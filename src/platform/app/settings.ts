@@ -113,11 +113,6 @@ export interface Settings {
   // silently on models that don't support reasoning.
   chatThinking: ThinkingSetting;
   prepThinking: ThinkingSetting;
-  // Deck-illustration image relay (docs/14). Base URL and model are harmless
-  // config and sync freely; the paid key lives in credentials.json (not synced).
-  // null falls back to the built-in defaults (see src/reading/slides/imageGen.ts).
-  illustrationApiBase: string | null;
-  illustrationModel: string | null;
   // Voice-input STT endpoint (docs/15). base/model sync freely; the key lives in
   // credentials.json (not synced). null falls back to the built-in SiliconFlow
   // SenseVoice defaults (see src/ai/voice/config.ts).
@@ -135,6 +130,11 @@ export interface Settings {
   // Language the AI writes its user-facing output in. "auto" mirrors the user's
   // own language; every other value pins output to that language.
   aiLanguage: AiLanguage;
+  // illustrationApiBase and illustrationModel used to be here: the base URL and
+  // model of the image relay the deck drew its illustrations from. The deck is
+  // gone (docs/44) and nothing spends that key any more. Left in the file for
+  // the same reason as the keys below.
+  //
   // autoNotes used to be here (docs/09): a switch for "I don't want to spend
   // this". Deleted 2026-08-19 — money is not the constraint, and preparation is
   // now started by the two entries that mean it (reading/prep/trigger.ts), the
@@ -157,8 +157,6 @@ export const DEFAULT_SETTINGS: Settings = {
   semanticScholarApiKey: null,
   chatThinking: "low",
   prepThinking: "medium",
-  illustrationApiBase: null,
-  illustrationModel: null,
   sttApiBase: null,
   sttModel: null,
   dictationLocale: "zh-CN",

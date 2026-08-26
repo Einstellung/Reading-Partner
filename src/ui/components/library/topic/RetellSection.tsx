@@ -1,15 +1,13 @@
 // The Retell section of a topic (docs/31, "界面"): the retells being prepared under
 // this topic, each one openable back into its own retell conversation.
 //
-// It lists retells, not decks. A deck is one thing a retell eventually produces, so
-// it shows as a retell's state ("deck ready") and as a button on its row — the
-// list itself is of the objects being prepared, which is what a reader comes
-// here looking for.
+// A row says how far its retell has got and nothing else. What comes out of a
+// retell is the talk note (docs/44), and the note is opened from the topic's
+// Rehearsal section, so there is no second product to show here.
 
 import { useCallback, useEffect, useState } from "react";
 import { logEvent } from "../../../../platform/app/events";
 import type { Topic } from "../../../../platform/app/topics";
-import { listDecks, revealDeckFile, type RetellEntry } from "../../../../reading/slides";
 import {
   createRetell,
   deleteRetell,
@@ -41,15 +39,7 @@ export default function RetellSection(props: {
   const [candidates, setCandidates] = useState<MaterialCandidate[]>([]);
 
   const refresh = useCallback(async () => {
-    const [retells, decks] = await Promise.all([
-      listRetellsForTopic(topic.id),
-      listDecks().catch((): RetellEntry[] => []),
-    ]);
-    // The join between a retell and the deck built from it is the shared id; the
-    // retell list only needs the file to open, so that is all it is handed.
-    const files = new Map<string, string>();
-    for (const d of decks) if (d.retellId) files.set(d.retellId, d.file);
-    setRows(retellRows(retells, files));
+    setRows(retellRows(await listRetellsForTopic(topic.id)));
   }, [topic.id]);
 
   useEffect(() => {
@@ -65,14 +55,6 @@ export default function RetellSection(props: {
       cancelled = true;
     };
   }, [topic, refresh]);
-
-  // Literally the same path the retell's own deck dialog opens a deck by, and the
-  // failure goes on screen where the button is.
-  const revealDeck = useCallback(async (file: string) => {
-    setError(null);
-    const failure = await revealDeckFile(file);
-    if (failure) setError(failure);
-  }, []);
 
   const create = useCallback(
     async (bookIds: string[]) => {
@@ -121,15 +103,6 @@ export default function RetellSection(props: {
                   <span className="truncate text-[15px]">{row.name}</span>
                   <span className="text-xs text-muted-foreground">{retellSummary(row)}</span>
                 </button>
-                {row.deckFile && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void revealDeck(row.deckFile as string)}
-                  >
-                    Open deck
-                  </Button>
-                )}
                 <CardMenu
                   label={`Actions for ${row.name}`}
                   items={[

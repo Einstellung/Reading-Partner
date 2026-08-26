@@ -29,10 +29,7 @@ import {
   buildRetellTurn,
   loadMaterials,
   loadRetell,
-  moveDecision,
   recordRetellDecision,
-  removeDecision,
-  setIncluded,
   retellThreadKey,
   updateRetell,
   type LoadedMaterial,
@@ -72,10 +69,7 @@ export interface RetellController {
   error: string | null;
   send(text: string): void;
   stop(): void;
-  // Outline edits. Each one writes the retell file and is reflected immediately.
-  moveEntry(index: number, delta: number): void;
-  cutEntry(bookId: string, chapter: number, include: boolean): void;
-  removeEntry(bookId: string, chapter: number): void;
+  // Writes the retell file and is reflected immediately.
   rename(name: string): void;
 }
 
@@ -427,24 +421,6 @@ export function useRetell(retellId: string, topicName: string): RetellController
     [retellId],
   );
 
-  const moveEntry = useCallback(
-    (index: number, delta: number) =>
-      edit((t) => ({ ...t, decisions: moveDecision(t.decisions, index, delta) })),
-    [edit],
-  );
-  const cutEntry = useCallback(
-    (bookId: string, chapter: number, include: boolean) =>
-      edit((t) => ({
-        ...t,
-        decisions: setIncluded(t.decisions, bookId, chapter, include, Date.now()),
-      })),
-    [edit],
-  );
-  const removeEntry = useCallback(
-    (bookId: string, chapter: number) =>
-      edit((t) => ({ ...t, decisions: removeDecision(t.decisions, bookId, chapter) })),
-    [edit],
-  );
   const rename = useCallback(
     (name: string) => {
       const trimmed = name.trim();
@@ -462,9 +438,6 @@ export function useRetell(retellId: string, topicName: string): RetellController
     error,
     send,
     stop,
-    moveEntry,
-    cutEntry,
-    removeEntry,
     rename,
   };
 }

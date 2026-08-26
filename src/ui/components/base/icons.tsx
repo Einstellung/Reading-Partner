@@ -541,7 +541,7 @@ export function IconLessonPath({ size = 20 }: IconProps) {
 	);
 }
 
-// A screen on a stand: a retell and the deck it ends in.
+// A screen on a stand: a retell being prepared.
 export function IconRetell({ size = 20 }: IconProps) {
 	return (
 		<svg
@@ -562,8 +562,8 @@ export function IconRetell({ size = 20 }: IconProps) {
 	);
 }
 
-// The same screen, with someone talking at it: a deck being given out loud.
-// Deliberately IconRetell's frame — a rehearsal is that deck, one step on — with
+// The same screen, with someone talking at it: a talk being given out loud.
+// Deliberately IconRetell's frame — a rehearsal is that retell, one step on — with
 // the stand replaced by a microphone, which is the only thing this section adds.
 export function IconRehearse({ size = 20 }: IconProps) {
 	return (

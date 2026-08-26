@@ -36,35 +36,15 @@ function decision(chapter: number): RetellDecision {
   };
 }
 
-const NO_DECKS: ReadonlyMap<string, string> = new Map();
-
-// The two ends meet on the retell id: the retell file says how far the retell
-// got, the deck the caller looked up says whether a deck came out of it.
-test("a retell with a deck says so and carries the file to open", () => {
-  const [row] = retellRows([retell()], new Map([["100", "slides/100-a-retell.html"]]));
-  expect(row.stage).toBe("deck");
-  expect(row.deckFile).toBe("slides/100-a-retell.html");
-  expect(retellSummary(row)).toBe("1 material · deck ready");
-});
-
-test("a retell with no deck is still being prepared", () => {
-  const [row] = retellRows([retell({ decisions: [decision(1), decision(2)] })], NO_DECKS);
-  expect(row.stage).toBe("preparing");
-  expect(row.deckFile).toBeNull();
+test("a retell says how many chapters it has settled", () => {
+  const [row] = retellRows([retell({ decisions: [decision(1), decision(2)] })]);
+  expect(row.settled).toBe(2);
   expect(retellSummary(row)).toBe("1 material · 2 chapters settled");
 });
 
 test("a retell nothing has been settled in says that, not zero", () => {
-  const [row] = retellRows([retell()], NO_DECKS);
+  const [row] = retellRows([retell()]);
   expect(retellSummary(row)).toBe("1 material · not started");
-});
-
-// A deck built before retells had ids belongs to no retell, so it never reaches the
-// map; another retell's deck must not be matched to this one either.
-test("a deck under a different id claims nothing", () => {
-  const rows = retellRows([retell()], new Map([["999", "slides/999-other.html"]]));
-  expect(rows[0].stage).toBe("preparing");
-  expect(rows[0].deckFile).toBeNull();
 });
 
 // The one being prepared now is the one worked on last, not the one made first.
@@ -75,7 +55,6 @@ test("the list is ordered by when each retell was last worked on", () => {
       retell({ id: "2", createdAt: 2, updatedAt: 50 }),
       retell({ id: "3", createdAt: 3, updatedAt: 9 }),
     ],
-    NO_DECKS,
   );
   expect(rows.map((r) => r.id)).toEqual(["2", "3", "1"]);
 });

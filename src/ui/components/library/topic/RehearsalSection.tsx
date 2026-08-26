@@ -1,8 +1,8 @@
-// The Rehearsal section of a topic (docs/43, "入口"): every deck under this
+// The Rehearsal section of a topic (docs/43, "入口"): every talk under this
 // topic that can be given out loud, and the door into giving it.
 //
 // Two kinds of row, one kind of object. A deck brought in from outside is a
-// rehearsal the moment it is imported; a deck a retell built is listed from the
+// rehearsal the moment it is imported; a retell's own talk is listed from the
 // retell, and the rehearsal behind it is made the first time it is given. Which
 // is why pressing a row goes through rehearsalForRetell rather than creating
 // something here: the Rehearse button on the retell's own header lands on the
@@ -23,7 +23,7 @@ import {
   rehearsalForRetell,
   rehearsalRows,
   rehearsalSummary,
-  type DeckedRetell,
+  type ArrangedRetell,
   type Rehearsal,
   type RehearsalRow,
   type RunCount,
@@ -59,21 +59,20 @@ export default function RehearsalSection(props: {
       listTalkOutlinesForTopic(topic.id),
     ]);
     // A retell is listed once it has arranged its talk (docs/44), which is what
-    // an outline of its own says. The deck it may also have built is nothing to
-    // this list any more.
+    // an outline of its own says.
     const arranged = new Map<string, string>();
     for (const o of outlines) if (o.retellId) arranged.set(o.retellId, o.id);
-    const decked: DeckedRetell[] = [];
+    const withTalk: ArrangedRetell[] = [];
     for (const t of retells) {
       const outlineId = arranged.get(t.id);
-      if (outlineId) decked.push({ retellId: t.id, name: t.name, outlineId });
+      if (outlineId) withTalk.push({ retellId: t.id, name: t.name, outlineId });
     }
     // One read per rehearsal, of the index alone: what a pass said is a file of
     // its own (reading/rehearsal/store.ts), so a count here costs a few hundred
     // bytes a pass however long the talk was.
     //
     // A runs file that will not open costs its own count and nothing else: this
-    // list never writes a run, and the rest of the section — every other deck
+    // list never writes a run, and the rest of the section — every other talk
     // under the topic, and the door into this one — has no reason to go with it.
     const counts = new Map<string, RunCount>();
     for (const r of rehearsals) {
@@ -82,7 +81,7 @@ export default function RehearsalSection(props: {
       const last = log.runs[log.runs.length - 1];
       counts.set(r.id, { runs: log.runs.length, lastRunAt: last ? last.startedAt : null });
     }
-    setRows(rehearsalRows(rehearsals, decked, counts));
+    setRows(rehearsalRows(rehearsals, withTalk, counts));
   }, [topic.id]);
 
   useEffect(() => {
@@ -96,7 +95,7 @@ export default function RehearsalSection(props: {
     };
   }, [refresh, reloadKey]);
 
-  // A row without an id is a retell's deck nobody has given yet: the object is
+  // A row without an id is a retell's talk nobody has given yet: the object is
   // made now, which is the same call the retell's own Rehearse button makes.
   const start = useCallback(
     async (row: RehearsalRow) => {
@@ -159,7 +158,8 @@ export default function RehearsalSection(props: {
           <p className="m-0 mb-4 text-sm text-muted-foreground">
             Nothing to rehearse here yet. Bring in a deck you already have — a self-contained HTML
             one — and give it out loud; every pass is kept, page by page, so the next one has
-            something to be held against. A retell that has built a deck shows up here on its own.
+            something to be held against. A retell that has arranged its talk shows up here on its
+            own.
           </p>
           <Button disabled={busy} onClick={() => void bringIn()}>
             Bring in a deck

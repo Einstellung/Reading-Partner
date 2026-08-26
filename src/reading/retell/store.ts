@@ -3,7 +3,7 @@
 // Not a derived cache — nothing can rebuild it, because it is the record of what
 // the reader and the AI agreed the retell will contain and in what order. So it is
 // a root-level file in the sync range (platform/sync/syncFs.ts), like marks and
-// threads, and unlike the deck it produces (slides/**, a build output).
+// threads, and unlike the decks an older build made from it (slides/**).
 //
 // The list is the directory rather than a registry file: two devices starting a
 // retell each would otherwise write the same registry and one of them would lose.
@@ -141,9 +141,8 @@ export function recordRetellDecision(
 }
 
 // Delete a retell, and the record of every time it was given. The conversation
-// file and the deck under slides/<retellId>/ are left where they are: the thread
-// store owns one and the slides pipeline the other, and an orphan of either is
-// inert. The rehearsals are not — they are a list of runs of a retell that no
+// file is left where it is — the thread store owns it — and so is any deck an
+// older build wrote under slides/<retellId>/; an orphan of either is inert. The rehearsals are not — they are a list of runs of a retell that no
 // longer exists, and nothing will ever open them again.
 export async function deleteRetell(retellId: string): Promise<void> {
   try {

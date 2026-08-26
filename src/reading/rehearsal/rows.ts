@@ -13,10 +13,11 @@
 
 import type { Rehearsal } from "./types";
 
-// The half of a retell this needs: it is named structurally rather than imported
+// The half of a retell this needs — one that has arranged its talk. Named
+// structurally rather than imported
 // from reading/retell, because reading/retell imports this module (deleting a
 // retell deletes its rehearsal) and the two must not point at each other.
-export interface DeckedRetell {
+export interface ArrangedRetell {
   retellId: string;
   name: string;
   outlineId: string;
@@ -42,13 +43,13 @@ export interface RunCount {
 
 /**
  * The rows for one topic, newest first: this topic's rehearsals, plus the
- * retells of this topic whose deck has never been rehearsed. A retell that
+ * retells of this topic whose talk has never been rehearsed. A retell that
  * already has a rehearsal appears once — as the rehearsal, which is the object
  * carrying the history.
  */
 export function rehearsalRows(
   rehearsals: readonly Rehearsal[],
-  retells: readonly DeckedRetell[],
+  retells: readonly ArrangedRetell[],
   counts: ReadonlyMap<string, RunCount>,
 ): RehearsalRow[] {
   const rehearsed = new Set<string>();
@@ -82,7 +83,7 @@ export function rehearsalRows(
         lastRunAt: null,
       },
       // A retell's id is the millisecond it was started (reading/retell/types.ts),
-      // so an unrehearsed deck sorts among the rehearsals by when its retell
+      // so an unrehearsed talk sorts among the rehearsals by when its retell
       // began. A non-numeric id sorts last rather than to 1970.
       at: Number(t.retellId) || 0,
     });

@@ -1,7 +1,8 @@
-// OpenAI-Images-compatible async relay client (right.codes style), for deck
-// illustrations. A generation is submitted async (returns a task id), then
-// polled until it completes or fails. The paid API key is a credential
-// (credentials.json, not synced); apiBase/model are harmless settings. All the
+// OpenAI-Images-compatible async relay client (right.codes style), for the
+// poster bench beside it (generate.ts). A generation is submitted async (returns
+// a task id), then polled until it completes or fails. Key, base and model come
+// from the environment, because this is a bench and not a path the app takes:
+// the deck that used to spend this key from Settings is gone (docs/44). All the
 // request-building and poll-state logic is pure and fetch-injectable so the flow
 // runs in bun tests with a scripted fetch — no network, no spend.
 
@@ -35,11 +36,11 @@ export function resolveImageGenConfig(opts: {
 
 export interface GenerateParams {
   prompt: string;
-  // Optional reference image (a prior illustration) as a data URL, for style
-  // consistency across the deck.
+  // Optional reference image (an earlier one) as a data URL, for style
+  // consistency across a series.
   image?: string;
-  // Aspect ratio. Optional because deck illustrations are always landscape;
-  // other callers of the relay (a portrait poster, say) need to say so. The
+  // Aspect ratio. Optional because the relay has its own default; a poster is
+  // portrait and says so. The
   // relay takes "1:1" | "16:9" | "9:16" | "4:3" or a pixel form like "1024x1024".
   size?: string;
   // Output resolution tier. Left unset the relay applies its own default.

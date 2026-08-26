@@ -34,7 +34,7 @@ export {
 export {
   rehearsalRows,
   rehearsalSummary,
-  type DeckedRetell,
+  type ArrangedRetell,
   type RehearsalRow,
   type RunCount,
 } from "./rows";

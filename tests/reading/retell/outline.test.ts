@@ -8,9 +8,6 @@ import {
   bucketRetellMarks,
   combineChapters,
   combinedSource,
-  moveDecision,
-  removeDecision,
-  setIncluded,
   slotAt,
   slotFor,
   toRetellPlan,
@@ -160,29 +157,3 @@ test("a new decision goes on the end, in the order the retell walks", () => {
   expect(list.map((d) => d.chapter)).toEqual([1, 2]);
 });
 
-test("an entry moves, and a move off either end changes nothing", () => {
-  const list = [decision(), decision({ chapter: 2 }), decision({ chapter: 3 })];
-  expect(moveDecision(list, 2, -1).map((d) => d.chapter)).toEqual([1, 3, 2]);
-  expect(moveDecision(list, 0, -1).map((d) => d.chapter)).toEqual([1, 2, 3]);
-  expect(moveDecision(list, 2, 1).map((d) => d.chapter)).toEqual([1, 2, 3]);
-  // The input is untouched either way.
-  expect(list.map((d) => d.chapter)).toEqual([1, 2, 3]);
-});
-
-// Cutting and removing are different: a cut chapter is a settled question the
-// model must not ask again, a removed one goes back to being unreached.
-test("cutting keeps the entry, removing takes it away", () => {
-  const list = [decision(), decision({ chapter: 2 })];
-  const cut = setIncluded(list, "b1", 1, false, 500);
-  expect(cut[0].include).toBe(false);
-  expect(cut[0].updatedAt).toBe(500);
-  expect(cut).toHaveLength(2);
-  expect(removeDecision(list, "b1", 1).map((d) => d.chapter)).toEqual([2]);
-  // The same book's chapter, not another book's with the same number.
-  expect(removeDecision(list, "b2", 1)).toHaveLength(2);
-});
-
-test("cutting a chapter that has no entry changes nothing", () => {
-  const list = [decision()];
-  expect(setIncluded(list, "b1", 9, false, 500)).toEqual(list);
-});

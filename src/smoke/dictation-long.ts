@@ -1,6 +1,6 @@
 // The long hold (VITE_SMOKE=dictation-long). Not a dictation question:
 // hold-to-talk has a five-minute backstop and no business running this long.
-// This is the gate for the rehearsal feature, where someone talks against a deck
+// This is the gate for the rehearsal feature, where someone talks against a note
 // and the AI critiques the delivery — so what it asks is whether SpeechAnalyzer
 // survives a long span at all, whether finals keep arriving or the stream goes
 // quiet partway, and whether anything grows without bound.

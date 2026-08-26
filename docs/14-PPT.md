@@ -8,6 +8,8 @@
 
 > 2026-08-25：重做的方向定了，排练对着大纲不对着 deck，见 [44](./44-大纲与排练.md)。`src/reading/slides/` 冻结不删。
 
+> 2026-08-26：`src/reading/slides/` 已删，app 内不再生成 deck，本文全篇作历史读。图片中转的两个设置项（`illustrationApiBase`／`illustrationModel`）和 Settings 的插图卡一起删了，写在 settings.json 里的旧值当未知键原样留着；credentials.json 里的 key 也留着，没有代码再花它。海报台架 `scripts/poster/` 还用同一套中转，客户端搬到了 `scripts/poster/imageGen.ts`，key 从环境变量来。
+
 ---
 
 ## PPT（slides）共识

@@ -1,5 +1,5 @@
 // Bench for reading-group poster prompts: submits one prompt to the image relay
-// (src/reading/slides/imageGen.ts) and drops the PNG plus the exact prompt and
+// (imageGen.ts beside it) and drops the PNG plus the exact prompt and
 // parameters that produced it into scripts/poster/out/, so a run can be traced
 // back and iterated on. Experimental tooling, not a product path.
 //
@@ -17,7 +17,7 @@ import {
   resolveImageGenConfig,
   type HttpRequest,
   type ImageGenDeps,
-} from "../../src/reading/slides/imageGen";
+} from "./imageGen";
 
 const OUT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "out");
 const DEFAULT_SIZE = "9:16";

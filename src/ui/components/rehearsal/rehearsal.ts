@@ -2,12 +2,11 @@
 // afterwards, and what the bar above the panel says (docs/44).
 //
 // The deck half of this module — the postMessage contract below, down to
-// withSlideEvent — is frozen. A pass is given against an outline now and nothing
-// mounts a deck, but the bridge is the deck's side of a protocol that is still
-// on disk in every deck ever built (docs/44 freezes slides/, import-deck.ts and
-// isDeckPath on the same grounds). Nothing feeds it any more: the note the
-// reader talks from does not turn pages, and the one page a pass now has is
-// passEvent's.
+// withSlideEvent — has no caller. The app does not make decks any more
+// (docs/44) and the note the reader talks from does not turn pages: the one page
+// a pass has is passEvent's. It is kept for the decks already on disk and for
+// the ones brought in from outside (import-deck.ts), which is the side of this
+// protocol that is left.
 
 import {
   buildRun,
@@ -238,30 +237,8 @@ export function formatElapsed(ms: number): string {
   return `${h}:${String(m).padStart(2, "0")}:${ss}`;
 }
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
 // "Aug 19, 14:32", built by hand rather than by locale: the same string in the
 // list and in a test, and short enough for a 300px pane.
-export function formatRunDate(at: number, now: Date = new Date()): string {
-  const d = new Date(at);
-  const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const day = `${MONTHS[d.getMonth()]} ${d.getDate()}`;
-  return d.getFullYear() === now.getFullYear() ? `${day}, ${time}` : `${day} ${d.getFullYear()}`;
-}
-
 export interface RehearsalReadiness {
   ok: boolean;
   // Always present: a disabled button that does not say why is a dead end.

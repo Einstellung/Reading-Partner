@@ -27,7 +27,7 @@ export default function DeleteRetellButton(props: {
           <AlertDialogTitle>Delete “{props.name}”?</AlertDialogTitle>
           <AlertDialogDescription>
             The retell goes, and with it the outline you settled. The books, their marks and their
-            notes are untouched, and a deck already built stays where it was written.
+            notes are untouched.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

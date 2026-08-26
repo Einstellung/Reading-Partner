@@ -32,7 +32,6 @@ import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
 import { rehearsalForRetell, type Rehearsal } from "../../../reading/rehearsal";
 import type { Retell } from "../../../reading/retell";
-import DeckDialog from "./DeckDialog";
 import CoachView from "../rehearsal/CoachView";
 import RehearsalView from "../rehearsal/RehearsalView";
 import { rehearsalReadiness } from "../rehearsal/rehearsal";
@@ -54,12 +53,11 @@ export default function RetellView(props: {
 }) {
   const retell = useRetell(props.retellId, props.topicName);
   const [renaming, setRenaming] = useState(false);
-  const [deckOpen, setDeckOpen] = useState(false);
 
   // Giving the retell covers this view rather than replacing it: no route, and
   // leaving it puts the retell back exactly as it was. Covering rather than
   // swapping is not cosmetic — unmounting the conversation is what distils it
-  // (useRetell's cleanup), and stepping over to the deck for ten minutes is not
+  // (useRetell's cleanup), and stepping over to a pass for ten minutes is not
   // leaving the retell.
   //
   // What is being given is a rehearsal object (docs/43), found or made by the
@@ -137,21 +135,9 @@ export default function RetellView(props: {
                 </span>
               )}
             </button>
-            {/* The deck is this retell's product and the last step of the loop
-                (docs/31), so it starts here, from this retell's outline — there is
-                no second place to generate one from. */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!retell.retell}
-              onClick={() => setDeckOpen(true)}
-            >
-              Deck
-            </Button>
-            {/* The deck is only half of the last step: docs/31's judgement is
-                whether the reader can give the retell, so the deck has a Rehearse
-                beside it and the pass is recorded. */}
+            {/* The last step of the loop is docs/31's judgement: whether the
+                reader can give the retell. It is given from the note this retell
+                wrote (docs/44), so the one button here starts a pass. */}
             <Button
               type="button"
               variant="outline"
@@ -238,14 +224,6 @@ export default function RetellView(props: {
               passKey={passKey}
               pending={passPending}
               onBack={() => setCoaching(false)}
-            />
-          )}
-
-          {deckOpen && retell.retell && (
-            <DeckDialog
-              retellId={retell.retell.id}
-              retellName={retell.retell.name}
-              onClose={() => setDeckOpen(false)}
             />
           )}
 

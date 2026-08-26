@@ -1,8 +1,7 @@
 // A retell (docs/31): the object the second stage of reading produces — one pass
-// over what was read, under a topic, with its own conversation, its own outline
-// and, at the end, its deck. Retell mode is the posture that fills it: the AI
-// questions and the reader answers chapter by chapter, and the outline is the
-// by-product. The object and the process that produces it are the same subject,
+// over what was read, under a topic, with its own conversation and its own
+// outline. Retell mode is the posture that fills it: the AI questions and the
+// reader answers chapter by chapter, and the outline is the by-product. The object and the process that produces it are the same subject,
 // so they live in one directory.
 
 export {
@@ -27,9 +26,6 @@ export {
   bucketRetellMarks,
   combineChapters,
   combinedSource,
-  moveDecision,
-  removeDecision,
-  setIncluded,
   slotAt,
   slotFor,
   toRetellPlan,
@@ -45,7 +41,6 @@ export {
   retellSummary,
   type MaterialCandidate,
   type RetellRow,
-  type RetellStage,
 } from "./list";
 export {
   loadMaterial,

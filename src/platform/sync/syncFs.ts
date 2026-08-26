@@ -8,8 +8,8 @@
 // time one was given (docs/31), the cross-scenario user profile and
 // info feedback log (docs/16), and app settings. Book PDFs travel the separate books channel
 // (content-addressed blobs), never the data channel. Excluded: derived caches
-// (fulltext-*, figures-*, prep-*/pdf and its caches), generated slide decks
-// (slides/**, docs/14 — a build output, rebuildable from notes), the local
+// (fulltext-*, figures-*, prep-*/pdf and its caches), the slide decks an older
+// build generated (slides/**, docs/14), the local
 // event log, sync's own local
 // files (sync-auth.json, sync-state.json, and the sync-base/ merge-base mirror
 // — syncing the record of what was last agreed would be circular), and
@@ -97,8 +97,8 @@ export function inSyncRange(path: string): boolean {
       /^threads-.+\.json$/.test(top) ||
       // Retells (docs/31): the materials, the outline the retell settled and the
       // order the reader put it in. Nothing can rebuild it from the books, so it
-      // travels like marks and threads rather than like a cache. The deck it
-      // produces (slides/**) stays out: that is a build output.
+      // travels like marks and threads rather than like a cache. A deck an older
+      // build made from it (slides/**) stays out.
       /^retell-.+\.json$/.test(top) ||
       // The outline of a talk (docs/44): the spine and the segments the reader
       // rehearses against. Written on whichever device the reader is holding and
@@ -107,9 +107,9 @@ export function inSyncRange(path: string): boolean {
       // (platform/sync/merge/contract.ts). Nothing rebuilds it: the retell's
       // chapter decisions are its material, not its structure.
       /^outline-.+\.json$/.test(top) ||
-      // A rehearsal and the index of its passes (docs/43): the deck the reader
+      // A rehearsal and the index of its passes (docs/43): the talk the reader
       // gives over and over, and one row per time they gave it. A trace, not a
-      // derivation — no deck and no book rebuilds it. The transcripts are one
+      // derivation — nothing rebuilds it. The transcripts are one
       // file each under runs/ (below). The deck itself stays out: a built one is
       // slides/**, and an imported one is rehearsals/**, tens of megabytes of
       // self-contained HTML that has no business in a per-file merge. So the

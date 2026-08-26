@@ -11,9 +11,9 @@ import type { BookChapter } from "../chapters";
 // once. The decisions therefore say which book's chapter they are about — a
 // chapter number alone stops meaning anything the moment a second material joins.
 //
-// The id is shared with the deck: slides/<retellId>/ is where the deck this retell
-// produces keeps its state and its pages (reading/slides/store.ts). One id, one
-// retell, whichever end you come at it from.
+// A deck an older build made from this retell sits under slides/<retellId>/,
+// named by this same id. Nothing reads it: the app does not make decks any more
+// (docs/44), and what is already on disk is left where it is.
 
 export const RETELL_VERSION = 1 as const;
 
@@ -61,9 +61,7 @@ export interface Retell {
   decisions: RetellDecision[];
 }
 
-// A new retell id. The creation timestamp, like the deck's (reading/slides/live.ts
-// mints the same shape), so the two cannot disagree about what a retell id looks
-// like.
+// A new retell id: the creation timestamp.
 export function newRetellId(now: number): string {
   return `${now}`;
 }

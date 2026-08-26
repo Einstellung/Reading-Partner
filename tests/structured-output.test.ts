@@ -1,6 +1,6 @@
 // The structured-output measurement (src/platform/app/structured-output.ts):
 // how a bad model reply is classified, what the event carries, and that the
-// reply itself never reaches the log. The four parse functions are exercised
+// reply itself never reaches the log. The three parse functions are exercised
 // through their real signatures so the tally reflects what they actually drop.
 // Run: bun test.
 
@@ -17,7 +17,6 @@ import {
 import type { EventPayload, EventType } from "../src/platform/app/events";
 import { parsePlan } from "../src/reading/prep/papers/plan";
 import { parseChapterSpinePlan } from "../src/reading/prep/chapters/plan";
-import { parseSlidePlan } from "../src/reading/slides/plan";
 import { parseTriageResult } from "../src/info/briefing/triage";
 
 const MODEL = { providerId: "anthropic", modelId: "claude-sonnet-4-5" };
@@ -127,12 +126,12 @@ test("a successful parse logs ok with the tally and no text", () => {
 
 test("nothing in the payload is text from the reply", () => {
   const { r, lines } = reporter();
-  const text = '{"title": "A Secret Book Title", "slides": [{"title": "Chapter one is about x", "kind": "title"}]}';
-  r.recordParse("slides-plan", MODEL, text, (tally) => parseSlidePlan(text, tally));
+  const text = '{"chapters": [{"title": "A Secret Chapter Title", "startPage": 1}]}';
+  r.recordParse("notes-plan", MODEL, text, (tally) => parseChapterSpinePlan(text, 10, tally));
 
   const dumped = JSON.stringify(lines[0].payload);
   expect(dumped).not.toContain("Secret");
-  expect(dumped).not.toContain("Chapter one");
+  expect(dumped).not.toContain("Chapter");
   // Only ids, flags and counts.
   for (const v of Object.values(lines[0].payload)) {
     expect(["string", "number", "boolean", "object"]).toContain(typeof v);
@@ -197,25 +196,17 @@ test("silently dropped elements show up as kept falling short of seen", () => {
 
 test("defaults the parse substituted are counted as repairs, not failures", () => {
   const { r, lines } = reporter();
-  // No deck title, a slide with an unknown kind, and a slide asking for both an
-  // illustration and a figure.
+  // One chapter with no title, which is kept under a substituted one.
   const text = JSON.stringify({
-    slides: [
-      { title: "Opening", kind: "splash" },
-      {
-        title: "Both",
-        kind: "content",
-        bookId: "b1",
-        illustration: { prompt: "a graph" },
-        figure: { figId: "3" },
-      },
+    chapters: [
+      { title: "", startPage: 1 },
+      { title: "Two", startPage: 4 },
     ],
   });
-  r.recordParse("slides-plan", MODEL, text, (t) => parseSlidePlan(text, t));
+  r.recordParse("notes-plan", MODEL, text, (t) => parseChapterSpinePlan(text, 10, t));
   expect(lines[0].payload.ok).toBe(true);
   expect(lines[0].payload.kept).toBe(2);
-  // missing deck title + unknown kind + illustration-and-figure
-  expect(lines[0].payload.repaired).toBe(3);
+  expect(lines[0].payload.repaired).toBe(1);
 });
 
 test("triage records the refs it drops for naming ids that were never offered", () => {
@@ -287,7 +278,7 @@ test("each site keeps its own streak", () => {
     }
   };
   fail("notes-plan");
-  fail("slides-plan");
+  fail("prep-plan");
   fail("notes-plan");
   expect(lines.map((l) => l.payload.attempt)).toEqual([1, 1, 2]);
 });

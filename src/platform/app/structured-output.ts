@@ -1,14 +1,14 @@
-// How often the model's machine-readable output is actually usable. Five places
-// ask a model for structure — four have it write JSON in the reply body (lesson
-// prep's plan, the notes chapter plan, the slides deck plan, the news triage),
-// one goes through tool arguments (the agent loop's validateToolCall) — and
+// How often the model's machine-readable output is actually usable. Four places
+// ask a model for structure — three have it write JSON in the reply body (lesson
+// prep's plan, the notes chapter plan, the news triage), one goes through tool
+// arguments (the agent loop's validateToolCall) — and
 // every one of them repairs what it can before giving up. Until now both the
 // repairs and the give-ups were silent, so the failure rate that decides whether
 // those pipelines should move to tool calls was unmeasured.
 //
 // Each parse writes one line to the shared event log. There is no topic to
-// attribute these to (a deck spans books, a briefing spans none, the agent loop
-// knows nothing about topics), so they share one reserved stream — same writer,
+// attribute these to (a lesson plan is a book's, a briefing is no topic's, the
+// agent loop knows nothing about topics), so they share one reserved stream — same writer,
 // same format, same AppData directory, same exclusion from sync — under a topic
 // id no real topic can have.
 //
@@ -30,7 +30,6 @@ export const AI_EVENT_TOPIC = "ai";
 export type ParseSite =
   | "prep-plan"
   | "notes-plan"
-  | "slides-plan"
   | "info-screen"
   | "info-triage"
   | "tool-args";

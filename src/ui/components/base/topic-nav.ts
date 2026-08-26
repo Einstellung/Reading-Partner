@@ -6,8 +6,8 @@
 export type TopicSection = "materials" | "retell" | "rehearsal" | "observations";
 
 // In the order the work happens: read the materials, go through them with the AI,
-// give the result out loud. Rehearsal is not under Retell (docs/43): the deck
-// being rehearsed is as often one the reader already had as one this app built.
+// give the result out loud. Rehearsal is not under Retell (docs/43): the talk
+// being rehearsed is as often one the reader already had as one prepared here.
 export const TOPIC_SECTIONS: readonly { id: TopicSection; label: string }[] = [
   { id: "materials", label: "Materials" },
   { id: "retell", label: "Retell" },

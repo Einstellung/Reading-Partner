@@ -26,8 +26,8 @@ import type { Fulltext } from "../../fulltext/types";
 
 // One chapter of one book: where it is and what it is called. Every later stage
 // reads this same division back — the spine pass adds a status to it, the
-// retell walks it, the deck plan cites it. Each of those adds its own field
-// to this record; none of them redraws it.
+// retell walks it. Each of those adds its own field to this record; none of them
+// redraws it.
 //
 // Ranges are 1-based inclusive, contiguous, and cover the whole book.
 export interface BookChapter {

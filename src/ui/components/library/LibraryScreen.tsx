@@ -96,7 +96,7 @@ export default function LibraryScreen(props: {
   // The retell being prepared, if any. Nothing else on this screen changes while
   // one is open, so leaving it is one setState.
   const [openRetellId, setOpenRetellId] = useState<string | null>(null);
-  // The deck being given, if any (docs/43). A rehearsal replaces the sections
+  // The talk being given, if any (docs/43). A rehearsal replaces the sections
   // the way a retell does rather than covering them: the section it is started
   // from sits inside a scrolling column, which would clip a full-screen cover.
   const [openRehearsal, setOpenRehearsal] = useState<Rehearsal | null>(null);

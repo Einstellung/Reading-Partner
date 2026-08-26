@@ -10,7 +10,6 @@ import {
   endEvent,
   finishRun,
   formatElapsed,
-  formatRunDate,
   isPageTurn,
   readDeckSignal,
   rehearsalReadiness,
@@ -167,12 +166,6 @@ test("elapsed time reads in minutes until it needs hours", () => {
   expect(formatElapsed(3_600_000)).toBe("1:00:00");
   expect(formatElapsed(3_723_000)).toBe("1:02:03");
   expect(formatElapsed(-5)).toBe("0:00");
-});
-
-test("a run in this year is dated by time of day, an older one by year", () => {
-  const at = new Date(2026, 7, 19, 14, 32).getTime();
-  expect(formatRunDate(at, new Date(2026, 11, 1))).toBe("Aug 19, 14:32");
-  expect(formatRunDate(at, new Date(2027, 0, 3))).toBe("Aug 19 2026");
 });
 
 test("the Rehearse button says why it is off", () => {

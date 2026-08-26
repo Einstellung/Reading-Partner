@@ -1,12 +1,9 @@
 // The Retell list of a topic: what each retell says about itself before you open
 // it (docs/31, "界面" — 讲是这个 topic 下的几场讲).
 //
-// A retell's state is two questions, and they are answered from two places that
-// share one id: how far the retell has got, which is the retell file, and
-// whether a deck has come out of it, which is the deck registry
-// (slides/retells.json, keyed by the same retell id). The second one arrives as a
-// plain map from the caller rather than as the registry's own type — the deck is
-// the retell's product, so slides reads retells and not the other way round.
+// A retell's state is one question — how far it has got — and the retell file
+// answers it. The deck it used to end in is gone (docs/44): the talk note is the
+// product now, and the note's own list is the topic's Rehearsal section.
 
 import type { Retell, RetellMaterial } from "./types";
 
@@ -26,20 +23,15 @@ export function defaultMaterialSelection(candidates: readonly MaterialCandidate[
   return (marked.length > 0 ? marked : candidates).map((c) => c.bookId);
 }
 
-export type RetellStage = "preparing" | "deck";
-
 export interface RetellRow {
   id: string;
   name: string;
   createdAt: number;
   updatedAt: number;
-  stage: RetellStage;
   // How many chapters have been settled. The total is not here: it needs every
   // material's skeleton off disk, which is not worth a list row.
   settled: number;
   materials: number;
-  // The deck file to open, when one has been built.
-  deckFile: string | null;
 }
 
 // One line under the name. Says what the retell is and what has happened to it —
@@ -47,31 +39,23 @@ export interface RetellRow {
 // costs a read per material.
 export function retellSummary(row: RetellRow): string {
   const materials = `${row.materials} material${row.materials === 1 ? "" : "s"}`;
-  if (row.stage === "deck") return `${materials} · deck ready`;
   if (row.settled === 0) return `${materials} · not started`;
   return `${materials} · ${row.settled} chapter${row.settled === 1 ? "" : "s"} settled`;
 }
 
 // Newest first, by when the retell was last worked on rather than when it was
 // created: a retell picked up again yesterday is the one being prepared now.
-// `deckFiles` maps a retell id to the deck file built from it, when one has been.
-export function retellRows(
-  retells: readonly Retell[],
-  deckFiles: ReadonlyMap<string, string>,
-): RetellRow[] {
+export function retellRows(retells: readonly Retell[]): RetellRow[] {
   return retells
-    .map((t): RetellRow => {
-      const deckFile = deckFiles.get(t.id) ?? null;
-      return {
+    .map(
+      (t): RetellRow => ({
         id: t.id,
         name: t.name,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
-        stage: deckFile ? "deck" : "preparing",
         settled: t.decisions.length,
         materials: t.materials.length,
-        deckFile,
-      };
-    })
+      }),
+    )
     .sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
 }
