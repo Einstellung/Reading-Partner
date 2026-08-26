@@ -1,7 +1,7 @@
-// The rehearsal panel, pinned by a static render (docs/44): one block of the
-// note on screen, the through-line above it, and where the talk goes next below
-// it. What any of it means is decided in
-// src/ui/components/rehearsal/outline-run.ts and tested there. Run: bun test.
+// The rehearsal surface, pinned by a static render (docs/44): the whole note in
+// order on one page, the through-line above it, and nothing that pages or moves
+// it. What a pass does with what was said is decided in
+// src/ui/components/rehearsal/rehearsal.ts and tested there. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -60,24 +60,49 @@ function render(segments: TalkSegment[], thesis?: string): string {
   );
 }
 
-test("the panel opens on the first block, with the through-line above it", () => {
-  const html = render([
-    segment({ id: "a", body: "## Opening\n\nAttention replaced recurrence" }),
-    segment({ id: "b", body: "## The turn\n\nand it cost quadratic time" }),
-  ]);
+const NOTE = [
+  segment({ id: "a", body: "## Opening\n\nAttention replaced recurrence" }),
+  segment({ id: "b", body: "## The turn\n\nand it cost quadratic time" }),
+  segment({ id: "c", body: "## Closing\n\nso here is where that leaves us" }),
+];
+
+// The whole point of the surface: the reader can see where they are going and
+// start or stop anywhere, which needs every block on the page at once.
+test("the note is on the page whole, in the order it is given", () => {
+  const html = render(NOTE);
   expect(html).toContain("Recurrence was the bottleneck.");
-  expect(html).toContain("Attention replaced recurrence");
-  // One block at a time: the next one is not on screen with it.
-  expect(html).not.toContain("and it cost quadratic time");
+  const at = (text: string) => html.indexOf(text);
+  expect(at("Attention replaced recurrence")).toBeGreaterThan(0);
+  expect(at("and it cost quadratic time")).toBeGreaterThan(at("Attention replaced recurrence"));
+  expect(at("so here is where that leaves us")).toBeGreaterThan(at("and it cost quadratic time"));
 });
 
-// The hard part of giving a talk is the turn, so where it goes next is on screen
-// the whole time the current segment is being said (docs/44).
-test("the panel says what comes next, and says when nothing does", () => {
-  expect(render([segment({ id: "a" }), segment({ id: "b", body: "## The turn" })])).toContain(
-    "Next: The turn",
-  );
-  expect(render([segment({ id: "a" })])).toContain("Last segment");
+// A block is told from the next one by the space between them. A frame, a
+// number or a status chip would make the note a list of cards, which is the
+// shape that was just taken out.
+test("the blocks carry no numbering and no chrome of their own", () => {
+  const html = render(NOTE);
+  expect(html).not.toContain("Next:");
+  expect(html).not.toContain("Segments");
+  expect(html).not.toContain(">Next<");
+  expect(html).not.toContain("Last segment");
+  expect(html).not.toContain("1 / 3");
+});
+
+// The bar is what stays: the way out, what this talk is, how long it has been
+// going, and the way to stop.
+test("the bar holds the way out, the name and the clock", () => {
+  const html = render(NOTE);
+  expect(html).toContain("Back to the topic");
+  expect(html).toContain("A short talk");
+  expect(html).toContain("0:00");
+  expect(html).toContain("End the rehearsal");
+});
+
+// A formula wider than the measure scrolls in its own box rather than taking the
+// page sideways with it, which would lose the reader's place in every block.
+test("a display formula scrolls inside itself", () => {
+  expect(render(NOTE)).toContain("katex-display]:overflow-x-auto");
 });
 
 test("a talk with nothing arranged on it says so rather than showing a blank", () => {

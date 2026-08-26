@@ -1,20 +1,19 @@
-// The desktop TranscriptSource (docs/43): one continuous recording, cut into a
-// segment per page, every segment uploaded on its own.
+// The desktop TranscriptSource (docs/43): one continuous recording, cut into
+// segments, every segment uploaded on its own.
 //
 // Desktop STT returns a block of text and nothing else — no word timings, no
 // sentence boundaries (parseTranscriptionResponse in ai/voice/stt.ts) — so the
 // only timestamps a segment can have are the ones the host put on its two ends.
-// Ten minutes recorded in one piece transcribes into one block hanging off page
-// one. Cutting at the page turn is what makes the transcript per-page at all,
-// and the cut has to happen while the reader is still talking, which is why the
+// The cut has to happen while the reader is still talking, which is why the
 // recorder cuts rather than stops: capture never pauses, only the buffer is
 // swapped.
 //
 // The rules here are the rehearsal's, not the microphone's, which is why they
 // live in this layer:
-//   - A page turn cuts. The deck reports the turn; this source is told.
-//   - 60 seconds cuts anyway. A reader who stays on one page longer than that
-//     would otherwise hand STT a segment that keeps growing, and the desktop
+//   - 60 seconds cuts, and re-arms. It used to be the fallback behind a page
+//     turn; a note turns no pages (docs/44) and this is now the only knife. A
+//     talk recorded in one piece would otherwise hand STT a file that keeps
+//     growing and be one long upload waited for at the end, and the desktop
 //     recorder has a ceiling of its own.
 //   - Segments go up as they are cut, not one after another. A ten-page retell
 //     spends one upload's wait at the end, not ten.

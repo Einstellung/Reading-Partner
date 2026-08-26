@@ -6,77 +6,55 @@
 // is a message and not a prompt section: a prompt section would be replaced by
 // the next pass, and "come back and give it again" is the whole point.
 //
-// The one thing it has to be exact about is coverage. A pass is the segments
-// given this time and not "the nth time through" (types.ts), so going over one
-// segment five times is five passes of one segment each — and a coach that
-// judged the talk on a pass covering three of twelve would be marking the reader
-// down for the nine they deliberately skipped.
+// It is the words and nothing else. The note is not in here — the system prompt
+// carries the whole of it already (coach.ts, formatTalkOutline), and a second
+// copy would be the note twice in one request — and neither is any map from what
+// was said to the block it came from, because the surface the reader talks from
+// records no such thing (RehearsalView.tsx). What is left is the one thing the
+// coach has to be told rather than work out: that the reader may have given part
+// of the talk, or one part several times, and that what is missing was left out
+// on purpose.
 
-import { segmentLabel, type TalkOutline } from "../talk";
 import { runSummary } from "./summary";
 import type { RehearsalPage, RehearsalRunEntry } from "./types";
 
 export interface PassHandoff {
   // The pass as the store recorded it, for the ordinal and the counts.
   entry: RehearsalRunEntry;
-  // What was said, one entry per segment that was up (store.ts keeps these in a
-  // file of their own).
+  // What was said. One page for a pass given from the note; one per segment for
+  // a pass from the days of a block at a time, which reads back the same way
+  // here because the transcripts are joined in the order they were spoken.
   pages: readonly RehearsalPage[];
-  // The talk as it stands, for the numbering and the titles. Read at handoff
-  // time rather than when the pass started: a segment renamed mid-pass is named
-  // here the way the reader will see it in the outline.
-  outline: TalkOutline;
-}
-
-// "1, 2 and 5" — the way the reader would say which segments they gave.
-function listed(items: readonly string[]): string {
-  if (items.length === 0) return "";
-  if (items.length === 1) return items[0];
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
 /**
  * The message a finished pass puts into the talk's conversation, as the reader.
  *
- * Empty when nothing was said at all: a pass that recorded segments and no words
- * — no STT key on the desktop, no dictation on the host — has nothing for a
- * coach to hear, and a message saying so would only invite a reply about the
- * silence.
+ * Empty when nothing was said at all: a pass with no words in it — no STT key on
+ * the desktop, no dictation on the host — has nothing for a coach to hear, and a
+ * message saying so would only invite a reply about the silence.
  */
 export function passMessage(input: PassHandoff): string {
-  const { entry, pages, outline } = input;
-  const place = new Map(outline.segments.map((s, i) => [s.id, i + 1]));
-  if (!pages.some((p) => p.transcript.trim())) return "";
+  const { entry, pages } = input;
+  const said = pages
+    .map((p) => p.transcript.trim())
+    .filter(Boolean)
+    .join("\n");
+  if (!said) return "";
 
   const summary = runSummary(entry);
-  const label = (page: RehearsalPage): string => {
-    const at = place.get(page.kind);
-    const found = outline.segments.find((s) => s.id === page.kind);
-    const title = found ? segmentLabel(found) : page.title;
-    // A segment dropped from the talk between passes has no place in it any
-    // more, and saying so is better than printing a number that now belongs to
-    // somebody else.
-    const head = at ? `Segment ${at}` : "A segment that is no longer in the talk";
-    return `${head}. ${title || "(untitled)"}${page.kind ? ` (id: ${page.kind})` : ""}`;
-  };
-
-  const given = pages.map((p) => `${place.get(p.kind) ?? "?"}`);
-  const total = outline.segments.length;
-  const lines: string[] = [
+  return [
     `I have just given this talk out loud — pass ${summary.ordinal}, about ` +
       `${summary.minutes} minute(s) and ${summary.wordsSpoken} words.`,
     "",
-    given.length >= total
-      ? `I went through all ${total} segment(s).`
-      : `I gave ${given.length} of the ${total} segment(s) in the talk: ${listed(given)}. ` +
-        "I did not give the rest this time, so there is nothing about them to hear.",
+    "I may have given the whole talk or only part of it, and I may have gone over",
+    "one part several times. Whatever is not below, I left out on purpose, so there",
+    "is nothing about it to hear. Nothing recorded which part of the note I was on —",
+    "work that out from what I said.",
     "",
     "This is what I said, as the recogniser heard it — a wrong homophone in here is",
     "its mistake and not mine:",
-  ];
-  for (const page of pages) {
-    lines.push("", `--- ${label(page)} ---`);
-    lines.push(page.transcript.trim() || "(I said nothing on this one.)");
-  }
-  return lines.join("\n");
+    "",
+    said,
+  ].join("\n");
 }

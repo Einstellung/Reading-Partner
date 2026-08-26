@@ -1,5 +1,5 @@
-// What a rehearsal looks like from outside: one row per run, and the pages it
-// went past without a word. Pure, so a list can be drawn from a log without
+// What a rehearsal looks like from outside: one row per run, how long it took
+// and how much was said. Pure, so a list can be drawn from a log without
 // re-reading anything — which is now literal, since the transcripts are files of
 // their own (store.ts) and a row must be drawable without opening one.
 //
@@ -13,16 +13,13 @@ import type { BuiltRun, RehearsalPage, RehearsalRunEntry } from "./types";
 export interface RunSummary {
   ordinal: number;
   startedAt: number;
-  // Wall-clock length, rounded to whole minutes. The exact timestamps are on
-  // the run itself for anything that needs them; this is the number a list
-  // shows and the number two runs are compared on.
+  // Wall-clock length, rounded to whole minutes. What the pass is talked about
+  // in — "about twelve minutes" — and what the coach is told (handoff.ts).
   minutes: number;
-  // How many segments this pass covered, and how many of those were spoken to.
-  // Not "of how many the talk has": the outline is not open here, it changes
-  // between passes, and covering three of twelve on purpose is a run and not a
-  // shortfall (docs/44).
-  segments: number;
-  segmentsSpoken: number;
+  // The same length to the second, which is what a list of passes shows: the
+  // question there is whether this one ran longer than the last, and two passes
+  // of "3 min" can be a minute apart.
+  elapsedMs: number;
   wordsSpoken: number;
 }
 
@@ -35,7 +32,12 @@ export function segmentIdOf(page: RehearsalPage): string {
 
 // Which segments a pass covered, and which of them were spoken to, in the order
 // buildRun left them. A page with no id belongs to no segment and is left out of
-// both — that is a pass recorded against a deck, whose pages were never segments.
+// both — which is every pass given from the note, since the note does not say
+// which block is up and its one page carries no id (docs/44). It is still
+// computed rather than assumed empty: the migration that lifts an old log's
+// transcripts out of it (store.ts) rebuilds those entries through here, and two
+// devices on two builds have to rebuild them the same way or the merged log
+// disagrees with itself.
 export function coverageOf(pages: readonly RehearsalPage[]): {
   segmentIds: string[];
   spokenSegmentIds: string[];
@@ -46,7 +48,7 @@ export function coverageOf(pages: readonly RehearsalPage[]): {
     const id = segmentIdOf(page);
     if (!id || segmentIds.includes(id)) continue;
     segmentIds.push(id);
-    if (spoken(page)) spokenSegmentIds.push(id);
+    if (page.transcript.trim()) spokenSegmentIds.push(id);
   }
   return { segmentIds, spokenSegmentIds };
 }
@@ -66,8 +68,6 @@ function lastMoment(run: { startedAt: number; endedAt: number | null; pages: Reh
 // The log entry for a run that has just been built: the times and the counts,
 // with the pages left out because they are about to become a file of their own.
 export function runEntryOf(run: BuiltRun): RehearsalRunEntry {
-  const counts = countPages(run.pages);
-  const covered = coverageOf(run.pages);
   return {
     id: run.id,
     ordinal: run.ordinal,
@@ -76,55 +76,34 @@ export function runEntryOf(run: BuiltRun): RehearsalRunEntry {
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     lastMomentAt: lastMoment(run),
-    segmentIds: covered.segmentIds,
-    spokenSegmentIds: covered.spokenSegmentIds,
-    wordsSpoken: counts.wordsSpoken,
+    // Empty for every pass this build records, and not empty for the entries an
+    // older one left behind. The fields stay on the entry for those (types.ts:
+    // RUN_LOG_VERSION is deliberately unchanged), and nothing reads them.
+    ...coverageOf(run.pages),
+    wordsSpoken: countPages(run.pages),
   };
 }
 
-function countPages(pages: readonly RehearsalPage[]): { pagesSpoken: number; wordsSpoken: number } {
-  let pagesSpoken = 0;
+function countPages(pages: readonly RehearsalPage[]): number {
   let wordsSpoken = 0;
-  for (const page of pages) {
-    if (!spoken(page)) continue;
-    pagesSpoken++;
-    wordsSpoken += countWords(page.transcript);
-  }
-  return { pagesSpoken, wordsSpoken };
+  for (const page of pages) wordsSpoken += countWords(page.transcript);
+  return wordsSpoken;
 }
 
 export function runSummary(entry: RehearsalRunEntry): RunSummary {
   // An entry that still carries its pages predates the split, and its counts
   // were never written down. Counting them here rather than repairing the file
   // keeps a list draw free of writes; the split (store.ts) is what settles it.
-  if (entry.pages) {
-    const counts = countPages(entry.pages);
-    const covered = coverageOf(entry.pages);
-    return {
-      ordinal: entry.ordinal,
-      startedAt: entry.startedAt,
-      minutes: minutes(entry.startedAt, lastMoment({ ...entry, pages: entry.pages })),
-      segments: covered.segmentIds.length,
-      segmentsSpoken: covered.spokenSegmentIds.length,
-      wordsSpoken: counts.wordsSpoken,
-    };
-  }
+  const lastAt = entry.pages
+    ? lastMoment({ ...entry, pages: entry.pages })
+    : entry.lastMomentAt;
   return {
     ordinal: entry.ordinal,
     startedAt: entry.startedAt,
-    minutes: minutes(entry.startedAt, entry.lastMomentAt),
-    segments: entry.segmentIds.length,
-    segmentsSpoken: entry.spokenSegmentIds.length,
-    wordsSpoken: entry.wordsSpoken,
+    minutes: Math.max(0, Math.round((lastAt - entry.startedAt) / 60_000)),
+    elapsedMs: Math.max(0, lastAt - entry.startedAt),
+    wordsSpoken: entry.pages ? countPages(entry.pages) : entry.wordsSpoken,
   };
-}
-
-function minutes(startedAt: number, lastAt: number): number {
-  return Math.max(0, Math.round((lastAt - startedAt) / 60_000));
-}
-
-function spoken(page: RehearsalPage): boolean {
-  return page.transcript.trim().length > 0;
 }
 
 // Ideographs, kana and hangul syllables. Their punctuation is deliberately out:

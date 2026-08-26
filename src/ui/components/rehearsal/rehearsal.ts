@@ -5,8 +5,9 @@
 // withSlideEvent — is frozen. A pass is given against an outline now and nothing
 // mounts a deck, but the bridge is the deck's side of a protocol that is still
 // on disk in every deck ever built (docs/44 freezes slides/, import-deck.ts and
-// isDeckPath on the same grounds). The segment signal the panel sends instead is
-// in outline-run.ts, and it is deliberately the same event.
+// isDeckPath on the same grounds). Nothing feeds it any more: the note the
+// reader talks from does not turn pages, and the one page a pass now has is
+// passEvent's.
 
 import {
   buildRun,
@@ -111,6 +112,22 @@ export function endEvent(at: number): RehearsalEvent {
   return { kind: "end", at };
 }
 
+// The pass itself, as the run format has to hold it. A note is not paged
+// (docs/44) and nothing on the surface says which block the reader was on, so a
+// pass is one stretch from the first word to the last.
+//
+// It exists because buildRun is untouched and buildRun hangs an utterance on
+// whichever page was up when it started, dropping anything said before the first
+// page event — with no page event at all a pass would come out as no pages and
+// no words, which is every run lost. So the pass opens with this one, and the
+// whole transcript lands on it. The id is empty on purpose: it is where a
+// segment's id used to ride (types.ts), and this page is not a segment, so
+// coverageOf reads the pass as covering none and the entry's segmentIds are
+// written empty.
+export function passEvent(at: number): RehearsalEvent {
+  return { kind: "slide", at, index: 0, slideKind: "", title: "" };
+}
+
 // Whether this report is the reader moving, or the deck repeating the page that
 // is already on screen. The deck re-runs its own show() on every window resize,
 // so a rotation or a window drag reports the current page again. Going 3 → 4 → 3
@@ -136,13 +153,6 @@ export function withSlideEvent(
 ): RehearsalEvent[] {
   if (!isPageTurn(events, sig)) return events.slice();
   return [...events, slideEvent(sig, at)];
-}
-
-// Whether anything of a run was actually recorded. A view that failed to load a
-// deck, or one the reader backed out of before the first page arrived, is not a
-// pass over the deck and does not become a row in its history.
-export function hasRecordedPages(events: readonly RehearsalEvent[]): boolean {
-  return events.some((e) => e.kind === "slide");
 }
 
 export interface FinishRunInput<Saved = unknown> {
@@ -175,9 +185,14 @@ export interface FinishRunInput<Saved = unknown> {
 
 // End a rehearsal: close the speech, build the run out of everything that
 // arrived, write it. True when a run reached the store, which is the only case
-// in which the rehearsal's history has changed and has to be read again — a pass
-// that recorded no page was never a pass, and a write that failed did not
-// happen (docs/43).
+// in which the rehearsal's history has changed and has to be read again — a
+// write that failed did not happen (docs/43).
+//
+// Every pass is written, including one with no words in it. There is nothing
+// left to tell a pass from a non-pass: the surface reports nothing, so a
+// rehearsal that was opened and given in silence — no STT key on the desktop, no
+// dictation on the host — looks exactly like one the reader turned round in, and
+// silence is the ordinary case of the first (docs/44).
 //
 // The order is the whole of it, and the order is why this is not in the view:
 // the run cannot be built before the source has stopped, and the history cannot
@@ -186,8 +201,7 @@ export async function finishRun<Saved>(input: FinishRunInput<Saved>): Promise<bo
   if (input.source) {
     await input.source.stop().catch((e: unknown) => console.warn("transcript stop failed", e));
   }
-  const events = [...input.events(), endEvent(input.endedAt)];
-  if (!hasRecordedPages(events)) return false;
+  const events = [passEvent(input.startedAt), ...input.events(), endEvent(input.endedAt)];
   const run = buildRun({
     id: input.id,
     ordinal: 0, // the store assigns it
@@ -276,11 +290,4 @@ export function rehearsalReadiness(input: {
     };
   }
   return { ok: true, title: "Give the talk, from the top" };
-}
-
-// The counter on the bar. Before a segment is up there is no position to show,
-// and a made-up "1 / 1" would be worse than a dash.
-export function positionLabel(current: { index: number; total: number } | null): string {
-  if (!current) return "—";
-  return `${current.index + 1} / ${current.total}`;
 }

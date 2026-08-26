@@ -1,25 +1,18 @@
 // A finished pass written out for the conversation
-// (src/reading/rehearsal/handoff.ts): that it says which segments were given and
-// which were not, that it names them the way the outline does, and that a pass
-// with no words in it produces nothing at all.
+// (src/reading/rehearsal/handoff.ts): that it hands over the words and the
+// clock, that it says the reader may have given only part of the talk, that it
+// does not carry the note, and that a pass with no words in it produces nothing
+// at all.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
 import { passMessage } from "../../../src/reading/rehearsal/handoff";
 import type { RehearsalPage, RehearsalRunEntry } from "../../../src/reading/rehearsal/types";
-import { putSegment } from "../../../src/reading/talk/edit";
-import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
 
-function outlineOf(...titles: string[]): TalkOutline {
-  let outline = newTalkOutline({ id: "o1", topicId: "t1", name: "The eye", now: 1 });
-  for (const [i, title] of titles.entries()) {
-    outline = putSegment(outline, { body: title }, 1, () => `s${i + 1}`);
-  }
-  return outline;
-}
-
-function page(over: Partial<RehearsalPage> & { index: number; kind: string }): RehearsalPage {
+function page(over: Partial<RehearsalPage> = {}): RehearsalPage {
   return {
+    index: 0,
+    kind: "",
     title: "",
     enteredAt: 1_000,
     leftAt: 2_000,
@@ -44,81 +37,63 @@ function entry(over: Partial<RehearsalRunEntry> = {}): RehearsalRunEntry {
   };
 }
 
-// docs/44: a pass is the segments given this time, not "the nth time through".
-// Going over one segment five times is five passes of one segment each, and the
-// coach must not read that as a talk that lost the rest.
-test("a partial pass says which segments it gave and that the rest were not", () => {
-  const outline = outlineOf("Opening", "The cost", "The turn", "Closing");
+test("the pass hands over which pass it is, how long, how many words, and the words", () => {
   const text = passMessage({
-    outline,
     entry: entry(),
-    pages: [
-      page({ index: 1, kind: "s2", transcript: "the retina throws most of it away" }),
-      page({ index: 2, kind: "s3", transcript: "so the brain has to guess" }),
-    ],
+    pages: [page({ transcript: "the retina throws most of it away" })],
   });
   expect(text).toContain("pass 3");
-  expect(text).toContain("I gave 2 of the 4 segment(s) in the talk: 2 and 3.");
-  expect(text).toContain("nothing about them to hear");
-  expect(text).toContain("Segment 2. The cost (id: s2)");
+  expect(text).toContain("2 minute(s) and 12 words");
+  expect(text).toContain("recogniser");
   expect(text).toContain("the retina throws most of it away");
-  // The segments that were never up are not in the message at all.
-  expect(text).not.toContain("Opening");
-  expect(text).not.toContain("Closing");
 });
 
-test("a whole pass says so instead of listing every segment", () => {
-  const outline = outlineOf("Opening", "The cost");
+// docs/44: a pass is what was given this time, not "the nth time through". Going
+// over one part five times and skipping the rest is a reader working on that
+// part, and the coach must not read it as a talk that lost the others.
+test("the pass says the rest was left out on purpose", () => {
+  const text = passMessage({ entry: entry(), pages: [page({ transcript: "so far so good" })] });
+  expect(text).toContain("only part of it");
+  expect(text).toContain("left out on purpose");
+  expect(text).toContain("nothing about it to hear");
+});
+
+// Nothing on the note records where the reader was, and the message says so
+// rather than leaving the coach to invent an order it was given in.
+test("the pass says nothing recorded which block was up", () => {
+  const text = passMessage({ entry: entry(), pages: [page({ transcript: "one two three" })] });
+  expect(text).toContain("Nothing recorded which part of the note I was on");
+});
+
+// The note is already in the system prompt (coach.ts, formatTalkOutline). A copy
+// in the message would be the whole talk twice in one request.
+test("the pass does not carry the note", () => {
   const text = passMessage({
-    outline,
+    entry: entry(),
+    pages: [page({ transcript: "here is what you think you see" })],
+  });
+  expect(text).not.toContain("Segment");
+  expect(text).not.toContain("id:");
+});
+
+// A pass recorded before the note surface has one stretch per segment. Its words
+// are one transcript here, in the order they were spoken.
+test("a pass recorded a segment at a time reads back as one transcript", () => {
+  const text = passMessage({
     entry: entry(),
     pages: [
-      page({ index: 0, kind: "s1", transcript: "here is what you think you see" }),
-      page({ index: 1, kind: "s2", transcript: "and here is what arrives" }),
+      page({ index: 0, kind: "s1", title: "Opening", transcript: "here is what you think you see" }),
+      page({ index: 1, kind: "s2", title: "The cost", transcript: "and here is what arrives" }),
     ],
   });
-  expect(text).toContain("I went through all 2 segment(s).");
-  expect(text).not.toContain("nothing about them to hear");
+  expect(text).toContain("here is what you think you see\nand here is what arrives");
 });
 
-// No STT key on the desktop and no dictation on the host both record a pass of
-// segments and no words. There is nothing in that for a coach to hear, and a
-// message saying so would only invite a reply about the silence.
+// No STT key on the desktop and no dictation on the host both record a pass with
+// no words in it. There is nothing in that for a coach to hear, and a message
+// saying so would only invite a reply about the silence.
 test("a pass with no words in it hands nothing over", () => {
-  const outline = outlineOf("Opening");
-  expect(
-    passMessage({ outline, entry: entry(), pages: [page({ index: 0, kind: "s1" })] }),
-  ).toBe("");
-  expect(passMessage({ outline, entry: entry(), pages: [] })).toBe("");
-});
-
-// A segment given in one pass and dropped from the talk before the next has no
-// place in it any more; printing a number would give it somebody else's.
-test("a segment no longer in the talk is named as such and still carries its words", () => {
-  const outline = outlineOf("Opening");
-  const text = passMessage({
-    outline,
-    entry: entry(),
-    pages: [
-      page({ index: 0, kind: "s1", transcript: "here is what you think you see" }),
-      page({ index: 1, kind: "gone", title: "The cut segment", transcript: "and this bit" }),
-    ],
-  });
-  expect(text).toContain("A segment that is no longer in the talk. The cut segment");
-  expect(text).toContain("and this bit");
-});
-
-// A segment the reader went past without saying anything is not a failure, but
-// the coach has to be able to tell it apart from one that was never up.
-test("a segment that was up in silence is shown as said nothing", () => {
-  const outline = outlineOf("Opening", "The cost");
-  const text = passMessage({
-    outline,
-    entry: entry(),
-    pages: [
-      page({ index: 0, kind: "s1", transcript: "here is what you think you see" }),
-      page({ index: 1, kind: "s2" }),
-    ],
-  });
-  expect(text).toContain("(I said nothing on this one.)");
+  expect(passMessage({ entry: entry(), pages: [page()] })).toBe("");
+  expect(passMessage({ entry: entry(), pages: [page({ transcript: "   \n " })] })).toBe("");
+  expect(passMessage({ entry: entry(), pages: [] })).toBe("");
 });

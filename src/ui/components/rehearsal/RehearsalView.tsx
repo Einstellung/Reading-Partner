@@ -1,19 +1,27 @@
-// Giving the talk (docs/44): one block of the note on screen, and a record
-// of which segment the reader was on and how long they stayed there. Reached
+// Giving the talk (docs/44): the note, whole, on one scrolling page. Reached
 // from the topic's Rehearsal section or from the Rehearse button on a retell —
 // one object either way, so one view.
 //
-// Not a deck. The slides are made outside the app and the app never sees that
-// file; what is on screen is the note the reader wrote, one block at a time,
-// with the through-line small and always there because it is the only thing a
-// reader talking off the top of their head can check themselves against.
+// Not a deck, and no longer a block at a time. Reading a note while talking asks
+// three things of the page — find your place again a second after looking up,
+// see what is coming, start or stop anywhere — and one block per screen with a
+// Next button answered only the first, by taking the other two away.
+//
+// So the page never moves by itself: no jump on mount, no restored scroll, no
+// auto-advance. A surface that scrolls while the reader is looking at the
+// audience is worse than any amount of paging, because they come back to a place
+// they did not leave.
+//
+// Nothing here records where the reader was. A scroll position is not a claim
+// about what is being said, and the pass is handed in as the words and the clock
+// (handoff.ts); the coach works out the rest from what it can hear.
 //
 // The run lands on disk on the way out, whichever way out that was — the End
 // button, the back button, or the view being unmounted from under it. A pass is
 // expensive to make and worthless to half-record.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IconClose, IconChevronDown, IconChevronUp } from "../base/icons";
+import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";
 import {
   appendRun,
@@ -21,22 +29,15 @@ import {
   type RehearsalEvent,
   type TranscriptSource,
 } from "../../../reading/rehearsal";
-import type { TalkOutline, TalkSegment } from "../../../reading/talk";
+import type { TalkOutline } from "../../../reading/talk";
 import {
   browserWakeLockTarget,
   createScreenWakeLock,
   type ScreenWakeLock,
 } from "../../../platform/app/wake-lock";
 import { Markdown } from "../markdown/Markdown";
-import {
-  isSegmentChange,
-  nextSegmentIndex,
-  nextTitle,
-  segmentTitle,
-  withSegmentEvent,
-} from "./outline-run";
 import { handOffPass } from "./coach-thread";
-import { finishRun, formatElapsed, positionLabel, utteranceEvent } from "./rehearsal";
+import { finishRun, formatElapsed, utteranceEvent } from "./rehearsal";
 
 export interface RehearsalViewProps {
   // The object this pass is recorded against. Created or found by the caller
@@ -44,17 +45,17 @@ export interface RehearsalViewProps {
   // same thing.
   rehearsal: Rehearsal;
   // The talk being given. Read by the caller rather than here, for the same
-  // reason the microphone is opened by the caller: the panel has to be on screen
-  // with a segment up before the reader starts talking, and a read from disk
-  // after mount would put the first words of the talk against nothing.
+  // reason the microphone is opened by the caller: the note has to be on screen
+  // before the reader starts talking, and a read from disk after mount would put
+  // the first words of the talk against a blank page.
   outline: TalkOutline;
   // Where the close button goes, in words: the retell for one door, the topic's
   // list for the other.
   backLabel: string;
   // Speech, when there is any. The caller makes one before it mounts this view
-  // so that capture is already running when the first segment goes up; with no
-  // STT key configured there is none, and the run records segments and no words,
-  // which is a run and not a failure.
+  // so that capture is already running when the note goes up; with no STT key
+  // configured there is none, and the run records the clock and no words, which
+  // is a run and not a failure.
   transcript?: TranscriptSource;
   onExit(): void;
   // The pass has been dealt with: written to disk and handed to the talk's
@@ -65,68 +66,36 @@ export interface RehearsalViewProps {
   onSaved(recorded: boolean): void;
 }
 
-// One block of the note. Through the renderer the rest of the app reads markdown
-// with, so the formulas and the [fig:N] citations written into the block are set
-// the way they are set everywhere else — the figure host comes from the context
-// a book open under this screen provides, and a citation with no host behind it
-// stays as the reader typed it.
-function SegmentPanel({
-  segments,
-  index,
-}: {
-  segments: readonly TalkSegment[];
-  index: number;
-}) {
-  const segment = segments[index];
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-5 sm:px-10">
-      <p className="m-0 flex items-baseline gap-2 text-[15px] text-white/60">
-        <span className="tabular-nums text-white/40">{index + 1}.</span>
-        <span className="min-w-0">{segmentTitle(segment)}</span>
-      </p>
-      <div className="text-white [&_*]:text-inherit">
-        <Markdown text={segment.body} />
-      </div>
-    </div>
-  );
-}
-
-// The whole talk, folded away. Out of sight while a segment is being given —
-// the reader should not be looking at the shape of the talk in the middle of
-// saying part of it — and one press away when the next thing to do is to go
-// somewhere else in it (docs/44).
-function JumpList({
-  segments,
-  current,
-  onJump,
-}: {
-  segments: readonly TalkSegment[];
-  current: number;
-  onJump(index: number): void;
-}) {
-  return (
-    <aside className="flex w-64 flex-none flex-col overflow-y-auto border-l border-white/10">
-      <ul className="m-0 flex list-none flex-col p-0">
-        {segments.map((segment, i) => (
-          <li key={segment.id}>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onJump(i)}
-              aria-current={i === current ? "true" : undefined}
-              className={`h-auto w-full justify-start gap-2 rounded-none px-3 py-2 text-left text-[13px] can-hover:hover:bg-white/10 ${
-                i === current ? "bg-white/10 text-white" : "text-white/60"
-              }`}
-            >
-              <span className="flex-none tabular-nums text-white/35">{i + 1}</span>
-              <span className="min-w-0 flex-1 truncate">{segmentTitle(segment)}</span>
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </aside>
-  );
-}
+// The note, as it is read at arm's length while talking. Everything is set
+// against the block's own font size (em, as in MarkdownRenderer's set), so the
+// one number that decides how big the note is on an iPhone and on an iPad is the
+// font size on the column below.
+//
+// The renderer this sits over is the app's, and the app's is drawn for a light
+// bubble: its own rules colour code, quotes, rules and links for ink on paper.
+// Those are the ones repeated here with `!` — at equal specificity the winner
+// would otherwise be whichever Tailwind emitted last, which is not a thing to
+// hang a talk on.
+const NOTE = [
+  // Headings are the reader's landmarks — the thing the eye lands on coming back
+  // from the audience — so they are brighter than the prose and carry the space.
+  "[&_h1]:text-white [&_h1]:text-[1.15em] [&_h2]:text-white [&_h2]:text-[1.1em]",
+  "[&_h3]:text-white [&_h4]:text-white [&_h5]:text-white [&_h6]:!text-white/55",
+  // Prose and list items, opened up. A line found by eye rather than by reading
+  // from the top needs the space between lines to be wider than the space
+  // between words.
+  "[&_p]:leading-[1.8] [&_li]:leading-[1.8] [&_li]:my-[0.35em]",
+  "[&_a]:!text-sky-300",
+  "[&_code]:!bg-white/10",
+  "[&_pre]:!border-white/10 [&_pre]:!bg-black/40",
+  "[&_blockquote]:!border-white/25 [&_blockquote]:!text-white/65",
+  "[&_hr]:!border-white/15",
+  "[&_th]:!border-white/20 [&_th]:!bg-white/10 [&_td]:!border-white/20",
+  // A formula wider than the measure scrolls inside its own box. The alternative
+  // is one long equation making the whole note scroll sideways, which loses the
+  // reader's place in every block at once.
+  "[&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden",
+].join(" ");
 
 export default function RehearsalView({
   rehearsal,
@@ -142,14 +111,10 @@ export default function RehearsalView({
   const startedAtRef = useRef(Date.now());
   const savedRef = useRef(false);
 
-  const [current, setCurrent] = useState(0);
   const [elapsed, setElapsed] = useState(0);
-  const [jumpOpen, setJumpOpen] = useState(false);
 
   // The listener below and the save are both mounted once and hold their
-  // closures for the life of the view, so the source is reached through a ref:
-  // read the prop directly and a segment change would cut a source the view was
-  // handed on its first render.
+  // closures for the life of the view, so the source is reached through a ref.
   const transcriptRef = useRef(transcript);
   useEffect(() => {
     transcriptRef.current = transcript;
@@ -163,13 +128,13 @@ export default function RehearsalView({
   });
 
   // Keep the screen on for the length of the pass (platform/app/wake-lock).
-  // Tens of minutes go by with nobody touching the iPad, and a device that locks
-  // itself suspends the webview: the dictation session listening to the talk
-  // goes down with it, and the rest of the pass is recorded as segments and no
-  // words. Asked for here rather than after any await so the request still rides
-  // the tap that opened the rehearsal — Safari wants a gesture for it — and
-  // failure is not the caller's business: a screen that naps is a worse
-  // rehearsal, not a lost one.
+  // Tens of minutes go by with nobody touching the iPad — more of them now that
+  // there is no Next button to touch — and a device that locks itself suspends
+  // the webview: the dictation session listening to the talk goes down with it,
+  // and the rest of the pass is recorded as no words at all. Asked for here
+  // rather than after any await so the request still rides the tap that opened
+  // the rehearsal — Safari wants a gesture for it — and failure is not the
+  // caller's business: a screen that naps is a worse rehearsal, not a lost one.
   const lockRef = useRef<ScreenWakeLock | null>(null);
   useEffect(() => {
     const lock = createScreenWakeLock(browserWakeLockTarget());
@@ -188,6 +153,11 @@ export default function RehearsalView({
   // stopping the desktop source waits for every segment still uploading, which
   // is why finish() awaits it too. Both calls land on the one stop: a source is
   // stopped once and every caller gets that same promise back.
+  //
+  // Nothing cuts the recording any more. The desktop source cut on a page turn
+  // and there are no page turns, so its own 60-second ceiling is the only knife
+  // left (segmented-source.ts arms it at start and re-arms it after every cut);
+  // the dictated source never had one to lose.
   useEffect(() => {
     if (!transcript) return;
     void transcript
@@ -200,48 +170,16 @@ export default function RehearsalView({
     };
   }, [transcript]);
 
-  // Putting a segment up is what a deck's page turn used to be: the host stamps
-  // the time, the run records it, and the recording is cut so the words either
-  // side of it are transcribed as two segments rather than one block hung on
-  // whichever segment happened to be up first (docs/43 — desktop STT hands back
-  // one lump of text with no timings inside it). Jumping to the segment already
-  // on screen is not a change and does not cut.
-  const show = useCallback(
-    (index: number) => {
-      const segment = segments[index];
-      if (!segment) return;
-      const at = Date.now();
-      if (isSegmentChange(eventsRef.current, index)) transcriptRef.current?.cut();
-      eventsRef.current = withSegmentEvent(eventsRef.current, segment, index, at);
-      setCurrent(index);
-    },
-    [segments],
-  );
-
-  // The first segment goes up with the panel. Declared after the transcript
-  // effect so capture is already running when it does; anything said before the
-  // first segment event belongs to no segment and is dropped (buildRun).
-  const showRef = useRef(show);
-  useEffect(() => {
-    showRef.current = show;
-  });
-  useEffect(() => {
-    showRef.current(0);
-  }, []);
-
-  // Write the run. Once, whichever exit was taken. A view that never got a
-  // segment up (an outline with nothing on it, or the reader turning round
-  // immediately) has nothing to write: an empty row in the history would be a
-  // pass that never happened.
+  // Write the run. Once, whichever exit was taken.
   //
-  // The last segment's words arrive after the reader has left: stopping the
-  // source sends the final segment and waits for every earlier one still on its
-  // way back from STT, and the utterances land through the callback above. So
-  // the run is built on the other side of that await, which is finishRun's order
-  // (rehearsal.ts). The rest of this runs after the view is gone — the End
-  // button unmounts it before the uploads finish — which is why nothing past
-  // this point touches this view's state: the events are a ref, the store
-  // writes a file, and onSaved belongs to the view above, which is still up.
+  // The last words arrive after the reader has left: stopping the source sends
+  // the final segment and waits for every earlier one still on its way back from
+  // STT, and the utterances land through the callback above. So the run is built
+  // on the other side of that await, which is finishRun's order (rehearsal.ts).
+  // The rest of this runs after the view is gone — the End button unmounts it
+  // before the uploads finish — which is why nothing past this point touches this
+  // view's state: the events are a ref, the store writes a file, and onSaved
+  // belongs to the view above, which is still up.
   const finish = useCallback(async () => {
     // The gate closes before the first await, so the second caller (the End
     // button and then the unmount, or the other way round) turns back here
@@ -250,8 +188,8 @@ export default function RehearsalView({
     savedRef.current = true;
     // The screen is handed back at the same gate the run is written at, so the
     // three ways out (End, back, unmount) are one path to keep right and not
-    // two. Before the await: the reader has stopped talking, and the segments
-    // still uploading do not need the iPad awake.
+    // two. Before the await: the reader has stopped talking, and the words still
+    // uploading do not need the iPad awake.
     lockRef.current?.set(false);
     const saved = await finishRun({
       rehearsalId: rehearsal.id,
@@ -294,17 +232,15 @@ export default function RehearsalView({
     onExit();
   };
 
-  const segment = segments[current] ?? null;
-  const upNext = nextTitle(segments, current);
-  const goNext = nextSegmentIndex(current, segments.length);
-
   return (
     // The one screen that is not on the app's palette and is not tinted with
     // it: a rehearsal is what a room looks at, and the chrome around it is dark.
     // The paper tint (styles.css) has nothing to say here — it lightens a
     // reading surface, and there is none.
     <div className="absolute inset-0 flex flex-col bg-[#0d0f14]">
-      <div className="flex flex-none items-center gap-3 px-3 py-2 text-white">
+      <div
+        className="flex flex-none items-center gap-3 pb-2 pl-safe-3 pr-safe-3 pt-safe-2 text-white"
+      >
         {/* The app's one surviving `bg-white`, and the reason it survives: a
             tenth of white is how a control lights up on a near-black bar, and a
             palette token would put a cream fill on it. The contract test names
@@ -321,25 +257,12 @@ export default function RehearsalView({
           <IconClose size={18} />
         </Button>
         <span className="min-w-0 flex-1 truncate text-[13px] text-white/70">{outline.name}</span>
-        <span className="flex-none text-[13px] tabular-nums text-white/70">
-          {positionLabel(segment ? { index: current, total: segments.length } : null)}
-        </span>
         <span
           className="flex-none text-[13px] tabular-nums text-white/70"
           title="How long this rehearsal has been going"
         >
           {formatElapsed(elapsed)}
         </span>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => setJumpOpen((open) => !open)}
-          title="The whole talk, to start or stop anywhere in it"
-          className="h-9 gap-1.5 px-2 text-[13px] text-white/70 can-hover:hover:bg-white/10 can-hover:hover:text-white"
-        >
-          Segments
-          {jumpOpen ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-        </Button>
         <Button type="button" onClick={leave}>
           End the rehearsal
         </Button>
@@ -349,47 +272,38 @@ export default function RehearsalView({
           not said out loud, it is the one thing a reader talking off the top of
           their head can check themselves against (docs/44). */}
       {outline.spine.thesis && (
-        <p className="m-0 flex-none truncate border-b border-white/10 px-4 py-1.5 text-[11px] text-white/40">
+        <p
+          className="m-0 flex-none truncate border-b border-white/10 py-1.5 pl-safe-4 pr-safe-4 text-[11px] text-white/40"
+        >
           {outline.spine.thesis}
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1">
-        {segment ? (
-          <SegmentPanel segments={segments} index={current} />
-        ) : (
-          <p className="m-0 flex-1 px-6 py-5 text-sm text-white/70">
+      {/* The whole note in one column, and the only thing in this view that
+          scrolls. `overscroll-contain` so a flick at the end of the last block
+          does not hand the gesture to whatever is behind this screen. */}
+      <div
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-6 pb-safe-16 pl-safe-6 pr-safe-6"
+      >
+        {segments.length === 0 ? (
+          <p className="m-0 text-sm text-white/70">
             This talk has no segments yet. Arrange it at the end of the retell, then rehearse.
           </p>
+        ) : (
+          // A measure, not a column of the iPad's width: a line the eye has to
+          // track back across is a line the reader loses. Blocks are told apart
+          // by the space between them and nothing else — no frame, no number, no
+          // status — because it is one note and it is read as one.
+          <div
+            className="mx-auto flex max-w-[36rem] flex-col gap-10 text-[19px] leading-[1.8] text-white/90 sm:text-[21px]"
+          >
+            {segments.map((segment) => (
+              <div key={segment.id} className={NOTE}>
+                <Markdown text={segment.body} />
+              </div>
+            ))}
+          </div>
         )}
-        {jumpOpen && segments.length > 0 && (
-          <JumpList
-            segments={segments}
-            current={current}
-            onJump={(i) => {
-              show(i);
-              setJumpOpen(false);
-            }}
-          />
-        )}
-      </div>
-
-      {/* Where this is going. On screen the whole time the current segment is
-          being given: landing a segment somewhere the next one can pick up from
-          is the hard part, and it cannot be done without knowing what the next
-          one is (docs/44). */}
-      <div className="flex flex-none items-center gap-3 border-t border-white/10 px-4 py-3">
-        <span className="min-w-0 flex-1 truncate text-[13px] text-white/45">
-          {upNext ? `Next: ${upNext}` : "Last segment"}
-        </span>
-        <Button
-          type="button"
-          disabled={goNext === null}
-          title={goNext === null ? "This is the last segment" : "Go on to the next segment"}
-          onClick={() => goNext !== null && show(goNext)}
-        >
-          Next
-        </Button>
       </div>
     </div>
   );
