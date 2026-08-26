@@ -526,8 +526,10 @@ test("a note already started is in the prompt with its segment ids", async () =>
   expect(turn.systemPrompt).toContain("id: s1");
 });
 
-// The stage comes off the talk, not off the chapters: a spine written means the
-// macro pass is over, and every chapter settled means nothing on its own.
+// The record comes off the talk, not off the chapters. A spine on it does not
+// say the macro pass is over — that stage banks its draft as it goes — but it
+// does take the record past its opening, and every chapter settled means
+// nothing on its own.
 test("a spine on the talk takes the record past its opening", async () => {
   const talk = talkStub();
   await talk.access.edit((o) =>

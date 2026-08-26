@@ -108,10 +108,11 @@ function blockForRib(rib: string, labels: readonly string[]): number | null {
 }
 
 // The record of the retell so far, as the model reads it at the top of every
-// turn. This is what makes "start from where it stands" answerable, and which
-// stage the retell is in is read off it: no through-line on the talk means the
-// reader has not yet given the whole thing back, so the retell is still at its
-// opening or in the macro pass; a through-line means it is on the ribs.
+// turn. This is what makes "start from where it stands" answerable. It reports
+// what is written, not which stage that is: no through-line means the reader has
+// not given the whole thing back, so the retell is at its opening or in the macro
+// pass; a spine with no block yet is what the macro pass banks as it goes, and
+// only the conversation says whether the reader can name the parts back unaided.
 //
 // It says nothing about which chapter comes next, and there is no such thing. A
 // record that named one turned every reply into a chapter march: a reader who
@@ -137,7 +138,7 @@ export function formatPlan(
     lines.push(
       "",
       "The talk has no through-line yet: the reader has not given the whole thing",
-      "back, so nothing about the parts is settled and nothing goes in the note.",
+      "back, so no block of the note goes in yet.",
       "If the conversation above is empty, this is the opening — hand them their",
       "trail back and ask for the whole thing, end to end, from memory.",
       // The record only knows what was written, so on the turn right after the
@@ -145,6 +146,11 @@ export function formatPlan(
       // for the one-minute version a second time.
       "If the opening has already happened above, do not do it again: you are in",
       "the macro pass, working the through-line and the backbone out with them.",
+      // The macro pass writes as it goes now, so the empty record is also the
+      // one place to say that waiting for a finished spine is what left the
+      // stage with nothing written.
+      "Put the line and the parts onto the spine as they come, in the reader's",
+      "words — it overwrites.",
     );
   } else {
     lines.push("", `Through-line: ${thesis || "(not written yet)"}`);
@@ -162,7 +168,17 @@ export function formatPlan(
     lines.push("", `The note — ${segments.length} block(s), in the order they are given:`);
     for (const [i, label] of labels.entries()) lines.push(`  ${i + 1}. ${label}`);
   } else if (hasSpine) {
-    lines.push("", "No block of the note is written yet.");
+    // A spine with no block is the macro pass's own draft as often as it is a
+    // finished backbone, and the record cannot tell them apart: only the
+    // conversation says whether the reader named the parts back unaided.
+    lines.push(
+      "",
+      "No block of the note is written yet.",
+      "This spine is what the macro pass has banked so far. If the conversation",
+      "above shows the reader naming the parts in order, unaided, you are on the",
+      "ribs. If not, you are still in the macro pass: keep working the whole and",
+      "write the spine again as it firms up, rather than starting the opening over.",
+    );
   }
 
   const decisions = plan?.decisions ?? [];

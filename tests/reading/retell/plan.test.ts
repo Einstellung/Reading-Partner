@@ -66,6 +66,9 @@ test("a talk with no through-line reads as a retell still at its opening", () =>
   expect(text).toContain("no through-line yet");
   expect(text).toContain("this is the opening");
   expect(text).toContain("from memory");
+  // The stage writes as it goes; an empty record that only said "nothing is
+  // settled" is what left fifty-one messages with nothing written.
+  expect(text).toContain("onto the spine as they come");
 });
 
 // The record only knows what was written, so the turn right after the opening
@@ -117,7 +120,10 @@ test("the record keeps the order it was given in", () => {
   expect(text.indexOf("3. Endings —")).toBeLessThan(text.indexOf("1. Openings —"));
 });
 
-test("a through-line on the talk takes the retell past its opening", () => {
+// A spine with no block under it is as likely to be the macro pass's own draft
+// as a finished backbone, and the record cannot tell which: it prints what is
+// written and leaves the stage to the conversation.
+test("a through-line with no block yet reads as the macro pass's draft", () => {
   const outline = setSpine(
     talk(),
     { thesis: "Vision is inference, not measurement", audience: "second-year students" },
@@ -128,6 +134,8 @@ test("a through-line on the talk takes the retell past its opening", () => {
   expect(text).toContain("Through-line: Vision is inference, not measurement");
   expect(text).toContain("Audience: second-year students");
   expect(text).toContain("No block of the note is written yet.");
+  expect(text).toContain("This spine is what the macro pass has banked so far.");
+  expect(text).toContain("you are still in the macro pass");
 });
 
 // A block exists for a rib exactly when the reader has given that rib, so the

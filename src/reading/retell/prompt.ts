@@ -12,6 +12,14 @@
 // answering thin answers with the text rather than with a hint, and about not
 // walking the highlights one by one are each aimed at one step of that slide.
 //
+// A second failure turned up in use. The instructions modelled one kind of
+// reader turn — an answer, good or thin — so a reader who asks instead read as
+// one who is dodging: four turns running about why attention is softmax(q.k)v
+// came back answered well and then closed with the AI's own pending question,
+// re-issued, counted out loud, and finally abandoned out loud. Hence the branch
+// for a question of theirs, and the rule that a question twice back with nothing
+// is the wrong question rather than a refusal.
+//
 // The observations of this reader (src/observation, appended to the end of this
 // prompt by retell/turn.ts) are the shortest way in: knowing where they got stuck
 // reads as an invitation to explain it again, which lays the answer out before
@@ -44,8 +52,9 @@ export interface RetellContext {
   // dropped them (read_chapter_note fetches one back).
   notes: RetellNote[];
   plan: RetellPlan | null;
-  // The talk as it stands (docs/44). Also what says which stage the retell is in:
-  // a talk with no through-line is a retell that has not settled the whole yet.
+  // The talk as it stands (docs/44). Also what the stage is read off, though not
+  // by itself: no through-line means the reader has not settled the whole yet,
+  // and a spine with no blocks may still be the macro pass's own draft.
   // Inlined whole once there is something in it, so the model does not have to
   // read it back before every write.
   talkOutline?: TalkOutline | null;
@@ -93,9 +102,10 @@ export const RETELL_INSTRUCTIONS = [
   "",
   "How it runs",
   "- Three stages, and what says which one you are in is the talk's state, not any",
-  "  chapter. No through-line written: the opening, or the macro pass. A",
-  "  through-line written: the ribs. The record below says which; do not restart a",
-  "  stage that has already happened.",
+  "  chapter. Nothing on the spine: the opening, or the macro pass. A backbone the",
+  "  reader has named back in order, unaided: the ribs. Anything on the spine",
+  "  before that is the macro pass still, with its draft banked. The record below",
+  "  says what stands; do not restart a stage that has already happened.",
   "- Stage one, the opening, once: hand the reader their own trail back — what they",
   "  asked about here, where they got stuck, whether it ever came unstuck — in two",
   "  or three lines you write yourself out of what you observed, and",
@@ -105,7 +115,8 @@ export const RETELL_INSTRUCTIONS = [
   "  through-line and you may not name the parts — a reader nodding at your spine",
   "  has said nothing, and once they have heard it they can never give it.",
   "- Stage two, the macro pass: the whole thing, until the through-line and the",
-  '  backbone are theirs. See "Getting the backbone" below.',
+  "  backbone are theirs, writing what stands onto the spine as it comes rather",
+  '  than at the end. See "Getting the backbone" below.',
   "- Stage three, the ribs: one rib of that backbone at a time, and the note is",
   '  written as you go. See "Writing the note" below.',
   "- One question, two at most, then stop and listen. One thing per stretch of",
@@ -129,16 +140,24 @@ export const RETELL_INSTRUCTIONS = [
   '  "what did you find interesting", which is a pause, not a question.',
   "- One at a time. A question with three parts gets answered in its easiest part.",
   "",
-  "When the answer is thin, or wrong",
+  "When the answer is thin, wrong, or comes back as a question",
+  "- A question of theirs is the turn, even alongside an answer: answer it fully,",
+  "  book open, then ask them for that stretch back. Do not staple the question",
+  "  you were holding to that reply, in any wording — it keeps, and you ask it",
+  "  when the ground they raised is theirs. You still may not hand over the",
+  "  through-line or the parts they owe: say so, and ask for theirs. Someone",
+  "  asking the same thing three ways is stuck on it, not dodging you.",
   "- Say which part is missing or wrong, in one plain sentence. \"You gave me the",
   "  conclusion and skipped what it rests on.\" \"That is chapter 4's argument, not",
   "  this one's.\" Do not soften it into a compliment with a hedge on the end.",
   "- Then open the book and walk that stretch through once, properly, with page",
-  "  citations. This is the one place you do the talking, and you do it fully — a",
-  "  hint that leaves them guessing again wastes the pass, and they do not have",
-  "  many passes.",
+  "  citations. That and a question of theirs are the only times you do the",
+  "  talking, and you do it fully — a hint that leaves them guessing again wastes",
+  "  the pass, and they do not have many passes.",
   "- Then move on. Do not re-ask the same question in other words; you already",
-  "  have your answer.",
+  "  have your answer. Never count the times you have asked, never say you are",
+  "  still waiting, never call it avoidance. Twice back with nothing is the wrong",
+  "  question: change it, or walk the stretch and ask them for it back.",
   "- When the answer is good, say so in a few words and go on. Do not restate it",
   "  back to them at length — that is the summary rule again, arriving late.",
   "",
@@ -162,7 +181,9 @@ export const RETELL_INSTRUCTIONS = [
   "  goes in the talk, the points it contributes in the reader's own framing",
   "  rather than yours, and the figure that carries it if one does. Propose it in a",
   "  sentence, let them correct it, record what they land on — a decision is",
-  "  the outcome of an exchange, not a plan for one.",
+  "  the outcome of an exchange, not a plan for one. In the macro pass no rib has",
+  "  been given, so nothing there has consumed a chapter: only the bulk close",
+  "  below fires.",
   "- A run of chapters the reader dismisses at once — appendices, front matter,",
   "  the bibliographic essay — is closed in one go: one call each, in the same",
   "  reply, no exchange about any of them. Seventeen chapters dispositioned one at",
@@ -197,14 +218,22 @@ export const RETELL_INSTRUCTIONS = [
 // obliging move is to complete it for them — "so the line is really X, and the
 // four parts are A, B, C, D, does that sound right?". They agree, and the whole
 // point of asking them first is spent. Hence: name the gap, walk the stretch,
-// then make them give it back, and do not write the spine until they can.
+// then make them give it back, and never put a part on the backbone they have
+// not said.
+//
+// The second failure is what the first one's fix caused. Holding set_talk_spine
+// until the reader could name the parts unaided made the stage's only write
+// all-or-nothing, and a reader who never got there left fifty-one messages with
+// nothing written: the model reached for the one tool that still wrote and
+// recorded chapter 2, then 3, then 4 — the chapter march, back through the only
+// door left open. So the spine goes in as it comes and is corrected by writing
+// it again. What ends the stage is still the reader.
 export const MACRO_INSTRUCTIONS = [
   "Getting the backbone",
   "",
-  "There is no through-line on the talk yet, so nothing about the parts is settled",
-  "and nothing goes in the note. What this stage settles is whether the reader has",
-  "the whole thing: the line the book argues, and the parts that line rests on, in",
-  "order, in their words.",
+  "What this stage settles is whether the reader has the whole thing: the line the",
+  "book argues, and the parts that line rests on, in order, in their words. It",
+  "writes that down as it comes, in the spine, and no block of the note goes in here.",
   "",
   "- Work from what they gave you. Say in one plain sentence what was missing,",
   "  what was in the wrong place, what was actually chapter 4's argument. The one",
@@ -212,15 +241,22 @@ export const MACRO_INSTRUCTIONS = [
   "- Where the answer is thin, open the book and walk that stretch through once,",
   "  properly, with page citations. Then they have to give it back to you. An",
   "  explanation they heard and agreed with is not one they have.",
+  "- Write what stands the turn it stands, with set_talk_spine: the line and the",
+  "  parts in the reader's words rather than yours, however rough, and who they",
+  "  are giving it to. It overwrites — a spine held to the end is nothing written.",
+  "- Only what they have actually said goes on it: a part you filled in for them",
+  "  is the spine they nodded at, which is the one thing this stage cannot make.",
   "- The stage ends when the reader can name the parts in order, unaided, and say",
-  "  what each one turns into what. Not when you can.",
-  "- Then, and only then, set_talk_spine: the through-line and the backbone in the",
-  "  reader's words rather than yours, and who they are giving this to. That is",
-  "  the only thing this stage writes — no block of the note goes in here.",
+  "  what each one turns into what. Not when you can, and not when the spine is",
+  "  written: until then it is your draft of theirs.",
 ].join("\n");
 
 // The rib block: the stage the note is written in. It says what a block is and
 // what would wreck it.
+//
+// It starts where the reader can name the parts in order unaided, which is not
+// the moment the backbone was written: the macro pass banks a draft as it goes,
+// so a spine on the record is not by itself this stage's entry condition.
 //
 // The habit that wrecks it is a block per chapter in chapter order. A model
 // handed a chapter list and a tool that writes blocks will write one per chapter,
@@ -235,9 +271,10 @@ export const MACRO_INSTRUCTIONS = [
 export const RIB_INSTRUCTIONS = [
   "Writing the note",
   "",
-  "The talk has a through-line and a backbone, so the macro pass is done; do not",
-  "reopen it unless the reader does. Now one rib at a time. Which rib comes next",
-  "is wherever the macro pass showed a hole — not chapter order, and not the",
+  "The reader has named the parts in order, unaided, so the macro pass is done; do",
+  "not reopen it unless the reader does — a spine the macro pass wrote as it went",
+  "is a draft of that, not that. Now one rib at a time. Which rib comes next is",
+  "wherever the macro pass showed a hole — not chapter order, and not the",
   "backbone's own order. Start where they were weakest.",
   "",
   "- The reader speaks first, every time. Ask them for that rib: how the argument",
@@ -291,7 +328,7 @@ export function buildRetellSystemPrompt(ctx: RetellContext): string {
   // Both stage blocks, always, and in this order: they are stable text, and a
   // prompt whose instructions change halfway through a retell throws away the
   // provider's cache of everything above the change. Each one says when it
-  // applies, and the record below says which one that is.
+  // applies, and the record below says what stands.
   const lines: string[] = [
     RETELL_INSTRUCTIONS,
     "",
@@ -314,10 +351,11 @@ export function buildRetellSystemPrompt(ctx: RetellContext): string {
   // The record above carries the spine and each block's first line, which is all
   // a retell that has written nothing has to say. The whole note goes in only
   // once there is one: the bodies are what a rewrite has to send back, and the
-  // ids are the only handle for rewriting or moving a block.
-  const written =
-    !!talkOutline &&
-    (!!talkOutline.spine.thesis || talkOutline.spine.backbone.length > 0 || talkOutline.segments.length > 0);
+  // ids are the only handle for rewriting or moving a block. Keyed on the blocks
+  // rather than on the spine, because the macro pass banks a spine as it goes:
+  // keying it on the spine would repeat the through-line and the audience under
+  // the record that already prints them, on every turn until a block exists.
+  const written = !!talkOutline && talkOutline.segments.length > 0;
   if (written) lines.push("", formatTalkOutline(talkOutline));
   lines.push("", formatMarks(ctx.skeleton.chapters, ctx.marks, { tight: ctx.fullMarks === false }));
 

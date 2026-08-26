@@ -120,12 +120,13 @@ test("the opening asks for the whole thing and withholds the spine", () => {
 });
 
 // Which stage the retell is in comes off the talk, not off how many chapters
-// have been dispositioned.
-test("the stage is read off the talk's through-line, and there are three of them", () => {
+// have been dispositioned — and not off the spine's existence either, since the
+// macro pass banks a draft of it as it goes.
+test("the stage is read off the talk's state, and there are three of them", () => {
   expect(RETELL_INSTRUCTIONS).toContain("Three stages");
   expect(RETELL_INSTRUCTIONS).toContain("the talk's state, not any");
-  expect(RETELL_INSTRUCTIONS).toContain("No through-line written: the opening, or the macro");
-  expect(RETELL_INSTRUCTIONS).toContain("through-line written: the ribs");
+  expect(RETELL_INSTRUCTIONS).toContain("Nothing on the spine");
+  expect(RETELL_INSTRUCTIONS).toContain("named back in order, unaided: the ribs");
 });
 
 // The chapter march is what the record used to force. The instructions have to
