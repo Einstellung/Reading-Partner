@@ -97,10 +97,11 @@ export default function RetellView(props: {
       })
       .finally(() => setPreparing(false));
   };
-  // The talk this retell has arranged, re-read as the conversation grows: the
-  // arrangement comes out of the last exchange of the retell (docs/44), so the
-  // outline that turns Rehearse on is written mid-sitting, by the turn that has
-  // just finished.
+  // The talk this retell is writing, re-read as the conversation grows: the note
+  // is written a rib at a time as the retell goes (docs/44), so the block that
+  // turns Rehearse on lands mid-sitting, by the turn that has just finished —
+  // and Rehearse comes on at the first rib, because a note with one block on it
+  // is a note that can be read aloud.
   const talk = useRetellOutline(props.retellId, retell.messages.length);
   const readiness = rehearsalReadiness({
     segments: talk.loading ? null : (talk.outline?.segments.length ?? 0),

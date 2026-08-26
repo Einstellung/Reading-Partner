@@ -30,6 +30,7 @@ export {
   type StartTalkOutlineInput,
 } from "./store";
 export {
+  columns,
   displayMath,
   emptySpine,
   newTalkOutline,

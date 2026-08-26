@@ -153,6 +153,18 @@ test("a rib with a block reads as given, one without as not given yet", () => {
   expect(text).toContain("1. The retina throws most of it away");
 });
 
+// The reader writes in Chinese, where a rib is often two ideographs — as much
+// signal as an English word of four letters, and the only reason the floor on a
+// containment match is counted in columns rather than characters.
+test("a short Chinese rib still finds the block headed with it", () => {
+  const rib = "\u5806\u5757";
+  let outline = setSpine(talk(), { thesis: "t", backbone: [rib, "\u63a8\u7406"] }, 2);
+  outline = putSegment(outline, { body: `## ${rib}\uff1a\u53e0\u51e0\u5341\u5c42\n\nresidual, layernorm` }, 3);
+  const text = formatPlan(chapters, null, outline);
+  expect(text).toContain(`1. ${rib} \u2014 given (block 1)`);
+  expect(text).toContain("2. \u63a8\u7406 \u2014 not given yet");
+});
+
 // formatOutline is what read_retell_outline reads back to the reader, so unlike
 // formatPlan it is the chapter view and carries no instruction about what to do
 // next.

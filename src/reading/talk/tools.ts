@@ -2,11 +2,11 @@
 // the readback the prompt inlines.
 //
 // They sit here because there are two conversations that write a talk and
-// neither owns the other. The retell arranges one at its last stretch, turning
-// the chapter decisions into segments; the coach edits the same outline after a
-// pass has been given against it (reading/rehearsal/coach.ts), because what
-// comes out of a rehearsal is a change to the talk rather than a review of it.
-// Each of those two owns its own stretch of prompt — ARRANGE_INSTRUCTIONS in
+// neither owns the other. The retell writes the note as it goes, a block per rib
+// of the backbone; the coach edits the same note after a pass has been given
+// against it (reading/rehearsal/coach.ts), because what comes out of a rehearsal
+// is a change to the talk rather than a review of it. Each of those two owns its
+// own stretch of prompt — MACRO_INSTRUCTIONS and RIB_INSTRUCTIONS in
 // reading/retell/prompt.ts, COACH_INSTRUCTIONS in reading/rehearsal/coach.ts —
 // and shares the writing.
 //

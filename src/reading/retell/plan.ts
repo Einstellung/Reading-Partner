@@ -6,7 +6,7 @@
 // rather than prose. Where it lives, and in what order, belongs to the retell
 // (reading/retell/outline.ts); this file only reads it back.
 
-import { segmentLabel, type TalkOutline } from "../talk";
+import { columns, segmentLabel, type TalkOutline } from "../talk";
 import type { RetellChapter, RetellPlan } from "./types";
 
 // The whole outline as something to read back to the reader when they ask what
@@ -84,7 +84,9 @@ function normalizeLine(text: string): string {
 }
 
 // Below this a containment match means nothing — two ribs that share the word
-// "the" are not the same rib.
+// "the" are not the same rib. Measured in columns rather than characters: a rib
+// written in Chinese is often two ideographs, which says as much as an English
+// word of four letters and would never clear a floor counted in characters.
 const MATCH_FLOOR = 4;
 
 // Which block of the note gives a rib, counting from 1, or null when none does.
@@ -99,8 +101,8 @@ function blockForRib(rib: string, labels: readonly string[]): number | null {
     const have = normalizeLine(label);
     if (!have) continue;
     if (have === want) return i + 1;
-    if (have.includes(want) && want.length >= MATCH_FLOOR) return i + 1;
-    if (want.includes(have) && have.length >= MATCH_FLOOR) return i + 1;
+    if (have.includes(want) && columns(want) >= MATCH_FLOOR) return i + 1;
+    if (want.includes(have) && columns(have) >= MATCH_FLOOR) return i + 1;
   }
   return null;
 }

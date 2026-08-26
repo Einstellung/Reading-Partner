@@ -214,7 +214,7 @@ export function normalizeSegment(raw: unknown, seen?: Set<string>): TalkSegment 
 // written as code points rather than pasted as glyphs (docs/pitfall/170).
 const WIDE_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7a3]/gu;
 
-function columns(text: string): number {
+export function columns(text: string): number {
   const wide = text.match(WIDE_CHAR)?.length ?? 0;
   return [...text].length + wide;
 }
