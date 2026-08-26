@@ -312,6 +312,19 @@ export function linkifyCitations(text: string, knownSlugs?: KnownSlugs): string 
   return scanAnchors(text, renderAnchor, knownSlugs);
 }
 
+// Rewrite only the [fig:N] shorthands, leaving every other bracket byte for byte
+// as the model wrote it. For the surfaces that have the book's figures but no
+// reader under them — a retell, a rehearsal note, the coach — where a figure
+// opens in place and a page citation has nowhere to go. Those two answers used
+// to be one switch, so turning figures on there would also have turned [p.12]
+// into a chip that leads nowhere.
+//
+// Nothing is reconstructed on the way back: a page bracket is never rewritten,
+// so there is no label to un-strip and no quote to put back.
+export function linkifyFigureCitations(text: string): string {
+  return scanAnchors(text, (a) => (a.kind === "figure" ? renderAnchor(a) : null));
+}
+
 // A prep note's page anchors mean pages of *that* paper, but they are written
 // bare — [p.3], the same shape a survey citation has. Copied into a reply or a
 // prompt they land in the survey's namespace and jump to the wrong book; one

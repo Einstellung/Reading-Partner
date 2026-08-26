@@ -4,8 +4,15 @@
 // It replaces the topic's sections the way a retell does, rather than covering
 // them: the section it was opened from sits inside a scrolling column, and a
 // full-screen cover mounted there would be clipped by it.
+//
+// This is the second door into the same note — the first is the retell's own
+// Rehearse — so the note's [fig:N] cards have to work here too, and the scope
+// comes off the rehearsal's retell (MaterialFigureScope). A rehearsal arranged
+// without a retell has no materials and so no figures, which is the note as it
+// reads today.
 
 import type { Rehearsal } from "../../../reading/rehearsal";
+import MaterialFigureScope from "../common/MaterialFigureScope";
 import RehearsalView from "./RehearsalView";
 import { openTranscriptSource } from "./start";
 import { useTalkOutline } from "./useRehearsal";
@@ -42,16 +49,18 @@ export default function RehearsalScreen(props: {
   }
 
   return (
-    <RehearsalView
-      rehearsal={props.rehearsal}
-      outline={outline}
-      backLabel="Back to the topic"
-      // Which talk is being given is known before a word of it is said, so its
-      // name goes in as the recognizer's hot words. Opened when the reader
-      // starts, not here: a talk is opened to read as often as to give.
-      openSource={() => openTranscriptSource({ title: props.rehearsal.name })}
-      onExit={props.onBack}
-      onSaved={props.onSaved}
-    />
+    <MaterialFigureScope retellId={props.rehearsal.retellId}>
+      <RehearsalView
+        rehearsal={props.rehearsal}
+        outline={outline}
+        backLabel="Back to the topic"
+        // Which talk is being given is known before a word of it is said, so its
+        // name goes in as the recognizer's hot words. Opened when the reader
+        // starts, not here: a talk is opened to read as often as to give.
+        openSource={() => openTranscriptSource({ title: props.rehearsal.name })}
+        onExit={props.onBack}
+        onSaved={props.onSaved}
+      />
+    </MaterialFigureScope>
   );
 }

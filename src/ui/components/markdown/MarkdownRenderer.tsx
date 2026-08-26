@@ -17,7 +17,7 @@ import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
-import { linkifyCitations, parseCitationHref } from '../../../reading/prep/anchors';
+import { linkifyCitations, linkifyFigureCitations, parseCitationHref } from '../../../reading/prep/anchors';
 import { linkActionFor, openExternal } from '../../../platform/app/external-link';
 import {
 	CitationContext,
@@ -105,12 +105,25 @@ function makeParagraph(onCitation: CitationHandler | null) {
 // webview: that would replace the app (docs/pitfall/94). A web link opens in
 // the system browser, anything that would reload our own page does nothing.
 //
+// A figure is read back whenever there is a figure host, handler or not: the
+// card is a picture that opens where it stands, so it needs nothing to jump to.
+// The other shapes are jumps, so they are only read back when someone can take
+// one — and a citation href with no handler prints its own text rather than an
+// anchor nothing answers. Reached only for a link the model wrote as a link,
+// since without a handler nothing else is rewritten into one.
+//
 // `node` is the hast node react-markdown hands every custom component; it is
 // named here so the spreads below drop it instead of writing it to the DOM.
 function makeAnchor(onCitation: CitationHandler | null) {
 	return function Anchor({ href, children, node, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & ExtraProps) {
 		const figureHost = useContext(FigureContext);
-		const citation = onCitation ? parseCitationHref(href) : null;
+		const citation = onCitation || figureHost ? parseCitationHref(href) : null;
+		// A [fig:N] citation renders as an inline card when a figure host is
+		// available; otherwise it falls through to the quiet chip below (which
+		// still jumps via onCitation).
+		if (citation?.kind === 'figure' && figureHost) {
+			return <FigureCard host={figureHost} id={citation.id} />;
+		}
 		if (!citation) {
 			return (
 				<a
@@ -127,12 +140,7 @@ function makeAnchor(onCitation: CitationHandler | null) {
 				</a>
 			);
 		}
-		// A [fig:N] citation renders as an inline card when a figure host is
-		// available; otherwise it falls through to the quiet chip below (which
-		// still jumps via onCitation).
-		if (citation.kind === 'figure' && figureHost) {
-			return <FigureCard host={figureHost} id={citation.id} />;
-		}
+		if (!onCitation) return <>{children}</>;
 		return (
 			<a
 				href={href}
@@ -203,15 +211,21 @@ const MD = [
 export default function MarkdownRenderer({ text }: { text: string }) {
 	const onCitation = useContext(CitationContext);
 	const prepSlugs = useContext(PrepSlugContext);
+	const figureHost = useContext(FigureContext);
 	// The fences are canonicalized whether or not there is a citation host, and
 	// before linkify: the scanner should see the model's own bytes. The order is
 	// free either way — linkify inserts no `$`, no backtick and no newline, and
 	// the newlines this inserts cannot split a citation bracket, since a bracket
 	// holding a newline was never a candidate.
+	//
+	// With figures but no handler (a retell, a rehearsal note, the coach) only
+	// the figure brackets are rewritten: a page citation there stays the text
+	// the model wrote, exactly as it did before figures reached these surfaces.
 	const source = useMemo(() => {
 		const math = canonicalizeMathFences(text);
-		return onCitation ? linkifyCitations(math, prepSlugs) : math;
-	}, [text, onCitation, prepSlugs]);
+		if (onCitation) return linkifyCitations(math, prepSlugs);
+		return figureHost ? linkifyFigureCitations(math) : math;
+	}, [text, onCitation, prepSlugs, figureHost]);
 	// The anchor override is installed whether or not there is a citation host:
 	// without it, a plain link in a reply navigates the webview away from the app.
 	const components = useMemo<Components>(

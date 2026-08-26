@@ -38,6 +38,7 @@ import {
 import { createRetell } from "../../../reading/retell";
 import RetellView from "../retell/RetellView";
 import CoachView from "../rehearsal/CoachView";
+import MaterialFigureScope from "../common/MaterialFigureScope";
 import RehearsalScreen from "../rehearsal/RehearsalScreen";
 import type { Rehearsal } from "../../../reading/rehearsal";
 import { Button } from "../ui/button";
@@ -189,16 +190,22 @@ export default function LibraryScreen(props: {
   }
 
   if (activeTopic && coachOutlineId) {
+    // The coach reads the note and can name a figure in it, so it gets the same
+    // figure scope the retell's copy of this view gets — reached from the topic
+    // it must not behave differently. The outline is all this door knows; the
+    // scope reads the retell off it.
     return (
-      <CoachView
-        key={coachOutlineId}
-        outlineId={coachOutlineId}
-        topicName={activeTopic.name}
-        backLabel="Back to the topic"
-        passKey={passKey}
-        pending={passPending}
-        onBack={() => setCoachOutlineId(null)}
-      />
+      <MaterialFigureScope outlineId={coachOutlineId}>
+        <CoachView
+          key={coachOutlineId}
+          outlineId={coachOutlineId}
+          topicName={activeTopic.name}
+          backLabel="Back to the topic"
+          passKey={passKey}
+          pending={passPending}
+          onBack={() => setCoachOutlineId(null)}
+        />
+      </MaterialFigureScope>
     );
   }
 

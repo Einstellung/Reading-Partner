@@ -12,6 +12,12 @@
 // provides a null CitationContext, which is what makes the markdown renderer
 // leave them alone.
 //
+// Figures are the exception, and for the same reason. A [fig:N] is a picture,
+// not a way back to a page: the card can be drawn from the materials' figure
+// indexes and the crop taken with pdf.js, so MaterialFigureScope wraps the
+// subtree and a tap opens the figure over this view instead of navigating.
+// RehearsalView and CoachView mount inside here and take the scope from it.
+//
 // The conversation column is a ChatScaleScope, on the same value as the reader's
 // call window.
 
@@ -20,6 +26,7 @@ import ChatScaleScope from "../base/ChatScaleScope";
 import { CitationContext } from "../markdown/Markdown";
 import { IconClose, IconOutline } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
+import MaterialFigureScope from "../common/MaterialFigureScope";
 import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
 import { rehearsalForRetell, type Rehearsal } from "../../../reading/rehearsal";
@@ -117,182 +124,184 @@ export default function RetellView(props: {
   const runs = useRehearsalRuns(rehearsal?.id ?? null, runsKey);
 
   return (
-    <CitationContext.Provider value={null}>
-      <div className="absolute inset-0 flex flex-col bg-background">
-        <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            title="Back to the topic"
-            aria-label="Back to the topic"
-            onClick={props.onBack}
-            className="h-9 w-9 text-muted-foreground"
-          >
-            <IconClose size={18} />
-          </Button>
-          {/* The name is the button: a retell gets named once, and a permanent
-              field in a header that is otherwise about the conversation would be
-              the loudest thing on the screen. */}
-          <button
-            className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left can-hover:hover:bg-muted"
-            title="Rename this retell"
-            disabled={!retell.retell}
-            onClick={() => setRenaming(true)}
-          >
-            <span className="truncate text-[15px] font-medium">{retell.retell?.name ?? "Retell"}</span>
-            {materialsLine(retell.retell) && (
-              <span className="truncate text-xs text-muted-foreground">
-                {materialsLine(retell.retell)}
-              </span>
+    <MaterialFigureScope retellId={props.retellId}>
+      <CitationContext.Provider value={null}>
+        <div className="absolute inset-0 flex flex-col bg-background">
+          <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              title="Back to the topic"
+              aria-label="Back to the topic"
+              onClick={props.onBack}
+              className="h-9 w-9 text-muted-foreground"
+            >
+              <IconClose size={18} />
+            </Button>
+            {/* The name is the button: a retell gets named once, and a permanent
+                field in a header that is otherwise about the conversation would be
+                the loudest thing on the screen. */}
+            <button
+              className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left can-hover:hover:bg-muted"
+              title="Rename this retell"
+              disabled={!retell.retell}
+              onClick={() => setRenaming(true)}
+            >
+              <span className="truncate text-[15px] font-medium">{retell.retell?.name ?? "Retell"}</span>
+              {materialsLine(retell.retell) && (
+                <span className="truncate text-xs text-muted-foreground">
+                  {materialsLine(retell.retell)}
+                </span>
+              )}
+            </button>
+            {!outlineOpen && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setOutlineOpen(true)}
+                className="gap-1.5"
+              >
+                <IconOutline size={16} />
+                The retell so far
+              </Button>
             )}
-          </button>
-          {!outlineOpen && (
+            {/* The deck is this retell's product and the last step of the loop
+                (docs/31), so it starts here, from this retell's outline — there is
+                no second place to generate one from. */}
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setOutlineOpen(true)}
-              className="gap-1.5"
+              disabled={!retell.retell}
+              onClick={() => setDeckOpen(true)}
             >
-              <IconOutline size={16} />
-              The retell so far
+              Deck
             </Button>
+            {/* The deck is only half of the last step: docs/31's judgement is
+                whether the reader can give the retell, so the deck has a Rehearse
+                beside it and the pass is recorded. */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!retell.retell || !readiness.ok}
+              title={readiness.title}
+              onClick={rehearse}
+            >
+              Rehearse
+            </Button>
+          </div>
+
+          <div className="flex min-h-0 flex-1">
+            <ChatScaleScope className="flex min-w-0 flex-1 flex-col">
+              {retell.error && (
+                <p className="m-0 border-b border-border bg-muted/40 px-4 py-2 text-sm text-destructive">
+                  {retell.error}
+                </p>
+              )}
+              {retell.loading ? (
+                <p className="m-0 px-4 py-3 text-sm text-muted-foreground">Loading the retell…</p>
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
+                  <MessageList
+                    messages={retell.messages}
+                    size="lg"
+                    className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
+                  />
+                </div>
+              )}
+              <div className="px-4 pb-6">
+                <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
+                  <Composer
+                    onSend={retell.send}
+                    placeholder="Say it in your own words…"
+                    pill
+                    streaming={retell.streaming}
+                    onStop={retell.stop}
+                  />
+                </div>
+              </div>
+            </ChatScaleScope>
+
+            {outlineOpen && (
+              <OutlinePane
+                rows={rows}
+                runs={runs}
+                onMove={retell.moveEntry}
+                onSetIncluded={retell.cutEntry}
+                onRemove={retell.removeEntry}
+                onClose={() => setOutlineOpen(false)}
+              />
+            )}
+          </div>
+
+          {rehearsing && talk.outline && (
+            <RehearsalView
+              rehearsal={rehearsing}
+              outline={talk.outline}
+              backLabel="Back to the retell"
+              // Which retell is being given is known before a word of it is said,
+              // so its proper names go in as the recognizer's hot words.
+              openSource={() =>
+                openTranscriptSource({
+                  title: rehearsing.name,
+                  outline: [...(retell.retell?.materials ?? []), ...rows],
+                })
+              }
+              // A pass hands itself in (docs/44), so it lands in the talk's
+              // conversation — which is a different conversation from this one.
+              // The retell settled what the talk says; the coach hears it said,
+              // and covers the retell the way the panel did. A talk that was only
+              // read has nothing to say to the coach, so it goes nowhere.
+              onExit={(gave) => {
+                setRehearsing(null);
+                if (!gave) return;
+                setCoaching(true);
+                setPassPending(true);
+              }}
+              onSaved={(recorded) => {
+                setPassPending(false);
+                if (!recorded) return;
+                setRunsKey((n) => n + 1);
+                setPassKey((n) => n + 1);
+              }}
+            />
           )}
-          {/* The deck is this retell's product and the last step of the loop
-              (docs/31), so it starts here, from this retell's outline — there is
-              no second place to generate one from. */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!retell.retell}
-            onClick={() => setDeckOpen(true)}
-          >
-            Deck
-          </Button>
-          {/* The deck is only half of the last step: docs/31's judgement is
-              whether the reader can give the retell, so the deck has a Rehearse
-              beside it and the pass is recorded. */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!retell.retell || !readiness.ok}
-            title={readiness.title}
-            onClick={rehearse}
-          >
-            Rehearse
-          </Button>
-        </div>
 
-        <div className="flex min-h-0 flex-1">
-          <ChatScaleScope className="flex min-w-0 flex-1 flex-col">
-            {retell.error && (
-              <p className="m-0 border-b border-border bg-muted/40 px-4 py-2 text-sm text-destructive">
-                {retell.error}
-              </p>
-            )}
-            {retell.loading ? (
-              <p className="m-0 px-4 py-3 text-sm text-muted-foreground">Loading the retell…</p>
-            ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
-                <MessageList
-                  messages={retell.messages}
-                  size="lg"
-                  className="mx-auto max-w-[calc(48rem*var(--chat-scale,1))] pb-6"
-                />
-              </div>
-            )}
-            <div className="px-4 pb-6">
-              <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
-                <Composer
-                  onSend={retell.send}
-                  placeholder="Say it in your own words…"
-                  pill
-                  streaming={retell.streaming}
-                  onStop={retell.stop}
-                />
-              </div>
-            </div>
-          </ChatScaleScope>
+          {coaching && talk.outline && (
+            <CoachView
+              outlineId={talk.outline.id}
+              topicName={props.topicName}
+              backLabel="Back to the retell"
+              passKey={passKey}
+              pending={passPending}
+              onBack={() => setCoaching(false)}
+            />
+          )}
 
-          {outlineOpen && (
-            <OutlinePane
-              rows={rows}
-              runs={runs}
-              onMove={retell.moveEntry}
-              onSetIncluded={retell.cutEntry}
-              onRemove={retell.removeEntry}
-              onClose={() => setOutlineOpen(false)}
+          {deckOpen && retell.retell && (
+            <DeckDialog
+              retellId={retell.retell.id}
+              retellName={retell.retell.name}
+              onClose={() => setDeckOpen(false)}
+            />
+          )}
+
+          {renaming && retell.retell && (
+            <NameDialog
+              open
+              onOpenChange={setRenaming}
+              title="Rename this retell"
+              description="Only the name changes. The outline and the conversation stay as they are."
+              confirmLabel="Save"
+              initialValue={retell.retell.name}
+              onConfirm={retell.rename}
             />
           )}
         </div>
-
-        {rehearsing && talk.outline && (
-          <RehearsalView
-            rehearsal={rehearsing}
-            outline={talk.outline}
-            backLabel="Back to the retell"
-            // Which retell is being given is known before a word of it is said,
-            // so its proper names go in as the recognizer's hot words.
-            openSource={() =>
-              openTranscriptSource({
-                title: rehearsing.name,
-                outline: [...(retell.retell?.materials ?? []), ...rows],
-              })
-            }
-            // A pass hands itself in (docs/44), so it lands in the talk's
-            // conversation — which is a different conversation from this one.
-            // The retell settled what the talk says; the coach hears it said,
-            // and covers the retell the way the panel did. A talk that was only
-            // read has nothing to say to the coach, so it goes nowhere.
-            onExit={(gave) => {
-              setRehearsing(null);
-              if (!gave) return;
-              setCoaching(true);
-              setPassPending(true);
-            }}
-            onSaved={(recorded) => {
-              setPassPending(false);
-              if (!recorded) return;
-              setRunsKey((n) => n + 1);
-              setPassKey((n) => n + 1);
-            }}
-          />
-        )}
-
-        {coaching && talk.outline && (
-          <CoachView
-            outlineId={talk.outline.id}
-            topicName={props.topicName}
-            backLabel="Back to the retell"
-            passKey={passKey}
-            pending={passPending}
-            onBack={() => setCoaching(false)}
-          />
-        )}
-
-        {deckOpen && retell.retell && (
-          <DeckDialog
-            retellId={retell.retell.id}
-            retellName={retell.retell.name}
-            onClose={() => setDeckOpen(false)}
-          />
-        )}
-
-        {renaming && retell.retell && (
-          <NameDialog
-            open
-            onOpenChange={setRenaming}
-            title="Rename this retell"
-            description="Only the name changes. The outline and the conversation stay as they are."
-            confirmLabel="Save"
-            initialValue={retell.retell.name}
-            onConfirm={retell.rename}
-          />
-        )}
-      </div>
-    </CitationContext.Provider>
+      </CitationContext.Provider>
+    </MaterialFigureScope>
   );
 }
