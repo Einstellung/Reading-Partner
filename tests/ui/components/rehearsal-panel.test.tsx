@@ -192,8 +192,17 @@ test("opening a talk asks for no microphone and starts no clock", async () => {
   expect(view.queryByText("End the rehearsal")).toBeNull();
   expect(view.queryByText("0:00")).toBeNull();
   expect(view.getByText("Start the rehearsal")).toBeTruthy();
-  // The note is what the reader came for, and it is there.
-  expect(view.getByText("Attention replaced recurrence")).toBeTruthy();
+  // The note is what the reader came for, and every block of it is there.
+  //
+  // Read off the page's text rather than by matching an element, because the
+  // markdown renderer is behind a React.lazy boundary (markdown/Markdown.tsx):
+  // until its chunk resolves the block is its own source in one span, and
+  // whether that has happened by now depends on which files ran before this one.
+  // The words are on the page either way, which is the claim being made.
+  const page = () => view.container.textContent ?? "";
+  expect(page()).toContain("Attention replaced recurrence");
+  expect(page()).toContain("and it cost quadratic time");
+  expect(page()).toContain("so here is where that leaves us");
 });
 
 // The other half of the same symptom: leaving a talk that was only read wrote a
