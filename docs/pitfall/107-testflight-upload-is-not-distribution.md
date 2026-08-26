@@ -49,3 +49,24 @@ POST /v1/betaGroups/6622ced0-.../relationships/builds -> HTTP 404
 原因：`fields[builds]` 是 sparse fieldset，管的不只是 attributes，也管 relationships——没列进去的 relationship 整个不会出现在响应里。当时 `fields[builds]` 只列了 `version,uploadedDate,processingState,expired,usesNonExemptEncryption`，于是 `include=preReleaseVersion` 拿回来的 included 数组没有对应的 relationship id 可以配，营销版本号取不出来，What's New 跟着退化。
 
 解法：把要读的 relationship 名字也写进 `fields[builds]`（`preReleaseVersion`、`buildBetaDetail`、`buildAudienceType` 都是 [get-v1-builds](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-builds) 文档里的合法取值）。取 included 资源统一走 `pick_included()`：按 relationship 的 id 配，配不上且 included 里恰好只有一个该类型资源时才退而取它；仍取不到就单独 `GET /v1/builds/{id}/preReleaseVersion`。
+
+## distribute job 红了不代表包没到手：外测审核提交有当天频次上限
+
+run 32952493149（0.11.11 / build 65）：build job 绿，distribute job 红，退出码 1。但日志里内测那半是成功的：
+
+```
+Internal testing:
+  'Internal': already has the build (already in the group)
+External testing:
+  external build state READY_FOR_BETA_SUBMISSION
+  What's New updated ('Reading Partner 0.11.11, build 65.')
+  stopped at: submitting the build for beta review
+##[error]submitting the build for beta review: POST /v1/betaAppReviewSubmissions -> HTTP 422
+[ENTITY_UNPROCESSABLE.SUBMISSION_LIMIT_REACHED] Submission limit has been reached.
+```
+
+原因：Apple 对外测 beta 审核提交有当天频次上限。这天已经连着发了 61、62、63、64，第五次撞上。内测不受这个限制，build 早就进组了，装得到。
+
+脚本在这个 422 下打的提示是「去 App Store Connect 填 Test Information」，那是挂在 422 上的通用提示，和 SUBMISSION_LIMIT_REACHED 无关，照着做没有用。
+
+解法：不重新构建。只有内测测试者时直接忽略，红的只是外测那条路。要补外测就等次日手动跑 `iOS TestFlight Distribute` 填这个 build 号，脚本幂等，会跳过已经做完的内测那半。
