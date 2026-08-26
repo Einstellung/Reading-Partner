@@ -275,10 +275,9 @@ export interface RehearsalReadiness {
 export function rehearsalReadiness(input: {
   // How many segments the outline has, or null while it is still being read.
   segments: number | null;
-  // A pass that has been asked for and is not on screen yet. Starting a second
-  // one here would open a second recording session, and the recorder keeps one:
-  // the newer start drains the older session (src-tauri/src/voice.rs), leaving
-  // the first source cutting into a session that is already gone.
+  // A rehearsal that has been asked for and is not on screen yet: its object is
+  // still being found or made on disk. A second press while the first is out
+  // would mount the panel against whichever of the two came back last.
   preparing?: boolean;
 }): RehearsalReadiness {
   if (input.preparing) return { ok: false, title: "Starting this rehearsal…" };

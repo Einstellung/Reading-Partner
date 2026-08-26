@@ -2,6 +2,11 @@
 // from the topic's Rehearsal section or from the Rehearse button on a retell —
 // one object either way, so one view.
 //
+// Two states, and it opens in the first: reading the note, and giving a pass.
+// Opening a talk is how the reader looks at what is on it, so nothing runs until
+// they say so — no microphone, no clock, no screen held awake, and nothing
+// written on the way out. Pressing start is the whole of the difference.
+//
 // Not a deck, and no longer a block at a time. Reading a note while talking asks
 // three things of the page — find your place again a second after looking up,
 // see what is coming, start or stop anywhere — and one block per screen with a
@@ -16,9 +21,9 @@
 // about what is being said, and the pass is handed in as the words and the clock
 // (handoff.ts); the coach works out the rest from what it can hear.
 //
-// The run lands on disk on the way out, whichever way out that was — the End
-// button, the back button, or the view being unmounted from under it. A pass is
-// expensive to make and worthless to half-record.
+// A pass, once started, lands on disk on the way out, whichever way out that was
+// — the End button, the back button, or the view being unmounted from under it.
+// A pass is expensive to make and worthless to half-record.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconClose } from "../base/icons";
@@ -40,29 +45,36 @@ import { handOffPass } from "./coach-thread";
 import { finishRun, formatElapsed, utteranceEvent } from "./rehearsal";
 
 export interface RehearsalViewProps {
-  // The object this pass is recorded against. Created or found by the caller
-  // before it mounts this view, so both doors (docs/44) arrive here holding the
-  // same thing.
+  // The object a pass is recorded against. Created or found by the caller before
+  // it mounts this view, so both doors (docs/44) arrive here holding the same
+  // thing — and so a reader who only reads the note still lands on the object
+  // the next pass will be written against.
   rehearsal: Rehearsal;
-  // The talk being given. Read by the caller rather than here, for the same
-  // reason the microphone is opened by the caller: the note has to be on screen
-  // before the reader starts talking, and a read from disk after mount would put
-  // the first words of the talk against a blank page.
+  // The talk being given. Read by the caller rather than here: the note is what
+  // this view is for, and a read from disk after mount would open it blank.
   outline: TalkOutline;
   // Where the close button goes, in words: the retell for one door, the topic's
   // list for the other.
   backLabel: string;
-  // Speech, when there is any. The caller makes one before it mounts this view
-  // so that capture is already running when the note goes up; with no STT key
-  // configured there is none, and the run records the clock and no words, which
-  // is a run and not a failure.
-  transcript?: TranscriptSource;
-  onExit(): void;
+  // The microphone, opened when the reader starts a pass. A function rather than
+  // a source because each door knows different proper names to give the
+  // recognizer as hot words — the retell's materials, the talk's name — and
+  // neither of them knows when the pass begins. This view does.
+  //
+  // null is the ordinary answer on a machine with no STT key and no dictation.
+  // The pass starts anyway and records the clock and no words, which is a run
+  // and not a failure.
+  openSource(): Promise<TranscriptSource | null>;
+  // Left. `gave` is false for a reader who opened the talk, read the note and
+  // turned round: no run was written, so there is nothing for the coach to
+  // answer and nothing for the caller's history to re-read.
+  onExit(gave: boolean): void;
   // The pass has been dealt with: written to disk and handed to the talk's
   // conversation, or found to be nothing worth writing. Later than onExit — a
   // source still uploading holds it back by seconds — and `recorded` says which
   // of the two it was, so the caller both re-reads the history at the one moment
   // it changed and stops waiting when there was never anything to wait for.
+  // Silent for a talk that was only read: there was no pass.
   onSaved(recorded: boolean): void;
 }
 
@@ -97,57 +109,84 @@ const NOTE = [
   "[&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden",
 ].join(" ");
 
+// Reading the note, opening the microphone, and giving the pass. The middle one
+// is a state and not a flicker: opening the microphone reads the STT config off
+// disk and asks the host for a session, and the button has to say so rather than
+// sit there looking unpressed.
+type Phase = "reading" | "starting" | "giving";
+
 export default function RehearsalView({
   rehearsal,
   outline,
   backLabel,
-  transcript,
+  openSource,
   onExit,
   onSaved,
 }: RehearsalViewProps) {
   const segments = outline.segments;
 
   const eventsRef = useRef<RehearsalEvent[]>([]);
-  const startedAtRef = useRef(Date.now());
-  const savedRef = useRef(false);
+  // Closed by the first exit taken. Read by a source that arrives after it (see
+  // start below) to know there is no longer anything to arrive for.
+  const finishedRef = useRef(false);
 
+  const [phase, setPhase] = useState<Phase>("reading");
   const [elapsed, setElapsed] = useState(0);
 
-  // The listener below and the save are both mounted once and hold their
-  // closures for the life of the view, so the source is reached through a ref.
-  const transcriptRef = useRef(transcript);
-  useEffect(() => {
-    transcriptRef.current = transcript;
-  });
+  // The pass, once there is one. Null for a talk that is only being read, which
+  // is what makes leaving write nothing. Refs rather than state because both are
+  // read after this view is gone — the End button unmounts it before the run is
+  // built — and neither is drawn.
+  const startedAtRef = useRef<number | null>(null);
+  const sourceRef = useRef<TranscriptSource | null>(null);
 
-  // Same reason, and one more: this one is called after the view is gone (see
-  // finish below), so it cannot be read off a render that has been torn down.
+  // Called after the view is torn down (see finish below), so it cannot be read
+  // off a render that no longer exists.
   const onSavedRef = useRef(onSaved);
   useEffect(() => {
     onSavedRef.current = onSaved;
   });
 
-  // Keep the screen on for the length of the pass (platform/app/wake-lock).
-  // Tens of minutes go by with nobody touching the iPad — more of them now that
-  // there is no Next button to touch — and a device that locks itself suspends
-  // the webview: the dictation session listening to the talk goes down with it,
-  // and the rest of the pass is recorded as no words at all. Asked for here
-  // rather than after any await so the request still rides the tap that opened
-  // the rehearsal — Safari wants a gesture for it — and failure is not the
-  // caller's business: a screen that naps is a worse rehearsal, not a lost one.
   const lockRef = useRef<ScreenWakeLock | null>(null);
-  useEffect(() => {
+
+  const start = () => {
+    if (phase !== "reading") return;
+    // Keep the screen on for the length of the pass (platform/app/wake-lock).
+    // Tens of minutes go by with nobody touching the iPad — there is no Next
+    // button to touch — and a device that locks itself suspends the webview: the
+    // dictation session listening to the talk goes down with it, and the rest of
+    // the pass is recorded as no words at all. Asked for here, in the tap
+    // handler and before the await below, so the request rides the gesture that
+    // started the pass — Safari wants one for it. Failure is not the caller's
+    // business: a screen that naps is a worse rehearsal, not a lost one.
     const lock = createScreenWakeLock(browserWakeLockTarget());
     lockRef.current = lock;
     lock.set(true);
-  }, []);
+    setPhase("starting");
+    void openSource().then((source) => {
+      if (finishedRef.current) {
+        // Left between the tap and the microphone. Nothing was recorded, but the
+        // session is open on the host and would stay open.
+        void source?.stop().catch(() => {});
+        return;
+      }
+      sourceRef.current = source;
+      // The pass starts when the microphone does and not when the button was
+      // pressed, so the clock the reader watches and the run that is written
+      // count the same minutes.
+      startedAtRef.current = Date.now();
+      setPhase("giving");
+    });
+  };
 
   useEffect(() => {
-    const id = window.setInterval(() => setElapsed(Date.now() - startedAtRef.current), 500);
+    if (phase !== "giving") return;
+    const startedAt = startedAtRef.current ?? Date.now();
+    const id = window.setInterval(() => setElapsed(Date.now() - startedAt), 500);
     return () => window.clearInterval(id);
-  }, []);
+  }, [phase]);
 
-  // Speech, when a source is handed in. Declared before the save effect on
+  // Speech, when this machine has any. Declared before the save effect on
   // purpose: React tears cleanups down in declaration order, so the stop is
   // already under way by the time the save runs. It is not enough on its own —
   // stopping the desktop source waits for every segment still uploading, which
@@ -159,18 +198,21 @@ export default function RehearsalView({
   // left (segmented-source.ts arms it at start and re-arms it after every cut);
   // the dictated source never had one to lose.
   useEffect(() => {
-    if (!transcript) return;
-    void transcript
+    if (phase !== "giving") return;
+    const source = sourceRef.current;
+    if (!source) return;
+    void source
       .start((u) => {
         eventsRef.current = [...eventsRef.current, utteranceEvent(u)];
       })
       .catch((e: unknown) => console.warn("the transcript source failed to start", e));
     return () => {
-      void transcript.stop().catch((e: unknown) => console.warn("transcript stop failed", e));
+      void source.stop().catch((e: unknown) => console.warn("transcript stop failed", e));
     };
-  }, [transcript]);
+  }, [phase]);
 
-  // Write the run. Once, whichever exit was taken.
+  // Write the run. Once, whichever exit was taken, and only when a pass was
+  // given.
   //
   // The last words arrive after the reader has left: stopping the source sends
   // the final segment and waits for every earlier one still on its way back from
@@ -184,19 +226,24 @@ export default function RehearsalView({
     // The gate closes before the first await, so the second caller (the End
     // button and then the unmount, or the other way round) turns back here
     // rather than writing the run twice.
-    if (savedRef.current) return;
-    savedRef.current = true;
+    if (finishedRef.current) return;
+    finishedRef.current = true;
     // The screen is handed back at the same gate the run is written at, so the
-    // three ways out (End, back, unmount) are one path to keep right and not
-    // two. Before the await: the reader has stopped talking, and the words still
-    // uploading do not need the iPad awake.
+    // ways out are one path to keep right and not two. Before the await: the
+    // reader has stopped talking, and the words still uploading do not need the
+    // iPad awake.
     lockRef.current?.set(false);
+    const startedAt = startedAtRef.current;
+    // The note was read and the reader turned round. A talk that was looked at
+    // is not a pass: no row in the history, and nothing put in front of the
+    // coach.
+    if (startedAt === null) return;
     const saved = await finishRun({
       rehearsalId: rehearsal.id,
       id: crypto.randomUUID(),
-      startedAt: startedAtRef.current,
+      startedAt,
       endedAt: Date.now(),
-      source: transcriptRef.current,
+      source: sourceRef.current ?? undefined,
       events: () => eventsRef.current,
       save: appendRun,
       // Stopping is handing it in (docs/44): the pass goes into the talk's
@@ -227,9 +274,14 @@ export default function RehearsalView({
   // whole of what "the AI says something" costs: the panel closes, the
   // conversation is where it was, and nothing was said out of it during the pass
   // (docs/44).
+  //
+  // Whether a pass was given is read before finish() clears the way, and it is
+  // the back button's answer as much as the End button's: during a pass, back is
+  // an end like any other.
   const leave = () => {
+    const gave = startedAtRef.current !== null;
     void finish();
-    onExit();
+    onExit(gave);
   };
 
   return (
@@ -257,15 +309,23 @@ export default function RehearsalView({
           <IconClose size={18} />
         </Button>
         <span className="min-w-0 flex-1 truncate text-[13px] text-white/70">{outline.name}</span>
-        <span
-          className="flex-none text-[13px] tabular-nums text-white/70"
-          title="How long this rehearsal has been going"
-        >
-          {formatElapsed(elapsed)}
-        </span>
-        <Button type="button" onClick={leave}>
-          End the rehearsal
-        </Button>
+        {phase === "giving" ? (
+          <>
+            <span
+              className="flex-none text-[13px] tabular-nums text-white/70"
+              title="How long this rehearsal has been going"
+            >
+              {formatElapsed(elapsed)}
+            </span>
+            <Button type="button" onClick={leave}>
+              End the rehearsal
+            </Button>
+          </>
+        ) : (
+          <Button type="button" disabled={phase === "starting"} onClick={start}>
+            {phase === "starting" ? "Starting…" : "Start the rehearsal"}
+          </Button>
+        )}
       </div>
 
       {/* The through-line, on screen for the whole pass. Small on purpose: it is

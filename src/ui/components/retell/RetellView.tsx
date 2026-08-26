@@ -22,11 +22,7 @@ import { IconClose, IconOutline } from "../base/icons";
 import { Composer, MessageList } from "../chat/chat";
 import NameDialog from "../common/NameDialog";
 import { Button } from "../ui/button";
-import {
-  rehearsalForRetell,
-  type Rehearsal,
-  type TranscriptSource,
-} from "../../../reading/rehearsal";
+import { rehearsalForRetell, type Rehearsal } from "../../../reading/rehearsal";
 import { outlineRows, type Retell } from "../../../reading/retell";
 import { defaultNavOpen, readNavEnv } from "../base/topic-nav";
 import DeckDialog from "./DeckDialog";
@@ -79,43 +75,24 @@ export default function RetellView(props: {
   const [coaching, setCoaching] = useState(false);
   const [passPending, setPassPending] = useState(false);
   const [passKey, setPassKey] = useState(0);
-  // The words for the pass about to be given, or null when the machine has no
-  // way to hear them (no STT key on the desktop, no dictation on the host).
-  // Which of the two shapes it is belongs to the rehearsal, not to this button
-  // (reading/rehearsal/transcript-source.ts). Made here rather than inside the
-  // rehearsal because the source has to be recording before the deck reports its
-  // first page: reading the STT config is a trip to disk, and doing it after the
-  // view is up would race the deck's own load — every word said to page one
-  // while that race was on would be lost. Made once per pass, too: a source that
-  // has been stopped is finished, and the next Rehearse needs a new one.
-  const [transcript, setTranscript] = useState<TranscriptSource | null>(null);
-  // Making it is a trip to disk, and the button stays on screen for the whole of
-  // it. Two presses would make two sources and open two recording sessions, and
-  // the recorder keeps one: the second start drains the first session
-  // (src-tauri/src/voice.rs), so the first source's page turns would cut a
-  // session that is already gone. The gate is the button's, through readiness.
+  // Finding or making the object is a trip to disk, and the button stays on
+  // screen for the whole of it. The gate is the button's, through readiness: a
+  // second press while the first is out would mount the panel on whichever of
+  // the two objects came back last, and only one of them would be given.
   const [preparing, setPreparing] = useState(false);
   const rehearse = () => {
     const target = retell.retell;
     if (!target || !talk.outline) return;
     setPreparing(true);
-    void Promise.all([
-      rehearsalForRetell({
-        topicId: target.topicId,
-        retellId: target.id,
-        name: target.name,
-      }),
-      // Which retell is being given is known before a word of it is said, so its
-      // proper names go in as the recognizer's hot words.
-      openTranscriptSource({ title: target.name, outline: [...target.materials, ...rows] }),
-    ])
-      .then(([rehearsal, source]) => {
-        setTranscript(source);
-        setRehearsing(rehearsal);
-      })
+    void rehearsalForRetell({
+      topicId: target.topicId,
+      retellId: target.id,
+      name: target.name,
+    })
+      .then(setRehearsing)
       .catch((e: unknown) => {
-        // The object is the pass: without it there is nothing to record against,
-        // so unlike a missing transcript this does stop the rehearsal.
+        // The object is what a pass is recorded against: without it there is
+        // nothing to open the panel on.
         console.warn("could not open the rehearsal", e);
       })
       .finally(() => setPreparing(false));
@@ -256,14 +233,22 @@ export default function RetellView(props: {
             rehearsal={rehearsing}
             outline={talk.outline}
             backLabel="Back to the retell"
-            transcript={transcript ?? undefined}
-            // Closing the panel hands the pass in (docs/44), so it lands in the
-            // talk's conversation — which is a different conversation from this
-            // one. The retell settled what the talk says; the coach hears it
-            // said, and covers the retell the way the panel did.
-            onExit={() => {
+            // Which retell is being given is known before a word of it is said,
+            // so its proper names go in as the recognizer's hot words.
+            openSource={() =>
+              openTranscriptSource({
+                title: rehearsing.name,
+                outline: [...(retell.retell?.materials ?? []), ...rows],
+              })
+            }
+            // A pass hands itself in (docs/44), so it lands in the talk's
+            // conversation — which is a different conversation from this one.
+            // The retell settled what the talk says; the coach hears it said,
+            // and covers the retell the way the panel did. A talk that was only
+            // read has nothing to say to the coach, so it goes nowhere.
+            onExit={(gave) => {
               setRehearsing(null);
-              setTranscript(null);
+              if (!gave) return;
               setCoaching(true);
               setPassPending(true);
             }}

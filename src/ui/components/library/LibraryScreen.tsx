@@ -166,13 +166,16 @@ export default function LibraryScreen(props: {
       <RehearsalScreen
         key={openRehearsal.id}
         rehearsal={openRehearsal}
-        // Closing the panel is handing the pass in (docs/44), so it lands in the
-        // talk's conversation rather than back on the section it was opened
-        // from. The pass itself is still being written at this point — the
-        // coach's view says so until onSaved lands.
-        onBack={() => {
-          setCoachOutlineId(outlineId);
-          setPassPending(true);
+        // A pass hands itself in (docs/44), so leaving one lands in the talk's
+        // conversation rather than back on the section it was opened from. The
+        // pass itself is still being written at this point — the coach's view
+        // says so until onSaved lands. A talk that was opened to read goes
+        // straight back to the section instead: there is no pass to answer.
+        onBack={(gave) => {
+          if (gave) {
+            setCoachOutlineId(outlineId);
+            setPassPending(true);
+          }
           setOpenRehearsal(null);
         }}
         onSaved={(recorded) => {
