@@ -88,9 +88,10 @@ export interface RehearsalViewProps {
 // repainting them was only ever the price of standing the note on a dark ground.
 // What is left is where reading a page differs from reading a chat reply.
 const NOTE = [
-  // Headings are the reader's landmarks — the thing the eye lands on coming back
-  // from the audience — so they carry the space rather than the size.
-  "[&_h1]:text-[1.15em] [&_h2]:text-[1.1em]",
+  // Nothing here resizes a heading. The renderer's own scale reaches this note
+  // now that the note is on the app's surface, and an override at the same
+  // specificity would be settled by whichever rule Tailwind happened to emit
+  // last.
   // Prose and list items, opened up. A line found by eye rather than by reading
   // from the top needs the space between lines to be wider than the space
   // between words.
