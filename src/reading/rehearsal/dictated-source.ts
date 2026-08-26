@@ -85,8 +85,8 @@ export interface DictatedSourceOptions {
   // until something releases it (plugins/voice/README.md). So the run that took
   // the microphone gives it back when it ends. Never rejects.
   release?: () => Promise<void>;
-  // The host clock. Defaults to Date.now, which is what the deck listener
-  // stamps its page reports with.
+  // The host clock. Defaults to Date.now, which is what the pass event is
+  // stamped with.
   now?: () => number;
 }
 

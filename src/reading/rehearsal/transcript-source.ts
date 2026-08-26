@@ -6,8 +6,8 @@
 // the recorder session and needs an STT key. iOS transcribes on device
 // (dictated-source.ts), so it takes nothing — it opens the microphone itself,
 // no key, no upload. Neither is available everywhere, and no source at all is a
-// legal run: the deck still reports its pages and what lands on disk is the
-// shape of the retell with every transcript empty (source.ts).
+// legal run: what lands on disk is then the shape of the pass with its
+// transcript empty (source.ts).
 
 import {
   hasOnDeviceDictation,

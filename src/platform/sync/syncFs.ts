@@ -97,8 +97,7 @@ export function inSyncRange(path: string): boolean {
       /^threads-.+\.json$/.test(top) ||
       // Retells (docs/31): the materials, the outline the retell settled and the
       // order the reader put it in. Nothing can rebuild it from the books, so it
-      // travels like marks and threads rather than like a cache. A deck an older
-      // build made from it (slides/**) stays out.
+      // travels like marks and threads rather than like a cache.
       /^retell-.+\.json$/.test(top) ||
       // The outline of a talk (docs/44): the spine and the segments the reader
       // rehearses against. Written on whichever device the reader is holding and
@@ -110,11 +109,7 @@ export function inSyncRange(path: string): boolean {
       // A rehearsal and the index of its passes (docs/43): the talk the reader
       // gives over and over, and one row per time they gave it. A trace, not a
       // derivation — nothing rebuilds it. The transcripts are one
-      // file each under runs/ (below). The deck itself stays out: a built one is
-      // slides/**, and an imported one is rehearsals/**, tens of megabytes of
-      // self-contained HTML that has no business in a per-file merge. So the
-      // other device shows the rehearsal and its history with no deck to give
-      // until one is imported there too. The .bad copy a failed parse leaves
+      // file each under runs/ (below). The .bad copy a failed parse leaves
       // beside the index is deliberately not matched.
       /^rehearsal-.+\.json$/.test(top) ||
       /^runs-rehearsal-.+\.json$/.test(top) ||
@@ -132,7 +127,7 @@ export function inSyncRange(path: string): boolean {
   // nothing to read. Cold once uploaded — the name changes with the content, so
   // a file is written once and never revised.
   if (top === "article-bodies") return parts.length === 2 && isArticleBodyFile(parts[1]);
-  // What the reader said on each page of one pass over a deck (docs/43), under
+  // What the reader said on one pass over a talk (docs/44), under
   // runs/<rehearsalId>/<runId>.json: one immutable file per pass, written when
   // the pass ends and never revised. In range for the same reason the index is —
   // nothing rebuilds what the reader said — and out of the index so that

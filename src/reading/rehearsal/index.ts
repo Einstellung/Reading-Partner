@@ -26,12 +26,6 @@ export {
   type DictatedSourceOptions,
 } from "./dictated-source";
 export {
-  deckNameFromPath,
-  importRehearsalDeck,
-  isDeckPath,
-  type ImportDeckInput,
-} from "./import-deck";
-export {
   rehearsalRows,
   rehearsalSummary,
   type ArrangedRetell,
@@ -57,20 +51,16 @@ export {
   appendRun,
   deleteRehearsal,
   deleteRehearsalsForRetell,
-  importedDeckFile,
-  isImportedDeck,
   listAllRehearsals,
   listRehearsalsForTopic,
   loadRehearsal,
   loadRehearsalRun,
   loadRehearsalRuns,
   loadRunPages,
-  readRehearsalDeck,
   rehearsalFile,
   rehearsalForOutline,
   rehearsalForRetell,
   rehearsalRunsFile,
-  REHEARSAL_DECK_DIR,
   renameRehearsal,
   RUN_PAGES_DIR,
   runPagesDir,

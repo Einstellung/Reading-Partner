@@ -7,7 +7,7 @@
 
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { anthropicLogout, getValidAnthropicAuth } from "../../src/ai/anthropic-oauth";
-import { setImageGenKey } from "../../src/ai/credentials";
+import { setActiveCredential } from "../../src/ai/credentials";
 import { getValidOpenAIAuth } from "../../src/ai/openai-oauth";
 import { setSttKey } from "../../src/ai/voice/config";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
@@ -125,29 +125,33 @@ test("a later caller reuses the refreshed token instead of refreshing again", as
   expect(refreshCalls).toEqual(["r1"]);
 });
 
-test("two device keys written at once both land", async () => {
+test("two keys written at once both land", async () => {
   write({});
 
-  // Both writers read the file first; unserialized, the slower one would write
-  // back a snapshot taken before the other's field existed.
-  await Promise.all([setImageGenKey("img-key"), setSttKey("stt-key")]);
+  // Two writers of two different fields — Settings saving the STT key while a
+  // provider is signed in. Both read the file first; unserialized, the slower
+  // one would write back a snapshot taken before the other's field existed.
+  await Promise.all([
+    setActiveCredential("deepseek", { type: "apiKey", key: "dk-key" }),
+    setSttKey("stt-key"),
+  ]);
 
   const store = read();
-  expect(store.imageGen.key).toBe("img-key");
+  expect(store.deepseek.key).toBe("dk-key");
   expect(store.voiceStt.key).toBe("stt-key");
 });
 
-test("an image-gen key saved during a refresh survives the refresh write", async () => {
+test("a device key saved during a refresh survives the refresh write", async () => {
   write({ anthropic: expired("r1") });
 
   const auth = getValidAnthropicAuth();
   await settle(); // the exchange is now in flight, holding a pre-key snapshot
-  await setImageGenKey("img-key");
+  await setSttKey("stt-key");
   release();
   await auth;
 
   const store = read();
-  expect(store.imageGen.key).toBe("img-key");
+  expect(store.voiceStt.key).toBe("stt-key");
   expect(store.anthropic.access).toBe("access-after-r1");
 });
 

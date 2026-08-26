@@ -50,17 +50,14 @@ export function isOAuthCredential(cred: unknown): cred is OAuthCredential {
 export type ProviderCredential = OAuthCredential | ApiKeyCredential;
 
 export type CredentialStore = Partial<Record<ProviderCredentialId, ProviderCredential>> & {
-	// Paid image-relay key for deck illustrations (docs/14). A credential, not a
-	// setting, so it stays on the device and out of the sync range.
-	imageGen?: ApiKeyCredential;
-	// Speech-to-text key for voice input (docs/15). Same reasoning: on-device,
-	// never synced.
+	// Speech-to-text key for voice input (docs/15). A credential, not a setting,
+	// so it stays on the device and out of the sync range.
 	voiceStt?: ApiKeyCredential;
 };
 
 // The model providers. At most one may hold a live credential at a time:
-// signing into (or saving a key for) one signs the others out. imageGen and
-// voiceStt are device keys, outside this set, and are never touched by it.
+// signing into (or saving a key for) one signs the others out. voiceStt is a
+// device key, outside this set, and is never touched by it.
 export type ProviderCredentialId = ProviderId;
 
 // Priority used only to disambiguate a legacy credentials.json that carries more
@@ -204,25 +201,4 @@ export async function setActiveCredential(
 	cred: ProviderCredential,
 ): Promise<void> {
 	await updateCredentials((s) => withActiveCredential(s, id, cred));
-}
-
-// The image-relay key, or null when unset (decks then generate without AI
-// illustrations).
-export async function getImageGenKey(): Promise<string | null> {
-	const creds = await loadCredentials();
-	return creds.imageGen?.key ?? null;
-}
-
-// Set or clear the image-relay key (empty string clears it).
-export async function setImageGenKey(key: string): Promise<void> {
-	const trimmed = key.trim();
-	await updateCredentials((creds) => {
-		if (trimmed) creds.imageGen = { type: "apiKey", key: trimmed };
-		else delete creds.imageGen;
-	});
-}
-
-// Whether an image-relay key is configured (drives the Settings UI state).
-export async function hasImageGenKey(): Promise<boolean> {
-	return (await getImageGenKey()) !== null;
 }

@@ -26,7 +26,6 @@ function entry(over: Partial<RehearsalRunEntry> = {}): RehearsalRunEntry {
     id: "run-1",
     ordinal: 3,
     rehearsalId: "r1",
-    deckFile: null,
     startedAt: 0,
     endedAt: 120_000,
     lastMomentAt: 120_000,

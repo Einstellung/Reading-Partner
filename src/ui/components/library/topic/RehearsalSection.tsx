@@ -1,22 +1,19 @@
-// The Rehearsal section of a topic (docs/43, "入口"): every talk under this
+// The Rehearsal section of a topic (docs/44, "入口"): every talk under this
 // topic that can be given out loud, and the door into giving it.
 //
-// Two kinds of row, one kind of object. A deck brought in from outside is a
-// rehearsal the moment it is imported; a retell's own talk is listed from the
-// retell, and the rehearsal behind it is made the first time it is given. Which
-// is why pressing a row goes through rehearsalForRetell rather than creating
-// something here: the Rehearse button on the retell's own header lands on the
-// same call, and the two doors must not leave two histories behind.
+// A retell's talk is listed from the retell, and the rehearsal behind it is made
+// the first time it is given. Which is why pressing a row goes through
+// rehearsalForRetell rather than creating something here: the Rehearse button on
+// the retell's own header lands on the same call, and the two doors must not
+// leave two histories behind.
 //
 // The join and the wording are rehearsalRows/rehearsalSummary in
 // reading/rehearsal; what is left here is the reads, the presses and the list.
 
 import { useCallback, useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import type { Topic } from "../../../../platform/app/topics";
 import {
   deleteRehearsal,
-  importRehearsalDeck,
   listRehearsalsForTopic,
   listAllRehearsals,
   loadRehearsalRuns,
@@ -125,28 +122,6 @@ export default function RehearsalSection(props: {
     [onStart, topic.id],
   );
 
-  // The system picker, through the dialog plugin — the same door the shelf opens
-  // a PDF by. On iOS it is the document picker, which hands back a path in a
-  // temporary inbox, which is why the import copies the bytes rather than
-  // remembering where they were.
-  const bringIn = useCallback(async () => {
-    setError(null);
-    try {
-      const picked = await open({
-        multiple: false,
-        filters: [{ name: "Deck", extensions: ["html", "htm"] }],
-      });
-      if (typeof picked !== "string") return;
-      setBusy(true);
-      await importRehearsalDeck({ topicId: topic.id, sourcePath: picked });
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not bring that deck in");
-    } finally {
-      setBusy(false);
-    }
-  }, [refresh, topic.id]);
-
   return (
     <>
       {error && <p className="mt-0 mb-3 text-sm text-destructive">{error}</p>}
@@ -154,73 +129,56 @@ export default function RehearsalSection(props: {
       {rows === null ? (
         <p className="m-0 text-sm text-muted-foreground">Loading…</p>
       ) : rows.length === 0 ? (
-        <div className="max-w-prose">
-          <p className="m-0 mb-4 text-sm text-muted-foreground">
-            Nothing to rehearse here yet. Bring in a deck you already have — a self-contained HTML
-            one — and give it out loud; every pass is kept, page by page, so the next one has
-            something to be held against. A retell that has arranged its talk shows up here on its
-            own.
-          </p>
-          <Button disabled={busy} onClick={() => void bringIn()}>
-            Bring in a deck
-          </Button>
-        </div>
+        <p className="m-0 max-w-prose text-sm text-muted-foreground">
+          Nothing to rehearse here yet. A talk shows up here once a retell has arranged one, and
+          every pass over it is kept, so the next one has something to be held against.
+        </p>
       ) : (
-        <>
-          <ul className="m-0 mb-3 flex list-none flex-col gap-1.5 p-0">
-            {rows.map((row) => (
-              <li key={row.key} className={ROW}>
-                <button
-                  className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 border-0 bg-transparent px-0 py-2 text-left"
-                  disabled={busy}
-                  onClick={() => void start(row)}
-                >
-                  <span className="truncate text-[15px]">{row.name}</span>
-                  <span className="text-xs text-muted-foreground">{rehearsalSummary(row)}</span>
-                </button>
-                {/* The way back into the talk's conversation without giving a
-                    pass first (docs/44): it spans every pass over this talk, so
-                    a reply left unread after the last one is still there. */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => onTalk(row.outlineId)}
-                >
-                  How it went
-                </Button>
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => void start(row)}>
-                  Rehearse
-                </Button>
-                {row.id && (
-                  <CardMenu
-                    label={`Actions for ${row.name}`}
-                    items={[
-                      {
-                        label: "Delete this rehearsal",
-                        destructive: true,
-                        onSelect: () => setDeleting(row),
-                      },
-                    ]}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
-          <Button variant="outline" disabled={busy} onClick={() => void bringIn()}>
-            Bring in a deck
-          </Button>
-        </>
+        <ul className="m-0 mb-3 flex list-none flex-col gap-1.5 p-0">
+          {rows.map((row) => (
+            <li key={row.key} className={ROW}>
+              <button
+                className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 border-0 bg-transparent px-0 py-2 text-left"
+                disabled={busy}
+                onClick={() => void start(row)}
+              >
+                <span className="truncate text-[15px]">{row.name}</span>
+                <span className="text-xs text-muted-foreground">{rehearsalSummary(row)}</span>
+              </button>
+              {/* The way back into the talk's conversation without giving a
+                  pass first (docs/44): it spans every pass over this talk, so
+                  a reply left unread after the last one is still there. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => onTalk(row.outlineId)}
+              >
+                How it went
+              </Button>
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => void start(row)}>
+                Rehearse
+              </Button>
+              {row.id && (
+                <CardMenu
+                  label={`Actions for ${row.name}`}
+                  items={[
+                    {
+                      label: "Delete this rehearsal",
+                      destructive: true,
+                      onSelect: () => setDeleting(row),
+                    },
+                  ]}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
       )}
 
       {deleting?.id && (
         <DeleteRehearsalButton
           name={deleting.name}
-          // A rehearsal with no retell behind it is one a deck was brought in
-          // for, which is the only kind that has a copy of a file to lose. The
-          // path is no longer on the object (docs/44), so the row's own shape is
-          // what answers it.
-          imported={!deleting.retellId}
           open
           onOpenChange={(open) => !open && setDeleting(null)}
           onDelete={() => {

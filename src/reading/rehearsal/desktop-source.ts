@@ -4,7 +4,7 @@
 //
 // The recording session is a parameter rather than an import. The Rust commands
 // behind it (start / cut / stop, one continuous capture, src-tauri/src/voice.rs)
-// are wrapped in ai/voice/recorder.ts, and the call site that has the deck on
+// are wrapped in ai/voice/recorder.ts, and the call site that has the note on
 // screen is what hands them over — which is also what keeps every rule in this
 // unit testable without a microphone.
 

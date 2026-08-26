@@ -25,6 +25,7 @@ import {
   startRehearsal,
 } from "../../../src/reading/rehearsal/store";
 import type { BuiltRun } from "../../../src/reading/rehearsal/types";
+import { loadTalkOutline } from "../../../src/reading/talk/store";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 let disk: FakeDisk;
@@ -41,7 +42,6 @@ function aRun(id: string, over: Partial<BuiltRun> = {}): BuiltRun {
     id,
     ordinal: 1,
     rehearsalId: ID,
-    deckFile: "slides/1754400000000-my-retell.html",
     startedAt: 1_000,
     endedAt: 601_000,
     pages: [
@@ -178,7 +178,7 @@ test("a run written comes back the way it went in", async () => {
   await appendRun(aRun("r1"));
   const log = await loadRehearsalRuns(ID);
   expect(log.runs).toHaveLength(1);
-  expect(log.runs[0].deckFile).toBe("slides/1754400000000-my-retell.html");
+  expect(log.runs[0].startedAt).toBe(1_000);
   expect((await loadRehearsalRun(log.runs[0])).pages[0].transcript).toBe("Good evening.");
 });
 
@@ -413,6 +413,8 @@ test("the split lifts every transcript out and leaves the rows behind", async ()
   expect(log.runs.every((r) => r.pages === undefined)).toBe(true);
   // The counts the rows were drawn from are written down now, so drawing them
   // never opens a transcript again.
+  // The deckFile an older build wrote is read past and not carried forward.
+  expect("deckFile" in log.runs[0]).toBe(false);
   expect(log.runs[0].segmentIds).toEqual(["seg-open"]);
   expect(log.runs[0].wordsSpoken).toBe(2);
   expect(log.runs[0].lastMomentAt).toBe(601_000);
@@ -486,41 +488,37 @@ test("the split covers every rehearsal on the device, and one bad log is its own
   expect(disk.files.get(rehearsalRunsFile(a.id))).toContain("Good evening.");
 });
 
-test("deleting takes the object, the runs, the rescue copy and an imported deck", async () => {
+test("deleting takes the object, the runs and the rescue copy", async () => {
   const made = await startRehearsal({
     topicId: "topic-1",
-    name: "Deck",
+    name: "A talk",
     outlineId: "o-7",
     now: 7,
   });
-  disk.files.set("rehearsals/7.html", "<html></html>");
   await appendRun(aRun("r1", { rehearsalId: made.id }));
   disk.files.set(`${rehearsalRunsFile(made.id)}.bad`, "{not json");
   await deleteRehearsal(made.id);
   expect(disk.files.has(rehearsalFile(made.id))).toBe(false);
   expect(disk.files.has(rehearsalRunsFile(made.id))).toBe(false);
   expect(disk.files.has(`${rehearsalRunsFile(made.id)}.bad`)).toBe(false);
-  expect(disk.files.has("rehearsals/7.html")).toBe(false);
   // The transcripts go as a directory: once the log is gone there is no list of
   // them left to walk.
   expect(disk.files.has(runPagesFile(made.id, "r1")!)).toBe(false);
 });
 
-// A deck the slides pipeline built belongs to its retell, not to the rehearsal:
-// the delete only ever takes the copy named after the rehearsal's own id.
-test("deleting a rehearsal leaves a built deck where it is", async () => {
+// Not the outline: a talk outlives the history of one set of passes over it.
+test("deleting a rehearsal leaves the talk it was given against", async () => {
   const made = await rehearsalForRetell({
     topicId: "topic-1",
     retellId: "900",
     name: "Eye and Brain",
     now: 10,
   });
-  disk.files.set("slides/900-eye-and-brain.html", "<html></html>");
   await deleteRehearsal(made.id);
-  expect(disk.files.has("slides/900-eye-and-brain.html")).toBe(true);
+  expect(await loadTalkOutline(made.outlineId)).not.toBeNull();
 });
 
-test("deleting a retell takes the rehearsal of its deck and nobody else's", async () => {
+test("deleting a retell takes the rehearsal of its talk and nobody else's", async () => {
   const mine = await rehearsalForRetell({
     topicId: "topic-1",
     retellId: "900",

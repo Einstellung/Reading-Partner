@@ -16,9 +16,6 @@ import {
 
 export default function DeleteRehearsalButton(props: {
   name: string;
-  // Whether this deck is the app's own copy of one brought in from outside. A
-  // deck the slides pipeline built belongs to its retell and stays where it is.
-  imported: boolean;
   open: boolean;
   onOpenChange(open: boolean): void;
   onDelete(): void;
@@ -29,9 +26,8 @@ export default function DeleteRehearsalButton(props: {
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{props.name}”?</AlertDialogTitle>
           <AlertDialogDescription>
-            {props.imported
-              ? "Every rehearsal of this deck goes, and so does this app's copy of the deck. Your own file is untouched."
-              : "Every rehearsal of this deck goes. The retell and the deck it built stay where they are, and you can rehearse it again from there."}
+            Every pass over this talk goes with it. The talk itself stays where it is, and you can
+            rehearse it again from the retell.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

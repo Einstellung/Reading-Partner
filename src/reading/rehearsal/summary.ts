@@ -72,7 +72,6 @@ export function runEntryOf(run: BuiltRun): RehearsalRunEntry {
     id: run.id,
     ordinal: run.ordinal,
     rehearsalId: run.rehearsalId,
-    deckFile: run.deckFile,
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     lastMomentAt: lastMoment(run),

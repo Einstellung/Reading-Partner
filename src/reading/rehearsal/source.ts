@@ -1,16 +1,14 @@
 // Where the words come from. One interface, two shapes of machine behind it.
 //
-// A run with no source is a legal run, not a broken one. The deck still reports
-// its pages, so what lands on disk is the shape of the retell — which page, how
-// long — with every transcript empty. That is worth keeping on its own (it says
-// where the reader ran long), and a run recorded today reads the same after the
-// microphone is wired in. The same rule holds one segment at a time: a stretch
-// of speech that fails to transcribe costs that page its words and nothing
-// else.
+// A run with no source is a legal run, not a broken one. What lands on disk is
+// then the shape of the pass — when it started, how long it ran — with the
+// transcript empty, and a run recorded today reads the same after the microphone
+// is wired in. The same rule holds one segment at a time: a stretch of speech
+// that fails to transcribe costs the pass those words and nothing else.
 
 // A stretch of speech and when it was said, on the host clock — the same clock
-// the deck's page reports are stamped with, which is what lets build.ts put the
-// two streams in one order.
+// the pass event is stamped with (rehearsal.ts, passEvent), which is what lets
+// build.ts put the two streams in one order.
 export interface Utterance {
   text: string;
   startedAt: number;
@@ -27,8 +25,7 @@ export interface TranscriptSource {
   // iOS on-device, where every final already carries its own host timestamp —
   // has nothing to cut, and does nothing.
   //
-  // Nothing outside a source calls this any more. A deck's page turn used to,
-  // and so did the Next button that replaced it; the note the reader talks from
+  // Nothing outside a source calls this any more: the note the reader talks from
   // turns no pages (docs/44), which leaves segmented-source.ts cutting on its
   // own ceiling and nothing else.
   //

@@ -1,6 +1,6 @@
 // Voice-input STT configuration (docs/15). base URL and model are harmless
 // settings that sync freely; the API key is a credential (credentials.json, not
-// synced), mirroring the deck image-relay key. Defaults point at SiliconFlow's
+// synced). Defaults point at SiliconFlow's
 // free SenseVoice tier — strongest on Chinese, OpenAI-compatible — but any
 // OpenAI-compatible transcription endpoint works via Settings.
 

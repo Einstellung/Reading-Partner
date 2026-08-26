@@ -117,20 +117,12 @@ export interface RehearsalPage {
   transcript: string; // what the reader said while this page was up
 }
 
-// One pass over the deck, as it comes out of the build step: the pages and the
-// times, before the store has numbered it or counted anything off it.
-//
-// `deckFile` is the deck that was on screen, kept so a run can still say what it
-// was given against after the deck is rebuilt or replaced; null when the caller
-// did not have one to name.
+// One pass, as it comes out of the build step: the pages and the times, before
+// the store has numbered it or counted anything off it.
 export interface BuiltRun {
   id: string;
   ordinal: number; // 1 for this rehearsal's first pass; the store assigns it
   rehearsalId: string;
-  // Frozen at null since the pass is given against an outline (docs/44). Still
-  // on the shape because buildRun copies it across and buildRun is not being
-  // touched; nothing reads it back.
-  deckFile: string | null;
   startedAt: number;
   endedAt: number | null;
   pages: RehearsalPage[];
@@ -144,7 +136,6 @@ export interface RehearsalRunEntry {
   id: string;
   ordinal: number;
   rehearsalId: string;
-  deckFile: string | null;
   startedAt: number;
   endedAt: number | null;
   // The last moment this pass has any record of: endedAt when it was ended
@@ -195,7 +186,7 @@ export interface RehearsalLog {
   runs: RehearsalRunEntry[]; // oldest first
 }
 
-// What the deck and the microphone report while a run is in progress. The
+// What is reported while a run is in progress. The
 // build step (build.ts) turns a list of these into a run; nothing accumulates
 // state during the run itself, so a run that ends badly still yields whatever
 // was collected before it did.
@@ -320,7 +311,6 @@ function normalizeRunEntry(raw: unknown, rehearsalId: string): RehearsalRunEntry
     ordinal: Number.isFinite(run.ordinal) && run.ordinal > 0 ? Math.round(run.ordinal) : 1,
     rehearsalId:
       typeof run.rehearsalId === "string" && run.rehearsalId ? run.rehearsalId : rehearsalId,
-    deckFile: typeof run.deckFile === "string" && run.deckFile ? run.deckFile : null,
     startedAt: run.startedAt,
     endedAt,
     lastMomentAt: Number.isFinite(run.lastMomentAt)

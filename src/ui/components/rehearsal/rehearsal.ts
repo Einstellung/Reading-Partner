@@ -1,12 +1,5 @@
 // The rehearsal's logic, without React: how a pass ends, how a run reads back
 // afterwards, and what the bar above the panel says (docs/44).
-//
-// The deck half of this module — the postMessage contract below, down to
-// withSlideEvent — has no caller. The app does not make decks any more
-// (docs/44) and the note the reader talks from does not turn pages: the one page
-// a pass has is passEvent's. It is kept for the decks already on disk and for
-// the ones brought in from outside (import-deck.ts), which is the side of this
-// protocol that is left.
 
 import {
   buildRun,
@@ -14,90 +7,6 @@ import {
   type RehearsalEvent,
   type TranscriptSource,
 } from "../../../reading/rehearsal";
-
-// The protocol the deck announces in its ready message. A deck built before the
-// bridge existed announces nothing at all and simply never reports a page — the
-// run then records no pages, which is the truth about it.
-export const DECK_PROTOCOL = 1;
-
-// What the deck sends. `source` is what separates it from every other thing that
-// posts into this window; the view additionally checks the message came from its
-// own iframe, which is what makes a second frame unable to write into this run.
-export interface DeckReady {
-  type: "ready";
-  protocol: number;
-  total: number;
-}
-
-export interface DeckSlide {
-  type: "slide";
-  index: number; // 0-based
-  total: number;
-  kind: string;
-  title: string;
-}
-
-export type DeckSignal = DeckReady | DeckSlide;
-
-const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-
-// Read one posted message. Anything that is not this deck's contract reads as
-// null: the window is shared with the whole app, and a run must not grow a page
-// because some library posted a string into it.
-export function readDeckSignal(data: unknown): DeckSignal | null {
-  if (!data || typeof data !== "object") return null;
-  const m = data as Record<string, unknown>;
-  if (m.source !== "deck") return null;
-  if (m.type === "ready") {
-    if (!isNum(m.protocol) || !isNum(m.total)) return null;
-    return { type: "ready", protocol: m.protocol, total: Math.max(0, Math.trunc(m.total)) };
-  }
-  if (m.type === "slide") {
-    if (!isNum(m.index) || !isNum(m.total)) return null;
-    return {
-      type: "slide",
-      index: Math.max(0, Math.trunc(m.index)),
-      total: Math.max(0, Math.trunc(m.total)),
-      kind: typeof m.kind === "string" ? m.kind : "",
-      title: typeof m.title === "string" ? m.title : "",
-    };
-  }
-  return null;
-}
-
-export interface ProtocolCheck {
-  ok: boolean;
-  deck: number;
-  host: number;
-  // Empty when ok. What the chrome around the frame says about the mismatch:
-  // which side is behind, both version numbers, and the one thing to do.
-  notice: string;
-}
-
-// Whether this deck and this app are speaking the same bridge. A deck is a file
-// on disk that is never rebuilt on its own, so an app that has moved on will
-// happily record pages a deck of another version reported, and the record would
-// look exactly like a good one. Say it instead: a run that may not line up with
-// what was on screen has to be visibly that, not silently that.
-export function checkDeckProtocol(sig: DeckReady, host: number = DECK_PROTOCOL): ProtocolCheck {
-  const deck = sig.protocol;
-  if (deck === host) return { ok: true, deck, host, notice: "" };
-  const side =
-    deck < host
-      ? "This deck was built by an older version of the app"
-      : "This deck was built by a newer version of the app";
-  const fix = deck < host ? "generate the deck again" : "update the app";
-  return {
-    ok: false,
-    deck,
-    host,
-    notice: `${side} (deck protocol ${deck}, this app speaks ${host}). What it reports may not be the page on screen — ${fix}.`,
-  };
-}
-
-export function slideEvent(sig: DeckSlide, at: number): RehearsalEvent {
-  return { kind: "slide", at, index: sig.index, slideKind: sig.kind, title: sig.title };
-}
 
 export function utteranceEvent(u: {
   text: string;
@@ -127,38 +36,8 @@ export function passEvent(at: number): RehearsalEvent {
   return { kind: "slide", at, index: 0, slideKind: "", title: "" };
 }
 
-// Whether this report is the reader moving, or the deck repeating the page that
-// is already on screen. The deck re-runs its own show() on every window resize,
-// so a rotation or a window drag reports the current page again. Going 3 → 4 → 3
-// is a real second visit and counts.
-//
-// A page turn is also where the transcript is cut (docs/43), which is why this
-// is its own function: the run's events and the recording have to agree on what
-// a turn is, or a resize would put a segment boundary in the middle of a page.
-export function isPageTurn(events: readonly RehearsalEvent[], sig: DeckSlide): boolean {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i];
-    if (e.kind !== "slide") continue;
-    return e.index !== sig.index;
-  }
-  return true;
-}
-
-// Append a page report, unless it repeats the page that is already on screen.
-export function withSlideEvent(
-  events: readonly RehearsalEvent[],
-  sig: DeckSlide,
-  at: number,
-): RehearsalEvent[] {
-  if (!isPageTurn(events, sig)) return events.slice();
-  return [...events, slideEvent(sig, at)];
-}
-
 export interface FinishRunInput<Saved = unknown> {
   rehearsalId: string;
-  // Frozen at null: the pass is given against an outline (docs/44) and nothing
-  // has a deck to name. Still on the shape because BuiltRun carries it.
-  deckFile?: string | null;
   // Stamped by the caller at the moment the reader finished, not after the wait
   // below: the rehearsal ended when they stopped talking, not when the last
   // upload came back.
@@ -205,7 +84,6 @@ export async function finishRun<Saved>(input: FinishRunInput<Saved>): Promise<bo
     id: input.id,
     ordinal: 0, // the store assigns it
     rehearsalId: input.rehearsalId,
-    deckFile: input.deckFile ?? null,
     startedAt: input.startedAt,
     events,
   });
@@ -237,8 +115,6 @@ export function formatElapsed(ms: number): string {
   return `${h}:${String(m).padStart(2, "0")}:${ss}`;
 }
 
-// "Aug 19, 14:32", built by hand rather than by locale: the same string in the
-// list and in a test, and short enough for a 300px pane.
 export interface RehearsalReadiness {
   ok: boolean;
   // Always present: a disabled button that does not say why is a dead end.

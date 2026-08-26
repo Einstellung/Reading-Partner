@@ -83,8 +83,8 @@ const realSchedule: Schedule = (fn, ms) => {
 export interface SegmentedSourceOptions {
   session: RecordingSession;
   transcribe: TranscribeSegment;
-  // The host clock. Defaults to Date.now, which is what the deck listener stamps
-  // its page reports with.
+  // The host clock. Defaults to Date.now, which is what the pass event is
+  // stamped with.
   now?: () => number;
   schedule?: Schedule;
   maxSegmentSeconds?: number;

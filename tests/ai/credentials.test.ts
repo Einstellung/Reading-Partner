@@ -42,14 +42,12 @@ test("activating deepseek drops anthropic and openai", () => {
 	expect(after.openai).toBeUndefined();
 });
 
-test("device keys (imageGen, voiceStt) survive a provider switch", () => {
+test("the device key (voiceStt) survives a provider switch", () => {
 	const before: CredentialStore = {
 		anthropic: oauth,
-		imageGen: key("img"),
 		voiceStt: key("stt"),
 	};
 	const after = withActiveCredential(before, "deepseek", key("dk"));
-	expect(after.imageGen).toEqual(key("img"));
 	expect(after.voiceStt).toEqual(key("stt"));
 	expect(after.anthropic).toBeUndefined();
 });
@@ -84,18 +82,16 @@ test("a key saved for one of the newer providers signs the previous one out", ()
 	expect(activeProviderId(after)).toBe("xai");
 });
 
-test("device keys survive a switch between two of the newer providers", () => {
+test("the device key survives a switch between two of the newer providers", () => {
 	const before: CredentialStore = {
 		"kimi-coding": key("kimi"),
-		imageGen: key("img"),
 		voiceStt: key("stt"),
 	};
 	const after = withActiveCredential(before, "cerebras", key("cb"));
-	expect(after.imageGen).toEqual(key("img"));
 	expect(after.voiceStt).toEqual(key("stt"));
 	expect(after["kimi-coding"]).toBeUndefined();
-	// Nor do the device keys ever count as the active provider.
-	expect(activeProviderId({ imageGen: key("img"), voiceStt: key("stt") })).toBeNull();
+	// Nor does the device key ever count as the active provider.
+	expect(activeProviderId({ voiceStt: key("stt") })).toBeNull();
 });
 
 // --- legacy multi-provider read rule ---------------------------------------
@@ -181,13 +177,13 @@ test("a second store's mutation does not queue behind the first store's unfinish
 	const landed = await Promise.race([
 		second
 			.update((s) => {
-				s.imageGen = key("img");
+				s.voiceStt = key("stt");
 			})
 			.then(() => "landed"),
 		Bun.sleep(100).then(() => "still queued behind the other store"),
 	]);
 	expect(landed).toBe("landed");
-	expect((JSON.parse(file.text) as CredentialStore).imageGen).toEqual(key("img"));
+	expect((JSON.parse(file.text) as CredentialStore).voiceStt).toEqual(key("stt"));
 
 	release();
 	await stuck;

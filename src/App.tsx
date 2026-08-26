@@ -393,7 +393,7 @@ export default function App() {
       void splitSavedArticleBodiesOnce().catch((e) =>
         console.warn("saved-article body split skipped", e),
       );
-      // What the reader said on each pass over a deck moved out of the
+      // What the reader said on each pass moved out of the
       // rehearsal's log into a file per pass (docs/43). Independent of both, and
       // not awaited: everything that reads a rehearsal reads either shape, so
       // nothing below is waiting on it. Writes nothing once it has run.

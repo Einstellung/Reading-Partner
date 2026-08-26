@@ -39,12 +39,7 @@
 // belongs to the runs file alone, for that reason.
 //
 // All three are in the sync range (platform/sync/syncFs.ts): a rehearsal is a
-// trace the reader left and nothing can rebuild it. The deck itself is not —
-// slides/** is a build output, and an imported deck under rehearsals/ can be tens
-// of megabytes, which does not belong in a per-file diff-and-merge engine. So a
-// rehearsal recorded on the desktop shows on the iPad with its history intact and
-// no deck to give: the deck is imported on the device it is rehearsed on. Known
-// limitation, first version.
+// trace the reader left and nothing can rebuild it.
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
@@ -173,9 +168,6 @@ export interface StartRehearsalInput {
  * also steps over a rehearsal-<retellId>.json an earlier build left behind under
  * the same name.
  *
- * Separate from startRehearsal because an imported deck has to know where it is
- * going before it is copied: writing the object first would leave one pointing
- * at a file the copy never managed to produce.
  */
 export async function reserveRehearsalId(now = Date.now()): Promise<{ id: string; at: number }> {
   let at = now;
@@ -286,7 +278,7 @@ function badFile(rehearsalId: string): string {
 
 /**
  * This rehearsal's index of passes, oldest first — the rows, without the
- * transcripts. A deck that has never been given reads as
+ * transcripts. A rehearsal that has never been given reads as
  * an empty log, and so does one whose file this build cannot use — but in that
  * case the bytes are moved aside first, so the empty log the caller gets is
  * never the only copy left. That is the shape docs/29 recorded on
@@ -502,21 +494,14 @@ export function splitRehearsalRunPagesOnce(): Promise<number> {
 
 /**
  * Drop a rehearsal: the object, the index of its passes, every transcript under
- * it, the rescue copy if there is one, and the deck this rehearsal has a copy of
- * its own. Not the outline — a talk outlives the history of one set of passes
- * over it — and not a deck the slides pipeline built, which the retell owns.
- *
- * The imported copy is named from the rehearsal's own id (importedDeckFile), so
- * it is removed by name rather than by reading the object for a path: the deck
- * left the rehearsal (docs/44) and the object no longer carries one, and a
- * remove of a name nothing put there is a file that is not found.
+ * it, and the rescue copy if there is one. Not the outline — a talk outlives the
+ * history of one set of passes over it.
  */
 export async function deleteRehearsal(rehearsalId: string): Promise<void> {
   const files = [
     rehearsalFile(rehearsalId),
     rehearsalRunsFile(rehearsalId),
     badFile(rehearsalId),
-    importedDeckFile(rehearsalId),
   ];
   for (const file of files) {
     try {
@@ -537,35 +522,11 @@ export async function deleteRehearsal(rehearsalId: string): Promise<void> {
 }
 
 /**
- * Drop the rehearsal a retell's deck was given through, when the retell itself
- * is deleted. It is a history of passes over a deck nobody will ever open again.
+ * Drop the rehearsal of a retell's talk, when the retell itself is deleted. It
+ * is a history of passes over a talk nobody will ever open again.
  */
 export async function deleteRehearsalsForRetell(retellId: string): Promise<void> {
   for (const r of await listAllRehearsals()) {
     if (r.retellId === retellId) await deleteRehearsal(r.id);
-  }
-}
-
-// Decks brought in from outside live under this directory, one file per
-// rehearsal. Not synced (see the head of this file), so it is never walked by
-// the sync scan.
-export const REHEARSAL_DECK_DIR = "rehearsals";
-
-export function importedDeckFile(rehearsalId: string): string {
-  return `${REHEARSAL_DECK_DIR}/${rehearsalId}.html`;
-}
-
-export function isImportedDeck(file: string): boolean {
-  return file.startsWith(`${REHEARSAL_DECK_DIR}/`);
-}
-
-/** A deck's HTML, whichever kind of deck it is. Missing reads as null. */
-export async function readRehearsalDeck(file: string): Promise<string | null> {
-  try {
-    if (!(await appData.exists(file))) return null;
-    return await appData.readText(file);
-  } catch (e) {
-    console.warn("failed to read a deck", file, e);
-    return null;
   }
 }

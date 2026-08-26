@@ -74,7 +74,7 @@ const RECORD_FILES = new Set([
 ]);
 
 export function strategyFor(path: string): MergeStrategy {
-  // What the reader said on one pass over a deck (docs/43),
+  // What the reader said on one pass over a talk (docs/44),
   // runs/<rehearsalId>/<runId>.json. Judged by where it sits and not by its
   // name, because its name is a run id: an id that happened to read as
   // "state.json" would otherwise be merged field by field. Opaque, and never
@@ -95,7 +95,7 @@ export function strategyFor(path: string): MergeStrategy {
   if (/^threads-.+\.json$/.test(name)) return "records";
   // A rehearsal's index of passes (docs/43): identified rows in a `runs` array,
   // and a row is a pass that happened — nothing ever edits one. Records, so two
-  // devices that each gave the deck a turn keep both passes; opaque would park
+  // devices that each gave the talk a turn keep both passes; opaque would park
   // one of them in a conflict copy nobody opens. It could only be records once
   // the transcripts moved out: merging row by row is cheap, merging thirty KB of
   // talk per row was not the shape to grow into.

@@ -21,7 +21,6 @@ export interface BuildRunInput {
   id: string;
   ordinal: number;
   rehearsalId: string;
-  deckFile: string | null;
   startedAt: number;
   events: readonly RehearsalEvent[];
 }
@@ -106,7 +105,6 @@ export function buildRun(input: BuildRunInput): BuiltRun {
     id: input.id,
     ordinal: input.ordinal,
     rehearsalId: input.rehearsalId,
-    deckFile: input.deckFile,
     startedAt: input.startedAt,
     endedAt,
     pages: [...pages.values()].sort((a, b) => a.index - b.index),
