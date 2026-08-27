@@ -1,7 +1,7 @@
 // The coach: its prompt (src/reading/rehearsal/coach.ts) and the turn assembled
 // around it (coach-turn.ts). What is pinned here is the posture the prompt has
-// to keep — the two measures, and that a pass produces a change to the outline
-// rather than a review — and that the turn mounts the tools that make that
+// to keep — the measures it listens with, and that a pass produces a change to
+// the outline rather than a review — and that the turn mounts the tools that make that
 // possible over the talk as it stands.
 // Run: bun test.
 
@@ -62,6 +62,26 @@ test("the instructions separate the coach from the retell's examiner", () => {
   expect(COACH_INSTRUCTIONS).toContain("a change to the talk, not a review");
   expect(COACH_INSTRUCTIONS).toContain("one block of markdown per segment");
   expect(COACH_INSTRUCTIONS).toContain("Never rewrite a segment into your own words");
+});
+
+// docs/44: a pass is the only place the segments are heard back to back, and the
+// only place a block's failure-mode line has to be said out loud rather than
+// worked out. Both measures are pinned here, and so is the fence around them:
+// they judge a stretch the coach heard, never a block that never came up.
+test("the pass's own two measures are in the instructions, and fenced", () => {
+  // The seam. The retell asked one segment at a time, so nothing before the pass
+  // could show whether they join.
+  expect(COACH_INSTRUCTIONS).toContain("The seams.");
+  expect(COACH_INSTRUCTIONS).toContain("an order that works against the through-line");
+  // The cost line. It is in the block because the retell got it out of them, so
+  // leaving it on the page is what there is to say about that stretch.
+  expect(COACH_INSTRUCTIONS).toContain("what the other way would cost");
+  expect(COACH_INSTRUCTIONS).toContain("the one sentence worth giving is the one they left");
+  // Neither measure may reach a block the reader never touched this pass.
+  expect(COACH_INSTRUCTIONS).toContain("about a stretch you heard them give");
+  expect(COACH_INSTRUCTIONS).toContain("Say nothing about what you cannot hear");
+  // A block with no such line is the retell's unfinished business, not theirs.
+  expect(COACH_INSTRUCTIONS).toContain("do not call it recited and do not set");
 });
 
 test("a talk with nothing on it yet still assembles a prompt", () => {
