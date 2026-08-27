@@ -52,6 +52,14 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // The interactive one: the real composer with nothing above it, so the bar
   // can be tried by hand on a .dev build that cannot sign in (docs/pitfall/31).
   void import("./smoke/dictation-bench").then(({ runDictationBench }) => runDictationBench());
+} else if (import.meta.env.VITE_SMOKE === "speech") {
+  // The playback experiments: six legs over a fixture already on the device, no
+  // network and nobody in the room (docs/33, M-voice-2).
+  void import("./smoke/speech-probe").then(({ runSpeechProbe }) => runSpeechProbe());
+} else if (import.meta.env.VITE_SMOKE === "speech-bench") {
+  // The half of it that needs ears: whether twelve scheduled buffers sound like
+  // one stretch of speech.
+  void import("./smoke/speech-bench").then(({ runSpeechBench }) => runSpeechBench());
 } else if (import.meta.env.VITE_SMOKE === "dictation-guided") {
   // The half of the dictation measurements that needs a person in front of the
   // phone: a level curve and a flush latency are both about a human voice, and

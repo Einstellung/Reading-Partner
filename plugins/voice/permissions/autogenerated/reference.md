@@ -1,6 +1,6 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, and park the audio stack for the indicator probe.
+Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, and interrupt or bench the spoken half.
 
 #### This default permission set includes the following:
 
@@ -9,6 +9,9 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-cancel-dictation`
 - `allow-release-microphone`
 - `allow-set-indicator-probe`
+- `allow-stop-speaking`
+- `allow-speech-probe`
+- `allow-speech-report`
 - `allow-register-listener`
 - `allow-remove-listener`
 
@@ -50,32 +53,6 @@ Denies the cancel_dictation command without any pre-configured scope.
 <tr>
 <td>
 
-`voice:allow-release-microphone`
-
-</td>
-<td>
-
-Enables the release_microphone command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`voice:deny-release-microphone`
-
-</td>
-<td>
-
-Denies the release_microphone command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `voice:allow-register-listener`
 
 </td>
@@ -95,6 +72,32 @@ Enables the register_listener command without any pre-configured scope.
 <td>
 
 Denies the register_listener command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-release-microphone`
+
+</td>
+<td>
+
+Enables the release_microphone command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-release-microphone`
+
+</td>
+<td>
+
+Denies the release_microphone command without any pre-configured scope.
 
 </td>
 </tr>
@@ -154,6 +157,58 @@ Denies the set_indicator_probe command without any pre-configured scope.
 <tr>
 <td>
 
+`voice:allow-speech-probe`
+
+</td>
+<td>
+
+Enables the speech_probe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-speech-probe`
+
+</td>
+<td>
+
+Denies the speech_probe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-speech-report`
+
+</td>
+<td>
+
+Enables the speech_report command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-speech-report`
+
+</td>
+<td>
+
+Denies the speech_report command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `voice:allow-start-dictation`
 
 </td>
@@ -199,6 +254,32 @@ Enables the stop_dictation command without any pre-configured scope.
 <td>
 
 Denies the stop_dictation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-stop-speaking`
+
+</td>
+<td>
+
+Enables the stop_speaking command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-stop-speaking`
+
+</td>
+<td>
+
+Denies the stop_speaking command without any pre-configured scope.
 
 </td>
 </tr>

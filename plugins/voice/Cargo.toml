@@ -16,6 +16,9 @@ links = "tauri-plugin-voice"
 tauri = { version = "2" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
+# The sentence PCM crosses the bridge as a JSON string: serde writes a Vec<u8>
+# as an array of numbers, which is six bytes on the wire for every one.
+base64 = "0.22"
 thiserror = "2"
 # The speaking half (src/tts) makes its own HTTPS requests: Mimo streams PCM over
 # SSE and the bytes are headed for an audio node, not for the webview, so they
@@ -24,7 +27,6 @@ thiserror = "2"
 # it already builds with, so this adds a compile unit to nothing.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "json"] }
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
-base64 = "0.22"
 async-trait = "0.1"
 
 [dev-dependencies]

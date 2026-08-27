@@ -120,3 +120,86 @@ impl<R: Runtime> Voice<R> {
             .map_err(Into::into)
     }
 }
+
+// The playback half (docs/33, M-voice-2). Swift decodes these with a plain
+// JSONDecoder, so the property names are camelCase here too.
+//
+// `enqueue_speech` is not a `#[tauri::command]` and never becomes one: the
+// synthesiser lives in Rust, so the audio would otherwise cross the bridge into
+// the webview and back out again for nothing. The three below it are commands
+// because the webview is what interrupts a turn and what drives the bench.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EnqueueSpeechArgs {
+    utterance: u64,
+    index: u32,
+    /// How many characters this sentence is. Swift interpolates a character
+    /// offset inside it and never sees the text.
+    chars: u32,
+    last: bool,
+    sample_rate: u32,
+    trim: bool,
+    /// Little-endian 16-bit mono, exactly the bytes the vendor sent. serde
+    /// writes a `Vec<u8>` as a JSON array of numbers, so this is base64'd by
+    /// hand into the string Swift's `Data` decoder reads.
+    pcm: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StopSpeakingArgs {
+    reason: String,
+}
+
+impl<R: Runtime> Voice<R> {
+    /// One sentence onto the back of the playback queue. Called by the TTS
+    /// client as each sentence finishes streaming, in order.
+    pub async fn enqueue_speech(
+        &self,
+        utterance: u64,
+        index: u32,
+        chars: u32,
+        last: bool,
+        sample_rate: u32,
+        trim: bool,
+        pcm: Vec<u8>,
+    ) -> crate::Result<SpeechEnqueued> {
+        use base64::Engine as _;
+        self.0
+            .run_mobile_plugin_async(
+                "enqueue_speech",
+                EnqueueSpeechArgs {
+                    utterance,
+                    index,
+                    chars,
+                    last,
+                    sample_rate,
+                    trim,
+                    pcm: base64::engine::general_purpose::STANDARD.encode(pcm),
+                },
+            )
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn stop_speaking(&self, reason: String) -> crate::Result<SpeechPosition> {
+        self.0
+            .run_mobile_plugin_async("stop_speaking", StopSpeakingArgs { reason })
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn speech_probe(&self, args: serde_json::Value) -> crate::Result<SpeechReport> {
+        self.0
+            .run_mobile_plugin_async("speech_probe", args)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn speech_report(&self) -> crate::Result<SpeechReport> {
+        self.0
+            .run_mobile_plugin_async("speech_report", ())
+            .await
+            .map_err(Into::into)
+    }
+}

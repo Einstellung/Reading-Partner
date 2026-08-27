@@ -1,0 +1,416 @@
+{
+  "purpose": "Pre-synthesized per-sentence PCM for the on-device playback seam test; no network at playback time.",
+  "audio_format": {
+    "encoding": "pcm_s16le",
+    "sample_rate_hz": 24000,
+    "bits_per_sample": 16,
+    "channels": 1,
+    "byte_order": "little-endian",
+    "note": "the .pcm files are headerless; the .wav files are the same bytes with a RIFF header"
+  },
+  "tts": {
+    "vendor": "xiaomi",
+    "endpoint": "https://api.xiaomimimo.com/v1/chat/completions",
+    "model": "mimo-v2.5-tts",
+    "voice": "冰糖",
+    "note": "text goes in the assistant message; the user message is an optional style hint and is not spoken"
+  },
+  "text_pipeline": {
+    "source": "SAMPLE briefing corpus + one added sentence",
+    "normalizer": "src/info/briefing/speech/normalize.ts (normalizeForSpeech)",
+    "split": "on 。！？； keeping the terminator"
+  },
+  "trim": {
+    "method": "hysteresis RMS gate",
+    "frame_ms": 10,
+    "hop_ms": 10,
+    "guard_ms": 20,
+    "high_dbfs": -35.0,
+    "low_dbfs": -45.0,
+    "evidence": "silence floor (5th-pct frame) -59..-71 dBFS, speech peaks -7..-12 dBFS; absolute gates at -45 and -40 dBFS agree with this gate to within one 10 ms frame"
+  },
+  "counts": {
+    "sentences": 12,
+    "raw_seconds": 81.44,
+    "trimmed_seconds": 75.06
+  },
+  "trim_summary": {
+    "lead_ms_mean": 91.7,
+    "trail_ms_mean": 440.0,
+    "lead_ms_range": [
+      60.0,
+      110.0
+    ],
+    "trail_ms_range": [
+      310.0,
+      530.0
+    ]
+  },
+  "reference": {
+    "joined_raw_wav": "reference/joined_raw.wav",
+    "joined_trimmed_wav": "reference/joined_trimmed.wav",
+    "note": "the twelve clips concatenated with no gap, as the seamless comparison for the device test"
+  },
+  "sentences": [
+    {
+      "index": 1,
+      "id": "s01",
+      "text": "早上好，这是八月二十七日的科技简报。",
+      "chars": 18,
+      "raw": {
+        "pcm": "raw/s01.pcm",
+        "wav": "raw/s01.wav",
+        "samples": 84480,
+        "seconds": 3.52
+      },
+      "trimmed": {
+        "pcm": "trimmed/s01.pcm",
+        "wav": "trimmed/s01.wav",
+        "samples": 72480,
+        "seconds": 3.02
+      },
+      "trim": {
+        "lead_ms": 60.0,
+        "trail_ms": 440.0,
+        "lead_samples": 1440,
+        "trail_samples": 10560
+      },
+      "peak_dbfs": -3.1,
+      "synth": {
+        "ttfb_ms": 790.2,
+        "total_ms": 1496.7,
+        "sse_chunks": 11
+      }
+    },
+    {
+      "index": 2,
+      "id": "s02",
+      "text": "英伟达发布 H 二百之后，A 一百的二手价格明显回落，新一代 H B M 四预计明年量产。",
+      "chars": 45,
+      "raw": {
+        "pcm": "raw/s02.pcm",
+        "wav": "raw/s02.wav",
+        "samples": 184320,
+        "seconds": 7.68
+      },
+      "trimmed": {
+        "pcm": "trimmed/s02.pcm",
+        "wav": "trimmed/s02.wav",
+        "samples": 168960,
+        "seconds": 7.04
+      },
+      "trim": {
+        "lead_ms": 110.0,
+        "trail_ms": 530.0,
+        "lead_samples": 2640,
+        "trail_samples": 12720
+      },
+      "peak_dbfs": -2.8,
+      "synth": {
+        "ttfb_ms": 841.7,
+        "total_ms": 2414.2,
+        "sse_chunks": 24
+      }
+    },
+    {
+      "index": 3,
+      "id": "s03",
+      "text": "该公司第三季度营收一千八百三十亿美元，毛利率升至百分之二十六，同比提高三点五个百分点，市值一度突破五万亿美元。",
+      "chars": 55,
+      "raw": {
+        "pcm": "raw/s03.pcm",
+        "wav": "raw/s03.wav",
+        "samples": 257280,
+        "seconds": 10.72
+      },
+      "trimmed": {
+        "pcm": "trimmed/s03.pcm",
+        "wav": "trimmed/s03.wav",
+        "samples": 242160,
+        "seconds": 10.09
+      },
+      "trim": {
+        "lead_ms": 100.0,
+        "trail_ms": 530.0,
+        "lead_samples": 2400,
+        "trail_samples": 12720
+      },
+      "peak_dbfs": -3.9,
+      "synth": {
+        "ttfb_ms": 638.1,
+        "total_ms": 2920.2,
+        "sse_chunks": 33
+      }
+    },
+    {
+      "index": 4,
+      "id": "s04",
+      "text": "OpenAI 宣布 G P T 五将于第三季度开放 A P I 接口，推理成本比上一代下降四成；",
+      "chars": 48,
+      "raw": {
+        "pcm": "raw/s04.pcm",
+        "wav": "raw/s04.wav",
+        "samples": 188160,
+        "seconds": 7.84
+      },
+      "trimmed": {
+        "pcm": "trimmed/s04.pcm",
+        "wav": "trimmed/s04.wav",
+        "samples": 175920,
+        "seconds": 7.33
+      },
+      "trim": {
+        "lead_ms": 110.0,
+        "trail_ms": 400.0,
+        "lead_samples": 2640,
+        "trail_samples": 9600
+      },
+      "peak_dbfs": -3.7,
+      "synth": {
+        "ttfb_ms": 986.7,
+        "total_ms": 2292.9,
+        "sse_chunks": 24
+      }
+    },
+    {
+      "index": 5,
+      "id": "s05",
+      "text": "国产 G P U 厂商同期发布新品，主打 L L M 推理场景。",
+      "chars": 32,
+      "raw": {
+        "pcm": "raw/s05.pcm",
+        "wav": "raw/s05.wav",
+        "samples": 130560,
+        "seconds": 5.44
+      },
+      "trimmed": {
+        "pcm": "trimmed/s05.pcm",
+        "wav": "trimmed/s05.wav",
+        "samples": 116880,
+        "seconds": 4.87
+      },
+      "trim": {
+        "lead_ms": 100.0,
+        "trail_ms": 470.0,
+        "lead_samples": 2400,
+        "trail_samples": 11280
+      },
+      "peak_dbfs": -1.9,
+      "synth": {
+        "ttfb_ms": 595.2,
+        "total_ms": 1368.3,
+        "sse_chunks": 17
+      }
+    },
+    {
+      "index": 6,
+      "id": "s06",
+      "text": "制造端，台积电十八 A 制程进入风险试产，月产能规划五万片晶圆。",
+      "chars": 32,
+      "raw": {
+        "pcm": "raw/s06.pcm",
+        "wav": "raw/s06.wav",
+        "samples": 165120,
+        "seconds": 6.88
+      },
+      "trimmed": {
+        "pcm": "trimmed/s06.pcm",
+        "wav": "trimmed/s06.wav",
+        "samples": 154080,
+        "seconds": 6.42
+      },
+      "trim": {
+        "lead_ms": 70.0,
+        "trail_ms": 390.0,
+        "lead_samples": 1680,
+        "trail_samples": 9360
+      },
+      "peak_dbfs": -3.0,
+      "synth": {
+        "ttfb_ms": 644.7,
+        "total_ms": 2312.6,
+        "sse_chunks": 21
+      }
+    },
+    {
+      "index": 7,
+      "id": "s07",
+      "text": "R I S C V 服务器芯片流片成功，可兼容五 G A 基站场景。",
+      "chars": 34,
+      "raw": {
+        "pcm": "raw/s07.pcm",
+        "wav": "raw/s07.wav",
+        "samples": 142080,
+        "seconds": 5.92
+      },
+      "trimmed": {
+        "pcm": "trimmed/s07.pcm",
+        "wav": "trimmed/s07.wav",
+        "samples": 127440,
+        "seconds": 5.31
+      },
+      "trim": {
+        "lead_ms": 100.0,
+        "trail_ms": 510.0,
+        "lead_samples": 2400,
+        "trail_samples": 12240
+      },
+      "peak_dbfs": -0.1,
+      "synth": {
+        "ttfb_ms": 803.4,
+        "total_ms": 2221.8,
+        "sse_chunks": 18
+      }
+    },
+    {
+      "index": 8,
+      "id": "s08",
+      "text": "某新能源车企上月交付八点六万辆，其新款电机峰值扭矩达到六百二十 N·m。",
+      "chars": 36,
+      "raw": {
+        "pcm": "raw/s08.pcm",
+        "wav": "raw/s08.wav",
+        "samples": 172800,
+        "seconds": 7.2
+      },
+      "trimmed": {
+        "pcm": "trimmed/s08.pcm",
+        "wav": "trimmed/s08.wav",
+        "samples": 162720,
+        "seconds": 6.78
+      },
+      "trim": {
+        "lead_ms": 110.0,
+        "trail_ms": 310.0,
+        "lead_samples": 2640,
+        "trail_samples": 7440
+      },
+      "peak_dbfs": -3.3,
+      "synth": {
+        "ttfb_ms": 663.4,
+        "total_ms": 2146.4,
+        "sse_chunks": 22
+      }
+    },
+    {
+      "index": 9,
+      "id": "s09",
+      "text": "重庆基地同步扩建产线，芯片供货紧张导致现货市场涨幅超过三成。",
+      "chars": 30,
+      "raw": {
+        "pcm": "raw/s09.pcm",
+        "wav": "raw/s09.wav",
+        "samples": 145920,
+        "seconds": 6.08
+      },
+      "trimmed": {
+        "pcm": "trimmed/s09.pcm",
+        "wav": "trimmed/s09.wav",
+        "samples": 134640,
+        "seconds": 5.61
+      },
+      "trim": {
+        "lead_ms": 70.0,
+        "trail_ms": 400.0,
+        "lead_samples": 1680,
+        "trail_samples": 9600
+      },
+      "peak_dbfs": -1.5,
+      "synth": {
+        "ttfb_ms": 736.1,
+        "total_ms": 1844.5,
+        "sse_chunks": 19
+      }
+    },
+    {
+      "index": 10,
+      "id": "s10",
+      "text": "最后，探测器于二〇二六年完成第十二次发射任务，成功着陆火星并传回首批地表图像。",
+      "chars": 39,
+      "raw": {
+        "pcm": "raw/s10.pcm",
+        "wav": "raw/s10.wav",
+        "samples": 199680,
+        "seconds": 8.32
+      },
+      "trimmed": {
+        "pcm": "trimmed/s10.pcm",
+        "wav": "trimmed/s10.wav",
+        "samples": 188640,
+        "seconds": 7.86
+      },
+      "trim": {
+        "lead_ms": 80.0,
+        "trail_ms": 380.0,
+        "lead_samples": 1920,
+        "trail_samples": 9120
+      },
+      "peak_dbfs": -1.7,
+      "synth": {
+        "ttfb_ms": 698.6,
+        "total_ms": 2544.9,
+        "sse_chunks": 26
+      }
+    },
+    {
+      "index": 11,
+      "id": "s11",
+      "text": "工信部与中国信通院联合发布的报告显示，上半年 A I 服务器出货量同比增长百分之四十七，其中八成流向头部云厂商。",
+      "chars": 56,
+      "raw": {
+        "pcm": "raw/s11.pcm",
+        "wav": "raw/s11.wav",
+        "samples": 238080,
+        "seconds": 9.92
+      },
+      "trimmed": {
+        "pcm": "trimmed/s11.pcm",
+        "wav": "trimmed/s11.wav",
+        "samples": 225120,
+        "seconds": 9.38
+      },
+      "trim": {
+        "lead_ms": 100.0,
+        "trail_ms": 440.0,
+        "lead_samples": 2400,
+        "trail_samples": 10560
+      },
+      "peak_dbfs": -2.3,
+      "synth": {
+        "ttfb_ms": 611.2,
+        "total_ms": 2546.3,
+        "sse_chunks": 31
+      }
+    },
+    {
+      "index": 12,
+      "id": "s12",
+      "text": "以上是今天的简报。",
+      "chars": 9,
+      "raw": {
+        "pcm": "raw/s12.pcm",
+        "wav": "raw/s12.wav",
+        "samples": 46080,
+        "seconds": 1.92
+      },
+      "trimmed": {
+        "pcm": "trimmed/s12.pcm",
+        "wav": "trimmed/s12.wav",
+        "samples": 32400,
+        "seconds": 1.35
+      },
+      "trim": {
+        "lead_ms": 90.0,
+        "trail_ms": 480.0,
+        "lead_samples": 2160,
+        "trail_samples": 11520
+      },
+      "peak_dbfs": -4.6,
+      "synth": {
+        "ttfb_ms": 913.2,
+        "total_ms": 1216.4,
+        "sse_chunks": 6
+      }
+    }
+  ]
+}

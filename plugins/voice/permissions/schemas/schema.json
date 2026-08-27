@@ -319,6 +319,18 @@
           "markdownDescription": "Denies the register_listener command without any pre-configured scope."
         },
         {
+          "description": "Enables the release_microphone command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-release-microphone",
+          "markdownDescription": "Enables the release_microphone command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the release_microphone command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-release-microphone",
+          "markdownDescription": "Denies the release_microphone command without any pre-configured scope."
+        },
+        {
           "description": "Enables the remove_listener command without any pre-configured scope.",
           "type": "string",
           "const": "allow-remove-listener",
@@ -341,6 +353,30 @@
           "type": "string",
           "const": "deny-set-indicator-probe",
           "markdownDescription": "Denies the set_indicator_probe command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the speech_probe command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-speech-probe",
+          "markdownDescription": "Enables the speech_probe command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the speech_probe command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-speech-probe",
+          "markdownDescription": "Denies the speech_probe command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the speech_report command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-speech-report",
+          "markdownDescription": "Enables the speech_report command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the speech_report command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-speech-report",
+          "markdownDescription": "Denies the speech_report command without any pre-configured scope."
         },
         {
           "description": "Enables the start_dictation command without any pre-configured scope.",
@@ -367,10 +403,22 @@
           "markdownDescription": "Denies the stop_dictation command without any pre-configured scope."
         },
         {
-          "description": "Dictate on the device: start, stop and cancel a hold, subscribe to the dictation event, and park the audio stack for the indicator probe.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-set-indicator-probe`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Enables the stop_speaking command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-speaking",
+          "markdownDescription": "Enables the stop_speaking command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_speaking command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-speaking",
+          "markdownDescription": "Denies the stop_speaking command without any pre-configured scope."
+        },
+        {
+          "description": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, and interrupt or bench the spoken half.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-report`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Dictate on the device: start, stop and cancel a hold, subscribe to the dictation event, and park the audio stack for the indicator probe.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-set-indicator-probe`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, and interrupt or bench the spoken half.\n#### This default permission set includes:\n\n- `allow-start-dictation`\n- `allow-stop-dictation`\n- `allow-cancel-dictation`\n- `allow-release-microphone`\n- `allow-set-indicator-probe`\n- `allow-stop-speaking`\n- `allow-speech-probe`\n- `allow-speech-report`\n- `allow-register-listener`\n- `allow-remove-listener`"
         }
       ]
     }
