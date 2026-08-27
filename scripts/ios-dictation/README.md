@@ -21,7 +21,7 @@ iPhone 16, iOS 26.6, UDID `00008140-000C31641EEB001C`, attached over USB.
 | `launch-on-unlock.sh` | wait for the phone to unlock, kill any stale instance, start the console and speaker, launch |
 | `syslog.sh` | `idevicesyslog` filtered to `RP-DICT` |
 | `speaker.sh` | watch the console and speak into the room on each hold's cue |
-| `speech-run.sh` | the playback experiments: build `VITE_SMOKE=speech`, launch once to make the data directory, push the fixture, run it and fetch the tape |
+| `speech-run.sh` | the playback experiments: build `VITE_SMOKE=speech`, launch once to make the data directory, push the fixture, run it and fetch the tape. `speech-run.sh speech-live` adds the leg that synthesises |
 | `push-fixture.sh` | copy the pre-synthesised sentences into the app data container. Needs the app to have been launched once |
 | `fetch-result.sh` | pull `dictation-result.json` out of the app data container |
 | `analyse.py` | print the numbers §7 of the brief asks for |
@@ -32,6 +32,28 @@ drives the bar on a schedule while a person reads lines aloud; `dictation-bench`
 drives nothing and measures nothing — it mounts the real composer so the bar can
 be held by hand, which is the only way to judge it on a build that cannot sign
 in (docs/pitfall/31).
+
+## The whole line, once, on the phone
+
+The fixture legs measure the player and nothing in front of it. The one run that
+goes text → 小米 → trim → relay → speaker is `speech-live`, and the first command
+after the phone is plugged in is:
+
+```sh
+MIMO_API_KEY=$(grep -m1 '^MIMO_API_KEY=' ~/Reading-Partner/.env | cut -d= -f2-) \
+  ~/Reading-Partner/scripts/ios-dictation/speech-run.sh speech-live
+```
+
+The key never lands on the phone's disk and is never built into the app:
+`devicectl` forwards `DEVICECTL_CHILD_MIMO_API_KEY` into the launched process's
+environment and Rust reads it there. The `.env` it comes from is the Linux
+checkout's, so on the Mac either copy that one line over first or paste the key
+into the command.
+
+The result is `/tmp/speech-result.json` as before, with one more leg on it:
+`label: "live"`, carrying the relay's own timeline in `relay` — when each
+sentence's request went out, when its first audio came back, what the trim took
+off, and the margin left on the player as each one was queued.
 
 ## What each one had to learn the hard way
 

@@ -37,9 +37,10 @@ struct SpeechAck: Encodable {
     /// True when this sentence was thrown away rather than queued: its turn was
     /// stopped between the vendor sending it and it arriving here.
     let dropped: Bool
-    let leadMs: Double
-    let trailMs: Double
     /// How much speech is queued ahead of the listener, this sentence included.
+    /// Ahead of the listener and not the whole queue: it is the only number the
+    /// relay's admission gate reads, and a running total would sit above the
+    /// gate for the rest of the turn and starve the player.
     let queuedMs: Double
     /// Where this sentence starts on the current player timeline.
     let startMs: Double
@@ -62,8 +63,6 @@ struct SpeechSentenceRow: Encodable {
     let chars: Int
     let bytes: Int
     let frames: Int
-    let leadMs: Double
-    let trailMs: Double
     let startFrame: Int
     /// Player frames at the moment this sentence's audio had left the node,
     /// against the frame the book says it ends on. The difference is the whole
@@ -201,8 +200,7 @@ final class SpeechOut {
     /// carries the trim and the queue depth, and Rust wants both before it
     /// decides whether to keep synthesising ahead.
     func enqueue(
-        pcm: Data, sampleRate: Double, chars: Int, utterance: UInt64, index: Int, last: Bool,
-        trim: Bool
+        pcm: Data, sampleRate: Double, chars: Int, utterance: UInt64, index: Int, last: Bool
     ) throws -> SpeechAck {
         try queue.sync {
             guard sampleRate == SpeechOut.sampleRate else {
@@ -214,36 +212,20 @@ final class SpeechOut {
             // rather than throwing: the vendor was mid-sentence when the user
             // interrupted, and that is not an error on anybody's part.
             if speaking && utterance != self.utterance {
-                return SpeechAck(
-                    dropped: true, leadMs: 0, trailMs: 0, queuedMs: 0, startMs: 0)
+                return SpeechAck(dropped: true, queuedMs: 0, startMs: 0)
             }
             if !speaking && utterance < self.utterance {
-                return SpeechAck(
-                    dropped: true, leadMs: 0, trailMs: 0, queuedMs: 0, startMs: 0)
+                return SpeechAck(dropped: true, queuedMs: 0, startMs: 0)
             }
 
             let node = try attachedPlayer()
             let bytes = pcm.count
-            let total = bytes / 2
-            guard total > 0 else {
-                throw DictationError("That sentence arrived with no audio in it.")
-            }
-
-            var bounds = 0..<total
-            if trim {
-                bounds = pcm.withUnsafeBytes { raw -> Range<Int> in
-                    guard let base = raw.baseAddress else { return 0..<total }
-                    // The bytes are little-endian 16-bit, which is this
-                    // architecture's own order, so the pointer is a view rather
-                    // than a copy.
-                    return speechBounds(
-                        base.assumingMemoryBound(to: Int16.self), count: total,
-                        sampleRate: sampleRate)
-                }
-            }
-            let frames = bounds.count
+            // Every byte is played. The silence at both ends was cut in Rust
+            // (src/tts/trim.rs) and the pause that follows the sentence is
+            // already on the end of what arrives here.
+            let frames = bytes / 2
             guard frames > 0 else {
-                throw DictationError("That sentence trimmed away to nothing.")
+                throw DictationError("That sentence arrived with no audio in it.")
             }
 
             guard
@@ -256,9 +238,11 @@ final class SpeechOut {
             buffer.frameLength = AVAudioFrameCount(frames)
             pcm.withUnsafeBytes { raw in
                 guard let base = raw.baseAddress else { return }
+                // Little-endian 16-bit is this architecture's own order, so
+                // the pointer is a view rather than a copy.
                 let samples = base.assumingMemoryBound(to: Int16.self)
                 for i in 0..<frames {
-                    channel[i] = Float(samples[bounds.lowerBound + i]) / 32768.0
+                    channel[i] = Float(samples[i]) / 32768.0
                 }
             }
 
@@ -281,22 +265,21 @@ final class SpeechOut {
             let enqueuedAt = (CFAbsoluteTimeGetCurrent() - startedAt) * 1000
             let chars_ = chars
             let bytes_ = bytes
-            let leadMs = Double(bounds.lowerBound) / sampleRate * 1000
-            let trailMs = Double(total - bounds.upperBound) / sampleRate * 1000
 
             node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) {
                 [weak self] _ in
                 self?.queue.async {
                     self?.completed(
                         generation: scheduledGeneration, index: index, chars: chars_,
-                        bytes: bytes_, frames: frames, leadMs: leadMs, trailMs: trailMs,
-                        startFrame: startFrame, enqueuedAtMs: enqueuedAt)
+                        bytes: bytes_, frames: frames, startFrame: startFrame,
+                        enqueuedAtMs: enqueuedAt)
                 }
             }
 
             return SpeechAck(
-                dropped: false, leadMs: leadMs, trailMs: trailMs,
-                queuedMs: Double(clock.queuedFrames) / sampleRate * 1000,
+                dropped: false,
+                queuedMs: Double(max(0, clock.queuedFrames - playedFrameLocked())) / sampleRate
+                    * 1000,
                 startMs: Double(startFrame) / sampleRate * 1000)
         }
     }
@@ -428,6 +411,10 @@ final class SpeechOut {
         sawLast = false
         pending = 0
         startedAt = CFAbsoluteTimeGetCurrent()
+        // A turn that reached the player did not fail on its way to speaking,
+        // whatever the one before it did. Not every run sets a label first: the
+        // live bench synthesises in Rust and only ever arrives here.
+        lastError = nil
         clock.reset(sampleRate: SpeechOut.sampleRate, baseMs: 0)
         rows.removeAll(keepingCapacity: true)
         levelDb.removeAll(keepingCapacity: true)
@@ -488,8 +475,8 @@ final class SpeechOut {
     }
 
     private func completed(
-        generation: UInt64, index: Int, chars: Int, bytes: Int, frames: Int, leadMs: Double,
-        trailMs: Double, startFrame: Int, enqueuedAtMs: Double
+        generation: UInt64, index: Int, chars: Int, bytes: Int, frames: Int, startFrame: Int,
+        enqueuedAtMs: Double
     ) {
         guard generation == self.generation, speaking else { return }
         pending -= 1
@@ -498,8 +485,8 @@ final class SpeechOut {
         let endFrame = startFrame + frames
         rows.append(
             SpeechSentenceRow(
-                index: index, chars: chars, bytes: bytes, frames: frames, leadMs: leadMs,
-                trailMs: trailMs, startFrame: startFrame, completionFrame: completionFrame,
+                index: index, chars: chars, bytes: bytes, frames: frames,
+                startFrame: startFrame, completionFrame: completionFrame,
                 latencyMs: Double(completionFrame - endFrame) / SpeechOut.sampleRate * 1000,
                 enqueuedAtMs: enqueuedAtMs,
                 completedAtMs: (CFAbsoluteTimeGetCurrent() - startedAt) * 1000))

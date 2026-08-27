@@ -15,8 +15,9 @@ import Foundation
 
 struct SpeechProbeArgs: Decodable {
     let label: String
-    /// Which copy of the fixture to feed: `trimmed` (already cut) or `raw` (the
-    /// vendor's bytes, so that SpeechOut does the cutting).
+    /// Which copy of the fixture to feed: `trimmed`, which is what a real turn
+    /// hands over, or `raw`, the vendor's own bytes with their silences left in.
+    /// Two files, not a switch: nothing on this side trims (docs/pitfall/191).
     let source: String
     /// `burst` queues everything at once; `measured` waits out each sentence's
     /// real synthesis time from the manifest first.
@@ -86,11 +87,6 @@ enum SpeechProbe {
             }
         #endif
 
-        // The vendor's own bytes never come from a `trim: false` path in
-        // production — Rust always hands over what the vendor sent. The `raw`
-        // leg exists so that the same twelve sentences can be listened to with
-        // the vendor's silences left in, as the control for the trimmed one.
-        let trim = args.source == "raw"
         let measured = args.pace == "measured"
         let turn = UInt64(Date().timeIntervalSince1970 * 1000)
 
@@ -114,8 +110,8 @@ enum SpeechProbe {
                 do {
                     let ack = try SpeechOut.shared.enqueue(
                         pcm: pcm, sampleRate: SpeechOut.sampleRate, chars: sentence.chars,
-                        utterance: turn, index: sentence.index, last: position == sentences.count - 1,
-                        trim: trim)
+                        utterance: turn, index: sentence.index,
+                        last: position == sentences.count - 1)
                     if ack.dropped { return }
                 } catch {
                     SpeechOut.shared.fail(DictationError.describe(error))
@@ -146,7 +142,7 @@ enum SpeechProbe {
             let turn = UInt64(round) &+ 1
             _ = try SpeechOut.shared.enqueue(
                 pcm: pcm, sampleRate: SpeechOut.sampleRate, chars: first.chars, utterance: turn,
-                index: first.index, last: true, trim: args.source == "raw")
+                index: first.index, last: true)
             Thread.sleep(forTimeInterval: afterMs / 1000)
             positions.append(SpeechOut.shared.stop(reason: "interrupt"))
         }

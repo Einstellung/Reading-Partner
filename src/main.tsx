@@ -56,6 +56,13 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // The playback experiments: six legs over a fixture already on the device, no
   // network and nobody in the room (docs/33, M-voice-2).
   void import("./smoke/speech-probe").then(({ runSpeechProbe }) => runSpeechProbe());
+} else if (import.meta.env.VITE_SMOKE === "speech-live") {
+  // The same legs plus the one with the vendor in it: text synthesised now,
+  // trimmed and scheduled in Rust, spoken by the phone. Needs MIMO_API_KEY in
+  // the app's environment.
+  void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
+    runSpeechProbe({ live: true }),
+  );
 } else if (import.meta.env.VITE_SMOKE === "speech-bench") {
   // The half of it that needs ears: whether twelve scheduled buffers sound like
   // one stretch of speech.

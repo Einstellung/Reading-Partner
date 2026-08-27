@@ -39,16 +39,17 @@ class IndicatorProbeArgs: Decodable {
 
 /// Arguments of `enqueue_speech`, which Rust calls once per sentence as the
 /// vendor finishes it. `pcm` is base64 on the wire and JSONDecoder turns it back
-/// into bytes with no help; the rest is the whole of what Swift needs to know
-/// about a sentence. No text: the native side's log has never contained a word
-/// anybody said and this does not start.
+/// into bytes with no help, and it is already trimmed: the threshold is a
+/// property of the vendor's audio (docs/pitfall/191), so the cut is made in
+/// src/tts/trim.rs. The rest is the whole of what Swift needs to know about a
+/// sentence. No text: the native side's log has never contained a word anybody
+/// said and this does not start.
 class EnqueueSpeechArgs: Decodable {
     let utterance: UInt64
     let index: Int
     let chars: Int
     let last: Bool
     let sampleRate: Double
-    let trim: Bool?
     let pcm: Data
 }
 
@@ -256,8 +257,7 @@ class VoicePlugin: Plugin {
             do {
                 let ack = try SpeechOut.shared.enqueue(
                     pcm: args.pcm, sampleRate: args.sampleRate, chars: args.chars,
-                    utterance: args.utterance, index: args.index, last: args.last,
-                    trim: args.trim ?? true)
+                    utterance: args.utterance, index: args.index, last: args.last)
                 invoke.resolve(ack)
             } catch {
                 invoke.reject(DictationError.describe(error))

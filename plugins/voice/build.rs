@@ -17,6 +17,7 @@ const COMMANDS: &[&str] = &[
     "release_microphone",
     "stop_speaking",
     "speech_probe",
+    "speech_live",
     "speech_report",
     "register_listener",
     "remove_listener",

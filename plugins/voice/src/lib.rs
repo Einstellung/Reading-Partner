@@ -24,15 +24,20 @@ mod ios;
 
 mod commands;
 mod error;
+/// The whole pipeline against the real vendor and the real speaker, driven from
+/// the bench. Debug builds only, and the one path that runs every stage at once.
+#[cfg(debug_assertions)]
+mod live;
 mod models;
+/// The relay's far end on the phone: `tts::Player` over `Voice::enqueue_speech`.
+mod speaker;
 /// Speaking (docs/33, M-voice-2). Platform-independent: it compiles and makes
-/// real requests on the desktop, which is where it is measured. No command
-/// reaches it yet — the far end is an AVAudioPlayerNode that does not exist, and
-/// the shape of the commands follows from what that hand-off turns out to be.
-/// See the README's "Speaking" for the contract the Swift half has to meet.
+/// real requests on the desktop, which is where it is measured. See the
+/// README's "Speaking" for the contract between the two halves.
 pub mod tts;
 
 pub use error::{Error, Result};
+pub use speaker::DevicePlayer;
 
 #[cfg(not(target_os = "ios"))]
 use fallback::Voice;
@@ -66,6 +71,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::set_indicator_probe,
             commands::stop_speaking,
             commands::speech_probe,
+            commands::speech_live,
             commands::speech_report,
             commands::register_listener,
             commands::remove_listener

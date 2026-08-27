@@ -82,7 +82,6 @@ impl<R: Runtime> Voice<R> {
         _chars: u32,
         _last: bool,
         _sample_rate: u32,
-        _trim: bool,
         _pcm: Vec<u8>,
     ) -> crate::Result<SpeechEnqueued> {
         Err(Error::Unsupported(UNSUPPORTED.to_string()))

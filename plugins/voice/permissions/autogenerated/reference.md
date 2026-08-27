@@ -11,6 +11,7 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-set-indicator-probe`
 - `allow-stop-speaking`
 - `allow-speech-probe`
+- `allow-speech-live`
 - `allow-speech-report`
 - `allow-register-listener`
 - `allow-remove-listener`
@@ -150,6 +151,32 @@ Enables the set_indicator_probe command without any pre-configured scope.
 <td>
 
 Denies the set_indicator_probe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-speech-live`
+
+</td>
+<td>
+
+Enables the speech_live command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-speech-live`
+
+</td>
+<td>
+
+Denies the speech_live command without any pre-configured scope.
 
 </td>
 </tr>

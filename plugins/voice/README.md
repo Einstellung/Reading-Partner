@@ -129,24 +129,29 @@ SilenceTrimmer    streaming head and tail trim, pushed bytes in, playable bytes
                   out.
 SpeechRelay       sentences in, trimmed audio to the player in order, working
                   far enough ahead that playback never runs dry.
-Player            where finished audio goes. VirtualPlayer keeps the clock and
-                  throws the audio away, which is how the relay is measured.
+Player            where finished audio goes. DevicePlayer is the phone;
+                  VirtualPlayer keeps the clock and throws the audio away, which
+                  is how the relay is measured.
 OpeningCache      one slot for the sentence that is known before it is asked
                   for.
 ```
 
 The Swift half below is what consumes it. `Player` is the Rust-side shape of
-that hand-off; on iOS it is `Voice::enqueue_speech`, and `VirtualPlayer` is the
+that hand-off, `DevicePlayer` (`src/speaker.rs`) is the implementation that
+calls `Voice::enqueue_speech` and `stop_speaking`, and `VirtualPlayer` is the
 same shape with the audio thrown away, which is how the relay was measured
-without a phone.
+without a phone. Off iOS `Voice` rejects both, so `DevicePlayer` compiles
+everywhere and speaks only where there is something to speak through.
 
 ### What the Swift half has to do
 
 `Player` is the whole contract, and it has three calls.
 
-`enqueue(sentence)` takes one finished sentence — `id`, `chars`, the audio
-format, and PCM that is already trimmed and already carries the pause that goes
-after it. It schedules a buffer on the player node and returns immediately, and
+`enqueue(sentence)` takes one finished sentence — `id`, `chars`, whether it is
+the turn's `last`, the audio format, and PCM that is already trimmed and already
+carries the pause that goes after it. `last` is there because a player cannot
+work it out: a turn that ended and a turn that starved both look like a queue
+running dry. It schedules a buffer on the player node and returns immediately, and
 it answers with **how much audio is queued ahead of the playhead**, in
 milliseconds, counting the one just added. That number is the only feedback the
 relay gets and the only thing it needs: it is what says whether there is time to
@@ -154,8 +159,10 @@ synthesise another sentence or whether the speaker is about to run out. It is
 not a sentence count, because sentences run from three characters to forty and a
 count says nothing about how long the player can keep going.
 
-`state()` is the same answer with nothing added, for the stretch where no
-sentence is being handed over.
+`state()` is the same answer for the stretch where no sentence is being handed
+over, and there is no command behind it: Rust keeps the last margin it was given
+and subtracts the wall clock, which is what playback does anyway. Asking the
+phone would be a round trip for a number that is already known.
 
 `stop()` drops every scheduled buffer that has not been heard and answers with
 where the user was interrupted: the sentence id, how far into it the playhead
@@ -183,7 +190,15 @@ play end to end with no gap inserted between them.
 |---|---|---|
 | `stop_speaking` | optional `reason` | `{ speaking, utterance, index, charOffset, playedMs }` |
 | `speech_probe` | `args` object, debug builds only | — (or the interruption leg's positions) |
+| `speech_live` | `args` object, debug builds only | the relay's timeline for that turn |
 | `speech_report` | — | the last bench run's measurements |
+
+`speech_probe` plays sentences synthesised days ago and measures the player;
+`speech_live` is the same twelve sentences through the vendor, the trim and the
+relay, which is the only path that runs every stage at once. It takes its key
+from the process environment (`MIMO_API_KEY`) rather than an argument or a file,
+resolves when the last sentence has been queued rather than when the voice
+stops, and is a debug build's tool on both counts.
 
 `enqueue_speech` is deliberately **not** a command. Sentences are put on the
 queue from Rust, through `Voice::enqueue_speech`, because the synthesiser lives
@@ -197,14 +212,12 @@ back out. Its shape is the contract between the two halves:
 | `chars` | how many characters that sentence is. Never the text — nothing native has ever held a word anybody said, and this does not start |
 | `last` | this is the turn's final sentence |
 | `sampleRate` | 24000. Anything else is refused with both numbers, never resampled |
-| `trim` | debug builds only. Production audio arrives trimmed; the bench uses this to play a fixture raw for an A/B |
-| `pcm` | base64 of little-endian 16-bit mono, exactly the vendor's bytes |
+| `pcm` | base64 of little-endian 16-bit mono, already trimmed and already carrying the pause after the sentence |
 
 | Swift answers | |
 |---|---|
 | `dropped` | the turn was stopped before this sentence arrived; it was not queued |
-| `leadMs` / `trailMs` | silence cut off the front and the back. Zero unless the bench asked for a trim |
-| `queuedMs` | speech now ahead of the listener |
+| `queuedMs` | speech now ahead of the listener — the whole queue minus what has been played, not the running total |
 | `startMs` | where this sentence starts on the player's timeline |
 
 Queueing, timekeeping and interruption are Swift's. Trimming is not: the
@@ -212,7 +225,7 @@ threshold is a property of the vendor's audio — the lead-out is room tone at
 -45..-65 dBFS, not silence (docs/pitfall/191) — so it belongs beside the vendor,
 in `src/tts`, where it is measurable on a desktop and covered by tests. Swift
 receives PCM that is already trimmed and already carries the pause that follows
-the sentence, and answers with what it did with it. Changing vendor changes
+the sentence, and answers with where it put it. Changing vendor changes
 nothing on this side unless the new one speaks at some rate other than 24 kHz.
 
 One more event, subscribed with `addPluginListener('voice', 'speech', cb)`:

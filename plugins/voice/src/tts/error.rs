@@ -36,6 +36,10 @@ pub enum TtsError {
     /// later, so it is transient and worth one more try rather than a sentence
     /// dropped from the middle of an answer.
     NoAudio,
+    /// The far end refused the audio, or could not be reached at all: a host
+    /// with no player, an engine that is not running, a sample rate the node is
+    /// not wired for. Never retried — the same bytes would be refused again.
+    Player(String),
     /// The session was stopped: barge-in, or the turn was abandoned.
     Cancelled,
 }
@@ -76,6 +80,9 @@ impl fmt::Display for TtsError {
                 write!(f, "the voice service sent something unreadable: {what}")
             }
             TtsError::NoAudio => write!(f, "the voice service answered without any audio"),
+            // Verbatim: what the player rejects with is already a sentence
+            // (VoicePlugin rejects with one), and a prefix would say it twice.
+            TtsError::Player(what) => write!(f, "{what}"),
             TtsError::Cancelled => write!(f, "speaking was stopped"),
         }
     }

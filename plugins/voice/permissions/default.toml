@@ -8,6 +8,7 @@ permissions = [
   "allow-set-indicator-probe",
   "allow-stop-speaking",
   "allow-speech-probe",
+  "allow-speech-live",
   "allow-speech-report",
   "allow-register-listener",
   "allow-remove-listener",

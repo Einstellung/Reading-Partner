@@ -172,12 +172,17 @@ async fn run(
         while let Some((pcm, chars)) = ready.remove(&next_to_queue) {
             let id = next_to_queue;
             next_to_queue += 1;
+            // Nothing else can produce a sentence and no more are coming, so
+            // this is the turn's last. The player needs it to tell a turn that
+            // ended from a turn that starved.
+            let last = closed && pending.is_empty() && inflight.is_empty() && ready.is_empty();
             let state = player
                 .enqueue(SentenceAudio {
                     id,
                     format,
                     pcm,
                     chars,
+                    last,
                 })
                 .await;
             match state {
@@ -363,4 +368,108 @@ async fn synthesize_one(
 
 fn elapsed_ms(from: Instant) -> f64 {
     from.elapsed().as_secs_f64() * 1000.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tts::PlaybackState;
+    use std::sync::Mutex;
+
+    /// A vendor that always answers, with a fixed length of loud tone so that
+    /// the trim has something to keep.
+    struct Tone {
+        ms: f64,
+    }
+
+    #[async_trait::async_trait]
+    impl TtsBackend for Tone {
+        fn id(&self) -> &'static str {
+            "tone"
+        }
+        fn model(&self) -> &str {
+            "tone"
+        }
+        fn format(&self) -> AudioFormat {
+            AudioFormat::PCM16_24K_MONO
+        }
+        fn default_voice(&self) -> &str {
+            "tone"
+        }
+        async fn synthesize(
+            &self,
+            _request: &SpeechRequest,
+            out: mpsc::Sender<Vec<u8>>,
+        ) -> Result<(), TtsError> {
+            let format = AudioFormat::PCM16_24K_MONO;
+            let samples = format.bytes_for_ms(self.ms) / 2;
+            let pcm: Vec<u8> = (0..samples)
+                .flat_map(|i| (if i % 2 == 0 { 8000i16 } else { -8000 }).to_le_bytes())
+                .collect();
+            out.send(pcm).await.map_err(|_| TtsError::Cancelled)?;
+            Ok(())
+        }
+    }
+
+    /// A player that writes down what it was handed and nothing else. The
+    /// margin it answers with is zero, so admission never waits and the order
+    /// below is the relay's own.
+    #[derive(Default)]
+    struct Recorder {
+        queued: Mutex<Vec<(u64, bool)>>,
+    }
+
+    #[async_trait::async_trait]
+    impl Player for Recorder {
+        async fn enqueue(&self, sentence: SentenceAudio) -> Result<PlaybackState, TtsError> {
+            self.queued
+                .lock()
+                .unwrap()
+                .push((sentence.id, sentence.last));
+            Ok(PlaybackState {
+                queued_ahead_ms: 0.0,
+                playing: true,
+            })
+        }
+
+        async fn state(&self) -> Result<PlaybackState, TtsError> {
+            Ok(PlaybackState {
+                queued_ahead_ms: 0.0,
+                playing: true,
+            })
+        }
+
+        async fn stop(&self) -> Result<Heard, TtsError> {
+            Ok(Heard {
+                sentence: 0,
+                position_ms: 0.0,
+                duration_ms: 0.0,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn sentences_are_queued_in_order_and_only_the_last_one_says_so() {
+        let player = Arc::new(Recorder::default());
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone { ms: 200.0 }),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push("一");
+        relay.push("二");
+        relay.push("三");
+        relay.close();
+
+        while let Some(event) = incoming.recv().await {
+            if matches!(event, RelayEvent::Drained { .. }) {
+                break;
+            }
+        }
+
+        let queued = player.queued.lock().unwrap().clone();
+        assert_eq!(queued, vec![(0, false), (1, false), (2, true)]);
+    }
 }

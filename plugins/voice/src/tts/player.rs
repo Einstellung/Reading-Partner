@@ -1,9 +1,10 @@
 // Where a finished sentence goes, and the one thing it says back.
 //
 // On the phone this is an AVAudioPlayerNode on the same voice-processing engine
-// AudioFront already holds (docs/33, 形态：全原生); that half is Swift and is not
-// written yet. What the trait fixes now is what the two sides owe each other,
-// because the scheduler above cannot be built without it.
+// AudioFront already holds (docs/33, 形态：全原生); `speaker::DevicePlayer` is the
+// implementation that reaches it. What the trait fixes is what the two sides owe
+// each other, and it is deliberately a trait: the scheduler above is measured
+// against VirtualPlayer, on a desktop, with nothing audible happening.
 //
 // The answer to an enqueue is how much audio is queued ahead of the playhead.
 // That number, and not a sentence count, is what tells the relay whether it is
@@ -31,6 +32,10 @@ pub struct SentenceAudio {
     /// interrupts (docs/33, TTS): Chinese is spoken at an even enough rate that
     /// linear interpolation lands within a character or two.
     pub chars: usize,
+    /// The turn's final sentence. A player cannot work this out for itself: a
+    /// turn that ended and a turn that starved both look like a queue running
+    /// dry, and this is the only thing that tells them apart.
+    pub last: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -195,6 +200,7 @@ mod tests {
             format,
             pcm: vec![0; format.bytes_for_ms(ms)],
             chars: 10,
+            last: false,
         }
     }
 

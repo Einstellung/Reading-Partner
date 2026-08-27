@@ -13,12 +13,13 @@
 import { addPluginListener, type PluginListener } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
-import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
+import { mkdir, readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { holdTheScreen } from "./wake-lock";
 
 export const SPEECH_RESULT_DIR = "speech";
 export const SPEECH_RESULT_FILE = "speech/speech-result.json";
+const SPEECH_FIXTURE_DIR = "speech-fixture";
 
 type SpeechEvent = { kind: string; value: number; reason?: string };
 
@@ -41,7 +42,12 @@ type LegResult = {
   levelGaps: number[];
   speaking: { value: number; reason?: string; atMs: number }[];
   wallMs: number;
+  /// What Swift measured. Its own `label` belongs to the last leg that set one:
+  /// the live leg is started from Rust and sets none.
   report: unknown;
+  /// What the relay did with every sentence, on the live leg only. Null on the
+  /// fixture legs, which have no relay in front of them.
+  relay: unknown;
 };
 
 type SpeechResult = {
@@ -95,13 +101,14 @@ async function write(result: SpeechResult): Promise<void> {
   }
 }
 
-/// One leg: subscribe, start, wait for the run to say it has stopped, take the
-/// measurement record. The timeout is generous — the fixture is 75 s of speech
-/// and the measured pace adds its synthesis times on top — but it exists: a leg
-/// that never said `speaking:false` is the failure this whole probe is for.
-async function runLeg(leg: Leg, fixtureDir: string, captureDir: string): Promise<LegResult> {
+/// What every leg does around whatever starts it: subscribe, start it, wait for
+/// the run to say it has stopped, take the measurement record. The timeout is
+/// generous — the fixture is 75 s of speech and the measured pace adds its
+/// synthesis times on top — but it exists: a leg that never said
+/// `speaking:false` is the failure this whole probe is for.
+async function watch(label: string, begin: () => Promise<unknown>): Promise<LegResult> {
   const out: LegResult = {
-    label: leg.label,
+    label,
     ok: false,
     error: null,
     levels: [],
@@ -109,6 +116,7 @@ async function runLeg(leg: Leg, fixtureDir: string, captureDir: string): Promise
     speaking: [],
     wallMs: 0,
     report: null,
+    relay: null,
   };
   const began = performance.now();
   let lastLevelAt = 0;
@@ -137,17 +145,7 @@ async function runLeg(leg: Leg, fixtureDir: string, captureDir: string): Promise
       }
     });
 
-    await invoke("plugin:voice|speech_probe", {
-      args: {
-        label: leg.label,
-        source: leg.source,
-        pace: leg.pace,
-        vpio: leg.vpio,
-        fixtureDir,
-        capturePath: leg.capture ? await join(captureDir, `${leg.label}.pcm`) : undefined,
-        limit: leg.limit,
-      },
-    });
+    out.relay = await begin();
 
     await Promise.race([
       finished,
@@ -170,7 +168,47 @@ async function runLeg(leg: Leg, fixtureDir: string, captureDir: string): Promise
   return out;
 }
 
-export async function runSpeechProbe(): Promise<void> {
+function runLeg(leg: Leg, fixtureDir: string, captureDir: string): Promise<LegResult> {
+  return watch(leg.label, async () => {
+    await invoke("plugin:voice|speech_probe", {
+      args: {
+        label: leg.label,
+        source: leg.source,
+        pace: leg.pace,
+        vpio: leg.vpio,
+        fixtureDir,
+        capturePath: leg.capture ? await join(captureDir, `${leg.label}.pcm`) : undefined,
+        limit: leg.limit,
+      },
+    });
+    return null;
+  });
+}
+
+/// The leg with the vendor in it: the same twelve sentences, synthesised now.
+/// Everything the fixture legs leave out is in this one — the request, the
+/// trim, the relay deciding how far ahead to work — and it answers with the
+/// relay's own timeline, which is the only record of anything before the
+/// player. Needs MIMO_API_KEY in the app's environment; the run that puts it
+/// there is scripts/ios-dictation/speech-run.sh.
+///
+/// The sentences come from the fixture's manifest so that the two kinds of leg
+/// say the same words and their measurements line up sentence by sentence.
+async function runLive(): Promise<LegResult> {
+  const raw = await readTextFile(`${SPEECH_FIXTURE_DIR}/manifest.json`, {
+    baseDir: BaseDirectory.AppData,
+  });
+  const manifest = JSON.parse(raw) as { sentences: { index: number; text: string }[] };
+  const sentences = [...manifest.sentences]
+    .sort((a, b) => a.index - b.index)
+    .map((sentence) => sentence.text);
+  return watch("live", () => invoke("plugin:voice|speech_live", { args: { sentences } }));
+}
+
+/// `live` adds the leg that synthesises. It is off by default because it needs
+/// a key and a network, and the fixture legs are the control that must keep
+/// working without either.
+export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<void> {
   const result: SpeechResult = {
     ok: false,
     stage: "start",
@@ -197,6 +235,16 @@ export async function runSpeechProbe(): Promise<void> {
       result.legs.push(await runLeg(leg, fixtureDir, captureDir));
       // Between legs, so that the next one starts from a parked stack rather
       // than from one that is still coming to rest.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+
+    // After the fixture legs: they are the control and they answer without a
+    // network, so they are on disk before anything is asked of the vendor.
+    if (options.live) {
+      result.stage = "live";
+      render(result);
+      await write(result);
+      result.legs.push(await runLive());
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 

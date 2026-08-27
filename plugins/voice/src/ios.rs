@@ -138,10 +138,10 @@ struct EnqueueSpeechArgs {
     chars: u32,
     last: bool,
     sample_rate: u32,
-    trim: bool,
-    /// Little-endian 16-bit mono, exactly the bytes the vendor sent. serde
-    /// writes a `Vec<u8>` as a JSON array of numbers, so this is base64'd by
-    /// hand into the string Swift's `Data` decoder reads.
+    /// Little-endian 16-bit mono, already trimmed (src/tts/trim.rs) and already
+    /// carrying the pause that follows the sentence. serde writes a `Vec<u8>`
+    /// as a JSON array of numbers, so this is base64'd by hand into the string
+    /// Swift's `Data` decoder reads.
     pcm: String,
 }
 
@@ -161,7 +161,6 @@ impl<R: Runtime> Voice<R> {
         chars: u32,
         last: bool,
         sample_rate: u32,
-        trim: bool,
         pcm: Vec<u8>,
     ) -> crate::Result<SpeechEnqueued> {
         use base64::Engine as _;
@@ -174,7 +173,6 @@ impl<R: Runtime> Voice<R> {
                     chars,
                     last,
                     sample_rate,
-                    trim,
                     pcm: base64::engine::general_purpose::STANDARD.encode(pcm),
                 },
             )

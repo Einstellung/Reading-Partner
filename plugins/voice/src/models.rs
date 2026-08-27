@@ -37,9 +37,8 @@ pub struct IndicatorProbe {
     pub inputs: String,
 }
 
-/// Answer to `enqueue_speech`. Swift decides the trim and therefore the real
-/// duration, so this is where Rust learns how much speech is ahead of the
-/// listener and whether it may run further ahead of it.
+/// Answer to `enqueue_speech`. Where Rust learns how much speech is ahead of
+/// the listener and therefore whether it may run further ahead of it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpeechEnqueued {
@@ -47,9 +46,6 @@ pub struct SpeechEnqueued {
     /// been stopped. Not an error — the vendor was mid-sentence when the user
     /// interrupted.
     pub dropped: bool,
-    /// Silence cut off the front and the back of what the vendor sent.
-    pub lead_ms: f64,
-    pub trail_ms: f64,
     /// Speech queued ahead of the listener, this sentence included.
     pub queued_ms: f64,
     /// Where this sentence starts on the player's current timeline.

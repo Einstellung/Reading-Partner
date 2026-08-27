@@ -128,6 +128,32 @@ pub(crate) async fn speech_probe<R: Runtime>(
     app.voice().speech_probe(args).await
 }
 
+/// The other bench: synthesise for real and speak it. Text goes to Mimo, the
+/// trim and the relay run in Rust, and the sentences land on the same player the
+/// fixture legs use, so the two are comparable. Resolves when every sentence has
+/// been handed to the player — the audio is still playing then, and the `speech`
+/// event is what says the voice has stopped.
+///
+/// Debug builds only. It needs a vendor key in the process environment, which is
+/// a thing only a bench launch puts there.
+#[command]
+pub(crate) async fn speech_live<R: Runtime>(
+    app: AppHandle<R>,
+    args: serde_json::Value,
+) -> Result<serde_json::Value> {
+    #[cfg(debug_assertions)]
+    {
+        crate::live::run(app, args).await
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = (app, args);
+        Err(crate::Error::Speech(
+            "Speaking from live synthesis is a debug build's bench.".to_string(),
+        ))
+    }
+}
+
 /// What the last bench run measured, and the point at which its tape is written
 /// to the container.
 #[command]

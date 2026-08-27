@@ -1,72 +1,18 @@
-// The two pieces of playback that are arithmetic rather than audio: where a
-// sentence's speech starts and ends inside the bytes a vendor sent, and which
-// sentence and which character the player is standing on right now.
+// The half of playback that is arithmetic rather than audio: which sentence and
+// which character the player is standing on right now.
 //
-// Nothing here imports AVFoundation. Both answers can be checked against the
-// fixture manifest (docs/assets/tts-probe/manifest.json) without a device, and
-// that is the point of keeping them apart from SpeechOut: a wrong trim and a
-// wrong offset both look like "the audio is fine" from the outside.
+// Nothing here imports AVFoundation, so the account can be checked without a
+// device, and that is the point of keeping it apart from SpeechOut: a wrong
+// offset looks like "the audio is fine" from the outside.
+//
+// Trimming was here and is not any more. The threshold is a property of the
+// vendor's audio — the lead-out is room tone at -45..-65 dBFS, not silence
+// (docs/pitfall/191) — so it belongs beside the vendor, in
+// src/tts/trim.rs, where it runs on a desktop and is covered by tests. What
+// arrives here is already trimmed and already carries the pause that follows
+// the sentence.
 
 import Foundation
-
-/// The first and last sample of speech in one sentence, with a 20 ms guard band
-/// left on either side.
-///
-/// A plain absolute gate at -45 dBFS over 10 ms frames, no hysteresis. Measured
-/// on the twelve-sentence mimo fixture: the silence floor (5th-percentile frame)
-/// sits at -59..-71 dBFS and speech peaks at -7..-12 dBFS, so the gate has more
-/// than 14 dB of room on both sides, and an absolute gate at -45 or at -40
-/// agrees with the -35/-45 hysteresis gate that built the fixture to within one
-/// 10 ms frame on all twelve. The expected result on that fixture is a leading
-/// trim averaging 91.7 ms and a trailing trim averaging 440.0 ms; the per
-/// sentence numbers are the acceptance table.
-///
-/// Trimming is here rather than in Rust because it needs the whole sentence and
-/// because vendors differ: mimo leaves 117/451 ms, DashScope 85/51 ms, and a
-/// cloned voice jitters its leading silence by 90 ms (docs/pitfall/188). Rust
-/// hands over the vendor's bytes unaltered and this decides what is speech.
-///
-/// A sentence with no frame above the gate is returned whole. That is a vendor
-/// that sent silence, and dropping it would take a sentence out of the count the
-/// clock keeps; a silent sentence that plays is visible, a missing one is not.
-func speechBounds(_ samples: UnsafePointer<Int16>, count: Int, sampleRate: Double) -> Range<Int> {
-    guard count > 0, sampleRate > 0 else { return 0..<count }
-
-    let frame = max(1, Int(sampleRate * 0.01))
-    let guardFrames = 2  // 20 ms
-    // -45 dBFS as a squared-amplitude threshold, so the loop never calls log.
-    let gateAmplitude = 32768.0 * pow(10.0, -45.0 / 20.0)
-    let gateMeanSquare = gateAmplitude * gateAmplitude
-
-    var firstLoud = -1
-    var lastLoud = -1
-    var start = 0
-    while start < count {
-        let end = min(start + frame, count)
-        var sum = 0.0
-        for i in start..<end {
-            let v = Double(samples[i])
-            sum += v * v
-        }
-        if sum / Double(end - start) >= gateMeanSquare {
-            if firstLoud < 0 { firstLoud = start }
-            lastLoud = end
-        }
-        start = end
-    }
-
-    guard firstLoud >= 0 else { return 0..<count }
-    let lead = max(0, firstLoud - guardFrames * frame)
-    let trail = min(count, lastLoud + guardFrames * frame)
-    return lead..<trail
-}
-
-func speechBounds(_ samples: [Int16], sampleRate: Double) -> Range<Int> {
-    samples.withUnsafeBufferPointer { buffer in
-        guard let base = buffer.baseAddress else { return 0..<0 }
-        return speechBounds(base, count: buffer.count, sampleRate: sampleRate)
-    }
-}
 
 /// One book, kept in frames on the player's own timeline.
 ///
