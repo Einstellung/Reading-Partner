@@ -56,15 +56,51 @@ function isHard(c: string): boolean {
 // would be eaten as a heading, quote or list marker, and one beginning with a
 // sign and a digit would be read as 负 or 正. The clean-up step merges runs of
 // punctuation, repeated newlines, and a space before punctuation, all of which
-// would span the point. A fence and an inline link can span a hard boundary, but
-// both start with a character this excludes; ** and * and backticks can span one
-// too, and are harmless, because paired or not they are removed and leave the
-// same text. Failing the test only delays the freeze to the next boundary.
-const RESUMES = /[A-Za-z0-9㐀-鿿「」『』“”《》〈〉"]/;
+// would span the point. Failing the test only delays the freeze to the next
+// boundary.
+//
+// A word character, not merely a harmless one: an opening quote looks harmless
+// because normalize deletes it outright, but deleting it hands its position to
+// whatever follows, and a 、 or a ｜ that lands at the front of a fragment is
+// then stripped as leading punctuation when in the whole text it survives.
+const RESUMES = /[A-Za-z0-9㐀-鿿]/;
+
+// A newline needs one more check than the punctuation does. Several rules put
+// `\s*` between their two halves — units, currency, ranges, ratios, fractions,
+// and the 年 after a year — and `\s*` matches a newline, so "¥\n9" and "6~\n0"
+// are single matches in the whole text. Every one of them needs a digit, a
+// currency sign, or one of - ~ / : on the left of that gap, so a letter, an
+// ideograph or punctuation there is proof the newline is not inside one.
+const BEFORE_NEWLINE = /[A-Za-z㐀-鿿。！？；：，、]/;
+
+// Markdown delimiters pair across a boundary, and which step removes them
+// changes the outcome: "*5。5*%" is one emphasis span in the whole text, so the
+// star is gone by the time the percent rule looks for a digit next to the %, and
+// "百分之五" comes out; frozen in the middle, each half keeps its star until the
+// bracket step, the percent rule sees nothing, and the % is read as a symbol.
+// So a delimiter still waiting for its partner blocks the freeze. Only the
+// current line matters, because every one of these constructs is line-bounded.
+function marksOpen(prefix: string): boolean {
+  const line = prefix.slice(prefix.lastIndexOf("\n") + 1);
+  const paired = line
+    .replace(/\[[^\]\n]+\]\([^)\n]*\)/g, "")
+    .replace(/\*\*[^*\n]+\*\*/g, "")
+    .replace(/(^|[^\w*])\*[^*\n]+\*/g, "$1");
+  // A fence runs to the end of its line, so any backtick left here is open.
+  return /[*`[]/.test(paired);
+}
 
 function lastFreezePoint(raw: string): number {
   for (let i = raw.length - 1; i >= 1; i--) {
-    if (RESUMES.test(raw[i]) && isHard(raw[i - 1])) return i;
+    if (!RESUMES.test(raw[i])) continue;
+    const before = raw[i - 1];
+    if (!HARD.includes(before)) {
+      if (before !== "\n") continue;
+      let j = i - 2;
+      while (j >= 0 && /\s/.test(raw[j])) j--;
+      if (j < 0 || !BEFORE_NEWLINE.test(raw[j])) continue;
+    }
+    if (!marksOpen(raw.slice(0, i))) return i;
   }
   return 0;
 }
