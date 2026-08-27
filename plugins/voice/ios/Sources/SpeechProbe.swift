@@ -108,8 +108,8 @@ enum SpeechProbe {
                 let file = dir.appendingPathComponent(args.source)
                     .appendingPathComponent("\(sentence.id).pcm")
                 guard let pcm = try? Data(contentsOf: file) else {
-                    NSLog("RP-SPEECH fixture missing: %@", file.path)
-                    continue
+                    SpeechOut.shared.fail("The fixture is missing \(file.path).")
+                    return
                 }
                 do {
                     let ack = try SpeechOut.shared.enqueue(
@@ -118,7 +118,7 @@ enum SpeechProbe {
                         trim: trim)
                     if ack.dropped { return }
                 } catch {
-                    NSLog("RP-SPEECH enqueue failed: %@", DictationError.describe(error))
+                    SpeechOut.shared.fail(DictationError.describe(error))
                     return
                 }
             }

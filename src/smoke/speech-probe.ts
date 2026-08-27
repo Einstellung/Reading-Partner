@@ -154,7 +154,13 @@ async function runLeg(leg: Leg, fixtureDir: string, captureDir: string): Promise
       new Promise<void>((resolve) => setTimeout(resolve, 180_000)),
     ]);
     out.report = await invoke("plugin:voice|speech_report");
-    out.ok = out.speaking.some((s) => s.value === 0);
+    // A leg that never got as far as speaking also says `speaking: 0`, with
+    // `failed` on it. Both the reason and the record's own error have to be
+    // clear before the leg counts.
+    const stopped = out.speaking.find((s) => s.value === 0);
+    const reported = (out.report ?? {}) as { error?: string | null };
+    out.ok = !!stopped && stopped.reason !== "failed" && !reported.error;
+    if (reported.error) out.error = reported.error;
   } catch (e) {
     out.error = String(e);
   } finally {

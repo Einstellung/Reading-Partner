@@ -98,6 +98,8 @@ struct SpeechReport: Encodable {
     let playbackFormat: String
     let capturedFrames: Int
     let capturePath: String?
+    /// Why the voice never started, when it never started.
+    let error: String?
 }
 
 final class SpeechOut {
@@ -140,6 +142,13 @@ final class SpeechOut {
     private var tapBuffers = 0
     private var underruns = 0
     private var stops: [String] = []
+    /// The last thing that went wrong on the way to speaking, kept because a
+    /// failure before the first sentence is queued is otherwise invisible to
+    /// anything but the system log — the run never starts, so it never says it
+    /// has stopped, and a harness waiting on that waits out its whole timeout
+    /// with nothing to report. Measured: on a simulator, where the input node
+    /// reports 0 Hz and the shared stack cannot be built at all.
+    private var lastError: String?
 
     /// Where events leave for the webview. Injected by VoicePlugin so this file
     /// knows nothing about Tauri.
@@ -371,7 +380,26 @@ final class SpeechOut {
     #endif
 
     func setLabel(_ value: String) {
-        queue.sync { label = value }
+        queue.sync {
+            label = value
+            lastError = nil
+        }
+    }
+
+    /// A turn that could not start. Recorded and announced as a stop, so that a
+    /// listener waiting for the voice to finish is told rather than left to time
+    /// out, and so the reason reaches the record instead of only the log.
+    func fail(_ message: String) {
+        queue.async {
+            self.lastError = message
+            self.stops.append("failed")
+            NSLog("RP-SPEECH could not speak: %@", message)
+            if self.speaking {
+                _ = self.stopLocked(reason: "failed")
+            } else {
+                self.emit(kind: "speaking", value: 0, reason: "failed")
+            }
+        }
     }
 
     // MARK: - On the queue
@@ -513,7 +541,7 @@ final class SpeechOut {
             outputRoute: session.currentRoute.outputs.map { $0.portType.rawValue }.joined(
                 separator: ","),
             playbackFormat: describeFormat(playbackFormat), capturedFrames: captured,
-            capturePath: path)
+            capturePath: path, error: lastError)
     }
 
     // MARK: - The audio thread
