@@ -37,6 +37,7 @@
 | 拿 grep 判断"这东西没人用"、按结论删代码 | 开发环境 |
 | 在 worktree 里起 dev server 做实验 | 开发环境 |
 | 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
+| 查首屏耗时、字体加载开销 | WebKit / webview |
 | 渲染 AI 回复的 markdown、加 remark/rehype 插件 | markdown 渲染 |
 | 无头截图核对渲染 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
@@ -179,6 +180,7 @@
 - [115-the-cookie-count-does-not-say-the-warm-up-worked](./115-the-cookie-count-does-not-say-the-warm-up-worked.md) — 预热改看 jar 之后，"该站 cookie 条数不再增长"两头都不成立：停在服务端那几条上的加载会被判成功（`_px3` 根本没来），热 profile 上重写 13 行而条数不变的加载会被判成什么都没发生；判据要看与顺序无关的行内容指纹变了几次，安静 6 秒（实测一次加载内部最宽间隔 3.25s，写完之后下一件事在 30 秒开外）
 - [116-no-sign-in-control-is-not-a-session](./116-no-sign-in-control-is-not-a-session.md) — 「页面上还有没有登录入口」在登录窗口里两头不成立：彭博登录页上一个可点标签都不匹配（写的是 Continue），按这个信号读出来用户正在输密码的那页是"已登录"；未登录首页的登录入口第 2 次 poll（约 6 秒）才渲染出来，而 readyState 到 21 秒才 complete。要同站、非登录路径、字符数 ≥2000、且字符数不再变化连续两次才认
 - [141-a-blocked-main-thread-stops-the-scroll-outright](./141-a-blocked-main-thread-stops-the-scroll-outright.md) — 主线程占多久屏幕就冻多久（90ms 阻塞冻 82-119ms），和挂不挂 wheel 监听、passive 与否无关，Chromium 同样冻；滚动路径上别占主线程，判据用屏幕像素不用页内计数
+- [178-webkit-pays-per-font-family-before-first-paint](./178-webkit-pays-per-font-family-before-first-paint.md) — 生产构建提交到出像素之间 WebKit 空 78ms、Chromium 12ms、Firefox 25ms，和 JS 体积无关；`body` 字体栈里 WebKit 解析不出的每个 family（`system-ui`、`"Segoe UI"`）各查询约 33ms，Chromium/Firefox 换栈没差别。字体栈至今没按平台拆分，坑还在
 
 ## 浮层与 shadcn 原语
 
