@@ -93,6 +93,9 @@ test("a hyphen is a pause between Chinese words and a joint everywhere else", ()
   expect(normalizeForSpeech("Agent-引擎接口")).toBe("Agent 引擎接口");
   expect(normalizeForSpeech("Cross-Batch 版本")).toBe("Cross Batch 版本");
   expect(normalizeForSpeech("MLS-Bench")).toBe("M L S Bench");
+  // Against digits it is a range everywhere but after a Chinese word, where the
+  // voice would otherwise say 负: "苏负二十七".
+  expect(normalizeForSpeech("俄军苏-27 战机")).toBe("俄军苏二十七战机");
 });
 
 test("a model name splits at the letter/digit joint", () => {
@@ -107,6 +110,29 @@ test("a unit is read as a word", () => {
   expect(normalizeForSpeech("吞吐最高 3.0 倍")).toBe("吞吐最高三点零倍");
   // Storage units fall through to the letter-by-letter fallback on purpose.
   expect(normalizeForSpeech("8.28MB")).toBe("八点二八 M B");
+});
+
+// A throughput unit needs its own row: left to the slash rule the per-second
+// turns into an enumeration pause and the voice says "T B、s".
+test("a throughput unit keeps its per-second", () => {
+  expect(normalizeForSpeech("显存带宽 4.8TB/s")).toBe("显存带宽四点八 T B 每秒");
+  expect(normalizeForSpeech("互联带宽 900 GB/s")).toBe("互联带宽九百 G B 每秒");
+  expect(normalizeForSpeech("顺序写入 500MB/s")).toBe("顺序写入五百 M B 每秒");
+});
+
+test("a torque unit is read as a word, middle dot and all", () => {
+  expect(normalizeForSpeech("峰值扭矩 620N·m")).toBe("峰值扭矩六百二十牛米");
+  expect(normalizeForSpeech("620 N·m")).toBe("六百二十牛米");
+  // The row is anchored to a preceding number, so a bare formula is untouched.
+  expect(normalizeForSpeech("单位是 N·m")).toBe("单位是 N·m");
+});
+
+// A digit directly against a unit letter is read as that unit — "18A" comes out
+// 十八安培, and a space does not help. Turning the digits into a Chinese numeral
+// is what breaks the adjacency (measured on mimo-v2.5-tts, docs/33).
+test("a process-node name reads its digits as a Chinese numeral", () => {
+  expect(normalizeForSpeech("采用 18A 制程")).toBe("采用十八 A 制程");
+  expect(normalizeForSpeech("台积电 N2 节点")).toBe("台积电 N 二节点");
 });
 
 test("a currency amount says the unit after the number", () => {
