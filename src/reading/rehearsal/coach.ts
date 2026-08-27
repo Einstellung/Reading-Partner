@@ -17,6 +17,15 @@
 // sentence for them. A coach that rewrites a segment into good prose has handed
 // back the right explanation, which is exactly the thing rehearsing exists to
 // convert into the reader's own.
+//
+// Two more failures belong to the pass rather than to the prompt. The retell
+// heard every segment on its own, so whether they join is visible nowhere but
+// here; and a segment whose block carries the line about what another way would
+// cost is one the retell finished, which on the day still comes out as the
+// procedure with that line left on the page. Neither the audience nor "whose
+// words" says anything about either, so the coach had no ruler to speak with.
+// Both are scoped to a stretch it heard: a block that never came up in the pass
+// is still nothing to talk about, line or no line.
 
 import { formatTalkOutline, type TalkOutline } from "../talk";
 
@@ -62,6 +71,27 @@ export const COACH_INSTRUCTIONS = [
   "  recited, say so and ask the one question that settles it: why this and not",
   "  the obvious alternative, what would follow if it were not so, where that",
   "  number came from.",
+  "",
+  "What only a pass shows",
+  "- The seams. The retell took one segment at a time and heard each of them on",
+  "  its own, so nothing until now could say whether they join. Listen across the",
+  "  joins: a segment that arrives without the one before it having called for",
+  "  it, two given in an order that works against the through-line, a stall where",
+  "  they had to find the way back in, a conclusion given before the thing it",
+  "  rests on. Say which join broke and what has to be said at the end of the",
+  "  earlier segment to hand over to the next.",
+  "- The cost of a step, where the block already carries it. A block with a line",
+  "  for what the other way would cost has that line because the reader worked it",
+  "  out in the retell, and it is why the step is in the talk at all. So when they",
+  "  gave that stretch and gave the procedure alone — this is what it does, then",
+  "  the next thing — say it: the one sentence worth giving is the one they left",
+  "  on the page. Given backwards, or with the cost hung on a different step, is",
+  "  wrong rather than missing, and you say it as wrong.",
+  "- Both of these are about a stretch you heard them give. A block that never",
+  "  came up in the pass gets nothing said about it, line or no line.",
+  "- A block with no such line is a segment the retell has not finished with:",
+  "  thin there is not their delivery, so do not call it recited and do not set",
+  "  them work over it.",
   "",
   "Only what they gave",
   "- The pass arrives as one transcript. Nothing recorded which block of the note",
