@@ -11,7 +11,7 @@
 
 ## 原因
 
-1. 这个 Apple ID 在付费开发者团队里只有 Developer 角色，不是 Account Holder。苹果的规则是 provisioning 权限只给 Account Holder，其他角色一律 409。个人想在自己设备上调试，只能换成免费的 Personal Team 签名。`com.xinyuan.readingpartner` 这个 App ID 已经全局唯一地注册给了付费团队，Personal Team 抢不到同一个 identifier，必须换一个。
+1. 这个 Apple ID 在付费开发者团队里只有 Developer 角色，不是 Account Holder，而这个开发者账号本身注册的是个人（Individual）类型：个人账号的开发者门户是单人的，只有 Account Holder 能建证书和描述文件，团队成员能进 App Store Connect 管 TestFlight 和商店信息，但签名权限这个开关根本不允许打开（共享签名要 Organization 类型账号）。实测确认过这一条：这个成员登进 developer.apple.com，Account 页只有 Tools and resources / Profile / Emails / Agreements 四项加一个「Enroll today」，没有 Certificates, Identifiers & Profiles，Xcode 里也拉不到任何 team、建不出证书；用 Account Holder 的 App Store Connect API key 调 `GET /v1/users` 查到该成员的 `provisioningAllowed` 是 false，`PATCH /v1/users/{id}` 想把它改成 true，Apple 直接拒：`409 ENTITY_ERROR.ATTRIBUTE.INVALID`，消息 `The user can't have provisioning privilege.`。个人想在自己设备上调试，只能换成免费的 Personal Team 签名。`com.xinyuan.readingpartner` 这个 App ID 已经全局唯一地注册给了付费团队，Personal Team 抢不到同一个 identifier，必须换一个。
 2. 部署目标是 `tauri.conf.json` 里全仓库共用的一个字段，改了它，TestFlight 的发布链路也跟着涨门槛——手上验证机型还没升级到 iOS 26 的话，下一个 TestFlight 版本会把它锁在门外。
 3. `tauri ios dev` 让手机去连 Mac 在局域网地址上开的 Vite server，不是 localhost。iOS 14 起，app 访问局域网地址前系统要先弹一次用户同意，且只有 bundle 声明了 `NSLocalNetworkUsageDescription` 才会弹这个框；没声明就在请求出手机之前直接被拒，报错和网络故障长得一样。
 4. `UIBackgroundModes: audio` 是发布级的能力声明，对应的是"这个功能已经上线"，探针阶段只是想知道锁屏后音频会不会被系统掐掉，还没有到写进发布声明的地步。
