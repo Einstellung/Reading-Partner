@@ -4,7 +4,7 @@
 // app: it happens in the topic, with no book open, no reader mounted and no
 // engine running. Everything it needs is already on disk under the book's
 // content hash — fulltext-<hash>.json, annotations-<hash>.json,
-// figures-<hash>.json, prep-<hash>/chapters/ — so the path is a set of reads, not an
+// figures-<hash>.json, prep-<hash>/ — so the path is a set of reads, not an
 // engine. The book's bytes are only read when a figure actually has to be
 // rasterized, which is the one thing that needs them (figures/render.ts crops
 // with pdf.js, no reader and no PDFium).
@@ -20,6 +20,10 @@ import type { Skeleton } from "./types";
 import { getFigures } from "../figures/store";
 import type { Figure } from "../figures/types";
 import { loadChapterSpineState } from "../prep/chapters/store";
+import { classroomNoteBody, type ClassroomNote } from "../prep/papers/classroom";
+import { parseNote } from "../prep/papers/notes";
+import { loadPrepState, readPrepNote } from "../prep/papers/store";
+import type { PrepState } from "../prep/papers/types";
 import type { RetellMaterial } from "./types";
 
 // One material of a retell with everything the retell reads about it.
@@ -31,6 +35,30 @@ export interface LoadedMaterial {
   annotations: AnnotationLite[];
   skeleton: Skeleton;
   figures: Figure[];
+  // The prep run over this material's references (docs/09), or null when none
+  // ran. It carries the paper list read_paper and read_note answer from, and the
+  // chapter table the notes are ordered against.
+  prep: PrepState | null;
+  // Every note that run has on disk, already through classroomNoteBody. Which of
+  // them ride in the prompt is the retell's choice (retell/prep-notes.ts).
+  prepNotes: ClassroomNote[];
+}
+
+// The notes a prep run has on disk, cleaned. classroomNoteBody is applied here
+// and nowhere else on this path: it is the one place a stored note becomes
+// prompt text, so what the budget prices is what the prompt carries — pricing
+// the raw body instead ran 21% under what was printed.
+async function loadPrepNotes(bookId: string, prep: PrepState | null): Promise<ClassroomNote[]> {
+  if (!prep) return [];
+  const ready = prep.papers.filter((p) => p.status === "done" || p.status === "abstract-only");
+  const notes = await Promise.all(
+    ready.map(async (p): Promise<ClassroomNote | null> => {
+      const raw = await readPrepNote(bookId, p.slug).catch(() => null);
+      if (!raw) return null;
+      return { slug: p.slug, title: p.title, body: classroomNoteBody(parseNote(raw).body, p.slug) };
+    }),
+  );
+  return notes.filter((n): n is ClassroomNote => n !== null);
 }
 
 // Everything a retell needs about one book, read from disk. Every read is
@@ -39,12 +67,13 @@ export interface LoadedMaterial {
 // retell and being told "this book contributes nothing" is more use than an error.
 export async function loadMaterial(material: RetellMaterial): Promise<LoadedMaterial> {
   const { bookId } = material;
-  const [entry, fulltext, anns, spineState, figures] = await Promise.all([
+  const [entry, fulltext, anns, spineState, figures, prep] = await Promise.all([
     getLibraryEntry(bookId).catch(() => null),
     getFulltext(bookId).catch(() => null),
     loadAnnotations(bookId).catch((): Annotation[] => []),
     loadChapterSpineState(bookId).catch(() => null),
     getFigures(bookId).catch(() => null),
+    loadPrepState(bookId).catch(() => null),
   ]);
   const skeleton = buildSkeleton({
     spineChapters: spineState?.chapters ?? null,
@@ -60,6 +89,8 @@ export async function loadMaterial(material: RetellMaterial): Promise<LoadedMate
       .filter((a): a is AnnotationLite => a !== null),
     skeleton,
     figures: figures?.figures ?? [],
+    prep,
+    prepNotes: await loadPrepNotes(bookId, prep),
   };
 }
 

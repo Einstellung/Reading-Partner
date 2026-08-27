@@ -34,6 +34,14 @@ import { buildFigureTools } from "../figures/tools";
 import { renderFigure } from "../figures/render";
 import type { Figure } from "../figures/types";
 import { readChapterSpine } from "../prep/chapters/store";
+import {
+  CLASSROOM_NOTE_BUDGET_TIGHT,
+  prepNotesSection,
+  type ClassroomNote,
+} from "../prep/papers/classroom";
+import { buildClassroomTools } from "../prep/papers/tools";
+import type { PrepState } from "../prep/papers/types";
+import { retellPrepStatus, selectRetellPrepNotes } from "./prep-notes";
 import { buildArrangeTools, type TalkOutline } from "../talk";
 import { buildRetellSystemPrompt, RETELL_KICKOFF, type RetellNote } from "./prompt";
 import { buildRetellTools } from "./tools";
@@ -274,6 +282,34 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
     if (body) notes = [{ chapter: chapter.index, title: chapter.title, body }];
   }
 
+  // The prep runs behind these materials (docs/09): read_paper / read_note over
+  // whatever each one produced. Mounted wherever there is a prep state to read,
+  // which is what "by data" means here — the tools follow the material, not the
+  // mode. A survey's value is the papers it strings together, so a retell of one
+  // that could not reach them would be a retell of the joins.
+  const prepStates = materials.map((m) => m.prep).filter((p): p is PrepState => p !== null);
+  if (prepStates.length > 0) {
+    tools = [...tools, ...buildClassroomTools(() => prepStates)];
+  }
+
+  // Every prep note the materials have, under one budget across all of them, and
+  // the same list under a quarter of it for the "prep-notes-trim" rung.
+  //
+  // The ordering position is the chapter this turn is heading into, in that
+  // material's own page numbers: a retell has no reader parked anywhere, and the
+  // combined chapter list the retell walks is not the table the prep run indexed
+  // its papers against. It only decides which notes are given up first, and only
+  // once the budget bites.
+  const focusSlot = chapter ? slotAt(slots, chapter.index) : undefined;
+  const prepFocus =
+    chapter && focusSlot ? { bookId: focusSlot.bookId, startPage: chapter.startPage } : null;
+  const prepNotes: ClassroomNote[] = selectRetellPrepNotes(materials, prepFocus);
+  const prepNotesTight: ClassroomNote[] = selectRetellPrepNotes(
+    materials,
+    prepFocus,
+    CLASSROOM_NOTE_BUDGET_TIGHT,
+  );
+
   tools = [
     ...tools,
     ...buildRetellTools({
@@ -311,6 +347,7 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
   ];
 
   function composePrompt(dropped: ReadonlySet<RetellReductionId>): string {
+    const prepped = dropped.has("prep-notes-trim") ? prepNotesTight : prepNotes;
     let prompt = buildRetellSystemPrompt({
       topicName,
       bookName: materialsLabel(materials),
@@ -320,6 +357,11 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
       skeleton,
       marks,
       notes: dropped.has("retell-notes") ? [] : notes,
+      prepNotes: prepNotesSection(prepped),
+      // Built from the notes this prompt actually carries, so a status line
+      // cannot claim a note is below when the rung above took it.
+      prepStatus: retellPrepStatus(materials, new Set(prepped.map((n) => n.slug))),
+      hasPrepTools: prepStates.length > 0,
       plan,
       talkOutline,
       figureCatalog: dropped.has("figure-catalog") ? "" : figureCatalog,
@@ -357,6 +399,9 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
   // dangling.
   const skip = new Set<RetellReductionId>();
   if (composeMessages(new Set()).some((m) => m.text.includes("[fig:"))) skip.add("figure-catalog");
+  // Composing the prompt to price a block that is not there is a full re-render
+  // for nothing.
+  if (prepNotes.length === 0) skip.add("prep-notes-trim");
 
   const fitted = fitToBudget<RetellReductionId, RetellTurnMessage>({
     model,
