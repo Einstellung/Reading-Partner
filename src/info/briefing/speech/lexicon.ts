@@ -49,8 +49,11 @@ export const WORD_READINGS: Record<string, string> = {
 
 // Unit suffixes, read only when they sit directly after a number, so a row can
 // use a short lowercase form ("ms") without swallowing an ordinary word.
-// Storage units (KB/MB/GB) are deliberately absent: the letter-by-letter
-// fallback already gives "M B", which is what a Chinese speaker says.
+// Bare storage units (KB/MB/GB) are deliberately absent: the letter-by-letter
+// fallback already gives "M B", which is what a Chinese speaker says. Their
+// per-second forms do need a row, because the slash would otherwise reach the
+// step that reads a slash as an enumeration pause and leave "T B、s".
+// A row may spell out letters itself, as the throughput rows do.
 export const UNIT_READINGS: Record<string, string> = {
   ms: "毫秒",
   ns: "纳秒",
@@ -66,6 +69,11 @@ export const UNIT_READINGS: Record<string, string> = {
   mAh: "毫安时",
   kW: "千瓦",
   MW: "兆瓦",
+  "MB/s": "M B 每秒",
+  "GB/s": "G B 每秒",
+  "TB/s": "T B 每秒",
+  // Torque. Without the row the middle dot is dropped and the m is read 米.
+  "N·m": "牛米",
   x: "倍",
   X: "倍",
 };

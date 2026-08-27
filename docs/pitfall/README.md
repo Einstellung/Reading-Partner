@@ -23,6 +23,7 @@
 | SSH 远程到 Mac 上签名、构建 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 解流式 TTS 的音频分片、按字节数算时长 | 原生音频与语音 |
+| 判读 TTS 读音、往语音文本预处理的词表里加行 | 原生音频与语音 |
 | 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
@@ -166,6 +167,8 @@
 - [168-the-probe-parked-beside-the-thing-it-measures](./168-the-probe-parked-beside-the-thing-it-measures.md) — 橙点探针停在 `engine`/`tap`/`recording` 不撤，下一次按住先替它拆引擎，四百到八百毫秒记在 `session` 那一步上，21 次按住的一整轮数据作废（探针停 off/session 的 11 次全是 72-156ms，停在建了引擎那三档的 9 次全是 584-977ms，中间没有值）；顺带把上一次留着的引擎也清了，`reuse` 十次按住 `reused` 全 false。日志和字段全都正常，所以看不出来。解法是拒绝这次按住并在界面上说原因，不偷偷复位；判据是"上次按住之后碰过探针没有"而不是"探针现在停在哪一档"——`setIndicatorProbe(.off)` 自己也 teardown，提示人"先把探针关掉"等于亲手指挥人毁掉要复用的引擎；拆除动作放进被拒的那次按住里（它的数不算数），碰一次探针固定赔一次按住；每行记 `probeStage` 和 `probeTouched`，快路径没走成要写 `reuseSkipped`
 - [170-a-regex-boundary-is-a-code-point-not-a-glyph](./170-a-regex-boundary-is-a-code-point-not-a-glyph.md) — CJK 字符类的边界 U+F900 和 U+8C48 渲染成同一个字形，抄成后者就把 U+8C48–U+FAFF 这 2.8 万个码点（谚文、彝文、私用区，加上没有 `u` 标志时每个 emoji 的前导代理）全算成 CJK，seam 该留的空格被吃掉；bench 只跑纯中文和纯英文，两种范围结论一致，测不出来。边界按码点读不按字形读
 - [187-dashscope-streams-a-wav-header-in-the-first-chunk](./187-dashscope-streams-a-wav-header-in-the-first-chunk.md) — 阿里 `qwen3-tts-flash` 流式的首帧带 44 字节 RIFF/WAVE 头（data chunk size 是占位符 `0x7FFFFFFF`），当裸 PCM 拼就是开头一声满刻度咔哒，31 句全段峰值都在前 5ms、`|x[0]|` 0.57，差点当成音频质量缺陷；首帧见 `RIFF` 就跳 44 字节，峰值中位数 -0.0 → -7.3 dBFS。硅基流动和小米是真裸 PCM，别假设分片都是采样点；响应里也没有采样率字段，24kHz 是跨供应商逐句时长交叉验证推出来的
+- [188-one-asr-rewrites-a-correct-tts-reading](./188-one-asr-rewrites-a-correct-tts-reading.md) — 回读判读读音时，SenseVoiceSmall 把念对的 `风险试产` 稳定写成 `风险市场`（两音色四次取样全错），差点当成确定性读音错加进词表；换 Qwen3-ASR 四条全对。ASR 的语言模型比声学证据强势，`产`/`场` 只差鼻音韵尾，同一个词换成 `试产阶段` 它又写对。复现次数救不了这个——同一个 ASR 每次朝同一个方向改。要两个来源不同的 ASR 交叉，只有一边报错就当没有证据；SenseVoice 不做逆规范化，适合抓「多念了字」，Qwen 做逆规范化，适合抓「改没改字」
+- [189-a-space-does-not-break-a-digit-from-a-unit-letter](./189-a-space-does-not-break-a-digit-from-a-unit-letter.md) — 小米把工艺节点名 `18A` 念成「十八安培」，中间垫空格写成 `18 A` 照旧念安培（茉莉音色更远，念成「十纳米」）：单位识别按 token 走不按字距走。把数字换成中文数字 `十八 A` 才躲得开，两音色双 ASR 全部回读成 `18A`。同一批里 `620N·m` 念成「620 N 米」而 `4.8TB/s` 念对成「太字节每秒」，是逐个单位的查表行为，只能一个个试
 
 ## WebKit / webview
 
