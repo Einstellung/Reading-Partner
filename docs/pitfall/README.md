@@ -43,7 +43,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 177）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 178）。
 
 ## EmbedPDF 引擎
 
@@ -134,6 +134,7 @@
 - [48-tauri-ios-signing-log-noise](./48-tauri-ios-signing-log-noise.md) — "找不到证书"警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音，签名成没成看 export 阶段
 - [107-testflight-upload-is-not-distribution](./107-testflight-upload-is-not-distribution.md) — altool 上传成功只是 ingest，build 不 link 到 beta 组就谁也装不到（内测组没开自动分发要逐个加，外测组还要 What's New 和 beta 审核）；上传后必须跑分发脚本。外测加组 404 说 build 不存在：端点要用 builds 那一侧、审核提交要排在加组前面、先查 `buildAudienceType` 和 `externalBuildState`。`fields[builds]` 漏列 relationship 会把 `include` 的数据一起吞掉。上传返回时 build 资源还没建出来，要等它出现和等它 VALID 两段轮询，且不许猜「最新那个」。distribute job 红不代表包没到手：外测 beta 审核提交有当天频次上限，撞上时内测那半已经成功，脚本打的 Test Information 提示是无关的通用提示
 - [163-idevicesyslog-drops-lines-when-it-is-not-filtered](./163-idevicesyslog-drops-lines-when-it-is-not-filtered.md) — 不加过滤的 `idevicesyslog` 四分钟落盘 127MB，里面自己 app 的 NSLog 只有 13 行：设备日志本身 0.5MB/s，中继跟不上就丢，丢哪段不挑。用 `-m/--match` 在中继侧过滤，判据是行数不是文件大小
+- [177-personal-team-signing-changes-must-not-reach-main](./177-personal-team-signing-changes-must-not-reach-main.md) — 个人开发者账号只有 Developer 角色时，真机调试签名要换成免费 Personal Team，配套的 dev-only bundle id、部署目标临时提到 26.0、`NSLocalNetworkUsageDescription`（连 Mac 上的 Vite dev server）、探针用的 `UIBackgroundModes: audio` 全部只留在本地分支，commit message 写死不许进 main
 
 ## Android 构建与签名
 
