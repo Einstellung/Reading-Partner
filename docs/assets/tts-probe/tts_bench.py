@@ -113,7 +113,7 @@ DEFAULT_ENV_FILE = "/home/xinyuan/Documents/Github/Reading-Partner/.env"
 
 SO_MARK = 36  # socket.SO_MARK, not exposed on all Python builds
 
-VENDORS = ("siliconflow", "dashscope")
+VENDORS = ("siliconflow", "dashscope", "mimo")
 
 SF_HOST = "api.siliconflow.cn"
 SF_PATH = "/v1/audio/speech"
@@ -125,6 +125,27 @@ DS_PATH = "/api/v1/services/aigc/multimodal-generation/generation"
 DS_MODEL = "qwen3-tts-flash"
 DS_VOICE = "Cherry"
 DS_SAMPLE_RATE = 24000  # fixed by the model, not selectable
+
+MIMO_HOST = "api.xiaomimimo.com"
+MIMO_PATH = "/v1/chat/completions"          # chat-shaped, not /v1/audio/speech
+MIMO_MODEL = "mimo-v2.5-tts"
+MIMO_VOICE = "冰糖"                          # 冰糖 / 茉莉 / 苏打 / 白桦, passed as a literal
+MIMO_FORMAT = "pcm16"
+MIMO_SAMPLE_RATE = 24000  # fixed by the model, not selectable
+
+VENDOR_HOSTS = {"siliconflow": SF_HOST, "dashscope": DS_HOST, "mimo": MIMO_HOST}
+KEY_VARS = {"siliconflow": "SILICONFLOW_API_KEY",
+            "dashscope": "DASHSCOPE_API_KEY",
+            "mimo": "MIMO_API_KEY"}
+# Only SiliconFlow lets the caller pick a rate; the other two are fixed by the model.
+# They agree on 24000 today, which is a coincidence, not a shared constant.
+FIXED_SAMPLE_RATES = {"dashscope": DS_SAMPLE_RATE, "mimo": MIMO_SAMPLE_RATE}
+
+
+def sample_rate_for(vendor, cfg):
+    if vendor == "siliconflow":
+        return cfg["sample_rate"]
+    return FIXED_SAMPLE_RATES[vendor]
 
 
 def load_env_file(path):
@@ -449,6 +470,13 @@ def dig_audio_b64(obj):
     except (KeyError, TypeError):
         pass
 
+    try:
+        v = obj["choices"][0]["delta"]["audio"]["data"]
+        if isinstance(v, str) and v:
+            return v, "choices[0].delta.audio.data"
+    except (KeyError, IndexError, TypeError):
+        pass
+
     found = []
 
     def walk(node, path):
@@ -487,6 +515,21 @@ def build_request(vendor, text, cfg):
         }
         return SF_HOST, SF_PATH, headers, json.dumps(body, ensure_ascii=False).encode("utf-8")
 
+    if vendor == "mimo":
+        # The text to speak goes in an *assistant* message. A user message would be
+        # read as a style instruction and never spoken.
+        body = {
+            "model": cfg["mimo_model"],
+            "messages": [{"role": "assistant", "content": text}],
+            "audio": {"format": cfg["mimo_format"], "voice": cfg["mimo_voice"]},
+            "stream": True,
+        }
+        headers = {
+            "Authorization": "Bearer " + cfg["mimo_key"],
+            "Content-Type": "application/json",
+        }
+        return MIMO_HOST, MIMO_PATH, headers, json.dumps(body, ensure_ascii=False).encode("utf-8")
+
     body = {
         "model": cfg["ds_model"],
         "input": {
@@ -503,19 +546,42 @@ def build_request(vendor, text, cfg):
     return DS_HOST, DS_PATH, headers, json.dumps(body, ensure_ascii=False).encode("utf-8")
 
 
+# Content moderation is a corpus result, not a transport failure, so it gets its own
+# class. DashScope says DataInspectionFailed; Mimo follows the OpenAI error shape and
+# moderates both the input text and the synthesised output.
+MODERATION_MARKERS = (
+    "datainspectionfailed",
+    "data_inspection_failed",
+    "content_filter",
+    "content_policy",
+    "contentpolicy",
+    "risk_control",
+    "sensitive",
+    "moderation",
+    "内容安全",
+    "内容审核",
+    "违规",
+)
+
+
 def classify_error(status, body_bytes):
-    """DashScope content inspection is an HTTP 400 with code DataInspectionFailed.
-    It is a corpus result, not a transport failure, so it gets its own class."""
+    """Split content-moderation refusals out of real HTTP/transport errors.
+
+    Both vendors can bury the payload one level down: DashScope puts code/message at
+    the top level, Mimo nests them under "error"."""
     text = body_bytes.decode("utf-8", "replace")
     code = msg = None
     try:
         j = json.loads(text)
-        code = j.get("code")
-        msg = j.get("message")
+        if isinstance(j, dict):
+            err = j.get("error") if isinstance(j.get("error"), dict) else None
+            src = err if err else j
+            code = src.get("code") or src.get("type")
+            msg = src.get("message")
     except (ValueError, AttributeError):
         pass
-    blob = f"{code} {msg} {text}"
-    if "DataInspectionFailed" in blob or "data_inspection_failed" in blob.lower():
+    blob = f"{code} {msg} {text}".lower()
+    if any(m in blob for m in MODERATION_MARKERS):
         return "content_rejected", code, msg or text[:300]
     return "http_error", code, msg or text[:300]
 
@@ -527,7 +593,7 @@ def classify_error(status, body_bytes):
 
 def measure(vendor, idx, text, cfg, conn=None):
     host, path, headers, body = build_request(vendor, text, cfg)
-    sample_rate = cfg["sample_rate"] if vendor == "siliconflow" else DS_SAMPLE_RATE
+    sample_rate = sample_rate_for(vendor, cfg)
     bytes_per_ms = sample_rate * 2 / 1000.0
 
     rec = {
@@ -597,10 +663,14 @@ def measure(vendor, idx, text, cfg, conn=None):
                         obj = json.loads(payload.decode("utf-8"))
                     except ValueError:
                         continue
-                    if isinstance(obj, dict) and obj.get("code"):
+                    if isinstance(obj, dict) and (obj.get("code")
+                                                  or isinstance(obj.get("error"), dict)):
                         outcome, code, msg = classify_error(400, payload)
-                        rec.update({"outcome": outcome, "error_code": obj.get("code"),
-                                    "error_message": obj.get("message") or msg})
+                        # Mimo moderates the output too, so a refusal can land after
+                        # some audio has already streamed. Record how much.
+                        rec.update({"outcome": outcome, "error_code": code,
+                                    "error_message": msg,
+                                    "pcm_before_error": total_pcm})
                         stop = True
                         break
                     b64, p = dig_audio_b64(obj)
@@ -712,6 +782,34 @@ def fake_script(vendor, text, sample_rate, idx, scenario="stream"):
         nframes = max(2, int(audio_ms / frame_ms))
     frame_bytes = int(frame_ms * bpm) & ~1
 
+    if vendor == "mimo" and idx == 7:  # exercise the nested-error moderation path
+        head = (b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                b"Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+        ev = {"error": {"message": "Content flagged by the safety system.",
+                        "type": "content_filter", "code": "content_filter"}}
+        raw = b"data:" + json.dumps(ev).encode() + b"\n\n"
+        return [(0.230, head), (0.020, b"%x\r\n" % len(raw) + raw + b"\r\n")]
+
+    if vendor == "mimo":
+        head = (b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                b"Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+        script = [(0.200, head)]
+        first = True
+        for i in range(nframes):
+            pcm = b"\x55\x66" * (frame_bytes // 2)
+            ev = {"id": "chatcmpl-fake-%d" % idx, "object": "chat.completion.chunk",
+                  "model": "mimo-v2.5-tts",
+                  "choices": [{"index": 0, "delta": {"audio": {
+                      "data": base64.b64encode(pcm).decode()}}, "finish_reason": None}]}
+            raw = b"data:" + json.dumps(ev).encode() + b"\n\n"
+            script.append(((0.280 if scenario == "stream" else audio_ms / 1000.0 * 0.5)
+                           if first else 0.060,
+                           b"%x\r\n" % len(raw) + raw + b"\r\n"))
+            first = False
+        script.append((0.030, b"%x\r\n" % len(b"data:[DONE]\n\n") + b"data:[DONE]\n\n" + b"\r\n"))
+        script.append((0.005, b"0\r\n\r\n"))
+        return script
+
     if vendor == "dashscope" and idx == 7:  # exercise the content-inspection path
         body = json.dumps({
             "code": "DataInspectionFailed",
@@ -761,7 +859,7 @@ def fake_script(vendor, text, sample_rate, idx, scenario="stream"):
 
 
 def measure_fake(vendor, idx, text, cfg):
-    sample_rate = cfg["sample_rate"] if vendor == "siliconflow" else DS_SAMPLE_RATE
+    sample_rate = sample_rate_for(vendor, cfg)
     sock = FakeSocket(fake_script(vendor, text, sample_rate, idx, cfg["dry_scenario"]))
 
     real_open = globals()["open_connection"]
@@ -853,7 +951,8 @@ def fmt(v, key):
 def print_report(results, meta):
     vendors = [v for v in VENDORS if v in results]
     W = 26
-    line = "=" * (W + 2 + 40 * len(vendors))
+    COLW = 34
+    line = "=" * (W + 2 + (COLW + 2) * len(vendors))
     print()
     print(line)
     print("TTS 首包延迟测量  label=%s  %s" % (meta["label"], meta["timestamp_iso"]))
@@ -866,9 +965,9 @@ def print_report(results, meta):
               % meta["dry_scenario"])
     print(line)
 
-    header = "分段".ljust(W) + "".join(("  " + v).ljust(40) for v in vendors)
+    header = "分段".ljust(W) + "".join(("  " + v).ljust(COLW + 2) for v in vendors)
     print(header)
-    print("".ljust(W) + "".join("  " + "p50 / p90 / min / max".ljust(38) for _ in vendors))
+    print("".ljust(W) + "".join("  " + "p50 / p90 / min / max".ljust(COLW) for _ in vendors))
     print("-" * len(line))
 
     def row(key, label):
@@ -876,9 +975,9 @@ def print_report(results, meta):
         for v in vendors:
             st = results[v]["summary"]["stats"].get(key)
             if not st:
-                cells.append("  " + "-".ljust(38))
+                cells.append("  " + "-".ljust(COLW))
             else:
-                cells.append("  " + " / ".join(fmt(st[k], key) for k in ("p50", "p90", "min", "max")).ljust(38))
+                cells.append("  " + " / ".join(fmt(st[k], key) for k in ("p50", "p90", "min", "max")).ljust(COLW))
         print(label.ljust(W) + "".join(cells))
 
     for key, label in SEGMENTS:
@@ -933,7 +1032,8 @@ def print_report(results, meta):
 
 def main():
     ap = argparse.ArgumentParser(description="TTS first-packet latency benchmark (throwaway).")
-    ap.add_argument("--vendor", choices=["siliconflow", "dashscope", "both"], default="both")
+    ap.add_argument("--vendor", choices=["siliconflow", "dashscope", "mimo", "both", "all"],
+                    default="all", help='"both" is the original two vendors; "all" adds mimo')
     ap.add_argument("--n", type=int, default=40, help="sentences from the corpus (max %d)" % len(CORPUS))
     ap.add_argument("--label", default="wifi", help="network-environment tag for the filenames")
     ap.add_argument("--reuse-conn", action="store_true",
@@ -949,6 +1049,9 @@ def main():
     ap.add_argument("--sf-model", default=SF_MODEL)
     ap.add_argument("--ds-voice", default=DS_VOICE)
     ap.add_argument("--ds-model", default=DS_MODEL)
+    ap.add_argument("--mimo-voice", default=MIMO_VOICE, help="冰糖 / 茉莉 / 苏打 / 白桦")
+    ap.add_argument("--mimo-model", default=MIMO_MODEL)
+    ap.add_argument("--mimo-format", default=MIMO_FORMAT)
     ap.add_argument("--ds-language-type", default="Chinese",
                     choices=["Auto", "Chinese", "English", "German", "Italian", "Portuguese",
                              "Spanish", "Japanese", "Korean", "French", "Russian"])
@@ -966,7 +1069,12 @@ def main():
     if args.dry_run:
         CLOCK = VirtualClock()
 
-    vendors = list(VENDORS) if args.vendor == "both" else [args.vendor]
+    if args.vendor == "all":
+        vendors = list(VENDORS)
+    elif args.vendor == "both":
+        vendors = ["siliconflow", "dashscope"]
+    else:
+        vendors = [args.vendor]
     sentences = CORPUS[:min(args.n, len(CORPUS))]
 
     resolve = {}
@@ -974,8 +1082,7 @@ def main():
         h, _, ip = item.partition(":")
         resolve[h.strip()] = ip.strip()
 
-    probe_hosts = ([SF_HOST] if "siliconflow" in vendors else []) + \
-                  ([DS_HOST] if "dashscope" in vendors else [])
+    probe_hosts = [VENDOR_HOSTS[v] for v in vendors]
     network = detect_network(probe_hosts)
     if not args.dry_run:
         print(network["note"], file=sys.stderr)
@@ -986,7 +1093,7 @@ def main():
     dotenv = load_env_file(args.env_file)
     keys, key_sources = {}, {}
     for v in vendors:
-        var = "SILICONFLOW_API_KEY" if v == "siliconflow" else "DASHSCOPE_API_KEY"
+        var = KEY_VARS[v]
         keys[v], key_sources[v] = resolve_key(var, dotenv)
         if not args.dry_run:
             if not keys[v]:
@@ -1001,6 +1108,8 @@ def main():
         "sf_key": keys.get("siliconflow", ""), "sf_voice": args.sf_voice, "sf_model": args.sf_model,
         "ds_key": keys.get("dashscope", ""), "ds_voice": args.ds_voice, "ds_model": args.ds_model,
         "ds_language_type": args.ds_language_type,
+        "mimo_key": keys.get("mimo", ""), "mimo_voice": args.mimo_voice,
+        "mimo_model": args.mimo_model, "mimo_format": args.mimo_format,
         "timeout": args.timeout, "mark": args.mark, "resolve": resolve,
         "reuse": args.reuse_conn, "dry_scenario": args.dry_scenario,
     }
@@ -1014,30 +1123,42 @@ def main():
         "platform": "linux-desktop", "reuse_conn": args.reuse_conn, "dry_run": args.dry_run, "dry_scenario": args.dry_scenario,
         "network": network, "key_sources": key_sources,
         "env_file": args.env_file, "sample_rate_siliconflow": args.sample_rate,
-        "sample_rate_dashscope": DS_SAMPLE_RATE, "n": len(sentences),
+        "sample_rate_dashscope": DS_SAMPLE_RATE, "sample_rate_mimo": MIMO_SAMPLE_RATE,
+        "voices": {"siliconflow": args.sf_voice, "dashscope": args.ds_voice, "mimo": args.mimo_voice},
+        "models": {"siliconflow": args.sf_model, "dashscope": args.ds_model, "mimo": args.mimo_model},
+        "n": len(sentences),
         "total_chars": sum(len(s) for s in sentences),
     }
 
-    results = {}
-    for v in vendors:
-        recs, conn = [], None
-        for i, text in enumerate(sentences):
+    # Sentence-outer, vendor-inner: the vendors take turns rather than each taking a
+    # solid block of the run, so a drifting network is a shared term instead of a bias
+    # towards whoever went first.
+    records = {v: [] for v in vendors}
+    conns = {v: None for v in vendors}
+    for i, text in enumerate(sentences):
+        for v in vendors:
             if args.dry_run:
                 rec, _ = measure_fake(v, i, text, cfg)
             else:
-                rec, conn = measure(v, i, text, cfg, conn=conn if args.reuse_conn else None)
-            recs.append(rec)
+                rec, conns[v] = measure(v, i, text, cfg,
+                                        conn=conns[v] if args.reuse_conn else None)
+            records[v].append(rec)
             if not args.dry_run:
                 mark = {"ok": "ok", "content_rejected": "REJECTED"}.get(rec["outcome"], rec["outcome"])
-                print("  [%s %2d/%d] %s  first_pcm=%s ms  ff_audio=%s ms"
+                print("  [%-11s %2d/%d] %s  first_pcm=%s ms  ff_audio=%s ms"
                       % (v, i + 1, len(sentences), mark,
                          fmt(rec.get("first_pcm_ms"), "x"), fmt(rec.get("first_frame_audio_ms"), "x")),
                       file=sys.stderr)
-        if conn:
+    for v in vendors:
+        if conns[v]:
             try:
-                conn[0].close()
+                conns[v][0].close()
             except OSError:
                 pass
+
+    results = {}
+    for v in vendors:
+        recs = records[v]
         results[v] = {"records": recs, "summary": summarize(recs)}
 
         path = os.path.join(args.outdir, "raw-%s-%s-%d.jsonl" % (v, args.label, ts))
