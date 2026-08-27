@@ -28,8 +28,8 @@ function state(over: Partial<PrepState> = {}): PrepState {
   return { surveyHash: SURVEY, papers: [paper()], ...over } as PrepState;
 }
 
-function tool(name: string) {
-  return buildClassroomTools(() => state()).find((t) => t.name === name)!;
+function tool(name: string, states: PrepState[] = [state()]) {
+  return buildClassroomTools(() => states).find((t) => t.name === name)!;
 }
 
 test("read_paper labels every page with the citation for that page", async () => {
@@ -63,4 +63,38 @@ test("an unknown slug lists what is available instead of returning nothing", asy
   const out = (await tool("read_note").execute({ slug: "dream-to-control" })) as string;
   expect(out).toContain('No prepped paper with slug "dream-to-control"');
   expect(out).toContain(SLUG);
+});
+
+// A retell holds several materials, each with its own prep run, and the tools
+// are mounted once over all of them.
+const OTHER = "other-survey-hash";
+const OTHER_SLUG = "world-models";
+
+test("a slug is resolved against every prep run, and they all list their slugs", async () => {
+  await writePrepNote(OTHER, OTHER_SLUG, "---\ntitle: World Models\n---\n\nA latent dream [p.1].\n");
+  const states = [
+    state(),
+    state({
+      surveyHash: OTHER,
+      papers: [paper({ slug: OTHER_SLUG, title: "World Models" })],
+    }),
+  ];
+  const read = tool("read_note", states);
+  expect(String(await read.execute({ slug: OTHER_SLUG }))).toBe(`A latent dream [${OTHER_SLUG} p.1].`);
+  const missing = String(await read.execute({ slug: "nope" }));
+  expect(missing).toContain(SLUG);
+  expect(missing).toContain(OTHER_SLUG);
+});
+
+// The same paper is routinely prepped under two materials. Both copies are the
+// same paper read twice, so the first run answers and which one it was cannot
+// show.
+test("a slug in two prep runs is answered from the first of them", async () => {
+  await writePrepNote(SURVEY, SLUG, "---\ntitle: t\n---\n\nfrom the first run.\n");
+  await writePrepNote(OTHER, SLUG, "---\ntitle: t\n---\n\nfrom the second run.\n");
+  const states = [state(), state({ surveyHash: OTHER })];
+  expect(String(await tool("read_note", states).execute({ slug: SLUG }))).toBe("from the first run.");
+  expect(String(await tool("read_note", states.slice().reverse()).execute({ slug: SLUG }))).toBe(
+    "from the second run.",
+  );
 });

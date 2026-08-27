@@ -199,12 +199,20 @@ export function selectClassroomNotes(
   const out: ClassroomNote[] = [];
   let spent = 0;
   for (const { note } of ranked) {
-    const cost = estimateTextTokens(`${note.slug}${note.title}${note.body}`);
+    const cost = classroomNoteCost(note);
     if (spent + cost > budget) continue;
     spent += cost;
     out.push(note);
   }
   return out;
+}
+
+// What one note costs the prompt. Exported because a caller spending one budget
+// across several prep runs (a retell over several materials) has to subtract what
+// each run took, and a second copy of this expression is a second answer to
+// "what does this note cost".
+export function classroomNoteCost(note: ClassroomNote): number {
+  return estimateTextTokens(`${note.slug}${note.title}${note.body}`);
 }
 
 // --- the prep status list ---

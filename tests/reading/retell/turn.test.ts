@@ -24,6 +24,7 @@ const { buildRetellTurn, OBSERVATION_ORDER_TIGHT } = await import(
 const { HISTORY_KEEP } = await import("../../../src/reading/turn");
 const { combineChapters } = await import("../../../src/reading/retell/outline");
 import type { LoadedMaterial } from "../../../src/reading/retell/material";
+import type { PrepPaper, PrepState } from "../../../src/reading/prep/papers/types";
 import type { Retell, RetellDecision } from "../../../src/reading/retell/types";
 import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
 import { putSegment, setSpine } from "../../../src/reading/talk/edit";
@@ -66,7 +67,45 @@ function material(over: Partial<LoadedMaterial> = {}): LoadedMaterial {
       ],
     },
     figures: [],
+    prep: null,
+    prepNotes: [],
     ...over,
+  };
+}
+
+// A prep run over one material's references, as material.ts would have read it
+// back: the state file plus the notes already through classroomNoteBody.
+function prepped(over: Partial<PrepState> = {}, notes = 1, size = 40): Partial<LoadedMaterial> {
+  const papers: PrepPaper[] = Array.from({ length: notes }, (_, i) => ({
+    slug: `paper-${i + 1}`,
+    title: `Paper ${i + 1}`,
+    authors: [],
+    year: null,
+    arxivId: null,
+    citedInChapters: [1],
+    reason: "",
+    status: "done",
+  }));
+  return {
+    prep: {
+      version: 1,
+      surveyHash: "b1",
+      surveyName: "Eye and Brain",
+      createdAt: 1,
+      planStatus: "done",
+      chapters: [
+        { index: 1, title: "One", startPage: 1 },
+        { index: 2, title: "Two", startPage: 3 },
+      ],
+      references: [],
+      papers,
+      ...over,
+    },
+    prepNotes: papers.map((p) => ({
+      slug: p.slug,
+      title: p.title,
+      body: `${p.title} says a thing [${p.slug} p.1]. `.repeat(size),
+    })),
   };
 }
 
@@ -447,6 +486,95 @@ test("read_chapter_note answers in combined chapter numbers", async () => {
   // chapter of this retell at all.
   expect(String(await tool!.execute({ chapter: 4 }))).toContain("No note on file");
   expect(String(await tool!.execute({ chapter: 9 }))).toContain("No chapter 9");
+});
+
+// A survey's value is the papers it strings together, so a retell of one has to
+// reach them. The tools follow the data: a material with a prep run mounts them,
+// one without does not.
+test("a material with a prep run brings its papers' notes and the tools to read them", async () => {
+  const turn = await buildRetellTurn(input({ materials: [material(prepped({}, 2))] }));
+  expect(names(turn.tools)).toContain("read_note");
+  expect(names(turn.tools)).toContain("read_paper");
+  expect(turn.systemPrompt).toContain("Prep notes on this document's references, in full");
+  expect(turn.systemPrompt).toContain("--- paper-1: Paper 1 ---");
+  expect(turn.systemPrompt).toContain("--- paper-2: Paper 2 ---");
+  expect(turn.systemPrompt).toContain("- paper-1 — Paper 1 [note below]");
+  expect(turn.systemPrompt).toContain("[paper-slug p.N]");
+  expect(turn.systemPrompt).toContain("read_note(slug)");
+});
+
+test("a retell of a book nobody prepped says nothing about prep at all", async () => {
+  const turn = await buildRetellTurn(input());
+  expect(names(turn.tools)).not.toContain("read_note");
+  expect(names(turn.tools)).not.toContain("read_paper");
+  expect(turn.systemPrompt).not.toContain("prep");
+  expect(turn.systemPrompt).not.toContain("paper-slug");
+});
+
+// The notes are stable for the whole sitting and the record is not, so they go
+// above it: forty thousand tokens under something that is rewritten every turn
+// is forty thousand tokens the provider's cache never holds.
+test("the papers' notes sit above the record, in the stable half of the prompt", async () => {
+  const turn = await buildRetellTurn(input({ materials: [material(prepped())] }));
+  const notes = turn.systemPrompt.indexOf("Prep notes on this document's references");
+  const status = turn.systemPrompt.indexOf("The prep list —");
+  const record = turn.systemPrompt.indexOf("no through-line yet");
+  expect(notes).toBeGreaterThan(-1);
+  expect(status).toBeGreaterThan(notes);
+  expect(record).toBeGreaterThan(status);
+});
+
+// One budget across the whole retell, and one note per paper however many
+// materials nominated it: the same paper prepped under two surveys is the same
+// text, and buying it twice is what the cap is there to stop.
+test("two materials share one prep budget and never print a paper twice", async () => {
+  const turn = await buildRetellTurn(
+    input({
+      retell: retell({
+        materials: [
+          { bookId: "b1", title: "Eye and Brain" },
+          { bookId: "b2", title: "Vision" },
+        ],
+      }),
+      materials: [
+        material(prepped({}, 2)),
+        material({ bookId: "b2", title: "Vision", ...prepped({ surveyHash: "b2" }, 2) }),
+      ],
+    }),
+  );
+  const bodies = turn.systemPrompt.match(/--- paper-1: Paper 1 ---/g) ?? [];
+  expect(bodies).toHaveLength(1);
+  // Each material's own prep list is still printed, under its own heading: the
+  // note is shared, the nomination is not.
+  expect(turn.systemPrompt).toContain('In "Eye and Brain":');
+  expect(turn.systemPrompt).toContain('In "Vision":');
+});
+
+// The rung swaps the whole list for one chosen under a quarter of the budget,
+// rather than filtering it: the far end of the same queue goes, only sooner.
+test("the prep rung trades the notes for the tight list and says so", async () => {
+  const annotations = Array.from({ length: 1_200 }, (_, i) => ({
+    page: (i % 4) + 1,
+    text: "编译器内联缓存".repeat(200),
+    comment: "",
+  }));
+  const full = await buildRetellTurn(input({ materials: [material(prepped({}, 12, 300))] }));
+  const count = (s: string) => (s.match(/--- paper-\d+: /g) ?? []).length;
+  expect(count(full.systemPrompt)).toBe(12);
+
+  const tight = await buildRetellTurn(
+    input({
+      materials: [material({ annotations, ...prepped({}, 12, 300) })],
+      settings: small,
+    }),
+  );
+  expect(tight.refusal).toBe("");
+  expect(count(tight.systemPrompt)).toBeGreaterThan(0);
+  expect(count(tight.systemPrompt)).toBeLessThan(12);
+  expect(tight.notice).toContain("some of my notes on the reference papers were left out");
+  // The prep list is not on the ladder, so every slug is still named and
+  // read_note still reaches the ones that went.
+  expect(tight.systemPrompt).toContain("- paper-12 — Paper 12");
 });
 
 // What survives when the window forces the observation section down to three

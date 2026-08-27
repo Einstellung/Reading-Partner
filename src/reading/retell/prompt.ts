@@ -72,6 +72,13 @@ export interface RetellContext {
   // Inlined whole once there is something in it, so the model does not have to
   // read it back before every write.
   talkOutline?: TalkOutline | null;
+  // The prep notes on the materials' reference papers, in full, and the prep
+  // lists that index them (prep/papers/classroom.ts). Both "" when no material
+  // has a prep run, and the notes alone are "" when the ladder took them.
+  prepNotes?: string;
+  prepStatus?: string;
+  // Whether read_paper / read_note are mounted this turn.
+  hasPrepTools?: boolean;
   // Compact figure catalog for the book (M9), or "" when none were detected.
   figureCatalog?: string;
   // Whether the book's reading tools (read_pages / search_topic /
@@ -398,6 +405,22 @@ export function buildRetellSystemPrompt(ctx: RetellContext): string {
 
   const talkOutline = ctx.talkOutline ?? null;
   lines.push("", formatSkeleton(ctx.skeleton, counts));
+  // Above the record, not below it, and that is the whole reason these two blocks
+  // sit here. The record and the talk outline are rewritten every turn; the prep
+  // notes are not — nothing preps papers during a retell — so putting forty
+  // thousand tokens of them under something volatile would rewrite the lot on
+  // every turn and the provider's cache would never hold any of it.
+  if (ctx.prepNotes) {
+    lines.push(
+      "",
+      ctx.prepNotes,
+      "",
+      "When a point comes from one of these papers rather than from the material",
+      "itself, cite it as [paper-slug p.N]. A bare [p.N] says the reader's own book,",
+      "and a rib resting on a paper is a different claim from one resting on the book.",
+    );
+  }
+  if (ctx.prepStatus) lines.push("", ctx.prepStatus);
   lines.push("", formatPlan(ctx.skeleton.chapters, ctx.plan, talkOutline));
   // The record above carries the spine and each block's first line, which is all
   // a retell that has written nothing has to say. The whole note goes in only
@@ -447,6 +470,13 @@ export function buildRetellSystemPrompt(ctx: RetellContext): string {
     tools.push(
       "read_pages(from, to) reads the book; search_topic(query) keyword-searches the",
       "topic's materials; read_annotations(material) lists the reader's marks in full.",
+    );
+  }
+  if (ctx.hasPrepTools) {
+    tools.push(
+      "read_note(slug) returns a reference paper's whole prep note; read_paper(slug,",
+      "from, to) reads pages of the paper itself. Only slugs from the prep list are",
+      "accepted; never make one up from a reference-list entry.",
     );
   }
   if (ctx.figureCatalog && ctx.figureCatalog.trim()) {

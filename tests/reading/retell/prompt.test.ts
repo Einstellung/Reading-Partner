@@ -305,6 +305,34 @@ test("a recorded decision reads as an audit line, not as where to go next", () =
   expect(text).not.toContain("Next up");
 });
 
+// The papers the material leans on. Both blocks or neither, and both above the
+// record: they do not change during a sitting and the record does, so anything
+// volatile above them would be paid for again on every turn.
+test("the papers' notes and the prep list ride above the record, with a citation rule", () => {
+  const text = buildRetellSystemPrompt(
+    ctx({
+      prepNotes: "Prep notes on this document's references, in full:\n\n--- wm: World Models ---\nA latent dream.",
+      prepStatus: "The prep list —\n- wm — World Models [note below]",
+      hasPrepTools: true,
+    }),
+  );
+  expect(text).toContain("--- wm: World Models ---");
+  expect(text).toContain("- wm — World Models [note below]");
+  expect(text).toContain("cite it as [paper-slug p.N]");
+  expect(text).toContain("read_note(slug)");
+  expect(text.indexOf("--- wm: World Models ---")).toBeLessThan(text.indexOf("no through-line yet"));
+  // The reader has no book open in a retell, so nothing here may promise a jump
+  // (RetellView provides a null CitationContext).
+  expect(text).not.toContain("clickable link");
+});
+
+test("with no prep run behind any material, neither block leaves a trace", () => {
+  const text = buildRetellSystemPrompt(ctx());
+  expect(text).not.toContain("paper-slug");
+  expect(text).not.toContain("prep list");
+  expect(text).not.toContain("read_note(slug)");
+});
+
 test("a chapter note is inlined as background, flagged as not being their answer", () => {
   const text = buildRetellSystemPrompt(
     ctx({ notes: [{ chapter: 1, title: "Openings", body: "The chapter argues X." }] }),

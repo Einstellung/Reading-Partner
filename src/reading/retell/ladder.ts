@@ -10,6 +10,7 @@ import type { Rung } from "../../budget";
 export type RetellReductionId =
   | "figure-catalog"
   | "observation-trim"
+  | "prep-notes-trim"
   | "retell-notes"
   | "tool-result-stubs"
   | "retell-marks"
@@ -19,10 +20,24 @@ export const RETELL_LADDER: readonly Rung<RetellReductionId>[] = [
   // tier 1: redundancy.
   { id: "figure-catalog" },
   { id: "observation-trim" },
-  // tier 2: gone from the prompt, still reachable by a tool. The inlined chapter
-  // note goes before the tool results: the model asked for those and is working
-  // from them, while the note was put in front of it unasked and
-  // read_chapter_note fetches it straight back.
+  // tier 2: gone from the prompt, still reachable by a tool.
+  //
+  // The reference papers' notes go first of the three, and they are trimmed
+  // rather than dropped — a quarter of the budget, the same list further down the
+  // same queue (prep/papers/classroom.ts). Ahead of the chapter note because more
+  // of it survives being given up: the prep list stays in the prompt naming every
+  // slug, and read_note hands any of them back whole, so the model still knows
+  // exactly what it no longer has. It carries a notice all the same — which of
+  // their papers the retell was run against is the reader's business, and the
+  // model only fetches back what it thinks to fetch.
+  {
+    id: "prep-notes-trim",
+    price: "bulk",
+    notice: "some of my notes on the reference papers were left out to make room",
+  },
+  // The inlined chapter note goes before the tool results: the model asked for
+  // those and is working from them, while the note was put in front of it unasked
+  // and read_chapter_note fetches it straight back.
   { id: "retell-notes", price: "bulk" },
   { id: "tool-result-stubs", price: "none" },
   // tier 3: evidence. The reader's own marks, in the one mode where they are the

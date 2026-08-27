@@ -588,7 +588,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // there is a prep state to read, which is what "by data" means here: the tools
   // follow the material, not a mode.
   if (prepState) {
-    tools = [...tools, ...buildClassroomTools(() => getPipeline()?.snapshot().state ?? prepState)];
+    tools = [...tools, ...buildClassroomTools(() => [getPipeline()?.snapshot().state ?? prepState])];
   }
 
   // Every prep note there is, capped, and the same list under a quarter of the
