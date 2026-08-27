@@ -19,6 +19,7 @@
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 + 开发环境 |
+| 不出整包，只验原生插件的 Swift / Rust 编得过 | iOS 构建与签名 |
 | 动 CI 的构建缓存、靠 build script 生成的东西 | iOS 构建与签名 |
 | SSH 远程到 Mac 上签名、构建 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
@@ -51,7 +52,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 195）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 196）。
 
 ## EmbedPDF 引擎
 
@@ -148,6 +149,7 @@
 - [180-launchctl-asuser-still-runs-as-root](./180-launchctl-asuser-still-runs-as-root.md) — `asuser` 只换 security session 不换进程身份，Xcode 读到的还是 root 的账号和 DerivedData；要再套一层 `sudo -u <user>`
 - [183-gen-apple-only-builds-through-the-tauri-cli](./183-gen-apple-only-builds-through-the-tauri-cli.md) — 裸 `xcodebuild` 编 `gen/apple` 连不上 tauri CLI 才提供的 JSON-RPC，验编译要用 `tauri ios build --ci --target aarch64-sim --no-sign`，且构建前先清上一次的 xcarchive 残留
 - [184-info-ios-plist-merges-at-build-time](./184-info-ios-plist-merges-at-build-time.md) — `Info.ios.plist` 的 key 在构建期才合并，`tauri ios init` 刚生成的 `gen/apple` 里一个都看不到，要验去看 `.app/Info.plist`
+- [195-swift-rs-ignores-the-packages-own-platform-floor](./195-swift-rs-ignores-the-packages-own-platform-floor.md) — 单独 `cargo check --target aarch64-apple-ios` 插件时，build script 里的 swift-rs 按它内置的老下限编 Swift（不读 `Package.swift` 的 `platforms`），报一堆没动过的文件的可用性错；加 `IPHONEOS_DEPLOYMENT_TARGET=26.0`。Swift 那半单独验用 `xcodebuild -scheme <包名> -sdk iphoneos CODE_SIGNING_ALLOWED=NO`，两条合起来无签名也能验两边编得过
 
 ## Android 构建与签名
 
