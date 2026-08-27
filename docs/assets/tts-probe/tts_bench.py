@@ -15,8 +15,10 @@ flushed it rather than through a buffering client library.
 """
 
 import argparse
+import array
 import base64
 import json
+import math
 import os
 import socket
 import ssl
@@ -133,6 +135,32 @@ MIMO_VOICE = "冰糖"                          # 冰糖 / 茉莉 / 苏打 / 白�
 MIMO_FORMAT = "pcm16"
 MIMO_SAMPLE_RATE = 24000  # fixed by the model, not selectable
 
+DS3_PATH = "/api/v1/services/audio/tts/SpeechSynthesizer"   # new endpoint, not the old one
+DS3_FLASH = "qwen-audio-3.0-tts-flash"
+DS3_PLUS = "qwen-audio-3.0-tts-plus"
+
+# A "leg" is one model+voice under test. This round compares legs, not vendors:
+# three of them are the same vendor and host with different models/voices.
+LEGS = {
+    "ali3-flash-bc": {"kind": "dashscope3", "key": "dashscope", "model": DS3_FLASH,
+                      "voice": "qwen-audio-3.0-tts-flash-longliuxulan", "n": 40,
+                      "desc": "qwen-audio-3.0-tts-flash / 龙柳旭澜 (基础音色, 标准播音音)"},
+    "ali3-plus-bc": {"kind": "dashscope3", "key": "dashscope", "model": DS3_PLUS,
+                     "voice": "qwen-audio-3.0-tts-plus-longliuxulan", "n": 40,
+                     "desc": "qwen-audio-3.0-tts-plus / 龙柳旭澜 (基础音色, 标准播音音)"},
+    "mimo": {"kind": "mimo", "key": "mimo", "model": MIMO_MODEL, "voice": MIMO_VOICE, "n": 40,
+             "desc": "mimo-v2.5-tts / 冰糖"},
+    "ali-old": {"kind": "dashscope", "key": "dashscope", "model": DS_MODEL, "voice": DS_VOICE,
+                "n": 15, "desc": "qwen3-tts-flash / Cherry (上一轮同款, 对齐今天的网络)"},
+    "ali3-flash-sys": {"kind": "dashscope3", "key": "dashscope", "model": DS3_FLASH,
+                       "voice": "longanhuan_v3.6", "n": 15,
+                       "desc": "qwen-audio-3.0-tts-flash / 龙安欢 (系统音色, RTF 对照)"},
+}
+DEFAULT_LEGS = ["ali3-flash-bc", "ali3-plus-bc", "mimo", "ali-old", "ali3-flash-sys"]
+
+KIND_HOSTS = {"siliconflow": SF_HOST, "dashscope": DS_HOST,
+              "dashscope3": DS_HOST, "mimo": MIMO_HOST}
+
 VENDOR_HOSTS = {"siliconflow": SF_HOST, "dashscope": DS_HOST, "mimo": MIMO_HOST}
 KEY_VARS = {"siliconflow": "SILICONFLOW_API_KEY",
             "dashscope": "DASHSCOPE_API_KEY",
@@ -142,10 +170,11 @@ KEY_VARS = {"siliconflow": "SILICONFLOW_API_KEY",
 FIXED_SAMPLE_RATES = {"dashscope": DS_SAMPLE_RATE, "mimo": MIMO_SAMPLE_RATE}
 
 
-def sample_rate_for(vendor, cfg):
-    if vendor == "siliconflow":
+def sample_rate_for(kind, cfg):
+    # dashscope3 is the first one that actually lets the caller pick.
+    if kind in ("siliconflow", "dashscope3"):
         return cfg["sample_rate"]
-    return FIXED_SAMPLE_RATES[vendor]
+    return FIXED_SAMPLE_RATES[kind]
 
 
 def load_env_file(path):
@@ -495,22 +524,85 @@ def dig_audio_b64(obj):
 
 
 # --------------------------------------------------------------------------
+# Leading / trailing silence, measured on the PCM this run actually received.
+# 10 ms windows, RMS against a dBFS floor. Three floors are recorded so the
+# numbers can be lined up against the previous round's (which used an unrecorded
+# threshold) instead of being compared across incompatible definitions.
+# --------------------------------------------------------------------------
+
+SILENCE_THRESHOLDS = (-40.0, -45.0, -50.0)
+SILENCE_WIN_MS = 10.0
+
+
+def _win_rms(a, i, n):
+    s = 0
+    for j in range(i, i + n):
+        v = a[j]
+        s += v * v
+    return math.sqrt(s / n)
+
+
+def silence_edges(pcm, sample_rate, thresh_dbfs):
+    """(leading_ms, trailing_ms). Whole clip counts as leading if never audible."""
+    a = array.array("h")
+    a.frombytes(pcm[:len(pcm) // 2 * 2])
+    if sys.byteorder == "big":
+        a.byteswap()
+    n = max(1, int(sample_rate * SILENCE_WIN_MS / 1000.0))
+    nwin = len(a) // n
+    if nwin == 0:
+        return 0.0, 0.0
+    thr = 32768.0 * (10.0 ** (thresh_dbfs / 20.0))
+    lead = None
+    for w in range(nwin):
+        if _win_rms(a, w * n, n) > thr:
+            lead = w * SILENCE_WIN_MS
+            break
+    if lead is None:
+        return len(a) / sample_rate * 1000.0, 0.0
+    tail = 0.0
+    for w in range(nwin - 1, -1, -1):
+        if _win_rms(a, w * n, n) > thr:
+            tail = (nwin - 1 - w) * SILENCE_WIN_MS
+            break
+    return lead, tail
+
+
+# --------------------------------------------------------------------------
 # Per-vendor request construction
 # --------------------------------------------------------------------------
 
 
-def build_request(vendor, text, cfg):
+def build_request(leg, text, cfg):
+    vendor = leg["kind"]
+    if vendor == "dashscope3":
+        body = {
+            "model": leg["model"],
+            "input": {
+                "text": text,
+                "voice": leg["voice"],
+                "format": "pcm",             # raw PCM16, no RIFF header (pitfall 187)
+                "sample_rate": cfg["sample_rate"],
+            },
+        }
+        headers = {
+            "Authorization": "Bearer " + cfg["keys"]["dashscope"],
+            "Content-Type": "application/json",
+            "X-DashScope-SSE": "enable",
+        }
+        return DS_HOST, DS3_PATH, headers, json.dumps(body, ensure_ascii=False).encode("utf-8")
+
     if vendor == "siliconflow":
         body = {
-            "model": cfg["sf_model"],
+            "model": leg["model"],
             "input": text,
-            "voice": cfg["sf_voice"],
+            "voice": leg["voice"],
             "response_format": "pcm",
             "sample_rate": cfg["sample_rate"],
             "stream": True,
         }
         headers = {
-            "Authorization": "Bearer " + cfg["sf_key"],
+            "Authorization": "Bearer " + cfg["keys"]["siliconflow"],
             "Content-Type": "application/json",
         }
         return SF_HOST, SF_PATH, headers, json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -519,27 +611,27 @@ def build_request(vendor, text, cfg):
         # The text to speak goes in an *assistant* message. A user message would be
         # read as a style instruction and never spoken.
         body = {
-            "model": cfg["mimo_model"],
+            "model": leg["model"],
             "messages": [{"role": "assistant", "content": text}],
-            "audio": {"format": cfg["mimo_format"], "voice": cfg["mimo_voice"]},
+            "audio": {"format": cfg["mimo_format"], "voice": leg["voice"]},
             "stream": True,
         }
         headers = {
-            "Authorization": "Bearer " + cfg["mimo_key"],
+            "Authorization": "Bearer " + cfg["keys"]["mimo"],
             "Content-Type": "application/json",
         }
         return MIMO_HOST, MIMO_PATH, headers, json.dumps(body, ensure_ascii=False).encode("utf-8")
 
     body = {
-        "model": cfg["ds_model"],
+        "model": leg["model"],
         "input": {
             "text": text,
-            "voice": cfg["ds_voice"],
+            "voice": leg["voice"],
             "language_type": cfg["ds_language_type"],
         },
     }
     headers = {
-        "Authorization": "Bearer " + cfg["ds_key"],
+        "Authorization": "Bearer " + cfg["keys"]["dashscope"],
         "Content-Type": "application/json",
         "X-DashScope-SSE": "enable",
     }
@@ -591,13 +683,17 @@ def classify_error(status, body_bytes):
 # --------------------------------------------------------------------------
 
 
-def measure(vendor, idx, text, cfg, conn=None):
-    host, path, headers, body = build_request(vendor, text, cfg)
+def measure(leg_name, leg, idx, text, cfg, conn=None):
+    vendor = leg["kind"]
+    host, path, headers, body = build_request(leg, text, cfg)
     sample_rate = sample_rate_for(vendor, cfg)
     bytes_per_ms = sample_rate * 2 / 1000.0
 
     rec = {
+        "leg": leg_name,
         "vendor": vendor,
+        "model": leg["model"],
+        "voice": leg["voice"],
         "index": idx,
         "text": text,
         "text_chars": len(text),
@@ -640,6 +736,8 @@ def measure(vendor, idx, text, cfg, conn=None):
         total_pcm = 0
         frames = []          # (audio_ms, offset_from_send_ms)
         audio_path = None
+        pcm_parts = []       # kept only to measure leading/trailing silence
+        billed_chars = None
 
         if vendor == "siliconflow":
             for data, t in iter_body(reader, resp_headers):
@@ -649,6 +747,7 @@ def measure(vendor, idx, text, cfg, conn=None):
                     first_pcm_bytes = len(data)
                     t_first_bytes = t_first_pcm = t
                 total_pcm += len(data)
+                pcm_parts.append(data)
                 frames.append((len(data) / bytes_per_ms, ms(t_sent, t)))
             audio_path = "raw-body"
         else:
@@ -673,6 +772,9 @@ def measure(vendor, idx, text, cfg, conn=None):
                                     "pcm_before_error": total_pcm})
                         stop = True
                         break
+                    usage = obj.get("usage") or {}
+                    if isinstance(usage, dict) and usage.get("characters") is not None:
+                        billed_chars = usage["characters"]
                     b64, p = dig_audio_b64(obj)
                     if not b64:
                         continue          # final frame carries an empty data + a url
@@ -688,6 +790,7 @@ def measure(vendor, idx, text, cfg, conn=None):
                         t_first_pcm = t_dec
                         rec["first_frame_b64_decode_ms"] = ms(ts, t_dec)
                     total_pcm += len(pcm)
+                    pcm_parts.append(pcm)
                     frames.append((len(pcm) / bytes_per_ms, ms(t_sent, t_dec)))
                 if stop:
                     break
@@ -708,6 +811,24 @@ def measure(vendor, idx, text, cfg, conn=None):
         first_ms = first_pcm_bytes / bytes_per_ms
         synth_ms = ms(t_sent, t_done)
 
+        pcm_all = b"".join(pcm_parts)
+        # qwen3-tts-flash returns WAV: the 44-byte RIFF header decodes as very loud
+        # samples and would zero out the leading-silence figure (pitfall 187). Strip
+        # it for the silence measurement only; the byte counts and timings above stay
+        # exactly as the previous round measured them.
+        riff_stripped = pcm_all[:4] == b"RIFF"
+        if riff_stripped:
+            pcm_all = pcm_all[44:]
+        rec["riff_header_stripped_for_silence"] = riff_stripped
+        sil = {}
+        for thr in SILENCE_THRESHOLDS:
+            lead, tail = silence_edges(pcm_all, sample_rate, thr)
+            tag = str(int(abs(thr)))
+            sil["lead_silence_ms_t" + tag] = lead
+            sil["tail_silence_ms_t" + tag] = tail
+        rec.update(sil)
+        rec["billed_characters"] = billed_chars
+
         rec.update({
             "outcome": "ok",
             "audio_path": audio_path,
@@ -724,6 +845,9 @@ def measure(vendor, idx, text, cfg, conn=None):
             "first_frame_ratio": first_ms / audio_ms,
             "rtf": synth_ms / audio_ms,
             "mean_frame_audio_ms": statistics.fmean(f[0] for f in frames),
+            # what the user actually waits for: first playable frame plus the
+            # silence sitting at the head of that audio.
+            "audible_e2e_ms": ms(t_start, t_first_pcm) + sil["lead_silence_ms_t45"],
         })
         return rec, ((sock, reader) if cfg["reuse"] and conn is None else conn)
 
@@ -858,9 +982,11 @@ def fake_script(vendor, text, sample_rate, idx, scenario="stream"):
     return script
 
 
-def measure_fake(vendor, idx, text, cfg):
+def measure_fake(leg_name, leg, idx, text, cfg):
+    vendor = leg["kind"]
     sample_rate = sample_rate_for(vendor, cfg)
-    sock = FakeSocket(fake_script(vendor, text, sample_rate, idx, cfg["dry_scenario"]))
+    shape = "dashscope" if vendor == "dashscope3" else vendor
+    sock = FakeSocket(fake_script(shape, text, sample_rate, idx, cfg["dry_scenario"]))
 
     real_open = globals()["open_connection"]
 
@@ -878,7 +1004,7 @@ def measure_fake(vendor, idx, text, cfg):
 
     globals()["open_connection"] = fake_open
     try:
-        rec, _ = measure(vendor, idx, text, cfg, conn=None)
+        rec, _ = measure(leg_name, leg, idx, text, cfg, conn=None)
     finally:
         globals()["open_connection"] = real_open
     rec["simulated"] = True
@@ -888,6 +1014,10 @@ def measure_fake(vendor, idx, text, cfg):
 # --------------------------------------------------------------------------
 # Stats & reporting
 # --------------------------------------------------------------------------
+
+EXTRA_STAT_KEYS = ["lead_silence_ms_t40", "lead_silence_ms_t50",
+                   "tail_silence_ms_t40", "tail_silence_ms_t50",
+                   "billed_characters", "text_chars"]
 
 SEGMENTS = [
     ("dns_ms", "DNS 解析"),
@@ -900,6 +1030,9 @@ SEGMENTS = [
 ]
 
 DERIVED = [
+    ("lead_silence_ms_t45", "句首静音 (ms, -45dBFS)"),
+    ("tail_silence_ms_t45", "句尾静音 (ms, -45dBFS)"),
+    ("audible_e2e_ms", "端到端首字出声 (ms)"),
     ("first_frame_audio_ms", "首帧含音频 (ms)"),
     ("mean_frame_audio_ms", "平均每帧音频 (ms)"),
     ("audio_total_ms", "整句音频时长 (ms)"),
@@ -923,7 +1056,7 @@ def pctl(vals, q):
 def summarize(recs):
     ok = [r for r in recs if r.get("outcome") == "ok"]
     stats = {}
-    for key, _ in SEGMENTS + DERIVED:
+    for key in [k for k, _ in SEGMENTS + DERIVED] + EXTRA_STAT_KEYS:
         vals = [r[key] for r in ok if isinstance(r.get(key), (int, float))]
         if vals:
             stats[key] = {"p50": pctl(vals, .5), "p90": pctl(vals, .9),
@@ -936,6 +1069,10 @@ def summarize(recs):
         "n_error": sum(1 for r in recs if r.get("outcome") == "error"),
         "rejected_indices": [r["index"] for r in recs if r.get("outcome") == "content_rejected"],
         "rejected_texts": [r["text"] for r in recs if r.get("outcome") == "content_rejected"],
+        "billed_characters_total": sum(r["billed_characters"] for r in ok
+                                       if isinstance(r.get("billed_characters"), int)),
+        "billed_characters_n": sum(1 for r in ok if isinstance(r.get("billed_characters"), int)),
+        "text_chars_total": sum(r["text_chars"] for r in recs),
         "stats": stats,
     }
 
@@ -949,7 +1086,7 @@ def fmt(v, key):
 
 
 def print_report(results, meta):
-    vendors = [v for v in VENDORS if v in results]
+    vendors = list(results)
     W = 26
     COLW = 34
     line = "=" * (W + 2 + (COLW + 2) * len(vendors))
@@ -997,7 +1134,9 @@ def print_report(results, meta):
         paths = {r.get("audio_path") for r in results[v]["records"] if r.get("audio_path")}
         if paths:
             print("    音频字段路径: %s" % ", ".join(sorted(paths)))
-        print("    本轮送出字符数: %d" % sum(r["text_chars"] for r in results[v]["records"]))
+        print("    本轮送出字符数: %d  计费字符 (usage.characters): %s"
+              % (s["text_chars_total"],
+                 s["billed_characters_total"] if s["billed_characters_n"] else "n/a"))
 
     print(line)
     print("判据:")
@@ -1032,8 +1171,8 @@ def print_report(results, meta):
 
 def main():
     ap = argparse.ArgumentParser(description="TTS first-packet latency benchmark (throwaway).")
-    ap.add_argument("--vendor", choices=["siliconflow", "dashscope", "mimo", "both", "all"],
-                    default="all", help='"both" is the original two vendors; "all" adds mimo')
+    ap.add_argument("--legs", default=",".join(DEFAULT_LEGS),
+                    help="comma-separated leg names: " + ", ".join(LEGS))
     ap.add_argument("--n", type=int, default=40, help="sentences from the corpus (max %d)" % len(CORPUS))
     ap.add_argument("--label", default="wifi", help="network-environment tag for the filenames")
     ap.add_argument("--reuse-conn", action="store_true",
@@ -1043,14 +1182,8 @@ def main():
     ap.add_argument("--dry-scenario", choices=["stream", "buffered"], default="stream",
                     help="dry-run shape: real per-frame streaming, or whole-sentence buffering")
     ap.add_argument("--sample-rate", type=int, default=24000,
-                    choices=[8000, 16000, 24000, 32000, 44100],
-                    help="SiliconFlow pcm sample rate (DashScope is fixed at 24000)")
-    ap.add_argument("--sf-voice", default=SF_VOICE)
-    ap.add_argument("--sf-model", default=SF_MODEL)
-    ap.add_argument("--ds-voice", default=DS_VOICE)
-    ap.add_argument("--ds-model", default=DS_MODEL)
-    ap.add_argument("--mimo-voice", default=MIMO_VOICE, help="冰糖 / 茉莉 / 苏打 / 白桦")
-    ap.add_argument("--mimo-model", default=MIMO_MODEL)
+                    choices=[8000, 16000, 22050, 24000, 32000, 44100, 48000],
+                    help="pcm sample rate where the model allows one (old DashScope and mimo are fixed at 24000)")
     ap.add_argument("--mimo-format", default=MIMO_FORMAT)
     ap.add_argument("--ds-language-type", default="Chinese",
                     choices=["Auto", "Chinese", "English", "German", "Italian", "Portuguese",
@@ -1069,12 +1202,14 @@ def main():
     if args.dry_run:
         CLOCK = VirtualClock()
 
-    if args.vendor == "all":
-        vendors = list(VENDORS)
-    elif args.vendor == "both":
-        vendors = ["siliconflow", "dashscope"]
-    else:
-        vendors = [args.vendor]
+    leg_names = [s.strip() for s in args.legs.split(",") if s.strip()]
+    for name in leg_names:
+        if name not in LEGS:
+            print("unknown leg: %s" % name, file=sys.stderr)
+            return 2
+    legs = {name: dict(LEGS[name]) for name in leg_names}
+    for leg in legs.values():
+        leg["n"] = min(leg["n"], args.n, len(CORPUS))
     sentences = CORPUS[:min(args.n, len(CORPUS))]
 
     resolve = {}
@@ -1082,7 +1217,7 @@ def main():
         h, _, ip = item.partition(":")
         resolve[h.strip()] = ip.strip()
 
-    probe_hosts = [VENDOR_HOSTS[v] for v in vendors]
+    probe_hosts = sorted({KIND_HOSTS[legs[n]["kind"]] for n in leg_names})
     network = detect_network(probe_hosts)
     if not args.dry_run:
         print(network["note"], file=sys.stderr)
@@ -1092,7 +1227,7 @@ def main():
 
     dotenv = load_env_file(args.env_file)
     keys, key_sources = {}, {}
-    for v in vendors:
+    for v in sorted({legs[n]["key"] for n in leg_names}):
         var = KEY_VARS[v]
         keys[v], key_sources[v] = resolve_key(var, dotenv)
         if not args.dry_run:
@@ -1105,11 +1240,11 @@ def main():
 
     cfg = {
         "sample_rate": args.sample_rate,
-        "sf_key": keys.get("siliconflow", ""), "sf_voice": args.sf_voice, "sf_model": args.sf_model,
-        "ds_key": keys.get("dashscope", ""), "ds_voice": args.ds_voice, "ds_model": args.ds_model,
+        "keys": {"siliconflow": keys.get("siliconflow", ""),
+                 "dashscope": keys.get("dashscope", ""),
+                 "mimo": keys.get("mimo", "")},
         "ds_language_type": args.ds_language_type,
-        "mimo_key": keys.get("mimo", ""), "mimo_voice": args.mimo_voice,
-        "mimo_model": args.mimo_model, "mimo_format": args.mimo_format,
+        "mimo_format": args.mimo_format,
         "timeout": args.timeout, "mark": args.mark, "resolve": resolve,
         "reuse": args.reuse_conn, "dry_scenario": args.dry_scenario,
     }
@@ -1124,8 +1259,10 @@ def main():
         "network": network, "key_sources": key_sources,
         "env_file": args.env_file, "sample_rate_siliconflow": args.sample_rate,
         "sample_rate_dashscope": DS_SAMPLE_RATE, "sample_rate_mimo": MIMO_SAMPLE_RATE,
-        "voices": {"siliconflow": args.sf_voice, "dashscope": args.ds_voice, "mimo": args.mimo_voice},
-        "models": {"siliconflow": args.sf_model, "dashscope": args.ds_model, "mimo": args.mimo_model},
+        "legs": {n: {k: v for k, v in legs[n].items()} for n in leg_names},
+        "sample_rate_requested": args.sample_rate,
+        "silence_thresholds_dbfs": list(SILENCE_THRESHOLDS),
+        "silence_window_ms": SILENCE_WIN_MS,
         "n": len(sentences),
         "total_chars": sum(len(s) for s in sentences),
     }
@@ -1133,23 +1270,26 @@ def main():
     # Sentence-outer, vendor-inner: the vendors take turns rather than each taking a
     # solid block of the run, so a drifting network is a shared term instead of a bias
     # towards whoever went first.
-    records = {v: [] for v in vendors}
-    conns = {v: None for v in vendors}
+    records = {v: [] for v in leg_names}
+    conns = {v: None for v in leg_names}
     for i, text in enumerate(sentences):
-        for v in vendors:
+        for v in leg_names:
+            if i >= legs[v]["n"]:
+                continue
             if args.dry_run:
-                rec, _ = measure_fake(v, i, text, cfg)
+                rec, _ = measure_fake(v, legs[v], i, text, cfg)
             else:
-                rec, conns[v] = measure(v, i, text, cfg,
+                rec, conns[v] = measure(v, legs[v], i, text, cfg,
                                         conn=conns[v] if args.reuse_conn else None)
             records[v].append(rec)
             if not args.dry_run:
                 mark = {"ok": "ok", "content_rejected": "REJECTED"}.get(rec["outcome"], rec["outcome"])
-                print("  [%-11s %2d/%d] %s  first_pcm=%s ms  ff_audio=%s ms"
-                      % (v, i + 1, len(sentences), mark,
-                         fmt(rec.get("first_pcm_ms"), "x"), fmt(rec.get("first_frame_audio_ms"), "x")),
+                print("  [%-15s %2d/%d] %s  first_pcm=%s ms  ff_audio=%s ms  lead_sil=%s ms"
+                      % (v, i + 1, legs[v]["n"], mark,
+                         fmt(rec.get("first_pcm_ms"), "x"), fmt(rec.get("first_frame_audio_ms"), "x"),
+                         fmt(rec.get("lead_silence_ms_t45"), "x")),
                       file=sys.stderr)
-    for v in vendors:
+    for v in leg_names:
         if conns[v]:
             try:
                 conns[v][0].close()
@@ -1157,13 +1297,15 @@ def main():
                 pass
 
     results = {}
-    for v in vendors:
+    for v in leg_names:
         recs = records[v]
         results[v] = {"records": recs, "summary": summarize(recs)}
 
         path = os.path.join(args.outdir, "raw-%s-%s-%d.jsonl" % (v, args.label, ts))
         with open(path, "w", encoding="utf-8") as f:
-            f.write(json.dumps({"_meta": meta, "_vendor": v}, ensure_ascii=False) + "\n")
+            f.write(json.dumps({"_meta": meta, "_vendor": legs[v]["kind"], "_leg": v,
+                            "_model": legs[v]["model"], "_voice": legs[v]["voice"]},
+                           ensure_ascii=False) + "\n")
             for r in recs:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
             f.write(json.dumps({"_summary": results[v]["summary"]}, ensure_ascii=False) + "\n")

@@ -1,10 +1,23 @@
 # TTS 供应商横评
 
-> 本文留一轮 TTS 供应商横评的结果：候选清单、价格口径、能引用的中文质量证据，以及接下来值得花时间测什么。上游是 [33](./33-语音简报.md)。三份维度调研和排名稿留档在 [assets/tts-vendor-survey/](./assets/tts-vendor-survey/)。共识日期 2026-08-27。
+> 本文留一轮 TTS 供应商横评的结果：候选清单、价格口径、能引用的中文质量证据。选型 2026-08-27 结束，定小米 `mimo-v2.5-tts`（[33](./33-语音简报.md)），本文随之从待测清单变成结案记录：谁测了、谁没测、各自为什么。上游是 [33](./33-语音简报.md)。三份维度调研和排名稿留档在 [assets/tts-vendor-survey/](./assets/tts-vendor-survey/)。共识日期 2026-08-27。
 >
 > 这份横评的最终推荐（留在硅基流动）作废。派研究的时候音质那一轮还没出结果，它的输入里硅基流动仍然是「三条硬标准全过的现状」，它不知道实测出来是 16 kHz 上采样冒充 24 kHz、31 句里 11 句随机内容损坏。所以本文不是一份仍然有效的选型建议，选型结论以 [33](./33-语音简报.md) 为准；这里留下的是它仍然成立的那三样。
 
 ---
+
+## 结案状态
+
+| 候选 | 状态 |
+|---|---|
+| 小米 `mimo-v2.5-tts` | 定了，见 [33](./33-语音简报.md) |
+| 阿里 `qwen3-tts-flash` | 三轮实测，备选 |
+| 阿里 `qwen-audio-3.0-tts-plus` / `-flash` | 实测出局 |
+| 硅基流动 `FunAudioLLM/CosyVoice2-0.5B` | 实测出局：16 kHz 上采样冒充 24 kHz、31 句里 11 句随机内容损坏 |
+| Azure Neural TTS | 调研出局 |
+| 火山、Gitee AI CosyVoice3、腾讯、讯飞、Fish Audio | 没测，也不打算测 |
+
+下面的候选表和价格口径按调研当时的状态留着，没有回填这张表的结论。
 
 ## 价格口径
 
@@ -34,7 +47,9 @@
 
 ## 出局名单
 
-- 小米 mimo-v2.5-tts — 首包 1100–1900 ms。基准 .275 佐证，念错 350 条多于念对 273 条。
+这份名单是横评当时的。小米那条后来被实测推翻：1100–1900 ms 是域名被分流到境外的账，加进直连规则重跑是 804 ms 首字；基准 .275 对应的读音错在实测里是确定性的，一张替换表消得掉（[33](./33-语音简报.md)）。其余各条仍成立。
+
+- 小米 mimo-v2.5-tts — 首包 1100–1900 ms。基准 .275 佐证，念错 350 条多于念对 273 条。（已推翻，见上）
 - MiniMax speech-2.8-hd / turbo — 两头都输：基准 .548 对火山 .879，而「1 汉字 = 2 字符」的口径把 hd 抬到 ¥0.139/min（¥254/年）。turbo ¥0.0796/min 仍贵于火山而质量只会更低。
 - AWS Polly (Zhiyu) — 基准倒数第一 .244，correct 242 / wrong 323，念错比念对多。中国区还要企业 ICP 账户。
 - Google Chirp 3 HD / OpenAI TTS — 境内不可达。Google 基准 .604、255 个错读，不值得为它翻墙。
@@ -84,39 +99,38 @@ Azure 的 992 个目标里 correct 750 / wrong 0 / unknown 242，是七家里唯
 
 这件事先做，做完再谈换不换。
 
-## 值得实测的三个候选
+## 阿里新一代：实测出局
 
-按「花多少时间才能拿到答案」排。
+2026-08-27 实测五条腿（新 flash / 新 plus 各配基础播音音色 `-longliuxulan`、小米、`qwen3-tts-flash`、新 flash 配系统音色），同时段交替发送、每句新建连接、全程直连。逐项数据在 [assets/tts-probe/](./assets/tts-probe/) 的 `latency-report-2026-08-27.md`，结论在 [33](./33-语音简报.md) 的「实测」。
 
-**阿里 qwen-audio-3.0-tts 系列。** 最省事的一步：同一个 DashScope 账号、同一把 key、同一套协议族，理论上改个 model id 就能测。价格公开写在计费页上（[help.aliyun.com/zh/model-studio/billing-for-model-studio](https://help.aliyun.com/zh/model-studio/billing-for-model-studio)，同页头部明文写 1 汉字 = 2 字符）：
+三条理由。配上能念简报的基础播音音色，真实首字 p50 是 flash 946 ms、plus 1209 ms，慢于小米的 804 和 `qwen3-tts-flash` 的 471；按实测计费量折算每分钟 ¥0.0486 / ¥0.0671，贵于旧模型的 ¥0.0462；播音音色的句首静音标准差 89.6 ms，用户等第一个字的时间在 570–1257 ms 之间跳（坑 188）。系统音色首字 584 ms 确实快，但那 12 个音色全是陪伴、儿童、角色向，念不了简报。音质轮没跑，延迟结果出来就叫停了。
 
-| 模型 | 单价 | ¥/min（199 汉字） |
-|---|---|---|
-| cosyvoice-v3-plus | ¥2/万字符 | 0.0796 |
-| qwen-audio-3.0-tts-plus（阿里官方首推） | ¥1.4/万字符 | 0.0557 |
-| qwen-audio-3.0-tts-flash | ¥1/万字符 | 0.0398 |
-| qwen3-tts-flash（已实测） | ¥0.8/万字符 | 0.0318 |
+标称单价（[help.aliyun.com/zh/model-studio/billing-for-model-studio](https://help.aliyun.com/zh/model-studio/billing-for-model-studio)，同页头部明文写 1 汉字 = 2 字符）：cosyvoice-v3-plus ¥2、qwen-audio-3.0-tts-plus ¥1.4、qwen-audio-3.0-tts-flash ¥1、qwen3-tts-flash ¥0.8，每万字符。新一代比旧模型贵 25% 和 75%，实测每分钟成本又比标称折算高两到四成。
 
-所以阿里的新一代不是更便宜而是更贵：flash 比已实测的 qwen3-tts-flash 贵 25%，plus 贵 75%。它值得测是因为工程成本接近零，不是因为价格。一个待验证点：已实测的 qwen3-tts-flash 走的是 HTTP + `X-DashScope-SSE: enable`，而 qwen-audio-3.0-tts 系列在文档里是 run-task / continue-task 的 WebSocket 协议族，HTTP 流式那条路通不通没有验证过。另外 `qwen3-tts-vc` / `qwen3-tts-vd` 没有裸模型 ID，只有带日期的快照（如 `qwen3-tts-vc-2026-01-22`），调不带日期的名字会失败；`qwen3-tts-*-realtime` 家族走的是另一套 `session.finish` / `session.finished` 协议、端点也不同，接两种模型要写两套客户端。
+协议那条待验证项有了答案，全文在同目录的 `qwen-audio-3-protocol-2026-08-27.md`：HTTP + `X-DashScope-SSE: enable` 通，不需要 WebSocket；端点是 `/api/v1/services/audio/tts/SpeechSynthesizer`，和 `qwen3-tts-flash` 不是同一条路径，别沿用旧的；`input.format` 支持裸 `pcm`（绕开坑 187），采样率可选；参数错误返回 HTTP 200，错误藏在 SSE 流里的一个 data 事件，只看 status code 会把它当成空音频。
 
-**火山 seed-tts-2.0-standard，走 HTTP Chunked 单向流式。** `POST /api/v3/tts/unidirectional`，鉴权只有 X-Api-Key / X-Api-Resource-Id / X-Api-Request-Id 三个明文头，没有 HMAC，没有 access token 交换，reqwest 流式读 chunk + serde_json + base64 就完了（[volcengine.com/docs/6561/1359370](https://www.volcengine.com/docs/6561/1359370)）。约一小时能接。控制台点【试用】领 2 万字符、半年有效。
+同族的 `qwen3-tts-vc` / `qwen3-tts-vd` 没有裸模型 ID，只有带日期的快照（如 `qwen3-tts-vc-2026-01-22`）；`qwen3-tts-*-realtime` 家族走另一套 `session.finish` / `session.finished` 协议、端点也不同，接两种模型要写两套客户端。
 
-它回答两个研究解决不了的问题。一是厂商自己写的「流式调用首包耗时在 600 ms 左右」是不是真的——那句话描述的是上一代 bigtts，而且同一张表里的采样率信息已经和 2.0 接口文档打架（表说单向流只有 24K/16K/8K，接口文档给到 48000），说明它至少部分过期。二是首帧携带多少音频：两条流式路的 chunk 粒度厂商一个字都没写。
+## Azure：调研出局
 
-判据不放宽：p90 真落在 600 ms 就照标准判死，不要因为 .879 而抬门槛。如果 HTTP 路首帧粒度太粗但延迟过关，再上 WebSocket 单向流式复测。
+2026-08-27 调研，没架测试台。
 
-**Gitee AI 模力方舟的 CosyVoice3（Fun-CosyVoice3-0.5B-2512）。** 全场唯一「换过去几乎零工程成本」的质量升级：同族、同参数量、境内托管、OpenAI 兼容 `/v1/audio/speech`，改 base URL 和 model id 即可，seed-tts-eval 中文 CER 0.71–0.81 对现役 CosyVoice2 的 1.45。缺的只有价格那一个数，官网未公布。
+中国区（世纪互联）Speech 服务本身有，F0 免费额度同样是每月 50 万字符，但个人开不了户：1 元试用从 2020-11-30 起停止接受新申请，官方购买路径全是企业合同，实名要营业执照 + 统一社会信用代码 + 法人身份证明 + 企业银行账户，拿身份证走不通。中国区另外不支持自定义语音、个人语音、avatar 和 Voice Live。
 
-验证只要十分钟，不用一小时：注册（要大陆手机号），打开模型页把价格和免费额度抄出来，发一句带 `response_format=pcm`。只出 mp3 或者攒整句才 flush 就当场判死，别再往下投时间。
+全球区个人账号加国际信用卡可以开 F0，每订阅每区域只能有一个 F0 Speech 资源。从中国大陆直连实测（每项 5 次 TLS + HTTP，全部返回 401，握手和路由都通）：japaneast ping 均值 90.1 ms、TCP connect 0.089–0.097 s、TTFB 0.27–0.90 s；eastasia ping 113.5 ms、TTFB 0.33–1.56 s。japaneast 稳定压过 eastasia，两边 ICMP 各丢 10% 但 TCP 十次全成。网络不是它的死因。
 
-## 不值得花时间的
+死在配额。F0 硬限 20 次请求 / 60 秒，不可调，也没有 batch synthesis：按句合成 40 句一定撞线，只能一次请求合成整段（单请求限音频 10 分钟、SSML 内标签总数 50、WebSocket 单轮 SSML 64 KB），而整段合成要拿句级边界只能靠 SDK 的 bookmark 或 WordBoundary 事件，REST 拿不到。TTS 那 50 万字符约合 27 小时语音够用，STT 每月只有 5 小时且 F0 并发识别数为 1——全双工常开麦先撞死的是 STT 这条。
 
-- Azure — 两件事挡在前面。一是世纪互联中国区个人开发者能不能开户（azure.cn 的 purchase-options / subscription-agreement 页面 2026-08-27 全部 404，条款只给 PDF，历史惯例要企业执照）。二是 F0 免费层写死 20 次请求 / 60 秒且不可调：按句接力 5 分钟简报约 100 句，稳态每分钟 20 次请求，正好顶在天花板上——卡死的是请求频率不是字符数，免费额度按字符只用掉 12%。问蓝云（contactus@oe.21vianet.com / 400-089-0365）是十分钟的事，架测试台是一小时的事，顺序别反。
-- 腾讯 — 零质量证据，一年只省 ¥11，而且流式接口的采样率在官方同一页里自相矛盾（接口要求表写死 16000/8000，SampleRate 参数表写 24000 部分音色支持），要用得先确认目标音色支不支持 24k。
-- 讯飞 — 超拟人没有公开价。那份 ¥1.2–2.0/万字符 是 `xfyun.cn/services/smart-tts` 里「在线语音合成」（老一代）的价格，不是超拟人的；超拟人的产品页现在返回未能找到页面。单价只能登录控制台看。
-- 阿里 qwen3-tts-flash — 已实测，首帧 320.9 ms、RTF 0.243、端到端 360.2 / 394.8，三项都比现状的实测数字差。同族的新一代见上一节。
-- 所有境外厂商 — RTT 结构性出局。
+## 没测，也不打算测
+
+火山 seed-tts-2.0-standard、Gitee AI 托管的 CosyVoice3（Fun-CosyVoice3-0.5B-2512）、腾讯大模型音色档、讯飞超拟人、Fish Audio。原因是选型已经结束，不是它们被否了。将来要换供应商，这份清单和上面的候选表照样管用，各自还缺的是：
+
+- 火山 — 首包实测。`POST /api/v3/tts/unidirectional`，鉴权只有 X-Api-Key / X-Api-Resource-Id / X-Api-Request-Id 三个明文头，没有 HMAC，约一小时能接，控制台点【试用】领 2 万字符。厂商写的「首包 600 ms 左右」描述的是上一代 bigtts，两条流式路的 chunk 粒度一个字都没写。
+- Gitee AI CosyVoice3 — 价格（官网未公布）和「是不是攒整句才 flush」。同族、同参数量、境内托管、OpenAI 兼容 `/v1/audio/speech`，改 base URL 和 model id 即可。
+- 腾讯 — 零质量证据，一年只省 ¥11，流式接口的采样率在官方同一页里自相矛盾（接口要求表写死 16000/8000，SampleRate 参数表写 24000 部分音色支持），要用得先确认目标音色支不支持 24k。
+- 讯飞 — 超拟人没有公开价，只能登录控制台看。那份 ¥1.2–2.0/万字符 是 `xfyun.cn/services/smart-tts` 里「在线语音合成」（老一代）的价格。
+- Fish Audio 及其余境外托管 — 这台机器上 TLS 握手 0.5 秒起步，一次握手就吃光 500 ms 预算，而那还是下界（见「一条限定」）。
 
 ## 一条限定
 
-现有的延迟数字都是在开发机上测的，而开发机常态走隧道。对境内厂商这只会更快不会更慢，现状的余量只是被低估了；但这台机器上测到的任何境外厂商数字都只是下界，不能当结论。真要判境外，只能在 iPad 真机的真实网络上测。
+延迟数字都是在开发机上测的，第一、二轮走隧道，第四轮把两个域名加进 DIRECT 规则之后是直连。走隧道的那两轮对境内厂商只会更慢不会更快，余量被低估了；但这台机器上测到的任何境外厂商数字都只是下界，不能当结论。真要判境外，只能在 iPad 真机的真实网络上测。
