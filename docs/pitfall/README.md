@@ -19,6 +19,7 @@
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 + 开发环境 |
 | 动 CI 的构建缓存、靠 build script 生成的东西 | iOS 构建与签名 |
+| SSH 远程到 Mac 上签名、构建 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
@@ -36,6 +37,7 @@
 | 搬目录、切子域、动分层表 | 开发环境 |
 | 拿 grep 判断"这东西没人用"、按结论删代码 | 开发环境 |
 | 在 worktree 里起 dev server 做实验 | 开发环境 |
+| vite dev server 端口占用起不来、写 Tauri 插件命令的参数 | 开发环境 |
 | 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
 | 查首屏耗时、字体加载开销 | WebKit / webview |
 | 渲染 AI 回复的 markdown、加 remark/rehype 插件 | markdown 渲染 |
@@ -44,7 +46,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 179）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 186）。
 
 ## EmbedPDF 引擎
 
@@ -136,6 +138,10 @@
 - [107-testflight-upload-is-not-distribution](./107-testflight-upload-is-not-distribution.md) — altool 上传成功只是 ingest，build 不 link 到 beta 组就谁也装不到（内测组没开自动分发要逐个加，外测组还要 What's New 和 beta 审核）；上传后必须跑分发脚本。外测加组 404 说 build 不存在：端点要用 builds 那一侧、审核提交要排在加组前面、先查 `buildAudienceType` 和 `externalBuildState`。`fields[builds]` 漏列 relationship 会把 `include` 的数据一起吞掉。上传返回时 build 资源还没建出来，要等它出现和等它 VALID 两段轮询，且不许猜「最新那个」。distribute job 红不代表包没到手：外测 beta 审核提交有当天频次上限，撞上时内测那半已经成功，脚本打的 Test Information 提示是无关的通用提示
 - [163-idevicesyslog-drops-lines-when-it-is-not-filtered](./163-idevicesyslog-drops-lines-when-it-is-not-filtered.md) — 不加过滤的 `idevicesyslog` 四分钟落盘 127MB，里面自己 app 的 NSLog 只有 13 行：设备日志本身 0.5MB/s，中继跟不上就丢，丢哪段不挑。用 `-m/--match` 在中继侧过滤，判据是行数不是文件大小
 - [177-personal-team-signing-changes-must-not-reach-main](./177-personal-team-signing-changes-must-not-reach-main.md) — 个人开发者账号只有 Developer 角色时，真机调试签名要换成免费 Personal Team，配套的 dev-only bundle id、部署目标临时提到 26.0、`NSLocalNetworkUsageDescription`（连 Mac 上的 Vite dev server）、探针用的 `UIBackgroundModes: audio` 全部只留在本地分支，commit message 写死不许进 main
+- [179-ssh-session-codesign-has-no-keychain](./179-ssh-session-codesign-has-no-keychain.md) — SSH 会话没有图形登录会话的钥匙串，codesign 一律 `errSecInternalComponent`；命令要经 `launchctl asuser` 放回图形 session
+- [180-launchctl-asuser-still-runs-as-root](./180-launchctl-asuser-still-runs-as-root.md) — `asuser` 只换 security session 不换进程身份，Xcode 读到的还是 root 的账号和 DerivedData；要再套一层 `sudo -u <user>`
+- [183-gen-apple-only-builds-through-the-tauri-cli](./183-gen-apple-only-builds-through-the-tauri-cli.md) — 裸 `xcodebuild` 编 `gen/apple` 连不上 tauri CLI 才提供的 JSON-RPC，验编译要用 `tauri ios build --ci --target aarch64-sim --no-sign`，且构建前先清上一次的 xcarchive 残留
+- [184-info-ios-plist-merges-at-build-time](./184-info-ios-plist-merges-at-build-time.md) — `Info.ios.plist` 的 key 在构建期才合并，`tauri ios init` 刚生成的 `gen/apple` 里一个都看不到，要验去看 `.app/Info.plist`
 
 ## Android 构建与签名
 
@@ -248,6 +254,9 @@
 - [174-the-file-order-belongs-to-the-filesystem](./174-the-file-order-belongs-to-the-filesystem.md) — bun 的文件顺序是 readdir 顺序，`--seed` 只是拿它洗牌；ext4 按文件名哈希读、种子在超级块里，所以同一块盘上的主 checkout / worktree / 新 clone 顺序完全相同，换到 tmpfs 就 302 个位置差 297 个，默认顺序下同一个 commit 从 0 fail 变 7 fail。worktree 里的全绿推不出 CI 也绿。`bun test a b c` 不认参数顺序，`Ran N tests across M files` 的 M 照数链接期就死掉的文件。能转述的只有每文件一进程那一趟，且要拿"每文件用例总数 == 单进程用例总数"当闸，两个数都当场算不写死
 - [175-a-static-radix-import-races-the-first-usedom](./175-a-static-radix-import-races-the-first-usedom.md) — 16 个原语里 11 个（要 portal 的那些 Radix 包）传递地拉进 react-dom 客户端 bundle，静态 import 它们的测试文件跑在第一个 `useDom()` 之前，就打死这一轮每一个 `useDom()` 文件（mirror 树上 21 个文件 load 崩、170 个测试不跑），跑在之后则无事发生，而文件顺序不可移植。改成 `await useDom()` 加 `await import(...)`；不加静态检查，精确规矩要传递闭包分析，便宜的近似今天命中的 5 个文件里 3 个根本不拉那个 bundle（`Button`、`overlay.tsx`、`react-dom/server`、`@radix-ui/react-slot` 都是干净的）。危险的形状不是"静态 import 了 `ui/components`"，是"拉了 bundle 又从不要 window"——拉了又自己 `useDom()` 的单跑就红，藏起来的那种单跑绿，只能靠 `bash scripts/isolate.sh` 的每文件探针看见
 - [176-a-selection-outlives-the-tree-that-made-it](./176-a-selection-outlives-the-tree-that-made-it.md) — `document.getSelection()` 挂在 document 上不挂在树上，RTL 的 `cleanup()` 卸树卸不掉它；一个用例选中文字但没有让手势收走选区，就把它原样留给下一个用例，`--seed` 洗过顺序后随机撞上不同的用例（chat-pen-strokes：seed=1 撞 stylus 用例自己的 isCollapsed 断言，seed=4 撞 chat.tsx:379 那道"点击是不是划词收尾"的判断）。`afterEach` 里 `cleanup()` 之后补一句 `document.getSelection()?.removeAllRanges()`
+- [181-vite-strict-port-1420-survives-a-failed-run](./181-vite-strict-port-1420-survives-a-failed-run.md) — `vite.config.ts` 的 `strictPort: true` 撞见上一轮失败残留的 vite 进程占着 1420，`pkill -f 'bun.*vite'` 匹配不到它，下一轮直接退出；起前按端口 `lsof` 找出来 `kill -9`
+- [182-plugin-listener-commands-are-not-implemented-by-tauri](./182-plugin-listener-commands-are-not-implemented-by-tauri.md) — 移动端插件从 Swift 侧发事件，JS 的 `addPluginListener` 挂不上：它 invoke 的 `register_listener`/`remove_listener` 是 Tauri 核心没实现的两个命令，插件自己在 Rust 侧转发给 Swift 基类；不是 iOS 专属，Android 插件一样撞
+- [185-tauri-command-args-are-taken-by-parameter-name](./185-tauri-command-args-are-taken-by-parameter-name.md) — Tauri 命令的参数按参数名从 JS 对象里取，写 `payload: T` 就逼 JS 多包一层；想收平铺对象就把字段列成独立参数
 
 ## 历史（zotero/reader 引擎时代）
 
