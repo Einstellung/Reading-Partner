@@ -95,7 +95,12 @@ one modified file, `src-tauri/tauri.conf.json`, and nothing else.
 Signing identity present: `Apple Development: 1016180377@qq.com (H9Q4HYJ8P6)`,
 team `NNXRL2S9SA`, profile `iOS Team Provisioning Profile:
 com.xinyuan.readingpartner.dev`. A free Personal Team certificate expires after
-seven days; this one was minted 2026-08-12 and expires 2026-08-19.
+seven days, and renewing it means building once more. The profile in place on
+2026-08-27 expires 2026-08-28 18:01 Beijing time, and it cannot be renewed as
+things stand: the Apple ID in Xcode is gone (`IDE.Identifiers.Prod` is an empty
+array, no Xcode-Token in the keychain), and a free Personal Team profile can
+only be requested by a signed-in Xcode. Somebody has to sit at the Mac and add
+the account back under Settings > Accounts.
 
 ## speaker.sh is a harness, and it has limits
 

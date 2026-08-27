@@ -4,15 +4,17 @@
 // average (docs/33, 实测). Played one sentence after another that tail is dead
 // air between every pair — forty sentences is eighteen seconds of nothing.
 //
-// The trim is streaming rather than whole-sentence on purpose. Waiting for the
-// last byte before playing the first would turn the first sentence of every
-// answer from 736 ms of waiting into 2402 ms (docs/33), and the first sentence
-// of an answer is the one the user is sitting through. The head is decided as
-// soon as a loud enough window shows up; the tail is decided by holding back a
-// fixed window of the most recent audio and never emitting it until the stream
-// ends. Holding audio back costs nothing: synthesis runs at RTF 0.348, about
-// three times faster than the audio plays, so the producer is always far ahead
-// of the player.
+// The trim is streaming rather than whole-sentence: the head is decided as soon
+// as a loud enough window shows up, and the tail by holding back a fixed window
+// of the most recent audio and never emitting it until the stream ends. So it
+// costs no pass of its own and no buffer of its own beyond that window.
+//
+// It does not make the first sentence audible any sooner. The relay hands the
+// player one finished sentence at a time (docs/33, `plugins/voice/README.md`),
+// so the first sentence of an answer still waits for its own last byte —
+// measured at 1560 ms on a real briefing. What removes that wait is the opening
+// cache, not this; sub-sentence hand-off is the thing that would, and it is not
+// what was built.
 
 use std::collections::VecDeque;
 
