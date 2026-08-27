@@ -119,7 +119,9 @@ function blockForRib(rib: string, labels: readonly string[]): number | null {
 // asked for something else got agreement in prose and the march back on the next
 // turn. The chapters are here as an audit — where to open the book, what the talk
 // has actually used — and the note's blocks are the progress, because a block
-// exists for a rib exactly when the reader has given that rib.
+// exists for a rib exactly when the reader has given that rib. Given is not
+// through: the block carries the process first and the failure mode when it
+// comes back, so a rib's second state is read off the block's own body.
 export function formatPlan(
   chapters: readonly RetellChapter[],
   plan: RetellPlan | null,
@@ -156,11 +158,18 @@ export function formatPlan(
     lines.push("", `Through-line: ${thesis || "(not written yet)"}`);
     if (spine?.audience) lines.push(`Audience: ${spine.audience}`);
     if (backbone.length) {
-      lines.push("", "The backbone, and which ribs the reader has actually given:");
+      lines.push("", "The backbone, and how far the reader has taken each rib:");
       for (const [i, rib] of backbone.entries()) {
         const at = blockForRib(rib, labels);
         lines.push(`  ${i + 1}. ${rib} — ${at === null ? "not given yet" : `given (block ${at})`}`);
       }
+      // The blocks themselves are inlined whole below (prompt.ts), so this is
+      // answerable from the prompt without a read_talk_outline call.
+      lines.push(
+        "A block says that rib's process came back. Read the block for the rest:",
+        "no line in it for what breaks if that step were done another way, and the",
+        "rib is still open.",
+      );
     }
   }
 

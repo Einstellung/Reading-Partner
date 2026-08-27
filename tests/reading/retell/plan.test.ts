@@ -159,6 +159,12 @@ test("a rib with a block reads as given, one without as not given yet", () => {
   expect(text).toContain("2. Depth is a guess two eyes make — not given yet");
   expect(text).toContain("The note — 1 block(s)");
   expect(text).toContain("1. The retina throws most of it away");
+  // Given is not through: the block carries the process first, and the failure
+  // mode is written into that same block when it comes back. The record cannot
+  // read that off a heading, so it sends the model to the block's own body.
+  expect(text).toContain("A block says that rib's process came back.");
+  expect(text).toContain("what breaks if that step were done another way");
+  expect(text).toContain("rib is still open.");
 });
 
 // The reader writes in Chinese, where a rib is often two ideographs — as much

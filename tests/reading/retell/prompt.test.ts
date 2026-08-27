@@ -129,6 +129,38 @@ test("the stage is read off the talk's state, and there are three of them", () =
   expect(RETELL_INSTRUCTIONS).toContain("named back in order, unaided: the ribs");
 });
 
+// A retell runs over several sittings. In the one this rule comes from the chain
+// was asked for once, at the very start, and never again — after that every
+// question was about one stretch. Reopening on a backbone tests the whole thing
+// first, with nothing in front of the reader.
+test("a sitting that reopens on a backbone opens on the whole chain, unaided", () => {
+  expect(RETELL_INSTRUCTIONS).toContain(
+    "A sitting that opens with a backbone already on the spine",
+  );
+  expect(RETELL_INSTRUCTIONS).toContain("book shut, notes shut");
+  expect(RETELL_INSTRUCTIONS).toContain("blocks unread");
+  expect(RETELL_INSTRUCTIONS).toContain("do not name a rib");
+  expect(RETELL_INSTRUCTIONS).toContain("which rib went missing");
+  // The comparison is the question source; with no spine the old opening stands.
+  expect(RETELL_INSTRUCTIONS).toContain("where this sitting's questions come from");
+  expect(RETELL_INSTRUCTIONS).toContain("stage one is the opening");
+});
+
+// The question that asks what breaks another way is meant to come back empty;
+// the wrong-question rule would have thrown it out, and swapping it for one they
+// can answer is how the whole retell slid into process questions.
+test("the failure-mode question is exempt from changing the question, and nothing else", () => {
+  expect(RETELL_INSTRUCTIONS).toContain("One kind of question is exempt");
+  expect(RETELL_INSTRUCTIONS).toContain("do not trade it for an easier one");
+  expect(RETELL_INSTRUCTIONS).toContain("Everything above still binds");
+  expect(RETELL_INSTRUCTIONS).toContain("no counting");
+  expect(RETELL_INSTRUCTIONS).toContain("never that question re-issued in");
+  // The exemption may not hollow out the rules it sits next to.
+  expect(RETELL_INSTRUCTIONS).toContain("Never count the times you have asked");
+  expect(RETELL_INSTRUCTIONS).toContain("never say you are");
+  expect(RETELL_INSTRUCTIONS).toContain("never call it avoidance");
+});
+
 // The chapter march is what the record used to force. The instructions have to
 // say the chapters are not the order of the work, and that a run of them can be
 // closed at once.
@@ -160,6 +192,34 @@ test("a block is written only after the reader has given that rib", () => {
   expect(RIB_INSTRUCTIONS).toContain("Never write a block for a rib the reader has not given");
   expect(RIB_INSTRUCTIONS).toContain("Head the block with the rib it gives");
   expect(RIB_INSTRUCTIONS).toContain("A block is not a chapter");
+});
+
+// Giving the process back is what a reader can do from memory alone. The rib is
+// not through until they can say what the step is for, and the only test of that
+// is what would go wrong without it.
+test("a rib is through only once the reader can say what breaks another way", () => {
+  expect(RIB_INSTRUCTIONS).toContain("The process is the way in, not the pass");
+  expect(RIB_INSTRUCTIONS).toContain("what breaks if that step were done another way");
+  expect(RIB_INSTRUCTIONS).toContain("has to say what goes wrong without it");
+  expect(RIB_INSTRUCTIONS).toContain("memorised the step, not understood it");
+});
+
+// Asking the reader to sign off the wording bought five interruptions and five
+// "fine, go ahead": a reader mid-way through learning something is not thinking
+// about the wording of a note.
+test("the block is written without the reader approving the wording", () => {
+  expect(RIB_INSTRUCTIONS).toContain("Do not read the block out for approval first");
+  expect(RIB_INSTRUCTIONS).not.toContain("Say the block in a line before you write it");
+  // What must survive that: a block is only ever written out of what they said.
+  expect(RIB_INSTRUCTIONS).toContain("Never write a block for a rib the reader has not given");
+});
+
+// The note stays the only progress record, and now it carries both states: the
+// process goes in when it comes back, the failure mode into the same block.
+test("the failure mode is written back into the block the process went into", () => {
+  expect(RIB_INSTRUCTIONS).toContain("write that same block again with a line for it");
+  expect(RIB_INSTRUCTIONS).toContain("rather than opening a second block");
+  expect(RIB_INSTRUCTIONS).toContain("A block with no such line is a");
 });
 
 test("the rib order comes from where the macro pass showed holes", () => {
