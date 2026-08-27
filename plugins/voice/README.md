@@ -107,3 +107,69 @@ the stack down and the next hold rebuilds it. During a hold they only refuse the
 keep; the run tears itself down as it always did. Either way a hold never fails
 for it, and `timing.reused` says which one happened with `timing.reuseSkipped`
 beside it saying why.
+
+## Speaking
+
+The other half, and the newer one: `src/tts` turns a sentence into PCM. Mimo's
+`mimo-v2.5-tts` over SSE, base64 inside `choices[0].delta.audio.data`,
+24 kHz / 16-bit / mono, the text to speak in an **assistant** message — a user
+message would be read as a style instruction and never spoken (docs/33).
+
+It is here rather than in the app crate because this plugin owns the audio: the
+PCM is headed for an `AVAudioPlayerNode` on the same voice-processing engine
+`AudioFront` already holds, and producer and consumer in one crate is a function
+call instead of a cross-crate contract and a second ACL namespace. Nothing in it
+is iOS-only. It compiles and makes real requests on the Linux desktop, which is
+the only place any of it can be measured, and everything below was.
+
+```
+TtsBackend        one vendor. MimoBackend is the only one; qwen3-tts-flash is
+                  the named alternate and fits the same shape.
+SilenceTrimmer    streaming head and tail trim, pushed bytes in, playable bytes
+                  out.
+SpeechRelay       sentences in, trimmed audio to the player in order, working
+                  far enough ahead that playback never runs dry.
+Player            where finished audio goes. VirtualPlayer keeps the clock and
+                  throws the audio away, which is how the relay is measured.
+OpeningCache      one slot for the sentence that is known before it is asked
+                  for.
+```
+
+No command reaches any of it yet. The command surface follows from what the
+hand-off to Swift turns out to be, and that half does not exist; adding
+`speak_*` to the ACL now would be adding entries that have to be revised when it
+does.
+
+### What the Swift half has to do
+
+`Player` is the whole contract, and it has three calls.
+
+`enqueue(sentence)` takes one finished sentence — `id`, `chars`, the audio
+format, and PCM that is already trimmed and already carries the pause that goes
+after it. It schedules a buffer on the player node and returns immediately, and
+it answers with **how much audio is queued ahead of the playhead**, in
+milliseconds, counting the one just added. That number is the only feedback the
+relay gets and the only thing it needs: it is what says whether there is time to
+synthesise another sentence or whether the speaker is about to run out. It is
+not a sentence count, because sentences run from three characters to forty and a
+count says nothing about how long the player can keep going.
+
+`state()` is the same answer with nothing added, for the stretch where no
+sentence is being handed over.
+
+`stop()` drops every scheduled buffer that has not been heard and answers with
+where the user was interrupted: the sentence id, how far into it the playhead
+was, and that sentence's whole length. The caller turns the pair into a
+character offset — `chars` came in with the audio for exactly that — which is how
+the assistant's message gets truncated to what was actually heard (docs/33,
+docs/27). `playerTime` on the node is the authority for that position; Rust's
+side of the queue models it well enough to schedule against, never well enough
+to truncate a transcript with.
+
+Rust does not poll. Every enqueue refreshes the margin, and between enqueues it
+decays with the wall clock, which is what playback does anyway.
+
+The relay hands over whole sentences, not chunks. Within a sentence the trim
+streams — audio goes out while the rest is still arriving — but nothing leaves
+the relay until the sentence is complete, because the tail cannot be trimmed
+before the end of it is known.

@@ -23,6 +23,7 @@
 | SSH 远程到 Mac 上签名、构建 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 解流式 TTS 的音频分片、按字节数算时长 | 原生音频与语音 |
+| 裁 TTS 的头尾静音、按句拼接 | 原生音频与语音 |
 | 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
@@ -48,7 +49,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 188）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 190）。
 
 ## EmbedPDF 引擎
 
@@ -166,6 +167,8 @@
 - [168-the-probe-parked-beside-the-thing-it-measures](./168-the-probe-parked-beside-the-thing-it-measures.md) — 橙点探针停在 `engine`/`tap`/`recording` 不撤，下一次按住先替它拆引擎，四百到八百毫秒记在 `session` 那一步上，21 次按住的一整轮数据作废（探针停 off/session 的 11 次全是 72-156ms，停在建了引擎那三档的 9 次全是 584-977ms，中间没有值）；顺带把上一次留着的引擎也清了，`reuse` 十次按住 `reused` 全 false。日志和字段全都正常，所以看不出来。解法是拒绝这次按住并在界面上说原因，不偷偷复位；判据是"上次按住之后碰过探针没有"而不是"探针现在停在哪一档"——`setIndicatorProbe(.off)` 自己也 teardown，提示人"先把探针关掉"等于亲手指挥人毁掉要复用的引擎；拆除动作放进被拒的那次按住里（它的数不算数），碰一次探针固定赔一次按住；每行记 `probeStage` 和 `probeTouched`，快路径没走成要写 `reuseSkipped`
 - [170-a-regex-boundary-is-a-code-point-not-a-glyph](./170-a-regex-boundary-is-a-code-point-not-a-glyph.md) — CJK 字符类的边界 U+F900 和 U+8C48 渲染成同一个字形，抄成后者就把 U+8C48–U+FAFF 这 2.8 万个码点（谚文、彝文、私用区，加上没有 `u` 标志时每个 emoji 的前导代理）全算成 CJK，seam 该留的空格被吃掉；bench 只跑纯中文和纯英文，两种范围结论一致，测不出来。边界按码点读不按字形读
 - [187-dashscope-streams-a-wav-header-in-the-first-chunk](./187-dashscope-streams-a-wav-header-in-the-first-chunk.md) — 阿里 `qwen3-tts-flash` 流式的首帧带 44 字节 RIFF/WAVE 头（data chunk size 是占位符 `0x7FFFFFFF`），当裸 PCM 拼就是开头一声满刻度咔哒，31 句全段峰值都在前 5ms、`|x[0]|` 0.57，差点当成音频质量缺陷；首帧见 `RIFF` 就跳 44 字节，峰值中位数 -0.0 → -7.3 dBFS。硅基流动和小米是真裸 PCM，别假设分片都是采样点；响应里也没有采样率字段，24kHz 是跨供应商逐句时长交叉验证推出来的
+- [188-tts-lead-out-is-room-tone-not-silence](./188-tts-lead-out-is-room-tone-not-silence.md) — 小米每句前后那 117/451 ms 不是数字静音，是 -45 到 -65 dBFS 的底噪，按 -60 dBFS 裁句尾平均只裁掉 39 ms（要裁到 451 得把阈值压到 -45）；护栏也不是保险——句尾护栏归零，「是。」被 ASR 回读成 `Shi.`，句首护栏归零一句没变。定下来的三个数：阈值 -45 dBFS、句首护栏 40 ms、句尾护栏 60 ms，整句没有一个超阈值窗时两端都不裁
+- [189-mimo-200-stream-with-no-audio](./189-mimo-200-stream-with-no-audio.md) — 小米会返回 200 的 SSE 流、帧全合法、`[DONE]` 也来，但一帧音频都没有，约 30 次里 2 次，同一段文本重发就好；别当成内容审核拒绝（那条接口目前根本不审文本，9 句违法交易和政治敏感文本一次没拒），单列一种可重试的错误
 
 ## WebKit / webview
 
