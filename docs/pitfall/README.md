@@ -12,6 +12,7 @@
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 鼠标滚轮、触控板 pinch | 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
+| 比不同供应商的网络延迟、量首包时间 | 网络与 CSP |
 | 改 deck / 幻灯片的宿主桥、iframe srcdoc | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
@@ -21,6 +22,7 @@
 | 动 CI 的构建缓存、靠 build script 生成的东西 | iOS 构建与签名 |
 | SSH 远程到 Mac 上签名、构建 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
+| 解流式 TTS 的音频分片、按字节数算时长 | 原生音频与语音 |
 | 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
@@ -46,7 +48,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 186）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 188）。
 
 ## EmbedPDF 引擎
 
@@ -111,6 +113,7 @@
 - [72-arxiv-sortby-submitteddate-hangs](./72-arxiv-sortby-submitteddate-hangs.md) — arXiv 加 `sortBy=submittedDate` 25 秒不返回或 429，六个请求就把 IP 限流几分钟；"最新"要用 `submittedDate` 区间过滤，四个文献库一律"新是过滤、排序留给相关性"（OpenAlex 按日期排序会把管理学论文排到神经科学查询第一位）
 - [73-s2-citation-edges-null-and-ignored-year](./73-s2-citation-edges-null-and-ignored-year.md) — S2 的 `/references`、`/citations` 会回 `data: null`（出版商抽掉字段，照文档写就抛 TypeError），`year=` 参数静默忽略；引用图往后由 S2 领跑、往前只有 OpenAlex 能服务端过滤加排序，空结果必须能降级到下一个库
 - [152-srcdoc-iframe-inherits-the-parent-csp](./152-srcdoc-iframe-inherits-the-parent-csp.md) — `srcdoc`（和 `blob:`）iframe 不过 `frame-src`，CSP 从父页继承：deck 的内联脚本是靠 app 自己的 `script-src 'unsafe-inline'` 在跑；22 MB 的 srcdoc load 415 ms，CSP 一个字不用改
+- [186-fake-ip-dns-does-not-say-what-is-proxied](./186-fake-ip-dns-does-not-say-what-is-proxied.md) — fake-ip 模式下 DNS 永远返回 `198.18.0.x` 占位 IP，分流在连接建立时才按反查回的域名匹配，「三个域名解析结果一样」推不出「三家路径相同」（`dns-hijack: any:53` 让 `dig` 也拿不到真实 IP）；`geosite.dat` 停在 2025-11-19，2026 年才上线的 `api.xiaomimimo.com` 没命中 `GEOSITE,CN,DIRECT`，落到兜底走代理，TLS 882ms 对另两家 93/82ms，被写成「小米服务端慢」。确诊查 mihomo 的 `/connections` 看每条连接的 `rule` 和 `chains`，解法是最前面加 `DOMAIN-SUFFIX,<域名>,DIRECT` 再热重载；走代理时「请求→首帧」也含代理往返，去掉隧道后服务端那一段同样快了一倍
 
 ## 存储与数据目录
 
@@ -162,6 +165,7 @@
 - [167-the-microphone-indicator-lights-at-engine-start](./167-the-microphone-indicator-lights-at-engine-start.md) — 橙点在 `engine.start()` 那一步亮，`setActive(true)` 那一步不亮（实测四档，Apple 对触发点零文档，推过两次都错）。意味着坑 166 那 690ms 没法提前付掉而不点亮橙点：VPIO 只有引擎跑起来才建得成。只剩两种形态——切进语音模式就起引擎（用户没开口橙点就亮），或第一次按住时建、之后不 `stop()` 只 `pause()`（橙点从第一次说话开始亮）。取后者，已落地：橙点在语音模式里一直亮，退出语音模式立刻灭
 - [168-the-probe-parked-beside-the-thing-it-measures](./168-the-probe-parked-beside-the-thing-it-measures.md) — 橙点探针停在 `engine`/`tap`/`recording` 不撤，下一次按住先替它拆引擎，四百到八百毫秒记在 `session` 那一步上，21 次按住的一整轮数据作废（探针停 off/session 的 11 次全是 72-156ms，停在建了引擎那三档的 9 次全是 584-977ms，中间没有值）；顺带把上一次留着的引擎也清了，`reuse` 十次按住 `reused` 全 false。日志和字段全都正常，所以看不出来。解法是拒绝这次按住并在界面上说原因，不偷偷复位；判据是"上次按住之后碰过探针没有"而不是"探针现在停在哪一档"——`setIndicatorProbe(.off)` 自己也 teardown，提示人"先把探针关掉"等于亲手指挥人毁掉要复用的引擎；拆除动作放进被拒的那次按住里（它的数不算数），碰一次探针固定赔一次按住；每行记 `probeStage` 和 `probeTouched`，快路径没走成要写 `reuseSkipped`
 - [170-a-regex-boundary-is-a-code-point-not-a-glyph](./170-a-regex-boundary-is-a-code-point-not-a-glyph.md) — CJK 字符类的边界 U+F900 和 U+8C48 渲染成同一个字形，抄成后者就把 U+8C48–U+FAFF 这 2.8 万个码点（谚文、彝文、私用区，加上没有 `u` 标志时每个 emoji 的前导代理）全算成 CJK，seam 该留的空格被吃掉；bench 只跑纯中文和纯英文，两种范围结论一致，测不出来。边界按码点读不按字形读
+- [187-dashscope-streams-a-wav-header-in-the-first-chunk](./187-dashscope-streams-a-wav-header-in-the-first-chunk.md) — 阿里 `qwen3-tts-flash` 流式的首帧带 44 字节 RIFF/WAVE 头（data chunk size 是占位符 `0x7FFFFFFF`），当裸 PCM 拼就是开头一声满刻度咔哒，31 句全段峰值都在前 5ms、`|x[0]|` 0.57，差点当成音频质量缺陷；首帧见 `RIFF` 就跳 44 字节，峰值中位数 -0.0 → -7.3 dBFS。硅基流动和小米是真裸 PCM，别假设分片都是采样点；响应里也没有采样率字段，24kHz 是跨供应商逐句时长交叉验证推出来的
 
 ## WebKit / webview
 
