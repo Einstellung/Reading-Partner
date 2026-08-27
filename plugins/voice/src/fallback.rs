@@ -71,3 +71,40 @@ impl<R: Runtime> Voice<R> {
         Ok(())
     }
 }
+
+impl<R: Runtime> Voice<R> {
+    /// Rejecting: a synthesiser told "queued" by a host with no player would
+    /// keep synthesising a turn nobody can hear.
+    pub async fn enqueue_speech(
+        &self,
+        _utterance: u64,
+        _index: u32,
+        _chars: u32,
+        _last: bool,
+        _sample_rate: u32,
+        _trim: bool,
+        _pcm: Vec<u8>,
+    ) -> crate::Result<SpeechEnqueued> {
+        Err(Error::Unsupported(UNSUPPORTED.to_string()))
+    }
+
+    /// Silence, like `release_microphone`: stopping a voice that never started
+    /// is what a teardown asks for, and it has nowhere to show a rejection.
+    pub async fn stop_speaking(&self, _reason: String) -> crate::Result<SpeechPosition> {
+        Ok(SpeechPosition {
+            speaking: false,
+            utterance: 0,
+            index: -1,
+            char_offset: 0,
+            played_ms: 0.0,
+        })
+    }
+
+    pub async fn speech_probe(&self, _args: serde_json::Value) -> crate::Result<SpeechReport> {
+        Err(Error::Unsupported(UNSUPPORTED.to_string()))
+    }
+
+    pub async fn speech_report(&self) -> crate::Result<SpeechReport> {
+        Err(Error::Unsupported(UNSUPPORTED.to_string()))
+    }
+}

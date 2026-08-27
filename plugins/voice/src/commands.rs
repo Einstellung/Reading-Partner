@@ -93,3 +93,44 @@ pub(crate) async fn remove_listener<R: Runtime>(
 ) -> Result<()> {
     app.voice().remove_listener(event, channel_id).await
 }
+
+// The playback half (docs/33, M-voice-2). Three commands, not four: sentences
+// are put on the queue by the TTS client inside Rust through
+// `Voice::enqueue_speech`, so the audio never enters the webview and needs no
+// permission. What the webview owns is interrupting a turn and driving the
+// bench.
+
+/// Cut the voice off and say where it got to. The sentence index and character
+/// offset come back so the caller can map them onto the text it sent.
+#[command]
+pub(crate) async fn stop_speaking<R: Runtime>(
+    app: AppHandle<R>,
+    reason: Option<String>,
+) -> Result<SpeechPosition> {
+    app.voice()
+        .stop_speaking(reason.unwrap_or_else(|| "interrupted".to_string()))
+        .await
+}
+
+/// The bench: play a fixture already on the device through the whole playback
+/// path, with no network in the loop. Resolves as soon as the run starts; the
+/// `speech` event says when it has finished.
+///
+/// Arguments are carried as one JSON value rather than spelled out, because
+/// they are a bench's knobs and change with the question being asked. Tauri
+/// keys command arguments by parameter name (docs/pitfall/185), so the webview
+/// sends `{ args: { … } }`.
+#[command]
+pub(crate) async fn speech_probe<R: Runtime>(
+    app: AppHandle<R>,
+    args: serde_json::Value,
+) -> Result<SpeechReport> {
+    app.voice().speech_probe(args).await
+}
+
+/// What the last bench run measured, and the point at which its tape is written
+/// to the container.
+#[command]
+pub(crate) async fn speech_report<R: Runtime>(app: AppHandle<R>) -> Result<SpeechReport> {
+    app.voice().speech_report().await
+}

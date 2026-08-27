@@ -14,6 +14,10 @@ const COMMANDS: &[&str] = &[
     "stop_dictation",
     "cancel_dictation",
     "set_indicator_probe",
+    "release_microphone",
+    "stop_speaking",
+    "speech_probe",
+    "speech_report",
     "register_listener",
     "remove_listener",
 ];

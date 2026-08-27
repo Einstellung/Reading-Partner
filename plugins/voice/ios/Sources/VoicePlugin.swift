@@ -37,6 +37,27 @@ class IndicatorProbeArgs: Decodable {
     let stage: String
 }
 
+/// Arguments of `enqueue_speech`, which Rust calls once per sentence as the
+/// vendor finishes it. `pcm` is base64 on the wire and JSONDecoder turns it back
+/// into bytes with no help; the rest is the whole of what Swift needs to know
+/// about a sentence. No text: the native side's log has never contained a word
+/// anybody said and this does not start.
+class EnqueueSpeechArgs: Decodable {
+    let utterance: UInt64
+    let index: Int
+    let chars: Int
+    let last: Bool
+    let sampleRate: Double
+    let trim: Bool?
+    let pcm: Data
+}
+
+/// Arguments of `stop_speaking`. The reason is written into the measurement
+/// record and sent out with the `speaking:false` event.
+class StopSpeakingArgs: Decodable {
+    let reason: String?
+}
+
 class VoicePlugin: Plugin {
     /// The live run, if any. Touched from the IPC dispatch queue and from the
     /// Tasks the commands spawn, so every access goes through the lock.
@@ -47,6 +68,16 @@ class VoicePlugin: Plugin {
     /// whatever is ahead of it.
     private var chain: Task<Void, Never> = Task {}
     private let chainLock = NSLock()
+
+    /// Wires the playback path's event sender the moment the plugin exists, so
+    /// that a `speech` event can never be produced by something with nowhere to
+    /// send it.
+    override init() {
+        super.init()
+        SpeechOut.shared.setEmitter { [weak self] kind, value, reason in
+            self?.emitSpeech(kind: kind, value: value, reason: reason)
+        }
+    }
 
     private func serial(_ body: @escaping () async -> Void) {
         chainLock.lock()
@@ -159,6 +190,9 @@ class VoicePlugin: Plugin {
                 NSLog("RP-DICT voice mode ended with a run still live; stopping it")
                 await previous.stop()
             }
+            // The voice goes with the microphone: they are one engine, and an
+            // engine about to be torn down cannot go on speaking through.
+            SpeechOut.shared.stop(reason: "released")
             AudioFront.shared.close()
             invoke.resolve()
         }
@@ -196,6 +230,94 @@ class VoicePlugin: Plugin {
             } catch {
                 invoke.reject(DictationError.describe(error))
             }
+        }
+    }
+
+    // MARK: - Speaking
+
+    /// One sentence onto the back of the playback queue.
+    ///
+    /// Called from Rust, never from the webview: the PCM would otherwise cross
+    /// the bridge twice and be held in the webview's heap for no reason.
+    /// Resolves as soon as the sentence is queued — the answer says how much
+    /// speech is now ahead of the listener, which is what the synthesiser needs
+    /// to decide whether to keep running ahead.
+    @objc(enqueue_speech:)
+    public func enqueueSpeech(_ invoke: Invoke) {
+        let args: EnqueueSpeechArgs
+        do {
+            args = try invoke.parseArgs(EnqueueSpeechArgs.self)
+        } catch {
+            invoke.reject("That sentence did not parse: \(DictationError.describe(error))")
+            return
+        }
+
+        serial {
+            do {
+                let ack = try SpeechOut.shared.enqueue(
+                    pcm: args.pcm, sampleRate: args.sampleRate, chars: args.chars,
+                    utterance: args.utterance, index: args.index, last: args.last,
+                    trim: args.trim ?? true)
+                invoke.resolve(ack)
+            } catch {
+                invoke.reject(DictationError.describe(error))
+            }
+        }
+    }
+
+    /// Cut the voice off and say where it got to. The position is read before
+    /// the player is stopped, because stopping it resets the timeline the
+    /// position is measured on.
+    @objc(stop_speaking:)
+    public func stopSpeaking(_ invoke: Invoke) {
+        let args = try? invoke.parseArgs(StopSpeakingArgs.self)
+        let reason = args?.reason ?? "interrupted"
+        serial {
+            let position = SpeechOut.shared.stop(reason: reason)
+            invoke.resolve(position)
+        }
+    }
+
+    /// The bench: play the fixture on the device's own disk through the same
+    /// path a real turn takes. Resolves the moment the run is started, never
+    /// when it finishes — a command that waited out seventy-five seconds of
+    /// speech would hold the serial chain for all of it (docs/pitfall/159).
+    @objc(speech_probe:)
+    public func speechProbe(_ invoke: Invoke) {
+        let args: SpeechProbeArgs
+        do {
+            args = try invoke.parseArgs(SpeechProbeArgs.self)
+        } catch {
+            invoke.reject("That probe did not parse: \(DictationError.describe(error))")
+            return
+        }
+
+        serial {
+            do {
+                if args.mode == "interrupt" {
+                    let positions = try SpeechProbe.interrupt(
+                        args, afterMs: args.afterMs ?? 5, times: args.times ?? 50)
+                    invoke.resolve(SpeechInterruptReport(positions: positions))
+                } else {
+                    try SpeechProbe.start(args)
+                    invoke.resolve()
+                }
+            } catch {
+                invoke.reject(DictationError.describe(error))
+            }
+        }
+    }
+
+    /// What the last run measured, and the moment the tape is written to disk.
+    /// Called after the run has stopped, which is what the `speaking:false`
+    /// event tells the bench.
+    @objc(speech_report:)
+    public func speechReport(_ invoke: Invoke) {
+        serial {
+            #if DEBUG
+                SpeechOut.shared.flushCapture()
+            #endif
+            invoke.resolve(SpeechOut.shared.report())
         }
     }
 
@@ -246,6 +368,24 @@ class VoicePlugin: Plugin {
             // JSON encoder is the one path that does not have to be trusted to
             // coerce a dictionary of dictionaries correctly.
             try? self.trigger("dictation", data: event)
+        }
+    }
+
+    /// The playback path's own event, on an event name of its own.
+    ///
+    /// Not a fifth kind on `dictation`: the composer's reducer over that union
+    /// has no default branch (src/ai/voice/dictation.ts), and the run's emission
+    /// gate is what keeps a hold from hearing the previous hold's words. A
+    /// second name costs nothing on either side — Swift's `trigger` fans out by
+    /// name and the listener registry is keyed by the name the webview passed —
+    /// and it leaves every promise the dictation event makes untouched.
+    private func emitSpeech(kind: String, value: Double, reason: String?) {
+        var payload = JSObject()
+        payload["kind"] = kind
+        payload["value"] = value
+        if let reason = reason { payload["reason"] = reason }
+        DispatchQueue.main.async { [weak self] in
+            self?.trigger("speech", data: payload)
         }
     }
 

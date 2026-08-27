@@ -141,6 +141,18 @@ final class AudioFront {
     struct Opened {
         let engine: AVAudioEngine
         let format: AVAudioFormat
+        /// The playback node, when this stack has one. A hold never asks for one
+        /// and never looks at it; it is here because the same stack serves both
+        /// halves of a conversation.
+        let player: AVAudioPlayerNode?
+    }
+
+    /// What `acquireSpeaker` hands back. The engine comes with it because the
+    /// player must not be touched while the engine is not running, and that is a
+    /// question only the engine can answer.
+    struct Speaker {
+        let engine: AVAudioEngine
+        let player: AVAudioPlayerNode
     }
 
     private let lock = NSLock()
@@ -149,6 +161,25 @@ final class AudioFront {
     private var tapInstalled = false
     private var sessionActive = false
     private var stage: IndicatorStage = .off
+
+    /// The playback node, attached to the engine above and connected to the main
+    /// mixer. Built with the stack, torn down with it, and never rebuilt on its
+    /// own: a player that outlived its engine is a use-after-free waiting for
+    /// the next `play()`.
+    private var player: AVAudioPlayerNode?
+    /// True between `acquireSpeaker` and `releaseSpeaker`. The only thing it
+    /// changes is whether the end of a hold may park the engine: pausing an
+    /// engine somebody is speaking through would stop the speech mid-word.
+    private var speakerHeld = false
+    /// Told when the stack goes away under it. Called asynchronously, always —
+    /// the teardown runs with `lock` held and the speaker's answer to being lost
+    /// is a call back into this object.
+    private var onSpeakerLost: (() -> Void)?
+
+    /// Set by the bench only, to run one leg of the echo experiment with the
+    /// voice-processing unit off (docs/33). Nothing in the app writes it; a hold
+    /// with it unset behaves exactly as it always has.
+    static var voiceProcessingOverride: Bool?
 
     /// True between `open` and `release`: a run has the microphone right now and
     /// owns its teardown. What the notification handlers may do depends on it.
@@ -209,6 +240,7 @@ final class AudioFront {
     func open(
         pressedAt: CFAbsoluteTime,
         timing: TimingLog,
+        needsPlayer: Bool = false,
         sink: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> Opened {
         lock.lock()
@@ -245,11 +277,14 @@ final class AudioFront {
         }
 
         lostDuringHold = false
-        if let reused = reuseLocked(pressedAt: pressedAt, timing: timing, sink: sink) {
+        if let reused = reuseLocked(
+            pressedAt: pressedAt, timing: timing, needsPlayer: needsPlayer, sink: sink)
+        {
             holding = true
             return reused
         }
-        let opened = try openFreshLocked(pressedAt: pressedAt, timing: timing, sink: sink)
+        let opened = try openFreshLocked(
+            pressedAt: pressedAt, timing: timing, needsPlayer: needsPlayer, sink: sink)
         holding = true
         return opened
     }
@@ -262,10 +297,31 @@ final class AudioFront {
     private func reuseLocked(
         pressedAt: CFAbsoluteTime,
         timing: TimingLog,
-        sink: @escaping (AVAudioPCMBuffer) -> Void
+        needsPlayer: Bool,
+        sink: ((AVAudioPCMBuffer) -> Void)?
     ) -> Opened? {
         guard let engine = engine, let format = format, tapInstalled, sessionActive else {
             timing.recordReuseSkipped("nothing was standing to reuse")
+            return nil
+        }
+
+        // A player is an addition, never a subtraction: a hold that wants no
+        // player is served perfectly well by a stack that has one, so this is
+        // checked in one direction only. That is what keeps "the user spoke
+        // first, then held to talk" from paying for a rebuild.
+        if needsPlayer && player == nil {
+            timing.recordReuseSkipped("the kept stack has no player node")
+            teardownLocked()
+            return nil
+        }
+        // The bench turns voice processing off for one leg of the echo
+        // experiment. A stack built the other way answers a different question,
+        // so it is not inherited.
+        if let wanted = AudioFront.voiceProcessingOverride,
+            engine.inputNode.isVoiceProcessingEnabled != wanted
+        {
+            timing.recordReuseSkipped("the kept stack has the wrong voice-processing state")
+            teardownLocked()
             return nil
         }
 
@@ -312,7 +368,7 @@ final class AudioFront {
 
         timing.recordReuse(true)
         NSLog("RP-DICT front reused")
-        return Opened(engine: engine, format: format)
+        return Opened(engine: engine, format: format, player: player)
     }
 
     /// The slow path, which the first hold of a voice mode takes. This is the
@@ -323,7 +379,8 @@ final class AudioFront {
     private func openFreshLocked(
         pressedAt: CFAbsoluteTime,
         timing: TimingLog,
-        sink: @escaping (AVAudioPCMBuffer) -> Void
+        needsPlayer: Bool,
+        sink: ((AVAudioPCMBuffer) -> Void)?
     ) throws -> Opened {
         teardownLocked()
 
@@ -339,7 +396,7 @@ final class AudioFront {
         timing.mark("inputNode", since: pressedAt)
 
         do {
-            try input.setVoiceProcessingEnabled(true)
+            try input.setVoiceProcessingEnabled(AudioFront.voiceProcessingOverride ?? true)
         } catch {
             throw DictationError(
                 "The microphone could not be prepared: \(DictationError.describe(error))")
@@ -368,12 +425,84 @@ final class AudioFront {
         tapInstalled = true
 
         engine.prepare()
+
+        // After prepare() and before start(), and connected with an explicit
+        // 24 kHz mono float32 format on this edge only. Nothing here gives a
+        // format to anything touching `outputNode`: what the main mixer hands
+        // the hardware is the engine's business, and taking it over is what
+        // docs/pitfall/133 is about.
+        if needsPlayer {
+            let node = AVAudioPlayerNode()
+            engine.attach(node)
+            engine.connect(node, to: engine.mainMixerNode, format: SpeechOut.playbackFormat)
+            player = node
+        }
+
         try startLocked(engine)
 
         self.format = hardwareFormat
         timing.recordReuse(false)
-        NSLog("RP-DICT front built")
-        return Opened(engine: engine, format: hardwareFormat)
+        NSLog("RP-DICT front built player=%@", needsPlayer ? "yes" : "no")
+        return Opened(engine: engine, format: hardwareFormat, player: player)
+    }
+
+    // MARK: - A voice
+
+    /// Hands out the playback node, building the whole stack around it if there
+    /// is none standing. `onLost` is called — asynchronously, always — when the
+    /// stack goes away underneath it.
+    ///
+    /// Held until `releaseSpeaker`. What the hold does is keep the end of a
+    /// dictation press from parking the engine out from under a sentence that is
+    /// still being spoken.
+    func acquireSpeaker(onLost: @escaping () -> Void) throws -> Speaker {
+        lock.lock()
+        defer { lock.unlock() }
+
+        onSpeakerLost = onLost
+        if let engine = engine, let player = player, sessionActive {
+            if !engine.isRunning {
+                try startLocked(engine)
+            }
+            speakerHeld = true
+            return Speaker(engine: engine, player: player)
+        }
+
+        let timing = TimingLog()
+        let opened = try openFreshLocked(
+            pressedAt: CFAbsoluteTimeGetCurrent(), timing: timing, needsPlayer: true, sink: nil)
+        guard let player = opened.player else {
+            teardownLocked()
+            throw DictationError("The player node was not built with the audio stack.")
+        }
+        speakerHeld = true
+        return Speaker(engine: opened.engine, player: player)
+    }
+
+    /// The voice has stopped. If nobody is holding the microphone either, the
+    /// stack is parked the way the end of a hold parks it — the engine paused,
+    /// everything else standing — so that the next sentence or the next press
+    /// pays 304 ms rather than 1082.
+    func releaseSpeaker() {
+        lock.lock()
+        defer { lock.unlock() }
+
+        speakerHeld = false
+        guard !holding, let engine = engine, engine.isRunning else { return }
+        engine.pause()
+        NSLog("RP-DICT front paused after speaking")
+    }
+
+    /// The engine the player is on, for the one question SpeechOut has to ask
+    /// before every `play()`: is it running. Nil when there is no stack.
+    func speakerEngine() throws -> AVAudioEngine? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let engine = engine else { return nil }
+        if !engine.isRunning {
+            try startLocked(engine)
+        }
+        return engine
     }
 
     /// Lets go of the microphone at the end of a hold, and keeps it standing for
@@ -394,6 +523,13 @@ final class AudioFront {
         lostDuringHold = false
         guard keep, !lost, let engine = engine else {
             teardownLocked()
+            return
+        }
+        // The one thing that stops the park: somebody is speaking through this
+        // engine. Pausing it would cut the sentence off mid-word, and the
+        // speaker's own release does the park when it is done.
+        guard !speakerHeld else {
+            NSLog("RP-DICT front kept running: the voice is still speaking")
             return
         }
         // pause(), never stop(): Apple documents stop() as releasing what
@@ -688,11 +824,19 @@ final class AudioFront {
         // from under it on the way up. That silence was once reported as a
         // healthy 45-second run (docs/pitfall/132).
         guard engine.isRunning else {
+            // The player's edge is named too. Attaching one adds exactly one new
+            // way for this assertion to fire — a playback format the output
+            // chain will not accept — and it fires as this same silence.
+            let playing =
+                player != nil
+                ? " The player is connected at \(describeFormat(SpeechOut.playbackFormat))."
+                : ""
             throw DictationError(
                 "The microphone stopped as it started. The output chain accepts "
                     + "\(describeFormat(engine.outputNode.inputFormat(forBus: 0))) while its "
                     + "hardware is \(describeFormat(engine.outputNode.outputFormat(forBus: 0))) "
-                    + "and the session runs at \(AVAudioSession.sharedInstance().sampleRate) Hz.")
+                    + "and the session runs at \(AVAudioSession.sharedInstance().sampleRate) Hz."
+                    + playing)
         }
     }
 
@@ -701,14 +845,25 @@ final class AudioFront {
     private func teardownLocked() {
         setSink(nil)
         stage = .off
+        let hadPlayer = player != nil
         if let engine = engine {
             if tapInstalled {
                 engine.inputNode.removeTap(onBus: 0)
+            }
+            // The player goes before the engine stops, and its tap goes before
+            // it does: a node detached with a tap still on it is a callback into
+            // a node that is no longer in the graph.
+            if let player = player {
+                player.removeTap(onBus: 0)
+                player.stop()
+                engine.detach(player)
             }
             if engine.isRunning {
                 engine.stop()
             }
         }
+        player = nil
+        speakerHeld = false
         tapInstalled = false
         self.engine = nil
         format = nil
@@ -720,6 +875,12 @@ final class AudioFront {
                 NSLog("RP-DICT deactivate failed: %@", DictationError.describe(error))
             }
             sessionActive = false
+        }
+
+        // Never synchronously: `lock` is held right now and the answer to being
+        // lost is a call back into this object.
+        if hadPlayer, let onSpeakerLost = onSpeakerLost {
+            DispatchQueue.global().async { onSpeakerLost() }
         }
     }
 

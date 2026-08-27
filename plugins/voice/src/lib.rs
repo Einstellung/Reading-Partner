@@ -58,6 +58,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::cancel_dictation,
             commands::release_microphone,
             commands::set_indicator_probe,
+            commands::stop_speaking,
+            commands::speech_probe,
+            commands::speech_report,
             commands::register_listener,
             commands::remove_listener
         ])

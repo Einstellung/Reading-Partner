@@ -107,3 +107,81 @@ the stack down and the next hold rebuilds it. During a hold they only refuse the
 keep; the run tears itself down as it always did. Either way a hold never fails
 for it, and `timing.reused` says which one happened with `timing.reuseSkipped`
 beside it saying why.
+
+## Speaking
+
+The same engine also speaks (`docs/33`, M-voice-2). An `AVAudioPlayerNode` is
+attached to the stack the microphone already keeps and connected to the main
+mixer at 24 kHz mono float32; sentences are queued onto it one at a time and
+play end to end with no gap inserted between them.
+
+| command | arguments | answer |
+|---|---|---|
+| `stop_speaking` | optional `reason` | `{ speaking, utterance, index, charOffset, playedMs }` |
+| `speech_probe` | `args` object, debug builds only | — (or the interruption leg's positions) |
+| `speech_report` | — | the last bench run's measurements |
+
+`enqueue_speech` is deliberately **not** a command. Sentences are put on the
+queue from Rust, through `Voice::enqueue_speech`, because the synthesiser lives
+there: making it a command would carry the PCM into the webview and straight
+back out. Its shape is the contract between the two halves:
+
+| Rust sends | |
+|---|---|
+| `utterance` | one number per turn of conversation, increasing |
+| `index` | sentence number within the turn, from 0 |
+| `chars` | how many characters that sentence is. Never the text — nothing native has ever held a word anybody said, and this does not start |
+| `last` | this is the turn's final sentence |
+| `sampleRate` | 24000. Anything else is refused with both numbers, never resampled |
+| `trim` | default true |
+| `pcm` | base64 of little-endian 16-bit mono, exactly the vendor's bytes |
+
+| Swift answers | |
+|---|---|
+| `dropped` | the turn was stopped before this sentence arrived; it was not queued |
+| `leadMs` / `trailMs` | silence cut off the front and the back |
+| `queuedMs` | speech now ahead of the listener |
+| `startMs` | where this sentence starts on the player's timeline |
+
+Trimming, queueing, timekeeping and interruption are all Swift's. Rust hands
+over what the vendor sent and learns the real duration from the answer, because
+only the trim knows it. Changing vendor changes nothing on this side unless the
+new one speaks at some rate other than 24 kHz.
+
+One more event, subscribed with `addPluginListener('voice', 'speech', cb)`:
+
+| payload | when |
+|---|---|
+| `{ kind: "level", value }` | output level 0..1 for the orb, about 10 Hz, and one final `0` as the voice stops |
+| `{ kind: "speaking", value, reason }` | `1` when a turn starts; `0` when it ends, with `done`, `underrun`, `interrupted`, `released` or `lost` |
+
+A separate event name rather than a fifth `dictation` kind. The dictation
+reducer has no default branch and every promise above about that event stays
+exactly as it was: playback emits nothing on it, `DictationRun` is untouched,
+and a composer subscribed to `dictation` cannot hear the voice at all.
+
+What the playback path promises:
+
+- A drained queue is a `stop()`. `scheduleBuffer` with no `when` splices buffers
+  end to end, so a running frame total is the position in the speech — but the
+  player's timeline keeps advancing through the trailing silence and through a
+  gap where the next sentence has not arrived. Stopping on drain is what keeps
+  the position honest; it covers a turn ending and a turn starving with the same
+  mechanism, and only the `reason` tells them apart.
+- `stop_speaking` reads the position before it stops the player, because
+  stopping resets the timeline the position is measured on. `index` and
+  `charOffset` map back onto the text the caller sent; the character is linear
+  within the sentence, so it is worth about a character or two, and the sentence
+  boundary is exact.
+- Nothing resumes after an interruption. A route that went away, a session that
+  was interrupted or an app that left the screen ends the turn with
+  `reason: "lost"`, and what comes next is a new turn.
+- **Speaking lights the orange indicator too.** It is the same engine, so the
+  cost of one form is the cost of both: whoever opens a mouth owes a
+  `release_microphone`. That command now stops the voice as well — an engine
+  about to be torn down cannot go on speaking through.
+- A dictation hold that wants no player is served by a stack that has one, so
+  speaking first and then holding to talk costs no rebuild. Holding first and
+  then speaking costs one, and it is recorded in `timing.reuseSkipped`.
+- The end of a hold will not park the engine while a sentence is still being
+  spoken; the voice's own release parks it when the turn is over.

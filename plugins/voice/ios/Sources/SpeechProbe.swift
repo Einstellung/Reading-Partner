@@ -1,0 +1,162 @@
+// The bench's driver: twelve pre-synthesised sentences off the device's own
+// disk, fed through SpeechOut exactly the way the Rust TTS client will feed it,
+// with no network in the loop. Debug builds only — a shipping build has no
+// fixture to read and nothing to write a tape to.
+//
+// Playing files rather than synthesising is the whole point. Every question the
+// device experiments ask (does the seam splice, does playerTime tell the truth,
+// does the echo canceller keep our own voice out of the transcript, is the
+// envelope usable) is about the player and the engine, and a vendor's latency
+// jitter in the middle of it would be noise. The one leg that is about arrival
+// timing replays the fixture's own measured synthesis times.
+
+import AVFoundation
+import Foundation
+
+struct SpeechProbeArgs: Decodable {
+    let label: String
+    /// Which copy of the fixture to feed: `trimmed` (already cut) or `raw` (the
+    /// vendor's bytes, so that SpeechOut does the cutting).
+    let source: String
+    /// `burst` queues everything at once; `measured` waits out each sentence's
+    /// real synthesis time from the manifest first.
+    let pace: String
+    /// Force the voice-processing unit on or off for this run. Absent leaves the
+    /// app's own behaviour, which is on.
+    let vpio: Bool?
+    /// Absolute path of the fixture directory, resolved by the webview: it knows
+    /// where Tauri's app data directory is and Swift would have to guess.
+    let fixtureDir: String
+    /// Where to write the player's own output as 16-bit PCM. Absent writes none.
+    let capturePath: String?
+    /// Only the first N sentences, for the shorter legs.
+    let limit: Int?
+    /// `play` (the default) feeds the fixture; `interrupt` runs the
+    /// queue-then-stop loop below.
+    let mode: String?
+    let afterMs: Double?
+    let times: Int?
+}
+
+/// One sentence as the manifest describes it.
+private struct FixtureSentence: Decodable {
+    struct Synth: Decodable {
+        let total_ms: Double
+    }
+    let index: Int
+    let id: String
+    let chars: Int
+    let synth: Synth
+}
+
+private struct FixtureManifest: Decodable {
+    let sentences: [FixtureSentence]
+}
+
+enum SpeechProbe {
+    /// Reads the manifest, then feeds the sentences. Returns as soon as the
+    /// first one is queued: the command that calls this resolves immediately and
+    /// the run is watched through the `speech` event, because a command that
+    /// waited out seventy-five seconds of speech would hold the serial chain for
+    /// all of it (docs/pitfall/159).
+    static func start(_ args: SpeechProbeArgs) throws {
+        let dir = URL(fileURLWithPath: args.fixtureDir)
+        let manifestData = try Data(contentsOf: dir.appendingPathComponent("manifest.json"))
+        let manifest = try JSONDecoder().decode(FixtureManifest.self, from: manifestData)
+        var sentences = manifest.sentences.sorted { $0.index < $1.index }
+        if let limit = args.limit { sentences = Array(sentences.prefix(limit)) }
+        guard !sentences.isEmpty else {
+            throw DictationError("The fixture manifest has no sentences in it.")
+        }
+
+        // The stack is rebuilt whenever this leg wants a different unit than the
+        // one standing, because a leg that inherited the wrong one would answer
+        // a question nobody asked.
+        if let vpio = args.vpio, AudioFront.voiceProcessingOverride != vpio {
+            AudioFront.voiceProcessingOverride = vpio
+            AudioFront.shared.close()
+        }
+
+        SpeechOut.shared.setLabel(args.label)
+        #if DEBUG
+            if let path = args.capturePath {
+                // 120 s of headroom over a 75 s fixture, allocated up front so
+                // the audio thread never does.
+                SpeechOut.shared.beginCapture(label: args.label, path: path, seconds: 120)
+            }
+        #endif
+
+        // The vendor's own bytes never come from a `trim: false` path in
+        // production — Rust always hands over what the vendor sent. The `raw`
+        // leg exists so that the same twelve sentences can be listened to with
+        // the vendor's silences left in, as the control for the trimmed one.
+        let trim = args.source == "raw"
+        let measured = args.pace == "measured"
+        let turn = UInt64(Date().timeIntervalSince1970 * 1000)
+
+        Task.detached(priority: .userInitiated) {
+            var elapsed: Double = 0
+            let began = CFAbsoluteTimeGetCurrent()
+            for (position, sentence) in sentences.enumerated() {
+                if measured {
+                    elapsed += sentence.synth.total_ms
+                    let wait = elapsed / 1000 - (CFAbsoluteTimeGetCurrent() - began)
+                    if wait > 0 {
+                        try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                    }
+                }
+                let file = dir.appendingPathComponent(args.source)
+                    .appendingPathComponent("\(sentence.id).pcm")
+                guard let pcm = try? Data(contentsOf: file) else {
+                    NSLog("RP-SPEECH fixture missing: %@", file.path)
+                    continue
+                }
+                do {
+                    let ack = try SpeechOut.shared.enqueue(
+                        pcm: pcm, sampleRate: SpeechOut.sampleRate, chars: sentence.chars,
+                        utterance: turn, index: sentence.index, last: position == sentences.count - 1,
+                        trim: trim)
+                    if ack.dropped { return }
+                } catch {
+                    NSLog("RP-SPEECH enqueue failed: %@", DictationError.describe(error))
+                    return
+                }
+            }
+        }
+    }
+
+    /// The interruption leg: queue a sentence and cut it off after `afterMs`,
+    /// `times` over. What it is looking for is the process surviving a `stop()`
+    /// that lands before the player has finished a single IO cycle.
+    static func interrupt(_ args: SpeechProbeArgs, afterMs: Double, times: Int) throws
+        -> [SpeechPosition]
+    {
+        let dir = URL(fileURLWithPath: args.fixtureDir)
+        let manifestData = try Data(contentsOf: dir.appendingPathComponent("manifest.json"))
+        let manifest = try JSONDecoder().decode(FixtureManifest.self, from: manifestData)
+        guard let first = manifest.sentences.sorted(by: { $0.index < $1.index }).first else {
+            throw DictationError("The fixture manifest has no sentences in it.")
+        }
+        let pcm = try Data(
+            contentsOf: dir.appendingPathComponent(args.source)
+                .appendingPathComponent("\(first.id).pcm"))
+
+        var positions: [SpeechPosition] = []
+        for round in 0..<times {
+            let turn = UInt64(round) &+ 1
+            _ = try SpeechOut.shared.enqueue(
+                pcm: pcm, sampleRate: SpeechOut.sampleRate, chars: first.chars, utterance: turn,
+                index: first.index, last: true, trim: args.source == "raw")
+            Thread.sleep(forTimeInterval: afterMs / 1000)
+            positions.append(SpeechOut.shared.stop(reason: "interrupt"))
+        }
+        return positions
+    }
+}
+
+/// The interruption leg's answer. A struct rather than a dictionary because the
+/// invoke encoder takes an Encodable whole and would have to be trusted to
+/// coerce an array of them nested in one.
+struct SpeechInterruptReport: Encodable {
+    let positions: [SpeechPosition]
+}
