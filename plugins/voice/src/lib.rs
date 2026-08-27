@@ -25,6 +25,12 @@ mod ios;
 mod commands;
 mod error;
 mod models;
+/// Speaking (docs/33, M-voice-2). Platform-independent: it compiles and makes
+/// real requests on the desktop, which is where it is measured. No command
+/// reaches it yet — the far end is an AVAudioPlayerNode that does not exist, and
+/// the shape of the commands follows from what that hand-off turns out to be.
+/// See the README's "Speaking" for the contract the Swift half has to meet.
+pub mod tts;
 
 pub use error::{Error, Result};
 

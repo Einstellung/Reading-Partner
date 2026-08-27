@@ -17,6 +17,18 @@ tauri = { version = "2" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+# The speaking half (src/tts) makes its own HTTPS requests: Mimo streams PCM over
+# SSE and the bytes are headed for an audio node, not for the webview, so they
+# never leave Rust until they reach Swift. Every crate below is already in the
+# app's dependency graph through tauri-plugin-http, and the features are the ones
+# it already builds with, so this adds a compile unit to nothing.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "json"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+base64 = "0.22"
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
 
 [build-dependencies]
 tauri-plugin = { version = "2.6.3", features = ["build"] }
