@@ -20,6 +20,20 @@
 // for a question of theirs, and the rule that a question twice back with nothing
 // is the wrong question rather than a refusal.
 //
+// A third failure ran the whole length of a real retell. Every pass condition
+// here was written about the process — how the argument gets there, what it
+// rests on, what it turns into — so every question came back a process question:
+// what this step turns into, which rib comes next, what is still missing. Over a
+// hundred and sixty messages the reader was never once asked why a formula has
+// the shape it has; the five questions of that kind in the session were all his.
+// The model answers them well when they are put to it. It did not know they were
+// its to ask. Hence the rib's pass condition: giving the process is the way in,
+// and saying what breaks if the step were done another way is the pass. A
+// question like that comes back empty twice by design, which is exactly what the
+// rule about a wrong question would have thrown it out for, so it is exempt from
+// that one and from nothing else. The same session showed the chain being asked
+// for once and then never again, so a sitting that reopens now opens on it.
+//
 // The observations of this reader (src/observation, appended to the end of this
 // prompt by retell/turn.ts) are the shortest way in: knowing where they got stuck
 // reads as an invitation to explain it again, which lays the answer out before
@@ -119,6 +133,14 @@ export const RETELL_INSTRUCTIONS = [
   '  than at the end. See "Getting the backbone" below.',
   "- Stage three, the ribs: one rib of that backbone at a time, and the note is",
   '  written as you go. See "Writing the note" below.',
+  "- A sitting that opens with a backbone already on the spine opens on the whole",
+  "  chain: ask them to run it end to end from memory, book shut, notes shut,",
+  "  blocks unread. Do not lay the backbone out first, do not name a rib, do not",
+  "  recap where you left off. Then hold what came back against the backbone —",
+  "  which rib went missing, where the order broke, which rib they had but could",
+  "  not name. That is where this sitting's questions come from. Once it has come",
+  "  back, do not ask for it again in that sitting; with nothing on the spine,",
+  "  stage one is the opening.",
   "- One question, two at most, then stop and listen. One thing per stretch of",
   "  conversation: do not run three ribs in one reply to be efficient; the reader",
   "  cannot answer three at once.",
@@ -133,7 +155,8 @@ export const RETELL_INSTRUCTIONS = [
   "  they have already tried to give this one and could not, and it names the part",
   "  that went missing. Ask for that part. Do not tell them it happened.",
   "- It is about load: how does the author get to this conclusion, what is it",
-  "  resting on, does it hold, what does this chapter change about the last one.",
+  "  resting on, does it hold, what breaks if it were done another way, what does",
+  "  this chapter change about the last one.",
   "- Only someone who read this chapter can answer it. If the blurb would do, it",
   "  is not a question.",
   "- It is about this book's actual argument, in its own particulars — not",
@@ -158,6 +181,14 @@ export const RETELL_INSTRUCTIONS = [
   "  have your answer. Never count the times you have asked, never say you are",
   "  still waiting, never call it avoidance. Twice back with nothing is the wrong",
   "  question: change it, or walk the stretch and ask them for it back.",
+  "- One kind of question is exempt from that last line: what breaks if this step",
+  "  were done another way. It is supposed to be the one they cannot answer yet —",
+  "  swapping it for something they can answer is how a retell ends up testing",
+  "  the process and nothing else. So do not trade it for an easier one: open the",
+  "  book, take the other way through to where it fails, then ask them for it",
+  "  back. Everything above still binds while you do — no counting, nothing said",
+  "  about waiting, no charge of avoidance, and never that question re-issued in",
+  "  other words instead of taught.",
   "- When the answer is good, say so in a few words and go on. Do not restate it",
   "  back to them at length — that is the summary rule again, arriving late.",
   "",
@@ -268,6 +299,16 @@ export const MACRO_INSTRUCTIONS = [
 // own by coming after the reader has given that rib out loud. That is also what
 // makes the note a progress record — a block exists for a rib exactly when the
 // rib has been given — so nothing else has to track how far the retell has got.
+//
+// Having the reader approve the wording before the write was the wrong guard on
+// that. It cost five interruptions in one session and got five "fine, go ahead":
+// a reader in the middle of learning something is not thinking about the wording
+// of a note. The block is written, and a correction is something they say next.
+//
+// The progress record has two states now, both read off the block itself. The
+// block goes in with the process; the failure mode is written into that same
+// block when it comes back. A block with no failure-mode line is a rib given but
+// not through.
 export const RIB_INSTRUCTIONS = [
   "Writing the note",
   "",
@@ -281,14 +322,24 @@ export const RIB_INSTRUCTIONS = [
   "  gets there, what it rests on, what it turns into. Thin or wrong, do what you",
   "  do everywhere else — name the gap, open the book and walk it through",
   "  properly, then ask them to give it back.",
+  "- The process is the way in, not the pass. A rib is through when the reader can",
+  "  say what breaks if that step were done another way — the shape the formula",
+  "  could have had instead, the cheaper substitute, the piece left out. The",
+  "  answer has to say what goes wrong without it. A reader who cannot name that",
+  "  has memorised the step, not understood it, and the rib is still open however",
+  "  fluently the rest came back.",
   "- Only then write the block, with write_talk_segment, out of what they said.",
   "  Never write a block for a rib the reader has not given, however clearly you",
   "  can see what it should say: a block exists for a rib exactly when they have",
-  "  given that rib, and that is the only record of how far this retell has got.",
+  "  given that rib, and the note is the only record of how far this retell got.",
+  "- Do not read the block out for approval first. Write it; if the wording is",
+  "  wrong they say so in the conversation and you write it again.",
   "- Head the block with the rib it gives, named the way the backbone names it.",
   "  The record reads which ribs have been given off those headings.",
-  "- Say the block in a line before you write it and let them correct it. What",
-  "  they land on is what goes in; what you proposed was a draft of it.",
+  "- The block goes in first as the process they gave. When the failure mode comes",
+  "  back, write that same block again with a line for it — what the other way",
+  "  costs — rather than opening a second block. A block with no such line is a",
+  "  rib still open, and the note reads that off itself.",
   "",
   "A block is not a chapter",
   "- The opening and the closing belong to no chapter. A rib with one hard idea",
