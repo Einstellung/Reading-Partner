@@ -335,6 +335,17 @@ final class SpeechOut {
             }
         }
 
+        /// A leg that is not taping. Both the buffer and the destination go:
+        /// leaving the path standing is what made one tape hold two legs, the
+        /// meter appending the second one to the first and `speech_report`
+        /// writing both to the first one's file (docs/pitfall/197).
+        func endCapture() {
+            queue.sync {
+                releaseCaptureLocked()
+                capturePath = nil
+            }
+        }
+
         /// Writes what the tap collected and answers with how many frames it
         /// was. Called after the run has stopped, never during one.
         @discardableResult

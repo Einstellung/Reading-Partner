@@ -1,8 +1,9 @@
 // The unattended half of the playback experiments (docs/33, M-voice-2).
 //
-// Six legs, one after another, on a fixture already pushed into the app's data
-// container. Nothing here synthesises: what is being measured is the player and
-// the engine, and a vendor's latency jitter in the middle of it would be noise.
+// Three fixture legs, two echo legs and, when asked, one with the vendor in it,
+// on a fixture already pushed into the app's data container. Nothing but the
+// last of them synthesises: what is being measured is the player and the
+// engine, and a vendor's latency jitter in the middle of it would be noise.
 // The whole answer is written to speech/speech-result.json and pulled off the
 // device with scripts/ios-dictation/fetch-result.sh.
 //
@@ -16,6 +17,12 @@ import { appDataDir, join } from "@tauri-apps/api/path";
 import { mkdir, readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { holdTheScreen } from "./wake-lock";
+import {
+  hasOnDeviceDictation,
+  nativeDictation,
+  releaseDictationMicrophone,
+  type DictationEvent,
+} from "../ai/voice/dictation";
 
 export const SPEECH_RESULT_DIR = "speech";
 export const SPEECH_RESULT_FILE = "speech/speech-result.json";
@@ -55,6 +62,7 @@ type SpeechResult = {
   stage: string;
   fixtureDir: string;
   legs: LegResult[];
+  echo: EchoResult[];
   interrupts: unknown;
   error: string | null;
   timestamp: string;
@@ -68,9 +76,44 @@ const LEGS: Leg[] = [
   { label: "trimmed-burst", source: "trimmed", pace: "burst", capture: true },
   { label: "trimmed-measured", source: "trimmed", pace: "measured", capture: true },
   { label: "raw-burst", source: "raw", pace: "burst", capture: true },
-  { label: "vpio-off", source: "trimmed", pace: "burst", vpio: false, limit: 4 },
-  { label: "vpio-on", source: "trimmed", pace: "burst", vpio: true, limit: 4 },
 ];
+
+/// How many sentences the echo legs play. Long enough that the recogniser has
+/// something to settle on after the microphone joins, short enough that two of
+/// them fit in the run alongside everything else.
+const ECHO_SENTENCES = 6;
+
+/// One half of the echo experiment: the phone speaking while its own microphone
+/// is open, with the voice-processing unit on and then off.
+type EchoResult = {
+  label: string;
+  vpio: boolean;
+  ok: boolean;
+  error: string | null;
+  /// What the player was given, joined.
+  spoken: string;
+  /// What the recogniser settled on. The whole transcript, not a tail.
+  heard: string;
+  /// Character bigrams of `spoken`, and how many of them are in `heard`. A
+  /// ratio rather than a word count because the fixture is Chinese and the
+  /// recogniser does not agree with anybody about where the words are.
+  bigrams: number;
+  bigramsHeard: number;
+  /// Dictation events of any kind. Zero means the leg did not listen at all,
+  /// which is not the same answer as "the unit cancelled everything".
+  events: number;
+  wallMs: number;
+};
+
+/// Overlapping character pairs, punctuation and spacing dropped.
+function bigramsOf(text: string): Set<string> {
+  const clean = text.replace(/[^\p{L}\p{N}]/gu, "");
+  const out = new Set<string>();
+  for (let i = 0; i + 1 < clean.length; i += 1) out.add(clean.slice(i, i + 2));
+  return out;
+}
+
+const after = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function render(result: SpeechResult): void {
   const root = document.getElementById("root");
@@ -194,15 +237,116 @@ function runLeg(leg: Leg, fixtureDir: string, captureDir: string): Promise<LegRe
 ///
 /// The sentences come from the fixture's manifest so that the two kinds of leg
 /// say the same words and their measurements line up sentence by sentence.
-async function runLive(): Promise<LegResult> {
+async function fixtureSentences(): Promise<string[]> {
   const raw = await readTextFile(`${SPEECH_FIXTURE_DIR}/manifest.json`, {
     baseDir: BaseDirectory.AppData,
   });
   const manifest = JSON.parse(raw) as { sentences: { index: number; text: string }[] };
-  const sentences = [...manifest.sentences]
-    .sort((a, b) => a.index - b.index)
-    .map((sentence) => sentence.text);
+  return [...manifest.sentences].sort((a, b) => a.index - b.index).map((s) => s.text);
+}
+
+async function runLive(): Promise<LegResult> {
+  const sentences = await fixtureSentences();
   return watch("live", () => invoke("plugin:voice|speech_live", { args: { sentences } }));
+}
+
+/// The echo leg: the phone speaks the fixture with its own microphone open, and
+/// the answer is how much of what it said the recogniser wrote down. With the
+/// voice-processing unit on that should be close to nothing; with it off it
+/// should be most of it, and that second half is the control — two empty
+/// transcripts mean the leg never listened, not that the unit worked.
+///
+/// The order is load-bearing twice over. The unit is switched before anything
+/// subscribes, because the switch tears the stack down and the teardown ends in
+/// a `speaking:0` that a watching leg would take for its own ending. And the
+/// player starts before the microphone, because a stack that has a player can
+/// take a microphone but a stack that has none has to be rebuilt to get one,
+/// and the rebuild would take the recogniser with it.
+async function runEcho(vpio: boolean, fixtureDir: string): Promise<EchoResult> {
+  const label = vpio ? "echo-vpio-on" : "echo-vpio-off";
+  const began = performance.now();
+  const spoken = (await fixtureSentences()).slice(0, ECHO_SENTENCES).join("");
+  const out: EchoResult = {
+    label,
+    vpio,
+    ok: false,
+    error: null,
+    spoken,
+    heard: "",
+    bigrams: bigramsOf(spoken).size,
+    bigramsHeard: 0,
+    events: 0,
+    wallMs: 0,
+  };
+
+  let listener: PluginListener | null = null;
+  let dictating = false;
+  const source = hasOnDeviceDictation() ? nativeDictation() : null;
+  try {
+    if (!source) throw new Error("This device has no on-device dictation.");
+    await invoke("plugin:voice|speech_probe", {
+      args: { label, source: "trimmed", pace: "burst", vpio, fixtureDir, mode: "vpio" },
+    });
+    await after(800);
+
+    let live = false;
+    let started: (() => void) | null = null;
+    let ended: (() => void) | null = null;
+    const speakingStarted = new Promise<void>((resolve) => (started = resolve));
+    const speakingEnded = new Promise<void>((resolve) => (ended = resolve));
+    listener = await addPluginListener("voice", "speech", (event: SpeechEvent) => {
+      if (event.kind !== "speaking") return;
+      if (event.value === 1) {
+        live = true;
+        started?.();
+        return;
+      }
+      if (live) ended?.();
+    });
+
+    await invoke("plugin:voice|speech_probe", {
+      args: {
+        label,
+        source: "trimmed",
+        pace: "burst",
+        fixtureDir,
+        limit: ECHO_SENTENCES,
+      },
+    });
+    await Promise.race([speakingStarted, after(20_000)]);
+    if (!live) throw new Error("The player never started, so there was nothing to hear.");
+
+    await source.start((event: DictationEvent) => {
+      // Levels are the meter. They say nothing about what was transcribed.
+      if (event.kind !== "level") out.events += 1;
+    });
+    dictating = true;
+    await Promise.race([speakingEnded, after(120_000)]);
+    // The tail of the last sentence is still settling when the player stops.
+    await after(1500);
+    out.heard = await source.stop();
+    dictating = false;
+
+    const heard = bigramsOf(out.heard);
+    out.bigramsHeard = [...bigramsOf(spoken)].filter((b) => heard.has(b)).length;
+    out.ok = true;
+  } catch (e) {
+    out.error = String(e);
+  } finally {
+    if (dictating && source) {
+      try {
+        await source.cancel();
+      } catch {
+        // The stack the next leg builds is the one that matters.
+      }
+    }
+    await listener?.unregister();
+    // The microphone goes between legs: the next one switches the unit, and a
+    // switch under a live recogniser is a different experiment.
+    await releaseDictationMicrophone();
+    out.wallMs = Math.round(performance.now() - began);
+  }
+  return out;
 }
 
 /// `live` adds the leg that synthesises. It is off by default because it needs
@@ -214,6 +358,7 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
     stage: "start",
     fixtureDir: "",
     legs: [],
+    echo: [],
     interrupts: null,
     error: null,
     timestamp: new Date().toISOString(),
@@ -235,6 +380,16 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
       result.legs.push(await runLeg(leg, fixtureDir, captureDir));
       // Between legs, so that the next one starts from a parked stack rather
       // than from one that is still coming to rest.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+
+    // The echo legs next: still no network, and they leave the stack in a known
+    // state for everything after them.
+    for (const vpio of [false, true]) {
+      result.stage = vpio ? "echo-vpio-on" : "echo-vpio-off";
+      render(result);
+      await write(result);
+      result.echo.push(await runEcho(vpio, fixtureDir));
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 
@@ -265,7 +420,7 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
       },
     });
 
-    result.ok = result.legs.every((leg) => leg.ok);
+    result.ok = result.legs.every((leg) => leg.ok) && result.echo.every((leg) => leg.ok);
     result.stage = "done";
   } catch (e) {
     result.error = String(e);

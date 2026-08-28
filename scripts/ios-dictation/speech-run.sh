@@ -36,9 +36,10 @@ DEV_ID=com.xinyuan.readingpartner
 DEV_NAME="Reading Partner"
 DEVICE=00008140-000C31641EEB001C
 MODE=${1:-speech}
-# The live leg adds a turn of its own: twelve sentences synthesised one at a
-# time and then spoken end to end.
-WAIT=${2:-$([ "$MODE" = speech-live ] && echo 560 || echo 420)}
+# 75 s of fixture twice, 81 s of it once, two echo legs of 39 s each and the
+# gaps between them come to about 330 s. The live leg adds a turn of its own:
+# twelve sentences synthesised one at a time and then spoken end to end.
+WAIT=${2:-$([ "$MODE" = speech-live ] && echo 640 || echo 480)}
 FIXTURE=${3:-$HOME/rp-speech-fixture}
 
 if [ "$MODE" = speech-live ] && [ -z "${MIMO_API_KEY:-}" ]; then

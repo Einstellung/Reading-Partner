@@ -294,7 +294,14 @@ class VoicePlugin: Plugin {
 
         serial {
             do {
-                if args.mode == "interrupt" {
+                if args.mode == "vpio" {
+                    // Only the unit gets switched. The stack goes with it, and
+                    // returning here rather than doing it at the head of a leg
+                    // is what keeps that teardown's own `lost` from landing
+                    // inside a leg that has already started listening.
+                    SpeechProbe.setVoiceProcessing(args.vpio)
+                    invoke.resolve()
+                } else if args.mode == "interrupt" {
                     let positions = try SpeechProbe.interrupt(
                         args, afterMs: args.afterMs ?? 5, times: args.times ?? 50)
                     invoke.resolve(SpeechInterruptReport(positions: positions))

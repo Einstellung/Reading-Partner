@@ -60,6 +60,17 @@ enum SpeechProbe {
     /// the run is watched through the `speech` event, because a command that
     /// waited out seventy-five seconds of speech would hold the serial chain for
     /// all of it (docs/pitfall/159).
+    /// The stack is rebuilt whenever a leg wants a different unit than the one
+    /// standing, because a leg that inherited the wrong one would answer a
+    /// question nobody asked. The teardown is asynchronous and ends in a
+    /// `speaking:0` carrying `lost`, so a leg that cares switches before it
+    /// starts watching rather than on its way in.
+    static func setVoiceProcessing(_ vpio: Bool?) {
+        guard let vpio = vpio, AudioFront.voiceProcessingOverride != vpio else { return }
+        AudioFront.voiceProcessingOverride = vpio
+        AudioFront.shared.close()
+    }
+
     static func start(_ args: SpeechProbeArgs) throws {
         let dir = URL(fileURLWithPath: args.fixtureDir)
         let manifestData = try Data(contentsOf: dir.appendingPathComponent("manifest.json"))
@@ -70,13 +81,7 @@ enum SpeechProbe {
             throw DictationError("The fixture manifest has no sentences in it.")
         }
 
-        // The stack is rebuilt whenever this leg wants a different unit than the
-        // one standing, because a leg that inherited the wrong one would answer
-        // a question nobody asked.
-        if let vpio = args.vpio, AudioFront.voiceProcessingOverride != vpio {
-            AudioFront.voiceProcessingOverride = vpio
-            AudioFront.shared.close()
-        }
+        setVoiceProcessing(args.vpio)
 
         SpeechOut.shared.setLabel(args.label)
         #if DEBUG
@@ -84,6 +89,8 @@ enum SpeechProbe {
                 // 120 s of headroom over a 75 s fixture, allocated up front so
                 // the audio thread never does.
                 SpeechOut.shared.beginCapture(label: args.label, path: path, seconds: 120)
+            } else {
+                SpeechOut.shared.endCapture()
             }
         #endif
 
@@ -138,8 +145,13 @@ enum SpeechProbe {
                 .appendingPathComponent("\(first.id).pcm"))
 
         var positions: [SpeechPosition] = []
+        // Turns are wall-clock milliseconds everywhere else in this file, and
+        // the player drops a sentence whose turn is older than the last one it
+        // saw. A counter starting at 1 is older than every leg that ran before
+        // this one, which is how fifty interruptions came to be fifty drops.
+        let base = UInt64(Date().timeIntervalSince1970 * 1000)
         for round in 0..<times {
-            let turn = UInt64(round) &+ 1
+            let turn = base &+ UInt64(round)
             _ = try SpeechOut.shared.enqueue(
                 pcm: pcm, sampleRate: SpeechOut.sampleRate, chars: first.chars, utterance: turn,
                 index: first.index, last: true)
