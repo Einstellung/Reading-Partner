@@ -12,7 +12,7 @@ import { isTauri } from "./host";
 // The talk- names are the old word, deliberately: this object is a retell now,
 // but these strings are already written into every events-<topicId>.jsonl on
 // both of the reader's devices, the file is append-only, and the distillation
-// sweeps read them back (observation/distill/sweeps.ts). Renaming them would
+// sweeps read them back (memory/live/sweeps.ts). Renaming them would
 // make every retell that has already happened invisible.
 export type EventType =
   | "classroom-toggle" // { on: boolean }
@@ -38,9 +38,9 @@ export type EventType =
   // are the message indexes the pass would have moved the cursor over and
   // `fromTs`/`toTs` the timestamps at the ends of that stretch — which is the
   // stretch a later pass has to redo. Fields and the classifier are in
-  // observation/distill/distill.ts (distillFailurePayload).
+  // memory/observations/distill.ts (distillFailurePayload).
   | "distill-failed" // { trigger, threadId?, bookId?, retellId?, stage, reason, outcome, from, to, fromTs, toTs, created, updated, deleted }
-  // A profile-guess pass that finished (observation/profile/guess.ts), in events-ai.jsonl
+  // A profile-guess pass that finished (memory/profile/guess.ts), in events-ai.jsonl
   // rather than a topic's log: the pass looks across every topic at once.
   // `wrote` says whether the guess section actually changed.
   | "guess-run" // { trigger, wrote, guesses, dropped }

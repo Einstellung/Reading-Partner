@@ -66,7 +66,7 @@ import {
   type SourceResult,
 } from "./run-state";
 import type { PoolRecord } from "./item-pool";
-import type { FeedbackEvent } from "../../observation/profile/feedback";
+import type { FeedbackEvent } from "../../memory/profile/feedback";
 import type { Briefing, BriefingItemMeta, ScreenSummary, TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 

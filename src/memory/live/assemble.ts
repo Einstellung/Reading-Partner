@@ -11,10 +11,10 @@
 // entries) so it unit-tests without a filesystem; the async wrapper wires it to
 // the live store and topic list. Nothing here changes the storage format.
 
-import { listTopics } from "../platform/app/topics";
+import { listTopics } from "../../platform/app/topics";
 import { readObservationIndex } from "./live";
-import { loadProfile } from "./profile/profile";
-import type { ObservationIndexEntry, ObservationType } from "./record/types";
+import { loadProfile } from "../profile/profile";
+import type { ObservationIndexEntry, ObservationType } from "../observations/types";
 
 // The identity document, verbatim (empty string when the user has no profile yet).
 export function assembleIdentity(): Promise<string> {

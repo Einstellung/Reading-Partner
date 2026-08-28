@@ -8,7 +8,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import ObservationPanel from "../../../src/ui/components/reader/ObservationPanel";
-import type { ObservationConflict } from "../../../src/observation";
+import type { ObservationConflict } from "../../../src/memory";
 
 function copy(over: Partial<ObservationConflict> = {}): ObservationConflict {
   return {

@@ -5,30 +5,30 @@
 // the real model through runAgentTurn with the same provider config as chat, and
 // a tiny change feed so the observations panel refreshes after background writes.
 
-import { appData } from "../platform/app/appdata";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
-import { resolveModel } from "../ai/model-call";
-import { runSubagentTurnLive } from "../ai/subagent";
-import { StoppedError } from "../ai/watchdog";
-import { peekAnnotations } from "../platform/app/annotations";
-import { logEvent } from "../platform/app/events";
-import { observeAppLifecycle } from "../platform/app/lifecycle";
-import { AI_EVENT_TOPIC } from "../platform/app/structured-output";
-import { peekThreads } from "../platform/app/threads";
-import { listTopics } from "../platform/app/topics";
-import { loadFeedback } from "./profile/feedback";
+import { appData } from "../../platform/app/appdata";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { resolveModel } from "../../ai/model-call";
+import { runSubagentTurnLive } from "../../ai/subagent";
+import { StoppedError } from "../../ai/watchdog";
+import { peekAnnotations } from "../../platform/app/annotations";
+import { logEvent } from "../../platform/app/events";
+import { observeAppLifecycle } from "../../platform/app/lifecycle";
+import { AI_EVENT_TOPIC } from "../../platform/app/structured-output";
+import { peekThreads } from "../../platform/app/threads";
+import { listTopics } from "../../platform/app/topics";
+import { loadFeedback } from "../profile/feedback";
 import {
   isGuessDue,
   runProfileGuessPass,
   type GuessTopicEvidence,
-} from "./profile/guess";
+} from "../profile/guess";
 import {
   loadGuessState,
   loadProfileForWrite,
   saveGuessState,
   saveProfile,
-} from "./profile/profile";
-import { FileObservationAdapter, type ObservationAdapter } from "./record/adapter";
+} from "../profile/profile";
+import { FileObservationAdapter, type ObservationAdapter } from "../observations/adapter";
 import {
   SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
@@ -41,13 +41,13 @@ import {
   type DistillJob,
   type ThreadArrears,
   type TopicArrears,
-} from "./distill/arrears";
+} from "../observations/arrears";
 import {
   ObservationFileStore,
   type ObservationConflict,
   type ObservationFs,
-} from "./record/store";
-import type { ObservationIndexEntry } from "./record/types";
+} from "../observations/store";
+import type { ObservationIndexEntry } from "../observations/types";
 import {
   distillFailurePayload,
   markCursor,
@@ -57,14 +57,14 @@ import {
   type DistillAnnotation,
   type DistillMessage,
   type DistillUnitPart,
-} from "./distill/distill";
-import { runRetellDistillPass } from "./distill/retell";
+} from "../observations/distill";
+import { runRetellDistillPass } from "../observations/retell";
 import {
   createDistillGate,
   createSweeps,
   type DistillTrigger,
   type Sweeps,
-} from "./distill/sweeps";
+} from "./sweeps";
 
 const tauriFs: ObservationFs = {
   async read(path) {
@@ -156,7 +156,7 @@ export interface DistillThreadOptions {
   markedText: string;
   messages: DistillMessage[];
   // The threads `messages` was merged from, when it was merged from more than
-  // one (observation/distill/arrears.ts). Each carries a cursor over its own
+  // one (memory/observations/arrears.ts). Each carries a cursor over its own
   // messages and the pass moves all of them. Absent is the single-thread pass.
   parts?: readonly DistillUnitPart[];
   // The book's annotations, so distillation can fold in silent marks made since

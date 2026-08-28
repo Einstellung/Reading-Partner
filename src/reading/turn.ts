@@ -69,7 +69,7 @@ import {
   profileForPrompt,
   type DistillAnnotation,
   type Observation,
-} from "../observation";
+} from "../memory";
 import { readSpineOverview } from "./prep/chapters/store";
 import { chapterIndexForPage } from "./prep/papers/scheduler";
 import { paperFulltextHash, readPrepNote } from "./prep/papers/store";
@@ -722,7 +722,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // The cross-scenario user profile: who the companion is reading with, so it
   // pitches explanation depth to their background. Empty profile → no section.
   // The declared half and the AI's own guess section go in separately, and the
-  // guesses go in labelled as guesses (observation/profile/guess.ts).
+  // guesses go in labelled as guesses (memory/profile/guess.ts).
   const identity = profileForPrompt(await assembleIdentity().catch(() => ""));
   const profileSection = readerProfileSection(identity.declared, identity.guesses);
   // The whole-book outline from the reader's notes (docs/14), when they exist.
@@ -860,7 +860,7 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // parent's tail rides an aside's every turn and is not a length this
   // conversation reached.
   if (threadMsgs.length > HISTORY_KEEP && topicId) {
-    // Whose arrears these are (observation/distill/arrears.ts). A chat-span
+    // Whose arrears these are (memory/observations/arrears.ts). A chat-span
     // aside has no mark, so it is no unit of its own and this stretch belongs to
     // the conversation it was pulled out of.
     const marks = distillAnnotations();

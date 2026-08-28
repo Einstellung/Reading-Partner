@@ -11,7 +11,7 @@ import {
   type DistillMessage,
   type DistillUnitPart,
   type UnitThread,
-} from "../../observation";
+} from "../../memory";
 
 export interface HangupCall {
   threadId: string;
@@ -50,7 +50,7 @@ export interface HangupPass {
   markedText: string;
   messages: DistillMessage[];
   // The threads this transcript was merged from, so the pass moves a cursor per
-  // thread (observation/distill/arrears.ts).
+  // thread (memory/observations/arrears.ts).
   parts: DistillUnitPart[];
   annotations: DistillAnnotation[];
 }
@@ -66,7 +66,7 @@ export function hangupPass(input: {
   annotations: DistillAnnotation[];
   // The book's threads, so the pass runs over the whole conversation rather than
   // one branch of it. A chat-span aside is not a unit of its own — it folds into
-  // the thread it was pulled out of (observation/distill/arrears.ts) — and a
+  // the thread it was pulled out of (memory/observations/arrears.ts) — and a
   // lesson that had asides open owes their transcripts too. Absent leaves every
   // line below exactly as it was before asides existed.
   threads?: readonly UnitThread[];

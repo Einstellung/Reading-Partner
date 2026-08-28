@@ -1,4 +1,4 @@
-// The arrears model (src/observation/distill/arrears.ts): given what every topic has on
+// The arrears model (src/memory/observations/arrears.ts): given what every topic has on
 // disk and the clock, whether anything is owed and which single debt to pay.
 // Pure — no fs, no model, no clock of its own. Run: bun test.
 
@@ -20,8 +20,8 @@ import {
   type ThreadArrears,
   type TopicArrears,
   type UnitThread,
-} from "../../src/observation/distill/arrears";
-import type { DistillAnnotation, DistillMessage } from "../../src/observation/distill/distill";
+} from "../../src/memory/observations/arrears";
+import type { DistillAnnotation, DistillMessage } from "../../src/memory/observations/distill";
 
 const NOW = new Date("2026-08-10T12:00:00Z").getTime();
 const HOUR = 60 * 60_000;

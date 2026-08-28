@@ -533,7 +533,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     // conversation they were in the middle of because another device deleted the
     // lesson is the destructive direction. Enumerated here so the thread list
     // has a door to them; distillation gives each one a unit of its own
-    // (observation/distill/arrears.ts), so what the reader said still lands in
+    // (memory/observations/arrears.ts), so what the reader said still lands in
     // memory whether or not anyone reopens it.
     orphanAsides: (bookId) => {
       const held = cache.get(bookId);

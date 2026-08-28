@@ -354,7 +354,7 @@ test("the feedback log unions its lines and keeps the trailing newline", () => {
 });
 
 // The other half of that union, and the reason appendFeedback would rather skip
-// a reaction than write over a log it could not read (observation/profile/feedback.ts):
+// a reaction than write over a log it could not read (memory/profile/feedback.ts):
 // the lines merge is a union only when there is no base. With one, lines this
 // device no longer has are deletes, and they come off the other device too.
 test("a feedback log that lost lines does not get them back from the other device", () => {

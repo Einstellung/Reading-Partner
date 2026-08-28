@@ -8,8 +8,8 @@ export type {
   ObservationPatch,
   ObservationType,
   RetainInput,
-} from "./record/types";
-export { OBSERVATION_TYPES, isObservationType } from "./record/types";
+} from "./observations/types";
+export { OBSERVATION_TYPES, isObservationType } from "./observations/types";
 export {
   isoDate,
   localDate,
@@ -17,23 +17,23 @@ export {
   parseObservation,
   serializeIndexLine,
   serializeObservation,
-} from "./record/files";
+} from "./observations/files";
 export {
   ObservationFileStore,
   type ObservationConflict,
   type ObservationFs,
   type ObservationMeta,
-} from "./record/store";
-export { FileObservationAdapter, type ObservationAdapter } from "./record/adapter";
-export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./record/snapshot";
+} from "./observations/store";
+export { FileObservationAdapter, type ObservationAdapter } from "./observations/adapter";
+export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./observations/select";
 export {
   assembleIdentity,
   assembleReadingContext,
   assembleReadingSignal,
   READING_SIGNAL_BUDGET,
   type TopicObservationSignal,
-} from "./assemble";
-export { buildObservationTools, type ObservationToolOptions, type ObservationWriteAction } from "./record/tools";
+} from "./live/assemble";
+export { buildObservationTools, type ObservationToolOptions, type ObservationWriteAction } from "./observations/tools";
 export {
   buildDistillAgent,
   buildDistillSystemPrompt,
@@ -80,7 +80,7 @@ export {
   type MarksDistillInput,
   type MarksPassInput,
   type MarksPassResult,
-} from "./distill/distill";
+} from "./observations/distill";
 export {
   countNewMarks,
   distillUnitOf,
@@ -102,7 +102,7 @@ export {
   type ThreadArrears,
   type TopicArrears,
   type UnitThread,
-} from "./distill/arrears";
+} from "./observations/arrears";
 export {
   buildGuessAgent,
   buildGuessSystemPrompt,
@@ -153,7 +153,7 @@ export {
   type RetellPassInput,
   type RetellPassResult,
   type RetellPassStore,
-} from "./distill/retell";
+} from "./observations/retell";
 export {
   distillMarks,
   distillRetell,
@@ -170,4 +170,4 @@ export {
   type DistillRetellOptions,
   type DistillThreadOptions,
   type DistillTrigger,
-} from "./live";
+} from "./live/live";

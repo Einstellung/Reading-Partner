@@ -1,10 +1,10 @@
-// The pure reading-episode signal builder (src/observation/assemble.ts): it distills
+// The pure reading-episode signal builder (src/memory/live/assemble.ts): it distills
 // per-topic observation indexes into a short, recency-ordered plain-text summary of
 // what the reader is reading and stuck on, honoring a character budget. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { assembleReadingSignal, type TopicObservationSignal } from "../../src/observation/assemble";
-import type { ObservationIndexEntry } from "../../src/observation/record/types";
+import { assembleReadingSignal, type TopicObservationSignal } from "../../src/memory/live/assemble";
+import type { ObservationIndexEntry } from "../../src/memory/observations/types";
 
 function e(
   type: ObservationIndexEntry["type"],

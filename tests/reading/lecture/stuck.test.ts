@@ -6,7 +6,7 @@
 
 import { expect, test } from "bun:test";
 import type { Annotation } from "../../../src/platform/app/reader-contract";
-import type { Observation, ObservationType } from "../../../src/observation";
+import type { Observation, ObservationType } from "../../../src/memory";
 import {
   annotationPageMap,
   lectureObservationSnapshot,

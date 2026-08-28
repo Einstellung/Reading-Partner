@@ -149,7 +149,7 @@ export interface SubagentProgress {
 }
 
 // One sub-agent turn, run to completion. Injected so the core is testable with
-// no provider, no credentials and no network — the same shape src/observation's
+// no provider, no credentials and no network — the same shape src/memory's
 // distillation uses for the same reason. live.ts backs it with runAgentTurn.
 //
 // It must settle: a cancelled run rejects with StoppedError (the agent loop

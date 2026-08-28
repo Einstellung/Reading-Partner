@@ -1,5 +1,5 @@
-// Retell distillation (src/observation/distill/retell.ts): the pass that runs when
-// the reader leaves a retell. Same harness as tests/observation/distill.test.ts —
+// Retell distillation (src/memory/observations/retell.ts): the pass that runs when
+// the reader leaves a retell. Same harness as tests/memory/distill.test.ts —
 // the sub-agent turn is the real agent loop over a scripted stream, so the real
 // observation tools and the real failure mapping run against a fake fs with no
 // provider, network or token spend. Run: bun test.
@@ -18,8 +18,8 @@ import {
 import { runAgentLoop, type StreamFn } from "../../src/ai/agent";
 import { createTurnSettler } from "../../src/ai/subagent/turn";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/types";
-import { FileObservationAdapter } from "../../src/observation/record/adapter";
-import { runDistillPass } from "../../src/observation/distill/distill";
+import { FileObservationAdapter } from "../../src/memory/observations/adapter";
+import { runDistillPass } from "../../src/memory/observations/distill";
 import {
   buildRetellDistillSystemPrompt,
   buildRetellDistillUserMessage,
@@ -27,8 +27,8 @@ import {
   selectNewMessages,
   type RetellDistillInput,
   type RetellPassInput,
-} from "../../src/observation/distill/retell";
-import { ObservationFileStore } from "../../src/observation/record/store";
+} from "../../src/memory/observations/retell";
+import { ObservationFileStore } from "../../src/memory/observations/store";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };

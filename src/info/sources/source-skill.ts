@@ -6,7 +6,7 @@
 // Pure string assembly, like chat.ts / triage.ts.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile/profile";
+import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile/profile";
 import { DESCRIPTOR_GUIDE } from "./descriptor";
 
 const RULES = [

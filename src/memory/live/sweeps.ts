@@ -8,7 +8,7 @@
 // screen. That is not a rule to keep only in live.ts, where the only way to
 // reach it is a real model call.
 
-import { selectDistillJob, type DistillJob, type TopicArrears } from "./arrears";
+import { selectDistillJob, type DistillJob, type TopicArrears } from "../observations/arrears";
 
 // What set a pass going. Recorded on the event so a log can be read back — a
 // topic whose observations only ever come from "hangup" is a topic the sweep is

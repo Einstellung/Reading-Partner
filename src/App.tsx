@@ -53,7 +53,7 @@ import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
-import { startDistillSweeps, toDistillAnnotations, type DistillAnnotation } from "./observation";
+import { startDistillSweeps, toDistillAnnotations, type DistillAnnotation } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
@@ -617,7 +617,7 @@ export default function App() {
   }, []);
 
   // Pay down whatever the observations still owe, on a timer and whenever the
-  // app comes back (src/observation/distill/arrears.ts). Silent throughout: a sweep that
+  // app comes back (src/memory/observations/arrears.ts). Silent throughout: a sweep that
   // finds nothing owed does nothing, and one that runs a pass shows no UI. The
   // predicate keeps it off a thread whose reply is still being written.
   useEffect(() => startDistillSweeps((threadId) => isAnswering(threadId)), [isAnswering]);

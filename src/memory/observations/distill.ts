@@ -21,10 +21,10 @@ import {
   type SubagentTurnFn,
 } from "../../ai/subagent";
 import type { EventPayload } from "../../platform/app/events";
-import type { ObservationAdapter } from "../record/adapter";
-import { localDate } from "../record/files";
-import type { ObservationMeta } from "../record/store";
-import { buildObservationTools, type ObservationWriteAction } from "../record/tools";
+import type { ObservationAdapter } from "./adapter";
+import { localDate } from "./files";
+import type { ObservationMeta } from "./store";
+import { buildObservationTools, type ObservationWriteAction } from "./tools";
 
 export interface DistillMessage {
   role: "user" | "ai";
@@ -560,7 +560,7 @@ export interface DistillPassInput {
   markedText: string;
   messages: DistillMessage[];
   // The threads `messages` was merged from, when it was merged from more than
-  // one — a lesson and the asides pulled out of it (observation/distill/arrears.ts).
+  // one — a lesson and the asides pulled out of it (memory/observations/arrears.ts).
   // Each of them carries a cursor over its own messages and this pass moves all
   // of them, so a folded conversation that is later deleted or lost to sync
   // leaves every other cursor still meaning what it meant. Absent is the
@@ -603,7 +603,7 @@ export function countNewReaderMessages(
 }
 
 // One thread's own messages inside a transcript made of several — a lesson and
-// the asides pulled out of it (observation/distill/arrears.ts).
+// the asides pulled out of it (memory/observations/arrears.ts).
 //
 // The cursors stay per thread and each one still counts over that thread's own
 // messages, which is what they have always meant and what the retell pipeline's
