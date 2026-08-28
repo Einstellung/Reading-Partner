@@ -781,14 +781,36 @@ final class AudioFront {
 
     // MARK: - Session
 
-    /// `.voiceChat` is the mode the voice-processing unit wants, and it sets HFP
-    /// itself, so no Bluetooth option here. `.defaultToSpeaker` is what puts
-    /// playback on the speaker, which is the echo the unit is there to cancel.
+    /// `.voiceChat` is the mode the voice-processing unit wants.
+    /// `.defaultToSpeaker` is what puts playback on the speaker when there is
+    /// nothing better, which is the echo the unit is there to cancel.
+    ///
+    /// `.allowBluetooth` is the only way a paired headset hears anything, and it
+    /// costs both directions. Measured on the phone, with a headset connected,
+    /// six sets of options on one session (the survey in SpeechProbe):
+    ///
+    ///   options                     out                 in                rate
+    ///   .defaultToSpeaker           Speaker             built-in mic      48000
+    ///   .allowBluetooth             BluetoothHFP        BluetoothHFP      16000
+    ///   .allowBluetoothA2DP         Receiver            built-in mic      48000
+    ///   .allowBluetoothA2DP+speaker Speaker             built-in mic      48000
+    ///
+    /// Without `.allowBluetooth` the headset is not even in `availableInputs`.
+    /// A2DP is not an option here and the mode is not why: `.default` and
+    /// `.videoChat` do the same. What A2DP cannot coexist with is a category
+    /// that records — under `.playAndRecord` iOS does not offer the A2DP port at
+    /// all, and the Bluetooth option only decides between the receiver and the
+    /// speaker. So it is 48 kHz out of the speaker with a silent headset, or
+    /// 16 kHz narrowband both ways through the headset. The project decided for
+    /// the headset: hearing nothing is worse than hearing something muffled.
+    /// Voice processing came up on every one of the six, so it is not what
+    /// constrains this.
     private func configureSessionLocked() throws {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(
-                .playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker])
+                .playAndRecord, mode: .voiceChat,
+                options: [.defaultToSpeaker, .allowBluetooth])
         } catch {
             throw DictationError(
                 "The microphone is in use by something else: \(DictationError.describe(error))")
@@ -850,22 +872,23 @@ final class AudioFront {
             if tapInstalled {
                 engine.inputNode.removeTap(onBus: 0)
             }
-            // The tap goes before the node does: a node detached with a tap
-            // still on it is a callback into a node that is no longer in the
-            // graph. The detach itself has to wait for the engine to stop —
-            // `AVAudioEngineGraph::RemoveNode` raises an Objective-C exception
-            // when the node it is asked to remove is still in a running graph,
-            // and an ObjC exception in Swift is an abort, not an error. That is
-            // how a route change during playback took the whole process with it
-            // (docs/pitfall/198).
+            // Taps off, player stopped, engine stopped — and no detaching.
+            // `AVAudioEngineGraph::RemoveNode` raises an Objective-C exception,
+            // and an ObjC exception in Swift is an abort rather than an error,
+            // which is how a teardown took the whole process with it twice
+            // (docs/pitfall/198 and 199).
             player?.removeTap(onBus: 0)
             player?.stop()
             if engine.isRunning {
                 engine.stop()
             }
-            if let player = player {
-                engine.detach(player)
-            }
+            // And then nothing detaches it. Stopping the engine first was not
+            // enough: the same abort came back on a device run, in the same
+            // frame — `AVAudioEngineGraph::RemoveNode` raised again with the
+            // engine already stopped (docs/pitfall/199). The detach was never
+            // needed. The engine is dropped three lines below, and it takes its
+            // whole graph with it; a node that outlives nothing does not have to
+            // be removed from a graph that is about to stop existing.
         }
         player = nil
         speakerHeld = false
