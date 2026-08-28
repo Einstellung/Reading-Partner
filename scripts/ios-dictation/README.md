@@ -81,26 +81,39 @@ off, and the margin left on the player as each one was queued.
   (`Permission was denied`) without user activation, so a run longer than one
   auto-lock period needs Auto-Lock set to Never on the device.
 
-## The .dev bundle id
+## Cloud signing
 
-Local signing needs `com.xinyuan.readingpartner.dev` (the real identifier is an
-explicit App ID owned by the paid team, which a Personal Team cannot claim).
-`ios-dev.sh` and `smoke-run.sh` apply it with `sed` as an **uncommitted
-working-tree edit in the Mac's clone** and it must never travel back: the real
-identifier has Google's reversed client id baked into `CFBundleURLTypes` at
-build time, owns every user's data directory, and is what the sideload and
-simulator workflows assert on. Expect `git status` on the Mac to show exactly
-one modified file, `src-tauri/tauri.conf.json`, and nothing else.
+These scripts sign in the cloud, under the paid team, not locally under a
+Personal Team. `~/.asc-env` on the Mac carries `APPLE_API_KEY`,
+`APPLE_API_ISSUER`, `APPLE_API_KEY_PATH` and `APPLE_DEVELOPMENT_TEAM`; each
+build script sources it and hands the three API-key variables to `xcodebuild`
+through Tauri's `-allowProvisioningUpdates`. xcodebuild makes the development
+certificate and the provisioning profile on demand, on the App Store Connect
+key's own authority — no Apple ID needs to be signed into Xcode at all
+(docs/pitfall/197).
 
-Signing identity present: `Apple Development: 1016180377@qq.com (H9Q4HYJ8P6)`,
-team `NNXRL2S9SA`, profile `iOS Team Provisioning Profile:
-com.xinyuan.readingpartner.dev`. A free Personal Team certificate expires after
-seven days, and renewing it means building once more. The profile in place on
-2026-08-27 expires 2026-08-28 18:01 Beijing time, and it cannot be renewed as
-things stand: the Apple ID in Xcode is gone (`IDE.Identifiers.Prod` is an empty
-array, no Xcode-Token in the keychain), and a free Personal Team profile can
-only be requested by a signed-in Xcode. Somebody has to sit at the Mac and add
-the account back under Settings > Accounts.
+Team `HF6369DDYP`, bundle id `com.xinyuan.readingpartner` — the real one, not
+a `.dev` suffix. That team already owns it, so there is no `sed` rewrite of
+`tauri.conf.json` any more; `gen/apple` regenerates whenever its cached
+identifier does not match. The profile is valid about a year, not the
+Personal Team's seven days.
+
+One step the CLI does not do: registering the device. Tauri does not pass
+`-allowProvisioningDeviceRegistration`, so a Development profile for a device
+the team has never seen comes back empty. Register once, by hand:
+
+```
+POST /v1/devices
+{"data":{"type":"devices","attributes":{"name":"…","platform":"IOS","udid":"…"}}}
+```
+
+That write costs one of the team's 100-device-a-year iOS slots — disabling a
+device does not free the slot back — so it is done once, not on every run.
+
+Side effect: the dev build now installs under the same bundle id as the
+TestFlight build, so putting one of these on the phone replaces whichever
+Reading Partner is already there. Getting the ordinary app back means
+reinstalling it from TestFlight, not just deleting the dev build.
 
 ## speaker.sh is a harness, and it has limits
 

@@ -8,10 +8,15 @@ export SUDO_ASKPASS="$HOME/.askpass.sh"
 REPO="$HOME/Reading-Partner"
 GUI_UID=501
 GUI_USER=mima1234
-TEAM=NNXRL2S9SA
-DEV_ID=com.xinyuan.readingpartner.dev
-# What the icon says, so it cannot be confused with the TestFlight build.
-DEV_NAME="RP DEV"
+# The paid team signs in the cloud: ~/.asc-env carries the App Store Connect
+# key that xcodebuild is handed through -allowProvisioningUpdates, so the
+# certificate and the profile are made on demand and nothing has to be added to
+# Xcode. The bundle identifier is the real one, which is what the device is
+# provisioned for.
+[ -f "$HOME/.asc-env" ] && . "$HOME/.asc-env"
+TEAM=${APPLE_DEVELOPMENT_TEAM:?APPLE_DEVELOPMENT_TEAM is unset; see ~/.asc-env}
+DEV_ID=com.xinyuan.readingpartner
+DEV_NAME="Reading Partner"
 DEVICE=00008140-000C31641EEB001C
 
 cd "$REPO"
@@ -23,27 +28,10 @@ bun install >/dev/null
 step "port 1420"
 lsof -ti tcp:1420 | xargs kill -9 2>/dev/null || true
 
-step "bundle id and display name"
-# Both are local-only and neither may be committed. The name matters as much as
-# the id: the TestFlight build is installed under the same bundle name, so the
-# home screen shows two icons both reading "Reading Partner" and the user opens
-# whichever one they find. On 2026-08-17 that cost a night — they opened the
-# TestFlight one, saw the ordinary app, and there was no button to tap.
-if grep -q '"identifier": "com.xinyuan.readingpartner"' src-tauri/tauri.conf.json; then
-  sed -i '' "s|\"identifier\": \"com.xinyuan.readingpartner\"|\"identifier\": \"$DEV_ID\"|" \
-    src-tauri/tauri.conf.json
-fi
-if grep -q '"productName": "Reading Partner"' src-tauri/tauri.conf.json; then
-  sed -i '' "s|\"productName\": \"Reading Partner\"|\"productName\": \"$DEV_NAME\"|" \
-    src-tauri/tauri.conf.json
-fi
-grep -E '"identifier"|"productName"' src-tauri/tauri.conf.json
-
-# productName reaches the home screen through gen/apple/project.yml, which only
-# `tauri ios init` rewrites — a stale gen/apple keeps the old name however many
-# times tauri.conf.json changes.
-if ! grep -q "$DEV_NAME" src-tauri/gen/apple/project.yml 2>/dev/null; then
-  echo "regenerating gen/apple so the display name takes"
+step "generated project"
+# gen/apple is ignored and stale: it keeps whichever identifier the last run
+# wrote, and only `tauri ios init` rewrites it.
+if ! grep -q "PRODUCT_BUNDLE_IDENTIFIER: $DEV_ID\$" src-tauri/gen/apple/project.yml 2>/dev/null; then
   rm -rf src-tauri/gen/apple
   bun run tauri ios init --ci 2>&1 | tail -2
 fi
@@ -52,7 +40,10 @@ rm -rf src-tauri/gen/apple/build
 
 step "build (VITE_SMOKE=dictation)"
 sudo -A launchctl asuser "$GUI_UID" sudo -u "$GUI_USER" \
-  /bin/bash -lc "cd '$REPO' && export PATH='$PATH' APPLE_DEVELOPMENT_TEAM=$TEAM VITE_SMOKE=dictation && bun run tauri ios build --debug --target aarch64" 2>&1 | tail -5
+  /bin/bash -lc "cd '$REPO' && export PATH='$PATH' APPLE_DEVELOPMENT_TEAM=$TEAM \
+    APPLE_API_KEY=$APPLE_API_KEY APPLE_API_ISSUER=$APPLE_API_ISSUER \
+    APPLE_API_KEY_PATH=$APPLE_API_KEY_PATH VITE_SMOKE=dictation && \
+    bun run tauri ios build --debug --target aarch64 --export-method debugging" 2>&1 | tail -5
 
 IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)
 echo "ipa: $IPA"

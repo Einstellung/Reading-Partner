@@ -15,10 +15,8 @@
 # with — a 127 MB log carrying thirteen of our lines.
 export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 DEVICE=00008140-000C31641EEB001C
-APP=com.xinyuan.readingpartner.dev
-# The local build's bundle name, which is not "Reading Partner" — that is the
-# TestFlight one, and killing the user's copy of it is not ours to do.
-DEV_NAME="RP DEV"
+APP=com.xinyuan.readingpartner
+DEV_NAME="Reading Partner"
 
 for i in $(seq 1 900); do
   if xcrun devicectl device info lockState --device "$DEVICE" 2>&1 | grep -q 'passcodeRequired: false'; then

@@ -90,9 +90,10 @@ bridge_token_file() {
 BRIDGE_TOKEN_FILE="$(bridge_token_file)"
 
 export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$PATH"
-# The free Personal Team. A simulator build is signed ad-hoc and does not need
-# it, but tauri reads it for the device target and complains when it is unset.
-export APPLE_DEVELOPMENT_TEAM="${APPLE_DEVELOPMENT_TEAM:-NNXRL2S9SA}"
+# The paid team, which owns com.xinyuan.readingpartner. A simulator build is
+# signed ad-hoc and does not need it, but tauri reads it for the device target
+# and complains when it is unset.
+export APPLE_DEVELOPMENT_TEAM="${APPLE_DEVELOPMENT_TEAM:-HF6369DDYP}"
 
 mkdir -p "$OUT"
 
