@@ -41,8 +41,21 @@ MODE=${1:-speech}
 # twelve sentences synthesised one at a time and then spoken end to end.
 WAIT=${2:-$([ "$MODE" = speech-live ] && echo 640 || echo 480)}
 FIXTURE=${3:-$HOME/rp-speech-fixture}
+# The phone is not always available: it locks itself, and the person holding it
+# has to be asked to unlock it. Compiling inside that window wastes it, so the
+# two halves can be run apart — `PHASE=build` needs nothing but the network (the
+# signing certificate is made in the cloud and the device is already registered),
+# and `PHASE=device` wants the phone awake for every second it runs.
+PHASE=${PHASE:-all}
+case "$PHASE" in
+  build | device | all) ;;
+  *)
+    echo "PHASE is $PHASE; it has to be build, device or all."
+    exit 1
+    ;;
+esac
 
-if [ "$MODE" = speech-live ] && [ -z "${MIMO_API_KEY:-}" ]; then
+if [ "$PHASE" != build ] && [ "$MODE" = speech-live ] && [ -z "${MIMO_API_KEY:-}" ]; then
   echo "MIMO_API_KEY is not set; the live leg has nothing to synthesise with."
   exit 1
 fi
@@ -60,6 +73,8 @@ launch() {
     xcrun devicectl device process launch --device "$DEVICE" "$DEV_ID" 2>&1 | tail -1
   fi
 }
+
+if [ "$PHASE" != device ]; then
 
 step "bun install"
 bun install >/dev/null
@@ -94,9 +109,18 @@ sudo -A launchctl asuser "$GUI_UID" sudo -u "$GUI_USER" \
     APPLE_API_KEY_PATH=$APPLE_API_KEY_PATH VITE_SMOKE=$MODE && \
     bun run tauri ios build --debug --target aarch64 --export-method debugging" 2>&1 | tail -5
 
+fi
+
+# Located in both halves: the device half is told to install whatever the build
+# half left behind, which is the whole point of being able to run them apart.
 IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)
 echo "ipa: $IPA"
-[ -n "$IPA" ] || { echo "no .ipa produced"; exit 1; }
+[ -n "$IPA" ] || { echo "no .ipa to install; run PHASE=build first"; exit 1; }
+
+if [ "$PHASE" = build ]; then
+  echo "built, not installed. Ask for the phone, then: PHASE=device $0 $MODE"
+  exit 0
+fi
 
 kill_stale() {
   for pid in $(xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null \
