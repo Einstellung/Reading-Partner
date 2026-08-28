@@ -111,7 +111,10 @@ sudo -A launchctl asuser "$GUI_UID" sudo -u "$GUI_USER" \
 
 fi  # end of the build half
 
-IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)
+# An explicit path when there is more than one build in play: the device half
+# and the build half can be minutes and another build apart, and the tree only
+# ever holds the last one.
+IPA=${IPA_PATH:-$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)}
 echo "ipa: $IPA"
 [ -n "$IPA" ] || { echo "no .ipa produced"; exit 1; }
 ls -l "$IPA"
