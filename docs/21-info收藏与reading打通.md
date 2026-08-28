@@ -14,7 +14,7 @@
 
 重心在 reading。topic 是引力中心，info 是补给线，不是反过来。
 
-不引入第三套状态机。info 侧现有的 `opened` / `dismissed` / `appealed`（`src/observation/profile/feedback.ts` 的 `FeedbackAction`）只喂 info 自己的筛选，一条都不进 reading，这条边界写死在代码里。收藏只有一个动作：收下。其余状态都是推导的。
+不引入第三套状态机。info 侧现有的 `opened` / `dismissed` / `appealed`（`src/memory/profile/feedback.ts` 的 `FeedbackAction`）只喂 info 自己的筛选，一条都不进 reading，这条边界写死在代码里。收藏只有一个动作：收下。其余状态都是推导的。
 
 ## 入口
 
@@ -88,6 +88,6 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - 引用时的三件事。时效、证据不全两条已落地，见 `src/reading/saved-article-tools.ts`：`publishedAt` 进了引用路径（`publishedDay`），`summaryOnly` 跟着材料进了 reading 的 prompt，工具由 `src/reading/turn.ts` 装配（`buildSavedArticleTools`、`SAVED_ARTICLES_PROMPT`）。只剩第三条：用了哪几条材料的可见性。现在没有落点：工具痕迹是瞬时的，成功即从行里消失，从不落盘（`src/ai/tool-status.ts`）。可见性既然是闸的一部分，就不能靠一个成功就消失的东西。
 
-反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/observation/assemble.ts` → `src/info/briefing/live.ts`）。reading→info 通了，info→reading 一条都没有。
+反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/memory/live/assemble.ts` → `src/info/briefing/live.ts`）。reading→info 通了，info→reading 一条都没有。
 
 *讨论：2026-07-27*

@@ -56,7 +56,7 @@ Rust 侧工作量差得明显。硅基流动是 OpenAI 兼容的 `POST {base}/v1
 
 辨识度。一个团是通用的。便宜的替代是声音（这正是 51 音色对 8 音色那条真正的分量所在）和一个名字——名字不是美术资产，成本为零。
 
-**没丢的，也是最该说清的一条：**主动说话。`companion.md` 里「它也会主动说说话」是 AI 行为，不是美术。内容来源是主题快照和蒸馏出来的观察（`src/observation/`），一个会发光的团和一只画出来的宠物一样有能力主动开口。这条完全保留，而且是那个愿景里唯一有产品价值的部分。
+**没丢的，也是最该说清的一条：**主动说话。`companion.md` 里「它也会主动说说话」是 AI 行为，不是美术。内容来源是主题快照和蒸馏出来的观察（`src/memory/observations/`），一个会发光的团和一只画出来的宠物一样有能力主动开口。这条完全保留，而且是那个愿景里唯一有产品价值的部分。
 
 **两边都说：**支持保留某种角色感的最好证据是 Roomba 那篇（Sung et al., UbiComp 2007，30 户里 21 户给它起名、18 户认为它有意图和性格、3 户在人口表上把它填成家庭成员），但那篇的机制说得很清楚——人抓住的是运动的随机性，不是脸，论文原话是 "a non-lifelike form can also engender strong attachment"。这条同时是「orb 够用」的证据和「美术本来就不是承重墙」的证据。可以便宜保留的就是这个机制：给 idle 一点不规整的漂移（三层 radial-gradient 各自 6s/7.5s/9s 关键帧、负 delay 让它们永不同步，纯 CSS 二十行），而不是节拍器一样的脉动。
 
@@ -72,7 +72,7 @@ Rust 侧工作量差得明显。硅基流动是 OpenAI 兼容的 `POST {base}/v1
 
 **自以为消失、其实没有的：**
 
-SB 243。§22601(b)(1) 原文：「'Companion chatbot' means an artificial intelligence system with a natural language interface that provides adaptive, human-like responses to user inputs and is capable of meeting a user's social needs, **including by** exhibiting anthropomorphic features and being able to sustain a relationship across multiple interactions.」"including by" 是扩张性表述不是限定，它修饰的是「capable of meeting a user's social needs」这个要件，而且它自己还是合取的——拟人特征 **和** 跨会话关系。跨会话记忆把后半截完整留着。真正的出口是 §22601(b)(2)(A) 的排除项：「A bot that is used **only** for customer service, a business' operational purposes, productivity and analysis related to source information, internal research, or technical assistance.」承重的词是 "only"。分析用户在读的书是标准的 "analysis related to source information"。威胁它的不是吉祥物，是画像的边界：`src/observation/record/types.ts` 现在那七种观察（reading-position、stuck-point、cannot-explain、can-explain、understood-concept、belief、correction）全部关于读者对材料的掌握，稳稳落在排除项里；`src/observation/profile/guess.ts` 那种「他要的是对那个时代的判断而不是选股技巧」的心智推断已经在边缘上，只要不往情绪、关系、生活处境延伸就还站得住。这是整份分析里最有后果的一个决定，它是记忆范围的决定，不是美术的决定。
+SB 243。§22601(b)(1) 原文：「'Companion chatbot' means an artificial intelligence system with a natural language interface that provides adaptive, human-like responses to user inputs and is capable of meeting a user's social needs, **including by** exhibiting anthropomorphic features and being able to sustain a relationship across multiple interactions.」"including by" 是扩张性表述不是限定，它修饰的是「capable of meeting a user's social needs」这个要件，而且它自己还是合取的——拟人特征 **和** 跨会话关系。跨会话记忆把后半截完整留着。真正的出口是 §22601(b)(2)(A) 的排除项：「A bot that is used **only** for customer service, a business' operational purposes, productivity and analysis related to source information, internal research, or technical assistance.」承重的词是 "only"。分析用户在读的书是标准的 "analysis related to source information"。威胁它的不是吉祥物，是画像的边界：`src/memory/observations/types.ts` 现在那七种观察（reading-position、stuck-point、cannot-explain、can-explain、understood-concept、belief、correction）全部关于读者对材料的掌握，稳稳落在排除项里；`src/memory/profile/guess.ts` 那种「他要的是对那个时代的判断而不是选股技巧」的心智推断已经在边缘上，只要不往情绪、关系、生活处境延伸就还站得住。这是整份分析里最有后果的一个决定，它是记忆范围的决定，不是美术的决定。
 
 管辖。§22601(e)：「'Operator' means a person who makes a companion chatbot platform available to a user **in the state**.」没有开发者住所要件、没有收入门槛。纽约 GBL §1700(8) 同形（"uses an AI companion for personal use within the state"）。用户只有一个人、在中国大陆，两部法今天都够不着这个 app。把敞口按在零的是用户地理位置，不是角色。
 

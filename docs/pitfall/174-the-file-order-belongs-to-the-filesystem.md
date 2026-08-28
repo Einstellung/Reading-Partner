@@ -10,7 +10,7 @@
 | 新 clone | ext4 同一块盘 | 0 fail | 133 fail | — |
 | 新 clone | tmpfs `/dev/shm` | 7 fail | 48 fail | 47 fail |
 
-每棵树里各自稳定：worktree 连跑两次 seed 23 都是 133，tmpfs 连跑两次默认顺序都是 7，7 个全落在 `tests/observation/profile.test.ts`。tmpfs 那 7 个没有 seed，就是默认顺序。
+每棵树里各自稳定：worktree 连跑两次 seed 23 都是 133，tmpfs 连跑两次默认顺序都是 7，7 个全落在 `tests/memory/profile.test.ts`。tmpfs 那 7 个没有 seed，就是默认顺序。
 
 ## 原因
 
