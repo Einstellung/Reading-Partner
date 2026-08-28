@@ -92,11 +92,23 @@ certificate and the provisioning profile on demand, on the App Store Connect
 key's own authority — no Apple ID needs to be signed into Xcode at all
 (docs/pitfall/197).
 
-Team `HF6369DDYP`, bundle id `com.xinyuan.readingpartner` — the real one, not
-a `.dev` suffix. That team already owns it, so there is no `sed` rewrite of
-`tauri.conf.json` any more; `gen/apple` regenerates whenever its cached
-identifier does not match. The profile is valid about a year, not the
-Personal Team's seven days.
+Team `HF6369DDYP` owns both bundle ids: `com.xinyuan.readingpartner`, the
+TestFlight one, and `com.xinyuan.readingpartner.dev` (resource id
+`VW3G7LG4MS`), which every script here that installs onto the real device
+uses. `gen/apple` regenerates whenever its cached identifier does not match.
+The profile is valid about a year, not the Personal Team's seven days.
+
+**Every script that installs onto the phone must use the `.dev` id and pass
+the `.ipa` check that reads `CFBundleIdentifier` back out of it before
+installing.** `tauri ios build` regenerates `gen/apple` from
+`tauri.conf.json` on every run, so a `sed` rewrite of the generated project
+does not hold — sed's edit is silently overwritten by the next build, and the
+`.ipa` that actually gets installed still carries the shipping id. The
+identifier is overridden through the CLI's `--config` merge instead (a file,
+not inline JSON, so it survives the `bash -lc` inside `sudo launchctl
+asuser`), and the `.ipa` check catches the case where that override didn't
+take. Skipping either half installs the shipping id over the TestFlight
+build on the user's phone — it has happened once already.
 
 One step the CLI does not do: registering the device. Tauri does not pass
 `-allowProvisioningDeviceRegistration`, so a Development profile for a device
@@ -110,10 +122,10 @@ POST /v1/devices
 That write costs one of the team's 100-device-a-year iOS slots — disabling a
 device does not free the slot back — so it is done once, not on every run.
 
-Side effect: the dev build now installs under the same bundle id as the
-TestFlight build, so putting one of these on the phone replaces whichever
-Reading Partner is already there. Getting the ordinary app back means
-reinstalling it from TestFlight, not just deleting the dev build.
+The `.dev` id installs alongside the TestFlight app rather than over it, so
+these scripts do not touch it. That protection only holds as long as every
+install path stays on `.dev` and keeps the `.ipa` check — see the warning
+above.
 
 ## speaker.sh is a harness, and it has limits
 

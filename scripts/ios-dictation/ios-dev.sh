@@ -29,17 +29,27 @@ GUI_USER=mima1234
 # The paid team signs in the cloud: ~/.asc-env carries the App Store Connect
 # key that xcodebuild is handed through -allowProvisioningUpdates, so the
 # certificate and the profile are made on demand and nothing has to be added to
-# Xcode. The bundle identifier is the real one, which is what the device is
-# provisioned for.
+# Xcode.
 [ -f "$HOME/.asc-env" ] && . "$HOME/.asc-env"
 TEAM=${APPLE_DEVELOPMENT_TEAM:?APPLE_DEVELOPMENT_TEAM is unset; see ~/.asc-env}
-DEV_ID=com.xinyuan.readingpartner
+DEV_ID=com.xinyuan.readingpartner.dev
 DEV_NAME="Reading Partner"
 DEVICE=00008140-000C31641EEB001C
 
 cd "$REPO"
 
 step() { printf '\n=== %s ===\n' "$1"; }
+
+# tauri.conf.json's identifier is the shipping one, and installing that would
+# replace the build the phone has from TestFlight. Rewriting the generated
+# project does not hold — `tauri ios build` regenerates it from the config on
+# every run, which is what the check below caught — so the identifier is
+# overridden at the source, through the config merge the CLI offers. A file
+# rather than an inline JSON string: this reaches the build through a `bash -lc`
+# inside a `sudo launchctl asuser`, and a path survives that quoting.
+# Registered under the same paid team, so the same key still signs it.
+DEV_CONFIG=/tmp/rp-dev-id.json
+printf '{"identifier": "%s"}\n' "$DEV_ID" > "$DEV_CONFIG"
 
 # beforeBuildCommand runs `bun run typecheck`, which needs the dev deps. A tree
 # that only ever built the app has none of them and fails on tests/support.
@@ -55,7 +65,7 @@ step "generated project"
 # wrote, and only `tauri ios init` rewrites it.
 if ! grep -q "PRODUCT_BUNDLE_IDENTIFIER: $DEV_ID\$" src-tauri/gen/apple/project.yml 2>/dev/null; then
   rm -rf src-tauri/gen/apple
-  bun run tauri ios init --ci 2>&1 | tail -2
+  bun run tauri ios init --ci --config "$DEV_CONFIG" 2>&1 | tail -2
 fi
 
 # --- gen/apple, regenerated when the target moved -------------------------
@@ -65,7 +75,7 @@ step "deployment target: want $WANT_TARGET, gen/apple has $HAVE_TARGET"
 if [ "${1:-}" = "--reinit" ] || [ "$WANT_TARGET" != "$HAVE_TARGET" ]; then
   echo "regenerating gen/apple"
   rm -rf src-tauri/gen/apple
-  bun run tauri ios init --ci
+  bun run tauri ios init --ci --config "$DEV_CONFIG"
 else
   # 4. a stale build dir is os error 66 and nothing else.
   rm -rf src-tauri/gen/apple/build
@@ -78,7 +88,8 @@ sudo -A launchctl asuser "$GUI_UID" sudo -u "$GUI_USER" \
   /bin/bash -lc "cd '$REPO' && export PATH='$PATH' APPLE_DEVELOPMENT_TEAM=$TEAM \
     APPLE_API_KEY=$APPLE_API_KEY APPLE_API_ISSUER=$APPLE_API_ISSUER \
     APPLE_API_KEY_PATH=$APPLE_API_KEY_PATH && \
-    bun run tauri ios build --debug --target aarch64 --export-method debugging"
+    bun run tauri ios build --debug --target aarch64 --export-method debugging \
+      --config '$DEV_CONFIG'"
 
 step "artifact"
 # `tauri ios build` exports an .ipa; the .app it was built from lives in
@@ -88,6 +99,19 @@ APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 5 -path '*debug
 echo "ipa: $IPA"
 echo "app: $APP"
 [ -n "$IPA" ] || { echo "no .ipa produced"; exit 1; }
+
+# What matters is the identifier inside the bundle that is about to be
+# installed, not the one the build was asked for: rewriting the generated
+# project does not hold, because `tauri ios build` regenerates it from
+# tauri.conf.json every run. Installing the wrong one replaces the app the
+# phone has from TestFlight.
+BUILT_ID=$(unzip -p "$IPA" "Payload/$DEV_NAME.app/Info.plist" 2>/dev/null \
+  | plutil -extract CFBundleIdentifier raw - 2>/dev/null || true)
+echo "built bundle id: $BUILT_ID"
+if [ "$BUILT_ID" != "$DEV_ID" ]; then
+  echo "REFUSING: that .ipa is $BUILT_ID, not $DEV_ID; it would replace the TestFlight build"
+  exit 1
+fi
 
 if [ -n "$APP" ]; then
   # Never grep src-tauri/gen/apple for these: Info.ios.plist is merged into the

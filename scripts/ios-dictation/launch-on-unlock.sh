@@ -13,9 +13,15 @@
 # The console is filtered to our own lines. Unfiltered, the device produces
 # about half a megabyte a second and idevicesyslog drops what it cannot keep up
 # with — a 127 MB log carrying thirteen of our lines.
+#
+# APP is the .dev bundle id, not the shipping one: this only launches whatever
+# is already installed, and the build scripts that install it (bench-run.sh,
+# smoke-run.sh, guided-run.sh, long-run.sh) all refuse to install anything but
+# the .dev build, so there is nothing here for that build's TestFlight sibling
+# to collide with.
 export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 DEVICE=00008140-000C31641EEB001C
-APP=com.xinyuan.readingpartner
+APP=com.xinyuan.readingpartner.dev
 DEV_NAME="Reading Partner"
 
 for i in $(seq 1 900); do
