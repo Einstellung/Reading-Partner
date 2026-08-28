@@ -102,11 +102,18 @@ fi
 # yml and the Info.plist, because the identifier is spelled out in the plist
 # rather than left to $(PRODUCT_BUNDLE_IDENTIFIER), and the pbxproj if xcodegen
 # has already made one.
+# LC_ALL=C throughout: BSD sed rejects a file it cannot decode in the ambient
+# UTF-8 locale with "RE error: illegal byte sequence", and the generated tree
+# has files it cannot. The patterns are ASCII, so bytewise is the right mode.
+export LC_ALL=C
 sed -i '' "s/^\( *PRODUCT_BUNDLE_IDENTIFIER: \).*/\1$DEV_ID/" src-tauri/gen/apple/project.yml
-find src-tauri/gen/apple -name 'Info.plist' -exec \
+# Only the source plists, never anything under build/: those are outputs, some
+# of them binary, and they are about to be replaced anyway.
+find src-tauri/gen/apple -name 'Info.plist' -not -path '*/build/*' -exec \
   sed -i '' "s#<string>com\.xinyuan\.readingpartner</string>#<string>$DEV_ID</string>#g" {} +
-find src-tauri/gen/apple -name project.pbxproj -exec \
+find src-tauri/gen/apple -name project.pbxproj -not -path '*/build/*' -exec \
   sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = $DEV_ID;/g" {} +
+unset LC_ALL
 rm -rf src-tauri/gen/apple/build
 
 step "build (VITE_SMOKE=$MODE)"
