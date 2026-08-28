@@ -25,7 +25,7 @@ import {
 //   outline-<id>.json          { segments: TalkSegment[] }, `id` (reading/talk/store.ts)
 //   library.json               { books: Record<hash, Entry> }  (platform/app/library.ts)
 //   reading-state.json         { states: Record<bookId, ViewState> } (platform/app/storage.ts)
-//   info-feedback.jsonl        one JSON object per line        (observation/profile/feedback.ts)
+//   info-feedback.jsonl        one JSON object per line        (memory/profile/feedback.ts)
 // A map's key is the identity. A JSONL line is its own identity: the events
 // carry no id of their own and the log is append-only.
 export interface RecordShape {

@@ -7,8 +7,8 @@
 // tools surface confirm cards.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
-import { profileForPrompt } from "../../observation/profile/guess";
-import { PROFILE_SKELETON_GUIDANCE } from "../../observation/profile/profile";
+import { profileForPrompt } from "../../memory/profile/guess";
+import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile/profile";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
 import { signInSiteLine, signInSites } from "../sources/site-session";
 import type { Briefing } from "../briefing/types";
@@ -173,7 +173,7 @@ export function formatSignInSites(sources: SourceDescriptor[]): string {
 // The reading profile block, so the companion can explain what triage is
 // optimizing for and draft precise edits. The declared half only: update_profile
 // drafts a complete replacement of what it is shown, so showing it the AI's own
-// guess section (observation/profile/guess.ts) would let a draft promote a guess into
+// guess section (memory/profile/guess.ts) would let a draft promote a guess into
 // the user's own words, where no later pass could revise or drop it.
 export function formatProfile(profile: string): string {
   return [

@@ -1,4 +1,4 @@
-// Unit tests for the observation file formats (src/observation/record/files.ts). Run: bun test.
+// Unit tests for the observation file formats (src/memory/observations/files.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -11,8 +11,8 @@ import {
   parseObservation,
   serializeIndexLine,
   serializeObservation,
-} from "../../src/observation/record/files";
-import type { Observation } from "../../src/observation/record/types";
+} from "../../src/memory/observations/files";
+import type { Observation } from "../../src/memory/observations/types";
 
 const ENTRY: Observation = {
   id: "m-1a2b3c4d",

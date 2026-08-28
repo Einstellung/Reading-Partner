@@ -1,7 +1,7 @@
 // In-memory ObservationFs for the observation tests: the store runs its whole
 // write path against a Map, no Tauri involved.
 
-import type { ObservationFs } from "../../src/observation/record/store";
+import type { ObservationFs } from "../../src/memory/observations/store";
 
 export function makeFakeFs(): { fs: ObservationFs; files: Map<string, string> } {
   const files = new Map<string, string>();

@@ -35,7 +35,7 @@ import {
   type LoadedMaterial,
   type Retell,
 } from "../../../reading/retell";
-import { distillRetell } from "../../../observation";
+import { distillRetell } from "../../../memory";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { ThreadMessage } from "../chat/types";
 import {

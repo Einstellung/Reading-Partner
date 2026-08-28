@@ -1,4 +1,4 @@
-// Appending to the attention log (src/observation/profile/feedback.ts) against an
+// Appending to the attention log (src/memory/profile/feedback.ts) against an
 // in-memory AppData. Its own file rather than feedback.test.ts's: that one is
 // the pure parser, this one is the disk.
 //
@@ -13,7 +13,7 @@ import {
   appendFeedback,
   loadFeedback,
   parseFeedbackLog,
-} from "../../src/observation/profile/feedback";
+} from "../../src/memory/profile/feedback";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 
 let disk: FakeDisk;

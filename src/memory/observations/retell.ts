@@ -15,7 +15,7 @@
 
 import type { AgentTool } from "../../ai/agent";
 import { runSubagent, type SubagentDefinition, type SubagentModel } from "../../ai/subagent";
-import type { ObservationAdapter } from "../record/adapter";
+import type { ObservationAdapter } from "./adapter";
 import {
   DISTILL_BRIEF_TOKENS,
   DISTILL_MAX_ROUNDS,
@@ -29,8 +29,8 @@ import {
   type DistillResult,
   type EvidenceDates,
 } from "./distill";
-import type { ObservationMeta } from "../record/store";
-import { buildObservationTools, type ObservationWriteAction } from "../record/tools";
+import type { ObservationMeta } from "./store";
+import { buildObservationTools, type ObservationWriteAction } from "./tools";
 
 export const RETELL_DISTILL_AGENT_NAME = "retell_distiller";
 

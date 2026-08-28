@@ -1,5 +1,5 @@
 // The AI observations section of a topic (docs/31, "界面"). They have always been
-// stored per topic (docs/02, src/observation), so this is where they belong, and
+// stored per topic (docs/02, src/memory), so this is where they belong, and
 // this is the only place they show: the reader's sidebar used to carry a second
 // copy keyed to whichever topic the open book was in, and two views of one thing
 // is one too many.
@@ -16,7 +16,7 @@ import {
   onObservationChange,
   type Observation,
   type ObservationConflict,
-} from "../../../../observation";
+} from "../../../../memory";
 import ObservationPanel from "../../reader/ObservationPanel";
 
 export default function ObservationSection({ topicId }: { topicId: string }) {

@@ -2,7 +2,7 @@
 // same reason: everything the book still owes has to be collected while the refs
 // still point at it.
 
-import { sweepDistillation } from "../../observation";
+import { sweepDistillation } from "../../memory";
 import type { ReaderShell } from "./shell";
 
 export function closeBook(

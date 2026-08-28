@@ -38,7 +38,7 @@ import { asideReceipt, asideReturn, type AsideReturn } from "../aside";
 import { hostMarkIds } from "../chat-marks";
 import { markExcerpt, reopenCall } from "../reopen";
 import type { Fulltext } from "../../fulltext";
-import { distillThread, type DistillAnnotation } from "../../observation";
+import { distillThread, type DistillAnnotation } from "../../memory";
 import {
   applyRowChange,
   callReducer,

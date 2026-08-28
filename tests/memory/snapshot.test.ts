@@ -1,4 +1,4 @@
-// Unit tests for the opening snapshot assembly (src/observation/record/snapshot.ts).
+// Unit tests for the opening snapshot assembly (src/memory/observations/select.ts).
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -6,8 +6,8 @@ import {
   buildObservationSnapshot,
   observationPromptSection,
   trimObservations,
-} from "../../src/observation/record/snapshot";
-import type { ObservationIndexEntry, ObservationType } from "../../src/observation/record/types";
+} from "../../src/memory/observations/select";
+import type { ObservationIndexEntry, ObservationType } from "../../src/memory/observations/types";
 
 function e(type: ObservationType, summary: string, updated: string, id = "m-00000001"): ObservationIndexEntry {
   return { id, type, summary, updated };

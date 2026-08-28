@@ -128,7 +128,7 @@ export function useChapterSpine(host: ChapterSpineHost): ChapterSpineController 
         // a reply, and the spine pass writes per chapter from page-anchored
         // evidence, so there is no page to file it under. It is not lost — that
         // conversation is distilled into its parent's memory unit
-        // (observation/distill/arrears.ts).
+        // (memory/observations/arrears.ts).
         getChatThreads: async () => {
           const threadMap = await loadThreads(bookId);
           return Object.values(threadMap)

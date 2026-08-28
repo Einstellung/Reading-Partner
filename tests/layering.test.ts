@@ -8,13 +8,13 @@
 //              platform/http, platform/sync). platform/app is the floor and
 //              imports nothing.
 //   capability headless services a domain calls into (ai/, ai/voice, budget/,
-//              fulltext/). They may use platform and each other; they must
-//              never reach up into a domain, because that is how ai/ ended up
-//              in a cycle with four of them (reading-turn assembly used to live
-//              there).
-//   domain     one product area each (info/, observation/, reading/ and the units
-//              inside it), free to use platform, capability and each other, as
-//              long as the graph stays acyclic.
+//              fulltext/, memory/). They may use platform and each other; they
+//              must never reach up into a domain, because that is how ai/ ended
+//              up in a cycle with four of them (reading-turn assembly used to
+//              live there).
+//   domain     one product area each (info/, reading/ and the units inside it),
+//              free to use platform, capability and each other, as long as the
+//              graph stays acyclic.
 //   ui         React components (ui/components and the directories inside it).
 //   shell      App.tsx and PhoneApp.tsx, the two form factors, and the only
 //              places that wire ui to domains.
@@ -51,6 +51,10 @@ const LAYER: Record<string, Layer> = {
   "ai/voice": "capability",
   budget: "capability",
   fulltext: "capability",
+  memory: "capability",
+  "memory/live": "capability",
+  "memory/observations": "capability",
+  "memory/profile": "capability",
 
   info: "domain",
   "info/briefing": "domain",
@@ -58,10 +62,6 @@ const LAYER: Record<string, Layer> = {
   "info/companion": "domain",
   "info/extract": "domain",
   "info/sources": "domain",
-  observation: "capability",
-  "observation/distill": "capability",
-  "observation/profile": "capability",
-  "observation/record": "capability",
   reading: "domain",
   "reading/chapters": "domain",
   "reading/engine": "domain",
@@ -191,8 +191,8 @@ function entryOf(rel: string): string {
 // leaves src/ or points at a non-source asset.
 //
 // The trap: a specifier carries no extension, so a barrel import of a directory
-// ("../observation") and an import of a file ("../App") look alike, and the path
-// that goes into entryOf differs — "observation" against "App.tsx". Telling them
+// ("../memory") and an import of a file ("../App") look alike, and the path
+// that goes into entryOf differs — "memory" against "App.tsx". Telling them
 // apart takes a real stat, not a count of slashes.
 function resolveEntry(fromFile: string, spec: string): string | null {
   // `@/x` is the alias the shadcn CLI writes into a generated component; it

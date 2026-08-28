@@ -31,7 +31,7 @@ import {
   type NewChatMark,
 } from "../../src/reading/chat-marks";
 import { annotationPageMap, observationScope } from "../../src/reading/lecture";
-import type { Observation } from "../../src/observation";
+import type { Observation } from "../../src/memory";
 
 const pageMark = (id: string, pageIndex = 0): Annotation => ({
   id,

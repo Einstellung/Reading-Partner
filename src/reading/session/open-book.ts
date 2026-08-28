@@ -12,7 +12,7 @@ import { loadAnnotations } from "../../platform/app/annotations";
 import { loadThreads } from "../../platform/app/threads";
 import { pageMarks, type Annotation, type ViewState } from "../../platform/app/reader-contract";
 import { ensureFulltext, type Fulltext } from "../../fulltext";
-import { sweepDistillation } from "../../observation";
+import { sweepDistillation } from "../../memory";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
 import { seedReadingPosition } from "../reading-position";
 import type { ReaderShell } from "./shell";

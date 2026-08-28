@@ -36,9 +36,9 @@ import {
   saveSourceHealth,
   SOURCES_PULL_ROUTE,
 } from "../sources/source-store";
-import { loadFeedback } from "../../observation/profile/feedback";
-import { loadProfile } from "../../observation/profile/profile";
-import { assembleReadingContext } from "../../observation/assemble";
+import { loadFeedback } from "../../memory/profile/feedback";
+import { loadProfile } from "../../memory/profile/profile";
+import { assembleReadingContext } from "../../memory/live/assemble";
 import { InfoPipeline, type InfoSourceRef, type SourceResult } from "./pipeline";
 import {
   parseScreenVerdicts,
@@ -93,7 +93,7 @@ import {
   triageUserMessage,
   type ParseOutcome,
 } from "./triage";
-import type { FeedbackEvent } from "../../observation/profile/feedback";
+import type { FeedbackEvent } from "../../memory/profile/feedback";
 import type { Briefing, TriageResult } from "./types";
 import type { InfoItem } from "../sources/item";
 

@@ -27,7 +27,7 @@ import {
   trimObservations,
   type Observation,
   type ObservationType,
-} from "../../observation";
+} from "../../memory";
 import { buildReadingTools } from "../context";
 import { buildFigureCatalog } from "../figures/catalog";
 import { buildFigureTools } from "../figures/tools";

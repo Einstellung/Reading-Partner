@@ -8,8 +8,8 @@ import {
   triageSystemPrompt,
   triageUserMessage,
 } from "../../src/info/briefing/triage";
-import type { FeedbackEvent } from "../../src/observation/profile/feedback";
-import { composeProfile, splitProfile } from "../../src/observation/profile/guess";
+import type { FeedbackEvent } from "../../src/memory/profile/feedback";
+import { composeProfile, splitProfile } from "../../src/memory/profile/guess";
 import type { InfoItem } from "../../src/info/sources/item";
 import { languageInstruction } from "../../src/platform/app/settings";
 

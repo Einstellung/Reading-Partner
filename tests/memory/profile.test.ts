@@ -1,4 +1,4 @@
-// User profile persistence + one-time rename migration (src/observation/profile/profile.ts).
+// User profile persistence + one-time rename migration (src/memory/profile/profile.ts).
 // There is no factory seed, so a first run (no file) returns an empty profile and
 // writes nothing; an existing file is read verbatim. When only the old
 // info-profile.md exists, loadProfile promotes it to user-profile.md once and
@@ -16,7 +16,7 @@ import {
   loadProfile,
   loadProfileForWrite,
   saveProfile,
-} from "../../src/observation/profile/profile";
+} from "../../src/memory/profile/profile";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 
 let disk: FakeDisk;

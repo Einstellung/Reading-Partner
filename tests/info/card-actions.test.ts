@@ -12,7 +12,7 @@ import {
   type AddSourcePorts,
   type ProfileStore,
 } from "../../src/info/companion/card-actions";
-import { GUESS_BEGIN, GUESS_END, GUESS_HEADING } from "../../src/observation/profile/guess";
+import { GUESS_BEGIN, GUESS_END, GUESS_HEADING } from "../../src/memory/profile/guess";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 

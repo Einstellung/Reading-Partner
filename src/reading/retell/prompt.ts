@@ -34,7 +34,7 @@
 // that one and from nothing else. The same session showed the chain being asked
 // for once and then never again, so a sitting that reopens now opens on it.
 //
-// The observations of this reader (src/observation, appended to the end of this
+// The observations of this reader (src/memory, appended to the end of this
 // prompt by retell/turn.ts) are the shortest way in: knowing where they got stuck
 // reads as an invitation to explain it again, which lays the answer out before
 // the question is asked. The rules for using them are therefore spread into the

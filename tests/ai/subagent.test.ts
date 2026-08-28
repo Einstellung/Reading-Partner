@@ -2,7 +2,7 @@
 // tool.ts), driven through the real agent loop over a scripted fake stream — so
 // the settling, the tool execution, the round counting, the mid-turn budget
 // refusal and the abort path are the production ones, with no provider, no
-// credentials and no network. Same pattern as tests/observation/distill.test.ts.
+// credentials and no network. Same pattern as tests/memory/distill.test.ts.
 // Run: bun test.
 
 import { expect, test } from "bun:test";

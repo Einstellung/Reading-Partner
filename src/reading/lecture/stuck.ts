@@ -28,7 +28,7 @@ import {
   trimObservations,
   type Observation,
   type ObservationType,
-} from "../../observation";
+} from "../../memory";
 import { annotationPage, type Annotation } from "../../platform/app/reader-contract";
 
 // Every mark of the open book, by id, with the 1-based page it sits on. The one
