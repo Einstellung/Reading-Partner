@@ -49,3 +49,7 @@ if let player = player {
 
 一般化：`AVAudioEngine` 的图操作里，凡是文档说「引擎运行时不允许」的，失败方式都是 ObjC 异常加 abort，不是
 可以捕获的 Swift error。运行时状态要自己判，别指望 `try` 兜底。
+
+## 后续
+
+这个解法不够。同样的栈在 engine 已经停了、tap 和 player 也停了的情况下照样抛，`RemoveNode` 的前置条件从外面看不全。最终改成根本不 detach，见坑 199。

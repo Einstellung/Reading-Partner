@@ -1,0 +1,84 @@
+{
+  "ok": false,
+  "stage": "echo-vpio-off",
+  "fixtureDir": "/private/var/mobile/Containers/Data/Application/802AB9D6-464B-463D-BA5D-2DC28DA8C51B/Library/Application Support/com.xinyuan.readingpartner.dev/speech-fixture",
+  "routes": {
+    "trials": [
+      {
+        "configured": true,
+        "name": "shipping",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=8 out=Speaker/Speaker in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "voiceChat+hfp",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=4 out=BluetoothHFP/REDMI Buds 6 Pro in=BluetoothHFP/REDMI Buds 6 Pro rate=16000.0 available=MicrophoneBuiltIn/iPhone Microphone+BluetoothHFP/REDMI Buds 6 Pro",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "voiceChat+a2dp",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=32 out=Receiver/Receiver in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "voiceChat+a2dp+speaker",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=40 out=Speaker/Speaker in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "default+a2dp",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=0 out=Receiver/Receiver in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "videoChat+a2dp",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVideoChat opts=32 out=Speaker/Speaker in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      }
+    ]
+  },
+  "legs": [
+    {
+      "label": "trimmed-burst",
+      "ok": false,
+      "error": "NSCocoaErrorDomain 260: The file “manifest.json” couldn’t be opened because there is no such file.",
+      "levels": [],
+      "levelGaps": [],
+      "speaking": [],
+      "wallMs": 26,
+      "report": null,
+      "relay": null
+    },
+    {
+      "label": "trimmed-measured",
+      "ok": false,
+      "error": "NSCocoaErrorDomain 260: The file “manifest.json” couldn’t be opened because there is no such file.",
+      "levels": [],
+      "levelGaps": [],
+      "speaking": [],
+      "wallMs": 12,
+      "report": null,
+      "relay": null
+    },
+    {
+      "label": "raw-burst",
+      "ok": false,
+      "error": "NSCocoaErrorDomain 260: The file “manifest.json” couldn’t be opened because there is no such file.",
+      "levels": [],
+      "levelGaps": [],
+      "speaking": [],
+      "wallMs": 7,
+      "report": null,
+      "relay": null
+    }
+  ],
+  "echo": [],
+  "interrupts": null,
+  "error": "failed to open file at path: /private/var/mobile/Containers/Data/Application/802AB9D6-464B-463D-BA5D-2DC28DA8C51B/Library/Application Support/com.xinyuan.readingpartner.dev/speech-fixture/manifest.json with error: No such file or directory (os error 2)",
+  "timestamp": "2026-08-28T07:04:17.787Z"
+}
