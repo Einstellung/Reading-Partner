@@ -34,8 +34,8 @@ SyntaxError: Export named 'writeTextFile' not found in module
 
 ## 推论：测试树不能镜像 src 的目录结构
 
-2026-08-15 切 `src/observation/` 子域时实测。把 `src/observation/` 切成 `record/` / `distill/` / `profile/` 之后，照 `tests/reading/` 的样子把 `tests/observation/` 也镜像切一层，全量跑出 7 个 fail，全在 `profile.test.ts`。
+2026-08-15 切观察子域（现 `src/memory/`）时实测。把它切成 `record/` / `distill/` / `profile/` 之后，照 `tests/reading/` 的样子把 `tests/memory/` 也镜像切一层，全量跑出 7 个 fail，全在 `profile.test.ts`。
 
-文件内容一个字节没改，只是从 `tests/observation/profile.test.ts` 挪到深一层。原因是 bun 按目录遍历顺序跑测试文件：挪之前它排在 `tests/info/*` 前面，抢先把 `atomic-fs` 换成自己的桩；挪之后顺序翻转，`tests/info/*` 的 `mock.module` 赢了，`saveProfile` 打到真的 `writeTextAtomic` 上，报 `window is not defined`——错误信息完全不指向真正的原因。用同一份内容在深浅两个路径各跑一次可以复现翻转。
+文件内容一个字节没改，只是从 `tests/memory/profile.test.ts` 挪到深一层。原因是 bun 按目录遍历顺序跑测试文件：挪之前它排在 `tests/info/*` 前面，抢先把 `atomic-fs` 换成自己的桩；挪之后顺序翻转，`tests/info/*` 的 `mock.module` 赢了，`saveProfile` 打到真的 `writeTextAtomic` 上，报 `window is not defined`——错误信息完全不指向真正的原因。用同一份内容在深浅两个路径各跑一次可以复现翻转。
 
 所以：**测试树保持扁平，不要为了对齐 src 的子域去加深 `tests/` 的目录**。搬测试文件（哪怕只是换个目录）等同于改变 mock 的胜负关系，改完必须跑全量，而且失败了要先怀疑顺序而不是怀疑自己改错了路径。

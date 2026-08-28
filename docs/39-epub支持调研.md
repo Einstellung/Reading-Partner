@@ -64,7 +64,7 @@ CFI 的下标数的是子节点序号，往 DOM 里注入或删除节点就会�
 
 - `src/reading/reading-position.ts`（108 行）零改动，它只是个按 `bookId` 的防抖写入器，页码全在 `ViewState` 里。
 - `src/reading/prep/anchors.ts`（328 行）零改动。`[p.N]` 的语法、href 编解码、`page > 0` 的校验全部继续成立，因为合成页号也是从 1 开始的正整数。
-- `src/observation/` 不存页码，`Observation` 的锚点是标注 id 和消息 id。只有 prompt 里出现 `p12`，`page: number | null` 已经允许 null。
+- `src/memory/observations/` 不存页码，`Observation` 的锚点是标注 id 和消息 id。只有 prompt 里出现 `p12`，`page: number | null` 已经允许 null。
 - `src/reading/slides/` 没有自己的页码，页码只从 `BookChapter` 进来；`slides/outline.ts` 已经在发 `startPage: 0, endPage: 0` 的章节，并注明下游没人读。
 - `src/platform/sync/` 全部。
 
