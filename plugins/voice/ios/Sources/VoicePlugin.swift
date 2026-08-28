@@ -284,6 +284,7 @@ class VoicePlugin: Plugin {
     /// speech would hold the serial chain for all of it (docs/pitfall/159).
     @objc(speech_probe:)
     public func speechProbe(_ invoke: Invoke) {
+        SpeechProbe.holdTheScreen()
         let args: SpeechProbeArgs
         do {
             args = try invoke.parseArgs(SpeechProbeArgs.self)

@@ -12,6 +12,9 @@
 
 import AVFoundation
 import Foundation
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 struct SpeechProbeArgs: Decodable {
     let label: String
@@ -65,6 +68,22 @@ enum SpeechProbe {
     /// question nobody asked. The teardown is asynchronous and ends in a
     /// `speaking:0` carrying `lost`, so a leg that cares switches before it
     /// starts watching rather than on its way in.
+    /// The unattended run is minutes long and the phone auto-locks after two,
+    /// which backgrounds the app, tears the stack down and ends whichever leg
+    /// was running with a `lost` (docs/pitfall/162). The webview's wake lock
+    /// cannot cover it: it is refused until something on the page has been
+    /// touched, and an unattended run has nobody to touch it. So the idle timer
+    /// is held off from here instead, for the life of the process — every entry
+    /// into the probe asks for it, including the very first VPIO switch.
+    ///
+    /// Debug only. A shipping build has no probe to call this and never holds
+    /// the user's screen awake.
+    static func holdTheScreen() {
+        #if DEBUG && canImport(UIKit)
+            DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
+        #endif
+    }
+
     static func setVoiceProcessing(_ vpio: Bool?) {
         guard let vpio = vpio, AudioFront.voiceProcessingOverride != vpio else { return }
         AudioFront.voiceProcessingOverride = vpio
