@@ -120,6 +120,6 @@ sleep "$WAIT"
 
 step "fetch"
 "$(dirname "$0")/fetch-result.sh" speech-result.json /tmp/speech-result.json
-for label in trimmed-burst trimmed-measured raw-burst; do
+for label in trimmed-burst trimmed-measured raw-burst live; do
   "$(dirname "$0")/fetch-result.sh" "$label.pcm" "/tmp/$label.pcm" || true
 done

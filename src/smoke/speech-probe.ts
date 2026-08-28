@@ -245,8 +245,21 @@ async function fixtureSentences(): Promise<string[]> {
   return [...manifest.sentences].sort((a, b) => a.index - b.index).map((s) => s.text);
 }
 
-async function runLive(): Promise<LegResult> {
+async function runLive(captureDir: string): Promise<LegResult> {
   const sentences = await fixtureSentences();
+  // The tape is armed separately because this leg is started from Rust and
+  // never passes through the probe that arms the fixture legs' tapes. It is the
+  // only recording with the relay's own gaps between sentences in it.
+  await invoke("plugin:voice|speech_probe", {
+    args: {
+      label: "live",
+      source: "trimmed",
+      pace: "burst",
+      fixtureDir: "",
+      mode: "capture",
+      capturePath: await join(captureDir, "live.pcm"),
+    },
+  });
   return watch("live", () => invoke("plugin:voice|speech_live", { args: { sentences } }));
 }
 
@@ -399,7 +412,7 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
       result.stage = "live";
       render(result);
       await write(result);
-      result.legs.push(await runLive());
+      result.legs.push(await runLive(captureDir));
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 

@@ -68,6 +68,12 @@ enum SpeechProbe {
     /// question nobody asked. The teardown is asynchronous and ends in a
     /// `speaking:0` carrying `lost`, so a leg that cares switches before it
     /// starts watching rather than on its way in.
+    static func setVoiceProcessing(_ vpio: Bool?) {
+        guard let vpio = vpio, AudioFront.voiceProcessingOverride != vpio else { return }
+        AudioFront.voiceProcessingOverride = vpio
+        AudioFront.shared.close()
+    }
+
     /// The unattended run is minutes long and the phone auto-locks after two,
     /// which backgrounds the app, tears the stack down and ends whichever leg
     /// was running with a `lost` (docs/pitfall/162). The webview's wake lock
@@ -84,10 +90,22 @@ enum SpeechProbe {
         #endif
     }
 
-    static func setVoiceProcessing(_ vpio: Bool?) {
-        guard let vpio = vpio, AudioFront.voiceProcessingOverride != vpio else { return }
-        AudioFront.voiceProcessingOverride = vpio
-        AudioFront.shared.close()
+    /// Arm the tape without playing anything. The live leg is driven from Rust
+    /// and never comes through `start`, so without this it is the one leg that
+    /// leaves no recording — and it is the only leg with the relay's own gaps
+    /// between sentences in it, which is what someone listening has to hear.
+    /// `speech_report` flushes it, exactly as it does for the fixture legs.
+    static func armCapture(_ args: SpeechProbeArgs) {
+        SpeechOut.shared.setLabel(args.label)
+        #if DEBUG
+            if let path = args.capturePath {
+                // Longer than the fixture legs' 120 s: this one waits on a
+                // vendor between sentences and the tap runs through the waits.
+                SpeechOut.shared.beginCapture(label: args.label, path: path, seconds: 200)
+            } else {
+                SpeechOut.shared.endCapture()
+            }
+        #endif
     }
 
     static func start(_ args: SpeechProbeArgs) throws {

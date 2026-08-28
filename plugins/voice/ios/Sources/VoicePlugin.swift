@@ -302,6 +302,10 @@ class VoicePlugin: Plugin {
                     // inside a leg that has already started listening.
                     SpeechProbe.setVoiceProcessing(args.vpio)
                     invoke.resolve()
+                } else if args.mode == "capture" {
+                    // Arms a tape for a leg that plays from somewhere else.
+                    SpeechProbe.armCapture(args)
+                    invoke.resolve()
                 } else if args.mode == "interrupt" {
                     let positions = try SpeechProbe.interrupt(
                         args, afterMs: args.afterMs ?? 5, times: args.times ?? 50)
