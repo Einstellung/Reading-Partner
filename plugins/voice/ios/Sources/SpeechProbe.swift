@@ -74,6 +74,115 @@ enum SpeechProbe {
         AudioFront.shared.close()
     }
 
+    // MARK: - Route survey
+
+    /// One combination tried, and what the system did with it.
+    struct RouteTrial: Encodable {
+        let name: String
+        /// The whole route line: category, mode, options, both halves of the
+        /// route with names, the sample rate and what else was on offer. The
+        /// rate is what says which Bluetooth profile came up — HFP runs at 8 or
+        /// 16 kHz, A2DP at 44.1 or 48.
+        let route: String
+        /// Whether the category could be set at all with these options.
+        let configured: Bool
+        /// Whether the voice-processing unit could be turned on over that route
+        /// and an engine started through it. This is the half that decides
+        /// whether asymmetric routing (A2DP out, built-in microphone in) is a
+        /// real option or only a nice idea.
+        let voiceProcessing: Bool
+        let error: String?
+    }
+
+    /// What the phone actually does with each set of category options, measured
+    /// rather than read off the documentation. The shipping configuration asks
+    /// for `.playAndRecord` + `.voiceChat` + `.defaultToSpeaker` and no Bluetooth
+    /// option at all, so a paired headset gets no playback; whether asking for
+    /// A2DP changes that, and what it costs, is not answerable from the code.
+    ///
+    /// Runs on its own session, before the stack is up, and leaves the session
+    /// inactive behind it. Debug only.
+    static func surveyRoutes() -> [RouteTrial] {
+        #if DEBUG
+            let session = AVAudioSession.sharedInstance()
+            let beforeMode = session.mode
+            let beforeOptions = session.categoryOptions
+            var out: [RouteTrial] = []
+            let combos: [(String, AVAudioSession.Mode, AVAudioSession.CategoryOptions)] = [
+                ("shipping", .voiceChat, [.defaultToSpeaker]),
+                ("voiceChat+hfp", .voiceChat, [.allowBluetooth]),
+                ("voiceChat+a2dp", .voiceChat, [.allowBluetoothA2DP]),
+                ("voiceChat+a2dp+speaker", .voiceChat, [.allowBluetoothA2DP, .defaultToSpeaker]),
+                ("default+a2dp", .default, [.allowBluetoothA2DP]),
+                ("videoChat+a2dp", .videoChat, [.allowBluetoothA2DP]),
+            ]
+            for (name, mode, options) in combos {
+                var configured = false
+                var vp = false
+                var failure: String? = nil
+                do {
+                    try session.setCategory(.playAndRecord, mode: mode, options: options)
+                    try session.setActive(true)
+                    configured = true
+                } catch {
+                    failure = DictationError.describe(error)
+                }
+                if configured {
+                    // A scratch engine, so that nothing here can leave the real
+                    // one in a state a leg would inherit. Torn down before the
+                    // next combination is asked for.
+                    let engine = AVAudioEngine()
+                    let input = engine.inputNode
+                    do {
+                        try input.setVoiceProcessingEnabled(true)
+                        // Something has to consume the input or the engine has
+                        // no reason to run the IO unit.
+                        let format = input.outputFormat(forBus: 0)
+                        input.installTap(onBus: 0, bufferSize: 1024, format: format) { _, _ in }
+                        engine.prepare()
+                        try engine.start()
+                        vp = engine.isRunning
+                    } catch {
+                        failure = (failure.map { $0 + "; " } ?? "") + DictationError.describe(error)
+                    }
+                    // The order that does not abort: the tap first, then the
+                    // engine, and no detaching of anything (docs/pitfall/198).
+                    input.removeTap(onBus: 0)
+                    engine.stop()
+                }
+                let line = describeRoute(session)
+                out.append(
+                    RouteTrial(
+                        name: name, route: line, configured: configured,
+                        voiceProcessing: vp, error: failure))
+                NSLog("RP-SPEECH route %@ vp=%d %@", name, vp ? 1 : 0, line)
+            }
+            // Put the session back the way it was found and let go of it, so the
+            // first leg configures from the same place it always has.
+            try? session.setCategory(.playAndRecord, mode: beforeMode, options: beforeOptions)
+            try? session.setActive(false, options: [.notifyOthersOnDeactivation])
+            return out
+        #else
+            return []
+        #endif
+    }
+
+    /// Same wording as SpeechOut's, and for the same reason: a port type alone
+    /// does not say whether the headset got the audio.
+    private static func describeRoute(_ session: AVAudioSession) -> String {
+        let route = session.currentRoute
+        let ports = { (list: [AVAudioSessionPortDescription]) in
+            list.map { "\($0.portType.rawValue)/\($0.portName)" }.joined(separator: "+")
+        }
+        let available = (session.availableInputs ?? []).map {
+            "\($0.portType.rawValue)/\($0.portName)"
+        }.joined(separator: "+")
+        return "cat=\(session.category.rawValue) mode=\(session.mode.rawValue) "
+            + "opts=\(session.categoryOptions.rawValue) "
+            + "out=\(ports(route.outputs)) in=\(ports(route.inputs)) "
+            + "rate=\(session.sampleRate) available=\(available)"
+    }
+
     /// The unattended run is minutes long and the phone auto-locks after two,
     /// which backgrounds the app, tears the stack down and ends whichever leg
     /// was running with a `lost` (docs/pitfall/162). The webview's wake lock
@@ -87,6 +196,50 @@ enum SpeechProbe {
     static func holdTheScreen() {
         #if DEBUG && canImport(UIKit)
             DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
+        #endif
+    }
+
+    /// Says on the device console that the native half came up, and then says
+    /// every time the app changes lifecycle state. Two device runs ended with
+    /// no result file, no crash report and no process, and nothing on either
+    /// side could say whether the webview had ever started or whether something
+    /// had put the app in the background. One `NSLog` per transition answers
+    /// both, and `idevicesyslog -p 'Reading Partner'` is where it is read.
+    ///
+    /// Debug only, and idempotent: the plugin is constructed once, but a second
+    /// call would otherwise register a second set of observers.
+    static func watchLifecycle() {
+        #if DEBUG && canImport(UIKit)
+            guard !watching else { return }
+            watching = true
+            NSLog("RP-SPEECH native up")
+            let names: [(Notification.Name, String)] = [
+                (UIApplication.didFinishLaunchingNotification, "didFinishLaunching"),
+                (UIApplication.didBecomeActiveNotification, "didBecomeActive"),
+                (UIApplication.willResignActiveNotification, "willResignActive"),
+                (UIApplication.didEnterBackgroundNotification, "didEnterBackground"),
+                (UIApplication.willEnterForegroundNotification, "willEnterForeground"),
+                (UIApplication.willTerminateNotification, "willTerminate"),
+                (UIApplication.didReceiveMemoryWarningNotification, "memoryWarning"),
+            ]
+            for (name, label) in names {
+                NotificationCenter.default.addObserver(
+                    forName: name, object: nil, queue: .main
+                ) { _ in NSLog("RP-SPEECH lifecycle %@", label) }
+            }
+        #endif
+    }
+
+    #if DEBUG && canImport(UIKit)
+        private static var watching = false
+    #endif
+
+    /// A line on the console from the webview, so that the JavaScript half of
+    /// the run leaves the same trail the native half does. `console.log` in a
+    /// WKWebView reaches nothing a cable can read.
+    static func note(_ text: String) {
+        #if DEBUG
+            NSLog("RP-SPEECH %@", text)
         #endif
     }
 
@@ -204,4 +357,9 @@ enum SpeechProbe {
 /// coerce an array of them nested in one.
 struct SpeechInterruptReport: Encodable {
     let positions: [SpeechPosition]
+}
+
+/// What every set of category options did to the route.
+struct SpeechRouteReport: Encodable {
+    let trials: [SpeechProbe.RouteTrial]
 }

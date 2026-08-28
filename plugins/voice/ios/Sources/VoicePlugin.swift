@@ -75,6 +75,10 @@ class VoicePlugin: Plugin {
     /// send it.
     override init() {
         super.init()
+        // Debug only, and the first thing the native half does: it is the line
+        // that says the process got as far as loading its plugins, and after it
+        // every lifecycle transition is on the console too.
+        SpeechProbe.watchLifecycle()
         SpeechOut.shared.setEmitter { [weak self] kind, value, reason in
             self?.emitSpeech(kind: kind, value: value, reason: reason)
         }
@@ -293,6 +297,15 @@ class VoicePlugin: Plugin {
             return
         }
 
+        // A breadcrumb for the device console, carried in `label`. Answered
+        // here rather than in the chain: a note queued behind a seventy-five
+        // second leg is not a breadcrumb.
+        if args.mode == "note" {
+            SpeechProbe.note(args.label)
+            invoke.resolve()
+            return
+        }
+
         serial {
             do {
                 if args.mode == "vpio" {
@@ -306,6 +319,12 @@ class VoicePlugin: Plugin {
                     // Arms a tape for a leg that plays from somewhere else.
                     SpeechProbe.armCapture(args)
                     invoke.resolve()
+                } else if args.mode == "route" {
+                    // Which category options actually get the audio to a
+                    // headset, and whether the voice-processing unit survives
+                    // the route they produce. Runs before the first leg, while
+                    // the stack is still down.
+                    invoke.resolve(SpeechRouteReport(trials: SpeechProbe.surveyRoutes()))
                 } else if args.mode == "interrupt" {
                     let positions = try SpeechProbe.interrupt(
                         args, afterMs: args.afterMs ?? 5, times: args.times ?? 50)

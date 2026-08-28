@@ -61,6 +61,11 @@ type SpeechResult = {
   ok: boolean;
   stage: string;
   fixtureDir: string;
+  /// What each set of audio-session category options did to the route, taken
+  /// before the first leg. The answer to "does the headset get the audio, and
+  /// at which Bluetooth profile" — the shipping configuration asks for neither
+  /// Bluetooth option, and nothing so far has measured what that costs.
+  routes: unknown;
   legs: LegResult[];
   echo: EchoResult[];
   interrupts: unknown;
@@ -365,11 +370,27 @@ async function runEcho(vpio: boolean, fixtureDir: string): Promise<EchoResult> {
 /// `live` adds the leg that synthesises. It is off by default because it needs
 /// a key and a network, and the fixture legs are the control that must keep
 /// working without either.
+/// A line on the device console, from the webview. `console.log` in a WKWebView
+/// reaches nothing a cable can read, so it goes through the plugin and out of
+/// NSLog, where `idevicesyslog -p 'Reading Partner'` picks it up. The arguments
+/// besides `label` are only there because the probe's argument type requires
+/// them. Never throws: a broken breadcrumb must not end a run.
+async function note(text: string): Promise<void> {
+  try {
+    await invoke("plugin:voice|speech_probe", {
+      args: { label: text, source: "trimmed", pace: "burst", fixtureDir: "", mode: "note" },
+    });
+  } catch {
+    /* the run matters, the breadcrumb does not */
+  }
+}
+
 export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<void> {
   const result: SpeechResult = {
     ok: false,
-    stage: "start",
+    stage: "boot",
     fixtureDir: "",
+    routes: null,
     legs: [],
     echo: [],
     interrupts: null,
@@ -377,19 +398,61 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
     timestamp: new Date().toISOString(),
   };
   render(result);
-  await holdTheScreen();
+  // Anything the run does not catch itself lands in the file rather than in a
+  // console nobody is reading. Two device runs produced no file at all and
+  // there was no way afterwards to tell a webview that never started from one
+  // that threw on its first line.
+  window.addEventListener("error", (event) => {
+    result.error = `window.onerror: ${event.message} @ ${event.filename}:${event.lineno}`;
+    void note(result.error);
+    void write(result);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    result.error = `unhandledrejection: ${String(event.reason)}`;
+    void note(result.error);
+    void write(result);
+  });
 
   try {
+    // Before anything else, and before the first thing that can hang: the file
+    // existing at all is the answer to "did the webview ever run".
+    await write(result);
+    await note("webview up, stage=boot");
+    await holdTheScreen();
     const data = await appDataDir();
     const fixtureDir = await join(data, "speech-fixture");
     const captureDir = await join(data, "speech");
     result.fixtureDir = fixtureDir;
     await mkdir(SPEECH_RESULT_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
 
+    // First, while nothing is holding the audio session: which category options
+    // the phone honours. It is the shortest leg and the one whose answer does
+    // not depend on anything downstream of it, so it goes on disk before any of
+    // the long ones can take the process with them.
+    result.stage = "routes";
+    render(result);
+    await write(result);
+    await note(`stage=${result.stage}`);
+    try {
+      result.routes = await invoke("plugin:voice|speech_probe", {
+        args: {
+          label: "routes",
+          source: "trimmed",
+          pace: "burst",
+          fixtureDir: "",
+          mode: "route",
+        },
+      });
+    } catch (e) {
+      result.routes = { error: String(e) };
+    }
+    await write(result);
+
     for (const leg of LEGS) {
       result.stage = leg.label;
       render(result);
       await write(result);
+      await note(`stage=${result.stage}`);
       result.legs.push(await runLeg(leg, fixtureDir, captureDir));
       // Between legs, so that the next one starts from a parked stack rather
       // than from one that is still coming to rest.
@@ -402,6 +465,7 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
       result.stage = vpio ? "echo-vpio-on" : "echo-vpio-off";
       render(result);
       await write(result);
+      await note(`stage=${result.stage}`);
       result.echo.push(await runEcho(vpio, fixtureDir));
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
@@ -412,6 +476,7 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
       result.stage = "live";
       render(result);
       await write(result);
+      await note(`stage=${result.stage}`);
       result.legs.push(await runLive(captureDir));
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
@@ -421,6 +486,7 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
     result.stage = "interrupt";
     render(result);
     await write(result);
+    await note(`stage=${result.stage}`);
     result.interrupts = await invoke("plugin:voice|speech_probe", {
       args: {
         label: "interrupt",
@@ -440,4 +506,5 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
   }
   render(result);
   await write(result);
+  await note(`stage=${result.stage}`);
 }
