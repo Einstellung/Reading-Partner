@@ -195,6 +195,10 @@ enum SpeechProbe {
     /// the user's screen awake.
     static func holdTheScreen() {
         #if DEBUG && canImport(UIKit)
+            // Also the first thing the webview does that Swift can see, and the
+            // console is the only witness left when a run dies without writing
+            // its JSON and without leaving a crash report.
+            NSLog("RP-SPEECH probe entered")
             DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
         #endif
     }

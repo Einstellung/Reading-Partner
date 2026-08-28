@@ -36,10 +36,6 @@ DEV_ID=com.xinyuan.readingpartner.dev
 DEV_NAME="Reading Partner"
 DEVICE=00008140-000C31641EEB001C
 MODE=${1:-speech}
-# Which half to run. The build needs no phone and can happen while it is in the
-# user's pocket; only the device half needs it unlocked, and that is the half
-# somebody has to stand by for. `all` is both, which is what it used to be.
-PHASE=${PHASE:-all}
 # Wipe the container before installing. The .dev identifier has been in use
 # since the Personal Team days and its container still carries state from runs
 # that no longer exist; a run that ends with nothing on disk should not have to
@@ -53,8 +49,21 @@ RUNLOG=${RUNLOG:-$HOME/rp-run-$(date +%m%d-%H%M%S)}
 # twelve sentences synthesised one at a time and then spoken end to end.
 WAIT=${2:-$([ "$MODE" = speech-live ] && echo 640 || echo 480)}
 FIXTURE=${3:-$HOME/rp-speech-fixture}
+# The phone is not always available: it locks itself, and the person holding it
+# has to be asked to unlock it. Compiling inside that window wastes it, so the
+# two halves can be run apart — `PHASE=build` needs nothing but the network (the
+# signing certificate is made in the cloud and the device is already registered),
+# and `PHASE=device` wants the phone awake for every second it runs.
+PHASE=${PHASE:-all}
+case "$PHASE" in
+  build | device | all) ;;
+  *)
+    echo "PHASE is $PHASE; it has to be build, device or all."
+    exit 1
+    ;;
+esac
 
-if [ "$MODE" = speech-live ] && [ "$PHASE" != build ] && [ -z "${MIMO_API_KEY:-}" ]; then
+if [ "$PHASE" != build ] && [ "$MODE" = speech-live ] && [ -z "${MIMO_API_KEY:-}" ]; then
   echo "MIMO_API_KEY is not set; the live leg has nothing to synthesise with."
   exit 1
 fi
@@ -62,6 +71,17 @@ fi
 cd "$REPO"
 step() { printf '\n=== %s ===\n' "$1"; }
 IPA_AT="$REPO/src-tauri/gen/apple/build/arm64/Reading Partner.ipa"
+
+# tauri.conf.json's identifier is the shipping one, and installing that would
+# replace the build the phone has from TestFlight. Rewriting the generated
+# project does not hold — `tauri ios build` regenerates it from the config on
+# every run, which is what the check below caught — so the identifier is
+# overridden at the source, through the config merge the CLI offers. A file
+# rather than an inline JSON string: this reaches the build through a `bash -lc`
+# inside a `sudo launchctl asuser`, and a path survives that quoting.
+# Registered under the same paid team, so the same key still signs it.
+BENCH_CONFIG=/tmp/rp-bench-id.json
+printf '{"identifier": "%s"}\n' "$DEV_ID" > "$BENCH_CONFIG"
 
 # The key reaches the app only here, and only on the run that uses it. The first
 # launch below is just to make the data directory.
@@ -87,19 +107,9 @@ step "generated project"
 # wrote, and only `tauri ios init` rewrites it.
 if ! grep -q "PRODUCT_BUNDLE_IDENTIFIER: $DEV_ID\$" src-tauri/gen/apple/project.yml 2>/dev/null; then
   rm -rf src-tauri/gen/apple
-  bun run tauri ios init --ci 2>&1 | tail -2
-  # `init` writes tauri.conf.json's identifier, which is the shipping one. The
-  # bench must not install over the build the phone got from TestFlight, so the
-  # generated project — which is ignored, and rewritten from scratch above — is
-  # pointed at a bundle id of its own. Registered under the same paid team, so
-  # the same App Store Connect key still signs it.
-  sed -i '' "s/^\( *PRODUCT_BUNDLE_IDENTIFIER: \).*/\1$DEV_ID/" src-tauri/gen/apple/project.yml
-  # And in the Xcode project xcodegen already made from it, because whether the
-  # build regenerates that from the yml is tauri's business, not ours.
-  find src-tauri/gen/apple -name project.pbxproj -exec \
-    sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = $DEV_ID;/g" {} +
+  bun run tauri ios init --ci --config "$BENCH_CONFIG" 2>&1 | tail -2
 fi
-grep -h "PRODUCT_BUNDLE_IDENTIFIER" src-tauri/gen/apple/project.yml | sort -u
+
 rm -rf src-tauri/gen/apple/build
 
 step "build (VITE_SMOKE=$MODE)"
@@ -107,20 +117,33 @@ sudo -A launchctl asuser "$GUI_UID" sudo -u "$GUI_USER" \
   /bin/bash -lc "cd '$REPO' && export PATH='$PATH' APPLE_DEVELOPMENT_TEAM=$TEAM \
     APPLE_API_KEY=$APPLE_API_KEY APPLE_API_ISSUER=$APPLE_API_ISSUER \
     APPLE_API_KEY_PATH=$APPLE_API_KEY_PATH VITE_SMOKE=$MODE && \
-    bun run tauri ios build --debug --target aarch64 --export-method debugging" 2>&1 | tail -5
+    bun run tauri ios build --debug --target aarch64 --export-method debugging \
+      --config '$BENCH_CONFIG'" 2>&1 | tail -5
 
-fi  # end of the build half
+fi  # PHASE != device
 
 # An explicit path when there is more than one build in play: the device half
 # and the build half can be minutes and another build apart, and the tree only
 # ever holds the last one.
 IPA=${IPA_PATH:-$(find src-tauri/gen/apple/build -name '*.ipa' -type f | head -1)}
 echo "ipa: $IPA"
-[ -n "$IPA" ] || { echo "no .ipa produced"; exit 1; }
-ls -l "$IPA"
+[ -n "$IPA" ] || { echo "no .ipa to install; run PHASE=build first"; exit 1; }
+
+# What matters is the identifier inside the bundle that is about to be
+# installed, not the one the build was asked for: rewriting the generated
+# project does not hold, because `tauri ios build` regenerates it from
+# tauri.conf.json every run. Installing the wrong one replaces the app the phone
+# has from TestFlight, which has already happened once.
+BUILT_ID=$(unzip -p "$IPA" "Payload/$DEV_NAME.app/Info.plist" 2>/dev/null \
+  | plutil -extract CFBundleIdentifier raw - 2>/dev/null || true)
+echo "built bundle id: $BUILT_ID"
+if [ "$BUILT_ID" != "$DEV_ID" ]; then
+  echo "REFUSING: that .ipa is $BUILT_ID, not $DEV_ID; it would replace the TestFlight build"
+  exit 1
+fi
 
 if [ "$PHASE" = build ]; then
-  echo "build phase done; run again with PHASE=device once the phone is unlocked"
+  echo "built, not installed. Ask for the phone, then: PHASE=device $0 $MODE"
   exit 0
 fi
 
