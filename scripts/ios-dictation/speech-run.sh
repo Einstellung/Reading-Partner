@@ -32,7 +32,7 @@ GUI_USER=mima1234
 # provisioned for.
 [ -f "$HOME/.asc-env" ] && . "$HOME/.asc-env"
 TEAM=${APPLE_DEVELOPMENT_TEAM:?APPLE_DEVELOPMENT_TEAM is unset; see ~/.asc-env}
-DEV_ID=com.xinyuan.readingpartner
+DEV_ID=com.xinyuan.readingpartner.dev
 DEV_NAME="Reading Partner"
 DEVICE=00008140-000C31641EEB001C
 MODE=${1:-speech}
@@ -73,7 +73,18 @@ step "generated project"
 if ! grep -q "PRODUCT_BUNDLE_IDENTIFIER: $DEV_ID\$" src-tauri/gen/apple/project.yml 2>/dev/null; then
   rm -rf src-tauri/gen/apple
   bun run tauri ios init --ci 2>&1 | tail -2
+  # `init` writes tauri.conf.json's identifier, which is the shipping one. The
+  # bench must not install over the build the phone got from TestFlight, so the
+  # generated project — which is ignored, and rewritten from scratch above — is
+  # pointed at a bundle id of its own. Registered under the same paid team, so
+  # the same App Store Connect key still signs it.
+  sed -i '' "s/^\( *PRODUCT_BUNDLE_IDENTIFIER: \).*/\1$DEV_ID/" src-tauri/gen/apple/project.yml
+  # And in the Xcode project xcodegen already made from it, because whether the
+  # build regenerates that from the yml is tauri's business, not ours.
+  find src-tauri/gen/apple -name project.pbxproj -exec \
+    sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = $DEV_ID;/g" {} +
 fi
+grep -h "PRODUCT_BUNDLE_IDENTIFIER" src-tauri/gen/apple/project.yml | sort -u
 rm -rf src-tauri/gen/apple/build
 
 step "build (VITE_SMOKE=$MODE)"

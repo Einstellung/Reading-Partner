@@ -520,6 +520,25 @@ final class SpeechOut {
         }
     }
 
+    /// The whole routing picture in one line, because "no sound came out of the
+    /// headphones" is not answerable from a port type alone: what was asked for
+    /// (category, mode, options), what the system settled on (both halves of the
+    /// route, with names and rates — HFP runs at 8 or 16 kHz and A2DP at 44.1 or
+    /// 48, so the rate says which profile is up) and what else was on offer.
+    private func describeRoute(_ session: AVAudioSession) -> String {
+        let route = session.currentRoute
+        let ports = { (list: [AVAudioSessionPortDescription]) in
+            list.map { "\($0.portType.rawValue)/\($0.portName)" }.joined(separator: "+")
+        }
+        let available = (session.availableInputs ?? []).map {
+            "\($0.portType.rawValue)/\($0.portName)"
+        }.joined(separator: "+")
+        return "cat=\(session.category.rawValue) mode=\(session.mode.rawValue) "
+            + "opts=\(session.categoryOptions.rawValue) "
+            + "out=\(ports(route.outputs)) in=\(ports(route.inputs)) "
+            + "rate=\(session.sampleRate) available=\(available)"
+    }
+
     private func reportLocked() -> SpeechReport {
         let session = AVAudioSession.sharedInstance()
         var captured = 0
@@ -536,8 +555,7 @@ final class SpeechOut {
             sessionOutputLatencyMs: session.outputLatency * 1000,
             ioBufferDurationMs: session.ioBufferDuration * 1000,
             outputVolume: Double(session.outputVolume), sessionSampleRate: session.sampleRate,
-            outputRoute: session.currentRoute.outputs.map { $0.portType.rawValue }.joined(
-                separator: ","),
+            outputRoute: describeRoute(session),
             playbackFormat: describeFormat(playbackFormat), capturedFrames: captured,
             capturePath: path, error: lastError)
     }

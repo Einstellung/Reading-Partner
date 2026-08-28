@@ -850,16 +850,21 @@ final class AudioFront {
             if tapInstalled {
                 engine.inputNode.removeTap(onBus: 0)
             }
-            // The player goes before the engine stops, and its tap goes before
-            // it does: a node detached with a tap still on it is a callback into
-            // a node that is no longer in the graph.
-            if let player = player {
-                player.removeTap(onBus: 0)
-                player.stop()
-                engine.detach(player)
-            }
+            // The tap goes before the node does: a node detached with a tap
+            // still on it is a callback into a node that is no longer in the
+            // graph. The detach itself has to wait for the engine to stop —
+            // `AVAudioEngineGraph::RemoveNode` raises an Objective-C exception
+            // when the node it is asked to remove is still in a running graph,
+            // and an ObjC exception in Swift is an abort, not an error. That is
+            // how a route change during playback took the whole process with it
+            // (docs/pitfall/198).
+            player?.removeTap(onBus: 0)
+            player?.stop()
             if engine.isRunning {
                 engine.stop()
+            }
+            if let player = player {
+                engine.detach(player)
             }
         }
         player = nil

@@ -12,7 +12,7 @@
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 DEVICE=00008140-000C31641EEB001C
-APP=com.xinyuan.readingpartner
+APP=com.xinyuan.readingpartner.dev
 SRC=${1:-$HOME/rp-speech-fixture}
 
 [ -f "$SRC/manifest.json" ] || { echo "no manifest.json in $SRC"; exit 1; }

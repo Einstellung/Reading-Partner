@@ -9,7 +9,7 @@
 # dictation-guided.json and dictation-long.json.
 export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 DEVICE=00008140-000C31641EEB001C
-APP=com.xinyuan.readingpartner
+APP=com.xinyuan.readingpartner.dev
 NAME=${1:-dictation-result.json}
 OUT=${2:-/tmp/$NAME}
 
