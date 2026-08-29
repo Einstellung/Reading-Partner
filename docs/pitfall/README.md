@@ -53,7 +53,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 202）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 203）。
 
 ## EmbedPDF 引擎
 
@@ -154,6 +154,7 @@
 - [195-swift-rs-ignores-the-packages-own-platform-floor](./195-swift-rs-ignores-the-packages-own-platform-floor.md) — 单独 `cargo check --target aarch64-apple-ios` 插件时，build script 里的 swift-rs 按它内置的老下限编 Swift（不读 `Package.swift` 的 `platforms`），报一堆没动过的文件的可用性错；加 `IPHONEOS_DEPLOYMENT_TARGET=26.0`。Swift 那半单独验用 `xcodebuild -scheme <包名> -sdk iphoneos CODE_SIGNING_ALLOWED=NO`，两条合起来无签名也能验两边编得过
 - [200-devicectl-cannot-list-processes-while-console-is-attached](./200-devicectl-cannot-list-processes-while-console-is-attached.md) — `devicectl device process launch --console` 挂着的时候，并发的 `devicectl device info processes` 列不出这个进程，无人值守跑的点名整轮都读成 `GONE`，而 app 还在按秒写日志；判活改看日志文件的 mtime，或者直接看 `--console` 那份日志的最后一行
 - [201-a-kept-player-node-outlives-its-engine](./201-a-kept-player-node-outlives-its-engine.md) — `SpeechOut` 缓存的 player 节点属于上一张图，`play()` 抛 `player started when in a disconnected state`（ObjC 异常 = abort）。拆栈握着锁，只能异步通知缓存方，实测窗口 1.3 秒，里面新开一副 front 就会拿到「旧 player + 新 engine」两个 guard 都过。解法是取用侧同步问一句 `isCurrentSpeaker`；一般教训是缓存别处持有的指针就得有办法问它还算不算数
+- [202-the-reverse-tunnel-dies-with-the-network](./202-the-reverse-tunnel-dies-with-the-network.md) — 连 Mac 构建机的反向隧道把 Linux 的地址写死在 Mac 那头，换网就断；本地端口还听着，所以症状是 `Connection timed out during banner exchange` 而不是拒绝，跑到一半的构建和 `devicectl` 一起卡死。两头在同一个热点上时直连（`172.20.10.0/28`，Mac `.11`），断了先扫网段别修隧道
 
 ## Android 构建与签名
 
