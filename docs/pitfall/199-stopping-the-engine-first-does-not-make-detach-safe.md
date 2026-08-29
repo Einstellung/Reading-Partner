@@ -33,3 +33,8 @@ thread com.apple.root.default-qos.cooperative
 一个不会比 engine 活得更久的节点，不需要从一张马上就不存在的图里摘出来。
 
 同一条也适用于临时搭起来的 engine（比如探针里量路由用的那个）：用完 `removeTap` + `stop` 就够，不要 detach。
+
+## 真机实测
+
+2026-08-29 的一轮验过：同一处（探针切 VPIO 时的 `close()`）拆栈走完，`RP-DICT front closed` 打了出来，没有
+abort。这一条结案。同一轮崩在它后面 1.3 秒的另一件事上，和 detach 无关，见坑 201。
