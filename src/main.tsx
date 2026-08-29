@@ -70,6 +70,14 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
     runSpeechProbe({ echoOnly: true }),
   );
+} else if (import.meta.env.VITE_SMOKE === "speech-control") {
+  // The echo experiment's positive control: the leg that hears nothing of its
+  // own playback, then the same measurement with a person reading the same
+  // sentence instead, then both at once. Needs somebody in front of the phone
+  // for about a minute; the screen says when to read.
+  void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
+    runSpeechProbe({ control: true }),
+  );
 } else if (import.meta.env.VITE_SMOKE === "speech-bench") {
   // The half of it that needs ears: whether twelve scheduled buffers sound like
   // one stretch of speech.
