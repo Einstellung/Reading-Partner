@@ -215,16 +215,17 @@ else
 fi
 CONSOLE_PID=$!
 echo "started at $(date +%H:%M:%S); waiting ${WAIT}s"
-# Every half minute, whether the process is still there. A run that dies at
-# 40 s and a run that dies at 400 s look the same in the container afterwards.
+# Every half minute, whether the app is still writing. A run that dies at 40 s
+# and a run that dies at 400 s look the same in the container afterwards, so
+# something has to take the roll call while it runs — but not
+# `devicectl device info processes`: with --console holding the device it comes
+# back without our process while the app is still logging every second, and a
+# whole round's roll call read GONE against a log that was still growing
+# (docs/pitfall/200). The log's own mtime cannot lie the same way.
 for _ in $(seq 1 $((WAIT / 30))); do
   sleep 30
-  if xcrun devicectl device info processes --device "$DEVICE" 2>/dev/null \
-     | grep -q "$DEV_NAME.app"; then
-    printf '%s alive\n' "$(date +%H:%M:%S)"
-  else
-    printf '%s GONE\n' "$(date +%H:%M:%S)"
-  fi
+  printf '%s last line %ss ago\n' "$(date +%H:%M:%S)" \
+    "$(( $(date +%s) - $(stat -f %m "$RUNLOG.app.log" 2>/dev/null || echo 0) ))"
 done
 kill "$CONSOLE_PID" 2>/dev/null || true
 

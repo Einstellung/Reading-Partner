@@ -53,7 +53,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 200）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 201）。
 
 ## EmbedPDF 引擎
 
@@ -152,6 +152,7 @@
 - [197-cloud-signing-needs-no-apple-id-but-does-need-the-device](./197-cloud-signing-needs-no-apple-id-but-does-need-the-device.md) — Xcode 里没有任何 Apple ID 也能出真机开发包：tauri 见到 `APPLE_API_KEY` / `APPLE_API_ISSUER` / `APPLE_API_KEY_PATH` 就把 `-allowProvisioningUpdates` 和三个 `-authenticationKey*` 透传给 xcodebuild，证书和 profile 在 export 阶段现建，profile 一年有效不是 Personal Team 的 7 天。但它不传 `-allowProvisioningDeviceRegistration`，设备要自己 `POST /v1/devices` 注册，而且占掉每年 100 个名额里的一个、当年只能禁用不能删
 - [184-info-ios-plist-merges-at-build-time](./184-info-ios-plist-merges-at-build-time.md) — `Info.ios.plist` 的 key 在构建期才合并，`tauri ios init` 刚生成的 `gen/apple` 里一个都看不到，要验去看 `.app/Info.plist`
 - [195-swift-rs-ignores-the-packages-own-platform-floor](./195-swift-rs-ignores-the-packages-own-platform-floor.md) — 单独 `cargo check --target aarch64-apple-ios` 插件时，build script 里的 swift-rs 按它内置的老下限编 Swift（不读 `Package.swift` 的 `platforms`），报一堆没动过的文件的可用性错；加 `IPHONEOS_DEPLOYMENT_TARGET=26.0`。Swift 那半单独验用 `xcodebuild -scheme <包名> -sdk iphoneos CODE_SIGNING_ALLOWED=NO`，两条合起来无签名也能验两边编得过
+- [200-devicectl-cannot-list-processes-while-console-is-attached](./200-devicectl-cannot-list-processes-while-console-is-attached.md) — `devicectl device process launch --console` 挂着的时候，并发的 `devicectl device info processes` 列不出这个进程，无人值守跑的点名整轮都读成 `GONE`，而 app 还在按秒写日志；判活改看日志文件的 mtime，或者直接看 `--console` 那份日志的最后一行
 
 ## Android 构建与签名
 
