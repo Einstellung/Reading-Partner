@@ -310,8 +310,11 @@ final class SpeechOut {
     func lost() {
         queue.async {
             guard self.speaking || self.player != nil else { return }
-            // The node is already detached by the time this runs, so the book is
-            // closed without touching it.
+            // The node is not touched on the way out. It is no longer detached
+            // by the time this runs — teardown stopped detaching anything
+            // (docs/pitfall/199) — but it belongs to an engine that has been
+            // dropped, and the only safe thing to do with such a pointer is let
+            // go of it.
             self.generation &+= 1
             self.player = nil
             self.pending = 0
@@ -398,8 +401,29 @@ final class SpeechOut {
 
     // MARK: - On the queue
 
+    /// The playback node, kept between sentences so that a turn does not rebuild
+    /// the stack twelve times.
+    ///
+    /// The kept pointer is asked whether it is still the current one, because
+    /// the answer can be no and nothing here would otherwise know. `lost()` is
+    /// the notice that the stack went away, and it cannot arrive in time: the
+    /// teardown runs with AudioFront's lock held, so all it can do is dispatch
+    /// the notice asynchronously. On a device run the gap was 1.3 seconds —
+    /// long enough for the stack to be torn down, a fresh one to be built, and a
+    /// sentence to be handed to the *previous* graph's node. AVAudioPlayerNode
+    /// answers that with `player started when in a disconnected state`, which is
+    /// an ObjC exception, which in Swift is an abort (docs/pitfall/201).
+    ///
+    /// What this closes is that window. A smaller one is left open on purpose:
+    /// AudioFront's lock is released again before `play()`, so a teardown that
+    /// lands in those few microseconds still reaches a stale node. It has never
+    /// been observed, and the way to close it — holding the lock across `play()`
+    /// — trades an abort nobody has seen for a deadlock everybody would: AVFAudio
+    /// calls back into this object from inside `play()`.
     private func attachedPlayer() throws -> AVAudioPlayerNode {
-        if let player = player { return player }
+        if let player = player, AudioFront.shared.isCurrentSpeaker(player) { return player }
+        // Whatever it was pointing at belongs to a graph that no longer exists.
+        player = nil
         let speaker = try AudioFront.shared.acquireSpeaker { [weak self] in
             self?.lost()
         }

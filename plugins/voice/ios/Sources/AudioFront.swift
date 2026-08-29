@@ -493,6 +493,19 @@ final class AudioFront {
         NSLog("RP-DICT front paused after speaking")
     }
 
+    /// Whether that node is the one this stack is handing out right now.
+    ///
+    /// A caller that keeps the node between sentences is keeping a pointer into
+    /// a graph it does not own, and a teardown cannot tell it so in time — the
+    /// teardown holds `lock`, so the notice it sends is asynchronous. This is
+    /// the synchronous half of that answer: ask before using it
+    /// (docs/pitfall/201).
+    func isCurrentSpeaker(_ node: AVAudioPlayerNode) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return engine != nil && player === node
+    }
+
     /// The engine the player is on, for the one question SpeechOut has to ask
     /// before every `play()`: is it running. Nil when there is no stack.
     func speakerEngine() throws -> AVAudioEngine? {
