@@ -434,11 +434,38 @@ final class AudioFront {
         if needsPlayer {
             let node = AVAudioPlayerNode()
             engine.attach(node)
+            // Each step separately, and the graph read back after each: the leg
+            // that aborts is the one that tore a stack down first, and the
+            // difference between it and the three that work has to be in this
+            // order or in what one of these calls quietly does not do.
+            #if DEBUG
+                NSLog(
+                    "RP-SPEECH build attach ok attached=%d",
+                    engine.attachedNodes.contains(node) ? 1 : 0)
+            #endif
             engine.connect(node, to: engine.mainMixerNode, format: SpeechOut.playbackFormat)
+            #if DEBUG
+                NSLog(
+                    "RP-SPEECH build connect ok nodeOut=%d mixerOut=%d vpio=%d running=%d",
+                    engine.outputConnectionPoints(for: node, outputBus: 0).count,
+                    engine.outputConnectionPoints(for: engine.mainMixerNode, outputBus: 0).count,
+                    engine.inputNode.isVoiceProcessingEnabled ? 1 : 0,
+                    engine.isRunning ? 1 : 0)
+            #endif
             player = node
         }
 
         try startLocked(engine)
+        #if DEBUG
+            if let node = player {
+                NSLog(
+                    "RP-SPEECH build start ok nodeOut=%d mixerOut=%d vpio=%d running=%d",
+                    engine.outputConnectionPoints(for: node, outputBus: 0).count,
+                    engine.outputConnectionPoints(for: engine.mainMixerNode, outputBus: 0).count,
+                    engine.inputNode.isVoiceProcessingEnabled ? 1 : 0,
+                    engine.isRunning ? 1 : 0)
+            }
+        #endif
 
         self.format = hardwareFormat
         timing.recordReuse(false)

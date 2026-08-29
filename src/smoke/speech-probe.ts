@@ -385,7 +385,9 @@ async function note(text: string): Promise<void> {
   }
 }
 
-export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<void> {
+export async function runSpeechProbe(
+  options: { live?: boolean; echoOnly?: boolean } = {},
+): Promise<void> {
   const result: SpeechResult = {
     ok: false,
     stage: "boot",
@@ -448,7 +450,11 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
     }
     await write(result);
 
-    for (const leg of LEGS) {
+    // `echoOnly` skips straight to the leg under investigation. The three
+    // fixture legs are four minutes of phone time and they have passed in every
+    // round; when the question is why the echo leg aborts, they are four minutes
+    // of somebody standing next to a phone waiting for a known answer.
+    for (const leg of options.echoOnly ? [] : LEGS) {
       result.stage = leg.label;
       render(result);
       await write(result);
@@ -472,7 +478,7 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
 
     // After the fixture legs: they are the control and they answer without a
     // network, so they are on disk before anything is asked of the vendor.
-    if (options.live) {
+    if (options.live && !options.echoOnly) {
       result.stage = "live";
       render(result);
       await write(result);
@@ -483,6 +489,15 @@ export async function runSpeechProbe(options: { live?: boolean } = {}): Promise<
 
     // The interruption loop last: it is the leg that can take the process with
     // it, and everything before it is already on disk by then.
+    if (options.echoOnly) {
+      result.ok = result.echo.every((leg) => leg.ok);
+      result.stage = "done";
+      render(result);
+      await write(result);
+      await note(`stage=${result.stage}`);
+      return;
+    }
+
     result.stage = "interrupt";
     render(result);
     await write(result);

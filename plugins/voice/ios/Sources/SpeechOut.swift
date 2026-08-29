@@ -255,6 +255,29 @@ final class SpeechOut {
                         "The audio engine is not running, so the player was not started.")
                 }
                 beginLocked(utterance: utterance)
+                // Four rounds have aborted on the next line with `player started
+                // when in a disconnected state`, and always on the one leg that
+                // tears the stack down before rebuilding it. The node is freshly
+                // attached and connected by then, so the question is what the
+                // graph actually looks like at this instant — three answers that
+                // a stack trace cannot separate: the connect never took, it took
+                // and something later undid it, or the node hangs off a mixer
+                // that is itself connected to nothing.
+                #if DEBUG
+                    let nodeOut = engine.outputConnectionPoints(for: node, outputBus: 0)
+                    let mixerOut = engine.outputConnectionPoints(
+                        for: engine.mainMixerNode, outputBus: 0)
+                    NSLog(
+                        "RP-SPEECH graph attached=%d nodeOut=%d mixerOut=%d running=%d "
+                            + "vpio=%d nodeFmt=%@ mixerFmt=%@",
+                        engine.attachedNodes.contains(node) ? 1 : 0,
+                        nodeOut.count,
+                        mixerOut.count,
+                        engine.isRunning ? 1 : 0,
+                        engine.inputNode.isVoiceProcessingEnabled ? 1 : 0,
+                        describeFormat(node.outputFormat(forBus: 0)),
+                        describeFormat(engine.mainMixerNode.outputFormat(forBus: 0)))
+                #endif
                 node.play()
             }
 

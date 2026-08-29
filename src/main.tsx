@@ -63,6 +63,12 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
     runSpeechProbe({ live: true }),
   );
+} else if (import.meta.env.VITE_SMOKE === "speech-echo") {
+  // Just the echo legs, for the abort that has ended four rounds on the same
+  // step. Ninety seconds instead of thirteen minutes of somebody's phone.
+  void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
+    runSpeechProbe({ echoOnly: true }),
+  );
 } else if (import.meta.env.VITE_SMOKE === "speech-bench") {
   // The half of it that needs ears: whether twelve scheduled buffers sound like
   // one stretch of speech.
