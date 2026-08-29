@@ -269,14 +269,17 @@ final class SpeechOut {
                         for: engine.mainMixerNode, outputBus: 0)
                     NSLog(
                         "RP-SPEECH graph attached=%d nodeOut=%d mixerOut=%d running=%d "
-                            + "vpio=%d nodeFmt=%@ mixerFmt=%@",
+                            + "vpio=%d nodeFmt=%@ mixerFmt=%@ outIn=%@ outHw=%@ rate=%d",
                         engine.attachedNodes.contains(node) ? 1 : 0,
                         nodeOut.count,
                         mixerOut.count,
                         engine.isRunning ? 1 : 0,
                         engine.inputNode.isVoiceProcessingEnabled ? 1 : 0,
                         describeFormat(node.outputFormat(forBus: 0)),
-                        describeFormat(engine.mainMixerNode.outputFormat(forBus: 0)))
+                        describeFormat(engine.mainMixerNode.outputFormat(forBus: 0)),
+                        describeFormat(engine.outputNode.inputFormat(forBus: 0)),
+                        describeFormat(engine.outputNode.outputFormat(forBus: 0)),
+                        Int(AVAudioSession.sharedInstance().sampleRate))
                 #endif
                 node.play()
             }

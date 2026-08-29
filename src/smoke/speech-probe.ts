@@ -83,6 +83,14 @@ const LEGS: Leg[] = [
   { label: "raw-burst", source: "raw", pace: "burst", capture: true },
 ];
 
+/// The control leg of the truth-table run: one sentence, voice processing on,
+/// nothing torn down first. It is there to leave a stack standing — without one
+/// the echo leg's `close()` has nothing to close and the leg after it is a cold
+/// build wearing the label of a rebuild.
+const ECHO_ONLY_LEGS: Leg[] = [
+  { label: "trimmed-burst", source: "trimmed", pace: "burst", limit: 1 },
+];
+
 /// How many sentences the echo legs play. Long enough that the recogniser has
 /// something to settle on after the microphone joins, short enough that two of
 /// them fit in the run alongside everything else.
@@ -280,10 +288,14 @@ async function runLive(captureDir: string): Promise<LegResult> {
 /// player starts before the microphone, because a stack that has a player can
 /// take a microphone but a stack that has none has to be rebuilt to get one,
 /// and the rebuild would take the recogniser with it.
-async function runEcho(vpio: boolean, fixtureDir: string): Promise<EchoResult> {
+async function runEcho(
+  vpio: boolean,
+  fixtureDir: string,
+  sentences: number = ECHO_SENTENCES,
+): Promise<EchoResult> {
   const label = vpio ? "echo-vpio-on" : "echo-vpio-off";
   const began = performance.now();
-  const spoken = (await fixtureSentences()).slice(0, ECHO_SENTENCES).join("");
+  const spoken = (await fixtureSentences()).slice(0, sentences).join("");
   const out: EchoResult = {
     label,
     vpio,
@@ -328,7 +340,7 @@ async function runEcho(vpio: boolean, fixtureDir: string): Promise<EchoResult> {
         source: "trimmed",
         pace: "burst",
         fixtureDir,
-        limit: ECHO_SENTENCES,
+        limit: sentences,
       },
     });
     await Promise.race([speakingStarted, after(20_000)]);
@@ -454,7 +466,7 @@ export async function runSpeechProbe(
     // fixture legs are four minutes of phone time and they have passed in every
     // round; when the question is why the echo leg aborts, they are four minutes
     // of somebody standing next to a phone waiting for a known answer.
-    for (const leg of options.echoOnly ? [] : LEGS) {
+    for (const leg of options.echoOnly ? ECHO_ONLY_LEGS : LEGS) {
       result.stage = leg.label;
       render(result);
       await write(result);
@@ -467,12 +479,20 @@ export async function runSpeechProbe(
 
     // The echo legs next: still no network, and they leave the stack in a known
     // state for everything after them.
-    for (const vpio of [false, true]) {
+    // Voice processing on before off, on the truth-table run. Four rounds have
+    // read "the leg that tears the stack down first" as the reason the abort
+    // happens, but that leg is also the only one that turns voice processing
+    // off, and nothing has ever separated the two. This is the missing cell:
+    // torn down and rebuilt, voice processing on. It goes first because the
+    // other one takes the process with it.
+    for (const vpio of options.echoOnly ? [true, false] : [false, true]) {
       result.stage = vpio ? "echo-vpio-on" : "echo-vpio-off";
       render(result);
       await write(result);
       await note(`stage=${result.stage}`);
-      result.echo.push(await runEcho(vpio, fixtureDir));
+      result.echo.push(
+        await runEcho(vpio, fixtureDir, options.echoOnly ? 1 : ECHO_SENTENCES),
+      );
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 

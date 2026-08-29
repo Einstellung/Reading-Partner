@@ -64,8 +64,9 @@ if (import.meta.env.VITE_SMOKE === "1") {
     runSpeechProbe({ live: true }),
   );
 } else if (import.meta.env.VITE_SMOKE === "speech-echo") {
-  // Just the echo legs, for the abort that has ended four rounds on the same
-  // step. Ninety seconds instead of thirteen minutes of somebody's phone.
+  // The truth-table run: one sentence with voice processing on and nothing torn
+  // down, then the same thing after a teardown, then the leg that aborts. Under
+  // a minute instead of thirteen.
   void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
     runSpeechProbe({ echoOnly: true }),
   );

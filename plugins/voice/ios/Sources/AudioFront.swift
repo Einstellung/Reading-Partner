@@ -446,11 +446,15 @@ final class AudioFront {
             engine.connect(node, to: engine.mainMixerNode, format: SpeechOut.playbackFormat)
             #if DEBUG
                 NSLog(
-                    "RP-SPEECH build connect ok nodeOut=%d mixerOut=%d vpio=%d running=%d",
+                    "RP-SPEECH build connect ok nodeOut=%d mixerOut=%d vpio=%d running=%d "
+                        + "mixerFmt=%@ outIn=%@ outHw=%@",
                     engine.outputConnectionPoints(for: node, outputBus: 0).count,
                     engine.outputConnectionPoints(for: engine.mainMixerNode, outputBus: 0).count,
                     engine.inputNode.isVoiceProcessingEnabled ? 1 : 0,
-                    engine.isRunning ? 1 : 0)
+                    engine.isRunning ? 1 : 0,
+                    describeFormat(engine.mainMixerNode.outputFormat(forBus: 0)),
+                    describeFormat(engine.outputNode.inputFormat(forBus: 0)),
+                    describeFormat(engine.outputNode.outputFormat(forBus: 0)))
             #endif
             player = node
         }
@@ -459,11 +463,15 @@ final class AudioFront {
         #if DEBUG
             if let node = player {
                 NSLog(
-                    "RP-SPEECH build start ok nodeOut=%d mixerOut=%d vpio=%d running=%d",
+                    "RP-SPEECH build start ok nodeOut=%d mixerOut=%d vpio=%d running=%d "
+                        + "mixerFmt=%@ outIn=%@ outHw=%@",
                     engine.outputConnectionPoints(for: node, outputBus: 0).count,
                     engine.outputConnectionPoints(for: engine.mainMixerNode, outputBus: 0).count,
                     engine.inputNode.isVoiceProcessingEnabled ? 1 : 0,
-                    engine.isRunning ? 1 : 0)
+                    engine.isRunning ? 1 : 0,
+                    describeFormat(engine.mainMixerNode.outputFormat(forBus: 0)),
+                    describeFormat(engine.outputNode.inputFormat(forBus: 0)),
+                    describeFormat(engine.outputNode.outputFormat(forBus: 0)))
             }
         #endif
 
