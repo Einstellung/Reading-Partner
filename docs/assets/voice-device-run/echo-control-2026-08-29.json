@@ -1,0 +1,282 @@
+{
+  "ok": true,
+  "stage": "done",
+  "fixtureDir": "/private/var/mobile/Containers/Data/Application/1407FD86-ABAA-4C48-88E4-E3851185D8DF/Library/Application Support/com.xinyuan.readingpartner.dev/speech-fixture",
+  "routes": {
+    "trials": [
+      {
+        "configured": true,
+        "name": "shipping",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=8 out=Speaker/Speaker in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "voiceChat+hfp",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=4 out=Receiver/Receiver in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "voiceChat+a2dp",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=32 out=Receiver/Receiver in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "voiceChat+a2dp+speaker",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=40 out=Speaker/Speaker in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "default+a2dp",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=0 out=Receiver/Receiver in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      },
+      {
+        "configured": true,
+        "name": "videoChat+a2dp",
+        "route": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVideoChat opts=32 out=Speaker/Speaker in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "voiceProcessing": true
+      }
+    ]
+  },
+  "legs": [
+    {
+      "label": "trimmed-burst",
+      "ok": true,
+      "error": null,
+      "levels": [
+        0,
+        0.8132501853040135,
+        0.7239145463610693,
+        0.7946141828554946,
+        0.4973448967004419,
+        0.638763932787241,
+        0.7154443749379356,
+        0.4678064803588648,
+        0,
+        0,
+        0.6544810610611734,
+        0.6033713298139269,
+        0.6701911492655344,
+        0.82602015174988,
+        0.8356712708297441,
+        0.8597229198037475,
+        0.8052779949007383,
+        0.6807230376586497,
+        0.5782532050116848,
+        0.6571290949152919,
+        0.715682449307803,
+        0.7632658032125742,
+        0.7493948687183543,
+        0.25737606482461606,
+        0.6949583615189641,
+        0.558042028192387,
+        0.5153065644099788,
+        0.6727359094267166,
+        0.47996942352973926,
+        0.784243229327628,
+        0.6163541469142559,
+        0
+      ],
+      "levelGaps": [
+        92,
+        116,
+        92,
+        91,
+        115,
+        92,
+        92,
+        116,
+        95,
+        89,
+        116,
+        93,
+        90,
+        116,
+        92,
+        91,
+        117,
+        94,
+        89,
+        115,
+        92,
+        92,
+        115,
+        92,
+        114,
+        92,
+        93,
+        114,
+        91,
+        93,
+        57
+      ],
+      "speaking": [
+        {
+          "value": 1,
+          "atMs": 656
+        },
+        {
+          "value": 0,
+          "reason": "done",
+          "atMs": 3803
+        }
+      ],
+      "wallMs": 3816,
+      "report": {
+        "capturedFrames": 0,
+        "firstTapFrames": 2400,
+        "ioBufferDurationMs": 23,
+        "label": "trimmed-burst",
+        "levelDb": [
+          -49.83086968676835,
+          -14.789244255575586,
+          -17.558649062806854,
+          -15.36696033147967,
+          -24.5823082022863,
+          -20.19831808359553,
+          -17.821224376923997,
+          -25.49799910887519,
+          -59.46075063363233,
+          -58.141458480610694,
+          -19.711087107103623,
+          -21.295488775768263,
+          -19.224074372768435,
+          -14.393375295753716,
+          -14.094190604277932,
+          -13.348589486083828,
+          -15.036382158077114,
+          -18.897585832581857,
+          -22.074150644637772,
+          -19.62899805762595,
+          -17.813844071458107,
+          -16.338760100410198,
+          -16.76875906973102,
+          -32.0213419904369,
+          -18.45629079291211,
+          -22.700697126036,
+          -24.025496503290658,
+          -19.145186807771783,
+          -25.12094787057808,
+          -15.688459890843532,
+          -20.893021445658064
+        ],
+        "levelIntervalMs": [
+          0,
+          92.56398677825928,
+          115.27001857757568,
+          91.74597263336182,
+          91.64595603942873,
+          114.70305919647215,
+          91.98999404907228,
+          91.9719934463501,
+          115.66102504730225,
+          92.3689603805542,
+          92.40996837615968,
+          116.01495742797852,
+          90.55399894714355,
+          91.7760133743286,
+          116.582989692688,
+          91.17209911346436,
+          91.25399589538574,
+          117.41399765014648,
+          91.51995182037354,
+          91.14599227905272,
+          114.38500881195068,
+          92.54300594329834,
+          91.48001670837402,
+          115.6519651412964,
+          91.80307388305664,
+          114.44294452667236,
+          91.80796146392822,
+          92.95809268951416,
+          113.913893699646,
+          91.55702590942384,
+          92.90897846221924
+        ],
+        "outputPresentationLatencyMs": 0,
+        "outputRoute": "cat=AVAudioSessionCategoryPlayAndRecord mode=AVAudioSessionModeVoiceChat opts=12 out=Speaker/Speaker in=MicrophoneBuiltIn/iPhone Microphone rate=48000.0 available=MicrophoneBuiltIn/iPhone Microphone",
+        "outputVolume": 0.800000011920929,
+        "playbackFormat": "24000Hz 1ch deinterleaved fmt=1",
+        "sentences": [
+          {
+            "bytes": 144960,
+            "chars": 18,
+            "completedAtMs": 3127.1690130233765,
+            "completionFrame": 73416,
+            "enqueuedAtMs": 7.140994071960449,
+            "frames": 72480,
+            "index": 1,
+            "latencyMs": 39,
+            "startFrame": 0
+          }
+        ],
+        "sessionOutputLatencyMs": 8.541666902601719,
+        "sessionSampleRate": 48000,
+        "stops": [
+          "done"
+        ],
+        "tapBuffers": 31,
+        "underruns": 0
+      },
+      "relay": null
+    }
+  ],
+  "echo": [
+    {
+      "label": "echo-vpio-on",
+      "vpio": true,
+      "ok": true,
+      "error": null,
+      "spoken": "早上好，这是八月二十七日的科技简报。",
+      "heard": "",
+      "bigrams": 15,
+      "bigramsHeard": 0,
+      "events": 1,
+      "wallMs": 6557,
+      "peakLevel": 0,
+      "meanLevel": 0,
+      "played": null
+    },
+    {
+      "label": "echo-human",
+      "vpio": true,
+      "ok": true,
+      "error": null,
+      "spoken": "早上好，这是八月二十七日的科技简报。",
+      "heard": "早上好 ，这是 8月 27日的科技简报。",
+      "bigrams": 15,
+      "bigramsHeard": 9,
+      "events": 7,
+      "wallMs": 14301,
+      "peakLevel": 0.974,
+      "meanLevel": 0.248,
+      "played": null
+    },
+    {
+      "label": "echo-human-duplex",
+      "vpio": true,
+      "ok": true,
+      "error": null,
+      "spoken": "今天天气很好，我们出去走一走吧。",
+      "heard": "今天天气很好 ，我们出去走一走吧。",
+      "bigrams": 13,
+      "bigramsHeard": 13,
+      "events": 8,
+      "wallMs": 16384,
+      "peakLevel": 0.992,
+      "meanLevel": 0.222,
+      "played": {
+        "text": "早上好，这是八月二十七日的科技简报。英伟达发布 H 二百之后，A 一百的二手价格明显回落，新一代 H B M 四预计明年量产。",
+        "bigrams": 50,
+        "bigramsHeard": 0
+      }
+    }
+  ],
+  "interrupts": null,
+  "error": null,
+  "timestamp": "2026-08-29T08:23:37.162Z"
+}
