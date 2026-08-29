@@ -54,3 +54,17 @@ connect 调用成立，不说明这条链进了渲染图。`play()` 检查的是
 
 `AudioFront.openFreshLocked` 里 attach + connect 那一段是现场：`engine.prepare()` 之后才第一次读
 `mainMixerNode`，而那时 `outputNode` 还没有真值。
+
+顺着这条读下来，怀疑落在**顺序**上，还没上机验：
+
+`openFreshLocked` 的调用序是 `engine.inputNode` → `setVoiceProcessingEnabled` → `engine.prepare()` →
+（`needsPlayer` 时）`attach` + `connect(node, to: engine.mainMixerNode)`。`mainMixerNode` 是懒创建的，第一次读
+它才把它建出来并接到 `outputNode` 上——也就是说 **`prepare()` 跑的时候图里只有输入那半**，输出链是 prepare
+之后才声明的，没人再 prepare 一次。
+
+VPIO 开着时这个顺序不出事，因为 `setVoiceProcessingEnabled(true)` 在 `prepare()` 之前就把采集和播放两个方向
+一起绑上了硬件；关掉它，输出那半就只剩 `prepare()` 之后这条没人分配的声明。
+
+要试的最小改动是把 `_ = engine.mainMixerNode` 挪到 `engine.prepare()` 之前。产品路径上 VPIO 永远开着，这个改
+动对它是「早几行读同一个属性」；要更保守就只在 `needsPlayer && !inputNode.isVoiceProcessingEnabled` 时提前读，
+产品路径一个字节都不动。判据还是那一条：建完图之后 `outputNode.outputFormat(forBus: 0).sampleRate` 不是 0。
