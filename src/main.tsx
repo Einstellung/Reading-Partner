@@ -63,6 +63,13 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
     runSpeechProbe({ live: true }),
   );
+} else if (import.meta.env.VITE_SMOKE === "speech-echo") {
+  // The truth-table run: one sentence with voice processing on and nothing torn
+  // down, then the same thing after a teardown, then the leg that aborts. Under
+  // a minute instead of thirteen.
+  void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
+    runSpeechProbe({ echoOnly: true }),
+  );
 } else if (import.meta.env.VITE_SMOKE === "speech-bench") {
   // The half of it that needs ears: whether twelve scheduled buffers sound like
   // one stretch of speech.
