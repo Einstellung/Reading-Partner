@@ -358,7 +358,12 @@ async function runEcho(
 
   let listener: PluginListener | null = null;
   let dictating = false;
-  const source = hasOnDeviceDictation() ? nativeDictation() : null;
+  // The locale is not optional here. Without one the native side walks
+  // `Locale.preferredLanguages` and lands on en-US, and a Chinese sentence
+  // decoded as English comes back as fluent English nonsense rather than as a
+  // bad transcript (docs/pitfall/164) — which scores zero against every Chinese
+  // bigram and reads exactly like an echo canceller doing its job.
+  const source = hasOnDeviceDictation() ? nativeDictation({ locale: "zh-CN" }) : null;
   try {
     if (!source) throw new Error("This device has no on-device dictation.");
     await invoke("plugin:voice|speech_probe", {
@@ -494,7 +499,12 @@ async function runHuman(
 
   let listener: PluginListener | null = null;
   let dictating = false;
-  const source = hasOnDeviceDictation() ? nativeDictation() : null;
+  // The locale is not optional here. Without one the native side walks
+  // `Locale.preferredLanguages` and lands on en-US, and a Chinese sentence
+  // decoded as English comes back as fluent English nonsense rather than as a
+  // bad transcript (docs/pitfall/164) — which scores zero against every Chinese
+  // bigram and reads exactly like an echo canceller doing its job.
+  const source = hasOnDeviceDictation() ? nativeDictation({ locale: "zh-CN" }) : null;
   try {
     if (!source) throw new Error("This device has no on-device dictation.");
     // The same switch the echo legs make, in the same place, and a no-op by the
