@@ -8,7 +8,7 @@
 // every one of these calls with a sentence (fallback.rs), which is exactly what
 // a player that cannot play should answer.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use async_trait::async_trait;
@@ -160,5 +160,34 @@ impl<R: Runtime> Player for DevicePlayer<R> {
             position_ms: (at.played_ms - placed.start_ms).clamp(0.0, placed.duration_ms),
             duration_ms: placed.duration_ms,
         })
+    }
+}
+
+/// Where a turn's audio goes, asked for one turn at a time.
+///
+/// A player carries the utterance number for its whole life — Swift drops a
+/// sentence whose utterance is not the one it is playing, which is how audio the
+/// vendor finished after a barge-in is thrown away instead of spoken into the
+/// next turn — so a new turn cannot reuse the last turn's player. The session
+/// (session.rs) asks for one here each time it opens a turn, and the trait is
+/// what lets its tests run against a player with no phone underneath it.
+pub trait Speakers: Send + Sync + 'static {
+    fn player(&self, utterance: u64) -> Arc<dyn Player>;
+}
+
+/// The phone's own speaker.
+pub struct DeviceSpeakers<R: Runtime> {
+    app: AppHandle<R>,
+}
+
+impl<R: Runtime> DeviceSpeakers<R> {
+    pub fn new(app: AppHandle<R>) -> Self {
+        Self { app }
+    }
+}
+
+impl<R: Runtime> Speakers for DeviceSpeakers<R> {
+    fn player(&self, utterance: u64) -> Arc<dyn Player> {
+        Arc::new(DevicePlayer::new(self.app.clone(), utterance))
     }
 }

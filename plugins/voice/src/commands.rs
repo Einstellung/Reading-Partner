@@ -11,9 +11,10 @@
 // `#[tauri::command]` reads arguments as camelCase by default, so
 // `contextual_strings` is `contextualStrings` on the wire with no annotation.
 
-use tauri::{command, ipc::Channel, AppHandle, Runtime};
+use tauri::{command, ipc::Channel, AppHandle, Manager, Runtime};
 
 use crate::models::*;
+use crate::session::SpeechSession;
 use crate::Result;
 use crate::VoiceExt;
 
@@ -159,4 +160,33 @@ pub(crate) async fn speech_live<R: Runtime>(
 #[command]
 pub(crate) async fn speech_report<R: Runtime>(app: AppHandle<R>) -> Result<SpeechReport> {
     app.voice().speech_report().await
+}
+
+// A turn of speech, one sentence at a time (session.rs). The model streams, the
+// webview cuts the stream into sentences, and each one arrives here on its own;
+// what holds them together is the `SpeechSession` managed on the app.
+
+/// Open a turn and answer with its number. Whatever was still speaking stops.
+#[command]
+pub(crate) async fn speak_begin<R: Runtime>(app: AppHandle<R>) -> Result<u64> {
+    app.state::<SpeechSession>().begin().await
+}
+
+/// The turn's next sentence, already split by the caller.
+#[command]
+pub(crate) async fn speak_push<R: Runtime>(app: AppHandle<R>, text: String) -> Result<()> {
+    app.state::<SpeechSession>().push(text).await
+}
+
+/// No more sentences are coming. What was pushed is still spoken.
+#[command]
+pub(crate) async fn speak_close<R: Runtime>(app: AppHandle<R>) -> Result<()> {
+    app.state::<SpeechSession>().close().await
+}
+
+/// Cut the turn off now. The answer is a sentinel on the path that matters —
+/// see the warning on `SpeechSession::stop`.
+#[command]
+pub(crate) async fn speak_stop<R: Runtime>(app: AppHandle<R>) -> Result<SpeechStopped> {
+    app.state::<SpeechSession>().stop().await
 }

@@ -75,3 +75,34 @@ pub struct SpeechPosition {
 /// to decode on the device — a whole build cycle to learn that a field was
 /// renamed. The three shapes above are typed because Rust acts on them.
 pub type SpeechReport = serde_json::Value;
+
+/// Answer to `speak_stop`: where the voice got to in the turn that was cut.
+///
+/// Read the warning on `SpeechSession::stop` before using any of it. On the
+/// real barge-in path Swift has already stopped the player by the time this
+/// command runs, so what comes back is `UNKNOWN` rather than a position. The
+/// authority on where a turn was cut is the event Swift emits when it cuts it.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeechStopped {
+    /// The turn this is about, counted from 1. Zero means there was no turn.
+    pub utterance: u64,
+    /// The sentence that was playing, counted from zero within the turn.
+    pub sentence: u64,
+    /// How far into that sentence the playhead had got.
+    pub position_ms: f64,
+    /// That sentence's whole length. The caller holds the text it sent and
+    /// turns the pair into a character offset.
+    pub duration_ms: f64,
+}
+
+impl SpeechStopped {
+    /// Nothing was playing, or nothing here knows what was. Utterance 0 is the
+    /// value no real turn is ever given.
+    pub const UNKNOWN: Self = Self {
+        utterance: 0,
+        sentence: 0,
+        position_ms: 0.0,
+        duration_ms: 0.0,
+    };
+}
