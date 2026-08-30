@@ -285,10 +285,14 @@ async fn run(
                     let spent = wait_until.is_some_and(|until| now >= until);
                     match second_attempt {
                         Some(pcm) if !spent => {
+                            // A tail that is not a length of time is a tail of
+                            // none: the deadline lands now and the next refusal
+                            // ends the turn.
                             let horizon = now
-                                + std::time::Duration::from_secs_f64(
+                                + std::time::Duration::try_from_secs_f64(
                                     (tail_ms.max(0.0) + config.busy_grace_ms.max(0.0)) / 1000.0,
-                                );
+                                )
+                                .unwrap_or_default();
                             wait_until =
                                 Some(wait_until.map_or(horizon, |until| until.max(horizon)));
                             let _ = events.send(RelayEvent::Waiting {
