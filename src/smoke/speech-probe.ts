@@ -686,6 +686,25 @@ export async function runSpeechProbe(
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 
+    // The vendor leg here, ahead of the echo legs and not behind them. It is
+    // after the fixture legs for the reason it always was — they are the control
+    // and they answer without a network, so they are on disk before anything is
+    // asked of the vendor — but `echo-vpio-off` aborts the process
+    // (docs/pitfall/203) and everything behind it has never run. That is the
+    // whole of why three rounds came back with no live leg: nothing was wrong
+    // with the leg, the run died two stages in front of it.
+    if (options.live && !short) {
+      result.stage = "live";
+      render(result);
+      await write(result);
+      await note(`stage=${result.stage}`);
+      result.legs.push(await runLive(captureDir));
+      // On disk before the leg that can take the process is started, rather than
+      // at the top of the next stage.
+      await write(result);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+
     // The echo legs next: still no network, and they leave the stack in a known
     // state for everything after them.
     // Voice processing on before off, on the truth-table run. Four rounds have
@@ -719,17 +738,6 @@ export async function runSpeechProbe(
         await write(result);
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
-    }
-
-    // After the fixture legs: they are the control and they answer without a
-    // network, so they are on disk before anything is asked of the vendor.
-    if (options.live && !short) {
-      result.stage = "live";
-      render(result);
-      await write(result);
-      await note(`stage=${result.stage}`);
-      result.legs.push(await runLive(captureDir));
-      await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 
     // The interruption loop last: it is the leg that can take the process with

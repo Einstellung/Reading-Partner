@@ -193,6 +193,16 @@ play end to end with no gap inserted between them.
 | `speech_live` | `args` object, debug builds only | the relay's timeline for that turn |
 | `speech_report` | — | the last bench run's measurements |
 
+`speech_probe` also carries the turn probe, under the `mode` names `turn-start`,
+`turn-stage`, `turn-finalize` and `turn-stop` (docs/33, M-voice-3). One pass is
+one microphone, one `SpeechAnalyzer` with a `SpeechDetector` in its module list,
+and every event on one clock: a record per tap buffer with the raw linear RMS on
+it, every detector result, every transcript result, the stage names the harness
+supplies and every forced `finalize(through: nil)` with what the volatile tail
+was at the moment of the call. `turn-stop` answers with the whole of it.
+Debug builds only, and it measures without deciding: no threshold, no turn
+detector, no barge-in. `src/smoke/turn-probe.ts` drives it.
+
 `speech_probe` plays sentences synthesised days ago and measures the player;
 `speech_live` is the same twelve sentences through the vendor, the trim and the
 relay, which is the only path that runs every stage at once. It takes its key
