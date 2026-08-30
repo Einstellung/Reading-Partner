@@ -60,6 +60,11 @@ struct SpeechProbeArgs: Decodable {
     /// pass with it false is the control that says the silence came from the
     /// flag rather than from the model.
     let reportResults: Bool?
+    /// The replay leg's input (SpeechProbe.swift, "The turn detector replay"):
+    /// one recorded level per buffer, and the config patch to run them through.
+    /// `label` carries the case's name.
+    let frames: [TurnReplayFrame]?
+    let turnConfig: TurnReplayConfig?
 }
 
 /// One sentence as the manifest describes it.
@@ -1089,6 +1094,130 @@ final class TurnProbe {
             let seconds = CMTimeGetSeconds(time)
             guard seconds.isFinite else { return nil }
             return seconds * 1000
+        }
+
+    #endif
+}
+
+// MARK: - The turn detector replay
+//
+// VoiceTurn.swift is a transliteration of src/info/companion/turn-detect.ts, and
+// this is what makes "transliteration" a checkable claim rather than a promise:
+// the harness sends the level sequences the earlier probe recorded on this
+// phone, the device runs them through the ported machine, and
+// src/smoke/turn-replay.ts compares the event stream against what the TypeScript
+// machine answers over the same numbers.
+//
+// Arithmetic over a list. No microphone, no player, nobody in the room, one
+// command. Debug builds only, like every other step under `turn-`.
+
+/// One buffer as the harness sends it.
+///
+/// `db` is null for digital silence: JSON has no -Infinity, the machine's
+/// contract takes one, and null is the only way to spell it on the wire. The
+/// harness computes dB itself and sends the result, so `20 * log10` is never
+/// evaluated twice in two languages and cannot disagree in its last bit.
+struct TurnReplayFrame: Decodable {
+    let atMs: Double
+    let db: Double?
+}
+
+/// The config patch, every key optional. An absent key is that field's default,
+/// which is what `resolveTurnDetectConfig` does with a partial over there.
+struct TurnReplayConfig: Decodable {
+    let startDb: Double?
+    let startFrames: Int?
+    let confirmMs: Double?
+    let resumeMs: Double?
+    let hangoverMs: Double?
+    let resumeGuardMs: Double?
+
+    func resolved() -> TurnDetectConfig {
+        let base = TurnDetectConfig()
+        return TurnDetectConfig(
+            startDb: startDb ?? base.startDb,
+            startFrames: startFrames ?? base.startFrames,
+            confirmMs: confirmMs ?? base.confirmMs,
+            resumeMs: resumeMs ?? base.resumeMs,
+            hangoverMs: hangoverMs ?? base.hangoverMs,
+            resumeGuardMs: resumeGuardMs ?? base.resumeGuardMs)
+    }
+}
+
+/// One event the ported machine announced, and the buffer it announced it on.
+/// Flat, and the same shape the TypeScript side compares against: `silentMs` is
+/// written for `end` and left out of the other three.
+struct TurnReplayEvent: Encodable {
+    let atMs: Double
+    let type: String
+    let silentMs: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case atMs, type, silentMs
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(atMs, forKey: .atMs)
+        try c.encode(type, forKey: .type)
+        try c.encodeIfPresent(silentMs, forKey: .silentMs)
+    }
+}
+
+/// What one replay produced.
+struct TurnReplayReport: Encodable {
+    /// The case's name, carried in and back out on `label`.
+    let label: String
+    let frames: Int
+    /// The config the machine actually ran with, after `TurnDetectConfig`'s
+    /// initialiser clamped it. Compared against `resolveTurnDetectConfig`'s
+    /// answer, so a clamp that drifted is caught by the same run.
+    let startDb: Double
+    let startFrames: Int
+    let confirmMs: Double
+    let resumeMs: Double
+    let hangoverMs: Double
+    let resumeGuardMs: Double
+    let events: [TurnReplayEvent]
+}
+
+enum TurnReplay {
+    #if DEBUG
+
+        static func run(
+            label: String, frames: [TurnReplayFrame], config: TurnReplayConfig?
+        ) -> TurnReplayReport {
+            let resolved = config?.resolved() ?? TurnDetectConfig()
+            var machine = VoiceTurn(config: resolved)
+            var events: [TurnReplayEvent] = []
+            for frame in frames {
+                // A null level is digital silence, which is what the machine
+                // reads -Infinity as.
+                guard let event = machine.step(db: frame.db ?? -.infinity, atMs: frame.atMs)
+                else { continue }
+                switch event {
+                case .duck:
+                    events.append(TurnReplayEvent(atMs: frame.atMs, type: "duck", silentMs: nil))
+                case .stop:
+                    events.append(TurnReplayEvent(atMs: frame.atMs, type: "stop", silentMs: nil))
+                case .resume:
+                    events.append(
+                        TurnReplayEvent(atMs: frame.atMs, type: "resume", silentMs: nil))
+                case .end(let silentMs):
+                    events.append(
+                        TurnReplayEvent(atMs: frame.atMs, type: "end", silentMs: silentMs))
+                }
+            }
+            return TurnReplayReport(
+                label: label,
+                frames: frames.count,
+                startDb: resolved.startDb,
+                startFrames: resolved.startFrames,
+                confirmMs: resolved.confirmMs,
+                resumeMs: resolved.resumeMs,
+                hangoverMs: resolved.hangoverMs,
+                resumeGuardMs: resolved.resumeGuardMs,
+                events: events)
         }
 
     #endif

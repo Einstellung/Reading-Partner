@@ -164,8 +164,12 @@ func stepTurnDetect(
             ? (state.loudFrames >= config.startFrames
                 ? config.startFrames : state.loudFrames + 1)
             : 0
-        let guarded =
-            state.lastResumeMs != nil && atMs - state.lastResumeMs! < config.resumeGuardMs
+        // `lastResumeMs !== null && atMs - lastResumeMs < resumeGuardMs`. Never
+        // resumed is never guarded, which is what the null half says over there.
+        var guarded = false
+        if let lastResumeMs = state.lastResumeMs {
+            guarded = atMs - lastResumeMs < config.resumeGuardMs
+        }
         if loudFrames >= config.startFrames && !guarded {
             var next = state
             next.phase = .ducked
