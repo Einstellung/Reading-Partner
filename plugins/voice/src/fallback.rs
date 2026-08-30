@@ -87,6 +87,12 @@ impl<R: Runtime> Voice<R> {
         Err(Error::Unsupported(UNSUPPORTED.to_string()))
     }
 
+    /// Rejecting, like the enqueue above: nothing here ever started speaking,
+    /// so there is no turn to end.
+    pub async fn finish_speech(&self, _utterance: u64) -> crate::Result<()> {
+        Err(Error::Unsupported(UNSUPPORTED.to_string()))
+    }
+
     /// Silence, like `release_microphone`: stopping a voice that never started
     /// is what a teardown asks for, and it has nowhere to show a rejection.
     pub async fn stop_speaking(&self, _reason: String) -> crate::Result<SpeechPosition> {

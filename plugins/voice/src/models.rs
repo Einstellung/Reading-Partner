@@ -42,10 +42,21 @@ pub struct IndicatorProbe {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpeechEnqueued {
-    /// The sentence was thrown away rather than queued: its turn had already
-    /// been stopped. Not an error — the vendor was mid-sentence when the user
-    /// interrupted.
+    /// The sentence was thrown away rather than queued. Not an error — either
+    /// the vendor was mid-sentence when the user interrupted, or the turn it
+    /// belongs to has not started yet.
     pub dropped: bool,
+    /// Which of those two, and only meaningful when `dropped`. True when the
+    /// player is still finishing an earlier turn: this sentence is early rather
+    /// than stale, and the same bytes are taken once that tail runs out, with
+    /// `queued_ms` saying how much of it is left. False is the permanent
+    /// refusal — the player has moved on to a later turn and this one will
+    /// never be spoken.
+    ///
+    /// Absent from the payload counts as false, which is the reading that ends
+    /// the turn rather than the one that waits for it.
+    #[serde(default)]
+    pub busy: bool,
     /// Speech queued ahead of the listener, this sentence included.
     pub queued_ms: f64,
     /// Where this sentence starts on the player's current timeline.
@@ -76,12 +87,15 @@ pub struct SpeechPosition {
 /// renamed. The three shapes above are typed because Rust acts on them.
 pub type SpeechReport = serde_json::Value;
 
-/// Answer to `speak_stop`: where the voice got to in the turn that was cut.
+/// Answer to `speak_stop`: which turn was cut, and where the voice got to in it.
 ///
 /// Read the warning on `SpeechSession::stop` before using any of it. On the
 /// real barge-in path Swift has already stopped the player by the time this
-/// command runs, so what comes back is `UNKNOWN` rather than a position. The
-/// authority on where a turn was cut is the event Swift emits when it cuts it.
+/// command runs, so the position that comes back is zeroes — the turn's own
+/// number with sentence 0 and both times 0, not `UNKNOWN`. The authority on
+/// where a turn was cut is the event Swift emits when it cuts it. `UNKNOWN` is
+/// only ever "there was no turn": a player that refused to stop is an error,
+/// not a sentinel.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpeechStopped {

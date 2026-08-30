@@ -42,6 +42,11 @@ pub enum TtsError {
     Player(String),
     /// The session was stopped: barge-in, or the turn was abandoned.
     Cancelled,
+    /// The player would not take the sentence yet because it is still speaking
+    /// an earlier turn. Nothing is wrong with the sentence and nothing is wrong
+    /// with the turn: the same bytes are taken once that tail runs out.
+    /// `tail_ms` is how much of it the player says is left.
+    Busy { tail_ms: f64 },
 }
 
 impl TtsError {
@@ -54,6 +59,9 @@ impl TtsError {
             // the request itself being wrong, and it will be wrong again.
             TtsError::Status { status, .. } => *status == 429 || *status >= 500,
             TtsError::NoAudio => true,
+            // Tried again by the relay and not by the synthesis loop: it is the
+            // hand-over that was refused, and the audio is already in hand.
+            TtsError::Busy { .. } => false,
             _ => false,
         }
     }
@@ -76,6 +84,10 @@ impl fmt::Display for TtsError {
             TtsError::Moderated { message, .. } => {
                 write!(f, "the voice service refused to say this: {message}")
             }
+            TtsError::Busy { tail_ms } => write!(
+                f,
+                "the player is still finishing the turn before this one,                  with {tail_ms:.0} ms of it left"
+            ),
             TtsError::Protocol(what) => {
                 write!(f, "the voice service sent something unreadable: {what}")
             }

@@ -62,11 +62,14 @@ pub struct Heard {
 pub trait Player: Send + Sync + 'static {
     /// Queue one sentence. Returns when it is queued, never when it is played.
     ///
-    /// `TtsError::Cancelled` is about the turn and not the sentence: it says
-    /// this player's turn is no longer the one being spoken, so everything
-    /// behind this sentence would be refused too, and the relay winds the turn
-    /// up on it. Every other error is one sentence lost, with playback carrying
-    /// on into the next.
+    /// Two of the errors are about the turn rather than the sentence.
+    /// `TtsError::Cancelled` says this player's turn is behind the one being
+    /// spoken, so everything after this sentence would be refused too and the
+    /// relay winds the turn up on it. `TtsError::Busy` says the opposite: the
+    /// player is still finishing an earlier turn and this one is only early, so
+    /// the relay waits out the tail the error carries and offers the same
+    /// sentence again. Every other error is one sentence lost, with playback
+    /// carrying on into the next.
     async fn enqueue(&self, sentence: SentenceAudio) -> Result<PlaybackState, TtsError>;
 
     /// The same answer without adding anything.
@@ -74,6 +77,18 @@ pub trait Player: Send + Sync + 'static {
 
     /// Drop everything not yet heard and stop.
     async fn stop(&self) -> Result<Heard, TtsError>;
+
+    /// No more audio is coming in this turn. Nothing is queued and nothing is
+    /// stopped: what is already queued still plays, and the player falls silent
+    /// on its own when it runs out.
+    ///
+    /// `SentenceAudio::last` is what normally says this, and it rides on the
+    /// audio, which is why it is the one to prefer. It has nothing to ride on
+    /// when the turn's final sentence never came back — a synthesis that failed
+    /// leaves the flag on a sentence that is never sent — and this is how the
+    /// player is told anyway. Called at most once per turn, and only when no
+    /// sentence carried the flag.
+    async fn finish(&self) -> Result<(), TtsError>;
 }
 
 /// A player that keeps the clock and throws the audio away.
@@ -96,6 +111,10 @@ struct Virtual {
     /// much. This is the thing the relay exists to keep empty.
     underruns: Vec<(u64, f64)>,
     played_ms: f64,
+    /// Whether the turn was ever said to be over — by the last sentence's flag
+    /// or by `finish`. A player that is never told cannot tell a turn that
+    /// ended from a turn that starved, so the tests read this.
+    told_the_end: bool,
 }
 
 impl Default for VirtualPlayer {
@@ -112,6 +131,7 @@ impl VirtualPlayer {
                 ends_at: None,
                 underruns: Vec::new(),
                 played_ms: 0.0,
+                told_the_end: false,
             }),
         }
     }
@@ -124,6 +144,11 @@ impl VirtualPlayer {
 
     pub fn played_ms(&self) -> f64 {
         self.state.lock().unwrap().played_ms
+    }
+
+    /// Whether anything ever said this turn was over.
+    pub fn told_the_end(&self) -> bool {
+        self.state.lock().unwrap().told_the_end
     }
 }
 
@@ -147,6 +172,7 @@ impl Player for VirtualPlayer {
             }
             None => now,
         };
+        state.told_the_end |= sentence.last;
         let ends_at = starts_at + std::time::Duration::from_secs_f64(duration / 1000.0);
         state.queue.push_back((sentence.id, starts_at, duration));
         state.ends_at = Some(ends_at);
@@ -192,6 +218,11 @@ impl Player for VirtualPlayer {
         state.queue.clear();
         state.ends_at = None;
         Ok(heard)
+    }
+
+    async fn finish(&self) -> Result<(), TtsError> {
+        self.state.lock().unwrap().told_the_end = true;
+        Ok(())
     }
 }
 

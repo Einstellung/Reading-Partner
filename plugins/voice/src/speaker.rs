@@ -87,15 +87,22 @@ impl<R: Runtime> Player for DevicePlayer<R> {
             .map_err(|e| TtsError::Player(e.to_string()))?;
 
         if ack.dropped {
-            // Swift compares utterances, not sentences: it drops this one
-            // because the turn it belongs to is not the turn it is playing
-            // (SpeechOut.swift), and a player carries one utterance for its
-            // whole life. So this is the turn being refused, not the sentence,
-            // and every sentence behind it would be refused the same way. The
-            // relay reads it as the end of the turn and stops synthesising
-            // (tts/relay.rs). Cancelled rather than an empty queue: an empty
-            // queue reads as "run further ahead".
-            return Err(TtsError::Cancelled);
+            // Swift compares utterances, not sentences, and a player carries one
+            // utterance for its whole life — so a drop is always about the turn.
+            // Which way round it is decides everything: this turn behind the one
+            // being spoken is the turn being refused, and every sentence behind
+            // this one would go the same way, so the relay winds the turn up
+            // (tts/relay.rs). This turn ahead of it is the previous turn's tail
+            // still running: the same sentence is taken as soon as that ends, and
+            // `queued_ms` is how much of it is left. Neither is an empty queue —
+            // that reads as "run further ahead".
+            return Err(if ack.busy {
+                TtsError::Busy {
+                    tail_ms: ack.queued_ms,
+                }
+            } else {
+                TtsError::Cancelled
+            });
         }
 
         let mut book = self.book.lock().unwrap();
@@ -126,6 +133,14 @@ impl<R: Runtime> Player for DevicePlayer<R> {
             queued_ahead_ms,
             playing: queued_ahead_ms > 0.0,
         })
+    }
+
+    async fn finish(&self) -> Result<(), TtsError> {
+        self.app
+            .voice()
+            .finish_speech(self.utterance)
+            .await
+            .map_err(|e| TtsError::Player(e.to_string()))
     }
 
     async fn stop(&self) -> Result<Heard, TtsError> {

@@ -66,13 +66,19 @@ struct Turn {
 /// While the loop is running it does both halves — kill the synthesis still in
 /// flight, then stop the player — and answers with where the listener had got
 /// to. Once the loop has ended there is no synthesis left and the stop goes
-/// straight to the player. It has to be stopped either way: Swift drops any
-/// sentence whose utterance is not the one it is playing (speaker.rs), so a new
-/// turn opened under an old turn's tail would be dropped sentence by sentence
-/// and say nothing at all.
+/// straight to the player. It has to be stopped either way: Swift will not
+/// speak a turn while an earlier one's tail is still running (speaker.rs), so a
+/// turn opened over one starts as late as that tail is long.
+///
+/// `None` is the one thing this cannot promise: the player would not stop, on
+/// both the path through the relay and the one straight to it. The audio is
+/// still playing, and the caller is the only one that can say what that costs.
 async fn cut(turn: &Turn) -> Option<Heard> {
     match turn.relay.stop().await {
         Ok(heard) => Some(heard),
+        // Either there is no loop left to carry the stop, or the loop carried it
+        // and the player refused. Both leave the player to be stopped from here:
+        // the relay is gone in the first and has let go in the second.
         Err(_) => turn.player.stop().await.ok(),
     }
 }
@@ -173,7 +179,11 @@ impl SpeechSession {
 
         let mut turn = self.turn.lock().await;
         if let Some(previous) = turn.take() {
-            cut(&previous).await;
+            // A player that will not stop does not stop a turn from opening. The
+            // new turn's first sentence is refused for as long as the old tail
+            // runs and offered again after it (tts/relay.rs), which is late
+            // rather than silent; the timeline's `Waiting` is where it shows.
+            let _ = cut(&previous).await;
         }
 
         let utterance = self.utterances.fetch_add(1, Ordering::SeqCst) + 1;
@@ -245,7 +255,12 @@ impl SpeechSession {
             return Ok(SpeechStopped::UNKNOWN);
         };
         let Some(heard) = cut(&turn).await else {
-            return Ok(SpeechStopped::UNKNOWN);
+            // Not `UNKNOWN`: there was a turn, it is still audible, and saying
+            // "nothing was playing" would be the one answer that is certainly
+            // wrong.
+            return Err(Error::Speech(
+                "The voice would not stop; it is still speaking.".to_string(),
+            ));
         };
         Ok(SpeechStopped {
             utterance: turn.utterance,
@@ -342,6 +357,9 @@ mod tests {
         /// Times this turn was told to shut up. The count and not a flag: a
         /// turn silenced twice is a round trip to the phone nobody asked for.
         stops: AtomicUsize,
+        /// A player that will not shut up, which is the failure `cut` is there
+        /// for and the one it used to swallow.
+        refuse_stop: bool,
     }
 
     impl Recorder {
@@ -380,11 +398,18 @@ mod tests {
 
         async fn stop(&self) -> std::result::Result<Heard, TtsError> {
             self.stops.fetch_add(1, Ordering::SeqCst);
+            if self.refuse_stop {
+                return Err(TtsError::Player("the node would not stop".to_string()));
+            }
             Ok(Heard {
                 sentence: 7,
                 position_ms: 70.0,
                 duration_ms: 700.0,
             })
+        }
+
+        async fn finish(&self) -> std::result::Result<(), TtsError> {
+            Ok(())
         }
     }
 
@@ -393,6 +418,8 @@ mod tests {
     #[derive(Default)]
     struct Stage {
         made: StdMutex<Vec<(u64, Arc<Recorder>)>>,
+        /// Every player it makes refuses to stop.
+        refuse_stop: bool,
     }
 
     impl Stage {
@@ -409,7 +436,10 @@ mod tests {
 
     impl Speakers for Stage {
         fn player(&self, utterance: u64) -> Arc<dyn Player> {
-            let player = Arc::new(Recorder::default());
+            let player = Arc::new(Recorder {
+                refuse_stop: self.refuse_stop,
+                ..Default::default()
+            });
             self.made.lock().unwrap().push((utterance, player.clone()));
             player
         }
@@ -434,6 +464,24 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         done()
+    }
+
+    /// Wait for the open turn's relay to have ended. Asking it to close is what
+    /// asks: it is the one command that costs nothing to repeat — the turn is
+    /// closed already, so a loop that is still running only sets the flag it has
+    /// already set — and a loop that has ended is a channel that answers false.
+    async fn relay_ended(session: &SpeechSession) -> bool {
+        for _ in 0..200 {
+            {
+                let turn = session.turn.lock().await;
+                let Some(turn) = turn.as_ref() else { return true };
+                if !turn.relay.close() {
+                    return true;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        false
     }
 
     fn near(a: f64, b: f64) -> bool {
@@ -505,9 +553,8 @@ mod tests {
         // its turn in the order went with it, unheard.
         assert_eq!(cancelled.load(Ordering::SeqCst), 1);
 
-        // The relay's loop returned. The references left are the stage's and
-        // this test's; the one the loop held is gone with it.
-        assert!(until(|| Arc::strong_count(&player) == 2).await);
+        // That cancellation is also the loop having returned: nothing else kills
+        // a synthesis in flight.
         // Long past the point the held-back synthesis would have finished.
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert!(player.sentences().is_empty(), "{:?}", player.sentences());
@@ -555,20 +602,13 @@ mod tests {
     /// A turn whose relay has ended, with its audio still in the air. Both
     /// tests below start here: it is the state a turn that ran to the end of
     /// its sentences sits in until something stops the player.
-    ///
-    /// The count is what says the relay is gone: the stage holds one reference
-    /// to that player, this test holds one, the session's turn holds a third,
-    /// and the fourth was the relay's loop.
     async fn a_finished_turn(stage: &Arc<Stage>, session: &SpeechSession) -> (u64, Arc<Recorder>) {
         let utterance = session.begin().await.unwrap();
         session.push("a".to_string()).await.unwrap();
         session.close().await.unwrap();
         let player = stage.player_for(utterance);
         assert!(until(|| player.sentences().len() == 1).await);
-        assert!(
-            until(|| Arc::strong_count(&player) == 3).await,
-            "the relay is still holding the player"
-        );
+        assert!(relay_ended(session).await, "the relay is still running");
         (utterance, player)
     }
 
@@ -612,6 +652,30 @@ mod tests {
         assert_eq!(stopped.utterance, utterance);
         assert_eq!(stopped.sentence, 7);
         assert!(near(stopped.position_ms, 70.0), "{stopped:?}");
+    }
+
+    /// The failure `cut` exists for. A player that will not stop used to be
+    /// reported through the relay as a turn that had been silenced, so the one
+    /// caller written for this case never saw it.
+    #[tokio::test]
+    async fn a_player_that_will_not_stop_is_not_reported_as_a_silenced_turn() {
+        let stage = Arc::new(Stage {
+            refuse_stop: true,
+            ..Default::default()
+        });
+        let session = session(stage.clone());
+
+        let utterance = session.begin().await.unwrap();
+        session.push("slow one".to_string()).await.unwrap();
+        let player = stage.player_for(utterance);
+
+        // The relay is still running, so the stop goes through it — the path
+        // that used to answer with a position of its own making.
+        let refused = session.stop().await;
+        assert!(matches!(refused, Err(Error::Speech(_))), "{refused:?}");
+        // Both halves tried: the relay's own stop, then the fallback straight to
+        // the player.
+        assert_eq!(player.stops(), 2);
     }
 
     #[tokio::test]
