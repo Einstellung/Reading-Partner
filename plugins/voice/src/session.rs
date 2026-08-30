@@ -10,11 +10,10 @@
 // commands move it. `speak_begin` opens a turn, `speak_push` hands it a
 // sentence, `speak_close` says no more are coming, `speak_stop` cuts it off.
 //
-// One relay per turn, never reused. `SpeechRelay::stop` makes its loop return
-// (tts/relay.rs), so a stopped relay is a dead one; `close` is the other half of
-// that pair and deliberately does not end the loop, because sentences pushed
-// before it are still being synthesised. The session therefore keeps the handle
-// after a close and only lets go of it when the next turn begins.
+// One relay per turn, never reused, and a turn ends its own relay: `stop` cuts
+// the loop short and a `close` ends it as soon as the last sentence has been
+// handed to the player (tts/relay.rs). Either way the handle left here is dead,
+// which is why a turn keeps its player beside it — see `cut`.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
@@ -23,7 +22,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::models::SpeechStopped;
 use crate::speaker::Speakers;
-use crate::tts::{RelayConfig, SpeechRelay, TtsBackend};
+use crate::tts::{Heard, Player, RelayConfig, SpeechRelay, TtsBackend};
 use crate::{Error, Result};
 
 /// The vendor key's fallback source: the process environment. A bench launch is
@@ -51,10 +50,31 @@ fn effective_key(from_settings: Option<&str>, from_env: Option<&str>) -> Option<
         .map(str::to_string)
 }
 
-/// A turn of speech that has not finished yet.
+/// A turn of speech, from `begin` until it is stopped or replaced.
 struct Turn {
     utterance: u64,
     relay: SpeechRelay,
+    /// The same player the relay is speaking through. Kept because the relay
+    /// ends on its own once the turn is closed and drained, and the audio it
+    /// handed over is still playing after that: past that point the player is
+    /// the only thing left that can be stopped.
+    player: Arc<dyn Player>,
+}
+
+/// End a turn's audio, whatever state its relay is in.
+///
+/// While the loop is running it does both halves — kill the synthesis still in
+/// flight, then stop the player — and answers with where the listener had got
+/// to. Once the loop has ended there is no synthesis left and the stop goes
+/// straight to the player. It has to be stopped either way: Swift drops any
+/// sentence whose utterance is not the one it is playing (speaker.rs), so a new
+/// turn opened under an old turn's tail would be dropped sentence by sentence
+/// and say nothing at all.
+async fn cut(turn: &Turn) -> Option<Heard> {
+    match turn.relay.stop().await {
+        Ok(heard) => Some(heard),
+        Err(_) => turn.player.stop().await.ok(),
+    }
 }
 
 pub struct SpeechSession {
@@ -153,7 +173,7 @@ impl SpeechSession {
 
         let mut turn = self.turn.lock().await;
         if let Some(previous) = turn.take() {
-            let _ = previous.relay.stop().await;
+            cut(&previous).await;
         }
 
         let utterance = self.utterances.fetch_add(1, Ordering::SeqCst) + 1;
@@ -162,8 +182,12 @@ impl SpeechSession {
         // a turn of conversation has no reader for it; the relay is written to
         // carry on with the receiver gone.
         let (events, _timeline) = mpsc::unbounded_channel();
-        let relay = SpeechRelay::start(backend, player, self.config.clone(), events);
-        *turn = Some(Turn { utterance, relay });
+        let relay = SpeechRelay::start(backend, player.clone(), self.config.clone(), events);
+        *turn = Some(Turn {
+            utterance,
+            relay,
+            player,
+        });
         Ok(utterance)
     }
 
@@ -184,7 +208,10 @@ impl SpeechSession {
     }
 
     /// No more sentences are coming in this turn. What was pushed is still being
-    /// synthesised and will still be spoken.
+    /// synthesised and will still be spoken; the relay ends itself once the
+    /// last of it has been handed over, which is not the same moment as the
+    /// voice stopping. Only Swift knows that one, and it says so in the
+    /// `speech` event.
     ///
     /// Silent when there is no turn, rather than an error. The webview closes a
     /// turn when the model's stream ends, and a barge-in stops the turn before
@@ -213,7 +240,7 @@ impl SpeechSession {
         let Some(turn) = turn.take() else {
             return Ok(SpeechStopped::UNKNOWN);
         };
-        let Ok(heard) = turn.relay.stop().await else {
+        let Some(heard) = cut(&turn).await else {
             return Ok(SpeechStopped::UNKNOWN);
         };
         Ok(SpeechStopped {
@@ -308,11 +335,18 @@ mod tests {
     #[derive(Default)]
     struct Recorder {
         heard: StdMutex<Vec<(u64, f64, bool)>>,
+        /// Times this turn was told to shut up. The count and not a flag: a
+        /// turn silenced twice is a round trip to the phone nobody asked for.
+        stops: AtomicUsize,
     }
 
     impl Recorder {
         fn sentences(&self) -> Vec<(u64, f64, bool)> {
             self.heard.lock().unwrap().clone()
+        }
+
+        fn stops(&self) -> usize {
+            self.stops.load(Ordering::SeqCst)
         }
     }
 
@@ -341,6 +375,7 @@ mod tests {
         }
 
         async fn stop(&self) -> std::result::Result<Heard, TtsError> {
+            self.stops.fetch_add(1, Ordering::SeqCst);
             Ok(Heard {
                 sentence: 7,
                 position_ms: 70.0,
@@ -511,6 +546,68 @@ mod tests {
         // Well past the moment the abandoned synthesis would have come back.
         tokio::time::sleep(Duration::from_millis(200)).await;
         assert!(before.sentences().is_empty(), "{:?}", before.sentences());
+    }
+
+    /// A turn whose relay has ended, with its audio still in the air. Both
+    /// tests below start here: it is the state a turn that ran to the end of
+    /// its sentences sits in until something stops the player.
+    ///
+    /// The count is what says the relay is gone: the stage holds one reference
+    /// to that player, this test holds one, the session's turn holds a third,
+    /// and the fourth was the relay's loop.
+    async fn a_finished_turn(stage: &Arc<Stage>, session: &SpeechSession) -> (u64, Arc<Recorder>) {
+        let utterance = session.begin().await.unwrap();
+        session.push("a".to_string()).await.unwrap();
+        session.close().await.unwrap();
+        let player = stage.player_for(utterance);
+        assert!(until(|| player.sentences().len() == 1).await);
+        assert!(
+            until(|| Arc::strong_count(&player) == 3).await,
+            "the relay is still holding the player"
+        );
+        (utterance, player)
+    }
+
+    /// Opening a turn has to silence the one before it even when that one said
+    /// everything it had to say: the audio is still playing, and Swift drops
+    /// any sentence whose utterance is not the one it is playing, so a new turn
+    /// speaking under an old turn's tail would be dropped sentence by sentence.
+    /// The relay that used to carry the stop is gone by then.
+    #[tokio::test]
+    async fn opening_a_turn_silences_the_finished_one_before_it() {
+        let stage = Arc::new(Stage::default());
+        let session = session(stage.clone());
+        let (_, before) = a_finished_turn(&stage, &session).await;
+
+        let second = session.begin().await.unwrap();
+        assert_eq!(before.stops(), 1);
+
+        // And the new turn is heard rather than dropped.
+        session.push("bb".to_string()).await.unwrap();
+        session.close().await.unwrap();
+        let after = stage.player_for(second);
+        assert!(
+            until(|| after.sentences().len() == 1).await,
+            "{:?}",
+            after.sentences()
+        );
+        assert_eq!(before.stops(), 1);
+    }
+
+    /// The same for a barge-in that lands after the model's last sentence: the
+    /// user talking over the tail is exactly when there is no relay left, and
+    /// the player is the only thing that can still be stopped.
+    #[tokio::test]
+    async fn stopping_a_finished_turn_still_stops_the_player() {
+        let stage = Arc::new(Stage::default());
+        let session = session(stage.clone());
+        let (utterance, player) = a_finished_turn(&stage, &session).await;
+
+        let stopped = session.stop().await.unwrap();
+        assert_eq!(player.stops(), 1);
+        assert_eq!(stopped.utterance, utterance);
+        assert_eq!(stopped.sentence, 7);
+        assert!(near(stopped.position_ms, 70.0), "{stopped:?}");
     }
 
     #[tokio::test]
