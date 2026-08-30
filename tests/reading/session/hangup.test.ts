@@ -22,6 +22,12 @@ const stored = [
   { role: "ai" as const, text: "because", ts: 2 },
 ];
 
+// The transcript as the pass carries it: every message stamped with the thread
+// it is stored in, so a folded aside's lines keep their own id
+// (memory/observations/transcript.ts).
+const from = (threadId: string, messages = stored) =>
+  messages.map((m) => ({ ...m, threadId }));
+
 test("a mark-anchored retell is pinned to the mark's page, not to where the reader is", () => {
   const pass = hangupPass({
     call: { threadId: "t1", annotationId: "mark-1" },
@@ -118,7 +124,7 @@ test("the book-level thread never quotes a mark", () => {
   expect(pass.page).toBe(12);
 });
 
-test("the transcript is the three fields a retell is made of, and nothing the screen added", () => {
+test("the transcript is what a retell is made of, and nothing the screen added", () => {
   const pass = hangupPass({
     call: { threadId: "t1", annotationId: "mark-1" },
     context,
@@ -136,7 +142,7 @@ test("the transcript is the three fields a retell is made of, and nothing the sc
     annotations: [],
   });
 
-  expect(pass.messages).toEqual([{ role: "ai", text: "because", ts: 2 }]);
+  expect(pass.messages).toEqual([{ role: "ai", text: "because", ts: 2, threadId: "t1" }]);
 });
 
 test("the marks the book carries ride along for the silent-marks pass", () => {
@@ -189,8 +195,8 @@ test("a hangup mid-answer distils the exchange the turn was still writing", () =
 
   expect(distilled).toHaveLength(1);
   expect(distilled[0]?.messages).toEqual([
-    { role: "user", text: "why?", ts: 1 },
-    { role: "ai", text: "because the mark is on that page", ts: 2 },
+    { role: "user", text: "why?", ts: 1, threadId: "t1" },
+    { role: "ai", text: "because the mark is on that page", ts: 2, threadId: "t1" },
   ]);
   expect(distilled[0]?.page).toBe(5);
 });
@@ -208,7 +214,7 @@ test("a hangup with nothing in flight distils the thread as it stands", () => {
   });
 
   expect(distilled).toHaveLength(1);
-  expect(distilled[0]?.messages).toEqual(stored);
+  expect(distilled[0]?.messages).toEqual(from("t1"));
 });
 
 // --- asides (docs/03) ---
@@ -291,7 +297,7 @@ test("a mark-anchored aside hangs up as its own conversation", () => {
   expect(pass.threadId).toBe("as");
   expect(pass.page).toBe(5);
   expect(pass.markedText).toBe("the marked sentence");
-  expect(pass.messages).toEqual(stored);
+  expect(pass.messages).toEqual(from("as"));
 });
 
 // Sync can leave an aside whose parent was deleted elsewhere. Folding it into a
@@ -307,5 +313,5 @@ test("an aside with no parent left hangs up on its own", () => {
   });
 
   expect(pass.threadId).toBe("as");
-  expect(pass.messages).toEqual(stored);
+  expect(pass.messages).toEqual(from("as"));
 });

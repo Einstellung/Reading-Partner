@@ -160,7 +160,7 @@ test("a finished pass writes observations and stores the message cursor", async 
               type: "can-explain",
               summary: "Can give chapter 22 of A Brief History of Intelligence",
               body: "2026-07-17 gave the lesion-study argument himself in the retell.",
-              messageIds: ["retell-1:200"],
+              messageIndices: [2],
             },
           },
         ],
@@ -221,7 +221,9 @@ test("a second pass sends only the new stretch, and says what came before it", a
 
   expect(second).toMatchObject({ ran: true, ok: true, distilled: 2 });
   const task = runner.requests[0].task;
-  expect(task).toContain("[retell-1:400] reader: that one I can only give the conclusion of");
+  // The stretch is renumbered from 1: the model cites a line of what it was
+  // shown, and the pass turns that back into the message's own id.
+  expect(task).toContain("[2] 1970-01-01 reader: that one I can only give the conclusion of");
   expect(task).not.toContain("lesion studies"); // already folded in
   expect(task).toContain("first 2 message(s)");
   expect((await store.getMeta()).distilledMessages).toEqual({ "retell-1": 4 });
@@ -320,13 +322,21 @@ test("the system prompt writes down the examiner's bias and the three things to 
   expect(prompt).toContain("never a retelling");
 });
 
-test("the user message carries the retell, its materials, and the message ids", () => {
-  const msg = buildRetellDistillUserMessage(input());
+test("the user message carries the retell, its materials, and a numbered transcript", () => {
+  const msg = buildRetellDistillUserMessage(
+    input({
+      messages: [
+        { role: "ai", text: "What is chapter 22 resting on?", ts: JULY_17 },
+        { role: "user", text: "the lesion studies", ts: JULY_17 },
+      ],
+    }),
+  );
   expect(msg).toContain("Topic: minds");
   expect(msg).toContain("Retell: A Brief History of Intelligence");
   expect(msg).toContain("Materials: A Brief History of Intelligence, Surfing Uncertainty");
-  expect(msg).toContain("[retell-1:200] reader: the lesion studies");
-  expect(msg).toContain("[retell-1:100] you: What is chapter 22 resting on?");
+  expect(msg).toContain("[2] 2026-07-17 reader: the lesion studies");
+  expect(msg).toContain("[1] 2026-07-17 you: What is chapter 22 resting on?");
+  expect(msg).not.toContain("retell-1:");
   // A first pass has nothing behind it to mention.
   expect(msg).not.toContain("earlier pass");
 });

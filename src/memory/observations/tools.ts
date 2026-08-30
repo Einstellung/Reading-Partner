@@ -16,6 +16,28 @@ export interface ObservationToolOptions {
   // tools (record/types.ts). Not a tool parameter: the model does not know the
   // content hash and would invent one. Absent where there is no one book.
   bookId?: string;
+  // The transcript this pass rendered, as "<threadId>:<ts>" anchors, position i
+  // holding the anchor for the line the prompt printed as [i + 1]
+  // (transcript.ts). The model cites the number; the mapping happens here.
+  //
+  // A message id is a fact the program holds, so it is never asked of the
+  // model — the same rule as bookId above, and for the same measured reason:
+  // 76 of 298 model-written message anchors on one real store resolved against
+  // no message. Absent means this mount has no transcript behind it (a live
+  // conversation, the silent-marks pass), and then the parameter is not offered
+  // at all rather than offered with nothing to resolve against.
+  messageAnchors?: readonly string[];
+  // Whether creating an observation must cite at least one anchor — an
+  // annotation id or a transcript line. On for the three distillation passes,
+  // each of which prints everything it may cite; off for the tools mounted in a
+  // live conversation, where the model is answering the reader rather than
+  // reading a listing and has nothing to point at.
+  //
+  // 14 of 142 observations on one real store carry no anchor of any kind, and
+  // the most valuable broken link there is one of them: the reader gave back,
+  // under examination, the exact wrong answer an earlier observation had
+  // recorded as an open question, and nothing connects the two.
+  requireAnchor?: boolean;
 }
 
 function describeEntry(e: Observation): string {
@@ -35,6 +57,7 @@ function describeEntry(e: Observation): string {
 const TYPE_LIST = OBSERVATION_TYPES.join(" | ");
 
 export function buildObservationTools(adapter: ObservationAdapter, opts: ObservationToolOptions = {}): AgentTool[] {
+  const anchors = opts.messageAnchors ?? [];
   return [
     {
       name: "observation_search",
@@ -73,7 +96,12 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
         "turned out wrong. When a new fact contradicts an existing observation, " +
         "rewrite it as an evolution (keep the old state and add the resolution with " +
         "its date) — never silently drop the old state. Write absolute dates, one " +
-        "fact per observation.",
+        "fact per observation." +
+        (opts.requireAnchor
+          ? " Every observation you create must cite its evidence: the annotationIds" +
+            (anchors.length > 0 ? " and/or the messageIndices" : "") +
+            " it came from."
+          : ""),
       parameters: Type.Object({
         action: Type.String({ description: 'One of "create" | "update" | "delete".' }),
         id: Type.Optional(Type.String({ description: "Observation id (required for update/delete)." })),
@@ -81,19 +109,59 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
         summary: Type.Optional(Type.String({ description: "One-line summary (required for create)." })),
         body: Type.Optional(Type.String({ description: "Full markdown body (required for create; replaces on update)." })),
         annotationIds: Type.Optional(Type.Array(Type.String(), { description: "Evidence: annotation ids this observation came from." })),
-        messageIds: Type.Optional(Type.Array(Type.String(), { description: "Evidence: message ids this observation came from." })),
+        // Bounded by the schema so an out-of-range or invented line is refused
+        // by validation before execute ever sees it (ai/agent.ts turns that
+        // into a tool-result error the model can react to), rather than being
+        // stored as an anchor that resolves to nothing.
+        ...(anchors.length > 0
+          ? {
+              messageIndices: Type.Optional(
+                Type.Array(Type.Integer({ minimum: 1, maximum: anchors.length }), {
+                  description:
+                    `Evidence: the transcript line numbers this observation came from — the [n] ` +
+                    `printed in front of each line, 1 to ${anchors.length}.`,
+                }),
+              ),
+            }
+          : {}),
       }),
       execute: async (args) => {
         const action = String(args.action);
-        const anchors =
-          args.annotationIds !== undefined || args.messageIds !== undefined
+        const indices = args.messageIndices as number[] | undefined;
+        // Sorted and de-duplicated: the same line cited twice is one piece of
+        // evidence, and the stored list reads as the transcript reads.
+        const messageIds =
+          indices === undefined
+            ? undefined
+            : [...new Set(indices)].sort((a, b) => a - b).map((i) => {
+                const anchor = anchors[i - 1];
+                // The schema already bounds this; a provider that ships an
+                // argument past validation must still not write a dead anchor.
+                if (anchor === undefined) {
+                  throw new Error(
+                    `messageIndices: ${i} is not a transcript line (1-${anchors.length}).`,
+                  );
+                }
+                return anchor;
+              });
+        const evidence =
+          args.annotationIds !== undefined || messageIds !== undefined
             ? {
                 annotationIds: (args.annotationIds as string[] | undefined) ?? [],
-                messageIds: (args.messageIds as string[] | undefined) ?? [],
+                messageIds: messageIds ?? [],
               }
             : undefined;
+        const anchorCount =
+          evidence === undefined ? 0 : evidence.annotationIds.length + evidence.messageIds.length;
 
         if (action === "create") {
+          if (opts.requireAnchor && anchorCount === 0) {
+            throw new Error(
+              "create requires evidence: pass annotationIds" +
+                (anchors.length > 0 ? " and/or messageIndices" : "") +
+                ". An observation nothing points back to cannot be checked later.",
+            );
+          }
           const type = String(args.type ?? "");
           if (!isObservationType(type)) throw new Error(`type must be one of: ${TYPE_LIST}`);
           const summary = String(args.summary ?? "").trim();
@@ -103,7 +171,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             type,
             summary,
             body,
-            anchors,
+            anchors: evidence,
             ...(opts.bookId ? { bookId: opts.bookId } : {}),
           });
           opts.onWrite?.("create");
@@ -128,7 +196,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             type,
             summary: args.summary === undefined ? undefined : String(args.summary),
             body: args.body === undefined ? undefined : String(args.body),
-            anchors,
+            anchors: evidence,
           });
           if (!entry) return `No observation with id "${id}".`;
           opts.onWrite?.("update");
