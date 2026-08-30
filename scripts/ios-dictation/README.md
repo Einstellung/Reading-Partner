@@ -22,6 +22,8 @@ iPhone 16, iOS 26.6, UDID `00008140-000C31641EEB001C`, attached over USB.
 | `syslog.sh` | `idevicesyslog` filtered to `RP-DICT` |
 | `speaker.sh` | watch the console and speak into the room on each hold's cue |
 | `speech-run.sh` | the playback experiments: build `VITE_SMOKE=speech`, launch once to make the data directory, push the fixture, run it and fetch the tape. `speech-run.sh speech-live` adds the leg that synthesises |
+| `turn-run.sh` | the turn detector probe: build `VITE_SMOKE=turn`, push the fixture, run it. Interactive — the screen says when to read |
+| `turn-replay-run.sh` | the turn detector's two implementations over the same numbers: build `VITE_SMOKE=turn-replay`, run it, print where Swift and TypeScript disagree. Nothing plays, nothing listens, nobody has to be there |
 | `push-fixture.sh` | copy the pre-synthesised sentences into the app data container. Needs the app to have been launched once |
 | `fetch-result.sh` | pull `dictation-result.json` out of the app data container |
 | `analyse.py` | print the numbers §7 of the brief asks for |

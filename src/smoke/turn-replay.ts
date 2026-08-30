@@ -86,9 +86,9 @@ async function note(text: string): Promise<void> {
   }
 }
 
-/// One case through the device. The frames go over as they are: every dB here is
-/// finite, and a -Infinity would cross as null, which is what the Swift side
-/// reads back as digital silence.
+/// One case through the device. The frames go over as they are: -Infinity has no
+/// JSON spelling and crosses as null, which is what the Swift side reads back as
+/// digital silence, and a `reset` frame is a call rather than a buffer.
 async function replay(item: ReplayCase): Promise<DeviceReport> {
   return (await invoke("plugin:voice|speech_probe", {
     args: {

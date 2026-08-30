@@ -125,9 +125,9 @@ test("with VPIO on, 15 s of the companion's own voice never even ducks", () => {
 });
 
 // 2. The barge-in is one turn only if the hangover outlasts the pauses inside
-// it; see the hangover table below for what 800 ms does to this take.
+// it; the default does, see the hangover table below for what it costs.
 test("the barge-in ducks once and escalates to a stop, at the buffer the person crosses", () => {
-  const log = feed(stageFrames(VPIO_ON, "barge"), { hangoverMs: 1500 });
+  const log = feed(stageFrames(VPIO_ON, "barge"));
   expect(ducks(log).map((e) => e.atMs)).toEqual([36278]);
   expect(stops(log).map((e) => e.atMs)).toEqual([36694]);
   expect(resumes(log)).toEqual([]);
@@ -136,10 +136,12 @@ test("the barge-in ducks once and escalates to a stop, at the buffer the person 
 });
 
 // 3. The stage's own trailing silence closes the turn: the last loud buffer is
-// at 44190, the hangover is 1500, and the first buffer at or past that is 45777.
+// at 44190, the hangover is 1250, and the first buffer at or past that is 45478
+// — which measured 1288 ms, not 1250, because the buffer that would have
+// measured 1250 exactly does not exist.
 test("the turn closes one hangover after the last loud buffer, with the gap it measured", () => {
-  const log = feed(stageFrames(VPIO_ON, "barge"), { hangoverMs: 1500 });
-  expect(ends(log)).toEqual([{ atMs: 45777, event: { type: "end", silentMs: 1587 } }]);
+  const log = feed(stageFrames(VPIO_ON, "barge"));
+  expect(ends(log)).toEqual([{ atMs: 45478, event: { type: "end", silentMs: 1288 } }]);
 });
 
 test("silentMs is the measured gap, not the configured one", () => {
@@ -234,9 +236,9 @@ test("a resume puts the machine back where a real onset ducks again", () => {
   // Past the resume guard, the next real onset is treated as a first onset.
   expect(detector.step(-10, 700)).toEqual({ type: "duck" });
   expect(detector.step(-10, 1000)).toEqual({ type: "stop" });
-  expect(detector.step(Number.NEGATIVE_INFINITY, 1900)).toEqual({
+  expect(detector.step(Number.NEGATIVE_INFINITY, 2300)).toEqual({
     type: "end",
-    silentMs: 900,
+    silentMs: 1300,
   });
 });
 
@@ -313,9 +315,9 @@ test("digital silence is quiet, not an exception", () => {
   expect(detector.step(-10, 100)).toEqual({ type: "duck" });
   expect(detector.step(-10, 400)).toEqual({ type: "stop" });
   expect(detector.step(Number.NEGATIVE_INFINITY, 500)).toBeNull();
-  expect(detector.step(Number.NEGATIVE_INFINITY, 1200)).toEqual({
+  expect(detector.step(Number.NEGATIVE_INFINITY, 1650)).toEqual({
     type: "end",
-    silentMs: 800,
+    silentMs: 1250,
   });
   expect(Number.isFinite(detector.snapshot().lastVoiceMs)).toBe(true);
 });
@@ -375,7 +377,7 @@ test("the config is all defaults, all overridable, and clamped where it can be w
     startFrames: 1,
     confirmMs: 300,
     resumeMs: 300,
-    hangoverMs: 800,
+    hangoverMs: 1250,
     resumeGuardMs: 300,
   });
 });
@@ -417,7 +419,7 @@ test("the event sequence is always duck -> (resume | stop -> end)", () => {
     for (const startFrames of [1, 2]) {
       for (const confirmMs of [0, 300, 1200]) {
         for (const resumeMs of [0, 300, 1500]) {
-          for (const hangoverMs of [0, 800, 2000]) {
+          for (const hangoverMs of [0, 1250, 2000]) {
             grids.push({ startDb, startFrames, confirmMs, resumeMs, hangoverMs });
           }
         }
@@ -456,12 +458,25 @@ test("the event sequence is always duck -> (resume | stop -> end)", () => {
   expect(sawEveryEvent.end).toBeGreaterThan(0);
 });
 
-// Kept as evidence, not as an endorsement: on this recording the person paused
-// 1.4 s and 1.1 s mid-sentence, and the 800 ms default takes the turn away from
-// them once. The third fragment is now a false alarm rather than a third turn,
-// which is ducking earning its keep, but the split is still there.
-test("the default hangover still splits this real barge-in in two", () => {
+// The whole recording at the shipped defaults, which is what the person paused
+// 1.4 s and 1.1 s in the middle of: one duck, one stop, one end. The two
+// mid-sentence pauses no longer take the turn away from them, and the two
+// trailing fragments that used to be a second turn and a false alarm are inside
+// this turn instead of after it.
+test("the default hangover holds this real barge-in together as one turn", () => {
   const log = feed(stageFrames(VPIO_ON, "barge"));
+  expect(log).toEqual([
+    { atMs: 36278, event: { type: "duck" } },
+    { atMs: 36694, event: { type: "stop" } },
+    { atMs: 45478, event: { type: "end", silentMs: 1288 } },
+  ]);
+});
+
+// What the previous default did to the same recording, kept because 1250 is
+// only defensible next to it: two turns, so the companion answered in the
+// middle of the person's sentence, and one false alarm after it.
+test("the 800 ms this default replaced split that barge-in in two", () => {
+  const log = feed(stageFrames(VPIO_ON, "barge"), { hangoverMs: 800 });
   expect(log).toEqual([
     { atMs: 36278, event: { type: "duck" } },
     { atMs: 36694, event: { type: "stop" } },
@@ -503,6 +518,7 @@ test("what the hangover costs on this recording, at the values worth considering
   expect(summarise(800)).toEqual({ turns: 2, falseAlarms: 1, replyLatency: [897, 899] });
   expect(summarise(1000)).toEqual({ turns: 2, falseAlarms: 0, replyLatency: [1011, 1103] });
   expect(summarise(1200)).toEqual({ turns: 2, falseAlarms: 0, replyLatency: [1219, 1288] });
+  expect(summarise(1250)).toEqual({ turns: 1, falseAlarms: 0, replyLatency: [1288] });
   expect(summarise(1500)).toEqual({ turns: 1, falseAlarms: 0, replyLatency: [1587] });
   expect(summarise(2000)).toEqual({ turns: 1, falseAlarms: 0, replyLatency: [2003] });
 
@@ -510,9 +526,18 @@ test("what the hangover costs on this recording, at the values worth considering
   expect(summarise(1219).turns).toBe(2);
   expect(summarise(1220).turns).toBe(1);
 
-  // At 800 the companion answers 298 ms before the person's actual last word,
-  // which is the split stated as a delay rather than as a count.
+  // Why the default is 1250 and not 1500: past the break-even the turn ends on
+  // the first buffer of the stage's trailing silence either way, and asking for
+  // 250 ms more silence than that buffer measured only delays the reply.
+  expect(DEFAULT_TURN_DETECT.hangoverMs).toBeGreaterThan(1220);
+  expect(summarise(1250).replyLatency).toEqual(summarise(1220).replyLatency);
+  expect(summarise(1500).replyLatency[0]).toBeGreaterThan(summarise(1250).replyLatency[0]);
+
+  // At 800 the companion answered 298 ms before the person's actual last word,
+  // which is the split stated as a delay rather than as a count. At the default
+  // it waits until they have really finished.
   const lastWord = frames.filter((f) => f.db >= -35).pop()!.atMs;
   expect(lastWord).toBe(44190);
-  expect(ends(feed(frames)).pop()!.atMs - lastWord).toBe(-298);
+  expect(ends(feed(frames, { hangoverMs: 800 })).pop()!.atMs - lastWord).toBe(-298);
+  expect(ends(feed(frames)).pop()!.atMs - lastWord).toBe(1288);
 });

@@ -16,6 +16,7 @@
 // still bit for bit what the fixture says.
 
 import {
+  DEFAULT_TURN_DETECT,
   createTurnDetector,
   type TurnDetectConfig,
   type TurnEvent,
@@ -24,10 +25,22 @@ import {
 /** One recorded buffer: milliseconds since the session started, and its RMS. */
 type Row = readonly [number, number];
 
-/** One buffer as the machine takes it, and as the device is handed it. */
+/**
+ * One buffer as the machine takes it, and as the device is handed it.
+ *
+ * `db` is -Infinity for digital silence, which JSON has no spelling for: it
+ * crosses the wire as null and the Swift side reads null back as -Infinity.
+ * That decode is a line of code like any other, so some frames here are
+ * digitally silent on purpose.
+ *
+ * `reset` is not a buffer at all. It is the one call on the detector that is
+ * not `step`, and a replay that never made it would let a broken `reset` ship.
+ * The frame is not fed to the machine; its `db` is ignored.
+ */
 export interface ReplayFrame {
   atMs: number;
   db: number;
+  reset?: true;
 }
 
 /**
@@ -486,6 +499,10 @@ export function replayExpected(
   const detector = createTurnDetector(config);
   const out: ReplayEvent[] = [];
   for (const frame of frames) {
+    if (frame.reset) {
+      detector.reset();
+      continue;
+    }
     const event = detector.step(frame.db, frame.atMs);
     if (!event) continue;
     out.push(
@@ -506,12 +523,13 @@ const PLAN: { name: string; sequence: ReplaySequence; config: Partial<TurnDetect
   // Fifteen seconds of the companion's own voice, and the defaults ignore all
   // of it. The one case whose right answer is an empty list.
   { name: "echo-default", sequence: "vpio-on/echo", config: {} },
-  // The recorded barge-in at the defaults: two turns and a trailing false
-  // alarm, which is duck, stop and end in one run.
+  // The recorded barge-in at the defaults: one turn, and an `end` whose
+  // silentMs is above the configured hangover because no buffer landed on it.
   { name: "barge-default", sequence: "vpio-on/barge", config: {} },
-  // The same barge-in with a hangover long enough to hold it together: one
-  // turn, and an `end` whose silentMs is far above the configured number.
-  { name: "barge-hangover-1500", sequence: "vpio-on/barge", config: { hangoverMs: 1500 } },
+  // The same barge-in at the hangover this default replaced, which is the only
+  // recorded run that produces all four events: the two mid-sentence pauses cut
+  // it into two turns and the tail of it ducks and resumes.
+  { name: "barge-hangover-800", sequence: "vpio-on/barge", config: { hangoverMs: 800 } },
   // A threshold the echo tail crosses. Three ducks, three resumes, no stop:
   // the confirm window at work on real audio.
   { name: "echo-loose-50", sequence: "vpio-on/echo", config: { startDb: -50 } },
@@ -555,12 +573,123 @@ const PLAN: { name: string; sequence: ReplaySequence; config: Partial<TurnDetect
   },
 ];
 
+// The recorded runs above cannot fail a comparison the machine gets wrong at
+// the line. Every one of the four thresholds is a `>=` or a `<`, and on real
+// audio neither side of one is ever reached exactly: dB is `20 * log10(rms)` and
+// never lands on -35, and buffers arrive 113-208 ms apart so no difference of
+// two timestamps lands on 300 or on 1250. A port that wrote `>` for `>=`
+// replays all thirteen of them bit for bit.
+//
+// Which is the wrong way round, because the caller this machine is written for
+// drives it off a fixed-period timer when the tap goes quiet — and a fixed
+// period is exactly what makes `atMs - lastVoiceMs` land on the hangover
+// exactly. The path most likely to be taken is the path the recordings cannot
+// see, and getting it wrong means a turn that never ends.
+//
+// So these are made up rather than recorded, and they say so. Every level is
+// exactly `startDb` or digital silence, and every timestamp is a multiple of the
+// period chosen so the thresholds fall on a frame.
+
+/** Digital silence: no signal at all, not merely a quiet buffer. */
+const SILENT = Number.NEGATIVE_INFINITY;
+
+/** `n` buffers at one level, or the one call that is not a buffer. */
+type Run = readonly [count: number, db: number] | "reset";
+
+/**
+ * What a timer produces: a frame every `periodMs` from zero, at the levels the
+ * runs spell out. A "reset" run occupies one tick and feeds nothing.
+ */
+function timer(periodMs: number, runs: readonly Run[]): ReplayFrame[] {
+  const out: ReplayFrame[] = [];
+  let atMs = 0;
+  for (const run of runs) {
+    if (run === "reset") {
+      out.push({ atMs, db: SILENT, reset: true });
+      atMs += periodMs;
+      continue;
+    }
+    const [count, db] = run;
+    for (let i = 0; i < count; i += 1) {
+      out.push({ atMs, db });
+      atMs += periodMs;
+    }
+  }
+  return out;
+}
+
+/** The threshold the synthetic levels sit exactly on. */
+const AT_THE_LINE = DEFAULT_TURN_DETECT.startDb;
+
+const SYNTHETIC: { name: string; config: Partial<TurnDetectConfig>; frames: ReplayFrame[] }[] = [
+  // A 50 ms timer, because 50 divides both 300 and 1250. The duck is at 0, the
+  // frame at 300 is confirmMs after it to the millisecond, and the frame at
+  // 1550 is hangoverMs after the last loud one. Three comparisons at once: a
+  // `>` where `db >= startDb` belongs answers nothing at all here, a `>` on the
+  // confirm turns the stop into a resume, and a `>` on the hangover moves the
+  // end one frame late and its silentMs with it.
+  {
+    name: "timer-confirm-and-hangover-exact",
+    config: {},
+    frames: timer(50, [
+      [7, AT_THE_LINE],
+      [27, SILENT],
+    ]),
+  },
+  // The other two comparisons, on the same 50 ms grid. The resume is resumeMs
+  // after the last loud buffer exactly; the duck that follows is resumeGuardMs
+  // after the resume exactly, which is the first moment the guard is over — a
+  // guard written `<=` swallows it.
+  {
+    name: "timer-resume-and-guard-exact",
+    config: {},
+    frames: timer(50, [
+      [1, AT_THE_LINE],
+      [6, SILENT],
+      [12, AT_THE_LINE],
+      [26, SILENT],
+    ]),
+  },
+  // Two seconds of a timer with no audio behind it, which is what the caller
+  // sends when the tap stops delivering. Nothing may happen, and on the device
+  // every one of these frames arrives as JSON null: the recorded runs never
+  // contain a digitally silent buffer, so this is the only case that reads the
+  // null back as -Infinity rather than as some number.
+  {
+    name: "timer-digital-silence",
+    config: {},
+    frames: timer(100, [[21, SILENT]]),
+  },
+  // The one entry point a replay otherwise never touches. Reset lands after a
+  // resume and before a loud buffer that the resume guard would still be
+  // covering, so a reset that forgot `lastResumeMs` shows up as a missing duck
+  // rather than as nothing at all.
+  {
+    name: "reset-clears-the-guard-mid-run",
+    config: {},
+    frames: timer(50, [
+      [1, AT_THE_LINE],
+      [6, SILENT],
+      "reset",
+      [7, AT_THE_LINE],
+      [26, SILENT],
+    ]),
+  },
+];
+
 /** Every run, with its input and the answer the device has to reproduce. */
 export function turnReplayCases(): ReplayCase[] {
-  return PLAN.map(({ name, sequence, config }) => {
-    const frames = replayFrames(sequence);
-    return { name, config, frames, expected: replayExpected(frames, config) };
-  });
+  const recorded = PLAN.map(({ name, sequence, config }) => ({
+    name,
+    config,
+    frames: replayFrames(sequence),
+  }));
+  return [...recorded, ...SYNTHETIC].map(({ name, config, frames }) => ({
+    name,
+    config,
+    frames,
+    expected: replayExpected(frames, config),
+  }));
 }
 
 /** The same thing as a file, for a harness that would rather read than import. */

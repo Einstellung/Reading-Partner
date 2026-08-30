@@ -67,7 +67,18 @@ export interface TurnDetectConfig {
   // speech, and far below the 802 ms shortest real pause in it, so a dropped
   // buffer or a stop consonant does not un-duck mid-word.
   resumeMs: number;
-  // Silence this long after the last loud buffer closes the turn.
+  // Silence this long after the last loud buffer closes the turn. Default 1250:
+  // the recorded barge-in has a 1403 ms pause in the middle of a sentence, and
+  // the break-even that keeps it one turn is 1220, not 1403 — the tap only ever
+  // *observed* 1219 ms of that pause, because the buffer that would have
+  // measured more arrived loud. Silence measured on a sampled stream is always
+  // shorter than the pause it samples, and that gap is the entire difference
+  // between 1220 and 1500.
+  //
+  // 800 was the first guess and it costs a turn: it cuts that barge-in in two
+  // and starts the reply 298 ms before the person's last word. 1250 clears the
+  // break-even by 30 ms and pays for it in reply latency, which is always the
+  // hangover plus up to one delivery interval.
   hangoverMs: number;
   // No new duck within this long of a `resume`. A resume ramps the volume back
   // up; without this, a source sitting on the threshold ducks and resumes at
@@ -82,7 +93,7 @@ export const DEFAULT_TURN_DETECT: TurnDetectConfig = {
   startFrames: 1,
   confirmMs: 300,
   resumeMs: 300,
-  hangoverMs: 800,
+  hangoverMs: 1250,
   resumeGuardMs: 300,
 };
 

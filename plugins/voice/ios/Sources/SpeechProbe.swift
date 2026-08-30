@@ -1117,9 +1117,14 @@ final class TurnProbe {
 /// contract takes one, and null is the only way to spell it on the wire. The
 /// harness computes dB itself and sends the result, so `20 * log10` is never
 /// evaluated twice in two languages and cannot disagree in its last bit.
+///
+/// `reset` is not a buffer. It is the machine's other entry point, and a replay
+/// that only ever called `step` would let a broken `reset` through; the frame is
+/// not fed to the machine and its `db` is ignored.
 struct TurnReplayFrame: Decodable {
     let atMs: Double
     let db: Double?
+    let reset: Bool?
 }
 
 /// The config patch, every key optional. An absent key is that field's default,
@@ -1191,6 +1196,10 @@ enum TurnReplay {
             var machine = VoiceTurn(config: resolved)
             var events: [TurnReplayEvent] = []
             for frame in frames {
+                if frame.reset == true {
+                    machine.reset()
+                    continue
+                }
                 // A null level is digital silence, which is what the machine
                 // reads -Infinity as.
                 guard let event = machine.step(db: frame.db ?? -.infinity, atMs: frame.atMs)
