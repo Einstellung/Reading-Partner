@@ -1,5 +1,5 @@
 [default]
-description = "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, speak a turn one sentence at a time, and interrupt or bench the spoken half."
+description = "Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, and interrupt or bench the spoken half."
 permissions = [
   "allow-start-dictation",
   "allow-stop-dictation",
@@ -10,6 +10,7 @@ permissions = [
   "allow-speech-probe",
   "allow-speech-live",
   "allow-speech-report",
+  "allow-set-speech-key",
   "allow-speak-begin",
   "allow-speak-push",
   "allow-speak-close",

@@ -53,11 +53,15 @@ export type CredentialStore = Partial<Record<ProviderCredentialId, ProviderCrede
 	// Speech-to-text key for voice input (docs/15). A credential, not a setting,
 	// so it stays on the device and out of the sync range.
 	voiceStt?: ApiKeyCredential;
+	// Text-to-speech key for the voice the app answers with (docs/33). A device
+	// key on the same terms as voiceStt; it is also handed to the voice plugin,
+	// which is what actually makes the request (ai/voice/speech-key.ts).
+	voiceTts?: ApiKeyCredential;
 };
 
 // The model providers. At most one may hold a live credential at a time:
-// signing into (or saving a key for) one signs the others out. voiceStt is a
-// device key, outside this set, and is never touched by it.
+// signing into (or saving a key for) one signs the others out. voiceStt and
+// voiceTts are device keys, outside this set, and are never touched by it.
 export type ProviderCredentialId = ProviderId;
 
 // Priority used only to disambiguate a legacy credentials.json that carries more

@@ -17,7 +17,7 @@
 // after a close and only lets go of it when the next turn begins.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use tokio::sync::{mpsc, Mutex};
 
@@ -26,10 +26,30 @@ use crate::speaker::Speakers;
 use crate::tts::{RelayConfig, SpeechRelay, TtsBackend};
 use crate::{Error, Result};
 
-/// Where the vendor key is read from. The process environment and nowhere else:
-/// the run is launched with it set, so it exists for the length of the run and
-/// is not on the phone's disk, in the bundle, or in the repository.
+/// The vendor key's fallback source: the process environment. A bench launch is
+/// what sets it (`DEVICECTL_CHILD_MIMO_API_KEY`, live.rs), so it exists for the
+/// length of that run and is on nobody's disk. It is the second source, not the
+/// only one — see `effective_key`.
 pub(crate) const KEY_VAR: &str = "MIMO_API_KEY";
+
+/// What `begin` answers with when no key was found at either source. Names
+/// neither key nor source: it is shown to the user, and the fix is the same
+/// either way.
+const NO_VOICE: &str = "There is no voice to speak with: set the speech API key in Settings.";
+
+/// The key to build the vendor from, in priority order: the one saved in
+/// Settings and handed over by the webview, then `MIMO_API_KEY` from the
+/// process environment. Blank at either level counts as unset, so clearing the
+/// field in Settings falls back to the environment rather than silencing a
+/// bench build that was launched with a key.
+fn effective_key(from_settings: Option<&str>, from_env: Option<&str>) -> Option<String> {
+    [from_settings, from_env]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|key| !key.is_empty())
+        .map(str::to_string)
+}
 
 /// A turn of speech that has not finished yet.
 struct Turn {
@@ -38,10 +58,16 @@ struct Turn {
 }
 
 pub struct SpeechSession {
-    /// The vendor, when the process was given a key. A build without one still
-    /// manages a session: the rejection has to reach the webview as a command
-    /// that answered "no key", not as a command that does not exist.
-    backend: Option<Arc<dyn TtsBackend>>,
+    /// The vendor, when a key was found. A build without one still manages a
+    /// session: the rejection has to reach the webview as a command that
+    /// answered "no key", not as a command that does not exist.
+    ///
+    /// Behind a lock because Settings can replace it while the app runs. The
+    /// key itself is not kept beside it: `use_key` builds the backend and lets
+    /// the string go, so the only copy in this process is the one the client
+    /// signs requests with. A turn already speaking keeps its own `Arc` and is
+    /// not disturbed by a replacement.
+    backend: StdMutex<Option<Arc<dyn TtsBackend>>>,
     speakers: Arc<dyn Speakers>,
     config: RelayConfig,
     /// The one turn, and the lock that serialises the four commands against
@@ -64,7 +90,7 @@ impl SpeechSession {
         config: RelayConfig,
     ) -> Self {
         Self {
-            backend,
+            backend: StdMutex::new(backend),
             speakers,
             config,
             turn: Mutex::new(None),
@@ -72,15 +98,47 @@ impl SpeechSession {
         }
     }
 
-    /// Build the session this plugin runs with: Mimo if the key is there, and a
-    /// player per turn on whatever host this is.
+    /// Build the session this plugin runs with: a player per turn on whatever
+    /// host this is, and Mimo if the process was launched with a key. The key
+    /// saved in Settings is not readable from here — it is in the webview's
+    /// credential store — so it arrives afterwards through `use_key`.
     pub fn from_env(speakers: Arc<dyn Speakers>) -> Self {
-        let backend = std::env::var(KEY_VAR)
-            .ok()
-            .filter(|key| !key.is_empty())
+        let session = Self::new(None, speakers, RelayConfig::default());
+        session.use_key(None);
+        session
+    }
+
+    /// Take the key saved in Settings and rebuild the vendor around it. `None`
+    /// or blank clears it, after which `MIMO_API_KEY` is used again if the run
+    /// was launched with one. Answers whether there is a voice afterwards.
+    ///
+    /// Called once when the app starts and again on every save, rather than
+    /// per turn: the key belongs to the process, and carrying it on
+    /// `speak_begin` would put it across the IPC boundary once per answer.
+    pub fn use_key(&self, from_settings: Option<&str>) -> bool {
+        self.use_key_with(from_settings, std::env::var(KEY_VAR).ok().as_deref())
+    }
+
+    /// `use_key` with the environment's half handed in, so the priority between
+    /// the two sources can be exercised without a process environment. A test
+    /// that read the real one would pass or fail by what the shell exported.
+    fn use_key_with(&self, from_settings: Option<&str>, from_env: Option<&str>) -> bool {
+        let backend = effective_key(from_settings, from_env)
             .and_then(|key| crate::tts::mimo::MimoBackend::new(key).ok())
             .map(|backend| Arc::new(backend) as Arc<dyn TtsBackend>);
-        Self::new(backend, speakers, RelayConfig::default())
+        let speaking = backend.is_some();
+        *self.backend.lock().expect("speech backend lock") = backend;
+        speaking
+    }
+
+    /// The vendor to open a turn with, or the rejection to answer with. Not
+    /// async on purpose: the lock is never held across an await.
+    fn vendor(&self) -> Result<Arc<dyn TtsBackend>> {
+        self.backend
+            .lock()
+            .expect("speech backend lock")
+            .clone()
+            .ok_or_else(|| Error::Speech(NO_VOICE.to_string()))
     }
 
     /// Open a turn and answer with its number.
@@ -91,11 +149,7 @@ impl SpeechSession {
     /// the last turn; letting the old audio run under the new one would speak
     /// two answers at once.
     pub async fn begin(&self) -> Result<u64> {
-        let backend = self.backend.clone().ok_or_else(|| {
-            Error::Speech(format!(
-                "There is no voice to speak with: {KEY_VAR} is not in this process's environment."
-            ))
-        })?;
+        let backend = self.vendor()?;
 
         let mut turn = self.turn.lock().await;
         if let Some(previous) = turn.take() {
@@ -472,6 +526,82 @@ mod tests {
     async fn stopping_with_no_turn_open_answers_the_sentinel() {
         let session = session(Arc::new(Stage::default()));
         assert_eq!(session.stop().await.unwrap(), SpeechStopped::UNKNOWN);
+    }
+
+    // Where the key comes from. `effective_key` is the whole of that decision,
+    // and it is pure, so the priority and the fallback are testable without a
+    // process environment or a network. The strings below are shaped like keys
+    // and are not: nothing here reaches a vendor.
+
+    #[test]
+    fn settings_wins_over_the_environment() {
+        assert_eq!(
+            effective_key(Some("from-settings-not-real"), Some("from-env-not-real")),
+            Some("from-settings-not-real".to_string())
+        );
+    }
+
+    #[test]
+    fn a_blank_settings_key_falls_back_to_the_environment() {
+        for blank in ["", "   "] {
+            assert_eq!(
+                effective_key(Some(blank), Some("from-env-not-real")),
+                Some("from-env-not-real".to_string()),
+                "{blank:?}"
+            );
+        }
+        assert_eq!(
+            effective_key(None, Some("from-env-not-real")),
+            Some("from-env-not-real".to_string())
+        );
+    }
+
+    #[test]
+    fn settings_alone_is_enough() {
+        assert_eq!(
+            effective_key(Some("from-settings-not-real"), None),
+            Some("from-settings-not-real".to_string())
+        );
+    }
+
+    #[test]
+    fn neither_source_means_no_voice() {
+        assert_eq!(effective_key(None, None), None);
+        assert_eq!(effective_key(Some("  "), Some("")), None);
+    }
+
+    #[test]
+    fn a_key_is_taken_trimmed() {
+        assert_eq!(
+            effective_key(Some("  from-settings-not-real\n"), None),
+            Some("from-settings-not-real".to_string())
+        );
+    }
+
+    /// The session with no key at either source refuses to open a turn, and the
+    /// refusal says where to fix it without naming a key or a variable.
+    #[tokio::test]
+    async fn a_session_with_no_key_refuses_to_begin() {
+        let session = SpeechSession::new(None, Arc::new(Stage::default()), RelayConfig::default());
+        let refused = session.begin().await;
+        let Err(Error::Speech(message)) = refused else {
+            panic!("{refused:?}");
+        };
+        assert_eq!(message, NO_VOICE);
+    }
+
+    /// Handing a key over builds a vendor; clearing it with nothing in the
+    /// environment takes the vendor away again; clearing it with a key in the
+    /// environment falls back to that one and keeps a voice.
+    #[tokio::test]
+    async fn a_key_handed_over_gives_the_session_a_voice() {
+        let session = SpeechSession::new(None, Arc::new(Stage::default()), RelayConfig::default());
+        assert!(session.use_key_with(Some("handed-over-not-real"), None));
+        assert!(session.vendor().is_ok());
+        assert!(!session.use_key_with(Some("   "), None));
+        assert!(session.vendor().is_err());
+        assert!(session.use_key_with(None, Some("from-env-not-real")));
+        assert!(session.vendor().is_ok());
     }
 
     #[tokio::test]

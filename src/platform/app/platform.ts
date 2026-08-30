@@ -45,6 +45,24 @@ export function hasOnDeviceDictation(): boolean {
 	}
 }
 
+// Whether the host can say an answer out loud (docs/33). Synthesis and playback
+// are both the voice plugin's, and the capability that grants its commands is
+// iOS-only (src-tauri/capabilities/ios.json), so a desktop invoke is refused by
+// the ACL rather than answered — and off iOS the player answers every sentence
+// with "this host cannot speak" anyway (plugins/voice/src/fallback.rs).
+//
+// Its own question rather than hasOnDeviceDictation's: that one is the
+// microphone and this one is the speaker, and the day a desktop gets the grant
+// only one of them changes.
+export function hasNativeSpeech(): boolean {
+	try {
+		return platform() === "ios";
+	} catch {
+		// Not running under Tauri (unit tests, plain-browser dev): no commands.
+		return false;
+	}
+}
+
 // Whether the host can render an article in a hidden webview
 // (src-tauri/src/webview_fetch, docs/17). Same shape as hasNativeRecorder: the
 // command is compiled `#[cfg(desktop)]`, and the DOM bridge behind it is
