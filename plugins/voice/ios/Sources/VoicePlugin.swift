@@ -356,7 +356,7 @@ class VoicePlugin: Plugin {
                             // produced arrive on the results stream and are in
                             // the report, not in this answer.
                             let ms = await TurnProbe.shared.finalizeNow()
-                            invoke.resolve(["callMs": ms])
+                            invoke.resolve(TurnFinalizeReport(callMs: ms))
                         case "turn-stop":
                             invoke.resolve(await TurnProbe.shared.stop())
                         default:

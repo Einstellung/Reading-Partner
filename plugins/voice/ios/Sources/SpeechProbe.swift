@@ -553,6 +553,14 @@ struct TurnPayload: Encodable {
     }
 }
 
+/// What a forced finalize cost to call. A struct rather than a dictionary
+/// literal for the reason the interruption leg's is one: `resolve` takes both a
+/// JSObject and an Encodable, and a one-key literal of Doubles is a coin toss
+/// between them.
+struct TurnFinalizeReport: Encodable {
+    let callMs: Double
+}
+
 /// What one pass of the turn probe measured.
 struct TurnProbeReport: Encodable {
     let label: String
@@ -660,7 +668,7 @@ final class TurnProbe {
         func start(label: String, locale requested: String?, sensitivity: String, report: Bool)
             async throws
         {
-            if running { _ = await stopRun() }
+            if running { await stopRun() }
 
             eventLock.lock()
             events = []
