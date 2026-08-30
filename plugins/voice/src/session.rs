@@ -231,10 +231,14 @@ impl SpeechSession {
     /// The answer is NOT where the user interrupted, on the path that matters.
     /// Swift cuts the player itself the instant it hears the user start talking
     /// (docs/33), long before the webview notices and invokes this, so by the
-    /// time the stop reaches the player there is nothing playing and what comes
-    /// back is the sentinel — utterance 0, sentence 0, both times 0. The
+    /// time the stop reaches the player there is nothing playing: the answer
+    /// names the turn that was cut and carries sentence 0 and both times 0. The
     /// authority on where a turn was cut is the event Swift emits when it cuts
     /// it. Do not resume a turn from this return value.
+    ///
+    /// A turn whose relay has already finished — closed, every sentence handed
+    /// over, the audio still playing — answers the same way, through the player
+    /// the turn kept. Only a turn that is not there at all answers `UNKNOWN`.
     pub async fn stop(&self) -> Result<SpeechStopped> {
         let mut turn = self.turn.lock().await;
         let Some(turn) = turn.take() else {
