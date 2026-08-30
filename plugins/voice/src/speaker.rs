@@ -87,9 +87,14 @@ impl<R: Runtime> Player for DevicePlayer<R> {
             .map_err(|e| TtsError::Player(e.to_string()))?;
 
         if ack.dropped {
-            // Swift only drops a sentence whose turn it has already stopped, so
-            // there is nothing left for this relay to do. Cancelled rather than
-            // an empty queue: an empty queue reads as "run further ahead".
+            // Swift compares utterances, not sentences: it drops this one
+            // because the turn it belongs to is not the turn it is playing
+            // (SpeechOut.swift), and a player carries one utterance for its
+            // whole life. So this is the turn being refused, not the sentence,
+            // and every sentence behind it would be refused the same way. The
+            // relay reads it as the end of the turn and stops synthesising
+            // (tts/relay.rs). Cancelled rather than an empty queue: an empty
+            // queue reads as "run further ahead".
             return Err(TtsError::Cancelled);
         }
 

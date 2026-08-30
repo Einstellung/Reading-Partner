@@ -181,6 +181,34 @@ streams — audio goes out while the rest is still arriving — but nothing leav
 the relay until the sentence is complete, because the tail cannot be trimmed
 before the end of it is known.
 
+### When a turn is over
+
+A turn's relay ends itself. `close` says no more sentences are coming; the loop
+goes on synthesising what was already pushed and returns once the last of it has
+reached the player, with `Drained` as its final event. Dropping the handle says
+the same thing, and is finished the same way — what is queued and in flight is
+still spoken, and the player is still told which sentence was the last. `stop`
+is the other ending: barge-in, which cancels what is in flight, drops what is
+queued and stops the player. Nothing idles between turns.
+
+`Drained` is not the voice falling silent. It is every sentence handed over, and
+what was handed over is still playing. Rust has no signal for the end of the
+audio and does not offer one: the player node is what knows, and Swift says so
+in the `speech` event's `speaking: 0`, with the `reason` telling a turn that
+ended from one that starved. Anything waiting for a turn to be heard waits on
+that event.
+
+A player that answers `Cancelled` to an `enqueue` is refusing the turn, not the
+sentence — Swift compares utterances, and a player carries one for its whole
+life — so the relay winds the turn up on it instead of sending the rest of the
+turn to be dropped a sentence at a time, and paying the vendor for each one.
+
+The player outlives the relay, and the session keeps hold of it. A turn that
+said everything it had to say still has audio in the air, and that audio has to
+be stopped before the next turn speaks: Swift drops any sentence whose utterance
+is not the one it is playing, so a new turn opened under an old turn's tail
+would be dropped sentence by sentence and say nothing at all.
+
 The same engine also speaks (`docs/33`, M-voice-2). An `AVAudioPlayerNode` is
 attached to the stack the microphone already keeps and connected to the main
 mixer at 24 kHz mono float32; sentences are queued onto it one at a time and
