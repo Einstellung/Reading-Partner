@@ -327,8 +327,9 @@ test("a stop before a word was spoken leaves no reply in the transcript", async 
 
   expect(h.wasAborted(1)).toBe(true);
   expect(h.transcript.filter((t) => t.role === "ai")).toEqual([]);
-  // The volume goes back up; there was never a turn of speech to stop.
-  expect(h.calls.map((c) => c.command)).toEqual(["plugin:voice|set_speech_volume"]);
+  // Nothing was ducked and no turn of speech was ever opened, so the native side
+  // is asked for nothing at all.
+  expect(h.calls).toEqual([]);
 });
 
 test("deltas that land after the abort are dropped", async () => {

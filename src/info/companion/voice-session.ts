@@ -259,8 +259,11 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
           // The real thing. The player is already stopped on the native side;
           // `cut` says how far it got, and that is where the transcript is cut.
           cut(e.cut.sentence, out);
-          ducked = false;
-          volume(config.fullVolume, out);
+          // The duck that led here is over: the next turn must not open quiet.
+          if (ducked) {
+            ducked = false;
+            volume(config.fullVolume, out);
+          }
           go("listening", out);
           return out;
         }
