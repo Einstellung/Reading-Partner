@@ -164,42 +164,62 @@ export function splitSentences(normalized: string): SpokenSentence[] {
   return cut(normalized, false, true)[0];
 }
 
+// A sentence with the boundary it was cut at. The plain splitter drops the
+// boundary; the source map is built out of it.
+interface Cut extends SpokenSentence {
+  /** UTF-16 offset into the buffer, one past this sentence's boundary. */
+  end: number;
+}
+
 // The one scan both paths use. `started` says whether a sentence has already
 // gone out in this turn, `final` whether what is left is the end of it. Returns
 // the sentences and the text after the last one.
-function cut(buffer: string, started: boolean, final: boolean): [SpokenSentence[], string] {
+function scan(buffer: string, started: boolean, final: boolean): [Cut[], string] {
   const cps = [...buffer];
-  const out: SpokenSentence[] = [];
+  // The scan counts in code points and the boundaries are string offsets, so
+  // the two are lined up once here rather than joined per sentence.
+  const off: number[] = new Array(cps.length + 1);
+  for (let i = 0, n = 0; i <= cps.length; i++) {
+    off[i] = n;
+    if (i < cps.length) n += cps[i].length;
+  }
+  const out: Cut[] = [];
   let start = 0;
   let first = !started;
 
-  function take(end: number): void {
+  // `end` is where the text stops, `next` where the following sentence starts:
+  // a newline is the boundary but is not said, so the two differ there.
+  function take(end: number, next: number): void {
     const text = cps.slice(start, end).join("").trim();
     if (text) {
-      out.push({ text, chars: [...text].length });
+      out.push({ text, chars: [...text].length, end: off[next] });
       first = false;
     }
+    start = next;
   }
 
   for (let i = 0; i < cps.length; i++) {
     const c = cps[i];
     if (isHard(c)) {
       // A newline is where a sentence ends, not something to say.
-      take(c === "\n" ? i : i + 1);
-      start = i + 1;
+      take(c === "\n" ? i : i + 1, i + 1);
       continue;
     }
     if (!SOFT.includes(c)) continue;
     if (i - start < (first ? SOFT_MIN_FIRST : SOFT_MIN)) continue;
-    take(i + 1);
-    start = i + 1;
+    take(i + 1, i + 1);
   }
 
   if (final) {
-    take(cps.length);
+    take(cps.length, cps.length);
     return [out, ""];
   }
   return [out, cps.slice(start).join("")];
+}
+
+function cut(buffer: string, started: boolean, final: boolean): [SpokenSentence[], string] {
+  const [cuts, rest] = scan(buffer, started, final);
+  return [cuts.map(({ text, chars }) => ({ text, chars })), rest];
 }
 
 // --- where a sentence came from --------------------------------------------
@@ -210,11 +230,10 @@ function cut(buffer: string, started: boolean, final: boolean): [SpokenSentence[
 // boundary in the model's OWN output (docs/45), so every sentence needs its span
 // in the raw text as well.
 //
-// A wrapper rather than a field on SpokenSentence: normalization runs over a
-// whole frozen fragment and hands back no positions, so recovering them means
-// asking normalizeForSpeech again, which the streaming splitter must not pay for
-// where nobody wants the spans. Sentences come out of it identical, with the
-// span beside them.
+// A splitter of its own rather than a field on SpokenSentence: keeping the map
+// costs a normalization per sentence, and the briefing's own playback wants
+// none of it. Sentences come out of it identical to the plain splitter's, with
+// the span beside them.
 
 /** A half-open span of the pushed text: `raw.slice(start, end)`. */
 export interface SourceSpan {
@@ -236,10 +255,39 @@ export interface SourcedSplitter {
   raw(): string;
 }
 
+// The map is built where the correspondence is still known. `freeze` is handed
+// one stretch of raw text, normalizes it whole, and appends the result to the
+// buffer the sentences are then cut out of — so at that moment, and only then,
+// this stretch of raw and that stretch of normalized are the same words. Every
+// frozen fragment is recorded as one such pair, and the pairs tile both texts
+// end to end with no gaps.
+//
+// Locating a sentence boundary is then a lookup rather than a search. A boundary
+// that falls on a fragment's edge is exact. One that falls inside a fragment —
+// the common case, since a fragment usually holds several sentences — is found
+// by normalizing prefixes OF THAT FRAGMENT, which is what the earlier attempt at
+// this got wrong: it normalized spans starting at the previous sentence, and a
+// span that starts mid-line makes every `^`-anchored rule in normalize.ts fire
+// on text that is not the start of a line. A fragment does start where a line's
+// rules see the same thing they saw for the whole, because `lastFreezePoint`
+// only freezes where a word character resumes. And a boundary resolved wrongly
+// is confined to its own fragment: it cannot move the next sentence's, so a
+// miss is a miss and never a cascade.
+interface Fragment {
+  /** Half-open span in the pushed text. */
+  rawStart: number;
+  rawEnd: number;
+  /** Half-open span in the normalized stream, the same words. */
+  normStart: number;
+  normEnd: number;
+  raw: string;
+  norm: string;
+}
+
 // Trailing punctuation and space are what the two sides disagree about: a
-// sentence keeps the comma it was cut at, and normalizing that same span on its
-// own strips it as a line's trailing punctuation. Nothing else is touched, so a
-// span that matches matches on its whole content.
+// sentence keeps the comma it was cut at, and normalizing a prefix that ends
+// there strips it as a line's trailing punctuation. Nothing else is touched, so
+// a prefix that matches matches on its whole content.
 const TAIL = /[\s，。！？；：、]+$/;
 
 function keyOf(text: string): string {
@@ -254,27 +302,49 @@ function keyOf(text: string): string {
 // than one per character.
 const WORD = /[A-Za-z0-9㐀-鿿]/;
 
+// A position between the two halves of a surrogate pair is not a position:
+// slicing there yields a lone surrogate, and an emoji in the model's output
+// would be cut in half in the transcript.
+function splits(text: string, q: number): boolean {
+  const c = text.charCodeAt(q - 1);
+  return c >= 0xd800 && c <= 0xdbff;
+}
+
 // How far past the sentence's own length the scan keeps looking once it has a
 // fallback: enough for one rewrite to have lengthened the tail ("5%" is two
 // characters of raw and four of speech), not enough to run to the end of a turn.
 const OVERSHOOT = 12;
 
-// Where in `raw` the sentence that normalizes to `text` ends, starting from
-// `at`. Exact whenever normalizing the span on its own reproduces the sentence,
-// which is the ordinary case; where a rewrite reached across the boundary it
-// falls back to the first candidate long enough to hold the sentence, which is
-// that position or the next one along.
-function sourceEnd(raw: string, at: number, text: string): number {
-  const want = keyOf(text);
+// Where inside `f` the normalized prefix `want` ends. The LAST prefix that
+// matches, not the first: `keyOf` strips the terminator from both sides, so
+// "他涨了 3.5%" and "他涨了 3.5%。" both match, and taking the first would hand
+// every sentence's own full stop to the sentence after it. Nothing beyond the
+// terminator can match, because the next sentence's first character is a word
+// character and is not even a candidate.
+function inside(f: Fragment, want: string): number {
+  const key = keyOf(want);
+  let hit = -1;
   let fallback = -1;
-  for (let q = at + 1; q <= raw.length; q++) {
-    if (q < raw.length && WORD.test(raw[q - 1])) continue;
-    const got = keyOf(normalizeForSpeech(raw.slice(at, q)));
-    if (got === want) return q;
-    if (fallback < 0 && got.length >= want.length) fallback = q;
-    else if (fallback >= 0 && got.length > want.length + OVERSHOOT) break;
+  // Up to and including the end of the fragment: what is left over may be
+  // nothing but a separator — the newline `freeze` had to keep — and then the
+  // whole fragment is the match. Where a real sentence is left over it is not,
+  // because `key` would have to contain it.
+  for (let q = 1; q <= f.raw.length; q++) {
+    if (q < f.raw.length && (WORD.test(f.raw[q - 1]) || splits(f.raw, q))) continue;
+    const got = keyOf(normalizeForSpeech(f.raw.slice(0, q)));
+    if (got === key) {
+      hit = q;
+      continue;
+    }
+    if (hit >= 0) break;
+    if (fallback < 0 && got.length >= key.length) fallback = q;
+    else if (fallback >= 0 && got.length > key.length + OVERSHOOT) break;
   }
-  return fallback < 0 ? raw.length : fallback;
+  if (hit >= 0) return f.rawStart + hit;
+  // No prefix reproduces the sentence: a rewrite reached across the boundary.
+  // The first candidate long enough to hold it is that position or the next one
+  // along, and either way it stays inside this fragment.
+  return fallback < 0 ? f.rawEnd : f.rawStart + fallback;
 }
 
 /**
@@ -283,29 +353,83 @@ function sourceEnd(raw: string, at: number, text: string): number {
  * contiguous, in order, and cover the pushed text from 0 to its end.
  */
 export function createSourcedSplitter(): SourcedSplitter {
-  const inner = createSpeechSplitter();
+  // Everything pushed, and the part of it past the last freeze point.
+  let all = "";
   let raw = "";
+  let rawBase = 0;
+  // Normalized text past the last sentence handed out, and where it starts in
+  // the normalized stream.
+  let normalized = "";
+  let normBase = 0;
+  let started = false;
+  // Where the next sentence's span starts. Spans are contiguous by
+  // construction: each one begins where the last one ended.
   let at = 0;
+  const map: Fragment[] = [];
 
-  function attribute(sentences: SpokenSentence[], final: boolean): SourcedSentence[] {
-    return sentences.map((s, i) => {
+  function freeze(upTo: number): void {
+    const fragment = raw.slice(0, upTo);
+    raw = raw.slice(upTo);
+    const piece = normalizeForSpeech(fragment);
+    // normalize trims, and a trailing newline is a boundary the splitter needs.
+    const norm = piece ? (fragment.endsWith("\n") ? `${piece}\n` : piece) : "";
+    const normStart = normBase + normalized.length;
+    // Recorded even when it normalized to nothing, so the raw stays tiled: a
+    // fragment that says nothing aloud still has to belong to some sentence.
+    map.push({
+      rawStart: rawBase,
+      rawEnd: rawBase + upTo,
+      normStart,
+      normEnd: normStart + norm.length,
+      raw: fragment,
+      norm,
+    });
+    rawBase += upTo;
+    normalized += norm;
+  }
+
+  // Where an offset in the normalized stream falls in the pushed text.
+  function locate(n: number): number {
+    let i = map.length - 1;
+    while (i > 0 && map[i].normStart > n) i--;
+    const f = map[i];
+    if (n >= f.normEnd) return f.rawEnd;
+    if (n <= f.normStart) return f.rawStart;
+    return inside(f, f.norm.slice(0, n - f.normStart));
+  }
+
+  function drain(final: boolean): SourcedSentence[] {
+    const [cuts, rest] = scan(normalized, started, final);
+    const out = cuts.map(({ text, chars, end }, i) => {
       // The last sentence of the turn takes the rest of the text, trailing
       // whitespace and all: there is nothing after it to give it to.
-      const end = final && i === sentences.length - 1 ? raw.length : sourceEnd(raw, at, s.text);
-      const source = { start: at, end };
-      at = end;
-      return { ...s, source };
+      const last = final && i === cuts.length - 1;
+      // Clamped rather than trusted: a fallback inside a fragment is the one
+      // place a boundary can come out short, and the spans are promised to run
+      // forwards and to stay within what was pushed.
+      const to = last ? all.length : Math.min(Math.max(locate(normBase + end), at), all.length);
+      const source = { start: at, end: to };
+      at = to;
+      return { text, chars, source };
     });
+    normBase += normalized.length - rest.length;
+    normalized = rest;
+    if (cuts.length > 0) started = true;
+    return out;
   }
 
   return {
     push(chunk: string): SourcedSentence[] {
+      all += chunk;
       raw += chunk;
-      return attribute(inner.push(chunk), false);
+      const point = lastFreezePoint(raw);
+      if (point > 0) freeze(point);
+      return drain(false);
     },
     end(): SourcedSentence[] {
-      return attribute(inner.end(), true);
+      if (raw) freeze(raw.length);
+      return drain(true);
     },
-    raw: () => raw,
+    raw: () => all,
   };
 }
