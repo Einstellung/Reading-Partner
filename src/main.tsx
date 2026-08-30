@@ -79,6 +79,12 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/speech-probe").then(({ runSpeechProbe }) =>
     runSpeechProbe({ control: true }),
   );
+} else if (import.meta.env.VITE_SMOKE === "turn") {
+  // The three full-duplex questions, in one pass with a person in front of the
+  // phone for five four-second readings (docs/33, M-voice-3). Whether
+  // SpeechDetector reports anything, what a forced finalize costs, and what
+  // this build's tap and this placement's levels look like.
+  void import("./smoke/turn-probe").then(({ runTurnProbe }) => runTurnProbe());
 } else if (import.meta.env.VITE_SMOKE === "speech-bench") {
   // The half of it that needs ears: whether twelve scheduled buffers sound like
   // one stretch of speech.

@@ -11,7 +11,11 @@
 // timing replays the fixture's own measured synthesis times.
 
 import AVFoundation
+// CMTime and CMTimeRange, which the turn probe's detector and transcript
+// results are stamped with.
+import CoreMedia
 import Foundation
+import Speech
 #if canImport(UIKit)
     import UIKit
 #endif
@@ -40,6 +44,22 @@ struct SpeechProbeArgs: Decodable {
     let mode: String?
     let afterMs: Double?
     let times: Int?
+    // The turn probe's own knobs. All optional and all absent on every other
+    // mode: the invoke payload is JSON.stringify'd and undefined properties
+    // vanish, so a leg that does not set one sends no key at all.
+    /// `low`, `medium` or `high`. Anything else is medium, which is the level
+    /// Apple recommends and the one the other passes are compared against.
+    let sensitivity: String?
+    /// BCP-47. Not optional in practice: without one the native side walks
+    /// `Locale.preferredLanguages` and a Chinese sentence decoded as English
+    /// comes back as fluent English nonsense (docs/pitfall/164).
+    let locale: String?
+    /// The name of the stretch that starts here — `played`, `human`, `duplex`.
+    let stage: String?
+    /// What `reportResults` is passed to `SpeechDetector`. Absent is true; a
+    /// pass with it false is the control that says the silence came from the
+    /// flag rather than from the model.
+    let reportResults: Bool?
 }
 
 /// One sentence as the manifest describes it.
@@ -366,4 +386,710 @@ struct SpeechInterruptReport: Encodable {
 /// What every set of category options did to the route.
 struct SpeechRouteReport: Encodable {
     let trials: [SpeechProbe.RouteTrial]
+}
+
+// MARK: - The turn probe
+//
+// Everything below answers three questions about full duplex and nothing else
+// (docs/33, M-voice-3). It is a measuring instrument: it records, it never
+// decides. No turn detector, no barge-in, no threshold — those are written
+// against the numbers this produces, not inside it.
+//
+//   1. Does SpeechDetector report anything at all? Apple's own documentation
+//      disagrees with itself — Result's abstract says the results "currently
+//      only support error handling from the VAD model" while the initializer's
+//      says it reports the VAD model's results — and only a device settles it.
+//      `detectorEvents == 0` with `detectorStreamEnded` beside it is the answer
+//      if the answer is no, and that is a finding, not a failure.
+//   2. What does finalize(through: nil) cost, and what does it cost the words?
+//      Every call is recorded, and the transcript events around it are in the
+//      same list on the same clock, so the wait and the difference are both
+//      read off `events`.
+//   3. How does the tap actually deliver, and what levels does this placement
+//      see? One record per buffer, no throttle and no aggregation: the 15 Hz
+//      ceiling and the 0..1 mapping in DictationRun are display decisions and
+//      they would destroy the raw distribution a threshold has to be fitted to.
+//
+// Not shared with DictationRun on purpose. Hold-to-talk is on TestFlight and a
+// probe is not a reason to touch it, so the converter and the level maths are
+// repeated here rather than lifted out.
+
+/// A one-shot latch with a deadline. The same shape as DictationRun's `Gate`
+/// and copied rather than shared for the reason above; Swift cannot abandon an
+/// `await` on another task, so the deadline resolves the wait instead of racing
+/// it.
+private final class ProbeGate {
+    private let lock = NSLock()
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func signal() {
+        lock.lock()
+        opened = true
+        let pending = waiters
+        waiters = []
+        lock.unlock()
+        for waiter in pending { waiter.resume() }
+    }
+
+    func wait(upToMs: UInt64, onTimeout: (() -> Void)? = nil) async {
+        lock.lock()
+        let already = opened
+        lock.unlock()
+        if already { return }
+
+        let timer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: upToMs * 1_000_000)
+            if Task.isCancelled { return }
+            onTimeout?()
+            self?.signal()
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if opened {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            waiters.append(continuation)
+            lock.unlock()
+        }
+        timer.cancel()
+    }
+}
+
+/// One thing that happened, on one clock.
+///
+/// Every kind goes in the same array in arrival order, because the ordering
+/// between kinds is the measurement: a detector result is only worth anything
+/// next to the level frames around it, and a forced finalize is only worth
+/// anything next to the transcript events that follow it.
+struct TurnEvent: Encodable {
+    /// Milliseconds since the pass started — `CFAbsoluteTimeGetCurrent` at the
+    /// moment the record is made, and the one clock everything here shares.
+    let sinceStartMs: Double
+    /// `level`, `detector`, `transcript`, `stage`, `finalize` or `log`.
+    let kind: String
+    let payload: TurnPayload
+}
+
+/// The union of everything a `TurnEvent` can carry. One struct with optionals
+/// and a hand-written encoding that leaves the absent ones out, rather than a
+/// type-erased box: the shape is small and it is read by a person as well as by
+/// a parser.
+struct TurnPayload: Encodable {
+    // level
+    /// Linear RMS over the raw microphone samples, before conversion — the same
+    /// number DictationRun computes and the same name the earlier probe wrote
+    /// (`payload.inputRms`), so the two rounds are comparable. dB is
+    /// `20 * log10(inputRms)` and is not stored: a derived column that can
+    /// disagree with its source is worse than an arithmetic step.
+    var inputRms: Double? = nil
+    /// What the tap actually delivered. `bufferSize` is a request, not a
+    /// contract (docs/pitfall/161), and this build's delivery rhythm is one of
+    /// the three questions.
+    var frames: Int? = nil
+    /// Where this buffer starts on the microphone's own timeline, counted in
+    /// frames from the first buffer of the pass. The analyzer's audio clock has
+    /// the same zero, so a detector result's `range` and a level frame's
+    /// `audioMs` are directly comparable — which is the whole of question 1.
+    var audioMs: Double? = nil
+
+    // detector
+    var speechDetected: Bool? = nil
+
+    // detector and transcript
+    var isFinal: Bool? = nil
+    var rangeStartMs: Double? = nil
+    var rangeEndMs: Double? = nil
+    var finalizationMs: Double? = nil
+
+    // transcript
+    var text: String? = nil
+
+    // stage
+    var stage: String? = nil
+
+    // finalize
+    var request: Int? = nil
+    /// `called` before `finalize(through:)` is awaited, `returned` after.
+    var phase: String? = nil
+    /// How long the call itself took. Not how long the words took to arrive —
+    /// that is the gap to the next `transcript` event carrying `isFinal`, and it
+    /// is read off the list.
+    var callMs: Double? = nil
+    /// The volatile tail standing at the instant of the call. The first version
+    /// either sends this or sends what the forced finalize produced, so the two
+    /// have to be recorded side by side.
+    var volatileAtCall: String? = nil
+
+    // log and failure
+    var line: String? = nil
+    var error: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case inputRms, frames, audioMs, speechDetected, isFinal, rangeStartMs, rangeEndMs
+        case finalizationMs, text, stage, request, phase, callMs, volatileAtCall, line, error
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(inputRms, forKey: .inputRms)
+        try c.encodeIfPresent(frames, forKey: .frames)
+        try c.encodeIfPresent(audioMs, forKey: .audioMs)
+        try c.encodeIfPresent(speechDetected, forKey: .speechDetected)
+        try c.encodeIfPresent(isFinal, forKey: .isFinal)
+        try c.encodeIfPresent(rangeStartMs, forKey: .rangeStartMs)
+        try c.encodeIfPresent(rangeEndMs, forKey: .rangeEndMs)
+        try c.encodeIfPresent(finalizationMs, forKey: .finalizationMs)
+        try c.encodeIfPresent(text, forKey: .text)
+        try c.encodeIfPresent(stage, forKey: .stage)
+        try c.encodeIfPresent(request, forKey: .request)
+        try c.encodeIfPresent(phase, forKey: .phase)
+        try c.encodeIfPresent(callMs, forKey: .callMs)
+        try c.encodeIfPresent(volatileAtCall, forKey: .volatileAtCall)
+        try c.encodeIfPresent(line, forKey: .line)
+        try c.encodeIfPresent(error, forKey: .error)
+    }
+}
+
+/// What a forced finalize cost to call. A struct rather than a dictionary
+/// literal for the reason the interruption leg's is one: `resolve` takes both a
+/// JSObject and an Encodable, and a one-key literal of Doubles is a coin toss
+/// between them.
+struct TurnFinalizeReport: Encodable {
+    let callMs: Double
+}
+
+/// What one pass of the turn probe measured.
+struct TurnProbeReport: Encodable {
+    let label: String
+    let ok: Bool
+    let error: String?
+    /// What was asked for and what was built, so a pass that answers nothing
+    /// still says what it was.
+    let locale: String
+    let sensitivity: String
+    let reportResults: Bool
+    let voiceProcessing: Bool
+    let tapSampleRate: Double
+    let analyzerFormat: String
+    /// Whether the analyzer accepted a detector module at all. False with an
+    /// `error` beside it is already an answer to question 1.
+    let detectorAttached: Bool
+    /// The count question 1 turns on. Zero over a pass that had speech in it
+    /// says the results stream does not exist, whatever the documentation says.
+    let detectorEvents: Int
+    /// Whether the detector's sequence ended on its own rather than being
+    /// cancelled. Zero events over a stream that ended and zero over a stream
+    /// still waiting are the same number and not the same finding.
+    let detectorStreamEnded: Bool
+    let detectorError: String?
+    let levelEvents: Int
+    /// Everything the recogniser settled on, folded the way DictationRun folds
+    /// it. The per-result texts are in `events`; this is the convenience copy.
+    let transcript: String
+    /// Wall-clock milliseconds at `sinceStartMs == 0`, so a pass lines up
+    /// against the device log and against the other passes.
+    let startedAtEpochMs: Double
+    let events: [TurnEvent]
+}
+
+/// The live pass. A singleton because the harness drives it in steps — start,
+/// stage, finalize, stop — and each step arrives as its own command.
+///
+/// Debug builds only: every member is compiled out below and the plugin refuses
+/// the mode outright in a shipping build.
+final class TurnProbe {
+    static let shared = TurnProbe()
+
+    private init() {}
+
+    #if DEBUG
+
+        // MARK: State
+
+        private var transcriber: SpeechTranscriber?
+        private var detector: SpeechDetector?
+        private var analyzer: SpeechAnalyzer?
+        private var resultsTask: Task<Void, Never>?
+        private var detectorTask: Task<Void, Never>?
+        private let resultsGate = ProbeGate()
+
+        /// Written on the start task, read on the audio thread. Held for the
+        /// whole of `feed`, which is a conversion and a yield and costs
+        /// microseconds — the same trade DictationRun's pre-roll lock makes on
+        /// the same thread.
+        private let feedLock = NSLock()
+        private var converter: AVAudioConverter?
+        private var analyzerFormat: AVAudioFormat?
+        private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
+
+        private let eventLock = NSLock()
+        private var events: [TurnEvent] = []
+        private var detectorEvents = 0
+        private var levelEvents = 0
+        private var detectorStreamEnded = false
+        private var detectorError: String?
+        private var finals: [String] = []
+        private var volatileTail = ""
+
+        /// Frames the tap has delivered, touched on the audio thread only.
+        private var framesSeen: UInt64 = 0
+        private var tapSampleRate: Double = 0
+        private var startedAt: CFAbsoluteTime = 0
+        private var startedAtEpochMs: Double = 0
+        private var running = false
+        private var nextRequest = 0
+
+        private var label = ""
+        private var localeTag = ""
+        private var sensitivityName = "medium"
+        private var reportResults = true
+        private var detectorAttached = false
+        private var analyzerFormatLine = ""
+        private var startError: String?
+        private var observers: [NSObjectProtocol] = []
+
+        // MARK: - Start
+
+        /// Builds the recogniser first and opens the microphone last, which is
+        /// the opposite of a hold and right for a probe: nobody is speaking
+        /// during the start, so there is nothing to pre-roll, and a chain that
+        /// is already consuming when the first buffer arrives is one fewer
+        /// moving part in a measurement.
+        ///
+        /// The player node is asked for up front. A stack that has one can take
+        /// a microphone; a stack that has none has to be rebuilt to get one, and
+        /// the rebuild would take the recogniser with it — which is why the echo
+        /// legs start the player before the microphone. Here the microphone
+        /// stands for the whole pass and playback comes and goes inside it, so
+        /// the node has to be there from the beginning.
+        func start(label: String, locale requested: String?, sensitivity: String, report: Bool)
+            async throws
+        {
+            if running { await stopRun() }
+
+            eventLock.lock()
+            events = []
+            detectorEvents = 0
+            levelEvents = 0
+            detectorStreamEnded = false
+            detectorError = nil
+            finals = []
+            volatileTail = ""
+            nextRequest = 0
+            eventLock.unlock()
+
+            framesSeen = 0
+            startError = nil
+            detectorAttached = false
+            analyzerFormatLine = ""
+            self.label = label
+            self.sensitivityName = sensitivity
+            self.reportResults = report
+            startedAt = CFAbsoluteTimeGetCurrent()
+            startedAtEpochMs = Date().timeIntervalSince1970 * 1000
+
+            NSLog(
+                "RP-TURN start label=%@ sensitivity=%@ report=%d", label, sensitivity,
+                report ? 1 : 0)
+
+            guard SpeechTranscriber.isAvailable else {
+                throw DictationError(
+                    "This iPhone cannot transcribe on device. It needs iOS 26 on an iPhone 12 "
+                        + "or later.")
+            }
+            try await Recogniser.ensureMicrophonePermission()
+
+            let locale = try await Recogniser.resolveLocale(requested)
+            localeTag = locale.identifier(.bcp47)
+            let transcriber = Recogniser.makeTranscriber(locale: locale)
+            self.transcriber = transcriber
+            try await Recogniser.installModelIfNeeded(for: transcriber, locale: locale)
+
+            // Asked of the transcriber alone, which is the call this repository
+            // has run on a device. Whether a detector in the list would change
+            // the answer is not a question this pass is for.
+            let format = try await Recogniser.resolveAnalyzerFormat(for: transcriber)
+            analyzerFormatLine = Recogniser.describe(format)
+
+            let detector = SpeechDetector(
+                detectionOptions: SpeechDetector.DetectionOptions(
+                    sensitivityLevel: Self.level(sensitivity)),
+                reportResults: report)
+            self.detector = detector
+
+            // The detector first, the transcriber second, the order Apple's own
+            // note uses. It gates the transcriber, and the module list is the
+            // only place that relationship is expressed.
+            let analyzer = SpeechAnalyzer(modules: [detector, transcriber])
+            self.analyzer = analyzer
+
+            let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
+
+            do {
+                try await analyzer.prepareToAnalyze(in: format)
+            } catch {
+                throw DictationError(
+                    "The recognizer would not start: \(DictationError.describe(error))")
+            }
+
+            startConsumingResults(from: transcriber)
+            startConsumingDetector(from: detector)
+
+            do {
+                try await analyzer.start(inputSequence: stream)
+                detectorAttached = true
+            } catch {
+                // An analyzer that refuses a detector module is itself an answer
+                // to question 1, so it is recorded as well as thrown: the
+                // harness writes a report either way.
+                let why = DictationError.describe(error)
+                startError = why
+                record("log", TurnPayload(error: "the analyzer refused the module list: \(why)"))
+                throw DictationError("The recognizer would not start: \(why)")
+            }
+
+            observeSession()
+
+            let opened = try AudioFront.shared.open(
+                pressedAt: startedAt, timing: TimingLog(), needsPlayer: true
+            ) { [weak self] buffer in
+                self?.consume(buffer)
+            }
+            tapSampleRate = opened.format.sampleRate
+            guard let made = AVAudioConverter(from: opened.format, to: format) else {
+                throw DictationError(
+                    "No audio converter from \(Recogniser.describe(opened.format)) to "
+                        + "\(Recogniser.describe(format)).")
+            }
+            // Assigned together and behind the lock the tap reads through.
+            // Buffers that arrive before this line find no converter and are
+            // dropped, which costs the first fraction of a second of a pass
+            // nobody is speaking into.
+            feedLock.lock()
+            converter = made
+            analyzerFormat = format
+            inputContinuation = continuation
+            feedLock.unlock()
+
+            running = true
+            record("log", TurnPayload(line: "listening at \(Recogniser.describe(opened.format))"))
+        }
+
+        private static func level(_ name: String) -> SpeechDetector.SensitivityLevel {
+            switch name {
+            case "low": return .low
+            case "high": return .high
+            default: return .medium
+            }
+        }
+
+        // MARK: - Stages
+
+        /// A boundary in the pass. What separates "only the phone was speaking"
+        /// from "only the person was" from "both at once" is nothing in the
+        /// audio — it is the harness knowing which it just asked for, and this
+        /// is where it says so.
+        func stage(_ name: String) {
+            NSLog("RP-TURN stage %@", name)
+            record("stage", TurnPayload(stage: name))
+        }
+
+        /// Force the recogniser to settle now. Answers with how long the call
+        /// itself took; what the words cost is the gap from here to the next
+        /// `transcript` event carrying `isFinal`, which is in the same list.
+        @discardableResult
+        func finalizeNow() async -> Double {
+            guard let analyzer = analyzer else { return -1 }
+            eventLock.lock()
+            nextRequest += 1
+            let request = nextRequest
+            let tail = volatileTail
+            eventLock.unlock()
+
+            record("finalize", TurnPayload(request: request, phase: "called", volatileAtCall: tail))
+            let began = CFAbsoluteTimeGetCurrent()
+            var failure: String?
+            do {
+                // nil finalizes through the last audio the analyzer has
+                // consumed, which is not the last audio the tap has delivered: a
+                // buffer in flight is not covered. The level frames around this
+                // event are what say how much audio that is.
+                try await analyzer.finalize(through: nil)
+            } catch {
+                failure = DictationError.describe(error)
+            }
+            let ms = (CFAbsoluteTimeGetCurrent() - began) * 1000
+            NSLog("RP-TURN finalize %d returned in %.0fms", request, ms)
+            record(
+                "finalize",
+                TurnPayload(request: request, phase: "returned", callMs: ms, error: failure))
+            return ms
+        }
+
+        // MARK: - Stop
+
+        /// Tears the pass down and answers with everything it saw.
+        func stop() async -> TurnProbeReport {
+            await stopRun()
+            eventLock.lock()
+            defer { eventLock.unlock() }
+            let transcript = (finals + [volatileTail])
+                .reduce("", Recogniser.joinSpeech)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return TurnProbeReport(
+                label: label,
+                ok: startError == nil,
+                error: startError,
+                locale: localeTag,
+                sensitivity: sensitivityName,
+                reportResults: reportResults,
+                voiceProcessing: AudioFront.voiceProcessingOverride ?? true,
+                tapSampleRate: tapSampleRate,
+                analyzerFormat: analyzerFormatLine,
+                detectorAttached: detectorAttached,
+                detectorEvents: detectorEvents,
+                detectorStreamEnded: detectorStreamEnded,
+                detectorError: detectorError,
+                levelEvents: levelEvents,
+                transcript: transcript,
+                startedAtEpochMs: startedAtEpochMs,
+                events: events)
+        }
+
+        private func stopRun() async {
+            for observer in observers { NotificationCenter.default.removeObserver(observer) }
+            observers = []
+
+            running = false
+            // Never kept. A pass is a measurement and the next one has to build
+            // its own stack, exactly as the echo legs do between theirs.
+            AudioFront.shared.release(keep: false)
+
+            feedLock.lock()
+            let continuation = inputContinuation
+            inputContinuation = nil
+            converter = nil
+            feedLock.unlock()
+            continuation?.finish()
+
+            if let analyzer = analyzer {
+                let done = ProbeGate()
+                Task {
+                    try? await analyzer.finalizeAndFinishThroughEndOfInput()
+                    done.signal()
+                }
+                await done.wait(upToMs: 3000) {
+                    NSLog("RP-TURN finalizeAndFinish did not return in 3000ms")
+                }
+            }
+            if resultsTask != nil {
+                await resultsGate.wait(upToMs: 1000) { NSLog("RP-TURN results grace expired") }
+            }
+            resultsTask?.cancel()
+            resultsTask = nil
+            detectorTask?.cancel()
+            detectorTask = nil
+            analyzer = nil
+            transcriber = nil
+            detector = nil
+        }
+
+        // MARK: - Audio
+
+        /// One record per buffer, unthrottled and unaggregated. The 15 Hz
+        /// ceiling and the 0..1 window in DictationRun are what a meter needs; a
+        /// threshold has to be fitted against what the microphone actually
+        /// produced, and both of those destroy it.
+        private func consume(_ buffer: AVAudioPCMBuffer) {
+            let frames = Int(buffer.frameLength)
+            let audioMs = tapSampleRate > 0 ? Double(framesSeen) / tapSampleRate * 1000 : 0
+            framesSeen &+= UInt64(frames)
+
+            var rms: Double? = nil
+            if let channels = buffer.floatChannelData, frames > 0 {
+                let samples = channels[0]
+                var sum: Float = 0
+                for index in 0..<frames { sum += samples[index] * samples[index] }
+                let value = Double((sum / Float(frames)).squareRoot())
+                if value.isFinite { rms = value }
+            }
+            eventLock.lock()
+            levelEvents += 1
+            eventLock.unlock()
+            record("level", TurnPayload(inputRms: rms, frames: frames, audioMs: audioMs))
+
+            feed(buffer)
+        }
+
+        /// The same conversion DictationRun does, repeated here rather than
+        /// shared: hold-to-talk is shipping and a probe is not a reason to reach
+        /// into it.
+        private func feed(_ buffer: AVAudioPCMBuffer) {
+            feedLock.lock()
+            defer { feedLock.unlock() }
+            guard
+                let converter = converter,
+                let format = analyzerFormat,
+                let continuation = inputContinuation
+            else { return }
+
+            let ratio = format.sampleRate / buffer.format.sampleRate
+            let capacity =
+                AVAudioFrameCount((Double(buffer.frameLength) * ratio).rounded(.up)) + 1024
+            guard let converted = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity)
+            else { return }
+
+            var conversionError: NSError?
+            var delivered = false
+            let status = converter.convert(to: converted, error: &conversionError) { _, outStatus in
+                if delivered {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                delivered = true
+                outStatus.pointee = .haveData
+                return buffer
+            }
+            guard status != .error, converted.frameLength > 0 else { return }
+            continuation.yield(AnalyzerInput(buffer: converted))
+        }
+
+        // MARK: - Results
+
+        private func startConsumingResults(from transcriber: SpeechTranscriber) {
+            resultsTask = Task { [weak self] in
+                do {
+                    for try await result in transcriber.results {
+                        self?.handle(result)
+                    }
+                    self?.record("log", TurnPayload(line: "the transcript stream ended"))
+                } catch {
+                    self?.record(
+                        "log",
+                        TurnPayload(
+                            error: "the transcript stream failed: "
+                                + DictationError.describe(error)))
+                }
+                self?.resultsGate.signal()
+            }
+        }
+
+        private func handle(_ result: SpeechTranscriber.Result) {
+            let text = String(result.text.characters).trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            eventLock.lock()
+            if result.isFinal {
+                if !text.isEmpty { finals.append(text) }
+                volatileTail = ""
+            } else {
+                volatileTail = text
+            }
+            eventLock.unlock()
+
+            // Shape and timing on the console, the words only in the file. The
+            // plist promises the user their speech is never uploaded and a
+            // sysdiagnose is an upload; the report goes nowhere but the app's
+            // own container and the Mac that fetches it, which is the road the
+            // echo legs' transcripts already travel.
+            NSLog("RP-TURN %@ %d chars", result.isFinal ? "final" : "volatile", text.count)
+            record(
+                "transcript",
+                TurnPayload(
+                    isFinal: result.isFinal,
+                    rangeStartMs: Self.ms(result.range.start),
+                    rangeEndMs: Self.ms(result.range.end),
+                    text: text))
+        }
+
+        /// The stream question 1 is about. A sequence that yields nothing and
+        /// then ends is the "this road is closed" answer, and it looks exactly
+        /// like a sequence that is still waiting — which is why the ending is
+        /// recorded separately from the count.
+        private func startConsumingDetector(from detector: SpeechDetector) {
+            detectorTask = Task { [weak self] in
+                do {
+                    for try await result in detector.results {
+                        self?.handleDetector(result)
+                    }
+                    self?.noteDetectorEnded(nil)
+                } catch {
+                    self?.noteDetectorEnded(DictationError.describe(error))
+                }
+            }
+        }
+
+        private func handleDetector(_ result: SpeechDetector.Result) {
+            eventLock.lock()
+            detectorEvents += 1
+            eventLock.unlock()
+            NSLog(
+                "RP-TURN detector speech=%d final=%d", result.speechDetected ? 1 : 0,
+                result.isFinal ? 1 : 0)
+            record(
+                "detector",
+                TurnPayload(
+                    speechDetected: result.speechDetected,
+                    isFinal: result.isFinal,
+                    rangeStartMs: Self.ms(result.range.start),
+                    rangeEndMs: Self.ms(result.range.end),
+                    finalizationMs: Self.ms(result.resultsFinalizationTime)))
+        }
+
+        private func noteDetectorEnded(_ failure: String?) {
+            eventLock.lock()
+            detectorStreamEnded = true
+            if detectorError == nil { detectorError = failure }
+            eventLock.unlock()
+            NSLog("RP-TURN detector stream ended err=%@", failure ?? "none")
+            record("log", TurnPayload(line: "the detector stream ended", error: failure))
+        }
+
+        // MARK: - What iOS takes back
+
+        /// Log-only. A pass that went quiet because the session was interrupted
+        /// and a pass that went quiet because the detector says nothing are the
+        /// same silence in the numbers and must not be the same finding.
+        private func observeSession() {
+            let center = NotificationCenter.default
+            let session = AVAudioSession.sharedInstance()
+            observers.append(
+                center.addObserver(
+                    forName: AVAudioSession.interruptionNotification, object: session, queue: .main
+                ) { [weak self] _ in
+                    self?.record("log", TurnPayload(error: "the audio session was interrupted"))
+                })
+            observers.append(
+                center.addObserver(
+                    forName: AVAudioSession.routeChangeNotification, object: session, queue: .main
+                ) { [weak self] _ in
+                    let route = AVAudioSession.sharedInstance().currentRoute
+                    let ins = route.inputs.map { $0.portType.rawValue }.joined(separator: ",")
+                    let outs = route.outputs.map { $0.portType.rawValue }.joined(separator: ",")
+                    self?.record("log", TurnPayload(line: "route in=[\(ins)] out=[\(outs)]"))
+                })
+        }
+
+        // MARK: - Bookkeeping
+
+        private func record(_ kind: String, _ payload: TurnPayload) {
+            let at = (CFAbsoluteTimeGetCurrent() - startedAt) * 1000
+            eventLock.lock()
+            events.append(TurnEvent(sinceStartMs: at, kind: kind, payload: payload))
+            eventLock.unlock()
+        }
+
+        /// Milliseconds, or nothing. An invalid or indefinite `CMTime` gives NaN
+        /// through `CMTimeGetSeconds`, and `JSONEncoder` refuses to write NaN —
+        /// one of them anywhere in the list would take the whole report down.
+        private static func ms(_ time: CMTime) -> Double? {
+            guard time.isValid, !time.isIndefinite else { return nil }
+            let seconds = CMTimeGetSeconds(time)
+            guard seconds.isFinite else { return nil }
+            return seconds * 1000
+        }
+
+    #endif
 }

@@ -329,6 +329,42 @@ class VoicePlugin: Plugin {
                     let positions = try SpeechProbe.interrupt(
                         args, afterMs: args.afterMs ?? 5, times: args.times ?? 50)
                     invoke.resolve(SpeechInterruptReport(positions: positions))
+                } else if let mode = args.mode, mode.hasPrefix("turn-") {
+                    // The turn probe (SpeechProbe.swift, "The turn probe"): four
+                    // steps of one pass, each its own command because the
+                    // stretches between them are a person speaking and a phone
+                    // playing, and only the harness knows when those begin and
+                    // end. `turn-start` returns as soon as the microphone is
+                    // open; the pass runs until `turn-stop`.
+                    //
+                    // On the serial chain like everything else here: a pass and
+                    // a hold cannot share a microphone, and the fixture playback
+                    // the stages ask for arrives on this same chain.
+                    #if DEBUG
+                        switch mode {
+                        case "turn-start":
+                            try await TurnProbe.shared.start(
+                                label: args.label, locale: args.locale,
+                                sensitivity: args.sensitivity ?? "medium",
+                                report: args.reportResults ?? true)
+                            invoke.resolve()
+                        case "turn-stage":
+                            TurnProbe.shared.stage(args.stage ?? args.label)
+                            invoke.resolve()
+                        case "turn-finalize":
+                            // Resolves with how long the call took. The words it
+                            // produced arrive on the results stream and are in
+                            // the report, not in this answer.
+                            let ms = await TurnProbe.shared.finalizeNow()
+                            invoke.resolve(TurnFinalizeReport(callMs: ms))
+                        case "turn-stop":
+                            invoke.resolve(await TurnProbe.shared.stop())
+                        default:
+                            invoke.reject("Unknown turn probe step \(mode).")
+                        }
+                    #else
+                        invoke.reject("\(mode) is a debug build's tool.")
+                    #endif
                 } else {
                     try SpeechProbe.start(args)
                     invoke.resolve()
