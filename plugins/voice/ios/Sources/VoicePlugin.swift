@@ -53,6 +53,13 @@ class EnqueueSpeechArgs: Decodable {
     let pcm: Data
 }
 
+/// Arguments of `finish_speech`. The turn and nothing else: the call says that
+/// turn has no more sentences, and carrying the number is what stops a call made
+/// about a turn the player has already left from ending the one after it.
+class FinishSpeechArgs: Decodable {
+    let utterance: UInt64
+}
+
 /// Arguments of `stop_speaking`. The reason is written into the measurement
 /// record and sent out with the `speaking:false` event.
 class StopSpeakingArgs: Decodable {
@@ -266,6 +273,29 @@ class VoicePlugin: Plugin {
             } catch {
                 invoke.reject(DictationError.describe(error))
             }
+        }
+    }
+
+    /// That turn has no more sentences coming.
+    ///
+    /// Called from Rust, like the enqueue above, and only when the turn's last
+    /// sentence never came back from the vendor: the flag that says a turn ended
+    /// rides on the audio, and a turn whose end was never synthesised has no
+    /// audio to put it on. Queues nothing and stops nothing — what is already
+    /// queued plays to the end, and the player falls silent on its own.
+    @objc(finish_speech:)
+    public func finishSpeech(_ invoke: Invoke) {
+        let args: FinishSpeechArgs
+        do {
+            args = try invoke.parseArgs(FinishSpeechArgs.self)
+        } catch {
+            invoke.reject("That turn did not parse: \(DictationError.describe(error))")
+            return
+        }
+
+        serial {
+            SpeechOut.shared.finish(utterance: args.utterance)
+            invoke.resolve()
         }
     }
 

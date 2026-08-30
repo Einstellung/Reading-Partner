@@ -200,8 +200,9 @@ pub(crate) async fn speak_close<R: Runtime>(app: AppHandle<R>) -> Result<()> {
     app.state::<SpeechSession>().close().await
 }
 
-/// Cut the turn off now. The answer is a sentinel on the path that matters —
-/// see the warning on `SpeechSession::stop`.
+/// Cut the turn off now. The answer names the turn it cut; the position in it
+/// is zeroes on the path that matters — see the warning on
+/// `SpeechSession::stop`.
 #[command]
 pub(crate) async fn speak_stop<R: Runtime>(app: AppHandle<R>) -> Result<SpeechStopped> {
     app.state::<SpeechSession>().stop().await

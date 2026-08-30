@@ -31,12 +31,18 @@
 import AVFoundation
 import Foundation
 
-/// What `enqueue_speech` answers with. Rust reads `dropped` to know the turn it
-/// belongs to has already been stopped, and the rest is measurement.
+/// What `enqueue_speech` answers with. Rust reads `dropped` and `busy` to know
+/// whether the turn is over or has not started yet, and the rest is measurement.
 struct SpeechAck: Encodable {
-    /// True when this sentence was thrown away rather than queued: its turn was
-    /// stopped between the vendor sending it and it arriving here.
+    /// True when this sentence was thrown away rather than queued: it is not the
+    /// turn being played.
     let dropped: Bool
+    /// Which way round that was, and only meaningful when `dropped`. True when
+    /// this sentence's turn is ahead of the one being played: the player is
+    /// finishing an earlier turn's tail, `queuedMs` is how much of it is left,
+    /// and the same sentence is taken once it runs out. False is the permanent
+    /// one — the turn is behind what is playing and will never be spoken.
+    let busy: Bool
     /// How much speech is queued ahead of the listener, this sentence included.
     /// Ahead of the listener and not the whole queue: it is the only number the
     /// relay's admission gate reads, and a running total would sit above the
@@ -208,14 +214,25 @@ final class SpeechOut {
                     "This voice speaks at \(Int(sampleRate)) Hz and the player is wired for "
                         + "\(Int(SpeechOut.sampleRate)) Hz.")
             }
-            // A sentence from a turn that has already been stopped. Answering
-            // rather than throwing: the vendor was mid-sentence when the user
-            // interrupted, and that is not an error on anybody's part.
-            if speaking && utterance != self.utterance {
-                return SpeechAck(dropped: true, queuedMs: 0, startMs: 0)
+            // A sentence that is not this player's turn. Answering rather than
+            // throwing: the vendor was mid-sentence when the user interrupted,
+            // and that is not an error on anybody's part.
+            if speaking && utterance > self.utterance {
+                // Ahead of what is playing: a turn opened over the tail of the
+                // one before it. Nothing is wrong with the sentence and it is
+                // not refused for good — the tail is what it is waiting on, so
+                // the answer says how much of that is left.
+                return SpeechAck(
+                    dropped: true, busy: true,
+                    queuedMs: Double(max(0, clock.queuedFrames - playedFrameLocked()))
+                        / SpeechOut.sampleRate * 1000,
+                    startMs: 0)
+            }
+            if speaking && utterance < self.utterance {
+                return SpeechAck(dropped: true, busy: false, queuedMs: 0, startMs: 0)
             }
             if !speaking && utterance < self.utterance {
-                return SpeechAck(dropped: true, queuedMs: 0, startMs: 0)
+                return SpeechAck(dropped: true, busy: false, queuedMs: 0, startMs: 0)
             }
 
             let node = try attachedPlayer()
@@ -304,9 +321,30 @@ final class SpeechOut {
 
             return SpeechAck(
                 dropped: false,
+                busy: false,
                 queuedMs: Double(max(0, clock.queuedFrames - playedFrameLocked())) / sampleRate
                     * 1000,
                 startMs: Double(startFrame) / sampleRate * 1000)
+        }
+    }
+
+    /// This turn has no more sentences.
+    ///
+    /// `last` on the audio is what normally says so, and it is the one to
+    /// prefer: it arrives with the sentence rather than a round trip behind it.
+    /// A turn whose final sentence never came back from the vendor has no audio
+    /// left to carry the flag, and without this the queue running out would read
+    /// as a turn that starved — `underrun` rather than `done`, on the one event
+    /// anything waiting for a turn to be over can wait on.
+    ///
+    /// Silent about a turn that is not the one playing: a call about a turn the
+    /// player has already left must not end the turn that replaced it. Silent
+    /// too when the queue has already run out and this arrived behind it, which
+    /// is the case `last` on the audio is there to win.
+    func finish(utterance: UInt64) {
+        queue.sync {
+            guard speaking, utterance == self.utterance else { return }
+            sawLast = true
         }
     }
 

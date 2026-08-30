@@ -147,6 +147,14 @@ struct EnqueueSpeechArgs {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+struct FinishSpeechArgs {
+    /// The turn that is over. Carried so that a call made about a turn the
+    /// player has already left cannot end the one that replaced it.
+    utterance: u64,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct StopSpeakingArgs {
     reason: String,
 }
@@ -176,6 +184,16 @@ impl<R: Runtime> Voice<R> {
                     pcm: base64::engine::general_purpose::STANDARD.encode(pcm),
                 },
             )
+            .await
+            .map_err(Into::into)
+    }
+
+    /// This turn has no more sentences. Queues nothing and stops nothing: it
+    /// is `last` for a turn whose final sentence never came back, so that a
+    /// turn that ended is not heard as a turn that starved.
+    pub async fn finish_speech(&self, utterance: u64) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("finish_speech", FinishSpeechArgs { utterance })
             .await
             .map_err(Into::into)
     }

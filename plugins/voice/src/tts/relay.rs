@@ -38,6 +38,12 @@ pub struct RelayConfig {
     /// Silence put back between two sentences, in place of what the trim took
     /// off their ends.
     pub gap_ms: f64,
+    /// How long past the tail the player says it is still finishing to go on
+    /// offering it the first sentence of a new turn. The wait itself is bounded
+    /// by that tail and not by this: what this covers is the tail being measured
+    /// before the answer travelled back, and the player taking a moment more to
+    /// notice it has run out.
+    pub busy_grace_ms: f64,
     pub voice: String,
     pub trim: TrimConfig,
 }
@@ -48,6 +54,7 @@ impl Default for RelayConfig {
             prefetch_ms: 6000.0,
             concurrency: 2,
             gap_ms: 160.0,
+            busy_grace_ms: 1000.0,
             voice: String::new(),
             trim: TrimConfig::default(),
         }
@@ -83,6 +90,12 @@ pub enum RelayEvent {
     },
     /// The sentence never happened. Playback carries on with the next one.
     Failed { id: u64, at_ms: f64, error: String },
+    /// The player would not take the sentence yet: it is still finishing the
+    /// turn before this one, with `tail_ms` of it left. Nothing is lost — the
+    /// same sentence is offered again — but the turn starts late, and the
+    /// reason it is late is that whatever opened this turn did not silence the
+    /// one before it.
+    Waiting { id: u64, at_ms: f64, tail_ms: f64 },
     /// The player refused the sentence because this turn is no longer the one
     /// it is speaking. The turn is over: what is still in flight is cancelled
     /// and nothing behind this sentence is synthesised or sent.
@@ -101,7 +114,7 @@ pub enum RelayEvent {
 enum Command {
     Push(String),
     Close,
-    Stop(oneshot::Sender<Heard>),
+    Stop(oneshot::Sender<Result<Heard, TtsError>>),
 }
 
 /// Drives synthesis for one turn: sentences in, audio out, in order.
@@ -142,12 +155,19 @@ impl SpeechRelay {
     /// `Cancelled` means there was no loop left to stop — the turn was closed
     /// and every sentence of it has already been handed over. The player is
     /// then the caller's to stop; the relay no longer holds anything.
+    ///
+    /// Any other error is the player's own: the relay reached it and it would
+    /// not stop. That is the failure the caller has to see rather than a
+    /// position made up on its behalf — the audio is still playing.
     pub async fn stop(&self) -> Result<Heard, TtsError> {
         let (tx, rx) = oneshot::channel();
         if self.commands.send(Command::Stop(tx)).is_err() {
             return Err(TtsError::Cancelled);
         }
-        rx.await.map_err(|_| TtsError::Cancelled)
+        match rx.await {
+            Ok(answer) => answer,
+            Err(_) => Err(TtsError::Cancelled),
+        }
     }
 }
 
@@ -182,6 +202,23 @@ async fn run(
     // False once the handle is gone. The turn still finishes what it holds:
     // dropping a relay is the caller letting go, not the caller cancelling.
     let mut listening = true;
+    // The sentence the player would not take yet because it is still finishing
+    // an earlier turn, held for the next attempt. It sits here rather than back
+    // in `ready` because it is already past `next_to_queue`: the id left the
+    // queue when it was first offered, and everything behind it waits for it.
+    let mut waiting: Option<(u64, Vec<u8>, usize)> = None;
+    // When to stop offering it. Set from the tail the player reported, so the
+    // wait is bounded by what the player says it is still holding rather than by
+    // a number chosen here.
+    let mut wait_until: Option<Instant> = None;
+    // True once the player has taken a sentence of this turn. From then on it is
+    // this turn the player is speaking, so nothing later can come back `Busy`,
+    // and nothing is kept for a second attempt.
+    let mut accepted = false;
+    // True once a sentence went over with `last` on it. The flag rides on the
+    // audio, so a turn whose final sentences all failed never sends one, and the
+    // player has to be told some other way before the loop ends.
+    let mut told_last = false;
 
     let mut tick = tokio::time::interval(std::time::Duration::from_millis(100));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -189,13 +226,22 @@ async fn run(
     loop {
         // Anything finished and next in line goes to the player before more work
         // is admitted: the margin the gate reads has to be up to date.
-        while let Some((pcm, chars)) = ready.remove(&next_to_queue) {
-            let id = next_to_queue;
-            next_to_queue += 1;
+        while let Some((id, pcm, chars)) = waiting.take().or_else(|| {
+            ready
+                .remove(&next_to_queue)
+                .map(|(pcm, chars)| (next_to_queue, pcm, chars))
+        }) {
+            if id == next_to_queue {
+                next_to_queue += 1;
+            }
             // Nothing else can produce a sentence and no more are coming, so
             // this is the turn's last. The player needs it to tell a turn that
             // ended from a turn that starved.
             let last = closed && pending.is_empty() && inflight.is_empty() && ready.is_empty();
+            // Only a sentence offered before the player has taken any of this
+            // turn's can come back `Busy`, so that is exactly how long a copy is
+            // worth keeping. Past that point the audio is handed over once.
+            let second_attempt = (!accepted).then(|| pcm.clone());
             let state = player
                 .enqueue(SentenceAudio {
                     id,
@@ -207,6 +253,9 @@ async fn run(
                 .await;
             match state {
                 Ok(state) => {
+                    accepted = true;
+                    told_last |= last;
+                    wait_until = None;
                     let _ = events.send(RelayEvent::Queued {
                         id,
                         at_ms: elapsed_ms(started),
@@ -215,10 +264,10 @@ async fn run(
                 }
                 // Not this sentence being refused: the player carries one
                 // utterance for its whole life and answers `Cancelled` only
-                // when that turn is no longer the one being spoken
-                // (speaker.rs), so everything behind this sentence would be
-                // refused too. Going on would spend the vendor's quota on
-                // audio nobody can hear.
+                // when that turn is behind the one being spoken (speaker.rs),
+                // so everything behind this sentence would be refused too.
+                // Going on would spend the vendor's quota on audio nobody can
+                // hear.
                 Err(TtsError::Cancelled) => {
                     inflight.shutdown().await;
                     let _ = events.send(RelayEvent::Abandoned {
@@ -226,6 +275,48 @@ async fn run(
                         at_ms: elapsed_ms(started),
                     });
                     return;
+                }
+                // The other way round: this turn is ahead of the one being
+                // spoken, and the player is only finishing that one's tail. The
+                // sentence is offered again on the next tick, for as long as the
+                // tail the player reported says it needs.
+                Err(TtsError::Busy { tail_ms }) => {
+                    let now = Instant::now();
+                    let spent = wait_until.is_some_and(|until| now >= until);
+                    match second_attempt {
+                        Some(pcm) if !spent => {
+                            // A tail that is not a length of time is a tail of
+                            // none: the deadline lands now and the next refusal
+                            // ends the turn.
+                            let horizon = now
+                                + std::time::Duration::try_from_secs_f64(
+                                    (tail_ms.max(0.0) + config.busy_grace_ms.max(0.0)) / 1000.0,
+                                )
+                                .unwrap_or_default();
+                            wait_until =
+                                Some(wait_until.map_or(horizon, |until| until.max(horizon)));
+                            let _ = events.send(RelayEvent::Waiting {
+                                id,
+                                at_ms: elapsed_ms(started),
+                                tail_ms,
+                            });
+                            waiting = Some((id, pcm, chars));
+                            break;
+                        }
+                        // Either the tail has had as long as it said it needed
+                        // and something other than playback is keeping the
+                        // player, or the player took a sentence of this turn and
+                        // is somehow busy with an earlier one anyway. Both mean
+                        // this turn is not going to be spoken.
+                        _ => {
+                            inflight.shutdown().await;
+                            let _ = events.send(RelayEvent::Abandoned {
+                                id,
+                                at_ms: elapsed_ms(started),
+                            });
+                            return;
+                        }
+                    }
                 }
                 Err(e) => {
                     let _ = events.send(RelayEvent::Failed {
@@ -301,7 +392,21 @@ async fn run(
         // here rather than idling on the tick is what makes a closed turn cost
         // nothing between turns; the caller is left holding a handle whose
         // `push` answers false and whose `stop` answers `Cancelled`.
-        if closed && pending.is_empty() && inflight.is_empty() && ready.is_empty() {
+        if closed
+            && pending.is_empty()
+            && inflight.is_empty()
+            && ready.is_empty()
+            && waiting.is_none()
+        {
+            // The turn ended on a sentence the player never got: the last one
+            // failed, or was refused. Nothing carried the flag, so the player is
+            // told separately — otherwise its queue running out reads as a turn
+            // that starved, and a turn that ended cannot be told from one that
+            // did (tts/player.rs). Nothing was accepted at all means the player
+            // never started this turn and has nothing to end.
+            if accepted && !told_last {
+                let _ = player.finish().await;
+            }
             let _ = events.send(RelayEvent::Drained {
                 at_ms: elapsed_ms(started),
             });
@@ -317,12 +422,10 @@ async fn run(
                 Some(Command::Close) => closed = true,
                 Some(Command::Stop(reply)) => {
                     inflight.shutdown().await;
-                    let heard = player.stop().await.unwrap_or(Heard {
-                        sentence: next_to_queue.saturating_sub(1),
-                        position_ms: 0.0,
-                        duration_ms: 0.0,
-                    });
-                    let _ = reply.send(heard);
+                    // Whatever the player says, including that it would not
+                    // stop: the caller falls back to stopping it itself on an
+                    // error, and cannot if this answers with a position.
+                    let _ = reply.send(player.stop().await);
                     return;
                 }
                 // The handle was dropped. Finishing is the only safe reading:
@@ -423,8 +526,12 @@ mod tests {
     use std::sync::Mutex;
     use std::time::Duration;
 
-    /// A vendor that always answers, with a fixed length of loud tone so that
-    /// the trim has something to keep.
+    /// A sentence this vendor refuses. Never retried (error.rs), so it is one
+    /// sentence lost out of the turn.
+    const REFUSED: &str = "\u{2717}";
+
+    /// A vendor that answers everything but `REFUSED`, with a fixed length of
+    /// loud tone so that the trim has something to keep.
     struct Tone {
         ms: f64,
         /// Sentences it was actually asked for. Read by the test that asserts
@@ -457,10 +564,16 @@ mod tests {
         }
         async fn synthesize(
             &self,
-            _request: &SpeechRequest,
+            request: &SpeechRequest,
             out: mpsc::Sender<Vec<u8>>,
         ) -> Result<(), TtsError> {
             self.started.fetch_add(1, Ordering::SeqCst);
+            if request.text == REFUSED {
+                return Err(TtsError::Moderated {
+                    code: None,
+                    message: "not this one".to_string(),
+                });
+            }
             let format = AudioFormat::PCM16_24K_MONO;
             let samples = format.bytes_for_ms(self.ms) / 2;
             let pcm: Vec<u8> = (0..samples)
@@ -478,13 +591,43 @@ mod tests {
     struct Recorder {
         queued: Mutex<Vec<(u64, bool)>>,
         /// From this sentence on, the turn is refused the way a phone refuses
-        /// one whose utterance it is no longer playing.
+        /// one whose utterance is behind the turn it is speaking.
         refuse_from: Option<u64>,
+        /// Offers to bounce before taking anything, the way a phone still
+        /// finishing the turn before this one does. `usize::MAX` is a tail that
+        /// never ends.
+        busy_offers: AtomicUsize,
+        /// How many were bounced that way.
+        bounced: AtomicUsize,
+        /// Times the turn was said to be over with no audio to carry it.
+        finished: AtomicUsize,
+        /// A player that will not shut up.
+        refuse_stop: bool,
+    }
+
+    impl Recorder {
+        fn bounced(&self) -> usize {
+            self.bounced.load(Ordering::SeqCst)
+        }
+
+        fn finished(&self) -> usize {
+            self.finished.load(Ordering::SeqCst)
+        }
     }
 
     #[async_trait::async_trait]
     impl Player for Recorder {
         async fn enqueue(&self, sentence: SentenceAudio) -> Result<PlaybackState, TtsError> {
+            // Before the record: an offer bounced for being early was never
+            // taken, and it is offered again.
+            if self
+                .busy_offers
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| left.checked_sub(1))
+                .is_ok()
+            {
+                self.bounced.fetch_add(1, Ordering::SeqCst);
+                return Err(TtsError::Busy { tail_ms: 30.0 });
+            }
             self.queued
                 .lock()
                 .unwrap()
@@ -506,11 +649,19 @@ mod tests {
         }
 
         async fn stop(&self) -> Result<Heard, TtsError> {
+            if self.refuse_stop {
+                return Err(TtsError::Player("the node would not stop".to_string()));
+            }
             Ok(Heard {
                 sentence: 0,
                 position_ms: 0.0,
                 duration_ms: 0.0,
             })
+        }
+
+        async fn finish(&self) -> Result<(), TtsError> {
+            self.finished.fetch_add(1, Ordering::SeqCst);
+            Ok(())
         }
     }
 
@@ -537,6 +688,8 @@ mod tests {
 
         let queued = player.queued.lock().unwrap().clone();
         assert_eq!(queued, vec![(0, false), (1, false), (2, true)]);
+        // The flag rode on the audio, so nothing was said separately.
+        assert_eq!(player.finished(), 0);
     }
 
     /// Every event of a turn, up to and including the loop's end. The channel
@@ -630,12 +783,163 @@ mod tests {
         );
         // Nothing behind the refused sentence was handed over.
         assert_eq!(*player.queued.lock().unwrap(), vec![(0, false), (1, false)]);
-        // And nothing behind it was paid for. The fourth sentence was never
-        // admitted, and whatever was in flight went with the turn.
+        // And the turn stopped spending. What was already admitted when the
+        // refusal came back was paid for whatever happens next — a request in
+        // flight has left — so the guarantee is about admission: the sentences
+        // still queued behind the gate never went out, and none goes out after.
         let paid = started.load(Ordering::SeqCst);
         assert!(paid < 4, "{paid} of 4 sentences reached the vendor");
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(started.load(Ordering::SeqCst), paid);
+    }
+
+    /// A player still finishing the turn before this one is not refusing this
+    /// one. Every sentence still gets there, in order, and the last one still
+    /// says it is the last — the turn only starts late.
+    #[tokio::test]
+    async fn a_player_finishing_an_earlier_turn_is_waited_out() {
+        let player = Arc::new(Recorder {
+            busy_offers: AtomicUsize::new(2),
+            ..Default::default()
+        });
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone::new(200.0)),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push("一");
+        relay.push("二");
+        relay.close();
+
+        let seen = timeline(&mut incoming).await;
+        assert!(
+            matches!(seen.last(), Some(RelayEvent::Drained { .. })),
+            "{seen:?}"
+        );
+        // Both offers were of the first sentence, and it is the first sentence
+        // that was queued: a turn that waits does not skip ahead.
+        assert_eq!(player.bounced(), 2);
+        assert!(
+            seen.iter()
+                .any(|e| matches!(e, RelayEvent::Waiting { id: 0, .. })),
+            "{seen:?}"
+        );
+        assert_eq!(*player.queued.lock().unwrap(), vec![(0, false), (1, true)]);
+    }
+
+    /// The wait is bounded. A player that says it is busy for longer than the
+    /// tail it reported is not finishing anything, and the turn ends rather
+    /// than the loop going round for ever.
+    #[tokio::test]
+    async fn a_player_that_is_busy_for_ever_ends_the_turn() {
+        let player = Arc::new(Recorder {
+            busy_offers: AtomicUsize::new(usize::MAX),
+            ..Default::default()
+        });
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone::new(200.0)),
+            player.clone(),
+            RelayConfig {
+                busy_grace_ms: 30.0,
+                ..RelayConfig::default()
+            },
+            events,
+        );
+        relay.push("一");
+        relay.push("二");
+        relay.close();
+
+        let seen = timeline(&mut incoming).await;
+        assert!(
+            matches!(seen.last(), Some(RelayEvent::Abandoned { id: 0, .. })),
+            "{seen:?}"
+        );
+        assert!(player.queued.lock().unwrap().is_empty());
+        // It was offered more than once: the give-up is a deadline passing, not
+        // the first refusal.
+        assert!(player.bounced() > 1, "{} offers", player.bounced());
+    }
+
+    /// The turn's last sentence never came back, so the flag that says a turn
+    /// ended had nothing to ride on. The player is told anyway: without it, a
+    /// turn that ended cannot be told from one that ran dry (tts/player.rs).
+    #[tokio::test]
+    async fn a_turn_whose_last_sentence_fails_still_says_it_is_over() {
+        let player = Arc::new(Recorder::default());
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone::new(200.0)),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push("一");
+        relay.push(REFUSED);
+        relay.close();
+
+        let seen = timeline(&mut incoming).await;
+        assert!(
+            matches!(seen.last(), Some(RelayEvent::Drained { .. })),
+            "{seen:?}"
+        );
+        assert!(
+            seen.iter()
+                .any(|e| matches!(e, RelayEvent::Failed { id: 1, .. })),
+            "{seen:?}"
+        );
+        // Only the first sentence was ever queued, and it went over before the
+        // second failed, so nothing carried the flag.
+        assert_eq!(*player.queued.lock().unwrap(), vec![(0, false)]);
+        assert_eq!(player.finished(), 1);
+    }
+
+    /// A turn that was never heard has nothing to end. The player never started
+    /// on it, and telling it the turn is over would be about somebody else's.
+    #[tokio::test]
+    async fn a_turn_that_reached_the_player_with_nothing_says_nothing() {
+        let player = Arc::new(Recorder::default());
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone::new(200.0)),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push(REFUSED);
+        relay.close();
+
+        let seen = timeline(&mut incoming).await;
+        assert!(
+            matches!(seen.last(), Some(RelayEvent::Drained { .. })),
+            "{seen:?}"
+        );
+        assert!(player.queued.lock().unwrap().is_empty());
+        assert_eq!(player.finished(), 0);
+    }
+
+    /// A player that will not stop is the caller's problem, and the caller can
+    /// only have it if the relay hands it over: a position invented here would
+    /// read as a turn that had been silenced.
+    #[tokio::test]
+    async fn a_player_that_will_not_stop_is_reported_rather_than_covered_for() {
+        let player = Arc::new(Recorder {
+            refuse_stop: true,
+            ..Default::default()
+        });
+        let (events, _incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone::new(200.0)),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push("一");
+
+        let stopped = relay.stop().await;
+        assert!(matches!(stopped, Err(TtsError::Player(_))), "{stopped:?}");
     }
 
     #[tokio::test]

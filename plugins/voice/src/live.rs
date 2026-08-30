@@ -178,6 +178,9 @@ fn record(event: &RelayEvent) -> Value {
         RelayEvent::Failed { id, at_ms, error } => {
             json!({ "event": "failed", "id": id, "atMs": at_ms, "error": error })
         }
+        RelayEvent::Waiting { id, at_ms, tail_ms } => {
+            json!({ "event": "waiting", "id": id, "atMs": at_ms, "tailMs": tail_ms })
+        }
         RelayEvent::Abandoned { id, at_ms } => {
             json!({ "event": "abandoned", "id": id, "atMs": at_ms })
         }
