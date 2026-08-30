@@ -83,7 +83,18 @@ pub enum RelayEvent {
     },
     /// The sentence never happened. Playback carries on with the next one.
     Failed { id: u64, at_ms: f64, error: String },
-    /// Every sentence that was pushed has been queued.
+    /// The player refused the sentence because this turn is no longer the one
+    /// it is speaking. The turn is over: what is still in flight is cancelled
+    /// and nothing behind this sentence is synthesised or sent.
+    Abandoned { id: u64, at_ms: f64 },
+    /// Every sentence that was pushed has been queued with the player, and the
+    /// loop has ended. Nothing follows it.
+    ///
+    /// Not the voice falling silent: what was queued at that moment is still
+    /// playing. Nothing in Rust knows when the last buffer runs out — the
+    /// player node does, and on the phone Swift is what says so, in the
+    /// `speech` event's `speaking: 0`. Do not wait on this to decide a turn has
+    /// been heard.
     Drained { at_ms: f64 },
 }
 
@@ -117,13 +128,20 @@ impl SpeechRelay {
         self.commands.send(Command::Push(text.into())).is_ok()
     }
 
-    /// No more sentences are coming in this turn.
+    /// No more sentences are coming in this turn. What was already pushed is
+    /// still synthesised and still spoken; the loop ends by itself once the
+    /// last of it has been handed to the player, and `Drained` is the last
+    /// thing it sends. Dropping this handle says the same thing.
     pub fn close(&self) -> bool {
         self.commands.send(Command::Close).is_ok()
     }
 
-    /// Barge-in. Cancels what is in flight, drops what is queued, and answers
-    /// with where the user was interrupted.
+    /// Barge-in. Cancels what is in flight, drops what is queued, stops the
+    /// player and answers with where the user was interrupted.
+    ///
+    /// `Cancelled` means there was no loop left to stop — the turn was closed
+    /// and every sentence of it has already been handed over. The player is
+    /// then the caller's to stop; the relay no longer holds anything.
     pub async fn stop(&self) -> Result<Heard, TtsError> {
         let (tx, rx) = oneshot::channel();
         if self.commands.send(Command::Stop(tx)).is_err() {
@@ -161,7 +179,9 @@ async fn run(
     let mut next_id: u64 = 0;
     let mut next_to_queue: u64 = 0;
     let mut closed = false;
-    let mut drained = false;
+    // False once the handle is gone. The turn still finishes what it holds:
+    // dropping a relay is the caller letting go, not the caller cancelling.
+    let mut listening = true;
 
     let mut tick = tokio::time::interval(std::time::Duration::from_millis(100));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -192,6 +212,20 @@ async fn run(
                         at_ms: elapsed_ms(started),
                         queued_ahead_ms: state.queued_ahead_ms,
                     });
+                }
+                // Not this sentence being refused: the player carries one
+                // utterance for its whole life and answers `Cancelled` only
+                // when that turn is no longer the one being spoken
+                // (speaker.rs), so everything behind this sentence would be
+                // refused too. Going on would spend the vendor's quota on
+                // audio nobody can hear.
+                Err(TtsError::Cancelled) => {
+                    inflight.shutdown().await;
+                    let _ = events.send(RelayEvent::Abandoned {
+                        id,
+                        at_ms: elapsed_ms(started),
+                    });
+                    return;
                 }
                 Err(e) => {
                     let _ = events.send(RelayEvent::Failed {
@@ -261,19 +295,24 @@ async fn run(
             });
         }
 
-        if closed && pending.is_empty() && inflight.is_empty() && ready.is_empty() && !drained {
-            drained = true;
+        // The turn is through. Nothing can produce another sentence, and the
+        // last one went to the player in the drain above — the three emptied
+        // together is exactly what says every id was handed over. Returning
+        // here rather than idling on the tick is what makes a closed turn cost
+        // nothing between turns; the caller is left holding a handle whose
+        // `push` answers false and whose `stop` answers `Cancelled`.
+        if closed && pending.is_empty() && inflight.is_empty() && ready.is_empty() {
             let _ = events.send(RelayEvent::Drained {
                 at_ms: elapsed_ms(started),
             });
+            return;
         }
 
         tokio::select! {
-            command = commands.recv() => match command {
+            command = commands.recv(), if listening => match command {
                 Some(Command::Push(text)) => {
                     pending.push_back(Pending { id: next_id, text });
                     next_id += 1;
-                    drained = false;
                 }
                 Some(Command::Close) => closed = true,
                 Some(Command::Stop(reply)) => {
@@ -286,7 +325,13 @@ async fn run(
                     let _ = reply.send(heard);
                     return;
                 }
-                None => return,
+                // The handle was dropped. Finishing is the only safe reading:
+                // returning here would bin what is queued and in flight, and
+                // the player would never be told which sentence was the last.
+                None => {
+                    closed = true;
+                    listening = false;
+                }
             },
             Some(done) = inflight.join_next(), if !inflight.is_empty() => {
                 let Ok(done) = done else { continue };
@@ -373,13 +418,27 @@ fn elapsed_ms(from: Instant) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tts::PlaybackState;
+    use crate::tts::{PlaybackState, VirtualPlayer};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::time::Duration;
 
     /// A vendor that always answers, with a fixed length of loud tone so that
     /// the trim has something to keep.
     struct Tone {
         ms: f64,
+        /// Sentences it was actually asked for. Read by the test that asserts
+        /// an abandoned turn stops spending.
+        started: Arc<AtomicUsize>,
+    }
+
+    impl Tone {
+        fn new(ms: f64) -> Self {
+            Self {
+                ms,
+                started: Arc::new(AtomicUsize::new(0)),
+            }
+        }
     }
 
     #[async_trait::async_trait]
@@ -401,6 +460,7 @@ mod tests {
             _request: &SpeechRequest,
             out: mpsc::Sender<Vec<u8>>,
         ) -> Result<(), TtsError> {
+            self.started.fetch_add(1, Ordering::SeqCst);
             let format = AudioFormat::PCM16_24K_MONO;
             let samples = format.bytes_for_ms(self.ms) / 2;
             let pcm: Vec<u8> = (0..samples)
@@ -417,6 +477,9 @@ mod tests {
     #[derive(Default)]
     struct Recorder {
         queued: Mutex<Vec<(u64, bool)>>,
+        /// From this sentence on, the turn is refused the way a phone refuses
+        /// one whose utterance it is no longer playing.
+        refuse_from: Option<u64>,
     }
 
     #[async_trait::async_trait]
@@ -426,6 +489,9 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push((sentence.id, sentence.last));
+            if self.refuse_from.is_some_and(|from| sentence.id >= from) {
+                return Err(TtsError::Cancelled);
+            }
             Ok(PlaybackState {
                 queued_ahead_ms: 0.0,
                 playing: true,
@@ -453,7 +519,7 @@ mod tests {
         let player = Arc::new(Recorder::default());
         let (events, mut incoming) = mpsc::unbounded_channel();
         let relay = SpeechRelay::start(
-            Arc::new(Tone { ms: 200.0 }),
+            Arc::new(Tone::new(200.0)),
             player.clone(),
             RelayConfig::default(),
             events,
@@ -471,5 +537,128 @@ mod tests {
 
         let queued = player.queued.lock().unwrap().clone();
         assert_eq!(queued, vec![(0, false), (1, false), (2, true)]);
+    }
+
+    /// Every event of a turn, up to and including the loop's end. The channel
+    /// runs dry only when the loop drops the sender it holds, so this returning
+    /// is the loop having ended rather than a guess that it has.
+    /// The bound turns a loop that went back to idling — which is the thing
+    /// these tests are here to catch — into a failure rather than a hang.
+    async fn timeline(incoming: &mut mpsc::UnboundedReceiver<RelayEvent>) -> Vec<RelayEvent> {
+        let mut seen = Vec::new();
+        let drained = tokio::time::timeout(Duration::from_secs(5), async {
+            while let Some(event) = incoming.recv().await {
+                seen.push(event);
+            }
+        })
+        .await;
+        assert!(drained.is_ok(), "the loop never ended: {seen:?}");
+        seen
+    }
+
+    #[tokio::test]
+    async fn a_closed_turn_ends_its_own_loop_once_the_last_sentence_is_queued() {
+        let player = Arc::new(Recorder::default());
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone::new(200.0)),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push("一");
+        relay.push("二");
+        relay.close();
+
+        let seen = timeline(&mut incoming).await;
+        assert!(
+            matches!(seen.last(), Some(RelayEvent::Drained { .. })),
+            "{seen:?}"
+        );
+        assert_eq!(*player.queued.lock().unwrap(), vec![(0, false), (1, true)]);
+        // Nothing is left ticking behind it, and the handle says so.
+        assert!(!relay.push("三"));
+    }
+
+    #[tokio::test]
+    async fn dropping_the_handle_finishes_the_turn_instead_of_binning_it() {
+        let player = Arc::new(Recorder::default());
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone::new(200.0)),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push("一");
+        relay.push("二");
+        relay.push("三");
+        drop(relay);
+
+        let seen = timeline(&mut incoming).await;
+        assert!(
+            matches!(seen.last(), Some(RelayEvent::Drained { .. })),
+            "{seen:?}"
+        );
+        // All three, and the last one told it was the last: a player that is
+        // never told cannot tell a turn that ended from a turn that starved.
+        assert_eq!(
+            *player.queued.lock().unwrap(),
+            vec![(0, false), (1, false), (2, true)]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_player_that_refuses_the_turn_ends_it_rather_than_the_sentence() {
+        let player = Arc::new(Recorder {
+            refuse_from: Some(1),
+            ..Default::default()
+        });
+        let tone = Arc::new(Tone::new(200.0));
+        let started = tone.started.clone();
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(tone, player.clone(), RelayConfig::default(), events);
+        for text in ["一", "二", "三", "四"] {
+            relay.push(text);
+        }
+        relay.close();
+
+        let seen = timeline(&mut incoming).await;
+        assert!(
+            matches!(seen.last(), Some(RelayEvent::Abandoned { id: 1, .. })),
+            "{seen:?}"
+        );
+        // Nothing behind the refused sentence was handed over.
+        assert_eq!(*player.queued.lock().unwrap(), vec![(0, false), (1, false)]);
+        // And nothing behind it was paid for. The fourth sentence was never
+        // admitted, and whatever was in flight went with the turn.
+        let paid = started.load(Ordering::SeqCst);
+        assert!(paid < 4, "{paid} of 4 sentences reached the vendor");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(started.load(Ordering::SeqCst), paid);
+    }
+
+    #[tokio::test]
+    async fn drained_is_every_sentence_queued_and_not_the_voice_falling_silent() {
+        let player = Arc::new(VirtualPlayer::new());
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let relay = SpeechRelay::start(
+            Arc::new(Tone::new(2000.0)),
+            player.clone(),
+            RelayConfig::default(),
+            events,
+        );
+        relay.push("一");
+        relay.close();
+
+        let seen = timeline(&mut incoming).await;
+        assert!(
+            matches!(seen.last(), Some(RelayEvent::Drained { .. })),
+            "{seen:?}"
+        );
+        // Two seconds of audio went to the player a moment ago and is still
+        // playing. Whoever wants the end of it has to ask the player.
+        let left = player.state().await.unwrap().queued_ahead_ms;
+        assert!(left > 1500.0, "{left} ms of audio left");
     }
 }

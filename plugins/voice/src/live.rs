@@ -109,9 +109,13 @@ pub async fn run<R: Runtime>(app: AppHandle<R>, args: Value) -> Result<Value> {
             RelayEvent::Failed { .. } => failed += 1,
             _ => {}
         }
-        let drained = matches!(event, RelayEvent::Drained { .. });
+        // Either way the relay's loop has ended and nothing else is coming.
+        let over = matches!(
+            event,
+            RelayEvent::Drained { .. } | RelayEvent::Abandoned { .. }
+        );
         timeline.push(record(&event));
-        if drained {
+        if over {
             break;
         }
     }
@@ -173,6 +177,9 @@ fn record(event: &RelayEvent) -> Value {
         }),
         RelayEvent::Failed { id, at_ms, error } => {
             json!({ "event": "failed", "id": id, "atMs": at_ms, "error": error })
+        }
+        RelayEvent::Abandoned { id, at_ms } => {
+            json!({ "event": "abandoned", "id": id, "atMs": at_ms })
         }
         RelayEvent::Drained { at_ms } => json!({ "event": "drained", "atMs": at_ms }),
     }

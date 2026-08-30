@@ -61,6 +61,12 @@ pub struct Heard {
 #[async_trait]
 pub trait Player: Send + Sync + 'static {
     /// Queue one sentence. Returns when it is queued, never when it is played.
+    ///
+    /// `TtsError::Cancelled` is about the turn and not the sentence: it says
+    /// this player's turn is no longer the one being spoken, so everything
+    /// behind this sentence would be refused too, and the relay winds the turn
+    /// up on it. Every other error is one sentence lost, with playback carrying
+    /// on into the next.
     async fn enqueue(&self, sentence: SentenceAudio) -> Result<PlaybackState, TtsError>;
 
     /// The same answer without adding anything.
