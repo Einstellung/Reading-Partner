@@ -85,6 +85,12 @@ if (import.meta.env.VITE_SMOKE === "1") {
   // SpeechDetector reports anything, what a forced finalize costs, and what
   // this build's tap and this placement's levels look like.
   void import("./smoke/turn-probe").then(({ runTurnProbe }) => runTurnProbe());
+} else if (import.meta.env.VITE_SMOKE === "turn-replay") {
+  // The other half of the turn detector: the same recorded levels through the
+  // Swift transliteration on the phone and through the TypeScript original
+  // here, compared position by position. No microphone, no player and nobody in
+  // the room — it is arithmetic on both sides.
+  void import("./smoke/turn-replay").then(({ runTurnReplay }) => runTurnReplay());
 } else if (import.meta.env.VITE_SMOKE === "speech-bench") {
   // The half of it that needs ears: whether twelve scheduled buffers sound like
   // one stretch of speech.

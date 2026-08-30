@@ -340,6 +340,10 @@ class VoicePlugin: Plugin {
                     // On the serial chain like everything else here: a pass and
                     // a hold cannot share a microphone, and the fixture playback
                     // the stages ask for arrives on this same chain.
+                    //
+                    // `turn-replay` is not one of the four. It opens nothing and
+                    // measures nothing — recorded levels through the ported turn
+                    // detector, answered from arithmetic.
                     #if DEBUG
                         switch mode {
                         case "turn-start":
@@ -359,6 +363,16 @@ class VoicePlugin: Plugin {
                             invoke.resolve(TurnFinalizeReport(callMs: ms))
                         case "turn-stop":
                             invoke.resolve(await TurnProbe.shared.stop())
+                        case "turn-replay":
+                            // Not a pass and not a measurement: recorded levels
+                            // through the ported turn detector and back, which
+                            // is how src/smoke/turn-replay.ts checks
+                            // VoiceTurn.swift against turn-detect.ts. No
+                            // microphone, so it does not care what else has run.
+                            invoke.resolve(
+                                TurnReplay.run(
+                                    label: args.label, frames: args.frames ?? [],
+                                    config: args.turnConfig))
                         default:
                             invoke.reject("Unknown turn probe step \(mode).")
                         }
