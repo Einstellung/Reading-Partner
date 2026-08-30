@@ -95,9 +95,53 @@ export type ConversationEvent =
   // The turn's playback finished, whether it was said to the end (`done`), ran
   // out of audio (`underrun`), was cut off (`interrupted`) or lost the engine.
   // The `speech` event's `speaking: 0` half, carried here so one stream is the
-  // whole call. One per turn of speech: the orchestrator hands the floor back on
-  // it, so a queue that drained mid-turn must not send one.
+  // whole call.
+  //
+  // `reason` does not separate a turn that ended from a turn that lost its
+  // tail. The relay marks the last sentence `last` only once nothing is pending,
+  // in flight or ready (plugins/voice/src/tts/relay.rs); a sentence whose
+  // synthesis failed never becomes ready, so if the failure is the last one of a
+  // turn no sentence is ever marked, and the player reports `underrun` for a
+  // turn that is over as far as the model is concerned. What separates the two
+  // is whether the orchestrator has closed the turn, not what this says, and
+  // the orchestrator uses that and ignores `reason`.
   | { kind: "spoken"; turn: number; utterance: number; reason: string };
+
+// --- what a payload has to carry ---------------------------------------------
+
+// A default branch is only half of what this file promised. A native build that
+// keeps a kind and changes its payload — a `cut` that grew a field and lost one,
+// a `speech-end` that stopped carrying text — throws on `undefined.trim()`
+// inside the microphone's own callback, which is the throw this event exists to
+// prevent. So every field either side reads is checked before it is read, and an
+// event that does not carry what its kind promises is ignored exactly like a
+// kind nobody has heard of.
+
+function finite(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/** The text an event claims to carry, or null if it carries none. */
+export function speechText(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+
+/**
+ * The barge-in position an event claims to carry. Only `sentence` has to be
+ * there: it is the one the transcript is cut at, and the rest is for showing.
+ */
+export function speechCut(v: unknown): SpeechCut | null {
+  if (!v || typeof v !== "object") return null;
+  const c = v as Record<string, unknown>;
+  const sentence = finite(c.sentence);
+  if (sentence === null) return null;
+  return {
+    utterance: finite(c.utterance) ?? 0,
+    sentence,
+    charOffset: finite(c.charOffset) ?? 0,
+    playedMs: finite(c.playedMs) ?? 0,
+  };
+}
 
 // --- the reducer ------------------------------------------------------------
 
@@ -141,37 +185,52 @@ export function applyConversationEvent(
       return { ...s, turn, ducked: true };
     case "speech-resume":
       return { ...s, turn, ducked: false };
-    case "speech-stop":
-      return { ...s, turn, ducked: false, cut: e.cut };
-    case "speech-end":
-      return { ...s, turn, ducked: false, heard: e.text.trim() };
+    case "speech-stop": {
+      // The stop happened whether or not it said where, so the duck is over
+      // either way; only the position is dropped.
+      const cut = speechCut(e.cut);
+      return cut ? { ...s, turn, ducked: false, cut } : { ...s, turn, ducked: false };
+    }
+    case "speech-end": {
+      const said = speechText(e.text);
+      if (said === null) return { ...s, turn, ducked: false };
+      return { ...s, turn, ducked: false, heard: said.trim() };
+    }
     case "final": {
-      const text = e.text.trim();
+      const text = speechText(e.text)?.trim();
       // A final for the turn on the floor extends what was heard; one for an
       // older turn is the orchestrator's business (it repairs the message it
       // already sent) and changes nothing on screen.
       if (!text || e.turn !== s.turn) return { ...s, turn };
       return { ...s, turn, heard: joinSpeech(s.heard, text) };
     }
-    case "level":
-      return { ...s, turn, level: e.value };
-    case "state":
+    case "level": {
+      // Without this the orb draws with NaN.
+      const value = finite(e.value);
+      return value === null ? { ...s, turn } : { ...s, turn, level: value };
+    }
+    case "state": {
+      if (typeof e.running !== "boolean") return { ...s, turn };
       return {
         ...s,
         turn,
         running: e.running,
-        reason: e.reason,
+        reason: typeof e.reason === "string" ? e.reason : null,
         // A call that went away is not holding a duck.
         ducked: e.running ? s.ducked : false,
         level: e.running ? s.level : 0,
       };
+    }
     case "spoken":
       return { ...s, turn };
     // A kind this build has never heard of. The whole reason the call has an
     // event of its own: the native side can grow one without a webview that
-    // predates it throwing on the microphone's own callback.
+    // predates it throwing on the microphone's own callback. Ignoring it still
+    // means counting the turn it carries — a `final` for that turn arrives
+    // next, and if the counter never moved it is dropped as stale and the
+    // user's own words are lost.
     default:
-      return s;
+      return turn === s.turn ? s : { ...s, turn };
   }
 }
 

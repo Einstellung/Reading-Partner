@@ -315,7 +315,7 @@ test("the transcript keeps what the model wrote, not what the reader was handed"
   const reply = h.transcript.find((t) => t.role === "ai");
   // "百分之三点五" is what was synthesised; "3.5%" is what is kept.
   expect(h.calls.find((c) => c.args?.text)?.args?.text).toBe("英伟达涨了百分之三点五；");
-  expect(reply?.text).toBe(`英伟达涨了 3.5%\n${INTERRUPTED_MARK}`);
+  expect(reply?.text).toBe(`英伟达涨了 3.5%；\n${INTERRUPTED_MARK}`);
 });
 
 test("a stop before a word was spoken leaves no reply in the transcript", async () => {

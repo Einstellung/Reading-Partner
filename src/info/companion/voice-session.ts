@@ -28,7 +28,12 @@ import {
   type SourcedSplitter,
 } from "../briefing/speech/split";
 import { joinSpeech } from "../../ai/voice/dictation";
-import type { ConversationEvent } from "./conversation";
+import {
+  speechCut,
+  speechText,
+  type ConversationEvent,
+  type SpeechStopped,
+} from "./conversation";
 
 /**
  * What the call is doing. `idle` is a call that is not up; `listening` is the
@@ -80,6 +85,10 @@ export interface VoiceSessionConfig {
    * themselves over it, not zero: a duck that silences the companion and then
    * turns out to be a false alarm is a stutter, and the whole point of the two
    * stages is that a false alarm costs a wobble.
+   *
+   * The default is a guess. Nothing has measured what a phone speaker at arm's
+   * length has to drop to for a person to hear their own voice over it, and
+   * until a device has, it is a parameter so a probe can sweep it.
    */
   duckVolume: number;
   /** The volume a resume, a stop and a new turn go back to. */
@@ -112,6 +121,14 @@ export interface VoiceSession {
   done(turn: number): SessionEffect[];
   /** That model turn failed. The message is the caller's to show. */
   failed(turn: number): SessionEffect[];
+  /**
+   * What `speak_stop` answered, for the turn it was called on. The only place
+   * the playhead is known on the paths where no event carried it — a dropped
+   * call, or the user starting to talk without a barge-in ever being confirmed.
+   * The transcript entry it corrects has already been handed out; a `record`
+   * for the same turn and role replaces it.
+   */
+  stopped(turn: number, at: SpeechStopped): SessionEffect[];
   snapshot(): VoiceSessionSnapshot;
 }
 
@@ -136,15 +153,28 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
   let spoken: SourcedSentence[] = [];
   let began = false;
   let closed = false;
+  // The model turn ended before its text did, so what it wrote past the last
+  // sentence handed over will never be said and is not part of the reply.
+  let capped = false;
+  // The player fell silent while the turn was still open. Not the end of
+  // anything on its own — the next sentence may still be on its way — but if the
+  // turn then closes with nothing further to play, no second `spoken` is coming
+  // and this was the end after all.
+  let drained = false;
   // The turn the speech belongs to, which is not `turn` once the user has taken
   // the floor back.
   let speakingTurn = 0;
+  // The last reply cut without anyone saying where the playhead was, kept so
+  // `stopped` can correct the entry it recorded.
+  let guessed: { turn: number; sentences: SourcedSentence[]; raw: string } | null = null;
 
   function clearSpeech(): void {
     splitter = null;
     spoken = [];
     began = false;
     closed = false;
+    capped = false;
+    drained = false;
   }
 
   function go(to: SessionPhase, out: SessionEffect[]): void {
@@ -157,41 +187,72 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
     out.push({ type: "volume", value });
   }
 
-  // The companion's turn as the transcript should keep it, cut after sentence
-  // `through` (inclusive) or whole when that is null. Null when nothing was
-  // ever spoken: a reply the user never heard a word of is not a reply.
-  function reply(through: number | null): VoiceTurn | null {
-    if (!splitter) return null;
-    const raw = splitter.raw();
-    if (through === null) {
-      const text = raw.trim();
-      if (!text) return null;
-      return { role: "ai", turn: speakingTurn, text, interrupted: false };
-    }
-    if (spoken.length === 0) return null;
-    const at = spoken[Math.min(Math.max(through, 0), spoken.length - 1)].source.end;
+  // The companion's turn as the transcript should keep it: everything through
+  // sentence `through` (inclusive), or the whole of it when that is null, with
+  // the line saying it stops mid-sentence when `mark` is set.
+  //
+  // Null when no sentence was ever handed to the synthesiser. A reply the user
+  // never heard a word of is not a reply, and a draft the model was halfway
+  // through when the call dropped is not one either: it has no boundary to be
+  // cut at, so keeping it whole would be claiming the user heard all of it.
+  function keep(
+    sentences: SourcedSentence[],
+    raw: string,
+    through: number | null,
+    mark: boolean,
+    forTurn: number,
+  ): VoiceTurn | null {
+    if (sentences.length === 0) return null;
+    const at =
+      through === null
+        ? raw.length
+        : sentences[Math.min(Math.max(through, 0), sentences.length - 1)].source.end;
     const text = raw.slice(0, at).trim();
     if (!text) return null;
     return {
       role: "ai",
-      turn: speakingTurn,
-      text: `${text}\n${INTERRUPTED_MARK}`,
-      interrupted: true,
+      turn: forTurn,
+      text: mark ? `${text}\n${INTERRUPTED_MARK}` : text,
+      interrupted: mark,
     };
   }
 
   // Cut the companion off: abort the model round if one is still streaming, stop
   // the player if a turn was opened, and keep what was heard. `through` is the
-  // sentence the playhead was in, or null when nothing says.
+  // sentence the playhead was in; null is nobody saying, and then the best that
+  // is known is what was handed to the synthesiser — which the model may have
+  // run several sentences ahead of. `stopped` corrects that when the player's
+  // own answer comes back.
   function cut(through: number | null, out: SessionEffect[]): void {
     if (asked !== null) {
       out.push({ type: "abort", turn: asked });
       asked = null;
     }
     if (began) out.push({ type: "speak-stop", turn: speakingTurn });
-    const entry = reply(through === null ? (spoken.length ? spoken.length - 1 : null) : through);
+    const raw = splitter?.raw() ?? "";
+    const entry = keep(spoken, raw, through ?? spoken.length - 1, true, speakingTurn);
+    if (entry) out.push({ type: "record", entry });
+    // Only where nobody said: `speech-stop` carries the authority, and by the
+    // time `speak_stop` runs on that path the player is already stopped and its
+    // answer is the sentinel.
+    guessed = through === null && entry ? { turn: speakingTurn, sentences: spoken, raw } : null;
+    clearSpeech();
+  }
+
+  // The turn was played out. What the transcript keeps is the whole of what the
+  // model wrote, unless the model turn ended early, in which case it stops at
+  // the last sentence that reached the synthesiser.
+  function finish(out: SessionEffect[]): void {
+    const entry = keep(
+      spoken,
+      splitter?.raw() ?? "",
+      capped ? spoken.length - 1 : null,
+      false,
+      speakingTurn,
+    );
     if (entry) out.push({ type: "record", entry });
     clearSpeech();
+    go("listening", out);
   }
 
   function speak(sentences: SourcedSentence[], out: SessionEffect[]): void {
@@ -226,6 +287,7 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
 
       switch (e?.kind) {
         case "state": {
+          if (typeof e.running !== "boolean") return out;
           if (e.running) {
             go("listening", out);
             return out;
@@ -233,7 +295,13 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
           // The call went away: whatever was in flight goes with it, and what
           // the user did hear is kept rather than lost.
           if (asked !== null || began) cut(null, out);
-          ducked = false;
+          // Turned down and dropped. The player outlives the call, so a
+          // reconnect after a route change would go on speaking at a quarter
+          // volume for the rest of the session.
+          if (ducked) {
+            ducked = false;
+            volume(config.fullVolume, out);
+          }
           go("idle", out);
           return out;
         }
@@ -258,7 +326,9 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
         case "speech-stop": {
           // The real thing. The player is already stopped on the native side;
           // `cut` says how far it got, and that is where the transcript is cut.
-          cut(e.cut.sentence, out);
+          // An event that does not say is still a stop, and falls back to the
+          // same guess every other unwitnessed stop makes.
+          cut(speechCut(e.cut)?.sentence ?? null, out);
           // The duck that led here is over: the next turn must not open quiet.
           if (ducked) {
             ducked = false;
@@ -269,16 +339,24 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
         }
 
         case "speech-end": {
-          const text = e.text.trim();
+          const text = (speechText(e.text) ?? "").trim();
           // A turn that is still live at this point never got a `speech-stop`
           // — the native side heard the user out without confirming a barge-in.
-          // It still has to go.
+          // It still has to go, and it goes marked: the user talked over it,
+          // whatever the detector decided about the first syllable. Settled,
+          // not a placeholder.
           if (asked !== null || began) cut(null, out);
           if (ducked) {
             ducked = false;
             volume(config.fullVolume, out);
           }
           if (!text) {
+            // The hangover expired before the recognizer had a word. The turn
+            // still happened, and its slot is kept: a `final` that settles a
+            // second later is the whole of what was said, and with no slot to
+            // land in it would be dropped as belonging to no turn at all. That
+            // is the only thing `final` is for.
+            heard.set(turn, "");
             go("listening", out);
             return out;
           }
@@ -291,11 +369,17 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
           // the transcript and nothing else: the model is answering, or has
           // answered, the version without it, and a second question would be an
           // answer to a sentence the user never said twice.
-          const text = e.text.trim();
+          const text = (speechText(e.text) ?? "").trim();
           const said = heard.get(e.turn);
           if (!text || said === undefined) return out;
           const whole = joinSpeech(said, text);
           heard.set(e.turn, whole);
+          // Unless the turn was never sent, because there was nothing to send
+          // when it ended. Then this is not a repair, it is the question.
+          if (said === "" && e.turn === turn && asked === null && !began) {
+            ask(whole, out);
+            return out;
+          }
           out.push({
             type: "record",
             entry: { role: "user", turn: e.turn, text: whole, interrupted: false },
@@ -304,18 +388,22 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
         }
 
         case "spoken": {
-          // The turn was said to the end. What was spoken is what the model
-          // wrote, so the transcript takes it whole.
+          if (!began) return out;
+          // A turn the orchestrator has not closed yet is not over: the model
+          // is still writing and the next sentence is on its way, so a queue
+          // that ran dry is a gap in the audio. Remembered rather than acted
+          // on, because if the turn then closes with nothing left to play, no
+          // second one of these is coming.
           //
-          // One of these per turn is what the native side owes: a queue that
-          // ran dry while the model was still streaming is not the end of
-          // anything, and is ignored here rather than closing a turn whose next
-          // sentence is already on its way.
-          if (!closed || !began) return out;
-          const entry = reply(null);
-          if (entry) out.push({ type: "record", entry });
-          clearSpeech();
-          go("listening", out);
+          // `reason` is not consulted. It cannot tell a turn that ended from a
+          // turn whose last sentence failed to synthesise — see the kind's own
+          // comment in conversation.ts — and a companion that waits for a
+          // `done` it will never get holds the floor for the rest of the call.
+          if (!closed) {
+            drained = true;
+            return out;
+          }
+          finish(out);
           return out;
         }
 
@@ -346,6 +434,10 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
       }
       closed = true;
       out.push({ type: "speak-close", turn: speakingTurn });
+      // The player already fell silent with this turn open. Nothing more is
+      // going to it, so that was the end of the speech and no other event will
+      // say so.
+      if (drained) finish(out);
       return out;
     },
 
@@ -359,9 +451,29 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
         return out;
       }
       // Sentences already handed over are already being synthesised; they are
-      // worth hearing, so the turn is closed rather than stopped.
+      // worth hearing, so the turn is closed rather than stopped. What the
+      // model had written but not finished a sentence of was never handed over
+      // and never will be, so the transcript stops at the last sentence that
+      // was — the turn is short, not half-said, and is not marked as one.
+      capped = true;
       closed = true;
       out.push({ type: "speak-close", turn: speakingTurn });
+      if (drained) finish(out);
+      return out;
+    },
+
+    stopped(forTurn: number, at: SpeechStopped): SessionEffect[] {
+      const out: SessionEffect[] = [];
+      const was = guessed;
+      if (!was || was.turn !== forTurn) return out;
+      guessed = null;
+      const sentence = typeof at?.sentence === "number" ? Math.floor(at.sentence) : -1;
+      // Behind the guess or nothing: the player cannot have heard more than was
+      // handed to it, and the guess was already the last of those. A sentinel
+      // answer lands here too and says nothing worth acting on.
+      if (sentence < 0 || sentence >= was.sentences.length - 1) return out;
+      const entry = keep(was.sentences, was.raw, sentence, true, forTurn);
+      if (entry) out.push({ type: "record", entry });
       return out;
     },
 
