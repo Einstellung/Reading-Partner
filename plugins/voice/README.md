@@ -145,7 +145,7 @@ everywhere and speaks only where there is something to speak through.
 
 ### What the Swift half has to do
 
-`Player` is the whole contract, and it has three calls.
+`Player` is the whole contract, and it has four calls.
 
 `enqueue(sentence)` takes one finished sentence — `id`, `chars`, whether it is
 the turn's `last`, the audio format, and PCM that is already trimmed and already
@@ -163,6 +163,12 @@ count says nothing about how long the player can keep going.
 over, and there is no command behind it: Rust keeps the last margin it was given
 and subtracts the wall clock, which is what playback does anyway. Asking the
 phone would be a round trip for a number that is already known.
+
+`finish()` says the turn has no more sentences. It queues nothing and stops
+nothing — what is queued plays to the end and the player falls silent on its own.
+It is `last` for a turn that has no last sentence to put it on, and the relay
+sends it only then: the flag on the audio is the one to prefer, because it
+arrives with the sentence rather than a round trip behind it.
 
 `stop()` drops every scheduled buffer that has not been heard and answers with
 where the user was interrupted: the sentence id, how far into it the playhead
@@ -198,16 +204,33 @@ in the `speech` event's `speaking: 0`, with the `reason` telling a turn that
 ended from one that starved. Anything waiting for a turn to be heard waits on
 that event.
 
-A player that answers `Cancelled` to an `enqueue` is refusing the turn, not the
-sentence — Swift compares utterances, and a player carries one for its whole
-life — so the relay winds the turn up on it instead of sending the rest of the
-turn to be dropped a sentence at a time, and paying the vendor for each one.
+Which means `reason` has to be right whatever the turn did, and the flag it is
+made of rides on the audio: `last` marks the final sentence, and a turn whose
+final sentence never came back from the vendor has no audio left to mark. The
+relay says it separately then, with `finish_speech`, before the loop ends. So
+`done` is a turn that said everything it had, however many sentences it lost on
+the way, and `underrun` is a queue that ran out while the turn was still open.
+A consumer waiting for a turn to be over waits for `speaking: 0` and reads
+`reason` to know which happened; it never waits for `done` alone.
+
+A player refuses an `enqueue` about the turn and never about the sentence —
+Swift compares utterances, and a player carries one for its whole life — but the
+two directions mean opposite things. This turn behind the one being played is
+over: it will never be spoken, so the relay winds it up instead of sending the
+rest of the turn to be dropped a sentence at a time and paying the vendor for
+each one. This turn ahead of it is only early: the player is finishing the
+previous turn's tail, and the ack says how much of it is left. The relay holds
+the sentence and offers it again until that tail runs out, so nothing is lost
+and the turn starts late instead. It gives up only if the player goes on
+refusing past the tail it reported.
 
 The player outlives the relay, and the session keeps hold of it. A turn that
 said everything it had to say still has audio in the air, and that audio has to
-be stopped before the next turn speaks: Swift drops any sentence whose utterance
-is not the one it is playing, so a new turn opened under an old turn's tail
-would be dropped sentence by sentence and say nothing at all.
+be stopped before the next turn speaks: opening a turn over a tail nobody
+stopped is what the waiting above is for, and a turn that has to wait one out
+starts as late as the tail is long. `speak_stop` on such a turn answers with an
+error rather than a position when the player will not stop — the audio is still
+going, and a position would read as a turn that had been silenced.
 
 The same engine also speaks (`docs/33`, M-voice-2). An `AVAudioPlayerNode` is
 attached to the stack the microphone already keeps and connected to the main
@@ -238,23 +261,25 @@ from the process environment (`MIMO_API_KEY`) rather than an argument or a file,
 resolves when the last sentence has been queued rather than when the voice
 stops, and is a debug build's tool on both counts.
 
-`enqueue_speech` is deliberately **not** a command. Sentences are put on the
-queue from Rust, through `Voice::enqueue_speech`, because the synthesiser lives
-there: making it a command would carry the PCM into the webview and straight
-back out. Its shape is the contract between the two halves:
+`enqueue_speech` is deliberately **not** a command, and neither is
+`finish_speech` beside it. Sentences are put on the queue from Rust, through
+`Voice::enqueue_speech`, because the synthesiser lives there: making it a command
+would carry the PCM into the webview and straight back out. Its shape is the
+contract between the two halves:
 
 | Rust sends | |
 |---|---|
 | `utterance` | one number per turn of conversation, increasing |
 | `index` | sentence number within the turn, from 0 |
 | `chars` | how many characters that sentence is. Never the text — nothing native has ever held a word anybody said, and this does not start |
-| `last` | this is the turn's final sentence |
+| `last` | this is the turn's final sentence. `finish_speech`, carrying only the turn's `utterance`, says the same thing when the final sentence never came back to carry it |
 | `sampleRate` | 24000. Anything else is refused with both numbers, never resampled |
 | `pcm` | base64 of little-endian 16-bit mono, already trimmed and already carrying the pause after the sentence |
 
 | Swift answers | |
 |---|---|
-| `dropped` | the turn was stopped before this sentence arrived; it was not queued |
+| `dropped` | not the turn being played, so it was not queued |
+| `busy` | which way round that was: true when the player is finishing an earlier turn and this sentence is early, false when the turn is behind what is playing and is over |
 | `queuedMs` | speech now ahead of the listener — the whole queue minus what has been played, not the running total |
 | `startMs` | where this sentence starts on the player's timeline |
 
@@ -287,10 +312,10 @@ What the playback path promises:
   the position honest; it covers a turn ending and a turn starving with the same
   mechanism, and only the `reason` tells them apart.
 - `stop_speaking` reads the position before it stops the player, because
-  stopping resets the timeline the position is measured on. `index` and
-  `charOffset` map back onto the text the caller sent; the character is linear
-  within the sentence, so it is worth about a character or two, and the sentence
-  boundary is exact.
+  stopping resets the timeline the position is measured on. `index` is the
+  sentence the voice was cut in, which is the grain an interruption is recorded
+  at: the model's text is kept whole and that sentence is flagged. `charOffset`
+  is linear within the sentence and nothing reads it.
 - Nothing resumes after an interruption. A route that went away, a session that
   was interrupted or an app that left the screen ends the turn with
   `reason: "lost"`, and what comes next is a new turn.
