@@ -1,10 +1,10 @@
 // Settings, third tab: the things that need a key from someone else. All of it
 // is optional — the app works without any of it, one feature quieter each time.
 //
-// The note at the top is about the transcription key, which lives in
-// credentials.json and never syncs (ai/credentials.ts). The Semantic Scholar key
+// The note at the top is about the two voice keys, which live in
+// credentials.json and never sync (ai/credentials.ts). The Semantic Scholar key
 // is an ordinary setting and does sync, so the note names what it covers rather
-// than claiming both.
+// than claiming all three.
 
 import { type Settings } from "../../../platform/app/settings";
 import { Input } from "../ui/input";
@@ -13,6 +13,7 @@ import { CARD } from "./cardStyles";
 import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
 import VoiceInputCard from "./VoiceInputCard";
 import DictationLanguageCard from "./DictationLanguageCard";
+import SpeechKeyCard from "./SpeechKeyCard";
 import { hasOnDeviceDictation } from "../../../platform/app/platform";
 
 export default function OptionalPanel({
@@ -25,8 +26,8 @@ export default function OptionalPanel({
   return (
     <>
       <p className="mt-0 mb-5 text-xs text-[#777]">
-        Keys for outside services, each of them optional. The transcription key is kept with this
-        device's credentials and never syncs, so every device needs its own.
+        Keys for outside services, each of them optional. The two voice keys are kept with this
+        device's credentials and never sync, so every device needs its own.
       </p>
 
       <div className={SETTINGS_PANEL}>
@@ -63,6 +64,13 @@ export default function OptionalPanel({
           ) : (
             <VoiceInputCard settings={settings} onSettingsChange={onSettingsChange} />
           )}
+        </SettingsSection>
+
+        <SettingsSection title="Voice output">
+          {/* Not under "Voice input" and not conditional: this is the other
+              direction, and unlike the two cards above it is the same path on
+              every host — the request is made in Rust (plugins/voice). */}
+          <SpeechKeyCard />
         </SettingsSection>
       </div>
     </>

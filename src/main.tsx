@@ -4,6 +4,7 @@ import { installFetchBridge } from "./ai/fetch-bridge";
 import { applyStoredAutostart } from "./platform/app/autostart";
 import { initDeviceSettings } from "./platform/app/device";
 import { detectShell } from "./platform/app/shell";
+import { syncSpeechKey } from "./ai/voice/speech-key";
 import { initPaperTint } from "./ui/components/base/paper-tint";
 import "./styles.css";
 
@@ -108,6 +109,12 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void initDeviceSettings()
     .catch(() => {})
     .then(() => applyStoredAutostart());
+
+  // The voice plugin holds the speaking key for the process, so it is handed
+  // over once here rather than carried on every turn (ai/voice/speech-key.ts).
+  // Not awaited and never rejects: nothing on screen depends on it, and the
+  // first thing that speaks is minutes away.
+  void syncSpeechKey();
 
   // Which shell (docs/22), decided once here: the phone one carries no reader,
   // so the choice also decides whether PDFium is ever loaded. Both are dynamic
