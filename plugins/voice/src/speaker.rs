@@ -167,7 +167,8 @@ impl<R: Runtime> Player for DevicePlayer<R> {
         // `playedMs` is on the player's timeline, which is the timeline every
         // `startMs` above came back on, so the difference is the position
         // inside that sentence. Swift's own linear character offset is not used
-        // here: the caller holds the text and `Heard` is what it maps.
+        // here and nothing else reads it either: a sentence and a position in it
+        // is the grain an interruption is recorded at.
         let Some(placed) = book.sentences.iter().find(|s| s.id == id) else {
             return Ok(Heard {
                 sentence: id,

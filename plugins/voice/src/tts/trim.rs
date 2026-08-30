@@ -370,7 +370,7 @@ mod tests {
     fn a_sentence_that_is_quiet_all_through_is_left_alone_rather_than_deleted() {
         // Under the threshold everywhere: a real onset that never gets loud.
         let pcm = tone(1500.0, 4);
-        let (out, report) = run(&[pcm.clone()], TrimConfig::default());
+        let (out, report) = run(std::slice::from_ref(&pcm), TrimConfig::default());
         assert!(report.head_capped);
         assert_eq!(report.head_trimmed_ms, 0.0);
         assert_eq!(out.len(), pcm.len());

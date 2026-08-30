@@ -63,9 +63,10 @@ pub struct SpeechEnqueued {
     pub start_ms: f64,
 }
 
-/// Where the voice is. The answer to `stop_speaking`, and what an interrupted
-/// turn is resumed from: `index` and `char_offset` map back onto the sentence
-/// text Rust sent, which Swift never sees.
+/// Where the voice is. The answer to `stop_speaking`. `index` is the sentence
+/// the voice was cut in, which is the grain an interrupted turn is marked at:
+/// the model's text is kept whole and that sentence is flagged. `char_offset` is
+/// Swift's linear interpolation inside it, and nothing reads it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpeechPosition {
@@ -105,8 +106,9 @@ pub struct SpeechStopped {
     pub sentence: u64,
     /// How far into that sentence the playhead had got.
     pub position_ms: f64,
-    /// That sentence's whole length. The caller holds the text it sent and
-    /// turns the pair into a character offset.
+    /// That sentence's whole length, so the pair says how far through it the
+    /// voice was. Not turned into a character offset: an interruption is
+    /// recorded a sentence at a time.
     pub duration_ms: f64,
 }
 

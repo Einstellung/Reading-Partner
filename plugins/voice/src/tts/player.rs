@@ -53,8 +53,10 @@ pub struct Heard {
     pub sentence: u64,
     /// How far into that sentence the playhead had got.
     pub position_ms: f64,
-    /// That sentence's whole length, so the caller can turn the pair into a
-    /// character offset without holding the audio.
+    /// That sentence's whole length, so the pair says how far through it the
+    /// voice was without the caller holding the audio. How far in is not turned
+    /// into a character offset: an interruption is recorded a sentence at a
+    /// time.
     pub duration_ms: f64,
 }
 

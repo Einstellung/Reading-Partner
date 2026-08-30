@@ -15,7 +15,9 @@ pub struct SseParser {
 pub enum SseEvent {
     /// The joined `data:` lines of one frame.
     Data(String),
-    /// `data: [DONE]`. The stream is over; nothing after it is read.
+    /// `data: [DONE]`. The stream is over: whatever trails it in the same read
+    /// is dropped, and the reader stops there (mimo.rs). The parser keeps no
+    /// memory of it — it is the reader that stops, not this.
     Done,
 }
 
@@ -141,7 +143,13 @@ mod tests {
         let mut p = SseParser::new();
         let events = p.push(b"data: [DONE]\n\ndata: late\n\n");
         assert_eq!(events, vec![SseEvent::Done]);
-        assert!(p.push(b"data: later\n\n").is_empty() || true);
+        // Only what was in that read. The parser holds no "over" flag and the
+        // reader is what stops: it breaks out of the loop on this event and
+        // never pushes again (mimo.rs).
+        assert_eq!(
+            p.push(b"data: later\n\n"),
+            vec![SseEvent::Data("later".to_string())]
+        );
     }
 
     #[test]
