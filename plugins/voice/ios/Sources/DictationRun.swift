@@ -354,7 +354,7 @@ final class DictationRun {
                 "This iPhone cannot transcribe on device. It needs iOS 26 on an iPhone 12 or later.")
         }
 
-        try await ensureMicrophonePermission()
+        try await Recogniser.ensureMicrophonePermission()
         mark("permission", since: t0)
 
         // --- the microphone half ---------------------------------------------
@@ -404,22 +404,22 @@ final class DictationRun {
         // Everything below runs with the tap already filling the pre-roll, so
         // its cost is paid in buffered audio rather than in lost syllables.
 
-        let locale = try await resolveLocale(requested)
+        let locale = try await Recogniser.resolveLocale(requested)
         mark("locale", since: t0)
 
-        let transcriber = makeTranscriber(locale: locale)
+        let transcriber = Recogniser.makeTranscriber(locale: locale)
         self.transcriber = transcriber
 
         // The model lives in system storage, outside the app, and the system
         // drops it again after long disuse — so this asks every run rather than
         // assuming (docs/33). A first-ever hold pays a download here, which is
         // the one wait the pre-roll cap does not try to cover.
-        try await installModelIfNeeded(for: transcriber, locale: locale)
+        try await Recogniser.installModelIfNeeded(for: transcriber, locale: locale)
         mark("model", since: t0)
 
-        let analyzerFormat = try await resolveAnalyzerFormat(for: transcriber)
+        let analyzerFormat = try await Recogniser.resolveAnalyzerFormat(for: transcriber)
         self.analyzerFormat = analyzerFormat
-        NSLog("RP-DICT analyzer=%@", Self.describe(analyzerFormat))
+        NSLog("RP-DICT analyzer=%@", Recogniser.describe(analyzerFormat))
         mark("analyzerFormat", since: t0)
 
         // The graph can move while the recogniser comes up. If it did, the tap
@@ -432,12 +432,13 @@ final class DictationRun {
         guard currentFormat.isEqual(hardwareFormat) else {
             throw DictationError(
                 "The microphone changed format while it was being opened, from "
-                    + "\(Self.describe(hardwareFormat)) to \(Self.describe(currentFormat)).")
+                    + "\(Recogniser.describe(hardwareFormat)) to "
+                    + "\(Recogniser.describe(currentFormat)).")
         }
         guard let converter = AVAudioConverter(from: hardwareFormat, to: analyzerFormat) else {
             throw DictationError(
-                "No audio converter from \(Self.describe(hardwareFormat)) to "
-                    + "\(Self.describe(analyzerFormat)).")
+                "No audio converter from \(Recogniser.describe(hardwareFormat)) to "
+                    + "\(Recogniser.describe(analyzerFormat)).")
         }
         self.converter = converter
 
@@ -450,7 +451,7 @@ final class DictationRun {
         // Hot words, before prepareToAnalyze. docs/33 measured that these do not
         // cross a language boundary and help only weakly within one, so they are
         // worth passing and not worth failing a start over.
-        let hints = Self.capContextualStrings(contextualStrings)
+        let hints = Recogniser.capContextualStrings(contextualStrings)
         if !hints.isEmpty {
             let context = AnalysisContext()
             context.contextualStrings = [.general: hints]
@@ -618,7 +619,8 @@ final class DictationRun {
         transcriptLock.lock()
         let parts = finals + [volatileTail]
         transcriptLock.unlock()
-        return parts.reduce("", Self.joinSpeech).trimmingCharacters(in: .whitespacesAndNewlines)
+        return parts.reduce("", Recogniser.joinSpeech).trimmingCharacters(
+            in: .whitespacesAndNewlines)
     }
 
     /// The failure to reject stop_dictation with, if the recognizer died on the
@@ -633,144 +635,6 @@ final class DictationRun {
         failureLock.lock()
         if failure == nil { failure = message }
         failureLock.unlock()
-    }
-
-    // A space goes into a seam unless a CJK character sits on either side of it.
-    // The webview's joinSpeech is the same rule over the same ranges; the two
-    // have to agree, because stop_dictation's answer never passes through it.
-    private static let cjkRanges: [ClosedRange<UInt32>] = [
-        0x2E80...0x303F, 0x3040...0x30FF, 0x3400...0x4DBF,
-        0x4E00...0x9FFF, 0xF900...0xFAFF, 0xFE30...0xFE4F, 0xFF00...0xFFEF,
-    ]
-
-    private static func isCJK(_ scalar: Unicode.Scalar) -> Bool {
-        cjkRanges.contains { $0.contains(scalar.value) }
-    }
-
-    static func joinSpeech(_ left: String, _ right: String) -> String {
-        if left.isEmpty { return right }
-        if right.isEmpty { return left }
-        guard let last = left.unicodeScalars.last, let first = right.unicodeScalars.first else {
-            return left + right
-        }
-        let whitespace = CharacterSet.whitespacesAndNewlines
-        let seam =
-            whitespace.contains(last) || whitespace.contains(first) || isCJK(last) || isCJK(first)
-            ? "" : " "
-        return left + seam + right
-    }
-
-    // MARK: - Locale
-
-    /// Membership in `supportedLocales` is the only test that means anything.
-    /// `Locale.current` can carry a region override whose identifier does not
-    /// construct, and `supportedLocale(equivalentTo:)` answers with locales that
-    /// are not in the list at all (docs/33). Apple's own documentation says to
-    /// use the latter; the device says otherwise.
-    static func match(_ tag: String, in locales: [Locale]) -> Locale? {
-        let wanted = normalise(tag)
-        return locales.first { normalise($0.identifier(.bcp47)) == wanted }
-    }
-
-    private static func normalise(_ tag: String) -> String {
-        tag.replacingOccurrences(of: "_", with: "-").lowercased()
-    }
-
-    /// Without a locale from the composer — which is the normal case, the bar
-    /// never passes one — walk the device's own preference order and take the
-    /// first supported one.
-    private func resolveLocale(_ tag: String?) async throws -> Locale {
-        let supported = await SpeechTranscriber.supportedLocales
-
-        if let tag = tag {
-            guard let locale = Self.match(tag, in: supported) else {
-                throw DictationError(
-                    "This iPhone cannot dictate in \(tag). Add the language in Settings, or speak "
-                        + "one it already knows.")
-            }
-            return locale
-        }
-
-        for preferred in Locale.preferredLanguages {
-            if let locale = Self.match(preferred, in: supported) {
-                NSLog("RP-DICT locale from preferredLanguages: %@", locale.identifier(.bcp47))
-                return locale
-            }
-        }
-        guard let fallback = Self.match("en-US", in: supported) else {
-            throw DictationError("This iPhone has no dictation language installed.")
-        }
-        NSLog("RP-DICT locale fell back to en-US")
-        return fallback
-    }
-
-    // MARK: - Transcriber and model
-
-    /// Options are fixed rather than parameterised: docs/33 already decided
-    /// them. `.audioTimeRange` stays on even though the event drops the numbers,
-    /// because barge-in truncation wants it later.
-    private func makeTranscriber(locale: Locale) -> SpeechTranscriber {
-        SpeechTranscriber(
-            locale: locale,
-            transcriptionOptions: [],
-            reportingOptions: [.volatileResults, .fastResults],
-            attributeOptions: [.transcriptionConfidence, .audioTimeRange])
-    }
-
-    private func installModelIfNeeded(for transcriber: SpeechTranscriber, locale: Locale) async
-        throws
-    {
-        let request: AssetInstallationRequest?
-        do {
-            request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber])
-        } catch {
-            throw DictationError(
-                "The dictation model is unavailable: \(DictationError.describe(error))")
-        }
-        guard let request = request else { return }
-
-        NSLog("RP-DICT downloading the model for %@", locale.identifier(.bcp47))
-        let began = CFAbsoluteTimeGetCurrent()
-        do {
-            try await request.downloadAndInstall()
-        } catch {
-            throw DictationError(
-                "The dictation model could not be downloaded. Check the network and hold again.")
-        }
-        NSLog(
-            "RP-DICT model installed in %.0fms", (CFAbsoluteTimeGetCurrent() - began) * 1000)
-    }
-
-    /// Apple's contextual-strings API degrades past about a hundred entries and
-    /// the composer sends an uncapped `glossary.split('\n')`. Truncate and say
-    /// so; never fail a start over hot words.
-    private static func capContextualStrings(_ strings: [String]) -> [String] {
-        let cleaned =
-            strings
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .map { $0.count > 100 ? String($0.prefix(100)) : $0 }
-        if cleaned.count <= 100 { return cleaned }
-        NSLog("RP-DICT contextualStrings capped from %d to 100", cleaned.count)
-        return Array(cleaned.prefix(100))
-    }
-
-    // MARK: - Audio session and formats
-
-    private func resolveAnalyzerFormat(for transcriber: SpeechTranscriber) async throws
-        -> AVAudioFormat
-    {
-        guard let best = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
-        else {
-            throw DictationError("The recognizer would not name an audio format it accepts.")
-        }
-        return best
-    }
-
-    /// The same line AudioFront prints, so a format quoted in an error and a
-    /// format quoted in the log can be compared character for character.
-    private static func describe(_ format: AVAudioFormat) -> String {
-        describeFormat(format)
     }
 
     // MARK: - Notifications
@@ -1119,31 +983,6 @@ final class DictationRun {
         guard now - lastVolatileAt >= Self.volatileInterval else { return }
         lastVolatileAt = now
         send(["kind": "volatile", "text": text])
-    }
-
-    // MARK: - Permission
-
-    private func ensureMicrophonePermission() async throws {
-        switch AVAudioApplication.shared.recordPermission {
-        case .granted:
-            return
-        case .denied:
-            throw DictationError("Microphone access is off. Turn it on in Settings.")
-        case .undetermined:
-            // The alert steals the touch, so this hold is lost whatever happens
-            // — the pointer is cancelled and the composer cancels the run. Ask
-            // anyway, so the next hold works, and say a sentence instead of
-            // nothing.
-            _ = await withCheckedContinuation {
-                (continuation: CheckedContinuation<Bool, Never>) in
-                AVAudioApplication.requestRecordPermission { granted in
-                    continuation.resume(returning: granted)
-                }
-            }
-            throw DictationError("Microphone access is needed. Press and hold again.")
-        @unknown default:
-            throw DictationError("Microphone access is off. Turn it on in Settings.")
-        }
     }
 
     // MARK: - Timing
