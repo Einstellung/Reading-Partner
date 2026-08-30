@@ -262,6 +262,9 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
         out.push({ type: "speak-begin", turn: speakingTurn });
       }
       spoken.push(s);
+      // Whatever silence the player reported is over: it has something to play
+      // again, and it will say so again when it runs out.
+      drained = false;
       out.push({ type: "speak-push", turn: speakingTurn, text: s.text });
       go("speaking", out);
     }
@@ -339,7 +342,13 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
         }
 
         case "speech-end": {
-          const text = (speechText(e.text) ?? "").trim();
+          // An empty string is the recognizer having nothing yet, which is a
+          // turn and handled below. No string at all is a payload this build
+          // cannot read, and acting on it would tear down a live turn on the
+          // strength of a field that was not there.
+          const said = speechText(e.text);
+          if (said === null) return out;
+          const text = said.trim();
           // A turn that is still live at this point never got a `speech-stop`
           // — the native side heard the user out without confirming a barge-in.
           // It still has to go, and it goes marked: the user talked over it,

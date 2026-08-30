@@ -203,3 +203,59 @@ test("a malformed event is a no-op too", () => {
     expect(applyConversationEvent(before, junk as unknown as ConversationEvent)).toEqual(before);
   }
 });
+
+// Ignoring a kind is not ignoring the turn it carried. A `final` for that turn
+// arrives next and is dropped as stale unless the counter has already moved, and
+// what is dropped with it is the user's own words.
+test("a kind this build has never heard of still moves the turn on", () => {
+  const after = fold([
+    { kind: "state", turn: 1, running: true, reason: "opened" },
+    { kind: "speech-end", turn: 1, text: "第一句", silentMs: 1250 },
+    { kind: "barge-in-v2", turn: 5 } as unknown as ConversationEvent,
+    { kind: "final", turn: 5, text: "第五句", range: { startMs: 0, endMs: 10 } },
+  ]);
+  expect(after.turn).toBe(5);
+  expect(after.heard).toContain("第五句");
+});
+
+// The default branch is only half of what this event promised over `dictation`.
+// A kind this build knows, carrying a payload it does not, throws on the
+// microphone's own callback unless every field is checked before it is read.
+test("a known kind with a payload this build cannot read changes nothing", () => {
+  const before = fold([
+    { kind: "state", turn: 3, running: true, reason: "opened" },
+    { kind: "level", turn: 3, value: 0.5 },
+    { kind: "speech-end", turn: 3, text: "说过的话", silentMs: 1250 },
+  ]);
+  const broken = [
+    { kind: "speech-end", turn: 3 },
+    { kind: "final", turn: 3 },
+    { kind: "level", turn: 3 },
+    { kind: "state", turn: 3 },
+    { kind: "speech-stop", turn: 3 },
+    { kind: "level", turn: 3, value: "loud" },
+    { kind: "state", turn: 3, running: "yes", reason: "opened" },
+  ];
+  for (const e of broken) {
+    const after = applyConversationEvent(before, e as unknown as ConversationEvent);
+    expect(after.level).toBe(0.5);
+    expect(after.heard).toBe("说过的话");
+    expect(after.running).toBe(true);
+    // Declared `SpeechCut | null`, and a view that draws the orb from `level`
+    // would otherwise be computing with undefined.
+    expect(after.cut === null || typeof after.cut === "object").toBe(true);
+    expect(Number.isFinite(after.level)).toBe(true);
+  }
+});
+
+// A stop without a position is still a stop: the duck it came out of is over,
+// and only the position is lost.
+test("a stop with no position still ends the duck", () => {
+  const after = fold([
+    { kind: "state", turn: 1, running: true, reason: "opened" },
+    { kind: "speech-duck", turn: 1 },
+    { kind: "speech-stop", turn: 1 } as unknown as ConversationEvent,
+  ]);
+  expect(after.ducked).toBe(false);
+  expect(after.cut).toBeNull();
+});

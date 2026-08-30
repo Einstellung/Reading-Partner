@@ -120,6 +120,21 @@ class Harness {
     await this.perform(this.session.done(turn));
   }
 
+  async failed(turn: number): Promise<void> {
+    await this.perform(this.session.failed(turn));
+  }
+
+  /** What `speak_stop` answered, fed back the way a caller has to. */
+  async stopped(turn: number, sentence: number): Promise<void> {
+    await this.perform(
+      this.session.stopped(turn, { utterance: 1, sentence, positionMs: 0, durationMs: 0 }),
+    );
+  }
+
+  ai(turn: number): VoiceTurn | undefined {
+    return this.transcript.find((t) => t.turn === turn && t.role === "ai");
+  }
+
   /** The model streams its answer in chunks of `size`. */
   async stream(turn: number, text: string, size = 3): Promise<void> {
     for (let i = 0; i < text.length; i += size) await this.delta(turn, text.slice(i, i + size));
@@ -144,6 +159,11 @@ class Harness {
   async userSaid(turn: number, text: string): Promise<void> {
     await this.event({ kind: "speech-end", turn, text, silentMs: 1250 });
   }
+}
+
+function lastVolume(h: Harness): SessionEffect | undefined {
+  const all = h.of("volume");
+  return all[all.length - 1];
 }
 
 // --- a whole turn -----------------------------------------------------------
@@ -425,4 +445,256 @@ test("a kind this build has never heard of asks for nothing", async () => {
   await h.event({ kind: "vad-hint", turn: 2, probability: 0.9 } as unknown as ConversationEvent);
   expect(h.effects.length).toBe(before);
   expect(h.session.snapshot().phase).toBe("speaking");
+});
+
+// --- what the transcript is allowed to claim ---------------------------------
+
+// The model wrote four sentences and the user cut in on the second. What goes in
+// the transcript is the first two. The third and fourth were never played, and a
+// source map that lost its footing on a clause opening with a bracket used to
+// hand them over as if they had been.
+test("a sentence that was never played does not enter the transcript", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "怎么回事");
+  await h.stream(1, "结论。（补充）原文说的是另一回事。所以要小心。明天再说。");
+  await h.event({ kind: "speech-stop", turn: 2, cut: { ...CUT, sentence: 1 } });
+
+  const kept = h.ai(1)?.text ?? "";
+  expect(kept).toContain("结论。");
+  expect(kept).toContain("原文说的是另一回事。");
+  expect(kept).not.toContain("所以要小心");
+  expect(kept).not.toContain("明天再说");
+});
+
+// The model was still writing its first sentence when the user spoke again.
+// Nothing reached the synthesiser, so nothing was heard, so there is no reply.
+test("a draft nobody heard a word of is not stored as a reply", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.delta(1, "今天有三条消息");
+  expect(h.session.snapshot().spoken).toBe(0);
+
+  await h.userSaid(2, "算了");
+  expect(h.ai(1)).toBeUndefined();
+  expect(h.of("record").some((r) => r.entry.role === "ai")).toBe(false);
+});
+
+test("a call that drops mid-draft stores no reply either", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.delta(1, "半句话还没说完");
+  await h.event({ kind: "state", turn: 1, running: false, reason: "lost" });
+  expect(h.ai(1)).toBeUndefined();
+});
+
+// The stream arrives faster than the speaker can say it, so the sentence count
+// is not the playhead. With no event to witness the stop the machine can only
+// guess the last sentence it handed over; `stopped` is how the guess is
+// corrected, and the corrected entry replaces the guessed one.
+test("the player's own answer corrects a cut that had to guess", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "说五句");
+  await h.delta(1, "第一句。第二句。第三句。第四句。第五句。");
+  expect(h.session.snapshot().spoken).toBe(4);
+
+  await h.userSaid(2, "停");
+  expect(h.ai(1)?.text).toBe(`第一句。第二句。第三句。第四句。\n${INTERRUPTED_MARK}`);
+
+  await h.stopped(1, 0);
+  expect(h.ai(1)?.text).toBe(`第一句。\n${INTERRUPTED_MARK}`);
+  expect(h.ai(1)?.interrupted).toBe(true);
+});
+
+test("a stop the event already witnessed is not second-guessed", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "说五句");
+  await h.delta(1, "第一句。第二句。第三句。第四句。第五句。");
+  await h.event({ kind: "speech-stop", turn: 2, cut: { ...CUT, sentence: 2 } });
+  const witnessed = h.ai(1)?.text;
+
+  await h.stopped(1, 0);
+  expect(h.ai(1)?.text).toBe(witnessed);
+});
+
+// The recognizer had nothing at the moment the hangover expired and settled a
+// second later. That final is the whole of the user's turn, and the only chance
+// it has of being answered.
+test("a turn the recognizer settled late is still asked", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.event({ kind: "speech-end", turn: 1, text: "", silentMs: 700 });
+  expect(h.of("ask")).toEqual([]);
+
+  await h.event({
+    kind: "final",
+    turn: 1,
+    text: "帮我看看今天的新闻",
+    range: { startMs: 0, endMs: 900 },
+  });
+  expect(h.of("ask")).toEqual([{ type: "ask", turn: 1, text: "帮我看看今天的新闻" }]);
+  expect(h.transcript.find((t) => t.role === "user")?.text).toBe("帮我看看今天的新闻");
+  expect(h.session.snapshot().phase).toBe("thinking");
+});
+
+test("a late final for a turn that was already asked only repairs it", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "帮我看看");
+  await h.event({ kind: "final", turn: 1, text: "今天的新闻", range: { startMs: 0, endMs: 900 } });
+  expect(h.of("ask")).toEqual([{ type: "ask", turn: 1, text: "帮我看看" }]);
+  expect(h.transcript.find((t) => t.role === "user")?.text).toBe("帮我看看今天的新闻");
+});
+
+// --- the volume the player is left on ----------------------------------------
+
+test("a call that drops while ducked puts the volume back first", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.stream(1, REPLY);
+  await h.event({ kind: "speech-duck", turn: 2 });
+  expect(lastVolume(h)).toEqual({ type: "volume", value: 0.25 });
+
+  await h.event({ kind: "state", turn: 2, running: false, reason: "lost" });
+  expect(lastVolume(h)).toEqual({ type: "volume", value: 1 });
+  expect(h.session.snapshot().ducked).toBe(false);
+});
+
+test("the duck volume is a parameter", async () => {
+  const h = new Harness(createVoiceSession({ duckVolume: 0.4 }));
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.stream(1, REPLY);
+  await h.event({ kind: "speech-duck", turn: 2 });
+  expect(lastVolume(h)).toEqual({ type: "volume", value: 0.4 });
+});
+
+// --- a model turn that ended early -------------------------------------------
+
+// "第二" never became a sentence and never reached the synthesiser, so it was
+// never said. The reply stops at the sentence that was, and is not marked
+// half-said: it ends on a boundary, it is only short.
+test("a failed model turn keeps only what reached the synthesiser", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "说点什么");
+  await h.delta(1, "第一句。第二");
+  await h.failed(1);
+  await h.event({ kind: "spoken", turn: 1, utterance: 1, reason: "done" });
+
+  expect(h.ai(1)?.text).toBe("第一句。");
+  expect(h.ai(1)?.interrupted).toBe(false);
+  expect(h.session.snapshot().phase).toBe("listening");
+});
+
+// --- who says a turn of speech is over ---------------------------------------
+
+// The relay marks a sentence `last` only once nothing is pending, in flight or
+// ready. A sentence whose synthesis failed never becomes ready, so a turn that
+// loses its final sentence never marks one and the player reports `underrun` —
+// the same event a starved queue sends. Waiting for one that says `done` would
+// hold the floor for the rest of the call.
+test("a turn that ends on underrun still hands the floor back", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.stream(1, REPLY);
+  await h.done(1);
+  await h.event({ kind: "spoken", turn: 1, utterance: 1, reason: "underrun" });
+
+  expect(h.session.snapshot().phase).toBe("listening");
+  expect(h.ai(1)?.text).toBe(REPLY);
+});
+
+// A queue that ran dry with the model still writing is a gap in the audio, not
+// the end of a turn: the next sentence is on its way.
+test("a queue that runs dry mid-stream does not end the turn", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.delta(1, "第一句。第二");
+  await h.event({ kind: "spoken", turn: 1, utterance: 1, reason: "underrun" });
+  expect(h.session.snapshot().phase).toBe("speaking");
+
+  await h.delta(1, "句。第三句。");
+  await h.done(1);
+  expect(h.session.snapshot().phase).toBe("speaking");
+  await h.event({ kind: "spoken", turn: 1, utterance: 1, reason: "done" });
+  expect(h.session.snapshot().phase).toBe("listening");
+});
+
+// Unless nothing follows it. The model turn ended with nothing left to hand
+// over, so the silence the player already reported was the end of the speech,
+// and no second one is coming to say so.
+test("a turn whose tail never arrives does not hold the floor", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.delta(1, "第一句。第二");
+  await h.event({ kind: "spoken", turn: 1, utterance: 1, reason: "underrun" });
+  await h.failed(1);
+
+  expect(h.session.snapshot().phase).toBe("listening");
+  expect(h.ai(1)?.text).toBe("第一句。");
+});
+
+// --- a payload that is not what its kind promises -----------------------------
+
+// The reason this event is not a fifth `dictation` kind: a native build can
+// change a payload, and the webview must not throw inside the microphone's own
+// callback. A default branch alone does not do that — every one of these
+// carries a kind this build knows.
+test("an event missing what its kind promises is ignored, not thrown on", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.stream(1, REPLY);
+  const before = h.effects.length;
+
+  const broken = [
+    { kind: "speech-end", turn: 1 },
+    { kind: "final", turn: 1 },
+    { kind: "level", turn: 1 },
+    { kind: "state", turn: 1 },
+    { kind: "speech-end", turn: 1, text: null },
+    { kind: "final", turn: 1, text: 7 },
+  ];
+  for (const e of broken) await h.event(e as unknown as ConversationEvent);
+
+  // Nothing asked for, and the companion is still talking: a field that was not
+  // there is not grounds for tearing a live turn down.
+  expect(h.effects.length).toBe(before);
+  expect(h.session.snapshot().phase).toBe("speaking");
+});
+
+// An empty string is not a broken payload. It is the recognizer having nothing
+// at the moment the hangover expired, which is a turn like any other.
+test("a speech-end with an empty string is a turn, not a broken payload", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.stream(1, REPLY);
+  await h.userSaid(2, "");
+
+  expect(h.session.snapshot().phase).toBe("listening");
+  expect(h.ai(1)?.interrupted).toBe(true);
+});
+
+// A stop with no position is still a stop: the user is talking over the
+// companion whether or not the payload said where the playhead was.
+test("a stop with no position still stops", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.userSaid(1, "今天有什么");
+  await h.stream(1, REPLY);
+  await h.event({ kind: "speech-stop", turn: 2 } as unknown as ConversationEvent);
+
+  expect(h.session.snapshot().phase).toBe("listening");
+  expect(h.ai(1)?.interrupted).toBe(true);
+  expect(h.wasAborted(1)).toBe(true);
 });
