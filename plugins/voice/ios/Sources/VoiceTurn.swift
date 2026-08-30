@@ -72,7 +72,18 @@ struct TurnDetectConfig: Equatable {
     /// speech, and far below the 802 ms shortest real pause in it, so a dropped
     /// buffer or a stop consonant does not un-duck mid-word.
     let resumeMs: Double
-    /// Silence this long after the last loud buffer closes the turn.
+    /// Silence this long after the last loud buffer closes the turn. Default
+    /// 1250: the recorded barge-in has a 1403 ms pause in the middle of a
+    /// sentence, and the break-even that keeps it one turn is 1220, not 1403 —
+    /// the tap only ever *observed* 1219 ms of that pause, because the buffer
+    /// that would have measured more arrived loud. Silence measured on a sampled
+    /// stream is always shorter than the pause it samples, and that gap is the
+    /// entire difference between 1220 and 1500.
+    ///
+    /// 800 was the first guess and it costs a turn: it cuts that barge-in in two
+    /// and starts the reply 298 ms before the person's last word. 1250 clears
+    /// the break-even by 30 ms and pays for it in reply latency, which is always
+    /// the hangover plus up to one delivery interval.
     let hangoverMs: Double
     /// No new duck within this long of a `resume`. A resume ramps the volume back
     /// up; without this, a source sitting on the threshold ducks and resumes at
@@ -99,7 +110,7 @@ struct TurnDetectConfig: Equatable {
         startFrames: Int = 1,
         confirmMs: Double = 300,
         resumeMs: Double = 300,
-        hangoverMs: Double = 800,
+        hangoverMs: Double = 1250,
         resumeGuardMs: Double = 300
     ) {
         self.startDb = startDb
@@ -114,7 +125,10 @@ struct TurnDetectConfig: Equatable {
 /// Where the machine is. `idle` is the companion talking unimpeded; `ducked` is
 /// the volume down pending a verdict; `speaking` is the user holding the turn
 /// with the playback stopped.
-enum TurnPhase: String, Equatable {
+// No raw value and no explicit conformance: nothing reads a name off this, and
+// `: String` would let `==` resolve to `RawRepresentable`'s, which builds two
+// Strings per comparison. The audio thread runs one or two of these per buffer.
+enum TurnPhase {
     case idle
     case ducked
     case speaking
