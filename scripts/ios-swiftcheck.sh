@@ -192,13 +192,15 @@ if [ -s "$bundle" ]; then
     say "==> sending $(du -h "$bundle" | cut -f1) for $(git log --oneline -1 "$sha")"
     scp -q "$bundle" "$MAC:~/$REMOTE_ROOT.bundle"
     ssh "$MAC" "git -C ~/$REMOTE_ROOT fetch --quiet ~/$REMOTE_ROOT.bundle \
-        'refs/rp-swiftcheck/head:refs/heads/swiftcheck' --force"
+        'refs/rp-swiftcheck/head:refs/rp-swiftcheck/head' --force"
 else
     say "==> $MAC already has $(git log --oneline -1 "$sha")"
-    ssh "$MAC" "git -C ~/$REMOTE_ROOT update-ref refs/heads/swiftcheck $sha"
+    ssh "$MAC" "git -C ~/$REMOTE_ROOT update-ref refs/rp-swiftcheck/head $sha"
 fi
 
-ssh "$MAC" "git -C ~/$REMOTE_ROOT checkout --quiet --force swiftcheck"
+# Detached, because a branch that is checked out is a branch git refuses to
+# fetch into, and this checkout only ever holds whatever was last sent.
+ssh "$MAC" "git -C ~/$REMOTE_ROOT checkout --quiet --force --detach refs/rp-swiftcheck/head"
 
 if [ "$dirty" -eq 1 ]; then
     say "==> overlaying uncommitted $PKG"
