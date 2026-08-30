@@ -94,6 +94,9 @@ export type ConversationEvent =
   | { kind: "state"; turn: number; running: boolean; reason: ConversationReason }
   // The turn's playback finished, whether it was said to the end (`done`), ran
   // out of audio (`underrun`), was cut off (`interrupted`) or lost the engine.
+  // The `speech` event's `speaking: 0` half, carried here so one stream is the
+  // whole call. One per turn of speech: the orchestrator hands the floor back on
+  // it, so a queue that drained mid-turn must not send one.
   | { kind: "spoken"; turn: number; utterance: number; reason: string };
 
 // --- the reducer ------------------------------------------------------------

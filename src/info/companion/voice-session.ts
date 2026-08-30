@@ -304,8 +304,13 @@ export function createVoiceSession(patch?: Partial<VoiceSessionConfig>): VoiceSe
         }
 
         case "spoken": {
-          // The turn was said to the end (or ran dry). What was spoken is what
-          // the model wrote, so the transcript takes it whole.
+          // The turn was said to the end. What was spoken is what the model
+          // wrote, so the transcript takes it whole.
+          //
+          // One of these per turn is what the native side owes: a queue that
+          // ran dry while the model was still streaming is not the end of
+          // anything, and is ignored here rather than closing a turn whose next
+          // sentence is already on its way.
           if (!closed || !began) return out;
           const entry = reply(null);
           if (entry) out.push({ type: "record", entry });
