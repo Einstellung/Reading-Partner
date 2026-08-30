@@ -37,6 +37,7 @@ import {
   runDistillPass,
   runDistillation,
   runMarksDistillPass,
+  runMarksDistillation,
   selectSilentMarks,
   DISTILL_BRIEF_TOKENS,
   type DistillAnnotation,
@@ -1200,4 +1201,89 @@ test("the failure payload answers where, why and over what — and quotes nothin
     error: new Error("the reader said the lesion studies were the point"),
   });
   expect(JSON.stringify(quoted)).not.toContain("lesion");
+});
+
+// --- what the pass dates its observations by ---
+//
+// The store's clock in these tests is 2026-07-17. The sweep comes back to a
+// thread every half hour for as long as it is owed, so that is routinely not the
+// day the reader was here: 38 of 110 placeable observations on one real store
+// carry a date their own evidence does not support, the worst off by 17 days.
+
+test("a pass dates what it writes by the transcript, not by the day it runs", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillation(
+    makeInput({
+      messages: [
+        { role: "user", text: "why is this quadratic?", ts: noon(2026, 7, 2) },
+        { role: "ai", text: "every token attends to every token", ts: noon(2026, 7, 2) },
+        { role: "user", text: "so the KV cache is the fix?", ts: noon(2026, 7, 5) },
+      ],
+      dates: { first: "2026-07-02", last: "2026-07-05" },
+    }),
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c1",
+            args: {
+              action: "create",
+              type: "stuck-point",
+              summary: "Stuck on quadratic attention cost",
+              body: "Asked over two evenings.",
+              messageIndices: [1, 3],
+            },
+          },
+        ],
+      },
+      { text: "done" },
+    ]),
+  );
+  expect(result.created).toBe(1);
+  const [entry] = await store.list();
+  expect(entry.created).toBe("2026-07-02");
+  expect(entry.updated).toBe("2026-07-05");
+});
+
+test("the marks pass dates what it writes by when the marks were made", async () => {
+  const { store, adapter } = makeStore();
+  const marks: DistillAnnotation[] = [
+    { id: "ann-1", page: 12, text: "softmax over the scores", createdAt: noon(2026, 6, 20) },
+    { id: "ann-2", page: 31, text: "the residual stream", createdAt: noon(2026, 6, 29) },
+  ];
+  const result = await runMarksDistillation(
+    {
+      topicName: "attention",
+      bookName: "survey.pdf",
+      marks,
+      capped: false,
+      indexText: "",
+      dates: { first: "2026-06-20", last: "2026-06-29" },
+    },
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c1",
+            args: {
+              action: "create",
+              type: "belief",
+              summary: "Marks cluster on what the residual stream carries",
+              body: "From marks with no conversation behind them.",
+              annotationIds: ["ann-1", "ann-2"],
+            },
+          },
+        ],
+      },
+      { text: "done" },
+    ]),
+  );
+  expect(result.created).toBe(1);
+  const [entry] = await store.list();
+  expect(entry.created).toBe("2026-06-20");
+  expect(entry.updated).toBe("2026-06-29");
 });

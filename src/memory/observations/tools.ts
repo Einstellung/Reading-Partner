@@ -6,6 +6,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import type { ObservationAdapter } from "./adapter";
+import { coveredDays, transcriptAnchors, type TranscriptLine } from "./transcript";
 import { OBSERVATION_TYPES, isObservationType, type Observation } from "./types";
 
 export type ObservationWriteAction = "create" | "update" | "delete";
@@ -16,17 +17,24 @@ export interface ObservationToolOptions {
   // tools (record/types.ts). Not a tool parameter: the model does not know the
   // content hash and would invent one. Absent where there is no one book.
   bookId?: string;
-  // The transcript this pass rendered, as "<threadId>:<ts>" anchors, position i
-  // holding the anchor for the line the prompt printed as [i + 1]
-  // (transcript.ts). The model cites the number; the mapping happens here.
+  // The transcript this pass rendered, line by line (transcript.ts): position i
+  // holds the line the prompt printed as [i + 1], carrying both the
+  // "<threadId>:<ts>" anchor that lands on disk and the day that line happened.
+  // The model cites the number; the id and the date are read off this table.
   //
-  // A message id is a fact the program holds, so it is never asked of the
-  // model — the same rule as bookId above, and for the same measured reason:
-  // 76 of 298 model-written message anchors on one real store resolved against
-  // no message. Absent means this mount has no transcript behind it (a live
-  // conversation, the silent-marks pass), and then the parameter is not offered
-  // at all rather than offered with nothing to resolve against.
-  messageAnchors?: readonly string[];
+  // Neither is asked of the model — the same rule as bookId above, and for the
+  // same measured reason: 76 of 298 model-written message anchors on one real
+  // store resolved against no message. Absent means this mount has no
+  // transcript behind it (a live conversation, the silent-marks pass), and then
+  // the parameter is not offered at all rather than offered with nothing to
+  // resolve against.
+  messageLines?: readonly TranscriptLine[];
+  // The day each mark listed in this pass's prompt was made, by annotation id,
+  // on the reader's own clock. The other half of the dating: the silent-marks
+  // pass cites annotation ids and nothing else, so without this an observation
+  // made of marks would have nothing to date it but the clock — and a mark is
+  // read by the sweep even longer after the fact than a conversation is.
+  annotationDates?: ReadonlyMap<string, string>;
   // Whether creating an observation must cite at least one anchor — an
   // annotation id or a transcript line. On for the three distillation passes,
   // each of which prints everything it may cite; off for the tools mounted in a
@@ -57,7 +65,18 @@ function describeEntry(e: Observation): string {
 const TYPE_LIST = OBSERVATION_TYPES.join(" | ");
 
 export function buildObservationTools(adapter: ObservationAdapter, opts: ObservationToolOptions = {}): AgentTool[] {
-  const anchors = opts.messageAnchors ?? [];
+  const lines = opts.messageLines ?? [];
+  const anchors = transcriptAnchors(lines);
+  const annotationDates = opts.annotationDates;
+  // What this pass's evidence covers as a whole — every line it printed and
+  // every mark it listed. The fallback for a write that cites nothing datable,
+  // which in practice means an update: the model may rewrite an observation
+  // without restating its anchors, and the day the sweep happens to run is
+  // still not the day the reader was here.
+  const passDays = coveredDays([
+    ...lines.map((l) => l.date),
+    ...(annotationDates ? [...annotationDates.values()] : []),
+  ]);
   return [
     {
       name: "observation_search",
@@ -153,6 +172,19 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             : undefined;
         const anchorCount =
           evidence === undefined ? 0 : evidence.annotationIds.length + evidence.messageIds.length;
+        // When this observation's evidence happened, from the evidence itself.
+        // The cited lines and marks are the finest answer there is; the pass's
+        // own span stands in when the call cites nothing that carries a day,
+        // and only a mount with no evidence at all behind it (a live turn,
+        // where the conversation is happening now) falls through to the clock
+        // in store.ts.
+        const observed =
+          coveredDays([
+            ...(indices ?? []).map((i) => lines[i - 1]?.date ?? null),
+            ...((args.annotationIds as string[] | undefined) ?? []).map(
+              (id) => annotationDates?.get(id) ?? null,
+            ),
+          ]) ?? passDays;
 
         if (action === "create") {
           if (opts.requireAnchor && anchorCount === 0) {
@@ -173,6 +205,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             body,
             anchors: evidence,
             ...(opts.bookId ? { bookId: opts.bookId } : {}),
+            ...(observed ? { observed } : {}),
           });
           opts.onWrite?.("create");
           return `Created ${entry.id}.`;
@@ -197,6 +230,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             summary: args.summary === undefined ? undefined : String(args.summary),
             body: args.body === undefined ? undefined : String(args.body),
             anchors: evidence,
+            ...(observed ? { observed } : {}),
           });
           if (!entry) return `No observation with id "${id}".`;
           opts.onWrite?.("update");

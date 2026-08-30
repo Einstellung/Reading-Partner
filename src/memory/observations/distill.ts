@@ -25,7 +25,8 @@ import type { ObservationAdapter } from "./adapter";
 import { localDate } from "./files";
 import type { ObservationMeta } from "./store";
 import { buildObservationTools, type ObservationWriteAction } from "./tools";
-import { buildTranscript, renderTranscript, transcriptAnchors } from "./transcript";
+import { buildTranscript, renderTranscript } from "./transcript";
+import type { EvidenceDates } from "./types";
 
 export interface DistillMessage {
   role: "user" | "ai";
@@ -49,11 +50,9 @@ export interface DistillAnnotation {
 
 // --- when the evidence happened ---
 
-// The calendar days a pass's evidence spans, on the reader's own clock.
-export interface EvidenceDates {
-  first: string; // YYYY-MM-DD
-  last: string;
-}
+// The calendar days a pass's evidence spans, on the reader's own clock. Owned
+// by types.ts, because the same span is what an observation is dated by.
+export type { EvidenceDates };
 
 function stampSpan(stamps: readonly number[]): { lo: number; hi: number } | null {
   let lo = Infinity;
@@ -210,6 +209,19 @@ export function formatSilentMarks(marks: DistillAnnotation[], capped: boolean): 
     lines.push(`(the ${marks.length} oldest of a longer backlog; the rest follow in a later pass)`);
   }
   return [...lines, ...markLines(marks)].join("\n");
+}
+
+// The day each mark was made, by annotation id, on the reader's own clock. What
+// dates an observation the model anchored to marks: a mark carries its own
+// createdAt, and the pass that reads it may be weeks later (tools.ts). Marks
+// with an unusable stamp are left out rather than dated to 1970 — the same
+// guard stampSpan applies.
+export function markDates(marks: readonly DistillAnnotation[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const a of marks) {
+    if (Number.isFinite(a.createdAt) && a.createdAt > 0) out.set(a.id, localDate(a.createdAt));
+  }
+  return out;
 }
 
 // Where a book's marks had been folded in to. Per book, falling back to the
@@ -512,7 +524,8 @@ export async function runDistillation(
   const transcript = buildTranscript(input.messages, input.threadId);
   const tools = buildObservationTools(adapter, {
     bookId: input.bookId,
-    messageAnchors: transcriptAnchors(transcript),
+    messageLines: transcript,
+    annotationDates: markDates(input.silentMarks ?? []),
     requireAnchor: true,
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
@@ -858,6 +871,7 @@ export async function runMarksDistillation(
   // pass must cite is an annotation id, which it has in full in its prompt.
   const tools = buildObservationTools(adapter, {
     bookId: input.bookId,
+    annotationDates: markDates(input.marks),
     requireAnchor: true,
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;

@@ -31,6 +31,43 @@ test("create writes one file per observation and an index line", async () => {
   ]);
 });
 
+// The store's clock is 2026-07-17 throughout, so a date that is not that is a
+// date the evidence produced. Why: the arrears sweep reaches a conversation days
+// after it happened, and on one real store 38 of 110 placeable observations
+// carry a date their own evidence does not support, the worst off by 17 days.
+test("created and updated come from the evidence span, not from the clock", async () => {
+  const { store } = makeStore();
+  const entry = await store.create({
+    type: "belief",
+    summary: "Thinks positional encoding is additive by accident",
+    body: "Said so over two evenings.",
+    observed: { first: "2026-07-02", last: "2026-07-04" },
+  });
+  expect(entry.created).toBe("2026-07-02");
+  expect(entry.updated).toBe("2026-07-04");
+  // And the index, which is what a later conversation sorts on.
+  expect(await store.readIndexText()).toContain("updated 2026-07-04");
+});
+
+test("update moves updated to the evidence's last day and never backwards", async () => {
+  const { store } = makeStore();
+  const entry = await store.create({
+    type: "stuck-point",
+    summary: "s",
+    body: "b",
+    observed: { first: "2026-07-02", last: "2026-07-04" },
+  });
+  const later = await store.update(entry.id, { body: "b2", observed: { first: "2026-07-08", last: "2026-07-09" } });
+  expect(later?.created).toBe("2026-07-02");
+  expect(later?.updated).toBe("2026-07-09");
+
+  // A pass over an older stretch adds evidence; it does not make the
+  // observation older than what it already covers.
+  const older = await store.update(entry.id, { body: "b3", observed: { first: "2026-06-01", last: "2026-06-02" } });
+  expect(older?.updated).toBe("2026-07-09");
+  expect(older?.created).toBe("2026-07-02");
+});
+
 test("update rewrites in place: created kept, updated bumped, one file, one index line", async () => {
   let now = JULY_17;
   const { store, files } = makeStore(() => now);

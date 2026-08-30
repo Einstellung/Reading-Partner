@@ -31,7 +31,7 @@ import {
 } from "./distill";
 import type { ObservationMeta } from "./store";
 import { buildObservationTools, type ObservationWriteAction } from "./tools";
-import { buildTranscript, renderTranscript, transcriptAnchors } from "./transcript";
+import { buildTranscript, renderTranscript } from "./transcript";
 
 export const RETELL_DISTILL_AGENT_NAME = "retell_distiller";
 
@@ -223,7 +223,7 @@ export async function runRetellDistillation(
   // One numbering shared with the user message above (see distill.ts).
   const transcript = buildTranscript(input.messages, input.threadId);
   const tools = buildObservationTools(adapter, {
-    messageAnchors: transcriptAnchors(transcript),
+    messageLines: transcript,
     requireAnchor: true,
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;

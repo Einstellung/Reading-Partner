@@ -18,6 +18,7 @@
 // same "<threadId>:<ts>" strings the frontmatter has always carried.
 
 import { localDate } from "./files";
+import type { EvidenceDates } from "./types";
 
 // What this module needs of a message. Structural rather than imported so
 // distill.ts can keep owning DistillMessage without a cycle.
@@ -78,4 +79,23 @@ export function renderTranscript(lines: readonly TranscriptLine[]): string[] {
 // i holds the anchor for the line the prompt printed as [i + 1].
 export function transcriptAnchors(lines: readonly TranscriptLine[]): string[] {
   return lines.map((l) => l.anchor);
+}
+
+// The days a set of evidence covers, over days rather than timestamps. A line
+// already carries the day it happened and a mark's day is formatted the same
+// way, so the min and max of two ISO days is the same answer evidenceDates
+// gives over stamps (distill.ts) — one grain finer, because an observation is
+// dated by the lines it actually cited and not by the whole pass. Days that are
+// not known are dropped; null when none is left.
+export function coveredDays(
+  days: readonly (string | null | undefined)[],
+): EvidenceDates | null {
+  let first: string | null = null;
+  let last: string | null = null;
+  for (const d of days) {
+    if (!d) continue;
+    if (first === null || d < first) first = d;
+    if (last === null || d > last) last = d;
+  }
+  return first === null || last === null ? null : { first, last };
 }

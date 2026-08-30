@@ -9,6 +9,7 @@ import { buildDistillUserMessage } from "../../src/memory/observations/distill";
 import { distillUnits } from "../../src/memory/observations/arrears";
 import {
   buildTranscript,
+  coveredDays,
   renderTranscript,
   transcriptAnchors,
 } from "../../src/memory/observations/transcript";
@@ -106,4 +107,21 @@ test("the distill prompt prints the folded aside's own attribution nowhere and i
   // No id in the transcript at all, so none can be copied back wrong.
   expect(msg).not.toContain("aside-2:");
   expect(msg).not.toContain("lesson-1:");
+});
+
+// What dates an observation: the days its own cited evidence covers, which is
+// finer than the pass's span — the whole point being that the day the pass runs
+// is not the day the reader was here.
+test("coveredDays spans the days it is given and drops the ones it is not", () => {
+  expect(coveredDays(["2026-07-09", "2026-07-01", "2026-07-03"])).toEqual({
+    first: "2026-07-01",
+    last: "2026-07-09",
+  });
+  expect(coveredDays(["2026-07-01"])).toEqual({ first: "2026-07-01", last: "2026-07-01" });
+  expect(coveredDays([null, "2026-07-01", undefined])).toEqual({
+    first: "2026-07-01",
+    last: "2026-07-01",
+  });
+  expect(coveredDays([])).toBeNull();
+  expect(coveredDays([null, null])).toBeNull();
 });

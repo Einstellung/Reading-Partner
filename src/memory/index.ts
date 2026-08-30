@@ -51,6 +51,7 @@ export {
   formatEvidenceSpan,
   formatSilentMarks,
   markCursor,
+  markDates,
   messageCursor,
   runDistillPass,
   runDistillation,

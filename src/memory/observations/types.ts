@@ -34,6 +34,17 @@ export interface EvidenceAnchors {
   messageIds: string[];
 }
 
+// The days an observation's evidence actually covers, on the reader's own
+// clock. This is what dates an observation, in place of the machine clock the
+// pass happens to run on: the arrears sweep comes back to a thread every half
+// hour for as long as it is owed, so a conversation is read days after it
+// happened. Measured on one real store: 38 of 110 placeable observations carry
+// a date their own evidence does not support, the worst off by 17 days.
+export interface EvidenceDates {
+  first: string; // YYYY-MM-DD
+  last: string;
+}
+
 export interface Observation {
   id: string;
   type: ObservationType;
@@ -75,6 +86,12 @@ export interface RetainInput {
   // book being read is a fact about the session, and a model asked for it fills
   // it in wrong.
   bookId?: string;
+  // The days the evidence above covers, computed by the caller from the lines
+  // and marks the model cited (tools.ts). Stamped the same way and for the same
+  // reason as bookId: which day a message was sent is a fact the program holds.
+  // Absent only where nothing dates the evidence — a live conversation, which
+  // is happening now, so there the clock is the right answer.
+  observed?: EvidenceDates;
 }
 
 // A correction patch; every field optional, anchors replace when given.
@@ -84,6 +101,9 @@ export interface ObservationPatch {
   body?: string;
   anchors?: Partial<EvidenceAnchors>;
   bookId?: string;
+  // The days this correction's evidence covers. `updated` moves to its last day
+  // rather than to today; see ObservationFileStore.update.
+  observed?: EvidenceDates;
 }
 
 export interface ObservationHit {
