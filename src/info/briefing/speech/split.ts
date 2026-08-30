@@ -201,3 +201,111 @@ function cut(buffer: string, started: boolean, final: boolean): [SpokenSentence[
   }
   return [out, cps.slice(start).join("")];
 }
+
+// --- where a sentence came from --------------------------------------------
+
+// The splitter above hands out normalized text, which is what TTS needs and not
+// what a transcript should keep: "5%" is spoken as "百分之五" and would be read
+// back as that. A barge-in has to cut the conversation history at a sentence
+// boundary in the model's OWN output (docs/45), so every sentence needs its span
+// in the raw text as well.
+//
+// A wrapper rather than a field on SpokenSentence: normalization runs over a
+// whole frozen fragment and hands back no positions, so recovering them means
+// asking normalizeForSpeech again, which the streaming splitter must not pay for
+// where nobody wants the spans. Sentences come out of it identical, with the
+// span beside them.
+
+/** A half-open span of the pushed text: `raw.slice(start, end)`. */
+export interface SourceSpan {
+  /** UTF-16 offset into everything pushed so far. */
+  start: number;
+  /** UTF-16 offset one past the last character of this sentence. */
+  end: number;
+}
+
+/** A sentence plus the raw text it was normalized from. */
+export interface SourcedSentence extends SpokenSentence {
+  source: SourceSpan;
+}
+
+export interface SourcedSplitter {
+  push(chunk: string): SourcedSentence[];
+  end(): SourcedSentence[];
+  /** Everything pushed so far, exactly as it arrived. */
+  raw(): string;
+}
+
+// Trailing punctuation and space are what the two sides disagree about: a
+// sentence keeps the comma it was cut at, and normalizing that same span on its
+// own strips it as a line's trailing punctuation. Nothing else is touched, so a
+// span that matches matches on its whole content.
+const TAIL = /[\s，。！？；：、]+$/;
+
+function keyOf(text: string): string {
+  return text.replace(TAIL, "");
+}
+
+// A sentence can only end where the raw text has something that survives as a
+// boundary, and every one of those is punctuation, a newline or a space (see
+// normalize.ts: brackets, dashes, slashes and ellipses all become 、 or ，). So a
+// position after a letter, a digit or an ideograph is not a candidate, which is
+// what keeps the scan below to a handful of normalizations per sentence rather
+// than one per character.
+const WORD = /[A-Za-z0-9㐀-鿿]/;
+
+// How far past the sentence's own length the scan keeps looking once it has a
+// fallback: enough for one rewrite to have lengthened the tail ("5%" is two
+// characters of raw and four of speech), not enough to run to the end of a turn.
+const OVERSHOOT = 12;
+
+// Where in `raw` the sentence that normalizes to `text` ends, starting from
+// `at`. Exact whenever normalizing the span on its own reproduces the sentence,
+// which is the ordinary case; where a rewrite reached across the boundary it
+// falls back to the first candidate long enough to hold the sentence, which is
+// that position or the next one along.
+function sourceEnd(raw: string, at: number, text: string): number {
+  const want = keyOf(text);
+  let fallback = -1;
+  for (let q = at + 1; q <= raw.length; q++) {
+    if (q < raw.length && WORD.test(raw[q - 1])) continue;
+    const got = keyOf(normalizeForSpeech(raw.slice(at, q)));
+    if (got === want) return q;
+    if (fallback < 0 && got.length >= want.length) fallback = q;
+    else if (fallback >= 0 && got.length > want.length + OVERSHOOT) break;
+  }
+  return fallback < 0 ? raw.length : fallback;
+}
+
+/**
+ * The streaming splitter with every sentence's raw span beside it. The sentences
+ * are the ones `createSpeechSplitter` gives, unchanged; the spans are
+ * contiguous, in order, and cover the pushed text from 0 to its end.
+ */
+export function createSourcedSplitter(): SourcedSplitter {
+  const inner = createSpeechSplitter();
+  let raw = "";
+  let at = 0;
+
+  function attribute(sentences: SpokenSentence[], final: boolean): SourcedSentence[] {
+    return sentences.map((s, i) => {
+      // The last sentence of the turn takes the rest of the text, trailing
+      // whitespace and all: there is nothing after it to give it to.
+      const end = final && i === sentences.length - 1 ? raw.length : sourceEnd(raw, at, s.text);
+      const source = { start: at, end };
+      at = end;
+      return { ...s, source };
+    });
+  }
+
+  return {
+    push(chunk: string): SourcedSentence[] {
+      raw += chunk;
+      return attribute(inner.push(chunk), false);
+    },
+    end(): SourcedSentence[] {
+      return attribute(inner.end(), true);
+    },
+    raw: () => raw,
+  };
+}
