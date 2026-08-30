@@ -25,11 +25,17 @@ import type { ObservationAdapter } from "./adapter";
 import { localDate } from "./files";
 import type { ObservationMeta } from "./store";
 import { buildObservationTools, type ObservationWriteAction } from "./tools";
+import { buildTranscript, renderTranscript } from "./transcript";
+import type { EvidenceDates } from "./types";
 
 export interface DistillMessage {
   role: "user" | "ai";
   text: string;
   ts: number;
+  // Which thread this message is actually stored in, stamped where a unit is
+  // flattened (arrears.ts). Absent on a single-thread transcript, where it is
+  // the pass's own threadId. Never read off the unit instead — see transcript.ts.
+  threadId?: string;
 }
 
 // A mark the reader made on the book, reduced for distillation. Most are made
@@ -44,11 +50,9 @@ export interface DistillAnnotation {
 
 // --- when the evidence happened ---
 
-// The calendar days a pass's evidence spans, on the reader's own clock.
-export interface EvidenceDates {
-  first: string; // YYYY-MM-DD
-  last: string;
-}
+// The calendar days a pass's evidence spans, on the reader's own clock. Owned
+// by types.ts, because the same span is what an observation is dated by.
+export type { EvidenceDates };
 
 function stampSpan(stamps: readonly number[]): { lo: number; hi: number } | null {
   let lo = Infinity;
@@ -205,6 +209,19 @@ export function formatSilentMarks(marks: DistillAnnotation[], capped: boolean): 
     lines.push(`(the ${marks.length} oldest of a longer backlog; the rest follow in a later pass)`);
   }
   return [...lines, ...markLines(marks)].join("\n");
+}
+
+// The day each mark was made, by annotation id, on the reader's own clock. What
+// dates an observation the model anchored to marks: a mark carries its own
+// createdAt, and the pass that reads it may be weeks later (tools.ts). Marks
+// with an unusable stamp are left out rather than dated to 1970 — the same
+// guard stampSpan applies.
+export function markDates(marks: readonly DistillAnnotation[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const a of marks) {
+    if (Number.isFinite(a.createdAt) && a.createdAt > 0) out.set(a.id, localDate(a.createdAt));
+  }
+  return out;
 }
 
 // Where a book's marks had been folded in to. Per book, falling back to the
@@ -452,8 +469,10 @@ export function buildDistillSystemPrompt(input: DistillInput): string {
     "- Record only what cannot be re-derived from the book or the reader's",
     "  annotations: their understanding, confusions, beliefs, corrections, and where",
     "  they are. Do not copy book content or annotation text into an observation.",
-    "- Anchor evidence: pass the annotation id and the message ids an observation",
-    "  came from.",
+    "- Anchor evidence: every observation you create must cite where it came",
+    "  from — the annotation id, and the transcript line numbers (messageIndices:",
+    "  the [n] printed in front of each line). Numbers, not ids: turning a number",
+    "  back into a message id is the program's job, not yours.",
     "- A short or shallow conversation may yield nothing worth keeping; making no",
     "  tool call at all is a fine outcome.",
     ...((input.silentMarks?.length ?? 0) > 0
@@ -483,10 +502,8 @@ export function buildDistillUserMessage(input: DistillInput): string {
       (input.page !== null ? ` (page ${input.page})` : ""),
   ];
   if (input.markedText.trim()) lines.push(`Marked passage: "${input.markedText.trim()}"`);
-  lines.push("", "Transcript (message ids in brackets):");
-  for (const m of input.messages) {
-    lines.push(`[${input.threadId}:${m.ts}] ${m.role === "user" ? "reader" : "you"}: ${m.text}`);
-  }
+  lines.push("", "Transcript. Cite a message by the [n] in front of it:");
+  lines.push(...renderTranscript(buildTranscript(input.messages, input.threadId)));
   const marksBlock = formatSilentMarks(input.silentMarks ?? [], input.silentMarksCapped ?? false);
   if (marksBlock) lines.push("", marksBlock);
   return lines.join("\n");
@@ -500,8 +517,16 @@ export async function runDistillation(
   deps: DistillDeps,
 ): Promise<DistillResult> {
   const counts = { created: 0, updated: 0, deleted: 0 };
+  // The same lines the user message prints, so [n] there and messageIndices
+  // here are one numbering. Built twice rather than threaded through, because
+  // both are pure functions of the input and a numbering that can drift between
+  // the prompt and the tool is the bug this whole change is about.
+  const transcript = buildTranscript(input.messages, input.threadId);
   const tools = buildObservationTools(adapter, {
     bookId: input.bookId,
+    messageLines: transcript,
+    annotationDates: markDates(input.silentMarks ?? []),
+    requireAnchor: true,
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;
@@ -788,7 +813,8 @@ export function buildMarksDistillSystemPrompt(input: MarksDistillInput): string 
     ...datingRule("stretch of marks", input.dates),
     "- Do not copy the marked passages into an observation. They are already",
     "  stored; what is not stored is what marking them says about the reader.",
-    "- Anchor evidence: pass the annotation ids an observation came from.",
+    "- Anchor evidence: every observation you create must cite the annotation ids",
+    "  it came from.",
     "- A short or scattered stretch of marks may yield nothing worth keeping;",
     "  making no tool call at all is a fine outcome.",
     "",
@@ -841,8 +867,12 @@ export async function runMarksDistillation(
   deps: DistillDeps,
 ): Promise<DistillResult> {
   const counts = { created: 0, updated: 0, deleted: 0 };
+  // No transcript, so no message indices are mounted at all; the anchor this
+  // pass must cite is an annotation id, which it has in full in its prompt.
   const tools = buildObservationTools(adapter, {
     bookId: input.bookId,
+    annotationDates: markDates(input.marks),
+    requireAnchor: true,
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;

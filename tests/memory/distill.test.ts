@@ -37,6 +37,7 @@ import {
   runDistillPass,
   runDistillation,
   runMarksDistillPass,
+  runMarksDistillation,
   selectSilentMarks,
   DISTILL_BRIEF_TOKENS,
   type DistillAnnotation,
@@ -149,7 +150,8 @@ test("distillation creates observations through the real tools and counts them",
               summary: "Stuck on quadratic attention cost",
               body: "Asked on 2026-07-17 why attention is O(n^2).",
               annotationIds: ["ann-1"],
-              messageIds: ["thread-1:100"],
+              // The model cites a transcript line, never an id it assembled.
+              messageIndices: [1],
             },
           },
         ],
@@ -165,6 +167,60 @@ test("distillation creates observations through the real tools and counts them",
   expect(entries[0].anchors).toEqual({ annotationIds: ["ann-1"], messageIds: ["thread-1:100"] });
   // The index carries it for the next conversation's snapshot.
   expect(await store.readIndexText()).toContain("Stuck on quadratic attention cost");
+});
+
+// End to end through the real agent loop: what the pass mounts, not what the
+// tool can do in isolation (tests/memory/observation-tools.test.ts has that).
+test("a pass refuses an anchorless create and stores the aside's own thread id", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillation(
+    makeInput({
+      // A unit transcript: the lesson thread with a pageless aside folded in.
+      messages: [
+        { role: "user", text: "what is a key?", ts: JULY_17, threadId: "thread-1" },
+        { role: "user", text: "and a query?", ts: JULY_17 + 1000, threadId: "aside-2" },
+      ],
+    }),
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c1",
+            args: {
+              action: "create",
+              type: "stuck-point",
+              summary: "Stuck on the key/query split",
+              body: "Asked on 2026-07-17.",
+            },
+          },
+        ],
+      },
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c2",
+            args: {
+              action: "create",
+              type: "stuck-point",
+              summary: "Stuck on the key/query split",
+              body: "Asked on 2026-07-17.",
+              messageIndices: [2],
+            },
+          },
+        ],
+      },
+      { text: "done" },
+    ]),
+  );
+
+  expect(result).toMatchObject({ created: 1, ok: true });
+  const entries = await store.list();
+  expect(entries).toHaveLength(1);
+  // The aside's own id, not the unit's: the unit is named for the parent.
+  expect(entries[0].anchors.messageIds).toEqual([`aside-2:${JULY_17 + 1000}`]);
 });
 
 test("distillation updates (evolution) and deletes existing observations", async () => {
@@ -275,6 +331,7 @@ test("a failed call is a failed pass, with the writes it did make counted", asyn
               type: "belief",
               summary: "Suspects the survey overstates the result",
               body: "Voiced on 2026-07-17.",
+              messageIndices: [1],
             },
           },
         ],
@@ -591,6 +648,7 @@ test("an aborted pass stops, and does not advance the stamps", async () => {
               type: "reading-position",
               summary: "Reading the attention chapter",
               body: "On page 12 on 2026-07-17.",
+              annotationIds: ["ann-1"],
             },
           },
         ],
@@ -642,13 +700,22 @@ test("system prompt carries the curation rules, the date, and the index", () => 
   expect(prompt).toContain("cannot be re-derived");
 });
 
-test("user message carries metadata, the marked passage, and message ids", () => {
-  const msg = buildDistillUserMessage(makeInput());
+test("user message carries metadata, the marked passage, and a numbered transcript", () => {
+  const msg = buildDistillUserMessage(
+    makeInput({
+      messages: [
+        { role: "user", text: "why is this quadratic?", ts: JULY_17 },
+        { role: "ai", text: "because every token attends to every token", ts: JULY_17 },
+      ],
+    }),
+  );
   expect(msg).toContain("Topic: attention");
   expect(msg).toContain("annotation ann-1 (page 12)");
   expect(msg).toContain('Marked passage: "the marked sentence"');
-  expect(msg).toContain("[thread-1:100] reader: why is this quadratic?");
-  expect(msg).toContain("[thread-1:200] you: because every token attends to every token");
+  // A line number and the line's own day, never an id for the model to copy.
+  expect(msg).toContain("[1] 2026-07-17 reader: why is this quadratic?");
+  expect(msg).toContain("[2] 2026-07-17 you: because every token attends to every token");
+  expect(msg).not.toContain("thread-1:");
 });
 
 function mark(overrides: Partial<DistillAnnotation> = {}): DistillAnnotation {
@@ -1134,4 +1201,89 @@ test("the failure payload answers where, why and over what — and quotes nothin
     error: new Error("the reader said the lesion studies were the point"),
   });
   expect(JSON.stringify(quoted)).not.toContain("lesion");
+});
+
+// --- what the pass dates its observations by ---
+//
+// The store's clock in these tests is 2026-07-17. The sweep comes back to a
+// thread every half hour for as long as it is owed, so that is routinely not the
+// day the reader was here: 38 of 110 placeable observations on one real store
+// carry a date their own evidence does not support, the worst off by 17 days.
+
+test("a pass dates what it writes by the transcript, not by the day it runs", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillation(
+    makeInput({
+      messages: [
+        { role: "user", text: "why is this quadratic?", ts: noon(2026, 7, 2) },
+        { role: "ai", text: "every token attends to every token", ts: noon(2026, 7, 2) },
+        { role: "user", text: "so the KV cache is the fix?", ts: noon(2026, 7, 5) },
+      ],
+      dates: { first: "2026-07-02", last: "2026-07-05" },
+    }),
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c1",
+            args: {
+              action: "create",
+              type: "stuck-point",
+              summary: "Stuck on quadratic attention cost",
+              body: "Asked over two evenings.",
+              messageIndices: [1, 3],
+            },
+          },
+        ],
+      },
+      { text: "done" },
+    ]),
+  );
+  expect(result.created).toBe(1);
+  const [entry] = await store.list();
+  expect(entry.created).toBe("2026-07-02");
+  expect(entry.updated).toBe("2026-07-05");
+});
+
+test("the marks pass dates what it writes by when the marks were made", async () => {
+  const { store, adapter } = makeStore();
+  const marks: DistillAnnotation[] = [
+    { id: "ann-1", page: 12, text: "softmax over the scores", createdAt: noon(2026, 6, 20) },
+    { id: "ann-2", page: 31, text: "the residual stream", createdAt: noon(2026, 6, 29) },
+  ];
+  const result = await runMarksDistillation(
+    {
+      topicName: "attention",
+      bookName: "survey.pdf",
+      marks,
+      capped: false,
+      indexText: "",
+      dates: { first: "2026-06-20", last: "2026-06-29" },
+    },
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c1",
+            args: {
+              action: "create",
+              type: "belief",
+              summary: "Marks cluster on what the residual stream carries",
+              body: "From marks with no conversation behind them.",
+              annotationIds: ["ann-1", "ann-2"],
+            },
+          },
+        ],
+      },
+      { text: "done" },
+    ]),
+  );
+  expect(result.created).toBe(1);
+  const [entry] = await store.list();
+  expect(entry.created).toBe("2026-06-20");
+  expect(entry.updated).toBe("2026-06-29");
 });

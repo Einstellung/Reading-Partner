@@ -89,6 +89,15 @@ function newId(): string {
   return `m-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 }
 
+// `updated` never moves backwards. It is the last day this observation's
+// evidence covers, and that evidence is everything ever anchored to it rather
+// than only what the newest pass cited — the sweep works through its backlog
+// oldest-first, so a pass folding in an older conversation must not make an
+// observation look older than what it already carries.
+function laterDay(a: string, b: string): string {
+  return a > b ? a : b;
+}
+
 function normalizeAnchors(a?: Partial<EvidenceAnchors>): EvidenceAnchors {
   return {
     annotationIds: a?.annotationIds ?? [],
@@ -159,15 +168,25 @@ export class ObservationFileStore {
     return out;
   }
 
+  // Dated by the evidence it was anchored to, not by the day the pass ran:
+  // `created` is the first day that evidence covers, `updated` the last. The
+  // sweep comes back to a thread every half hour for as long as it is owed, so
+  // a conversation is distilled days after it happened — on one real store 38
+  // of 110 placeable observations carry a date their own evidence does not
+  // support, the worst off by 17 days.
+  //
+  // The clock is the fallback and nothing more: it is reached only where the
+  // evidence carries no day at all, which in practice is a live conversation,
+  // and there the clock is the right answer because the conversation is now.
   async create(input: RetainInput): Promise<Observation> {
-    const today = isoDate(this.now());
+    const clock = isoDate(this.now());
     const entry: Observation = {
       id: newId(),
       type: input.type,
       summary: oneLine(input.summary),
       body: input.body.trim(),
-      created: today,
-      updated: today,
+      created: input.observed?.first ?? clock,
+      updated: input.observed?.last ?? clock,
       anchors: normalizeAnchors(input.anchors),
       ...(input.bookId ? { bookId: input.bookId } : {}),
     };
@@ -176,9 +195,13 @@ export class ObservationFileStore {
     return entry;
   }
 
-  // Update in place: `created` is preserved, `updated` bumps to today. This is
-  // also the evolution path — the distiller rewrites summary/body to carry both
-  // the old state and the resolution.
+  // Update in place: `created` is preserved, `updated` moves to the last day the
+  // evidence covers. This is also the evolution path — the distiller rewrites
+  // summary/body to carry both the old state and the resolution.
+  //
+  // `created` stays where it was even when this pass's evidence is older,
+  // because it answers when this was first observed, not when the oldest
+  // evidence now attached to it happened.
   async update(id: string, patch: ObservationPatch): Promise<Observation | null> {
     const prev = await this.get(id);
     if (!prev) return null;
@@ -191,7 +214,8 @@ export class ObservationFileStore {
       // Filled in when the entry predates the field; never overwritten, because
       // the session correcting an observation is not always the one it is about.
       ...(prev.bookId ?? patch.bookId ? { bookId: prev.bookId ?? patch.bookId } : {}),
-      updated: isoDate(this.now()),
+      updated:
+        patch.observed === undefined ? isoDate(this.now()) : laterDay(prev.updated, patch.observed.last),
     };
     await this.fs.write(this.entryPath(id), serializeObservation(entry));
     await this.rebuildIndex();

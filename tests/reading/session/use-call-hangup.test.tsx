@@ -143,11 +143,18 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
 
     expect(getThread).toHaveBeenCalledTimes(1);
     expect(distilled).toHaveLength(1);
+    // Each line stamped with the thread it is stored in, which is what an
+    // anchor is built from (memory/observations/transcript.ts).
     expect(distilled[0]?.messages).toEqual([
-      { role: "user", text: "what is this mark about?", ts: 1 },
-      { role: "ai", text: "the 1962 figure", ts: 2 },
-      { role: "user", text: "why?", ts: expect.any(Number) },
-      { role: "ai", text: "because the mark is on that page", ts: expect.any(Number) },
+      { role: "user", text: "what is this mark about?", ts: 1, threadId: "t1" },
+      { role: "ai", text: "the 1962 figure", ts: 2, threadId: "t1" },
+      { role: "user", text: "why?", ts: expect.any(Number), threadId: "t1" },
+      {
+        role: "ai",
+        text: "because the mark is on that page",
+        ts: expect.any(Number),
+        threadId: "t1",
+      },
     ]);
   } finally {
     getThread.mockRestore();

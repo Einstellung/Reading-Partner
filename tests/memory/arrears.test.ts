@@ -334,12 +334,19 @@ test("a book with no asides is one unit per thread, unchanged", () => {
   expect(distillUnitOf(threads, "missing")).toBeNull();
 });
 
-// Only the three fields a transcript is made of: a stored message also carries
-// image filenames and the display row's parts, and neither is the retell.
-test("a folded transcript carries no more than role, text and ts", () => {
+// Only the fields a transcript is made of: a stored message also carries image
+// filenames and the display row's parts, and neither is the retell.
+test("a folded transcript carries role, text, ts and the message's own thread id", () => {
   const threads = [
     unit({ id: "bt", messages: [{ ...said1("l1", 1), images: ["a.png"] } as DistillMessage] }),
     unit({ id: "as", parentThreadId: "bt", messages: [said1("a1", 2)] }),
   ];
-  expect(distillUnits(threads)[0].messages[0]).toEqual({ role: "user", text: "l1", ts: 1 });
+  // Stamped here because this is the last place that knows it: after the merge
+  // the only thread id in scope is the parent's (transcript.ts).
+  expect(distillUnits(threads)[0].messages[0]).toEqual({
+    role: "user",
+    text: "l1",
+    ts: 1,
+    threadId: "bt",
+  });
 });

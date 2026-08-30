@@ -88,11 +88,17 @@ function foldsInto(
   return present.has(t.parentThreadId) ? t.parentThreadId : null;
 }
 
-// Only the three fields a transcript is made of, the same narrowing the hangup
-// path has always done: a stored message also carries image filenames and the
+// Only the fields a transcript is made of, the same narrowing the hangup path
+// has always done: a stored message also carries image filenames and the
 // display row's parts, and neither is the retell.
-function plain(messages: readonly DistillMessage[]): DistillMessage[] {
-  return messages.map(({ role, text, ts }) => ({ role, text, ts }));
+//
+// The thread id is stamped on here rather than worked out later, because this
+// is the last place that still knows it. A unit's messages are merged across
+// threads by timestamp below, and after that merge the only thread id in scope
+// is the parent's — which is wrong for every line that came from a folded
+// aside, and was 66 of the 76 unresolvable anchors on disk (transcript.ts).
+function plain(messages: readonly DistillMessage[], threadId: string): DistillMessage[] {
+  return messages.map(({ role, text, ts }) => ({ role, text, ts, threadId }));
 }
 
 // Every thread of one book reduced to the passes that should run over it.
@@ -110,12 +116,12 @@ export function distillUnits(
   for (const t of threads) {
     const into = foldsInto(t, present, pageless);
     if (into === null) continue;
-    folded.set(into, [...(folded.get(into) ?? []), { threadId: t.id, messages: plain(t.messages) }]);
+    folded.set(into, [...(folded.get(into) ?? []), { threadId: t.id, messages: plain(t.messages, t.id) }]);
   }
   const units: DistillUnit[] = [];
   for (const t of threads) {
     if (foldsInto(t, present, pageless) !== null) continue;
-    const own: DistillUnitPart = { threadId: t.id, messages: plain(t.messages) };
+    const own: DistillUnitPart = { threadId: t.id, messages: plain(t.messages, t.id) };
     const joined = folded.get(t.id);
     const parts = joined ? [own, ...joined] : [own];
     const messages = parts.flatMap((p) => p.messages);

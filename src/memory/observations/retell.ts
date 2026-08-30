@@ -31,6 +31,7 @@ import {
 } from "./distill";
 import type { ObservationMeta } from "./store";
 import { buildObservationTools, type ObservationWriteAction } from "./tools";
+import { buildTranscript, renderTranscript } from "./transcript";
 
 export const RETELL_DISTILL_AGENT_NAME = "retell_distiller";
 
@@ -157,7 +158,9 @@ export function buildRetellDistillSystemPrompt(input: RetellDistillInput): strin
     "  the body. Do not let a single chapter grow three entries: the index is what",
     "  the next conversation reads, and it is short.",
     ...datingRule("retell", input.dates),
-    "- Anchor evidence: pass the message ids an observation came from.",
+    "- Anchor evidence: every observation you create must cite the transcript",
+    "  line numbers it came from (messageIndices: the [n] printed in front of each",
+    "  line). Numbers, not ids — the program holds the ids.",
     "- A short or shallow stretch of conversation may yield nothing worth keeping;",
     "  making no tool call at all is a fine outcome.",
     "",
@@ -182,10 +185,8 @@ export function buildRetellDistillUserMessage(input: RetellDistillInput): string
         " retell; only what follows is new.",
     );
   }
-  lines.push("", "Transcript (message ids in brackets):");
-  for (const m of input.messages) {
-    lines.push(`[${input.threadId}:${m.ts}] ${m.role === "user" ? "reader" : "you"}: ${m.text}`);
-  }
+  lines.push("", "Transcript. Cite a message by the [n] in front of it:");
+  lines.push(...renderTranscript(buildTranscript(input.messages, input.threadId)));
   return lines.join("\n");
 }
 
@@ -219,7 +220,11 @@ export async function runRetellDistillation(
   deps: DistillDeps,
 ): Promise<DistillResult> {
   const counts = { created: 0, updated: 0, deleted: 0 };
+  // One numbering shared with the user message above (see distill.ts).
+  const transcript = buildTranscript(input.messages, input.threadId);
   const tools = buildObservationTools(adapter, {
+    messageLines: transcript,
+    requireAnchor: true,
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;
