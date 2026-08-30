@@ -101,10 +101,11 @@ test("a plugin that is not there does not reject the caller", async () => {
   expect(await syncSpeechKey(broken)).toBe(false);
 });
 
-test("off Tauri there is nothing to hand it to and the answer is false", async () => {
+test("on a host that cannot speak there is nothing to hand it to", async () => {
   await setTtsKey(KEY);
-  // No bridge, and bun is not a webview: isTauri() is false, so the command is
-  // never reached.
+  // No bridge, and bun is not a phone: hasNativeSpeech() is false, so the
+  // command is never reached. On a desktop it would be refused by the ACL
+  // anyway — the capability that grants the voice commands is iOS-only.
   expect(await syncSpeechKey()).toBe(false);
   expect(sent).toEqual([]);
 });

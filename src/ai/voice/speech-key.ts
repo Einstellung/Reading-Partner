@@ -13,7 +13,7 @@
 // conversation.
 
 import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "../../platform/app/host";
+import { hasNativeSpeech } from "../../platform/app/platform";
 import { loadCredentials, updateCredentials, type ApiKeyCredential } from "../credentials";
 
 // The command, and the argument key it reads. Both are checked by a test rather
@@ -62,11 +62,17 @@ export async function pushSpeechKey(
 // Read the saved key and hand it over: once at startup, and again after every
 // save.
 //
-// Never rejects. At startup there is nobody to show a failure to, and off Tauri
-// there is no plugin to tell — the app is silent either way, and the mic path
-// (config.ts) is unaffected. A caller that wants to know reads the answer.
+// Never rejects. At startup there is nobody to show a failure to, and on a host
+// that cannot speak there is nothing to tell — the app is silent either way, and
+// the mic path (config.ts) is unaffected. A caller that wants to know reads the
+// answer.
+//
+// No bridge is the caller's way of saying the host decides, the same way
+// nativeDictation() decides; a bridge means the caller is the transport and has
+// decided already, which is what lets the command string be checked somewhere
+// other than a device build.
 export async function syncSpeechKey(bridge?: SpeechKeyBridge): Promise<boolean> {
-  const transport = bridge ?? (isTauri() ? tauriBridge : null);
+  const transport = bridge ?? (hasNativeSpeech() ? tauriBridge : null);
   if (!transport) return false;
   try {
     return await pushSpeechKey(await getTtsKey(), transport);
