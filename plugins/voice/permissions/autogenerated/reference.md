@@ -1,6 +1,6 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, and interrupt or bench the spoken half.
+Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, speak a turn one sentence at a time, and interrupt or bench the spoken half.
 
 #### This default permission set includes the following:
 
@@ -13,6 +13,10 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-speech-probe`
 - `allow-speech-live`
 - `allow-speech-report`
+- `allow-speak-begin`
+- `allow-speak-push`
+- `allow-speak-close`
+- `allow-speak-stop`
 - `allow-register-listener`
 - `allow-remove-listener`
 
@@ -151,6 +155,110 @@ Enables the set_indicator_probe command without any pre-configured scope.
 <td>
 
 Denies the set_indicator_probe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-speak-begin`
+
+</td>
+<td>
+
+Enables the speak_begin command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-speak-begin`
+
+</td>
+<td>
+
+Denies the speak_begin command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-speak-close`
+
+</td>
+<td>
+
+Enables the speak_close command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-speak-close`
+
+</td>
+<td>
+
+Denies the speak_close command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-speak-push`
+
+</td>
+<td>
+
+Enables the speak_push command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-speak-push`
+
+</td>
+<td>
+
+Denies the speak_push command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-speak-stop`
+
+</td>
+<td>
+
+Enables the speak_stop command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-speak-stop`
+
+</td>
+<td>
+
+Denies the speak_stop command without any pre-configured scope.
 
 </td>
 </tr>

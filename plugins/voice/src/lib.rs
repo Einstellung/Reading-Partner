@@ -8,6 +8,8 @@
 // `{kind:"volatile"|"final",text}`, `{kind:"level",value}` and
 // `{kind:"timing",timing}` and reaches the frontend as a plugin listener.
 
+use std::sync::Arc;
+
 use tauri::{
     plugin::{Builder, TauriPlugin},
     Manager, Runtime,
@@ -29,6 +31,8 @@ mod error;
 #[cfg(debug_assertions)]
 mod live;
 mod models;
+/// One turn of speech, held together across the four `speak_*` commands.
+mod session;
 /// The relay's far end on the phone: `tts::Player` over `Voice::enqueue_speech`.
 mod speaker;
 /// Speaking (docs/33, M-voice-2). Platform-independent: it compiles and makes
@@ -37,7 +41,8 @@ mod speaker;
 pub mod tts;
 
 pub use error::{Error, Result};
-pub use speaker::DevicePlayer;
+pub use session::SpeechSession;
+pub use speaker::{DevicePlayer, DeviceSpeakers, Speakers};
 
 #[cfg(not(target_os = "ios"))]
 use fallback::Voice;
@@ -73,6 +78,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::speech_probe,
             commands::speech_live,
             commands::speech_report,
+            commands::speak_begin,
+            commands::speak_push,
+            commands::speak_close,
+            commands::speak_stop,
             commands::register_listener,
             commands::remove_listener
         ])
@@ -82,6 +91,15 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             #[cfg(not(target_os = "ios"))]
             let voice = fallback::init(app, api)?;
             app.manage(voice);
+            // Not split by target_os, and deliberately: the session is Rust all
+            // the way down — a relay and a vendor — and the one thing on it that
+            // needs a phone is where the audio ends up. `DevicePlayer` already
+            // handles that by asking `Voice`, which off iOS answers every
+            // enqueue with a sentence saying so (fallback.rs). A second copy of
+            // "this host cannot speak" here would say the same thing twice.
+            app.manage(session::SpeechSession::from_env(Arc::new(
+                speaker::DeviceSpeakers::new(app.clone()),
+            )));
             Ok(())
         })
         .build()

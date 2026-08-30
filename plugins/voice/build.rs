@@ -19,6 +19,10 @@ const COMMANDS: &[&str] = &[
     "speech_probe",
     "speech_live",
     "speech_report",
+    "speak_begin",
+    "speak_push",
+    "speak_close",
+    "speak_stop",
     "register_listener",
     "remove_listener",
 ];

@@ -23,12 +23,12 @@ use crate::speaker::DevicePlayer;
 use crate::tts::{mimo::MimoBackend, RelayConfig, RelayEvent, SpeechRelay, TtsBackend};
 use crate::{Error, Result};
 
-/// The key is read from the process environment, never from an argument and
-/// never from a file: the run is launched with
-/// `DEVICECTL_CHILD_MIMO_API_KEY=… xcrun devicectl device process launch`, so it
-/// exists for the length of the run and is nowhere on the phone's disk, in the
-/// bundle, or in the repository.
-const KEY_VAR: &str = "MIMO_API_KEY";
+// The key is read from the process environment, never from an argument and
+// never from a file: the run is launched with
+// `DEVICECTL_CHILD_MIMO_API_KEY=… xcrun devicectl device process launch`, so it
+// exists for the length of the run and is nowhere on the phone's disk, in the
+// bundle, or in the repository. The same variable the session reads.
+use crate::session::KEY_VAR;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
