@@ -166,6 +166,22 @@ pub(crate) async fn speech_report<R: Runtime>(app: AppHandle<R>) -> Result<Speec
 // webview cuts the stream into sentences, and each one arrives here on its own;
 // what holds them together is the `SpeechSession` managed on the app.
 
+/// Hand the speaking half the vendor key saved in Settings, and answer whether
+/// there is a voice to speak with afterwards. `null` clears it, after which the
+/// process environment's `MIMO_API_KEY` is used again if the run was launched
+/// with one.
+///
+/// Its own command rather than an argument on `speak_begin`: the key belongs to
+/// the process, not to a turn, so it crosses the IPC boundary when it changes
+/// instead of once per answer.
+#[command]
+pub(crate) async fn set_speech_key<R: Runtime>(
+    app: AppHandle<R>,
+    key: Option<String>,
+) -> Result<bool> {
+    Ok(app.state::<SpeechSession>().use_key(key.as_deref()))
+}
+
 /// Open a turn and answer with its number. Whatever was still speaking stops.
 #[command]
 pub(crate) async fn speak_begin<R: Runtime>(app: AppHandle<R>) -> Result<u64> {

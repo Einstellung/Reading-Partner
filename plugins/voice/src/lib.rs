@@ -78,6 +78,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::speech_probe,
             commands::speech_live,
             commands::speech_report,
+            commands::set_speech_key,
             commands::speak_begin,
             commands::speak_push,
             commands::speak_close,

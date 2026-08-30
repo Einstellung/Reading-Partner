@@ -1,6 +1,6 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, speak a turn one sentence at a time, and interrupt or bench the spoken half.
+Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, and interrupt or bench the spoken half.
 
 #### This default permission set includes the following:
 
@@ -13,6 +13,7 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-speech-probe`
 - `allow-speech-live`
 - `allow-speech-report`
+- `allow-set-speech-key`
 - `allow-speak-begin`
 - `allow-speak-push`
 - `allow-speak-close`
@@ -155,6 +156,32 @@ Enables the set_indicator_probe command without any pre-configured scope.
 <td>
 
 Denies the set_indicator_probe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-set-speech-key`
+
+</td>
+<td>
+
+Enables the set_speech_key command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-set-speech-key`
+
+</td>
+<td>
+
+Denies the set_speech_key command without any pre-configured scope.
 
 </td>
 </tr>
