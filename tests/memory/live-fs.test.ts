@@ -36,13 +36,17 @@ function makeStore(): ObservationFileStore {
 // The exists() that used to precede every read doubled the cost of a listing:
 // one list() over the owner's 106-entry topic was 2 + 2x106 = 214 crossings,
 // and buildReadingTurn (reading/turn.ts) does one on every reading turn.
-test("reading an observation costs one round trip, not two", async () => {
+//
+// The tombstone file is the second read here and it is per call, not per entry:
+// a listing reads it once and subtracts it from the whole set, so the count that
+// grows with the topic is one read per entry, which is the point.
+test("reading an observation probes nothing first", async () => {
   disk.files.set(ENTRY_PATH, ENTRY_TEXT);
 
   const entry = await makeStore().get("m-1a2b3c4d");
 
   expect(entry?.summary).toBe("Thinks attention is just soft lookup");
-  expect(disk.reads).toEqual([ENTRY_PATH]);
+  expect(disk.reads).toEqual(["memory-topic-1/deleted-observations.jsonl", ENTRY_PATH]);
   expect(fs.exists).not.toHaveBeenCalled();
 });
 
