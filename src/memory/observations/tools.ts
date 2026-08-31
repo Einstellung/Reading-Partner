@@ -6,6 +6,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import type { ObservationAdapter } from "./adapter";
+import { anchorSiblings, buildAnchorIndex, observationsById, resolveReferences } from "./links";
 import { coveredDays, transcriptAnchors, type TranscriptLine } from "./transcript";
 import { OBSERVATION_TYPES, isObservationType, type Observation } from "./types";
 
@@ -48,10 +49,42 @@ export interface ObservationToolOptions {
   requireAnchor?: boolean;
 }
 
-function describeEntry(e: Observation): string {
+// How many neighbours one read prints per section. The widest body on one real
+// store (2026-08-31) mentions 23 other observations and the widest
+// shared-evidence fan-out is 9, so this bites on the mention list and never on
+// the evidence list. Truncating the mention list costs the model nothing it
+// cannot get back: the ids themselves are in the body it is already reading, so
+// what the cap drops is the summary beside them, and one more observation_read
+// fetches it.
+const LINK_CAP = 12;
+
+function linkLine(e: Observation): string {
+  return `- [${e.id}] (${e.type}, updated ${e.updated}) ${e.summary}`;
+}
+
+function linkSection(title: string, entries: readonly Observation[], overflow: string): string[] {
+  if (entries.length === 0) return [];
+  const shown = entries.slice(0, LINK_CAP);
+  const lines = ["", title, ...shown.map(linkLine)];
+  if (entries.length > shown.length) lines.push(`(${entries.length - shown.length} more ${overflow})`);
+  return lines;
+}
+
+// One observation in full, plus the two hops out of it that the stored data
+// already supports but nothing rendered (links.ts): the observations this body
+// mentions by id, and the ones built on the same marks and messages. Both are
+// the neighbours the model would otherwise have to guess at — the mentions
+// print as bare ids in the body, and the anchors print as bare ids above it —
+// so this turns a read into a traversal it can chain inside the rounds it has.
+//
+// `all` is the same list observation_read already fetched to find `e`; nothing
+// here reads the disk again.
+function describeEntry(e: Observation, all: readonly Observation[]): string {
   const anchors: string[] = [];
   if (e.anchors.annotationIds.length) anchors.push(`annotations: ${e.anchors.annotationIds.join(", ")}`);
   if (e.anchors.messageIds.length) anchors.push(`messages: ${e.anchors.messageIds.join(", ")}`);
+  const { resolved, dangling } = resolveReferences(e, observationsById(all));
+  const siblings = anchorSiblings(buildAnchorIndex(all), e);
   return [
     `id: ${e.id}`,
     `type: ${e.type}`,
@@ -59,6 +92,18 @@ function describeEntry(e: Observation): string {
     ...anchors,
     "",
     e.body || e.summary,
+    ...linkSection("Observations this one mentions:", resolved, "mentioned in the body above"),
+    // Named so the model stops chasing them: an id it can read is worth a
+    // call, an id observation_read would answer "no observation" for is not.
+    // Phrased by where it looked rather than by what happened to it, because
+    // the set it resolves against is this topic's store: a mention the
+    // distiller deleted and one stored under another topic are the same
+    // silence from here. Neither exists on the real store — all 278 mentions
+    // resolve, and none crosses a topic directory.
+    ...(dangling.length
+      ? ["", `Mentioned but not in this topic's observations: ${dangling.join(", ")}.`]
+      : []),
+    ...linkSection("Other observations from the same evidence:", siblings, "on the same evidence"),
   ].join("\n");
 }
 
@@ -103,8 +148,9 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
       }),
       execute: async (args) => {
         const id = String(args.id);
-        const entry = (await adapter.listObservations()).find((e) => e.id === id);
-        return entry ? describeEntry(entry) : `No observation with id "${id}".`;
+        const all = await adapter.listObservations();
+        const entry = all.find((e) => e.id === id);
+        return entry ? describeEntry(entry, all) : `No observation with id "${id}".`;
       },
     },
     {

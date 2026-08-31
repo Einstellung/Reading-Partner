@@ -27,6 +27,17 @@ export {
 export { FileObservationAdapter, type ObservationAdapter } from "./observations/adapter";
 export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./observations/select";
 export {
+  anchorSiblings,
+  buildAnchorIndex,
+  mentionedIds,
+  observationsById,
+  observationsForAnnotation,
+  observationsForMessage,
+  resolveReferences,
+  type AnchorIndex,
+  type ResolvedReferences,
+} from "./observations/links";
+export {
   assembleIdentity,
   assembleReadingContext,
   assembleReadingSignal,
