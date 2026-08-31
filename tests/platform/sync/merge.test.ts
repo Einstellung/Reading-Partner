@@ -505,6 +505,112 @@ test("settings written before a key existed gain it rather than lose it", () => 
   );
 });
 
+// --- cursors ----------------------------------------------------------------
+
+// The distillation bookkeeping of one topic. The directory is the real one on
+// the owner's disk, where three losing copies of this file are parked.
+const META = "memory-b3a9f89c-ae9d-492e-8f69-4e12689af1b1/meta.json";
+
+const bookkeeping = (over: Record<string, unknown>) => ({
+  lastDistilledAt: 1786615519773,
+  lastAnnotationDistillAt: null,
+  distilledMessages: {},
+  distilledMarks: {},
+  ...over,
+});
+
+test("a topic's bookkeeping is merged, not parked whole in a conflict copy", () => {
+  expect(strategyFor(META)).toBe("cursors");
+  // Only that file, and only in that directory: the rule it applies is true of
+  // these numbers, not of numbers with this name anywhere.
+  expect(strategyFor("meta.json")).toBe("opaque");
+  expect(strategyFor("prep-abc/meta.json")).toBe("opaque");
+  expect(strategyFor("memory-b3a9f89c/index.md")).toBe("prose");
+});
+
+test("two devices each advancing a different thread keep both advances", () => {
+  const base = json(bookkeeping({ distilledMessages: { t1: 10, t2: 5 } }));
+  const local = json(bookkeeping({ distilledMessages: { t1: 20, t2: 5 } }));
+  const remote = json(bookkeeping({ distilledMessages: { t1: 10, t2: 9 } }));
+  const out = merge(META, base, local, remote);
+  expect(JSON.parse(text(out.merged)).distilledMessages).toEqual({ t1: 20, t2: 9 });
+  expect(out.contested).toBe(false);
+});
+
+test("two devices disagreeing on one cursor keep the lower: too high never distils those messages again", () => {
+  const base = json(bookkeeping({ distilledMessages: { t1: 10 } }));
+  const local = json(bookkeeping({ distilledMessages: { t1: 42 } }));
+  const remote = json(bookkeeping({ distilledMessages: { t1: 27 } }));
+  const out = merge(META, base, local, remote);
+  expect(JSON.parse(text(out.merged)).distilledMessages).toEqual({ t1: 27 });
+  // The higher one is journalled, so the choice is recoverable and not silent.
+  expect(out.dropped).toEqual([{ id: "distilledMessages.t1", record: 42 }]);
+  expect(out.contested).toBe(true);
+  expect(merged(META, base, remote, local)).toBe(text(out.merged));
+});
+
+test("a thread only one device knows about keeps its cursor", () => {
+  const base = json(bookkeeping({ distilledMessages: { t1: 10 } }));
+  const local = json(bookkeeping({ distilledMessages: { t1: 10, t2: 3 } }));
+  const remote = json(bookkeeping({ distilledMessages: { t1: 12 } }));
+  expect(JSON.parse(merged(META, base, local, remote)).distilledMessages).toEqual({
+    t1: 12,
+    t2: 3,
+  });
+});
+
+test("two devices disagreeing on a book's mark cursor keep the lower: a mark behind it is never offered again", () => {
+  const base = json(bookkeeping({ distilledMarks: { b1: 1787038818027 } }));
+  const local = json(bookkeeping({ distilledMarks: { b1: 1787874152211, b2: 5 } }));
+  const remote = json(bookkeeping({ distilledMarks: { b1: 1787045269042 } }));
+  const out = merge(META, base, local, remote);
+  expect(JSON.parse(text(out.merged)).distilledMarks).toEqual({ b1: 1787045269042, b2: 5 });
+});
+
+test("two devices disagreeing on the last-distilled stamp keep the lower: the next pass is not held back", () => {
+  // The stamp is a rate limit (isTopicDue, MIN_DISTILL_GAP_MS), not a cursor.
+  // The higher one makes the topic wait out a gap it has already served, and
+  // tells the profile guess that memory moved; the lower one only lets the
+  // half-hourly sweep look sooner, and the cursors end the pass at "no new
+  // messages" before it costs anything.
+  const base = json(bookkeeping({ lastDistilledAt: 1000 }));
+  const local = json(bookkeeping({ lastDistilledAt: 3000 }));
+  const remote = json(bookkeeping({ lastDistilledAt: 2000 }));
+  expect(JSON.parse(merged(META, base, local, remote)).lastDistilledAt).toBe(2000);
+});
+
+test("bookkeeping written by another build keeps the fields this merge knows nothing about", () => {
+  const base = json({
+    lastDistilledAt: 1000,
+    lastAnnotationDistillAt: 1786615519773,
+    distilledSomethingElse: { x: 1 },
+  });
+  const local = json({
+    lastDistilledAt: 2000,
+    lastAnnotationDistillAt: 1786615519773,
+    distilledSomethingElse: { x: 1 },
+  });
+  const remote = json({
+    lastDistilledAt: 1000,
+    lastAnnotationDistillAt: 1786615519773,
+    distilledSomethingElse: { x: 1, y: 2 },
+    distilledMessages: { t1: 4 },
+  });
+  expect(JSON.parse(merged(META, base, local, remote))).toEqual({
+    lastDistilledAt: 2000,
+    lastAnnotationDistillAt: 1786615519773,
+    distilledSomethingElse: { x: 1, y: 2 },
+    distilledMessages: { t1: 4 },
+  });
+});
+
+test("a topic never distilled on one device does not lose the other's cursors", () => {
+  const local = json(bookkeeping({ distilledMessages: { t1: 66 } }));
+  const remote = json({ lastDistilledAt: null, lastAnnotationDistillAt: null });
+  const out = merge(META, null, local, remote);
+  expect(JSON.parse(text(out.merged)).distilledMessages).toEqual({ t1: 66 });
+});
+
 // --- prose ------------------------------------------------------------------
 
 const note = (lines: string[]) => bytes(`${lines.join("\n")}\n`);
@@ -814,6 +920,29 @@ const CASES: Case[] = [
     identified: false,
   },
   {
+    name: "a topic's distillation bookkeeping both devices advanced",
+    path: "memory-b3a9f89c/meta.json",
+    base: json({
+      lastDistilledAt: 1000,
+      lastAnnotationDistillAt: null,
+      distilledMessages: { t1: 10, t2: 5 },
+      distilledMarks: { b1: 1 },
+    }),
+    local: json({
+      lastDistilledAt: 3000,
+      lastAnnotationDistillAt: null,
+      distilledMessages: { t1: 42, t2: 5, t3: 2 },
+      distilledMarks: { b1: 9 },
+    }),
+    remote: json({
+      lastDistilledAt: 2000,
+      lastAnnotationDistillAt: null,
+      distilledMessages: { t1: 27, t2: 8 },
+      distilledMarks: { b1: 4, b2: 3 },
+    }),
+    identified: false,
+  },
+  {
     name: "a records file that lost its shape",
     path: "annotations-x.json",
     base: json([{ id: "a", note: "one" }]),
@@ -939,7 +1068,10 @@ test("nothing leaves the merged file without being journalled or copied", () => 
 
 test("no setting a device actually changed leaves without being journalled", () => {
   for (const c of CASES) {
-    if (strategyFor(c.path) !== "fields") continue;
+    const strategy = strategyFor(c.path);
+    // cursors is fields with one rule for the scalars both sides moved, and the
+    // same promise about what it does with the value that lost.
+    if (strategy !== "fields" && strategy !== "cursors") continue;
     const out = merge(c.path, c.base, c.local, c.remote);
     const baseFields = c.base === null ? new Map<string, string>() : fieldsOf(c.base);
     const mergedFields = fieldsOf(out.merged);

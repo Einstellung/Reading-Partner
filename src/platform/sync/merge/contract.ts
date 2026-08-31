@@ -14,6 +14,9 @@ export type MergeStrategy =
   | "records"
   // JSON objects of scalar settings: three-way per field.
   | "fields"
+  // Fields, where the scalars are watermarks and the lower of two is the safe
+  // one: memory-<topicId>/meta.json and nothing else (cursors.ts).
+  | "cursors"
   // Markdown the user writes: three-way per line, conflict copy on overlap.
   | "prose"
   // Anything else: keep ours, park theirs beside it.
@@ -87,6 +90,15 @@ export function strategyFor(path: string): MergeStrategy {
   // exercised — the file is written once, under an id nothing else will ever
   // use, so the same path on two devices is the same pass.
   if (path.startsWith("runs/")) return "opaque";
+  // How much of a topic has already been distilled, memory-<topicId>/meta.json
+  // (memory/observations/store.ts). Qualified by its directory like the runs
+  // above, because "meta.json" is a name anything could take and the rule this
+  // strategy applies — lower number wins — is true of this file's numbers and
+  // not of numbers in general. It was falling through to opaque: three losing
+  // copies are parked in the owner's memory-b3a9f89c-* directory, holding 1, 14
+  // and 9 message cursors that the file in use never got, and nothing in src/
+  // can even see them (store.ts matches only entry and index conflict copies).
+  if (/^memory-[^/]+\/meta\.json$/.test(path)) return "cursors";
   const name = path.slice(path.lastIndexOf("/") + 1);
   if (name.endsWith(".md")) return "prose";
   if (RECORD_FILES.has(name)) return "records";
