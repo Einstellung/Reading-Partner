@@ -70,8 +70,9 @@ import {
 // through the Tauri plugin bridge, and it doubled the cost of every read: one
 // list() over the owner's 106-entry topic was 2 + 2x106 = 214 crossings, and
 // buildReadingTurn (reading/turn.ts) does one on every reading turn, iPad
-// included. Reading straight through makes it 107 — the same halving that made
-// syncFs.list() something only a full sync pass may call.
+// included. Reading straight through makes it 107. Two hundred-odd crossings
+// is the cost SyncFs names as the reason nothing but a full sync pass may call
+// its list() (platform/sync/syncFs.ts); this one ran on every turn.
 //
 // A read that throws is a file that is not there, which is the answer the store
 // already acts on: it takes null from read() and takes the same null from a
