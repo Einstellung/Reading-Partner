@@ -66,6 +66,16 @@ export interface Observation {
   // marks. Page numbers in the body are not an answer at all — two of the books
   // measured have the same page range about different subjects (docs/09).
   bookId?: string;
+  // Frontmatter pairs this build has no field for, kept so it can write them
+  // back out (files.ts). Opaque above the file format: nothing reads a value
+  // here, and the store carries it through an update only because it spreads
+  // the entry it read. Absent when the file had none.
+  //
+  // It is here so a device running an older build is not the thing that deletes
+  // a field a newer one added. Sync cannot catch that deletion — it is an
+  // ordinary line-level edit to a merge that reads these files as prose — so
+  // both devices converge on the loss with nothing written down.
+  extra?: [string, string][];
 }
 
 // The per-line view of the index file — everything the snapshot needs without
