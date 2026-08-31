@@ -4,6 +4,7 @@
 //   memory-<topicId>/<id>.md   — one observation per file (frontmatter + body)
 //   memory-<topicId>/index.md  — one line per observation; loaded into context
 //   memory-<topicId>/meta.json — bookkeeping (when the last distillation ran)
+//   memory-<topicId>/deleted-observations.jsonl — one line per deletion
 // The "memory-" prefix is the historical on-disk name, kept deliberately: the
 // feature was renamed to AI observations on 2026-08-06 but the directories hold
 // real synced data, so the paths and the meta.json field names never moved.
@@ -11,11 +12,13 @@
 // after every mutation (a topic holds tens of observations, not thousands).
 
 import {
+  appendTombstone,
   buildIndex,
   isoDate,
   oneLine,
   parseIndex,
   parseObservation,
+  parseTombstones,
   serializeObservation,
 } from "./files";
 import type {
@@ -72,6 +75,27 @@ const CONFLICT_FILE = /^(m-[0-9a-f]{8})\.conflict-[0-9a-f]+\.md$/;
 // owns this file's content.
 const INDEX_CONFLICT_FILE = /^index\.conflict-[0-9a-f]+\.md$/;
 
+// One line per deleted observation: `{"id":"m-1234abcd","at":"2026-08-31"}`.
+//
+// Removing the entry file is not a deletion that survives. Sync propagates no
+// file deletion by design — reconcile.ts leaves a file missing locally but
+// present remotely alone, so nothing is ever destroyed by a sync — and the other
+// device then republishes its copy at a higher revision. Measured on the owner's
+// store 2026-08-31: 106 entry files on disk against a 103-line index, the three
+// ids the index was missing (m-fb109f9c, m-0fe3bfb7, m-883ca3e9) all deliberately
+// merged into another entry and deleted, all three back from the other device;
+// m-883ca3e9 and m-fb109f9c arrived at rev 1 a week after the entry recording
+// their deletion was written. The next rebuildIndex would have put them back in
+// a prompt. So a deletion is written down as a record of its own, in a file the
+// records strategy unions across devices (platform/sync/merge/records.ts): a
+// tombstone can arrive from either side and can never be lost.
+//
+// A list of what is deleted, deliberately not a manifest of what exists. The
+// iPad runs an older build this one cannot upgrade and cannot detect; if this
+// file said which ids exist, every observation that build creates would be
+// absent from it and so invisible here. Existence stays with the entry files.
+const TOMBSTONE_FILE = "deleted-observations.jsonl";
+
 // One conflict copy, parsed here so a renderer never has to know the file
 // format. The fields are empty when the copy does not parse, which leaves the
 // path — and the path is what makes it findable either way.
@@ -121,20 +145,37 @@ export class ObservationFileStore {
     return `${this.dir}/${id}.md`;
   }
 
+  private get tombstonePath(): string {
+    return `${this.dir}/${TOMBSTONE_FILE}`;
+  }
+
+  private async readTombstones(): Promise<Set<string>> {
+    return parseTombstones((await this.fs.read(this.tombstonePath)) ?? "");
+  }
+
+  // A tombstoned id does not exist, whether or not its file is still on disk —
+  // and it usually is, because the other device keeps pushing it back. One
+  // answer for the whole store: if get() handed back an entry that list() and
+  // the index refuse to show, update() would rewrite that file and the store
+  // would be contradicting itself about the same id.
   async get(id: string): Promise<Observation | null> {
+    if ((await this.readTombstones()).has(id)) return null;
     const text = await this.fs.read(this.entryPath(id));
     return text === null ? null : parseObservation(text);
   }
 
-  // All observations, read from the entry files (index-independent), newest first.
+  // All observations, read from the entry files (index-independent) minus the
+  // tombstoned ids, newest first. A read never writes the tombstone file: the
+  // topic that has none has no deletions, which is the same answer.
   async list(): Promise<Observation[]> {
-    return this.readEntries(await this.fs.listDir(this.dir));
+    return this.readEntries(await this.fs.listDir(this.dir), await this.readTombstones());
   }
 
-  private async readEntries(names: string[]): Promise<Observation[]> {
+  private async readEntries(names: string[], deleted: Set<string>): Promise<Observation[]> {
     const entries: Observation[] = [];
     for (const name of names) {
-      if (!ENTRY_FILE.test(name)) continue;
+      const m = ENTRY_FILE.exec(name);
+      if (!m || deleted.has(m[1])) continue;
       const text = await this.fs.read(`${this.dir}/${name}`);
       const entry = text === null ? null : parseObservation(text);
       if (entry) entries.push(entry);
@@ -222,9 +263,20 @@ export class ObservationFileStore {
     return entry;
   }
 
+  // The tombstone is written before the file is removed: a tombstone whose entry
+  // file is still there is the steady state anyway (the other device pushes it
+  // back), while a file removed with no tombstone is exactly the bug above.
+  // Deleting an id that is already tombstoned succeeds without writing a second
+  // line — asking for something to be gone again is not an error.
   async delete(id: string): Promise<boolean> {
-    if ((await this.get(id)) === null) return false;
-    await this.fs.remove(this.entryPath(id));
+    const text = (await this.fs.read(this.tombstonePath)) ?? "";
+    const tombstoned = parseTombstones(text).has(id);
+    const onDisk = (await this.fs.read(this.entryPath(id))) !== null;
+    if (!tombstoned && !onDisk) return false;
+    if (!tombstoned) {
+      await this.fs.write(this.tombstonePath, appendTombstone(text, id, isoDate(this.now())));
+    }
+    if (onDisk) await this.fs.remove(this.entryPath(id));
     await this.rebuildIndex();
     return true;
   }
@@ -242,9 +294,17 @@ export class ObservationFileStore {
   // and drop any conflict copy of the index while here — see INDEX_CONFLICT_FILE.
   // An entry's own copies are left alone: those are versions of what the model
   // wrote about the reader, and the panel shows them.
+  //
+  // A topic with no tombstone file gets an empty one here and nothing else. On a
+  // store written before this file existed, an entry on disk and absent from the
+  // index cannot be told from one the other device created and synced in before
+  // this device last rebuilt — the owner's three arrived by exactly that route —
+  // so the migration deletes nothing and infers nothing.
   async rebuildIndex(): Promise<void> {
+    const text = await this.fs.read(this.tombstonePath);
+    if (text === null) await this.fs.write(this.tombstonePath, "");
     const names = await this.fs.listDir(this.dir);
-    const entries = await this.readEntries(names);
+    const entries = await this.readEntries(names, parseTombstones(text ?? ""));
     await this.fs.write(
       `${this.dir}/index.md`,
       buildIndex(entries.map(({ id, type, summary, updated }) => ({ id, type, summary, updated }))),
