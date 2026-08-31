@@ -27,12 +27,32 @@ export {
 export { FileObservationAdapter, type ObservationAdapter } from "./observations/adapter";
 export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./observations/select";
 export {
+  anchorSiblings,
+  buildAnchorIndex,
+  mentionedIds,
+  observationsById,
+  observationsForAnnotation,
+  observationsForMessage,
+  resolveReferences,
+  type AnchorIndex,
+  type ResolvedReferences,
+} from "./observations/links";
+export {
   assembleIdentity,
   assembleReadingContext,
   assembleReadingSignal,
   READING_SIGNAL_BUDGET,
   type TopicObservationSignal,
 } from "./live/assemble";
+export {
+  otherTopicNames,
+  rankObservations,
+  searchOtherTopics,
+  unionById,
+  CROSS_RECALL_LIMIT,
+  type ScopedHit,
+  type TopicObservations,
+} from "./observations/recall";
 export { buildObservationTools, type ObservationToolOptions, type ObservationWriteAction } from "./observations/tools";
 export {
   buildDistillAgent,
@@ -162,6 +182,7 @@ export {
   getLastDistillation,
   getObservationAdapter,
   listObservationConflicts,
+  listOtherTopicObservations,
   notifyObservationChange,
   onObservationChange,
   startDistillSweeps,

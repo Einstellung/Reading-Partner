@@ -24,6 +24,7 @@ import type { EventPayload } from "../../platform/app/events";
 import type { ObservationAdapter } from "./adapter";
 import { localDate } from "./files";
 import type { ObservationMeta } from "./store";
+import type { TopicObservations } from "./recall";
 import { buildObservationTools, type ObservationWriteAction } from "./tools";
 import { buildTranscript, renderTranscript } from "./transcript";
 import type { EvidenceDates } from "./types";
@@ -241,6 +242,16 @@ export interface DistillDeps {
   // which of the app's thinking settings a silent turn of the reader's own
   // conversation belongs to.
   model?: SubagentModel;
+  // The reader's other topics, for the search this pass is handed (tools.ts).
+  // Threaded in for the contradictions: two topics on the owner's store held
+  // opposite records of the same reader — a reinforcement-learning background
+  // in one, no reinforcement-learning vocabulary in the other — and it is the
+  // distiller that writes those, so it is the distiller that has to be able to
+  // see the other one before it writes the next. It still only writes here.
+  //
+  // Absent in every test and in any caller with no topic list, and then the
+  // pass runs exactly as it did.
+  otherTopics?: () => Promise<readonly TopicObservations[]>;
 }
 
 export interface DistillResult {
@@ -527,6 +538,7 @@ export async function runDistillation(
     messageLines: transcript,
     annotationDates: markDates(input.silentMarks ?? []),
     requireAnchor: true,
+    ...(deps.otherTopics ? { otherTopics: deps.otherTopics } : {}),
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;
@@ -718,7 +730,7 @@ export async function runDistillPass(
       silentMarksCapped: capped,
     },
     deps.adapter,
-    { run: deps.run, model: deps.model, signal: deps.signal },
+    { run: deps.run, model: deps.model, signal: deps.signal, otherTopics: deps.otherTopics },
   );
   if (!result.ok) return { ran: true, coverage, ...result };
   // One cursor per thread this transcript came from, and — when this pass
@@ -873,6 +885,7 @@ export async function runMarksDistillation(
     bookId: input.bookId,
     annotationDates: markDates(input.marks),
     requireAnchor: true,
+    ...(deps.otherTopics ? { otherTopics: deps.otherTopics } : {}),
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;
@@ -933,7 +946,7 @@ export async function runMarksDistillPass(
       dates: evidenceDates(stamps),
     },
     deps.adapter,
-    { run: deps.run, model: deps.model, signal: deps.signal },
+    { run: deps.run, model: deps.model, signal: deps.signal, otherTopics: deps.otherTopics },
   );
   if (!result.ok) return { ran: true, coverage, ...result };
   await deps.store.setMeta({

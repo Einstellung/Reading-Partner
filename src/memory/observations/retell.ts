@@ -225,6 +225,7 @@ export async function runRetellDistillation(
   const tools = buildObservationTools(adapter, {
     messageLines: transcript,
     requireAnchor: true,
+    ...(deps.otherTopics ? { otherTopics: deps.otherTopics } : {}),
     onWrite: (action: ObservationWriteAction) => {
       if (action === "create") counts.created++;
       else if (action === "update") counts.updated++;
@@ -315,7 +316,7 @@ export async function runRetellDistillPass(
       dates: evidenceDates(stamps),
     },
     deps.adapter,
-    { run: deps.run, model: deps.model, signal: deps.signal },
+    { run: deps.run, model: deps.model, signal: deps.signal, otherTopics: deps.otherTopics },
   );
   if (!result.ok) return { ran: true, distilled: fresh.length, coverage, ...result };
   // Spread first: the reading pass's two stamps live in the same file and this
