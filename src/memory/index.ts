@@ -44,6 +44,15 @@ export {
   READING_SIGNAL_BUDGET,
   type TopicObservationSignal,
 } from "./live/assemble";
+export {
+  otherTopicNames,
+  rankObservations,
+  searchOtherTopics,
+  unionById,
+  CROSS_RECALL_LIMIT,
+  type ScopedHit,
+  type TopicObservations,
+} from "./observations/recall";
 export { buildObservationTools, type ObservationToolOptions, type ObservationWriteAction } from "./observations/tools";
 export {
   buildDistillAgent,
@@ -173,6 +182,7 @@ export {
   getLastDistillation,
   getObservationAdapter,
   listObservationConflicts,
+  listOtherTopicObservations,
   notifyObservationChange,
   onObservationChange,
   startDistillSweeps,

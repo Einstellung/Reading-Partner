@@ -6,9 +6,17 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import type { ObservationAdapter } from "./adapter";
-import { anchorSiblings, buildAnchorIndex, observationsById, resolveReferences } from "./links";
+import { anchorSiblings, buildAnchorIndex, resolveReferences } from "./links";
+import {
+  allEntries,
+  otherTopicNames,
+  searchOtherTopics,
+  unionById,
+  type ScopedHit,
+  type TopicObservations,
+} from "./recall";
 import { coveredDays, transcriptAnchors, type TranscriptLine } from "./transcript";
-import { OBSERVATION_TYPES, isObservationType, type Observation } from "./types";
+import { OBSERVATION_TYPES, isObservationType, type Observation, type ObservationHit } from "./types";
 
 export type ObservationWriteAction = "create" | "update" | "delete";
 
@@ -47,6 +55,18 @@ export interface ObservationToolOptions {
   // under examination, the exact wrong answer an earlier observation had
   // recorded as an open question, and nothing connects the two.
   requireAnchor?: boolean;
+  // The reader's other topics, so recall reaches past the one these tools are
+  // mounted on (recall.ts). A thunk, not a list: a mount lives as long as a
+  // conversation and the reader can start a topic inside one, so the peers are
+  // read when a search runs, not when the tools are built. Reading all of them
+  // measures well under a millisecond on the owner's store, which is why there
+  // is no cache to go stale.
+  //
+  // Absent means same-topic only, and then every one of these tools behaves
+  // exactly as it did before cross-topic recall existed — same output bytes,
+  // same descriptions, same write path. That is what the distillation tests and
+  // any mount with no topic list behind it get.
+  otherTopics?: () => Promise<readonly TopicObservations[]>;
 }
 
 // How many neighbours one read prints per section. The widest body on one real
@@ -58,14 +78,22 @@ export interface ObservationToolOptions {
 // fetches it.
 const LINK_CAP = 12;
 
-function linkLine(e: Observation): string {
-  return `- [${e.id}] (${e.type}, updated ${e.updated}) ${e.summary}`;
+// `where` names the topic an entry lives in, and is empty for this topic's own
+// — an unlabelled line is local, a labelled one is about another book.
+function linkLine(e: Observation, where: ReadonlyMap<string, string>): string {
+  const topic = where.get(e.id);
+  return `- [${e.id}] (${topic ? `topic "${topic}", ` : ""}${e.type}, updated ${e.updated}) ${e.summary}`;
 }
 
-function linkSection(title: string, entries: readonly Observation[], overflow: string): string[] {
+function linkSection(
+  title: string,
+  entries: readonly Observation[],
+  overflow: string,
+  where: ReadonlyMap<string, string>,
+): string[] {
   if (entries.length === 0) return [];
   const shown = entries.slice(0, LINK_CAP);
-  const lines = ["", title, ...shown.map(linkLine)];
+  const lines = ["", title, ...shown.map((e) => linkLine(e, where))];
   if (entries.length > shown.length) lines.push(`(${entries.length - shown.length} more ${overflow})`);
   return lines;
 }
@@ -77,33 +105,49 @@ function linkSection(title: string, entries: readonly Observation[], overflow: s
 // print as bare ids in the body, and the anchors print as bare ids above it —
 // so this turns a read into a traversal it can chain inside the rounds it has.
 //
-// `all` is the same list observation_read already fetched to find `e`; nothing
-// here reads the disk again.
-function describeEntry(e: Observation, all: readonly Observation[]): string {
+// `all` and `others` are the same lists observation_read already fetched to
+// find `e`; nothing here reads the disk again.
+//
+// Both hops resolve across topics when other topics are mounted. Mentions
+// because the seam was already there — resolveReferences takes its known set as
+// a parameter — and because the moment the distiller can see another topic's
+// ids it starts writing them, so an id that resolves nowhere locally is now a
+// link rather than a corpse. Anchor siblings because one book can sit in two
+// topics, and then the same mark carries observations under both.
+function describeEntry(
+  e: Observation,
+  all: readonly Observation[],
+  others: readonly TopicObservations[],
+): string {
   const anchors: string[] = [];
   if (e.anchors.annotationIds.length) anchors.push(`annotations: ${e.anchors.annotationIds.join(", ")}`);
   if (e.anchors.messageIds.length) anchors.push(`messages: ${e.anchors.messageIds.join(", ")}`);
-  const { resolved, dangling } = resolveReferences(e, observationsById(all));
-  const siblings = anchorSiblings(buildAnchorIndex(all), e);
+  const where = otherTopicNames(all, others);
+  const { resolved, dangling } = resolveReferences(e, unionById(all, others));
+  const siblings = anchorSiblings(buildAnchorIndex(allEntries(all, others)), e);
+  const foreign = where.get(e.id);
   return [
     `id: ${e.id}`,
+    ...(foreign ? [`topic: ${foreign} — another topic, not the one you are in`] : []),
     `type: ${e.type}`,
     `created: ${e.created}, updated: ${e.updated}`,
     ...anchors,
     "",
     e.body || e.summary,
-    ...linkSection("Observations this one mentions:", resolved, "mentioned in the body above"),
+    ...linkSection("Observations this one mentions:", resolved, "mentioned in the body above", where),
     // Named so the model stops chasing them: an id it can read is worth a
     // call, an id observation_read would answer "no observation" for is not.
     // Phrased by where it looked rather than by what happened to it, because
-    // the set it resolves against is this topic's store: a mention the
-    // distiller deleted and one stored under another topic are the same
-    // silence from here. Neither exists on the real store — all 278 mentions
-    // resolve, and none crosses a topic directory.
+    // even widened the set it resolves against is only the topics this mount
+    // was given: a mention the distiller deleted and one stored in a topic
+    // nobody handed us are the same silence from here. Neither exists on the
+    // real store — all 278 mentions resolve, and none crosses a topic
+    // directory, which is what per-topic recall made of them and not a
+    // property of the text.
     ...(dangling.length
-      ? ["", `Mentioned but not in this topic's observations: ${dangling.join(", ")}.`]
+      ? ["", `Mentioned but not in the observations you can see: ${dangling.join(", ")}.`]
       : []),
-    ...linkSection("Other observations from the same evidence:", siblings, "on the same evidence"),
+    ...linkSection("Other observations from the same evidence:", siblings, "on the same evidence", where),
   ].join("\n");
 }
 
@@ -122,22 +166,79 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
     ...lines.map((l) => l.date),
     ...(annotationDates ? [...annotationDates.values()] : []),
   ]);
+  // Cross-topic recall is on by default wherever a topic list is mounted, and
+  // there is no "search wider" parameter for the model to set.
+  //
+  // The case against a default is that recall returns few hits and a union can
+  // crowd out the book in hand; that is answered by ranking the two apart
+  // (recall.ts) so the other topics add three lines and take none. What is left
+  // is the case against an opt-in, and it is decisive: the model cannot ask for
+  // what it cannot see is missing. Nothing in a reading turn says "this reader
+  // has a second topic that answers this" — that fact lives only in the topic
+  // it is being kept out of — so a widening it must request is a widening it
+  // requests exactly when it already suspects the answer, which is never.
+  const otherTopics = opts.otherTopics;
+  const readOtherTopics = async (): Promise<readonly TopicObservations[]> =>
+    otherTopics ? await otherTopics() : [];
+  // A hit from another topic is about another book. It is labelled at the line,
+  // not only under the section heading, because the model quotes lines.
+  const hitLine = (h: ObservationHit | ScopedHit): string => {
+    const topic = "topicName" in h ? `topic "${h.topicName}", ` : "";
+    return `[${h.entry.id}] (${topic}${h.entry.type}, updated ${h.entry.updated}) ${h.snippet}`;
+  };
+  // The other topic an id lives in, or undefined when it is this topic's — or
+  // nothing's, which the write path already has an answer for. Search now hands
+  // the model ids it cannot write to, and adapter.correct would answer a
+  // foreign id with the same "no observation" as a typo while delete would
+  // answer it with a cheerful "Deleted".
+  //
+  // Reads nothing at all where no other topics are mounted, so a distillation
+  // pass without them keeps exactly the write path it had.
+  const otherTopicOwner = async (id: string): Promise<string | undefined> => {
+    if (!otherTopics) return undefined;
+    const owner = (await otherTopics()).find((t) => t.entries.some((e) => e.id === id));
+    if (!owner) return undefined;
+    // A local entry wins a collision — the same rule unionById follows, for the
+    // same reason: the reader is in this topic.
+    const local = await adapter.listObservations();
+    return local.some((e) => e.id === id) ? undefined : owner.topicName;
+  };
+  const notYours = (id: string, topic: string): string =>
+    `${id} is stored under topic "${topic}", not this one. Observations can only be ` +
+    `changed in the topic they live in. If it matters here, write what you learned as ` +
+    `an observation of this topic.`;
   return [
     {
       name: "observation_search",
       description:
-        "Keyword-search your observations of this reader (this topic only). " +
-        "Returns ranked snippets with observation ids. If the first search doesn't " +
-        "answer the question, try different terms before giving up.",
+        "Keyword-search your observations of this reader. " +
+        (otherTopics
+          ? "Searches this topic and, in a second pass of its own, the reader's other " +
+            "topics — every hit from one of those is labelled with the topic it came " +
+            "from and is about a different book, so name that book before you lean on " +
+            "it, and never state it as something about the book in hand. "
+          : "This topic only. ") +
+        "Returns ranked snippets with observation ids" +
+        (otherTopics ? "; observation_read takes any id returned here. " : ". ") +
+        "If the first search doesn't answer the question, try different terms before giving up.",
       parameters: Type.Object({
         query: Type.String({ description: "Search terms." }),
       }),
       execute: async (args) => {
-        const hits = await adapter.recall(String(args.query));
-        if (hits.length === 0) return `No observation matches "${args.query}".`;
-        return hits
-          .map((h) => `[${h.entry.id}] (${h.entry.type}, updated ${h.entry.updated}) ${h.snippet}`)
-          .join("\n\n");
+        const query = String(args.query);
+        const hits = await adapter.recall(query);
+        const cross = searchOtherTopics(await readOtherTopics(), query);
+        if (hits.length === 0 && cross.length === 0) return `No observation matches "${query}".`;
+        // With nothing found outside this topic the answer is byte for byte the
+        // answer this tool has always given: no headings, no labels, nothing for
+        // the model to read as a change of subject.
+        if (cross.length === 0) return hits.map(hitLine).join("\n\n");
+        return [
+          hits.length
+            ? ["This topic:", hits.map(hitLine).join("\n\n")].join("\n\n")
+            : `Nothing in this topic matches "${query}".`,
+          ["The reader's other topics (other books — say which):", cross.map(hitLine).join("\n\n")].join("\n\n"),
+        ].join("\n\n");
       },
     },
     {
@@ -149,8 +250,14 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
       execute: async (args) => {
         const id = String(args.id);
         const all = await adapter.listObservations();
-        const entry = all.find((e) => e.id === id);
-        return entry ? describeEntry(entry, all) : `No observation with id "${id}".`;
+        // Searched here too, and not only in this topic's list, because a search
+        // that hands back ids from another topic and a read that refuses them
+        // would be one tool undoing the other.
+        const others = await readOtherTopics();
+        const entry =
+          all.find((e) => e.id === id) ??
+          others.flatMap((t) => [...t.entries]).find((e) => e.id === id);
+        return entry ? describeEntry(entry, all, others) : `No observation with id "${id}".`;
       },
     },
     {
@@ -162,6 +269,10 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
         "rewrite it as an evolution (keep the old state and add the resolution with " +
         "its date) — never silently drop the old state. Write absolute dates, one " +
         "fact per observation." +
+        (otherTopics
+          ? " Writes land in this topic only: a search can hand you an id from another " +
+            "topic, and that observation can be read but not changed from here."
+          : "") +
         (opts.requireAnchor
           ? " Every observation you create must cite its evidence: the annotationIds" +
             (anchors.length > 0 ? " and/or the messageIndices" : "") +
@@ -261,6 +372,8 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
         if (!id) throw new Error(`${action} requires id`);
 
         if (action === "delete") {
+          const foreign = await otherTopicOwner(id);
+          if (foreign) return notYours(id, foreign);
           await adapter.correct(id, null);
           opts.onWrite?.("delete");
           return `Deleted ${id}.`;
@@ -278,7 +391,10 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             anchors: evidence,
             ...(observed ? { observed } : {}),
           });
-          if (!entry) return `No observation with id "${id}".`;
+          if (!entry) {
+            const foreign = await otherTopicOwner(id);
+            return foreign ? notYours(id, foreign) : `No observation with id "${id}".`;
+          }
           opts.onWrite?.("update");
           return `Updated ${entry.id}.`;
         }

@@ -4,8 +4,7 @@
 // engine: the per-topic file store with BM25 recall (reusing the M6 search
 // implementation — each observation is one one-page document).
 
-import { bm25Search } from "../../fulltext/bm25";
-import { FULLTEXT_VERSION, type SearchDoc } from "../../fulltext/types";
+import { rankObservations } from "./recall";
 import type { ObservationFileStore } from "./store";
 import type { Observation, ObservationHit, ObservationPatch, RetainInput } from "./types";
 
@@ -13,7 +12,9 @@ export interface ObservationAdapter {
   // Write one fact (the write side curates: prefer correct() on an existing id
   // over retaining a near-duplicate).
   retain(input: RetainInput): Promise<Observation>;
-  // Keyword recall over summaries + bodies, ranked.
+  // Keyword recall over summaries + bodies, ranked. This topic only — reaching
+  // past it is the tools' business (recall.ts), because only the mount knows
+  // which other topics the reader has.
   recall(query: string, limit?: number): Promise<ObservationHit[]>;
   // Everything observed for this topic, newest first.
   listObservations(): Promise<Observation[]>;
@@ -33,22 +34,11 @@ export class FileObservationAdapter implements ObservationAdapter {
     return this.store.create(input);
   }
 
+  // This topic only, and unchanged by the cross-topic widening: the tools rank
+  // the other topics in a pass of their own (recall.ts) so that this ranking —
+  // its corpus, its idf, its six slots — stays exactly what it was.
   async recall(query: string, limit = RECALL_LIMIT): Promise<ObservationHit[]> {
-    const entries = await this.store.list();
-    const byId = new Map(entries.map((e) => [e.id, e]));
-    const docs: SearchDoc[] = entries.map((e) => ({
-      label: e.id,
-      fulltext: {
-        version: FULLTEXT_VERSION,
-        status: "ok",
-        pages: [`${e.summary}\n${e.body}`],
-        outline: [],
-      },
-    }));
-    return bm25Search(query, docs, limit).flatMap((h) => {
-      const entry = byId.get(h.label);
-      return entry ? [{ entry, score: h.score, snippet: h.snippet }] : [];
-    });
+    return rankObservations(await this.store.list(), query, limit);
   }
 
   listObservations(): Promise<Observation[]> {

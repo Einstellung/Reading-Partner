@@ -22,6 +22,7 @@ import {
   buildObservationSnapshot,
   buildObservationTools,
   getObservationAdapter,
+  listOtherTopicObservations,
   observationPromptSection,
   notifyObservationChange,
   trimObservations,
@@ -228,6 +229,9 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
     tools = [
       ...tools,
       ...buildObservationTools(observationsAdapter, {
+        // What the reader can and cannot say back is not a fact about one book
+        // (memory/observations/recall.ts).
+        otherTopics: () => listOtherTopicObservations(retell.topicId),
         onWrite: () => notifyObservationChange(retell.topicId),
       }),
     ];
