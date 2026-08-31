@@ -25,7 +25,7 @@ import {
   MAX_PAGE_CHARS,
   type TopicMaterial,
 } from "../src/fulltext/format";
-import { tokenize } from "../src/fulltext/bm25";
+import { tokenize, tokenizeForIndex } from "../src/fulltext/bm25";
 
 function fixture(rel: string): string {
   return fileURLToPath(new URL(rel, import.meta.url));
@@ -184,6 +184,47 @@ test("tokenizer splits latin words and CJK bigrams", () => {
   expect(tokenize("Hello WORLD 42")).toEqual(["hello", "world", "42"]);
   // Three Han chars -> two adjacent bigrams.
   expect(tokenize("阅读器")).toEqual(["阅读", "读器"]);
+});
+
+test("bigrams span only characters adjacent in the source", () => {
+  // The latin run breaks the CJK run: no "欢你" from characters the reader
+  // never wrote side by side.
+  expect(tokenize("我喜欢hello你好")).toEqual(["我喜", "喜欢", "hello", "你好"]);
+  // A run too short for a bigram still yields its character, so a
+  // single-character query has something to be.
+  expect(tokenize("读 熵 值")).toEqual(["读", "熵", "值"]);
+});
+
+test("word runs keep every script that spaces its words", () => {
+  // Greek carries meaning in the reader's notes: 17 observations mention "α",
+  // and the /[a-z0-9]+/ this replaced dropped all of them.
+  expect(tokenize("学习率 α 与 π")).toEqual(["学习", "习率", "α", "与", "π"]);
+  // Accented latin stays one word instead of splitting at the accent.
+  expect(tokenize("café naïve")).toEqual(["café", "naïve"]);
+  // Hangul is spaced like latin, so it is indexed whole rather than bigrammed.
+  expect(tokenize("한국어 텍스트")).toEqual(["한국어", "텍스트"]);
+  // Kana is not spaced, so it bigrams with the Han around it.
+  expect(tokenize("読み方")).toEqual(["読み", "み方"]);
+});
+
+test("the index adds CJK unigrams without changing document length", () => {
+  const { tokens, length } = tokenizeForIndex("注意力");
+  // Query-side tokens first, then the index-only unigrams.
+  expect(tokens).toEqual(["注意", "意力", "注", "意", "力"]);
+  // Length is the query-side count: BM25 divides by it, and letting the extra
+  // unigrams inflate it would re-weight Chinese pages against latin ones.
+  expect(length).toBe(2);
+  expect(tokens.slice(0, length)).toEqual(tokenize("注意力"));
+  // A lone character is already length-bearing and is not repeated.
+  expect(tokenizeForIndex("熵")).toEqual({ tokens: ["熵"], length: 1 });
+});
+
+test("a one-character query reaches a character inside a longer run", () => {
+  const page = ft(["信息熵是不确定性的度量", "书页排版与字体"]);
+  // "熵" only ever occurs mid-run, so the bigram index alone could not find it.
+  const hits = searchTopic("熵", [{ label: "Book", fulltext: page }]);
+  expect(hits.length).toBe(1);
+  expect(hits[0].page).toBe(1);
 });
 
 // --- prompt-facing formatting (src/fulltext/format.ts) ---

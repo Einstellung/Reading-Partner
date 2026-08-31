@@ -1,7 +1,23 @@
-// Hand-rolled BM25 over the pages of several books, each page a retrieval unit.
-// No external dependency. Latin tokens are lowercased word runs; CJK is indexed
-// as adjacent-character bigrams (plus a unigram fallback for lone characters),
-// which retrieves Chinese far better than per-character unigrams alone.
+// Hand-rolled BM25 over the pages of several books, each page a retrieval unit,
+// and over the reader's observations one entry at a time (memory/observations).
+// No external dependency.
+//
+// Chinese has no spaces, so the unit indexed for a run of Han characters is the
+// adjacent-character bigram: "注意力" is indexed as 注意 + 意力, and a query for
+// it looks for the same two. Bigrams are built only across characters that were
+// adjacent in the source, so "我喜欢hello你好" never yields "欢你". The shape is
+// the one OpenClaw's memory tokenizer uses (MIT, extensions/memory-core), minus
+// its Set return: BM25 needs term frequencies, so this returns a list.
+//
+// Bigrams alone leave one hole, measured on the owner's store (143 observations,
+// 127k characters of Chinese): a one-character query matches nothing, because a
+// character inside a longer run is only ever indexed as part of a bigram. "熵"
+// occurs in 4 observations and returned 0; "层" occurs in 55 and returned 3.
+// tokenizeForIndex closes it by adding a unigram per character *on the index
+// side only*. The query side stays bigram-only, which is what keeps this
+// additive: single characters are noisy terms, and feeding them into a
+// multi-character query displaced true hits (recall on "上下文长度" fell from
+// 0.83 to 0.67 when both sides emitted unigrams).
 
 import type { SearchDoc, SearchHit } from "./types";
 
@@ -9,22 +25,99 @@ const K1 = 1.5;
 const B = 0.75;
 const SNIPPET_RADIUS = 80;
 
-export function tokenize(text: string): string[] {
-  const tokens: string[] = [];
+// Scripts written without spaces between words, where the bigram is the unit.
+// Kana is here with Han because Japanese does not space its words either; there
+// are 12 kana characters in the owner's whole 5.6M-character book corpus, so
+// this costs nothing and only stops them tokenizing to nothing. Hangul is
+// deliberately NOT here — Korean *does* space its words, so it belongs in the
+// word class below and is indexed whole. (OpenClaw groups Hangul with Han; that
+// is the one part of its shape not taken.)
+function isCjk(cp: number): boolean {
+  return (
+    (cp >= 0x3040 && cp <= 0x30ff) || // hiragana + katakana
+    (cp >= 0x3400 && cp <= 0x4dbf) || // CJK extension A
+    (cp >= 0x4e00 && cp <= 0x9fff) || // CJK unified ideographs
+    (cp >= 0xf900 && cp <= 0xfaff) || // compatibility ideographs
+    (cp >= 0x20000 && cp <= 0x3ffff) // extensions B-F, above the BMP
+  );
+}
+
+// Any letter, digit or combining mark in any *spaced* script. The predecessor
+// of this matched /[a-z0-9]+/, which silently dropped every Greek letter the
+// reader's ML notes are full of — "α" occurs in 17 observations and could not
+// be searched for at all — and cut "café" into "caf" + "ve".
+const WORD_CHAR = /[\p{L}\p{N}\p{M}]/u;
+
+function isWordChar(cp: number, ch: string): boolean {
+  if (cp >= 0x61 && cp <= 0x7a) return true; // a-z, already lowercased
+  if (cp >= 0x30 && cp <= 0x39) return true; // 0-9
+  if (cp < 0x80) return false; // the rest of ASCII is punctuation
+  return WORD_CHAR.test(ch);
+}
+
+// Emits into `out` the tokens that define a document's length: word runs, CJK
+// bigrams, and the unigram for a CJK run too short to make a bigram. When
+// `unigrams` is given, every other CJK character is collected there instead —
+// index-only terms that must not count toward the length (see tokenizeForIndex).
+function scan(text: string, out: string[], unigrams: string[] | null): void {
   const lower = text.toLowerCase();
-  const re = /[a-z0-9]+|[㐀-鿿]+/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(lower)) !== null) {
-    const run = m[0];
-    if (run.charCodeAt(0) < 0x3400) {
-      tokens.push(run); // latin / digit word
-    } else if (run.length === 1) {
-      tokens.push(run); // lone CJK character
-    } else {
-      for (let i = 0; i + 1 < run.length; i++) tokens.push(run.slice(i, i + 2)); // CJK bigrams
+  let word = "";
+  let prev = "";
+  let runLength = 0;
+  const endRun = () => {
+    if (runLength === 1 && prev !== "") out.push(prev);
+    prev = "";
+    runLength = 0;
+  };
+  for (const ch of lower) {
+    const cp = ch.codePointAt(0) as number;
+    if (isCjk(cp)) {
+      if (word !== "") {
+        out.push(word);
+        word = "";
+      }
+      runLength++;
+      if (prev !== "") {
+        out.push(prev + ch);
+        // The run's first character becomes an index unigram only now, once the
+        // run is known to be long enough that endRun will not emit it.
+        if (runLength === 2 && unigrams) unigrams.push(prev);
+      }
+      if (unigrams !== null && runLength >= 2) unigrams.push(ch);
+      prev = ch;
+      continue;
+    }
+    endRun();
+    if (isWordChar(cp, ch)) word += ch;
+    else if (word !== "") {
+      out.push(word);
+      word = "";
     }
   }
+  endRun();
+  if (word !== "") out.push(word);
+}
+
+// Query-side tokens, and the general-purpose one: word runs plus CJK bigrams.
+export function tokenize(text: string): string[] {
+  const tokens: string[] = [];
+  scan(text, tokens, null);
   return tokens;
+}
+
+// Index-side tokens: the above plus one unigram per CJK character, so a
+// one-character query can reach a character sitting inside a longer run.
+// `length` is the count *without* those unigrams, i.e. exactly what tokenize
+// would return. BM25 divides by document length, and letting the index-only
+// unigrams inflate it would shift the balance between a Chinese page and a
+// Latin one rather than leave the existing ranking alone.
+export function tokenizeForIndex(text: string): { tokens: string[]; length: number } {
+  const tokens: string[] = [];
+  const unigrams: string[] = [];
+  scan(text, tokens, unigrams);
+  const length = tokens.length;
+  for (const u of unigrams) tokens.push(u);
+  return { tokens, length };
 }
 
 interface Unit {
@@ -59,10 +152,10 @@ export function bm25Search(query: string, docs: SearchDoc[], limit = 10): Search
   for (const d of docs) {
     d.fulltext.pages.forEach((text, i) => {
       if (text.trim() === "") return;
-      const tokens = tokenize(text);
+      const { tokens, length } = tokenizeForIndex(text);
       const tf = new Map<string, number>();
       for (const t of tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
-      units.push({ label: d.label, page: i + 1, text, tf, len: tokens.length });
+      units.push({ label: d.label, page: i + 1, text, tf, len: length });
     });
   }
   if (units.length === 0) return [];
