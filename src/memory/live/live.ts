@@ -1,4 +1,4 @@
-// Live wiring of the observation module: the Tauri fs behind ObservationFs, one
+// Live wiring of the observation module: the AppData fs behind ObservationFs, one
 // adapter per topic for the app's lifetime, the distillation entry points — a
 // reading conversation on hangup or a trim, a stretch of silent marking picked
 // up by the arrears sweep, a retell when the reader leaves the retell — all on
@@ -66,10 +66,25 @@ import {
   type Sweeps,
 } from "./sweeps";
 
-const tauriFs: ObservationFs = {
+// No exists() probe before a read or a listing. Each probe is a round trip
+// through the Tauri plugin bridge, and it doubled the cost of every read: one
+// list() over the owner's 106-entry topic was 2 + 2x106 = 214 crossings, and
+// buildReadingTurn (reading/turn.ts) does one on every reading turn, iPad
+// included. Reading straight through makes it 107 — the same halving that made
+// syncFs.list() something only a full sync pass may call.
+//
+// A read that throws is a file that is not there, which is the answer the store
+// already acts on: it takes null from read() and takes the same null from a
+// file whose bytes do not parse (store.ts), and nothing above it tells missing
+// from unreadable. The probe never ruled the throw out anyway — the file can go
+// between exists() and readText() — so this drops a cost, not a guarantee.
+export const observationFs: ObservationFs = {
   async read(path) {
-    if (!(await appData.exists(path))) return null;
-    return appData.readText(path);
+    try {
+      return await appData.readText(path);
+    } catch {
+      return null;
+    }
   },
   async write(path, content) {
     const dir = path.slice(0, path.lastIndexOf("/"));
@@ -80,9 +95,12 @@ const tauriFs: ObservationFs = {
     await appData.remove(path);
   },
   async listDir(path) {
-    if (!(await appData.exists(path))) return [];
-    const entries = await appData.readDir(path);
-    return entries.filter((e) => e.isFile).map((e) => e.name);
+    try {
+      const entries = await appData.readDir(path);
+      return entries.filter((e) => e.isFile).map((e) => e.name);
+    } catch {
+      return [];
+    }
   },
 };
 
@@ -92,7 +110,7 @@ const adapters = new Map<string, FileObservationAdapter>();
 function getStore(topicId: string): ObservationFileStore {
   let s = stores.get(topicId);
   if (!s) {
-    s = new ObservationFileStore(topicId, tauriFs);
+    s = new ObservationFileStore(topicId, observationFs);
     stores.set(topicId, s);
   }
   return s;

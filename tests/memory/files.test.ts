@@ -12,6 +12,7 @@ import {
   serializeIndexLine,
   serializeObservation,
 } from "../../src/memory/observations/files";
+import { mergeFile } from "../../src/platform/sync/merge";
 import type { Observation } from "../../src/memory/observations/types";
 
 const ENTRY: Observation = {
@@ -53,6 +54,100 @@ test("the book id round-trips, and an older file without one parses as before", 
 test("a multi-line summary is collapsed to one line on write", () => {
   const text = serializeObservation({ ...ENTRY, summary: "line one\nline  two" });
   expect(parseObservation(text)?.summary).toBe("line one line two");
+});
+
+// --- frontmatter keys this build has no field for ---
+
+// The gate on every field this format may still grow. Two devices sync these
+// files and neither can upgrade or detect the other; a build that drops a key
+// it cannot name deletes it everywhere, and the prose merge cannot tell that
+// from an ordinary edit.
+test("unknown frontmatter keys round-trip byte-identically", () => {
+  const text = [
+    "---",
+    "id: m-1a2b3c4d",
+    "type: stuck-point",
+    "created: 2026-07-17",
+    "updated: 2026-07-17",
+    "summary: Stuck on why attention scales quadratically",
+    "layer: durable",
+    "valid-until: 2027-01-01",
+    "---",
+    "",
+    "Asked twice.",
+    "",
+  ].join("\n");
+  const parsed = parseObservation(text);
+  expect(parsed?.extra).toEqual([
+    ["layer", "durable"],
+    ["valid-until", "2027-01-01"],
+  ]);
+  expect(serializeObservation(parsed as Observation)).toBe(text);
+});
+
+// Sorted, not in file order: two devices holding the same pairs have to write
+// the same bytes or each would rewrite the other's file on every pass.
+test("unknown keys are written sorted, and a repeated key keeps its last value", () => {
+  const parsed = parseObservation("---\nid: m-1\ntype: belief\nzeta: 2\nalpha: 1\nzeta: 3\n---\n\nb\n");
+  expect(parsed?.extra).toEqual([
+    ["zeta", "3"],
+    ["alpha", "1"],
+  ]);
+  expect(serializeObservation(parsed as Observation)).toContain("alpha: 1\nzeta: 3\n---");
+});
+
+// The known field is the one the app acts on; a second line with the same key
+// would win the reparse and replace it.
+test("an unknown pair naming a known key is dropped rather than written twice", () => {
+  const text = serializeObservation({
+    ...ENTRY,
+    extra: [
+      ["summary", "the other one"],
+      ["layer", "durable"],
+    ],
+  });
+  expect(text.match(/^summary: /gm)).toHaveLength(1);
+  expect(parseObservation(text)?.summary).toBe(ENTRY.summary);
+  expect(parseObservation(text)?.extra).toEqual([["layer", "durable"]]);
+});
+
+// An empty known field is omitted because it reparses to "" either way; an
+// omitted unknown key is gone.
+test("an unknown key with no value keeps its key", () => {
+  const text = "---\nid: m-1\ntype: belief\nlayer:\n---\n\nb\n";
+  expect(parseObservation(text)?.extra).toEqual([["layer", ""]]);
+  expect(serializeObservation(parseObservation(text) as Observation)).toBe(text);
+});
+
+test("a file with only known keys carries no extra", () => {
+  expect(parseObservation(serializeObservation(ENTRY))?.extra).toBeUndefined();
+});
+
+// What the shape rests on, checked against the merge that actually runs rather
+// than against a description of it: an unknown key is an ordinary frontmatter
+// line in a fixed place, so a device that rewrote something else leaves it
+// byte-identical to base and chunk3 puts it in a stable chunk.
+test("unknown keys survive the merge two devices run on these files", () => {
+  const base = serializeObservation({ ...ENTRY, extra: [["layer", "durable"]] });
+  const read = () => parseObservation(base) as Observation;
+  // One device rewrites the body, the other the summary. Neither knows `layer`.
+  const local = serializeObservation({ ...read(), body: "Asked a third time." });
+  const remote = serializeObservation({ ...read(), summary: "Still stuck on the quadratic cost" });
+
+  const bytes = (t: string) => new TextEncoder().encode(t);
+  const merged = mergeFile({
+    path: "memory-topic-1/m-1a2b3c4d.md",
+    base: bytes(base),
+    local: bytes(local),
+    remote: bytes(remote),
+  });
+
+  expect(merged.contested).toBe(false);
+  expect(merged.copies).toEqual([]);
+  const entry = parseObservation(new TextDecoder().decode(merged.merged));
+  expect(entry?.extra).toEqual([["layer", "durable"]]);
+  expect(entry?.body).toBe("Asked a third time.");
+  expect(entry?.summary).toBe("Still stuck on the quadratic cost");
 });
 
 test("malformed file or unknown type parses as null", () => {

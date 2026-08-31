@@ -149,6 +149,53 @@ test("meta round-trips and defaults to no distillation", async () => {
   expect(await store.getMeta()).toEqual({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
 });
 
+// The passthrough seen from the store: an entry read off disk goes back out
+// with the keys this build has no field for, because update spreads what it
+// read. Nothing between here and the file format has to know about them.
+test("update keeps frontmatter keys the store has no field for", async () => {
+  const { store, files } = makeStore();
+  const path = "memory-topic-1/m-1a2b3c4d.md";
+  files.set(
+    path,
+    [
+      "---",
+      "id: m-1a2b3c4d",
+      "type: belief",
+      "created: 2026-07-01",
+      "updated: 2026-07-01",
+      "summary: Thinks attention is just soft lookup",
+      "layer: durable",
+      "valid-until: 2027-01-01",
+      "---",
+      "",
+      "Said so twice.",
+      "",
+    ].join("\n"),
+  );
+
+  const updated = await store.update("m-1a2b3c4d", { body: "Said so a third time." });
+  const extra: [string, string][] = [
+    ["layer", "durable"],
+    ["valid-until", "2027-01-01"],
+  ];
+  expect(updated?.extra).toEqual(extra);
+
+  const text = files.get(path) ?? "";
+  expect(text).toContain("layer: durable");
+  expect(text).toContain("valid-until: 2027-01-01");
+  expect(text).toContain("Said so a third time.");
+
+  // And through the read path the index rebuild and every prompt use.
+  expect((await store.list())[0].extra).toEqual(extra);
+  expect((await store.get("m-1a2b3c4d"))?.extra).toEqual(extra);
+});
+
+test("a created observation carries no unknown keys", async () => {
+  const { store } = makeStore();
+  const entry = await store.create({ type: "belief", summary: "s", body: "b" });
+  expect(entry.extra).toBeUndefined();
+});
+
 // --- conflict copies sync leaves behind ---
 
 test("conflict copies are readable, and still not observations", async () => {
