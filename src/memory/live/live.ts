@@ -158,8 +158,9 @@ export function readObservationIndex(topicId: string): Promise<ObservationIndexE
 // no work for them.
 //
 // Cost on the owner's store, 2026-08-31: two peer topics, 37 observations,
-// 40 KB, well under a millisecond to read and 1.25 ms to rank — in front of a
-// model call, which is why this is read per search rather than cached.
+// 56 KB, 0.3 ms to read and parse and 1.3 ms to rank — in front of a model
+// call, which is why this is read per search rather than cached. store.list()
+// holds no cache, so every search sees what the last distillation pass wrote.
 export async function listOtherTopicObservations(topicId: string): Promise<TopicObservations[]> {
   const out: TopicObservations[] = [];
   for (const topic of await listTopics()) {

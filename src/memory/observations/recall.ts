@@ -10,8 +10,9 @@
 // neither able to see the other. This module is the widened read; nothing here
 // writes, moves or renames anything on disk.
 //
-// Measured on the owner's store, 2026-08-31: 3 topics, 143 observations,
-// 166 KB of entry files, 127k characters of summary + body. One observation_search
+// Measured on the owner's store, 2026-08-31: 3 topics hold observations (the
+// shelf has 5; the other two have none yet and are skipped), 143 observations,
+// 259 KB of entry files, 127k characters of summary + body. One observation_search
 // over the 106-observation topic he reads in costs 5.71 ms; the same search with
 // his other two topics (21 and 16) mounted costs 6.89 ms, plus about 0.4 ms to
 // read those 37 files off disk (the 106-file topic measures 1.01 ms). Under two
