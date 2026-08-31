@@ -4,6 +4,9 @@
 // nested objects. An array value is a scalar — the elements of these arrays
 // (a chapter list, a paper list) are positional, and merging them elementwise
 // would produce a list neither device ever had.
+//
+// The cursors strategy is this one with a rule for the scalars both devices
+// moved (cursors.ts), which is why the tie-break is a parameter.
 
 import type { DroppedRecord } from "./contract";
 import {
@@ -28,6 +31,13 @@ export interface ObjectMerge {
   contested: boolean;
 }
 
+// How a file settles two scalars both devices moved. Defaults to content order,
+// which is arbitrary but identical on both devices; a file whose values mean
+// something to compare passes its own rule (cursors.ts). It must stay symmetric
+// and idempotent for the same reason everything else here is: both devices run
+// this over the same pair and have to land on the same bytes.
+export type ResolveConflict = (local: Json, remote: Json) => { winner: Json; loser: Json };
+
 // One key, against the base. `undefined` on any side means the key is absent
 // there. The rules are the record rules: an edit outranks a delete, an add is
 // kept, a delete both sides left alone goes through, and with no base nothing
@@ -37,6 +47,7 @@ export function mergeField(
   local: Json | undefined,
   remote: Json | undefined,
   id: string,
+  resolve: ResolveConflict = chooseByContent,
 ): FieldMerge {
   if (local !== undefined && remote !== undefined && sameValue(local, remote)) {
     return { value: pickByContent(local, remote), dropped: [], contested: false };
@@ -46,7 +57,7 @@ export function mergeField(
     // No base: an absence cannot be told from a deletion, so it is an absence.
     if (local === undefined) return { value: remote, dropped: [], contested: false };
     if (remote === undefined) return { value: local, dropped: [], contested: false };
-    return mergeBoth(base, local, remote, id);
+    return mergeBoth(base, local, remote, id, resolve);
   }
 
   if (local === undefined && remote === undefined) {
@@ -69,18 +80,24 @@ export function mergeField(
 
   if (sameValue(local, base)) return { value: remote, dropped: [], contested: false };
   if (sameValue(remote, base)) return { value: local, dropped: [], contested: false };
-  return mergeBoth(base, local, remote, id);
+  return mergeBoth(base, local, remote, id, resolve);
 }
 
 // Both sides moved this key away from the base. Objects are opened up so two
 // devices editing different settings both keep theirs; anything else is one
-// value or the other, picked by content, with the value that lost journalled
-// so it is still recoverable.
-function mergeBoth(base: Json | undefined, local: Json, remote: Json, id: string): FieldMerge {
+// value or the other, settled by the file's own rule, with the value that lost
+// journalled so it is still recoverable.
+function mergeBoth(
+  base: Json | undefined,
+  local: Json,
+  remote: Json,
+  id: string,
+  resolve: ResolveConflict,
+): FieldMerge {
   if (isPlainObject(local) && isPlainObject(remote)) {
-    return mergeObject(isPlainObject(base) ? base : undefined, local, remote, id);
+    return mergeObject(isPlainObject(base) ? base : undefined, local, remote, id, resolve);
   }
-  const { winner, loser } = chooseByContent(local, remote);
+  const { winner, loser } = resolve(local, remote);
   return { value: winner, dropped: [{ id, record: loser }], contested: true };
 }
 
@@ -91,6 +108,7 @@ export function mergeObject(
   local: { [key: string]: Json },
   remote: { [key: string]: Json },
   prefix: string,
+  resolve: ResolveConflict = chooseByContent,
 ): ObjectMerge {
   const order = orderIds(base ? Object.keys(base) : [], Object.keys(local), Object.keys(remote));
   const value: { [key: string]: Json } = {};
@@ -103,6 +121,7 @@ export function mergeObject(
       local[key],
       remote[key],
       prefix ? `${prefix}.${key}` : key,
+      resolve,
     );
     dropped.push(...merged.dropped);
     contested = contested || merged.contested;

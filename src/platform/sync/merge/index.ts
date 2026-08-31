@@ -10,7 +10,8 @@
 // both devices write the same file under the same name.
 
 import { strategyFor, type ConflictCopy, type MergeInput, type MergeOutput } from "./contract";
-import { mergeObject } from "./fields";
+import { lowerCursorWins } from "./cursors";
+import { mergeObject, type ResolveConflict } from "./fields";
 import { mergeProse } from "./prose";
 import {
   lineCollection,
@@ -86,9 +87,11 @@ export function mergeFile(input: MergeInput): MergeOutput {
       ? mergeRecordFile(input)
       : strategy === "fields"
         ? mergeFieldFile(input)
-        : strategy === "prose"
-          ? mergeProseFile(input)
-          : null;
+        : strategy === "cursors"
+          ? mergeFieldFile(input, lowerCursorWins)
+          : strategy === "prose"
+            ? mergeProseFile(input)
+            : null;
   // A strategy returns null when the file is not the shape it merges —
   // unparseable JSON, a record with no identity, bytes that are not UTF-8. The
   // file then keeps its content whole instead of being half-understood.
@@ -164,7 +167,7 @@ function mergeRecordFile(input: MergeInput): MergeOutput | null {
   };
 }
 
-function mergeFieldFile(input: MergeInput): MergeOutput | null {
+function mergeFieldFile(input: MergeInput, resolve?: ResolveConflict): MergeOutput | null {
   const t = texts(input);
   if (t === null) return null;
   const local = parseJson(t.local);
@@ -172,7 +175,7 @@ function mergeFieldFile(input: MergeInput): MergeOutput | null {
   if (!isPlainObject(local) || !isPlainObject(remote)) return null;
   const base = t.base === null ? undefined : parseJson(t.base);
 
-  const merged = mergeObject(isPlainObject(base) ? base : undefined, local, remote, "");
+  const merged = mergeObject(isPlainObject(base) ? base : undefined, local, remote, "", resolve);
   return {
     merged: write(merged.value, t.base, t.local, t.remote),
     copies: [],
