@@ -26,6 +26,7 @@ import {
 //   library.json               { books: Record<hash, Entry> }  (platform/app/library.ts)
 //   reading-state.json         { states: Record<bookId, ViewState> } (platform/app/storage.ts)
 //   info-feedback.jsonl        one JSON object per line        (memory/profile/feedback.ts)
+//   memory-<topicId>/deleted-observations.jsonl  one JSON object per line (memory/observations/store.ts)
 // A map's key is the identity. A JSONL line is its own identity: the events
 // carry no id of their own and the log is append-only.
 export interface RecordShape {
@@ -40,6 +41,15 @@ export interface RecordShape {
 export function recordShape(path: string): RecordShape | null {
   const name = path.slice(path.lastIndexOf("/") + 1);
   if (name === "info-feedback.jsonl") return { kind: "lines", container: null, idField: null };
+  // Deleted observations. Lines rather than a map keyed by id so that the record
+  // is its own identity: two devices deleting the same observation on the same
+  // day write identical bytes and the union holds one line, where a map would
+  // hand two dated versions of one fact to chooseByContent and journal the loser
+  // to sync-trash. Nothing can make this shape unreadable either — a map that
+  // turned out not to be an object degrades the whole file to opaque.
+  if (name === "deleted-observations.jsonl") {
+    return { kind: "lines", container: null, idField: null };
+  }
   if (name === "info-sources.json") return { kind: "array", container: null, idField: "id" };
   if (name === "saved-articles.json") return { kind: "array", container: null, idField: "id" };
   if (name === "topics.json") return { kind: "array", container: "topics", idField: "id" };

@@ -115,3 +115,41 @@ export function parseIndex(text: string): ObservationIndexEntry[] {
     .map(parseIndexLine)
     .filter((e): e is ObservationIndexEntry => e !== null);
 }
+
+// --- tombstones: one deleted observation per line ---
+//
+// JSONL because the records merge identifies a line by the line (records.ts,
+// "lines" kind): two devices deleting the same observation on the same day
+// write the same bytes and the union holds one line, and no shape mismatch can
+// make the file fall back to the opaque strategy. `at` is the day the deletion
+// was made, kept because it is the only thing that makes the file readable to
+// someone looking at it later; nothing reads it back.
+
+export function serializeTombstone(id: string, at: string): string {
+  return JSON.stringify({ id, at });
+}
+
+// Append-only: an existing line is never rewritten, because rewriting it would
+// make it a different record to the merge and both versions would survive.
+export function appendTombstone(text: string, id: string, at: string): string {
+  const line = serializeTombstone(id, at);
+  if (text === "") return `${line}\n`;
+  return text.endsWith("\n") ? `${text}${line}\n` : `${text}\n${line}\n`;
+}
+
+// Tolerant like the rest of this file: a line that does not parse, or carries no
+// id, is not a tombstone and is skipped rather than failing the read.
+export function parseTombstones(text: string): Set<string> {
+  const ids = new Set<string>();
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (line === "") continue;
+    try {
+      const value = JSON.parse(line) as { id?: unknown };
+      if (typeof value?.id === "string" && value.id !== "") ids.add(value.id);
+    } catch {
+      continue;
+    }
+  }
+  return ids;
+}

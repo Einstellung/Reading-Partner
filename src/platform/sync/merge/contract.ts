@@ -71,6 +71,12 @@ const RECORD_FILES = new Set([
   // losing it means pushing the same item twice — and it travels so that a
   // machine taking over collection knows what its predecessor already sent.
   "info-pool-marks.json",
+  // One line per deleted observation, in memory-<topicId>/
+  // (memory/observations/store.ts). Records because a deletion only survives by
+  // travelling as a record: this module removes nothing at file level, so the
+  // device that still holds the entry file republishes it and the observation
+  // comes back. Union across devices, and a tombstone is never dropped.
+  "deleted-observations.jsonl",
 ]);
 
 export function strategyFor(path: string): MergeStrategy {

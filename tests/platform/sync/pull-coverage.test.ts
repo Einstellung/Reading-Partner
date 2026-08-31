@@ -92,7 +92,11 @@ function sampleForRegex(literal: string): string {
 const DIRECTORY_SAMPLES: Record<string, string[]> = {
   "article-bodies": ["article-bodies/0123456789abcdef0123456789abcdef.json"],
   runs: ["runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json"],
-  "memory-": ["memory-topic1/entries.jsonl", "memory-topic1/index.json"],
+  "memory-": [
+    "memory-topic1/entries.jsonl",
+    "memory-topic1/index.json",
+    "memory-topic1/deleted-observations.jsonl",
+  ],
   "prep-": [
     "prep-book1/state.json",
     "prep-book1/attention-is-all-you-need.md",
