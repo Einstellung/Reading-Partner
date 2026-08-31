@@ -47,7 +47,8 @@ import {
   type ObservationConflict,
   type ObservationFs,
 } from "../observations/store";
-import type { ObservationIndexEntry } from "../observations/types";
+import type { TopicObservations } from "../observations/recall";
+import type { Observation, ObservationIndexEntry } from "../observations/types";
 import {
   distillFailurePayload,
   markCursor,
@@ -124,6 +125,33 @@ export function listObservationConflicts(topicId: string): Promise<ObservationCo
 // gather a reading-episode signal across every topic.
 export function readObservationIndex(topicId: string): Promise<ObservationIndexEntry[]> {
   return getStore(topicId).readIndex();
+}
+
+// Every other topic's observations, in full, for the cross-topic half of recall
+// (observations/recall.ts). The same walk assemble.ts already does over the
+// topic list, one level deeper: the signal there needs summaries and reads the
+// index, a search needs bodies and so goes through the adapters.
+//
+// A topic that fails to read contributes nothing rather than failing the search
+// — same posture as assembleReadingContext, and for the same reason: the
+// widening is an addition, and an addition must not be able to take away what
+// the topic in hand already answered. Empty topics are dropped so a search does
+// no work for them.
+//
+// Cost on the owner's store, 2026-08-31: two peer topics, 37 observations,
+// 56 KB, 0.3 ms to read and parse and 1.3 ms to rank — in front of a model
+// call, which is why this is read per search rather than cached. store.list()
+// holds no cache, so every search sees what the last distillation pass wrote.
+export async function listOtherTopicObservations(topicId: string): Promise<TopicObservations[]> {
+  const out: TopicObservations[] = [];
+  for (const topic of await listTopics()) {
+    if (topic.id === topicId) continue;
+    const entries = await getObservationAdapter(topic.id)
+      .listObservations()
+      .catch((): Observation[] => []);
+    if (entries.length) out.push({ topicId: topic.id, topicName: topic.name, entries });
+  }
+  return out;
 }
 
 // --- change feed (observations panel refresh after background writes) ---
@@ -226,6 +254,7 @@ export function distillThread(
         {
           store: getStore(opts.topicId),
           adapter: getObservationAdapter(opts.topicId),
+          otherTopics: () => listOtherTopicObservations(opts.topicId),
           run: runSubagentTurnLive,
           model: {
             providerId: model.providerId,
@@ -312,6 +341,7 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
         {
           store: getStore(opts.topicId),
           adapter: getObservationAdapter(opts.topicId),
+          otherTopics: () => listOtherTopicObservations(opts.topicId),
           run: runSubagentTurnLive,
           model: {
             providerId: model.providerId,
@@ -644,6 +674,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
         {
           store: getStore(topicId),
           adapter: getObservationAdapter(topicId),
+          otherTopics: () => listOtherTopicObservations(topicId),
           run: runSubagentTurnLive,
           model: {
             providerId: model.providerId,

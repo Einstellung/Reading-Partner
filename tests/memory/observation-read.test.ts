@@ -47,10 +47,14 @@ test("a mentioned observation is printed with its type and summary", async () =>
   expect(out).toContain("- [m-bbbbbbbb] (correction, updated 2026-07-05) ω is not a ratio");
 });
 
-test("a mention this topic's store does not hold is named, not printed as a link", async () => {
+// Phrased by where the read looked rather than by what became of the id: with
+// cross-topic recall the set is this topic plus whichever others the mount was
+// given (recall.ts), so a deleted mention and one in a topic nobody handed us
+// are the same silence.
+test("a mention none of the visible observations hold is named, not printed as a link", async () => {
   const entry = obs("m-aaaaaaaa", { body: "取代了 m-cccccccc。" });
   const out = String(await readTool([entry]).execute({ id: "m-aaaaaaaa" }));
-  expect(out).toContain("Mentioned but not in this topic's observations: m-cccccccc.");
+  expect(out).toContain("Mentioned but not in the observations you can see: m-cccccccc.");
   expect(out).not.toContain("Observations this one mentions:");
 });
 

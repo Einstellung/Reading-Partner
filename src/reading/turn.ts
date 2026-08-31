@@ -63,6 +63,7 @@ import {
   distillThread,
   distillUnitOf,
   getObservationAdapter,
+  listOtherTopicObservations,
   observationPromptSection,
   notifyObservationChange,
   pagelessMarkIds,
@@ -481,6 +482,10 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       ...tools,
       ...buildObservationTools(observationsAdapter, {
         bookId,
+        // The reader keeps one book as a standing frame while reading another,
+        // and until now the search mounted here could not see that book's topic
+        // at all (memory/observations/recall.ts).
+        otherTopics: () => listOtherTopicObservations(topicId),
         onWrite: () => notifyObservationChange(topicId),
       }),
     ];
