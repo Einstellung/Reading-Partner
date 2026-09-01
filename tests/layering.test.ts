@@ -62,6 +62,11 @@ const LAYER: Record<string, Layer> = {
   "info/companion": "domain",
   "info/extract": "domain",
   "info/sources": "domain",
+  // The 0.12 data migration, deleted wholesale at 0.13. A domain rather than a
+  // capability because it drives the observation store and the thread files
+  // rather than serving them, and because nothing below it may ever grow a
+  // dependency on something that is about to be deleted.
+  migrate: "domain",
   reading: "domain",
   "reading/chapters": "domain",
   "reading/engine": "domain",

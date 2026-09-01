@@ -21,7 +21,9 @@ test("create writes one file per observation and an index line", async () => {
     anchors: { annotationIds: ["ann-9"] },
   });
 
-  expect(entry.id).toMatch(/^m-[0-9a-f]{8}$/);
+  // 16 hex since 0.12: the migration widens what is on disk, and a build still
+  // minting 8 would grow the store both widths again.
+  expect(entry.id).toMatch(/^m-[0-9a-f]{16}$/);
   expect(entry.created).toBe("2026-07-17");
   expect(files.has(`memory-topic-1/${entry.id}.md`)).toBe(true);
 
@@ -89,7 +91,7 @@ test("update rewrites in place: created kept, updated bumped, one file, one inde
   expect(updated?.updated).toBe("2026-07-20");
   expect(updated?.type).toBe("understood-concept");
   // Still one observation file (plus the index), not a new entry.
-  expect([...files.keys()].filter((k) => /m-[0-9a-f]{8}\.md$/.test(k))).toHaveLength(1);
+  expect([...files.keys()].filter((k) => /m-[0-9a-f]{16}\.md$/.test(k))).toHaveLength(1);
   const index = await store.readIndex();
   expect(index).toHaveLength(1);
   expect(index[0].summary).toContain("resolved on 2026-07-20");
