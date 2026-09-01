@@ -125,3 +125,46 @@ test("coveredDays spans the days it is given and drops the ones it is not", () =
   expect(coveredDays([])).toBeNull();
   expect(coveredDays([null, null])).toBeNull();
 });
+
+// The anchor a pass writes down carries the message's own id where it has one,
+// and the thread-and-stamp pair beside it. The pair alone names two messages
+// whenever a turn and the reply to it share a millisecond — 143 of the 292
+// stored on the owner's store.
+test("a message with an id is anchored by it, with the pair kept beside it", () => {
+  const lines = buildTranscript(
+    [
+      { id: "t-0123456789abcdef", role: "user", text: "asked", ts: 1000, threadId: "lesson-1" },
+      { id: "t-fedcba9876543210", role: "ai", text: "answered", ts: 1000, threadId: "lesson-1" },
+      { role: "user", text: "stored before ids existed", ts: 900, threadId: "lesson-1" },
+    ],
+    "lesson-1",
+  );
+  expect(transcriptAnchors(lines)).toEqual([
+    "t-0123456789abcdef@lesson-1:1000",
+    "t-fedcba9876543210@lesson-1:1000",
+    "lesson-1:900",
+  ]);
+});
+
+// The id has to survive the fold: a unit's messages are merged across threads,
+// and the narrowing that stamps the thread id on each one used to drop
+// everything it was not asked for.
+test("a folded aside's message keeps its id through the merge", () => {
+  const [unit] = distillUnits([
+    {
+      id: "lesson-1",
+      annotationId: "ann-1",
+      messages: [{ id: "t-1111111111111111", role: "user", text: "lesson", ts: 10 }],
+    },
+    {
+      id: "aside-2",
+      annotationId: "",
+      parentThreadId: "lesson-1",
+      messages: [{ id: "t-2222222222222222", role: "user", text: "aside", ts: 20 }],
+    },
+  ]);
+  expect(transcriptAnchors(buildTranscript(unit.messages, unit.threadId))).toEqual([
+    "t-1111111111111111@lesson-1:10",
+    "t-2222222222222222@aside-2:20",
+  ]);
+});

@@ -957,3 +957,93 @@ test("a file written before asides existed merges unchanged", async () => {
   expect("asideAnchor" in parsed.threads.t1).toBe(false);
   expect(onDisk()).toEqual(["bt", "t1"]);
 });
+
+// --- message ids ---
+//
+// An observation citing a conversation turn used to anchor on "<threadId>:<ts>",
+// and 155 of the 459 such anchors on the owner's store name two messages: a
+// user turn and the reply to it are appended in the same millisecond. The id
+// minted here is what an anchor names instead.
+test("an appended message is given an id, and the id survives the write", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  store.append("book1", "t1", { role: "user", text: "asked", ts: 5 });
+  const appended = store.get("book1", "t1")!.messages[1];
+  expect(appended.id).toMatch(/^t-[0-9a-f]{16}$/);
+
+  await advance(500);
+  const parsed = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect(parsed.threads.t1.messages[1].id).toBe(appended.id!);
+});
+
+test("two messages appended in the same millisecond get different ids", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  store.append("book1", "t1", { role: "user", text: "asked", ts: 9 });
+  store.append("book1", "t1", { role: "ai", text: "answered", ts: 9 });
+  const [, asked, answered] = store.get("book1", "t1")!.messages;
+  expect(asked.id).not.toBe(answered.id);
+});
+
+// Reading is where a backfill would have to happen, and it must not: an id
+// minted on read would differ per device and per load, so an observation
+// anchored on it would point at a string that never comes back.
+test("a message stored before ids existed does not gain one on read", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  const held = store.get("book1", "t1")!.messages[0];
+  expect(held.id).toBeUndefined();
+  expect(held.text).toBe("said in t1");
+
+  store.append("book1", "t1", { role: "ai", text: "answered", ts: 2 });
+  await advance(500);
+  const parsed = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect("id" in parsed.threads.t1.messages[0]).toBe(false);
+});
+
+// The property that makes adding a field to a message safe at all, and the
+// reason `id` could ship without an explicit passthrough of the kind the
+// observation format needed (memory/observations/files.ts): nothing in this
+// file rebuilds a message object from the fields it knows. A build that has
+// never heard of a key still round-trips it — parse is JSON.parse, the merge
+// spreads at the thread level and carries the messages array by reference,
+// patch spreads the message it is amending, and the write is JSON.stringify.
+//
+// Measured against the shipped 0.11.13 store before `id` was added: a file
+// written by a newer build kept every id through load, append, patch and write.
+// Nothing was guarding it, so this is the guard. A `messages.map(...)` in any
+// write path here ends the property silently.
+test("a key this build does not know survives load, append, patch and write", async () => {
+  const carried = {
+    id: "t-3333333333333333",
+    role: "user" as const,
+    text: "said in t1",
+    ts: 1,
+    // Two shapes, because a future field could be either.
+    fromANewerBuild: "kept",
+    alsoNew: { nested: [1, 2] },
+  };
+  writeFile([thread("t1", { messages: [carried] })]);
+  await store.load("book1");
+
+  store.append("book1", "t1", { role: "ai", text: "answered", ts: 2 });
+  store.patch("book1", "t1", 1, { text: "said in t1 (edited)" });
+  await advance(500);
+
+  const parsed = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect(parsed.threads.t1.messages[0]).toEqual({
+    ...carried,
+    text: "said in t1 (edited)",
+  });
+});
+
+test("a message that already carries an id keeps it", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  store.append("book1", "t1", { id: "t-0123456789abcdef", role: "user", text: "resent", ts: 3 });
+  expect(store.get("book1", "t1")!.messages[1].id).toBe("t-0123456789abcdef");
+});

@@ -98,7 +98,7 @@ function foldsInto(
 // is the parent's — which is wrong for every line that came from a folded
 // aside, and was 66 of the 76 unresolvable anchors on disk (transcript.ts).
 function plain(messages: readonly DistillMessage[], threadId: string): DistillMessage[] {
-  return messages.map(({ role, text, ts }) => ({ role, text, ts, threadId }));
+  return messages.map(({ id, role, text, ts }) => ({ ...(id ? { id } : {}), role, text, ts, threadId }));
 }
 
 // Every thread of one book reduced to the passes that should run over it.

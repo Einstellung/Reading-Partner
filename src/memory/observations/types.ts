@@ -27,8 +27,10 @@ export function isObservationType(v: string): v is ObservationType {
 }
 
 // Evidence anchors: an observation points back to its sources — annotation ids
-// and/or message ids ("<threadId>:<ts>") — so it can be traced to the original
-// marks and conversation turns.
+// and/or message anchors — so it can be traced to the original marks and
+// conversation turns. A message anchor is "<messageId>@<threadId>:<ts>", or
+// either half alone — the pair is what everything stored before message ids
+// carries. All three forms are resolved by anchors.ts.
 export interface EvidenceAnchors {
   annotationIds: string[];
   messageIds: string[];

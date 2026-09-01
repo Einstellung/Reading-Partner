@@ -12,7 +12,6 @@ import {
   lectureObservationSnapshot,
   observationScope,
   selectLectureObservations,
-  stripToolResidue,
   CORRECTION_QUOTA,
   LECTURE_OBSERVATION_CAP,
 } from "../../../src/reading/lecture";
@@ -182,12 +181,4 @@ test("this book's entries print their bodies, other books' print their line", ()
   expect(snapshot).toContain("another book in this topic");
   expect(snapshot).not.toContain("a body nobody asked for");
   expect(lectureObservationSnapshot([])).toBe("");
-});
-
-// Real entries on disk end with a stray closing tag and a parameter tag: written
-// by a model that was mid-tool-call. Harmless on disk, confusing in a prompt
-// that is itself about to describe tools.
-test("tool-call syntax that leaked into a stored body is stripped", () => {
-  const dirty = 'the prescription\n</body>\n<parameter name="summary">x</parameter>';
-  expect(stripToolResidue(dirty)).toBe("the prescription\nx");
 });

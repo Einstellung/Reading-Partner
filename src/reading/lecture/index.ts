@@ -23,7 +23,6 @@ export {
   lectureObservationSnapshot,
   observationScope,
   selectLectureObservations,
-  stripToolResidue,
   BOOK_HIT_CAP,
   CHAPTER_HIT_CAP,
   CORRECTION_QUOTA,

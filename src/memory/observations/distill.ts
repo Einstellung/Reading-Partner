@@ -30,6 +30,10 @@ import { buildTranscript, renderTranscript } from "./transcript";
 import type { EvidenceDates } from "./types";
 
 export interface DistillMessage {
+  // The message's own id, carried through every narrowing between the thread
+  // file and the transcript so the anchor written down names one turn and not
+  // two (anchors.ts). Absent on messages stored before ids existed.
+  id?: string;
   role: "user" | "ai";
   text: string;
   ts: number;
