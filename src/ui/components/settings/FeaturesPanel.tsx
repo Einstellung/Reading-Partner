@@ -56,7 +56,7 @@ export default function FeaturesPanel({
             />
           </FieldGrid>
           <p className="m-0 text-xs text-[#777]">
-            The language the AI writes chat replies, notes, slides, and the news briefing in. Auto
+            The language the AI writes chat replies, notes, and the news briefing in. Auto
             follows the language you write in. Voice transcription always follows what you speak.
           </p>
         </div>
