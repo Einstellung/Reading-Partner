@@ -26,6 +26,7 @@ export {
 } from "./observations/store";
 export { FileObservationAdapter, type ObservationAdapter } from "./observations/adapter";
 export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./observations/select";
+export { stripToolResidue } from "./observations/residue";
 export {
   anchorNames,
   messageAnchor,

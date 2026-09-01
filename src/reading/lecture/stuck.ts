@@ -25,6 +25,7 @@
 
 import {
   serializeIndexLine,
+  stripToolResidue,
   trimObservations,
   type Observation,
   type ObservationType,
@@ -66,27 +67,6 @@ const LECTURE_TYPE_ORDER: ObservationType[] = [
   "belief",
   "reading-position",
 ];
-
-// Tool-call syntax that leaked into a stored body. Real entries on disk end with
-// a stray `</body>` and a parameter tag: written by a model that was mid-tool-call
-// when it wrote the observation. Harmless on disk, confusing in a prompt that is
-// itself about to describe tools.
-const TOOL_RESIDUE =
-  /<\/?(?:antml:)?(?:body|parameter|function_calls|invoke|function_results|result)\b[^>]*>/gi;
-
-export function stripToolResidue(body: string): string {
-  const lines: string[] = [];
-  for (const raw of body.split("\n")) {
-    TOOL_RESIDUE.lastIndex = 0;
-    const cleaned = raw.replace(TOOL_RESIDUE, "");
-    // A line that was nothing but a tag goes with it: leaving the blank behind
-    // turns one stray tag into a paragraph break in the middle of a sentence.
-    if (cleaned.trim() === "" && raw.trim() !== "") continue;
-    if (cleaned.trim() === "" && lines[lines.length - 1]?.trim() === "") continue;
-    lines.push(cleaned);
-  }
-  return lines.join("\n").trim();
-}
 
 export interface LectureFocus {
   startPage: number;
