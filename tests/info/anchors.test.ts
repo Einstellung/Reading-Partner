@@ -45,20 +45,40 @@ function briefing(patch: Partial<Briefing> = {}): Briefing {
 
 test("the briefing and the no-briefing anchor are the same conversation", () => {
   const withOne = briefingAnchor(briefing(), CTX);
-  const without = noBriefingAnchor(CTX, { error: null, notices: [] });
-  expect(withOne.threadId).toBe("briefing");
+  const without = noBriefingAnchor(CTX, { dateKey: "2026-07-25", error: null, notices: [] });
+  expect(withOne.threadId).toBe("briefing-2026-07-25");
   expect(without.threadId).toBe(withOne.threadId);
   expect(withOne.position.line).toBe("Two real papers, the rest is vendor noise.");
 });
 
-test("with no briefing the card says what is known, error first, then the notice", () => {
-  expect(noBriefingAnchor(CTX, { error: "no provider", notices: ["Last seen 2h ago"] }).position.line).toBe(
-    "no provider",
+// A thread id is a global key — an observation's message anchor is
+// "<threadId>:<ts>" and a distillation cursor is keyed by thread id alone — while
+// info threads live in one file per day. So the two days must not share an id,
+// and the two ways into one day's conversation must.
+test("the briefing thread is one per day, and both anchors spell it the same", () => {
+  const day2 = { ...briefing(), date: "2026-07-26" };
+  expect(briefingAnchor(day2, CTX).threadId).not.toBe(briefingAnchor(briefing(), CTX).threadId);
+  expect(noBriefingAnchor(CTX, { dateKey: "2026-07-26", error: null, notices: [] }).threadId).toBe(
+    briefingAnchor(day2, CTX).threadId,
   );
-  expect(noBriefingAnchor(CTX, { error: null, notices: ["Last seen 2h ago"] }).position.line).toBe(
+});
+
+test("the same article in two days' briefings gets two threads", () => {
+  const day1 = articleAnchor(briefing(), "x", "body", CTX);
+  const day2 = articleAnchor({ ...briefing(), date: "2026-07-26" }, "x", "body", CTX);
+  expect(day1.threadId).toBe("2026-07-25:x");
+  expect(day2.threadId).toBe("2026-07-26:x");
+});
+
+test("with no briefing the card says what is known, error first, then the notice", () => {
+  const day = { dateKey: "2026-07-25" };
+  expect(
+    noBriefingAnchor(CTX, { ...day, error: "no provider", notices: ["Last seen 2h ago"] }).position.line,
+  ).toBe("no provider");
+  expect(noBriefingAnchor(CTX, { ...day, error: null, notices: ["Last seen 2h ago"] }).position.line).toBe(
     "Last seen 2h ago",
   );
-  expect(noBriefingAnchor(CTX, { error: null, notices: [] }).position.line).toBe("Not collected yet");
+  expect(noBriefingAnchor(CTX, { ...day, error: null, notices: [] }).position.line).toBe("Not collected yet");
 });
 
 // The order is the order the tiers are read in. An item can sit in more than one
@@ -78,9 +98,9 @@ test("an item in no tier has no line", () => {
   expect(articleReason(briefing(), "nothing-like-this")).toBe(null);
 });
 
-test("an article's thread is the item's, and its card carries the item's own words", () => {
+test("an article's thread is the day's item, and its card carries the item's own words", () => {
   const anchor = articleAnchor(briefing(), "x", "the full body text", CTX);
-  expect(anchor.threadId).toBe("x");
+  expect(anchor.threadId).toBe("2026-07-25:x");
   expect(anchor.emptyTitle).toBe("The paper");
   expect(anchor.position).toEqual({
     title: "The paper",

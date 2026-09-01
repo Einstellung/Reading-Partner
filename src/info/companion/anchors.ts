@@ -19,8 +19,12 @@ import {
 } from "./chat";
 
 export interface InfoCallAnchor {
-  // "briefing" for the briefing-level thread, or the item id for an article, or
-  // "onboarding" for the add-source flow.
+  // The thread this conversation writes to. Unique across every thread file, not
+  // just inside the day's own one: an observation's message anchor is
+  // "<threadId>:<ts>" and a distillation cursor is keyed by thread id alone, so
+  // both treat it as a global key (docs/pitfall/209). The day is therefore part
+  // of the briefing and article ids; "onboarding" is a constant because the
+  // add-source flow happens once.
   threadId: string;
   // The chat window's empty-state heading and composer placeholder.
   emptyTitle: string;
@@ -39,10 +43,27 @@ export interface InfoCallAnchor {
 const BRIEFING_TITLE = "Today's briefing";
 const BRIEFING_PLACEHOLDER = "Ask about today's briefing…";
 
+/**
+ * The day's briefing thread. One place because two anchors mint it — the
+ * briefing and the no-briefing state are one conversation (see below) and would
+ * split in two the moment the two spellings drifted apart.
+ */
+export function briefingThreadId(dateKey: string): string {
+  return `briefing-${dateKey}`;
+}
+
+/**
+ * One article's thread. The item id alone is not enough: the same article can be
+ * in two days' briefings, and each day's conversation about it is its own.
+ */
+export function articleThreadId(dateKey: string, itemId: string): string {
+  return `${dateKey}:${itemId}`;
+}
+
 /** The briefing-level thread, with the whole document as context. */
 export function briefingAnchor(b: Briefing, ctx: CompanionContext): InfoCallAnchor {
   return {
-    threadId: "briefing",
+    threadId: briefingThreadId(b.date),
     emptyTitle: BRIEFING_TITLE,
     placeholder: BRIEFING_PLACEHOLDER,
     systemPrompt: briefingChatSystemPrompt(b, ctx),
@@ -54,14 +75,16 @@ export function briefingAnchor(b: Briefing, ctx: CompanionContext): InfoCallAnch
  * The same thread told there is no briefing yet (docs/35): the day's collection
  * has not landed, or it failed. It is the same thread id on purpose — the
  * conversation about today's briefing is one conversation whether or not one
- * exists at the moment it is opened.
+ * exists at the moment it is opened. There is no briefing to read the day off,
+ * so the caller passes it; it goes through briefingThreadId so the two spellings
+ * cannot drift.
  */
 export function noBriefingAnchor(
   ctx: CompanionContext,
-  opts: { error?: string | null; notices: string[] },
+  opts: { dateKey: string; error?: string | null; notices: string[] },
 ): InfoCallAnchor {
   return {
-    threadId: "briefing",
+    threadId: briefingThreadId(opts.dateKey),
     emptyTitle: BRIEFING_TITLE,
     placeholder: BRIEFING_PLACEHOLDER,
     systemPrompt: noBriefingChatSystemPrompt(ctx, {
@@ -109,7 +132,7 @@ export function articleAnchor(
   const meta = b.items[itemId];
   const title = meta?.title ?? "Article";
   return {
-    threadId: itemId,
+    threadId: articleThreadId(b.date, itemId),
     emptyTitle: title,
     placeholder: "Ask about this article…",
     systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", bodyText, ctx),
