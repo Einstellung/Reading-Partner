@@ -6,7 +6,7 @@ An AI reading companion for academic surveys and technical books. It doesn't jus
 
 It reads the day's news for you too: the sources you subscribe to, screened and triaged into one finite briefing instead of a feed.
 
-Local-first and backend-free: sign in with your Claude or ChatGPT subscription, or use a DeepSeek API key. Books, annotations, notes, observations, and credentials never leave your machine.
+Local-first and backend-free: sign in with your Claude or ChatGPT subscription, or paste an API key for one of about two dozen other providers. Books, annotations, prep notes, observations, and credentials never leave your machine.
 
 ## Two machines
 
@@ -75,22 +75,28 @@ What you declared — interests, taste, background, what you're reading now — 
 
 The other half is what the AI guesses, and it writes that one itself. Not a reading log — that is on disk already — but a read on why you do what you do: you pick macro-trend investment books and mark the capital-flow passages, so what you are after is a judgment about the era, not a stock-picking method. At most eight guesses, each dated and carrying the one behavior it came from; a guess it cannot source doesn't get written. An automatic write may replace that half and nothing else, and both sides go into prompts labeled for what they are, so a guess is used as a hunch rather than a rule.
 
-## Two modes
+## Marking and asking
 
-**Companion mode** — you drive. Mark a passage with the AI pen and it explains it in place, like a video call with the book: the reply opens in a bubble you can expand, and the thread stays anchored to your highlight forever. The AI can turn pages on its own, run full-text search across the books in your topic, and read your existing highlights and notes when the conversation needs them. A button in the top bar opens a book-level thread for questions that belong to no particular passage ("what is this chapter about?").
+Mark a passage with the AI pen and it explains it in place, like a video call with the book: the reply opens in a bubble you can expand to cover the page, and the thread stays anchored to your highlight forever. The AI can turn pages on its own, run full-text search across the books in your topic, and read your existing highlights and their comments when the conversation needs them. A button in the top bar opens a book-level thread for questions that belong to no particular passage ("what is this chapter about?").
 
-**Classroom mode** — the AI drives. Toggle it inside any conversation and the AI switches from companion to teacher: the entire survey stays resident in its context, together with lesson notes it prepared for the papers the survey actually leans on. The toggle is remembered per book.
+There is no separate teaching mode and nothing to toggle. What the AI teaches from is decided by what preparation has gathered for the document you are in: with lesson notes on disk they ride along in the prompt, without them the same conversation runs on the book alone.
 
 ## Lesson prep
 
-When you open a survey, the AI reads it, picks the 15–20 load-bearing citations, and prepares them in the background:
+Opening a document starts a background pass, and which of the two it gets is decided by how much of its text leans on citations. No document gets both.
+
+A survey reaches outwards, so the AI reads it, picks the 15–20 load-bearing citations, and prepares those:
 
 - Full texts come from arXiv first, then [OpenAlex](https://openalex.org) (no key needed), then Semantic Scholar (optional free API key in Settings avoids the shared rate pool).
 - Each paper is digested by an agent loop into a lesson note — short papers in one pass, long ones by turning pages with the same tools you see in chat.
 - The prep panel in the sidebar shows every paper's status; you can skip, retry, replan, or add papers by title, arXiv id, or URL.
 - Preparation is lazy and chapter-driven: papers cited by the chapter you are reading get prepared first. Everything is resumable across restarts.
 
-![Classroom prep running while reading](docs/assets/classroom-prep.png)
+A book reaches inwards, so it gets the other kind: one spine per chapter — what the chapter does, what it builds on, what later chapters take from it — and a second pass that reads all of them together and connects them into a chapter graph. This one runs over the whole book rather than following where you have read, because what a spine answers ("can I start at chapter 3?") is a question about the chapters you have not reached. The same panel drives it: regenerate a single chapter, optionally with an instruction to steer it, or rebuild the graph after you have.
+
+Both kinds of note carry `[p.N]` and `[fig:N]` anchors, so a reply quoting one gives you the same chips you can click anywhere else.
+
+![Lesson prep running while reading](docs/assets/classroom-prep.png)
 
 ## Citations you can click
 
@@ -100,17 +106,13 @@ The AI cites what it teaches. Page references render as chips — click one and 
 
 ## AI observations
 
-When you hang up a conversation, the AI silently distills what it noticed about you: where you are in the book, what you now understand, where you were stuck, what you corrected it about. One observation per file, on your disk, in the topic's AI observations section. The next conversation opens with a snapshot — the AI knows you read to section 4.2, struggled with the KV cache last week, and resolved it. These are its notes on you, not a transcript, so you can argue with one: say "that's not right" in conversation and it rewrites it, rather than you editing files.
+When you hang up a conversation, the AI silently distills what it noticed about you: where you are in the book, what you now understand, where you were stuck, what you corrected it about. One observation per file, on your disk, under the topic. A hangup is not the only trigger — a background sweep picks up the conversations that never got one, so a session you ended by quitting the app is not lost.
+
+The next conversation opens with a snapshot: the AI knows you read to section 4.2, struggled with the KV cache last week, and resolved it. It can also search the observations of your other topics, so something you worked out reading one book is available while you read another. These are its notes on you, not a transcript, so you can argue with one: say "that's not right" in conversation and it rewrites it, rather than you editing files.
 
 ## Feed it links
 
 Paste a URL into the chat — an arXiv or OpenReview PDF, or a web article — and the AI ingests it: downloads, extracts, files it into the prep list, and can discuss it against the survey in the same turn. The survey is static; the field is not.
-
-## Whole-book notes
-
-The sidebar has a Notes tab: one click generates chapter-by-chapter lecture notes for the whole book. The chapter plan comes from the PDF outline, or the model reads the table of contents when there is none. Notes carry `[p.N]` and `[fig:N]` anchors that jump into the book, just like citations in chat. Regenerate any chapter on its own, with an optional instruction to steer it. Your highlights and conversations in a chapter shape how deep its note goes, and explanations you explicitly endorsed in chat get absorbed into the note.
-
-Notes also accrue as you read: a chapter distills into its note once your highlights move past it, chapters you never marked are skipped, and a final pass runs when you close the book. The notes overview is part of the context each conversation opens with, so the AI knows what the book has already covered.
 
 ## Retell it, then give the talk
 
@@ -118,7 +120,9 @@ Reading a book and being able to explain it are different things, and the second
 
 It opens with the skeleton it read, you correct it and say which thread the talk follows, and then you go chapter by chapter. One or two real questions each — what does this chapter argue, does the conclusion hold, how does it join the previous one — and you answer. Where you can't, it opens the text and explains that part again rather than hinting. Your highlights sit beside it as prompts; it doesn't walk them one at a time, and only asks about a chapter you marked heavily and then never touched.
 
-Every chapter leaves a decision behind: in or out, what it says, which figure carries it. Those decisions in order are the outline, editable beside the conversation. The deck is built from that outline — a self-contained HTML slide deck that opens in any browser with everything inlined, nothing to serve, illustrations drawn by AI if you have configured an image key. The run lives on disk, so a single page can be redone, one illustration redrawn, and the deck reassembled without rerunning anything else.
+Every chapter leaves a decision behind: in or out, what it says, which figure carries it. Those decisions in order are the record, editable beside the conversation. The last exchange turns them into a talk outline — the line the talk argues, the ribs under it, who is listening, and then the note you actually talk from, one markdown block at a time. Segments are not chapters: an opening belongs to no chapter, one chapter can break into six blocks, two can fuse into one.
+
+Then you give it. A rehearsal is one pass over that outline, spoken out loud and transcribed — on the desktop through the microphone, on the phone through its own dictation — and you can give the same talk as many times as you want. Afterwards the AI reads the pass back against the outline, block by block, and you edit the outline from what it says. The app makes no slides; if you want them you make them elsewhere.
 
 Leaving a talk distills it the way hanging up a conversation does, into which chapters you could explain, which you couldn't and what was missing, and where you corrected the AI.
 
@@ -128,7 +132,7 @@ Every chat composer on the desktop has a push-to-talk mic. Hold to record, relea
 
 ## Sync across devices
 
-Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, notes, talks, your profile, your sources, and the briefing the collector published — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same PDF opened on two devices lines up, and phones stay out of that channel entirely — they don't open books. AI provider credentials are the one thing that never leaves the device.
+Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, prep material, retells and talk outlines, your profile, your sources, and the briefing the collector published — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same PDF opened on two devices lines up, and phones stay out of that channel entirely — they don't open books. AI provider credentials are the one thing that never leaves the device.
 
 ## Thinking levels
 
@@ -140,7 +144,7 @@ Prebuilt binaries for Linux, macOS, Windows and Android are on the [releases pag
 
 Install the desktop app first. It is the one that collects, and the phone reads what it published (see [Two machines](#two-machines)).
 
-First run: open Settings and connect one provider — Sign in with ChatGPT or Sign in with Claude uses your subscription through an OAuth flow in the browser (no API key), or paste a DeepSeek API key. Only one provider is active at a time; connecting one signs the others out. Optionally add a Semantic Scholar API key for lesson prep, a SiliconFlow key for voice input, and an image key for deck illustrations. The AI's output language is set here too and governs chat, notes, decks, and the briefing — nine languages, or auto to follow the language you write in. With no sources yet, the AI starts a guided conversation to help you subscribe to your first few.
+First run: open Settings and connect one provider — Sign in with ChatGPT or Sign in with Claude uses your subscription through an OAuth flow in the browser (no API key), or paste a key for one of the others on the list (DeepSeek, OpenRouter, Moonshot, Groq and a couple of dozen more). Only one provider is active at a time; connecting one signs the others out. Optionally add a Semantic Scholar API key for lesson prep and a SiliconFlow key for voice input. The AI's output language is set here too and governs chat, prep notes, and the briefing — nine languages, or auto to follow the language you write in. With no sources yet, the AI starts a guided conversation to help you subscribe to your first few.
 
 A collector collects for as long as it is running, whether or not its window is in front. Closing the window puts it in the system tray rather than ending it; the tray menu shows when it last collected, brings the window back, and has the one Quit that actually stops it. Settings has a switch to start the app when the computer starts, off by default. That switch and the machine's role belong to that computer and are not carried to your other devices.
 
@@ -168,13 +172,14 @@ Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.
 - `src/platform/` — `app/` is the host (settings, per-device settings, lifecycle, filesystem); `sync/` is the Drive backend and the record-level merge.
 - `src/ai/` — provider streaming, the agent tool loop, and sub-agents. `src/budget/` — context-window accounting. `src/fulltext/` — the search index.
 - `src/info/` — the briefing half: `sources/` holds the descriptor format and the generic engine that runs one, `extract/` turns a page into text (including the hidden-webview path), `briefing/` is the collector, the funnel, the item pool and the reader-side view of what a collector published, `companion/` is the chat over a briefing.
-- `src/reading/` — the book half: `engine/` is the EmbedPDF adapter (assembles the headless core + plugins, renders from in-memory bytes, converts annotations at the boundary), `prep/` and `papers/` are lesson prep and the citation graph, `sources/` fetches and extracts a pasted link, `notes/`, `figures/`, `talks/`, `retell/` and `slides/` run from notes through to the deck. `src/memory/` — what the AI has noticed about the reader: `observations/` is one observation on disk (format, per-topic store, recall adapter, agent tools) plus the silent passes that write them and the arrears that decide when one runs, `profile/` the user profile document, `live/` the running state and the background sweeps.
-- `public/pdfium/pdfium.wasm` — the PDFium engine binary, self-hosted (gitignored; staged by `bun run wasm` from the npm package, no CDN at build or runtime). `src-tauri/` — Tauri 2 app, including the tray and the hidden-webview fetch.
+- `src/reading/` — the book half: `engine/` is the EmbedPDF adapter (assembles the headless core + plugins, renders from in-memory bytes, converts annotations at the boundary), `prep/` prepares a document in one of two kinds (`papers/` for a survey's citations, `chapters/` for a book's chapter spines), `papers/` is the citation graph and the four literature clients, `chapters/` is the book's own chapter table, `lecture/` decides what a teaching turn is handed, `figures/` crops figures off the page, `sources/` fetches and extracts a pasted link, and `retell/`, `talk/` and `rehearsal/` are the second stage — the questioning, the outline it settles, and giving the talk out loud.
+- `src/memory/` — what the AI has noticed about the reader: `observations/` is one observation on disk (format, per-topic store, recall and cross-topic search, agent tools) plus the silent passes that write them and the arrears that decide when one runs, `profile/` the user profile document and the guess pass, `live/` the running state and the background sweeps.
+- `public/pdfium/pdfium.wasm` — the PDFium engine binary, self-hosted (gitignored; staged by `bun run wasm` from the npm package, no CDN at build or runtime). `src-tauri/` — Tauri 2 app, including the tray and the hidden-webview fetch. `plugins/voice/` — the Tauri plugin behind recording and the phone's on-device dictation.
 - Design consensus documents (in Chinese) live in `docs/`; hard-won engine/Tauri surprises are indexed in `docs/pitfall/`.
 
 ## Status
 
-Early development, PDF only, moving fast. The screenshots above come from real reading sessions and may lag behind the current interface.
+Early development, PDF only, moving fast. Features get removed as well as added: the generated slide deck and the whole-book notes tab both shipped and are both gone. The screenshots above come from real reading sessions and lag behind the current interface.
 
 ## License
 
