@@ -58,7 +58,11 @@ export interface ObservationMeta {
   distilledMarks?: Record<string, number>;
 }
 
-const ENTRY_FILE = /^(m-[0-9a-f]{8})\.md$/;
+// Either width. The migration widens every id from 8 to 16 hex (src/migrate),
+// and a device that has not run it yet still holds narrow files — a build that
+// could not see those is worse than one that sees both. Narrows to 16 at 0.13,
+// when the migration directory is deleted.
+const ENTRY_FILE = /^(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))\.md$/;
 
 // A conflict copy sync left beside an entry: `<id>.conflict-<digest>.md`, the
 // whole losing version of a file two devices both edited (platform/sync/merge).
@@ -66,7 +70,8 @@ const ENTRY_FILE = /^(m-[0-9a-f]{8})\.md$/;
 // join the index or a prompt, and must not be rewritten by a later update — but
 // nothing else matched them either, so the reader's own writing sat on disk with
 // no way to know it was there. This is that way.
-const CONFLICT_FILE = /^(m-[0-9a-f]{8})\.conflict-[0-9a-f]+\.md$/;
+// Either width, for as long as ENTRY_FILE is; narrows to 16 at 0.13.
+const CONFLICT_FILE = /^(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))\.conflict-[0-9a-f]+\.md$/;
 
 // A conflict copy of the index, which is a different thing entirely: the index
 // is derived — rebuilt from the entry files after every mutation — so a losing
@@ -110,8 +115,12 @@ export interface ObservationConflict {
   updated: string;
 }
 
+// 16 hex, the same 64-bit shape a message id has (platform/app/threads.ts).
+// Eight was 32 bits, and the migration that widens what is already on disk
+// (src/migrate) would be undone on the next write by a build still minting
+// narrow ones.
 function newId(): string {
-  return `m-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+  return `m-${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
 // `updated` never moves backwards. It is the last day this observation's
