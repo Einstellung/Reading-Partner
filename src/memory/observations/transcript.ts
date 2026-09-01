@@ -14,10 +14,12 @@
 // one thread id off by a single character, one anchor invented outright.
 //
 // So the id is neither shown nor asked for. The model cites a line number, the
-// program holds the ids. What lands on disk is the message's own id where it
-// has one and the old "<threadId>:<ts>" pair where it does not (anchors.ts):
-// the pair names two messages whenever a turn and the reply to it share a
-// millisecond, which is 34% of the ones already stored.
+// program holds the ids. What lands on disk is the message's own id joined to
+// the "<threadId>:<ts>" pair that was the anchor before ids existed, or
+// whichever half is known (anchors.ts): the pair alone names two messages
+// whenever a turn and the reply to it share a millisecond, which is 49% of the
+// ones already stored, and the id alone can go missing from a message that
+// survives a sync merge.
 
 import { messageAnchor } from "./anchors";
 import { localDate } from "./files";
@@ -43,8 +45,9 @@ export interface TranscriptMessage {
 export interface TranscriptLine {
   // 1-based, the only handle the model is given on a message.
   index: number;
-  // What the observation's `messages:` field stores: the message's id, or
-  // "<threadId>:<ts>" for one that has none yet.
+  // What the observation's `messages:` field stores:
+  // "<messageId>@<threadId>:<ts>", or the pair alone for a message that has no
+  // id yet (anchors.ts).
   anchor: string;
   // The calendar day this message happened on, on the reader's own clock. Null
   // when its ts is unusable (rows written before messages carried one).

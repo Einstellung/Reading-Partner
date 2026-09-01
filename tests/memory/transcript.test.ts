@@ -126,10 +126,11 @@ test("coveredDays spans the days it is given and drops the ones it is not", () =
   expect(coveredDays([null, null])).toBeNull();
 });
 
-// The anchor a pass writes down is the message's own id where it has one. The
-// pair it would otherwise use names two messages whenever a turn and the reply
-// to it share a millisecond — 155 of the 459 stored on the owner's store.
-test("a message with an id is anchored by it, not by its thread and stamp", () => {
+// The anchor a pass writes down carries the message's own id where it has one,
+// and the thread-and-stamp pair beside it. The pair alone names two messages
+// whenever a turn and the reply to it share a millisecond — 143 of the 292
+// stored on the owner's store.
+test("a message with an id is anchored by it, with the pair kept beside it", () => {
   const lines = buildTranscript(
     [
       { id: "t-0123456789abcdef", role: "user", text: "asked", ts: 1000, threadId: "lesson-1" },
@@ -139,8 +140,8 @@ test("a message with an id is anchored by it, not by its thread and stamp", () =
     "lesson-1",
   );
   expect(transcriptAnchors(lines)).toEqual([
-    "t-0123456789abcdef",
-    "t-fedcba9876543210",
+    "t-0123456789abcdef@lesson-1:1000",
+    "t-fedcba9876543210@lesson-1:1000",
     "lesson-1:900",
   ]);
 });
@@ -163,7 +164,7 @@ test("a folded aside's message keeps its id through the merge", () => {
     },
   ]);
   expect(transcriptAnchors(buildTranscript(unit.messages, unit.threadId))).toEqual([
-    "t-1111111111111111",
-    "t-2222222222222222",
+    "t-1111111111111111@lesson-1:10",
+    "t-2222222222222222@aside-2:20",
   ]);
 });

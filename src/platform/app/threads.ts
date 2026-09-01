@@ -64,8 +64,22 @@ export interface ThreadMessage {
   // nothing invents one on read: an id minted at read time would differ per
   // device and per load, and an observation anchored on it would point at a
   // string that never comes back. A backfill is a migration of its own; until
-  // it runs, a message with no id is anchored the legacy way
-  // ("<threadId>:<ts>", memory/observations/anchors.ts).
+  // it runs, a message with no id is anchored by "<threadId>:<ts>" alone
+  // (memory/observations/anchors.ts).
+  //
+  // An id survives a build that has never heard of it, which is the whole
+  // reason it can be added at all: nothing below rebuilds a message object from
+  // known fields, so an unrecognised key rides through load, append, patch and
+  // write untouched (tests/threads-store.test.ts holds that property down —
+  // it is not a type, and a `messages.map(...)` in a write path would end it).
+  //
+  // It does not survive everything. This file merges with the records strategy
+  // and a thread record is atomic there (platform/sync/merge/records.ts): two
+  // devices that both edited one thread get one whole version of it, and the
+  // losing version takes its messages with it into the journal. That costs a
+  // whole message today; once the backfill runs it can also hand back a
+  // surviving message stripped of the id a device that migrated later gave it.
+  // Which is why an anchor carries the thread-and-stamp pair beside the id.
   id?: string;
   role: "user" | "ai";
   text: string;
