@@ -47,7 +47,26 @@ export type PersistedPart =
   | { type: "text"; text: string }
   | { type: "card"; id: string; card: PersistedCardPayload };
 
+// A message's own id, minted when it is appended. `t-` for turn: observation
+// ids are `m-<hex>` and the two travel together in an observation's `messages:`
+// frontmatter and in its body, so the prefixes have to be tellable apart at a
+// glance and by a regex. 16 hex characters off crypto.randomUUID(), the same
+// 64-bit shape the observation ids are moving to.
+//
+// Not a UUID: this string is written into prose and into a frontmatter list the
+// reader reads, and 36 characters per anchor buys nothing over 64 bits here.
+function newMessageId(): string {
+  return `t-${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+}
+
 export interface ThreadMessage {
+  // Optional because every message written before this existed has none, and
+  // nothing invents one on read: an id minted at read time would differ per
+  // device and per load, and an observation anchored on it would point at a
+  // string that never comes back. A backfill is a migration of its own; until
+  // it runs, a message with no id is anchored the legacy way
+  // ("<threadId>:<ts>", memory/observations/anchors.ts).
+  id?: string;
   role: "user" | "ai";
   text: string;
   ts: number;
@@ -586,7 +605,11 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       const entry = cache.get(bookId);
       const thread = entry?.threads[threadId];
       if (!entry || !thread) return undefined;
-      thread.messages.push(message);
+      // The id is minted here rather than at each of the dozen call sites, so
+      // no path can append a message without one. A caller that already has an
+      // id keeps it (a resend, a test); the stored object is a copy, so nothing
+      // the caller still holds is mutated behind its back.
+      thread.messages.push(message.id ? message : { id: newMessageId(), ...message });
       entry.gen++;
       schedule(bookId);
       return thread;

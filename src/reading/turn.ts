@@ -885,7 +885,9 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         annotationId: unit?.annotationId ?? annotationId,
         page: folded ? (unit.annotationId === "" ? currentPage : null) : page,
         markedText: folded ? "" : selectionText,
-        messages: unit?.messages ?? threadMsgs.map(({ role, text, ts }) => ({ role, text, ts })),
+        messages:
+          unit?.messages ??
+          threadMsgs.map(({ id, role, text, ts }) => ({ ...(id ? { id } : {}), role, text, ts })),
         ...(unit ? { parts: unit.parts } : {}),
         annotations: marks,
       },

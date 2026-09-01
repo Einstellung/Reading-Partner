@@ -14,15 +14,21 @@
 // one thread id off by a single character, one anchor invented outright.
 //
 // So the id is neither shown nor asked for. The model cites a line number, the
-// program holds the ids. On-disk format is unchanged: the anchors below are the
-// same "<threadId>:<ts>" strings the frontmatter has always carried.
+// program holds the ids. What lands on disk is the message's own id where it
+// has one and the old "<threadId>:<ts>" pair where it does not (anchors.ts):
+// the pair names two messages whenever a turn and the reply to it share a
+// millisecond, which is 34% of the ones already stored.
 
+import { messageAnchor } from "./anchors";
 import { localDate } from "./files";
 import type { EvidenceDates } from "./types";
 
 // What this module needs of a message. Structural rather than imported so
 // distill.ts can keep owning DistillMessage without a cycle.
 export interface TranscriptMessage {
+  // The message's own id (platform/app/threads.ts). Absent on every message
+  // stored before ids existed, and the anchor then falls back to the pair.
+  id?: string;
   role: "user" | "ai";
   text: string;
   ts: number;
@@ -37,7 +43,8 @@ export interface TranscriptMessage {
 export interface TranscriptLine {
   // 1-based, the only handle the model is given on a message.
   index: number;
-  // "<threadId>:<ts>" — what the observation's `messages:` field stores.
+  // What the observation's `messages:` field stores: the message's id, or
+  // "<threadId>:<ts>" for one that has none yet.
   anchor: string;
   // The calendar day this message happened on, on the reader's own clock. Null
   // when its ts is unusable (rows written before messages carried one).
@@ -52,7 +59,7 @@ export function buildTranscript(
 ): TranscriptLine[] {
   return messages.map((m, i) => ({
     index: i + 1,
-    anchor: `${m.threadId ?? fallbackThreadId}:${m.ts}`,
+    anchor: messageAnchor(m, fallbackThreadId),
     date: Number.isFinite(m.ts) && m.ts > 0 ? localDate(m.ts) : null,
     role: m.role,
     text: m.text,

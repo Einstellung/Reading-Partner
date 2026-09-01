@@ -27,6 +27,15 @@ export {
 export { FileObservationAdapter, type ObservationAdapter } from "./observations/adapter";
 export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./observations/select";
 export {
+  anchorNames,
+  messageAnchor,
+  messageAnchorKeys,
+  parseMessageAnchor,
+  resolveMessageAnchor,
+  type AnchoredMessage,
+  type ParsedAnchor,
+} from "./observations/anchors";
+export {
   anchorSiblings,
   buildAnchorIndex,
   mentionedIds,

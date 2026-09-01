@@ -957,3 +957,57 @@ test("a file written before asides existed merges unchanged", async () => {
   expect("asideAnchor" in parsed.threads.t1).toBe(false);
   expect(onDisk()).toEqual(["bt", "t1"]);
 });
+
+// --- message ids ---
+//
+// An observation citing a conversation turn used to anchor on "<threadId>:<ts>",
+// and 155 of the 459 such anchors on the owner's store name two messages: a
+// user turn and the reply to it are appended in the same millisecond. The id
+// minted here is what an anchor names instead.
+test("an appended message is given an id, and the id survives the write", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  store.append("book1", "t1", { role: "user", text: "asked", ts: 5 });
+  const appended = store.get("book1", "t1")!.messages[1];
+  expect(appended.id).toMatch(/^t-[0-9a-f]{16}$/);
+
+  await advance(500);
+  const parsed = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect(parsed.threads.t1.messages[1].id).toBe(appended.id!);
+});
+
+test("two messages appended in the same millisecond get different ids", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  store.append("book1", "t1", { role: "user", text: "asked", ts: 9 });
+  store.append("book1", "t1", { role: "ai", text: "answered", ts: 9 });
+  const [, asked, answered] = store.get("book1", "t1")!.messages;
+  expect(asked.id).not.toBe(answered.id);
+});
+
+// Reading is where a backfill would have to happen, and it must not: an id
+// minted on read would differ per device and per load, so an observation
+// anchored on it would point at a string that never comes back.
+test("a message stored before ids existed does not gain one on read", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  const held = store.get("book1", "t1")!.messages[0];
+  expect(held.id).toBeUndefined();
+  expect(held.text).toBe("said in t1");
+
+  store.append("book1", "t1", { role: "ai", text: "answered", ts: 2 });
+  await advance(500);
+  const parsed = JSON.parse(files.get(FILE)!) as { threads: Record<string, Thread> };
+  expect("id" in parsed.threads.t1.messages[0]).toBe(false);
+});
+
+test("a message that already carries an id keeps it", async () => {
+  writeFile([thread("t1")]);
+  await store.load("book1");
+
+  store.append("book1", "t1", { id: "t-0123456789abcdef", role: "user", text: "resent", ts: 3 });
+  expect(store.get("book1", "t1")!.messages[1].id).toBe("t-0123456789abcdef");
+});

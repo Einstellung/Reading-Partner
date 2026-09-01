@@ -14,15 +14,16 @@
 // reading/turn.ts calls listObservations() on every reading turn, and reading
 // all 106 files of the largest topic measures 1.01 ms. Neither adds I/O.
 
+import { messageAnchorKeys, type AnchoredMessage } from "./anchors";
 import type { Observation } from "./types";
 
 // --- anchor -> observations ---
 
 // Two maps rather than one, because the two anchor kinds are two namespaces —
-// an annotation id is a UUID, a message id is "<threadId>:<ts>" — and every
-// caller knows which one it is holding (a mark on the page, or a turn in a
-// thread). One merged map would let the wrong kind match by accident and could
-// never be told apart again.
+// an annotation id is a UUID, a message anchor is a message id or the legacy
+// "<threadId>:<ts>" pair — and every caller knows which one it is holding (a
+// mark on the page, or a turn in a thread). One merged map would let the wrong
+// kind match by accident and could never be told apart again.
 export interface AnchorIndex {
   annotations: ReadonlyMap<string, readonly Observation[]>;
   messages: ReadonlyMap<string, readonly Observation[]>;
@@ -58,8 +59,29 @@ export function observationsForAnnotation(index: AnchorIndex, annotationId: stri
   return index.annotations.get(annotationId) ?? [];
 }
 
-export function observationsForMessage(index: AnchorIndex, messageId: string): readonly Observation[] {
-  return index.messages.get(messageId) ?? [];
+// The observations citing one conversation turn. A caller holding the message
+// itself passes the message: an anchor is stored in either of two forms and one
+// turn can be cited in both — the observations written before message ids
+// existed name it as "<threadId>:<ts>", the ones written since name its id — so
+// asking with only one form finds only half of them. Passing a bare string
+// looks up exactly that string, which is what a caller reading an anchor off a
+// stored entry means.
+export function observationsForMessage(
+  index: AnchorIndex,
+  message: string | (AnchoredMessage & { threadId?: string }),
+  fallbackThreadId?: string,
+): readonly Observation[] {
+  if (typeof message === "string") return index.messages.get(message) ?? [];
+  const out: Observation[] = [];
+  const seen = new Set<string>();
+  for (const key of messageAnchorKeys(message, fallbackThreadId)) {
+    for (const entry of index.messages.get(key) ?? []) {
+      if (seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      out.push(entry);
+    }
+  }
+  return out;
 }
 
 // The other observations built on any of this one's evidence, itself excluded.
@@ -78,6 +100,10 @@ export function anchorSiblings(index: AnchorIndex, entry: Observation): Observat
     }
   };
   for (const id of entry.anchors.annotationIds) take(observationsForAnnotation(index, id));
+  // By the stored string, both sides. Two entries citing the same turn in
+  // different forms are not siblings here, and cannot be: telling the forms
+  // apart takes the thread file, which this pure function is never handed. A
+  // caller that has the messages asks observationsForMessage instead.
   for (const id of entry.anchors.messageIds) take(observationsForMessage(index, id));
   return out;
 }

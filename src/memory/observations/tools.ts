@@ -27,9 +27,11 @@ export interface ObservationToolOptions {
   // content hash and would invent one. Absent where there is no one book.
   bookId?: string;
   // The transcript this pass rendered, line by line (transcript.ts): position i
-  // holds the line the prompt printed as [i + 1], carrying both the
-  // "<threadId>:<ts>" anchor that lands on disk and the day that line happened.
-  // The model cites the number; the id and the date are read off this table.
+  // holds the line the prompt printed as [i + 1], carrying both the anchor that
+  // lands on disk — the message's id, or the legacy "<threadId>:<ts>" pair for
+  // one stored before ids existed (anchors.ts) — and the day that line
+  // happened. The model cites the number; the id and the date are read off this
+  // table.
   //
   // Neither is asked of the model — the same rule as bookId above, and for the
   // same measured reason: 76 of 298 model-written message anchors on one real

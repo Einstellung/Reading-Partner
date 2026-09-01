@@ -150,7 +150,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
         // stretch being distilled.
         messages: (getThread(key, threadId)?.messages ?? [])
           .filter((m) => m.text.trim() !== "")
-          .map(({ role, text, ts }) => ({ role, text, ts })),
+          .map(({ id, role, text, ts }) => ({ ...(id ? { id } : {}), role, text, ts })),
       });
     if (abortRef.current) {
       onSettledRef.current = run;

@@ -33,6 +33,10 @@ export interface HangupContext {
 // of go to distillation: a display row's trace, images and notices are not the
 // retell.
 export interface HangupMessage {
+  // Carried so the observation's anchor can be the message's own id rather than
+  // the "<threadId>:<ts>" pair, which names two turns whenever a message and
+  // the reply to it share a millisecond (memory/observations/anchors.ts).
+  id?: string;
   role: "user" | "ai";
   text: string;
   ts: number;
@@ -72,7 +76,7 @@ export function hangupPass(input: {
   threads?: readonly UnitThread[];
 }): HangupPass {
   const { call, context, annotation, stored, annotations } = input;
-  const own = stored.map(({ role, text, ts }) => ({ role, text, ts }));
+  const own = stored.map(({ id, role, text, ts }) => ({ ...(id ? { id } : {}), role, text, ts }));
   // The open thread's messages are the live ones, not the file's: hanging up
   // mid-answer waited for the reply and the file may be a debounce behind.
   const records: UnitThread[] = (input.threads ?? []).map((t) =>
