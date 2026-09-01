@@ -16,6 +16,7 @@ import { loadSettings } from "../../../platform/app/settings";
 import type { DeviceRole } from "../../../platform/app/device";
 import { buildGlossary } from "../../../ai/voice";
 import { getInfoView } from "../../../info/briefing/live";
+import { todayLocal } from "../../../info/briefing/store";
 import type { InfoSnapshot } from "../../../info/briefing/pipeline";
 import {
   clearCollectorLeftovers,
@@ -429,7 +430,13 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
       return;
     }
     setInfoCall(
-      noBriefingAnchor(await companionContext(), { error: snap?.error ?? null, notices }),
+      noBriefingAnchor(await companionContext(), {
+        // The day the briefing would have been for. Same fallback InfoHome uses
+        // for the call's bookId, so the thread and the book agree.
+        dateKey: todayLocal(),
+        error: snap?.error ?? null,
+        notices,
+      }),
     );
   }, [askBriefing, companionContext, notices]);
 

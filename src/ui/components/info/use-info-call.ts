@@ -81,10 +81,10 @@ export interface InfoCallController {
 }
 
 /**
- * The key this conversation's scroll position is stored under. The briefing
- * thread's id is the constant "briefing", so the date has to be in the key or
- * two days would share one slot; the prefix keeps info out of the reading
- * thread-id space.
+ * The key this conversation's scroll position is stored under. The briefing and
+ * article thread ids now carry the day themselves (anchors.ts), so the date here
+ * is redundant for those two and still separates the days for "onboarding",
+ * which is a constant. The prefix keeps info out of the reading thread-id space.
  */
 export function infoStickKey(dateKey: string, threadId: string): string {
   return `info:${dateKey}:${threadId}`;
