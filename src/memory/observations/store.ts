@@ -21,6 +21,7 @@ import {
   parseTombstones,
   serializeObservation,
 } from "./files";
+import { cleanObservationBody } from "./residue";
 import type {
   EvidenceAnchors,
   Observation,
@@ -221,14 +222,19 @@ export class ObservationFileStore {
   // and there the clock is the right answer because the conversation is now.
   async create(input: RetainInput): Promise<Observation> {
     const clock = isoDate(this.now());
+    // Cleaned on the way in, not on the way out. 29 of 140 bodies on the
+    // owner's store carry tool-call XML a model wrote while it was mid-call,
+    // the newest on 2026-08-27, and every anchor buried in one of those blocks
+    // was invisible to every index (residue.ts).
+    const cleaned = cleanObservationBody(input.body.trim(), normalizeAnchors(input.anchors));
     const entry: Observation = {
       id: newId(),
       type: input.type,
       summary: oneLine(input.summary),
-      body: input.body.trim(),
+      body: cleaned.body,
       created: input.observed?.first ?? clock,
       updated: input.observed?.last ?? clock,
-      anchors: normalizeAnchors(input.anchors),
+      anchors: cleaned.anchors,
       ...(input.bookId ? { bookId: input.bookId } : {}),
     };
     await this.fs.write(this.entryPath(entry.id), serializeObservation(entry));
@@ -246,12 +252,21 @@ export class ObservationFileStore {
   async update(id: string, patch: ObservationPatch): Promise<Observation | null> {
     const prev = await this.get(id);
     if (!prev) return null;
+    // Only a rewritten body is cleaned. One this build already wrote is clean,
+    // and one it did not is a file on disk that a correction of some other
+    // field must not quietly rewrite — repairing those is migration work.
+    // Anchors found in a rewritten body still merge into whatever the entry
+    // ends up with, patch or previous.
+    const cleaned = cleanObservationBody(
+      patch.body !== undefined ? patch.body.trim() : "",
+      patch.anchors !== undefined ? normalizeAnchors(patch.anchors) : prev.anchors,
+    );
     const entry: Observation = {
       ...prev,
       type: patch.type ?? prev.type,
       summary: patch.summary !== undefined ? oneLine(patch.summary) : prev.summary,
-      body: patch.body !== undefined ? patch.body.trim() : prev.body,
-      anchors: patch.anchors !== undefined ? normalizeAnchors(patch.anchors) : prev.anchors,
+      body: patch.body !== undefined ? cleaned.body : prev.body,
+      anchors: cleaned.anchors,
       // Filled in when the entry predates the field; never overwritten, because
       // the session correcting an observation is not always the one it is about.
       ...(prev.bookId ?? patch.bookId ? { bookId: prev.bookId ?? patch.bookId } : {}),
