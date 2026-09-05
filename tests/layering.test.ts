@@ -82,6 +82,10 @@ const LAYER: Record<string, Layer> = {
   migrate: "domain",
   reading: "domain",
   "reading/chapters": "domain",
+  // Deleting a book, which is one order of operations across the library, the
+  // topics, the observation stores and the retell/talk/rehearsal trio. A domain
+  // of its own because it belongs to none of them and drives all of them.
+  "reading/delete": "domain",
   "reading/engine": "domain",
   "reading/engine/gesture": "domain",
   "reading/figures": "domain",
