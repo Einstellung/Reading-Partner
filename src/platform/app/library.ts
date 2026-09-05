@@ -36,6 +36,16 @@ export function addEntry(store: LibraryStore, entry: LibraryEntry): LibraryStore
   return { books: { ...store.books, [entry.hash]: entry } };
 }
 
+// Pure: take an entry out. Returns the store unchanged — same object — when the
+// book is not in it, so deleting a book twice writes no second revision of a
+// file the whole sync treats as one unit.
+export function removeEntry(store: LibraryStore, bookId: string): LibraryStore {
+  if (!store.books[bookId]) return store;
+  const books = { ...store.books };
+  delete books[bookId];
+  return { books };
+}
+
 // Pure: decode a title/filename that was taken from a percent-encoded file URL
 // (see path.ts). Returns the store unchanged — same object — when there is
 // nothing to repair, which is what keeps the repair from writing a new revision
@@ -142,4 +152,14 @@ export async function importBook(bytes: Uint8Array, originalPath: string): Promi
   };
   await saveStore(addEntry(store, entry));
   return entry;
+}
+
+// Take a deleted book off the shelf (reading/delete/delete-book.ts). The blob
+// under library/ is not touched here: this is the registry, and what the reader
+// deleted is removed from disk by the caller in one place.
+export async function removeLibraryEntry(bookId: string): Promise<void> {
+  const store = await loadStore();
+  const next = removeEntry(store, bookId);
+  if (next === store) return;
+  await saveStore(next);
 }
