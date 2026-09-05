@@ -16,6 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { mkdir, readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { judgeRelayLeg } from "./relay-verdict";
 import { holdTheScreen } from "./wake-lock";
 import {
   hasOnDeviceDictation,
@@ -213,12 +214,33 @@ async function write(result: SpeechResult): Promise<void> {
   }
 }
 
+/// Generous — the fixture is 75 s of speech and the measured pace adds its
+/// synthesis times on top — but it exists: a leg that never ends is the failure
+/// this whole probe is for.
+const LEG_TIMEOUT_MS = 180_000;
+
+/// The backstop for a leg judged by its own answer rather than by an event.
+/// Rejects rather than resolving, so that running out of time is recorded as
+/// what happened instead of being read as an empty record.
+function timeOut(ms: number): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`nothing came back inside ${ms} ms`)), ms);
+  });
+}
+
 /// What every leg does around whatever starts it: subscribe, start it, wait for
-/// the run to say it has stopped, take the measurement record. The timeout is
-/// generous — the fixture is 75 s of speech and the measured pace adds its
-/// synthesis times on top — but it exists: a leg that never said
-/// `speaking:false` is the failure this whole probe is for.
-async function watch(label: string, begin: () => Promise<unknown>): Promise<LegResult> {
+/// the run to say it has stopped, take the measurement record.
+///
+/// `judge` is which answer says the leg worked. `player` is the fixture legs:
+/// they hand the player audio and the `speaking:0` the webview hears is the
+/// whole question. `relay` is the live leg, which is started from Rust and is
+/// about the path in front of the player; it is over when the relay's loop has
+/// ended, and the relay's own timeline is what judges it (relay-verdict.ts).
+async function watch(
+  label: string,
+  begin: () => Promise<unknown>,
+  judge: "player" | "relay" = "player",
+): Promise<LegResult> {
   const out: LegResult = {
     label,
     ok: false,
@@ -257,20 +279,34 @@ async function watch(label: string, begin: () => Promise<unknown>): Promise<LegR
       }
     });
 
-    out.relay = await begin();
+    // The relay-judged leg has nothing to wait for after this: the answer
+    // resolves when the relay's loop has ended, and the audio still playing out
+    // behind it is the player's business, not this leg's.
+    out.relay =
+      judge === "relay"
+        ? await Promise.race([begin(), timeOut(LEG_TIMEOUT_MS)])
+        : await begin();
 
-    await Promise.race([
-      finished,
-      new Promise<void>((resolve) => setTimeout(resolve, 180_000)),
-    ]);
+    if (judge === "player") {
+      await Promise.race([
+        finished,
+        new Promise<void>((resolve) => setTimeout(resolve, LEG_TIMEOUT_MS)),
+      ]);
+    }
     out.report = await invoke("plugin:voice|speech_report");
-    // A leg that never got as far as speaking also says `speaking: 0`, with
-    // `failed` on it. Both the reason and the record's own error have to be
-    // clear before the leg counts.
-    const stopped = out.speaking.find((s) => s.value === 0);
-    const reported = (out.report ?? {}) as { error?: string | null };
-    out.ok = !!stopped && stopped.reason !== "failed" && !reported.error;
-    if (reported.error) out.error = reported.error;
+    if (judge === "relay") {
+      // Swift's report is kept but does not judge: its label belongs to the
+      // last leg that set one, and this leg sets none.
+      Object.assign(out, judgeRelayLeg(out.relay));
+    } else {
+      // A leg that never got as far as speaking also says `speaking: 0`, with
+      // `failed` on it. Both the reason and the record's own error have to be
+      // clear before the leg counts.
+      const stopped = out.speaking.find((s) => s.value === 0);
+      const reported = (out.report ?? {}) as { error?: string | null };
+      out.ok = !!stopped && stopped.reason !== "failed" && !reported.error;
+      if (reported.error) out.error = reported.error;
+    }
   } catch (e) {
     out.error = String(e);
   } finally {
@@ -329,7 +365,11 @@ async function runLive(captureDir: string): Promise<LegResult> {
       capturePath: await join(captureDir, "live.pcm"),
     },
   });
-  return watch("live", () => invoke("plugin:voice|speech_live", { args: { sentences } }));
+  return watch(
+    "live",
+    () => invoke("plugin:voice|speech_live", { args: { sentences } }),
+    "relay",
+  );
 }
 
 /// The echo leg: the phone speaks the fixture with its own microphone open, and

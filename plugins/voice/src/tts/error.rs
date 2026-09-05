@@ -102,6 +102,28 @@ impl fmt::Display for TtsError {
 
 impl std::error::Error for TtsError {}
 
+/// The whole of what went wrong, not the outermost sentence of it.
+///
+/// A reqwest send failure says only `error sending request for url (…)`;
+/// whether the name did not resolve, the connection was refused, TLS failed or
+/// the connect timeout ran out lives one or more levels down in `source()`. A
+/// device run on 2026-09-05 lost all twelve sentences to that one sentence and
+/// could not say which of those four it was, which is a run repeated for
+/// nothing.
+pub(crate) fn describe_chain(e: &(dyn std::error::Error + 'static)) -> String {
+    let mut out = e.to_string();
+    let mut cause = e.source();
+    while let Some(e) = cause {
+        let text = e.to_string();
+        if !text.is_empty() {
+            out.push_str(": ");
+            out.push_str(&text);
+        }
+        cause = e.source();
+    }
+    out
+}
+
 /// What separates a refusal from a failure. Both vendors bury it one level down
 /// and neither uses a status code of its own, so the body is the only thing to
 /// go on. A list rather than an exact code because the two known vendors already
@@ -231,5 +253,60 @@ mod tests {
     fn a_body_that_is_not_json_still_produces_a_sentence() {
         let e = classify(Some(502), "<html>bad gateway</html>");
         assert!(e.to_string().contains("502"), "{e}");
+    }
+
+    /// One link of a hand-built chain. A `reqwest::Error` cannot be constructed
+    /// from outside its crate, and what is under test is the walk rather than
+    /// any one vendor's wording.
+    #[derive(Debug)]
+    struct Link {
+        text: &'static str,
+        under: Option<Box<Link>>,
+    }
+
+    impl fmt::Display for Link {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(self.text)
+        }
+    }
+
+    impl std::error::Error for Link {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.under
+                .as_deref()
+                .map(|e| e as &(dyn std::error::Error + 'static))
+        }
+    }
+
+    fn chain(texts: &[&'static str]) -> Link {
+        let mut under = None;
+        for text in texts.iter().rev() {
+            under = Some(Box::new(Link { text, under }));
+        }
+        *under.expect("a chain needs a link")
+    }
+
+    #[test]
+    fn a_transport_failure_carries_the_cause_under_it() {
+        let e = chain(&[
+            "error sending request for url (https://api.xiaomimimo.com/v1/chat/completions)",
+            "client error (Connect)",
+            "dns error",
+            "failed to lookup address information: Name or service not known",
+        ]);
+        assert_eq!(
+            describe_chain(&e),
+            "error sending request for url (https://api.xiaomimimo.com/v1/chat/completions): \
+             client error (Connect): dns error: \
+             failed to lookup address information: Name or service not known"
+        );
+    }
+
+    #[test]
+    fn an_error_with_nothing_under_it_reads_as_itself() {
+        assert_eq!(
+            describe_chain(&chain(&["connection refused"])),
+            "connection refused"
+        );
     }
 }
