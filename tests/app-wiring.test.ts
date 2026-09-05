@@ -1,4 +1,5 @@
-// The shell's wiring (src/App.tsx), where the last round's bugs were.
+// The shell's wiring (src/App.tsx and the marks hook it hands the doors to),
+// where the last round's bugs were.
 //
 // Everything under it was right: the pure decisions had tests, the session hook
 // had tests, and all of them were green while the app did the wrong thing —
@@ -19,10 +20,14 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const app = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../src/App.tsx"),
-  "utf8",
-);
+const read = (path: string) =>
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src", path), "utf8");
+
+// Four of the six doors moved out of App into the marks hook (reading/session/
+// use-mark-doors.ts) and are declared there now, at the same indent; the two
+// that need no mark are still App's. One source, so a door cannot escape this
+// by moving between the two.
+const app = read("App.tsx") + read("reading/session/use-mark-doors.ts");
 
 // One top-level `const name = …` declaration, up to the next one.
 function decl(name: string): string {
@@ -58,7 +63,9 @@ test("every door back into a conversation hands over its record", () => {
 test("the only conversation opened field by field is one that has no record yet", () => {
   // The brand-new thread an AI-pen stroke on the page creates, written down in
   // the same breath. Every other openThread call would be reopening something.
-  expect(app.match(/(?<![A-Za-z])openThreadCall\(/g)).toHaveLength(1);
+  // `(?!\w+:)` skips the one declaration of the door — a hand-written argument
+  // list is the only thing shaped `name(identifier:`.
+  expect(app.match(/(?<![A-Za-z])openThreadCall\((?!\w+:)/g)).toHaveLength(1);
   // Which of the three kinds a conversation is is derived in one place, and
   // that place is not here.
   expect(app).not.toContain("isBook: true");
