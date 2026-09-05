@@ -18,6 +18,13 @@
 // constant, not a redesign, so every number lives in TurnDetectConfig and
 // nothing here hard-codes one.
 //
+// The level stream is not the only input. The machine also has to be told when
+// the companion's own playback starts and stops: for about the first second and
+// a half of it, VPIO has not converged and the phone's own voice leaks into the
+// mic loudly enough to cross the line. `playbackStarted` opens an immunity
+// window over exactly that stretch and `playbackStopped` closes it; see
+// `immunityMs`. Both announce nothing.
+//
 // This machine gets transliterated into Swift and run on the audio thread, so
 // it stays a struct and a function: no clock, no I/O, no timers, no closures
 // over closures. `atMs` is a monotonic wall clock the caller passes in, never
@@ -86,6 +93,21 @@ export interface TurnDetectConfig {
   // stage does this once the threshold is loosened to where the echo crosses
   // at all: at -55 dBFS its isolated crossings land 323 and 481 ms apart.
   resumeGuardMs: number;
+  // No duck within this long of the playback of a turn starting. VPIO needs
+  // about a second and a half to converge on a voice it has not heard before,
+  // and until it does the phone's own playback comes back up the mic: on the
+  // 2026-09-05 device run (iPhone 16, iOS 26.6, speaker, VPIO on) four frames
+  // of the played stage crossed -35 dBFS, 591, 1280, 1396 and 1578 ms after the
+  // playback started, and nothing went above -45 dB for the remaining 20 s of
+  // it. With `startFrames: 1` each of those four is a duck on the companion's
+  // own voice. Default 2000: the last leak is at 1578, so the window covers the
+  // measured convergence by 422 ms. What it costs is a barge-in inside the
+  // first two seconds of a reply, which waits for the window to pass.
+  //
+  // Frames inside the window do not count toward `startFrames` either, so the
+  // first frame after it starts a fresh count rather than finishing one begun
+  // on leaked echo.
+  immunityMs: number;
 }
 
 export const DEFAULT_TURN_DETECT: TurnDetectConfig = {
@@ -95,6 +117,7 @@ export const DEFAULT_TURN_DETECT: TurnDetectConfig = {
   resumeMs: 300,
   hangoverMs: 1250,
   resumeGuardMs: 300,
+  immunityMs: 2000,
 };
 
 /**
@@ -110,6 +133,7 @@ export function resolveTurnDetectConfig(patch?: Partial<TurnDetectConfig>): Turn
     resumeMs: Math.max(0, c.resumeMs),
     hangoverMs: Math.max(0, c.hangoverMs),
     resumeGuardMs: Math.max(0, c.resumeGuardMs),
+    immunityMs: Math.max(0, c.immunityMs),
   };
 }
 
@@ -130,10 +154,42 @@ export interface TurnDetectState {
   duckedAtMs: number;
   // Timestamp of the last `resume`, or null if none was ever announced.
   lastResumeMs: number | null;
+  // Timestamp of the playback whose immunity window is open, or null when
+  // nothing is playing. Set by `playbackStarted`, cleared by `playbackStopped`
+  // and by a reset; the window expires by arithmetic, so the field stays set
+  // for the whole of a turn's playback.
+  playbackStartedMs: number | null;
 }
 
 export function initialTurnDetectState(): TurnDetectState {
-  return { phase: "idle", loudFrames: 0, lastVoiceMs: 0, duckedAtMs: 0, lastResumeMs: null };
+  return {
+    phase: "idle",
+    loudFrames: 0,
+    lastVoiceMs: 0,
+    duckedAtMs: 0,
+    lastResumeMs: null,
+    playbackStartedMs: null,
+  };
+}
+
+/**
+ * The playback of one turn began: open the immunity window at `atMs`. Announces
+ * nothing, and is the only thing that opens it — a machine never told about the
+ * playback behaves exactly as it did before the window existed.
+ */
+export function markPlaybackStarted(state: TurnDetectState, atMs: number): TurnDetectState {
+  return { ...state, playbackStartedMs: atMs };
+}
+
+/**
+ * The playback ended or was stopped: close the window now, whatever is left of
+ * it. Nothing is coming out of the speaker any more, so nothing can leak, and a
+ * duck suppressed after that costs a whole turn instead of a wobble — the user
+ * speaking into the silence is a turn starting, and the hangover has to be
+ * timed from their voice.
+ */
+export function markPlaybackStopped(state: TurnDetectState): TurnDetectState {
+  return { ...state, playbackStartedMs: null };
 }
 
 export interface TurnDetectStep {
@@ -161,7 +217,12 @@ export function stepTurnDetect(
   const loud = db >= config.startDb;
 
   if (state.phase === "idle") {
-    const loudFrames = loud ? Math.min(state.loudFrames + 1, config.startFrames) : 0;
+    // Inside the immunity window a loud buffer is the playback leaking back,
+    // not a person. It counts for nothing at all: not a duck, and not a frame
+    // toward one, so the first buffer after the window opens a fresh count.
+    const immune =
+      state.playbackStartedMs !== null && atMs - state.playbackStartedMs < config.immunityMs;
+    const loudFrames = loud && !immune ? Math.min(state.loudFrames + 1, config.startFrames) : 0;
     const guarded =
       state.lastResumeMs !== null && atMs - state.lastResumeMs < config.resumeGuardMs;
     if (loudFrames >= config.startFrames && !guarded) {
@@ -222,6 +283,15 @@ export interface TurnDetector {
   readonly config: TurnDetectConfig;
   /** Feed one buffer's level. Returns the event it produced, or null. */
   step(db: number, atMs: number): TurnEvent | null;
+  /** The playback of one turn began. Opens the immunity window. Announces nothing. */
+  playbackStarted(atMs: number): void;
+  /**
+   * The playback ended or was stopped. Closes the window. Announces nothing.
+   *
+   * The stamp is not read — closing is immediate — and is in the signature so
+   * that both ends of one playback are called the same way, off one clock.
+   */
+  playbackStopped(atMs: number): void;
   /** Current state, for tests and for logging what the machine believes. */
   snapshot(): TurnDetectState;
   /** Back to silence without announcing anything, e.g. when the call ends. */
@@ -238,6 +308,12 @@ export function createTurnDetector(patch?: Partial<TurnDetectConfig>): TurnDetec
       const next = stepTurnDetect(state, config, db, atMs);
       state = next.state;
       return next.event;
+    },
+    playbackStarted(atMs: number): void {
+      state = markPlaybackStarted(state, atMs);
+    },
+    playbackStopped(_atMs: number): void {
+      state = markPlaybackStopped(state);
     },
     snapshot(): TurnDetectState {
       return { ...state };

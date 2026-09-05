@@ -1125,6 +1125,10 @@ struct TurnReplayFrame: Decodable {
     let atMs: Double
     let db: Double?
     let reset: Bool?
+    /// "start" or "stop", the machine's other two entry points: the immunity
+    /// window opening when this turn's playback begins and closing when it
+    /// ends. Also not a buffer, and its `db` is ignored too.
+    let playback: String?
 }
 
 /// The config patch, every key optional. An absent key is that field's default,
@@ -1136,6 +1140,7 @@ struct TurnReplayConfig: Decodable {
     let resumeMs: Double?
     let hangoverMs: Double?
     let resumeGuardMs: Double?
+    let immunityMs: Double?
 
     func resolved() -> TurnDetectConfig {
         let base = TurnDetectConfig()
@@ -1145,7 +1150,8 @@ struct TurnReplayConfig: Decodable {
             confirmMs: confirmMs ?? base.confirmMs,
             resumeMs: resumeMs ?? base.resumeMs,
             hangoverMs: hangoverMs ?? base.hangoverMs,
-            resumeGuardMs: resumeGuardMs ?? base.resumeGuardMs)
+            resumeGuardMs: resumeGuardMs ?? base.resumeGuardMs,
+            immunityMs: immunityMs ?? base.immunityMs)
     }
 }
 
@@ -1183,6 +1189,7 @@ struct TurnReplayReport: Encodable {
     let resumeMs: Double
     let hangoverMs: Double
     let resumeGuardMs: Double
+    let immunityMs: Double
     let events: [TurnReplayEvent]
 }
 
@@ -1198,6 +1205,14 @@ enum TurnReplay {
             for frame in frames {
                 if frame.reset == true {
                     machine.reset()
+                    continue
+                }
+                if let playback = frame.playback {
+                    if playback == "start" {
+                        machine.playbackStarted(atMs: frame.atMs)
+                    } else {
+                        machine.playbackStopped(atMs: frame.atMs)
+                    }
                     continue
                 }
                 // A null level is digital silence, which is what the machine
@@ -1226,6 +1241,7 @@ enum TurnReplay {
                 resumeMs: resolved.resumeMs,
                 hangoverMs: resolved.hangoverMs,
                 resumeGuardMs: resolved.resumeGuardMs,
+                immunityMs: resolved.immunityMs,
                 events: events)
         }
 

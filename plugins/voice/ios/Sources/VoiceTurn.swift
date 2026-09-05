@@ -7,6 +7,14 @@
 // field names, same defaults, same events. A difference between the two files is
 // a bug in this one until the other one is changed first.
 //
+// The level stream is not the only input. The machine also has to be told when
+// the companion's own playback starts and stops: for about the first second and
+// a half of it, VPIO has not converged and the phone's own voice leaks into the
+// mic loudly enough to cross the line. `playbackStarted` opens an immunity
+// window over exactly that stretch and `playbackStopped` closes it; see
+// `immunityMs`. Both announce nothing. `SpeechOut` makes both calls, beside the
+// `speaking: 1` and `speaking: 0` it already emits.
+//
 // This machine runs inside the tap callback on the audio thread, so it obeys
 // that thread's rules: no allocation (every type below is a value type of
 // Doubles, an Int and an enum, and the returned event carries one Double
@@ -91,6 +99,22 @@ struct TurnDetectConfig: Equatable {
     /// stage does this once the threshold is loosened to where the echo crosses
     /// at all: at -55 dBFS its isolated crossings land 323 and 481 ms apart.
     let resumeGuardMs: Double
+    /// No duck within this long of the playback of a turn starting. VPIO needs
+    /// about a second and a half to converge on a voice it has not heard
+    /// before, and until it does the phone's own playback comes back up the
+    /// mic: on the 2026-09-05 device run (iPhone 16, iOS 26.6, speaker, VPIO
+    /// on) four frames of the played stage crossed -35 dBFS, 591, 1280, 1396
+    /// and 1578 ms after the playback started, and nothing went above -45 dB
+    /// for the remaining 20 s of it. With `startFrames: 1` each of those four
+    /// is a duck on the companion's own voice. Default 2000: the last leak is
+    /// at 1578, so the window covers the measured convergence by 422 ms. What
+    /// it costs is a barge-in inside the first two seconds of a reply, which
+    /// waits for the window to pass.
+    ///
+    /// Frames inside the window do not count toward `startFrames` either, so
+    /// the first frame after it starts a fresh count rather than finishing one
+    /// begun on leaked echo.
+    let immunityMs: Double
 
     /// The defaults, and the clamping `resolveTurnDetectConfig` does over there.
     /// One initialiser covers both: calling it with nothing is
@@ -111,7 +135,8 @@ struct TurnDetectConfig: Equatable {
         confirmMs: Double = 300,
         resumeMs: Double = 300,
         hangoverMs: Double = 1250,
-        resumeGuardMs: Double = 300
+        resumeGuardMs: Double = 300,
+        immunityMs: Double = 2000
     ) {
         self.startDb = startDb
         self.startFrames = max(1, startFrames)
@@ -119,6 +144,7 @@ struct TurnDetectConfig: Equatable {
         self.resumeMs = max(0, resumeMs)
         self.hangoverMs = max(0, hangoverMs)
         self.resumeGuardMs = max(0, resumeGuardMs)
+        self.immunityMs = max(0, immunityMs)
     }
 }
 
@@ -144,6 +170,31 @@ struct TurnDetectState: Equatable {
     var duckedAtMs: Double = 0
     /// Timestamp of the last `resume`, or nil if none was ever announced.
     var lastResumeMs: Double?
+    /// Timestamp of the playback whose immunity window is open, or nil when
+    /// nothing is playing. Set by `playbackStarted`, cleared by
+    /// `playbackStopped` and by a reset; the window expires by arithmetic, so
+    /// the field stays set for the whole of a turn's playback.
+    var playbackStartedMs: Double?
+}
+
+/// The playback of one turn began: open the immunity window at `atMs`.
+/// Announces nothing, and is the only thing that opens it — a machine never
+/// told about the playback behaves exactly as it did before the window existed.
+func markPlaybackStarted(_ state: TurnDetectState, _ atMs: Double) -> TurnDetectState {
+    var next = state
+    next.playbackStartedMs = atMs
+    return next
+}
+
+/// The playback ended or was stopped: close the window now, whatever is left of
+/// it. Nothing is coming out of the speaker any more, so nothing can leak, and a
+/// duck suppressed after that costs a whole turn instead of a wobble — the user
+/// speaking into the silence is a turn starting, and the hangover has to be
+/// timed from their voice.
+func markPlaybackStopped(_ state: TurnDetectState) -> TurnDetectState {
+    var next = state
+    next.playbackStartedMs = nil
+    return next
 }
 
 struct TurnDetectStep {
@@ -169,12 +220,24 @@ func stepTurnDetect(
     let loud = db >= config.startDb
 
     if state.phase == .idle {
+        // Inside the immunity window a loud buffer is the playback leaking
+        // back, not a person. It counts for nothing at all: not a duck, and not
+        // a frame toward one, so the first buffer after the window opens a
+        // fresh count.
+        //
+        // `playbackStartedMs != nil && atMs - playbackStartedMs < immunityMs`.
+        // Never told about a playback is never immune, which is what the null
+        // half says over there.
+        var immune = false
+        if let playbackStartedMs = state.playbackStartedMs {
+            immune = atMs - playbackStartedMs < config.immunityMs
+        }
         // JS/Swift: `Math.min(loudFrames + 1, startFrames)` written as a
         // comparison. `loudFrames` is never above the cap, so at the cap the
         // answer is the cap — and the addition that would trap on
         // `startFrames == Int.max` never happens.
         let loudFrames =
-            loud
+            loud && !immune
             ? (state.loudFrames >= config.startFrames
                 ? config.startFrames : state.loudFrames + 1)
             : 0
@@ -270,6 +333,20 @@ struct VoiceTurn {
         let next = stepTurnDetect(state, config, db, atMs)
         state = next.state
         return next.event
+    }
+
+    /// The playback of one turn began. Opens the immunity window. Announces
+    /// nothing.
+    mutating func playbackStarted(atMs: Double) {
+        state = markPlaybackStarted(state, atMs)
+    }
+
+    /// The playback ended or was stopped. Closes the window. Announces nothing.
+    ///
+    /// The stamp is not read — closing is immediate — and is in the signature so
+    /// that both ends of one playback are called the same way, off one clock.
+    mutating func playbackStopped(atMs: Double) {
+        state = markPlaybackStopped(state)
     }
 
     /// Back to silence without announcing anything, e.g. when the call ends.

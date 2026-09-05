@@ -3,14 +3,17 @@
 // VoiceTurn.swift is a transliteration of turn-detect.ts, and a transliteration
 // is only worth what proves it, so the two machines are run over the same
 // buffers and their event streams compared. This file is the shared input: the
-// level sequences the probe recorded on the phone, cut to a stage, plus what the
+// level sequences recorded on the phone, cut to a stage, plus what the
 // TypeScript machine answers over each one. The device replays the frames and
 // the harness compares; tests/info/turn-replay.test.ts checks the same table
 // against the fixtures it was cut from, so neither side can drift alone.
 //
-// Nothing here is invented. Every sequence is one stage of one recorded probe
+// Nothing here is invented. Every sequence is one stage of one recorded
 // session, the same cut tests/info/turn-detect.test.ts makes, and every config
-// is one the tests over there already argue for. The levels are stored as the
+// is one the tests over there already argue for. The frames that are not
+// buffers — the reset and the two playback calls — are the machine's other
+// entry points, and they are here because a replay that only ever called `step`
+// would let a broken one of those ship. The levels are stored as the
 // linear RMS the probe wrote, not as dB: dB is `20 * log10(rms)`, one derived
 // column, and keeping the raw number is what lets the test assert this table is
 // still bit for bit what the fixture says.
@@ -36,11 +39,17 @@ type Row = readonly [number, number];
  * `reset` is not a buffer at all. It is the one call on the detector that is
  * not `step`, and a replay that never made it would let a broken `reset` ship.
  * The frame is not fed to the machine; its `db` is ignored.
+ *
+ * `playback` is the same idea for the other two calls: "start" is
+ * `playbackStarted(atMs)` and "stop" is `playbackStopped(atMs)`, which is how
+ * the immunity window is opened and closed. Also not a buffer, `db` also
+ * ignored. A frame carries one of these or neither, never both.
  */
 export interface ReplayFrame {
   atMs: number;
   db: number;
   reset?: true;
+  playback?: "start" | "stop";
 }
 
 /**
@@ -454,24 +463,280 @@ const VPIO_OFF_BARGE: Row[] = [
   [47145, 0.005694097839295864],
 ];
 
+// The phone talking to itself, 2026-09-05, on the run the immunity window was
+// sized from: 21.8 seconds of the `played` stage, mic open, VPIO on, speaker.
+// Four of these buffers cross -35 dBFS and all four are in the first 1.6 s,
+// while VPIO is still converging; nothing after 5188 ms reaches -45 dB. The
+// stage marker below is the playback's start, and it is what
+// `playbackStarted` is called with.
+const PLAYED_2026_09_05_START = 3609.565019607544;
+
+const PLAYED_2026_09_05: Row[] = [
+  [3692.2320127487183, 0.00012272932508494705],
+  [3808.140993118286, 0.00012801695265807211],
+  [3900.3560543060303, 0.006538753397762775],
+  [3992.771983146667, 0.001275977585464716],
+  [4109.361052513123, 0.00996206421405077],
+  [4200.448989868164, 0.03686559945344925],
+  [4291.089057922363, 0.013146597892045976],
+  [4407.647013664246, 0.013521253131330012],
+  [4499.283075332642, 0.00026947056176140904],
+  [4590.524077415466, 8.2341481174808e-5],
+  [4706.115007400513, 0.00011774936865549536],
+  [4797.950029373169, 0.00012826742022298276],
+  [4889.500975608826, 0.020211393013596535],
+  [5005.522012710571, 0.025942834094166756],
+  [5098.137974739075, 0.014055619947612286],
+  [5187.829971313477, 0.020916741341352463],
+  [5303.228974342346, 0.005207980051636696],
+  [5395.972967147827, 0.0006639949278905988],
+  [5510.814070701599, 0.0006045903428457677],
+  [5602.090001106262, 0.0004579859087243676],
+  [5693.713068962097, 0.0003084797353949398],
+  [5808.590054512024, 0.00025961370556615293],
+  [5901.4610052108765, 0.00021794121130369604],
+  [5993.390083312988, 0.00014664448099210858],
+  [6108.492970466614, 0.00028822082094848156],
+  [6201.202988624573, 0.00017049830057658255],
+  [6292.9980754852295, 0.00011471532343421131],
+  [6408.3510637283325, 6.70676126901526e-6],
+  [6498.589038848877, 6.3901511566655245e-6],
+  [6592.200994491577, 6.279070657910779e-5],
+  [6708.0090045928955, 0.004070821218192577],
+  [6798.545002937317, 0.0005861523095518351],
+  [6889.816045761108, 0.00017451353778596967],
+  [7006.469011306763, 0.00023080751998350024],
+  [7098.563075065613, 0.0002749707200564444],
+  [7188.464999198914, 9.404563024872914e-5],
+  [7303.539991378784, 6.746139843016863e-5],
+  [7396.399974822998, 0.00010331028170185164],
+  [7487.588047981262, 0.0004591105971485376],
+  [7603.37507724762, 0.00014756213931832465],
+  [7696.768045425415, 2.6705372874857854e-5],
+  [7809.545993804932, 4.821305083169136e-6],
+  [7901.584029197693, 5.76506536162924e-5],
+  [7994.0550327301025, 4.091758455615491e-5],
+  [8108.932971954346, 0.0003997262101620436],
+  [8201.135993003845, 0.00011176606494700536],
+  [8293.848037719727, 0.00012489147775340825],
+  [8407.979011535645, 0.00012818266986869276],
+  [8496.551990509033, 0.0014805069658905268],
+  [8590.689063072205, 0.00012828521721530706],
+  [8709.519982337952, 0.0001216331947944127],
+  [8799.015045166016, 0.00015584818902425468],
+  [8890.863060951233, 0.00022532642469741404],
+  [9008.242011070251, 0.0002071034105028957],
+  [9098.028063774109, 0.0001920146023621783],
+  [9189.257025718687, 2.98366358038038e-5],
+  [9306.897044181824, 1.1842727872135583e-5],
+  [9397.709012031555, 6.5996814555546734e-6],
+  [9489.29500579834, 3.9182168620754965e-6],
+  [9604.742050170898, 6.21502431386034e-6],
+  [9696.613073349, 6.82779091221164e-6],
+  [9787.708044052124, 6.380690319929272e-5],
+  [9903.356075286863, 1.0811823813128283e-5],
+  [9996.345043182371, 4.563209586194716e-6],
+  [10110.06200313568, 6.423760623874841e-6],
+  [10202.107071876526, 6.8429681050474755e-6],
+  [10293.74098777771, 5.547855380427791e-6],
+  [10409.224033355713, 7.138032742659561e-6],
+  [10501.321077346802, 7.175885912147351e-6],
+  [10593.276023864746, 7.144619758037152e-6],
+  [10708.343029022217, 7.993306098796893e-6],
+  [10800.03297328949, 5.252549726719735e-6],
+  [10893.03708076477, 5.060684998170473e-6],
+  [11009.206056594849, 7.369397735601524e-6],
+  [11099.379062652588, 7.373804237431614e-6],
+  [11190.973043441772, 1.2626591342268512e-5],
+  [11307.25598335266, 0.0001528806023998186],
+  [11398.77200126648, 0.00016151553427334875],
+  [11489.26305770874, 0.0001882261858554557],
+  [11607.3579788208, 0.0001155767749878578],
+  [11697.79407978058, 7.323025783989579e-6],
+  [11789.24798965454, 8.162328413163777e-6],
+  [11904.381036758425, 7.427254331560107e-6],
+  [11997.863054275513, 4.531234026217135e-6],
+  [12087.705969810486, 6.18252624917659e-6],
+  [12203.33707332611, 5.981120466458378e-6],
+  [12295.735001564026, 6.051998752809595e-6],
+  [12410.171031951904, 6.7955370468553156e-6],
+  [12501.981973648071, 6.11915174886235e-6],
+  [12595.14307975769, 8.097981663013343e-6],
+  [12708.890080451964, 7.935594112495892e-6],
+  [12801.738977432253, 6.217695499799447e-6],
+  [12892.966032028198, 5.29604858456878e-6],
+  [13007.346034049988, 4.807042842003284e-6],
+  [13099.971055984495, 5.817889359605033e-6],
+  [13192.434072494509, 6.959669917705469e-6],
+  [13309.208989143372, 6.190369276737329e-6],
+  [13399.77204799652, 5.911266725888709e-6],
+  [13491.69099330902, 2.6423497274663532e-6],
+  [13607.554078102112, 3.829345132544404e-6],
+  [13698.485970497131, 5.113112365506822e-6],
+  [13789.777040481567, 5.612793756881729e-6],
+  [13905.99501132965, 6.190258318383712e-6],
+  [13998.844981193542, 4.7789158088562544e-6],
+  [14089.233040809631, 6.370589744619792e-6],
+  [14203.485012054443, 6.492479769804049e-6],
+  [14297.343015670776, 6.818973815825302e-6],
+  [14386.852025985718, 7.485197784262709e-6],
+  [14503.828048706057, 6.2272747527458705e-6],
+  [14595.550060272217, 5.208784841670422e-6],
+  [14709.77807044983, 5.984693416394293e-6],
+  [14802.36804485321, 5.6292769841093104e-6],
+  [14894.029021263124, 7.202851520560216e-6],
+  [15009.36198234558, 6.2384174270846415e-6],
+  [15101.755023002625, 5.305765171215171e-6],
+  [15192.24500656128, 6.299895630945684e-6],
+  [15308.86697769165, 0.00010369205847382544],
+  [15400.905966758728, 4.682564758695662e-5],
+  [15492.182970046995, 5.537021479540272e-6],
+  [15607.825994491575, 5.616686848952668e-6],
+  [15697.277069091797, 2.3035721824271604e-5],
+  [15790.739059448242, 0.00024317498900927603],
+  [15907.863974571228, 0.00022500910563394427],
+  [15998.143076896667, 0.00018175992590840903],
+  [16089.761972427368, 4.2754072637762874e-5],
+  [16207.382082939148, 4.852961410506396e-6],
+  [16297.52504825592, 6.040022526576649e-6],
+  [16388.853073120117, 5.490966486831894e-6],
+  [16503.538966178894, 6.134409431979293e-6],
+  [16597.36204147339, 0.00011487175652291626],
+  [16687.4920129776, 0.0002547202748246491],
+  [16802.37901210785, 0.00012668120325542986],
+  [16895.608067512512, 8.36029266793048e-6],
+  [17009.688019752502, 5.790033355879132e-6],
+  [17101.96304321289, 6.081015271774959e-6],
+  [17193.917989730835, 0.0001362004259135574],
+  [17308.837056159973, 0.00021038345585111529],
+  [17401.427030563354, 0.0002147930645151064],
+  [17492.825031280518, 0.0002187252539442852],
+  [17608.826994895935, 0.0002448532322887331],
+  [17700.072050094604, 0.00023841645452193916],
+  [17791.54896736145, 0.00019528412667568773],
+  [17908.194065093994, 0.00014003737305756658],
+  [17998.682022094727, 6.953474439796992e-6],
+  [18091.153979301453, 5.89678074902622e-6],
+  [18206.932067871097, 5.3215439947962295e-6],
+  [18298.699975013733, 6.188007318996824e-6],
+  [18389.288067817688, 5.146638613950927e-6],
+  [18506.950974464417, 6.073209078749642e-6],
+  [18597.460985183716, 0.00013925888924859464],
+  [18688.525080680847, 0.00024281456717289984],
+  [18804.404973983765, 0.00013076075993012637],
+  [18896.47603034973, 6.45491400064202e-6],
+  [18988.50107192993, 3.9636493056605104e-6],
+  [19102.941036224365, 1.411255288985558e-5],
+  [19195.755004882812, 2.81465622720134e-6],
+  [19310.232043266296, 3.703869197124732e-6],
+  [19402.00400352478, 4.1988241719082e-6],
+  [19493.743062019348, 5.5846576287876815e-6],
+  [19608.864068984985, 5.971152495476417e-5],
+  [19701.34699344635, 0.00016805306950118393],
+  [19792.45507717133, 0.000182238727575168],
+  [19908.59007835388, 0.00019654184870887548],
+  [19999.373078346252, 0.00018293385801371187],
+  [20091.556072235107, 7.782708962622564e-6],
+  [20208.401083946228, 5.723623871745076e-6],
+  [20299.47304725647, 5.578400305239484e-6],
+  [20391.700983047485, 5.984609288134379e-6],
+  [20507.49397277832, 6.294348622759571e-6],
+  [20598.299980163574, 6.1750456552545074e-6],
+  [20689.80097770691, 6.581027719221311e-6],
+  [20807.13403224945, 6.089398539188551e-6],
+  [20897.369027137756, 6.206418674992165e-6],
+  [20988.262057304382, 6.3649858930148184e-6],
+  [21104.145050048828, 5.690002581104636e-6],
+  [21197.556972503666, 6.32983164905454e-6],
+  [21287.31608390808, 5.21742776982137e-6],
+  [21403.51104736328, 6.181924163684016e-6],
+  [21495.346069335938, 5.252414212009171e-6],
+  [21609.763026237488, 5.704566319764126e-6],
+  [21702.4689912796, 0.0001347903598798439],
+  [21793.380975723267, 0.00016709388000890613],
+  [21909.64102745056, 0.00018088692741002887],
+  [22001.340985298157, 0.00015095609705895183],
+  [22092.786073684692, 0.0001463561202399433],
+  [22208.369970321655, 6.730484892614186e-5],
+  [22299.421072006226, 6.432151621993398e-6],
+  [22391.79801940918, 5.798950496682664e-6],
+  [22508.3509683609, 6.222713636816479e-6],
+  [22599.59197044373, 5.233486717770575e-6],
+  [22691.70308113098, 6.202668373589404e-6],
+  [22807.321071624756, 5.7962984101322945e-6],
+  [22898.43201637268, 5.560368208534783e-6],
+  [22989.585041999817, 5.8352579799247906e-6],
+  [23106.75597190857, 5.8889295360131655e-6],
+  [23198.66704940796, 5.5104710554587655e-6],
+  [23288.100004196167, 5.478307684825268e-6],
+  [23404.69002723694, 5.865012553840643e-6],
+  [23496.401071548466, 5.713202881452162e-6],
+  [23587.457060813904, 6.914898676768644e-6],
+  [23703.939080238342, 5.832070655742427e-6],
+  [23795.17197608948, 6.633928478549933e-6],
+  [23909.52503681183, 6.154181392048486e-6],
+  [24002.537965774536, 5.603846148005687e-6],
+  [24094.277024269104, 9.062613389687613e-5],
+  [24209.086060523987, 0.00014685018686577678],
+  [24300.955057144165, 0.00013864313950762153],
+  [24392.946004867554, 0.0001420673361280933],
+  [24507.251024246216, 0.0001473034790251404],
+  [24599.50304031372, 0.0001512427843408659],
+  [24692.42000579834, 0.00014053928316570818],
+  [24809.172987937927, 0.0001361801114398986],
+  [24899.639010429382, 0.00014523939171340317],
+  [24990.55802822113, 0.00015192643331829458],
+  [25106.62305355072, 0.0001364773779641837],
+  [25197.779059410095, 0.0001470004499424249],
+  [25289.89601135254, 0.00013932916044723245],
+];
+
 const SEQUENCES = {
   "vpio-on/echo": VPIO_ON_ECHO,
   "vpio-on/barge": VPIO_ON_BARGE,
   "vpio-off/echo": VPIO_OFF_ECHO,
   "vpio-off/barge": VPIO_OFF_BARGE,
+  "device-2026-09-05/played": PLAYED_2026_09_05,
 } as const;
 
 export type ReplaySequence = keyof typeof SEQUENCES;
 
 /**
- * Which probe file and which stage inside it each table was cut from, so the
+ * Which recording and which stage inside it each table was cut from, so the
  * test can re-cut it and compare rather than take this file's word for it.
+ * `file` is relative to docs/assets, and `shape` says which of the two on-disk
+ * layouts it is — the AEC probe writes a `stages` array beside its events, the
+ * device run marks its stages with events of their own.
  */
-export const REPLAY_SOURCES: Record<ReplaySequence, { file: string; stage: string }> = {
-  "vpio-on/echo": { file: "voice-probe-aec-vpio-on.json", stage: "echo" },
-  "vpio-on/barge": { file: "voice-probe-aec-vpio-on.json", stage: "barge" },
-  "vpio-off/echo": { file: "voice-probe-aec-vpio-off.json", stage: "echo" },
-  "vpio-off/barge": { file: "voice-probe-aec-vpio-off.json", stage: "barge" },
+export const REPLAY_SOURCES: Record<
+  ReplaySequence,
+  { file: string; stage: string; shape: "probe" | "device-run" }
+> = {
+  "vpio-on/echo": {
+    file: "voice-probe/voice-probe-aec-vpio-on.json",
+    stage: "echo",
+    shape: "probe",
+  },
+  "vpio-on/barge": {
+    file: "voice-probe/voice-probe-aec-vpio-on.json",
+    stage: "barge",
+    shape: "probe",
+  },
+  "vpio-off/echo": {
+    file: "voice-probe/voice-probe-aec-vpio-off.json",
+    stage: "echo",
+    shape: "probe",
+  },
+  "vpio-off/barge": {
+    file: "voice-probe/voice-probe-aec-vpio-off.json",
+    stage: "barge",
+    shape: "probe",
+  },
+  "device-2026-09-05/played": {
+    file: "voice-device-run/turn-result-2026-09-05.json",
+    stage: "played",
+    shape: "device-run",
+  },
 };
 
 /**
@@ -503,6 +768,11 @@ export function replayExpected(
       detector.reset();
       continue;
     }
+    if (frame.playback) {
+      if (frame.playback === "start") detector.playbackStarted(frame.atMs);
+      else detector.playbackStopped(frame.atMs);
+      continue;
+    }
     const event = detector.step(frame.db, frame.atMs);
     if (!event) continue;
     out.push(
@@ -519,7 +789,17 @@ export function replayExpected(
  * as the original, and every config on it is one tests/info/turn-detect.test.ts
  * already argues from data.
  */
-const PLAN: { name: string; sequence: ReplaySequence; config: Partial<TurnDetectConfig> }[] = [
+const PLAN: {
+  name: string;
+  sequence: ReplaySequence;
+  config: Partial<TurnDetectConfig>;
+  /**
+   * When the playback of this sequence began, for the runs that have one. The
+   * case is fed `playbackStarted(atMs)` before its first buffer; absent, the
+   * machine is never told about a playback and no window ever opens.
+   */
+  playbackStartedAtMs?: number;
+}[] = [
   // Fifteen seconds of the companion's own voice, and the defaults ignore all
   // of it. The one case whose right answer is an empty list.
   { name: "echo-default", sequence: "vpio-on/echo", config: {} },
@@ -571,6 +851,34 @@ const PLAN: { name: string; sequence: ReplaySequence; config: Partial<TurnDetect
     sequence: "vpio-off/echo",
     config: { startDb: -60, startFrames: 2 },
   },
+  // The immunity window on the audio it was measured from. Twenty-two seconds
+  // of the phone's own voice with the window open at the right moment: four
+  // buffers cross -35 dBFS, all four inside the window, and the right answer is
+  // an empty list.
+  {
+    name: "played-immunity-default",
+    sequence: "device-2026-09-05/played",
+    config: {},
+    playbackStartedAtMs: PLAYED_2026_09_05_START,
+  },
+  // The same buffers with the window shut, which is what shipped before this:
+  // every one of those four leaks is a duck on the companion's own voice.
+  {
+    name: "played-immunity-0",
+    sequence: "device-2026-09-05/played",
+    config: { immunityMs: 0 },
+    playbackStartedAtMs: PLAYED_2026_09_05_START,
+  },
+  // And a window too short for this phone. The last leak lands 1578 ms after
+  // the playback started, so at 1500 the same frame that is ignored above ducks
+  // — which is the margin the 2000 ms default is buying, stated as the case
+  // that fails without it.
+  {
+    name: "played-immunity-1500",
+    sequence: "device-2026-09-05/played",
+    config: { immunityMs: 1500 },
+    playbackStartedAtMs: PLAYED_2026_09_05_START,
+  },
 ];
 
 // The recorded runs above cannot fail a comparison the machine gets wrong at
@@ -593,12 +901,13 @@ const PLAN: { name: string; sequence: ReplaySequence; config: Partial<TurnDetect
 /** Digital silence: no signal at all, not merely a quiet buffer. */
 const SILENT = Number.NEGATIVE_INFINITY;
 
-/** `n` buffers at one level, or the one call that is not a buffer. */
-type Run = readonly [count: number, db: number] | "reset";
+/** `n` buffers at one level, or one of the three calls that is not a buffer. */
+type Run = readonly [count: number, db: number] | "reset" | "playback-start" | "playback-stop";
 
 /**
  * What a timer produces: a frame every `periodMs` from zero, at the levels the
- * runs spell out. A "reset" run occupies one tick and feeds nothing.
+ * runs spell out. A "reset" or "playback-" run occupies one tick and feeds
+ * nothing.
  */
 function timer(periodMs: number, runs: readonly Run[]): ReplayFrame[] {
   const out: ReplayFrame[] = [];
@@ -606,6 +915,11 @@ function timer(periodMs: number, runs: readonly Run[]): ReplayFrame[] {
   for (const run of runs) {
     if (run === "reset") {
       out.push({ atMs, db: SILENT, reset: true });
+      atMs += periodMs;
+      continue;
+    }
+    if (run === "playback-start" || run === "playback-stop") {
+      out.push({ atMs, db: SILENT, playback: run === "playback-start" ? "start" : "stop" });
       atMs += periodMs;
       continue;
     }
@@ -675,14 +989,68 @@ const SYNTHETIC: { name: string; config: Partial<TurnDetectConfig>; frames: Repl
       [26, SILENT],
     ]),
   },
+  // The fifth comparison, on the same 50 ms grid: 2000 divides by 50, so the
+  // playback starts at 0 and there are frames at 1950 and at 2000. The first is
+  // inside the window and answers nothing; the second is immunityMs after the
+  // start to the millisecond, which is the first moment the window is over — a
+  // window written `<=` swallows it and every stamp after it moves.
+  //
+  // It also pins the counting rule: the loud frame at 1950 leaves loudFrames at
+  // zero, so at `startFrames: 1` the duck at 2000 is a count begun after the
+  // window, not one finished inside it.
+  {
+    name: "timer-immunity-boundary-exact",
+    config: {},
+    frames: timer(50, [
+      "playback-start",
+      [38, SILENT],
+      [8, AT_THE_LINE],
+      [27, SILENT],
+    ]),
+  },
+  // The window belongs to the playback, not to the clock. The playback stops
+  // 450 ms in, and the voice that follows — well inside what would have been
+  // the window — takes the turn like any other: nothing is coming out of the
+  // speaker, so nothing can be leaking.
+  {
+    name: "playback-stop-closes-the-window-early",
+    config: {},
+    frames: timer(50, [
+      "playback-start",
+      [8, SILENT],
+      "playback-stop",
+      [8, AT_THE_LINE],
+      [27, SILENT],
+    ]),
+  },
+  // Reset is the machine's other way back to silence, and it has to take the
+  // window with it: without that, a call that ended mid-playback leaves the
+  // next one deaf for the rest of a window nobody is playing into.
+  {
+    name: "reset-clears-the-window-mid-run",
+    config: {},
+    frames: timer(50, [
+      "playback-start",
+      [8, SILENT],
+      "reset",
+      [8, AT_THE_LINE],
+      [27, SILENT],
+    ]),
+  },
 ];
 
 /** Every run, with its input and the answer the device has to reproduce. */
 export function turnReplayCases(): ReplayCase[] {
-  const recorded = PLAN.map(({ name, sequence, config }) => ({
+  const recorded = PLAN.map(({ name, sequence, config, playbackStartedAtMs }) => ({
     name,
     config,
-    frames: replayFrames(sequence),
+    frames:
+      playbackStartedAtMs === undefined
+        ? replayFrames(sequence)
+        : [
+            { atMs: playbackStartedAtMs, db: SILENT, playback: "start" as const },
+            ...replayFrames(sequence),
+          ],
   }));
   return [...recorded, ...SYNTHETIC].map(({ name, config, frames }) => ({
     name,

@@ -20,35 +20,84 @@ import {
   type ReplaySequence,
 } from "../../src/info/companion/turn-replay";
 
-const PROBE_DIR = join(import.meta.dir, "../../docs/assets/voice-probe");
+const ASSETS = join(import.meta.dir, "../../docs/assets");
+
+interface LevelEvent {
+  kind: string;
+  sinceStartMs: number;
+  payload: { inputRms: number; stage?: string };
+}
+
+const toFrame = (e: LevelEvent) => ({
+  atMs: e.sinceStartMs,
+  db:
+    e.payload.inputRms > 0 ? 20 * Math.log10(e.payload.inputRms) : Number.NEGATIVE_INFINITY,
+});
 
 /** The same cut tests/info/turn-detect.test.ts makes, made again from source. */
-function stageFrames(file: string, stage: string): { atMs: number; db: number }[] {
-  const probe = JSON.parse(readFileSync(join(PROBE_DIR, file), "utf8"));
-  const span = probe.stages.find((s: { stage: string }) => s.stage === stage);
-  if (!span) throw new Error(`no stage ${stage} in ${file}`);
-  return probe.events
+function stageFrames(
+  file: string,
+  stage: string,
+  shape: "probe" | "device-run",
+): { atMs: number; db: number }[] {
+  const json = JSON.parse(readFileSync(join(ASSETS, file), "utf8"));
+  if (shape === "probe") {
+    const span = json.stages.find((s: { stage: string }) => s.stage === stage);
+    if (!span) throw new Error(`no stage ${stage} in ${file}`);
+    return json.events
+      .filter(
+        (e: LevelEvent) =>
+          e.kind === "level" &&
+          e.sinceStartMs >= span.sinceStartMs &&
+          e.sinceStartMs < span.endedSinceStartMs,
+      )
+      .map(toFrame);
+  }
+  // The device run has no stage table: the stages are events among the others,
+  // and one runs until the next one starts.
+  const events: LevelEvent[] = json.passes[0].report.events;
+  const marks = events.filter((e) => e.kind === "stage");
+  const from = marks.find((e) => e.payload.stage === stage);
+  if (!from) throw new Error(`no stage ${stage} in ${file}`);
+  const to = marks.find((e) => e.sinceStartMs > from.sinceStartMs);
+  const until = to ? to.sinceStartMs : Number.POSITIVE_INFINITY;
+  return events
     .filter(
-      (e: { kind: string; sinceStartMs: number }) =>
-        e.kind === "level" &&
-        e.sinceStartMs >= span.sinceStartMs &&
-        e.sinceStartMs < span.endedSinceStartMs,
+      (e) => e.kind === "level" && e.sinceStartMs >= from.sinceStartMs && e.sinceStartMs < until,
     )
-    .map((e: { sinceStartMs: number; payload: { inputRms: number } }) => ({
-      atMs: e.sinceStartMs,
-      db:
-        e.payload.inputRms > 0
-          ? 20 * Math.log10(e.payload.inputRms)
-          : Number.NEGATIVE_INFINITY,
-    }));
+    .map(toFrame);
+}
+
+/** Where one stage of the device run begins, on the same clock as its levels. */
+function stageStart(file: string, stage: string): number {
+  const json = JSON.parse(readFileSync(join(ASSETS, file), "utf8"));
+  const events: LevelEvent[] = json.passes[0].report.events;
+  const from = events.find((e) => e.kind === "stage" && e.payload.stage === stage);
+  if (!from) throw new Error(`no stage ${stage} in ${file}`);
+  return from.sinceStartMs;
 }
 
 test("every sequence is still bit for bit the stage it was cut from", () => {
   const names = Object.keys(REPLAY_SOURCES) as ReplaySequence[];
-  expect(names.length).toBe(4);
+  expect(names.length).toBe(5);
   for (const name of names) {
-    const { file, stage } = REPLAY_SOURCES[name];
-    expect(replayFrames(name)).toEqual(stageFrames(file, stage));
+    const { file, stage, shape } = REPLAY_SOURCES[name];
+    expect(replayFrames(name)).toEqual(stageFrames(file, stage, shape));
+  }
+});
+
+// The window is measured from a moment, and a moment copied wrong is a case
+// that proves nothing: it would go on reporting SAME while the window sat over
+// the wrong stretch of audio.
+test("the played cases open the window where the recording says the playback began", () => {
+  const { file, stage } = REPLAY_SOURCES["device-2026-09-05/played"];
+  const start = stageStart(file, stage);
+  const played = turnReplayCases().filter((c) => c.name.startsWith("played-"));
+  expect(played.length).toBe(3);
+  for (const item of played) {
+    expect(item.frames[0]).toEqual({ atMs: start, db: Number.NEGATIVE_INFINITY, playback: "start" });
+    // And nothing else in the case is anything but a buffer.
+    expect(item.frames.slice(1).every((f) => !f.playback && !f.reset)).toBe(true);
   }
 });
 
@@ -134,6 +183,62 @@ test("the synthetic cases sit exactly on the four thresholds", () => {
   const afterReset = reset.expected[2];
   expect(afterReset.type).toBe("duck");
   expect(afterReset.atMs - reset.expected[1].atMs).toBeLessThan(cfg.resumeGuardMs);
+
+  // The fifth threshold. The playback starts at 0, there is a loud buffer at
+  // 1950 inside the window and one at 2000 exactly on its far edge, and only
+  // the second of them ducks.
+  const immunity = named("timer-immunity-boundary-exact");
+  const opened = immunity.frames[0];
+  expect(opened.playback).toBe("start");
+  expect(immunity.frames.some((f) => f.atMs === cfg.immunityMs - 50 && f.db === cfg.startDb))
+    .toBe(true);
+  expect(immunity.expected[0]).toEqual({ atMs: opened.atMs + cfg.immunityMs, type: "duck" });
+  expect(immunity.expected[1].atMs - immunity.expected[0].atMs).toBe(cfg.confirmMs);
+});
+
+// The three cases cut from the 2026-09-05 device run, which is the recording the
+// window exists because of: the phone's own voice, mic open, VPIO converging.
+test("the immunity window is what the played stage answers nothing", () => {
+  const named = (name: string) => turnReplayCases().find((c) => c.name === name)!;
+
+  // Twenty-two seconds of the companion talking to itself, and the shipped
+  // config announces nothing at all.
+  expect(named("played-immunity-default").expected).toEqual([]);
+
+  // The same buffers with the window shut. Four of them cross the line, and
+  // what the machine did with them before the window existed is two ducks —
+  // the resume guard swallows the other two — each of which would have dropped
+  // the companion's volume mid-sentence.
+  expect(named("played-immunity-0").expected).toEqual([
+    { atMs: 4200.448989868164, type: "duck" },
+    { atMs: 4590.524077415466, type: "resume" },
+    { atMs: 5005.522012710571, type: "duck" },
+    { atMs: 5510.814070701599, type: "resume" },
+  ]);
+
+  // A window 500 ms short of the default, where the last of the four leaks is
+  // outside it: the same frame the default ignores ducks here. That gap is the
+  // margin, and this case is what would fail if it were spent.
+  expect(named("played-immunity-1500").expected).toEqual([
+    { atMs: 5187.829971313477, type: "duck" },
+    { atMs: 5510.814070701599, type: "resume" },
+  ]);
+});
+
+// The window belongs to the playback. Both of the ways it can end early leave
+// the machine hearing the user immediately, and the two cases are identical
+// except for which call did it.
+test("a stopped playback and a reset both hand the turn straight back", () => {
+  const named = (name: string) => turnReplayCases().find((c) => c.name === name)!;
+  const answer: ReplayEvent[] = [
+    { atMs: 500, type: "duck" },
+    { atMs: 800, type: "stop" },
+    { atMs: 2100, type: "end", silentMs: 1250 },
+  ];
+  expect(named("playback-stop-closes-the-window-early").expected).toEqual(answer);
+  expect(named("reset-clears-the-window-mid-run").expected).toEqual(answer);
+  // Both duck 500 ms in, which is well inside the window they opened.
+  expect(500).toBeLessThan(resolveTurnDetectConfig({}).immunityMs);
 });
 
 // The harness sends this over a JSON bridge, so anything the format cannot carry

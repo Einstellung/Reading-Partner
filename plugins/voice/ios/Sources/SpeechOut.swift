@@ -137,6 +137,17 @@ final class SpeechOut {
     private var clock = SpeechClock()
     private var startedAt: CFAbsoluteTime = 0
 
+    /// The turn detector this call is driving, when there is one.
+    ///
+    /// Nil today, and assigned by nobody: nothing on the device runs
+    /// VoiceTurn.swift outside the replay harness yet, so the two calls below
+    /// reach no machine and no existing path behaves differently for them. What
+    /// they are is the seam the detector's immunity window is measured from —
+    /// the window opens when this turn's playback starts and closes when it
+    /// ends, and only the player knows those two moments (docs/33, VoiceTurn's
+    /// `immunityMs`). Touched on `queue` like every other field here.
+    private var turn: VoiceTurn?
+
     // Measurement, bench only. Cleared on every `play()`.
     private var label = ""
     private var rows: [SpeechSentenceRow] = []
@@ -521,6 +532,7 @@ final class SpeechOut {
         lastLevelAt = 0
         firstTapFrames = 0
         tapBuffers = 0
+        turn?.playbackStarted(atMs: CFAbsoluteTimeGetCurrent() * 1000)
         emit(kind: "speaking", value: 1, reason: nil)
     }
 
@@ -546,6 +558,7 @@ final class SpeechOut {
     private func finishLocked(reason: String) {
         speaking = false
         AudioFront.shared.releaseSpeaker()
+        turn?.playbackStopped(atMs: CFAbsoluteTimeGetCurrent() * 1000)
         emit(kind: "level", value: 0, reason: nil)
         emit(kind: "speaking", value: 0, reason: reason)
     }
