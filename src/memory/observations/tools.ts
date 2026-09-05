@@ -19,7 +19,6 @@ import { coveredDays, transcriptAnchors, type TranscriptLine } from "./transcrip
 import {
   OBSERVATION_TYPES,
   isObservationType,
-  type EvidenceAnchors,
   type Observation,
   type ObservationHit,
 } from "./types";
@@ -653,7 +652,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           await gate(null);
           const grown = await adapter.anchor(
             target,
-            evidence as EvidenceAnchors,
+            evidence ?? { annotationIds: [], messageIds: [] },
             observed ?? undefined,
           );
           if (!grown) throw reject("bad-index", `${target} is no longer on this reader's record.`);
