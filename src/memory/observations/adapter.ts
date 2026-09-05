@@ -6,7 +6,14 @@
 
 import { rankObservations } from "./recall";
 import type { ObservationFileStore } from "./store";
-import type { Observation, ObservationHit, ObservationPatch, RetainInput } from "./types";
+import type {
+  EvidenceAnchors,
+  EvidenceDates,
+  Observation,
+  ObservationHit,
+  ObservationPatch,
+  RetainInput,
+} from "./types";
 
 export interface ObservationAdapter {
   // Write one fact (the write side curates: prefer correct() on an existing id
@@ -21,6 +28,16 @@ export interface ObservationAdapter {
   // Fix an existing observation; patch null deletes it (it turned out wrong).
   // Returns the corrected entry, or null when deleted / unknown id.
   correct(id: string, patch: ObservationPatch | null): Promise<Observation | null>;
+  // More evidence for an observation whose text already says it (docs/48: the
+  // text is never rewritten, the anchors only grow). Null when there is no such
+  // observation. Its own method rather than a correct() with anchors only,
+  // because correct() re-cleans and rewrites the body it is given and this
+  // caller has no body to give.
+  anchor(
+    id: string,
+    anchors: Partial<EvidenceAnchors>,
+    observed?: EvidenceDates,
+  ): Promise<Observation | null>;
   // Regenerate derived state (the index) from the observation files.
   rebuild(): Promise<void>;
 }
@@ -51,6 +68,14 @@ export class FileObservationAdapter implements ObservationAdapter {
       return null;
     }
     return this.store.update(id, patch);
+  }
+
+  anchor(
+    id: string,
+    anchors: Partial<EvidenceAnchors>,
+    observed?: EvidenceDates,
+  ): Promise<Observation | null> {
+    return this.store.appendAnchors(id, anchors, observed);
   }
 
   rebuild(): Promise<void> {

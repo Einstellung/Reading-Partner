@@ -6,7 +6,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import type { ObservationAdapter } from "./adapter";
-import { anchorSiblings, buildAnchorIndex, resolveReferences } from "./links";
+import { anchorSiblings, buildAnchorIndex, mentionedIds, resolveReferences } from "./links";
 import {
   allEntries,
   otherTopicNames,
@@ -16,12 +16,109 @@ import {
   type TopicObservations,
 } from "./recall";
 import { coveredDays, transcriptAnchors, type TranscriptLine } from "./transcript";
-import { OBSERVATION_TYPES, isObservationType, type Observation, type ObservationHit } from "./types";
+import {
+  OBSERVATION_TYPES,
+  isObservationType,
+  type EvidenceAnchors,
+  type Observation,
+  type ObservationHit,
+} from "./types";
 
-export type ObservationWriteAction = "create" | "update" | "delete";
+export type ObservationWriteAction = "create" | "update" | "delete" | "same-as";
+
+// How a created observation stands to what is already held about the reader
+// (docs/48). The judgement is made at write time, in the same call that drafts
+// the observation: it is one hop from evidence the model is already holding,
+// and nothing later can recover it — a night pass reading the observation
+// afterwards no longer has the transcript that made it obvious.
+export const WRITE_RELATIONS = ["new", "predicted-by", "contradicts"] as const;
+export type WriteRelation = (typeof WRITE_RELATIONS)[number];
+
+// What onWrite reports. "same-as" is not a relation to a statement — it is one
+// to an observation — but it is the fourth thing a pass can do, and the counts
+// are read together.
+export type WriteRelationOutcome = WriteRelation | "same-as";
+
+// Why a write was refused before anything reached the disk. Three, because they
+// fail for three different reasons and only the first is the model miscounting:
+// a number that names no row, an anchor that resolves to nothing, an id in the
+// text that names no observation.
+export type WriteRejection = "bad-index" | "unresolved-anchor" | "unresolved-mention";
+
+// The immutable write path. Mounting this swaps `update` (which replaced a
+// body) for `same-as` (which appends evidence and leaves the body alone), and
+// makes `relation` required on every create.
+//
+// Mounted only where the prompt printed both numbered lists, because both
+// halves are one numbering: the model cites a row number and this table turns
+// it back into an id, the same discipline the transcript already follows
+// (transcript.ts). A mount without it keeps exactly the tool it had.
+export interface RelationMount {
+  // Observation ids in the order the prompt numbered them; index i holds the
+  // observation printed as [i + 1].
+  observations: readonly string[];
+  // Statement ids, likewise. Empty means there is nothing to be predicted by or
+  // to contradict, and then neither relation is offered at all.
+  statements: readonly string[];
+  addEvidence(statementId: string, observationIds: readonly string[]): Promise<unknown>;
+  addContradiction(statementId: string, observationId: string): Promise<unknown>;
+}
+
+// The half of the id gate that needs the outside world: whether a mark and a
+// message anchor name anything real. Injected because the tools hold neither
+// the book's annotations nor the topic's threads.
+export interface AnchorVerifier {
+  annotation(id: string): boolean | Promise<boolean>;
+  message(anchor: string): boolean | Promise<boolean>;
+}
+
+export interface GateInput {
+  annotationIds: readonly string[];
+  messageIds: readonly string[];
+  // Observation ids named in the text being written.
+  mentions: readonly string[];
+}
+
+export interface GateResult {
+  // Marks and message anchors that resolve to nothing, in the order given.
+  anchors: string[];
+  mentions: string[];
+}
+
+// The gate itself, as a function of what was handed in. Pure but for the
+// verifier, and exported so the judgement is unit-tested apart from the tool
+// loop around it.
+//
+// Only this call's own ids are checked. The stored anchors of the observation
+// being added to are not: they were checked when they were written, and a mark
+// deleted since would make every later write to that observation fail with an
+// error naming something the model never mentioned (docs/48).
+export async function unresolvedIds(
+  input: GateInput,
+  known: ReadonlySet<string>,
+  verify?: AnchorVerifier,
+): Promise<GateResult> {
+  const anchors: string[] = [];
+  if (verify) {
+    for (const id of input.annotationIds) if (!(await verify.annotation(id))) anchors.push(id);
+    for (const anchor of input.messageIds) if (!(await verify.message(anchor))) anchors.push(anchor);
+  }
+  const mentions = input.mentions.filter((id) => !known.has(id));
+  return { anchors, mentions };
+}
 
 export interface ObservationToolOptions {
-  onWrite?(action: ObservationWriteAction): void;
+  onWrite?(action: ObservationWriteAction, relation?: WriteRelationOutcome): void;
+  // Every write the gate refused, by why. Counted rather than logged here: a
+  // refusal is handed back to the model and usually answered by a corrected
+  // call, so what matters afterwards is how often that happened.
+  onReject?(reason: WriteRejection): void;
+  // The immutable write path (docs/48). Absent leaves the tool exactly as it
+  // was: create / update / delete, no relation.
+  relations?: RelationMount;
+  // Resolves the anchors a write hands in. Absent means anchors are taken as
+  // given — a live mount has no listing to check them against.
+  verify?: AnchorVerifier;
   // The book the session is on, stamped onto anything created through these
   // tools (record/types.ts). Not a tool parameter: the model does not know the
   // content hash and would invent one. Absent where there is no one book.
@@ -208,6 +305,52 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
     `${id} is stored under topic "${topic}", not this one. Observations can only be ` +
     `changed in the topic they live in. If it matters here, write what you learned as ` +
     `an observation of this topic.`;
+  const relations = opts.relations;
+  // Only the relations there is something to point at are offered. With no
+  // statement on record "predicted-by" and "contradicts" have no possible
+  // target, and naming them would be asking for a row number the prompt never
+  // printed.
+  const relationList =
+    relations && relations.statements.length > 0
+      ? WRITE_RELATIONS.map((r) => `"${r}"`).join(" | ")
+      : '"new"';
+  // A refusal the model has to answer, counted on the way out. Returned rather
+  // than thrown from here so the call site reads as `throw reject(...)` and no
+  // path can count a rejection it then fails to raise.
+  const reject = (reason: WriteRejection, message: string): Error => {
+    opts.onReject?.(reason);
+    return new Error(message);
+  };
+  // One row number back to the id it was printed for. The schema bounds it
+  // already; this catches the argument that got past validation and the row
+  // that has been deleted since the prompt was built.
+  const pickIndex = (ids: readonly string[], raw: unknown, what: string): string => {
+    if (typeof raw !== "number" || !Number.isInteger(raw)) {
+      throw reject("bad-index", `${what}: give the number printed in front of the row.`);
+    }
+    const id = ids[raw - 1];
+    if (id === undefined) {
+      throw reject("bad-index", `${what}: ${raw} is not a row you were shown (1-${ids.length}).`);
+    }
+    return id;
+  };
+  const readRelation = (
+    mount: RelationMount,
+    args: Record<string, unknown>,
+  ): { kind: WriteRelation; statementId: string } | { kind: "new"; statementId?: undefined } => {
+    const kind = String(args.relation ?? "");
+    if (!(WRITE_RELATIONS as readonly string[]).includes(kind)) {
+      throw new Error(`relation must be one of: ${relationList}`);
+    }
+    if (kind === "new") return { kind: "new" };
+    if (mount.statements.length === 0) {
+      throw new Error('there are no statements to relate to; use relation "new"');
+    }
+    return {
+      kind: kind as WriteRelation,
+      statementId: pickIndex(mount.statements, args.statement, "statement"),
+    };
+  };
   return [
     {
       name: "observation_search",
@@ -264,12 +407,22 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
     {
       name: "observation_update",
       description:
-        "Create, update, or delete one observation about this reader. Update an " +
-        "existing observation instead of creating a near-duplicate; delete one that " +
-        "turned out wrong. When a new fact contradicts an existing observation, " +
-        "rewrite it as an evolution (keep the old state and add the resolution with " +
-        "its date) — never silently drop the old state. Write absolute dates, one " +
-        "fact per observation." +
+        (relations
+          ? "Write one observation about this reader, add evidence to one that is " +
+            "already there, or delete one that turned out wrong. An observation is " +
+            "never rewritten: what it says is what the evidence said on the day it " +
+            "was written, and reading it differently later is a new observation, not " +
+            "an edit of the old one. Every observation you create says how it stands " +
+            "to what is already held about this reader (relation). When the same " +
+            "thing has happened again, do not write a second observation saying it: " +
+            'action "same-as" on the one that already says it, and your evidence is ' +
+            "added to it. Write absolute dates, one fact per observation."
+          : "Create, update, or delete one observation about this reader. Update an " +
+            "existing observation instead of creating a near-duplicate; delete one that " +
+            "turned out wrong. When a new fact contradicts an existing observation, " +
+            "rewrite it as an evolution (keep the old state and add the resolution with " +
+            "its date) — never silently drop the old state. Write absolute dates, one " +
+            "fact per observation.") +
         (otherTopics
           ? " Writes land in this topic only: a search can hand you an id from another " +
             "topic, and that observation can be read but not changed from here."
@@ -280,11 +433,68 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             " it came from."
           : ""),
       parameters: Type.Object({
-        action: Type.String({ description: 'One of "create" | "update" | "delete".' }),
-        id: Type.Optional(Type.String({ description: "Observation id (required for update/delete)." })),
+        action: Type.String({
+          description: relations
+            ? 'One of "create" | "same-as" | "delete".'
+            : 'One of "create" | "update" | "delete".',
+        }),
+        id: Type.Optional(
+          Type.String({
+            description: relations
+              ? "Observation id (required for delete)."
+              : "Observation id (required for update/delete).",
+          }),
+        ),
+        // The two targets are row numbers, bounded by the schema for the same
+        // reason messageIndices is: an out-of-range or invented target is
+        // refused by validation before execute sees it, so no edge can be
+        // written to something that was never printed.
+        ...(relations
+          ? {
+              relation: Type.Optional(
+                Type.String({
+                  description:
+                    `How this observation stands to what is already held: ${relationList}. ` +
+                    "Required for create.",
+                }),
+              ),
+              ...(relations.statements.length > 0
+                ? {
+                    statement: Type.Optional(
+                      Type.Integer({
+                        minimum: 1,
+                        maximum: relations.statements.length,
+                        description:
+                          "The number in front of a statement in the list above — required " +
+                          'for relation "predicted-by" and "contradicts".',
+                      }),
+                    ),
+                  }
+                : {}),
+              ...(relations.observations.length > 0
+                ? {
+                    observation: Type.Optional(
+                      Type.Integer({
+                        minimum: 1,
+                        maximum: relations.observations.length,
+                        description:
+                          "The number in front of an observation in the index above — " +
+                          'required for action "same-as".',
+                      }),
+                    ),
+                  }
+                : {}),
+            }
+          : {}),
         type: Type.Optional(Type.String({ description: `Observation type: ${TYPE_LIST} (required for create).` })),
         summary: Type.Optional(Type.String({ description: "One-line summary (required for create)." })),
-        body: Type.Optional(Type.String({ description: "Full markdown body (required for create; replaces on update)." })),
+        body: Type.Optional(
+          Type.String({
+            description: relations
+              ? "Full markdown body (required for create)."
+              : "Full markdown body (required for create; replaces on update).",
+          }),
+        ),
         annotationIds: Type.Optional(Type.Array(Type.String(), { description: "Evidence: annotation ids this observation came from." })),
         // Bounded by the schema so an out-of-range or invented line is refused
         // by validation before execute ever sees it (ai/agent.ts turns that
@@ -315,7 +525,8 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
                 // The schema already bounds this; a provider that ships an
                 // argument past validation must still not write a dead anchor.
                 if (anchor === undefined) {
-                  throw new Error(
+                  throw reject(
+                    "bad-index",
                     `messageIndices: ${i} is not a transcript line (1-${anchors.length}).`,
                   );
                 }
@@ -344,9 +555,47 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             ),
           ]) ?? passDays;
 
+        // The id gate (docs/48), run on what this call handed in and nothing
+        // else. `text` is the prose being written, or null where the call
+        // writes none; an id that resolves to nothing there would dangle for
+        // good, since no later pass can tell a typo from a deleted observation.
+        const gate = async (text: string | null): Promise<void> => {
+          if (!relations) return;
+          const known = new Set(
+            [
+              ...(await adapter.listObservations()),
+              ...(await readOtherTopics()).flatMap((t) => [...t.entries]),
+            ].map((e) => e.id),
+          );
+          const bad = await unresolvedIds(
+            {
+              annotationIds: evidence?.annotationIds ?? [],
+              messageIds: evidence?.messageIds ?? [],
+              mentions: text === null ? [] : mentionedIds(text),
+            },
+            known,
+            opts.verify,
+          );
+          if (bad.anchors.length > 0) {
+            throw reject(
+              "unresolved-anchor",
+              `This evidence resolves to nothing: ${bad.anchors.join(", ")}. Cite only the ` +
+                "annotation ids and the line numbers printed in this pass.",
+            );
+          }
+          if (bad.mentions.length > 0) {
+            throw reject(
+              "unresolved-mention",
+              `Your text names observations that do not exist: ${bad.mentions.join(", ")}. ` +
+                "Copy an id from the index above, or say it without an id.",
+            );
+          }
+        };
+
         if (action === "create") {
           if (opts.requireAnchor && anchorCount === 0) {
-            throw new Error(
+            throw reject(
+              "unresolved-anchor",
               "create requires evidence: pass annotationIds" +
                 (anchors.length > 0 ? " and/or messageIndices" : "") +
                 ". An observation nothing points back to cannot be checked later.",
@@ -357,6 +606,11 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           const summary = String(args.summary ?? "").trim();
           const body = String(args.body ?? "").trim();
           if (!summary || !body) throw new Error("create requires summary and body");
+          // Read before anything is written: an observation created and only
+          // then found to name a statement that is not there would be on disk
+          // with the edge it declared missing, and nothing afterwards says so.
+          const relation = relations ? readRelation(relations, args) : undefined;
+          await gate(`${summary}\n${body}`);
           const entry = await adapter.retain({
             type,
             summary,
@@ -365,8 +619,46 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             ...(opts.bookId ? { bookId: opts.bookId } : {}),
             ...(observed ? { observed } : {}),
           });
-          opts.onWrite?.("create");
+          if (relations && relation && relation.kind !== "new") {
+            if (relation.kind === "predicted-by") {
+              await relations.addEvidence(relation.statementId, [entry.id]);
+            } else {
+              await relations.addContradiction(relation.statementId, entry.id);
+            }
+          }
+          opts.onWrite?.("create", relation?.kind);
           return `Created ${entry.id}.`;
+        }
+
+        if (relations && action === "same-as") {
+          // Refused rather than ignored: a model that passed a body meant to
+          // change what the observation says, and silently keeping the old text
+          // would leave it believing it had said something it did not.
+          if (args.summary !== undefined || args.body !== undefined || args.type !== undefined) {
+            throw new Error(
+              "same-as adds evidence to an observation that already says this; it never " +
+                'rewrites it. Drop summary/body/type, or create a new observation with relation "new".',
+            );
+          }
+          const target = pickIndex(relations.observations, args.observation, "observation");
+          if (anchorCount === 0) {
+            throw reject(
+              "unresolved-anchor",
+              "same-as is a second piece of evidence for that observation: pass the " +
+                "annotationIds" +
+                (anchors.length > 0 ? " and/or messageIndices" : "") +
+                " it happened in.",
+            );
+          }
+          await gate(null);
+          const grown = await adapter.anchor(
+            target,
+            evidence as EvidenceAnchors,
+            observed ?? undefined,
+          );
+          if (!grown) throw reject("bad-index", `${target} is no longer on this reader's record.`);
+          opts.onWrite?.("same-as", "same-as");
+          return `Added evidence to ${grown.id}.`;
         }
 
         const id = String(args.id ?? "").trim();
@@ -380,7 +672,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           return `Deleted ${id}.`;
         }
 
-        if (action === "update") {
+        if (!relations && action === "update") {
           const type = args.type === undefined ? undefined : String(args.type);
           if (type !== undefined && !isObservationType(type)) {
             throw new Error(`type must be one of: ${TYPE_LIST}`);
@@ -400,7 +692,11 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           return `Updated ${entry.id}.`;
         }
 
-        throw new Error('action must be one of "create" | "update" | "delete"');
+        throw new Error(
+          relations
+            ? 'action must be one of "create" | "same-as" | "delete"'
+            : 'action must be one of "create" | "update" | "delete"',
+        );
       },
     },
   ];
