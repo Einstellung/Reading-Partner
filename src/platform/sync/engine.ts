@@ -68,12 +68,14 @@
 // Everything the pass touches (backend, fs, books) is injected; the Tauri wiring
 // lives in index.ts. reconcile() (reconcile.ts) is the pure decision core.
 
+import { DELETED_BOOKS_FILE, parseDeletedBooks } from "../app/deleted-books";
 import { isAuthFailure, isRemoteGone, type SyncBackend } from "./backend";
 import type { BookFs } from "./books";
 import { hashBytes } from "./content";
 import type { BaseStore, TrashJournal } from "./localStore";
 import type { MergeFile } from "./merge/contract";
 import { mergeFile } from "./merge";
+import { isDeadPath } from "./dead-paths";
 import { cachedHash, reconcile, type Merge, type Snapshot, type Upload } from "./reconcile";
 import { inSyncRange, type LocalFile, type ScannedFile, type SyncFs } from "./syncFs";
 
@@ -279,6 +281,12 @@ export class SyncEngine {
   // Only the resume floor reads it: what it has to know is when this device
   // last asked the remote anything, not when it last got a clean answer.
   private lastPassAt = 0;
+  // Book blobs this process has already asked the remote to delete, so a
+  // tombstone list that only grows does not cost a Drive search per book per
+  // pass (syncBooks).
+  private readonly booksRemoved = new Set<string>();
+  // The parsed tombstone and the hash of the bytes it was parsed from.
+  private deadCache: { hash: string; books: Set<string> } | null = null;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   // In-range paths the app has changed since the running pass started. Empty is
   // the whole of "there is nothing to send"; see the top of this file for why
@@ -567,6 +575,77 @@ export class SyncEngine {
     }
   }
 
+  // The books the reader deleted, as this device's copy of the tombstone knows
+  // them (platform/app/deleted-books.ts). Read through the pass's own fs rather
+  // than through readDeletedBooks: it is an in-range file like any other, and
+  // the pass reads every other file it acts on this way. A file that will not
+  // read is no tombstones — a pass that cannot read it must not conclude that
+  // every book is deleted.
+  //
+  // Taken from the scan, and cached on the content hash the scan already
+  // produced, so a steady pass reads nothing: the file is absent on most
+  // devices, and where it exists it changes only when a book is deleted. A
+  // tombstone this pass pulls is therefore acted on by the next one — the
+  // download lands after the plan is made either way, and fifteen seconds is not
+  // a property anything here needs.
+  private async deadBooks(local: LocalFile[]): Promise<Set<string>> {
+    const f = local.find((l) => l.path === DELETED_BOOKS_FILE);
+    if (!f) return new Set();
+    if (this.deadCache?.hash === f.hash) return this.deadCache.books;
+    try {
+      const books = parseDeletedBooks(
+        new TextDecoder().decode(await this.d.fs.read(DELETED_BOOKS_FILE)),
+      );
+      this.deadCache = { hash: f.hash, books };
+      return books;
+    } catch {
+      return new Set();
+    }
+  }
+
+  // Take one dead path off both sides. The local copy goes first and is
+  // journalled on the way out: the device that deleted the book has nothing left
+  // to lose, but a device that spent the week editing these annotations offline
+  // is losing that week's work here, and sync-trash.jsonl is the thirty days it
+  // stays recoverable in (localStore.ts).
+  //
+  // The remote delete failing is not the pass's problem to solve twice: the
+  // tombstone is still there next pass, and reconcile will name the path again.
+  private async purgeDead(
+    path: string,
+    inRemote: boolean,
+    failures: PassFailures,
+  ): Promise<boolean> {
+    let bytes: Uint8Array | null = null;
+    try {
+      bytes = await this.d.fs.read(path);
+    } catch {
+      // Not on this device, or unreadable. Either way there is nothing to
+      // journal and nothing to delete.
+    }
+    if (bytes !== null) {
+      await this.d.trash
+        .append([
+          { at: this.now(), path, id: path, record: new TextDecoder().decode(bytes) },
+        ])
+        .catch(() => {});
+      await this.d.fs.remove(path).catch(() => {});
+    }
+    if (inRemote) {
+      try {
+        await this.d.backend.remove(path);
+      } catch (e) {
+        if (isAuthFailure(e)) throw e;
+        failures.record(`delete ${path}`, e);
+        return bytes !== null;
+      }
+      failures.succeeded();
+    }
+    delete this.snapshot[path];
+    await this.d.base.remove(path).catch(() => {});
+    return bytes !== null;
+  }
+
   private async runPass(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -594,7 +673,11 @@ export class SyncEngine {
       await this.drainPurge(failures);
       const remote = await this.d.backend.listRemote();
       const local = await this.hashLocal(await this.d.fs.list());
-      const plan = reconcile(local, remote, this.snapshot);
+      // Read before the plan is made: the tombstone is what turns "this file is
+      // only on one side" from something to copy into something to take away
+      // (dead-paths.ts).
+      const dead = await this.deadBooks(local);
+      const plan = reconcile(local, remote, this.snapshot, (path) => isDeadPath(path, dead));
       await this.d.trash.prune(this.now()).catch(() => {});
 
       // No bytes move for these: the snapshot is only catching up on what it
@@ -614,6 +697,16 @@ export class SyncEngine {
       }
 
       const changed: string[] = [];
+
+      // Before the transfers, like drainPurge and for the same reason: a path
+      // this pass is about to take away has no business in one. The paths are
+      // reported as changed so the caches keyed by book drop what they hold
+      // (pull-routes.ts) — a deleted file is as good a reason as a pulled one.
+      for (const path of plan.purges) {
+        if (failures.halted()) break;
+        if (await this.purgeDead(path, remote[path] !== undefined, failures)) changed.push(path);
+      }
+
       // Pull first so library.json is current before the books channel reads it.
       await runPool(plan.downloads, DATA_CONCURRENCY, () => failures.halted(), async (dl) => {
         try {
@@ -702,7 +795,7 @@ export class SyncEngine {
         ]),
       );
 
-      await this.syncBooks(failures);
+      await this.syncBooks(failures, dead);
 
       // A pass that got this far pulled what it could, so the next one is due on
       // the normal schedule rather than on the next 15s tick.
@@ -737,13 +830,39 @@ export class SyncEngine {
   // chunked at all. Chunking bounds one book's peak; two books at once
   // multiplies whatever that peak is, and the device that needs this channel
   // most is the one with the least memory to lose.
-  private async syncBooks(failures: PassFailures): Promise<void> {
+  private async syncBooks(failures: PassFailures, dead: ReadonlySet<string>): Promise<void> {
     // Before listHashes, not inside the loop: under "off" the channel does not
-    // exist, so it does not read library.json either.
+    // exist, so it does not read library.json either — nor does it delete
+    // anything from the remote, since a shell that never mirrors a book has no
+    // standing to say a blob should go.
     if ((this.d.booksPolicy ?? "mirror") === "off") return;
+    // A deleted book is normally gone from library.json too, so listHashes will
+    // not name it; the blob it left in Drive is what has to be asked for by
+    // name. Once per process: removeBook is idempotent, and a hash that is
+    // already gone costs one search every time it is retried.
+    for (const hash of dead) {
+      if (failures.halted()) break;
+      if (this.booksRemoved.has(hash)) continue;
+      try {
+        await this.d.backend.removeBook(hash);
+        this.booksRemoved.add(hash);
+        failures.succeeded();
+      } catch (e) {
+        if (isAuthFailure(e)) throw e;
+        if (isRemoteGone(e)) {
+          this.booksRemoved.add(hash);
+          continue;
+        }
+        failures.record(`delete book ${hash}`, e);
+      }
+    }
     const hashes = await this.d.books.listHashes();
     for (const hash of hashes) {
       if (failures.halted()) break;
+      // Still in library.json on this device — the record delete has not
+      // arrived yet, or this is the device that has not run the domain half.
+      // Mirroring it either way would put the blob straight back.
+      if (dead.has(hash)) continue;
       try {
         const [localHas, remoteHas] = await Promise.all([
           this.d.books.has(hash),

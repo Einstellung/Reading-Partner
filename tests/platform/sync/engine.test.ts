@@ -52,6 +52,7 @@ function makeBackend(seedRemote: RemoteState = {}, seedData: Record<string, stri
   const books = new Map<string, Uint8Array>();
   // Every remove the engine asked for, and the names that refuse to go.
   const removed: string[] = [];
+  const removedBooks: string[] = [];
   const failRemove = new Set<string>();
   let ensureLayoutCalls = 0;
   const backend: SyncBackend = {
@@ -87,12 +88,17 @@ function makeBackend(seedRemote: RemoteState = {}, seedData: Record<string, stri
       if (!b) throw new Error(`missing book ${hash}`);
       return b;
     },
+    async removeBook(hash) {
+      removedBooks.push(hash);
+      books.delete(hash);
+    },
   };
   return {
     backend,
     data,
     books,
     removed,
+    removedBooks,
     failRemove,
     remote: () => Object.fromEntries(meta),
     ensureLayoutCalls: () => ensureLayoutCalls,
@@ -134,6 +140,12 @@ function makeFs(
     async stat(path) {
       const f = files.get(path);
       return f ? { mtime: f.mtime, size: f.bytes.length } : null;
+    },
+    // Like the real one (syncFs.ts): a path that is not there is the state this
+    // asks for, not a failure.
+    async remove(path) {
+      files.delete(path);
+      announce?.(path);
     },
   };
   return { fs, files, reads: () => reads, lists: () => lists };
@@ -1581,4 +1593,143 @@ test("purge: nothing queued costs the pass nothing", async () => {
   const { engine } = makeEngine({ backend: be.backend, snapshot: {}, purge: [] });
   await engine.syncNow();
   expect(be.removed).toEqual([]);
+});
+
+// --- a deleted book (platform/app/deleted-books.ts) -------------------------
+//
+// The tombstone is an ordinary in-range file; what makes it different is that
+// the pass reads it before it plans and takes the deleted book's files off both
+// sides instead of copying them (dead-paths.ts).
+
+const TOMBSTONE = "deleted-books.jsonl";
+const tombstoned = (...ids: string[]) =>
+  ids.map((id) => JSON.stringify({ bookId: id, at: "2026-09-05" })).join("\n") + "\n";
+
+test("a deleted book's file on the remote is purged, never pulled", async () => {
+  const be = makeBackend(
+    { "threads-h1.json": { rev: 4, mtime: 700, size: 5 } },
+    { "threads-h1.json": "THEIRS" },
+  );
+  const { fs, files } = makeFs({ [TOMBSTONE]: { text: tombstoned("h1"), mtime: 100 } });
+  const { engine, pulled } = makeEngine({ backend: be.backend, fs, snapshot: {} });
+
+  await engine.syncNow();
+
+  // Not on disk, not in Drive, and nothing was announced as pulled but the
+  // deletion itself.
+  expect(files.has("threads-h1.json")).toBe(false);
+  expect(be.removed).toEqual(["threads-h1.json"]);
+  expect(be.remote()["threads-h1.json"]).toBeUndefined();
+  expect(pulled).toEqual([]);
+});
+
+test("a deleted book's local file is purged, journalled, and never uploaded", async () => {
+  const be = makeBackend();
+  const { fs, files } = makeFs({
+    [TOMBSTONE]: { text: tombstoned("h1"), mtime: 100 },
+    "annotations-h1.json": { text: "MINE", mtime: 100 },
+    "annotations-h2.json": { text: "KEEP", mtime: 100 },
+  });
+  const trash = makeTrash();
+  const { engine, pulled } = makeEngine({
+    backend: be.backend,
+    fs,
+    trash: trash.trash,
+    snapshot: {},
+  });
+
+  await engine.syncNow();
+
+  expect(files.has("annotations-h1.json")).toBe(false);
+  expect(be.data.has("annotations-h1.json")).toBe(false);
+  // The other book is untouched, and the tombstone itself travels.
+  expect(dec(be.data.get("annotations-h2.json")!)).toBe("KEEP");
+  expect(dec(be.data.get(TOMBSTONE)!)).toBe(tombstoned("h1"));
+  // Nothing to delete remotely, so no request was spent on it.
+  expect(be.removed).toEqual([]);
+  // The week of work a device offline since the delete would lose is kept for
+  // thirty days (localStore.ts).
+  expect(trash.entries().map((e) => [e.path, e.record])).toEqual([
+    ["annotations-h1.json", "MINE"],
+  ]);
+  // The caches keyed by book have to hear about it (pull-routes.ts).
+  expect(pulled).toEqual([["annotations-h1.json"]]);
+});
+
+test("a deleted book's prep material goes with it, and the snapshot forgets it", async () => {
+  const be = makeBackend(
+    { "prep-h1/state.json": { rev: 4, mtime: 700, size: 5 } },
+    { "prep-h1/state.json": "THEIRS" },
+  );
+  const { fs, files } = makeFs({
+    [TOMBSTONE]: { text: tombstoned("h1"), mtime: 100 },
+    "prep-h1/chapters/chapter-03.md": { text: "MINE", mtime: 100 },
+  });
+  const base = makeBase({ "prep-h1/state.json": "BASE" });
+  const snapshot: Snapshot = {
+    "prep-h1/state.json": { rev: 3, mtime: 700, size: 5, hash: "x" },
+  };
+  const { engine } = makeEngine({ backend: be.backend, fs, base: base.base, snapshot });
+
+  await engine.syncNow();
+
+  expect(files.has("prep-h1/chapters/chapter-03.md")).toBe(false);
+  expect(be.removed).toEqual(["prep-h1/state.json"]);
+  expect(engine.currentSnapshot()["prep-h1/state.json"]).toBeUndefined();
+  expect(base.text("prep-h1/state.json")).toBeNull();
+});
+
+// The book was deleted here; the other device has not run the domain half yet
+// and still lists the hash. Mirroring it would put the blob straight back.
+test("the books channel skips a deleted book and removes its blob once", async () => {
+  const be = makeBackend();
+  await be.backend.uploadBook("h1", enc("PDF"));
+  const { books } = makeBooks({ h1: "PDF", h2: "OTHER" });
+  const { fs } = makeFs({ [TOMBSTONE]: { text: tombstoned("h1"), mtime: 100 } });
+  const { engine } = makeEngine({ backend: be.backend, fs, books, snapshot: {} });
+
+  await engine.syncNow();
+  await engine.syncNow();
+
+  expect(be.removedBooks).toEqual(["h1"]);
+  expect(be.books.has("h1")).toBe(false);
+  // The book that was not deleted still mirrors.
+  expect(dec(be.books.get("h2")!)).toBe("OTHER");
+});
+
+// Idempotence: the tombstone stays on disk forever, so every pass after the
+// first has to be free.
+test("a second pass over the same tombstone deletes nothing again", async () => {
+  const be = makeBackend(
+    { "threads-h1.json": { rev: 4, mtime: 700, size: 5 } },
+    { "threads-h1.json": "THEIRS" },
+  );
+  const { fs } = makeFs({ [TOMBSTONE]: { text: tombstoned("h1"), mtime: 100 } });
+  const { engine, pulled } = makeEngine({ backend: be.backend, fs, snapshot: {} });
+
+  await engine.syncNow();
+  await engine.syncNow();
+
+  expect(be.removed).toEqual(["threads-h1.json"]);
+  expect(pulled).toEqual([]);
+});
+
+// A remote copy that will not go is the pass's only failure, and the tombstone
+// is still there next pass to name it again.
+test("a remote delete that fails does not fail the rest of the pass", async () => {
+  const be = makeBackend(
+    { "threads-h1.json": { rev: 4, mtime: 700, size: 5 } },
+    { "threads-h1.json": "THEIRS" },
+  );
+  be.failRemove.add("threads-h1.json");
+  const { fs } = makeFs({
+    [TOMBSTONE]: { text: tombstoned("h1"), mtime: 100 },
+    "topics.json": { text: "T", mtime: 100 },
+  });
+  const { engine } = makeEngine({ backend: be.backend, fs, snapshot: {} });
+
+  await engine.syncNow();
+
+  expect(dec(be.data.get("topics.json")!)).toBe("T");
+  expect(engine.status().lastError).toContain("threads-h1.json");
 });
