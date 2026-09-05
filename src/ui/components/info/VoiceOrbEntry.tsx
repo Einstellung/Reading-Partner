@@ -19,25 +19,42 @@ import { VoiceOrb } from "../orb/VoiceOrb";
 import { orbErrorLine, type OrbPhase, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
+import { useVoiceCall, type VoiceCallView } from "./use-voice-call";
 
-export function VoiceOrbEntry() {
+export function VoiceOrbEntry({ dateKey, stub = false }: { dateKey: string; stub?: boolean }) {
 	// A host that cannot speak has nothing to enter: the whole audio path is the
 	// iOS plugin's (docs/33), and on the desktop this draws nothing at all.
 	// Constant for the life of the process, so the early return never changes
 	// which hooks run below it.
 	if (!hasNativeSpeech()) return null;
-	return <VoiceOrbLayer />;
+	// The stub is the simulator harness's: no audio stack can start there
+	// (docs/pitfall/193), so the four states are driven from `window.__orbStub`.
+	if (stub) return <StubOrbLayer />;
+	return <VoiceOrbLayer dateKey={dateKey} />;
 }
 
-function VoiceOrbLayer() {
-	// ── STUB: the voice session is not wired up yet ──────────────────────────
-	// The real hook is ui/components/info/use-voice-call.ts (landing separately).
-	// Swapping it in is this one line —
-	//     const call = useVoiceCall();
-	// — plus deleting useStubCall below and its import of VoiceCallHandle.
-	const call = useStubCall();
-	// ─────────────────────────────────────────────────────────────────────────
+function VoiceOrbLayer({ dateKey }: { dateKey: string }) {
+	const call = useVoiceCall({ dateKey });
+	return <OrbLayer call={asHandle(call)} />;
+}
 
+function StubOrbLayer() {
+	return <OrbLayer call={useStubCall()} />;
+}
+
+// The orb reads an error as a key into its own lines (interrupted, lost) or as
+// a sentence to show as-is; the call reports a reason and a sentence, so the
+// reason goes first where the orb has a line for it.
+function asHandle(call: VoiceCallView): VoiceCallHandle {
+	const error = call.error
+		? call.error.reason === "interrupted" || call.error.reason === "lost"
+			? call.error.reason
+			: call.error.message
+		: null;
+	return { phase: call.phase, start: call.start, stop: call.stop, error, subscribeLevel: call.subscribeLevel };
+}
+
+function OrbLayer({ call }: { call: VoiceCallHandle }) {
 	const line = orbErrorLine(call.error);
 	const calling = call.phase !== "idle";
 
@@ -80,7 +97,7 @@ function ErrorLine({ line }: { line: string }) {
 	);
 }
 
-// STUB, deleted with the line above: a call with no audio behind it. A tap opens
+// A call with no audio behind it, for the simulator harness only. A tap opens
 // and closes it, and in a dev build `window.__orbStub` drives the phase, the
 // level and the error line — which is the only way to see the four states in the
 // iOS simulator, where the audio stack cannot start at all (docs/pitfall/193).

@@ -186,7 +186,7 @@ export default function InfoHome(props: {
         return (
           <>
             {wrapped}
-            {!info.infoCall && <VoiceOrbEntry />}
+            {!info.infoCall && <VoiceOrbEntry dateKey={info.snap?.briefing?.date ?? todayLocal()} />}
           </>
         );
       })()}
