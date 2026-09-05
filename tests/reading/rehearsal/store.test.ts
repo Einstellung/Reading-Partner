@@ -536,8 +536,12 @@ test("deleting a retell takes the rehearsal of its talk and nobody else's", asyn
   expect(disk.files.has(rehearsalFile(other.id))).toBe(true);
 });
 
+// Everything the delete leaves is sync's own: the remote purge queue it writes
+// the paths into lands in sync-state.json when this process has an initialized
+// sync module, which depends on what else the run has done. So the assertion is
+// about the rehearsal's own files, not about an empty disk.
 test("deleting a rehearsal that was never there is not an error", async () => {
   await deleteRehearsal("never");
   await deleteRehearsalsForRetell("never");
-  expect(disk.files.size).toBe(0);
+  expect([...disk.files.keys()].filter((f) => f.includes("rehearsal"))).toEqual([]);
 });

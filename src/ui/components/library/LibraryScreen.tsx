@@ -25,6 +25,8 @@ import {
   type Topic,
 } from "../../../platform/app/topics";
 import { logEvent } from "../../../platform/app/events";
+import { deleteBook } from "../../../reading/delete/delete-book";
+import { isLastReferenceToBook } from "../../../reading/delete/pick";
 import { getViewState } from "../../../platform/app/storage";
 import { getFulltext } from "../../../fulltext";
 import { loadAnnotations } from "../../../platform/app/annotations";
@@ -262,12 +264,19 @@ export default function LibraryScreen(props: {
               ) : (
                 <TopicMaterials
                   topic={activeTopic}
+                  topics={props.topics}
                   savedArticles={savedArticles}
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
                   onRetell={(f) => void startRetellOn(f)}
                   onRemoveFile={async (p) => {
                     await removeFileFromTopic(activeTopic.id, p);
+                    await props.onTopicsChanged();
+                  }}
+                  // deleteBook unlinks the book from every topic itself, so the
+                  // shelf reread below is the only thing left to do here.
+                  onDeleteBook={async (bookId) => {
+                    await deleteBook(bookId);
                     await props.onTopicsChanged();
                   }}
                   onOpenSavedArticle={setOpenSavedArticle}
@@ -437,6 +446,9 @@ function TopicLibrary(props: {
 // topic's name are the sidebar shell's now, because every section wears them.
 function TopicMaterials(props: {
   topic: Topic;
+  // Every topic, for the one question this section asks of them: whether the
+  // book being taken out of this one is anywhere else (pick.ts).
+  topics: Topic[];
   // Already filtered to this topic and newest-first by the host.
   savedArticles: SavedArticle[];
   onAddFile: () => void;
@@ -444,12 +456,18 @@ function TopicMaterials(props: {
   // Start a retell of this one book and go straight into it.
   onRetell: (file: FileRef) => void;
   onRemoveFile: (path: string) => void;
+  // Take the book itself away, with everything about it.
+  onDeleteBook: (bookId: string) => void;
   onOpenSavedArticle: (article: SavedArticle) => void;
   onRemoveSavedArticle: (id: string) => void;
 }) {
   const files = sortedFiles(props.topic);
   const [meta, setMeta] = useState<Record<string, BookMeta>>({});
   const [removing, setRemoving] = useState<FileRef | null>(null);
+  // Whether the confirmation is offering to unlink or to delete.
+  const lastReference = removing
+    ? isLastReferenceToBook(props.topics, props.topic.id, removing)
+    : false;
 
   // Loaded off the render path, per file, keyed by book id (content hash). Every
   // read is optional: a book that was never opened has no state, no full-text
@@ -544,9 +562,14 @@ function TopicMaterials(props: {
       {removing && (
         <RemoveFileButton
           title={displayFileTitle(removing.name)}
+          lastReference={lastReference}
           open
           onOpenChange={(open) => !open && setRemoving(null)}
-          onRemove={() => props.onRemoveFile(removing.path)}
+          onRemove={() =>
+            lastReference && removing.hash
+              ? props.onDeleteBook(removing.hash)
+              : props.onRemoveFile(removing.path)
+          }
         />
       )}
     </>
