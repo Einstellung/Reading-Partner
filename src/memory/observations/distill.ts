@@ -560,6 +560,27 @@ export function distillFailurePayload(input: DistillFailureInput): EventPayload 
   };
 }
 
+// What a pass's writes did, as the flat fields an event line takes: how the
+// observations it wrote stood to what was already held, and what the id gate
+// turned away, by reason. Both are what the gate and the relation are for — one
+// says the reader is being read as expected or not, the other says how often the
+// model is pointing at things that are not there — and neither can be recovered
+// from the observations afterwards.
+export function distillWritePayload(result: {
+  relations: RelationCounts;
+  rejected: RejectionCounts;
+}): EventPayload {
+  return {
+    relNew: result.relations.new,
+    relPredictedBy: result.relations["predicted-by"],
+    relContradicts: result.relations.contradicts,
+    relSameAs: result.relations["same-as"],
+    refusedBadIndex: result.rejected["bad-index"],
+    refusedAnchor: result.rejected["unresolved-anchor"],
+    refusedMention: result.rejected["unresolved-mention"],
+  };
+}
+
 // The sub-agent's name, which is what its honest-failure sentences are about
 // ("The observation_distiller sub-agent could not complete: …"). Lowercase with
 // underscores, like every other tool name in the app (docs/24).

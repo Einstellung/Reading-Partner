@@ -16,7 +16,7 @@ import {
   type StatementStore,
 } from "../statements/store";
 import type { DaySpan } from "../statements/dates";
-import { observationFs } from "./live";
+import { observationFs } from "./fs";
 
 // Unlike observationFs, a read that throws is not treated as a missing file.
 // That store writes one file per observation and a lost read costs one entry;

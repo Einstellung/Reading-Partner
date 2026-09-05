@@ -32,6 +32,7 @@ import {
   datingRule,
   distillCoverage,
   distillFailurePayload,
+  distillWritePayload,
   evidenceDates,
   formatEvidenceSpan,
   runDistillPass,
@@ -1437,6 +1438,24 @@ test("classifyDistillFailure sorts an outcome, then an error's own words", () =>
   // A thrown non-Error still classifies rather than throwing again.
   expect(classifyDistillFailure({ outcome: "failed", error: "network unreachable" })).toBe("network");
   expect(classifyDistillFailure({ outcome: "failed", error: { weird: true } })).toBe("unknown");
+});
+
+test("the write payload carries the relation spread and the refusals, and no text", () => {
+  const payload = distillWritePayload({
+    relations: { new: 2, "predicted-by": 1, contradicts: 1, "same-as": 3 },
+    rejected: { "bad-index": 1, "unresolved-anchor": 0, "unresolved-mention": 2 },
+  });
+  expect(payload).toEqual({
+    relNew: 2,
+    relPredictedBy: 1,
+    relContradicts: 1,
+    relSameAs: 3,
+    refusedBadIndex: 1,
+    refusedAnchor: 0,
+    refusedMention: 2,
+  });
+  // Numbers only: no id, no summary, nothing a log reader could quote back.
+  expect(Object.values(payload).every((v) => typeof v === "number")).toBe(true);
 });
 
 test("the failure payload answers where, why and over what — and quotes nothing", () => {
