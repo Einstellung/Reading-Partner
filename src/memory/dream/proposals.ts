@@ -19,7 +19,10 @@ import type { DreamCandidates } from "./candidates";
 export type Proposal =
   | { action: "state"; kind: "profile"; text: string; evidence: number[] }
   | { action: "support"; statement: number; evidence: number[] }
-  | { action: "supersede"; statement: number; text: string; evidence: number[] };
+  // One replacement, one or more statements replaced. The wire form takes a
+  // number or a list of them; what comes out of here is always the list, so the
+  // write path has one shape to walk.
+  | { action: "supersede"; statements: number[]; text: string; evidence: number[] };
 
 export interface ValidatedProposals {
   accepted: Proposal[];
@@ -62,6 +65,22 @@ function evidenceIndices(raw: unknown, count: number): number[] | null {
 function statementIndex(raw: unknown, count: number): number | null {
   if (typeof raw !== "number" || !Number.isInteger(raw)) return null;
   return raw >= 1 && raw <= count ? raw : null;
+}
+
+// One statement number or several, deduplicated and in the order given, or null
+// when any of them names nothing on the list. A bare number is the same answer
+// as a one-element list: two statements saying one thing is the case this grew
+// for, and one statement is still the common one.
+function statementIndices(raw: unknown, count: number): number[] | null {
+  const list = Array.isArray(raw) ? raw : [raw];
+  if (list.length === 0) return null;
+  const out: number[] = [];
+  for (const value of list) {
+    const index = statementIndex(value, count);
+    if (index === null) return null;
+    if (!out.includes(index)) out.push(index);
+  }
+  return out;
 }
 
 function textOf(raw: unknown): string | null {
@@ -147,15 +166,18 @@ export function validateProposals(raw: unknown, candidates: DreamCandidates): Va
     }
 
     if (action === "supersede") {
-      const statement = statementIndex(element.statement, statements);
-      if (statement === null) {
+      const targets = statementIndices(element.statement, statements);
+      if (targets === null) {
         drop(`supersede names no statement: ${JSON.stringify(element.statement)}`);
         continue;
       }
       // What the reader said about themselves is never replaced by a night
       // pass. It may be supported, and it may be contradicted, but the words
-      // stay theirs (docs/48, "author 决定谁能改").
-      if (candidates.statements[statement - 1].author !== "dream") {
+      // stay theirs (docs/48, "author 决定谁能改"). One bad target drops the
+      // whole element rather than the target: the replacement's text was
+      // written to answer for all of them, and writing it against the rest
+      // would put a claim on disk that says more than it was meant to.
+      if (targets.some((i) => candidates.statements[i - 1].author !== "dream")) {
         drop("supersede targets a statement the reader wrote");
         continue;
       }
@@ -168,7 +190,7 @@ export function validateProposals(raw: unknown, candidates: DreamCandidates): Va
         drop(`supersede needs ${MIN_EVIDENCE} observations from ${MIN_DAYS} days`);
         continue;
       }
-      accepted.push({ action: "supersede", statement, text, evidence });
+      accepted.push({ action: "supersede", statements: targets, text, evidence });
       continue;
     }
 

@@ -5,6 +5,7 @@ import { expect, test } from "bun:test";
 import { materializeDream } from "../../src/memory/dream/materialize";
 import { selectDreamCandidates } from "../../src/memory/dream/candidates";
 import {
+  DREAM_SYSTEM_PROMPT,
   runDream,
   type DreamCallModel,
   type DreamStore,
@@ -49,10 +50,11 @@ interface Written {
   created: CreateStatementInput[];
   supported: { id: string; evidence: readonly string[] }[];
   superseded: { id: string; input: CreateStatementInput }[];
+  marked: { id: string; byId: string }[];
 }
 
 function fakeStore(over: Partial<DreamStore> = {}): DreamStore & { written: Written } {
-  const written: Written = { created: [], supported: [], superseded: [] };
+  const written: Written = { created: [], supported: [], superseded: [], marked: [] };
   return {
     written,
     async createStatement(input) {
@@ -66,6 +68,10 @@ function fakeStore(over: Partial<DreamStore> = {}): DreamStore & { written: Writ
     async supersede(oldId, input) {
       written.superseded.push({ id: oldId, input });
       return statement({ id: "s-new", ...input, contradictedBy: [] });
+    },
+    async markSuperseded(id, byId) {
+      written.marked.push({ id, byId });
+      return statement({ id, supersededBy: byId });
     },
     ...over,
   };
@@ -81,6 +87,18 @@ function answers(reply: string): DreamCallModel & { calls: number } {
   );
   return fn;
 }
+
+// The rules that only the prompt can carry: neither is enforceable by a
+// function, and both are what the 0.12 store came out wrong on — ten
+// conclusions written twice, once in each language, by two runs of one night.
+test("the prompt asks for one statement over two, and for the observations' language", () => {
+  expect(DREAM_SYSTEM_PROMPT).toContain(
+    "When two standing statements say the same thing, supersede both",
+  );
+  expect(DREAM_SYSTEM_PROMPT).toContain(
+    "Write the statement in the language the observations are written in.",
+  );
+});
 
 test("no candidates: no model call, and the hash still advances", async () => {
   const model = answers("[]");
@@ -176,6 +194,52 @@ test("support and supersede reach the statement their number stands for", async 
       input: { kind: "profile", text: "no longer true", author: "dream", evidence: [A, B] },
     },
   ]);
+});
+
+test("one supersede over two statements mints one replacement and points both at it", async () => {
+  const store = fakeStore();
+  const statements = [statement({ id: "s-1" }), statement({ id: "s-2" })];
+  const result = await runDream(
+    { observations, statements, lastInputHash: null },
+    answers('[{"action":"supersede","statement":[1,2],"text":"one claim","evidence":[1,2]}]'),
+    store,
+  );
+
+  // The first target mints it; the second is pointed at what came back.
+  expect(store.written.superseded).toEqual([
+    {
+      id: "s-1",
+      input: { kind: "profile", text: "one claim", author: "dream", evidence: [A, B] },
+    },
+  ]);
+  expect(store.written.marked).toEqual([{ id: "s-2", byId: "s-new" }]);
+  expect(result).toMatchObject({ outcome: "merged", written: 2, dropped: 0 });
+});
+
+test("a replacement the store refused leaves the other targets alone", async () => {
+  const store = fakeStore({ supersede: async () => null });
+  const statements = [statement({ id: "s-1" }), statement({ id: "s-2" })];
+  const result = await runDream(
+    { observations, statements, lastInputHash: null },
+    answers('[{"action":"supersede","statement":[1,2],"text":"one claim","evidence":[1,2]}]'),
+    store,
+  );
+
+  expect(store.written.marked).toEqual([]);
+  expect(result).toMatchObject({ outcome: "merged", written: 0, dropped: 1 });
+});
+
+test("a second target the store would not mark costs that target, not the replacement", async () => {
+  const store = fakeStore({ markSuperseded: async () => null });
+  const statements = [statement({ id: "s-1" }), statement({ id: "s-2" })];
+  const result = await runDream(
+    { observations, statements, lastInputHash: null },
+    answers('[{"action":"supersede","statement":[1,2],"text":"one claim","evidence":[1,2]}]'),
+    store,
+  );
+
+  expect(store.written.superseded).toHaveLength(1);
+  expect(result).toMatchObject({ outcome: "merged", written: 1, dropped: 1 });
 });
 
 test("an empty array is a merged night that wrote nothing", async () => {

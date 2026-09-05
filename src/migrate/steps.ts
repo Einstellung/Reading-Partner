@@ -1,4 +1,4 @@
-// The six steps, in the order they have to run in.
+// The seven steps, in the order they have to run in.
 //
 // 1 repairs the anchors that name the wrong thread, because 2 and 3 derive from
 // the anchor and deriving from a wrong thread computes the wrong message.
@@ -8,7 +8,9 @@
 // 5 cleans tool-call residue out of the bodies and lifts the anchors buried in
 //   it into the frontmatter.
 // 6 widens the observation ids from 8 to 16 hex, which touches every file at
-//   once and so goes last.
+//   once and so goes after the per-file work.
+// 7 widens the same ids where statements point at them, which needs 6's
+//   derivation and would otherwise leave every statement's evidence dangling.
 //
 // Every step is self-detecting: it asks the data whether it is still in the old
 // shape. None of them consults a stored flag, and none writes one.
@@ -22,6 +24,7 @@ import {
 import { cleanObservationBody } from "../memory/observations/residue";
 import { ObservationFileStore } from "../memory/observations/store";
 import type { Observation } from "../memory/observations/types";
+import { STATEMENTS_FILE } from "../memory/statements/store";
 import {
   composeAnchor,
   normalizeAnchor,
@@ -50,6 +53,8 @@ const TOMBSTONE_FILE = "deleted-observations.jsonl";
 // reads. Narrow only: a mention already widened must not match, which is what
 // makes the rewrite idempotent.
 const NARROW_MENTION = /(^|[^0-9a-z-])(m-[0-9a-f]{8})(?![0-9a-f])/gi;
+// An observation id this migration has already widened, or one minted since.
+const WIDE_OBSERVATION_ID = /^m-[0-9a-f]{16}$/;
 
 export async function topicDirs(fs: MigrationFs): Promise<string[]> {
   return (await fs.listSubdirs("")).filter((n) => n.startsWith("memory-")).sort();
@@ -434,6 +439,95 @@ function rewriteIdField(text: string, oldId: string, newId: string): string {
   return `---\n${head}\n---\n${text.slice(m[0].length)}`;
 }
 
+// --- step 7: the observation ids statements point at ------------------------
+
+// The wrapper key the statement file holds its records under (statements/
+// store.ts). Named here rather than imported because that constant is private
+// to the store, and this directory is deleted at 0.13.
+const STATEMENT_CONTAINER = "statements";
+// The two fields on a statement that hold observation ids. `supersededBy` is a
+// statement id and `evidence` may also hold message anchors, which is why the
+// narrow-id regexp decides rather than the field.
+const ID_FIELDS = ["evidence", "contradictedBy"] as const;
+
+// Every statement dream wrote before this migration ran names its evidence by
+// the narrow observation id, and step 6 has just renamed every one of those
+// files. Without this the evidence dangles: nothing resolves, coveredObservation
+// Ids matches nothing, and the observations those statements were built from
+// come back as candidates on the next night (docs/pitfall/210).
+//
+// Derived through the same function step 6 renamed the files with, so the two
+// agree by construction rather than by having been written to match.
+export async function stepWidenStatementIds(fs: MigrationFs): Promise<StepReport> {
+  const step = emptyStep("widen-statement-ids", "statements whose ids name an 8 hex observation");
+  const text = await fs.read(STATEMENTS_FILE);
+  // No statements on this device: nothing to widen, and nothing to report.
+  if (text === null || text.trim() === "") return step;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    step.aborted = `${STATEMENTS_FILE} does not parse`;
+    refuse(step, STATEMENTS_FILE, "file is not JSON");
+    return step;
+  }
+  const held =
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)[STATEMENT_CONTAINER]
+      : undefined;
+  if (held === undefined) return step;
+  if (!Array.isArray(held)) {
+    step.aborted = `${STATEMENTS_FILE}: ${STATEMENT_CONTAINER} is not an array`;
+    return step;
+  }
+
+  let idsWidened = 0;
+  for (const record of held) {
+    step.scanned++;
+    if (typeof record !== "object" || record === null || Array.isArray(record)) {
+      refuse(step, `${STATEMENT_CONTAINER}[${step.scanned - 1}]`, "record is not an object");
+      continue;
+    }
+    const statement = record as Record<string, unknown>;
+    const id = typeof statement.id === "string" ? statement.id : "?";
+    let touched = 0;
+    for (const field of ID_FIELDS) {
+      const list = statement[field];
+      if (!Array.isArray(list)) continue;
+      for (let i = 0; i < list.length; i++) {
+        const value: unknown = list[i];
+        if (typeof value !== "string") continue;
+        if (!NARROW_OBSERVATION_ID.test(value)) {
+          // Already widened, or a message anchor, which this step has no
+          // business touching. Counting it is what makes a second run readable.
+          if (WIDE_OBSERVATION_ID.test(value)) {
+            step.counts.alreadyWide = (step.counts.alreadyWide ?? 0) + 1;
+          }
+          continue;
+        }
+        const next = deriveObservationId(value);
+        // Written in place so every field this build does not know — anything a
+        // later build adds beside them — rides through untouched.
+        list[i] = next;
+        touched++;
+        idsWidened++;
+        sample(step, `${id}: ${field} ${value} -> ${next}`);
+      }
+    }
+    if (touched === 0) step.skipped++;
+    else step.changed++;
+  }
+
+  step.counts.statementsChanged = step.changed;
+  step.counts.idsWidened = idsWidened;
+  if (step.changed === 0) return step;
+  // The store's own formatting, so a device that has widened and a device that
+  // never had a narrow id to widen hold the same bytes.
+  await fs.write(STATEMENTS_FILE, JSON.stringify(parsed, null, 2));
+  return step;
+}
+
 export const STEPS = [
   stepParentAnchors,
   stepTypoAnchors,
@@ -441,4 +535,5 @@ export const STEPS = [
   stepComposeAnchors,
   stepCleanBodies,
   stepWidenObservationIds,
+  stepWidenStatementIds,
 ] as const;

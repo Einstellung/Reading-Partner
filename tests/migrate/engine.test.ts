@@ -3,6 +3,7 @@
 // what the backup is. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { STATEMENTS_FILE } from "../../src/memory/statements/store";
 import { inSyncRange } from "../../src/platform/sync/syncFs";
 import { BACKUP_ROOT } from "../../src/migrate/fs";
 import { deriveMessageId } from "../../src/migrate/hash";
@@ -56,6 +57,13 @@ test("a real run copies what it is about to touch into a backup out of sync rang
     if (original === undefined) continue;
     expect(files.get(`${report.backupDir}/${path}`)).toBe(original);
   }
+  // The statement file rides the same mechanism as everything else rather than
+  // a backup rule of its own: step 7 writes it, so the dry pass names it and the
+  // copy happens before the real pass starts.
+  expect(report.written).toContain(STATEMENTS_FILE);
+  expect(files.get(`${report.backupDir}/${STATEMENTS_FILE}`)).toBe(
+    before.get(STATEMENTS_FILE),
+  );
   // inSyncRange is an allowlist keyed on the top path segment, so the backup is
   // excluded by construction rather than by a rule of its own. Asserted rather
   // than assumed: a backup that synced would push the pre-migration files back

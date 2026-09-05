@@ -13,10 +13,17 @@ import { AI_EVENT_TOPIC } from "../../platform/app/structured-output";
 import { listTopics } from "../../platform/app/topics";
 import { callModel } from "../../ai/model-call";
 import { observationFs } from "../live/live";
-import { addEvidence, createStatement, listStatements, supersede } from "../live/statements";
+import {
+  addEvidence,
+  createStatement,
+  listStatements,
+  markSuperseded,
+  supersede,
+} from "../live/statements";
 import { localDate } from "../observations/files";
 import { ObservationFileStore } from "../observations/store";
 import type { Observation } from "../observations/types";
+import { createDreamGate, migrationPending } from "./gate";
 import { runDream, type DreamResult } from "./run";
 import {
   DREAM_STATE_FILE,
@@ -64,13 +71,44 @@ async function allObservations(): Promise<Observation[]> {
   return all;
 }
 
+// The topic directories the observation files live in, the same names
+// ObservationFileStore builds. Read straight rather than through migrate/: this
+// is a capability and migrate is a domain, and that directory is deleted at 0.13
+// anyway.
+async function observationDirs(): Promise<string[]> {
+  return (await listTopics()).map((topic) => `memory-${topic.id}`);
+}
+
+// The one gate for this process, held across every entry point that calls in —
+// start-up, foreground and the five-minute tick all reach the same object.
+const gate = createDreamGate();
+
+// A night that stood down before reading anything.
+function standDown(): DreamResult {
+  return { outcome: "waiting-migration", candidates: 0, written: 0, dropped: 0, inputHash: null };
+}
+
 // One night, if one is due. Never throws: this rides the collector's five-minute
 // tick, and a night that cannot run must not take the morning briefing's
 // schedule down with it.
 export async function runDreamIfDue(now = Date.now()): Promise<DreamResult | null> {
+  const day = localDate(now);
+  // Turned away rather than queued: three entry points fire within seconds of a
+  // launch, and a queue would run the night once per caller (gate.ts).
+  if (!gate.enter(day)) return null;
+  let finished = false;
   try {
     const state = await loadDreamState();
     if (!isDreamDue(state, now)) return null;
+
+    // Before the stores are read, because the whole point is not to read them:
+    // observations still on their 8 hex ids are about to be renamed, and
+    // statements written against those ids would name files that no longer
+    // exist by the time the reader presses the button (docs/pitfall/210).
+    if (await migrationPending(await observationDirs(), (dir) => observationFs.listDir(dir))) {
+      logEvent(AI_EVENT_TOPIC, "dream-run", { outcome: "waiting-migration" });
+      return standDown();
+    }
 
     const [observations, statements] = await Promise.all([allObservations(), listStatements()]);
     const result = await runDream(
@@ -80,15 +118,18 @@ export async function runDreamIfDue(now = Date.now()): Promise<DreamResult | nul
           signal: new AbortController().signal,
           onProgress: () => {},
         }),
-      { createStatement, addEvidence, supersede },
+      { createStatement, addEvidence, supersede, markSuperseded },
     );
+    // Marked here rather than after the write below: the day is used up by the
+    // look, and a state file that would not save must not buy a second night.
+    finished = true;
 
     // The day advances whatever happened, including a failure: the gate is one
     // look a day, and without it a provider that is down turns a five-minute
     // tick into a call every five minutes. The hash is the waterline and only
     // an outcome entitled to advance it carries one (run.ts).
     await saveDreamState({
-      lastRunDay: localDate(now),
+      lastRunDay: day,
       lastInputHash: result.inputHash ?? state.lastInputHash,
       lastOutcome: result.outcome,
       lastRunAt: now,
@@ -103,5 +144,7 @@ export async function runDreamIfDue(now = Date.now()): Promise<DreamResult | nul
   } catch (e) {
     console.warn("the nightly dream pass failed", e);
     return null;
+  } finally {
+    gate.leave(day, finished);
   }
 }

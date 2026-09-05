@@ -53,3 +53,4 @@ export const createStatement = store.createStatement;
 export const addEvidence = store.addEvidence;
 export const addContradiction = store.addContradiction;
 export const supersede = store.supersede;
+export const markSuperseded = store.markSuperseded;
