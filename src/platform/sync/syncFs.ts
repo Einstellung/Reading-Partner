@@ -82,6 +82,11 @@ export const ROOT_FILES = new Set([
   // means the same item is pushed a second time, and a machine that takes over
   // collection has to know what its predecessor already sent.
   "info-pool-marks.json",
+  // What is held to be true about the reader (memory/statements/store.ts). Not
+  // derived from the observations it points at — a statement is a reading of
+  // them that no pass would reproduce word for word — and it is about the
+  // reader rather than about a device, so it travels.
+  "statements.json",
 ]);
 
 // Whether an AppData-relative path (forward-slash separators) is synced.
@@ -118,7 +123,13 @@ export function inSyncRange(path: string): boolean {
       // collector says who it is and when it was last alive, and a reader asks
       // for a briefing it cannot build itself.
       /^info-collector-.+\.json$/.test(top) ||
-      /^info-ask-.+\.json$/.test(top)
+      /^info-ask-.+\.json$/.test(top) ||
+      // Which memory was shown, cited or rejected, one file per device
+      // (memory/usage/log.ts). Append-only and written by its own device alone,
+      // so there is never a merge to do beyond the union of the lines. In range
+      // because what the reader did with a statement on the other device is
+      // evidence about the reader, not about that machine.
+      /^memory-usage-.+\.jsonl$/.test(top)
     );
   }
   // The body of one kept article (docs/21), one immutable file per body, named

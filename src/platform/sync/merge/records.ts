@@ -27,6 +27,8 @@ import {
 //   reading-state.json         { states: Record<bookId, ViewState> } (platform/app/storage.ts)
 //   info-feedback.jsonl        one JSON object per line        (memory/profile/feedback.ts)
 //   memory-<topicId>/deleted-observations.jsonl  one JSON object per line (memory/observations/store.ts)
+//   statements.json            { statements: Statement[] }, `id` (memory/statements/store.ts)
+//   memory-usage-<deviceId>.jsonl  one JSON object per line   (memory/usage/log.ts)
 // A map's key is the identity. A JSONL line is its own identity: the events
 // carry no id of their own and the log is append-only.
 export interface RecordShape {
@@ -50,9 +52,21 @@ export function recordShape(path: string): RecordShape | null {
   if (name === "deleted-observations.jsonl") {
     return { kind: "lines", container: null, idField: null };
   }
+  // One line per memory shown, cited or rejected (memory/usage/log.ts). Lines
+  // rather than a map because the file is named for the device that writes it
+  // and nothing else ever appends to it, so the line is the whole identity.
+  if (/^memory-usage-.+\.jsonl$/.test(name)) {
+    return { kind: "lines", container: null, idField: null };
+  }
   if (name === "info-sources.json") return { kind: "array", container: null, idField: "id" };
   if (name === "saved-articles.json") return { kind: "array", container: null, idField: "id" };
   if (name === "topics.json") return { kind: "array", container: "topics", idField: "id" };
+  // Statements about the reader, each under an id minted where it was written
+  // (memory/statements/store.ts). A wrapper key over the array, like topics, so
+  // a field added beside the collection later merges as a field.
+  if (name === "statements.json") {
+    return { kind: "array", container: "statements", idField: "id" };
+  }
   if (name === "library.json") return { kind: "map", container: "books", idField: null };
   if (name === "reading-state.json") return { kind: "map", container: "states", idField: null };
   // Keyed by item id (info/extract/id.ts), which is a hash of source:key and so
