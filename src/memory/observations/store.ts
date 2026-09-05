@@ -24,6 +24,7 @@ import {
 import { cleanObservationBody } from "./residue";
 import type {
   EvidenceAnchors,
+  EvidenceDates,
   Observation,
   ObservationIndexEntry,
   ObservationPatch,
@@ -130,6 +131,17 @@ function newId(): string {
 // observation look older than what it already carries.
 function laterDay(a: string, b: string): string {
   return a > b ? a : b;
+}
+
+function appendUnique(existing: readonly string[], added: readonly string[]): string[] {
+  const out = [...existing];
+  const seen = new Set(existing);
+  for (const item of added) {
+    if (!item || seen.has(item)) continue;
+    seen.add(item);
+    out.push(item);
+  }
+  return out;
 }
 
 function normalizeAnchors(a?: Partial<EvidenceAnchors>): EvidenceAnchors {
@@ -281,6 +293,39 @@ export class ObservationFileStore {
       ...(prev.bookId ?? patch.bookId ? { bookId: prev.bookId ?? patch.bookId } : {}),
       updated:
         patch.observed === undefined ? isoDate(this.now()) : laterDay(prev.updated, patch.observed.last),
+    };
+    await this.fs.write(this.entryPath(id), serializeObservation(entry));
+    await this.rebuildIndex();
+    return entry;
+  }
+
+  // More evidence for an observation that already says what it says. The
+  // anchors are appended and de-duplicated, `updated` moves to the last day the
+  // new evidence covers, and the body is not touched at all.
+  //
+  // Separate from update() rather than a call into it, because update() rewrites
+  // and re-cleans the body it is given: the caller here has no body to give and
+  // is not correcting the text. Anchoring a second conversation to a stuck point
+  // the reader is still stuck on is a different act from rewriting what the
+  // stuck point says, and only the second one costs a model call.
+  //
+  // `updated` never moves backwards (laterDay) and falls back to the clock only
+  // where the new evidence carries no day, which is a live conversation — the
+  // same rule and the same reason as create() and update().
+  async appendAnchors(
+    id: string,
+    anchors: Partial<EvidenceAnchors>,
+    observed?: EvidenceDates,
+  ): Promise<Observation | null> {
+    const prev = await this.get(id);
+    if (!prev) return null;
+    const entry: Observation = {
+      ...prev,
+      anchors: {
+        annotationIds: appendUnique(prev.anchors.annotationIds, anchors.annotationIds ?? []),
+        messageIds: appendUnique(prev.anchors.messageIds, anchors.messageIds ?? []),
+      },
+      updated: laterDay(prev.updated, observed ? observed.last : isoDate(this.now())),
     };
     await this.fs.write(this.entryPath(id), serializeObservation(entry));
     await this.rebuildIndex();
