@@ -5,9 +5,9 @@
 // itself and which one is active stay on App, which needs them for the reading
 // context.
 //
-// A topic has a sidebar down its left (docs/31, "界面"): Materials, Retell, AI
-// observations. Which section is showing and whether the sidebar is open live
-// here — they are view state of this screen and nothing above it reads them.
+// A topic's four sections are a row of tabs under its name (docs/51): Materials,
+// Retell, Rehearsal, AI observations. Which one is showing lives here — it is
+// view state of this screen and nothing above it reads it.
 //
 // An open retell replaces the whole topic while it lasts (the same move the saved
 // article reader makes), so entering one needs no route and leaving it puts the
@@ -27,9 +27,6 @@ import {
 import { logEvent } from "../../../platform/app/events";
 import { deleteBook } from "../../../reading/delete/delete-book";
 import { isLastReferenceToBook } from "../../../reading/delete/pick";
-import { getViewState } from "../../../platform/app/storage";
-import { getFulltext } from "../../../fulltext";
-import { loadAnnotations } from "../../../platform/app/annotations";
 import {
   formatPublishedAt,
   loadSavedArticles,
@@ -44,8 +41,10 @@ import MaterialFigureScope from "../common/MaterialFigureScope";
 import RehearsalScreen from "../rehearsal/RehearsalScreen";
 import type { Rehearsal } from "../../../reading/rehearsal";
 import { Button } from "../ui/button";
+import AddCard from "../shelf/AddCard";
 import BookCard from "../shelf/BookCard";
-import { ADD_CARD, ADD_CARD_BOX, CARD_LABEL, LIBRARY_GRID, LIBRARY_PAGE } from "../shelf/cardStyles";
+import { readBookMeta } from "../shelf/book-meta";
+import { LIBRARY_GRID, LIBRARY_PAGE } from "../shelf/cardStyles";
 import DeleteTopicButton from "./DeleteTopicButton";
 import { displayFileTitle, type BookMeta } from "../shelf/file-title";
 import RemoveFileButton from "./RemoveFileButton";
@@ -57,14 +56,8 @@ import ObservationSection from "./topic/ObservationSection";
 import RehearsalSection from "./topic/RehearsalSection";
 import RetellSection from "./topic/RetellSection";
 import TopicNav from "./topic/TopicNav";
-import {
-  browserNavStore,
-  DEFAULT_SECTION,
-  readNavEnv,
-  readNavOpen,
-  writeNavOpen,
-  type TopicSection,
-} from "../base/topic-nav";
+import { topicHeaderLine } from "./topic/topic-header";
+import { DEFAULT_SECTION, type TopicSection } from "../base/topic-nav";
 
 const GRID = `${LIBRARY_GRID} ${TOPIC_GRID_COLUMNS_CLASS}`;
 const PAGE_TITLE = "mt-0 mb-6 mx-0 text-[22px] font-bold";
@@ -80,6 +73,9 @@ export default function LibraryScreen(props: {
   topics: Topic[];
   activeTopic: Topic | null;
   onOpenTopic: (topic: Topic) => void;
+  // Leave the open topic for the shelf. The list of topics and which one is
+  // active belong to App, which needs them for the reading context.
+  onCloseTopic: () => void;
   onAddFile: () => void;
   onOpenFile: (file: FileRef) => void;
   // A topic or file was created / renamed / deleted on disk: reload the list.
@@ -90,9 +86,7 @@ export default function LibraryScreen(props: {
   const [openSavedArticle, setOpenSavedArticle] = useState<SavedArticle | null>(null);
   const { activeTopic } = props;
 
-  // The sidebar. Read once at mount, like the shell choice it shares its
-  // measurements with: following a rotation would reopen a sidebar the user
-  // closed. The section resets to Materials with every topic — a topic is
+  // Which tab is showing. It resets to Materials with every topic — a topic is
   // entered to read, and Retell is where you go on purpose.
   const [section, setSection] = useState<TopicSection>(DEFAULT_SECTION);
   // The retell being prepared, if any. Nothing else on this screen changes while
@@ -114,15 +108,25 @@ export default function LibraryScreen(props: {
   // Bumped when a pass reaches disk, which is the only moment this device
   // changes the counts the section shows.
   const [rehearsalKey, setRehearsalKey] = useState(0);
-  const [navOpen, setNavOpen] = useState(() =>
-    readNavOpen(browserNavStore(window), readNavEnv(window)),
-  );
-  const toggleNav = useCallback(() => {
-    setNavOpen((open) => {
-      writeNavOpen(browserNavStore(window), !open);
-      return !open;
+  // What the header counts and the Materials grid labels: reading position,
+  // length and marks, per file, keyed by path. Loaded off the render path; every
+  // read is optional (book-meta.ts).
+  const [meta, setMeta] = useState<Record<string, BookMeta>>({});
+  useEffect(() => {
+    if (!activeTopic) {
+      setMeta({});
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      activeTopic.files.map(async (f): Promise<[string, BookMeta]> => [f.path, await readBookMeta(f)]),
+    ).then((entries) => {
+      if (!cancelled) setMeta(Object.fromEntries(entries));
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTopic]);
   useEffect(() => {
     setSection(DEFAULT_SECTION);
     setOpenRetellId(null);
@@ -222,27 +226,42 @@ export default function LibraryScreen(props: {
     );
   }
 
-  // One topic: the sidebar beside a column that scrolls. The sidebar is a column
-  // in the flow rather than a drawer over the content, so the shelf narrows
-  // instead of being covered and nothing has to be dismissed to reach a card.
+  // One topic: a header that does not scroll — the way back, the name, what is
+  // in it, and the four sections as tabs — over the section that does.
   if (activeTopic) {
     return (
-      <div className="absolute inset-0 flex items-stretch bg-background">
-        <TopicNav
-          section={section}
-          onSelect={(next) => {
-            if (next === "observations") logEvent(activeTopic.id, "observations-open");
-            setSection(next);
-          }}
-          open={navOpen}
-          onToggle={toggleNav}
-        />
+      <div className="absolute inset-0 flex min-h-0 flex-col bg-background">
+        <div className="flex-none border-b border-border-subtle px-6 pt-6">
+          <div className="mx-auto w-[min(1180px,100%)]">
+            <Button
+              variant="link"
+              size="link"
+              className="text-[13px] text-muted-foreground underline-offset-4 can-hover:hover:underline"
+              onClick={props.onCloseTopic}
+            >
+              ‹ All topics
+            </Button>
+            <h1 className="mx-0 mb-0 mt-1.5 text-[22px] font-bold">{activeTopic.name}</h1>
+            <p className="mx-0 mb-0 mt-1.5 text-[13px] text-muted-foreground">
+              {topicHeaderLine(activeTopic, meta, new Date())}
+            </p>
+            <div className="mt-3">
+              <TopicNav
+                section={section}
+                onSelect={(next) => {
+                  if (next === "observations") logEvent(activeTopic.id, "observations-open");
+                  setSection(next);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
         {section === "observations" ? (
           // The panel scrolls inside itself, so this column does not scroll.
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {/* No second width utility here: LIBRARY_PAGE owns it (docs/30). */}
             <div className={`${LIBRARY_PAGE} flex min-h-0 flex-1 flex-col`}>
-              <h1 className={PAGE_TITLE}>{activeTopic.name}</h1>
               <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border">
                 <ObservationSection topicId={activeTopic.id} />
               </div>
@@ -251,7 +270,6 @@ export default function LibraryScreen(props: {
         ) : (
           <div className="min-w-0 flex-1 overflow-y-auto">
             <div className={LIBRARY_PAGE}>
-              <h1 className={PAGE_TITLE}>{activeTopic.name}</h1>
               {section === "rehearsal" ? (
                 <RehearsalSection
                   topic={activeTopic}
@@ -265,6 +283,7 @@ export default function LibraryScreen(props: {
                 <TopicMaterials
                   topic={activeTopic}
                   topics={props.topics}
+                  meta={meta}
                   savedArticles={savedArticles}
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
@@ -350,24 +369,6 @@ function EmptyState(props: { title: string; blurb: string; action: string; onAct
   );
 }
 
-// The last tile in a grid: the one that adds something rather than opening it.
-// Same two pieces as a card, so it is the same size as the cards beside it.
-function AddCard(props: { label: string; onClick: () => void }) {
-  return (
-    <li>
-      <button className={ADD_CARD} onClick={props.onClick}>
-        <span className={ADD_CARD_BOX}>
-          <span aria-hidden className="text-[30px] leading-none font-light">
-            +
-          </span>
-          <span className="text-[13px]">{props.label}</span>
-        </span>
-        <span className={CARD_LABEL} />
-      </button>
-    </li>
-  );
-}
-
 function TopicLibrary(props: {
   topics: Topic[];
   onCreate: (name: string) => void;
@@ -449,6 +450,9 @@ function TopicMaterials(props: {
   // Every topic, for the one question this section asks of them: whether the
   // book being taken out of this one is anywhere else (pick.ts).
   topics: Topic[];
+  // Reading position, length and marks per file, keyed by path; read by the
+  // host, which needs the same numbers for the topic's header line.
+  meta: Record<string, BookMeta>;
   // Already filtered to this topic and newest-first by the host.
   savedArticles: SavedArticle[];
   onAddFile: () => void;
@@ -462,43 +466,12 @@ function TopicMaterials(props: {
   onRemoveSavedArticle: (id: string) => void;
 }) {
   const files = sortedFiles(props.topic);
-  const [meta, setMeta] = useState<Record<string, BookMeta>>({});
+  const meta = props.meta;
   const [removing, setRemoving] = useState<FileRef | null>(null);
   // Whether the confirmation is offering to unlink or to delete.
   const lastReference = removing
     ? isLastReferenceToBook(props.topics, props.topic.id, removing)
     : false;
-
-  // Loaded off the render path, per file, keyed by book id (content hash). Every
-  // read is optional: a book that was never opened has no state, no full-text
-  // cache and no annotation file — the normal case, not an error. A file without
-  // a book id yet (added but never opened since the upgrade) shows no meta line.
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all(
-      props.topic.files.map(async (f): Promise<[string, BookMeta]> => {
-        if (!f.hash) return [f.path, { marks: 0 }];
-        const [state, fulltext, annotations] = await Promise.all([
-          getViewState(f.hash).catch(() => null),
-          getFulltext(f.hash).catch(() => null),
-          loadAnnotations(f.hash).catch(() => []),
-        ]);
-        return [
-          f.path,
-          {
-            page: state ? state.pageIndex + 1 : undefined,
-            pages: fulltext?.pages.length || undefined,
-            marks: annotations.length,
-          },
-        ];
-      }),
-    ).then((entries) => {
-      if (!cancelled) setMeta(Object.fromEntries(entries));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [props.topic]);
 
   return (
     <>

@@ -1,16 +1,17 @@
-// The topic sidebar (docs/31, docs/43): Materials, Retell, Rehearsal, AI observations down the
-// left of a topic, above the shelf rather than inside a book.
+// A topic's sections as a row of tabs under its name (docs/51): Materials,
+// Retell, Rehearsal, AI observations. The left column belongs to the shell now,
+// so the sections went horizontal — a topic is one place, and its four views are
+// tabs of it rather than a second sidebar beside the first.
 //
-// It is a column in the flow, not an overlay: it sits beside the content and the
-// content narrows, so nothing is covered and none of the overlay rules (docs/30)
-// apply. Collapsed it becomes an icon rail rather than disappearing — on a
-// portrait iPad the sidebar has to stay reachable, and 52px is cheaper than a
-// drawer plus a button to summon it.
+// Plain buttons rather than shadcn's Tabs: the panel a tab shows is not under
+// the row in the DOM. It is in the topic's scrolling column, below a header that
+// does not scroll, and a Radix Tabs root that wraps only its own list points
+// every trigger at a panel that is not there.
 //
-// Pure and controlled: which section is showing and whether it is open belong to
-// the host (LibraryScreen), which is also where they are remembered.
+// Pure and controlled: which section is showing belongs to the host
+// (LibraryScreen), which is also where it is remembered.
 
-import { IconBooks, IconObservations, IconRehearse, IconSidebar, IconRetell } from "../../base/icons";
+import { IconBooks, IconObservations, IconRehearse, IconRetell } from "../../base/icons";
 import { Button } from "../../ui/button";
 import { TOPIC_SECTIONS, type TopicSection } from "../../base/topic-nav";
 
@@ -21,46 +22,21 @@ const ICONS: Record<TopicSection, (p: { size?: number }) => JSX.Element> = {
   observations: IconObservations,
 };
 
-// One row, in each of the sidebar's two widths. Written out twice rather than
-// as a base plus overrides: two utilities that set the same property are settled
-// by the order Tailwind emits them in, not by the order they are concatenated in
-// (docs/30). h-11 is the 44px touch target either way; the active row takes the
-// same accent fill the reader's tabs use, so the two sidebars read alike.
-const ROW = "h-11 w-full justify-start gap-2.5 rounded-md px-2.5 text-muted-foreground";
-const ROW_RAIL = "h-11 w-11 justify-center rounded-md text-muted-foreground";
-const ROW_ACTIVE = "bg-accent text-accent-foreground can-hover:hover:bg-accent";
+// h-11 is the 44px touch target; the underline is the tab, so the row carries no
+// fill and nothing moves when the active one changes.
+const TAB =
+  "h-11 flex-none gap-2 rounded-none border-b-2 border-transparent px-3 text-[14px] " +
+  "font-medium text-muted-foreground";
+const TAB_ACTIVE = "border-primary text-foreground";
 
 export default function TopicNav(props: {
   section: TopicSection;
   onSelect: (section: TopicSection) => void;
-  open: boolean;
-  onToggle: () => void;
 }) {
   return (
-    <nav
-      aria-label="Topic"
-      className={
-        // Plain padding, not the `-safe-*` utilities: the shell already wears
-        // `p-safe` (App.tsx), and a rail whose gutters grow with the inset stops
-        // holding its 44px button. 3.75rem minus the two 0.5rem gutters is that
-        // button exactly.
-        "flex flex-none flex-col gap-1 overflow-y-auto border-r border-border bg-background px-2 py-4 " +
-        (props.open ? "w-[13rem]" : "w-[3.75rem] items-center")
-      }
-    >
-      <Button
-        type="button"
-        variant="ghost"
-        size={null}
-        className="h-11 w-11 flex-none justify-center rounded-md text-muted-foreground"
-        title={props.open ? "Collapse sidebar" : "Expand sidebar"}
-        aria-label={props.open ? "Collapse sidebar" : "Expand sidebar"}
-        aria-expanded={props.open}
-        onClick={props.onToggle}
-      >
-        <IconSidebar size={18} />
-      </Button>
-
+    // Scrolls within its own band on a narrow window rather than wrapping to a
+    // second line, which would move everything under it.
+    <nav aria-label="Topic" className="-mb-px flex gap-0.5 overflow-x-auto">
       {TOPIC_SECTIONS.map(({ id, label }) => {
         const Icon = ICONS[id];
         const active = props.section === id;
@@ -70,16 +46,12 @@ export default function TopicNav(props: {
             type="button"
             variant="ghost"
             size={null}
-            className={(props.open ? ROW : ROW_RAIL) + (active ? ` ${ROW_ACTIVE}` : "")}
-            // The title is the label a collapsed rail cannot show. It never fires
-            // on touch, which is what aria-label is for.
-            title={label}
-            aria-label={label}
+            className={`${TAB}${active ? ` ${TAB_ACTIVE}` : ""}`}
             aria-current={active ? "page" : undefined}
             onClick={() => props.onSelect(id)}
           >
-            <Icon size={18} />
-            {props.open && <span className="truncate text-[14px] font-medium">{label}</span>}
+            <Icon size={16} />
+            <span className="whitespace-nowrap">{label}</span>
           </Button>
         );
       })}

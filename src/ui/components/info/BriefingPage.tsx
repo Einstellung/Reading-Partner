@@ -47,7 +47,6 @@ export interface BriefingPageProps {
   onAskBriefing: () => void;
   onAskArticle: (itemId: string) => void;
   onOpenSources: () => void;
-  onBack: () => void;
 }
 
 export function BriefingPage(props: BriefingPageProps) {
@@ -57,9 +56,8 @@ export function BriefingPage(props: BriefingPageProps) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
       <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
-        <Button variant="subtle" size="chip" onClick={props.onBack}>
-          ‹ Today
-        </Button>
+        {/* No back chip: the shell's sidebar is what leaves this page, and on
+            the phone back is the edge swipe and the system button (docs/22). */}
         <span className="text-[13px] text-[#999]">{b.date}</span>
         <span className="flex-1" />
         <Button variant="subtle" size="chip" onClick={props.onOpenSources} title="Manage sources">

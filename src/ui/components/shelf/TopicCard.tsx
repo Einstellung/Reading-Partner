@@ -16,8 +16,11 @@ import { coverTiles, fileCountLabel } from "./topic-shelf";
 export default function TopicCard(props: {
   topic: Topic;
   onOpen: () => void;
-  onRename: () => void;
-  onDelete: () => void;
+  // The card menu, when the screen has somewhere to put its dialogs. Today shows
+  // the same cards without it: that screen opens things, and renaming a topic is
+  // done where the topics are.
+  onRename?: () => void;
+  onDelete?: () => void;
 }) {
   const { topic } = props;
   const tiles = useMemo(() => coverTiles(topic), [topic]);
@@ -36,18 +39,20 @@ export default function TopicCard(props: {
           button is neither valid nor clickable. It sits over the label strip,
           whose right padding is its room; the target is 44px and reaches up
           over the bottom of the cover, the glyph is small. */}
-      <div className="absolute right-0 bottom-0">
-        <CardMenu
-          label={`Actions for ${topic.name}`}
-          items={[
-            { label: "Rename", onSelect: props.onRename },
-            // The confirmation is a dialog the screen owns: a menu row cannot be
-            // its trigger, because picking the row closes the menu and would
-            // take the dialog down with it.
-            { label: "Delete", onSelect: props.onDelete, destructive: true },
-          ]}
-        />
-      </div>
+      {props.onRename && props.onDelete && (
+        <div className="absolute right-0 bottom-0">
+          <CardMenu
+            label={`Actions for ${topic.name}`}
+            items={[
+              { label: "Rename", onSelect: props.onRename },
+              // The confirmation is a dialog the screen owns: a menu row cannot
+              // be its trigger, because picking the row closes the menu and
+              // would take the dialog down with it.
+              { label: "Delete", onSelect: props.onDelete, destructive: true },
+            ]}
+          />
+        </div>
+      )}
     </li>
   );
 }

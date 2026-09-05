@@ -29,11 +29,14 @@ const { STARTUP_READS, startupSettled, useShellBootstrap } = await import(
 );
 type StartupRead = (typeof STARTUP_READS)[number];
 
-const BOOK = { title: "The Selfish Gene", topicName: "Evolution" };
+const BOOK = {
+  file: { path: "/books/selfish-gene.pdf", name: "The Selfish Gene.pdf", addedAt: 0 },
+  topicName: "Evolution",
+};
 
 function launch(over: {
   launchReady: boolean;
-  continueBook?: { title: string; topicName: string } | null;
+  continueBook?: { file: { path: string; name: string; addedAt: number }; topicName: string } | null;
 }) {
   return (
     <InfoHome
@@ -72,7 +75,7 @@ test("before the start-up reads answer, both cards are placeholders and neither 
   expect(text).not.toContain("Nothing open yet");
   // The chrome is not held back with them: the frame is there from the first
   // frame, which is the whole point of holding only the bodies.
-  expect(text).toContain("Reading Partner");
+  expect(text).toContain("Today");
   expect(text).toContain("Continue reading");
   expect(text).toContain("Today's briefing");
 });
@@ -93,13 +96,13 @@ test("the briefing placeholder is replaced by the answer the reads produced", as
 
 test("the shelf placeholder is replaced by the book the shelf answered with", async () => {
   const { container, rerender } = await paint(launch({ launchReady: false }));
-  expect(container.textContent ?? "").not.toContain(BOOK.title);
+  expect(container.textContent ?? "").not.toContain("The Selfish Gene");
 
   await act(async () => {
     rerender(launch({ launchReady: false, continueBook: BOOK }));
   });
 
-  expect(container.textContent ?? "").toContain(BOOK.title);
+  expect(container.textContent ?? "").toContain("The Selfish Gene");
   expect(container.textContent ?? "").toContain(BOOK.topicName);
   expect(container.querySelectorAll("[data-placeholder='card-body']").length).toBe(1);
 });

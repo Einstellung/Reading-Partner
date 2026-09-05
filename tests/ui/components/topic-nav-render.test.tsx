@@ -1,46 +1,29 @@
-// The topic sidebar's rendered contract, pinned by a static render: three rows
-// in order, labels only while it is open, and every row a 44px target either
-// way. The expand/collapse decision itself is in topic-nav.test.ts.
-// Run: bun test.
+// The topic tab row's rendered contract, pinned by a static render: four tabs in
+// order, each a 44px target, and the open one marked. The sections themselves are
+// in topic-nav.test.ts. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import TopicNav from "../../../src/ui/components/library/topic/TopicNav";
 
-function render(open: boolean) {
-  return renderToStaticMarkup(
-    <TopicNav section="materials" onSelect={() => {}} open={open} onToggle={() => {}} />,
-  );
-}
+const html = renderToStaticMarkup(<TopicNav section="materials" onSelect={() => {}} />);
 
-test("open, the three sections read as text in order", () => {
-  const html = render(true);
+test("the four sections read as text in order", () => {
   expect(html.indexOf(">Materials<")).toBeGreaterThan(-1);
   expect(html.indexOf(">Retell<")).toBeGreaterThan(html.indexOf(">Materials<"));
-  expect(html.indexOf(">AI observations<")).toBeGreaterThan(html.indexOf(">Retell<"));
-});
-
-// Collapsed it is an icon rail: the labels leave the flow, but the buttons keep
-// their names for a screen reader and their tooltip for a mouse.
-test("collapsed, the labels are gone but the names are not", () => {
-  const html = render(false);
-  expect(html).not.toContain(">Materials<");
-  expect(html).toContain('aria-label="Materials"');
-  expect(html).toContain('title="Retell"');
+  expect(html.indexOf(">Rehearsal<")).toBeGreaterThan(html.indexOf(">Retell<"));
+  expect(html.indexOf(">AI observations<")).toBeGreaterThan(html.indexOf(">Rehearsal<"));
 });
 
 test("the open section is the current one", () => {
-  expect(render(true)).toContain('aria-current="page"');
+  expect(html).toContain('aria-current="page"');
 });
 
-test("every row is a 44px touch target in both widths", () => {
-  for (const open of [true, false]) {
-    // One toggle plus four sections.
-    expect(render(open).match(/h-11/g)?.length).toBe(5);
-  }
+test("every tab is a 44px touch target", () => {
+  expect(html.match(/h-11/g)?.length).toBe(4);
 });
 
-test("the toggle says which way it goes", () => {
-  expect(render(true)).toContain('aria-label="Collapse sidebar"');
-  expect(render(false)).toContain('aria-label="Expand sidebar"');
+// The underline is the tab. Exactly one of them carries it.
+test("only the open tab is underlined", () => {
+  expect(html.match(/border-primary/g)?.length).toBe(1);
 });

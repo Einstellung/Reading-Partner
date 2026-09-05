@@ -19,6 +19,7 @@ import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import { ANNOTATION_COLORS } from "./platform/app/annotations";
 import {
   addFileToTopic,
+  createTopic,
   listTopics,
   markOpened,
   mostRecentlyOpened,
@@ -89,7 +90,8 @@ import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
-import SettingsButton from "./ui/components/common/SettingsButton";
+import AppSidebar from "./ui/components/common/AppSidebar";
+import { activeNavFor, screenForNav } from "./ui/components/base/shell-nav";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import { clearScrollMemory } from "./ui/components/common/scroll-memory";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
@@ -1180,8 +1182,11 @@ export default function App() {
           content; the center is the flex-1 that grows to center its tools and,
           when the phone is too narrow for the full rack, scrolls within its own
           band (overflow-x-auto) so the page itself never scrolls. */}
-      <header className="relative z-10 flex h-11 flex-none items-center gap-1.5 border-b border-[#dcdcdc] bg-[#fafafa] px-2 sm:gap-2 sm:px-3">
-        {inReader ? (
+      {/* Only the reader has a header. Everywhere else the sidebar carries the
+          navigation and Settings, and the topic's name is on the topic's own
+          page (docs/51). */}
+      {inReader && (
+        <header className="relative z-10 flex h-11 flex-none items-center gap-1.5 border-b border-[#dcdcdc] bg-[#fafafa] px-2 sm:gap-2 sm:px-3">
           <ReaderTopBar
             view={viewRef}
             stats={stats}
@@ -1201,36 +1206,23 @@ export default function App() {
             onOpenSettings={() => setShowSettings(true)}
             settingsAlert={syncReport.alert !== "none"}
           />
-        ) : homeScreen === "library" ? (
-          <>
-            {activeTopic ? (
-              <Button variant="outline" onClick={() => setActiveTopicId(null)}>
-                ‹ Topics
-              </Button>
-            ) : (
-              <Button variant="outline" onClick={() => setHomeScreen("vestibule")}>
-                ‹ Today
-              </Button>
-            )}
-            {activeTopic && <span className="text-[13px] text-[#1b1b1b] overflow-hidden text-ellipsis whitespace-nowrap max-w-[40vw]">{activeTopic.name}</span>}
-            <span className="flex-1" />
-            <SettingsButton
-              alert={syncReport.alert !== "none"}
-              onClick={() => setShowSettings(true)}
-            />
-          </>
-        ) : (
-          <>
-            <span className="flex-1" />
-            <SettingsButton
-              alert={syncReport.alert !== "none"}
-              onClick={() => setShowSettings(true)}
-            />
-          </>
-        )}
-      </header>
+        </header>
+      )}
 
       <main className="relative flex-1 min-h-0 flex">
+        {!inReader && (
+          <AppSidebar
+            active={activeNavFor(homeScreen)}
+            onSelect={(id) => {
+              // Topics from inside a topic goes back to the shelf: the item is
+              // already lit, so the only thing left for it to mean is "up".
+              if (id === "topics" && homeScreen === "library") setActiveTopicId(null);
+              setHomeScreen(screenForNav(id));
+            }}
+            onOpenSettings={() => setShowSettings(true)}
+            settingsAlert={syncReport.alert !== "none"}
+          />
+        )}
         {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the
             right side is reserved for the future AI column. */}
         {inReader && (
@@ -1265,7 +1257,10 @@ export default function App() {
 
         <div
           ref={readerPaneRef}
-          className="flex-1 min-w-0 h-full"
+          // Hidden rather than unmounted outside the reader: the ref is handed
+          // to the gesture hooks, and a flex sibling with no content would still
+          // take half the row away from the home screens beside the sidebar.
+          className={inReader ? "flex-1 min-w-0 h-full" : "hidden"}
           onPointerDownCapture={dismissOnPaneTouch}
           onPointerUpCapture={onPanePointerUp}
         >
@@ -1293,32 +1288,45 @@ export default function App() {
           )}
         </div>
 
-        <InfoHome
-          screen={inReader ? null : homeScreen}
-          onNavigate={setHomeScreen}
-          role={deviceRole}
-          continueBook={(() => {
-            if (topics === null) return undefined;
-            const recent = mostRecentlyOpened(topics);
-            return recent ? { title: recent.file.name, topicName: recent.topic.name } : null;
-          })()}
-          onContinue={continueReading}
-          configured={configured}
-          launchReady={bootstrapped}
-          onOpenSettings={() => setShowSettings(true)}
-          onTopicsChanged={refreshTopics}
-        />
-
-        {!inReader && homeScreen === "library" && (
-          <LibraryScreen
-            topics={topics ?? []}
-            activeTopic={activeTopic}
-            onOpenTopic={(t) => setActiveTopicId(t.id)}
-            onAddFile={addFile}
-            onOpenFile={openFile}
+        {/* The column beside the sidebar. The home screens position themselves
+            over it, so it is what they are inset to rather than the whole row. */}
+        <div className={inReader ? "contents" : "relative min-w-0 flex-1"}>
+          <InfoHome
+            screen={inReader ? null : homeScreen}
+            onNavigate={setHomeScreen}
+            role={deviceRole}
+            continueBook={(() => {
+              if (topics === null) return undefined;
+              const recent = mostRecentlyOpened(topics);
+              return recent ? { file: recent.file, topicName: recent.topic.name } : null;
+            })()}
+            onContinue={continueReading}
+            topics={topics}
+            onOpenTopic={(t) => {
+              setActiveTopicId(t.id);
+              setHomeScreen("library");
+            }}
+            onCreateTopic={(name) => {
+              void createTopic(name).then(() => refreshTopics());
+            }}
+            configured={configured}
+            launchReady={bootstrapped}
+            onOpenSettings={() => setShowSettings(true)}
             onTopicsChanged={refreshTopics}
           />
-        )}
+
+          {!inReader && homeScreen === "library" && (
+            <LibraryScreen
+              topics={topics ?? []}
+              activeTopic={activeTopic}
+              onOpenTopic={(t) => setActiveTopicId(t.id)}
+              onCloseTopic={() => setActiveTopicId(null)}
+              onAddFile={addFile}
+              onOpenFile={openFile}
+              onTopicsChanged={refreshTopics}
+            />
+          )}
+        </div>
 
         {popup && (
           <AnnotationPopup

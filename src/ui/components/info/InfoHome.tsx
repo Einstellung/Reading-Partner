@@ -7,7 +7,9 @@
 // article and the conversation that is up all live in use-info-home.ts.
 
 import { savedArticleId } from "../../../reading/saved-articles";
+import type { HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
+import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/briefing/pipeline";
 import { todayLocal } from "../../../info/briefing/store";
 import { liveProbeAndTrial } from "../../../info/sources/source-live";
@@ -20,9 +22,9 @@ import { InfoCall } from "./InfoCall";
 import { VoiceOrbEntry } from "./VoiceOrbEntry";
 import { useInfoHome } from "./use-info-home";
 
-// The launch layer in front of the library. "library" belongs to App, which
-// renders the shelf; it is in the union so the two navigate through one setter.
-export type HomeScreen = "vestibule" | "library" | "briefing" | "article" | "sources";
+// The screen union lives in base/shell-nav.ts, which is what maps it to the
+// shell's sidebar; re-exported here so its importers are unchanged.
+export type { HomeScreen } from "../base/shell-nav";
 
 // What a shell needs to know to put its own affordance around a screen that has
 // something to talk about: the chat the screen's Ask button opens, in the
@@ -66,11 +68,16 @@ export default function InfoHome(props: {
   // shell, which wants the vestibule; the phone shell has no library and no
   // book to continue, so it draws its own.
   renderLaunch?: (launch: LaunchProps) => React.ReactNode;
-  // The most recently opened book, for the vestibule's Continue reading. Null
-  // when there is none; undefined while the shell has not read the library yet,
-  // which the vestibule draws as a placeholder rather than as an empty shelf.
-  continueBook?: { title: string; topicName: string } | null;
+  // The most recently opened book, for Today's Continue reading. Null when there
+  // is none; undefined while the shell has not read the library yet, which Today
+  // draws as a placeholder rather than as an empty shelf.
+  continueBook?: { file: FileRef; topicName: string } | null;
   onContinue?: () => void;
+  // The shelf Today shows a row of, null while it is being read. Omitted by the
+  // phone shell, which has no library (docs/22).
+  topics?: Topic[] | null;
+  onOpenTopic?: (topic: Topic) => void;
+  onCreateTopic?: (name: string) => void;
   // Whether an AI provider is connected (the vestibule guides to Settings).
   configured: boolean;
   // Whether the shell's start-up reads have answered (useShellBootstrap). The
@@ -140,6 +147,9 @@ export default function InfoHome(props: {
           ) : (
             <Vestibule
               continueBook={props.continueBook}
+              topics={props.topics ?? null}
+              onOpenTopic={props.onOpenTopic ?? (() => {})}
+              onCreateTopic={props.onCreateTopic ?? (() => {})}
               snap={info.snap}
               ready={props.launchReady}
               configured={props.configured}
@@ -171,7 +181,6 @@ export default function InfoHome(props: {
               onAskBriefing={info.askBriefing}
               onAskArticle={info.askArticle}
               onOpenSources={info.openSourcesPage}
-              onBack={() => onNavigate("vestibule")}
             />
           </div>
         );
