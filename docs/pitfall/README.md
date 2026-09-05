@@ -54,7 +54,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 212）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 213）。
 
 ## EmbedPDF 引擎
 
@@ -87,6 +87,7 @@
 - [139-encoderpoolsize-is-only-read-by-the-worker-engine](./139-encoderpoolsize-is-only-read-by-the-worker-engine.md) — 两个引擎共用同一份选项类型，但直连版写死主线程 canvas 编码、从不读 `encoderPoolSize`，传了等于没传；要编码池只能用 worker 引擎（`ImageEncoderWorkerPool` 不在包的 exports 里，拼不出来）
 - [140-buffersize-widens-the-window-it-does-not-move-it](./140-buffersize-widens-the-window-it-does-not-move-it.md) — `bufferSize` 只决定预取窗口多宽，`endIndex + bufferSize - 1` 在 1 时已经提前一页；调大只多常驻几张光栅，停顿时刻分毫不动。小 fixture 上调到 ≥ 页数会整本预渲染完，量出一组假数字
 - [150-restoring-a-scale-nobody-saved-overrides-fit-width](./150-restoring-a-scale-nobody-saved-overrides-fit-width.md) — 没开过的书也带着一个合成的 viewState 进来，`scale: "auto"` 这个哨兵在壳里被折成数字 1，`requestZoom(1)` 当场作废注册时的 `FitWidth`，第一次开书停在 100%、改窗口也不再重新适配；"没存过的缩放"要一路保持"没有"，还原判据收进纯函数 `openingZoom`
+- [212-fit-width-in-paged-mode-turns-the-swipe-into-a-pan](./212-fit-width-in-paged-mode-turns-the-swipe-into-a-pan.md) — 翻页模式下点 "Fit page width" 之后就翻不动页：`zoomReset` 写死 fit-width，竖屏下它比 fit-page 大，`refreshZoomedIn` 判定放大、横滑归平移；重置要问布局自己锁的那个 fit（`resetZoom`），翻页还得重新居中并复位 `zoomedIn`
 
 ## 触摸与手势
 
