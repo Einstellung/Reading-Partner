@@ -29,7 +29,7 @@ import { asideParentTail, ASIDE_KICKOFF } from "./aside";
 import { markedReplyText } from "./chat-marks";
 import { READING_LADDER, type ReadingReductionId } from "./ladder";
 import { isPageMark, type Annotation } from "../platform/app/reader-contract";
-import { buildSystemPrompt, readerProfileSection, type BooklistItem } from "../platform/app/context";
+import { buildSystemPrompt, type BooklistItem } from "../platform/app/context";
 import type { Settings } from "../platform/app/settings";
 import { loadAnnotations } from "../platform/app/annotations";
 import {
@@ -58,16 +58,15 @@ import type { Figure } from "./figures/types";
 import { logEvent } from "../platform/app/events";
 import { AI_EVENT_TOPIC } from "../platform/app/structured-output";
 import {
-  assembleIdentity,
+  assembleStatements,
   buildObservationTools,
   distillThread,
   distillUnitOf,
   getObservationAdapter,
   listOtherTopicObservations,
-  observationPromptSection,
+  memorySection,
   notifyObservationChange,
   pagelessMarkIds,
-  profileForPrompt,
   type DistillAnnotation,
   type Observation,
 } from "../memory";
@@ -473,8 +472,13 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   // the reading tools; the selection rides the system prompt below. Which of
   // them ride is reading/lecture/stuck.ts's judgement — anchored to this book
   // first, this chapter first of all, with corrections on a quota of their own.
-  let observationSection = "";
-  let observationSectionTight = "";
+  //
+  // What comes out of here is what the memory paragraph is built from below:
+  // the snapshot for this turn, and the topic's observations whole, which is
+  // what deciding what this book has left open reads (memory/live/memory-section.ts).
+  let observationSnapshot = "";
+  let observationSnapshotTight = "";
+  let topicObservations: Observation[] = [];
   if (topicId) {
     const observationsAdapter = getObservationAdapter(topicId);
     const observations = await observationsAdapter.listObservations().catch((): Observation[] => []);
@@ -501,10 +505,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         bookLevel,
         ...(limit === undefined ? {} : { limit }),
       });
-    observationSection = observationPromptSection(lectureObservationSnapshot(pick(), focus), true);
-    observationSectionTight = observationPromptSection(
-      lectureObservationSnapshot(pick(LECTURE_OBSERVATION_CAP_TIGHT), focus),
-      true,
+    topicObservations = observations;
+    observationSnapshot = lectureObservationSnapshot(pick(), focus);
+    observationSnapshotTight = lectureObservationSnapshot(
+      pick(LECTURE_OBSERVATION_CAP_TIGHT),
+      focus,
     );
   }
   // Figures (M9): the model can cite one as [fig:N] (rendered inline in chat)
@@ -724,12 +729,11 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     // turns to come back with less.
     buildFindPaperTool(literatureDeps),
   ];
-  // The cross-scenario user profile: who the companion is reading with, so it
-  // pitches explanation depth to their background. Empty profile → no section.
-  // The declared half and the AI's own guess section go in separately, and the
-  // guesses go in labelled as guesses (memory/profile/guess.ts).
-  const identity = profileForPrompt(await assembleIdentity().catch(() => ""));
-  const profileSection = readerProfileSection(identity.declared, identity.guesses);
+  // What is held to be true about this reader (docs/48): a set of statements,
+  // each with its own id, its own evidence and its own author. This side no
+  // longer reads user-profile.md or the guesses drawn off it — a blob agreed to
+  // once cannot be dated, expired, or argued with one line at a time.
+  const statements = await assembleStatements();
   // The whole-book outline from the reader's notes (docs/14), when they exist.
   const spineOverview = spineOverviewSection(await readSpineOverview(bookId));
   // A booklist entry with no text layer and no marks is a title the model can do
@@ -802,10 +806,21 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
       prepNotes: prepNotesSection(notes),
       chapterSpine: dropped.has("notes-overview") ? "" : chapterSpine,
       spineOverview: dropped.has("notes-overview") ? "" : spineOverview,
-      profile: dropped.has("reader-profile") ? "" : profileSection,
       toolPrompts,
       ...(focusChapter ? { focusLabel: chapterFocusLabel(focusChapter) } : {}),
-      observations: dropped.has("observation-trim") ? observationSectionTight : observationSection,
+      // Memory, as one paragraph of three blocks in a fixed order (docs/48).
+      // The ladder's two rungs here give up the statements and shorten the
+      // retrieved observations; what this book has left open is a few lines and
+      // stays until the paragraph goes.
+      observations: memorySection({
+        statements: dropped.has("reader-statements") ? [] : statements,
+        observations: topicObservations,
+        bookId,
+        observationSnapshot: dropped.has("observation-trim")
+          ? observationSnapshotTight
+          : observationSnapshot,
+        hasObservationTools: !!topicId,
+      }),
       prepStatus: prepStatusSection(prepState, new Set(notes.map((n) => n.slug))),
       // Said only when the pictures are actually going: a prompt that describes
       // a window the ladder took back tells the model to look at something that
@@ -966,12 +981,12 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   //
   // One drawn on the page is bigger: the page images and the text around the mark
   // are its own. If that is what puts it over the line, the ladder gives up
-  // reader-profile and notes-overview before it gives up the page window, and
-  // both are stable-half blocks — so the shared prefix ends where the profile
-  // was, and the chapter below it is written again. Left as it is: those rungs
-  // are ahead of the window because they are the cheapest things in the call to
-  // lose, and the same order costs the lesson its own prefix on its own tight
-  // turns. Pricing a rung by what it does to the next turn's cache is a change to
+  // reader-statements and notes-overview before it gives up the page window.
+  // The statements now ride the volatile half with the rest of memory, so it is
+  // the notes that cut the shared prefix: it ends where the spine was, and the
+  // chapter below it is written again. Left as it is: those rungs are ahead of
+  // the window because they are the cheapest things in the call to lose, and the
+  // same order costs the lesson its own prefix on its own tight turns. Pricing a rung by what it does to the next turn's cache is a change to
   // the ladder, not to this turn.
   const fitted = fitToBudget<ReadingReductionId, ReadingTurnMessage>({
     model,

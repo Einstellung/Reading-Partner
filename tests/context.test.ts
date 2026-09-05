@@ -4,7 +4,6 @@
 import { expect, test } from "bun:test";
 import {
   buildSystemPrompt,
-  readerProfileSection,
   type BooklistItem,
 } from "../src/platform/app/context";
 import { languageInstruction } from "../src/platform/app/settings";
@@ -113,29 +112,6 @@ test("aiLanguage appends the output-language instruction, auto adds nothing", ()
   expect(buildSystemPrompt({ ...base, aiLanguage: "auto" })).toBe(plain);
 });
 
-test("readerProfileSection injects the profile and depth guidance, empty when unset", () => {
-  const section = readerProfileSection("Background: strong in ML, new to robotics.");
-  expect(section).toContain("Background: strong in ML, new to robotics.");
-  expect(section).toMatch(/match the depth to their background/i);
-  expect(readerProfileSection("")).toBe("");
-  expect(readerProfileSection("   ")).toBe("");
-  expect(readerProfileSection("", "   ")).toBe("");
-});
-
-test("the AI's guesses go in as guesses, and never as a depth verdict", () => {
-  const guesses = "- Wants the era, not the method | basis: trends.pdf marks | since: 2026-08-01";
-  const section = readerProfileSection("Background: strong in ML.", guesses);
-  expect(section).toContain("Background: strong in ML.");
-  expect(section).toContain("Wants the era, not the method");
-  expect(section).toMatch(/nobody confirmed them/i);
-  expect(section).toMatch(/hypothesis to test/i);
-  // The self-fulfilling loop this guard exists for: a guess drawn from what the
-  // reader highlighted must not come back as a verdict on what they can handle.
-  expect(section).toMatch(/never pitch depth from a guess/i);
-  // Guesses alone still produce a section; the declared half is not required.
-  expect(readerProfileSection("", guesses)).toContain("Wants the era, not the method");
-});
-
 // The paragraph is rendered from the names of the tools actually wired, because
 // read_annotations is mounted only when some material carries a mark: on a book
 // with no marks the old fixed paragraph promised a tool that answers "unknown
@@ -186,7 +162,6 @@ test("everything stable comes before everything that moves", () => {
     prepNotes: "PREP NOTES",
     chapterSpine: "CHAPTER SPINE",
     spineOverview: "NOTES OVERVIEW",
-    profile: "PROFILE",
     toolPrompts: ["TOOL PROMPT"],
     figureCatalog: "FIGURES",
     observations: "OBSERVATIONS",
@@ -195,7 +170,7 @@ test("everything stable comes before everything that moves", () => {
     loaded: "LOADED THIS TURN",
   });
   const at = (needle: string) => out.indexOf(needle);
-  const stable = ["TOOL PROMPT", "PROFILE", "CHAPTER TABLE", "INLINE BODY", "PREP NOTES", "CHAPTER SPINE", "NOTES OVERVIEW"];
+  const stable = ["TOOL PROMPT", "CHAPTER TABLE", "INLINE BODY", "PREP NOTES", "CHAPTER SPINE", "NOTES OVERVIEW"];
   const volatile = ["- Page: 12", "FIGURES", "OBSERVATIONS", "PREP STATUS", "PAGE WINDOW"];
   for (const s of stable) {
     for (const v of volatile) expect(at(s)).toBeLessThan(at(v));
@@ -288,7 +263,6 @@ test("an aside's stable half is the lesson's, byte for byte", () => {
     bookLevel: true,
     toolNames: ["read_pages", "search_topic"],
     toolPrompts: ["TOOL PROMPT"],
-    profile: "PROFILE",
     materials: [
       { label: "Book A.pdf", pageCount: 210, annotationCount: 1, fulltextAvailable: true, isCurrent: true },
     ],

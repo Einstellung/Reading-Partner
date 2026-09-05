@@ -20,7 +20,7 @@ const FITS_AT = WINDOW - PI_CONTEXT_SAFETY_TOKENS - 4096;
 // deciding which ones get used.
 const EVEN: Record<ReadingReductionId, number> = {
   "figure-catalog": 5_000,
-  "reader-profile": 5_000,
+  "reader-statements": 5_000,
   "notes-overview": 5_000,
   "booklist-thin": 5_000,
   "observation-trim": 5_000,
@@ -45,7 +45,7 @@ function plan(used: number) {
 test("the reading ladder's order and its wording are pinned", () => {
   expect(READING_LADDER.map((r) => [r.id, r.notice ?? ""])).toEqual([
     ["figure-catalog", ""],
-    ["reader-profile", ""],
+    ["reader-statements", ""],
     ["notes-overview", ""],
     ["booklist-thin", ""],
     ["observation-trim", ""],
@@ -64,7 +64,7 @@ test("redundancy goes first, all of it, and without a word", () => {
   const p = plan(FITS_AT + 22_000);
   expect(p.apply).toEqual([
     "figure-catalog",
-    "reader-profile",
+    "reader-statements",
     "notes-overview",
     "booklist-thin",
     "observation-trim",
@@ -128,7 +128,7 @@ test("the rungs that are not priced like the rest say so on the table", () => {
   const priced = Object.fromEntries(READING_LADDER.map((r) => [r.id, r.price ?? "prompt"]));
   expect(priced).toEqual({
     "figure-catalog": "prompt",
-    "reader-profile": "prompt",
+    "reader-statements": "prompt",
     "notes-overview": "prompt",
     "booklist-thin": "prompt",
     "observation-trim": "prompt",

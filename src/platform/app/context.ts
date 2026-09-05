@@ -77,8 +77,6 @@ export interface ReadingContext {
   chapterSpine?: string;
   // The reader's own whole-book outline, from their notes.
   spineOverview?: string;
-  // Who the reader is (declared) and what has been guessed about them.
-  profile?: string;
   // Paragraphs belonging to individual tools, each written where its tool is.
   toolPrompts?: readonly string[];
 
@@ -278,7 +276,6 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     );
   }
   for (const p of ctx.toolPrompts ?? []) push(p);
-  push(ctx.profile);
 
   if (ctx.materials && ctx.materials.length > 0) {
     push(["The materials in this topic:", ...ctx.materials.map(booklistLine)].join("\n"));
@@ -373,48 +370,3 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   return blocks.join("\n\n");
 }
 
-// The reader's cross-scenario profile, injected into the reading companion's
-// system prompt so it knows their background and interests and pitches its
-// explanations accordingly. Empty on both counts yields "" (the caller skips the
-// section) — nothing is assumed about a reader who has stated nothing.
-//
-// The two halves arrive separately and stay separate here. `declared` is what the
-// reader said about themselves; `guesses` is what the AI inferred on its own
-// (memory/profile/guess.ts), which is wrong often enough that a prompt must not be
-// able to act on it as a fact. The caller splits them (profileForPrompt) —
-// platform/app imports nothing, so the parsing lives in the domain that owns
-// the format.
-export function readerProfileSection(declared: string, guesses = ""): string {
-  const p = declared.trim();
-  const g = guesses.trim();
-  if (!p && !g) return "";
-  const lines: string[] = [];
-  if (p) {
-    lines.push(
-      "Who you are reading with (their profile — background, interests, taste, in",
-      "their own words):",
-      p,
-      "",
-      "Pitch your explanations to this: match the depth to their background in the",
-      "area at hand, and connect to interests they have stated. Do not force it in",
-      "where it is not relevant.",
-    );
-  }
-  if (g) {
-    if (lines.length) lines.push("");
-    lines.push(
-      "Guesses you have made about this reader. These are your own inferences,",
-      "drawn from what they read and mark. Nobody confirmed them and some of them",
-      "are wrong:",
-      g,
-      "",
-      "Treat each as a hypothesis to test against this conversation, not as",
-      "something the reader told you. Never pitch depth from a guess: how much this",
-      "reader can handle is decided by what they have actually said about their",
-      "background and by how this conversation is going, never by something you",
-      "inferred from what they happened to highlight. If a guess is wrong, the",
-      "conversation will show it — follow the conversation.",
-    );
-  }
-  return lines.join("\n");
-}
