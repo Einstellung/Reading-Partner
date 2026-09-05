@@ -41,8 +41,14 @@ test("every box here takes its layer from the scale, and spells none of its own"
   // The generated file writes z-50 on all three. A page raised past that at the
   // call site is what put the Settings dropdowns behind the page that opened
   // them (docs/pitfall/103); the ordering is decided in ui/overlay.tsx now.
-  expect(component("DialogOverlay")).toContain("OVERLAY_Z.dialog");
-  expect(component("DialogContent")).toContain("OVERLAY_Z.dialog");
+  //
+  // The floating box and its backdrop each resolve their own rung: which one
+  // they land on depends on the surface that opened them, and a backdrop left on
+  // the dialog rung while its content is raised dims the wrong things
+  // (docs/pitfall/211). The full-screen page is a surface, not a box on one, so
+  // it still names its rung outright.
+  expect(component("DialogOverlay")).toContain("useDialogLayer()");
+  expect(component("DialogContent")).toContain("useDialogLayer()");
   expect(component("DialogFullScreenContent")).toContain("OVERLAY_Z.page");
   expect(source).not.toMatch(/(^|[^\w-])z-(\[|\d)/m);
 });

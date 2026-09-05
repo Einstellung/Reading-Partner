@@ -12,7 +12,7 @@ import IntentChips from './IntentChips';
 import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
-import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
+import { OVERLAY_Z, OverlaySurface, useOverlaySafePadding } from '../ui/overlay';
 import DeleteThreadButton from './DeleteThreadButton';
 import { overlayLayerOpen } from '../base/overlay-layer';
 import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
@@ -113,68 +113,74 @@ export default function CallBubble({
 		return () => document.removeEventListener('pointerdown', onDown, true);
 	}, [onClose]);
 
+	// Everything in here is opened from a floater, not from the app behind it. A
+	// modal dialog raised from a control in this header — the delete confirmation
+	// — has to cover the bubble, and being portalled it cannot tell what opened
+	// it; this is where that is said (ui/overlay.tsx, docs/pitfall/211).
 	return (
-		<div
-			ref={ref}
-			role="dialog"
-			aria-label="AI conversation"
-			style={{ width, left: pos?.left, top: pos?.top, visibility: pos ? 'visible' : 'hidden' }}
-			className={cn(
-				'fixed box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-popover p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]',
-				OVERLAY_Z.floating,
-			)}
-		>
-			<div className="flex items-center justify-between">
-				{onBackToLesson ? (
-					<Button
-						type="button"
-						variant="ghost"
-						size={null}
-						onClick={onBackToLesson}
-						className="rounded-md px-1.5 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400 can-hover:hover:text-neutral-600 coarse:px-2.5 coarse:py-2"
-					>
-						‹ Back to the lesson
-					</Button>
-				) : (
-					<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
+		<OverlaySurface layer="floating">
+			<div
+				ref={ref}
+				role="dialog"
+				aria-label="AI conversation"
+				style={{ width, left: pos?.left, top: pos?.top, visibility: pos ? 'visible' : 'hidden' }}
+				className={cn(
+					'fixed box-border flex flex-col gap-2 rounded-xl border border-black/10 bg-popover p-3 shadow-[0_8px_40px_rgba(0,0,0,0.18)]',
+					OVERLAY_Z.floating,
 				)}
-				<div className="flex items-center gap-0.5">
-					{onDelete && <DeleteThreadButton onDelete={onDelete} />}
-					<Button
-						type="button"
-						variant="ghost"
-						size={null}
-						title="Expand"
-						aria-label="Expand"
-						onClick={onExpand}
-						className="h-6 w-6 rounded-md text-neutral-500 coarse:h-11 coarse:w-11"
-					>
-						<IconExpand size={15} />
-					</Button>
+			>
+				<div className="flex items-center justify-between">
+					{onBackToLesson ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size={null}
+							onClick={onBackToLesson}
+							className="rounded-md px-1.5 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400 can-hover:hover:text-neutral-600 coarse:px-2.5 coarse:py-2"
+						>
+							‹ Back to the lesson
+						</Button>
+					) : (
+						<span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Reading with AI</span>
+					)}
+					<div className="flex items-center gap-0.5">
+						{onDelete && <DeleteThreadButton onDelete={onDelete} />}
+						<Button
+							type="button"
+							variant="ghost"
+							size={null}
+							title="Expand"
+							aria-label="Expand"
+							onClick={onExpand}
+							className="h-6 w-6 rounded-md text-neutral-500 coarse:h-11 coarse:w-11"
+						>
+							<IconExpand size={15} />
+						</Button>
+					</div>
 				</div>
-			</div>
 
-			{messages.length > 0 ? (
-				<MessageList
-					messages={messages}
-					surface="bubble"
-					className="max-h-64 pr-0.5"
-					onCardAction={onCardAction}
+				{messages.length > 0 ? (
+					<MessageList
+						messages={messages}
+						surface="bubble"
+						className="max-h-64 pr-0.5"
+						onCardAction={onCardAction}
+					/>
+				) : (
+					intents && intents.length > 0 && <IntentChips intents={intents} onPick={onSend} />
+				)}
+
+				<Composer
+					onSend={onSend}
+					placeholder="Ask about this passage…"
+					pendingImages={pendingImages}
+					onRemoveImage={onRemoveImage}
+					hint={hint}
+					streaming={streaming}
+					onStop={onStop}
+					voice={voice}
 				/>
-			) : (
-				intents && intents.length > 0 && <IntentChips intents={intents} onPick={onSend} />
-			)}
-
-			<Composer
-				onSend={onSend}
-				placeholder="Ask about this passage…"
-				pendingImages={pendingImages}
-				onRemoveImage={onRemoveImage}
-				hint={hint}
-				streaming={streaming}
-				onStop={onStop}
-				voice={voice}
-			/>
-		</div>
+			</div>
+		</OverlaySurface>
 	);
 }

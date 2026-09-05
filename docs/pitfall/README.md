@@ -35,7 +35,7 @@
 | 隐藏 webview 取正文、反爬、UA、站点登录与退出 | WebKit / webview + 网络与 CSP |
 | 渲染链接、点外链、开系统浏览器 | WebKit / webview |
 | 清洗第三方 HTML、往 innerHTML 里塞正文 | WebKit / webview |
-| 确认框、删除之类的破坏性操作 | WebKit / webview |
+| 确认框、删除之类的破坏性操作 | WebKit / webview + 浮层与 shadcn 原语 |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
@@ -54,7 +54,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 211）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 212）。
 
 ## EmbedPDF 引擎
 
@@ -235,6 +235,7 @@
 - [93-a-select-trigger-is-as-wide-as-the-chosen-value](./93-a-select-trigger-is-as-wide-as-the-chosen-value.md) — 原生 `<select>` 按最宽的 option 定宽，Radix 的 trigger 只装选中那一行，换值就跳宽；把所有选项零高 `invisible` 叠进同一个 grid 单元格占住列宽
 - [95-button-swallows-the-ref](./95-button-swallows-the-ref.md) — shadcn 生成的是 React 19 风格的函数组件，React 18 下 `<Button ref>` 恒为 `null`，类型全绿、生产构建无警告；已全部改成 `forwardRef`，护栏是 `tests/ui/components/forward-ref-contract.test.ts`，一次 `shadcn add` 就会写回来
 - [103-anchored-overlay-paints-under-the-surface-that-opened-it](./103-anchored-overlay-paints-under-the-surface-that-opened-it.md) — 全屏设置页是 `z-[70]` 的不透明白底，锚定浮层停在生成的 `z-50`，下拉全部画在开它的页面底下；Select 开着时页面外一切 `pointer-events: none`，手指照样落在看不见的列表上，于是报成「点不动」。`elementFromPoint` 打得中而屏幕上没有 = 画的顺序不对。一条命名 z 阶梯收进 `ui/overlay.tsx` 的 `OVERLAY_Z`，锚定层排在整条阶梯之上
+- [211-confirm-opens-under-the-floater-that-asked-for-it](./211-confirm-opens-under-the-floater-that-asked-for-it.md) — 从 `z-[1000]` 的阅读弹层里开的删除确认框停在 dialog 那格（50），被弹层盖掉一半，Cancel 在后面按不到；AlertDialog 又是 Radix 写死不给点外面关的，iPad 没有 Escape，只剩 Delete 一个出口。阶梯加 `floatingDialog: z-[1050]`，选哪一格由面声明（`OverlaySurface`）而不是由对话框猜，backdrop 跟着抬
 
 ## 排版基线与 Tailwind
 
