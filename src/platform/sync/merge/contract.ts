@@ -80,6 +80,11 @@ const RECORD_FILES = new Set([
   // device that still holds the entry file republishes it and the observation
   // comes back. Union across devices, and a tombstone is never dropped.
   "deleted-observations.jsonl",
+  // Statements about the reader (memory/statements/store.ts). Records because
+  // two devices offline both add to one file: a dream pass on the desktop and
+  // something the reader said on the iPad are two additions, and opaque would
+  // park one of them in a conflict copy nobody opens.
+  "statements.json",
 ]);
 
 export function strategyFor(path: string): MergeStrategy {
@@ -111,6 +116,12 @@ export function strategyFor(path: string): MergeStrategy {
   // get (writeCollection, records.ts), so one file covers both layers.
   if (/^outline-.+\.json$/.test(name)) return "records";
   if (/^threads-.+\.json$/.test(name)) return "records";
+  // What memory this device showed, cited or rejected (memory/usage.ts). Named
+  // for the device that writes it, so it cannot be an entry in RECORD_FILES the
+  // way the other logs are — the name is only known at runtime. Records, like
+  // every other append-only log here: the line is its own identity and the
+  // union across devices is the whole history.
+  if (/^memory-usage-.+\.jsonl$/.test(name)) return "records";
   // A rehearsal's index of passes (docs/43): identified rows in a `runs` array,
   // and a row is a pass that happened — nothing ever edits one. Records, so two
   // devices that each gave the talk a turn keep both passes; opaque would park

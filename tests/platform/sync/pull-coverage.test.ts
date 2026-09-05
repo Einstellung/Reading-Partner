@@ -60,6 +60,10 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "runs/":
     "what was said on one pass is read when that pass's row is opened, and the file is " +
     "written once under the run's own id, so a pull can add one but never change the one on screen",
+  "statements.json": "the statement store reads the file on every call and holds nothing",
+  // Listed above "memory-" so a claim reports this reason rather than the
+  // observation store's, which is about a different file entirely.
+  "memory-usage-": "append-only, and nothing reads it yet",
   "memory-": "the observation store reads its entries per query",
   "article-bodies/":
     "a kept article's body is read when the article is opened, and the file is named " +
@@ -138,10 +142,10 @@ test("the samples this test is built from are all in sync range", () => {
   for (const file of ROOT_FILES) expect(inSyncRange(file)).toBe(true);
 
   const patterns = perKeySamples();
-  // Eight filename patterns and four directories, as of this writing; the
+  // Nine filename patterns and four directories, as of this writing; the
   // count is asserted so a pattern that stops being found by the scan is
   // noticed rather than quietly dropping its files from the check.
-  expect(patterns.length).toBe(12);
+  expect(patterns.length).toBe(13);
   for (const { pattern, paths } of patterns) {
     for (const path of paths) {
       expect(`${pattern} -> ${path}: ${inSyncRange(path)}`).toBe(`${pattern} -> ${path}: true`);

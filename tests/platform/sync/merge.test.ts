@@ -53,6 +53,10 @@ test("the files the app writes are classified by what they hold", () => {
   // deletion: this module removes no file, so an observation deleted on one
   // device comes back from the other unless its tombstone travels and unions.
   expect(strategyFor("memory-b3a9f89c/deleted-observations.jsonl")).toBe("records");
+  expect(strategyFor("statements.json")).toBe("records");
+  // Named for the device that writes it, so it is matched by pattern rather
+  // than by an entry in RECORD_FILES.
+  expect(strategyFor("memory-usage-device1.jsonl")).toBe("records");
   expect(strategyFor("settings.json")).toBe("fields");
   // One device writes each of these and nobody else touches it, so there is
   // nothing to merge; a crossing pair leaves a conflict copy nobody reads.
@@ -342,6 +346,78 @@ test("the source list merges per source", () => {
   expect(merged("info-sources.json", base, local, remote)).toBe(
     JSON.stringify([source("a", false), source("b", true), source("c", true)], null, 2),
   );
+});
+
+// --- statements ------------------------------------------------------------
+
+// A statement's evidence is append-only (memory/statements/types.ts), and the
+// two devices append to it independently: a dream pass runs on the desktop
+// while the reader says something on the iPad. What follows is what the records
+// strategy does with that, pinned rather than assumed.
+function statement(id: string, evidence: string[]): Record<string, unknown> {
+  return {
+    id,
+    kind: "profile",
+    text: `about ${id}`,
+    author: "dream",
+    evidence,
+    contradictedBy: [],
+    established: "2026-07-02",
+    lastSupported: "2026-08-01",
+  };
+}
+
+function statements(...records: Record<string, unknown>[]): Uint8Array {
+  return json({ statements: records });
+}
+
+test("two devices growing different statements keep both, with no conflict copy", () => {
+  const base = statements(statement("s-1", ["m-a"]), statement("s-2", ["m-b"]));
+  const local = statements(statement("s-1", ["m-a", "m-desk"]), statement("s-2", ["m-b"]));
+  const remote = statements(statement("s-1", ["m-a"]), statement("s-2", ["m-b", "m-ipad"]));
+  const out = merge("statements.json", base, local, remote);
+
+  expect(JSON.parse(text(out.merged))).toEqual({
+    statements: [statement("s-1", ["m-a", "m-desk"]), statement("s-2", ["m-b", "m-ipad"])],
+  });
+  expect(out.copies).toEqual([]);
+  expect(out.dropped).toEqual([]);
+  expect(out.contested).toBe(false);
+});
+
+// The same append on ONE statement from both sides. A record is atomic under
+// this strategy, so there is no union of the two evidence lists: one whole
+// version of the record wins, chosen by content so both devices choose the
+// same one, and the loser goes to the journal. The append that lost is
+// recoverable from sync-trash and is not in the file.
+//
+// This is the accepted cost of a whole-record merge, not an oversight. The
+// alternative — merging the arrays field by field — would have to hold for
+// every field of every record file, and `text` is a field where blending two
+// versions produces a sentence neither device wrote.
+test("one statement appended to from both sides keeps one version and journals the other", () => {
+  const base = statements(statement("s-1", ["m-a"]));
+  const local = statements(statement("s-1", ["m-a", "m-desk"]));
+  const remote = statements(statement("s-1", ["m-a", "m-ipad"]));
+  const out = merge("statements.json", base, local, remote);
+
+  const kept = (JSON.parse(text(out.merged)) as { statements: Record<string, unknown>[] }).statements;
+  expect(kept.length).toBe(1);
+  // Which of the two wins is decided by content and is stable; what matters is
+  // that exactly one is in the file and the other is in the journal.
+  expect([
+    JSON.stringify(statement("s-1", ["m-a", "m-desk"])),
+    JSON.stringify(statement("s-1", ["m-a", "m-ipad"])),
+  ]).toContain(JSON.stringify(kept[0]));
+  expect(out.dropped.map((d) => d.id)).toEqual(["s-1"]);
+  expect(JSON.stringify(out.dropped[0].record)).not.toBe(JSON.stringify(kept[0]));
+  expect(out.contested).toBe(true);
+  expect(out.copies).toEqual([]);
+
+  // Both devices run this with themselves as local and must land on the same
+  // bytes, or the file ping-pongs forever.
+  const swapped = merge("statements.json", base, remote, local);
+  expect(text(swapped.merged)).toBe(text(out.merged));
 });
 
 test("the feedback log unions its lines and keeps the trailing newline", () => {
