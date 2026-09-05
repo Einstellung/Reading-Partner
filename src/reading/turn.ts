@@ -68,6 +68,9 @@ import {
   notifyObservationChange,
   pagelessMarkIds,
   profileForPrompt,
+  buildStatementTools,
+  latestReaderMessage,
+  statementStore,
   type DistillAnnotation,
   type Observation,
 } from "../memory";
@@ -406,6 +409,9 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
 
   let tools = buildReadingTools({ currentFulltext, materials });
+  // What the reader says about themselves, in their words (docs/48): evidenced by
+  // the message they just sent, which the caller appended before assembling this.
+  tools = [...tools, ...buildStatementTools({ store: statementStore, message: latestReaderMessage(thread?.messages ?? []), threadId })];
 
   // The lecture load (docs/09). The chapter table decides what read_chapter can
   // be asked for and which chapter the thread can be parked on; the thread's own
