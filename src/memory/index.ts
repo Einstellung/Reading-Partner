@@ -26,6 +26,7 @@ export {
 } from "./observations/store";
 export { FileObservationAdapter, type ObservationAdapter } from "./observations/adapter";
 export { buildObservationSnapshot, observationPromptSection, trimObservations } from "./observations/select";
+export { openStuckPoints } from "./observations/open-stuck";
 export { stripToolResidue } from "./observations/residue";
 export {
   anchorNames,
@@ -49,6 +50,7 @@ export {
 } from "./observations/links";
 export {
   assembleIdentity,
+  assembleStatements,
   assembleReadingContext,
   assembleReadingSignal,
   READING_SIGNAL_BUDGET,
@@ -203,3 +205,13 @@ export {
   type DistillThreadOptions,
   type DistillTrigger,
 } from "./live/live";
+
+// The statement layer on top of the observations (docs/48): what is held to be
+// true about the reader, pointing back at the observations it rests on.
+export type { Statement, StatementAuthor, StatementKind } from "./statements/types";
+export { listStatements } from "./live/statements";
+export {
+  dropCoveredObservations,
+  memorySection,
+  type MemorySectionInput,
+} from "./live/memory-section";
