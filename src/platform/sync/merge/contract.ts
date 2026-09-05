@@ -80,6 +80,11 @@ const RECORD_FILES = new Set([
   // device that still holds the entry file republishes it and the observation
   // comes back. Union across devices, and a tombstone is never dropped.
   "deleted-observations.jsonl",
+  // One line per deleted book, at the AppData root
+  // (platform/app/deleted-books.ts). Records for the same reason the line above
+  // is: the deletion only survives by travelling as a record, and the union
+  // never drops a tombstone.
+  "deleted-books.jsonl",
   // Statements about the reader (memory/statements/store.ts). Records because
   // two devices offline both add to one file: a dream pass on the desktop and
   // something the reader said on the iPad are two additions, and opaque would

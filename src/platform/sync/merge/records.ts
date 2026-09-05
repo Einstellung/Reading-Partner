@@ -52,6 +52,12 @@ export function recordShape(path: string): RecordShape | null {
   if (name === "deleted-observations.jsonl") {
     return { kind: "lines", container: null, idField: null };
   }
+  // Deleted books (platform/app/deleted-books.ts), for the same reasons as the
+  // line above: two devices deleting the same book on the same day write
+  // identical bytes, and the union holds one line.
+  if (name === "deleted-books.jsonl") {
+    return { kind: "lines", container: null, idField: null };
+  }
   // One line per memory shown, cited or rejected (memory/usage/log.ts). Lines
   // rather than a map because the file is named for the device that writes it
   // and nothing else ever appends to it, so the line is the whole identity.

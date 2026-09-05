@@ -47,6 +47,11 @@ export interface SyncFs {
   // Writes bytes, creating any parent directory first.
   write(path: string, bytes: Uint8Array): Promise<void>;
   stat(path: string): Promise<{ mtime: number; size: number } | null>;
+  // Takes a local file away. Reached only for a path a tombstone has named
+  // (dead-paths.ts) — the reconcile loop still never deletes anything on its own
+  // reading of the two sides (docs/13). A path that is already gone is success,
+  // not an error: that is the state this asks for.
+  remove(path: string): Promise<void>;
 }
 
 // Exported for tests/platform/sync/pull-coverage.test.ts, which walks it: every
@@ -87,6 +92,11 @@ export const ROOT_FILES = new Set([
   // them that no pass would reproduce word for word — and it is about the
   // reader rather than about a device, so it travels.
   "statements.json",
+  // One line per book the reader deleted (platform/app/deleted-books.ts). In
+  // range because that is the whole point of it: a file-level delete does not
+  // travel, so the deletion travels as a record and every device that reads this
+  // drops what the book owned (dead-paths.ts).
+  "deleted-books.jsonl",
 ]);
 
 // Whether an AppData-relative path (forward-slash separators) is synced.
@@ -261,5 +271,14 @@ export const tauriSyncFs: SyncFs = {
   async stat(path) {
     const info = await appData.stat(path);
     return info === null ? null : { mtime: info.mtimeMs, size: info.size };
+  },
+  async remove(path) {
+    try {
+      await appData.remove(path);
+    } catch {
+      // Already gone, which is the state this asks for. appData.remove throws on
+      // a missing path and the pass must not fail over a file it wanted deleted
+      // anyway.
+    }
   },
 };

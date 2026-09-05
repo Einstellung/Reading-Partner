@@ -122,4 +122,9 @@ export interface SyncBackend {
   uploadBook(hash: string, bytes: Uint8Array): Promise<void>;
   // Throws RemoteGoneError when the blob is not in the remote any more.
   downloadBook(hash: string): Promise<Uint8Array>;
+  // Take a book's blob out of the remote for good, for a book the reader deleted
+  // (platform/app/deleted-books.ts). Without it the blob outlives every device's
+  // copy of the book, and the next device to sign in on a clean snapshot pulls
+  // it back. A hash that is not in the remote is success, like remove().
+  removeBook(hash: string): Promise<void>;
 }
