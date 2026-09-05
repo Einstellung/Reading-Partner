@@ -77,6 +77,9 @@ struct TurnVerdict {
     /// unread. The run stamps buffers in the analyzer's audio time so a
     /// recogniser result's range can be matched against a turn's window.
     let audioMs: Double
+    /// For a `.stop`: the token `userTurnEnded(_:)` has to hand back to lift
+    /// the refusal of new turns this stop began. Zero otherwise.
+    let refusal: UInt64
 }
 
 /// One sentence's row in the measurement record. Written on the completion
@@ -186,6 +189,22 @@ final class SpeechOut {
     /// Refusing it with `dropped, !busy` is the answer that says the turn is
     /// over, which is what winds the relay up.
     private var cutUtterance: UInt64?
+    /// Between a `.stop` and the end of the user's turn, a turn the player has
+    /// not seen yet is one that was opened before the user spoke — the answer
+    /// to the previous turn, still being synthesised while the user was
+    /// talking over the thinking — and its first sentence would start the
+    /// player in the middle of the user's turn. Refused, and remembered as cut,
+    /// until the run says the turn is over; the answer to *this* turn is only
+    /// asked for after that. Counted rather than a flag so that a stop that
+    /// settles the previous turn on its way in is not un-refused by that
+    /// settling.
+    private var refusal: UInt64 = 0
+    private var refusingSince: UInt64 = 0
+    /// When the tap last stepped the detector, and the audio stamp it carried.
+    /// The timer below drives time when the tap has gone quiet.
+    private var lastStepMs: Double = 0
+    private var lastAudioMs: Double = 0
+    private var clockTimer: DispatchSourceTimer?
     /// True while a verdict's own `stopLocked` runs, so that `finishLocked`
     /// holds the `spoken` back: the webview has to hear `speech-stop` before
     /// the end of the playback, or it files the reply as said in full. The
@@ -273,6 +292,11 @@ final class SpeechOut {
             // throwing: the vendor was mid-sentence when the user interrupted,
             // and that is not an error on anybody's part.
             if let cut = cutUtterance, utterance <= cut {
+                return SpeechAck(dropped: true, busy: false, queuedMs: 0, startMs: 0)
+            }
+            if refusingSince != 0, utterance > self.utterance {
+                cutUtterance = utterance
+                NSLog("RP-SPEECH refused turn %llu: the user has the floor", utterance)
                 return SpeechAck(dropped: true, busy: false, queuedMs: 0, startMs: 0)
             }
             if speaking && utterance > self.utterance {
@@ -462,6 +486,9 @@ final class SpeechOut {
             turn = detector
             onVerdict = verdict
             onSpoken = spoken
+            refusingSince = 0
+            clockTimer?.cancel()
+            clockTimer = nil
             if detector == nil {
                 ducked = false
                 applyVolumeLocked()
@@ -472,6 +499,48 @@ final class SpeechOut {
                 // player's own voice.
                 turn?.playbackStarted(atMs: CFAbsoluteTimeGetCurrent() * 1000)
             }
+            if detector != nil {
+                startClockLocked()
+            }
+        }
+    }
+
+    /// The detector's second driver. The tap is the first, and the only one on
+    /// a healthy stack; but a tap that stops delivering — the locked screen
+    /// takes the input route with no interruption posted (docs/pitfall/162),
+    /// and that is only the one way it has been seen — would otherwise leave a
+    /// duck holding the volume down for ever, or a turn that never ends. The
+    /// machine is written to be driven by time with no audio (VoiceTurn.swift,
+    /// `stepTurnDetect`'s note): every quarter second, if no buffer has arrived
+    /// for half a second, it is stepped with silence at the current time, and
+    /// a stale duck resumes and a turn on the floor ends on schedule.
+    ///
+    /// Only when the tap is quiet. A silent step between two loud buffers is
+    /// harmless to the timers, which measure time and not frames, but it would
+    /// reset a `startFrames` count above one.
+    private func startClockLocked() {
+        lastStepMs = CFAbsoluteTimeGetCurrent() * 1000
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + .milliseconds(250), repeating: .milliseconds(250))
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.turn != nil else { return }
+            let now = CFAbsoluteTimeGetCurrent() * 1000
+            guard now - self.lastStepMs >= 500 else { return }
+            self.stepLocked(db: -Double.infinity, atMs: now, audioMs: self.lastAudioMs)
+        }
+        timer.resume()
+        clockTimer = timer
+    }
+
+    /// The user's turn that `stop` opened is over: the answer to it is about
+    /// to be asked for, and new turns are admitted again. `token` is the
+    /// `refusal` the stop's verdict carried; a stale one changes nothing.
+    /// Asynchronous, because the run calls it from this queue as well as from
+    /// its own tasks.
+    func userTurnEnded(_ token: UInt64) {
+        queue.async { [weak self] in
+            guard let self = self, self.refusingSince == token else { return }
+            self.refusingSince = 0
         }
     }
 
@@ -481,36 +550,44 @@ final class SpeechOut {
     /// A buffer that arrives with no detector installed is dropped.
     func stepTurn(db: Double, atMs: Double, audioMs: Double) {
         queue.async { [weak self] in
-            guard let self = self, let event = self.turn?.step(db: db, atMs: atMs) else {
-                return
+            self?.stepLocked(db: db, atMs: atMs, audioMs: audioMs)
+        }
+    }
+
+    private func stepLocked(db: Double, atMs: Double, audioMs: Double) {
+        lastStepMs = atMs
+        lastAudioMs = audioMs
+        guard let event = turn?.step(db: db, atMs: atMs) else { return }
+        var cut: SpeechPosition? = nil
+        var token: UInt64 = 0
+        switch event {
+        case .duck:
+            ducked = true
+            applyVolumeLocked()
+        case .resume:
+            ducked = false
+            applyVolumeLocked()
+        case .stop:
+            // The position is read inside stopLocked, before the node is
+            // stopped, on this same queue turn: nothing can play between the
+            // verdict and the cut.
+            if speaking {
+                cutUtterance = utterance
+                cutting = true
+                cut = stopLocked(reason: "interrupted")
+                cutting = false
             }
-            var cut: SpeechPosition? = nil
-            switch event {
-            case .duck:
-                self.ducked = true
-                self.applyVolumeLocked()
-            case .resume:
-                self.ducked = false
-                self.applyVolumeLocked()
-            case .stop:
-                // The position is read inside stopLocked, before the node is
-                // stopped, on this same queue turn: nothing can play between
-                // the verdict and the cut.
-                if self.speaking {
-                    self.cutUtterance = self.utterance
-                    self.cutting = true
-                    cut = self.stopLocked(reason: "interrupted")
-                    self.cutting = false
-                }
-                self.ducked = false
-                self.applyVolumeLocked()
-            case .end:
-                break
-            }
-            self.onVerdict?(TurnVerdict(event: event, cut: cut, audioMs: audioMs))
-            if let cut = cut {
-                self.onSpoken?(cut.utterance, "interrupted")
-            }
+            refusal &+= 1
+            refusingSince = refusal
+            token = refusal
+            ducked = false
+            applyVolumeLocked()
+        case .end:
+            break
+        }
+        onVerdict?(TurnVerdict(event: event, cut: cut, audioMs: audioMs, refusal: token))
+        if let cut = cut {
+            onSpoken?(cut.utterance, "interrupted")
         }
     }
 
@@ -605,8 +682,10 @@ final class SpeechOut {
             if self.speaking {
                 _ = self.stopLocked(reason: "failed")
             } else {
+                // No `spoken`: `utterance` is the last turn that played, not
+                // the one that failed, and a number nobody has is worse than
+                // none. Only the bench reaches this branch.
                 self.emit(kind: "speaking", value: 0, reason: "failed")
-                self.onSpoken?(self.utterance, "failed")
             }
         }
     }
@@ -671,6 +750,10 @@ final class SpeechOut {
         firstTapFrames = 0
         tapBuffers = 0
         turn?.playbackStarted(atMs: CFAbsoluteTimeGetCurrent() * 1000)
+        // A turn that starts inside a duck starts quiet, and comes up when the
+        // duck resolves; a node kept from the last turn carries whatever it
+        // was last set to.
+        applyVolumeLocked()
         emit(kind: "speaking", value: 1, reason: nil)
     }
 

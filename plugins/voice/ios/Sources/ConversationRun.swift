@@ -2,8 +2,9 @@
 // while the companion speaks, and who is talking is decided here, on the phone,
 // without a frame or a verdict ever waiting on the webview. This file is the
 // native half of the contract in src/info/companion/conversation.ts; that file's
-// event kinds and payload fields are the specification, and voice-session.ts is
-// the consumer that says in which order they have to arrive.
+// event kinds and payload fields are the specification, voice-session.ts is
+// the consumer that says in which order they have to arrive, and voice-call.ts
+// is the driver that holds the call open.
 //
 // It is not DictationRun with the backstop taken off. A hold is single-use,
 // pre-rolls the first 300 ms, gates its emission per press and hands back one
@@ -14,15 +15,20 @@
 //
 // Threads, because the audio thread is the whole difficulty:
 //
-//   tap (audio thread)     RMS and dB of the buffer, no allocation; convert and
-//                          yield to the analyzer (the same conversion every run
-//                          here does); one `stepTurn` into SpeechOut, which is a
-//                          dispatch and nothing else; a level event at 10 Hz.
+//   tap (audio thread)     RMS and dB of the buffer; convert and yield to the
+//                          analyzer (the same conversion every run here does,
+//                          one buffer allocation per call); one `stepTurn` into
+//                          SpeechOut, which is a dispatch and nothing else; a
+//                          level event at 10 Hz. It takes `feedLock` for the
+//                          converter and no other lock: the turn number it puts
+//                          on a level is a plain read of `floor`.
 //   SpeechOut.queue        owns the VoiceTurn and the player. The step, the
 //                          verdict and the act on the player (duck, cut, resume)
 //                          happen there in one queue turn, and the cut position
 //                          is read on that same turn. `verdict(_:)` below runs
 //                          there too, so it never calls SpeechOut synchronously.
+//                          A timer on the same queue drives the machine with
+//                          silence when the tap has gone quiet.
 //   results task           the recogniser's stream; segments and their audio
 //                          ranges go into `finals`/`tail` under `stateLock`.
 //   a Task per turn end    `finalize(through: nil)` on the analyzer (50 ms,
@@ -32,9 +38,10 @@
 //                          Tauri's listener table is read on one queue.
 //   the plugin's chain     start and stop.
 //
-// `stateLock` is the one lock the turn bookkeeping uses and it is never held
-// across an await or an emission's own work; `feedLock` guards the converter the
-// tap reads, the way the turn probe's does.
+// `stateLock` is the one lock the turn bookkeeping uses. It is never held
+// across an await, a log line or an emission: the paths that decide something
+// under it hand the event out and send it after the unlock, so the tap — which
+// does not take it — and the results task are never waiting on syslog.
 
 import AVFoundation
 import Foundation
@@ -47,7 +54,10 @@ import UIKit
 /// reads it (conversation.ts, "what a payload has to carry").
 struct ConversationEvent: Encodable {
     let kind: String
-    /// The user turn this belongs to, from 1; 0 before any turn was taken.
+    /// The user turn this belongs to: the last one taken, from 1; 0 before any
+    /// was, which is the turn the driver's own opening line is asked as
+    /// (voice-call.ts, KICKOFF_TURN). `speech-end` and `final` are never sent
+    /// for 0 — both carry a turn a `speech-stop` has taken.
     let turn: Int
     var text: String? = nil
     var silentMs: Double? = nil
@@ -103,6 +113,9 @@ final class ConversationRun {
     private struct TurnWindow {
         let number: Int
         let startMs: Double
+        /// The refusal token the stop that opened this turn carried, handed
+        /// back to SpeechOut when the turn ends.
+        let refusal: UInt64
         var endMs: Double?
         var silentMs: Double = 0
     }
@@ -118,6 +131,8 @@ final class ConversationRun {
     private static let finalizeGraceMs: UInt64 = 1500
     private static let finishGraceMs: UInt64 = 3000
     private static let resultsGraceMs: UInt64 = 1000
+    /// How long a second `stop` waits for the first to let the microphone go.
+    private static let stopGraceMs: UInt64 = 5000
 
     private let emit: Emit
 
@@ -146,6 +161,11 @@ final class ConversationRun {
     private let stateLock = NSLock()
     /// The last turn taken. Bumped on `stop`, the moment the user has the floor.
     private var turn = 0
+    /// `turn`, for the tap. Written beside it and read without the lock: a
+    /// level that carries the number from one buffer ago is a level, and an Int
+    /// on arm64 does not tear. The dynamic exclusivity checker does not track
+    /// a class property's plain get and set.
+    private var floor = 0
     /// The user turn on the floor, or waiting on its finalize.
     private var open: TurnWindow?
     /// The last turn settled, which a late final can still belong to.
@@ -166,6 +186,10 @@ final class ConversationRun {
     private let stopLock = NSLock()
     private var stopping = false
     private var opened = false
+    /// Signalled once the microphone has been let go of, so that a second
+    /// caller of `stop` — a hold that wants the stack — waits for that rather
+    /// than for nothing.
+    private let released = Gate()
     private var observers: [NSObjectProtocol] = []
 
     init(emit: @escaping Emit) {
@@ -273,11 +297,25 @@ final class ConversationRun {
     /// microphone was wanted for something else, `interrupted` and `lost` for
     /// what iOS took, `failed` for a start that did not complete.
     ///
-    /// The player is not stopped: it outlives the call (docs/33), and what is
-    /// taken away is the detector, which puts the volume back if it was down.
-    /// Safe to call twice and on a run whose start threw.
+    /// Returns as soon as the microphone is let go of and the webview told —
+    /// tens of milliseconds, a few hundred when the stack is torn down — and
+    /// finishes the recogniser behind itself. The plugin's chain, which
+    /// `enqueue_speech` shares, is therefore not held while the analyzer
+    /// settles a call's worth of audio, and a reply still playing goes on
+    /// being fed. The player is not stopped here: the webview stops it,
+    /// through `speak_stop`, on every ending it hears about. What is taken away
+    /// is the detector, which puts the volume back if it was down.
+    ///
+    /// Safe to call twice — the second call waits for the first to have
+    /// released the microphone, so a hold that follows opens a stack nobody is
+    /// about to tear down — and safe on a run whose start threw.
     func stop(reason: String) async {
-        guard claimStop() else { return }
+        guard claimStop() else {
+            await released.wait(upToMs: Self.stopGraceMs) {
+                NSLog("RP-CALL a second stop waited %llums for the first", Self.stopGraceMs)
+            }
+            return
+        }
         NSLog("RP-CALL stop reason=%@", reason)
         for observer in observers {
             NotificationCenter.default.removeObserver(observer)
@@ -296,6 +334,7 @@ final class ConversationRun {
             // would refuse anyway.
             AudioFront.shared.release(keep: reason == "closed" || reason == "released")
         }
+        released.signal()
 
         feedLock.lock()
         let continuation = inputContinuation
@@ -303,24 +342,6 @@ final class ConversationRun {
         converter = nil
         feedLock.unlock()
         continuation?.finish()
-
-        if let analyzer = analyzer {
-            let finished = Gate()
-            Task {
-                try? await analyzer.finalizeAndFinishThroughEndOfInput()
-                finished.signal()
-            }
-            await finished.wait(upToMs: Self.finishGraceMs) {
-                NSLog("RP-CALL finalizeAndFinish did not return in %llums", Self.finishGraceMs)
-            }
-        }
-        if resultsTask != nil {
-            await resultsGate.wait(upToMs: Self.resultsGraceMs) {
-                NSLog("RP-CALL results grace expired")
-            }
-        }
-        resultsTask?.cancel()
-        resultsTask = nil
 
         // A turn still on the floor goes down with the call. Nothing settles
         // it: the webview cuts what was in flight on the state event.
@@ -330,15 +351,44 @@ final class ConversationRun {
         finals = []
         stateLock.unlock()
 
-        // Through the gate whatever its state — the one event the webview must
-        // hear after a start it was told succeeded — and then the gate shuts
-        // for good.
-        if wasOpened {
-            emit(ConversationEvent(kind: "state", turn: currentTurn(), running: false, reason: reason))
-        }
+        // The gate shuts first, then the one event that has to pass it: a final
+        // the results task is delivering right now finds the gate closed, and
+        // nothing follows `state { running: false }`.
         emitLock.lock()
         emitting = false
         emitLock.unlock()
+        if wasOpened {
+            emit(ConversationEvent(kind: "state", turn: currentTurn(), running: false, reason: reason))
+        }
+
+        // The recogniser is finished off the caller's time. Its stream has
+        // nowhere to send to any more; this is bookkeeping, and a hold started
+        // meanwhile builds its own analyzer.
+        let analyzer = self.analyzer
+        let resultsTask = self.resultsTask
+        self.analyzer = nil
+        self.resultsTask = nil
+        let resultsGate = self.resultsGate
+        Task.detached {
+            if let analyzer = analyzer {
+                let finished = Gate()
+                let finishing = Task {
+                    try? await analyzer.finalizeAndFinishThroughEndOfInput()
+                    finished.signal()
+                }
+                await finished.wait(upToMs: Self.finishGraceMs) {
+                    NSLog("RP-CALL finalizeAndFinish did not return in %llums", Self.finishGraceMs)
+                    finishing.cancel()
+                }
+            }
+            if resultsTask != nil {
+                await resultsGate.wait(upToMs: Self.resultsGraceMs) {
+                    NSLog("RP-CALL results grace expired")
+                }
+            }
+            resultsTask?.cancel()
+            NSLog("RP-CALL recogniser finished")
+        }
     }
 
     private func claimStop() -> Bool {
@@ -420,7 +470,7 @@ final class ConversationRun {
         lastLevelAt = now
         let scaled = (db - Self.quietDb) / (Self.loudDb - Self.quietDb)
         let value = min(max(scaled.isFinite ? scaled : 0, 0), 1)
-        send(ConversationEvent(kind: "level", turn: currentTurn(), value: value))
+        send(ConversationEvent(kind: "level", turn: floor, value: value))
     }
 
     /// The conversion every run here does, into the format the analyzer named.
@@ -468,7 +518,8 @@ final class ConversationRun {
     // MARK: - Verdicts (on SpeechOut's queue)
 
     /// The detector spoke and the player has already done its part. What is
-    /// left is the bookkeeping and the event; nothing here touches SpeechOut.
+    /// left is the bookkeeping and the event; nothing here calls SpeechOut
+    /// synchronously.
     private func verdict(_ verdict: TurnVerdict) {
         switch verdict.event {
         case .duck:
@@ -486,13 +537,14 @@ final class ConversationRun {
             // The previous turn still waiting on its finalize is settled with
             // what it has: the user has started the next one, and a turn
             // cannot arrive after the one that followed it.
-            if let previous = open {
-                settleLocked(previous)
-            }
+            let settled = open.map { settleLocked($0) }
             turn += 1
-            open = TurnWindow(number: turn, startMs: lastDuckMs, endMs: nil)
+            floor = turn
+            open = TurnWindow(
+                number: turn, startMs: lastDuckMs, refusal: verdict.refusal, endMs: nil)
             let number = turn
             stateLock.unlock()
+            if let settled = settled { deliver(settled) }
             var event = ConversationEvent(kind: "speech-stop", turn: number)
             if let cut = verdict.cut, cut.index >= 0 {
                 event.cut = SpeechCut(
@@ -516,10 +568,11 @@ final class ConversationRun {
                 guard let self = self else { return }
                 await self.forceFinal()
                 self.stateLock.lock()
-                if let current = self.open, current.number == number {
-                    self.settleLocked(current)
+                let settled = self.open.flatMap { current in
+                    current.number == number ? self.settleLocked(current) : nil
                 }
                 self.stateLock.unlock()
+                if let settled = settled { self.deliver(settled) }
             }
         }
     }
@@ -531,12 +584,13 @@ final class ConversationRun {
     }
 
     /// Settle now rather than in 2.6 s. Bounded, because a turn whose end never
-    /// arrives holds the floor for the rest of the call.
+    /// arrives holds the floor for the rest of the call; the call that ran over
+    /// is cancelled rather than left behind.
     private func forceFinal() async {
         guard let analyzer = analyzer else { return }
         let began = CFAbsoluteTimeGetCurrent()
         let done = Gate()
-        Task {
+        let finalizing = Task {
             do {
                 try await analyzer.finalize(through: nil)
             } catch {
@@ -546,30 +600,39 @@ final class ConversationRun {
         }
         await done.wait(upToMs: Self.finalizeGraceMs) {
             NSLog("RP-CALL finalize did not return in %llums", Self.finalizeGraceMs)
+            finalizing.cancel()
         }
         NSLog("RP-CALL finalize %.0fms", (CFAbsoluteTimeGetCurrent() - began) * 1000)
     }
 
+    /// What settling a turn produced, to be delivered after the lock is dropped.
+    private struct Settled {
+        let event: ConversationEvent
+        let refusal: UInt64
+        let dropped: Int
+    }
+
     /// The turn is over: everything the recogniser settled inside its window,
     /// plus whatever hypothesis is still standing, joined the way the webview
-    /// joins, goes out as `speech-end`. An empty string is still a turn — the
+    /// joins, becomes its `speech-end`. An empty string is still a turn — the
     /// webview keeps the slot so a final that settles later has somewhere to
-    /// land. Called with `stateLock` held.
-    private func settleLocked(_ window: TurnWindow) {
+    /// land. Called with `stateLock` held; sends nothing and logs nothing.
+    ///
+    /// Finals that do not fall in the window are dropped, whichever side of it
+    /// they are on: older ones are the playback leaking back up the microphone
+    /// or the room, and a later one — a range the recogniser stretched past the
+    /// hangover — cannot be the next turn's, which has not been spoken yet.
+    private func settleLocked(_ window: TurnWindow) -> Settled {
         var parts: [String] = []
-        finals = finals.filter { segment in
+        var dropped = 0
+        for segment in finals {
             if segment.overlaps(window) {
                 parts.append(segment.text)
-                return false
+            } else {
+                dropped += 1
             }
-            // Older than this turn and claimed by nobody: the playback leaking
-            // back up the microphone, or the room. Not the user's words.
-            if let end = segment.endMs, end < window.startMs - Self.windowSlackMs {
-                NSLog("RP-CALL dropped a final of %d chars outside any turn", segment.text.count)
-                return false
-            }
-            return true
         }
+        finals = []
         if let hypothesis = tail, hypothesis.overlaps(window) {
             parts.append(hypothesis.text)
             tail = nil
@@ -577,8 +640,21 @@ final class ConversationRun {
         let text = parts.reduce("", Recogniser.joinSpeech)
         closed = window
         open = nil
-        NSLog("RP-CALL turn %d ended: %d chars, silent %.0fms", window.number, text.count, window.silentMs)
-        send(ConversationEvent(kind: "speech-end", turn: window.number, text: text, silentMs: window.silentMs))
+        return Settled(
+            event: ConversationEvent(
+                kind: "speech-end", turn: window.number, text: text, silentMs: window.silentMs),
+            refusal: window.refusal, dropped: dropped)
+    }
+
+    /// The half of settling that is not done under the lock: the log line, the
+    /// event, and telling the player the floor is free again.
+    private func deliver(_ settled: Settled) {
+        NSLog(
+            "RP-CALL turn %d ended: %d chars, silent %.0fms, %d finals outside it",
+            settled.event.turn, settled.event.text?.count ?? 0, settled.event.silentMs ?? 0,
+            settled.dropped)
+        send(settled.event)
+        SpeechOut.shared.userTurnEnded(settled.refusal)
     }
 
     // MARK: - Results
@@ -607,27 +683,34 @@ final class ConversationRun {
             text: text, startMs: Self.ms(result.range.start), endMs: Self.ms(result.range.end))
         NSLog("RP-CALL %@ %d chars", result.isFinal ? "final" : "volatile", text.count)
 
+        // Decided under the lock, sent after it.
+        var late: ConversationEvent? = nil
+        var orphaned = false
         stateLock.lock()
-        defer { stateLock.unlock() }
         if !result.isFinal {
             tail = text.isEmpty ? nil : segment
-            return
-        }
-        tail = nil
-        guard !text.isEmpty else { return }
-        if let current = open, segment.overlaps(current) {
-            finals.append(segment)
-            return
-        }
-        if let last = closed, segment.overlaps(last) {
-            var event = ConversationEvent(kind: "final", turn: last.number, text: text)
-            if let start = segment.startMs, let end = segment.endMs {
-                event.range = SpeechRange(startMs: start, endMs: end)
+        } else {
+            tail = nil
+            if text.isEmpty {
+                // Nothing to file.
+            } else if let current = open, segment.overlaps(current) {
+                finals.append(segment)
+            } else if let last = closed, segment.overlaps(last) {
+                var event = ConversationEvent(kind: "final", turn: last.number, text: text)
+                if let start = segment.startMs, let end = segment.endMs {
+                    event.range = SpeechRange(startMs: start, endMs: end)
+                }
+                late = event
+            } else {
+                orphaned = true
             }
-            send(event)
-            return
         }
-        NSLog("RP-CALL dropped a final of %d chars outside any turn", text.count)
+        stateLock.unlock()
+
+        if let late = late { send(late) }
+        if orphaned {
+            NSLog("RP-CALL dropped a final of %d chars outside any turn", text.count)
+        }
     }
 
     private static func ms(_ time: CMTime) -> Double? {

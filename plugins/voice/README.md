@@ -351,12 +351,25 @@ interruption, an input route that went empty, the app leaving the screen (v1 is
 foreground-only) — and every one of those ends with `state { running: false }`
 so the webview is told rather than left listening. `stop_conversation` keeps the
 stack parked the way a hold does, so `release_microphone` still owes the
-indicator its release. The player outlives the call: whatever is speaking goes
-on, at full volume — the detector is what goes, and any duck it held goes with it.
+indicator its release, and it returns as soon as the microphone is let go of —
+the recogniser is finished off the chain, so a reply still playing goes on being
+fed while the analyzer settles. The native side does not stop the player on any
+ending: the webview does, through `speak_stop`, the moment it hears the state
+event (voice-call.ts). What the native side takes away is the detector, and any
+duck it was holding goes with it, so the player is at full volume for whatever
+it says between the two.
+
+A hold that arrives while a call is on its way down — an interruption's stop is
+not on the command chain — waits for that stop to have released the microphone
+before it opens its own, rather than building a stack the stop is about to tear
+down. A hold that arrives while a call is live is refused.
 
 One event, subscribed with `addPluginListener('voice', 'conversation', cb)`.
-Every payload carries `turn`, the user turn it belongs to, counted from 1 and
-bumped the moment the user has the floor; `0` before any turn was taken.
+Every payload carries `turn`, the user turn it belongs to: the last one taken,
+counted from 1 and bumped the moment the user has the floor; `0` before any was,
+which is the turn the driver asks its own opening line as (voice-call.ts,
+`KICKOFF_TURN`). `speech-end` and `final` never carry `0` — both belong to a
+turn a `speech-stop` has taken.
 
 | payload | when |
 |---|---|
@@ -378,19 +391,31 @@ position read first, volume back) and the callback that emits the event all run
 on that queue in one turn. No lock and no atomics on the audio thread beyond the
 dispatch itself, and nothing can play between the verdict and the cut. The
 immunity window is opened and closed by the player (`speaking: 1` / `0`), which
-is why the detector sits beside it.
+is why the detector sits beside it. The tap is not the machine's only driver: a
+timer on the same queue steps it with silence every 250 ms once no buffer has
+arrived for 500 ms, so a duck resumes and a turn ends on schedule when the tap
+stops delivering (docs/pitfall/162 is the one way that has been seen; the
+machine is written to be driven by time, `stepTurnDetect`'s own note).
 
 `set_speech_volume` names the two levels rather than driving the volume: the
 native side ducks to 0.25 and restores to 1 at the verdict, a round trip ahead
 of the webview, and the command writes whichever level the call is in at the
 moment it arrives — the webview sends its duck value on `speech-duck` and its
-full value on `speech-resume`, so the two train themselves.
+full value on `speech-resume`, so the two train themselves. It is the one
+command here not on the serial chain, so nothing can hold a duck's value back
+past the resume. A turn that starts inside a duck starts at the duck level and
+comes up when the duck resolves.
 
 A barge-in cuts the player, and the relay does not hear it until the webview's
 `speak_stop` arrives. Until then the relay is still handing the cut turn's
 sentences to a stopped player, and a sentence of the same turn would start it
 again; so a cut turn is remembered and its later sentences are refused with
-`dropped, !busy`, the answer that tells the relay the turn is over.
+`dropped, !busy`, the answer that tells the relay the turn is over. The same
+refusal covers a barge-in into the thinking: from a `speech-stop` until that
+turn's `speech-end`, a turn the player has never seen is one that was opened
+before the user spoke — the previous turn's answer, still being synthesised —
+and its first sentence is refused and the turn remembered as cut. The answer to
+the user's own turn is only asked for after the `speech-end`, so it is admitted.
 
 Which turn a recogniser result belongs to is decided by its `.audioTimeRange`
 against the turn's window on the same timeline (frames fed to the analyzer):
@@ -398,8 +423,13 @@ from the duck that opened the turn to the buffer on which the hangover expired,
 with 300 ms of slack. A final inside the turn on the floor is sent with its
 `speech-end`; one inside the turn just settled is a late `final`; one inside
 neither — the playback leaking back up the microphone before the voice-
-processing unit converged, or the room — is dropped. That is what keeps the
-companion's own words out of the user's transcript.
+processing unit converged, or the room — is dropped, and so is anything left
+unclaimed when a turn settles. That is what keeps the companion's own words out
+of the user's transcript. The cost is the immunity window's: a sentence said
+whole inside the first two seconds of a reply falls in no turn and is dropped
+with the barge-in it never became (docs/33).
 
 Nothing here is emitted before `start_conversation`'s response reaches the
-webview, and nothing after `state { running: false }`.
+webview, and nothing after `state { running: false }`: the gate shuts before
+that event goes out, so a final the results task is delivering at that moment
+finds it closed.

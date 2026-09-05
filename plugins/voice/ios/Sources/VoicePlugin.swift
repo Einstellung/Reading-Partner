@@ -127,10 +127,17 @@ class VoicePlugin: Plugin {
 
             // A call has the microphone. Refused rather than replaced: the
             // call is the user's, and a hold that silently ended it would look
-            // like a call that dropped.
-            if self.liveConversation() != nil {
-                invoke.reject("A voice call is in progress. End it before holding to talk.")
-                return
+            // like a call that dropped. A call that is already on its way down
+            // — an interruption's stop is not on this chain — is waited out
+            // instead, so the stack this hold builds is not the one that stop
+            // is about to release.
+            if let call = self.takeConversation() {
+                if call.isLive {
+                    self.setConversation(call)
+                    invoke.reject("A voice call is in progress. End it before holding to talk.")
+                    return
+                }
+                await call.stop(reason: "released")
             }
 
             // A start that arrives with a run still live replaces it. The chain
@@ -341,10 +348,11 @@ class VoicePlugin: Plugin {
             invoke.reject("That volume did not parse: \(DictationError.describe(error))")
             return
         }
-        serial {
-            SpeechOut.shared.setVolume(args.value)
-            invoke.resolve()
-        }
+        // Not on the chain: it touches the player and nothing else, and a
+        // duck's volume queued behind a start still downloading a model would
+        // land after the resume and be filed as the full level.
+        SpeechOut.shared.setVolume(args.value)
+        invoke.resolve()
     }
 
     // MARK: - Speaking
@@ -649,18 +657,6 @@ class VoicePlugin: Plugin {
         let current = conversation
         conversation = nil
         return current
-    }
-
-    /// The call, if it still has the microphone. One that iOS already ended is
-    /// let go of here, so that it does not block the next hold until a
-    /// `stop_conversation` that may never come.
-    private func liveConversation() -> ConversationRun? {
-        runLock.lock()
-        defer { runLock.unlock() }
-        guard let call = conversation else { return nil }
-        if call.isLive { return call }
-        conversation = nil
-        return nil
     }
 }
 
