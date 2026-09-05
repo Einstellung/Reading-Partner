@@ -15,6 +15,7 @@ import VoiceInputCard from "./VoiceInputCard";
 import DictationLanguageCard from "./DictationLanguageCard";
 import SpeechKeyCard from "./SpeechKeyCard";
 import MigrationCard from "./MigrationCard";
+import ProfileLinesCard from "./ProfileLinesCard";
 import { hasOnDeviceDictation } from "../../../platform/app/platform";
 
 export default function OptionalPanel({
@@ -79,6 +80,9 @@ export default function OptionalPanel({
             once and never again, and because it is gone at 0.13. */}
         <SettingsSection title="Data migration">
           <MigrationCard />
+          {/* Draws nothing once there is nothing left to carry across, which is
+              the state every reader ends in. */}
+          <ProfileLinesCard />
         </SettingsSection>
       </div>
     </>

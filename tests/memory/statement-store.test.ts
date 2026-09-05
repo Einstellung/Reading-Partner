@@ -182,3 +182,74 @@ test("a file that does not parse throws instead of emptying itself", async () =>
   files.set(STATEMENTS_FILE, JSON.stringify({}));
   expect(await store.listStatements()).toEqual([]);
 });
+
+// --- confirmedOn: the one date a caller may supply ---
+
+// A line the reader kept from the old user-profile.md points at no message, so
+// there is nothing to date it from (src/ui/components/settings/profile-pick.ts).
+test("a reader's line with no evidence is dated by the day they confirmed it", async () => {
+  const { store } = makeStore();
+  const s = await store.createStatement({
+    kind: "profile",
+    text: "Wants the full derivation, not a diagram",
+    author: "reader",
+    evidence: [],
+    confirmedOn: "2026-09-05",
+  });
+  expect(s.established).toBe("2026-09-05");
+  expect(s.lastSupported).toBe("2026-09-05");
+  expect(s.evidence).toEqual([]);
+});
+
+// The whole point of keeping the opening narrow: it is the reader's own words
+// that cannot be dated any other way, and a dream's claim with nothing behind it
+// is exactly what the computed dates exist to refuse.
+test("confirmedOn is refused for a dream, and ignored when there is evidence", async () => {
+  const { store, files } = makeStore();
+
+  await expect(
+    store.createStatement({
+      kind: "profile",
+      text: "x",
+      author: "dream",
+      evidence: [],
+      confirmedOn: "2026-09-05",
+    }),
+  ).rejects.toThrow(/needs evidence/);
+  expect(files.has(STATEMENTS_FILE)).toBe(false);
+
+  // Evidence dates the statement better than the day a button was pressed.
+  const dated = await store.createStatement({
+    kind: "profile",
+    text: "y",
+    author: "reader",
+    evidence: ["m-1111111111111111"],
+    confirmedOn: "2026-09-05",
+  });
+  expect(dated.established).toBe("2026-07-02");
+  expect(dated.lastSupported).toBe("2026-07-05");
+
+  // Evidence that is only whitespace is no evidence, so the day still applies.
+  const blank = await store.createStatement({
+    kind: "profile",
+    text: "z",
+    author: "reader",
+    evidence: ["  "],
+    confirmedOn: "2026-09-05",
+  });
+  expect(blank.evidence).toEqual([]);
+  expect(blank.established).toBe("2026-09-05");
+});
+
+test("a confirmedOn that is not a day is refused rather than stamped", async () => {
+  const { store } = makeStore();
+  await expect(
+    store.createStatement({
+      kind: "profile",
+      text: "x",
+      author: "reader",
+      evidence: [],
+      confirmedOn: "yesterday",
+    }),
+  ).rejects.toThrow(/not a day/);
+});
