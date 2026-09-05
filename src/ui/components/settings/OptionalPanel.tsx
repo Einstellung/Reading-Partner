@@ -14,6 +14,7 @@ import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
 import VoiceInputCard from "./VoiceInputCard";
 import DictationLanguageCard from "./DictationLanguageCard";
 import SpeechKeyCard from "./SpeechKeyCard";
+import MigrationCard from "./MigrationCard";
 import { hasOnDeviceDictation } from "../../../platform/app/platform";
 
 export default function OptionalPanel({
@@ -71,6 +72,13 @@ export default function OptionalPanel({
               direction, and unlike the two cards above it is the same path on
               every host — the request is made in Rust (plugins/voice). */}
           <SpeechKeyCard />
+        </SettingsSection>
+
+        {/* Not a key and not optional in the same sense as the rest of this tab.
+            It sits here because it is the one thing in Settings a reader runs
+            once and never again, and because it is gone at 0.13. */}
+        <SettingsSection title="Data migration">
+          <MigrationCard />
         </SettingsSection>
       </div>
     </>
