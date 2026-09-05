@@ -1,4 +1,4 @@
-# 213 iOS 26.6 的 `SpeechDetector` 挂得上、结束得干净，一条结果都不报
+# 215 iOS 26.6 的 `SpeechDetector` 挂得上、结束得干净，一条结果都不报
 
 ## 现象
 

@@ -58,7 +58,7 @@ mainland-China iPhone withholds it from every new install, and the cloud-signed
 `.dev` build is a new install every round. Without it the request never leaves
 the phone: it comes back as a transport error in about a millisecond and the
 error string says nothing about why (2026-09-05, 12 of 12 sentences — see
-docs/pitfall/215).
+docs/pitfall/217).
 
 The result is `/tmp/speech-result.json` as before, with one more leg on it:
 `label: "live"`, carrying the relay's own timeline in `relay` — when each

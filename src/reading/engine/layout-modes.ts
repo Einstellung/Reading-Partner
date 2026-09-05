@@ -142,3 +142,20 @@ export function openingZoom(layout: ReadingLayout, saved: number | undefined): n
   if (LAYOUT_SETTINGS[layout].zoom === "fit-page") return null;
   return typeof saved === "number" && saved > 0 ? saved : null;
 }
+
+// What "reset the zoom" means in a layout: the zoom that layout locks to. The
+// reset control is the reader asking for the baseline back, not for one
+// particular fit — and the two layouts have different baselines. Fit-width in
+// the paged strip is bigger than fit-page on a portrait screen, so it reads as
+// a magnification: the gesture machine switches to panning and swiping stops
+// turning pages (pitfall 213).
+export function resetZoom(layout: ReadingLayout): ZoomLock {
+  return LAYOUT_SETTINGS[layout].zoom;
+}
+
+// Whether a reset would move anything, given the zoom currently in effect —
+// null for a numeric scale, which is what a pinch leaves behind and is never a
+// lock. Answers `canZoomReset`.
+export function atResetZoom(layout: ReadingLayout, zoom: ZoomLock | null): boolean {
+  return zoom !== null && zoom === resetZoom(layout);
+}

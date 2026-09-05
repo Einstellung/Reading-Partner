@@ -47,6 +47,8 @@ export interface ViewStateStore {
   get: (bookId: string) => Promise<ViewState | null>;
   save: (bookId: string, state: ViewState) => Promise<void>;
   saveOnExit: (bookId: string, state: ViewState) => Promise<void>;
+  /** Forget one book's position, for good: the book was deleted. */
+  remove: (bookId: string) => Promise<void>;
   /** Forget the held map: a pull rewrote the file, or anything else did. */
   drop: () => void;
 }
@@ -125,6 +127,14 @@ export function createViewStateStore(io: ViewStateIo): ViewStateStore {
       held.states[bookId] = state;
       await save(held);
     },
+    // A book with no position in the file is already in the state this asks
+    // for, and writing the file again would only cost a sync revision.
+    remove: async (bookId) => {
+      const store = await load();
+      if (!(bookId in store.states)) return;
+      delete store.states[bookId];
+      await save(store);
+    },
     drop: () => {
       cached = null;
     },
@@ -173,4 +183,9 @@ export function saveViewState(bookId: string, state: ViewState): Promise<void> {
  */
 export function saveViewStateOnExit(bookId: string, state: ViewState): Promise<void> {
   return store.saveOnExit(bookId, state);
+}
+
+/** Drop a deleted book's position (reading/delete/delete-book.ts). */
+export function removeViewState(bookId: string): Promise<void> {
+  return store.remove(bookId);
 }

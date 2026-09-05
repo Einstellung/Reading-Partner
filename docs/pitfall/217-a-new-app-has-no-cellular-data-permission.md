@@ -1,4 +1,4 @@
-# 215 国行 iPhone 上新装的 app 联网前要人点一下，没点的请求 1 毫秒就失败
+# 217 国行 iPhone 上新装的 app 联网前要人点一下，没点的请求 1 毫秒就失败
 
 ## 现象
 
@@ -19,8 +19,8 @@ the voice service could not be reached: error sending request for url (https://a
 国行 iPhone 的「无线数据」（设置 → 无线数据）对每个 app 单独授权，新装的 app 默认没有。
 在授权之前，这个 app 的出站请求在系统层就被拒绝，连接从来没有离开手机。
 
-reqwest 那边看到的只是一个立刻返回的连接错误，`transport()`（`plugins/voice/src/tts/mimo.rs:195`）
-又只留 `to_string()`、把 source chain 丢了，于是记录里 DNS、connect、TLS、系统拒绝四种情况长得一模一样。
+reqwest 那边看到的只是一个立刻返回的连接错误，而当时 `transport()` 只留 `to_string()`、把 source chain 丢了，
+于是记录里 DNS、connect、TLS、系统拒绝四种情况长得一模一样。
 
 云签名的 `.dev` 包每一轮都是重新安装的，所以这个授权每次重装都要重点一次。
 
@@ -32,5 +32,5 @@ reqwest 那边看到的只是一个立刻返回的连接错误，`transport()`�
 判据：请求在 1–2 ms 内以传输错误失败，而同一时刻别的机器够得到那个服务，先怀疑授权，别怀疑网络。
 真的 DNS 或 TLS 问题不会这么快。
 
-顺带要修的是错误本身说不清自己：`transport()` 要把 `reqwest::Error` 的 source chain 记下来，
-不然下一次同样的现象还是四选一。
+错误本身说不清自己那一半已经修了：`describe_chain`（`plugins/voice/src/tts/error.rs`）把整条 source chain
+拼进 message，下一次同样的现象至少分得出 DNS、connect 和 TLS。

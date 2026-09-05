@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import {
   applyReaderZoom,
   readerZoomKeyAction,
+  zoomResetLabel,
 } from "../../../src/ui/components/reader/reader-zoom-keys";
 import type { ViewInstance } from "../../../src/platform/app/reader-contract";
 
@@ -59,12 +60,19 @@ test("reset is fit-width scrolling vertically", () => {
   expect(calls).toEqual(["zoomReset"]);
 });
 
-test("reset is fit-page in the paged layout", () => {
-  // zoomReset is fit-width whatever the layout, which in paged mode is taller
-  // than the screen. Re-asserting the layout restores the fit it owns.
+test("reset is the same call in the paged layout", () => {
+  // Which fit that is belongs to the engine (layout-modes.resetZoom), not to
+  // the key press.
   const { view, calls } = fakeView();
   applyReaderZoom(view, "paged", "reset");
-  expect(calls).toEqual(["setLayout:paged"]);
+  expect(calls).toEqual(["zoomReset"]);
+});
+
+test("the reset item names the fit its layout lands on", () => {
+  expect(zoomResetLabel("vertical")).toBe("Fit page width");
+  expect(zoomResetLabel("paged")).toBe("Fit page");
+  // No stats yet: the reader opens vertical.
+  expect(zoomResetLabel(undefined)).toBe("Fit page width");
 });
 
 test("a press before the view is ready is dropped", () => {

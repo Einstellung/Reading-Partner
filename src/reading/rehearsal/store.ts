@@ -43,6 +43,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { requestRemotePurge } from "../../platform/sync";
 import { talkOutlineForRetell } from "../talk/store";
 import { runEntryOf } from "./summary";
 import {
@@ -492,10 +493,33 @@ export function splitRehearsalRunPagesOnce(): Promise<number> {
   return (splitRun ??= splitRehearsalRunPagesEverywhere());
 }
 
+// Every transcript this rehearsal has on disk, as AppData-relative paths. Listed
+// rather than derived from the index: the remote holds exactly what was
+// uploaded, and what was uploaded is what is on disk. A directory that is not
+// there, or will not list, is no transcripts.
+async function runPagesPaths(rehearsalId: string): Promise<string[]> {
+  const dir = runPagesDir(rehearsalId);
+  if (!dir) return [];
+  try {
+    if (!(await appData.exists(dir))) return [];
+    return (await appData.readDir(dir)).filter((e) => e.isFile).map((e) => `${dir}/${e.name}`);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Drop a rehearsal: the object, the index of its passes, every transcript under
  * it, and the rescue copy if there is one. Not the outline — a talk outlives the
  * history of one set of passes over it.
+ *
+ * The object, the index and the transcripts are in sync range, and a sync
+ * propagates no file deletion of its own: deleted here alone they are downloaded
+ * back on the next pass (docs/13, pitfall 208). So the remote copies are queued
+ * first — the transcripts by name, because the queue takes paths and the
+ * directory listing is gone the moment the local delete runs. The .bad rescue
+ * copy is not queued: it was never in range (syncFs.ts), so there is no remote
+ * copy of it to take out.
  */
 export async function deleteRehearsal(rehearsalId: string): Promise<void> {
   const files = [
@@ -503,6 +527,15 @@ export async function deleteRehearsal(rehearsalId: string): Promise<void> {
     rehearsalRunsFile(rehearsalId),
     badFile(rehearsalId),
   ];
+  try {
+    await requestRemotePurge([
+      rehearsalFile(rehearsalId),
+      rehearsalRunsFile(rehearsalId),
+      ...(await runPagesPaths(rehearsalId)),
+    ]);
+  } catch (e) {
+    console.warn("failed to queue a rehearsal for remote deletion", rehearsalId, e);
+  }
   for (const file of files) {
     try {
       if (await appData.exists(file)) await appData.remove(file);

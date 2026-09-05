@@ -11,7 +11,7 @@ iPhone 16、iOS 26.6、全程 WiFi，云签名 `.dev` 包，从 main `90b407dc`�
 （`echo-default`、`echo-loose-50-two-frames`、`vpio-off-barge-default`、`timer-digital-silence`），
 其余 13 个各 2–8 个事件，逐位相同。
 
-## C 腿 speech-live：跑到了，12 句一句没成
+## C 腿 speech-live：第一遍 12 句没成，授权之后重跑全过
 
 ```
 sentences=12 failed=12 queued=0 chars=434 model="mimo-v2.5-tts" voice="冰糖"
@@ -31,11 +31,12 @@ the voice service could not be reached: error sending request for url (https://a
 后面十句在开跑后 2.54–3.99 ms 内失败。`synthesize_with_retry`（`plugins/voice/src/tts/mod.rs:54-69`）
 没有退避，三次尝试背靠背，每次约 1 ms 就回来。
 
-失败点是 `.send()`（`plugins/voice/src/tts/mimo.rs:142`）。`transport()`（`mimo.rs:195`）只留
+失败点是 `.send()`（`plugins/voice/src/tts/mimo.rs`）。当时的 `transport()` 只留
 `reqwest::Error::to_string()`，source chain 丢了，所以记录里分不出 DNS、connect 和 TLS。
+这条已经修了，`describe_chain`（`tts/error.rs`）现在把整条链拼进 message。
 
 真因是国行 iPhone 上新装的 app 没在 设置 → 无线数据 里授权，请求根本没离开手机。错误串看不出这件事，
-是坑 215。用户授权之后在重跑，那一轮的数还没回来。
+是坑 217。用户授权之后重跑了一遍，12 句全过，见下。
 
 key 的递送没问题：`MIMO_API_KEY` 那道闸没有触发，key 只经 `DEVICECTL_CHILD_MIMO_API_KEY` 进去；
 key 的问题会以 401 的 `Status` 错误回来，不是 transport。手机直连 `api.xiaomimimo.com` 通不通这一轮
@@ -48,12 +49,44 @@ Mac 是经自己的 Clash 到 `127.0.0.1:7890` 出去的，那个数不能替手
   `raw-burst` 81.8 s / 816，都以 `speaking:0 reason=done` 收尾。
 - live 腿的 `ok:false` 有一半是探针的事：`watch()`（`src/smoke/speech-probe.ts:221`）按 webview 收到
   `speaking:0` 判成功。`SpeechOut` 对每个进了 `enqueue_speech` 的句子都会发 `speaking:1/0`，live 路径
-  也一样；但这一轮 12 句全失败、一句都没排上队，于是没有任何事件能结束这条腿，只能等满
-  180 秒（`wallMs=180070`）。已改成按 relay 的结果判定、relay 一结束就收腿。
+  也一样；但这一遍 12 句全失败、一句都没排上队，于是没有任何事件能结束这条腿，只能等满
+  180 秒（`wallMs=180070`）。重跑那遍证实事件照常到（`speaking:1` 在 1619 ms、`speaking:0 reason=done`
+  在 80227 ms，`ok: true`），所以这是「一句都没播」的缺口，不是这条腿判不了。
+  已改成按 relay 的结果判定、relay 一结束就收腿。
 - `live.pcm` 不存在，`capturedFrames: 0`，和"一个字节音频都没排上队"一致。
 - 坑 203 的改序有效：live 腿在进程死掉之前就写到盘上了。`speech-result-2026-09-05.json` 停在
   `stage: "echo-vpio-off"`、`echo: []`，console 最后一行 `App terminated due to signal 6`。
   那条腿仍然 abort，只是不再挡住 live 腿。
+
+### 重跑：12/12 合成并播出
+
+授权之后 08:37 重跑一遍，数据在 `speech-result-2026-09-05-run2.json`。
+
+```
+sentences=12 failed=12 → failed=0 queued=12  每句 attempts=1
+ok:true  wallMs=80256  786 条 level  speaking 1@1619ms  0 reason=done@80227ms  underruns=0
+```
+
+| | min | p50 | max |
+| --- | --- | --- | --- |
+| 请求 → 首音 | 375 | 628 | 1031 |
+| 请求 → 整句收全 | 860 | 1853 | 2855 |
+| 排队时播放器余量 | 3090（第一句） | 10524 | 13317 |
+| 裁头 | 40 | 70 | 90 |
+| 裁尾 | 180 | 410 | 480 |
+
+12 句共裁掉 5590 ms，82080 → 76490，6.8%。`headCapped` 12 句全 false。
+
+和桌面比：
+
+- 请求到首音 p50 628 ms 对桌面小米 38 句的端到端首帧 p50 687 ms，同量级。
+- 裁尾 p50 410 ms 对桌面量到的句尾静音 451 ms，对得上。
+- 裁头 p50 70 ms 小于桌面的句首静音 117 ms，是坑 191 定的 40 ms 句首护栏在挡。
+- 整句最慢 2855 ms 比桌面的 2402 多 450 ms，但余量最小的一句是 3090 ms，接力没被追上，`underruns` 0。
+
+整轮第一个可闻的字在腿起点后 1619 ms。手机没挂代理，`api.xiaomimimo.com` 直连是通的。
+
+重跑仍然死在 `echo-vpio-off`（坑 203 未修），文件同样停在那个 stage。
 
 ## A 腿 turn probe：三个问题都有答案
 
@@ -125,17 +158,17 @@ VPIO 开着，识别器把手机自己放的那段写下来了：`played` 段两
 
 1. Mac 上的 `linux` remote 指着 `ssh://xinyuan@172.20.10.10/...`（坑 202 那个热点网段），Linux 现在是
    192.168.0.107。症状是 `Connection closed by 172.20.10.10 port 22`——那个地址上有别的东西在应答，
-   不是超时。改了 Mac 上的 remote URL。这是这一轮在 Mac 上做的唯一配置改动。记进坑 214。
+   不是超时。改了 Mac 上的 remote URL。这是这一轮在 Mac 上做的唯一配置改动。记进坑 216。
 2. WiFi 下的 `idevicesyslog` 是个空转：不报错、不退出，只打一行
    `Waiting for device with UDID … to become available...` 然后挂着。后果是 `.app.log` / `.sys.log`
    永远停在那一行，脚本里那个 `last line Ns ago` 计数从文件创建时刻起单调增长，读起来像 app 早就死了
    （C 腿爬到 667 s，而 app 一直活到自己 SIGABRT）；`idevicecrashreport` 也什么都拉不到
    （`~/crash` 最新的还是 08-29）。脚本不会失败：`pgrep -fl idevicesyslog` 找得到那个等待中的进程，
-   `set -euo pipefail` 不触发。判活要改看 `--console` 那份日志。记进坑 212。
+   `set -euo pipefail` 不触发。判活要改看 `--console` 那份日志。记进坑 214。
 3. 手机上没有正式包：`devicectl device info apps --include-all-apps` 列出 111 个 app，只有
    `com.xinyuan.readingpartner.dev` 对得上。不是这一轮造成的（三次安装读回的都是 `.dev`），
    但 TestFlight 版现在不在机器上。
 4. 国行 iPhone 上新装的 app 第一次联网前要在 设置 → 无线数据 里授权，没授权的请求约 1 ms 内以 transport
-   错误失败，错误串看不出原因。C 腿 12/12 失败就是它。记进坑 215。
+   错误失败，错误串看不出原因。C 腿 12/12 失败就是它。记进坑 217。
 5. 一句都没排上队时，live 腿没有任何事件能结束它（见 C 腿）。
-6. 传输错误丢掉 source chain（`mimo.rs:195`）。
+6. 传输错误丢掉 source chain（当时的 `transport()`）。已修，见 `tts/error.rs` 的 `describe_chain`。

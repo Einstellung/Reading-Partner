@@ -1,4 +1,4 @@
-# 212 WiFi 连接下 `idevicesyslog` 根本挂不上，而且不报错
+# 214 WiFi 连接下 `idevicesyslog` 根本挂不上，而且不报错
 
 ## 现象
 

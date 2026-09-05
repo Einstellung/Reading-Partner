@@ -15,7 +15,10 @@
 //
 // File-level deletions are still not propagated — a file missing locally but
 // present remotely is left alone, so nothing is ever destroyed by a sync.
-// Record-level deletion inside a file is the merge module's decision.
+// Record-level deletion inside a file is the merge module's decision. The one
+// exception is a path a tombstone names by book (dead-paths.ts): that is not
+// this loop concluding a file should go, it is a record the reader wrote saying
+// so, and it arrives here already decided.
 
 import type { RemoteEntry, RemoteState } from "./backend";
 import type { LocalFile } from "./syncFs";
@@ -69,6 +72,10 @@ export interface Plan {
   // Paths gone from both sides. Their merge base is what is left of a file
   // nothing holds any more, so it is dropped (localStore.ts).
   dropBases: string[];
+  // Paths a tombstone says must not exist any more (dead-paths.ts), wherever
+  // this pass found them. Nothing was compared to decide this: the plan carries
+  // them so the engine takes them off both sides in one place.
+  purges: string[];
 }
 
 // The snapshot's hash for a scanned file, when it can be trusted without
@@ -91,7 +98,20 @@ function isLocallyChanged(loc: LocalFile, snap: SnapshotEntry | undefined): bool
   return loc.hash !== snap.hash;
 }
 
-export function reconcile(local: LocalFile[], remote: RemoteState, snap: Snapshot): Plan {
+/**
+ * `dead` names the paths a tombstone has ruled out (dead-paths.ts): a book the
+ * reader deleted owns files this loop would otherwise keep alive forever, since
+ * the device that still holds one republishes it and the device that deleted it
+ * downloads it back. A dead path is never uploaded, downloaded or merged; if
+ * either side still has it, it goes in `purges`. Defaults to nothing dead, which
+ * is byte for byte the behaviour this had before.
+ */
+export function reconcile(
+  local: LocalFile[],
+  remote: RemoteState,
+  snap: Snapshot,
+  dead: (path: string) => boolean = () => false,
+): Plan {
   const localByPath = new Map(local.map((f) => [f.path, f]));
   const paths = new Set<string>([
     ...localByPath.keys(),
@@ -104,11 +124,22 @@ export function reconcile(local: LocalFile[], remote: RemoteState, snap: Snapsho
   const merges: Merge[] = [];
   const converged: Converged[] = [];
   const dropBases: string[] = [];
+  const purges: string[] = [];
 
   for (const path of paths) {
     const loc = localByPath.get(path);
     const rem = remote[path];
     const base = snap[path];
+
+    // Before every comparison: a dead path has no side to win. It leaves by
+    // whichever door it came in — the local copy, the remote one, or both — and
+    // the snapshot entry a device that never held it still carries is dropped
+    // with it.
+    if (dead(path)) {
+      if (loc || rem) purges.push(path);
+      else dropBases.push(path);
+      continue;
+    }
 
     const remoteChanged = !!rem && (!base || rem.rev > base.rev);
 
@@ -169,5 +200,5 @@ export function reconcile(local: LocalFile[], remote: RemoteState, snap: Snapsho
     }
   }
 
-  return { uploads, downloads, merges, converged, dropBases };
+  return { uploads, downloads, merges, converged, dropBases, purges };
 }

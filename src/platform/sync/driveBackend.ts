@@ -678,6 +678,38 @@ export class DriveBackend implements SyncBackend {
     return this.getMedia(found.id, "book download", BULK);
   }
 
+  // The books channel's remove(), and the same two steps for the same reasons:
+  // the cached id first, the name searched when it turns out to be stale, and a
+  // 404 counted as done. Deleted for good rather than trashed — this is the
+  // app's own folder, and a book the reader deleted has no business sitting in
+  // their Drive bin for thirty days.
+  async removeBook(hash: string): Promise<void> {
+    const del = (id: string): Promise<undefined> =>
+      this.send(`${DRIVE}/files/${id}`, { method: "DELETE" }, "book delete", SMALL, async () => undefined);
+
+    const cached = await this.withCachedId(
+      this.ids.bookIds[hash],
+      () => {
+        delete this.ids.bookIds[hash];
+      },
+      del,
+    );
+    if (!cached.done) {
+      const found = await this.findBook(hash);
+      if (found) {
+        try {
+          await del(found.id);
+        } catch (e) {
+          // Gone between the search and the delete, which is the whole of what
+          // this was asked to arrange.
+          if (!(e instanceof SyncHttpError) || e.status !== 404) throw e;
+        }
+      }
+    }
+    delete this.ids.bookIds[hash];
+    await this.d.persistIds();
+  }
+
   // Small book: one multipart/related request carrying metadata + media. It
   // pays the same per-byte encoding cost as any other body (see CHUNK_BYTES),
   // but RESUMABLE_THRESHOLD caps what reaches it, so the worst case is a 5 MB

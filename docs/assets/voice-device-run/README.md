@@ -9,7 +9,8 @@
 - `echo-control-2026-08-29.json` — 回声对照轮，E3 的答案。`echo-vpio-on` / `echo-human` / `echo-human-duplex` 三条腿各自的转写、bigram 命中和电平峰均值，duplex 那条另记手机同时播的那段的命中；同一轮的六组路由真值和一条一句话的夹具腿也在里面。
 - `turn-replay-2026-09-05.json` — 轮次检测机的 Swift/TS 对拍。17 个用例各自的输入帧、两侧的事件序列和逐位比对结果。
 - `turn-result-2026-09-05.json` — 轮次探针。`detectorEvents` / `detectorStreamEnded`、两次 `finalize` 的时刻和 `callMs`、逐条转写（volatile 和定稿都带 `audioTimeRange`）、708 条一个缓冲区一条的 `inputRms`，加分段用的 stage 标记。33 里「VAD 和轮次检测」那三段的数全出自它。
-- `speech-result-2026-09-05.json` — 同一夜的 speech 轮。三条夹具腿照旧，另外第一次有 live 腿的记录：`relay` 里 12 句的 started / failed 时刻和错误串。文件停在 `stage: "echo-vpio-off"`，那条腿仍然 abort（坑 203）。
+- `speech-result-2026-09-05.json` — 同一夜的 speech 轮，第一遍。三条夹具腿照旧，另外第一次有 live 腿的记录：`relay` 里 12 句的 started / failed 时刻和错误串，12 句全在传输层失败（坑 217）。文件停在 `stage: "echo-vpio-off"`，那条腿仍然 abort（坑 203）。
+- `speech-result-2026-09-05-run2.json` — 授权之后重跑的那遍，live 腿 12/12 合成并播出。`relay` 的 timeline 里每句四条（started / firstAudio / ready / queued），`ready` 带 `trim` 的头尾裁剪量和 `attempts`，`queued` 带排队那一刻的播放器余量 `queuedAheadMs`。iPhone 上的按句首包绝对值全出自它。同样停在 `stage: "echo-vpio-off"`。
 - `device-report-2026-09-05.md` — 那一夜的中文实测记录，三条腿的完整判读和电平分布表。
 
 三卷录音（`raw-burst` / `trimmed-burst` / `trimmed-measured`，24 kHz 单声道）没进仓库，11 MB 而且重跑就有：`scripts/ios-dictation/speech-run.sh` 跑一轮 `speech` 会重新录。人耳判过的那三条（拼接、句间停顿、裁剪）就是听它们得出的。

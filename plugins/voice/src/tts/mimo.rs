@@ -15,7 +15,7 @@ use serde_json::json;
 use tokio::sync::mpsc;
 
 use super::backend::{SpeechRequest, TtsBackend};
-use super::error::{classify, TtsError};
+use super::error::{classify, describe_chain, TtsError};
 use super::format::AudioFormat;
 use super::sse::{SseEvent, SseParser};
 
@@ -107,7 +107,7 @@ pub fn default_client() -> Result<reqwest::Client, TtsError> {
         .build()
         .map_err(|e| TtsError::Transport {
             before_first_byte: true,
-            message: e.to_string(),
+            message: describe_chain(&e),
         })
 }
 
@@ -192,10 +192,12 @@ impl TtsBackend for MimoBackend {
     }
 }
 
+/// The cause chain and not only reqwest's own sentence: `Display` on a send
+/// failure names the URL and nothing about why it failed.
 fn transport(before_first_byte: bool, e: &reqwest::Error) -> TtsError {
     TtsError::Transport {
         before_first_byte,
-        message: e.to_string(),
+        message: describe_chain(e),
     }
 }
 

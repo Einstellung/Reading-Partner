@@ -11,7 +11,8 @@ import { reportStoreError } from "../platform/app/store-errors";
 import { extractFulltext } from "./extract";
 import { FULLTEXT_VERSION, type Fulltext } from "./types";
 
-function fileFor(hash: string): string {
+/** One document's cache file. Exported so a delete names it the same way. */
+export function fulltextFile(hash: string): string {
   return `fulltext-${hash}.json`;
 }
 
@@ -47,7 +48,7 @@ export function createFulltextStore(io: FulltextIo): FulltextStore {
   // thrown, so a corrupt cache degrades to a re-extraction rather than a crash.
   async function get(hash: string): Promise<Fulltext | null> {
     try {
-      const text = await io.read(fileFor(hash));
+      const text = await io.read(fulltextFile(hash));
       if (text === null) return null;
       const parsed = JSON.parse(text) as Fulltext;
       if (!parsed || parsed.version !== FULLTEXT_VERSION) return null;
@@ -65,7 +66,7 @@ export function createFulltextStore(io: FulltextIo): FulltextStore {
     // single "page", link ingestion in docs/09) under the same cache key a real
     // document uses, so the reading tools can serve it immediately. Overwrites
     // any prior entry for the key.
-    save: (key, ft) => io.write(fileFor(key), JSON.stringify(ft)),
+    save: (key, ft) => io.write(fulltextFile(key), JSON.stringify(ft)),
 
     // Return the cached full text, extracting and caching it on a miss.
     // Idempotent: a second call while extraction is running joins the same job.
@@ -82,7 +83,7 @@ export function createFulltextStore(io: FulltextIo): FulltextStore {
         const result = await io.extract(buffer);
         const ft: Fulltext = { version: FULLTEXT_VERSION, ...result };
         try {
-          await io.write(fileFor(hash), JSON.stringify(ft));
+          await io.write(fulltextFile(hash), JSON.stringify(ft));
         } catch (e) {
           // The line is written by the channel, not here (store-errors.ts).
           io.onError(e);

@@ -145,3 +145,95 @@ test("the snapshot's hash is only reusable while mtime and size still match", ()
   expect(cachedHash({ rev: 1, mtime: 100, size: 10 }, { mtime: 100, size: 10 })).toBeNull();
   expect(cachedHash(undefined, { mtime: 100, size: 10 })).toBeNull();
 });
+
+// --- what a tombstone rules out (dead-paths.ts) -----------------------------
+//
+// A file the reader deleted with the book. The point of the predicate is that no
+// comparison of the two sides can express this: the device that still holds the
+// file republishes it and the device that deleted it downloads it back forever.
+
+const deadIs =
+  (...paths: string[]) =>
+  (p: string): boolean =>
+    paths.includes(p);
+
+test("a dead file present only on the remote is purged, not downloaded", () => {
+  const remote: RemoteState = { "annotations-h1.json": { rev: 3, mtime: 50, size: 20 } };
+  const plan = reconcile([], remote, {}, deadIs("annotations-h1.json"));
+  expect(plan.purges).toEqual(["annotations-h1.json"]);
+  expect(plan.downloads).toEqual([]);
+});
+
+test("a dead file present only locally is purged, not uploaded", () => {
+  const dead = deadIs("annotations-h1.json");
+  const plan = reconcile([L("annotations-h1.json", 100, "h1")], {}, {}, dead);
+  expect(plan.purges).toEqual(["annotations-h1.json"]);
+  expect(plan.uploads).toEqual([]);
+});
+
+test("a dead file both sides hold is purged", () => {
+  const snap: Snapshot = { "threads-h1.json": { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const remote: RemoteState = { "threads-h1.json": { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const plan = reconcile([L("threads-h1.json", 100, "h1")], remote, snap, deadIs("threads-h1.json"));
+  expect(plan.purges).toEqual(["threads-h1.json"]);
+  expect(plan.uploads).toEqual([]);
+  expect(plan.downloads).toEqual([]);
+  expect(plan.converged).toEqual([]);
+});
+
+// The device that was offline all week comes back and republishes the file at a
+// rev nobody has seen. It is still a file the reader deleted.
+test("a dead file whose remote rev is ahead is still purged", () => {
+  const snap: Snapshot = { "threads-h1.json": { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const remote: RemoteState = { "threads-h1.json": { rev: 9, mtime: 900, size: 30, hash: "h9" } };
+  const plan = reconcile([L("threads-h1.json", 100, "h1")], remote, snap, deadIs("threads-h1.json"));
+  expect(plan.purges).toEqual(["threads-h1.json"]);
+  expect(plan.downloads).toEqual([]);
+  expect(plan.merges).toEqual([]);
+});
+
+// Both sides changed it, which is the case that would otherwise be merged and
+// republished — the most expensive way for a deleted file to come back.
+test("a dead file both sides changed is purged rather than merged", () => {
+  const snap: Snapshot = { "annotations-h1.json": { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const remote: RemoteState = {
+    "annotations-h1.json": { rev: 5, mtime: 300, size: 14, hash: "h9" },
+  };
+  const plan = reconcile(
+    [L("annotations-h1.json", 400, "h2")],
+    remote,
+    snap,
+    deadIs("annotations-h1.json"),
+  );
+  expect(plan.merges).toEqual([]);
+  expect(plan.purges).toEqual(["annotations-h1.json"]);
+});
+
+// Nothing left to delete: the snapshot is all that remembers the file, and it
+// goes the way any other entry for a file nothing holds goes.
+test("a dead file gone from both sides only drops its base", () => {
+  const snap: Snapshot = { "threads-h1.json": { rev: 2, mtime: 100, size: 10, hash: "h1" } };
+  const plan = reconcile([], {}, snap, deadIs("threads-h1.json"));
+  expect(plan.purges).toEqual([]);
+  expect(plan.dropBases).toEqual(["threads-h1.json"]);
+});
+
+test("a live file beside a dead one is planned exactly as before", () => {
+  const remote: RemoteState = { "threads-h1.json": { rev: 3, mtime: 50, size: 20 } };
+  const plan = reconcile(
+    [L("annotations-h2.json", 100, "h1")],
+    remote,
+    {},
+    deadIs("threads-h1.json"),
+  );
+  expect(plan.uploads).toEqual([
+    { path: "annotations-h2.json", rev: 1, mtime: 100, size: 10, hash: "h1" },
+  ]);
+  expect(plan.purges).toEqual(["threads-h1.json"]);
+});
+
+// The default predicate is what every existing caller and every test above gets.
+test("with nothing dead, a plan carries no purges", () => {
+  const remote: RemoteState = { a: { rev: 3, mtime: 50, size: 20 } };
+  expect(reconcile([L("b", 100, "h1")], remote, {}).purges).toEqual([]);
+});
