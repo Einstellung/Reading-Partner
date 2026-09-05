@@ -1,0 +1,723 @@
+{
+  "ok": true,
+  "cases": [
+    {
+      "name": "echo-default",
+      "ok": true,
+      "config": {},
+      "frames": 99,
+      "expected": [],
+      "got": [],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "barge-default",
+      "ok": true,
+      "config": {},
+      "frames": 104,
+      "expected": [
+        {
+          "atMs": 36278,
+          "type": "duck"
+        },
+        {
+          "atMs": 36694,
+          "type": "stop"
+        },
+        {
+          "atMs": 45478,
+          "type": "end",
+          "silentMs": 1288
+        }
+      ],
+      "got": [
+        {
+          "atMs": 36278,
+          "type": "duck"
+        },
+        {
+          "atMs": 36694,
+          "type": "stop"
+        },
+        {
+          "atMs": 45478,
+          "silentMs": 1288,
+          "type": "end"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "barge-hangover-800",
+      "ok": true,
+      "config": {
+        "hangoverMs": 800
+      },
+      "frames": 104,
+      "expected": [
+        {
+          "atMs": 36278,
+          "type": "duck"
+        },
+        {
+          "atMs": 36694,
+          "type": "stop"
+        },
+        {
+          "atMs": 42074,
+          "type": "end",
+          "silentMs": 897
+        },
+        {
+          "atMs": 42580,
+          "type": "duck"
+        },
+        {
+          "atMs": 42993,
+          "type": "stop"
+        },
+        {
+          "atMs": 43892,
+          "type": "end",
+          "silentMs": 899
+        },
+        {
+          "atMs": 44076,
+          "type": "duck"
+        },
+        {
+          "atMs": 44490,
+          "type": "resume"
+        }
+      ],
+      "got": [
+        {
+          "atMs": 36278,
+          "type": "duck"
+        },
+        {
+          "atMs": 36694,
+          "type": "stop"
+        },
+        {
+          "atMs": 42074,
+          "silentMs": 897,
+          "type": "end"
+        },
+        {
+          "atMs": 42580,
+          "type": "duck"
+        },
+        {
+          "atMs": 42993,
+          "type": "stop"
+        },
+        {
+          "atMs": 43892,
+          "silentMs": 899,
+          "type": "end"
+        },
+        {
+          "atMs": 44076,
+          "type": "duck"
+        },
+        {
+          "atMs": 44490,
+          "type": "resume"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "echo-loose-50",
+      "ok": true,
+      "config": {
+        "startDb": -50
+      },
+      "frames": 99,
+      "expected": [
+        {
+          "atMs": 18593,
+          "type": "duck"
+        },
+        {
+          "atMs": 19074,
+          "type": "resume"
+        },
+        {
+          "atMs": 19582,
+          "type": "duck"
+        },
+        {
+          "atMs": 19995,
+          "type": "resume"
+        },
+        {
+          "atMs": 23789,
+          "type": "duck"
+        },
+        {
+          "atMs": 24180,
+          "type": "resume"
+        }
+      ],
+      "got": [
+        {
+          "atMs": 18593,
+          "type": "duck"
+        },
+        {
+          "atMs": 19074,
+          "type": "resume"
+        },
+        {
+          "atMs": 19582,
+          "type": "duck"
+        },
+        {
+          "atMs": 19995,
+          "type": "resume"
+        },
+        {
+          "atMs": 23789,
+          "type": "duck"
+        },
+        {
+          "atMs": 24180,
+          "type": "resume"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "echo-loose-50-two-frames",
+      "ok": true,
+      "config": {
+        "startDb": -50,
+        "startFrames": 2
+      },
+      "frames": 99,
+      "expected": [],
+      "got": [],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "echo-loose-55-two-frames",
+      "ok": true,
+      "config": {
+        "startDb": -55,
+        "startFrames": 2
+      },
+      "frames": 99,
+      "expected": [
+        {
+          "atMs": 19582,
+          "type": "duck"
+        },
+        {
+          "atMs": 19995,
+          "type": "resume"
+        }
+      ],
+      "got": [
+        {
+          "atMs": 19582,
+          "type": "duck"
+        },
+        {
+          "atMs": 19995,
+          "type": "resume"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "barge-loose-50-two-frames",
+      "ok": true,
+      "config": {
+        "startDb": -50,
+        "startFrames": 2
+      },
+      "frames": 104,
+      "expected": [
+        {
+          "atMs": 36278,
+          "type": "duck"
+        },
+        {
+          "atMs": 36694,
+          "type": "stop"
+        },
+        {
+          "atMs": 45478,
+          "type": "end",
+          "silentMs": 1288
+        }
+      ],
+      "got": [
+        {
+          "atMs": 36278,
+          "type": "duck"
+        },
+        {
+          "atMs": 36694,
+          "type": "stop"
+        },
+        {
+          "atMs": 45478,
+          "silentMs": 1288,
+          "type": "end"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "echo-guard-45",
+      "ok": true,
+      "config": {
+        "startDb": -45
+      },
+      "frames": 99,
+      "expected": [
+        {
+          "atMs": 18593,
+          "type": "duck"
+        },
+        {
+          "atMs": 19074,
+          "type": "resume"
+        },
+        {
+          "atMs": 23789,
+          "type": "duck"
+        },
+        {
+          "atMs": 24180,
+          "type": "resume"
+        }
+      ],
+      "got": [
+        {
+          "atMs": 18593,
+          "type": "duck"
+        },
+        {
+          "atMs": 19074,
+          "type": "resume"
+        },
+        {
+          "atMs": 23789,
+          "type": "duck"
+        },
+        {
+          "atMs": 24180,
+          "type": "resume"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "echo-guard-45-open",
+      "ok": true,
+      "config": {
+        "startDb": -45,
+        "resumeGuardMs": 0
+      },
+      "frames": 99,
+      "expected": [
+        {
+          "atMs": 18593,
+          "type": "duck"
+        },
+        {
+          "atMs": 19074,
+          "type": "resume"
+        },
+        {
+          "atMs": 23789,
+          "type": "duck"
+        },
+        {
+          "atMs": 24180,
+          "type": "resume"
+        },
+        {
+          "atMs": 24295,
+          "type": "duck"
+        },
+        {
+          "atMs": 24597,
+          "type": "resume"
+        }
+      ],
+      "got": [
+        {
+          "atMs": 18593,
+          "type": "duck"
+        },
+        {
+          "atMs": 19074,
+          "type": "resume"
+        },
+        {
+          "atMs": 23789,
+          "type": "duck"
+        },
+        {
+          "atMs": 24180,
+          "type": "resume"
+        },
+        {
+          "atMs": 24295,
+          "type": "duck"
+        },
+        {
+          "atMs": 24597,
+          "type": "resume"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "vpio-off-barge-default",
+      "ok": true,
+      "config": {},
+      "frames": 85,
+      "expected": [],
+      "got": [],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "vpio-off-barge-60",
+      "ok": true,
+      "config": {
+        "startDb": -60
+      },
+      "frames": 85,
+      "expected": [
+        {
+          "atMs": 34055,
+          "type": "duck"
+        },
+        {
+          "atMs": 34359,
+          "type": "stop"
+        }
+      ],
+      "got": [
+        {
+          "atMs": 34055,
+          "type": "duck"
+        },
+        {
+          "atMs": 34359,
+          "type": "stop"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "vpio-off-echo-60",
+      "ok": true,
+      "config": {
+        "startDb": -60
+      },
+      "frames": 91,
+      "expected": [
+        {
+          "atMs": 22459,
+          "type": "duck"
+        },
+        {
+          "atMs": 22856,
+          "type": "stop"
+        },
+        {
+          "atMs": 24442,
+          "type": "end",
+          "silentMs": 1283
+        },
+        {
+          "atMs": 25842,
+          "type": "duck"
+        },
+        {
+          "atMs": 26356,
+          "type": "stop"
+        },
+        {
+          "atMs": 28642,
+          "type": "end",
+          "silentMs": 1283
+        }
+      ],
+      "got": [
+        {
+          "atMs": 22459,
+          "type": "duck"
+        },
+        {
+          "atMs": 22856,
+          "type": "stop"
+        },
+        {
+          "atMs": 24442,
+          "silentMs": 1283,
+          "type": "end"
+        },
+        {
+          "atMs": 25842,
+          "type": "duck"
+        },
+        {
+          "atMs": 26356,
+          "type": "stop"
+        },
+        {
+          "atMs": 28642,
+          "silentMs": 1283,
+          "type": "end"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "vpio-off-echo-60-two-frames",
+      "ok": true,
+      "config": {
+        "startDb": -60,
+        "startFrames": 2
+      },
+      "frames": 91,
+      "expected": [
+        {
+          "atMs": 22645,
+          "type": "duck"
+        },
+        {
+          "atMs": 23042,
+          "type": "stop"
+        },
+        {
+          "atMs": 24442,
+          "type": "end",
+          "silentMs": 1283
+        },
+        {
+          "atMs": 25964,
+          "type": "duck"
+        },
+        {
+          "atMs": 26356,
+          "type": "stop"
+        },
+        {
+          "atMs": 28642,
+          "type": "end",
+          "silentMs": 1283
+        }
+      ],
+      "got": [
+        {
+          "atMs": 22645,
+          "type": "duck"
+        },
+        {
+          "atMs": 23042,
+          "type": "stop"
+        },
+        {
+          "atMs": 24442,
+          "silentMs": 1283,
+          "type": "end"
+        },
+        {
+          "atMs": 25964,
+          "type": "duck"
+        },
+        {
+          "atMs": 26356,
+          "type": "stop"
+        },
+        {
+          "atMs": 28642,
+          "silentMs": 1283,
+          "type": "end"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "timer-confirm-and-hangover-exact",
+      "ok": true,
+      "config": {},
+      "frames": 34,
+      "expected": [
+        {
+          "atMs": 0,
+          "type": "duck"
+        },
+        {
+          "atMs": 300,
+          "type": "stop"
+        },
+        {
+          "atMs": 1550,
+          "type": "end",
+          "silentMs": 1250
+        }
+      ],
+      "got": [
+        {
+          "atMs": 0,
+          "type": "duck"
+        },
+        {
+          "atMs": 300,
+          "type": "stop"
+        },
+        {
+          "atMs": 1550,
+          "silentMs": 1250,
+          "type": "end"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "timer-resume-and-guard-exact",
+      "ok": true,
+      "config": {},
+      "frames": 45,
+      "expected": [
+        {
+          "atMs": 0,
+          "type": "duck"
+        },
+        {
+          "atMs": 300,
+          "type": "resume"
+        },
+        {
+          "atMs": 600,
+          "type": "duck"
+        },
+        {
+          "atMs": 900,
+          "type": "stop"
+        },
+        {
+          "atMs": 2150,
+          "type": "end",
+          "silentMs": 1250
+        }
+      ],
+      "got": [
+        {
+          "atMs": 0,
+          "type": "duck"
+        },
+        {
+          "atMs": 300,
+          "type": "resume"
+        },
+        {
+          "atMs": 600,
+          "type": "duck"
+        },
+        {
+          "atMs": 900,
+          "type": "stop"
+        },
+        {
+          "atMs": 2150,
+          "silentMs": 1250,
+          "type": "end"
+        }
+      ],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "timer-digital-silence",
+      "ok": true,
+      "config": {},
+      "frames": 21,
+      "expected": [],
+      "got": [],
+      "differences": [],
+      "error": null
+    },
+    {
+      "name": "reset-clears-the-guard-mid-run",
+      "ok": true,
+      "config": {},
+      "frames": 41,
+      "expected": [
+        {
+          "atMs": 0,
+          "type": "duck"
+        },
+        {
+          "atMs": 300,
+          "type": "resume"
+        },
+        {
+          "atMs": 400,
+          "type": "duck"
+        },
+        {
+          "atMs": 700,
+          "type": "stop"
+        },
+        {
+          "atMs": 1950,
+          "type": "end",
+          "silentMs": 1250
+        }
+      ],
+      "got": [
+        {
+          "atMs": 0,
+          "type": "duck"
+        },
+        {
+          "atMs": 300,
+          "type": "resume"
+        },
+        {
+          "atMs": 400,
+          "type": "duck"
+        },
+        {
+          "atMs": 700,
+          "type": "stop"
+        },
+        {
+          "atMs": 1950,
+          "silentMs": 1250,
+          "type": "end"
+        }
+      ],
+      "differences": [],
+      "error": null
+    }
+  ],
+  "failed": 0,
+  "error": null,
+  "timestamp": "2026-09-05T07:55:04.250Z"
+}
