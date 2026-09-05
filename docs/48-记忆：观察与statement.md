@@ -212,5 +212,5 @@ statement 层的检索用同一套方法在 statement 上重新量，量出不�
 
 1. statement 存储、字段、`records` 合并。
 2. statement → 观察的边与反向索引，扩 `links.ts`。
-3. 写入时的 relation。第一版只做 `same-as`（追加锚点不新建）和 `predicted-by`，`contradicts` 边记下来不做动作。
+3. 写入时的 relation。`same-as`（追加锚点不新建）、`predicted-by`、`contradicts` 三种都落边；边上的后续动作（第二次冲突写新 statement、降权）留给 dream。
 4. append-only 使用日志，只记不用。
