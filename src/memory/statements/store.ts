@@ -14,7 +14,9 @@
 //
 // Dates are never taken from the clock here. Every write recomputes them from
 // the evidence, and evidence that cannot be dated is refused rather than
-// silently stamped with today — see dates.ts.
+// silently stamped with today — see dates.ts. The single exception is
+// `confirmedOn`, and it is a supplied day rather than a read of the clock:
+// see confirmedSpan.
 
 import {
   anchorSpan,
@@ -51,6 +53,8 @@ export interface StatementIo {
   newId?(): string;
 }
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 // 16 hex, the width every other id in the app has.
 function mintId(): string {
   return `s-${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
@@ -79,6 +83,25 @@ function appendUnique(existing: readonly string[], added: readonly string[]): st
     out.push(value);
   }
   return out;
+}
+
+// The one date a caller is allowed to supply, and the narrowest opening that
+// makes the profile carry-over possible: a line the reader kept from the old
+// user-profile.md points at no message, so there is nothing to date it from and
+// the day they kept it is the only date there is.
+//
+// Three conditions, all of them: the reader is the author, there is no evidence
+// at all, and a day was given. A dream can never take this route — a claim it
+// made with nothing behind it is the exact thing the computed dates refuse — and
+// evidence, when there is any, always wins, because it dates the statement
+// better than the day someone happened to press a button.
+function confirmedSpan(input: CreateStatementInput, evidence: readonly string[]): DaySpan | null {
+  if (input.confirmedOn === undefined) return null;
+  if (input.author !== "reader" || evidence.length > 0) return null;
+  if (!DAY.test(input.confirmedOn)) {
+    throw new Error(`confirmedOn is not a day: ${input.confirmedOn}`);
+  }
+  return { first: input.confirmedOn, last: input.confirmedOn };
 }
 
 export function createStatementStore(io: StatementIo): StatementStore {
@@ -130,7 +153,7 @@ export function createStatementStore(io: StatementIo): StatementStore {
 
   async function mint(input: CreateStatementInput): Promise<Statement> {
     const evidence = appendUnique([], input.evidence);
-    const span = await spanOfAll(evidence);
+    const span = confirmedSpan(input, evidence) ?? (await spanOfAll(evidence));
     return {
       id: newId(),
       kind: input.kind,

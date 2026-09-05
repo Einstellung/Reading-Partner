@@ -73,4 +73,12 @@ export interface CreateStatementInput {
   author: StatementAuthor;
   evidence: string[];
   expectedIntervalDays?: number;
+  // The day the reader confirmed this, "YYYY-MM-DD", and the only date a caller
+  // may hand in. It is read only when the reader is the author and there is no
+  // evidence at all — a line carried over from the old profile points at no
+  // message, and the day they kept it is the only date there is. Ignored the
+  // moment there is evidence, which dates the statement better, and never read
+  // for a dream: a dream's claim with no evidence behind it is the exact thing
+  // the computed dates exist to refuse (store.ts).
+  confirmedOn?: string;
 }
