@@ -66,10 +66,18 @@ class StopSpeakingArgs: Decodable {
     let reason: String?
 }
 
+/// Arguments of `set_speech_volume`: the playback level, 0..1.
+class SpeechVolumeArgs: Decodable {
+    let value: Double
+}
+
 class VoicePlugin: Plugin {
     /// The live run, if any. Touched from the IPC dispatch queue and from the
     /// Tasks the commands spawn, so every access goes through the lock.
     private var run: DictationRun?
+    /// The live call, if any. Same lock: a hold and a call are one microphone,
+    /// and whichever is asked for second is refused while the first is live.
+    private var conversation: ConversationRun?
     private let runLock = NSLock()
 
     /// The tail of the serial chain. Each command appends itself and waits for
@@ -115,6 +123,21 @@ class VoicePlugin: Plugin {
             guard let self = self else {
                 invoke.reject("Dictation is not available.")
                 return
+            }
+
+            // A call has the microphone. Refused rather than replaced: the
+            // call is the user's, and a hold that silently ended it would look
+            // like a call that dropped. A call that is already on its way down
+            // — an interruption's stop is not on this chain — is waited out
+            // instead, so the stack this hold builds is not the one that stop
+            // is about to release.
+            if let call = self.takeConversation() {
+                if call.isLive {
+                    self.setConversation(call)
+                    invoke.reject("A voice call is in progress. End it before holding to talk.")
+                    return
+                }
+                await call.stop(reason: "released")
             }
 
             // A start that arrives with a run still live replaces it. The chain
@@ -202,6 +225,10 @@ class VoicePlugin: Plugin {
                 NSLog("RP-DICT voice mode ended with a run still live; stopping it")
                 await previous.stop()
             }
+            if let call = self.takeConversation() {
+                NSLog("RP-CALL voice mode ended with a call still live; stopping it")
+                await call.stop(reason: "released")
+            }
             // The voice goes with the microphone: they are one engine, and an
             // engine about to be torn down cannot go on speaking through.
             SpeechOut.shared.stop(reason: "released")
@@ -236,6 +263,10 @@ class VoicePlugin: Plugin {
                 NSLog("RP-DICT indicator probe while a run was live; stopping the old one")
                 await previous.stop()
             }
+            if let call = self.takeConversation() {
+                NSLog("RP-CALL indicator probe while a call was live; stopping it")
+                await call.stop(reason: "released")
+            }
             do {
                 let state = try AudioFront.shared.setIndicatorProbe(stage)
                 invoke.resolve(state)
@@ -243,6 +274,85 @@ class VoicePlugin: Plugin {
                 invoke.reject(DictationError.describe(error))
             }
         }
+    }
+
+    // MARK: - The call
+
+    /// Open the microphone for a full-duplex call and keep it open until
+    /// `stop_conversation` or iOS ends it (ConversationRun.swift). Same
+    /// arguments as `start_dictation`, same absence rules.
+    ///
+    /// Refused while a hold is live; a call started over a call replaces it.
+    @objc(start_conversation:)
+    public func startConversation(_ invoke: Invoke) {
+        let args = try? invoke.parseArgs(StartDictationArgs.self)
+        let locale = args?.locale
+        let hints = args?.contextualStrings ?? []
+
+        serial { [weak self] in
+            guard let self = self else {
+                invoke.reject("The voice call is not available.")
+                return
+            }
+            if self.hasRun() {
+                invoke.reject("Hold-to-talk is in progress. Let go of the button before starting a call.")
+                return
+            }
+            if let previous = self.takeConversation() {
+                NSLog("RP-CALL start while a call was live; stopping the old one")
+                await previous.stop(reason: "released")
+            }
+
+            let call = ConversationRun { [weak self] event in
+                self?.emitConversation(event)
+            }
+            do {
+                try await call.start(locale: locale, contextualStrings: hints)
+            } catch {
+                await call.stop(reason: "failed")
+                invoke.reject(DictationError.describe(error))
+                return
+            }
+            self.setConversation(call)
+            invoke.resolve()
+            // Only now, for the reason start_dictation waits: the webview
+            // subscribes before it invokes, and `state { running: true }` is
+            // the first thing it should hear.
+            call.beginEmitting()
+        }
+    }
+
+    /// End the call. The player is not stopped — it outlives the call — but
+    /// the detector goes, and with it any duck it was holding. Resolves on no
+    /// call at all, like the other stops here.
+    @objc(stop_conversation:)
+    public func stopConversation(_ invoke: Invoke) {
+        serial { [weak self] in
+            guard let self = self, let call = self.takeConversation() else {
+                invoke.resolve()
+                return
+            }
+            await call.stop(reason: "closed")
+            invoke.resolve()
+        }
+    }
+
+    /// The playback level, 0..1. The native side ducks and restores on its own
+    /// at the verdict; this is the webview naming the two levels (SpeechOut).
+    @objc(set_speech_volume:)
+    public func setSpeechVolume(_ invoke: Invoke) {
+        let args: SpeechVolumeArgs
+        do {
+            args = try invoke.parseArgs(SpeechVolumeArgs.self)
+        } catch {
+            invoke.reject("That volume did not parse: \(DictationError.describe(error))")
+            return
+        }
+        // Not on the chain: it touches the player and nothing else, and a
+        // duck's volume queued behind a start still downloading a model would
+        // land after the resume and be filed as the full level.
+        SpeechOut.shared.setVolume(args.value)
+        invoke.resolve()
     }
 
     // MARK: - Speaking
@@ -500,6 +610,16 @@ class VoicePlugin: Plugin {
         }
     }
 
+    /// The call's own event, on a name of its own, for the reason `speech` is:
+    /// the dictation reducer's vocabulary is closed. Encodable rather than a
+    /// JSObject because `cut` and `range` are nested.
+    private func emitConversation(_ event: ConversationEvent) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            try? self.trigger("conversation", data: event)
+        }
+    }
+
     // MARK: - Run bookkeeping
 
     private func setRun(_ value: DictationRun?) {
@@ -513,6 +633,29 @@ class VoicePlugin: Plugin {
         defer { runLock.unlock() }
         let current = run
         run = nil
+        return current
+    }
+
+    /// Whether a hold is parked here at all. A run the backstop or an
+    /// interruption already ended still counts until its stop or cancel
+    /// arrives, which the composer always sends.
+    private func hasRun() -> Bool {
+        runLock.lock()
+        defer { runLock.unlock() }
+        return run != nil
+    }
+
+    private func setConversation(_ value: ConversationRun?) {
+        runLock.lock()
+        conversation = value
+        runLock.unlock()
+    }
+
+    private func takeConversation() -> ConversationRun? {
+        runLock.lock()
+        defer { runLock.unlock() }
+        let current = conversation
+        conversation = nil
         return current
     }
 }

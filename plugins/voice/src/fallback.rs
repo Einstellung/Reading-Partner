@@ -35,6 +35,28 @@ impl<R: Runtime> Voice<R> {
         Err(Error::Unsupported(UNSUPPORTED.to_string()))
     }
 
+    /// Rejecting, like the hold's start and for the same reason: a call that
+    /// answers "fine" and then never emits is a webview waiting on a
+    /// microphone nobody opened.
+    pub async fn start_conversation(
+        &self,
+        _locale: Option<String>,
+        _contextual_strings: Option<Vec<String>>,
+    ) -> crate::Result<()> {
+        Err(Error::Unsupported(UNSUPPORTED.to_string()))
+    }
+
+    /// Silence: ending a call that never started is what a teardown asks for.
+    pub async fn stop_conversation(&self) -> crate::Result<()> {
+        Ok(())
+    }
+
+    /// Silence: there is no player to set a level on, and the webview sends
+    /// this on every duck and resume.
+    pub async fn set_speech_volume(&self, _value: f64) -> crate::Result<()> {
+        Ok(())
+    }
+
     /// Nothing to let go of, and saying so would be noise: the composer calls
     /// this whenever voice mode ends, on every host that reaches the code.
     pub async fn release_microphone(&self) -> crate::Result<()> {

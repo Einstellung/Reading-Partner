@@ -1,6 +1,6 @@
 ## Default Permission
 
-Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, and interrupt or bench the spoken half.
+Dictate on the device: start, stop and cancel a hold, let the microphone go when voice mode ends, subscribe to the dictation event, park the audio stack for the indicator probe, hand over the speech key saved in Settings, speak a turn one sentence at a time, interrupt or bench the spoken half, and open, close and set the volume of a full-duplex call.
 
 #### This default permission set includes the following:
 
@@ -18,6 +18,9 @@ Dictate on the device: start, stop and cancel a hold, let the microphone go when
 - `allow-speak-push`
 - `allow-speak-close`
 - `allow-speak-stop`
+- `allow-start-conversation`
+- `allow-stop-conversation`
+- `allow-set-speech-volume`
 - `allow-register-listener`
 - `allow-remove-listener`
 
@@ -182,6 +185,32 @@ Enables the set_speech_key command without any pre-configured scope.
 <td>
 
 Denies the set_speech_key command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-set-speech-volume`
+
+</td>
+<td>
+
+Enables the set_speech_volume command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-set-speech-volume`
+
+</td>
+<td>
+
+Denies the set_speech_volume command without any pre-configured scope.
 
 </td>
 </tr>
@@ -371,6 +400,32 @@ Denies the speech_report command without any pre-configured scope.
 <tr>
 <td>
 
+`voice:allow-start-conversation`
+
+</td>
+<td>
+
+Enables the start_conversation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-start-conversation`
+
+</td>
+<td>
+
+Denies the start_conversation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `voice:allow-start-dictation`
 
 </td>
@@ -390,6 +445,32 @@ Enables the start_dictation command without any pre-configured scope.
 <td>
 
 Denies the start_dictation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:allow-stop-conversation`
+
+</td>
+<td>
+
+Enables the stop_conversation command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`voice:deny-stop-conversation`
+
+</td>
+<td>
+
+Denies the stop_conversation command without any pre-configured scope.
 
 </td>
 </tr>

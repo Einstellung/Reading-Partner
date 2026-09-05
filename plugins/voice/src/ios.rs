@@ -38,6 +38,12 @@ struct StartDictationArgs {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+struct SetSpeechVolumeArgs {
+    value: f64,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct IndicatorProbeArgs {
     stage: String,
 }
@@ -72,6 +78,39 @@ impl<R: Runtime> Voice<R> {
                     contextual_strings,
                 },
             )
+            .await
+            .map_err(Into::into)
+    }
+
+    /// The call takes the same two arguments as a hold, so it borrows the
+    /// hold's struct: Swift decodes both with `StartDictationArgs`.
+    pub async fn start_conversation(
+        &self,
+        locale: Option<String>,
+        contextual_strings: Option<Vec<String>>,
+    ) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async(
+                "start_conversation",
+                StartDictationArgs {
+                    locale,
+                    contextual_strings,
+                },
+            )
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn stop_conversation(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("stop_conversation", ())
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn set_speech_volume(&self, value: f64) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin_async("set_speech_volume", SetSpeechVolumeArgs { value })
             .await
             .map_err(Into::into)
     }

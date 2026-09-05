@@ -70,7 +70,7 @@ struct DictationError: Error {
 /// abandon an `await` on another task's completion — cancelling the waiter does
 /// not return it — so the deadline resolves the wait instead of racing it: a
 /// timer signals the same latch, and whoever gets there first wakes everybody.
-private final class Gate {
+final class Gate {
     private let lock = NSLock()
     private var opened = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
