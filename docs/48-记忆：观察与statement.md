@@ -153,6 +153,7 @@ supersede 一次可以指多条：两条 statement 说同一件事就合成一�
 - statement 存成带 id 的 JSON 数组不是 JSONL：JSONL 的身份是整行，而 statement 会被刷新，改一行会被当成两条留下。进同步范围，合并策略 `records`，加进 `RECORD_FILES` 一行。
 - dream 只在 PC 上写。iPad 那一侧只写读者自己说的。
 - 使用日志按设备分文件，各写各的，读取取并集。
+- 删一本书不碰 statement。观察按 bookId 挑着删，被引用为证据的那些跳过，见 [50](./50-删除.md)。
 
 ## 检索：待数据，先不做
 
