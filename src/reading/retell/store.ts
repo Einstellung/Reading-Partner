@@ -19,6 +19,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { requestRemotePurge } from "../../platform/sync";
 import { deleteRehearsalsForRetell } from "../rehearsal/store";
 import {
   newRetell,
@@ -144,7 +145,18 @@ export function recordRetellDecision(
 // file is left where it is — the thread store owns it — and so is any deck an
 // older build wrote under slides/<retellId>/; an orphan of either is inert. The rehearsals are not — they are a list of runs of a retell that no
 // longer exists, and nothing will ever open them again.
+//
+// retell-<id>.json is in sync range, and a sync propagates no file deletion of
+// its own: deleted here alone it is downloaded back on the next pass (docs/13,
+// pitfall 208). So the remote copy is asked for first and the local file goes
+// after — the other order loses the path if the app dies between the two, and
+// the queue survives on disk until a pass has taken it out of Drive.
 export async function deleteRetell(retellId: string): Promise<void> {
+  try {
+    await requestRemotePurge([retellFile(retellId)]);
+  } catch (e) {
+    console.warn("failed to queue a retell for remote deletion", retellId, e);
+  }
   try {
     await appData.remove(retellFile(retellId));
   } catch (e) {
