@@ -15,7 +15,7 @@
 // reader's own statements — so pressing the button twice writes nothing twice,
 // and so a line that was kept on another device does not reappear here.
 
-import type { ProfileGuess } from "../../../memory/profile/guess";
+import { GUESS_HEADING, parseGuessLine, type ProfileGuess } from "../../../memory/profile/guess";
 import type { Statement, StatementKind } from "../../../memory/statements/types";
 
 export type ProfileLineSource = "declared" | "guess";
@@ -87,6 +87,15 @@ export function declaredLines(declared: string): string[] {
   for (const raw of declared.split("\n")) {
     const line = raw.trim();
     if (line === "" || RULE.test(line) || COMMENT.test(line)) continue;
+    // The guess section, when its markers did not parse: splitProfile then hands
+    // the whole document back as declared, which is the safe reading for a
+    // writer and would otherwise show the AI's entries here twice over — once
+    // mangled with their basis and date, once properly under "The AI guessed".
+    if (line === GUESS_HEADING) {
+      section = null;
+      continue;
+    }
+    if (parseGuessLine(line)) continue;
     const name = sectionName(line);
     if (name !== null) {
       section = name;
