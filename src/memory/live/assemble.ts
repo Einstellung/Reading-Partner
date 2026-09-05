@@ -14,11 +14,28 @@
 import { listTopics } from "../../platform/app/topics";
 import { readObservationIndex } from "./live";
 import { loadProfile } from "../profile/profile";
+import { listStatements } from "./statements";
 import type { ObservationIndexEntry, ObservationType } from "../observations/types";
+import type { Statement } from "../statements/types";
 
 // The identity document, verbatim (empty string when the user has no profile yet).
+// The reading side no longer reads it — what it knows about the reader comes
+// from the statements below (docs/48). The info side still does, until its own
+// redesign.
 export function assembleIdentity(): Promise<string> {
   return loadProfile();
+}
+
+// Every statement there is, in file order. Never throws: a prompt is assembled
+// with what could be read, and a store that will not open costs the memory
+// paragraph rather than the turn.
+export async function assembleStatements(): Promise<Statement[]> {
+  try {
+    return await listStatements();
+  } catch (e) {
+    console.warn("failed to read statements", e);
+    return [];
+  }
 }
 
 // Default character budget for the reading-episode signal. A hint, not a hard

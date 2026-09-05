@@ -17,7 +17,7 @@ import type { Rung } from "../budget";
 
 export type ReadingReductionId =
   | "figure-catalog"
-  | "reader-profile"
+  | "reader-statements"
   | "notes-overview"
   | "booklist-thin"
   | "observation-trim"
@@ -31,7 +31,7 @@ export type ReadingReductionId =
 export const READING_LADDER: readonly Rung<ReadingReductionId>[] = [
   // tier 1: redundancy.
   { id: "figure-catalog" },
-  { id: "reader-profile" },
+  { id: "reader-statements" },
   // Both products of the notes pass: the reader's whole-book outline and the
   // chapter spine (docs/09). They go together because they are the same
   // material at two grains, and because what they are for — orientation and
