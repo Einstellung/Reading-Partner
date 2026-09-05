@@ -64,6 +64,9 @@ export interface EmbedViewStats {
   zoom: number;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  // False while the zoom already is the layout's own lock (layout-modes.
+  // atResetZoom) — a reset would move nothing.
+  canZoomReset: boolean;
   layout: EmbedLayout;
 }
 
@@ -75,8 +78,10 @@ export interface EmbedPdfHandle {
   setColor(color: string): void;
   zoomIn(): void;
   zoomOut(): void;
-  fitWidth(): void;
-  fitPage(): void;
+  // Back to the fit the current layout locks to — fit-width vertically,
+  // fit-page in the paged strip, where it also re-centres the page and takes
+  // the gesture machine out of pan mode.
+  zoomReset(): void;
   // Switch between vertical continuous scroll and paged horizontal flip.
   setLayout(mode: EmbedLayout): void;
   navigateToPage(pageIndex: number): void;

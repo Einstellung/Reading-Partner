@@ -144,7 +144,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
     (h: EmbedPdfHandle): ViewInstance => ({
       zoomIn: () => h.zoomIn(),
       zoomOut: () => h.zoomOut(),
-      zoomReset: () => h.fitWidth(),
+      zoomReset: () => h.zoomReset(),
       setLayout: (mode) => h.setLayout(mode),
       navigate: (target) => {
         if (target.annotationID) h.navigateToAnnotation(target.annotationID);
@@ -230,7 +230,7 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
             pagesCount: s.pagesCount,
             canZoomIn: s.canZoomIn,
             canZoomOut: s.canZoomOut,
-            canZoomReset: true,
+            canZoomReset: s.canZoomReset,
             layout: s.layout,
           })
         }
