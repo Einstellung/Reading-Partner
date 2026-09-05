@@ -13,9 +13,11 @@ import {
   getLastDistillation,
   getObservationAdapter,
   listObservationConflicts,
+  listStatements,
   onObservationChange,
   type Observation,
   type ObservationConflict,
+  type Statement,
 } from "../../../../memory";
 import ObservationPanel from "../../reader/ObservationPanel";
 
@@ -27,11 +29,15 @@ export default function ObservationSection({ topicId }: { topicId: string }) {
   // by a distillation, so nothing notifies this view when one appears; opening
   // the section is when it is looked for, which is also when it can be seen.
   const [conflicts, setConflicts] = useState<ObservationConflict[]>([]);
+  // Not keyed to the topic: a statement is about the reader (docs/48). Read on
+  // the same pass all the same, since what writes one is a conversation, which
+  // is also what writes an observation.
+  const [statements, setStatements] = useState<Statement[]>([]);
 
   const refresh = useCallback(() => {
     void (async () => {
       try {
-        const [list, last, forked] = await Promise.all([
+        const [list, last, forked, held] = await Promise.all([
           getObservationAdapter(topicId).listObservations(),
           getLastDistillation(topicId),
           // Caught on its own so an unreadable directory listing costs the
@@ -42,10 +48,17 @@ export default function ObservationSection({ topicId }: { topicId: string }) {
             console.warn("failed to read observation conflict copies", e);
             return [];
           }),
+          // Caught on its own too: an unreadable statement file costs the
+          // "About you" block, not the observations beside it.
+          listStatements().catch((e): Statement[] => {
+            console.warn("failed to read statements", e);
+            return [];
+          }),
         ]);
         setEntries(list);
         setLastDistilledAt(last);
         setConflicts(forked);
+        setStatements(held);
       } catch (e) {
         console.warn("failed to load observations", e);
         setEntries([]);
@@ -57,6 +70,7 @@ export default function ObservationSection({ topicId }: { topicId: string }) {
     setEntries(null);
     setLastDistilledAt(null);
     setConflicts([]);
+    setStatements([]);
     refresh();
   }, [refresh]);
 
@@ -72,6 +86,7 @@ export default function ObservationSection({ topicId }: { topicId: string }) {
   return (
     <ObservationPanel
       entries={entries}
+      statements={statements}
       lastDistilledAt={lastDistilledAt}
       conflicts={conflicts}
     />

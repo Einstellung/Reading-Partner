@@ -23,7 +23,7 @@ function copy(over: Partial<ObservationConflict> = {}): ObservationConflict {
 
 test("a topic with no conflict copies says nothing about them", () => {
   const html = renderToStaticMarkup(
-    <ObservationPanel entries={[]} lastDistilledAt={null} conflicts={[]} />,
+    <ObservationPanel entries={[]} statements={[]} lastDistilledAt={null} conflicts={[]} />,
   );
   expect(html).not.toContain("conflict");
 });
@@ -32,6 +32,7 @@ test("the notice counts the copies and names where they are", () => {
   const html = renderToStaticMarkup(
     <ObservationPanel
       entries={[]}
+      statements={[]}
       lastDistilledAt={null}
       conflicts={[copy(), copy({ path: "memory-topic-1/m-99887766.conflict-cafebabe.md" })]}
     />,
@@ -44,7 +45,7 @@ test("the notice counts the copies and names where they are", () => {
 
 test("one copy is one copy", () => {
   const html = renderToStaticMarkup(
-    <ObservationPanel entries={[]} lastDistilledAt={null} conflicts={[copy()]} />,
+    <ObservationPanel entries={[]} statements={[]} lastDistilledAt={null} conflicts={[copy()]} />,
   );
   expect(html).toContain("1 conflict copy");
   expect(html).not.toContain("1 conflict copies");
@@ -54,6 +55,7 @@ test("a copy that would not parse still shows its path", () => {
   const html = renderToStaticMarkup(
     <ObservationPanel
       entries={[]}
+      statements={[]}
       lastDistilledAt={null}
       conflicts={[copy({ summary: "", body: "" })]}
     />,

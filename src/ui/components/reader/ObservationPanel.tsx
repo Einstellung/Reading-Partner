@@ -4,8 +4,9 @@
 // pattern as the prep panel.
 
 import { useState } from "react";
-import type { Observation, ObservationConflict, ObservationType } from "../../../memory";
+import type { Observation, ObservationConflict, ObservationType, Statement } from "../../../memory";
 import { CitationContext, Markdown } from "../markdown/Markdown";
+import { statementRows, type StatementRow } from "./statements-view";
 
 const TYPE_STYLE: Record<ObservationType, string> = {
   "reading-position": "bg-sky-100 text-sky-700",
@@ -17,14 +18,60 @@ const TYPE_STYLE: Record<ObservationType, string> = {
   correction: "bg-red-100 text-red-700",
 };
 
+const KIND_STYLE: Record<Statement["kind"], string> = {
+  profile: "bg-indigo-100 text-indigo-700",
+  concern: "bg-fuchsia-100 text-fuchsia-700",
+};
+
 interface ObservationPanelProps {
   // null while loading; [] when the topic has no observations yet.
   entries: Observation[] | null;
+  // What is held to be true about the reader (docs/48). Not per topic — a
+  // statement is about the reader, not about what they were reading when it was
+  // concluded — so the same list shows under every topic.
+  statements: Statement[];
   lastDistilledAt: number | null;
   // Versions sync kept when two devices changed the same observation. Read-only
   // here on purpose: this panel exists so the reader knows a copy is there and
   // can find it, not so they can resolve it — resolving is a conversation.
   conflicts: ObservationConflict[];
+}
+
+// What is held to be true about the reader, read-only like everything else in
+// this panel: a wrong one is corrected by saying so in a conversation, which
+// writes a statement that supersedes it and takes it off this list. A delete
+// button would be the one way to lose the reasoning with the claim.
+//
+// Nothing at all when there are none — a heading over an empty list is a
+// statement about the reader too, and not one anybody made.
+function StatementList({ rows }: { rows: StatementRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="border-b border-border-subtle px-3 py-2">
+      <div className="text-[13px] text-foreground">About you</div>
+      <ul className="m-0 mt-2 list-none space-y-2.5 p-0">
+        {rows.map((row) => (
+          <li key={row.id}>
+            <div className="text-[13px] leading-snug text-foreground">{row.text}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] leading-none ${KIND_STYLE[row.kind]}`}
+              >
+                {row.kind}
+              </span>
+              <span className="text-[11px] text-neutral-400">{row.author}</span>
+              <span className="text-[11px] text-neutral-400">
+                last supported {row.lastSupported}
+              </span>
+              {row.evidence !== "" && (
+                <span className="text-[11px] text-neutral-400">from {row.evidence}</span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function ObservationRow({ entry }: { entry: Observation }) {
@@ -95,9 +142,11 @@ function ConflictNotice({ conflicts }: { conflicts: ObservationConflict[] }) {
 
 export default function ObservationPanel({
   entries,
+  statements,
   lastDistilledAt,
   conflicts,
 }: ObservationPanelProps) {
+  const rows = statementRows(statements);
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border-subtle px-3 py-2">
@@ -111,17 +160,20 @@ export default function ObservationPanel({
 
       <ConflictNotice conflicts={conflicts} />
 
-      <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto p-0">
-        {entries === null && (
-          <li className="px-3 py-4 text-center text-sm text-neutral-400">Loading…</li>
-        )}
-        {entries !== null && entries.length === 0 && (
-          <li className="px-3 py-4 text-center text-sm text-neutral-400">
-            Nothing observed yet. Observations are distilled when a conversation ends.
-          </li>
-        )}
-        {entries?.map((e) => <ObservationRow key={e.id} entry={e} />)}
-      </ul>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <StatementList rows={rows} />
+        <ul className="m-0 list-none p-0">
+          {entries === null && (
+            <li className="px-3 py-4 text-center text-sm text-neutral-400">Loading…</li>
+          )}
+          {entries !== null && entries.length === 0 && (
+            <li className="px-3 py-4 text-center text-sm text-neutral-400">
+              Nothing observed yet. Observations are distilled when a conversation ends.
+            </li>
+          )}
+          {entries?.map((e) => <ObservationRow key={e.id} entry={e} />)}
+        </ul>
+      </div>
 
       <div className="border-t border-border-subtle px-3 py-2 text-[11px] text-neutral-400">
         Observations are maintained by the AI. If one is off, say so in a conversation.

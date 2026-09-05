@@ -209,6 +209,7 @@ export {
 // The statement layer on top of the observations (docs/48): what is held to be
 // true about the reader, pointing back at the observations it rests on.
 export type { Statement, StatementAuthor, StatementKind } from "./statements/types";
+export { isObservationId } from "./statements/dates";
 export { listStatements } from "./live/statements";
 export {
   dropCoveredObservations,
