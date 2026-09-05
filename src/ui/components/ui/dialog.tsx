@@ -3,7 +3,11 @@
 // - the centred content takes OVERLAY_SAFE.centered and renders <OverlayLayer />,
 //   the two things everything portalled out of this directory has to do
 //   (ui/overlay.tsx). The generated `z-50` is gone from both contents and the
-//   overlay: the layer comes from OVERLAY_Z, so a caller never invents one.
+//   overlay: the layer comes from the scale, so a caller never invents one, and
+//   which rung of it comes from the surface the dialog was opened from — a
+//   dialog opened from one of the hand-placed floaters has to cover that floater
+//   (useDialogLayer, docs/pitfall/208). The full-screen page is the exception:
+//   it is a surface in its own right and names its own rung.
 // - the width is the caller's, and it is a `w-*`. max-width belongs to the
 //   safe-area utility alone — two of them at equal specificity would be settled
 //   by the order Tailwind happens to emit them in. The generated `sm:max-w-lg`
@@ -24,7 +28,7 @@ import * as React from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/ui/components/lib/utils"
-import { OVERLAY_SAFE, OVERLAY_Z, OverlayLayer } from "@/ui/components/ui/overlay"
+import { OVERLAY_SAFE, OVERLAY_Z, OverlayLayer, useDialogLayer } from "@/ui/components/ui/overlay"
 
 function Dialog({
   ...props
@@ -56,13 +60,17 @@ const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentProps<typeof DialogPrimitive.Overlay>
 >(function DialogOverlay({ className, ...props }, ref) {
+  // The backdrop asks the surface itself instead of taking the content's layer
+  // as a prop: the two are siblings under the portal, and a dim sheet on a lower
+  // rung than the box it dims is the same bug one step smaller.
+  const layer = useDialogLayer()
   return (
     <DialogPrimitive.Overlay
       ref={ref}
       data-slot="dialog-overlay"
       className={cn(
         "fixed inset-0 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
-        OVERLAY_Z.dialog,
+        layer,
         className
       )}
       {...props}
@@ -74,6 +82,7 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentProps<typeof DialogPrimitive.Content>
 >(function DialogContent({ className, children, ...props }, ref) {
+  const layer = useDialogLayer()
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -82,7 +91,7 @@ const DialogContent = React.forwardRef<
         data-slot="dialog-content"
         className={cn(
           "fixed top-[50%] left-[50%] grid w-full translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
-          OVERLAY_Z.dialog,
+          layer,
           OVERLAY_SAFE.centered,
           className
         )}

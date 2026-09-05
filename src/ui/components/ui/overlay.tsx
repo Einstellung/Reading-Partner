@@ -24,14 +24,24 @@
 // and unmounts with the portalled content rather than with the trigger.
 //
 // An anchored one takes a fourth thing, useOverlaySafePadding(), because half of
-// its clamping is Radix's and Radix's half is JS.
+// its clamping is Radix's and Radix's half is JS. A dialog takes a fourth thing
+// too, useDialogLayer(), because which rung it belongs on depends on the surface
+// it was opened from and only that surface knows (OverlaySurface).
 //
 // One shape is not portalled — the full-screen page, which has to stay inside
 // the phone shell's sliding surface (ui/dialog.tsx). It still takes all of the
 // above: it is still fixed, so the shell's padding still misses it, and a press
 // on it still has to stop belonging to whatever is underneath.
 
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { pushOverlayLayer } from "@/ui/components/base/overlay-layer";
 import {
@@ -61,10 +71,52 @@ export const OVERLAY_Z = {
   floating: "z-[1000]",
   // A control that has to stay reachable over those.
   floatingTop: "z-[1001]",
+  // A dialog raised over one of those floaters, the same relation pageDialog has
+  // to page. Above floatingTop as well: a dialog is modal, and a control left
+  // painting over a modal box is a control the reader can reach while it is up.
+  floatingDialog: "z-[1050]",
   // Anchored to a trigger: Select and DropdownMenu. Above the whole scale,
   // because a trigger can sit on any surface in it.
   anchored: "z-[1100]",
 } as const;
+
+// Which rung the surface a dialog is opened from stands on.
+//
+// A modal dialog cannot work this out for itself. It is portalled to <body>, so
+// its DOM position says nothing about what opened it, and the ladder above is
+// ordered by surface, not by shape: a confirm opened from the call bubble
+// (OVERLAY_Z.floating) sits 950 layers under the thing it was opened from, which
+// is how a Delete confirmation ended up half-covered with its Cancel unreachable
+// (docs/pitfall/208). So the surface says which rung it is on, and every dialog
+// inside it — now and later — reads that off the context rather than each call
+// site remembering to raise itself.
+export type OverlaySurfaceLayer = "base" | "floating";
+
+const DIALOG_LAYER: Record<OverlaySurfaceLayer, string> = {
+  base: OVERLAY_Z.dialog,
+  floating: OVERLAY_Z.floatingDialog,
+};
+
+const OverlaySurfaceContext = createContext<OverlaySurfaceLayer>("base");
+
+// Wraps a hand-placed floater's whole subtree, triggers included. Renders no DOM
+// of its own, and crosses portals: context follows the React tree, which is
+// where the trigger and the portalled content are still parent and child.
+export function OverlaySurface({
+  layer,
+  children,
+}: {
+  layer: OverlaySurfaceLayer;
+  children: ReactNode;
+}) {
+  return (
+    <OverlaySurfaceContext.Provider value={layer}>{children}</OverlaySurfaceContext.Provider>
+  );
+}
+
+export function useDialogLayer(): string {
+  return DIALOG_LAYER[useContext(OverlaySurfaceContext)];
+}
 
 export const OVERLAY_SAFE = {
   // Centred in the viewport: AlertDialog and Dialog.

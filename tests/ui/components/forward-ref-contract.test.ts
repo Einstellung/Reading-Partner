@@ -74,7 +74,8 @@ const MODULES: Record<string, Record<string, unknown>> = {
 };
 
 // The exports that render nothing of their own, so there is no node for a ref to
-// reach: Radix roots (context and state only), portals, and the layer counter.
+// reach: Radix roots (context and state only), portals, the layer counter, and
+// the surface that tells the dialogs inside it which rung they stand on.
 // Anything else that is a component and not a forwardRef is the bug.
 const NO_DOM = new Set([
   "AlertDialog",
@@ -84,6 +85,7 @@ const NO_DOM = new Set([
   "DropdownMenu",
   "DropdownMenuPortal",
   "OverlayLayer",
+  "OverlaySurface",
   "Select",
   "ToastProvider",
 ]);
