@@ -123,6 +123,52 @@ export function observation(over: Partial<Observation> & { id: string }): Observ
   };
 }
 
+// The statement file as a night that ran before the migration left it: evidence
+// naming the narrow observation ids, one message anchor beside them, and one
+// statement already superseded by another. The wide id on the third one is what
+// a second run has to leave alone.
+export function statementsFile(): string {
+  return JSON.stringify(
+    {
+      statements: [
+        {
+          id: "s-0000000000000001",
+          kind: "profile",
+          text: "reads past the maths",
+          author: "dream",
+          evidence: ["m-aaaaaa01", `${LESSON}:${TS_LESSON}`, "m-aaaaaa02"],
+          contradictedBy: ["m-aaaaaa03"],
+          established: "2026-08-01",
+          lastSupported: "2026-08-02",
+          supersededBy: "s-0000000000000002",
+        },
+        {
+          id: "s-0000000000000002",
+          kind: "profile",
+          text: "看不懂的推导先跳过",
+          author: "reader",
+          evidence: ["m-aaaaaa04"],
+          contradictedBy: [],
+          established: "2026-08-01",
+          lastSupported: "2026-08-02",
+        },
+        {
+          id: "s-0000000000000003",
+          kind: "profile",
+          text: "written after the widening",
+          author: "dream",
+          evidence: ["m-1111111111111111"],
+          contradictedBy: [],
+          established: "2026-08-03",
+          lastSupported: "2026-08-03",
+        },
+      ],
+    },
+    null,
+    2,
+  );
+}
+
 // Assembled rather than written as literals, so this file holds no text that
 // reads as a tool call.
 const OPEN = (name: string): string => `<${"parameter"} name="${name}">`;
@@ -183,6 +229,7 @@ export function makeStore(): { fs: MigrationFs; files: Map<string, string> } {
   ];
   const files: Record<string, string> = {
     [`threads-${BOOK}.json`]: threadFile(),
+    "statements.json": statementsFile(),
     [`${DIR}/deleted-observations.jsonl`]: `{"id":"m-aaaaaa09","at":"2026-08-20"}\n`,
     // A conflict copy sync left beside an entry.
     [`${DIR}/m-aaaaaa01.conflict-deadbeef.md`]: serializeObservation(

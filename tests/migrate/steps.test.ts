@@ -5,6 +5,7 @@
 
 import { expect, test } from "bun:test";
 import { parseObservation, parseTombstones } from "../../src/memory/observations/files";
+import { STATEMENTS_FILE } from "../../src/memory/statements/store";
 import { deriveMessageId, deriveObservationId } from "../../src/migrate/hash";
 import {
   stepCleanBodies,
@@ -14,6 +15,7 @@ import {
   stepTypoAnchors,
   planWidening,
   stepWidenObservationIds,
+  stepWidenStatementIds,
 } from "../../src/migrate/steps";
 import type { MigrationFs } from "../../src/migrate/types";
 import {
@@ -23,6 +25,7 @@ import {
   LESSON,
   makeMemFs,
   makeStore,
+  statementsFile,
   TS_ASIDE,
   TS_LESSON,
   TS_TIE,
@@ -279,4 +282,73 @@ test("step 6 finishes a rename that died between the write and the remove", asyn
   expect(files.has(`${DIR}/m-aaaaaa01.md`)).toBe(false);
   expect(parseObservation(files.get(`${DIR}/${wide}.md`) ?? "")?.summary).toBe("newer");
   expect(step.counts.alreadyRenamed).toBe(1);
+});
+
+test("step 7 widens the observation ids a statement points at", async () => {
+  const { fs, files } = makeStore();
+  const step = await stepWidenStatementIds(fs);
+
+  expect(step.aborted).toBeUndefined();
+  expect(step.scanned).toBe(3);
+  expect(step.changed).toBe(2);
+  // The third statement was written after the widening and has nothing to do.
+  expect(step.skipped).toBe(1);
+  expect(step.counts).toMatchObject({ statementsChanged: 2, idsWidened: 4, alreadyWide: 1 });
+
+  const held = JSON.parse(files.get(STATEMENTS_FILE) as string).statements;
+  expect(held[0].evidence).toEqual([
+    deriveObservationId("m-aaaaaa01"),
+    // A message anchor is not an observation id and is left where it is.
+    `${LESSON}:${TS_LESSON}`,
+    deriveObservationId("m-aaaaaa02"),
+  ]);
+  expect(held[0].contradictedBy).toEqual([deriveObservationId("m-aaaaaa03")]);
+  // supersededBy names a statement, not an observation.
+  expect(held[0].supersededBy).toBe("s-0000000000000002");
+  expect(held[1].evidence).toEqual([deriveObservationId("m-aaaaaa04")]);
+  // Already 16 hex: this step's own earlier output, or an id minted since.
+  expect(held[2].evidence).toEqual(["m-1111111111111111"]);
+  // Everything else about the records survives the rewrite.
+  expect(held[1].text).toBe("看不懂的推导先跳过");
+  expect(held[2]).toEqual(JSON.parse(statementsFile()).statements[2]);
+
+  const again = await stepWidenStatementIds(fs);
+  expect(again.changed).toBe(0);
+  expect(again.counts.idsWidened).toBe(0);
+});
+
+test("step 7 skips a store that has no statements", async () => {
+  const { fs, files } = makeMemFs({});
+  const step = await stepWidenStatementIds(fs);
+  expect(step).toMatchObject({ scanned: 0, changed: 0, skipped: 0 });
+  expect(step.aborted).toBeUndefined();
+  expect(files.has(STATEMENTS_FILE)).toBe(false);
+
+  // A file that is there but holds no collection yet is the same answer.
+  const empty = makeMemFs({ [STATEMENTS_FILE]: JSON.stringify({}) });
+  expect((await stepWidenStatementIds(empty.fs)).scanned).toBe(0);
+});
+
+test("step 7 stands down rather than rewriting a file it cannot read", async () => {
+  const { fs, files } = makeMemFs({ [STATEMENTS_FILE]: "{ not json" });
+  const step = await stepWidenStatementIds(fs);
+  expect(step.aborted).toContain("does not parse");
+  expect(step.changed).toBe(0);
+  expect(files.get(STATEMENTS_FILE)).toBe("{ not json");
+});
+
+// The whole point of the step: after the migration, every id a statement names
+// is an id there is a file for. Before it, none of them were.
+test("step 7 leaves the statements pointing at the files step 6 renamed", async () => {
+  const { fs, files } = makeStore();
+  await stepWidenObservationIds(fs);
+  await stepWidenStatementIds(fs);
+
+  const text = files.get(STATEMENTS_FILE) as string;
+  for (const old of ["m-aaaaaa01", "m-aaaaaa02", "m-aaaaaa03", "m-aaaaaa04"]) {
+    const id = deriveObservationId(old);
+    expect(text).toContain(id);
+    expect(text).not.toContain(old);
+    expect(files.has(`${DIR}/${id}.md`)).toBe(true);
+  }
 });
