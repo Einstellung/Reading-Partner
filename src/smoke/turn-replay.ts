@@ -41,6 +41,7 @@ interface DeviceReport {
   resumeMs: number;
   hangoverMs: number;
   resumeGuardMs: number;
+  immunityMs: number;
   events: ReplayEvent[];
 }
 
@@ -88,7 +89,8 @@ async function note(text: string): Promise<void> {
 
 /// One case through the device. The frames go over as they are: -Infinity has no
 /// JSON spelling and crosses as null, which is what the Swift side reads back as
-/// digital silence, and a `reset` frame is a call rather than a buffer.
+/// digital silence, and a `reset` or `playback` frame is a call rather than a
+/// buffer.
 async function replay(item: ReplayCase): Promise<DeviceReport> {
   return (await invoke("plugin:voice|speech_probe", {
     args: {
@@ -118,6 +120,7 @@ function configDiff(item: ReplayCase, report: DeviceReport): string[] {
   check("resumeMs");
   check("hangoverMs");
   check("resumeGuardMs");
+  check("immunityMs");
   if (report.frames !== item.frames.length) {
     lines.push(`frames ${report.frames}, expected ${item.frames.length}`);
   }

@@ -30,6 +30,10 @@ import {
 const PROBE_DIR = join(import.meta.dir, "../../docs/assets/voice-probe");
 const VPIO_ON = "voice-probe-aec-vpio-on.json";
 const VPIO_OFF = "voice-probe-aec-vpio-off.json";
+const DEVICE_RUN = join(
+  import.meta.dir,
+  "../../docs/assets/voice-device-run/turn-result-2026-09-05.json",
+);
 
 interface Frame {
   atMs: number;
@@ -55,6 +59,39 @@ function stageFrames(file: string, stage: string): Frame[] {
           ? 20 * Math.log10(e.payload.inputRms)
           : Number.NEGATIVE_INFINITY,
     }));
+}
+
+/**
+ * One stage of the 2026-09-05 device run, which unlike the AEC probe marks its
+ * stages with events among the levels rather than with a table beside them.
+ * Returns the stage's start as well: that is the moment the playback began, and
+ * the immunity window is measured from it.
+ */
+function deviceStage(stage: string): { startedAtMs: number; frames: Frame[] } {
+  const events = JSON.parse(readFileSync(DEVICE_RUN, "utf8")).passes[0].report.events as {
+    kind: string;
+    sinceStartMs: number;
+    payload: { inputRms: number; stage?: string };
+  }[];
+  const marks = events.filter((e) => e.kind === "stage");
+  const from = marks.find((e) => e.payload.stage === stage);
+  if (!from) throw new Error(`no stage ${stage} in the device run`);
+  const to = marks.find((e) => e.sinceStartMs > from.sinceStartMs);
+  const until = to ? to.sinceStartMs : Number.POSITIVE_INFINITY;
+  return {
+    startedAtMs: from.sinceStartMs,
+    frames: events
+      .filter(
+        (e) => e.kind === "level" && e.sinceStartMs >= from.sinceStartMs && e.sinceStartMs < until,
+      )
+      .map((e) => ({
+        atMs: e.sinceStartMs,
+        db:
+          e.payload.inputRms > 0
+            ? 20 * Math.log10(e.payload.inputRms)
+            : Number.NEGATIVE_INFINITY,
+      })),
+  };
 }
 
 /** Every event the detector announces over a run of frames, stamped. */
@@ -363,6 +400,7 @@ test("the config is all defaults, all overridable, and clamped where it can be w
       resumeMs: -1,
       hangoverMs: -1,
       resumeGuardMs: -1,
+      immunityMs: -1,
     }),
   ).toEqual({
     startDb: -35,
@@ -371,6 +409,7 @@ test("the config is all defaults, all overridable, and clamped where it can be w
     resumeMs: 0,
     hangoverMs: 0,
     resumeGuardMs: 0,
+    immunityMs: 0,
   });
   expect(DEFAULT_TURN_DETECT).toEqual({
     startDb: -35,
@@ -379,6 +418,7 @@ test("the config is all defaults, all overridable, and clamped where it can be w
     resumeMs: 300,
     hangoverMs: 1250,
     resumeGuardMs: 300,
+    immunityMs: 2000,
   });
 });
 
@@ -540,4 +580,123 @@ test("what the hangover costs on this recording, at the values worth considering
   expect(lastWord).toBe(44190);
   expect(ends(feed(frames, { hangoverMs: 800 })).pop()!.atMs - lastWord).toBe(-298);
   expect(ends(feed(frames)).pop()!.atMs - lastWord).toBe(1288);
+});
+
+// 10. The immunity window, and the measurement it is sized from. VPIO does not
+// converge instantly on a voice it has not heard before, and until it does the
+// phone's own playback comes back up the mic loudly enough to cross the line.
+// Everything the default is argued from is in these numbers, so they are
+// asserted rather than trusted: a re-exported run that moved them re-opens the
+// question of what the window should be.
+test("the played stage's leak is what the immunity window is sized against", () => {
+  const { startedAtMs, frames } = deviceStage("played");
+  expect(frames.length).toBe(217);
+
+  // Four buffers of the companion's own voice cross the line, and every one of
+  // them is in the first 1.6 s.
+  const leaks = frames.filter((f) => f.db >= DEFAULT_TURN_DETECT.startDb);
+  expect(leaks.map((f) => Math.round(f.atMs - startedAtMs))).toEqual([591, 1280, 1396, 1578]);
+  expect(leaks.map((f) => Number(f.db.toFixed(1)))).toEqual([-28.7, -33.9, -31.7, -33.6]);
+
+  // And after the last of them, VPIO has converged: 20 more seconds of the same
+  // playback, nothing within 10 dB of the line.
+  const after = frames.filter((f) => f.atMs > leaks[leaks.length - 1].atMs);
+  expect(after.length).toBe(201);
+  expect(Math.max(...after.map((f) => f.db))).toBeLessThan(-45);
+
+  // The default covers the last leak with 422 ms to spare. It is the margin
+  // that is the point: the four crossings are one run of one phone, and a
+  // window that only just cleared them would be fitted to it.
+  const lastLeak = leaks[leaks.length - 1].atMs - startedAtMs;
+  expect(Math.round(lastLeak)).toBe(1578);
+  expect(DEFAULT_TURN_DETECT.immunityMs).toBeGreaterThan(lastLeak);
+  expect(Math.round(DEFAULT_TURN_DETECT.immunityMs - lastLeak)).toBe(422);
+});
+
+test("with the window open the played stage says nothing, and without it, it ducks", () => {
+  const { startedAtMs, frames } = deviceStage("played");
+
+  const shipped = createTurnDetector();
+  shipped.playbackStarted(startedAtMs);
+  const heard = frames.map((f) => shipped.step(f.db, f.atMs)).filter((e) => e !== null);
+  expect(heard).toEqual([]);
+
+  // The same buffers with the window shut is what shipped before it existed:
+  // the volume drops on the companion's own voice, twice — the other two
+  // crossings land inside the resume guard.
+  const open = createTurnDetector({ immunityMs: 0 });
+  open.playbackStarted(startedAtMs);
+  const without = frames
+    .map((f) => ({ atMs: f.atMs, event: open.step(f.db, f.atMs) }))
+    .filter((e): e is { atMs: number; event: TurnEvent } => e.event !== null);
+  expect(ducks(without).map((e) => Math.round(e.atMs))).toEqual([4200, 5006]);
+  expect(stops(without)).toEqual([]);
+
+  // A window sized to the last leak and no further lets that leak through, which
+  // is the case the 422 ms is spent on.
+  const tight = createTurnDetector({ immunityMs: 1500 });
+  tight.playbackStarted(startedAtMs);
+  const short = frames
+    .map((f) => ({ atMs: f.atMs, event: tight.step(f.db, f.atMs) }))
+    .filter((e): e is { atMs: number; event: TurnEvent } => e.event !== null);
+  expect(ducks(short).map((e) => Math.round(e.atMs))).toEqual([5188]);
+});
+
+test("the window is over at immunityMs exactly, and not one buffer before", () => {
+  const detector = createTurnDetector();
+  detector.playbackStarted(1000);
+  // One millisecond short of the window's end, still the playback's own voice.
+  expect(detector.step(-10, 1000 + DEFAULT_TURN_DETECT.immunityMs - 1)).toBeNull();
+  expect(detector.step(-10, 1000 + DEFAULT_TURN_DETECT.immunityMs)).toEqual({ type: "duck" });
+});
+
+test("a machine never told about a playback has no window at all", () => {
+  expect(createTurnDetector().step(-10, 0)).toEqual({ type: "duck" });
+  expect(createTurnDetector({ immunityMs: 0 }).step(-10, 0)).toEqual({ type: "duck" });
+});
+
+// The counting half of the rule. A frame inside the window is not a frame
+// toward the count either, so a barge-in that began under the window has to
+// prove itself from scratch once the window is over.
+test("frames inside the window do not count toward startFrames", () => {
+  const detector = createTurnDetector({ startFrames: 2 });
+  detector.playbackStarted(0);
+  expect(detector.step(-10, 1900)).toBeNull();
+  expect(detector.step(-10, 1950)).toBeNull();
+  expect(detector.snapshot().loudFrames).toBe(0);
+  // The first buffer out of the window is the first of two, not the second.
+  expect(detector.step(-10, 2000)).toBeNull();
+  expect(detector.snapshot().loudFrames).toBe(1);
+  expect(detector.step(-10, 2050)).toEqual({ type: "duck" });
+});
+
+// The window is the playback's, not the clock's. Both ways it can end early
+// leave the user heard on the very next buffer, which is what they have to do:
+// with nothing coming out of the speaker there is nothing to leak, and a duck
+// held back then costs a whole turn instead of a wobble.
+test("stopping the playback closes the window, and so does a reset", () => {
+  const stopped = createTurnDetector();
+  stopped.playbackStarted(0);
+  expect(stopped.step(-10, 500)).toBeNull();
+  stopped.playbackStopped(600);
+  expect(stopped.snapshot().playbackStartedMs).toBeNull();
+  expect(stopped.step(-10, 700)).toEqual({ type: "duck" });
+
+  const reset = createTurnDetector();
+  reset.playbackStarted(0);
+  reset.reset();
+  expect(reset.snapshot()).toEqual(initialTurnDetectState());
+  expect(reset.step(-10, 500)).toEqual({ type: "duck" });
+});
+
+// Opening the window announces nothing and changes nothing else: a duck already
+// under way is not un-ducked by the companion starting to speak, and a turn in
+// progress still ends on its own hangover.
+test("opening the window mid-duck and mid-turn announces nothing", () => {
+  const ducked = createTurnDetector();
+  expect(ducked.step(-10, 0)).toEqual({ type: "duck" });
+  ducked.playbackStarted(50);
+  expect(ducked.snapshot().phase).toBe("ducked");
+  expect(ducked.step(-10, 400)).toEqual({ type: "stop" });
+  expect(ducked.step(Number.NEGATIVE_INFINITY, 1700)).toEqual({ type: "end", silentMs: 1300 });
 });
