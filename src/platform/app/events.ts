@@ -47,6 +47,12 @@ export type EventType =
   // One that did not, so the profile was left alone and the stamp did not move.
   // `outcome` is the sub-agent's, or a skip reason from before the model ran.
   | "guess-failed" // { trigger, outcome }
+  // A night of dream (memory/dream/run.ts), in events-ai.jsonl rather than a
+  // topic's log for the same reason as the guess pass: it reads every topic at
+  // once. Counts only — what was written is on disk in statements.json, and the
+  // observations it read are the reader's own words. `outcome` is one of
+  // no-change / merged / failed, and is what decided whether the waterline moved.
+  | "dream-run" // { outcome, candidates, written, dropped }
   // Where a briefing run's wall clock went, in events-info.jsonl rather than a
   // topic's log: a briefing belongs to no book. One line per source as it is
   // discovered, then one per funnel phase (docs/35) — so "why did that take four

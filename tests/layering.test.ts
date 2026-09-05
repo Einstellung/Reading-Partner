@@ -52,6 +52,11 @@ const LAYER: Record<string, Layer> = {
   budget: "capability",
   fulltext: "capability",
   memory: "capability",
+  // The nightly pass that turns observations into statements. A capability like
+  // the rest of memory: the collector election that decides which machine runs
+  // it lives in info/, and the call goes that way round — info calls dream,
+  // dream never reaches for info.
+  "memory/dream": "capability",
   "memory/live": "capability",
   "memory/observations": "capability",
   "memory/profile": "capability",
