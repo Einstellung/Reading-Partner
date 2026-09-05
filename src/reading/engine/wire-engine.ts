@@ -31,9 +31,11 @@ import {
 import { selectionChanged } from "./annotation-selection";
 import { pageCenterAlign } from "./gesture/paged-gesture";
 import {
+  atResetZoom,
   LAYOUT_SETTINGS,
   openingZoom,
   readingPosition,
+  resetZoom,
   type VisiblePage,
   type ZoomLock,
 } from "./layout-modes";
@@ -763,13 +765,17 @@ export async function wireEngine(
     propsRef.current.onViewState?.(currentState());
   };
   const emitStats = () => {
-    const z = zoomScope.getState().currentZoomLevel;
+    const zs = zoomScope.getState();
+    const z = zs.currentZoomLevel;
     const stats: EmbedViewStats = {
       pageIndex: scrollScope.getCurrentPage() - 1,
       pagesCount: scrollScope.getTotalPages(),
       zoom: z,
       canZoomIn: z < 6,
       canZoomOut: z > 0.15,
+      // Nothing to reset to while the zoom already is this layout's lock. A
+      // number — what a pinch leaves behind — is never a lock, so it is.
+      canZoomReset: !atResetZoom(layout, zoomLockOf(zs.zoomLevel)),
       layout,
     };
     propsRef.current.onViewStats?.(stats);
@@ -936,8 +942,23 @@ export async function wireEngine(
     },
     zoomIn: () => zoomScope.zoomIn(),
     zoomOut: () => zoomScope.zoomOut(),
-    fitWidth: () => zoomScope.requestZoom(ZoomMode.FitWidth),
-    fitPage: () => zoomScope.requestZoom(ZoomMode.FitPage),
+    // The reset control asks for the layout's own lock back: fit-width in the
+    // vertical column, fit-page in the paged strip. Resetting to fit-width in
+    // paged mode is a magnification (a portrait page is taller than the screen
+    // at page width), and a magnified strip pans instead of flipping — the
+    // reader loses the swipe (pitfall 212).
+    zoomReset: () => {
+      const lock = resetZoom(layout);
+      zoomScope.requestZoom(lock === "fit-page" ? ZoomMode.FitPage : ZoomMode.FitWidth);
+      if (layout !== "paged") return;
+      // Dropping a magnification re-scales the whole strip, so the page the
+      // reader was on has moved: centre it once the strip is the new size, the
+      // same way turning a page out of a magnification does. refreshZoomedIn
+      // takes the machine out of pan mode against the fit just asked for
+      // instead of waiting on the zoom event.
+      refreshZoomedIn();
+      settleLayout("paged", targetedPage(), "instant");
+    },
     navigateToPage(pageIndex) {
       // An explicit page jump is navigating away — drop any quote overlay.
       setQuoteHlRef.current(null);

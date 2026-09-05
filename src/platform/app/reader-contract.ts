@@ -40,7 +40,8 @@ export interface ViewStats {
   pagesCount: number;
   canZoomIn: boolean;
   canZoomOut: boolean;
-  // False once the scale is already page-width (zoomReset is fit-width).
+  // False once the scale already is the fit the layout locks to — fit-width
+  // vertically, fit-page in the paged flip, which is what zoomReset asks for.
   canZoomReset: boolean;
   layout: "vertical" | "paged";
 }

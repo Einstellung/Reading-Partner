@@ -27,20 +27,26 @@ export function readerZoomKeyAction(
   return zoomKeyAction(e);
 }
 
-// Reset is the fit the current layout is built around: fit-width for the
-// vertical scroll, fit-page for the paged flip, where re-asserting the layout is
-// how the engine restores its own fit (setLayout applies every setting on every
-// call, including the zoom mode).
+// Reset is the fit the current layout is built around, and zoomReset itself
+// knows which one that is (layout-modes.resetZoom) — the key press does not
+// have to name a fit.
 export function applyReaderZoom(
   view: ViewInstance | null | undefined,
-  layout: "vertical" | "paged" | undefined,
+  _layout: "vertical" | "paged" | undefined,
   action: ZoomAction,
 ): void {
   if (!view) return;
   if (action === "in") view.zoomIn();
   else if (action === "out") view.zoomOut();
-  else if (layout === "paged") view.setLayout("paged");
   else view.zoomReset();
+}
+
+// What the More menu's reset item is called. It names the fit it lands on, so
+// it follows the layout: the paged strip resets to one whole page, and calling
+// that "Fit page width" is what made the item read as a zoom control the reader
+// would not expect to change how swiping behaves.
+export function zoomResetLabel(layout: "vertical" | "paged" | undefined): string {
+  return layout === "paged" ? "Fit page" : "Fit page width";
 }
 
 export function useReaderZoomKeys(args: {

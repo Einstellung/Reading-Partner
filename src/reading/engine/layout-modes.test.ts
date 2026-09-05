@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import {
+  atResetZoom,
   LAYOUT_SETTINGS,
   openingZoom,
+  resetZoom,
   readingPosition,
   type ReadingLayout,
   type VisiblePage,
@@ -161,6 +163,24 @@ test("paged restores no scale at all", () => {
   // one that last saved — the same rule that keeps paged's saved position free
   // of an in-page offset.
   expect(openingZoom("paged", 2.328)).toBeNull();
+});
+
+test("a reset is the layout's own lock, not one fixed fit", () => {
+  expect(resetZoom("vertical")).toBe("fit-width");
+  expect(resetZoom("paged")).toBe("fit-page");
+  for (const layout of layouts) expect(resetZoom(layout)).toBe(LAYOUT_SETTINGS[layout].zoom);
+});
+
+test("only the layout's own lock counts as already reset", () => {
+  expect(atResetZoom("paged", "fit-page")).toBe(true);
+  // The bug this came from: fit-width in the paged strip is a magnification.
+  expect(atResetZoom("paged", "fit-width")).toBe(false);
+  expect(atResetZoom("vertical", "fit-width")).toBe(true);
+  expect(atResetZoom("vertical", "fit-page")).toBe(false);
+});
+
+test("a scale left behind by a pinch is never the reset", () => {
+  for (const layout of layouts) expect(atResetZoom(layout, null)).toBe(false);
 });
 
 test("a scale that cannot be a scale is not restored", () => {

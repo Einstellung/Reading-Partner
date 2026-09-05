@@ -20,6 +20,7 @@ import {
   IconZoomOut,
 } from "../base/icons";
 import MoreMenu, { type MoreItem } from "./MoreMenu";
+import { zoomResetLabel } from "./reader-zoom-keys";
 import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
@@ -60,7 +61,7 @@ export default function ReaderTopBar(props: {
   const moreItems: MoreItem[] = [
     {
       kind: "action",
-      label: "Fit page width",
+      label: zoomResetLabel(stats?.layout),
       icon: IconFitWidth,
       disabled: !stats?.canZoomReset,
       onClick: () => view.current?.zoomReset(),
