@@ -22,10 +22,17 @@ import {
 } from "../../ai/subagent";
 import type { EventPayload } from "../../platform/app/events";
 import type { ObservationAdapter } from "./adapter";
-import { localDate } from "./files";
+import { resolveMessageAnchor } from "./anchors";
+import { localDate, parseIndexLine } from "./files";
 import type { ObservationMeta } from "./store";
 import type { TopicObservations } from "./recall";
-import { buildObservationTools, type ObservationWriteAction } from "./tools";
+import {
+  buildObservationTools,
+  type AnchorVerifier,
+  type ObservationWriteAction,
+  type WriteRejection,
+  type WriteRelationOutcome,
+} from "./tools";
 import { buildTranscript, renderTranscript } from "./transcript";
 import type { EvidenceDates } from "./types";
 
@@ -134,8 +141,14 @@ export interface DistillInput {
   page: number | null; // 1-based, where the thread's mark sits
   markedText: string;
   messages: DistillMessage[];
-  // The current observation index (what "update, don't duplicate" checks against).
+  // The current observation index, as the index file has it. Numbered for the
+  // prompt (numberIndex) — the numbers are what "same-as" points at.
   indexText: string;
+  // What is already held about this reader, for the three-way judgement every
+  // create makes (docs/48). Read by the caller, because a statement is not
+  // scoped to a topic and this file does no I/O. Empty is the ordinary state
+  // before dream has written any.
+  statements?: readonly DistillStatement[];
   // When the transcript below happened, from the messages' own timestamps. Null
   // when none of them carries one.
   dates: EvidenceDates | null;
@@ -235,6 +248,117 @@ export function markCursor(meta: ObservationMeta, bookId: string): number | null
   return meta.distilledMarks?.[bookId] ?? meta.lastAnnotationDistillAt;
 }
 
+// --- the two numbered lists a pass writes against ---
+
+// One statement as a distillation pass needs to see it. Structural rather than
+// imported from memory/statements for the reason transcript.ts keeps
+// TranscriptMessage structural: statements read observations and never the
+// other way round (tests/layering.test.ts), so the type crosses the seam by
+// shape and the value is handed in by the caller that does the reading.
+export interface DistillStatement {
+  id: string;
+  kind: string;
+  text: string;
+  lastSupported: string;
+  // A superseded statement is not what is held about the reader any more; it is
+  // how its evidence was read at the time. It is not printed and cannot be
+  // pointed at.
+  supersededBy?: string;
+}
+
+// The statements a pass may point at, numbered. The numbers are the only handle
+// the model is given on them — the same rule the transcript follows, and for
+// the same reason: an id it is asked to copy is an id it can invent.
+export function formatStatements(
+  statements: readonly DistillStatement[],
+): { text: string; ids: string[] } {
+  const standing = statements.filter((s) => !s.supersededBy);
+  const ids = standing.map((s) => s.id);
+  const text = standing
+    .map((s, i) => `[${i + 1}] (${s.kind}, last supported ${s.lastSupported}) ${s.text}`)
+    .join("\n");
+  return { text, ids };
+}
+
+// The observation index with a number in front of every entry. The line itself
+// is left exactly as the index file has it — the id is still printed, because
+// an observation's body names other observations by id and that is the copy
+// that has to keep working.
+export function numberIndex(indexText: string): { text: string; ids: string[] } {
+  const ids: string[] = [];
+  const text = indexText
+    .split("\n")
+    .map((line) => {
+      const entry = parseIndexLine(line);
+      if (!entry) return line;
+      ids.push(entry.id);
+      return `[${ids.length}] ${line.trim()}`;
+    })
+    .join("\n")
+    .trim();
+  return { text, ids };
+}
+
+// What a pass's writes did, for the event log. Counts only: an event carrying
+// an observation's text would put the reader's record in a file nothing prunes.
+export interface RelationCounts {
+  new: number;
+  "predicted-by": number;
+  contradicts: number;
+  "same-as": number;
+}
+
+export type RejectionCounts = Record<WriteRejection, number>;
+
+export function emptyRelationCounts(): RelationCounts {
+  return { new: 0, "predicted-by": 0, contradicts: 0, "same-as": 0 };
+}
+
+export function emptyRejectionCounts(): RejectionCounts {
+  return { "bad-index": 0, "unresolved-anchor": 0, "unresolved-mention": 0 };
+}
+
+// What a pass counts while it runs. One object rather than two closures so a
+// pass that ends half-way still reports what it had done by then — the writes
+// are already on disk.
+function newTally() {
+  const counts = {
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    relations: emptyRelationCounts(),
+    rejected: emptyRejectionCounts(),
+  };
+  return {
+    counts,
+    write(action: ObservationWriteAction, relation?: WriteRelationOutcome): void {
+      if (action === "create") counts.created++;
+      else if (action === "delete") counts.deleted++;
+      else counts.updated++;
+      if (relation) counts.relations[relation]++;
+    },
+    reject(reason: WriteRejection): void {
+      counts.rejected[reason]++;
+    },
+  };
+}
+
+// The id gate's anchor half, built from what the pass printed. A mark is real
+// if it was listed; a message anchor is real if it resolves against the
+// transcript this pass is reading (anchors.ts), which is the only conversation
+// it was shown.
+function anchorVerifier(
+  annotationIds: readonly string[],
+  messages: readonly DistillMessage[],
+  threadId?: string,
+): AnchorVerifier {
+  const marks = new Set(annotationIds.filter((id) => id));
+  return {
+    annotation: (id) => marks.has(id),
+    message: (anchor) => resolveMessageAnchor(anchor, messages, threadId) !== undefined,
+  };
+}
+
 export interface DistillDeps {
   // One sub-agent turn, run to completion. live.ts backs it with the app's
   // provider; tests script it over the real agent loop.
@@ -256,12 +380,44 @@ export interface DistillDeps {
   // Absent in every test and in any caller with no topic list, and then the
   // pass runs exactly as it did.
   otherTopics?: () => Promise<readonly TopicObservations[]>;
+  // Where a create's relation lands: the two statement edges (memory/statements
+  // store). Injected for the same reason the statements themselves are — this
+  // file does no I/O — and only ever called when a statement was printed, which
+  // it can only have been if the caller read them.
+  statementEdges?: {
+    addEvidence(statementId: string, observationIds: readonly string[]): Promise<unknown>;
+    addContradiction(statementId: string, observationId: string): Promise<unknown>;
+  };
+}
+
+// The edges a pass writes. A pass given statements to point at but no writer
+// behind them would drop the edge it told the model it had recorded, so the
+// stand-in refuses instead of doing nothing.
+function statementEdgesOf(deps: DistillDeps): NonNullable<DistillDeps["statementEdges"]> {
+  return (
+    deps.statementEdges ?? {
+      async addEvidence() {
+        throw new Error("no statement writer is mounted on this pass");
+      },
+      async addContradiction() {
+        throw new Error("no statement writer is mounted on this pass");
+      },
+    }
+  );
 }
 
 export interface DistillResult {
   created: number;
+  // Observations whose evidence grew (same-as). Counted here rather than in a
+  // field of its own because every caller of this asks the same question of it
+  // — did anything about this topic change — and the relation breakdown below
+  // is what answers the finer one.
   updated: number;
   deleted: number;
+  // How the writes stood to what was already held, and what the id gate
+  // refused. Both are counts, never text.
+  relations: RelationCounts;
+  rejected: RejectionCounts;
   // Whether the pass finished. False means the sub-agent gave up or the call did
   // not complete, and the caller must not advance its distillation timestamps:
   // the next trigger has to be able to redo this transcript.
@@ -456,6 +612,43 @@ export function buildDistillAgent(
   };
 }
 
+// The block every distillation prompt ends with: what is held about this
+// reader, the observation index, and how a write says where it stands between
+// them. Shared by the two passes because the write path is one path — only the
+// evidence above it differs.
+export function relationSection(input: {
+  statements?: readonly DistillStatement[];
+  indexText: string;
+}): string[] {
+  const statements = formatStatements(input.statements ?? []);
+  const index = numberIndex(input.indexText);
+  return [
+    "",
+    "How to write what you find:",
+    "- An observation's text is never rewritten. It says what the evidence said on",
+    "  the day it was written. Reading it differently now is a new observation that",
+    "  names the old one by its id; the old one stays where it is.",
+    "- The same thing happening again is not a second observation: action \"same-as\"",
+    "  with the number of the observation that already says it, and your evidence is",
+    "  added to that one.",
+    "- Delete only what turned out to be wrong.",
+    ...(statements.ids.length > 0
+      ? [
+          "- Every observation you create says how it stands to the statements below:",
+          '  relation "predicted-by" with a statement\'s number when that statement already',
+          '  led you to expect this, "contradicts" with its number when it goes against one,',
+          '  "new" when no statement covers it.',
+          "",
+          "Held about this reader:",
+          statements.text,
+        ]
+      : ['- Every observation you create is relation "new": nothing is held about this reader yet.']),
+    "",
+    "Current observation index for this topic:",
+    index.text || "(empty)",
+  ];
+}
+
 export function buildDistillSystemPrompt(input: DistillInput): string {
   return [
     "You keep a reading companion's observations of its reader. A conversation",
@@ -473,13 +666,6 @@ export function buildDistillSystemPrompt(input: DistillInput): string {
     "- correction: the reader corrected you or the material",
     "",
     "Curation rules:",
-    "- Update, don't duplicate: when the index below already has a related",
-    "  observation, update it (observation_update action \"update\") instead of",
-    "  creating another.",
-    "- Delete what turned out wrong.",
-    "- On contradiction with an existing observation (e.g. the reader was stuck and",
-    "  now gets it), never silently drop the old state: rewrite that observation as",
-    '  an evolution — "was stuck on X, resolved on <date>" — so both states stay visible.',
     ...datingRule("conversation", input.dates),
     "- Record only what cannot be re-derived from the book or the reader's",
     "  annotations: their understanding, confusions, beliefs, corrections, and where",
@@ -500,9 +686,7 @@ export function buildDistillSystemPrompt(input: DistillInput): string {
           "  annotation ids — never one observation per mark. Recording nothing is fine.",
         ]
       : []),
-    "",
-    "Current observation index for this topic:",
-    input.indexText.trim() || "(empty)",
+    ...relationSection(input),
   ].join("\n");
 }
 
@@ -531,11 +715,12 @@ export async function runDistillation(
   adapter: ObservationAdapter,
   deps: DistillDeps,
 ): Promise<DistillResult> {
-  const counts = { created: 0, updated: 0, deleted: 0 };
+  const tally = newTally();
   // The same lines the user message prints, so [n] there and messageIndices
   // here are one numbering. Built twice rather than threaded through, because
   // both are pure functions of the input and a numbering that can drift between
-  // the prompt and the tool is the bug this whole change is about.
+  // the prompt and the tool is the bug this whole change is about. The two row
+  // tables below are built the same way, for the same reason.
   const transcript = buildTranscript(input.messages, input.threadId);
   const tools = buildObservationTools(adapter, {
     bookId: input.bookId,
@@ -543,11 +728,21 @@ export async function runDistillation(
     annotationDates: markDates(input.silentMarks ?? []),
     requireAnchor: true,
     ...(deps.otherTopics ? { otherTopics: deps.otherTopics } : {}),
-    onWrite: (action: ObservationWriteAction) => {
-      if (action === "create") counts.created++;
-      else if (action === "update") counts.updated++;
-      else counts.deleted++;
+    relations: {
+      observations: numberIndex(input.indexText).ids,
+      statements: formatStatements(input.statements ?? []).ids,
+      ...statementEdgesOf(deps),
     },
+    // The marks this pass printed — the thread's own, and the silent ones
+    // listed under the transcript — and the lines it printed. Nothing else was
+    // shown, so nothing else can be cited.
+    verify: anchorVerifier(
+      [input.annotationId, ...(input.silentMarks ?? []).map((m) => m.id)],
+      input.messages,
+      input.threadId,
+    ),
+    onWrite: tally.write,
+    onReject: tally.reject,
   });
   const brief = await runSubagent(
     {
@@ -566,7 +761,7 @@ export async function runDistillation(
   // relayed — a question with no meaning here, since the text is discarded.
   const ok = brief.outcome === "answered";
   return {
-    ...counts,
+    ...tally.counts,
     ok,
     outcome: brief.outcome,
     failure: ok ? undefined : brief.brief,
@@ -613,6 +808,9 @@ export interface DistillPassInput {
   // sent — a conversation about one passage is one unit — so this only decides
   // whether to run at all.
   minNewMessages?: number;
+  // What is already held about this reader, read by the caller (live.ts) —
+  // statements are not scoped to a topic, and nothing in this file does I/O.
+  statements?: readonly DistillStatement[];
 }
 
 // Why a pass did nothing, when it did nothing. Both are ordinary now that a
@@ -729,12 +927,19 @@ export async function runDistillPass(
       markedText: input.markedText,
       messages: input.messages,
       indexText: await deps.store.readIndexText(),
+      ...(input.statements ? { statements: input.statements } : {}),
       dates: evidenceDates(input.messages.map((m) => m.ts)),
       silentMarks: marks,
       silentMarksCapped: capped,
     },
     deps.adapter,
-    { run: deps.run, model: deps.model, signal: deps.signal, otherTopics: deps.otherTopics },
+    {
+      run: deps.run,
+      model: deps.model,
+      signal: deps.signal,
+      otherTopics: deps.otherTopics,
+      statementEdges: deps.statementEdges,
+    },
   );
   if (!result.ok) return { ran: true, coverage, ...result };
   // One cursor per thread this transcript came from, and — when this pass
@@ -774,6 +979,9 @@ export interface MarksDistillInput {
   marks: DistillAnnotation[];
   capped: boolean;
   indexText: string;
+  // What is already held about this reader, read by the caller — the same
+  // three-way judgement the transcript pass makes.
+  statements?: readonly DistillStatement[];
   // When the marks below were made, from their own createdAt.
   dates: EvidenceDates | null;
 }
@@ -819,13 +1027,9 @@ export function buildMarksDistillSystemPrompt(input: MarksDistillInput): string 
     "- Aggregate. A stretch of marks is worth one or two observations, never one",
     "  per mark: the marks are on disk already, with their own text, and an",
     "  observation that restates one adds nothing.",
-    "- Update, don't duplicate: when the index below already has a related",
-    '  observation, update it (observation_update action "update") instead of',
-    "  creating another. A reading-position for this book almost certainly exists",
-    "  already — move it rather than writing a second one.",
-    "- On contradiction with an existing observation, never silently drop the old",
-    "  state: rewrite it as an evolution — \"was stuck on X, marked it again on",
-    '  <date>" — so both states stay visible.',
+    "- A reading-position for this book almost certainly exists in the index",
+    "  already. The reader having got further is that observation happening again,",
+    '  so add this stretch to it with "same-as" rather than writing a second one.',
     ...datingRule("stretch of marks", input.dates),
     "- Do not copy the marked passages into an observation. They are already",
     "  stored; what is not stored is what marking them says about the reader.",
@@ -833,9 +1037,7 @@ export function buildMarksDistillSystemPrompt(input: MarksDistillInput): string 
     "  it came from.",
     "- A short or scattered stretch of marks may yield nothing worth keeping;",
     "  making no tool call at all is a fine outcome.",
-    "",
-    "Current observation index for this topic:",
-    input.indexText.trim() || "(empty)",
+    ...relationSection(input),
   ].join("\n");
 }
 
@@ -882,7 +1084,7 @@ export async function runMarksDistillation(
   adapter: ObservationAdapter,
   deps: DistillDeps,
 ): Promise<DistillResult> {
-  const counts = { created: 0, updated: 0, deleted: 0 };
+  const tally = newTally();
   // No transcript, so no message indices are mounted at all; the anchor this
   // pass must cite is an annotation id, which it has in full in its prompt.
   const tools = buildObservationTools(adapter, {
@@ -890,11 +1092,17 @@ export async function runMarksDistillation(
     annotationDates: markDates(input.marks),
     requireAnchor: true,
     ...(deps.otherTopics ? { otherTopics: deps.otherTopics } : {}),
-    onWrite: (action: ObservationWriteAction) => {
-      if (action === "create") counts.created++;
-      else if (action === "update") counts.updated++;
-      else counts.deleted++;
+    relations: {
+      observations: numberIndex(input.indexText).ids,
+      statements: formatStatements(input.statements ?? []).ids,
+      ...statementEdgesOf(deps),
     },
+    verify: anchorVerifier(
+      input.marks.map((m) => m.id),
+      [],
+    ),
+    onWrite: tally.write,
+    onReject: tally.reject,
   });
   const brief = await runSubagent(
     {
@@ -905,7 +1113,7 @@ export async function runMarksDistillation(
     { run: deps.run },
   );
   const ok = brief.outcome === "answered";
-  return { ...counts, ok, outcome: brief.outcome, failure: ok ? undefined : brief.brief };
+  return { ...tally.counts, ok, outcome: brief.outcome, failure: ok ? undefined : brief.brief };
 }
 
 export interface MarksPassInput {
@@ -917,6 +1125,7 @@ export interface MarksPassInput {
   // How many new marks make a pass worth its cost. The sweep gates on this too,
   // before it picks a job; the pass re-checks against the cursor it just read.
   minNewMarks?: number;
+  statements?: readonly DistillStatement[];
 }
 
 export type MarksPassResult =
@@ -947,10 +1156,17 @@ export async function runMarksDistillPass(
       marks,
       capped,
       indexText: await deps.store.readIndexText(),
+      ...(input.statements ? { statements: input.statements } : {}),
       dates: evidenceDates(stamps),
     },
     deps.adapter,
-    { run: deps.run, model: deps.model, signal: deps.signal, otherTopics: deps.otherTopics },
+    {
+      run: deps.run,
+      model: deps.model,
+      signal: deps.signal,
+      otherTopics: deps.otherTopics,
+      statementEdges: deps.statementEdges,
+    },
   );
   if (!result.ok) return { ran: true, coverage, ...result };
   await deps.store.setMeta({

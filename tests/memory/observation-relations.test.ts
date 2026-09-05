@@ -176,7 +176,8 @@ test("same-as with no evidence is refused: it exists to add some", async () => {
   await expect(again.execute({ action: "same-as", observation: 1 })).rejects.toThrow(
     "second piece of evidence",
   );
-  expect(rejects).toEqual(["unresolved-anchor"]);
+  // Not a gate rejection: the call named nothing for the gate to resolve.
+  expect(rejects).toEqual([]);
 });
 
 // A second mount over a store that already has an observation in it, with that

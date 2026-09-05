@@ -593,9 +593,10 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
         };
 
         if (action === "create") {
+          // Not a gate rejection: nothing was handed in to resolve. The gate
+          // counts ids that name nothing, and this call named none.
           if (opts.requireAnchor && anchorCount === 0) {
-            throw reject(
-              "unresolved-anchor",
+            throw new Error(
               "create requires evidence: pass annotationIds" +
                 (anchors.length > 0 ? " and/or messageIndices" : "") +
                 ". An observation nothing points back to cannot be checked later.",
@@ -642,8 +643,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           }
           const target = pickIndex(relations.observations, args.observation, "observation");
           if (anchorCount === 0) {
-            throw reject(
-              "unresolved-anchor",
+            throw new Error(
               "same-as is a second piece of evidence for that observation: pass the " +
                 "annotationIds" +
                 (anchors.length > 0 ? " and/or messageIndices" : "") +

@@ -21,6 +21,8 @@ import {
   DISTILL_MAX_ROUNDS,
   datingRule,
   distillCoverage,
+  emptyRejectionCounts,
+  emptyRelationCounts,
   evidenceDates,
   formatEvidenceSpan,
   type DistillCoverage,
@@ -241,7 +243,17 @@ export async function runRetellDistillation(
     { run: deps.run },
   );
   const ok = brief.outcome === "answered";
-  return { ...counts, ok, outcome: brief.outcome, failure: ok ? undefined : brief.brief };
+  // No relation mount on this pass: a retell is distilled with the tool as it
+  // was (create / update / delete), so both breakdowns are empty rather than
+  // absent — every reader of a DistillResult reads the same shape.
+  return {
+    ...counts,
+    relations: emptyRelationCounts(),
+    rejected: emptyRejectionCounts(),
+    ok,
+    outcome: brief.outcome,
+    failure: ok ? undefined : brief.brief,
+  };
 }
 
 // --- one pass over a retell's conversation, with the cursor discipline ---

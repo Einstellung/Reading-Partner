@@ -127,6 +127,14 @@ function makeInput(overrides: Partial<DistillInput> = {}): DistillInput {
   };
 }
 
+// A pass that wrote nothing, or wrote nothing the gate turned away.
+const NO_RELATIONS = { new: 0, "predicted-by": 0, contradicts: 0, "same-as": 0 } as const;
+const NO_REJECTIONS = {
+  "bad-index": 0,
+  "unresolved-anchor": 0,
+  "unresolved-mention": 0,
+} as const;
+
 function makeStore() {
   const { fs } = makeFakeFs();
   const store = new ObservationFileStore("t", fs, () => JULY_17);
@@ -146,6 +154,7 @@ test("distillation creates observations through the real tools and counts them",
             id: "c1",
             args: {
               action: "create",
+              relation: "new",
               type: "stuck-point",
               summary: "Stuck on quadratic attention cost",
               body: "Asked on 2026-07-17 why attention is O(n^2).",
@@ -160,7 +169,15 @@ test("distillation creates observations through the real tools and counts them",
     ]),
   );
 
-  expect(result).toEqual({ created: 1, updated: 0, deleted: 0, ok: true, outcome: "answered" });
+  expect(result).toEqual({
+    created: 1,
+    updated: 0,
+    deleted: 0,
+    relations: { ...NO_RELATIONS, new: 1 },
+    rejected: NO_REJECTIONS,
+    ok: true,
+    outcome: "answered",
+  });
   const entries = await store.list();
   expect(entries).toHaveLength(1);
   expect(entries[0].type).toBe("stuck-point");
@@ -190,6 +207,7 @@ test("a pass refuses an anchorless create and stores the aside's own thread id",
             id: "c1",
             args: {
               action: "create",
+              relation: "new",
               type: "stuck-point",
               summary: "Stuck on the key/query split",
               body: "Asked on 2026-07-17.",
@@ -204,6 +222,7 @@ test("a pass refuses an anchorless create and stores the aside's own thread id",
             id: "c2",
             args: {
               action: "create",
+              relation: "new",
               type: "stuck-point",
               summary: "Stuck on the key/query split",
               body: "Asked on 2026-07-17.",
@@ -223,7 +242,10 @@ test("a pass refuses an anchorless create and stores the aside's own thread id",
   expect(entries[0].anchors.messageIds).toEqual([`aside-2:${JULY_17 + 1000}`]);
 });
 
-test("distillation updates (evolution) and deletes existing observations", async () => {
+// The evolution the reader's own progress is: the old observation stays exactly
+// as it was and a new one says what is true now, naming it by id (docs/48 — an
+// observation's text is never rewritten). What was simply wrong is deleted.
+test("distillation writes the evolution as a new observation and deletes what was wrong", async () => {
   const { store, adapter } = makeStore();
   const stuck = await adapter.retain({
     type: "stuck-point",
@@ -246,11 +268,12 @@ test("distillation updates (evolution) and deletes existing observations", async
             name: "observation_update",
             id: "c1",
             args: {
-              action: "update",
-              id: stuck.id,
+              action: "create",
+              relation: "new",
               type: "understood-concept",
-              summary: "Was stuck on quadratic attention cost, resolved on 2026-07-17",
-              body: "Was stuck (2026-07-10) on why attention is O(n^2); resolved on 2026-07-17.",
+              summary: "Worked out why attention is quadratic",
+              body: `Resolved on 2026-07-17 what ${stuck.id} was stuck on.`,
+              messageIndices: [1],
             },
           },
           { name: "observation_update", id: "c2", args: { action: "delete", id: wrong.id } },
@@ -260,19 +283,234 @@ test("distillation updates (evolution) and deletes existing observations", async
     ]),
   );
 
-  expect(result).toEqual({ created: 0, updated: 1, deleted: 1, ok: true, outcome: "answered" });
+  expect(result).toEqual({
+    created: 1,
+    updated: 0,
+    deleted: 1,
+    relations: { ...NO_RELATIONS, new: 1 },
+    rejected: NO_REJECTIONS,
+    ok: true,
+    outcome: "answered",
+  });
+  const entries = await store.list();
+  expect(entries).toHaveLength(2);
+  const before = entries.find((e) => e.id === stuck.id)!;
+  expect(before.summary).toBe("Stuck on quadratic attention cost"); // untouched
+  expect(before.type).toBe("stuck-point");
+  const after = entries.find((e) => e.id !== stuck.id)!;
+  expect(after.body).toContain(stuck.id); // the two are linked by the mention
+});
+
+// --- the relation a pass declares (docs/48) ---
+
+const HELD = [
+  {
+    id: "s-1111111111111111",
+    kind: "profile",
+    text: "Wants the derivation, not the picture",
+    lastSupported: "2026-08-30",
+  },
+  {
+    id: "s-2222222222222222",
+    kind: "concern",
+    text: "Is watching what the residual stream carries",
+    lastSupported: "2026-08-20",
+  },
+];
+
+function edgeRecorder() {
+  const edges: string[] = [];
+  return {
+    edges,
+    statementEdges: {
+      async addEvidence(id: string, observationIds: readonly string[]) {
+        edges.push(`evidence ${id} ${observationIds.join(",")}`);
+      },
+      async addContradiction(id: string, observationId: string) {
+        edges.push(`contradiction ${id} ${observationId}`);
+      },
+    },
+  };
+}
+
+test("predicted-by hangs the new observation on the statement that row number named", async () => {
+  const { store, adapter } = makeStore();
+  const recorder = edgeRecorder();
+  const result = await runDistillation(
+    makeInput({ statements: HELD }),
+    adapter,
+    {
+      ...scriptedRunner([
+        {
+          calls: [
+            {
+              name: "observation_update",
+              id: "c1",
+              args: {
+                action: "create",
+                relation: "predicted-by",
+                statement: 2,
+                type: "belief",
+                summary: "Asked again what the residual stream carries",
+                body: "Voiced on 2026-07-17.",
+                messageIndices: [1],
+              },
+            },
+          ],
+        },
+        { text: "done" },
+      ]),
+      statementEdges: recorder.statementEdges,
+    },
+  );
+  const [entry] = await store.list();
+  expect(recorder.edges).toEqual([`evidence s-2222222222222222 ${entry.id}`]);
+  expect(result.relations).toEqual({ ...NO_RELATIONS, "predicted-by": 1 });
+});
+
+test("contradicts records the observation against that statement, and the text stays", async () => {
+  const { store, adapter } = makeStore();
+  const recorder = edgeRecorder();
+  const result = await runDistillation(
+    makeInput({ statements: HELD }),
+    adapter,
+    {
+      ...scriptedRunner([
+        {
+          calls: [
+            {
+              name: "observation_update",
+              id: "c1",
+              args: {
+                action: "create",
+                relation: "contradicts",
+                statement: 1,
+                type: "correction",
+                summary: "Asked for the picture and skipped the derivation",
+                body: "On 2026-07-17.",
+                messageIndices: [1],
+              },
+            },
+          ],
+        },
+        { text: "done" },
+      ]),
+      statementEdges: recorder.statementEdges,
+    },
+  );
+  const [entry] = await store.list();
+  expect(recorder.edges).toEqual([`contradiction s-1111111111111111 ${entry.id}`]);
+  expect(result.relations).toEqual({ ...NO_RELATIONS, contradicts: 1 });
+});
+
+test("same-as grows an observation's evidence and writes no second one", async () => {
+  const { store, adapter } = makeStore();
+  const stuck = await adapter.retain({
+    type: "stuck-point",
+    summary: "Stuck on quadratic attention cost",
+    body: "Asked on 2026-07-10 why attention is O(n^2).",
+    anchors: { annotationIds: ["ann-0"], messageIds: [] },
+  });
+  const result = await runDistillation(
+    makeInput({ indexText: await store.readIndexText() }),
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c1",
+            args: { action: "same-as", observation: 1, messageIndices: [1, 2] },
+          },
+        ],
+      },
+      { text: "done" },
+    ]),
+  );
+  expect(result.relations).toEqual({ ...NO_RELATIONS, "same-as": 1 });
+  expect(result.updated).toBe(1);
   const entries = await store.list();
   expect(entries).toHaveLength(1);
-  expect(entries[0].id).toBe(stuck.id); // evolution rewrote, never re-created
-  expect(entries[0].summary).toContain("resolved on 2026-07-17");
-  expect(entries[0].created).toBe("2026-07-17"); // created preserved from retain date
+  expect(entries[0].body).toBe(stuck.body);
+  expect(entries[0].anchors).toEqual({
+    annotationIds: ["ann-0"],
+    messageIds: ["thread-1:100", "thread-1:200"],
+  });
+});
+
+test("the gate refuses a mark this pass never printed, and counts it", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillation(
+    makeInput(),
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c1",
+            args: {
+              action: "create",
+              relation: "new",
+              type: "belief",
+              summary: "Suspects the survey overstates the result",
+              body: "Voiced on 2026-07-17.",
+              // ann-1 is the thread's own mark; ann-9 was never in front of it.
+              annotationIds: ["ann-1", "ann-9"],
+            },
+          },
+        ],
+      },
+      { text: "done" },
+    ]),
+  );
+  expect(result.rejected).toEqual({ ...NO_REJECTIONS, "unresolved-anchor": 1 });
+  expect(result.created).toBe(0);
+  expect(await store.list()).toEqual([]);
+});
+
+test("the gate refuses a body naming an observation that is not there, and counts it", async () => {
+  const { store, adapter } = makeStore();
+  const result = await runDistillation(
+    makeInput(),
+    adapter,
+    scriptedRunner([
+      {
+        calls: [
+          {
+            name: "observation_update",
+            id: "c1",
+            args: {
+              action: "create",
+              relation: "new",
+              type: "understood-concept",
+              summary: "Worked out why attention is quadratic",
+              body: "Resolved on 2026-07-17 what m-1234567812345678 was stuck on.",
+              annotationIds: ["ann-1"],
+            },
+          },
+        ],
+      },
+      { text: "done" },
+    ]),
+  );
+  expect(result.rejected).toEqual({ ...NO_REJECTIONS, "unresolved-mention": 1 });
+  expect(await store.list()).toEqual([]);
 });
 
 test("a no-op distillation (nothing worth keeping) writes nothing", async () => {
   const { store, adapter } = makeStore();
   const result = await runDistillation(makeInput(), adapter, scriptedRunner([{ text: "done" }]));
   // ok, with no tool call at all: the point of evidence "optional" (see below).
-  expect(result).toEqual({ created: 0, updated: 0, deleted: 0, ok: true, outcome: "answered" });
+  expect(result).toEqual({
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    relations: NO_RELATIONS,
+    rejected: NO_REJECTIONS,
+    ok: true,
+    outcome: "answered",
+  });
   expect(await store.list()).toEqual([]);
 });
 
@@ -288,14 +526,22 @@ test("invalid tool args become a tool error the loop survives, not a write", asy
           {
             name: "observation_update",
             id: "c1",
-            args: { action: "create", type: "stuck-point", summary: "s" },
+            args: { action: "create", relation: "new", type: "stuck-point", summary: "s" },
           },
         ],
       },
       { text: "done" },
     ]),
   );
-  expect(result).toEqual({ created: 0, updated: 0, deleted: 0, ok: true, outcome: "answered" });
+  expect(result).toEqual({
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    relations: NO_RELATIONS,
+    rejected: NO_REJECTIONS,
+    ok: true,
+    outcome: "answered",
+  });
   expect(await store.list()).toEqual([]);
 });
 
@@ -310,7 +556,7 @@ test("the distiller mounts tools but does not require evidence", () => {
   expect(definition.briefTokenCap).toBe(DISTILL_BRIEF_TOKENS);
   // The prompt the capability sends is the curation prompt, with the brief
   // contract appended by the runner.
-  expect(definition.systemPrompt).toContain("Update, don't duplicate");
+  expect(definition.systemPrompt).toContain("never rewritten");
 });
 
 // --- a pass that does not finish ---
@@ -328,6 +574,7 @@ test("a failed call is a failed pass, with the writes it did make counted", asyn
             id: "c1",
             args: {
               action: "create",
+              relation: "new",
               type: "belief",
               summary: "Suspects the survey overstates the result",
               body: "Voiced on 2026-07-17.",
@@ -645,6 +892,7 @@ test("an aborted pass stops, and does not advance the stamps", async () => {
             id: "c1",
             args: {
               action: "create",
+              relation: "new",
               type: "reading-position",
               summary: "Reading the attention chapter",
               body: "On page 12 on 2026-07-17.",
@@ -691,13 +939,48 @@ test("a signal already aborted never reaches the model", async () => {
   expect(runner.requests.length).toBe(0);
 });
 
-test("system prompt carries the curation rules, the date, and the index", () => {
+test("system prompt carries the curation rules, the date, and the numbered index", () => {
   const prompt = buildDistillSystemPrompt(makeInput({ indexText: "- [belief] x (updated 2026-07-01, id m-11111111)" }));
-  expect(prompt).toContain("Update, don't duplicate");
   expect(prompt).toContain("conversation below happened on 2026-07-17");
-  expect(prompt).toContain("evolution");
-  expect(prompt).toContain("id m-11111111");
+  expect(prompt).toContain("never rewritten");
   expect(prompt).toContain("cannot be re-derived");
+  // The index line keeps its id — a body names other observations by id — and
+  // gains the number "same-as" points at.
+  expect(prompt).toContain("[1] - [belief] x (updated 2026-07-01, id m-11111111)");
+  // With nothing held about the reader yet, the two statement relations have no
+  // target and are not offered.
+  expect(prompt).toContain('Every observation you create is relation "new"');
+  expect(prompt).not.toContain("predicted-by");
+});
+
+test("the statements a pass may point at are printed numbered, superseded ones left out", () => {
+  const prompt = buildDistillSystemPrompt(
+    makeInput({
+      indexText: "- [belief] x (updated 2026-07-01, id m-11111111)",
+      statements: [
+        {
+          id: "s-1111111111111111",
+          kind: "profile",
+          text: "Wants the derivation, not the picture",
+          lastSupported: "2026-08-30",
+        },
+        {
+          id: "s-2222222222222222",
+          kind: "concern",
+          text: "An old reading of the same evidence",
+          lastSupported: "2026-06-01",
+          supersededBy: "s-1111111111111111",
+        },
+      ],
+    }),
+  );
+  expect(prompt).toContain("[1] (profile, last supported 2026-08-30) Wants the derivation");
+  expect(prompt).not.toContain("An old reading");
+  // The id is not printed: the number is the only handle, so there is none to
+  // copy wrongly.
+  expect(prompt).not.toContain("s-1111111111111111");
+  expect(prompt).toContain('relation "predicted-by"');
+  expect(prompt).toContain('"contradicts"');
 });
 
 test("user message carries metadata, the marked passage, and a numbered transcript", () => {
@@ -980,7 +1263,9 @@ test("the marks prompt says there was no conversation and refuses comprehension 
   expect(prompt).toContain("distribution");
   expect(prompt).toContain("Do not record understood-concept");
   expect(prompt).toContain("Aggregate.");
-  expect(prompt).toContain("Update, don't duplicate");
+  // The reader having got further is the reading-position observation happening
+  // again, not a second one.
+  expect(prompt).toContain('"same-as"');
   expect(prompt).toContain("stretch of marks below happened on 2026-07-17");
   expect(prompt).toContain("id m-11111111");
 
@@ -1230,6 +1515,7 @@ test("a pass dates what it writes by the transcript, not by the day it runs", as
             id: "c1",
             args: {
               action: "create",
+              relation: "new",
               type: "stuck-point",
               summary: "Stuck on quadratic attention cost",
               body: "Asked over two evenings.",
@@ -1271,6 +1557,7 @@ test("the marks pass dates what it writes by when the marks were made", async ()
             id: "c1",
             args: {
               action: "create",
+              relation: "new",
               type: "belief",
               summary: "Marks cluster on what the residual stream carries",
               body: "From marks with no conversation behind them.",
