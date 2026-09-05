@@ -5,6 +5,7 @@ import { expect, test } from "bun:test";
 import { localDate } from "../../src/memory/observations/files";
 import { createStatementStore, STATEMENTS_FILE } from "../../src/memory/statements/store";
 import type { DaySpan } from "../../src/memory/statements/dates";
+import type { Statement } from "../../src/memory/statements/types";
 
 const JULY_17 = new Date("2026-07-17T12:00:00Z").getTime();
 
@@ -158,9 +159,10 @@ test("superseding points the old statement at the new one and changes nothing el
     evidence: ["m-2222222222222222"],
   });
 
+  expect(next).not.toBeNull();
   const all = await store.listStatements();
-  expect(all.map((s) => s.id)).toEqual([old.id, next?.id]);
-  expect(all[0]).toEqual({ ...old, supersededBy: next?.id });
+  expect(all.map((s) => s.id)).toEqual([old.id, (next as Statement).id]);
+  expect(all[0]).toEqual({ ...old, supersededBy: (next as Statement).id });
   expect(next?.established).toBe("2026-08-01");
 
   // Nothing to supersede means nothing is created.

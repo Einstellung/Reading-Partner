@@ -122,14 +122,14 @@ export function inSyncRange(path: string): boolean {
       // written by that device alone, so there is never a merge to do: a
       // collector says who it is and when it was last alive, and a reader asks
       // for a briefing it cannot build itself.
-      // Which memory was shown, cited or rejected, one file per device
-      // (memory/usage.ts). Append-only and written by its own device alone, so
-      // there is never a merge to do beyond the union of the lines. In range
-      // because what the other device's reader did with a statement is evidence
-      // about the reader, not about that machine.
-      /^memory-usage-.+\.jsonl$/.test(top) ||
       /^info-collector-.+\.json$/.test(top) ||
-      /^info-ask-.+\.json$/.test(top)
+      /^info-ask-.+\.json$/.test(top) ||
+      // Which memory was shown, cited or rejected, one file per device
+      // (memory/usage/log.ts). Append-only and written by its own device alone,
+      // so there is never a merge to do beyond the union of the lines. In range
+      // because what the reader did with a statement on the other device is
+      // evidence about the reader, not about that machine.
+      /^memory-usage-.+\.jsonl$/.test(top)
     );
   }
   // The body of one kept article (docs/21), one immutable file per body, named

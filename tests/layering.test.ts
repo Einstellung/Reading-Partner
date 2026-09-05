@@ -59,6 +59,10 @@ const LAYER: Record<string, Layer> = {
   // layer as memory/observations and one direction only: statements read
   // observations, observations never read statements.
   "memory/statements": "capability",
+  // A directory for one file, because memory/index.ts imports memory/live and
+  // the live binding of the usage log has to import the log itself: at the root
+  // of memory/ that import is a cycle.
+  "memory/usage": "capability",
 
   info: "domain",
   "info/briefing": "domain",

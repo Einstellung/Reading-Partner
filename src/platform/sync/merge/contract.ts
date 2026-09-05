@@ -116,7 +116,7 @@ export function strategyFor(path: string): MergeStrategy {
   // get (writeCollection, records.ts), so one file covers both layers.
   if (/^outline-.+\.json$/.test(name)) return "records";
   if (/^threads-.+\.json$/.test(name)) return "records";
-  // What memory this device showed, cited or rejected (memory/usage.ts). Named
+  // What memory this device showed, cited or rejected (memory/usage/log.ts). Named
   // for the device that writes it, so it cannot be an entry in RECORD_FILES the
   // way the other logs are — the name is only known at runtime. Records, like
   // every other append-only log here: the line is its own identity and the
