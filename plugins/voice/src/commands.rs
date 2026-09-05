@@ -207,3 +207,34 @@ pub(crate) async fn speak_close<R: Runtime>(app: AppHandle<R>) -> Result<()> {
 pub(crate) async fn speak_stop<R: Runtime>(app: AppHandle<R>) -> Result<SpeechStopped> {
     app.state::<SpeechSession>().stop().await
 }
+
+// The full-duplex call (docs/33 M-voice-3). Three forwarders, like the
+// dictation ones: the microphone, the recogniser, the turn detector and the
+// player are all in Swift, and the verdicts reach the webview as the
+// `conversation` plugin event without passing through here.
+
+/// Open the microphone for a call and keep it open until `stop_conversation`.
+/// Same two arguments as `start_dictation`, with the same absence rules.
+#[command]
+pub(crate) async fn start_conversation<R: Runtime>(
+    app: AppHandle<R>,
+    locale: Option<String>,
+    contextual_strings: Option<Vec<String>>,
+) -> Result<()> {
+    app.voice()
+        .start_conversation(locale, contextual_strings)
+        .await
+}
+
+/// End the call. Resolves on no call at all.
+#[command]
+pub(crate) async fn stop_conversation<R: Runtime>(app: AppHandle<R>) -> Result<()> {
+    app.voice().stop_conversation().await
+}
+
+/// The playback level, 0..1: the webview's duck and full values. The native
+/// side ducks and restores at the verdict on its own; this names the levels.
+#[command]
+pub(crate) async fn set_speech_volume<R: Runtime>(app: AppHandle<R>, value: f64) -> Result<()> {
+    app.voice().set_speech_volume(value).await
+}

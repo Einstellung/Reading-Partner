@@ -83,6 +83,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::speak_push,
             commands::speak_close,
             commands::speak_stop,
+            commands::start_conversation,
+            commands::stop_conversation,
+            commands::set_speech_volume,
             commands::register_listener,
             commands::remove_listener
         ])
