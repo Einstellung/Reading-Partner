@@ -54,7 +54,7 @@ test("the chips are ordered by the card's own list, not the provider table's", (
     "Ant Ling",
     "Xiaomi",
     "Qwen Token Plan",
-    "OpenCode Zen Go",
+    "OpenCode Go",
     "Moonshot AI CN",
     "Z.AI Coding CN",
     "MiniMax CN",
