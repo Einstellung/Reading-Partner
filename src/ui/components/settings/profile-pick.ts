@@ -34,76 +34,100 @@ export interface ProfilePick {
 
 // --- the declared half ---
 
-const HEADING = /^#{1,6}\s+(.*)$/;
+// The shape this has to read is a hard-wrapped document: a "# " title, then
+// prose paragraphs broken at about 80 characters with a blank line between
+// them. A physical line is not an entry there — half a sentence is not a claim
+// about anybody — so the unit is the paragraph, and the wrap is undone.
+const HEADING = /^#{1,6}\s/;
 const LIST_MARKER = /^(?:[-*+]|\d+[.)])\s+/;
 const RULE = /^(?:-{3,}|\*{3,}|_{3,})$/;
-const COMMENT = /^<!--.*$/;
-// A whole line wrapped in emphasis, which is how a heading is written when
-// nobody used a "#".
+const COMMENT = /^<!--/;
+const QUOTE = /^>\s*/;
+// A whole entry wrapped in emphasis. Cosmetic only: it is still an entry.
 const WRAPPED = /^(\*\*|__|\*|_)(.+?)\1$/;
 
-function unwrap(line: string): string {
-  const m = WRAPPED.exec(line.trim());
-  return m ? m[2].trim() : line.trim();
+function unwrap(text: string): string {
+  const m = WRAPPED.exec(text.trim());
+  return m ? m[2].trim() : text.trim();
 }
 
-function sectionOf(text: string): string | null {
-  return text.trim().replace(/:$/, "").trim() || null;
+// The lines of one paragraph, back into the sentence they were wrapped out of.
+// A line ending in a hyphen is a word broken across the wrap, so it joins with
+// nothing; everything else joins with the space the line break stood for.
+function joinWrapped(lines: readonly string[]): string {
+  let out = "";
+  for (const line of lines) {
+    if (out === "") {
+      out = line;
+      continue;
+    }
+    out += out.endsWith("-") ? line : ` ${line}`;
+  }
+  return unwrap(out.trim());
 }
 
-// A section name, or null when this line is an entry. Three forms, because the
-// profile skeleton's four sections (memory/profile/profile.ts) get written all
-// three ways: a markdown heading, a whole line in bold, and a bare "Interests:"
-// label with the entries under it.
-function sectionName(line: string): string | null {
-  const trimmed = line.trim();
-  const heading = HEADING.exec(trimmed);
-  if (heading) return sectionOf(heading[1]);
-  // An entry stays an entry however it is decorated.
-  if (LIST_MARKER.test(trimmed)) return null;
-  const wrapped = WRAPPED.exec(trimmed);
-  // A sentence someone emphasised is not a heading; a heading has no full stop.
-  if (wrapped && !wrapped[2].trim().endsWith(".")) return sectionOf(wrapped[2]);
-  if (trimmed.endsWith(":")) return sectionOf(trimmed);
-  return null;
+// One block — the lines between two blank ones — as entries. A block whose
+// lines carry list markers is a list and gives one entry per item; anything
+// else is a paragraph and gives one.
+function blockEntries(lines: readonly string[]): string[] {
+  const items: string[][] = [];
+  const lead: string[] = [];
+  for (const line of lines) {
+    if (LIST_MARKER.test(line)) {
+      items.push([line.replace(LIST_MARKER, "").trim()]);
+    } else if (items.length > 0) {
+      // A wrapped continuation of the item above it.
+      items[items.length - 1].push(line);
+    } else {
+      lead.push(line);
+    }
+  }
+  const out = items.length === 0 ? [] : items.map(joinWrapped);
+  if (lead.length > 0) out.unshift(joinWrapped(lead));
+  return out;
 }
 
-// The section is carried onto its items because a bare "robotics" is not a
-// claim about anybody. Skipped when the item already opens with the section
-// name, so a document that repeats it does not get it twice.
-function withSection(section: string | null, item: string): string {
-  if (!section) return item;
-  if (item.toLowerCase().startsWith(section.toLowerCase())) return item;
-  return `${section}: ${item}`;
-}
-
-// The declared half of user-profile.md, one entry per line. Free-text markdown
-// (memory/profile/profile.ts, PROFILE_SKELETON_GUIDANCE), so the markers come
-// off, blanks and rules and comments go, and headings become the prefix of what
-// follows them rather than entries of their own.
+// The declared half of user-profile.md, one entry per paragraph or list item.
+// Free-text markdown (memory/profile/profile.ts, PROFILE_SKELETON_GUIDANCE):
+// blank lines separate entries, rules and comments and "#" titles are dropped
+// outright, and nothing is prefixed onto anything — a title is a title, not a
+// label to hang on every sentence under it.
 export function declaredLines(declared: string): string[] {
-  const out: string[] = [];
-  let section: string | null = null;
+  const blocks: string[][] = [];
+  let block: string[] = [];
+  const close = () => {
+    if (block.length > 0) blocks.push(block);
+    block = [];
+  };
   for (const raw of declared.split("\n")) {
-    const line = raw.trim();
-    if (line === "" || RULE.test(line) || COMMENT.test(line)) continue;
+    const line = raw.trim().replace(QUOTE, "");
+    if (line === "" || RULE.test(line)) {
+      close();
+      continue;
+    }
+    // A title says nothing about the reader on its own, and it is not a label
+    // for what follows either: dropped, and it breaks the paragraph it touches.
+    if (HEADING.test(line)) {
+      close();
+      continue;
+    }
     // The guess section, when its markers did not parse: splitProfile then hands
     // the whole document back as declared, which is the safe reading for a
     // writer and would otherwise show the AI's entries here twice over — once
     // mangled with their basis and date, once properly under "The AI guessed".
-    if (line === GUESS_HEADING) {
-      section = null;
+    if (COMMENT.test(line) || line === GUESS_HEADING || parseGuessLine(line)) {
+      close();
       continue;
     }
-    if (parseGuessLine(line)) continue;
-    const name = sectionName(line);
-    if (name !== null) {
-      section = name;
-      continue;
-    }
-    const item = unwrap(line.replace(LIST_MARKER, "")).replace(/^>\s*/, "").trim();
-    if (item.length < 2) continue;
-    out.push(withSection(section, item));
+    block.push(line);
+  }
+  close();
+
+  const out: string[] = [];
+  for (const b of blocks) {
+    // Never clipped: a paragraph the reader wrote is offered whole, because
+    // what they tick is exactly what gets written down.
+    for (const entry of blockEntries(b)) if (entry.length >= 2) out.push(entry);
   }
   return out;
 }

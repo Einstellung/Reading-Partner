@@ -39,50 +39,93 @@ function statement(text: string, over: Partial<Statement> = {}): Statement {
 
 // --- the declared half ---
 
-test("the flat form of the profile is one entry per line", () => {
-  expect(declaredLines("Interests: robotics, macro.\nTaste: allergic to vendor PR.\n")).toEqual([
-    "Interests: robotics, macro.",
-    "Taste: allergic to vendor PR.",
+// The shape the file on disk actually has: a title, then prose paragraphs
+// hard-wrapped at about 80 characters with a blank line between them. A
+// physical line is half a sentence, and half a sentence is not a claim about
+// anybody.
+const WRAPPED_PROFILE = [
+  "# Reading profile",
+  "",
+  "I want hard technical substance: papers, methods, real results, concrete",
+  "numbers. Summaries that stay at the level of what a field is about are of no",
+  "use to me, and I would rather be sent the primary source than a write-up of",
+  "it.",
+  "",
+  "When something is explained I want the derivation in full, not a diagram",
+  "standing in for one. A term that turns up for the first time should be opened",
+  "up on the spot rather than assumed.",
+  "",
+  "I read across fields and expect the connections to be drawn out: what a",
+  "result here means for the argument somewhere else. Most of what I keep is the",
+  "cross-field link rather than the result on its own.",
+].join("\n");
+
+test("hard-wrapped paragraphs are one entry each, and the title is not a prefix", () => {
+  const lines = declaredLines(WRAPPED_PROFILE);
+  expect(lines).toHaveLength(3);
+  expect(lines[0]).toBe(
+    "I want hard technical substance: papers, methods, real results, concrete " +
+      "numbers. Summaries that stay at the level of what a field is about are of no " +
+      "use to me, and I would rather be sent the primary source than a write-up of it.",
+  );
+  expect(lines[1]).toBe(
+    "When something is explained I want the derivation in full, not a diagram " +
+      "standing in for one. A term that turns up for the first time should be opened " +
+      "up on the spot rather than assumed.",
+  );
+  expect(lines[2]).toBe(
+    "I read across fields and expect the connections to be drawn out: what a " +
+      "result here means for the argument somewhere else. Most of what I keep is the " +
+      "cross-field link rather than the result on its own.",
+  );
+  expect(lines.some((l) => l.startsWith("Reading profile"))).toBe(false);
+});
+
+test("a paragraph is offered whole however long it is", () => {
+  const long = "word ".repeat(120).trim();
+  const wrapped = long.replace(/((?:\S+ ){12})/g, "$1\n");
+  expect(declaredLines(wrapped)).toEqual([long]);
+  expect(declaredLines(wrapped)[0].length).toBeGreaterThan(400);
+});
+
+// A word broken across the wrap is one word, so that join takes no space.
+test("a line ending in a hyphen joins straight onto the next", () => {
+  expect(declaredLines("keeps the cross-\nchannel link\n")).toEqual([
+    "keeps the cross-channel link",
   ]);
 });
 
-// A bare "robotics" is not a claim about anybody, so the heading it sits under
-// travels with it.
-test("headings become the prefix of the entries under them, not entries", () => {
+test("a blank line is what separates two entries", () => {
+  expect(declaredLines("Robotics and macro.\n\nAllergic to vendor PR.\n")).toEqual([
+    "Robotics and macro.",
+    "Allergic to vendor PR.",
+  ]);
+});
+
+// The one place a single line is still a single entry.
+test("a markdown list is one entry per item, continuations folded in", () => {
   const declared = [
-    "# Profile",
-    "",
     "## Interests",
+    "",
     "- robotics",
-    "* macro, especially capital flows",
-    "",
-    "**Taste**",
-    "1. allergic to vendor PR",
-    "",
-    "---",
-    "Now:",
-    "- trends.pdf (2026-08)",
+    "- macro, especially the capital-flow side of it and where",
+    "  that shows up in policy",
+    "1. and numbered items too",
   ].join("\n");
   expect(declaredLines(declared)).toEqual([
-    "Interests: robotics",
-    "Interests: macro, especially capital flows",
-    "Taste: allergic to vendor PR",
-    "Now: trends.pdf (2026-08)",
+    "robotics",
+    "macro, especially the capital-flow side of it and where that shows up in policy",
+    "and numbered items too",
   ]);
 });
 
-test("an entry that already opens with its section is not prefixed twice", () => {
-  expect(declaredLines("## Interests\n- Interests in robotics\n")).toEqual([
-    "Interests in robotics",
-  ]);
-});
-
-// The bold-line rule has to stop somewhere, or an emphasised sentence would
-// swallow everything after it as its section.
-test("an emphasised sentence is an entry, not a heading", () => {
-  expect(declaredLines("*Wants the derivation.*\n- and the diagram after it\n")).toEqual([
-    "Wants the derivation.",
-    "and the diagram after it",
+// Nothing is a heading any more except a "#" line, and that one is dropped
+// rather than promoted onto what follows it.
+test("a colon line and a bold line are entries, not labels for what follows", () => {
+  expect(declaredLines("Interests:\n\n**Taste**\n\nplain text\n")).toEqual([
+    "Interests:",
+    "Taste",
+    "plain text",
   ]);
 });
 
@@ -101,7 +144,7 @@ test("guesses come across as their text alone, without the basis or the date", (
 
 test("a line the reader already kept is not offered again", () => {
   const lines = profileLines({
-    declared: "Interests: robotics.\nTaste: allergic to vendor PR.\n",
+    declared: "Interests: robotics.\n\nTaste: allergic to vendor PR.\n",
     guesses: [guess("Reads for the era")],
     statements: [
       statement("Taste: allergic to vendor PR."),
@@ -140,7 +183,7 @@ test("two empty documents make no lines, which is what stops the card drawing", 
 function loaded(): ProfileLinesState {
   return profileLinesReducer(initialProfileLinesState, {
     type: "load",
-    declared: "Interests: robotics.\nTaste: allergic to vendor PR.\n",
+    declared: "Interests: robotics.\n\nTaste: allergic to vendor PR.\n",
     guesses: [guess("Reads for the era")],
     statements: [],
   });
