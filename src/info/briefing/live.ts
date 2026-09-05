@@ -64,6 +64,7 @@ import {
   saveRun,
   todayLocal,
 } from "./store";
+import { runDreamIfDue } from "../../memory/dream/live";
 import { dailyAction, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { collectorStatusLine, InfoCollector } from "./collector";
 import { createCollectorSession, type CollectorSession } from "./presence";
@@ -423,10 +424,24 @@ async function dailyTick(): Promise<void> {
 // Never rejects. A check that throws — settings that would not read, a claim
 // file the disk refused — is a round that is late, and it must not take the
 // schedule down with it.
-function checkDailyRound(): Promise<void> {
-  return dailyTick().catch((e) => {
+//
+// The nightly memory pass rides this tick rather than a timer of its own. It
+// belongs to the collector (docs/48: dream runs where the election put the
+// collecting, and its statements are what the five o'clock briefing reads), and
+// this is the one place that already asks who the collector is on a schedule.
+// runDreamIfDue owns its own 3 a.m. day gate and never throws; the guard here is
+// for the election read.
+async function checkDailyRound(): Promise<void> {
+  try {
+    await dailyTick();
+  } catch (e) {
     console.warn("the morning briefing check failed", e);
-  });
+  }
+  try {
+    if (await session.amICollecting()) await runDreamIfDue();
+  } catch (e) {
+    console.warn("the nightly memory pass check failed", e);
+  }
 }
 
 // The wake is a hint and nothing more — the answer comes from the clock and the
