@@ -170,6 +170,62 @@ test("superseding points the old statement at the new one and changes nothing el
   expect((await store.listStatements()).length).toBe(2);
 });
 
+// One replacement for two statements (dream/run.ts): supersede() mints it
+// against the first, and the second is pointed at what came back.
+test("marking a statement superseded points it at a replacement that already exists", async () => {
+  const { store } = makeStore();
+  const first = await store.createStatement({
+    kind: "profile",
+    text: "Reads past the maths",
+    author: "dream",
+    evidence: ["m-1111111111111111"],
+  });
+  const second = await store.createStatement({
+    kind: "profile",
+    text: "看不懂的推导先跳过",
+    author: "dream",
+    evidence: ["m-2222222222222222"],
+  });
+  const replacement = (await store.supersede(first.id, {
+    kind: "profile",
+    text: "Reads past the maths and comes back to it",
+    author: "dream",
+    evidence: ["m-1111111111111111", "m-2222222222222222"],
+  })) as Statement;
+
+  const marked = await store.markSuperseded(second.id, replacement.id);
+
+  expect(marked).toEqual({ ...second, supersededBy: replacement.id });
+  const all = await store.listStatements();
+  expect(all.map((s) => s.supersededBy)).toEqual([
+    replacement.id,
+    replacement.id,
+    undefined,
+  ]);
+  // Nothing but the one pointer moved: no text, no dates, no evidence.
+  expect(all[1]).toEqual({ ...second, supersededBy: replacement.id });
+});
+
+test("a statement that already points somewhere is left where it points", async () => {
+  const { store } = makeStore();
+  const old = await store.createStatement({
+    kind: "profile",
+    text: "Avoids the maths",
+    author: "dream",
+    evidence: ["m-1111111111111111"],
+  });
+  const replacement = (await store.supersede(old.id, {
+    kind: "profile",
+    text: "Reads past the maths and comes back to it",
+    author: "dream",
+    evidence: ["m-2222222222222222"],
+  })) as Statement;
+
+  expect(await store.markSuperseded(old.id, "s-somewhere-else")).toBeNull();
+  expect((await store.listStatements())[0].supersededBy).toBe(replacement.id);
+  expect(await store.markSuperseded("s-nope", replacement.id)).toBeNull();
+});
+
 // Every statement lives in this one file, so carrying on from an empty list
 // would write the file back with all of them gone.
 test("a file that does not parse throws instead of emptying itself", async () => {

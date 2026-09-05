@@ -110,7 +110,53 @@ test("a supersede of a statement the night wrote is kept", () => {
     candidates,
   );
 
-  expect(accepted).toHaveLength(1);
+  // A bare number comes out as the one-element list the write path walks.
+  expect(accepted).toEqual([
+    { action: "supersede", statements: [1], text: "no longer true", evidence: [1, 2] },
+  ]);
+});
+
+// Two statements the night wrote, which is the shape one supersede over several
+// is for: the same conclusion twice, once in each language.
+const twice: DreamCandidates = {
+  observations: candidates.observations,
+  statements: [
+    statement({ id: "s-1", text: "reads past the maths" }),
+    statement({ id: "s-2", text: "看不懂的推导先跳过" }),
+    statement({ id: "s-3", author: "reader" }),
+  ],
+};
+
+test("a supersede may name several statements, deduplicated and in order", () => {
+  const { accepted, dropped } = validateProposals(
+    [{ action: "supersede", statement: [2, 1, 2], text: "one claim", evidence: [1, 2] }],
+    twice,
+  );
+
+  expect(dropped).toBe(0);
+  expect(accepted).toEqual([
+    { action: "supersede", statements: [2, 1], text: "one claim", evidence: [1, 2] },
+  ]);
+});
+
+test("one target the reader wrote drops the whole supersede", () => {
+  const { accepted, reasons } = validateProposals(
+    [{ action: "supersede", statement: [1, 3], text: "one claim", evidence: [1, 2] }],
+    twice,
+  );
+
+  expect(accepted).toEqual([]);
+  expect(reasons[0]).toContain("the reader wrote");
+});
+
+test("a supersede whose list names nothing on it is dropped", () => {
+  for (const statementField of [[], [1, 9], [1, "s-2"], ["s-1"], [1.5]]) {
+    const { accepted } = validateProposals(
+      [{ action: "supersede", statement: statementField, text: "one claim", evidence: [1, 2] }],
+      twice,
+    );
+    expect(accepted).toEqual([]);
+  }
 });
 
 test("a supersede is held to the same two-days rule as a state", () => {

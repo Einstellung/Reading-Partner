@@ -71,6 +71,12 @@ export interface StatementStore {
   // The new statement, or null when there is nothing to supersede — in which
   // case nothing is created either.
   supersede(oldId: string, input: CreateStatementInput): Promise<Statement | null>;
+  // Points a statement at a replacement that already exists, for the second and
+  // further statements one replacement answers for (dream/run.ts). Null when
+  // there is no such statement and when it already points somewhere: the first
+  // pointer is where its evidence went, and overwriting it would lose the only
+  // record of that.
+  markSuperseded(id: string, byId: string): Promise<Statement | null>;
 }
 
 function appendUnique(existing: readonly string[], added: readonly string[]): string[] {
@@ -244,6 +250,17 @@ export function createStatementStore(io: StatementIo): StatementStore {
       all.push(statement);
       await writeAll(all);
       return statement;
+    },
+
+    async markSuperseded(id, byId) {
+      const all = await readAll();
+      const at = all.findIndex((s) => s.id === id);
+      if (at < 0) return null;
+      if (all[at].supersededBy) return null;
+      const next: Statement = { ...all[at], supersededBy: byId };
+      all[at] = next;
+      await writeAll(all);
+      return next;
     },
   };
 }

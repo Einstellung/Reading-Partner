@@ -19,6 +19,11 @@ export interface DreamStore {
   createStatement(input: CreateStatementInput): Promise<Statement>;
   addEvidence(id: string, evidence: readonly string[]): Promise<Statement | null>;
   supersede(oldId: string, input: CreateStatementInput): Promise<Statement | null>;
+  // Points a statement at a replacement that already exists. One supersede
+  // proposal may name several statements — the store holds the same conclusion
+  // twice, once in each language — and supersede() mints the replacement for
+  // the first of them; the rest are pointed at it with this.
+  markSuperseded(id: string, byId: string): Promise<Statement | null>;
 }
 
 export interface DreamModelRequest {
@@ -73,6 +78,9 @@ export const DREAM_SYSTEM_PROMPT = [
   "- Supersede a statement only when the evidence has turned against it, or when its",
   "  wording is plainly wrong now. A statement written by the reader is never superseded;",
   "  support it instead.",
+  "- When two standing statements say the same thing, supersede both with one statement",
+  "  that carries the union of their evidence.",
+  "- Write the statement in the language the observations are written in.",
   "- Write the claim itself. Never put an observation id in the text: the evidence list",
   "  carries them.",
   "",
@@ -80,9 +88,11 @@ export const DREAM_SYSTEM_PROMPT = [
   '  {"action":"state","kind":"profile","text":"...","evidence":[1,4]}',
   '  {"action":"support","statement":2,"evidence":[7]}',
   '  {"action":"supersede","statement":2,"text":"...","evidence":[3,9]}',
+  '  {"action":"supersede","statement":[2,11],"text":"...","evidence":[3,9]}',
   "",
   "`evidence` holds numbers from the observation list; `statement` is a number from the",
-  "statement list. An empty array is a good answer when nothing has come together yet.",
+  "statement list, or a list of them when one statement replaces several. An empty array",
+  "is a good answer when nothing has come together yet.",
 ].join("\n");
 
 const TASK_TAIL = "\nSend the JSON array now.";
@@ -140,20 +150,36 @@ export async function runDream(
         written += 1;
         continue;
       }
-      const target = candidates.statements[proposal.statement - 1];
       if (proposal.action === "support") {
+        const target = candidates.statements[proposal.statement - 1];
         if (await store.addEvidence(target.id, evidence)) written += 1;
         else refused += 1;
         continue;
       }
-      const replacement = await store.supersede(target.id, {
-        kind: target.kind,
+      const targets = proposal.statements.map((i) => candidates.statements[i - 1]);
+      // The first target mints the replacement; the rest are pointed at it. Its
+      // kind is the replacement's kind — every target passed the author rule, so
+      // they are all statements a night wrote, and a night writes profile.
+      const replacement = await store.supersede(targets[0].id, {
+        kind: targets[0].kind,
         text: proposal.text,
         author: "dream",
         evidence,
       });
-      if (replacement) written += 1;
-      else refused += 1;
+      if (!replacement) {
+        // Nothing was created, so there is nothing for the other targets to
+        // point at and none of them is touched.
+        refused += 1;
+        continue;
+      }
+      written += 1;
+      for (const target of targets.slice(1)) {
+        // Counted one at a time: a target that went away, or that something
+        // else already replaced, costs that target and not the replacement
+        // which is on disk either way.
+        if (await store.markSuperseded(target.id, replacement.id)) written += 1;
+        else refused += 1;
+      }
     } catch {
       // One write refused — evidence the store could not date, a statement that
       // went away between the read and the write — is one proposal lost, not a

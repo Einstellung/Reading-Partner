@@ -13,7 +13,13 @@ import { AI_EVENT_TOPIC } from "../../platform/app/structured-output";
 import { listTopics } from "../../platform/app/topics";
 import { callModel } from "../../ai/model-call";
 import { observationFs } from "../live/live";
-import { addEvidence, createStatement, listStatements, supersede } from "../live/statements";
+import {
+  addEvidence,
+  createStatement,
+  listStatements,
+  markSuperseded,
+  supersede,
+} from "../live/statements";
 import { localDate } from "../observations/files";
 import { ObservationFileStore } from "../observations/store";
 import type { Observation } from "../observations/types";
@@ -80,7 +86,7 @@ export async function runDreamIfDue(now = Date.now()): Promise<DreamResult | nul
           signal: new AbortController().signal,
           onProgress: () => {},
         }),
-      { createStatement, addEvidence, supersede },
+      { createStatement, addEvidence, supersede, markSuperseded },
     );
 
     // The day advances whatever happened, including a failure: the gate is one
