@@ -26,6 +26,16 @@ export function infoBookId(dateKey: string): string {
 // synthetic user turn (never rendered — it only seeds the streaming reply).
 export const OPENING_KICKOFF = "(The user just opened onboarding — greet them and begin.)";
 
+// The voice call's opening line (docs/33 "被召唤的语音会话", docs/45). Same shape
+// as OPENING_KICKOFF and equally synthetic — it is never rendered and never
+// spoken, it only kicks the greeting. What it asks for is a greeting and a
+// question, not the briefing read out: the call is a companion that was summoned
+// and not a player with a script (docs/33 "不播稿").
+export const VOICE_OPENING_KICKOFF =
+  "(The user just opened the voice call — you are speaking aloud, so keep it short. " +
+  "Greet them, give ONE sentence on what today's briefing amounts to, and ask what they " +
+  "want to hear about. Do not read the briefing out and do not list the items.)";
+
 // The one briefing card's stable id: the progress card, then in place the ready
 // or failed card, all address this id through upsertCardRow.
 export const BRIEFING_CARD_ID = "briefing";
