@@ -23,6 +23,7 @@
 | 不出整包，只验原生插件的 Swift / Rust 编得过 | iOS 构建与签名 |
 | 动 CI 的构建缓存、靠 build script 生成的东西 | iOS 构建与签名 |
 | SSH 远程到 Mac 上签名、构建 | iOS 构建与签名 |
+| 真机无人值守跑、判 app 还活着没有、手机上发网络请求 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 解流式 TTS 的音频分片、按字节数算时长 | 原生音频与语音 |
 | 选 TTS 音色、量首字出声延迟 | 原生音频与语音 |
@@ -54,7 +55,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 214）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 218）。
 
 ## EmbedPDF 引擎
 
@@ -150,6 +151,8 @@
 - [48-tauri-ios-signing-log-noise](./48-tauri-ios-signing-log-noise.md) — "找不到证书"警告和 `Apple Distribution: Tauri (unset)` 证书都是 Tauri 自己的噪音，签名成没成看 export 阶段
 - [107-testflight-upload-is-not-distribution](./107-testflight-upload-is-not-distribution.md) — altool 上传成功只是 ingest，build 不 link 到 beta 组就谁也装不到（内测组没开自动分发要逐个加，外测组还要 What's New 和 beta 审核）；上传后必须跑分发脚本。外测加组 404 说 build 不存在：端点要用 builds 那一侧、审核提交要排在加组前面、先查 `buildAudienceType` 和 `externalBuildState`。`fields[builds]` 漏列 relationship 会把 `include` 的数据一起吞掉。上传返回时 build 资源还没建出来，要等它出现和等它 VALID 两段轮询，且不许猜「最新那个」。distribute job 红不代表包没到手：外测 beta 审核提交有当天频次上限，撞上时内测那半已经成功，脚本打的 Test Information 提示是无关的通用提示
 - [163-idevicesyslog-drops-lines-when-it-is-not-filtered](./163-idevicesyslog-drops-lines-when-it-is-not-filtered.md) — 不加过滤的 `idevicesyslog` 四分钟落盘 127MB，里面自己 app 的 NSLog 只有 13 行：设备日志本身 0.5MB/s，中继跟不上就丢，丢哪段不挑。用 `-m/--match` 在中继侧过滤，判据是行数不是文件大小
+- [214-idevicesyslog-never-attaches-over-wifi](./214-idevicesyslog-never-attaches-over-wifi.md) — 设备只经 WiFi 可达时 `idevicesyslog` 停在一行 `Waiting for device...` 上挂着，不报错不退出、`pgrep` 还找得到，于是 `set -euo pipefail` 不触发；日志文件永远停在那一行，坑 200 那个 `last line Ns ago` 判活计数从文件创建时刻起单调增长，一轮读成「app 十分钟前就死了」而 app 一直活着。判活改看 `--console` 那份日志，`idevicecrashreport` 同样一无所获
+- [217-a-new-app-has-no-cellular-data-permission](./217-a-new-app-has-no-cellular-data-permission.md) — 国行 iPhone 的「无线数据」按 app 单独授权，新装的默认没有，出站请求在系统层被拒、约 1 ms 就以传输错误返回，错误串里没有任何线索（12/12 TTS 句子失败，Mac 上同一域名 curl 回 401）。云签名包每轮重装，这个授权每轮都要重点一次；判据是「1–2 ms 内失败而别的机器够得到」，真的 DNS/TLS 问题没这么快
 - [177-personal-team-signing-changes-must-not-reach-main](./177-personal-team-signing-changes-must-not-reach-main.md) — 个人开发者账号只有 Developer 角色时，真机调试签名要换成免费 Personal Team，配套的 dev-only bundle id、部署目标临时提到 26.0、`NSLocalNetworkUsageDescription`（连 Mac 上的 Vite dev server）、探针用的 `UIBackgroundModes: audio` 全部只留在本地分支，commit message 写死不许进 main
 - [179-ssh-session-codesign-has-no-keychain](./179-ssh-session-codesign-has-no-keychain.md) — SSH 会话没有图形登录会话的钥匙串，codesign 一律 `errSecInternalComponent`；命令要经 `launchctl asuser` 放回图形 session
 - [180-launchctl-asuser-still-runs-as-root](./180-launchctl-asuser-still-runs-as-root.md) — `asuser` 只换 security session 不换进程身份，Xcode 读到的还是 root 的账号和 DerivedData；要再套一层 `sudo -u <user>`
@@ -160,6 +163,7 @@
 - [200-devicectl-cannot-list-processes-while-console-is-attached](./200-devicectl-cannot-list-processes-while-console-is-attached.md) — `devicectl device process launch --console` 挂着的时候，并发的 `devicectl device info processes` 列不出这个进程，无人值守跑的点名整轮都读成 `GONE`，而 app 还在按秒写日志；判活改看日志文件的 mtime，或者直接看 `--console` 那份日志的最后一行
 - [201-a-kept-player-node-outlives-its-engine](./201-a-kept-player-node-outlives-its-engine.md) — `SpeechOut` 缓存的 player 节点属于上一张图，`play()` 抛 `player started when in a disconnected state`（ObjC 异常 = abort）。拆栈握着锁，只能异步通知缓存方，实测窗口 1.3 秒，里面新开一副 front 就会拿到「旧 player + 新 engine」两个 guard 都过。解法是取用侧同步问一句 `isCurrentSpeaker`；一般教训是缓存别处持有的指针就得有办法问它还算不算数
 - [202-the-reverse-tunnel-dies-with-the-network](./202-the-reverse-tunnel-dies-with-the-network.md) — 连 Mac 构建机的反向隧道把 Linux 的地址写死在 Mac 那头，换网就断；本地端口还听着，所以症状是 `Connection timed out during banner exchange` 而不是拒绝，跑到一半的构建和 `devicectl` 一起卡死。两头在同一个热点上时直连（`172.20.10.0/28`，Mac `.11`），断了先扫网段别修隧道
+- [216-a-pinned-git-remote-answers-from-the-old-address](./216-a-pinned-git-remote-answers-from-the-old-address.md) — Mac 上的 `linux` remote 写死着 Linux 当时的局域网地址（坑 202 那次改直连时的热点段），Linux 换网之后那个地址上是别的设备，`git fetch` 报的是 `Connection closed by <旧 ip> port 22` 而不是超时，看起来像对端 sshd 拒绝你。先 `ssh <ip> hostname` 确认是不是目标机器，再 `git remote set-url`；凡是把 Linux 地址存在 Mac 上的东西，换网就要全过一遍
 - [204-github-com-breaks-at-the-http2-framing-layer](./204-github-com-breaks-at-the-http2-framing-layer.md) — Mac 到 github.com 在 HTTP/2 帧层就断，`git clone`/`fetch` 直接报错，但 SwiftPM/xcodebuild 解析依赖撞上同一故障要先重试约三分钟才失败，看起来像卡死；解法是把依赖 vendor 成本地 `path:` 依赖（swift-rs 从 DerivedData 拷出剥 `.git`），代码走 `git bundle` + `scp`，包解析彻底不碰 github
 - [205-git-fetch-refuses-a-branch-that-is-checked-out](./205-git-fetch-refuses-a-branch-that-is-checked-out.md) — 给机器用的一次性检出目录里，`git fetch` 更新正被检出的分支会被拒绝，本地 fetch 一样中招；一律 `git checkout --force --detach`，别停在分支名上
 - [206-xcodebuild-buffers-its-output-until-the-build-ends](./206-xcodebuild-buffers-its-output-until-the-build-ends.md) — `xcodebuild ... | tail -n 20` 整个构建期间不打印一行，结束才一次性吐出来；重定向到文件再另开 `tail -f` 看实时进度
@@ -194,6 +198,7 @@
 - [194-a-stale-generated-permission-keeps-a-command-alive](./194-a-stale-generated-permission-keeps-a-command-alive.md) — `tauri_plugin::Builder` 把权限生成进源码树而且只写不删：命令从 `build.rs` 的 `COMMANDS` 里掉了，旧的 `autogenerated/commands/<name>.toml` 还在、还被提交着，ACL 照样放行。漏登记因此零报错，直到有人清空重新生成。`default.toml` 的每条 `allow-*` 都要在 `COMMANDS` 里对得上
 - [196-a-freeze-point-is-not-a-punctuation-mark](./196-a-freeze-point-is-not-a-punctuation-mark.md) — 流式切句要先冻结一段去跑整段的规范化，安全点不是标点：删掉的引号会把自己的位置让给后面的字符、`\s*` 匹配换行所以 `¥\n9` 是一个匹配、markdown 的配对跨边界且分隔符在哪一步被删会改后面规则的结果。三处都只有对抗性随机文本的属性测试才暴露，正常简报语料九万次比对全绿。冻结点的三个条件和依据在 `src/info/briefing/speech/split.ts` 的注释里
 - [198-detaching-a-node-from-a-running-engine-aborts](./198-detaching-a-node-from-a-running-engine-aborts.md) — engine 还在跑就 `detach` 节点，`AVAudioEngineGraph::RemoveNode` 抛的是 ObjC 异常而不是往 `NSError**` 里填错误，Swift 接不住，整个进程 abort；触发点是播放中途的路由变化、中断和进后台，现象是「腿卡住了、日志里什么都没有」。拆栈顺序改成摘 tap → 停 player → 停 engine → 最后 detach（这一版还不够，见坑 199）
+- [215-speechdetector-reports-no-results](./215-speechdetector-reports-no-results.md) — iOS 26.6 上 `SpeechDetector` 挂得上、`reportResults` 传了 true、序列到点自己正常结束，71.7 秒里 `detectorEvents` 是 0，同一次运行的转写流一切正常；不抛错也没有任何诊断。Apple 自己的文档两处互相矛盾（`Result` 的摘要说只支持错误处理，构造器的摘要说它报告结果），实测站在前一句这边。VAD 的源因此定成 tap 里自算电平，不等它；探针要把 attached / reportResults / events / streamEnded 四个都记下来，少一个「零结果」就会被读成「没挂上」
 - [203-voice-processing-off-leaves-the-engine-with-no-output](./203-voice-processing-off-leaves-the-engine-with-no-output.md) — `setVoiceProcessingEnabled(false)` 之后 `engine.outputNode.outputFormat(forBus:0)` 是 0 Hz：开 VPIO 那 450 ms 是 I/O 单元把采集和播放一起绑上硬件，关掉它只剩输入那半被 `inputNode` 拉起来。懒创建的 `mainMixerNode` 于是退回兜底的 44100 立体声，`play()` 抛 `player started when in a disconnected state`。`nodeOut=1 mixerOut=1` 和 `isRunning=1` 全是真的也没用——连接是声明出来的，渲染链里没有输出这一段；唯一的判据是输出格式的采样率为 0。同一轮里「拆栈重建 + VPIO 开」那条腿好好的，所以拆栈不是变量
 - [199-stopping-the-engine-first-does-not-make-detach-safe](./199-stopping-the-engine-first-does-not-make-detach-safe.md) — 停了 engine 再 `detach` 照样 abort，`RemoveNode` 的前置条件从外面看不全，而它报错的方式是 ObjC 异常；解法是拆栈时根本不 detach，摘 tap、停 player、停 engine，然后让 engine 引用置空带走整张图。真机实测有效：同一处拆栈走完打出 `RP-DICT front closed`，没再 abort，崩的是它后面 1.3 秒的另一件事（坑 201）
 
