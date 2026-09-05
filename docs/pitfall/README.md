@@ -15,6 +15,7 @@
 | 比不同供应商的网络延迟、量首包时间 | 网络与 CSP |
 | 改 deck / 幻灯片的宿主桥、iframe srcdoc | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
+| 加自动跑的后台/夜间任务、写数据迁移 | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
@@ -53,7 +54,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 208）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 211）。
 
 ## EmbedPDF 引擎
 
@@ -129,6 +130,7 @@
 - [53-identical-rewrite-wins-whole-file](./53-identical-rewrite-wins-whole-file.md) — app 用相同内容重写文件，按 mtime 判就是本地有改动，整文件 LWW 让"只是重存了一次"的设备静默覆盖掉另一台的批注；改内容 hash 判变更 + 三方合并
 - [208-file-deletion-does-not-survive-sync](./208-file-deletion-does-not-survive-sync.md) — 同步按设计不传播文件级删除，本地删掉的 AI 观察被另一台设备以更高 rev 推回来，`rebuildIndex()` 再把它写回 index 送进 prompt，全程静默（实测 106 个文件对 103 行 index，三条有意删掉的都回来了）；删除改成随 records 策略合并的墓碑行
 - [209-a-thread-id-is-not-unique-across-thread-files](./209-a-thread-id-is-not-unique-across-thread-files.md) — 线程 id 只在自己那个 `threads-*.json` 里唯一，info 简报会话的 id 是字面量 `briefing`，25 个日期文件各有一个；按 id 建全局 Map 静默吞掉 67/614 条消息。索引按 id 存数组，"这个 id 下几个线程持有这个时间戳"不是一个就拒绝
+- [210-a-nightly-pass-runs-once-per-entry-point-and-before-the-migration](./210-a-nightly-pass-runs-once-per-entry-point-and-before-the-migration.md) — dream 的日闸只看跑完才写的状态文件，一次启动里启动/回前台/定时器三个入口打进来跑了四遍，十条结论落盘两组（一中一英）；同一次启动它还抢在用户点迁移按钮前 20 秒跑完，19 条 statement 的证据指着马上要被改名的 8 位 id，全部悬空。闸放在被调用的那一侧：进程内在飞标记 + 进程内当日标记 + 观察目录里还有 8 位文件就 `waiting-migration`
 - [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
 
 ## 提取（壳侧 pdf.js）
