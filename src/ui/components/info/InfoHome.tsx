@@ -17,6 +17,7 @@ import { BriefingPage } from "./BriefingPage";
 import { SourcesPage } from "./SourcesPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
+import { VoiceOrbEntry } from "./VoiceOrbEntry";
 import { useInfoHome } from "./use-info-home";
 
 // The launch layer in front of the library. "library" belongs to App, which
@@ -174,9 +175,20 @@ export default function InfoHome(props: {
             />
           </div>
         );
-        return props.wrapScreen
+        const wrapped = props.wrapScreen
           ? props.wrapScreen({ label: "Ask about today's briefing", onAsk: () => void info.askBriefing() }, page)
           : page;
+        // The voice orb belongs to this screen and only to it (docs/33): it is
+        // the briefing being talked about. Not while the text call is up —
+        // that is the same conversation in the other medium, and the two would
+        // otherwise be stacked on one screen with the orb painting over the
+        // call's corner card.
+        return (
+          <>
+            {wrapped}
+            {!info.infoCall && <VoiceOrbEntry />}
+          </>
+        );
       })()}
 
       {screen === "sources" && (

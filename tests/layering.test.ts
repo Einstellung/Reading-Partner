@@ -110,6 +110,10 @@ const LAYER: Record<string, Layer> = {
   "ui/components/library": "ui",
   "ui/components/library/topic": "ui",
   "ui/components/markdown": "ui",
+  // The voice session's orb (docs/45). Its own directory rather than a file in
+  // info/: the display maths is the orb's, and the info screen that mounts it
+  // is one caller.
+  "ui/components/orb": "ui",
   "ui/components/phone": "ui",
   "ui/components/reader": "ui",
   "ui/components/rehearsal": "ui",

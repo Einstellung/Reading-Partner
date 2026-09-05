@@ -41,6 +41,7 @@
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
+| 新建源文件、给同目录两个文件起名 | 开发环境 |
 | 用 `useDom()` / RTL 写组件测试 | 开发环境 |
 | 跑测试确认一个改动、拿别人报的全绿当结论 | 开发环境 |
 | 搬目录、切子域、动分层表 | 开发环境 |
@@ -55,7 +56,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 218）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 219）。
 
 ## EmbedPDF 引擎
 
@@ -297,6 +298,7 @@
 - [176-a-selection-outlives-the-tree-that-made-it](./176-a-selection-outlives-the-tree-that-made-it.md) — `document.getSelection()` 挂在 document 上不挂在树上，RTL 的 `cleanup()` 卸树卸不掉它；一个用例选中文字但没有让手势收走选区，就把它原样留给下一个用例，`--seed` 洗过顺序后随机撞上不同的用例（chat-pen-strokes：seed=1 撞 stylus 用例自己的 isCollapsed 断言，seed=4 撞 chat.tsx:379 那道"点击是不是划词收尾"的判断）。`afterEach` 里 `cleanup()` 之后补一句 `document.getSelection()?.removeAllRanges()`
 - [181-vite-strict-port-1420-survives-a-failed-run](./181-vite-strict-port-1420-survives-a-failed-run.md) — `vite.config.ts` 的 `strictPort: true` 撞见上一轮失败残留的 vite 进程占着 1420，`pkill -f 'bun.*vite'` 匹配不到它，下一轮直接退出；起前按端口 `lsof` 找出来 `kill -9`
 - [182-plugin-listener-commands-are-not-implemented-by-tauri](./182-plugin-listener-commands-are-not-implemented-by-tauri.md) — 移动端插件从 Swift 侧发事件，JS 的 `addPluginListener` 挂不上：它 invoke 的 `register_listener`/`remove_listener` 是 Tauri 核心没实现的两个命令，插件自己在 Rust 侧转发给 Swift 基类；不是 iOS 专属，Android 插件一样撞
+- [218-bun-resolves-an-import-case-insensitively](./218-bun-resolves-an-import-case-insensitively.md) — bun 扫目录不分大小写，同目录的 `orb.ts` 和 `Orb.tsx` 互相顶掉，`import "./orb"` 报一个不存在的 `orb.tsx` 的 ENOENT；扩展名还是 `.tsx` 优先于 `.ts`。同目录基名不许只差大小写
 - [185-tauri-command-args-are-taken-by-parameter-name](./185-tauri-command-args-are-taken-by-parameter-name.md) — Tauri 命令的参数按参数名从 JS 对象里取，写 `payload: T` 就逼 JS 多包一层；想收平铺对象就把字段列成独立参数
 
 ## 历史（zotero/reader 引擎时代）
