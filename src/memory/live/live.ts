@@ -5,8 +5,6 @@
 // the real model through runAgentTurn with the same provider config as chat, and
 // a tiny change feed so the observations panel refreshes after background writes.
 
-import { appData } from "../../platform/app/appdata";
-import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { resolveModel } from "../../ai/model-call";
 import { runSubagentTurnLive } from "../../ai/subagent";
 import { StoppedError } from "../../ai/watchdog";
@@ -42,24 +40,23 @@ import {
   type ThreadArrears,
   type TopicArrears,
 } from "../observations/arrears";
-import {
-  ObservationFileStore,
-  type ObservationConflict,
-  type ObservationFs,
-} from "../observations/store";
+import { ObservationFileStore, type ObservationConflict } from "../observations/store";
 import type { TopicObservations } from "../observations/recall";
 import type { Observation, ObservationIndexEntry } from "../observations/types";
 import {
   distillFailurePayload,
+  distillWritePayload,
   markCursor,
   messageCursor,
   runDistillPass,
   runMarksDistillPass,
   type DistillAnnotation,
   type DistillMessage,
+  type DistillStatement,
   type DistillUnitPart,
 } from "../observations/distill";
 import { runRetellDistillPass } from "../observations/retell";
+import { addContradiction, addEvidence, listStatements } from "./statements";
 import {
   createDistillGate,
   createSweeps,
@@ -67,44 +64,10 @@ import {
   type Sweeps,
 } from "./sweeps";
 
-// No exists() probe before a read or a listing. Each probe is a round trip
-// through the Tauri plugin bridge, and it doubled the cost of every read: one
-// list() over the owner's 106-entry topic was 2 + 2x106 = 214 crossings, and
-// buildReadingTurn (reading/turn.ts) does one on every reading turn, iPad
-// included. Reading straight through makes it 107. Two hundred-odd crossings
-// is the cost SyncFs names as the reason nothing but a full sync pass may call
-// its list() (platform/sync/syncFs.ts); this one ran on every turn.
-//
-// A read that throws is a file that is not there, which is the answer the store
-// already acts on: it takes null from read() and takes the same null from a
-// file whose bytes do not parse (store.ts), and nothing above it tells missing
-// from unreadable. The probe never ruled the throw out anyway — the file can go
-// between exists() and readText() — so this drops a cost, not a guarantee.
-export const observationFs: ObservationFs = {
-  async read(path) {
-    try {
-      return await appData.readText(path);
-    } catch {
-      return null;
-    }
-  },
-  async write(path, content) {
-    const dir = path.slice(0, path.lastIndexOf("/"));
-    if (dir) await appData.mkdirp(dir);
-    await writeTextAtomic(path, content);
-  },
-  async remove(path) {
-    await appData.remove(path);
-  },
-  async listDir(path) {
-    try {
-      const entries = await appData.readDir(path);
-      return entries.filter((e) => e.isFile).map((e) => e.name);
-    } catch {
-      return [];
-    }
-  },
-};
+// The observation filesystem lives in fs.ts, which the statement store reads
+// too; re-exported here because this is where every caller has always found it.
+export { observationFs } from "./fs";
+import { observationFs } from "./fs";
 
 const stores = new Map<string, ObservationFileStore>();
 const adapters = new Map<string, FileObservationAdapter>();
@@ -226,6 +189,22 @@ export interface DistillThreadOptions {
   signal?: AbortSignal;
 }
 
+// What every distillation pass needs of the statement store: the statements the
+// prompt numbers, and the two edges a relation writes. Read once per pass — the
+// file is one read and a pass is a model call, so the cost is nothing next to
+// what it is attached to.
+//
+// Superseded ones are filtered where they are rendered (distill.ts), not here:
+// what a pass may point at is the prompt's business.
+async function heldAboutReader(): Promise<readonly DistillStatement[]> {
+  return await listStatements();
+}
+
+const statementEdges = {
+  addEvidence: (id: string, observationIds: readonly string[]) => addEvidence(id, observationIds),
+  addContradiction: (id: string, observationId: string) => addContradiction(id, observationId),
+};
+
 // One pass at a time per subject: a thread id for a transcript pass, "marks:<bookId>"
 // for a silent-marking pass. Covers every trigger, so the sweep cannot start a
 // second pass over what a hangup is already distilling (sweeps.ts).
@@ -269,11 +248,13 @@ export function distillThread(
           ...(opts.parts ? { parts: opts.parts } : {}),
           annotations: opts.annotations,
           minNewMessages,
+          statements: await heldAboutReader(),
         },
         {
           store: getStore(opts.topicId),
           adapter: getObservationAdapter(opts.topicId),
           otherTopics: () => listOtherTopicObservations(opts.topicId),
+          statementEdges,
           run: runSubagentTurnLive,
           model: {
             providerId: model.providerId,
@@ -300,6 +281,7 @@ export function distillThread(
             coverage: result.coverage,
             counts: result,
           }),
+          ...distillWritePayload(result),
         });
         if (result.created + result.updated + result.deleted > 0) {
           notifyObservationChange(opts.topicId);
@@ -312,6 +294,7 @@ export function distillThread(
         created: result.created,
         updated: result.updated,
         deleted: result.deleted,
+        ...distillWritePayload(result),
       });
       notifyObservationChange(opts.topicId);
     } catch (e) {
@@ -356,11 +339,13 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
           bookName: opts.bookName,
           annotations: opts.annotations,
           minNewMarks: opts.minNewMarks,
+          statements: await heldAboutReader(),
         },
         {
           store: getStore(opts.topicId),
           adapter: getObservationAdapter(opts.topicId),
           otherTopics: () => listOtherTopicObservations(opts.topicId),
+          statementEdges,
           run: runSubagentTurnLive,
           model: {
             providerId: model.providerId,
@@ -381,6 +366,7 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
             coverage: result.coverage,
             counts: result,
           }),
+          ...distillWritePayload(result),
         });
         if (result.created + result.updated + result.deleted > 0) {
           notifyObservationChange(opts.topicId);
@@ -393,6 +379,7 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
         created: result.created,
         updated: result.updated,
         deleted: result.deleted,
+        ...distillWritePayload(result),
       });
       notifyObservationChange(opts.topicId);
     } catch (e) {
