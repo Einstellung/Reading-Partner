@@ -23,7 +23,7 @@ export default function SavedList({
           <Button variant="subtle" size="chip" onClick={onBack}>
             ‹ Today
           </Button>
-          <span className="text-[13px] text-[#999]">
+          <span className="text-[13px] text-faint-foreground">
             {articles.length} saved article{articles.length === 1 ? "" : "s"}
           </span>
         </div>
@@ -34,15 +34,15 @@ export default function SavedList({
             return (
               <li key={a.id}>
                 <button
-                  className="flex w-full flex-col items-start gap-1.5 rounded-xl border border-border-soft bg-card p-4 text-left coarse:min-h-[44px] hover:border-[#d3ccef]"
+                  className="flex w-full flex-col items-start gap-1.5 rounded-xl border border-border-soft bg-card p-4 text-left coarse:min-h-[44px] hover:border-secondary-border"
                   onClick={() => onOpen(a)}
                 >
-                  <span className="text-[15px] font-medium leading-snug text-[#1b1b1b]">{a.title}</span>
+                  <span className="text-[15px] font-medium leading-snug text-foreground">{a.title}</span>
                   <span className="flex items-center gap-2">
                     {a.sourceName && (
                       <Badge>{a.sourceName}</Badge>
                     )}
-                    {published && <span className="text-[12px] text-[#888]">{published}</span>}
+                    {published && <span className="text-[12px] text-faint-foreground">{published}</span>}
                     {a.summaryOnly && <span className="text-[12px] text-[#b08a3a]">summary only</span>}
                   </span>
                 </button>

@@ -116,7 +116,7 @@ export function InfoCall({
             }
             body={
               position.line ? (
-                <span className="line-clamp-3 text-[12px] leading-snug text-neutral-500">{position.line}</span>
+                <span className="line-clamp-3 text-[12px] leading-snug text-faint-foreground">{position.line}</span>
               ) : undefined
             }
             onClick={() => call.setSwapped(true)}

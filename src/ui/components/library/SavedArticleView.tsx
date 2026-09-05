@@ -61,10 +61,10 @@ export default function SavedArticleView({
           {article.sourceName && (
             <Badge>{article.sourceName}</Badge>
           )}
-          {published && <span className="text-[12px] text-[#888]">{published}</span>}
+          {published && <span className="text-[12px] text-faint-foreground">{published}</span>}
         </div>
 
-        <h1 className="m-0 mb-4 text-[22px] font-semibold leading-tight text-[#141414] sm:mb-6 sm:text-[26px]">
+        <h1 className="m-0 mb-4 font-display text-[22px] font-semibold leading-tight text-foreground sm:mb-6 sm:text-[26px]">
           {article.title}
         </h1>
 
@@ -86,12 +86,12 @@ export default function SavedArticleView({
         ) : body.text ? (
           <div className={`${ARTICLE_PROSE_CLASS} whitespace-pre-wrap`}>{body.text}</div>
         ) : (
-          <p className="my-3.5 text-[15px] leading-relaxed text-[#777]">
+          <p className="my-3.5 text-[15px] leading-relaxed text-faint-foreground">
             No body was saved with this article.
           </p>
         )}
 
-        <div className="mt-8 border-t border-border-subtle pt-4 text-[12px] text-[#bbb] sm:mt-10">{article.url}</div>
+        <div className="mt-8 border-t border-border-subtle pt-4 text-[12px] text-faint-foreground sm:mt-10">{article.url}</div>
       </div>
     </div>
   );

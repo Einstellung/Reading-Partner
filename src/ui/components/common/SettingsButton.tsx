@@ -22,7 +22,7 @@ export default function SettingsButton({
     >
       ⚙
       {alert && (
-        <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[#b45309] ring-2 ring-[#fafafa]" />
+        <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[#b45309] ring-2 ring-muted-faint" />
       )}
     </Button>
   );

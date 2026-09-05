@@ -30,7 +30,7 @@ export default function TopicCard(props: {
       <button className={LIBRARY_CARD} onClick={props.onOpen}>
         <CoverBand tiles={tiles} />
         <span className={CARD_LABEL}>
-          <span className={CARD_TITLE}>{topic.name}</span>
+          <span className={`${CARD_TITLE} font-display`}>{topic.name}</span>
           <span className={CARD_META}>{fileCountLabel(topic.files.length)}</span>
         </span>
       </button>

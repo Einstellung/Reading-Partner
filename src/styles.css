@@ -58,6 +58,10 @@
     --primary-hover: #435441;
 
     --secondary: #e6e8db;
+    /* One step lighter than --secondary and barely off the ground: the wash
+       under a whole card that belongs to the accent (the info cards the
+       companion writes), where --secondary would paint the card as a chip. */
+    --secondary-faint: #f2f4ec;
     --secondary-foreground: #3f5039;
     --secondary-border: #c9cfbd;
     --secondary-hover: #dde0cf;
@@ -83,7 +87,7 @@
        tokens because a neutral grey is the one thing that cannot follow the
        ground when the ground turns warm. */
     --muted-faint: #f3f3ed;
-    --muted-soft: #eeeee8;
+    --muted-soft: #f1f1ea;
     --muted-strong: #e3e3db;
 
     --destructive: #b91c1c;
@@ -167,7 +171,7 @@
     --muted: #ece5d4;
     --accent: #ece5d4;
     --muted-faint: #f1ebda;
-    --muted-soft: #ebe4d4;
+    --muted-soft: #eee8d8;
     --muted-strong: #e0d8c4;
 
     --border: #e2dac6;
@@ -200,6 +204,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
+  --color-secondary-faint: var(--secondary-faint);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary-border: var(--secondary-border);
   --color-secondary-hover: var(--secondary-hover);

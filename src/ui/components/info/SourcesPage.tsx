@@ -54,7 +54,7 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const state = healthState(health);
-  const color = state === "ok" ? "bg-[#3fb950]" : state === "warn" ? "bg-[#e3b341]" : "bg-[#d0d0d0]";
+  const color = state === "ok" ? "bg-[#3fb950]" : state === "warn" ? "bg-[#e3b341]" : "bg-muted-strong";
 
   // A press outside shuts the panel. Not blur: WebKit does not focus a button
   // when it is tapped, so on a touch device the dot never holds focus and a blur
@@ -79,11 +79,11 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
         className={`relative h-2.5 w-2.5 rounded-full ${HIT_44} ${color}`}
       />
       {open && health && (
-        <div className="absolute right-0 top-4 z-10 w-56 rounded-lg border border-black/10 bg-popover p-3 text-left text-[12px] shadow-lg">
+        <div className="absolute right-0 top-4 z-10 w-56 rounded-lg border border-border bg-popover p-3 text-left text-[12px] shadow-lg">
           {health.lastSuccess ? (
-            <div className="text-[#555]">Last success: {timeAgo(health.lastSuccess)}</div>
+            <div className="text-muted-foreground">Last success: {timeAgo(health.lastSuccess)}</div>
           ) : (
-            <div className="text-[#999]">No successful run yet.</div>
+            <div className="text-faint-foreground">No successful run yet.</div>
           )}
           {health.lastError && (
             <div className="mt-1.5 text-[#c0392b]">
@@ -116,11 +116,11 @@ function SignInRow(props: {
     <li className="flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3">
       <span
         aria-hidden
-        className={`h-2.5 w-2.5 flex-none rounded-full ${signedIn ? "bg-[#3fb950]" : "bg-[#d0d0d0]"}`}
+        className={`h-2.5 w-2.5 flex-none rounded-full ${signedIn ? "bg-[#3fb950]" : "bg-muted-strong"}`}
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[14px] font-medium text-[#1b1b1b]">{site.label}</div>
-        <div className="truncate text-[12px] text-[#999]">
+        <div className="truncate text-[14px] font-medium text-foreground">{site.label}</div>
+        <div className="truncate text-[12px] text-faint-foreground">
           {sessionRowLine(site, state, work)}
         </div>
       </div>
@@ -218,12 +218,12 @@ export function SourcesPage(props: SourcesPageProps) {
         <Button variant="subtle" size="chip" onClick={props.onBack}>
           ‹ Briefing
         </Button>
-        <span className="text-[15px] font-medium text-[#1b1b1b]">Sources</span>
+        <span className="text-[15px] font-medium text-foreground">Sources</span>
       </div>
 
       {/* Add by URL, where a URL can be proved to work. */}
       {!props.onProbeAdd ? (
-        <p className="mb-6 mt-0 text-[13px] leading-relaxed text-[#999]">
+        <p className="mb-6 mt-0 text-[13px] leading-relaxed text-faint-foreground">
           Sources are added on the computer that collects them — proving one works means fetching
           three articles from it, which only that machine can do.
         </p>
@@ -240,14 +240,14 @@ export function SourcesPage(props: SourcesPageProps) {
               }
             }}
             placeholder="Paste a site or RSS URL…"
-            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-background px-3 py-2 text-[14px] text-[#1b1b1b] outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-neutral-400 focus:border-primary"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-faint-foreground focus:border-primary"
           />
           <Button type="button" variant="cta" size="lg" onClick={() => void probe()} disabled={!url.trim() || probing}>
             {probing ? "Checking…" : "Add"}
           </Button>
         </div>
         {slow && (
-          <div className="mt-2 text-[13px] text-[#666]">
+          <div className="mt-2 text-[13px] text-muted-foreground">
             This site is read through a background browser window — fetching one article to test it takes up to a minute.
           </div>
         )}
@@ -271,7 +271,7 @@ export function SourcesPage(props: SourcesPageProps) {
           is on that machine, so that machine is the only place to repair it. */}
       {sites.length > 0 && !props.onSignIn && props.collectorSites && (
         <div className="mb-6">
-          <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#999]">
+          <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-faint-foreground">
             Signed-in sites
           </div>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -284,13 +284,13 @@ export function SourcesPage(props: SourcesPageProps) {
                 >
                   <span
                     aria-hidden
-                    className={`h-2.5 w-2.5 flex-none rounded-full ${signedIn ? "bg-[#3fb950]" : "bg-[#d0d0d0]"}`}
+                    className={`h-2.5 w-2.5 flex-none rounded-full ${signedIn ? "bg-[#3fb950]" : "bg-muted-strong"}`}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[14px] font-medium text-[#1b1b1b]">
+                    <div className="truncate text-[14px] font-medium text-foreground">
                       {site.label}
                     </div>
-                    <div className="truncate text-[12px] text-[#999]">
+                    <div className="truncate text-[12px] text-faint-foreground">
                       {signedIn
                         ? `Signed in on ${props.collectorSites?.deviceName}`
                         : `Needs signing in on ${props.collectorSites?.deviceName} for the full text`}
@@ -307,7 +307,7 @@ export function SourcesPage(props: SourcesPageProps) {
           the platform has no webview to sign in with. */}
       {sites.length > 0 && props.onSignIn && (
         <div className="mb-6">
-          <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#999]">
+          <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-faint-foreground">
             Signed-in sites
           </div>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -323,7 +323,7 @@ export function SourcesPage(props: SourcesPageProps) {
               />
             ))}
           </ul>
-          <p className="mt-2 text-[12px] leading-relaxed text-[#999]">
+          <p className="mt-2 text-[12px] leading-relaxed text-faint-foreground">
             Signing in opens the site's own page in a window. Close it when you are done — your
             password never reaches this app, and only the site's cookie stays behind.
           </p>
@@ -332,7 +332,7 @@ export function SourcesPage(props: SourcesPageProps) {
 
       {/* The list. */}
       {props.sources.length === 0 ? (
-        <p className="my-3.5 text-[14px] text-[#999]">
+        <p className="my-3.5 text-[14px] text-faint-foreground">
           {props.onProbeAdd
             ? "No sources yet. Paste a URL above to add one."
             : "No sources yet."}
@@ -346,8 +346,8 @@ export function SourcesPage(props: SourcesPageProps) {
             >
               <HealthDot health={props.health[s.id]} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] font-medium text-[#1b1b1b]">{s.name}</div>
-                <div className="truncate text-[12px] text-[#999]">
+                <div className="truncate text-[14px] font-medium text-foreground">{s.name}</div>
+                <div className="truncate text-[12px] text-faint-foreground">
                   {[s.line, pipeLabel(s)].filter(Boolean).join(" · ")}
                 </div>
               </div>
@@ -362,7 +362,7 @@ export function SourcesPage(props: SourcesPageProps) {
                 aria-label="Remove source"
                 title="Remove"
                 onClick={() => props.onRemove(s.id)}
-                className="h-7 w-7 flex-none rounded-full text-[#bbb] can-hover:opacity-0 transition-opacity can-hover:hover:text-[#c0392b] group-hover:opacity-100"
+                className="h-7 w-7 flex-none rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:text-[#c0392b] group-hover:opacity-100"
               >
                 ✕
               </Button>

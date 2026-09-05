@@ -37,7 +37,7 @@ export function Card({ children }: { children: React.ReactNode }) {
 }
 
 export function CardLabel({ children }: { children: React.ReactNode }) {
-  return <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[#999]">{children}</div>;
+  return <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-faint-foreground">{children}</div>;
 }
 
 // What a card body shows while its answer is still being read off disk.
@@ -144,11 +144,11 @@ export function BriefingCardBody({
     return (
       <div className="flex flex-1 flex-col justify-between">
         <div>
-          <div className="flex items-center gap-2 text-[15px] text-[#333]">
+          <div className="flex items-center gap-2 text-[15px] text-muted-foreground">
             <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
             {phase}…
           </div>
-          <div className="mt-1 text-[13px] tabular-nums text-[#999]">
+          <div className="mt-1 text-[13px] tabular-nums text-faint-foreground">
             {elapsed}s{detail ? ` · ${detail}` : ""}
           </div>
         </div>
@@ -178,9 +178,9 @@ export function BriefingCardBody({
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <button className="flex flex-1 flex-col justify-between text-left" onClick={onOpen}>
-          <p className="m-0 text-[15px] leading-relaxed text-[#2a2a2a]">{briefing.overview}</p>
+          <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">{briefing.overview}</p>
           <div className="mt-4 flex items-center justify-between">
-            <span className="text-[13px] text-[#888]">{counts}</span>
+            <span className="text-[13px] text-faint-foreground">{counts}</span>
             <span className="text-[13px] font-medium text-primary">Open →</span>
           </div>
         </button>
@@ -205,7 +205,7 @@ export function BriefingCardBody({
   if (configured && hasSources === false) {
     return (
       <div className="flex flex-1 flex-col justify-between">
-        <p className="m-0 text-[14px] leading-relaxed text-[#777]">
+        <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
           {collecting
             ? "Subscribe to what you follow — AI sources, robotics, anything with a feed — and get a triaged briefing each day."
             : "No sources yet. Subscriptions are set up on the computer that collects them, and the briefing arrives here."}
@@ -231,7 +231,7 @@ export function BriefingCardBody({
   return (
     <div className="flex flex-1 flex-col justify-between">
       <div>
-        <p className="m-0 text-[14px] leading-relaxed text-[#777]">
+        <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
           {snap?.error ? "Today's briefing could not be built." : waiting}
         </p>
         {snap?.error && <p className="mt-2 text-[13px] text-[#c0392b]">{snap.error}</p>}

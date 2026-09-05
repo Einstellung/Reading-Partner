@@ -102,7 +102,7 @@ function Harness() {
             title="Today's briefing"
             badge={<Badge className="shrink-0">Example</Badge>}
             body={
-              <span className="line-clamp-3 text-[12px] leading-snug text-neutral-500">
+              <span className="line-clamp-3 text-[12px] leading-snug text-faint-foreground">
                 The corner card the text call draws over this screen.
               </span>
             }

@@ -30,7 +30,7 @@ function DismissButton({ onDismiss }: { onDismiss: () => void }) {
         e.stopPropagation();
         onDismiss();
       }}
-      className="h-6 w-6 flex-none rounded-full text-[#bbb] can-hover:opacity-0 transition-opacity can-hover:hover:text-[#666] group-hover:opacity-100"
+      className="h-6 w-6 flex-none rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:text-muted-foreground group-hover:opacity-100"
     >
       ✕
     </Button>
@@ -58,7 +58,7 @@ export function BriefingPage(props: BriefingPageProps) {
       <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
         {/* No back chip: the shell's sidebar is what leaves this page, and on
             the phone back is the edge swipe and the system button (docs/22). */}
-        <span className="text-[13px] text-[#999]">{b.date}</span>
+        <span className="text-[13px] text-faint-foreground">{b.date}</span>
         <span className="flex-1" />
         <Button variant="subtle" size="chip" onClick={props.onOpenSources} title="Manage sources">
           Sources
@@ -69,12 +69,12 @@ export function BriefingPage(props: BriefingPageProps) {
       </div>
 
       {/* Overview: one honest line. */}
-      <p className="m-0 mb-6 text-[17px] font-medium leading-relaxed text-[#1b1b1b] sm:mb-9 sm:text-[19px]">{b.overview}</p>
+      <p className="m-0 mb-6 font-display text-[17px] font-medium leading-relaxed text-foreground sm:mb-9 sm:text-[19px]">{b.overview}</p>
 
       {/* Worth your time. */}
       {b.mustRead.length > 0 && (
         <section className="mb-8 sm:mb-10">
-          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-[#999]">Worth your time</h2>
+          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">Worth your time</h2>
           <div className="flex flex-col gap-3">
             {b.mustRead.map((r) => {
               const m = meta(r.itemId);
@@ -85,7 +85,7 @@ export function BriefingPage(props: BriefingPageProps) {
                 <div
                   key={r.itemId}
                   className={
-                    "group rounded-xl border border-border-soft bg-card p-4 transition-colors hover:border-[#d3ccef] " +
+                    "group rounded-xl border border-border-soft bg-card p-4 transition-colors hover:border-secondary-border " +
                     (dismissed ? "opacity-45" : "")
                   }
                 >
@@ -95,10 +95,10 @@ export function BriefingPage(props: BriefingPageProps) {
                     <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>
                       <div className="flex items-center gap-2">
                         <SourceTag name={m.sourceName} />
-                        {opened && <span className="text-[11px] text-[#aaa]">Read</span>}
+                        {opened && <span className="text-[11px] text-faint-foreground">Read</span>}
                       </div>
-                      <div className="mt-1.5 text-[16px] font-medium leading-snug text-[#1b1b1b]">{m.title}</div>
-                      <div className="mt-1.5 text-[14px] leading-relaxed text-[#555]">{r.reason}</div>
+                      <div className="mt-1.5 font-display text-[16px] font-medium leading-snug text-foreground">{m.title}</div>
+                      <div className="mt-1.5 text-[14px] leading-relaxed text-muted-foreground">{r.reason}</div>
                     </button>
                     <div className="flex flex-none items-center gap-1 self-end sm:self-auto">
                       <Button
@@ -107,7 +107,7 @@ export function BriefingPage(props: BriefingPageProps) {
                         aria-label="Ask about this"
                         title="Ask about this"
                         onClick={() => props.onAskArticle(r.itemId)}
-                        className="h-6 w-6 rounded-full text-[#c3bce6] can-hover:opacity-0 transition-opacity can-hover:hover:bg-[#f0eefb] can-hover:hover:text-primary group-hover:opacity-100"
+                        className="h-6 w-6 rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:bg-secondary can-hover:hover:text-primary group-hover:opacity-100"
                       >
                         <IconSparkle size={14} />
                       </Button>
@@ -124,7 +124,7 @@ export function BriefingPage(props: BriefingPageProps) {
       {/* In one line. */}
       {b.oneLiners.length > 0 && (
         <section className="mb-8 sm:mb-10">
-          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-[#999]">In one line</h2>
+          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">In one line</h2>
           <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
             {b.oneLiners.map((r) => {
               const m = meta(r.itemId);
@@ -132,15 +132,15 @@ export function BriefingPage(props: BriefingPageProps) {
               const dismissed = props.dismissedIds.has(r.itemId);
               return (
                 <li key={r.itemId} className={"group flex items-start gap-3 " + (dismissed ? "opacity-45" : "")}>
-                  <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-[#d0d0d0]" />
-                  <span className="min-w-0 flex-1 text-[14px] leading-relaxed text-[#333]">
+                  <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-muted-strong" />
+                  <span className="min-w-0 flex-1 text-[14px] leading-relaxed text-muted-foreground">
                     {r.line}{" "}
                     {/* Inline in the sentence, so the target comes from HIT_44:
                         padding here would break the line. */}
                     <Button
                       variant="link"
                       size="link"
-                      className="coarse:px-0 coarse:py-0 text-[12px] text-[#8a7fd0] hover:underline"
+                      className="coarse:px-0 coarse:py-0 text-[12px] text-primary hover:underline"
                       onClick={() => props.onOpenArticle(r.itemId)}
                     >
                       {m.sourceName} ↗
@@ -169,7 +169,7 @@ export function BriefingPage(props: BriefingPageProps) {
                       <Badge variant="aside">Out of your lane</Badge>
                       <SourceTag name={m.sourceName} />
                     </div>
-                    <div className="mt-1.5 text-[16px] font-medium leading-snug text-[#3a2f12]">{m.title}</div>
+                    <div className="mt-1.5 font-display text-[16px] font-medium leading-snug text-[#3a2f12]">{m.title}</div>
                     <div className="mt-1.5 text-[14px] leading-relaxed text-[#6b5a34]">{r.reason}</div>
                   </button>
                   <DismissButton onDismiss={() => props.onDismiss(r.itemId, m, "out-of-lane")} />
@@ -193,7 +193,7 @@ export function BriefingPage(props: BriefingPageProps) {
         />
       )}
 
-      <div className="mt-4 flex items-center justify-center py-6 text-[12px] text-[#c8c8c8]">
+      <div className="mt-4 flex items-center justify-center py-6 text-[12px] text-faint-foreground">
         · end of today's briefing ·
       </div>
     </div>
@@ -237,10 +237,10 @@ function FilteredSection({
   return (
     <Collapsible open={open} onOpenChange={setOpen} asChild>
       <section className="mb-2">
-        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] text-[#888] coarse:min-h-[44px] hover:text-[#555]">
+        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] text-faint-foreground coarse:min-h-[44px] hover:text-muted-foreground">
           <span className="text-[11px]">{open ? "▾" : "▸"}</span>
           <span className="font-medium">Filtered {filtered.length}</span>
-          <span className="min-w-0 flex-1 truncate text-[#aaa]">
+          <span className="min-w-0 flex-1 truncate text-faint-foreground">
             {summary && `— ${summary}`}
             {screenLine && `${summary ? " · " : "— "}+${dropped} skipped on the headline`}
           </span>
@@ -252,13 +252,13 @@ function FilteredSection({
               if (!m) return null;
               return (
                 <li key={f.itemId} className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted-faint">
-                  <span className="w-24 flex-none truncate text-[11px] text-[#bbb]">{f.category}</span>
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-[#777]">{m.title}</span>
-                  {openedIds.has(f.itemId) && <span className="text-[11px] text-[#bbb]">Read</span>}
+                  <span className="w-24 flex-none truncate text-[11px] text-faint-foreground">{f.category}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-faint-foreground">{m.title}</span>
+                  {openedIds.has(f.itemId) && <span className="text-[11px] text-faint-foreground">Read</span>}
                   <Button
                     variant="link"
                     size="link"
-                    className="flex-none text-[12px] text-[#8a7fd0] can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 coarse:py-0 hover:underline group-hover:opacity-100"
+                    className="flex-none text-[12px] text-primary can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 coarse:py-0 hover:underline group-hover:opacity-100"
                     onClick={() => onAppeal(f.itemId, m, f.category)}
                   >
                     Show anyway
@@ -268,7 +268,7 @@ function FilteredSection({
             })}
           </ul>
           {screenLine && (
-            <div className="mt-1 px-2 py-1.5 text-[12px] text-[#bbb]">{screenLine}.</div>
+            <div className="mt-1 px-2 py-1.5 text-[12px] text-faint-foreground">{screenLine}.</div>
           )}
         </CollapsibleContent>
       </section>

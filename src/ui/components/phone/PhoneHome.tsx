@@ -22,8 +22,8 @@ export default function PhoneHome({
     <div className="mx-auto flex w-full max-w-lg flex-col px-4 py-6">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-[24px] font-semibold text-[#1b1b1b]">Reading Partner</h1>
-          <p className="m-0 mt-1 text-[14px] text-[#999]">Today</p>
+          <h1 className="m-0 font-display text-[24px] font-semibold text-foreground">Reading Partner</h1>
+          <p className="m-0 mt-1 text-[14px] text-faint-foreground">Today</p>
         </div>
         <SettingsButton alert={settingsAlert} onClick={launch.onOpenSettings} />
       </div>
@@ -55,18 +55,18 @@ export default function PhoneHome({
               className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
               onClick={onOpenSaved}
             >
-              <p className="m-0 text-[15px] leading-relaxed text-[#2a2a2a]">
+              <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
                 Articles you kept, to read whenever.
               </p>
               <div className="mt-4 flex items-center justify-between">
-                <span className="text-[13px] text-[#888]">
+                <span className="text-[13px] text-faint-foreground">
                   {savedCount} article{savedCount === 1 ? "" : "s"}
                 </span>
                 <span className="text-[13px] font-medium text-primary">Open →</span>
               </div>
             </button>
           ) : (
-            <p className="m-0 text-[14px] leading-relaxed text-[#777]">
+            <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
               Nothing kept yet. Keep an article from the briefing and it waits here.
             </p>
           )}
