@@ -5,7 +5,7 @@
 // Two presses, never one. The dry run is what the reader reads before anything
 // is written, and the writing button does not exist until they have read it.
 //
-// Deleted with src/migrate at 0.13.
+// Deleted with src/migrate in a later release (kept through 0.13).
 
 import { useReducer } from "react";
 import { dryRunDataMigration, runDataMigration } from "../../../migrate/live";

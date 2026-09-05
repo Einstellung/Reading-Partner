@@ -443,7 +443,7 @@ function rewriteIdField(text: string, oldId: string, newId: string): string {
 
 // The wrapper key the statement file holds its records under (statements/
 // store.ts). Named here rather than imported because that constant is private
-// to the store, and this directory is deleted at 0.13.
+// to the store, and this directory is deleted in a later release (after 0.13).
 const STATEMENT_CONTAINER = "statements";
 // The two fields on a statement that hold observation ids. `supersededBy` is a
 // statement id and `evidence` may also hold message anchors, which is why the

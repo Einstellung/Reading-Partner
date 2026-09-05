@@ -4,7 +4,7 @@
 // arrives after the reader moved on must not land on screen, and "is there
 // anything to apply" is a fact about the last dry run rather than a flag.
 //
-// Deleted with src/migrate at 0.13.
+// Deleted with src/migrate in a later release (kept through 0.13).
 
 import { formatReport } from "../../../migrate/run";
 import { totalChanges, type MigrationReport } from "../../../migrate/types";

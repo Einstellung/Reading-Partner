@@ -77,7 +77,7 @@ export default function OptionalPanel({
 
         {/* Not a key and not optional in the same sense as the rest of this tab.
             It sits here because it is the one thing in Settings a reader runs
-            once and never again, and because it is gone at 0.13. */}
+            once and never again, and because it goes away after 0.13. */}
         <SettingsSection title="Data migration">
           <MigrationCard />
           {/* Draws nothing once there is nothing left to carry across, which is

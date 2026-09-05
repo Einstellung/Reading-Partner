@@ -1,8 +1,8 @@
 // The 0.12 data migration: shapes shared by the steps and the report they
 // hand back.
 //
-// This whole directory is temporary. It ships through 0.12 and is deleted
-// wholesale at 0.13, so it stands on its own — nothing outside it imports it
+// This whole directory is temporary. It ships through 0.12 and 0.13 and is
+// deleted wholesale in a later release, so it stands on its own — nothing outside it imports it
 // except the button that runs it, and it keeps no state of its own on disk.
 //
 // No stored version and no applied-state, deliberately. Every step inspects the
