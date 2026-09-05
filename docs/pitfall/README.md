@@ -33,6 +33,7 @@
 | 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
+| 画光晕、阴影、模糊之类的装饰效果 | WebKit / webview |
 | 隐藏 webview 取正文、反爬、UA、站点登录与退出 | WebKit / webview + 网络与 CSP |
 | 渲染链接、点外链、开系统浏览器 | WebKit / webview |
 | 清洗第三方 HTML、往 innerHTML 里塞正文 | WebKit / webview |
@@ -56,7 +57,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 219）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 220）。
 
 ## EmbedPDF 引擎
 
@@ -205,6 +206,7 @@
 
 ## WebKit / webview
 
+- [219-ios-webkit-clips-a-blur-to-the-elements-box](./219-ios-webkit-clips-a-blur-to-the-elements-box.md) — iOS WebKit 把 `filter: blur()` 的结果裁在元素自己的盒子上，`rounded-full` 也不管，模糊的光晕在真 iPad webview 里是个硬边方块（桌面 Chromium 和 WebKitGTK 都是圆的）；光晕改用径向渐变，不用 filter
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板
 - [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影。引入 preflight 后自动消失，手写那条已删；按下反馈仍要用 active:（同族的坑 49 反过来，preflight 管不着，收在「触摸与手势」）

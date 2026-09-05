@@ -126,8 +126,12 @@ export function VoiceOrb({
 				className="pointer-events-none absolute inset-0 block [--orb-glow:0.3] [--orb-scale:1]"
 			>
 				{/* The halo. Its opacity is the level's second reading: an orb that
-				    only grew would say the same thing twice at half the strength. */}
-				<span className="absolute inset-[-25%] rounded-full bg-primary/30 opacity-(--orb-glow) blur-2xl scale-(--orb-scale) motion-reduce:scale-100" />
+				    only grew would say the same thing twice at half the strength.
+				    A gradient that fades to nothing rather than a blurred disc:
+				    iOS WebKit clips a filter to the element's own box, and the
+				    blurred version drew a hard-edged square around the orb in the
+				    simulator (docs/pitfall/219). */}
+				<span className="absolute inset-[-40%] rounded-full bg-[radial-gradient(circle,var(--color-primary)_25%,transparent_62%)] opacity-(--orb-glow) scale-(--orb-scale) motion-reduce:scale-100" />
 				{/* The body. One colour for every phase (docs/45): the states are
 				    told apart by how it moves, the way every shipped orb does it. */}
 				<span className="absolute inset-0 rounded-full bg-primary shadow-md scale-(--orb-scale) motion-reduce:scale-100" />
