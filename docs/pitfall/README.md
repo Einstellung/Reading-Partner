@@ -33,6 +33,7 @@
 | 写 CJK 字符类、抄一段带非 ASCII 边界的正则 | 原生音频与语音 |
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
+| 画光晕、阴影、模糊之类的装饰效果 | WebKit / webview |
 | 隐藏 webview 取正文、反爬、UA、站点登录与退出 | WebKit / webview + 网络与 CSP |
 | 渲染链接、点外链、开系统浏览器 | WebKit / webview |
 | 清洗第三方 HTML、往 innerHTML 里塞正文 | WebKit / webview |
@@ -41,6 +42,7 @@
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
+| 新建源文件、给同目录两个文件起名 | 开发环境 |
 | 用 `useDom()` / RTL 写组件测试 | 开发环境 |
 | 跑测试确认一个改动、拿别人报的全绿当结论 | 开发环境 |
 | 搬目录、切子域、动分层表 | 开发环境 |
@@ -55,7 +57,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 218）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 220）。
 
 ## EmbedPDF 引擎
 
@@ -204,6 +206,7 @@
 
 ## WebKit / webview
 
+- [219-ios-webkit-clips-a-blur-to-the-elements-box](./219-ios-webkit-clips-a-blur-to-the-elements-box.md) — iOS WebKit 把 `filter: blur()` 的结果裁在元素自己的盒子上，`rounded-full` 也不管，模糊的光晕在真 iPad webview 里是个硬边方块（桌面 Chromium 和 WebKitGTK 都是圆的）；光晕改用径向渐变，不用 filter
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板
 - [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影。引入 preflight 后自动消失，手写那条已删；按下反馈仍要用 active:（同族的坑 49 反过来，preflight 管不着，收在「触摸与手势」）
@@ -297,6 +300,7 @@
 - [176-a-selection-outlives-the-tree-that-made-it](./176-a-selection-outlives-the-tree-that-made-it.md) — `document.getSelection()` 挂在 document 上不挂在树上，RTL 的 `cleanup()` 卸树卸不掉它；一个用例选中文字但没有让手势收走选区，就把它原样留给下一个用例，`--seed` 洗过顺序后随机撞上不同的用例（chat-pen-strokes：seed=1 撞 stylus 用例自己的 isCollapsed 断言，seed=4 撞 chat.tsx:379 那道"点击是不是划词收尾"的判断）。`afterEach` 里 `cleanup()` 之后补一句 `document.getSelection()?.removeAllRanges()`
 - [181-vite-strict-port-1420-survives-a-failed-run](./181-vite-strict-port-1420-survives-a-failed-run.md) — `vite.config.ts` 的 `strictPort: true` 撞见上一轮失败残留的 vite 进程占着 1420，`pkill -f 'bun.*vite'` 匹配不到它，下一轮直接退出；起前按端口 `lsof` 找出来 `kill -9`
 - [182-plugin-listener-commands-are-not-implemented-by-tauri](./182-plugin-listener-commands-are-not-implemented-by-tauri.md) — 移动端插件从 Swift 侧发事件，JS 的 `addPluginListener` 挂不上：它 invoke 的 `register_listener`/`remove_listener` 是 Tauri 核心没实现的两个命令，插件自己在 Rust 侧转发给 Swift 基类；不是 iOS 专属，Android 插件一样撞
+- [218-bun-resolves-an-import-case-insensitively](./218-bun-resolves-an-import-case-insensitively.md) — bun 扫目录不分大小写，同目录的 `orb.ts` 和 `Orb.tsx` 互相顶掉，`import "./orb"` 报一个不存在的 `orb.tsx` 的 ENOENT；扩展名还是 `.tsx` 优先于 `.ts`。同目录基名不许只差大小写
 - [185-tauri-command-args-are-taken-by-parameter-name](./185-tauri-command-args-are-taken-by-parameter-name.md) — Tauri 命令的参数按参数名从 JS 对象里取，写 `payload: T` 就逼 JS 多包一层；想收平铺对象就把字段列成独立参数
 
 ## 历史（zotero/reader 引擎时代）
