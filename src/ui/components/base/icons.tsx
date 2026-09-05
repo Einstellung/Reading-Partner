@@ -584,3 +584,54 @@ export function IconRehearse({ size = 20 }: IconProps) {
 		</svg>
 	);
 }
+
+// The shell sidebar's Today: a house. The day starts at home.
+export function IconToday({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M3 8.5L10 3L17 8.5V16C17 16.55 16.55 17 16 17H4C3.45 17 3 16.55 3 16V8.5Z" />
+			<path d="M8 17V11.5H12V17" />
+		</svg>
+	);
+}
+
+// The shell sidebar's Briefing: a folded sheet of ruled text.
+export function IconBriefing({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M3 5.5C3 4.95 3.45 4.5 4 4.5H13C13.55 4.5 14 4.95 14 5.5V15.5H4C3.45 15.5 3 15.05 3 14.5V5.5Z" />
+			<path d="M14 7.5H16C16.55 7.5 17 7.95 17 8.5V14.5C17 15.05 16.55 15.5 16 15.5H14" />
+			<path d="M5.5 7.5H11.5" />
+			<path d="M5.5 10H11.5" />
+			<path d="M5.5 12.5H9" />
+		</svg>
+	);
+}
+
+// The mark on a card that is itself a button: the whole card opens, and this is
+// where it says so.
+export function IconChevronRight({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M7.5 4.5L13 10L7.5 15.5" />
+		</svg>
+	);
+}

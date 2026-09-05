@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { InfoSnapshot } from "../../../info/briefing/pipeline";
 import { Button } from "../ui/button";
+import { builtAt } from "./today";
 
 // Live elapsed seconds since a generation started, for the running state.
 function useElapsed(running: boolean): number {
@@ -247,20 +248,6 @@ export function BriefingCardBody({
       )}
     </div>
   );
-}
-
-// When the briefing was built, in local time. A reader can be looking at one
-// made hours ago on another machine, or — after midnight, or in another timezone
-// — at yesterday's, which is the right thing to show as long as it says so.
-function builtAt(generatedAt: number): string {
-  const at = new Date(generatedAt);
-  const time = at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  const today = new Date();
-  const sameDay =
-    at.getFullYear() === today.getFullYear() &&
-    at.getMonth() === today.getMonth() &&
-    at.getDate() === today.getDate();
-  return sameDay ? time : `${at.toLocaleDateString()} ${time}`;
 }
 
 function Notices({ lines }: { lines: string[] }) {
