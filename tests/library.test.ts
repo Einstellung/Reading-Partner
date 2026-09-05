@@ -11,6 +11,8 @@ import {
   healLibrary,
   importBook,
   libraryPdfPath,
+  removeEntry,
+  removeLibraryEntry,
   type LibraryStore,
 } from "../src/platform/app/library";
 import { installAppData, QUARANTINE_SUFFIX, type FakeDisk } from "./support/appdata-fake";
@@ -156,6 +158,30 @@ test("an unparseable registry is moved aside and the import goes ahead", async (
   expect(Object.keys((JSON.parse(disk.files.get(LIBRARY_FILE)!) as LibraryStore).books)).toEqual([
     entry.hash,
   ]);
+});
+
+// --- taking a book off the shelf --------------------------------------------
+
+test("removeEntry drops one book and hands back the same store when there is none", () => {
+  const store: LibraryStore = {
+    books: {
+      a: { hash: "a", title: "A", originalFilename: "a.pdf", addedAt: 1 },
+      b: { hash: "b", title: "B", originalFilename: "b.pdf", addedAt: 2 },
+    },
+  };
+  expect(Object.keys(removeEntry(store, "a").books)).toEqual(["b"]);
+  // Same object, so no caller writes a revision of a file it did not change.
+  expect(removeEntry(store, "missing")).toBe(store);
+});
+
+test("removeLibraryEntry rewrites the registry without the book", async () => {
+  const one = await importBook(new Uint8Array([9, 9, 9]), "/books/one.pdf");
+  const two = await importBook(new Uint8Array([8, 8, 8]), "/books/two.pdf");
+  await removeLibraryEntry(one.hash);
+  expect(Object.keys((JSON.parse(disk.files.get(LIBRARY_FILE)!) as LibraryStore).books)).toEqual([
+    two.hash,
+  ]);
+  expect(await getLibraryEntry(one.hash)).toBeNull();
 });
 
 // A file that is not there is the first run, and it has to reach a write.

@@ -24,6 +24,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { readGuardedJson, writeTextAtomic } from "../../platform/app/atomic-fs";
+import { requestRemotePurge } from "../../platform/sync";
 import {
   newTalkOutline,
   newTalkOutlineId,
@@ -196,9 +197,21 @@ export function talkThreadKey(outlineId: string): string {
   return `talk-${outlineId}`;
 }
 
-/** Drop an outline. The rehearsals against it are the caller's to deal with. */
+/**
+ * Drop an outline. The rehearsals against it are the caller's to deal with.
+ *
+ * outline-<id>.json is in sync range, and a sync propagates no file deletion of
+ * its own — a file gone locally but present in the remote is downloaded back
+ * (docs/13, pitfall 208). So the remote copy is queued first, and the queue
+ * survives on disk until a pass has taken it out of Drive.
+ */
 export async function deleteTalkOutline(outlineId: string): Promise<void> {
   const file = talkOutlineFile(outlineId);
+  try {
+    await requestRemotePurge([file]);
+  } catch (e) {
+    console.warn("failed to queue for remote deletion", file, e);
+  }
   try {
     if (await appData.exists(file)) await appData.remove(file);
   } catch (e) {

@@ -45,7 +45,8 @@ export function figuresCacheFresh(index: FiguresIndex, now: number): boolean {
   return now - (index.failedAt ?? 0) < FIGURES_RETRY_AFTER_MS;
 }
 
-function fileFor(hash: string): string {
+/** One document's cache file. Exported so a delete names it the same way. */
+export function figuresFile(hash: string): string {
   return `figures-${hash}.json`;
 }
 
@@ -99,7 +100,7 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
   async function readCache(hash: string): Promise<FiguresIndex | null> {
     let text: string | null;
     try {
-      text = await io.read(fileFor(hash));
+      text = await io.read(figuresFile(hash));
     } catch (e) {
       console.warn("failed to read figures cache", e);
       return null;
@@ -161,7 +162,7 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
           index = failedFigures(now());
         }
         try {
-          await io.write(fileFor(hash), JSON.stringify(index));
+          await io.write(figuresFile(hash), JSON.stringify(index));
         } catch (e) {
           io.onError(e);
         }

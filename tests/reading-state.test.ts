@@ -22,6 +22,7 @@ import {
   dropViewStateCache,
   getViewState,
   saveViewState,
+  removeViewState,
   saveViewStateOnExit,
   type ViewStateFile,
   type ViewStateIo,
@@ -55,6 +56,19 @@ beforeEach(() => {
   disk = installAppData();
   disk.files.set(STATE_FILE, STATES_JSON);
   dropViewStateCache();
+});
+
+// --- a deleted book's position ----------------------------------------------
+
+test("removeViewState drops one book and leaves the rest", async () => {
+  await removeViewState("tracing");
+  expect(onDisk().states).toEqual({ jit: at(120), attention: at(31) });
+});
+
+test("removeViewState writes nothing for a book with no position", async () => {
+  const before = disk.files.get(STATE_FILE);
+  await removeViewState("never-opened");
+  expect(disk.files.get(STATE_FILE)).toBe(before);
 });
 
 // --- a read that failed for IO reasons --------------------------------------
