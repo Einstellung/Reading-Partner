@@ -43,6 +43,10 @@ export const statementIo: StatementIo = {
 
 const store: StatementStore = createStatementStore(statementIo);
 
+// The store itself, for a caller that hands it on rather than calls it — the
+// statement tool takes one (statements/tools.ts).
+export const statementStore = store;
+
 export const listStatements = store.listStatements;
 export const getStatement = store.getStatement;
 export const createStatement = store.createStatement;

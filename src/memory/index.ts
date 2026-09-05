@@ -203,3 +203,10 @@ export {
   type DistillThreadOptions,
   type DistillTrigger,
 } from "./live/live";
+export {
+  buildStatementTools,
+  latestReaderMessage,
+  type ReaderMessage,
+  type StatementToolContext,
+} from "./statements/tools";
+export { statementStore } from "./live/statements";
