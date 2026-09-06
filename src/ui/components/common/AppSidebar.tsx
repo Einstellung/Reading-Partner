@@ -3,17 +3,26 @@
 // — the content narrows beside it, so nothing is covered and none of the overlay
 // rules (docs/30) apply.
 //
-// Two widths, chosen by the breakpoint and not by a stored preference: a 52px
-// icon rail below `lg` (a portrait iPad, where 192px of labels costs the shelf a
-// card) and the labelled column at or above it. A rail rather than a drawer,
-// because the three destinations have to stay one tap away on a tablet.
+// Two widths: a 52px icon rail and a labelled column. Below `lg` (a portrait
+// iPad, where the labels cost the shelf a card) it is always the rail; from
+// `lg` up the reader picks, and the pick is remembered per device.
 //
-// Which item is lit and where each one goes are in base/shell-nav.ts; this file
-// renders them and binds the events.
+// Which item is lit and where each one goes are in base/shell-nav.ts; the
+// widths, the label rules and the stored choice are in base/shell-sidebar.ts.
+// This file renders them and binds the events.
 
 import appIcon from "../../assets/app-icon.png";
-import { IconBriefing, IconBooks, IconGear, IconToday } from "../base/icons";
+import { IconBriefing, IconBooks, IconGear, IconSidebar, IconToday } from "../base/icons";
 import { SHELL_NAV_ITEMS, type ShellNavId } from "../base/shell-nav";
+import {
+  collapseToggleTitle,
+  sidebarLabelClass,
+  sidebarNameClass,
+  sidebarNavClass,
+  sidebarRowClass,
+  sidebarToggleClass,
+  sidebarWordmarkClass,
+} from "../base/shell-sidebar";
 import { Button } from "../ui/button";
 
 const ICONS: Record<ShellNavId, (p: { size?: number }) => JSX.Element> = {
@@ -23,19 +32,14 @@ const ICONS: Record<ShellNavId, (p: { size?: number }) => JSX.Element> = {
   settings: IconGear,
 };
 
-// One row, in both widths. h-11 is the 44px touch target either way; the rail is
-// 44 wide and grows to the full column at `lg`, where the label joins it. The
-// active row takes the neutral chip fill the reader's panels use, so every
+// The active row takes the neutral chip fill the reader's panels use, so every
 // sidebar in the app reads alike. Depth and a medium label, not a hue.
-const ROW =
-  "h-11 w-11 flex-none justify-center rounded-md px-0 text-muted-foreground " +
-  "lg:w-full lg:justify-start lg:gap-2.5 lg:px-3";
 const ROW_ACTIVE = "bg-secondary text-secondary-foreground can-hover:hover:bg-secondary";
-const LABEL = "hidden truncate text-[14px] font-medium lg:inline";
 
 function Row(props: {
   label: string;
   icon: (p: { size?: number }) => JSX.Element;
+  collapsed: boolean;
   active?: boolean;
   title?: string;
   onClick: () => void;
@@ -47,7 +51,9 @@ function Row(props: {
       type="button"
       variant="ghost"
       size={null}
-      className={`relative ${ROW}${props.active ? ` ${ROW_ACTIVE}` : ""}`}
+      className={`relative ${sidebarRowClass(props.collapsed)}${
+        props.active ? ` ${ROW_ACTIVE}` : ""
+      }`}
       // The title is the label a rail cannot show. It never fires on touch,
       // which is what aria-label is for.
       title={props.title ?? props.label}
@@ -56,7 +62,7 @@ function Row(props: {
       onClick={props.onClick}
     >
       <Icon size={20} />
-      <span className={LABEL}>{props.label}</span>
+      <span className={sidebarLabelClass(props.collapsed)}>{props.label}</span>
       {props.children}
     </Button>
   );
@@ -71,23 +77,31 @@ export default function AppSidebar(props: {
   // running (platform/sync/health). The state rides on the affordance that
   // leads to it, the same as the header's Settings button did.
   settingsAlert: boolean;
+  // The reader's own choice, stored per device by App.tsx. It only decides
+  // anything from `lg` up; below it the class strings resolve to the rail
+  // either way.
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
-  return (
-    <nav
-      aria-label="Sections"
-      // Plain padding, not the `-safe-*` utilities: the shell already wears
-      // `p-safe` (App.tsx), and a rail whose gutters grow with the inset stops
-      // holding its 44px button. 52px is that button plus the two 4px gutters.
-      className={
-        "flex w-[3.25rem] flex-none flex-col items-center gap-0.5 overflow-y-auto " +
-        "border-r border-border bg-muted-faint px-1 py-4 lg:w-48 lg:items-stretch lg:px-2"
-      }
+  const collapsed = props.collapsed;
+  const toggle = (
+    <Button
+      type="button"
+      variant="ghost"
+      size={null}
+      className={sidebarToggleClass(collapsed)}
+      title={collapseToggleTitle(collapsed)}
+      aria-label={collapseToggleTitle(collapsed)}
+      aria-expanded={!collapsed}
+      onClick={props.onToggleCollapsed}
     >
-      {/* The app's own icon and its name, in the display face the headings
-          use. On the rail the name goes and the icon stands alone, centred over
-          the column of icons under it — the same 44px box as a row, so the
-          three destinations start where they do in the wide shape. */}
-      <div className="mb-2 flex h-11 flex-none items-center justify-center gap-2.5 lg:justify-start lg:px-2.5">
+      <IconSidebar size={20} />
+    </Button>
+  );
+
+  return (
+    <nav aria-label="Sections" className={sidebarNavClass(collapsed)}>
+      <div className={sidebarWordmarkClass(collapsed)}>
         <img
           src={appIcon}
           alt=""
@@ -95,16 +109,20 @@ export default function AppSidebar(props: {
           height={28}
           className="h-7 w-7 flex-none rounded-[7px]"
         />
-        <span className="hidden truncate font-display text-[15px] font-semibold text-foreground lg:inline">
-          Reading Partner
-        </span>
+        <span className={sidebarNameClass(collapsed)}>Reading Partner</span>
+        {/* Labelled, the toggle ends the wordmark row. Collapsed, the row has
+            room for nothing but the icon, so the toggle drops to the top of the
+            rail, under the icon and above the three destinations. */}
+        {!collapsed && toggle}
       </div>
+      {collapsed && toggle}
 
       {SHELL_NAV_ITEMS.map((item) => (
         <Row
           key={item.id}
           label={item.label}
           icon={ICONS[item.id]}
+          collapsed={collapsed}
           active={props.active === item.id}
           onClick={() => props.onSelect(item.id)}
         />
@@ -115,6 +133,7 @@ export default function AppSidebar(props: {
       <Row
         label="Settings"
         icon={ICONS.settings}
+        collapsed={collapsed}
         active={props.active === "settings"}
         title={props.settingsAlert ? "Settings — sync needs attention" : "Settings"}
         onClick={props.onOpenSettings}
