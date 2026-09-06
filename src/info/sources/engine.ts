@@ -60,6 +60,10 @@ export interface CollectDeps {
   // screening are ever fetched (fetchBodies).
   discoveryOnly?: boolean;
   now?: () => number;
+  // The retry backoff's wait, injected. Tests hand in a no-op so a source that
+  // is meant to fail does not spend the live ladder (0.5s + 1s) doing it; the
+  // live path leaves it unset and fetchText sleeps on a real timer.
+  sleep?: (ms: number) => Promise<void>;
   // Cancels the whole collection: requests in flight are aborted and nothing
   // queued is sent. Sources that settled before the abort are still reported —
   // the run keeps what it paid for and resumes on the rest (docs/16).
@@ -104,6 +108,7 @@ interface Filled {
   signal?: AbortSignal;
   gate?: Gate;
   discoveryOnly?: boolean;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 function fill(deps: CollectDeps): Filled {
@@ -115,6 +120,7 @@ function fill(deps: CollectDeps): Filled {
     signal: deps.signal,
     gate: deps.gate,
     discoveryOnly: deps.discoveryOnly,
+    sleep: deps.sleep,
   };
 }
 
@@ -147,7 +153,7 @@ function detailContent(detail: unknown, path: FieldPath): string {
 async function collectFeed(desc: SourceDescriptor, deps: Filled): Promise<InfoItem[]> {
   if (desc.discovery.kind !== "feed") return [];
   const init = requestInit(desc);
-  const xml = await fetchText(desc.discovery.url, deps.fetchFn, init, { signal: deps.signal });
+  const xml = await fetchText(desc.discovery.url, deps.fetchFn, init, { signal: deps.signal, sleep: deps.sleep });
   const limit = desc.limit ?? DEFAULT_LIMIT;
   const entries = parseFeed(xml).slice(0, limit);
   return perItem(entries, (e) => feedItem(desc, e, deps), deps);
@@ -252,7 +258,7 @@ async function fetchAndExtract(
 ): Promise<{ title: string; contentHtml: string; textContent: string } | null> {
   if (!url || !deps.extract) return null;
   try {
-    const html = await fetchText(url, deps.fetchFn, undefined, { signal: deps.signal });
+    const html = await fetchText(url, deps.fetchFn, undefined, { signal: deps.signal, sleep: deps.sleep });
     return deps.extract(html, url);
   } catch (e) {
     // A page that would not load costs the item its body; a stopped run costs
@@ -265,7 +271,7 @@ async function fetchAndExtract(
 async function collectListpage(desc: SourceDescriptor, deps: Filled): Promise<InfoItem[]> {
   if (desc.discovery.kind !== "listpage") return [];
   const { url, linkPattern, base: baseOrigin } = desc.discovery;
-  const html = await fetchText(url, deps.fetchFn, requestInit(desc), { signal: deps.signal });
+  const html = await fetchText(url, deps.fetchFn, requestInit(desc), { signal: deps.signal, sleep: deps.sleep });
   const origin = baseOrigin || new URL(url).origin;
   const limit = desc.limit ?? 10;
   // Find every occurrence of the article-link pattern in the page, dedup, cap.
@@ -309,6 +315,7 @@ async function collectJsonApi(desc: SourceDescriptor, deps: Filled): Promise<Inf
   const disc: JsonApiDiscovery = desc.discovery;
   const listJson = await fetchText(disc.listUrl, deps.fetchFn, requestInit(desc), {
     signal: deps.signal,
+    sleep: deps.sleep,
   });
   let data: unknown;
   try {
@@ -380,7 +387,7 @@ async function fetchDetail(desc: SourceDescriptor, item: InfoItem, deps: Filled)
       fillTemplate(ft.urlTemplate, key),
       deps.fetchFn,
       requestInit(desc, ft.headers),
-      { signal: deps.signal },
+      { signal: deps.signal, sleep: deps.sleep },
     );
     const detail = JSON.parse(detailJson);
     const body = detailContent(detail, ft.contentPath);

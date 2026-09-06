@@ -17,6 +17,12 @@ import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { WebviewArticle } from "../../src/info/extract/webview-article";
 import { textResponse } from "../support/fetch";
 
+// fetchText retries a 5xx twice, waiting 0.5s then 1s on a real timer. Half a
+// dozen tests here deliberately serve a 500, and the ladder is not what any of
+// them is about — they check what a failed fetch degrades into. Injected, the
+// same retries happen on the same schedule against a clock that costs nothing.
+const noSleep = async (): Promise<void> => {};
+
 const extract: ExtractReadable = (_html, url) => ({
   title: "Extracted title",
   contentHtml: `<p>body of ${url}</p>`,
@@ -63,7 +69,7 @@ test("json-api + detail-endpoint pulls list then per-item body", async () => {
     calls.push(url);
     return textResponse(url.includes("/api/") ? detail : list);
   };
-  const items = await collectSource(JQX, { fetchFn });
+  const items = await collectSource(JQX, { sleep: noSleep, fetchFn });
   expect(items.length).toBe(1);
   expect(items[0].source).toBe("jqx");
   expect(items[0].sourceName).toBe("机器之心");
@@ -77,7 +83,7 @@ test("json-api + detail-endpoint pulls list then per-item body", async () => {
 test("json-api keeps a summary-only item when the detail fetch fails", async () => {
   const list = JSON.stringify({ articles: [{ slug: "s1", title: "T1", summary: "just a blurb" }] });
   const fetchFn = async (url: string) => (url.includes("/api/") ? textResponse("nope", 500) : textResponse(list));
-  const items = await collectSource(JQX, { fetchFn });
+  const items = await collectSource(JQX, { sleep: noSleep, fetchFn });
   expect(items.length).toBe(1);
   expect(items[0].textContent).toBeUndefined();
   expect(items[0].summary).toBe("just a blurb");
@@ -113,7 +119,7 @@ test("json-api feed-field reads the body inline with no second request", async (
     calls.push(url);
     return textResponse(list);
   };
-  const items = await collectSource(desc, { fetchFn });
+  const items = await collectSource(desc, { sleep: noSleep, fetchFn });
   expect(calls.length).toBe(1);
   expect(items[0].title).toBe("Hi");
   expect(items[0].url).toBe("https://wp/5");
@@ -138,7 +144,7 @@ const QBIT: SourceDescriptor = {
 
 test("feed + fetch-page fetches the page and runs the injected extractor", async () => {
   const fetchFn = async (url: string) => (url.endsWith("/feed") ? textResponse(RSS) : textResponse("<html>page</html>"));
-  const items = await collectSource(QBIT, { fetchFn, extract });
+  const items = await collectSource(QBIT, { sleep: noSleep, fetchFn, extract });
   expect(items.length).toBe(1);
   expect(items[0].source).toBe("qbit");
   expect(items[0].title).toBe("Extracted title");
@@ -149,7 +155,7 @@ test("feed + fetch-page fetches the page and runs the injected extractor", async
 
 test("feed + fetch-page keeps a summary-only item when the page fetch fails", async () => {
   const fetchFn = async (url: string) => (url.endsWith("/feed") ? textResponse(RSS) : textResponse("boom", 500));
-  const items = await collectSource(QBIT, { fetchFn, extract });
+  const items = await collectSource(QBIT, { sleep: noSleep, fetchFn, extract });
   expect(items.length).toBe(1);
   expect(items[0].contentHtml).toBeUndefined();
   expect(items[0].title).toBe("大模型又出新活");
@@ -211,7 +217,7 @@ test("a webview source discovers headlines without opening a single window", asy
 
 test("fetchBodies renders a webview source's article and folds the body in", async () => {
   const asked: string[] = [];
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { sleep: noSleep, fetchFn: async () => textResponse(BB_RSS) });
   const out = await fetchBodies(items, [BLOOMBERG], {
     fetchViaWebview: async (url) => {
       asked.push(url);
@@ -226,7 +232,7 @@ test("fetchBodies renders a webview source's article and folds the body in", asy
 });
 
 test("an anonymous body on a source with a sign-in stays flagged as partial", async () => {
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { sleep: noSleep, fetchFn: async () => textResponse(BB_RSS) });
   const out = await fetchBodies(items, [BLOOMBERG], {
     fetchViaWebview: async () => article({ seesSignIn: true }),
   });
@@ -237,7 +243,7 @@ test("an anonymous body on a source with a sign-in stays flagged as partial", as
 });
 
 test("a wall or a timeout leaves the item alone, with nothing recorded against it", async () => {
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { sleep: noSleep, fetchFn: async () => textResponse(BB_RSS) });
   for (const status of ["blocked", "timeout", "network"] as const) {
     const out = await fetchBodies(items, [BLOOMBERG], {
       fetchViaWebview: async () => article({ status, text: null, html: null, chars: 0 }),
@@ -252,7 +258,7 @@ test("a wall or a timeout leaves the item alone, with nothing recorded against i
 });
 
 test("no webview on this platform is a headline, not a failure", async () => {
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { sleep: noSleep, fetchFn: async () => textResponse(BB_RSS) });
   // iOS, and any desktop whose bridge is not written: the dependency is simply
   // absent, and nothing throws or hangs.
   const out = await fetchBodies(items, [BLOOMBERG], {});
@@ -261,7 +267,7 @@ test("no webview on this platform is a headline, not a failure", async () => {
 });
 
 test("a webview fetch that throws costs the body and nothing else", async () => {
-  const items = await collectSource(BLOOMBERG, { fetchFn: async () => textResponse(BB_RSS) });
+  const items = await collectSource(BLOOMBERG, { sleep: noSleep, fetchFn: async () => textResponse(BB_RSS) });
   const out = await fetchBodies(items, [BLOOMBERG], {
     fetchViaWebview: async () => {
       throw new Error("command not found");
@@ -283,7 +289,7 @@ test("feed-field 'none' yields a summary-only item with the summary set", async 
     fulltext: { mode: "none" },
   };
   const rss = `<rss><channel><item><title>Paper</title><link>https://a/abs/1</link><description>An abstract here.</description></item></channel></rss>`;
-  const items = await collectSource(desc, { fetchFn: async () => textResponse(rss) });
+  const items = await collectSource(desc, { sleep: noSleep, fetchFn: async () => textResponse(rss) });
   expect(items[0].summaryOnly).toBe(true);
   expect(items[0].summary).toContain("abstract");
   expect(items[0].textContent).toBeUndefined();
@@ -299,7 +305,7 @@ test("feed-field flags a truncated (paywalled) body as summary-only", async () =
     fulltext: { mode: "feed-field", field: "content:encoded", truncationMarker: "Read more" },
   };
   const rss = `<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title>Paid</title><link>https://s/1</link><content:encoded><![CDATA[<p>Intro paragraph. Read more</p>]]></content:encoded></item></channel></rss>`;
-  const items = await collectSource(desc, { fetchFn: async () => textResponse(rss) });
+  const items = await collectSource(desc, { sleep: noSleep, fetchFn: async () => textResponse(rss) });
   expect(items[0].contentHtml).toContain("Intro paragraph");
   expect(items[0].summaryOnly).toBe(true);
 });
@@ -317,7 +323,7 @@ test("listpage finds article links, dedups, and fetches each page", async () => 
   };
   const listHtml = `<a href="/article/123.html">x</a> ... <a href="/article/123.html">dup</a> ... <a href="/article/456.html">y</a>`;
   const fetchFn = async (url: string) => (url.includes("/lists/") ? textResponse(listHtml) : textResponse("<html>art</html>"));
-  const items = await collectSource(desc, { fetchFn, extract });
+  const items = await collectSource(desc, { sleep: noSleep, fetchFn, extract });
   expect(items.length).toBe(2);
   expect(items[0].url).toBe("https://ji.com/article/123.html");
   expect(items[0].textContent).toContain("plain body of");
@@ -334,7 +340,7 @@ test("stream discovery is rejected (M-info-3)", async () => {
     discovery: { kind: "stream", url: "https://flash" },
     fulltext: { mode: "none" },
   } as unknown as SourceDescriptor;
-  await expect(collectSource(desc, { fetchFn: async () => textResponse("{}") })).rejects.toThrow();
+  await expect(collectSource(desc, { sleep: noSleep, fetchFn: async () => textResponse("{}") })).rejects.toThrow();
 });
 
 // --- collectAll: isolation + health ----------------------------------------
@@ -361,7 +367,7 @@ test("collectAll isolates a failing source and records health", async () => {
     if (url.includes("good/list")) return textResponse(JSON.stringify([{ id: "1", t: "Good one", c: "<p>body</p>" }]));
     return textResponse("down", 500); // bad feed fails
   };
-  const { items, health } = await collectAll([good, bad, disabled], { fetchFn, now: () => 1000 });
+  const { items, health } = await collectAll([good, bad, disabled], { sleep: noSleep, fetchFn, now: () => 1000 });
   expect(items.length).toBe(1);
   expect(items[0].source).toBe("good");
   expect(health.good.lastSuccess).toBe(1000);
@@ -397,6 +403,7 @@ test("collectAll hands each source over as it settles, items and all, once per e
 
   const settled: SourceSettled[] = [];
   await collectAll([good, bad, disabled], {
+    sleep: noSleep,
     fetchFn,
     now: () => 1000,
     onSourceSettled: (r) => void settled.push(r),
@@ -437,7 +444,7 @@ test("a source fetches its articles several at a time, in feed order", async () 
     inFlight--;
     return body;
   };
-  const run = collectSource(QBIT, { fetchFn, extract });
+  const run = collectSource(QBIT, { sleep: noSleep, fetchFn, extract });
   // Let the feed land and the first batch of page fetches go out.
   await new Promise<void>((r) => setTimeout(r, 0));
   expect(peak).toBeGreaterThan(1);
@@ -461,7 +468,7 @@ test("an abort stops a source mid-collection and sends nothing more", async () =
     await new Promise<void>((r) => setTimeout(r, 5));
     return textResponse("<html>page</html>");
   };
-  const run = collectSource(QBIT, { fetchFn, extract, signal: controller.signal });
+  const run = collectSource(QBIT, { sleep: noSleep, fetchFn, extract, signal: controller.signal });
   await new Promise<void>((r) => setTimeout(r, 0));
   controller.abort();
   await expect(run).rejects.toThrow();
@@ -480,7 +487,7 @@ test("a source already aborted is never fetched at all", async () => {
     calls++;
     return textResponse(feedOf(1));
   };
-  await expect(collectSource(QBIT, { fetchFn, extract, signal: controller.signal })).rejects.toThrow();
+  await expect(collectSource(QBIT, { sleep: noSleep, fetchFn, extract, signal: controller.signal })).rejects.toThrow();
   expect(calls).toBe(0);
 });
 
@@ -503,6 +510,7 @@ test("collectAll keeps the sources that settled and stays quiet about the aborte
   };
   const settled: SourceSettled[] = [];
   const run = collectAll([fast, slow], {
+    sleep: noSleep,
     fetchFn,
     extract,
     now: () => 1000,
@@ -552,7 +560,7 @@ test("discoveryOnly takes the headlines and sends not one article request", asyn
     calls.push(url);
     return textResponse(url.endsWith("/feed") ? RSS : "<html>page</html>");
   };
-  const items = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
+  const items = await collectSource(QBIT, { sleep: noSleep, fetchFn, extract, discoveryOnly: true });
   expect(calls).toEqual(["https://q/feed"]);
   expect(items.length).toBe(1);
   expect(items[0].title).toBe("大模型又出新活");
@@ -595,12 +603,12 @@ test("discoveryOnly skips the detail endpoint, and fetchBodies pays for it later
     calls.push(url);
     return textResponse(url.includes("/api/") ? detail : list);
   };
-  const discovered = await collectSource(JQX, { fetchFn, discoveryOnly: true });
+  const discovered = await collectSource(JQX, { sleep: noSleep, fetchFn, discoveryOnly: true });
   expect(calls).toEqual(["https://jqx/list"]);
   expect(discovered[0].summaryOnly).toBe(true);
   expect(discovered[0].sourceKey).toBe("s1");
 
-  const filled = await fetchBodies(discovered, [JQX], { fetchFn });
+  const filled = await fetchBodies(discovered, [JQX], { sleep: noSleep, fetchFn });
   expect(calls).toEqual(["https://jqx/list", "https://jqx/api/s1.json"]);
   expect(filled[0].textContent).toContain("42%");
   expect(filled[0].title).toBe("T1 full");
@@ -611,9 +619,9 @@ test("discoveryOnly skips the detail endpoint, and fetchBodies pays for it later
 
 test("fetchBodies fetches the page for a fetch-page source, reporting each as it settles", async () => {
   const fetchFn = async (url: string) => textResponse(url.endsWith("/feed") ? RSS : "<html>page</html>");
-  const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
+  const discovered = await collectSource(QBIT, { sleep: noSleep, fetchFn, extract, discoveryOnly: true });
   const settled: string[] = [];
-  const filled = await fetchBodies(discovered, [QBIT], { fetchFn, extract }, (it) => {
+  const filled = await fetchBodies(discovered, [QBIT], { sleep: noSleep, fetchFn, extract }, (it) => {
     settled.push(it.id);
   });
   expect(settled).toEqual([discovered[0].id]);
@@ -623,8 +631,8 @@ test("fetchBodies fetches the page for a fetch-page source, reporting each as it
 
 test("fetchBodies leaves an item summary-only when its page will not load", async () => {
   const fetchFn = async (url: string) => (url.endsWith("/feed") ? textResponse(RSS) : textResponse("boom", 500));
-  const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
-  const filled = await fetchBodies(discovered, [QBIT], { fetchFn, extract });
+  const discovered = await collectSource(QBIT, { sleep: noSleep, fetchFn, extract, discoveryOnly: true });
+  const filled = await fetchBodies(discovered, [QBIT], { sleep: noSleep, fetchFn, extract });
   expect(filled.length).toBe(1);
   expect(filled[0].summaryOnly).toBe(true);
   expect(filled[0].textContent).toBeUndefined();
@@ -669,9 +677,9 @@ test("a Stop during the material step surfaces rather than passing for a finishe
     controller.abort();
     return textResponse("<html>page</html>");
   };
-  const discovered = await collectSource(QBIT, { fetchFn, extract, discoveryOnly: true });
+  const discovered = await collectSource(QBIT, { sleep: noSleep, fetchFn, extract, discoveryOnly: true });
   await expect(
-    fetchBodies(discovered, [QBIT], { fetchFn, extract, signal: controller.signal }),
+    fetchBodies(discovered, [QBIT], { sleep: noSleep, fetchFn, extract, signal: controller.signal }),
   ).rejects.toThrow();
 });
 
@@ -690,7 +698,7 @@ test("an entry whose only text is content:encoded still gets a blurb", async () 
     discovery: { kind: "feed", url: "https://n/rss" },
     fulltext: { mode: "none" },
   };
-  const items = await collectSource(desc, { fetchFn: async () => textResponse(rss) });
+  const items = await collectSource(desc, { sleep: noSleep, fetchFn: async () => textResponse(rss) });
   expect(items[0].summary).toContain("stays coherent at 4K");
   // Flattened out of its HTML, like any other blurb.
   expect(items[0].summary).not.toContain("<p>");
@@ -706,6 +714,6 @@ test("a feed with its own description is unaffected by that fallback", async () 
     discovery: { kind: "feed", url: "https://a/rss" },
     fulltext: { mode: "none" },
   };
-  const items = await collectSource(desc, { fetchFn: async () => textResponse(rss) });
+  const items = await collectSource(desc, { sleep: noSleep, fetchFn: async () => textResponse(rss) });
   expect(items[0].summary).toBe("The list blurb.");
 });
