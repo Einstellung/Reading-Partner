@@ -313,6 +313,8 @@
 - [182-plugin-listener-commands-are-not-implemented-by-tauri](./182-plugin-listener-commands-are-not-implemented-by-tauri.md) — 移动端插件从 Swift 侧发事件，JS 的 `addPluginListener` 挂不上：它 invoke 的 `register_listener`/`remove_listener` 是 Tauri 核心没实现的两个命令，插件自己在 Rust 侧转发给 Swift 基类；不是 iOS 专属，Android 插件一样撞
 - [218-bun-resolves-an-import-case-insensitively](./218-bun-resolves-an-import-case-insensitively.md) — bun 扫目录不分大小写，同目录的 `orb.ts` 和 `Orb.tsx` 互相顶掉，`import "./orb"` 报一个不存在的 `orb.tsx` 的 ENOENT；扩展名还是 `.tsx` 优先于 `.ts`。同目录基名不许只差大小写
 - [185-tauri-command-args-are-taken-by-parameter-name](./185-tauri-command-args-are-taken-by-parameter-name.md) — Tauri 命令的参数按参数名从 JS 对象里取，写 `payload: T` 就逼 JS 多包一层；想收平铺对象就把字段列成独立参数
+- [232-a-virtual-clock-on-setTimeout-costs-real-time](./232-a-virtual-clock-on-setTimeout-costs-real-time.md) — 「跑在虚拟时钟上所以不花真实时间」的测试，时钟自己是 `setTimeout(r, 0)` 推的：宿主把 0 钳到约 1ms，`settle()` 空转 200 轮就是 200 毫秒，七个用例 1.4 秒。被测代码自己不碰真定时器时改用 `Promise.resolve()` 推进，1408ms → 130ms，空转不要钱之后轮数还能往上加
+- [233-a-failing-fetch-test-pays-the-retry-ladder](./233-a-failing-fetch-test-pays-the-retry-ladder.md) — 注入了 fetch 不等于注入了时间：故意发 500 的用例照走生产的重试退避（0.5s + 1s 真定时器），六个用例 7.5 秒，而 bun 对这个量级的用例一个 per-test 时间都不打。编排层把 `sleep` 一起收成可选注入转发给 `fetchText`，默认值不变；定位靠失败路径上的 `console.warn` 行数，验收拿 `expect() calls` 总数不变当闸
 
 ## 历史（zotero/reader 引擎时代）
 
