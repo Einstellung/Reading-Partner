@@ -100,6 +100,7 @@ import { OVERLAY_Z } from "./ui/components/ui/overlay";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import AppSidebar from "./ui/components/common/AppSidebar";
+import MigrationGate from "./ui/components/common/MigrationGate";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -1590,6 +1591,9 @@ export default function App() {
       </main>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Covers everything above, or renders nothing (docs/48). */}
+      <MigrationGate />
 
       {readerSettings && (
         <SettingsDialog

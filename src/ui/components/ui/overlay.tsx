@@ -78,6 +78,12 @@ export const OVERLAY_Z = {
   // Anchored to a trigger: Select and DropdownMenu. Above the whole scale,
   // because a trigger can sit on any surface in it.
   anchored: "z-[1100]",
+  // The one layer that covers the app rather than sits in it: the migration
+  // gate (common/MigrationGate). Above the anchored rung and everything under
+  // it, because what it means is that nothing behind it may be reached — a
+  // dropdown left painting over it would be a control the reader can use on
+  // data the app has already decided it must not touch.
+  blocking: "z-[2000]",
 } as const;
 
 // Which rung the surface a dialog is opened from stands on.

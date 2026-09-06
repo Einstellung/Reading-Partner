@@ -24,6 +24,8 @@ statement 两种 kind：
 
 观察全部存在一个目录 `observations/` 里：一条观察一个 `m-<16hex>.md`，一份 `index.md`、一份 `meta.json`、一份 `deleted-observations.jsonl`。id 本来就全局唯一，topic 是 frontmatter 上的一个字段（写入时从会话的 topicId 填），不是目录。index 的每行带 topic，按 topic 取索引就不用把每个文件都打开；发给模型的那份投影里不印 topic。`meta.json` 的 `lastDistilledAt` 和 `lastAnnotationDistillAt` 按 topicId 键，蒸馏节流仍然按 topic；`distilledMessages` 和 `distilledMarks` 的键本来就是 threadId 和 bookId，全局一份。
 
+老布局（一个 topic 一个 `memory-<topicId>/`）还留在盘上时整个 app 不可用。两个外壳启动时各判一次 `needsMigration(appDataMigrationFs)`（`src/migrate/pending.ts`，dream 停手用的也是这条），为真就盖一层全屏蒙层（`ui/components/common/MigrationGate.tsx`，规则和状态在同目录的 `migration-gate.ts`）：一句话加一个按钮，不能关，没有 Esc，点外面也不关，层级 `OVERLAY_Z.blocking` 压在锚定浮层之上。按一次等于设置页那张卡的两次——先 dry run 再 apply，进度和报告复用 `settings/migration-card.ts` 的状态机。放行只认盘：跑完再问一次 `needsMigration`，为假才撤蒙层，为真就留着报告和 Try again。每轮同步结束时再问一次（订阅 `subscribeSyncStatus`，`running` 由真变假的那一下，不轮询），因为还在老版本的机器随时可能同步来一个 `memory-<topicId>/`。第一次判据答出来之前 app 照常画，那是两次目录列举的工夫。
+
 statement 目录 `src/memory/statements/`，合并策略 `records`。"profile"这个词的旧用法（`loadProfile`、`readerProfileSection`、`user-profile.md`）按下文的作废清单删函数、留文件，名字空出来给新的。
 
 ## 边
