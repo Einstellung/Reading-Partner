@@ -20,7 +20,7 @@ export default function ChatPipCard({ lastMessage, onClick, onHangUp }: ChatPipC
 			title="Back to conversation"
 			className="group box-border flex w-60 items-start gap-2 rounded-xl border border-black/10 bg-popover p-3 shadow-[0_6px_24px_rgba(0,0,0,0.16)] hover:border-black/20 hover:shadow-[0_10px_32px_rgba(0,0,0,0.22)]"
 		>
-			<span className="mt-0.5 shrink-0 text-primary">
+			<span className="mt-0.5 shrink-0 text-accent-line">
 				<IconSparkle size={16} />
 			</span>
 			<span className="line-clamp-2 flex-1 text-[12px] leading-snug text-neutral-600">

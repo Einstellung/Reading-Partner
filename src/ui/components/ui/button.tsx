@@ -25,7 +25,7 @@ const buttonVariants = cva(
   {
     variants: {
       // Colour and border only. Anything about size lives in `size`, so the two
-      // compose: the same purple is a settings button and an info CTA.
+      // compose: the same ink fill is a settings button and an info CTA.
       variant: {
         // The filled primary. The transparent border is load-bearing: it sits
         // next to `outline` buttons, which are 1px larger without it.
@@ -38,7 +38,8 @@ const buttonVariants = cva(
         // Bordered but unfilled, with a quieter label. What info's chips are.
         subtle:
           "border border-border bg-transparent text-muted-foreground can-hover:enabled:hover:bg-muted",
-        // The violet-tinted second rank.
+        // The neutral second rank: a chip, one step deeper than the panel.
+        // Not tinted — the green is for lines, never for a filled control.
         secondary:
           "border border-secondary-border bg-secondary text-secondary-foreground can-hover:enabled:hover:bg-secondary-hover",
         "destructive-outline":

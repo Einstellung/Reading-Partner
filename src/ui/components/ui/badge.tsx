@@ -17,7 +17,7 @@ const badgeVariants = cva("rounded-full px-2 py-0.5 text-[11px] font-medium", {
   variants: {
     variant: {
       // Where a piece of news came from.
-      source: "bg-secondary text-primary",
+      source: "bg-secondary text-secondary-foreground",
       // A briefing item outside the topics the user asked for.
       aside: "bg-[#f2e4c4] text-[#8a6d1f]",
     },

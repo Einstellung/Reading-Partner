@@ -23,8 +23,8 @@ const ICONS: Record<ShellNavId, (p: { size?: number }) => JSX.Element> = {
 
 // One row, in both widths. h-11 is the 44px touch target either way; the rail is
 // 44 wide and grows to the full column at `lg`, where the label joins it. The
-// active row takes the violet chip fill the reader's tabs use, so every sidebar
-// in the app reads alike.
+// active row takes the neutral chip fill the reader's panels use, so every
+// sidebar in the app reads alike. Depth and a medium label, not a hue.
 const ROW =
   "h-11 w-11 flex-none justify-center rounded-md px-0 text-muted-foreground " +
   "lg:w-full lg:justify-start lg:gap-2.5 lg:px-3";

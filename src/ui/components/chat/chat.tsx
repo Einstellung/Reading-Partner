@@ -1104,7 +1104,7 @@ export function Composer({
 	const cardSize = pill ? 96 : 72;
 	const container = pill
 		? 'box-border rounded-3xl border border-black/10 bg-background px-2 py-2 shadow-sm'
-		: 'box-border rounded-xl border border-black/10 bg-background p-2 focus-within:border-primary';
+		: 'box-border rounded-xl border border-black/10 bg-background p-2 focus-within:border-accent-line';
 	// box-border: the auto-grow sets height from scrollHeight, which includes the
 	// padding. Hidden scrollbar: an appearing gutter would reflow the text mid-typing.
 	// 16px floor: WKWebView zooms the whole page in when a field smaller than that

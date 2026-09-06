@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
 // The inline "or do it the other way" links under the sign-in button.
-const LINK = "self-start text-xs text-primary hover:underline";
+const LINK = "self-start text-xs text-accent-line hover:underline";
 
 // The loopback-free login path for a provider. Anthropic pastes the code the
 // authorize page prints; OpenAI runs the ChatGPT device-code flow (with a

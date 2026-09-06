@@ -87,6 +87,29 @@ test("the tint is one attribute with one value, declared after the defaults", ()
   expect(paper.indexOf("--background:")).toBeGreaterThan(0);
 });
 
+// The two jobs --primary used to hold at once. It is the fill of every solid
+// control, --accent-line is the green, and the green only ever draws a line.
+// They were one token until 0.14, and the whole app came out green; this fails
+// the moment they are the same colour again.
+test("the solid-control fill is ink and the accent is the green", () => {
+  const { base } = paletteBlocks();
+  expect(hex(base, "--primary")).toBe("#252922");
+  expect(hex(base, "--accent-line")).toBe("#52664e");
+  expect(hex(base, "--foreground")).toBe(hex(base, "--primary"));
+  // The focus ring is a line, so it follows the accent and not the fill.
+  expect(base).toContain("--ring: var(--accent-line);");
+  // The second rank is a neutral: no more blue in it than red, and its label is
+  // the same ink as body text. A tinted chip is what a selected row used to be.
+  const secondary = hex(base, "--secondary");
+  expect(Number.parseInt(secondary.slice(5, 7), 16)).toBeLessThanOrEqual(
+    Number.parseInt(secondary.slice(1, 3), 16),
+  );
+  expect(hex(base, "--secondary-foreground")).toBe(hex(base, "--foreground"));
+  // Deeper than the panel it sits on, lighter than the pressed state.
+  expect(brightness(secondary)).toBeLessThan(brightness(hex(base, "--muted")));
+  expect(brightness(secondary)).toBeGreaterThan(brightness(hex(base, "--muted-strong")));
+});
+
 test("the reading ladder keeps its order in both palettes", () => {
   const { base, paper } = paletteBlocks();
   for (const block of [base, paper]) {
@@ -119,6 +142,12 @@ test("every tinted token is warmer and darker than the white it replaces", () =>
     "--accent",
     "--border",
     "--input",
+    // Neutral since 0.14, and a neutral is exactly what cannot follow a warm
+    // ground on its own.
+    "--secondary",
+    "--secondary-faint",
+    "--secondary-border",
+    "--secondary-hover",
     ...LADDER,
     ...RAMPS.flat(),
   ];

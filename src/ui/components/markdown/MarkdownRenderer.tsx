@@ -64,7 +64,7 @@ const CITATION_CHIP = [
 // 0.5em of padding above and below adds 12 more, and every part of that scales
 // with the container's font size rather than being calibrated for 16px.
 const QUOTE_BLOCK =
-	'my-[0.5em] flex w-full cursor-pointer flex-col items-start gap-[0.25em] rounded-r border-l-2 border-primary bg-muted-faint px-[0.75em] py-[0.5em] text-left can-hover:hover:bg-secondary';
+	'my-[0.5em] flex w-full cursor-pointer flex-col items-start gap-[0.25em] rounded-r border-l-2 border-accent-line bg-muted-faint px-[0.75em] py-[0.5em] text-left can-hover:hover:bg-secondary';
 
 function QuoteBlock({ quoted, onCitation }: { quoted: QuotedCitation; onCitation: CitationHandler }) {
 	return (
