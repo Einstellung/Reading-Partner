@@ -5,7 +5,7 @@
 // moves between books.
 
 import { callModel, resolveModel } from "../../../ai/model-call";
-import { realTimers } from "../../../ai/observable-run";
+import { realTimers } from "../../../legion/execute/observable-run";
 import { ensureFulltext, getFulltext, saveFulltext } from "../../../fulltext/store";
 import { FULLTEXT_VERSION, type Fulltext } from "../../../fulltext/types";
 import { buildFigureCatalog, ensureFigures } from "../../figures";

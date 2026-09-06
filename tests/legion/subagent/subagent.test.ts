@@ -1,4 +1,4 @@
-// The sub-agent runner and its parent-side tool (src/ai/subagent/run.ts,
+// The sub-agent runner and its parent-side tool (src/legion/subagent/run.ts,
 // tool.ts), driven through the real agent loop over a scripted fake stream — so
 // the settling, the tool execution, the round counting, the mid-turn budget
 // refusal and the abort path are the production ones, with no provider, no
@@ -18,18 +18,18 @@ import {
   type Context,
   type Model,
 } from "@earendil-works/pi-ai";
-import { runAgentLoop, type AgentTool, type StreamFn } from "../../src/ai/agent";
-import { StoppedError } from "../../src/ai/watchdog";
-import { runSubagent } from "../../src/ai/subagent/run";
-import { subagentTool } from "../../src/ai/subagent/tool";
-import { createSubagentLedger } from "../../src/ai/subagent/ledger";
-import { createTurnSettler } from "../../src/ai/subagent/turn";
+import { runAgentLoop, type AgentTool, type StreamFn } from "../../../src/ai/agent";
+import { StoppedError } from "../../../src/legion/execute/watchdog";
+import { runSubagent } from "../../../src/legion/subagent/run";
+import { subagentTool } from "../../../src/legion/subagent/tool";
+import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
+import { createTurnSettler } from "../../../src/legion/subagent/turn";
 import type {
   SubagentDefinition,
   SubagentProgress,
   SubagentTurnFn,
   SubagentTurnRequest,
-} from "../../src/ai/subagent/types";
+} from "../../../src/legion/subagent/types";
 
 // --- a scripted model, one entry per streamed turn ---
 

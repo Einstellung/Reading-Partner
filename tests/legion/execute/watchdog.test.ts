@@ -1,16 +1,16 @@
-// Unit tests for the shared stall watchdog (src/ai/watchdog.ts), driven on a
+// Unit tests for the shared stall watchdog (src/legion/execute/watchdog.ts), driven on a
 // virtual clock so no real time passes. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { fauxAssistantMessage, isRetryableAssistantError } from "@earendil-works/pi-ai";
-import { ModelCallError } from "../../src/ai/providers";
+import { ModelCallError } from "../../../src/ai/providers";
 import {
   isRetryableAiFailure,
   runWithWatchdog,
   StoppedError,
   resolveWatchdogConfig,
   type WatchdogHooks,
-} from "../../src/ai/watchdog";
+} from "../../../src/legion/execute/watchdog";
 
 // A failure as it reaches the watchdog: pi's AssistantMessage for the failed
 // turn, wrapped the way callModel wraps it.

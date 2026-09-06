@@ -11,8 +11,8 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import type { BudgetPurpose } from "../../budget";
-import type { AgentTool } from "../agent";
-import type { ProviderId } from "../providers";
+import type { AgentTool } from "../../ai/agent";
+import type { ProviderId } from "../../ai/providers";
 
 // A cheaper (or just different) model for one sub-agent. A run that only looks
 // things up and lists what it found does not need the model the reader is

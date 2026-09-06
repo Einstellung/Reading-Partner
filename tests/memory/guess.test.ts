@@ -16,8 +16,8 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { runAgentLoop, type StreamFn } from "../../src/ai/agent";
-import { createTurnSettler } from "../../src/ai/subagent/turn";
-import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/ai/subagent/types";
+import { createTurnSettler } from "../../src/legion/subagent/turn";
+import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/legion/subagent/types";
 import type { FeedbackEvent } from "../../src/memory/profile/feedback";
 import {
   buildGuessSystemPrompt,

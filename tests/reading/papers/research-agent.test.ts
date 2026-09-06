@@ -4,7 +4,7 @@
 //
 // Driven through the real agent loop over a scripted fake stream, with a fake search
 // and a fake fetch: no provider, no credentials, no API key, no network. Same pattern
-// as tests/ai/subagent.test.ts and tests/reading/papers/search-tool.ts.
+// as tests/legion/subagent/subagent.test.ts and tests/reading/papers/search-tool.ts.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -19,11 +19,11 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { runAgentLoop, type StreamFn } from "../../../src/ai/agent";
-import { StoppedError } from "../../../src/ai/watchdog";
-import { createSubagentLedger } from "../../../src/ai/subagent/ledger";
-import { subagentTool } from "../../../src/ai/subagent/tool";
-import { createTurnSettler } from "../../../src/ai/subagent/turn";
-import type { SubagentProgress, SubagentTurnFn, SubagentTurnRequest } from "../../../src/ai/subagent/types";
+import { StoppedError } from "../../../src/legion/execute/watchdog";
+import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
+import { subagentTool } from "../../../src/legion/subagent/tool";
+import { createTurnSettler } from "../../../src/legion/subagent/turn";
+import type { SubagentProgress, SubagentTurnFn, SubagentTurnRequest } from "../../../src/legion/subagent/types";
 import {
   buildResearchAgent,
   researchStatusLabel,

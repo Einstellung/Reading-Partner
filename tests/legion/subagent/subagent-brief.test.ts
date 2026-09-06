@@ -1,5 +1,5 @@
 // What a sub-agent is allowed to say, and the round ledger behind it
-// (src/ai/subagent/brief.ts, ledger.ts). Pure: no model, no tools, no network.
+// (src/legion/subagent/brief.ts, ledger.ts). Pure: no model, no tools, no network.
 // Run: bun test.
 //
 // These tests are the specification of the honest-failure rule. Each one asserts
@@ -13,10 +13,10 @@ import {
   composeBrief,
   subagentSystemPrompt,
   type BriefFacts,
-} from "../../src/ai/subagent/brief";
-import { createSubagentLedger } from "../../src/ai/subagent/ledger";
-import { estimateTextTokens } from "../../src/budget";
-import type { SubagentDefinition } from "../../src/ai/subagent/types";
+} from "../../../src/legion/subagent/brief";
+import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
+import { estimateTextTokens } from "../../../src/budget";
+import type { SubagentDefinition } from "../../../src/legion/subagent/types";
 
 function facts(over: Partial<BriefFacts> = {}): BriefFacts {
   return {

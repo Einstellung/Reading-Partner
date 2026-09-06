@@ -11,19 +11,17 @@
 // virtual clock.
 
 import { isContextOverflow, isRetryableAssistantError } from "@earendil-works/pi-ai";
-import { ModelCallError } from "./providers";
+import type { AiCallOptions } from "../../ai/call-options";
+import { ModelCallError } from "../../ai/providers";
 
 export const DEFAULT_WATCHDOG_MS = 60_000;
 export const DEFAULT_MAX_ATTEMPTS = 3;
 export const DEFAULT_RETRY_DELAY_MS = 2_000;
 
-// The invoke contract a long AI call receives: an abort signal it must honor,
-// and a progress callback fired with the cumulative received character count as
-// deltas arrive.
-export interface AiCallOptions {
-  signal: AbortSignal;
-  onProgress(chars: number): void;
-}
+// The invoke contract a long AI call receives. Declared in src/ai/call-options.ts
+// because callModel takes it and src/ai may not import src/legion; re-exported
+// here, which is where every caller already imports it from.
+export type { AiCallOptions } from "../../ai/call-options";
 
 export interface WatchdogConfig {
   watchdogMs: number;
@@ -43,7 +41,7 @@ export interface WatchdogTimers {
 // beforeRetry fires after a failed attempt that will be repeated, before the flat
 // retry delay, and is awaited: it is where a caller running several calls at once
 // makes the group sit out a rate limit rather than letting this one call retry
-// straight into the same minute (src/ai/limiter).
+// straight into the same minute (src/legion/execute/limiter).
 export interface WatchdogHooks {
   onAttempt(info: { attempt: number; attempts: number; startedAt: number }): void;
   onProgress(chars: number): void;

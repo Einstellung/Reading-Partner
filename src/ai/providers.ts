@@ -395,7 +395,7 @@ export type SimpleStreamFn = (
 // same 503 into a reply about two seconds later.
 //
 // This only wraps establishing the request. A stream that opens and then goes
-// quiet is the stall watchdog's business (src/ai/watchdog.ts); the two do not
+// quiet is the stall watchdog's business (src/legion/execute/watchdog.ts); the two do not
 // overlap. maxRetryDelayMs stays at pi's default, so a server asking for a wait
 // longer than a minute still fails fast and lands in the watchdog's hands with
 // the requested delay in the message.

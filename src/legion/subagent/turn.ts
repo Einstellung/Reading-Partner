@@ -11,15 +11,16 @@
 //   - Cancellation. The loop stops silently on abort — no onDone, no onError, by
 //     design, since whoever raised the signal already knows. A promise waiting on
 //     those callbacks would then never settle, so the abort listener rejects with
-//     StoppedError, the same signal src/ai/watchdog raises for a user Stop. That
-//     is the existing abort path: the reader hangs up, the AbortController the
-//     caller already owns fires, and the in-flight sub-agent dies with it.
+//     StoppedError, the same signal src/legion/execute/watchdog raises for a
+//     user Stop. That is the existing abort path: the reader hangs up, the
+//     AbortController the caller already owns fires, and the in-flight
+//     sub-agent dies with it.
 //
 // Kept apart from live.ts so it can be tested against the real runAgentLoop with
 // a scripted stream, with no settings read and no credentials.
 
-import { StoppedError } from "../watchdog";
-import type { AgentCallbacks } from "../agent";
+import { StoppedError } from "../execute/watchdog";
+import type { AgentCallbacks } from "../../ai/agent";
 import type { SubagentTurnOutcome } from "./types";
 
 export interface TurnSettler {

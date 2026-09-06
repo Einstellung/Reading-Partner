@@ -14,7 +14,7 @@
 // (the trigger point is on the retell's side, in ui/components/retell/useRetell.ts).
 
 import type { AgentTool } from "../../ai/agent";
-import { runSubagent, type SubagentDefinition, type SubagentModel } from "../../ai/subagent";
+import { runSubagent, type SubagentDefinition, type SubagentModel } from "../../legion/subagent";
 import type { ObservationAdapter } from "./adapter";
 import {
   DISTILL_BRIEF_TOKENS,

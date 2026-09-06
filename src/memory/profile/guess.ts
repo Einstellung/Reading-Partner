@@ -36,7 +36,7 @@ import {
   type SubagentModel,
   type SubagentOutcome,
   type SubagentTurnFn,
-} from "../../ai/subagent";
+} from "../../legion/subagent";
 import type { FeedbackEvent } from "./feedback";
 import type { ObservationIndexEntry } from "../observations/types";
 

@@ -119,7 +119,7 @@ export abstract class ObservableRun<TState, TActivity extends RunActivity> {
     }
   }
 
-  // Run one long AI call under the shared stall watchdog (src/ai/watchdog),
+  // Run one long AI call under the shared stall watchdog (src/legion/execute/watchdog),
   // publishing its liveness as this run's activity and clearing it on the way
   // out. `info` is the activity minus the liveness fields the watchdog fills in.
   protected async callWithWatchdog<T>(

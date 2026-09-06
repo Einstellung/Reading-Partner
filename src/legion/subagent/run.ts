@@ -7,8 +7,8 @@
 // network. live.ts supplies the real turn. This is the same dependency-injection
 // shape src/memory/observations/distill.ts uses, for the same reason.
 
-import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../agent";
-import { StoppedError } from "../watchdog";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../../ai/agent";
+import { StoppedError } from "../execute/watchdog";
 import { composeBrief, subagentSystemPrompt, EMPTY_ANSWER, type BriefFacts } from "./brief";
 import type { SubagentLedger } from "./ledger";
 import {

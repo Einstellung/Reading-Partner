@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { runAgentTurn, type ProviderId } from "../../ai";
 import type { CompressedImage } from "../../ai/image-utils";
-import type { SubagentProgress } from "../../ai/subagent";
+import type { SubagentProgress } from "../../legion/subagent";
 import { logEvent } from "../../platform/app/events";
 import type { Annotation } from "../../platform/app/reader-contract";
 import { toReasoning, type Settings } from "../../platform/app/settings";

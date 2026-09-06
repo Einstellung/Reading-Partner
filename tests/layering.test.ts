@@ -47,10 +47,16 @@ const LAYER: Record<string, Layer> = {
   "platform/sync/merge": "platform",
 
   ai: "capability",
-  "ai/subagent": "capability",
   "ai/voice": "capability",
   budget: "capability",
   fulltext: "capability",
+  // Running an agent: the stall watchdog and the pacing limiter every unattended
+  // call goes through, the observable shell the long pipelines share, and the
+  // isolated sub-agent runner. A capability like ai itself, and one layer out
+  // from it: legion calls ai to send a turn, ai never calls legion.
+  legion: "capability",
+  "legion/execute": "capability",
+  "legion/subagent": "capability",
   memory: "capability",
   // The nightly pass that turns observations into statements. A capability like
   // the rest of memory: the collector election that decides which machine runs
@@ -416,6 +422,27 @@ test("budget imports nothing from ai", () => {
         "and never calls into it:\n" +
         describe(bad) +
         "\nMove the piece budget needs into a module both can import.",
+    );
+  }
+  expect(bad).toEqual([]);
+});
+
+// Same reason the budget rule is spelled out: the layer table lets one
+// capability import another, so nothing else would stop the direction from
+// reversing. src/legion runs agents on top of what src/ai can send — the
+// watchdog wraps a call, the sub-agent runner drives the agent loop — and an
+// edge back would mean the loop cannot be read or tested without the runner.
+test("ai imports nothing from legion", () => {
+  const bad = EDGES.filter(
+    (e) => (e.from === "ai" || e.from.startsWith("ai/")) && (e.to === "legion" || e.to.startsWith("legion/")),
+  );
+  if (bad.length > 0) {
+    reject(
+      "src/ai is the send path and src/legion is what runs agents on it, so the imports go " +
+        "one way only:\n" +
+        describe(bad) +
+        "\nEither the piece belongs in src/legion too, or the vocabulary both need belongs in" +
+        " a module under src/ai that legion imports.",
     );
   }
   expect(bad).toEqual([]);

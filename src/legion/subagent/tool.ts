@@ -7,7 +7,7 @@
 // reason the capability exists.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../agent";
+import type { AgentTool } from "../../ai/agent";
 import { runSubagent, type SubagentDeps, type SubagentRequest } from "./run";
 import type { SubagentDefinition } from "./types";
 

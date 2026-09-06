@@ -19,7 +19,7 @@ import {
   type SubagentModel,
   type SubagentOutcome,
   type SubagentTurnFn,
-} from "../../ai/subagent";
+} from "../../legion/subagent";
 import type { EventPayload } from "../../platform/app/events";
 import type { ObservationAdapter } from "./adapter";
 import { resolveMessageAnchor } from "./anchors";

@@ -5,8 +5,8 @@
 
 import { beforeEach, expect, test } from "bun:test";
 import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../src/ai/agent";
-import type { SubagentTurnFn } from "../../src/ai/subagent";
-import { StoppedError } from "../../src/ai/watchdog";
+import type { SubagentTurnFn } from "../../src/legion/subagent";
+import { StoppedError } from "../../src/legion/execute/watchdog";
 import { estimateTextTokens } from "../../src/budget";
 import { getFulltext } from "../../src/fulltext/store";
 import type { Fulltext } from "../../src/fulltext/types";

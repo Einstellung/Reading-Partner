@@ -33,7 +33,7 @@ export type AiSurface =
   | "talk"
   // The info companion.
   | "info"
-  // An isolated sub-agent run (src/ai/subagent).
+  // An isolated sub-agent run (src/legion/subagent).
   | "subagent"
   // One book-note chapter.
   | "notes"

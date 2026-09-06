@@ -1,10 +1,10 @@
 // Sub-agents: run a task in an isolated agent loop and get one brief back
 // (docs/25).
 //
-// Not re-exported from src/ai/index.ts on purpose. That barrel belongs to the
-// `ai` entry, and an edge from it to `ai/subagent` would close a cycle between
-// the two (tests/layering.test.ts checks exactly this). Callers import
-// "../ai/subagent" directly, the way they already do for "../ai/voice".
+// Not re-exported from src/ai/index.ts, and not reachable from it at all:
+// legion is built on ai, so an edge back the other way would be a cycle
+// (tests/layering.test.ts checks exactly this). Callers import
+// "../legion/subagent" directly, the way they already do for "../ai/voice".
 
 // Only the surface a caller wires. The brief composition and the turn settler
 // are internals with their own tests, reachable by path when a caller genuinely

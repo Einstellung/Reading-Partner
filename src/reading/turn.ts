@@ -138,7 +138,7 @@ import {
   subagentTool,
   type SubagentProgress,
   type SubagentTurnFn,
-} from "../ai/subagent";
+} from "../legion/subagent";
 import type { PrepPipeline } from "./prep/papers/pipeline";
 
 // The opening ask on a marked passage (reading/intents.ts), re-exported here
@@ -218,7 +218,7 @@ export interface ReadingTurnInput {
   signal?: AbortSignal;
   // One line for the reader while the research sub-agent runs. Never its tool
   // calls: what arrives here is a phase, the label this turn wrote, and a round
-  // count (src/ai/subagent/types.ts).
+  // count (src/legion/subagent/types.ts).
   onSubagentProgress?: (progress: SubagentProgress) => void;
   // The sub-agent turn behind research_literature. Injected so the assembly and
   // its research tool can be exercised with no provider, no key and no network.

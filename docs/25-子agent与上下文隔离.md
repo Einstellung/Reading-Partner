@@ -1,6 +1,6 @@
 # 子 agent 与上下文隔离
 
-> 本文记录 `src/ai/subagent/` 的契约。上游是 [24](./24-联网搜索.md)（对话开始要去外面找东西）和 [02](./02-AI核心与memory设计.md)（观察蒸馏是这个抽象的先例）。代码按 2026-07-30 的实现写。
+> 本文记录 `src/legion/subagent/` 的契约。上游是 [24](./24-联网搜索.md)（对话开始要去外面找东西）和 [02](./02-AI核心与memory设计.md)（观察蒸馏是这个抽象的先例）。代码按 2026-07-30 的实现写。
 
 ---
 
@@ -12,7 +12,7 @@
 
 子 agent 拿到自己的 message 列表（只有一条 user 消息，就是任务）、自己那一小组工具、自己的轮数上限，自己跑到底，只把一份 brief 交回来。它跑过的轮次活在调用方永远看不到的数组里，中间产物随运行结束一起消失。
 
-签名层面（`src/ai/subagent/types.ts`）：定义是 `SubagentDefinition`（name / description / label / systemPrompt / tools / maxRounds / purpose / model / evidence / briefTokenCap），一次运行是 `runSubagent({definition, task, signal, onProgress}, {run, ledger})`，回来的是 `SubagentBrief`（brief / outcome / usable / rounds / roundsAllowed / toolCalls / toolSuccesses / toolFailures / clipped）。工具全部由调用方注入，这个目录不知道文献检索、简报和书的存在。
+签名层面（`src/legion/subagent/types.ts`）：定义是 `SubagentDefinition`（name / description / label / systemPrompt / tools / maxRounds / purpose / model / evidence / briefTokenCap），一次运行是 `runSubagent({definition, task, signal, onProgress}, {run, ledger})`，回来的是 `SubagentBrief`（brief / outcome / usable / rounds / roundsAllowed / toolCalls / toolSuccesses / toolFailures / clipped）。工具全部由调用方注入，这个目录不知道文献检索、简报和书的存在。
 
 隔离不是靠约定，是靠没有出口：`turn.ts` 把 loop 的 `onDelta`、`onThinking`、`onToolStart`、`onToolEnd` 全部接到空函数上，只有 `onDone` 的最终文本能出来。
 

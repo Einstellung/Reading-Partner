@@ -7,8 +7,8 @@
 // refreshes after background writes.
 
 import { resolveModel } from "../../ai/model-call";
-import { runSubagentTurnLive } from "../../ai/subagent";
-import { StoppedError } from "../../ai/watchdog";
+import { runSubagentTurnLive } from "../../legion/subagent";
+import { StoppedError } from "../../legion/execute/watchdog";
 import { peekAnnotations } from "../../platform/app/annotations";
 import { logEvent } from "../../platform/app/events";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";

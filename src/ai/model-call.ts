@@ -16,7 +16,7 @@ import {
 	type ResponseHead,
 	type StreamOutcome,
 } from "./providers";
-import type { AiCallOptions } from "./watchdog";
+import type { AiCallOptions } from "./call-options";
 
 export type ThinkingKind = "chat" | "prep";
 

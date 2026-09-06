@@ -105,7 +105,7 @@ export interface AgentCallbacks {
 	// Fires after the round has passed its budget check, so it counts turns that
 	// were really sent — which is what a caller reporting "3 of 6 turns used" has
 	// to mean. Optional; the conversational paths have no use for it, the
-	// sub-agent runner (ai/subagent) reports its turn count from it.
+	// sub-agent runner (legion/subagent) reports its turn count from it.
 	onRound?(info: { round: number; rounds: number }): void;
 	// The HTTP response head of each round, before its body is read: request id
 	// and rate-limit headers. Fires once per streamed model turn.

@@ -5,7 +5,7 @@
 // sub-agent's tool set, and the reader's turn sees one tool that comes back with a
 // brief.
 //
-// The prompt lives here rather than in src/ai/subagent because it is reading-domain
+// The prompt lives here rather than in src/legion/subagent because it is reading-domain
 // knowledge: how to search the literature for someone who is part-way through a book,
 // and what a reader mid-book can do with the answer. The capability stays ignorant of
 // literature search — it is handed a prompt, a tool list and a cap.
@@ -19,7 +19,7 @@ import {
   DEFAULT_SUBAGENT_ROUNDS,
   type SubagentDefinition,
   type SubagentProgress,
-} from "../../ai/subagent";
+} from "../../legion/subagent";
 import type { AgentTool } from "../../ai/agent";
 import { buildCitationTools } from "./citation-tool";
 import type { CitationDeps } from "./citations";

@@ -5,7 +5,7 @@
 // watchdog); the pure logic (adapters, triage prompt/validation) stays testable.
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
-import { realTimers } from "../../ai/observable-run";
+import { realTimers } from "../../legion/execute/observable-run";
 import { loadSettings } from "../../platform/app/settings";
 import {
   currentDeviceId,
@@ -19,7 +19,7 @@ import {
   type ArticleState,
   type BriefingView,
 } from "./reader";
-import type { AiCallOptions } from "../../ai/watchdog";
+import type { AiCallOptions } from "../../legion/execute/watchdog";
 import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
 import { observeAppExit, observeAppLifecycle } from "../../platform/app/lifecycle";

@@ -3,8 +3,8 @@
 // without a provider lives in run.ts; this file is the wiring, and is deliberately
 // the only part of the capability a test cannot reach.
 
-import { runAgentTurn } from "../agent";
-import { resolveModel } from "../model-call";
+import { runAgentTurn } from "../../ai/agent";
+import { resolveModel } from "../../ai/model-call";
 import { createTurnSettler } from "./turn";
 import type { SubagentTurnFn } from "./types";
 

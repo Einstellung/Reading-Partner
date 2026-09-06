@@ -2,7 +2,7 @@
 
 ## 现象
 
-`tests/ai/limiter.test.ts` 的注释写着「driven on a virtual clock so no real time
+`tests/legion/execute/limiter.test.ts` 的注释写着「driven on a virtual clock so no real time
 passes」，测试里的等待也确实全是虚拟的——被测的 `CallLimiter` 一个真定时器都不碰，
 所有 sleep 都走注入的 `timers.sleep`。可这个文件单跑 1408ms，10 个用例、33 个断言，
 没有网络没有文件系统。整个套件 372 个文件里绝大多数是 50–150ms。

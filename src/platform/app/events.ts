@@ -34,7 +34,7 @@ export type EventType =
   // A distillation pass that did not finish, so nothing was observed and its
   // cursors did not advance. `stage` is how far it got and `reason` is the one
   // category the failure sorts into; `outcome` is the sub-agent's
-  // (src/ai/subagent) and is null when the pass never reached a run. `from`/`to`
+  // (src/legion/subagent) and is null when the pass never reached a run. `from`/`to`
   // are the message indexes the pass would have moved the cursor over and
   // `fromTs`/`toTs` the timestamps at the ends of that stretch — which is the
   // stretch a later pass has to redo. Fields and the classifier are in

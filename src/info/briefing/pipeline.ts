@@ -31,7 +31,7 @@ import {
   StoppedError,
   type AiCallOptions,
   type WatchdogConfig,
-} from "../../ai/watchdog";
+} from "../../legion/execute/watchdog";
 import { mapSettled } from "../sources/pool";
 import {
   SCREEN_BATCH_SIZE,
