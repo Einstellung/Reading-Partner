@@ -229,6 +229,10 @@ export async function stepFlattenObservations(fs: MigrationFs): Promise<StepRepo
         // store's. Nothing in a losing copy of it is not in those files.
         await fs.remove(path);
         step.counts.indexesDropped = (step.counts.indexesDropped ?? 0) + 1;
+        // A removed source is a change: the gate applies only when the dry run
+        // counts one, and a directory holding nothing but bookkeeping still
+        // holds it shut.
+        step.changed++;
         continue;
       }
 
@@ -249,6 +253,7 @@ export async function stepFlattenObservations(fs: MigrationFs): Promise<StepRepo
           await fs.write(META_FILE, JSON.stringify(meta, null, 2));
         }
         await fs.remove(path);
+        step.changed++;
         continue;
       }
 
@@ -282,6 +287,7 @@ export async function stepFlattenObservations(fs: MigrationFs): Promise<StepRepo
           }
         }
         await fs.remove(path);
+        step.changed++;
         continue;
       }
 

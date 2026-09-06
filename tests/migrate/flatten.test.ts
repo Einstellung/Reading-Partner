@@ -31,7 +31,9 @@ test("every entry moves, carrying the directory's topic into its frontmatter", a
 
   const step = await stepFlattenObservations(fs);
   expect(step.scanned).toBe(2);
-  expect(step.changed).toBe(2);
+  // Two entries moved and one stale index dropped: every source that goes is
+  // a change, or the gate would not apply over a directory of bookkeeping.
+  expect(step.changed).toBe(3);
   expect(step.counts.directoriesRemoved).toBe(2);
 
   expect(parseObservation(files.get(`observations/${WIDE}.md`) ?? "")?.topic).toBe("topic-a");
@@ -145,6 +147,21 @@ test("a destination sync already delivered takes the source with it", async () =
 
   const again = await stepFlattenObservations(fs);
   expect({ scanned: again.scanned, changed: again.changed }).toEqual({ scanned: 0, changed: 0 });
+});
+
+test("a directory holding only bookkeeping still counts as a change, so the gate applies", async () => {
+  const { fs, files } = makeMemFs({
+    "memory-topic-a/meta.json": JSON.stringify({ lastDistilledAt: 5 }),
+    "memory-topic-a/index.md": "- stale line\n",
+  });
+
+  const step = await stepFlattenObservations(fs);
+  expect(step.unrepaired).toEqual([]);
+  expect(step.changed).toBeGreaterThan(0);
+  expect(step.counts.directoriesRemoved).toBe(1);
+  expect(files.has("memory-topic-a/meta.json")).toBe(false);
+  expect(files.has("memory-topic-a/index.md")).toBe(false);
+  expect(await legacyObservationLayout(fs)).toBe(false);
 });
 
 test("a version that disagrees is parked beside the destination, not over it", async () => {
