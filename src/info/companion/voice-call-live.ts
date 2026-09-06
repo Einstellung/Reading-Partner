@@ -18,6 +18,7 @@ import { hasWebviewFetch } from "../../platform/app/platform";
 import { loadSettings, toReasoning } from "../../platform/app/settings";
 import {
   appendMessage,
+  createThread,
   getThread,
   loadThreads,
   patchThreadMessage,
@@ -73,6 +74,16 @@ export function threadTranscript(bookId: string, threadId: string): VoiceCallTra
   return {
     begin() {
       written = new Map();
+      // The call is usually the day's first way into the conversation: the orb
+      // and the text chat are alternatives on the same page (InfoHome), so on a
+      // day whose chat was never opened nothing else has made the thread. A
+      // message appended to a thread that is not there is dropped in silence
+      // (threads.ts), which took every turn of such a call with it. Created
+      // here and not in the store: answering "no thread" is what the store's
+      // other callers read that return value for. Same id, same "info" anchor
+      // as use-info-call.ts, so the chat and the call keep opening the one
+      // conversation about today.
+      if (!getThread(bookId, threadId)) createThread(bookId, "info", threadId);
     },
     record(entry) {
       const key = `${entry.turn}:${entry.role}`;
@@ -209,7 +220,8 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
 
   const bookId = infoBookId(opts.dateKey);
   // The thread has to be in memory before the first turn reads its history off
-  // it, and before the first `record` appends to it.
+  // it, and before the first `record` appends to it. Whether there is one to
+  // read is answered per call, in the transcript's `begin`.
   await loadThreads(bookId).catch(() => {});
 
   // Built once per call rather than per turn: the extractor's chunk is a fetch
