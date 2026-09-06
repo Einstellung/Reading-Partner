@@ -16,6 +16,14 @@ import { splitRehearsalRunPagesOnce } from "./reading/rehearsal";
 import { splitSavedArticleBodiesOnce } from "./reading/saved-articles";
 import { documentShape, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
+import {
+  browserPrefStore,
+  closesOnNavigate,
+  columnLayoutNow,
+  readSidebarOpen,
+  writeSidebarOpen,
+} from "./ui/components/reader/sidebar-column";
+import { useSidebarColumn } from "./ui/components/reader/useSidebarColumn";
 import { ANNOTATION_COLORS } from "./platform/app/annotations";
 import {
   addFileToTopic,
@@ -211,11 +219,33 @@ export default function App() {
   const [pickedTool, setPickedTool] = useState<ToolType>("none");
   const [penColor, setPenColor] = useState(ANNOTATION_COLORS[0].color);
   const [viewReady, setViewReady] = useState(false);
-  // The panel is an overlay drawer, closed by default on every surface (docs:
-  // iPad adaptation). The open/closed choice persists for the session (App stays
-  // mounted across book open/close) and resets to closed on restart (reload).
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // The reader's left panel: a drawer below `lg`, a column beside the page at
+  // and above it (docs/54). Which form is on screen is CSS; App holds the open
+  // state, and the two rules that depend on the form come from
+  // sidebar-column.ts.
+  //
+  // A drawer opens shut, always: it covers the book, so a remembered one would
+  // greet the reader with a dimmed page (docs: iPad adaptation). A column is
+  // remembered per device, because it is a layout the reader chose and it costs
+  // the page nothing to keep.
+  const sidebarColumn = useSidebarColumn();
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    readSidebarOpen(browserPrefStore(window), columnLayoutNow(window)),
+  );
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("traces");
+
+  // Crossing the breakpoint re-decides the panel. Widening into a column adopts
+  // whatever this device last chose; narrowing back into a drawer shuts it,
+  // because the same panel that was standing beside the page is now lying on
+  // top of it.
+  useEffect(() => {
+    setSidebarOpen(sidebarColumn ? readSidebarOpen(browserPrefStore(window), true) : false);
+  }, [sidebarColumn]);
+
+  // Only the column is written down. The drawer's state is this session's.
+  useEffect(() => {
+    if (sidebarColumn) writeSidebarOpen(browserPrefStore(window), sidebarOpen);
+  }, [sidebarColumn, sidebarOpen]);
   // The current book's extracted text (M6 AI context) and outline (Sidebar).
   // Set from openInReader once ensureFulltext resolves; see the comment there.
   const [fulltext, setFulltext] = useState<Fulltext | null>(null);
@@ -993,7 +1023,9 @@ export default function App() {
         else if (currentCall()?.aside) returnFromAside();
         else if (currentCall()) endCall();
         else if (popup) setPopup(null);
-        else if (sidebarOpen) setSidebarOpen(false);
+        // Esc dismisses what is covering something. The column covers nothing,
+        // so it stays; the drawer goes.
+        else if (sidebarOpen && !sidebarColumn) setSidebarOpen(false);
         return;
       }
       const target = e.target as HTMLElement | null;
@@ -1007,7 +1039,7 @@ export default function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [showSettings, popup, endCall, currentCall, returnFromAside, quoteHlActive, sidebarOpen]);
+  }, [showSettings, popup, endCall, currentCall, returnFromAside, quoteHlActive, sidebarOpen, sidebarColumn]);
 
   // Which half of prep this document gets. Whichever run exists on disk wins;
   // with neither, the citation density decides (reading/prep/kind.ts). Read off
@@ -1237,10 +1269,11 @@ export default function App() {
             fulltext={fulltext}
             fulltextPending={fulltextPending}
             onNavigatePage={(page) => {
-              // Close the drawer on the way: its backdrop covers the reader and
-              // only answers a tap, so a jump that leaves it open lands on a page
-              // the finger cannot scroll.
-              setSidebarOpen(false);
+              // The drawer closes on the way out: its backdrop covers the reader
+              // and only answers a tap, so a jump that left it open would land on
+              // a page the finger cannot scroll. The column stays, so the reader
+              // keeps their place in the list they are working down.
+              if (closesOnNavigate(sidebarColumn)) setSidebarOpen(false);
               viewRef.current?.navigate({ pageIndex: page - 1 });
             }}
             annotations={traceAnns as unknown as PopupAnnotation[]}
