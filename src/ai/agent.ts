@@ -30,13 +30,7 @@ import type {
 	TSchema,
 } from "@earendil-works/pi-ai";
 import { validateToolCall } from "@earendil-works/pi-ai";
-import {
-	contextBudget,
-	fitsBudget,
-	stubEarlyToolResults,
-	TOOL_RESULTS_KEPT,
-	type BudgetPurpose,
-} from "../budget";
+import { fitRoundToBudget, type BudgetPurpose } from "../budget";
 import {
 	newRunId,
 	recordCacheTurn,
@@ -276,37 +270,25 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 		for (let round = 0; round < maxRounds; round++) {
 			if (signal?.aborted) return;
 
-			let context: Context = { systemPrompt, messages, tools: piTools };
 			// Every round grows the history by an assistant turn and its tool
 			// results, so a loop that started comfortably can reach the window
-			// mid-way. Sending it anyway does not fail: pi clamps the allowed output
-			// to 1, the model emits one token, and the stream ends with a normal
-			// `done` (docs/pitfall/65). Fetching a chapter is exactly how a turn
-			// gets there, so the check belongs on every round, not just the first.
-			if (!fitsBudget(contextBudget(model, context), purpose)) {
-				// The one rung available mid-turn: everything but the last few tool
-				// results becomes a stub naming the call and its size, so the model
-				// can fetch it again if it turns out to matter.
-				messages = stubEarlyToolResults(messages, TOOL_RESULTS_KEPT).messages;
-				context = { systemPrompt, messages, tools: piTools };
-				// Measured again rather than subtracted from. From round two the array
-				// carries real AssistantMessages with usage, pi's estimator prices the
-				// whole prefix at the provider's own count, and a rung's saving can only
-				// ever be counted script-aware; subtracting one from the other is
-				// arithmetic across two currencies (docs/pitfall/66).
-				//
-				// What that costs: a usage figure describes the request that was already
-				// sent, so it does not fall when the history behind it is rewritten.
-				// Stubbing rescues a round whose script-aware number was the binding one
-				// — the CJK case this module exists for — plus this round's own results,
-				// which sit after the usage mark. When pi's number is what is over the
-				// line, no edit to the history can help: pi clamps against that number
-				// regardless, so refusing is the outcome rather than a missed rescue.
-				if (!fitsBudget(contextBudget(model, context), purpose)) {
-					refuse(REFUSE_MIDTURN);
-					return;
-				}
+			// mid-way; the one reduction available mid-flight is to stub the tool
+			// results already collected. Both the sizing and that reduction are
+			// src/budget's (fitRoundToBudget), so this loop and the pi-Agent one in
+			// src/legion cannot drift on what "does not fit" means.
+			//
+			// What the reduction costs when it is not enough: a usage figure
+			// describes the request that was already sent, so it does not fall when
+			// the history behind it is rewritten. When pi's own number is what is
+			// over the line, no edit to the history can help — refusing is the
+			// outcome rather than a missed rescue.
+			const fit = fitRoundToBudget({ model, systemPrompt, messages, tools: piTools, purpose });
+			messages = fit.messages;
+			if (!fit.fits) {
+				refuse(REFUSE_MIDTURN);
+				return;
 			}
+			const context: Context = { systemPrompt, messages, tools: piTools };
 			onRound?.({ round: round + 1, rounds: maxRounds });
 			// Stamped before the request rather than after the answer: the entry a
 			// round reads was written when the request before it went out, so

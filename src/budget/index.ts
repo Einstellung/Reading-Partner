@@ -21,6 +21,7 @@ export {
 } from "./estimate";
 export {
   budgetNotice,
+  fitRoundToBudget,
   planReductions,
   stubEarlyToolResults,
   toolResultStub,
@@ -29,6 +30,8 @@ export {
   TOOL_RESULTS_KEPT,
   type LadderInput,
   type LadderPlan,
+  type RoundFit,
+  type RoundFitInput,
   type Rung,
   type RungPrice,
   type StubbedMessages,

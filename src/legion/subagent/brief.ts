@@ -37,10 +37,15 @@ export function briefContractPrompt(tokenCap: number): string {
   ].join("\n");
 }
 
+// A caller's own prompt with the brief contract on the end.
+export function withBriefContract(systemPrompt: string, tokenCap: number): string {
+  const own = systemPrompt.trim();
+  return own ? `${own}\n\n${briefContractPrompt(tokenCap)}` : briefContractPrompt(tokenCap);
+}
+
 // The prompt one sub-agent run is sent with.
 export function subagentSystemPrompt(definition: SubagentDefinition, tokenCap: number): string {
-  const own = definition.systemPrompt.trim();
-  return own ? `${own}\n\n${briefContractPrompt(tokenCap)}` : briefContractPrompt(tokenCap);
+  return withBriefContract(definition.systemPrompt, tokenCap);
 }
 
 // The largest prefix of `text` that fits `cap` tokens, priced by src/budget's

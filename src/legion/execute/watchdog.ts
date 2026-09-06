@@ -12,6 +12,7 @@
 
 import { isContextOverflow, isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { AiCallOptions } from "../../ai/call-options";
+import { StoppedError } from "../stop";
 import { ModelCallError } from "../../ai/providers";
 
 export const DEFAULT_WATCHDOG_MS = 60_000;
@@ -48,13 +49,10 @@ export interface WatchdogHooks {
   beforeRetry?(err: unknown, attempt: number): Promise<void> | void;
 }
 
-// Thrown when stopSignal aborts, to distinguish a deliberate stop from a failure.
-export class StoppedError extends Error {
-  constructor() {
-    super("stopped");
-    this.name = "StoppedError";
-  }
-}
+// Thrown when stopSignal aborts, to distinguish a deliberate stop from a
+// failure. Declared at the root of src/legion (stop.ts) and re-exported here,
+// which is where every caller already imports it from.
+export { StoppedError } from "../stop";
 
 // Whether a failed attempt is worth repeating.
 //

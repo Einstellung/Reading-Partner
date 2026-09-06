@@ -14,8 +14,8 @@
 // with a `notice` is one the reader is told about; a rung without one goes
 // silently, and that absence is the whole of what makes it silent.
 
-import { OUTPUT_FLOOR, outputAllowance, type BudgetPurpose } from "./estimate";
-import type { Message, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import { contextBudget, fitsBudget, OUTPUT_FLOOR, outputAllowance, type BudgetPurpose } from "./estimate";
+import type { Api, Context, Message, Model, Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 
 // How a rung's saving is measured when fitToBudget prices the ladder (fit.ts).
 // Data rather than a callback so a ladder stays a table.
@@ -220,4 +220,53 @@ export function stubEarlyToolResults(messages: Message[], keep = TOOL_RESULTS_KE
   });
 
   return { messages: out, stubbed, charsFreed };
+}
+
+// The one reduction available to a tool-calling loop between rounds, as a
+// decision rather than a procedure.
+//
+// Every round of such a loop grows the history by an assistant turn and its tool
+// results, so a turn that started comfortably can reach the window mid-way.
+// Sending it anyway does not fail loudly: pi clamps the allowed output to 1, the
+// model emits one token, and the stream ends with a normal `done`
+// (docs/pitfall/65). So the check belongs on every round, and the only thing a
+// round can give up mid-flight is the tool results it has already collected.
+//
+// `fits: false` means even the stubbed round is over the line; the caller
+// refuses rather than sending it. Measured again rather than subtracted from,
+// because a rung's saving can only be counted script-aware and pi's estimator
+// prices the prefix at the provider's own count (docs/pitfall/66).
+//
+// Pure and shared: src/ai/agent.ts's loop and src/legion/execute/agent-turn.ts
+// both size their rounds with this, so the two cannot drift on what "does not
+// fit" means.
+export interface RoundFitInput {
+  model: Model<Api>;
+  systemPrompt?: string;
+  messages: Message[];
+  tools?: Tool[];
+  purpose: BudgetPurpose;
+  // Recent tool results to leave whole; TOOL_RESULTS_KEPT when unset.
+  keep?: number;
+}
+
+export interface RoundFit {
+  // The messages to send: the originals when they fit, the stubbed list when
+  // they did not.
+  messages: Message[];
+  // Whether the reduction had to be applied.
+  stubbed: boolean;
+  // Whether what comes back can be sent at all.
+  fits: boolean;
+}
+
+export function fitRoundToBudget(input: RoundFitInput): RoundFit {
+  const { model, systemPrompt, tools, purpose } = input;
+  const sized = (messages: Message[]): boolean => {
+    const ctx: Context = { systemPrompt, messages, tools };
+    return fitsBudget(contextBudget(model, ctx), purpose);
+  };
+  if (sized(input.messages)) return { messages: input.messages, stubbed: false, fits: true };
+  const messages = stubEarlyToolResults(input.messages, input.keep ?? TOOL_RESULTS_KEPT).messages;
+  return { messages, stubbed: true, fits: sized(messages) };
 }

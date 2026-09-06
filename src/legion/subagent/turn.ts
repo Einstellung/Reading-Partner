@@ -19,7 +19,7 @@
 // Kept apart from live.ts so it can be tested against the real runAgentLoop with
 // a scripted stream, with no settings read and no credentials.
 
-import { StoppedError } from "../execute/watchdog";
+import { StoppedError } from "../stop";
 import type { AgentCallbacks } from "../../ai/agent";
 import type { SubagentTurnOutcome } from "./types";
 

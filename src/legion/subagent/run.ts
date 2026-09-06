@@ -6,9 +6,15 @@
 // on what crosses back — runs in a test with no provider, no credentials and no
 // network. live.ts supplies the real turn. This is the same dependency-injection
 // shape src/memory/observations/distill.ts uses, for the same reason.
+//
+// The loop underneath is the hand-written one (src/ai/agent.ts).
+// src/legion/execute/agent-turn.ts does this same job on pi-agent-core's Agent,
+// with all of the above kept outside it, and adds the two things the
+// hand-written loop cannot do: steering a run that is already working, and
+// queueing follow-up work. Moving this runner onto it is a separate change.
 
 import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../../ai/agent";
-import { StoppedError } from "../execute/watchdog";
+import { StoppedError } from "../stop";
 import { composeBrief, subagentSystemPrompt, EMPTY_ANSWER, type BriefFacts } from "./brief";
 import type { SubagentLedger } from "./ledger";
 import {

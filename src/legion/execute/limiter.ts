@@ -14,7 +14,7 @@
 // rate-limited paper fetches (60s / 5min / 15min, then give up); it lives here
 // now so both callers share it.
 
-import { StoppedError } from "./watchdog";
+import { StoppedError } from "../stop";
 
 // How long to wait after each successive rate limit that named no interval of
 // its own. After the last rung is spent there is nothing left to wait for.
