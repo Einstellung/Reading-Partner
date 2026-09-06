@@ -20,8 +20,19 @@ import { orbErrorLine, type OrbPhase, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
 import { useVoiceCall, type VoiceCallView } from "./use-voice-call";
+import type { Briefing } from "../../../info/briefing/types";
 
-export function VoiceOrbEntry({ dateKey, stub = false }: { dateKey: string; stub?: boolean }) {
+// `briefing` is the day's briefing as this page holds it, passed down rather
+// than loaded by the call: see LiveVoiceCallOptions.
+export function VoiceOrbEntry({
+	dateKey,
+	briefing,
+	stub = false,
+}: {
+	dateKey: string;
+	briefing: Briefing | null;
+	stub?: boolean;
+}) {
 	// A host that cannot speak has nothing to enter: the whole audio path is the
 	// iOS plugin's (docs/33), and on the desktop this draws nothing at all.
 	// Constant for the life of the process, so the early return never changes
@@ -30,11 +41,11 @@ export function VoiceOrbEntry({ dateKey, stub = false }: { dateKey: string; stub
 	// The stub is the simulator harness's: no audio stack can start there
 	// (docs/pitfall/193), so the four states are driven from `window.__orbStub`.
 	if (stub) return <StubOrbLayer />;
-	return <VoiceOrbLayer dateKey={dateKey} />;
+	return <VoiceOrbLayer dateKey={dateKey} briefing={briefing} />;
 }
 
-function VoiceOrbLayer({ dateKey }: { dateKey: string }) {
-	const call = useVoiceCall({ dateKey });
+function VoiceOrbLayer({ dateKey, briefing }: { dateKey: string; briefing: Briefing | null }) {
+	const call = useVoiceCall({ dateKey, briefing });
 	return <OrbLayer call={asHandle(call)} />;
 }
 
