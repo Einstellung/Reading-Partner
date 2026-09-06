@@ -28,16 +28,23 @@
    with `bunx shadcn add` lands on this palette without editing.
 
    The palette is paper and moss: an unbleached off-white ground (--background)
-   with cards a shade lighter than it, warm-grey ink, and a muted green as the
-   single accent. It replaced a white-and-violet set in 0.13 (docs/52); every
+   with cards a shade lighter than it, warm-grey ink, and a muted green used
+   over small areas. It replaced a white-and-violet set in 0.13 (docs/52); every
    hex that used to be written into a component now comes from here.
+
+   The green and the fill are two tokens, not one (docs/52, 0.14). --primary is
+   the ink a solid control is filled with; --accent-line is the green, and it
+   only ever draws a line, a link, a meter or a ring. Handing both jobs to one
+   token is what turned the app green: `bg-primary` is written wherever a button
+   is filled, and there are far more filled buttons than there are accents.
 
    --primary-hover exists because shadcn's `hover:bg-primary/90` lightens a
    colour over a light page, and every filled button here darkens on hover.
-   --secondary is the pale-green chip, which is what a second-rank button looks
-   like in this app; --accent keeps shadcn's meaning (the subtle fill a ghost
-   control takes on hover) and so equals --muted, as it does in shadcn's own
-   default theme.
+   --secondary is the neutral chip one step deeper than --muted, which is what a
+   second-rank button and every selected row look like: selection reads as fill
+   depth and label weight, not as hue. --accent keeps shadcn's meaning (the
+   subtle fill a ghost control takes on hover) and so equals --muted, as it does
+   in shadcn's own default theme.
 
    Status colours (--destructive and the ambers and greens the sync and health
    indicators use) are not part of the reskin: they carry meaning, not identity.
@@ -53,18 +60,30 @@
     --popover: #fffefa;
     --popover-foreground: #252922;
 
-    --primary: #52664e;
+    /* The solid-control fill: ink on paper. Every filled button in the app is
+       this — the send button, a dialog's confirm, an info CTA — because a page
+       of green buttons is a green page. */
+    --primary: #252922;
     --primary-foreground: #fffefa;
-    --primary-hover: #435441;
+    --primary-hover: #3a3e36;
 
-    --secondary: #e6e8db;
+    /* The green, and the only token that carries it. It draws lines and marks
+       and nothing with area: the active tab's 2px underline, a progress fill, a
+       text link, an arrow, a chevron, the focus ring, the AI sparkle, the orb.
+       A fill wider than a few pixels is either --primary or a neutral. */
+    --accent-line: #52664e;
+
+    /* The neutral second rank: a chip, a selected row, a selected tool, the
+       active sidebar row, a "secondary" button. One step deeper than --muted so
+       it reads as chosen against the panel it sits on. */
+    --secondary: #e9e9e1;
     /* One step lighter than --secondary and barely off the ground: the wash
-       under a whole card that belongs to the accent (the info cards the
-       companion writes), where --secondary would paint the card as a chip. */
-    --secondary-faint: #f2f4ec;
-    --secondary-foreground: #3f5039;
-    --secondary-border: #c9cfbd;
-    --secondary-hover: #dde0cf;
+       under a whole card the companion wrote, where --secondary would paint the
+       card as a chip. */
+    --secondary-faint: #f1f1ea;
+    --secondary-foreground: #252922;
+    --secondary-border: #d9d9d0;
+    --secondary-hover: #e2e2d9;
 
     --muted: #efefe8;
     --accent: #efefe8;
@@ -97,7 +116,8 @@
 
     --border: #e5e5dd;
     --input: #e5e5dd;
-    --ring: #52664e;
+    /* A focus ring is a line, so it follows the accent rather than the fill. */
+    --ring: var(--accent-line);
 
     /* Rules lighter than --border, same weight names and again lightest first.
        faint separates the rows of a dense list and only works while it stays
@@ -154,10 +174,12 @@
      specificity as the :root above (`[data-tint="paper"]` and `:root` are both
      0,1,0), so this wins on source order alone — it has to stay below.
 
-     Not redefined: the greens (--primary, --secondary, --ring) and every text
-     colour. Moss sits on cream as happily as it does on the default ground, and
-     a second green ramp would have to be re-derived against the new ground for
-     no gain.
+     Not redefined: the ink (--primary), the green (--accent-line, and --ring
+     with it) and every text colour. Moss sits on cream as happily as it does on
+     the default ground, and a second green ramp would have to be re-derived
+     against the new ground for no gain. The --secondary family is redefined,
+     because since 0.14 it is a neutral and a neutral is the one thing that
+     cannot follow the ground when the ground turns warm.
 
      What is deliberately not here: a dark mode. This is one step warmer for
      reading in daylight; inverting the app is a different design with different
@@ -173,6 +195,11 @@
     --muted-faint: #f1ebda;
     --muted-soft: #eee8d8;
     --muted-strong: #e0d8c4;
+
+    --secondary: #e6dfcc;
+    --secondary-faint: #eee8d8;
+    --secondary-border: #d6ceb9;
+    --secondary-hover: #dfd7c3;
 
     --border: #e2dac6;
     --input: #e2dac6;
@@ -203,6 +230,7 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
+  --color-accent-line: var(--accent-line);
   --color-secondary: var(--secondary);
   --color-secondary-faint: var(--secondary-faint);
   --color-secondary-foreground: var(--secondary-foreground);
