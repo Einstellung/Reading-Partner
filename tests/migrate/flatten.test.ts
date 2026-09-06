@@ -4,7 +4,12 @@
 // reading a flag. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { parseObservation, parseTombstones } from "../../src/memory/observations/files";
+import {
+  parseObservation,
+  parseTombstones,
+  serializeObservation,
+} from "../../src/memory/observations/files";
+import type { Observation } from "../../src/memory/observations/types";
 import { legacyObservationLayout } from "../../src/memory/observations/legacy";
 import { stepFlattenObservations } from "../../src/migrate/flatten";
 import { needsMigration } from "../../src/migrate/pending";
@@ -114,17 +119,85 @@ test("a file the step cannot place is left alone, and so is the directory around
   expect(await legacyObservationLayout(fs)).toBe(false);
 });
 
-test("an id already in the flat store is reported rather than overwritten", async () => {
+// The second device: the first one ran the move, sync delivered observations/,
+// and every destination this run wants is already there holding the same bytes.
+// Refusing those is what shut the app on 0.14.5 (pitfall 236).
+test("a destination sync already delivered takes the source with it", async () => {
+  const delivered = serializeObservation({
+    ...(parseObservation(entry(WIDE, "already moved")) as Observation),
+    topic: "topic-a",
+  });
+  const { fs, files } = makeMemFs({
+    [`observations/${WIDE}.md`]: delivered,
+    [`memory-topic-a/${WIDE}.md`]: entry(WIDE, "already moved"),
+  });
+
+  const step = await stepFlattenObservations(fs);
+  expect(step.unrepaired).toEqual([]);
+  expect(step.counts.alreadyMoved).toBe(1);
+  expect(step.changed).toBe(1);
+  expect(step.counts.directoriesRemoved).toBe(1);
+  expect(files.get(`observations/${WIDE}.md`)).toBe(delivered);
+  expect(files.has(`memory-topic-a/${WIDE}.md`)).toBe(false);
+  // The whole point: the gate reads the sources, and there are none left.
+  expect(await legacyObservationLayout(fs)).toBe(false);
+  expect(await needsMigration(fs)).toBe(false);
+
+  const again = await stepFlattenObservations(fs);
+  expect({ scanned: again.scanned, changed: again.changed }).toEqual({ scanned: 0, changed: 0 });
+});
+
+test("a version that disagrees is parked beside the destination, not over it", async () => {
   const { fs, files } = makeMemFs({
     [`observations/${WIDE}.md`]: entry(WIDE, "the copy already moved"),
     [`memory-topic-a/${WIDE}.md`]: entry(WIDE, "the copy sync pushed back"),
   });
 
   const step = await stepFlattenObservations(fs);
-  expect(step.changed).toBe(0);
-  expect(step.unrepaired[0]?.why).toContain("already exists");
+  expect(step.unrepaired).toEqual([]);
+  expect(step.counts.parkedAsConflict).toBe(1);
+  expect(step.changed).toBe(1);
   expect(files.get(`observations/${WIDE}.md`)).toContain("the copy already moved");
-  expect(files.has(`memory-topic-a/${WIDE}.md`)).toBe(true);
+  expect(files.has(`memory-topic-a/${WIDE}.md`)).toBe(false);
+
+  // Parked under a name the store already reads as a conflict copy.
+  const parked = [...files.keys()].filter((k) =>
+    new RegExp(`^observations/${WIDE}\\.conflict-[0-9a-f]+\\.md$`).test(k),
+  );
+  expect(parked).toHaveLength(1);
+  expect(files.get(parked[0] as string)).toContain("the copy sync pushed back");
+  expect(files.get(parked[0] as string)).toContain("topic: topic-a");
+  expect(step.samples.some((line) => line.includes(parked[0] as string))).toBe(true);
+  expect(await legacyObservationLayout(fs)).toBe(false);
+
+  // Sync hands the same directory back: the name is a digest of the bytes, so
+  // the second pass lands on the file it already wrote.
+  files.set(`memory-topic-a/${WIDE}.md`, entry(WIDE, "the copy sync pushed back"));
+  const again = await stepFlattenObservations(fs);
+  expect(again.counts.parkedAsConflict).toBe(1);
+  expect(
+    [...files.keys()].filter((k) => k.startsWith(`observations/${WIDE}.conflict-`)),
+  ).toHaveLength(1);
+});
+
+test("a conflict copy already in the flat store takes its source with it", async () => {
+  const copy = entry(WIDE, "what the other device wrote");
+  const { fs, files } = makeMemFs({
+    [`observations/${WIDE}.conflict-deadbeef.md`]: copy,
+    [`memory-topic-a/${WIDE}.conflict-deadbeef.md`]: copy,
+    [`memory-topic-a/${WIDE}.conflict-c0ffee.md`]: entry(WIDE, "a third version"),
+    [`observations/${WIDE}.conflict-c0ffee.md`]: entry(WIDE, "not the same third version"),
+  });
+
+  const step = await stepFlattenObservations(fs);
+  expect(step.unrepaired).toEqual([]);
+  expect(step.counts.alreadyMoved).toBe(1);
+  expect(step.counts.parkedAsConflict).toBe(1);
+  expect(files.get(`observations/${WIDE}.conflict-c0ffee.md`)).toContain(
+    "not the same third version",
+  );
+  expect([...files.keys()].some((k) => k.startsWith("memory-topic-a/"))).toBe(false);
+  expect(await legacyObservationLayout(fs)).toBe(false);
 });
 
 test("a conflict copy travels byte for byte, with no topic written into it", async () => {

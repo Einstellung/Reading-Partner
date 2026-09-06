@@ -14,6 +14,10 @@
 // A file the step does not recognise is left where it is and reported, and then
 // the directory is left as well: an unknown file in there is not observation
 // data, and removing the directory around it would take it with it.
+//
+// A file the step does recognise is never left behind. The gate that stands in
+// front of the app is keyed on the sources (memory/observations/legacy.ts), so a
+// source this step declines to remove is a gate nobody can get out of.
 
 import {
   appendTombstone,
@@ -23,6 +27,7 @@ import {
 } from "../memory/observations/files";
 import { isLegacyObservationDir } from "../memory/observations/legacy";
 import { ObservationFileStore } from "../memory/observations/store";
+import { encode, textDigest } from "../platform/sync/merge/text";
 import { asObservationFs } from "./fs";
 import { emptyStep, refuse, sample, type MigrationFs, type StepReport } from "./types";
 
@@ -116,6 +121,14 @@ function foldMeta(into: FlatMeta, topicId: string, text: string): void {
   keepHigher(into.distilledMarks, numbers(parsed.distilledMarks));
 }
 
+// Where a version that disagrees with the one already in the store goes. Named
+// the way sync names its own losing copies (platform/sync/merge/index.ts) — the
+// suffix is a digest of the bytes — so the store reads it as a conflict copy and
+// so re-running lands on the same name instead of minting a second copy.
+function conflictNameFor(entryName: string, text: string): string {
+  return `${entryName.slice(0, -".md".length)}.conflict-${textDigest(encode(text))}.md`;
+}
+
 export async function stepFlattenObservations(fs: MigrationFs): Promise<StepReport> {
   const step = emptyStep("flatten-observations", "observations still in a per-topic directory");
   const dirs = (await fs.listSubdirs("")).filter(isLegacyObservationDir).sort();
@@ -142,20 +155,37 @@ export async function stepFlattenObservations(fs: MigrationFs): Promise<StepRepo
           continue;
         }
         const dest = `${DIR}/${name}`;
-        // An id is global (m-<16 hex>, step 6), so two directories holding the
-        // same name hold the same observation and the one already moved is the
-        // one that stays. Reported rather than merged: the two versions are the
-        // reader's own record and picking between them is not a migration's
-        // call.
-        if ((await fs.read(dest)) !== null) {
-          refuse(step, path, `${dest} already exists`);
-          leftover++;
-          continue;
-        }
         // The topic the file's own frontmatter already names wins over the
         // directory it sits in: a directory this device pulled in over sync can
         // hold an entry another device had already stamped.
-        await fs.write(dest, serializeObservation({ ...entry, topic: entry.topic ?? topicId }));
+        const moved = serializeObservation({ ...entry, topic: entry.topic ?? topicId });
+        const held = await fs.read(dest);
+        // An id is global (m-<16 hex>, step 6), so two files under the same name
+        // are two versions of one observation, and a destination that is already
+        // there is the ordinary state of the second device: the first one ran
+        // the move and sync delivered the result here. Same bytes, so the source
+        // is spent and goes.
+        if (held === moved) {
+          await fs.remove(path);
+          step.changed++;
+          step.counts.alreadyMoved = (step.counts.alreadyMoved ?? 0) + 1;
+          continue;
+        }
+        // Still not picking between two versions — the destination is left
+        // exactly as it is and this one is parked beside it, the way sync parks
+        // a side it could not merge. What is not an option is leaving the source
+        // where it is: the gate reads the sources, so a refusal there is a locked
+        // app rather than a note in a report.
+        if (held !== null) {
+          const copy = `${DIR}/${conflictNameFor(name, moved)}`;
+          await fs.write(copy, moved);
+          await fs.remove(path);
+          step.changed++;
+          step.counts.parkedAsConflict = (step.counts.parkedAsConflict ?? 0) + 1;
+          sample(step, `${path} -> ${copy}`);
+          continue;
+        }
+        await fs.write(dest, moved);
         await fs.remove(path);
         step.changed++;
         sample(step, `${path} -> ${dest}`);
@@ -166,9 +196,23 @@ export async function stepFlattenObservations(fs: MigrationFs): Promise<StepRepo
         const text = await fs.read(path);
         if (text === null) continue;
         const dest = `${DIR}/${name}`;
-        if ((await fs.read(dest)) !== null) {
-          refuse(step, path, `${dest} already exists`);
-          leftover++;
+        const held = await fs.read(dest);
+        // Already delivered by sync, same as an entry file above.
+        if (held === text) {
+          await fs.remove(path);
+          step.counts.alreadyMoved = (step.counts.alreadyMoved ?? 0) + 1;
+          continue;
+        }
+        // The name carries a digest of what the other device wrote, so two
+        // different texts under it can only be a digest collision. Both are kept
+        // and this one takes a name from its own bytes.
+        if (held !== null) {
+          const stem = name.slice(0, name.indexOf(".conflict-"));
+          const copy = `${DIR}/${conflictNameFor(`${stem}.md`, text)}`;
+          await fs.write(copy, text);
+          await fs.remove(path);
+          step.counts.parkedAsConflict = (step.counts.parkedAsConflict ?? 0) + 1;
+          sample(step, `${path} -> ${copy}`);
           continue;
         }
         // Byte for byte, no topic stamped in. A conflict copy is the whole
