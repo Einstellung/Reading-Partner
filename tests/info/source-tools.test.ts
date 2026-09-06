@@ -11,6 +11,12 @@ import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { WebviewArticle } from "../../src/info/extract/webview-article";
 import { textResponse } from "../support/fetch";
 
+// fetchText retries a 5xx twice, waiting 0.5s then 1s on a real timer. The
+// discovery-failure test serves a 500 on purpose and is about what the failure
+// degrades into, not about the ladder; injected, it runs the same retries for
+// nothing.
+const noSleep = async (): Promise<void> => {};
+
 const extract: ExtractReadable = (_html, url) => ({
   title: `Title of ${url}`,
   contentHtml: `<p>${"body ".repeat(80)}</p>`,
@@ -29,7 +35,7 @@ const FEED_XML = `<rss><channel>${[1, 2, 3]
 
 test("trialSource fetches up to 3 articles and reports char counts + full-text", async () => {
   const fetchFn = async (url: string) => textResponse(url.endsWith("/feed") ? FEED_XML : "<html></html>");
-  const r = await trialSource(FEED_DESC, { fetchFn, extract });
+  const r = await trialSource(FEED_DESC, { fetchFn, extract, sleep: noSleep });
   expect(r.ok).toBe(true);
   expect(r.samples.length).toBe(3);
   expect(r.samples[0].fullText).toBe(true);
@@ -38,7 +44,7 @@ test("trialSource fetches up to 3 articles and reports char counts + full-text",
 
 test("trialSource returns not-ok on a discovery failure", async () => {
   const fetchFn = async () => textResponse("boom", 500);
-  const r = await trialSource(FEED_DESC, { fetchFn, extract });
+  const r = await trialSource(FEED_DESC, { fetchFn, extract, sleep: noSleep });
   expect(r.ok).toBe(false);
   expect(r.error).toBeTruthy();
 });

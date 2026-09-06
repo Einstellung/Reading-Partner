@@ -43,6 +43,9 @@ export interface TrialDeps {
   // `webview` source can only be trialed down to what its feed carried, which
   // is a headline and a blurb — true on that host, and the note says so.
   fetchViaWebview?: WebviewFetch;
+  // The HTTP retry backoff's wait, handed to the engine. Unset on the live path,
+  // where fetchText sleeps on a real timer; injected by tests.
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface TrialResult {
@@ -82,7 +85,7 @@ export async function trialSource(
     let items = (
       await collectSource(
         { ...descriptor, limit },
-        { fetchFn: deps.fetchFn, extract: deps.extract },
+        { fetchFn: deps.fetchFn, extract: deps.extract, sleep: deps.sleep },
       )
     ).slice(0, limit);
     if (viaWebview) {
@@ -95,6 +98,7 @@ export async function trialSource(
         fetchFn: deps.fetchFn,
         extract: deps.extract,
         fetchViaWebview: deps.fetchViaWebview,
+        sleep: deps.sleep,
       });
     }
     const samples: TrialSample[] = items.map((it) => {

@@ -30,9 +30,15 @@ function makeClock(start = 1000) {
       void pump();
     }
   }
+  // One turn of the loop. A microtask, not a `setTimeout(0)`: the limiter never
+  // touches a real timer (every wait of its own goes through `sleep` below), so
+  // draining the microtask queue is enough to let every resumed continuation
+  // run, and it costs nothing. On a macrotask the 200 idle turns `settle` takes
+  // are 200 real milliseconds of clamped timer, per test.
+  const tick = (): Promise<void> => Promise.resolve();
   async function pump(): Promise<void> {
     for (let guard = 0; guard < 100000; guard++) {
-      await new Promise<void>((r) => setTimeout(r, 0));
+      await tick();
       if (q.length === 0) {
         pumping = false;
         return;
@@ -47,10 +53,10 @@ function makeClock(start = 1000) {
   return {
     now: () => now,
     sleep: (ms: number) => new Promise<void>((resolve) => schedule(ms, resolve)),
-    // Advance the clock by running whatever is queued, plus a few idle ticks so
+    // Advance the clock by running whatever is queued, plus a few idle turns so
     // resumed continuations get to run.
     settle: async () => {
-      for (let i = 0; i < 200; i++) await new Promise<void>((r) => setTimeout(r, 0));
+      for (let i = 0; i < 2000; i++) await tick();
     },
   };
 }
