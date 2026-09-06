@@ -26,6 +26,8 @@ statement 两种 kind：
 
 老布局（一个 topic 一个 `memory-<topicId>/`）还留在盘上时整个 app 不可用。两个外壳启动时各判一次 `needsMigration(appDataMigrationFs)`（`src/migrate/pending.ts`，dream 停手用的也是这条），为真就盖一层全屏蒙层（`ui/components/common/MigrationGate.tsx`，规则和状态在同目录的 `migration-gate.ts`）：一句话加一个按钮，不能关，没有 Esc，点外面也不关，层级 `OVERLAY_Z.blocking` 压在锚定浮层之上。按一次等于设置页那张卡的两次——先 dry run 再 apply，进度和报告复用 `settings/migration-card.ts` 的状态机。放行只认盘：跑完再问一次 `needsMigration`，为假才撤蒙层，为真就留着报告和 Try again。每轮同步结束时再问一次（订阅 `subscribeSyncStatus`，`running` 由真变假的那一下，不轮询），因为还在老版本的机器随时可能同步来一个 `memory-<topicId>/`。第一次判据答出来之前 app 照常画，那是两次目录列举的工夫。
 
+搬运遇到 `observations/` 里已经有同名文件时不许把源文件留在原地：闸门看的就是 `memory-*/` 里还有没有源。字节相同（比的是把 topic 盖进去之后的搬运结果）就删源；不同就一个字节不动目标，把源的版本按 `m-<id>.conflict-<digest>.md` 停在旁边再删源。两份都留，迁移不挑；后缀取自内容，重跑落到同一个名字。第二台设备的正常状态就是目标全都已经被同步送到了（坑 236）。
+
 statement 目录 `src/memory/statements/`，合并策略 `records`。"profile"这个词的旧用法（`loadProfile`、`readerProfileSection`、`user-profile.md`）按下文的作废清单删函数、留文件，名字空出来给新的。
 
 ## 边
