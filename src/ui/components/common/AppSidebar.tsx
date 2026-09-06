@@ -4,7 +4,7 @@
 // rules (docs/30) apply.
 //
 // Two widths, chosen by the breakpoint and not by a stored preference: a 52px
-// icon rail below `lg` (a portrait iPad, where 176px of labels costs the shelf a
+// icon rail below `lg` (a portrait iPad, where 192px of labels costs the shelf a
 // card) and the labelled column at or above it. A rail rather than a drawer,
 // because the three destinations have to stay one tap away on a tablet.
 //
@@ -90,14 +90,14 @@ export default function AppSidebar(props: {
       // holding its 44px button. 52px is that button plus the two 4px gutters.
       className={
         "flex w-[3.25rem] flex-none flex-col items-center gap-0.5 overflow-y-auto " +
-        "border-r border-border bg-muted-faint px-1 py-4 lg:w-44 lg:items-stretch lg:px-2"
+        "border-r border-border bg-muted-faint px-1 py-4 lg:w-48 lg:items-stretch lg:px-2"
       }
     >
       {/* The app's own icon and its name, in the display face the headings
           use. On the rail the name goes and the icon stands alone, centred over
           the column of icons under it — the same 44px box as a row, so the
           three destinations start where they do in the wide shape. */}
-      <div className="mb-2 flex h-11 flex-none items-center justify-center gap-2 lg:justify-start lg:px-3">
+      <div className="mb-2 flex h-11 flex-none items-center justify-center gap-2.5 lg:justify-start lg:px-2.5">
         <img
           src={appIcon}
           alt=""
