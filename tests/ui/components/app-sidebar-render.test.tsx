@@ -1,7 +1,6 @@
 // The shell sidebar's rendered contract, pinned by a static render: the
-// wordmark, three items plus Settings, every row a 44px target, the labels and
-// the topic count only from `lg` up, and the alert dot on the affordance that
-// leads to it. Which item is lit is decided in shell-nav.test.ts. Run: bun test.
+// wordmark, three items plus Settings, every row a 44px target, the labels only
+// from `lg` up, and the alert dot on the affordance that leads to it. Which item is lit is decided in shell-nav.test.ts. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -11,7 +10,6 @@ function render(
   over: {
     active?: "today" | "briefing" | "topics" | "settings" | null;
     alert?: boolean;
-    topicCount?: number | null;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -20,7 +18,6 @@ function render(
       onSelect={() => {}}
       onOpenSettings={() => {}}
       settingsAlert={over.alert ?? false}
-      topicCount={"topicCount" in over ? (over.topicCount ?? null) : 4}
     />,
   );
 }
@@ -56,16 +53,6 @@ test("the wordmark is the app icon and the app's name", () => {
   expect(html).toContain("app-icon");
   expect(html).toContain("Reading Partner");
   expect(html).toContain("h-7 w-7 flex-none rounded-[7px]");
-});
-
-// A number nothing names is a puzzle, so the count goes with the labels, and a
-// library nobody has read yet has no number to give.
-test("the topic count rides on Topics, from lg up, and only once it is known", () => {
-  const html = render({ topicCount: 4 });
-  expect(html).toContain(">4</span>");
-  expect(html).toContain("lg:inline");
-  expect(render({ topicCount: null })).not.toContain(">4</span>");
-  expect(render({ topicCount: 0 })).toContain(">0</span>");
 });
 
 // One item at a time, and none at all on a screen the sidebar does not name.

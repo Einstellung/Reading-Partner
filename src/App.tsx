@@ -1274,7 +1274,6 @@ export default function App() {
             }}
             onOpenSettings={openSettings}
             settingsAlert={syncReport.alert !== "none"}
-            topicCount={topics?.length ?? null}
           />
         )}
         {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the

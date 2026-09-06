@@ -33,16 +33,11 @@ const ROW =
 const ROW_ACTIVE = "bg-secondary text-secondary-foreground can-hover:hover:bg-secondary";
 const LABEL = "hidden truncate text-[14px] font-medium lg:inline";
 
-// A count on the right of a row, for the rail to drop with the labels: a
-// number with nothing naming it is a puzzle, and there is no room for both.
-const COUNT = "ml-auto hidden text-[12px] tabular-nums text-faint-foreground lg:inline";
-
 function Row(props: {
   label: string;
   icon: (p: { size?: number }) => JSX.Element;
   active?: boolean;
   title?: string;
-  count?: number | null;
   onClick: () => void;
   children?: React.ReactNode;
 }) {
@@ -62,7 +57,6 @@ function Row(props: {
     >
       <Icon size={20} />
       <span className={LABEL}>{props.label}</span>
-      {props.count != null && <span className={COUNT}>{props.count}</span>}
       {props.children}
     </Button>
   );
@@ -77,10 +71,6 @@ export default function AppSidebar(props: {
   // running (platform/sync/health). The state rides on the affordance that
   // leads to it, the same as the header's Settings button did.
   settingsAlert: boolean;
-  // How many topics there are, for the row that opens them. Null while the
-  // library is still being read: a 0 that turns into 4 is a wrong answer given
-  // confidently, and this row is not worth one.
-  topicCount: number | null;
 }) {
   return (
     <nav
@@ -116,7 +106,6 @@ export default function AppSidebar(props: {
           label={item.label}
           icon={ICONS[item.id]}
           active={props.active === item.id}
-          count={item.id === "topics" ? props.topicCount : null}
           onClick={() => props.onSelect(item.id)}
         />
       ))}
