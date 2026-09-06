@@ -33,6 +33,7 @@ import type { AgentTool } from "../../ai/agent";
 import {
   runSubagent,
   type SubagentDefinition,
+  type SubagentFailure,
   type SubagentModel,
   type SubagentOutcome,
   type SubagentTurnFn,
@@ -509,6 +510,10 @@ export type ProfileGuessResult =
       // Entries the model sent that the rules above threw away.
       dropped: number;
       failure?: string;
+      // What the call that did not complete was: the error's name and message,
+      // neither of them a model's words (SubagentFailure). Set only alongside
+      // outcome "failed"; the caller puts it on the `guess-failed` line.
+      cause?: SubagentFailure;
       // Set when the model answered and the write was refused anyway.
       refused?: GuessRefusal;
     };
@@ -580,6 +585,7 @@ export async function runProfileGuessPass(
       guesses: split.guesses.length,
       dropped: 0,
       failure: brief.brief,
+      ...(brief.failure ? { cause: brief.failure } : {}),
     };
   }
   // The pass finished and decided the set still holds.

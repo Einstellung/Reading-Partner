@@ -469,16 +469,23 @@ export class ObservationFileStore {
   }
 
   // Read-modify-write, so a pass over one topic cannot drop another topic's
-  // stamp. The cursor maps are written as given: the caller got them from
-  // getMeta and merged its own entries into them, which is the same discipline
-  // the per-topic file already needed between the transcript and retell paths.
+  // stamp. The cursor maps are merged onto what is on disk rather than written
+  // as given: a caller read them, spent a model call, and is writing minutes
+  // later, so a key that arrived in that window — the other pass path, or a sync
+  // pull — is in `stored` and not in the caller's copy. Written as given, this
+  // call would take that key back out, and a cursor that is gone is a
+  // conversation the sweep offers to the model again from message zero.
+  //
+  // Keys the caller does name still win, including with the value it read
+  // before its own pass: that can move one cursor back over a stretch, which
+  // costs a repeat and never loses anything.
   async setMeta(topicId: string, meta: ObservationMeta): Promise<void> {
     const stored = await this.readStoredMeta();
     const next: StoredObservationMeta = {
       lastDistilledAt: { ...(stored.lastDistilledAt ?? {}) },
       lastAnnotationDistillAt: { ...(stored.lastAnnotationDistillAt ?? {}) },
-      distilledMessages: meta.distilledMessages ?? stored.distilledMessages ?? {},
-      distilledMarks: meta.distilledMarks ?? stored.distilledMarks ?? {},
+      distilledMessages: { ...(stored.distilledMessages ?? {}), ...(meta.distilledMessages ?? {}) },
+      distilledMarks: { ...(stored.distilledMarks ?? {}), ...(meta.distilledMarks ?? {}) },
     };
     if (meta.lastDistilledAt === null) delete next.lastDistilledAt?.[topicId];
     else next.lastDistilledAt![topicId] = meta.lastDistilledAt;

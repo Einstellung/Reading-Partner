@@ -491,10 +491,33 @@ test("a call that failed is a failed pass, and the profile is untouched", async 
   });
 
   expect(result).toMatchObject({ ran: true, ok: false, outcome: "failed", wrote: false });
+  // What actually went wrong comes back beside the outcome. `guess-failed` used
+  // to carry the outcome alone, so every one of these read "failed" and nothing
+  // else — twelve hours of them on the owner's store said no more than that.
+  expect(result).toMatchObject({ cause: { name: "Error", message: "connection reset" } });
   // The tool captured the entries, but a pass that did not finish does not write:
   // the caller leaves its stamp alone and the next sweep redoes the whole thing.
   expect(state.saves).toBe(0);
   expect(state.text).toBe(before);
+});
+
+test("a pass that never reached the provider names what was thrown", async () => {
+  const { state, store } = makeProfile(composeProfile(splitProfile(DECLARED), [guess()]));
+  const result = await runProfileGuessPass(EVIDENCE, {
+    profile: store,
+    run: async () => {
+      throw new TypeError("Load failed");
+    },
+    now: () => AUG_10,
+  });
+
+  expect(result).toMatchObject({
+    ran: true,
+    ok: false,
+    outcome: "failed",
+    cause: { name: "TypeError", message: "Load failed" },
+  });
+  expect(state.saves).toBe(0);
 });
 
 // --- the window between the read and the write -------------------------------

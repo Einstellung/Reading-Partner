@@ -22,6 +22,7 @@ import {
   DEFAULT_SUBAGENT_ROUNDS,
   type SubagentBrief,
   type SubagentDefinition,
+  type SubagentFailure,
   type SubagentOutcome,
   type SubagentProgress,
   type SubagentToolFailure,
@@ -136,7 +137,13 @@ export async function runSubagent(
     tokenCap,
   });
 
-  const finish = (partial: Partial<BriefFacts> & { outcome: SubagentOutcome }): SubagentBrief => {
+  // Carried beside the brief rather than dug back out of it: the brief is a
+  // sentence written for a reader, and a caller recording why a run did not
+  // complete needs the two fields it was composed from.
+  const finish = (
+    partial: Partial<BriefFacts> & { outcome: SubagentOutcome },
+    failure?: SubagentFailure,
+  ): SubagentBrief => {
     const f = { ...facts(), ...partial };
     const composed = composeBrief(f);
     onProgress?.({
@@ -156,6 +163,7 @@ export async function runSubagent(
       toolSuccesses: f.toolSuccesses,
       toolFailures: f.toolFailures,
       clipped: composed.clipped,
+      ...(failure ? { failure } : {}),
     };
   };
 
@@ -185,7 +193,12 @@ export async function runSubagent(
       },
     });
 
-    if (outcome.kind === "error") return finish({ outcome: "failed", message: outcome.message });
+    if (outcome.kind === "error") {
+      return finish(
+        { outcome: "failed", message: outcome.message },
+        { name: outcome.name ?? "Error", message: outcome.message },
+      );
+    }
     if (outcome.kind === "refusal") {
       // The loop's two stated give-ups, matched against its own exported
       // constants so the two reasons keep their own sentences: a spent turn cap
@@ -207,7 +220,11 @@ export async function runSubagent(
     // Cancellation is not a failure and must never become a brief: a brief for a
     // run the reader hung up on is a brief nobody asked for.
     if (e instanceof StoppedError || signal?.aborted) throw new StoppedError();
-    return finish({ outcome: "failed", message: e instanceof Error ? e.message : String(e) });
+    const message = e instanceof Error ? e.message : String(e);
+    return finish(
+      { outcome: "failed", message },
+      { name: e instanceof Error ? e.constructor.name : typeof e, message },
+    );
   } finally {
     deps.ledger?.settle(reserved, rounds);
   }

@@ -18,6 +18,7 @@ export {
   DEFAULT_SUBAGENT_ROUNDS,
   type SubagentBrief,
   type SubagentDefinition,
+  type SubagentFailure,
   type SubagentModel,
   type SubagentOutcome,
   type SubagentPhase,

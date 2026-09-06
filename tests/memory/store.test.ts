@@ -151,6 +151,66 @@ test("meta round-trips and defaults to no distillation", async () => {
   expect(await store.getMeta("t")).toEqual({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
 });
 
+// A pass reads the cursors, spends a model call, and writes minutes later. Two
+// things land in that window on a real store: the other pass path, and a sync
+// pull. A write of the map the caller read would take those back out, and a
+// cursor that is gone is a whole conversation the sweep offers to the model
+// again from message zero — which is what `from: 0` on a thread whose cursor
+// says 42 means in a `distill-failed` line.
+test("a pass writing its cursors keeps the ones that landed while it ran", async () => {
+  const { store } = makeStore();
+  await store.setMeta("t", {
+    lastDistilledAt: 1,
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "thread-a": 4 },
+    distilledMarks: { "book-a": 100 },
+  });
+  const read = await store.getMeta("t");
+
+  // Another writer gets there first, over keys this caller has never seen.
+  await store.setMeta("t", {
+    lastDistilledAt: 2,
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "thread-b": 9 },
+    distilledMarks: { "book-b": 200 },
+  });
+
+  // The first caller now writes back what it read plus its own entry.
+  await store.setMeta("t", {
+    ...read,
+    lastDistilledAt: 3,
+    distilledMessages: { ...(read.distilledMessages ?? {}), "thread-a": 6 },
+  });
+
+  expect(await store.getMeta("t")).toEqual({
+    lastDistilledAt: 3,
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "thread-a": 6, "thread-b": 9 },
+    distilledMarks: { "book-a": 100, "book-b": 200 },
+  });
+});
+
+// Two topics share the one file, and a pass over either writes the whole of it.
+test("a pass over one topic does not drop another topic's cursors or stamp", async () => {
+  const { store } = makeStore();
+  await store.setMeta("t1", {
+    lastDistilledAt: 10,
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "thread-1": 3 },
+  });
+  await store.setMeta("t2", {
+    lastDistilledAt: 20,
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "thread-2": 7 },
+  });
+
+  expect(await store.getMeta("t1")).toEqual({
+    lastDistilledAt: 10,
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "thread-1": 3, "thread-2": 7 },
+  });
+});
+
 // The passthrough seen from the store: an entry read off disk goes back out
 // with the keys this build has no field for, because update spreads what it
 // read. Nothing between here and the file format has to know about them.

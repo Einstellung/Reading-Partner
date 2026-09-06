@@ -123,6 +123,20 @@ export interface SubagentBrief {
   toolFailures: SubagentToolFailure[];
   // The model wrote more than briefTokenCap and the brief was cut.
   clipped: boolean;
+  // Why the call did not complete, set only for outcome "failed". Nothing here
+  // is the model's: "failed" means no round of this run came back, so this is
+  // the provider's or the runtime's own account of it. That is what makes it
+  // safe to record — see SubagentFailure.
+  failure?: SubagentFailure;
+}
+
+// What a call that did not complete was: the error's constructor name and its
+// message. Both come from the provider or from this app's own code, never from
+// a model, so a caller may write them to a log that ids and numbers otherwise
+// have to themselves.
+export interface SubagentFailure {
+  name: string;
+  message: string;
 }
 
 // What the caller may be told while a sub-agent runs.
@@ -173,6 +187,9 @@ export type SubagentTurnOutcome =
   | { kind: "answer"; text: string }
   // The loop gave up for a reason it can state, with nothing having failed.
   | { kind: "refusal"; message: string }
-  | { kind: "error"; message: string };
+  // The call did not complete. `name` is the constructor name of whatever was
+  // thrown, when the turn was ended by a throw; absent when the loop reported a
+  // failure it had no error object for.
+  | { kind: "error"; message: string; name?: string };
 
 export type SubagentTurnFn = (request: SubagentTurnRequest) => Promise<SubagentTurnOutcome>;
