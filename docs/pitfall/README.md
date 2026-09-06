@@ -136,6 +136,7 @@
 - [208-file-deletion-does-not-survive-sync](./208-file-deletion-does-not-survive-sync.md) — 同步按设计不传播文件级删除，本地删掉的 AI 观察被另一台设备以更高 rev 推回来，`rebuildIndex()` 再把它写回 index 送进 prompt，全程静默（实测 106 个文件对 103 行 index，三条有意删掉的都回来了）；删除改成随 records 策略合并的墓碑行
 - [209-a-thread-id-is-not-unique-across-thread-files](./209-a-thread-id-is-not-unique-across-thread-files.md) — 线程 id 只在自己那个 `threads-*.json` 里唯一，info 简报会话的 id 是字面量 `briefing`，25 个日期文件各有一个；按 id 建全局 Map 静默吞掉 67/614 条消息。索引按 id 存数组，"这个 id 下几个线程持有这个时间戳"不是一个就拒绝
 - [210-a-nightly-pass-runs-once-per-entry-point-and-before-the-migration](./210-a-nightly-pass-runs-once-per-entry-point-and-before-the-migration.md) — dream 的日闸只看跑完才写的状态文件，一次启动里启动/回前台/定时器三个入口打进来跑了四遍，十条结论落盘两组（一中一英）；同一次启动它还抢在用户点迁移按钮前 20 秒跑完，19 条 statement 的证据指着马上要被改名的 8 位 id，全部悬空。闸放在被调用的那一侧：进程内在飞标记 + 进程内当日标记 + 观察目录里还有 8 位文件就 `waiting-migration`
+- [235-a-silent-drop-plus-two-exclusive-uis-loses-everything](./235-a-silent-drop-plus-two-exclusive-uis-loses-everything.md) — `appendMessage` 对不存在的线程静默返回 `undefined`，而建线程的只有文字聊天那条路；球和文字聊天在 `InfoHome` 里互斥，于是「今天没开过文字聊天」时整场语音通话一句不落盘，全程无报错。建记录的责任放在会写它的那一侧（`threadTranscript` 的 `begin()`），store 的契约不动
 - [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
 
 ## 提取（壳侧 pdf.js）
