@@ -10,7 +10,7 @@ interface OutlineViewProps {
 	onNavigatePage(page: number): void;
 }
 
-const EMPTY_TEXT = "px-3 py-3 text-[13px] text-[#777]";
+const EMPTY_TEXT = "px-3 py-3 text-[13px] text-faint-foreground";
 
 export default function OutlineView({ fulltext, pending, onNavigatePage }: OutlineViewProps) {
 	if (pending) {
@@ -31,7 +31,7 @@ export default function OutlineView({ fulltext, pending, onNavigatePage }: Outli
 					onClick={() => onNavigatePage(item.page)}
 				>
 					<span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{item.title}</span>
-					<span className="shrink-0 [font-variant-numeric:tabular-nums] text-[11px] text-[#999]">{item.page}</span>
+					<span className="shrink-0 [font-variant-numeric:tabular-nums] text-[11px] text-faint-foreground">{item.page}</span>
 				</button>
 			))}
 		</div>

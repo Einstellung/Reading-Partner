@@ -116,7 +116,7 @@ export default function ReaderTopBar(props: {
         <Button
           variant="ghost"
           size="icon"
-          className="relative flex-none text-[#555]"
+          className="relative flex-none text-muted-foreground"
           title={sidebarOpen ? "Close panel" : "Open panel"}
           aria-label={sidebarOpen ? "Close panel" : "Open panel"}
           aria-pressed={sidebarOpen}
@@ -126,7 +126,7 @@ export default function ReaderTopBar(props: {
           {/* Background-work dot: prep/notes generating while the drawer is
               shut (docs: iPad adaptation). */}
           {props.sidebarBusy && (
-            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-[#fafafa]" />
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
           )}
         </Button>
         {/* Library: full label from sm up, back-chevron only on a phone,
@@ -134,7 +134,7 @@ export default function ReaderTopBar(props: {
         <Button
           variant="ghost"
           size="icon"
-          className="w-auto flex-none gap-0 px-1 text-[13px] text-[#555] coarse:w-auto coarse:min-w-[44px] sm:px-2"
+          className="w-auto flex-none gap-0 px-1 text-[13px] text-muted-foreground coarse:w-auto coarse:min-w-[44px] sm:px-2"
           title="Back to library"
           aria-label="Back to library"
           onClick={props.onCloseReader}
@@ -163,7 +163,7 @@ export default function ReaderTopBar(props: {
           disabled={gate.aiPen === null ? undefined : { ai: gate.aiPen }}
         />
         <Separator orientation="vertical" className="flex-none data-[orientation=vertical]:h-5" />
-        <span className="flex-none [font-variant-numeric:tabular-nums] text-[13px] text-[#555] whitespace-nowrap px-0.5">
+        <span className="flex-none [font-variant-numeric:tabular-nums] text-[13px] text-muted-foreground whitespace-nowrap px-0.5">
           {pageText}
         </span>
       </div>
@@ -173,7 +173,7 @@ export default function ReaderTopBar(props: {
         <Button
           variant="ghost"
           size="icon"
-          className="flex-none text-[#555]"
+          className="flex-none text-muted-foreground"
           disabled={gate.bookThread !== null}
           title={gate.bookThread ?? BOOK_THREAD}
           aria-label={gate.bookThread === null ? BOOK_THREAD : `${BOOK_THREAD}: ${gate.bookThread}`}

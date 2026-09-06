@@ -187,7 +187,7 @@ function PaperRow({
         onClick={onToggle}
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] text-[#1b1b1b]" title={paper.title}>
+          <span className="block truncate text-[13px] text-foreground" title={paper.title}>
             {paper.title}
           </span>
           <span className="mt-0.5 flex items-center gap-1.5">
@@ -276,7 +276,7 @@ function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
     <div className="flex h-full flex-col">
       <div className={HEADER}>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[13px] text-[#1b1b1b]">Referenced papers</div>
+          <div className="text-[13px] text-foreground">Referenced papers</div>
           {state.planStatus === "done" && (
             <Button
               type="button"
@@ -391,7 +391,7 @@ function ChapterSection({
     <div className={SECTION}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[13px] font-semibold text-[#1b1b1b]">
+          <div className="text-[13px] font-semibold text-foreground">
             {chapter.index}. {chapter.title}
           </div>
           <div className="mt-0.5 flex items-center gap-1.5">
@@ -509,7 +509,7 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
     <div className="flex h-full flex-col">
       <div className={HEADER}>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[13px] text-[#1b1b1b]">Chapter spines</div>
+          <div className="text-[13px] text-foreground">Chapter spines</div>
           {running ? (
             <Button type="button" variant="link" size="link" className={HEADER_LINK} onClick={onStop}>
               Stop
@@ -551,7 +551,7 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
         {(state.overviewStatus === "done" || state.overviewStatus === "stale") && (
           <div className={`${SECTION} bg-muted-faint`}>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[13px] font-semibold text-[#1b1b1b]">Chapter graph</div>
+              <div className="text-[13px] font-semibold text-foreground">Chapter graph</div>
               {state.overviewStatus === "stale" && !running && (
                 <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRegenerateOverview}>
                   Regenerate

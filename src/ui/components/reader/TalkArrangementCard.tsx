@@ -20,7 +20,7 @@ function Shell({ eyebrow, badge, badgeVariant, children }: {
   return (
     <div className="w-full max-w-md rounded-xl border border-black/10 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-primary">
           {eyebrow}
         </span>
         <span className="flex-1" />
@@ -35,8 +35,8 @@ function Shell({ eyebrow, badge, badgeVariant, children }: {
 
 function Line({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-2 text-[12px] leading-snug text-[#666]">
-      <span className="text-[#999]">{label}: </span>
+    <div className="mt-2 text-[12px] leading-snug text-muted-foreground">
+      <span className="text-faint-foreground">{label}: </span>
       {value}
     </div>
   );
@@ -46,8 +46,8 @@ function Bullets({ items }: { items: readonly string[] }) {
   return (
     <ul className="m-0 mt-2.5 flex list-none flex-col gap-1.5 p-0">
       {items.map((text, i) => (
-        <li key={i} className="flex items-start gap-2 text-[13px] leading-snug text-[#333]">
-          <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-[#d0d0d0]" />
+        <li key={i} className="flex items-start gap-2 text-[13px] leading-snug text-muted-foreground">
+          <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-muted-strong" />
           <span className="min-w-0 flex-1">{text}</span>
         </li>
       ))}
@@ -70,7 +70,7 @@ export function TalkArrangementCard({ payload }: CardComponentProps<TalkArrangem
     const s = payload.spine;
     return (
       <Shell eyebrow="The talk" badge="Spine">
-        <div className="mt-1 text-[15px] font-medium leading-snug text-[#1b1b1b]">
+        <div className="mt-1 text-[15px] font-medium leading-snug text-foreground">
           {s.thesis || "No through-line yet"}
         </div>
         {s.audience && <Line label="For" value={s.audience} />}
@@ -84,10 +84,10 @@ export function TalkArrangementCard({ payload }: CardComponentProps<TalkArrangem
   if (payload.change === "removed") {
     return (
       <Shell eyebrow="The talk" badge="Dropped" badgeVariant="aside">
-        <div className="mt-1 text-[15px] font-medium text-[#1b1b1b] line-through decoration-[#c0c0c0]">
+        <div className="mt-1 text-[15px] font-medium text-foreground line-through decoration-faint-foreground">
           {payload.title || "Untitled segment"}
         </div>
-        <div className="mt-2 text-[12px] text-[#999]">{payload.total} segment(s) left.</div>
+        <div className="mt-2 text-[12px] text-faint-foreground">{payload.total} segment(s) left.</div>
       </Shell>
     );
   }
@@ -95,10 +95,10 @@ export function TalkArrangementCard({ payload }: CardComponentProps<TalkArrangem
   if (payload.change === "moved") {
     return (
       <Shell eyebrow="The talk" badge="Moved" badgeVariant="aside">
-        <div className="mt-1 text-[15px] font-medium text-[#1b1b1b]">
+        <div className="mt-1 text-[15px] font-medium text-foreground">
           {payload.title || "Untitled segment"}
         </div>
-        <div className="mt-2 text-[12px] text-[#999]">
+        <div className="mt-2 text-[12px] text-faint-foreground">
           Now segment {payload.position} of {payload.total}.
         </div>
       </Shell>
@@ -110,7 +110,7 @@ export function TalkArrangementCard({ payload }: CardComponentProps<TalkArrangem
       {/* The head of the block, as it was written — markdown source and not
           rendered markdown. This is a receipt saying which block landed, and a
           second place to read the note would be a second note. */}
-      <div className="mt-1.5 whitespace-pre-line text-[13px] leading-snug text-[#333]">
+      <div className="mt-1.5 whitespace-pre-line text-[13px] leading-snug text-muted-foreground">
         {preview(payload.body)}
       </div>
     </Shell>
