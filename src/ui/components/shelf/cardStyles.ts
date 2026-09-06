@@ -46,3 +46,16 @@ export const LIBRARY_GRID = "grid list-none m-0 p-0 gap-x-4 gap-y-6";
 // wherever there is no inset (styles.css takes the larger of the two), so this
 // column never has to know which device it is on.
 export const LIBRARY_PAGE = "w-[min(1180px,100%)] mx-auto pt-8 pb-safe-10 pl-safe-6 pr-safe-6";
+
+// The header of a library page (docs/53): an eyebrow, the page's name in the
+// display face, one line of counts, and at the right the one thing the page
+// makes. Here rather than in LibraryScreen because both screens wear it.
+export const PAGE_HEADER = "flex items-end gap-4";
+export const PAGE_HEADER_TEXT = "min-w-0 flex-1";
+export const PAGE_EYEBROW =
+  "block text-[11px] font-medium tracking-[0.14em] uppercase text-faint-foreground";
+export const PAGE_TITLE = "mx-0 mt-1.5 mb-0 font-display text-[30px] leading-tight font-semibold";
+export const PAGE_SUB = "mx-0 mt-1.5 mb-0 text-[13px] text-muted-foreground";
+// The header's own button: solid ink, 40px, and never shrinking under a long
+// title beside it.
+export const HEADER_ACTION = "h-10 flex-none";

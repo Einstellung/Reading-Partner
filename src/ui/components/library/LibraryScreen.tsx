@@ -41,17 +41,25 @@ import MaterialFigureScope from "../common/MaterialFigureScope";
 import RehearsalScreen from "../rehearsal/RehearsalScreen";
 import type { Rehearsal } from "../../../reading/rehearsal";
 import { Button } from "../ui/button";
-import AddCard from "../shelf/AddCard";
 import BookCard from "../shelf/BookCard";
 import { readBookMeta } from "../shelf/book-meta";
-import { LIBRARY_GRID, LIBRARY_PAGE } from "../shelf/cardStyles";
+import {
+  HEADER_ACTION,
+  LIBRARY_GRID,
+  LIBRARY_PAGE,
+  PAGE_EYEBROW,
+  PAGE_HEADER,
+  PAGE_HEADER_TEXT,
+  PAGE_SUB,
+  PAGE_TITLE,
+} from "../shelf/cardStyles";
 import DeleteTopicButton from "./DeleteTopicButton";
 import { displayFileTitle, type BookMeta } from "../shelf/file-title";
 import RemoveFileButton from "./RemoveFileButton";
 import SavedArticleView from "./SavedArticleView";
 import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
-import { shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
+import { shelfHeaderLine, shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
 import ObservationSection from "./topic/ObservationSection";
 import RehearsalSection from "./topic/RehearsalSection";
 import RetellSection from "./topic/RetellSection";
@@ -60,7 +68,6 @@ import { topicHeaderLine } from "./topic/topic-header";
 import { DEFAULT_SECTION, type TopicSection } from "../base/topic-nav";
 
 const GRID = `${LIBRARY_GRID} ${TOPIC_GRID_COLUMNS_CLASS}`;
-const PAGE_TITLE = "mt-0 mb-6 mx-0 text-[22px] font-bold";
 // The list rows that are still rows: a saved article has no cover to show.
 const ROW_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
 const ROW = "flex items-center gap-2 border border-border rounded-lg py-1 pl-1 pr-1.5";
@@ -233,18 +240,32 @@ export default function LibraryScreen(props: {
       <div className="absolute inset-0 flex min-h-0 flex-col bg-background">
         <div className="flex-none border-b border-border-subtle px-6 pt-6">
           <div className="mx-auto w-[min(1180px,100%)]">
-            <Button
-              variant="link"
-              size="link"
-              className="text-[13px] text-muted-foreground underline-offset-4 can-hover:hover:underline"
-              onClick={props.onCloseTopic}
-            >
-              ‹ All topics
-            </Button>
-            <h1 className="mx-0 mb-0 mt-1.5 font-display text-[22px] font-bold">{activeTopic.name}</h1>
-            <p className="mx-0 mb-0 mt-1.5 text-[13px] text-muted-foreground">
-              {topicHeaderLine(activeTopic, meta, new Date())}
-            </p>
+            <div className={PAGE_HEADER}>
+              <div className={PAGE_HEADER_TEXT}>
+                <Button
+                  variant="link"
+                  size="link"
+                  className="text-[13px] text-muted-foreground underline-offset-4 can-hover:hover:underline"
+                  onClick={props.onCloseTopic}
+                >
+                  ‹ All topics
+                </Button>
+                <h1 className="mx-0 mt-1.5 mb-0 font-display text-[22px] font-bold">
+                  {activeTopic.name}
+                </h1>
+                <p className="mx-0 mt-1.5 mb-0 text-[13px] text-muted-foreground">
+                  {topicHeaderLine(activeTopic, meta, new Date())}
+                </p>
+              </div>
+              {/* Only on Materials: the other three sections have nothing to add
+                  a PDF to, and a button that acts on a section you cannot see is
+                  a button in the wrong place. */}
+              {section === "materials" && (
+                <Button className={HEADER_ACTION} onClick={props.onAddFile}>
+                  + Add PDF
+                </Button>
+              )}
+            </div>
             <div className="mt-3">
               <TopicNav
                 section={section}
@@ -385,7 +406,22 @@ function TopicLibrary(props: {
 
   return (
     <div className={LIBRARY_PAGE}>
-      <h1 className={PAGE_TITLE}>Topics</h1>
+      <div className={PAGE_HEADER}>
+        <div className={PAGE_HEADER_TEXT}>
+          <span className={PAGE_EYEBROW}>Your topics</span>
+          <h1 className={PAGE_TITLE}>Topics</h1>
+          <p className={PAGE_SUB}>
+            {topics.length === 0 ? NEW_TOPIC_BLURB : shelfHeaderLine(topics)}
+          </p>
+        </div>
+        {/* An empty shelf makes its topic from the empty state's own button,
+            which is the only thing on the page. */}
+        {topics.length > 0 && (
+          <Button className={HEADER_ACTION} onClick={() => setCreating(true)}>
+            + New topic
+          </Button>
+        )}
+      </div>
 
       {topics.length === 0 ? (
         <EmptyState
@@ -395,7 +431,7 @@ function TopicLibrary(props: {
           onAction={() => setCreating(true)}
         />
       ) : (
-        <ul className={GRID}>
+        <ul className={`${GRID} mt-6`}>
           {topics.map((t) => (
             <TopicCard
               key={t.id}
@@ -405,7 +441,6 @@ function TopicLibrary(props: {
               onDelete={() => setDeleting(t)}
             />
           ))}
-          <AddCard label="New topic" onClick={() => setCreating(true)} />
         </ul>
       )}
 
@@ -494,7 +529,6 @@ function TopicMaterials(props: {
               onRemove={() => setRemoving(f)}
             />
           ))}
-          <AddCard label="Add PDF" onClick={props.onAddFile} />
         </ul>
       )}
 
