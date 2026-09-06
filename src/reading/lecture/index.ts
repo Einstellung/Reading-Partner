@@ -21,7 +21,8 @@ export { buildReadChapterTool, READ_CHAPTER_MAX_PAGES, type ReadChapterDeps } fr
 export {
   annotationPageMap,
   lectureObservationSnapshot,
-  observationScope,
+  isAboutOpenBook,
+  isInFocusChapter,
   selectLectureObservations,
   BOOK_HIT_CAP,
   CHAPTER_HIT_CAP,
@@ -30,7 +31,6 @@ export {
   LECTURE_OBSERVATION_CAP_TIGHT,
   type LectureFocus,
   type ObservationPick,
-  type ObservationScope,
 } from "./stuck";
 export {
   chapterOutlineSection,

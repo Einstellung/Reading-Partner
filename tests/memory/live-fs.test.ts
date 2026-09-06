@@ -9,7 +9,7 @@ import { installAppData, type FakeDisk } from "../support/appdata-fake";
 import { observationFs } from "../../src/memory/live/live";
 import { ObservationFileStore } from "../../src/memory/observations/store";
 
-const ENTRY_PATH = "memory-topic-1/m-1a2b3c4d.md";
+const ENTRY_PATH = "observations/m-1a2b3c4d.md";
 const ENTRY_TEXT = [
   "---",
   "id: m-1a2b3c4d",
@@ -30,7 +30,7 @@ beforeEach(() => {
 });
 
 function makeStore(): ObservationFileStore {
-  return new ObservationFileStore("topic-1", observationFs);
+  return new ObservationFileStore(observationFs);
 }
 
 // The exists() that used to precede every read doubled the cost of a listing:
@@ -46,7 +46,7 @@ test("reading an observation probes nothing first", async () => {
   const entry = await makeStore().get("m-1a2b3c4d");
 
   expect(entry?.summary).toBe("Thinks attention is just soft lookup");
-  expect(disk.reads).toEqual(["memory-topic-1/deleted-observations.jsonl", ENTRY_PATH]);
+  expect(disk.reads).toEqual(["observations/deleted-observations.jsonl", ENTRY_PATH]);
   expect(fs.exists).not.toHaveBeenCalled();
 });
 
@@ -56,7 +56,7 @@ test("a file that is not there is absent through the whole store path", async ()
   expect(await store.get("m-1a2b3c4d")).toBeNull();
   expect(await store.readIndexText()).toBe("");
   expect(await store.readIndex()).toEqual([]);
-  expect(await store.getMeta()).toEqual({ lastDistilledAt: null, lastAnnotationDistillAt: null });
+  expect(await store.getMeta("t")).toEqual({ lastDistilledAt: null, lastAnnotationDistillAt: null });
   expect(await store.delete("m-1a2b3c4d")).toBe(false);
   expect(await store.update("m-1a2b3c4d", { body: "b" })).toBeNull();
   expect(fs.exists).not.toHaveBeenCalled();

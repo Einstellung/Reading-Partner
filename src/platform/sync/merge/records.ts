@@ -26,7 +26,7 @@ import {
 //   library.json               { books: Record<hash, Entry> }  (platform/app/library.ts)
 //   reading-state.json         { states: Record<bookId, ViewState> } (platform/app/storage.ts)
 //   info-feedback.jsonl        one JSON object per line        (memory/profile/feedback.ts)
-//   memory-<topicId>/deleted-observations.jsonl  one JSON object per line (memory/observations/store.ts)
+//   observations/deleted-observations.jsonl  one JSON object per line (memory/observations/store.ts)
 //   statements.json            { statements: Statement[] }, `id` (memory/statements/store.ts)
 //   memory-usage-<deviceId>.jsonl  one JSON object per line   (memory/usage/log.ts)
 // A map's key is the identity. A JSONL line is its own identity: the events

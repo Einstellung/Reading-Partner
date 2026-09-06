@@ -69,7 +69,7 @@ test("a real run copies what it is about to touch into a backup out of sync rang
   // than assumed: a backup that synced would push the pre-migration files back
   // onto the other device.
   expect(inSyncRange(`${report.backupDir}/threads-${BOOK}.json`)).toBe(false);
-  expect(inSyncRange(`${report.backupDir}/memory-topic-1/m-aaaaaa01.md`)).toBe(false);
+  expect(inSyncRange(`${report.backupDir}/observations/m-aaaaaa01.md`)).toBe(false);
   expect(inSyncRange(BACKUP_ROOT)).toBe(false);
 });
 

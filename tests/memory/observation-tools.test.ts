@@ -22,7 +22,7 @@ function lines(...specs: (string | [string, string])[]): TranscriptLine[] {
 
 function mount(opts: Parameters<typeof buildObservationTools>[1] = {}) {
   const { fs } = makeFakeFs();
-  const store = new ObservationFileStore("t", fs, () => JULY_17);
+  const store = new ObservationFileStore(fs, () => JULY_17);
   return { store, ...mountOn(store, opts) };
 }
 
@@ -32,7 +32,7 @@ function mountOn(
   store: ObservationFileStore,
   opts: Parameters<typeof buildObservationTools>[1] = {},
 ) {
-  const adapter = new FileObservationAdapter(store);
+  const adapter = new FileObservationAdapter(store, "t");
   const write = buildObservationTools(adapter, opts).find((t) => t.name === "observation_update")!;
   return { write };
 }

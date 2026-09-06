@@ -1,14 +1,13 @@
 // Live wiring of the statement store: the AppData file behind it, and the
 // resolver that turns an observation id into the days that observation covers.
 //
-// The resolver walks the topics because statements are not scoped to one and
-// observations are (memory/statements/store.ts). One read per topic for an id
-// that is in the first one is the cost, which is the same shape peekThreads and
-// the arrears sweep already pay; nothing calls this per turn.
+// One store read by id. A statement's evidence names observations across every
+// topic (memory/statements/store.ts) and the observation store is one flat
+// directory (memory/observations/store.ts), so an id is a file name and nothing
+// has to be walked to find it.
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
-import { listTopics } from "../../platform/app/topics";
 import { ObservationFileStore } from "../observations/store";
 import {
   createStatementStore,
@@ -33,11 +32,8 @@ export const statementIo: StatementIo = {
     return writeTextAtomic(path, content);
   },
   async observationDates(id): Promise<DaySpan | null> {
-    for (const topic of await listTopics()) {
-      const entry = await new ObservationFileStore(topic.id, observationFs).get(id);
-      if (entry) return { first: entry.created, last: entry.updated };
-    }
-    return null;
+    const entry = await new ObservationFileStore(observationFs).get(id);
+    return entry ? { first: entry.created, last: entry.updated } : null;
   },
 };
 

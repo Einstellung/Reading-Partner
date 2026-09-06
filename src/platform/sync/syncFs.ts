@@ -158,11 +158,10 @@ export function inSyncRange(path: string): boolean {
   if (top === "runs") {
     return parts.length === 3 && isIdSegment(parts[1]) && isRunPagesFile(parts[2]);
   }
-  // Per-topic AI observations: every file under memory-<topicId>/ (entries,
-  // index, meta). "memory-" is the historical directory name and is deliberately
-  // unchanged: the feature was renamed on 2026-08-06, the directories on disk and
-  // in the user's Drive were not, and this matcher goes by file name.
-  if (top.startsWith("memory-")) return true;
+  // AI observations: every file directly under observations/ — the entries, the
+  // index, the tombstones and the bookkeeping (memory/observations/store.ts).
+  // One flat directory, so one level and no deeper.
+  if (top === "observations") return parts.length === 2;
   // A document's prep (docs/09). Two kinds of material live under one directory
   // and only one of them is ever filled in: the paper notes sit at the top with
   // the plan state, the chapter spines sit one level down under chapters/ with a
@@ -212,14 +211,14 @@ function isRunPagesFile(name: string): boolean {
 // Whether a directory can hold an in-range file, so the walk descends into it.
 // Spelled out rather than left at "anything under prep-", which would open every
 // prep-<hash>/pdf/ to a readDir that can only ever return files inSyncRange
-// rejects. "memory-" is the observation directories' historical name; see above.
+// rejects.
 function worthDescending(rel: string): boolean {
   if (rel === "article-bodies") return true;
+  if (rel === "observations") return true;
   // runs/ holds one directory per rehearsal and nothing else, so the walk goes
   // exactly two levels and no further.
   if (rel === "runs") return true;
   if (rel.startsWith("runs/")) return rel.split("/").length === 2;
-  if (rel.startsWith("memory-")) return true;
   if (!rel.startsWith("prep-")) return false;
   const parts = rel.split("/");
   return parts.length === 1 || (parts.length === 2 && parts[1] === "chapters");

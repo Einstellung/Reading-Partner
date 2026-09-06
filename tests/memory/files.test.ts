@@ -136,7 +136,7 @@ test("unknown keys survive the merge two devices run on these files", () => {
 
   const bytes = (t: string) => new TextEncoder().encode(t);
   const merged = mergeFile({
-    path: "memory-topic-1/m-1a2b3c4d.md",
+    path: "observations/m-1a2b3c4d.md",
     base: bytes(base),
     local: bytes(local),
     remote: bytes(remote),
@@ -163,6 +163,25 @@ test("index line round-trips, including a summary with brackets and colons", () 
     updated: "2026-07-17",
   };
   expect(parseIndexLine(serializeIndexLine(e))).toEqual(e);
+});
+
+// The index file names the topic of every line; the projection a prompt gets is
+// one topic's worth already and drops it (files.ts). Both parse.
+test("an index line round-trips with a topic on it and without", () => {
+  const e = {
+    id: "m-1a2b3c4d",
+    type: "belief" as const,
+    summary: "Thinks [CLS] pooling: overrated (see 3.2)",
+    updated: "2026-07-17",
+    topic: "topic-1",
+  };
+  const file = buildIndex([e]);
+  expect(file).toContain("topic topic-1, id m-1a2b3c4d");
+  expect(parseIndex(file)).toEqual([e]);
+
+  const { topic: _topic, ...bare } = e;
+  expect(parseIndexLine(serializeIndexLine(bare))).toEqual(bare);
+  expect(serializeIndexLine(e)).toBe(serializeIndexLine(bare));
 });
 
 test("buildIndex sorts newest-updated first and parseIndex skips junk lines", () => {

@@ -15,7 +15,7 @@ export type MergeStrategy =
   // JSON objects of scalar settings: three-way per field.
   | "fields"
   // Fields, where the scalars are watermarks and the lower of two is the safe
-  // one: memory-<topicId>/meta.json and nothing else (cursors.ts).
+  // one: observations/meta.json and nothing else (cursors.ts).
   | "cursors"
   // Markdown the user writes: three-way per line, conflict copy on overlap.
   | "prose"
@@ -74,7 +74,7 @@ const RECORD_FILES = new Set([
   // losing it means pushing the same item twice — and it travels so that a
   // machine taking over collection knows what its predecessor already sent.
   "info-pool-marks.json",
-  // One line per deleted observation, in memory-<topicId>/
+  // One line per deleted observation, in observations/
   // (memory/observations/store.ts). Records because a deletion only survives by
   // travelling as a record: this module removes nothing at file level, so the
   // device that still holds the entry file republishes it and the observation
@@ -100,7 +100,7 @@ export function strategyFor(path: string): MergeStrategy {
   // exercised — the file is written once, under an id nothing else will ever
   // use, so the same path on two devices is the same pass.
   if (path.startsWith("runs/")) return "opaque";
-  // How much of a topic has already been distilled, memory-<topicId>/meta.json
+  // How much of each topic has already been distilled, observations/meta.json
   // (memory/observations/store.ts). Qualified by its directory like the runs
   // above, because "meta.json" is a name anything could take and the rule this
   // strategy applies — lower number wins — is true of this file's numbers and
@@ -108,7 +108,7 @@ export function strategyFor(path: string): MergeStrategy {
   // copies are parked in the owner's memory-b3a9f89c-* directory, holding 1, 14
   // and 9 message cursors that the file in use never got, and nothing in src/
   // can even see them (store.ts matches only entry and index conflict copies).
-  if (/^memory-[^/]+\/meta\.json$/.test(path)) return "cursors";
+  if (path === "observations/meta.json") return "cursors";
   const name = path.slice(path.lastIndexOf("/") + 1);
   if (name.endsWith(".md")) return "prose";
   if (RECORD_FILES.has(name)) return "records";

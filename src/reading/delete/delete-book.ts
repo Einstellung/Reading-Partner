@@ -49,8 +49,8 @@ export interface DeleteBookDeps {
   removeViewState: (bookId: string) => Promise<void>;
   listTopics: () => Promise<Topic[]>;
   unlinkFile: (topicId: string, path: string) => Promise<void>;
-  listObservations: (topicId: string) => Promise<Observation[]>;
-  deleteObservation: (topicId: string, id: string) => Promise<void>;
+  listObservations: () => Promise<Observation[]>;
+  deleteObservation: (id: string) => Promise<void>;
   listStatements: () => Promise<Statement[]>;
   listRetells: () => Promise<Retell[]>;
   deleteRetell: (retellId: string) => Promise<void>;
@@ -72,9 +72,9 @@ export const liveDeleteBookDeps: DeleteBookDeps = {
   removeViewState,
   listTopics,
   unlinkFile: removeFileFromTopic,
-  listObservations: (topicId) => new ObservationFileStore(topicId, observationFs).list(),
-  deleteObservation: async (topicId, id) => {
-    await new ObservationFileStore(topicId, observationFs).delete(id);
+  listObservations: () => new ObservationFileStore(observationFs).list(),
+  deleteObservation: async (id) => {
+    await new ObservationFileStore(observationFs).delete(id);
   },
   listStatements: () => listStatements(),
   listRetells: listAllRetells,
@@ -108,14 +108,14 @@ export async function deleteBook(
     }
   }
 
-  // One read of the statements for the whole sweep: they are not scoped to a
-  // topic, and what they cite does not change while this runs.
+  // One read of the statements and one of the observations for the whole sweep:
+  // neither is scoped to a topic, and what they say does not change while this
+  // runs. Which topic an observation is filed under does not come into it — a
+  // book is deleted by book id, and the store is one flat directory (docs/48).
   const statements = await deps.listStatements();
-  for (const topic of topics) {
-    const observations = await deps.listObservations(topic.id);
-    for (const id of observationIdsToDelete(observations, statements, bookId)) {
-      await deps.deleteObservation(topic.id, id);
-    }
+  const observations = await deps.listObservations();
+  for (const id of observationIdsToDelete(observations, statements, bookId)) {
+    await deps.deleteObservation(id);
   }
 
   await deleteRetells(bookId, deps);

@@ -29,6 +29,9 @@ export const appDataMigrationFs: MigrationFs = {
   async remove(path) {
     await appData.remove(path);
   },
+  async removeDir(path) {
+    await appData.removeDir(path);
+  },
   async listDir(path) {
     try {
       return (await appData.readDir(path || ".")).filter((e) => e.isFile).map((e) => e.name);

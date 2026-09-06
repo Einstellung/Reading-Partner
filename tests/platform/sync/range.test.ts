@@ -12,10 +12,10 @@ test("core user-data files are in range", () => {
     "topics.json",
     "annotations-abc123.json",
     "threads-abc123.json",
-    // "memory-" is the AI observations directories' historical on-disk name.
-    "memory-topic1/m-ab12cd34.md",
-    "memory-topic1/index.md",
-    "memory-topic1/meta.json",
+    "observations/m-ab12cd34ef567890.md",
+    "observations/index.md",
+    "observations/meta.json",
+    "observations/deleted-observations.jsonl",
     // A document's prep material (docs/09). Whichever kind it turns out to need
     // sits under the one prep-<hash>/ directory: paper notes at the top, chapter
     // spines a level down.
@@ -77,7 +77,7 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     // the record of what was last agreed would be circular, and every path
     // under it would come back as a second copy of the file it mirrors.
     "sync-base/library.json",
-    "sync-base/memory-topic1/m-ab12cd34.md",
+    "sync-base/observations/m-ab12cd34ef567890.md",
     "sync-base/prep-deadbeef/chapters/state.json",
     "credentials.json",
     "prep-deadbeef/pdf/some-paper.pdf",

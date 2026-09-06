@@ -44,7 +44,7 @@ export default function ObservationSection({ topicId }: { topicId: string }) {
           // conflict line and not the observations beside it — and said out
           // loud, because a read that fails without a word is how the last one
           // of these went unnoticed (docs/pitfall/09).
-          listObservationConflicts(topicId).catch((e): ObservationConflict[] => {
+          listObservationConflicts().catch((e): ObservationConflict[] => {
             console.warn("failed to read observation conflict copies", e);
             return [];
           }),

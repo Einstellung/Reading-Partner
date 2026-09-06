@@ -21,6 +21,14 @@ export function makeMemFs(initial: Record<string, string> = {}): {
     async remove(path) {
       files.delete(path);
     },
+    async removeDir(path) {
+      // A directory is only where its files are, so removing one that still has
+      // any is the caller's bug and is refused here rather than tidied up.
+      const prefix = `${path}/`;
+      for (const key of files.keys()) {
+        if (key.startsWith(prefix)) throw new Error(`removeDir on a non-empty ${path}`);
+      }
+    },
     async listDir(dir) {
       const prefix = dir === "" ? "" : `${dir}/`;
       const names = new Set<string>();

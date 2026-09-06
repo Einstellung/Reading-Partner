@@ -1,15 +1,22 @@
-// Per-topic observation store over an injected filesystem, so the whole write
-// path runs headless in tests (live.ts binds the Tauri fs). Layout, one
-// directory per topic under AppData:
-//   memory-<topicId>/<id>.md   — one observation per file (frontmatter + body)
-//   memory-<topicId>/index.md  — one line per observation; loaded into context
-//   memory-<topicId>/meta.json — bookkeeping (when the last distillation ran)
-//   memory-<topicId>/deleted-observations.jsonl — one line per deletion
-// The "memory-" prefix is the historical on-disk name, kept deliberately: the
-// feature was renamed to AI observations on 2026-08-06 but the directories hold
-// real synced data, so the paths and the meta.json field names never moved.
+// The observation store over an injected filesystem, so the whole write path
+// runs headless in tests (live.ts binds the Tauri fs). One flat directory under
+// AppData for the whole library:
+//   observations/<id>.md   — one observation per file (frontmatter + body)
+//   observations/index.md  — one line per observation, each naming its topic
+//   observations/meta.json — distillation bookkeeping, cursors and rate limits
+//   observations/deleted-observations.jsonl — one line per deletion
+//
+// Flat because an id is already global (m-<16 hex>) and every consumer that
+// crossed topics had to walk the directories to get there: resolving a
+// statement's evidence, a search that reaches past the book in hand, a night
+// pass reading everything. A topic is a field on the record instead — an
+// archival label, renamed and merged and split, never a retrieval key (docs/48).
+// Which topic a caller wants is a filter over that field, and the index carries
+// it so the filter costs no file reads.
+//
 // The entry files are the source of truth; the index is derived and rebuilt
-// after every mutation (a topic holds tens of observations, not thousands).
+// after every mutation (the store holds hundreds of observations, not
+// millions).
 
 import {
   appendTombstone,
@@ -39,6 +46,9 @@ export interface ObservationFs {
   listDir(path: string): Promise<string[]>; // file names; [] when the dir is missing
 }
 
+// One topic's view of the bookkeeping file. The scalars are that topic's; the
+// two cursor maps are the whole store's, because their keys already say what
+// they are about — a thread id and a book id, both global.
 export interface ObservationMeta {
   lastDistilledAt: number | null;
   // Where the reader's silent marks had been folded in to, before the cursor
@@ -57,6 +67,27 @@ export interface ObservationMeta {
   // by a pass over book A puts book B's older marks behind it, and they are then
   // never observed.
   distilledMarks?: Record<string, number>;
+}
+
+// meta.json as it sits on disk. The two stamps are keyed by topic id, because
+// what they mean is per topic and there is now one file for every topic:
+// lastDistilledAt is the rate limit isTopicDue waits out (arrears.ts), and one
+// shared stamp would make a pass over one topic hold every other topic back.
+// The cursor maps are keyed by thread and by book and so need no such split.
+interface StoredObservationMeta {
+  lastDistilledAt?: Record<string, number>;
+  lastAnnotationDistillAt?: Record<string, number>;
+  distilledMessages?: Record<string, number>;
+  distilledMarks?: Record<string, number>;
+}
+
+function numberMap(value: unknown): Record<string, number> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const out: Record<string, number> = {};
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
+  }
+  return out;
 }
 
 // Either width. The migration widens every id from 8 to 16 hex (src/migrate),
@@ -102,6 +133,9 @@ const INDEX_CONFLICT_FILE = /^index\.conflict-[0-9a-f]+\.md$/;
 // file said which ids exist, every observation that build creates would be
 // absent from it and so invisible here. Existence stays with the entry files.
 const TOMBSTONE_FILE = "deleted-observations.jsonl";
+
+// The one directory every observation lives in.
+const DIR = "observations";
 
 // One conflict copy, parsed here so a renderer never has to know the file
 // format. The fields are empty when the copy does not parse, which leaves the
@@ -152,16 +186,12 @@ function normalizeAnchors(a?: Partial<EvidenceAnchors>): EvidenceAnchors {
 }
 
 export class ObservationFileStore {
-  private dir: string;
+  private dir = DIR;
 
   constructor(
-    topicId: string,
     private fs: ObservationFs,
     private now: () => number = Date.now,
-  ) {
-    // Historical directory name, not a leftover: see the header.
-    this.dir = `memory-${topicId}`;
-  }
+  ) {}
 
   private entryPath(id: string): string {
     return `${this.dir}/${id}.md`;
@@ -188,25 +218,35 @@ export class ObservationFileStore {
 
   // All observations, read from the entry files (index-independent) minus the
   // tombstoned ids, newest first. A read never writes the tombstone file: the
-  // topic that has none has no deletions, which is the same answer.
-  async list(): Promise<Observation[]> {
-    return this.readEntries(await this.fs.listDir(this.dir), await this.readTombstones());
+  // store that has none has no deletions, which is the same answer.
+  //
+  // `topic` filters on the archival label, which is what a caller asking for
+  // "this topic's observations" means. Filtering rather than addressing: an
+  // entry written before the field existed belongs to no topic and is left out
+  // of every topic's list, which is the migration's business to fix, not this
+  // read's to guess at.
+  async list(topic?: string): Promise<Observation[]> {
+    return this.readEntries(await this.fs.listDir(this.dir), await this.readTombstones(), topic);
   }
 
-  private async readEntries(names: string[], deleted: Set<string>): Promise<Observation[]> {
+  private async readEntries(
+    names: string[],
+    deleted: Set<string>,
+    topic?: string,
+  ): Promise<Observation[]> {
     const entries: Observation[] = [];
     for (const name of names) {
       const m = ENTRY_FILE.exec(name);
       if (!m || deleted.has(m[1])) continue;
       const text = await this.fs.read(`${this.dir}/${name}`);
       const entry = text === null ? null : parseObservation(text);
-      if (entry) entries.push(entry);
+      if (entry && (topic === undefined || entry.topic === topic)) entries.push(entry);
     }
     entries.sort((a, b) => b.updated.localeCompare(a.updated) || a.id.localeCompare(b.id));
     return entries;
   }
 
-  // The conflict copies sitting in this topic's directory, oldest name first.
+  // The conflict copies sitting in the store, oldest name first.
   // Read-only and separate from list(): a copy is a second version of one
   // observation, not a second observation, so nothing derived — the index, a
   // prompt, recall — may take it for one.
@@ -257,6 +297,7 @@ export class ObservationFileStore {
       updated: input.observed?.last ?? clock,
       anchors: cleaned.anchors,
       ...(input.bookId ? { bookId: input.bookId } : {}),
+      ...(input.topic ? { topic: input.topic } : {}),
     };
     await this.fs.write(this.entryPath(entry.id), serializeObservation(entry));
     await this.rebuildIndex();
@@ -350,13 +391,21 @@ export class ObservationFileStore {
     return true;
   }
 
-  // The raw index text — the exact lines a prompt loads.
-  async readIndexText(): Promise<string> {
-    return (await this.fs.read(`${this.dir}/index.md`)) ?? "";
+  // The index as a prompt loads it. Without a topic that is the file verbatim,
+  // every line naming the topic it belongs to; with one it is that topic's lines
+  // with the topic segment dropped, because a prompt built for one topic would
+  // print the same id on every line and a model has nothing to do with it.
+  async readIndexText(topic?: string): Promise<string> {
+    const raw = (await this.fs.read(`${this.dir}/index.md`)) ?? "";
+    if (topic === undefined) return raw;
+    const mine = parseIndex(raw)
+      .filter((e) => e.topic === topic)
+      .map(({ topic: _topic, ...rest }) => rest);
+    return buildIndex(mine);
   }
 
-  async readIndex(): Promise<ObservationIndexEntry[]> {
-    return parseIndex(await this.readIndexText());
+  async readIndex(topic?: string): Promise<ObservationIndexEntry[]> {
+    return parseIndex(await this.readIndexText(topic));
   }
 
   // Regenerate the index from the entry files (they are the source of truth),
@@ -364,7 +413,7 @@ export class ObservationFileStore {
   // An entry's own copies are left alone: those are versions of what the model
   // wrote about the reader, and the panel shows them.
   //
-  // A topic with no tombstone file gets an empty one here and nothing else. On a
+  // A store with no tombstone file gets an empty one here and nothing else. On a
   // store written before this file existed, an entry on disk and absent from the
   // index cannot be told from one the other device created and synced in before
   // this device last rebuilt — the owner's three arrived by exactly that route —
@@ -376,30 +425,82 @@ export class ObservationFileStore {
     const entries = await this.readEntries(names, parseTombstones(text ?? ""));
     await this.fs.write(
       `${this.dir}/index.md`,
-      buildIndex(entries.map(({ id, type, summary, updated }) => ({ id, type, summary, updated }))),
+      buildIndex(
+        entries.map(({ id, type, summary, updated, topic }) => ({
+          id,
+          type,
+          summary,
+          updated,
+          ...(topic ? { topic } : {}),
+        })),
+      ),
     );
     for (const name of names) {
       if (INDEX_CONFLICT_FILE.test(name)) await this.fs.remove(`${this.dir}/${name}`);
     }
   }
 
-  async getMeta(): Promise<ObservationMeta> {
+  private async readStoredMeta(): Promise<StoredObservationMeta> {
     try {
       const raw = await this.fs.read(`${this.dir}/meta.json`);
-      if (raw === null) return { lastDistilledAt: null, lastAnnotationDistillAt: null };
-      const parsed = JSON.parse(raw) as Partial<ObservationMeta>;
+      if (raw === null) return {};
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
       return {
-        lastDistilledAt: parsed.lastDistilledAt ?? null,
-        lastAnnotationDistillAt: parsed.lastAnnotationDistillAt ?? null,
-        ...(parsed.distilledMessages ? { distilledMessages: parsed.distilledMessages } : {}),
-        ...(parsed.distilledMarks ? { distilledMarks: parsed.distilledMarks } : {}),
+        lastDistilledAt: numberMap(parsed.lastDistilledAt),
+        lastAnnotationDistillAt: numberMap(parsed.lastAnnotationDistillAt),
+        distilledMessages: numberMap(parsed.distilledMessages),
+        distilledMarks: numberMap(parsed.distilledMarks),
       };
     } catch {
-      return { lastDistilledAt: null, lastAnnotationDistillAt: null };
+      return {};
     }
   }
 
-  async setMeta(meta: ObservationMeta): Promise<void> {
-    await this.fs.write(`${this.dir}/meta.json`, JSON.stringify(meta, null, 2));
+  async getMeta(topicId: string): Promise<ObservationMeta> {
+    const stored = await this.readStoredMeta();
+    const messages = stored.distilledMessages ?? {};
+    const marks = stored.distilledMarks ?? {};
+    return {
+      lastDistilledAt: stored.lastDistilledAt?.[topicId] ?? null,
+      lastAnnotationDistillAt: stored.lastAnnotationDistillAt?.[topicId] ?? null,
+      ...(Object.keys(messages).length ? { distilledMessages: messages } : {}),
+      ...(Object.keys(marks).length ? { distilledMarks: marks } : {}),
+    };
   }
+
+  // Read-modify-write, so a pass over one topic cannot drop another topic's
+  // stamp. The cursor maps are written as given: the caller got them from
+  // getMeta and merged its own entries into them, which is the same discipline
+  // the per-topic file already needed between the transcript and retell paths.
+  async setMeta(topicId: string, meta: ObservationMeta): Promise<void> {
+    const stored = await this.readStoredMeta();
+    const next: StoredObservationMeta = {
+      lastDistilledAt: { ...(stored.lastDistilledAt ?? {}) },
+      lastAnnotationDistillAt: { ...(stored.lastAnnotationDistillAt ?? {}) },
+      distilledMessages: meta.distilledMessages ?? stored.distilledMessages ?? {},
+      distilledMarks: meta.distilledMarks ?? stored.distilledMarks ?? {},
+    };
+    if (meta.lastDistilledAt === null) delete next.lastDistilledAt?.[topicId];
+    else next.lastDistilledAt![topicId] = meta.lastDistilledAt;
+    if (meta.lastAnnotationDistillAt === null) delete next.lastAnnotationDistillAt?.[topicId];
+    else next.lastAnnotationDistillAt![topicId] = meta.lastAnnotationDistillAt;
+    await this.fs.write(`${this.dir}/meta.json`, JSON.stringify(next, null, 2));
+  }
+}
+
+// The three things a distillation pass asks of the store, bound to one topic.
+// The pass itself has no topic — it is handed a transcript and an index — so the
+// binding happens here rather than being threaded through every call.
+export interface TopicPassStore {
+  getMeta(): Promise<ObservationMeta>;
+  setMeta(meta: ObservationMeta): Promise<void>;
+  readIndexText(): Promise<string>;
+}
+
+export function topicPassStore(store: ObservationFileStore, topicId: string): TopicPassStore {
+  return {
+    getMeta: () => store.getMeta(topicId),
+    setMeta: (meta) => store.setMeta(topicId, meta),
+    readIndexText: () => store.readIndexText(topicId),
+  };
 }

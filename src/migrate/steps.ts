@@ -1,4 +1,4 @@
-// The seven steps, in the order they have to run in.
+// The eight steps, in the order they have to run in.
 //
 // 1 repairs the anchors that name the wrong thread, because 2 and 3 derive from
 // the anchor and deriving from a wrong thread computes the wrong message.
@@ -11,6 +11,8 @@
 //   once and so goes after the per-file work.
 // 7 widens the same ids where statements point at them, which needs 6's
 //   derivation and would otherwise leave every statement's evidence dangling.
+// 8 empties the per-topic directories into the one flat store, last because
+//   every step above it walks those directories (flatten.ts).
 //
 // Every step is self-detecting: it asks the data whether it is still in the old
 // shape. None of them consults a stored flag, and none writes one.
@@ -22,7 +24,6 @@ import {
   serializeTombstone,
 } from "../memory/observations/files";
 import { cleanObservationBody } from "../memory/observations/residue";
-import { ObservationFileStore } from "../memory/observations/store";
 import type { Observation } from "../memory/observations/types";
 import { STATEMENTS_FILE } from "../memory/statements/store";
 import {
@@ -32,7 +33,7 @@ import {
   repairTypoAnchor,
   type AnchorOutcome,
 } from "./anchors";
-import { asObservationFs } from "./fs";
+import { stepFlattenObservations } from "./flatten";
 import { deriveMessageId, deriveObservationId, NARROW_OBSERVATION_ID } from "./hash";
 import { allMessages, loadThreads, serializeThreadFile, type ThreadIndex } from "./threads";
 import {
@@ -49,6 +50,9 @@ import {
 const ENTRY_FILE = /^(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))\.md$/;
 const CONFLICT_FILE = /^(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))(\.conflict-[0-9a-f]+\.md)$/;
 const TOMBSTONE_FILE = "deleted-observations.jsonl";
+// The flat store's directory. Spelled out rather than imported because the store
+// keeps the name private, and this directory is deleted after 0.13.
+const FLAT_DIR = "observations";
 // A bare observation id in prose, the same shape memory/observations/links.ts
 // reads. Narrow only: a mention already widened must not match, which is what
 // makes the rewrite idempotent.
@@ -56,8 +60,15 @@ const NARROW_MENTION = /(^|[^0-9a-z-])(m-[0-9a-f]{8})(?![0-9a-f])/gi;
 // An observation id this migration has already widened, or one minted since.
 const WIDE_OBSERVATION_ID = /^m-[0-9a-f]{16}$/;
 
+// Every directory an observation entry file can be sitting in: the flat store
+// (memory/observations/store.ts) and any per-topic directory step 8 has not
+// emptied yet. Both, not one or the other — a device still on the old build can
+// sync a memory-<topicId>/ directory back long after this one flattened, and the
+// repairs above have to reach whichever side a file is on.
 export async function topicDirs(fs: MigrationFs): Promise<string[]> {
-  return (await fs.listSubdirs("")).filter((n) => n.startsWith("memory-")).sort();
+  return (await fs.listSubdirs(""))
+    .filter((n) => n === FLAT_DIR || n.startsWith("memory-"))
+    .sort();
 }
 
 interface EntryFile {
@@ -392,11 +403,10 @@ export async function stepWidenObservationIds(fs: MigrationFs): Promise<StepRepo
     step.counts.tombstonesWidened = (step.counts.tombstonesWidened ?? 0) + lines.length;
   }
 
-  // Pass D: the index, which is derived, rebuilt by the code that owns it.
-  for (const dir of dirs) {
-    const store = new ObservationFileStore(dir.slice("memory-".length), asObservationFs(fs));
-    await store.rebuildIndex();
-  }
+  // The index is not rebuilt here. It is derived, the only copy that will
+  // survive is the flat store's, and step 8 writes that one after it has moved
+  // the entries these passes just renamed — rebuilding a per-topic index now
+  // would be work on a file that is about to be deleted.
   return step;
 }
 
@@ -536,4 +546,5 @@ export const STEPS = [
   stepCleanBodies,
   stepWidenObservationIds,
   stepWidenStatementIds,
+  stepFlattenObservations,
 ] as const;

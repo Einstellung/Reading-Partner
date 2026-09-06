@@ -46,7 +46,10 @@ import {
   type DistillMessage,
   type DistillPassInput,
 } from "../../src/memory/observations/distill";
-import { ObservationFileStore } from "../../src/memory/observations/store";
+import { ObservationFileStore, topicPassStore } from "../../src/memory/observations/store";
+
+// The topic every store in this file is mounted on.
+const TOPIC = "t";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };
@@ -138,8 +141,8 @@ const NO_REJECTIONS = {
 
 function makeStore() {
   const { fs } = makeFakeFs();
-  const store = new ObservationFileStore("t", fs, () => JULY_17);
-  return { store, adapter: new FileObservationAdapter(store) };
+  const store = new ObservationFileStore(fs, () => JULY_17);
+  return { store, pass: topicPassStore(store, TOPIC), adapter: new FileObservationAdapter(store, TOPIC) };
 }
 
 test("distillation creates observations through the real tools and counts them", async () => {
@@ -184,7 +187,7 @@ test("distillation creates observations through the real tools and counts them",
   expect(entries[0].type).toBe("stuck-point");
   expect(entries[0].anchors).toEqual({ annotationIds: ["ann-1"], messageIds: ["thread-1:100"] });
   // The index carries it for the next conversation's snapshot.
-  expect(await store.readIndexText()).toContain("Stuck on quadratic attention cost");
+  expect(await store.readIndexText(TOPIC)).toContain("Stuck on quadratic attention cost");
 });
 
 // End to end through the real agent loop: what the pass mounts, not what the
@@ -260,7 +263,7 @@ test("distillation writes the evolution as a new observation and deletes what wa
   });
 
   const result = await runDistillation(
-    makeInput({ indexText: await store.readIndexText() }),
+    makeInput({ indexText: await store.readIndexText(TOPIC) }),
     adapter,
     scriptedRunner([
       {
@@ -413,7 +416,7 @@ test("same-as grows an observation's evidence and writes no second one", async (
     anchors: { annotationIds: ["ann-0"], messageIds: [] },
   });
   const result = await runDistillation(
-    makeInput({ indexText: await store.readIndexText() }),
+    makeInput({ indexText: await store.readIndexText(TOPIC) }),
     adapter,
     scriptedRunner([
       {
@@ -630,16 +633,16 @@ function passInput(overrides: Partial<DistillPassInput> = {}): DistillPassInput 
 }
 
 test("a finished pass advances both cursors", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const result = await runDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
   });
 
   expect(result).toMatchObject({ ran: true, ok: true });
-  expect(await store.getMeta()).toEqual({
+  expect(await store.getMeta(TOPIC)).toEqual({
     lastDistilledAt: JULY_17,
     lastAnnotationDistillAt: null,
     distilledMessages: { "thread-1": 2 },
@@ -648,16 +651,16 @@ test("a finished pass advances both cursors", async () => {
 });
 
 test("a second pass over the same transcript does not run", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   await runDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
   });
   const runner = loopRunner([{ text: "done" }]);
   const again = await runDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     run: runner.run,
     now: () => JULY_20,
@@ -666,24 +669,24 @@ test("a second pass over the same transcript does not run", async () => {
   expect(again).toEqual({ ran: false, skipped: "no-new-messages" });
   expect(runner.requests.length).toBe(0);
   // Cursors did not move on a pass that never ran.
-  expect((await store.getMeta()).lastDistilledAt).toBe(JULY_17);
+  expect((await store.getMeta(TOPIC)).lastDistilledAt).toBe(JULY_17);
 });
 
 test("the cursor is on disk, so a restart does not re-distill", async () => {
   const { fs } = makeFakeFs();
-  const first = new ObservationFileStore("t", fs, () => JULY_17);
+  const first = new ObservationFileStore(fs, () => JULY_17);
   await runDistillPass(passInput(), {
-    store: first,
-    adapter: new FileObservationAdapter(first),
+    store: topicPassStore(first, TOPIC),
+    adapter: new FileObservationAdapter(first, TOPIC),
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
   });
   // A fresh store over the same files is what a relaunch has.
-  const reopened = new ObservationFileStore("t", fs, () => JULY_20);
+  const reopened = new ObservationFileStore(fs, () => JULY_20);
   const runner = loopRunner([{ text: "done" }]);
   const again = await runDistillPass(passInput(), {
-    store: reopened,
-    adapter: new FileObservationAdapter(reopened),
+    store: topicPassStore(reopened, TOPIC),
+    adapter: new FileObservationAdapter(reopened, TOPIC),
     run: runner.run,
     now: () => JULY_20,
   });
@@ -693,9 +696,9 @@ test("the cursor is on disk, so a restart does not re-distill", async () => {
 });
 
 test("a new reader message after a pass is distilled again", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   await runDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
@@ -708,22 +711,22 @@ test("a new reader message after a pass is distilled again", async () => {
     ],
   });
   const again = await runDistillPass(longer, {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_20,
     ...scriptedRunner([{ text: "done" }]),
   });
 
   expect(again).toMatchObject({ ran: true, ok: true });
-  expect((await store.getMeta()).distilledMessages).toEqual({ "thread-1": 3 });
+  expect((await store.getMeta(TOPIC)).distilledMessages).toEqual({ "thread-1": 3 });
 });
 
 test("a thread the reader never spoke in is not distilled", async () => {
-  const { store, adapter } = makeStore();
+  const { pass, adapter } = makeStore();
   const runner = loopRunner([{ text: "done" }]);
   const result = await runDistillPass(
     passInput({ messages: [{ role: "ai", text: "here is the passage", ts: 100 }] }),
-    { store, adapter, run: runner.run, now: () => JULY_17 },
+    { store: pass, adapter, run: runner.run, now: () => JULY_17 },
   );
 
   expect(result).toEqual({ ran: false, skipped: "reader-silent" });
@@ -731,10 +734,10 @@ test("a thread the reader never spoke in is not distilled", async () => {
 });
 
 test("minNewMessages holds the trim fallback back", async () => {
-  const { store, adapter } = makeStore();
+  const { pass, adapter } = makeStore();
   const runner = loopRunner([{ text: "done" }]);
   const result = await runDistillPass(passInput({ minNewMessages: 20 }), {
-    store,
+    store: pass,
     adapter,
     run: runner.run,
     now: () => JULY_17,
@@ -776,16 +779,16 @@ function foldedInput(overrides: Partial<DistillPassInput> = {}): DistillPassInpu
 }
 
 test("a folded pass moves a cursor per thread, each over its own messages", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const result = await runDistillPass(foldedInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
   });
 
   expect(result).toMatchObject({ ran: true, ok: true });
-  expect((await store.getMeta()).distilledMessages).toEqual({ lesson: 2, aside: 2 });
+  expect((await store.getMeta(TOPIC)).distilledMessages).toEqual({ lesson: 2, aside: 2 });
 });
 
 // The lesson goes on after the aside is deleted. A cursor stamped at the merged
@@ -793,9 +796,9 @@ test("a folded pass moves a cursor per thread, each over its own messages", asyn
 // countNewReaderMessages clamps that to "nothing new" — so everything the reader
 // asked afterwards would never be distilled, and never would be.
 test("deleting a folded aside does not strand the lesson's cursor past its messages", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   await runDistillPass(foldedInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
@@ -808,20 +811,20 @@ test("deleting a folded aside does not strand the lesson's cursor past its messa
   ];
   const again = await runDistillPass(
     passInput({ threadId: "lesson", annotationId: "", page: null, markedText: "", messages: carriedOn }),
-    { store, adapter, now: () => JULY_20, ...scriptedRunner([{ text: "done" }]) },
+    { store: pass, adapter, now: () => JULY_20, ...scriptedRunner([{ text: "done" }]) },
   );
 
   expect(again).toMatchObject({ ran: true, ok: true });
-  expect((await store.getMeta()).distilledMessages).toEqual({ lesson: 4, aside: 2 });
+  expect((await store.getMeta(TOPIC)).distilledMessages).toEqual({ lesson: 4, aside: 2 });
 });
 
 // The other direction: sync deletes the lesson elsewhere and the aside is left
 // behind, so it becomes a unit of its own. Its own cursor was moved by the
 // folded pass, so there is nothing left to distil and nothing is written twice.
 test("an aside orphaned after a folded pass does not distil itself again", async () => {
-  const { store, adapter } = makeStore();
+  const { pass, adapter } = makeStore();
   await runDistillPass(foldedInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
@@ -830,7 +833,7 @@ test("an aside orphaned after a folded pass does not distil itself again", async
   const runner = loopRunner([{ text: "done" }]);
   const alone = await runDistillPass(
     passInput({ threadId: "aside", annotationId: "", page: null, markedText: "", messages: SIDE }),
-    { store, adapter, run: runner.run, now: () => JULY_20 },
+    { store: pass, adapter, run: runner.run, now: () => JULY_20 },
   );
 
   expect(alone).toEqual({ ran: false, skipped: "no-new-messages" });
@@ -838,9 +841,9 @@ test("an aside orphaned after a folded pass does not distil itself again", async
 });
 
 test("a book's mark cursor is its own, so a sibling book's pass never buries it", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   await runDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
@@ -853,17 +856,17 @@ test("a book's mark cursor is its own, so a sibling book's pass never buries it"
       bookName: "primer.pdf",
       annotations: [{ id: "b1", page: 2, text: "positional encoding", createdAt: 500 }],
     },
-    { store, adapter, now: () => JULY_20, ...scriptedRunner([{ text: "done" }]) },
+    { store: pass, adapter, now: () => JULY_20, ...scriptedRunner([{ text: "done" }]) },
   );
 
   expect(other).toMatchObject({ ran: true, ok: true });
-  expect((await store.getMeta()).distilledMarks).toEqual({ "book-1": 900, "book-2": 500 });
+  expect((await store.getMeta(TOPIC)).distilledMarks).toEqual({ "book-1": 900, "book-2": 500 });
 });
 
 test("a failed pass leaves both cursors where they were", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const result = await runDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ error: "connection reset" }]),
@@ -873,7 +876,7 @@ test("a failed pass leaves both cursors where they were", async () => {
   // Nothing moved, so the next trigger distils this transcript and these marks
   // again — the alternative is a conversation that is never observed and
   // nothing left to say so.
-  expect(await store.getMeta()).toEqual({
+  expect(await store.getMeta(TOPIC)).toEqual({
     lastDistilledAt: null,
     lastAnnotationDistillAt: null,
   });
@@ -882,7 +885,7 @@ test("a failed pass leaves both cursors where they were", async () => {
 // --- cancellation ---
 
 test("an aborted pass stops, and does not advance the stamps", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const controller = new AbortController();
   const runner = loopRunner(
     [
@@ -911,7 +914,7 @@ test("an aborted pass stops, and does not advance the stamps", async () => {
   );
 
   const attempt = runDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     run: runner.run,
     signal: controller.signal,
@@ -922,7 +925,7 @@ test("an aborted pass stops, and does not advance the stamps", async () => {
   // The loop stopped there: a run that carried on would have asked for a third.
   expect(runner.streamed()).toBe(2);
   expect(await store.list()).toHaveLength(1); // the write it made stays on disk
-  expect(await store.getMeta()).toEqual({
+  expect(await store.getMeta(TOPIC)).toEqual({
     lastDistilledAt: null,
     lastAnnotationDistillAt: null,
   });
@@ -1145,7 +1148,7 @@ test("countNewReaderMessages counts only what the reader said after the cursor",
 });
 
 test("a book with only marks is distilled on its own, and moves its cursor", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const result = await runMarksDistillPass(
     {
       topicName: "investing",
@@ -1156,11 +1159,11 @@ test("a book with only marks is distilled on its own, and moves its cursor", asy
         mark({ id: "m2", page: 140, text: "margin of safety", createdAt: 400 }),
       ],
     },
-    { store, adapter, now: () => JULY_17, ...scriptedRunner([{ text: "done" }]) },
+    { store: pass, adapter, now: () => JULY_17, ...scriptedRunner([{ text: "done" }]) },
   );
 
   expect(result).toMatchObject({ ran: true, ok: true });
-  expect(await store.getMeta()).toEqual({
+  expect(await store.getMeta(TOPIC)).toEqual({
     lastDistilledAt: JULY_17,
     lastAnnotationDistillAt: null,
     distilledMarks: { "book-7": 400 },
@@ -1175,7 +1178,7 @@ test("a book with only marks is distilled on its own, and moves its cursor", asy
 // cursor = the newest of all) the second pass here sees nothing and m0..m4 are
 // gone from the app's view of the book for good.
 test("a backlog bigger than the cap is drained across passes, not stepped over", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const annotations = Array.from({ length: 45 }, (_, i) =>
     mark({ id: `m${i}`, page: i + 1, text: `passage ${i}`, createdAt: 100 + i }),
   );
@@ -1188,33 +1191,33 @@ test("a backlog bigger than the cap is drained across passes, not stepped over",
 
   const first = loopRunner([{ text: "done" }]);
   expect(
-    await runMarksDistillPass(input, { store, adapter, run: first.run, now: () => JULY_17 }),
+    await runMarksDistillPass(input, { store: pass, adapter, run: first.run, now: () => JULY_17 }),
   ).toMatchObject({ ran: true, ok: true });
   // The oldest 40 went to the model, and the cursor is the newest of those.
   expect(first.requests[0].task).toContain("[m0]");
   expect(first.requests[0].task).toContain("[m39]");
   expect(first.requests[0].task).not.toContain("[m40]");
-  expect((await store.getMeta()).distilledMarks).toEqual({ "book-7": 139 });
+  expect((await store.getMeta(TOPIC)).distilledMarks).toEqual({ "book-7": 139 });
 
   const second = loopRunner([{ text: "done" }]);
   expect(
-    await runMarksDistillPass(input, { store, adapter, run: second.run, now: () => JULY_20 }),
+    await runMarksDistillPass(input, { store: pass, adapter, run: second.run, now: () => JULY_20 }),
   ).toMatchObject({ ran: true, ok: true });
   // The five the cap left behind, and nothing the first pass already read.
   expect(second.requests[0].task).toContain("[m44]");
   expect(second.requests[0].task).toContain("[m40]");
   expect(second.requests[0].task).not.toContain("[m39]");
-  expect((await store.getMeta()).distilledMarks).toEqual({ "book-7": 144 });
+  expect((await store.getMeta(TOPIC)).distilledMarks).toEqual({ "book-7": 144 });
 
   // And now there is nothing left: every one of the 45 has been looked at.
   const third = loopRunner([{ text: "done" }]);
   expect(
-    await runMarksDistillPass(input, { store, adapter, run: third.run, now: () => JULY_20 }),
+    await runMarksDistillPass(input, { store: pass, adapter, run: third.run, now: () => JULY_20 }),
   ).toEqual({ ran: false, skipped: "no-new-marks" });
 });
 
 test("a marks pass below its threshold does not reach the model", async () => {
-  const { store, adapter } = makeStore();
+  const { pass, adapter } = makeStore();
   const runner = loopRunner([{ text: "done" }]);
   const result = await runMarksDistillPass(
     {
@@ -1224,7 +1227,7 @@ test("a marks pass below its threshold does not reach the model", async () => {
       annotations: [mark({ id: "m1", page: 20, text: "owner earnings", createdAt: 100 })],
       minNewMarks: 5,
     },
-    { store, adapter, run: runner.run, now: () => JULY_17 },
+    { store: pass, adapter, run: runner.run, now: () => JULY_17 },
   );
 
   expect(result).toEqual({ ran: false, skipped: "no-new-marks" });
@@ -1232,7 +1235,7 @@ test("a marks pass below its threshold does not reach the model", async () => {
 });
 
 test("a failed marks pass leaves the book's cursor where it was", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const result = await runMarksDistillPass(
     {
       topicName: "investing",
@@ -1240,11 +1243,11 @@ test("a failed marks pass leaves the book's cursor where it was", async () => {
       bookName: "margin-of-safety.pdf",
       annotations: [mark({ id: "m1", page: 20, text: "owner earnings", createdAt: 100 })],
     },
-    { store, adapter, now: () => JULY_17, ...scriptedRunner([{ error: "connection reset" }]) },
+    { store: pass, adapter, now: () => JULY_17, ...scriptedRunner([{ error: "connection reset" }]) },
   );
 
   expect(result).toMatchObject({ ran: true, ok: false });
-  expect((await store.getMeta()).distilledMarks).toBeUndefined();
+  expect((await store.getMeta(TOPIC)).distilledMarks).toBeUndefined();
 });
 
 test("the marks prompt says there was no conversation and refuses comprehension claims", () => {
@@ -1318,7 +1321,7 @@ test("the dating rule names the last covered day and never the day the pass runs
 });
 
 test("a pass dates the prompt by the messages, not by the day it runs", async () => {
-  const { store, adapter } = makeStore();
+  const { pass, adapter } = makeStore();
   const runner = loopRunner([{ text: "done" }]);
   // The arrears sweep reaching a thread three days after the conversation.
   const spoke = noon(2026, 7, 17);
@@ -1336,7 +1339,7 @@ test("a pass dates the prompt by the messages, not by the day it runs", async ()
         { role: "ai", text: "every token attends to every token", ts: spoke + 60_000 },
       ],
     },
-    { store, adapter, now: () => JULY_20, run: runner.run },
+    { store: pass, adapter, now: () => JULY_20, run: runner.run },
   );
 
   const sent = runner.requests[0];
@@ -1346,7 +1349,7 @@ test("a pass dates the prompt by the messages, not by the day it runs", async ()
 });
 
 test("a marks pass dates the prompt by the marks, not by the day it runs", async () => {
-  const { store, adapter } = makeStore();
+  const { pass, adapter } = makeStore();
   const runner = loopRunner([{ text: "done" }]);
   await runMarksDistillPass(
     {
@@ -1358,7 +1361,7 @@ test("a marks pass dates the prompt by the marks, not by the day it runs", async
         mark({ id: "m2", page: 24, text: "float", createdAt: noon(2026, 7, 16) }),
       ],
     },
-    { store, adapter, now: () => JULY_20, run: runner.run },
+    { store: pass, adapter, now: () => JULY_20, run: runner.run },
   );
 
   const sent = runner.requests[0];
@@ -1380,14 +1383,14 @@ test("distillCoverage reports the stretch a failed pass leaves behind", () => {
 });
 
 test("a failed pass carries the message range it did not fold in", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const spoke = noon(2026, 7, 17);
   const messages: DistillMessage[] = [
     { role: "user", text: "first", ts: spoke },
     { role: "ai", text: "answer", ts: spoke + 1000 },
     { role: "user", text: "second", ts: spoke + 2000 },
   ];
-  await store.setMeta({
+  await store.setMeta(TOPIC, {
     lastDistilledAt: null,
     lastAnnotationDistillAt: null,
     distilledMessages: { "thread-1": 1 },
@@ -1403,7 +1406,7 @@ test("a failed pass carries the message range it did not fold in", async () => {
       markedText: "",
       messages,
     },
-    { store, adapter, now: () => JULY_20, ...scriptedRunner([{ error: "connection reset" }]) },
+    { store: pass, adapter, now: () => JULY_20, ...scriptedRunner([{ error: "connection reset" }]) },
   );
 
   expect(result).toMatchObject({ ran: true, ok: false });

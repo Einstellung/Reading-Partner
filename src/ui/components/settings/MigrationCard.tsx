@@ -46,8 +46,9 @@ export default function MigrationCard() {
     <div className={CARD}>
       <p className="m-0 text-xs text-faint-foreground">
         A one-time repair of data written before 0.12: messages get ids, anchors in observation
-        files are fixed, tool-call residue is cleaned out of bodies, and observation ids widen.
-        Every file it is about to touch is copied into migration-backups/&lt;timestamp&gt; first.
+        files are fixed, tool-call residue is cleaned out of bodies, observation ids widen, and the
+        per-topic observation directories become one. Every file it is about to touch is copied into
+        migration-backups/&lt;timestamp&gt; first.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">

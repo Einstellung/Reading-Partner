@@ -9,7 +9,7 @@
 // Deliberately not here:
 //   library.json, reading-state.json, topics.json — the book is one record in
 //     each, and a record-level delete already travels (merge/records.ts).
-//   memory-<topicId>/ — observations are stored by topic, not by book, and are
+//   observations/ — an observation is not one book's, and the ones that are get
 //     tombstoned one record at a time by their own store.
 //   retell-*, outline-*, rehearsal-*, runs-rehearsal-*, runs/ — named for their
 //     own ids, not for the book, and deleted by the stores that own them.

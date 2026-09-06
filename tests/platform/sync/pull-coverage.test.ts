@@ -61,10 +61,10 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
     "what was said on one pass is read when that pass's row is opened, and the file is " +
     "written once under the run's own id, so a pull can add one but never change the one on screen",
   "statements.json": "the statement store reads the file on every call and holds nothing",
-  // Listed above "memory-" so a claim reports this reason rather than the
+  // Listed above "observations" so a claim reports this reason rather than the
   // observation store's, which is about a different file entirely.
   "memory-usage-": "append-only, and nothing reads it yet",
-  "memory-": "the observation store reads its entries per query",
+  observations: "the observation store reads its entries per query",
   "article-bodies/":
     "a kept article's body is read when the article is opened, and the file is named " +
     "after its own bytes, so a pull can add one but never change the one on screen",
@@ -96,10 +96,10 @@ function sampleForRegex(literal: string): string {
 const DIRECTORY_SAMPLES: Record<string, string[]> = {
   "article-bodies": ["article-bodies/0123456789abcdef0123456789abcdef.json"],
   runs: ["runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json"],
-  "memory-": [
-    "memory-topic1/entries.jsonl",
-    "memory-topic1/index.json",
-    "memory-topic1/deleted-observations.jsonl",
+  observations: [
+    "observations/m-ab12cd34ef567890.md",
+    "observations/index.md",
+    "observations/deleted-observations.jsonl",
   ],
   "prep-": [
     "prep-book1/state.json",
@@ -115,7 +115,7 @@ function perKeySamples(): { pattern: string; paths: string[] }[] {
     out.push({ pattern: m[0], paths: [sampleForRegex(m[0])] });
   }
   // Two ways inSyncRange names a directory: a prefix its name varies inside
-  // (memory-<topicId>), and a fixed name (article-bodies). Both need a sample,
+  // (prep-<bookId>), and a fixed name (observations). Both need a sample,
   // because what a directory holds is the one thing its name cannot say.
   const dirs = [
     ...inRangeBody.matchAll(/startsWith\("([^"]+)"\)/g),

@@ -22,7 +22,9 @@ statement 两种 kind：
 
 字段：`kind`、`text`、`evidence[]`、`contradictedBy[]`、`established`、`lastSupported`、`supersededBy`、`author`；concern 另加预期复现间隔和 `lapsed`。除 `text` 外全部由代码从锚点和日期算，不经模型。
 
-目录 `src/memory/statements/`，合并策略 `records`。"profile"这个词的旧用法（`loadProfile`、`readerProfileSection`、`user-profile.md`）按下文的作废清单删函数、留文件，名字空出来给新的。
+观察全部存在一个目录 `observations/` 里：一条观察一个 `m-<16hex>.md`，一份 `index.md`、一份 `meta.json`、一份 `deleted-observations.jsonl`。id 本来就全局唯一，topic 是 frontmatter 上的一个字段（写入时从会话的 topicId 填），不是目录。index 的每行带 topic，按 topic 取索引就不用把每个文件都打开；发给模型的那份投影里不印 topic。`meta.json` 的 `lastDistilledAt` 和 `lastAnnotationDistillAt` 按 topicId 键，蒸馏节流仍然按 topic；`distilledMessages` 和 `distilledMarks` 的键本来就是 threadId 和 bookId，全局一份。
+
+statement 目录 `src/memory/statements/`，合并策略 `records`。"profile"这个词的旧用法（`loadProfile`、`readerProfileSection`、`user-profile.md`）按下文的作废清单删函数、留文件，名字空出来给新的。
 
 ## 边
 
@@ -161,7 +163,7 @@ supersede 一次可以指多条：两条 statement 说同一件事就合成一�
 
 statement 层的检索用同一套方法在 statement 上重新量，量出不行再走 [28](./28-记忆与画像调研.md) 那条语义路线。索引 statement 时把它的证据观察里的词并进索引（代码做），覆盖读者自己会怎么说。
 
-作用域撤掉。topic 会改，它只是归档便利，不是检索键。今天的 `observationScope` 判据是"不是这本书"而不是"是另一本书"，印出来的标签 45% 的时候是假的，而且印在 prompt 里。
+作用域撤掉。topic 会改，它只是归档便利，不是检索键。原来的 `observationScope` 判据是"不是这本书"而不是"是另一本书"，印出来的标签 45% 的时候是假的，而且印在 prompt 里；现在讲课那一段只留"是不是这本书"（决定印正文还是只印索引行）和"在不在当前章"（只排序不过滤），标签不印。
 
 三个入口，都不需要 topic：当下工作记忆的内容（最近几轮、光标下的文字、书名章节）、稳定锚点走边、使用日志给的激活度。相似度只在入口出现一次。
 
