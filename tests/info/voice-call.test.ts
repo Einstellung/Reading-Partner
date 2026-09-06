@@ -47,6 +47,7 @@ class Harness {
 
   private listener: ((e: ConversationEvent) => void) | null = null;
   private startError: Error | null = null;
+  private stopError: Error | null = null;
   private stopAnswer: SpeechStopped = { utterance: 1, sentence: 0, positionMs: 0, durationMs: 0 };
   private runs = new Map<
     number,
@@ -79,6 +80,7 @@ class Harness {
       },
       speakStop: async () => {
         this.calls.push({ command: "speak_stop" });
+        if (this.stopError) throw this.stopError;
         return this.stopAnswer;
       },
     };
@@ -115,6 +117,11 @@ class Harness {
 
   failStart(e: Error): void {
     this.startError = e;
+  }
+
+  /** The player will not stop — the command rejects rather than answering. */
+  failStop(e: Error): void {
+    this.stopError = e;
   }
 
   answerStopAt(sentence: number): void {
@@ -347,6 +354,30 @@ test("stop hangs up: the model is aborted, the player stopped, the call closed",
   expect(h.call.snapshot().error).toBeNull();
   // What the user did hear is kept rather than lost.
   expect(h.entry(KICKOFF_TURN, "ai")?.interrupted).toBe(true);
+});
+
+test("a player that will not stop does not cost the reply the user heard", async () => {
+  const h = new Harness();
+  h.failStop(new Error("the player is wedged"));
+  await h.open();
+  await h.stream(KICKOFF_TURN, REPLY); // two sentences handed over, one pending
+
+  await h.call.stop();
+
+  // A cut is abort, speak_stop, record in that order, and a rejected speak_stop
+  // used to end the batch before the record — so the reply that had just been
+  // spoken was never written down, on exactly the endings (a lost call, an app
+  // sent to the background) where the player is most likely to be stuck.
+  expect(h.commands("speak_stop")).toHaveLength(1);
+  expect(h.entry(KICKOFF_TURN, "ai")).toEqual({
+    role: "ai",
+    turn: KICKOFF_TURN,
+    text: `${S0}${S1}\n${INTERRUPTED_MARK}`,
+    interrupted: true,
+  });
+  // The call still came down; a failed command is not the end of the call.
+  expect(h.calls.map((c) => c.command).slice(-2)).toEqual(["speak_stop", "stop"]);
+  expect(h.call.snapshot().running).toBe(false);
 });
 
 test("a call that went away ends and says why", async () => {

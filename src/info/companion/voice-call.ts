@@ -218,47 +218,66 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       );
   }
 
+  // One effect. Everything that can reject is a native command; what to do when
+  // one does is decided by the loop below.
+  async function performOne(e: SessionEffect): Promise<void> {
+    switch (e.type) {
+      case "ask":
+        // Not awaited: the turn streams alongside the rest of the effects,
+        // which is what the `thinking` orb behind it is for.
+        startAsk(e.turn, e.text);
+        break;
+      case "abort":
+        asks.get(e.turn)?.abort();
+        asks.delete(e.turn);
+        break;
+      case "speak-begin":
+        utterance = await deps.bridge.speakBegin();
+        break;
+      case "speak-push":
+        await deps.bridge.speakPush(e.text);
+        break;
+      case "speak-close":
+        await deps.bridge.speakClose();
+        break;
+      case "speak-stop": {
+        const at = await deps.bridge.speakStop();
+        utterance = null;
+        // Behind the rest of this batch: the record it may correct is in it.
+        feed(() => session.stopped(e.turn, at));
+        break;
+      }
+      case "volume":
+        await deps.bridge.setVolume(e.value);
+        break;
+      case "orb":
+        setPhase(e.phase);
+        break;
+      case "record":
+        // Everything but the note the greeting was asked with. It is the
+        // driver's sentence, not the reader's, and it is never rendered.
+        if (!(e.entry.role === "user" && e.entry.turn === KICKOFF_TURN)) {
+          deps.transcript.record(e.entry);
+        }
+        break;
+    }
+  }
+
+  // A batch, effect by effect. A failure stops that one effect and nothing
+  // else, which is the rule `enqueue` already applies between batches: an
+  // effect that failed is one native command that did not happen, not the end
+  // of the call. Applying it per batch instead is what made a stuck player cost
+  // the transcript — a cut is `abort`, `speak-stop`, `record` in that order
+  // (voice-session.ts), `speak_stop` is a command that really can reject
+  // (plugins/voice/src/session.rs), and the reply the user did hear was then
+  // never written down. Endings are when the player is most likely to be stuck,
+  // which is when the last reply is the one at stake.
   async function perform(effects: SessionEffect[]): Promise<void> {
     for (const e of effects) {
-      switch (e.type) {
-        case "ask":
-          // Not awaited: the turn streams alongside the rest of the effects,
-          // which is what the `thinking` orb behind it is for.
-          startAsk(e.turn, e.text);
-          break;
-        case "abort":
-          asks.get(e.turn)?.abort();
-          asks.delete(e.turn);
-          break;
-        case "speak-begin":
-          utterance = await deps.bridge.speakBegin();
-          break;
-        case "speak-push":
-          await deps.bridge.speakPush(e.text);
-          break;
-        case "speak-close":
-          await deps.bridge.speakClose();
-          break;
-        case "speak-stop": {
-          const at = await deps.bridge.speakStop();
-          utterance = null;
-          // Behind the rest of this batch: the record it may correct is in it.
-          feed(() => session.stopped(e.turn, at));
-          break;
-        }
-        case "volume":
-          await deps.bridge.setVolume(e.value);
-          break;
-        case "orb":
-          setPhase(e.phase);
-          break;
-        case "record":
-          // Everything but the note the greeting was asked with. It is the
-          // driver's sentence, not the reader's, and it is never rendered.
-          if (!(e.entry.role === "user" && e.entry.turn === KICKOFF_TURN)) {
-            deps.transcript.record(e.entry);
-          }
-          break;
+      try {
+        await performOne(e);
+      } catch (err) {
+        console.error("voice call effect failed", err);
       }
     }
   }
