@@ -100,6 +100,10 @@ import { OVERLAY_Z } from "./ui/components/ui/overlay";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import AppSidebar from "./ui/components/common/AppSidebar";
+import {
+  readSidebarCollapsed,
+  writeSidebarCollapsed,
+} from "./ui/components/base/shell-sidebar";
 import { activeNavFor, screenForNav } from "./ui/components/base/shell-nav";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import { clearScrollMemory } from "./ui/components/common/scroll-memory";
@@ -234,6 +238,21 @@ export default function App() {
     readSidebarOpen(browserPrefStore(window), columnLayoutNow(window)),
   );
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("traces");
+
+  // The shell sidebar's own collapsed state (docs/51), the same kind of
+  // per-device preference and read the same way: synchronously at the first
+  // render, so the shell never paints the labelled column and then narrows it.
+  // Below `lg` it decides nothing — the sidebar is the rail either way — so it
+  // is kept as the reader left it and is there again on the next wide screen.
+  const [shellSidebarCollapsed, setShellSidebarCollapsed] = useState(() =>
+    readSidebarCollapsed(browserPrefStore(window)),
+  );
+  const toggleShellSidebar = useCallback(() => {
+    setShellSidebarCollapsed((collapsed) => {
+      writeSidebarCollapsed(browserPrefStore(window), !collapsed);
+      return !collapsed;
+    });
+  }, []);
 
   // Crossing the breakpoint re-decides the panel. Widening into a column adopts
   // whatever this device last chose; narrowing back into a drawer shuts it,
@@ -1274,7 +1293,8 @@ export default function App() {
             }}
             onOpenSettings={openSettings}
             settingsAlert={syncReport.alert !== "none"}
-            topicCount={topics?.length ?? null}
+            collapsed={shellSidebarCollapsed}
+            onToggleCollapsed={toggleShellSidebar}
           />
         )}
         {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the
