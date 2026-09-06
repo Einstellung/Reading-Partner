@@ -48,6 +48,7 @@
 | 搬目录、切子域、动分层表 | 开发环境 |
 | 拿 grep 判断"这东西没人用"、按结论删代码 | 开发环境 |
 | 在 worktree 里起 dev server 做实验 | 开发环境 |
+| 无头截图核对界面配色 | 开发环境 |
 | vite dev server 端口占用起不来、写 Tauri 插件命令的参数 | 开发环境 |
 | 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
 | 查首屏耗时、字体加载开销 | WebKit / webview |
@@ -284,6 +285,7 @@
 - [122-spyon-swaps-an-esm-export-and-puts-it-back](./122-spyon-swaps-an-esm-export-and-puts-it-back.md) — bun 的 ESM 命名空间可写：`spyOn(ns, "导出名")` 导入方看得见，`mockRestore()` 能还原，命名导出/默认导出/再导出链都成立；这是 119 之外替换模块导出的另一条路，还原写在 finally 里。`createXStore(io)` 的接线表在 import 时求值，`loadPdfjs,` 这种抄值的字段读不到那个槽，spy 就白装了（实测 store-disk 6 个用例红 4 个），一律写成 `() => loadPdfjs()`
 - [135-headless-chrome-window-size-is-not-the-viewport](./135-headless-chrome-window-size-is-not-the-viewport.md) — 无头截图核对渲染时 `--window-size` 给的是外窗，视口矮 87px、宽度还有 500px 下限，图底部被裁掉一截还容易误判成布局出界；窗口开大 + `--force-device-scale-factor=1` + 零边距包装页
 - [218-virtual-time-budget-hangs-on-a-vite-dev-page](./218-virtual-time-budget-hangs-on-a-vite-dev-page.md) — `--virtual-time-budget` 在 vite dev server 的页面上永远等不到「加载完」（HMR 的 WebSocket 一直挂着），Chrome 不退出也不写 PNG；拍 dev server 就别加这个 flag，要等异步内容就拍 `vite preview` 的静态产物
+- [221-two-overlay-components-blank-a-headless-harness](./221-two-overlay-components-blank-a-headless-harness.md) — 无头 Chrome 的静态探针页里挂 `PenToolbar` 或 `MoreMenu`，React #185（更新深度超限）把整棵树打白，别的组件都正常；成因未定，排除过内联 props 和 `.safe-probe` 的量值，两者唯一共同点是 `useOverlaySafePadding()`。探针页别放这两个
 - [123-vite-serves-node-modules-over-http](./123-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
 - [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id
