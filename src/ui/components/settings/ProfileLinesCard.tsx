@@ -102,7 +102,7 @@ export default function ProfileLinesCard() {
 
   return (
     <div className={CARD}>
-      <p className="m-0 text-xs text-[#777]">
+      <p className="m-0 text-xs text-faint-foreground">
         These are the things an earlier version of this app had written down about you. Tick the
         ones that still hold and they are kept as your own words, which is what the AI goes by from
         now on. The rest stop being read — the files stay on disk either way.
@@ -128,7 +128,7 @@ export default function ProfileLinesCard() {
       )}
 
       {state.wrote !== null && state.wrote > 0 && (
-        <p className="m-0 text-xs text-[#777]">{writtenNote(state.wrote)}</p>
+        <p className="m-0 text-xs text-faint-foreground">{writtenNote(state.wrote)}</p>
       )}
       {state.error && <p className="m-0 text-xs text-[#b91c1c]">{state.error}</p>}
     </div>
@@ -148,7 +148,7 @@ function Group({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="m-0 text-xs font-medium text-[#555]">{title}</p>
+      <p className="m-0 text-xs font-medium text-muted-foreground">{title}</p>
       {lines.map((line) => {
         const pick = state.picks[line.text];
         return (

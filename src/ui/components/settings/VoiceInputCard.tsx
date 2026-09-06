@@ -70,7 +70,7 @@ export default function VoiceInputCard({
           }
         />
       </Label>
-      <p className="m-0 text-xs text-[#777]">
+      <p className="m-0 text-xs text-faint-foreground">
         Hold the mic in the chat box to talk. SiliconFlow's SenseVoice tier is free and its API key
         works out of the box; any OpenAI-compatible transcription endpoint works too.
       </p>

@@ -43,7 +43,7 @@ export type MoreItem =
 // size or colour; this project's do. Identical modifier chains or tailwind-merge
 // keeps both (docs/pitfall/78).
 const ROW =
-	"gap-2.5 text-[#333] data-[disabled]:cursor-default data-[disabled]:opacity-40 " +
+	"gap-2.5 text-muted-foreground data-[disabled]:cursor-default data-[disabled]:opacity-40 " +
 	"[&_svg:not([class*='size-'])]:size-auto [&_svg:not([class*='text-'])]:text-current";
 
 export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: boolean }) {
@@ -62,9 +62,9 @@ export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: 
 				<button
 					type="button"
 					className={
-						"relative flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent text-[#555] " +
+						"relative flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground " +
 						"cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11 " +
-						"data-[state=open]:bg-black/5 data-[state=open]:text-[#1b1b1b]"
+						"data-[state=open]:bg-black/5 data-[state=open]:text-foreground"
 					}
 					title={alert ? "More — sync needs attention" : "More"}
 					aria-label={alert ? "More — sync needs attention" : "More"}
@@ -78,7 +78,7 @@ export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: 
 					{/* Settings lives in here, so a Settings-level warning rides the
 					    trigger the same way it rides the gear on the home headers. */}
 					{alert && (
-						<span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[#b45309] ring-2 ring-[#fafafa]" />
+						<span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[#b45309] ring-2 ring-background" />
 					)}
 				</button>
 			</DropdownMenuTrigger>
@@ -99,7 +99,7 @@ export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: 
 							<span
 								className={
 									"flex h-6 w-6 flex-none items-center justify-center rounded-md " +
-									(on ? "bg-[#efecfb] text-[#4a3a9e]" : "text-[#666]")
+									(on ? "bg-secondary text-secondary-foreground" : "text-muted-foreground")
 								}
 							>
 								<Icon size={18} />
@@ -109,7 +109,7 @@ export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: 
 								<span
 									className={
 										"flex-none text-[11px] font-medium " +
-										(item.on ? "text-[#4a3a9e]" : "text-[#aaa]")
+										(item.on ? "text-secondary-foreground" : "text-faint-foreground")
 									}
 								>
 									{item.on ? "On" : "Off"}
@@ -124,7 +124,7 @@ export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: 
 							key={item.label}
 							checked={item.on}
 							disabled={item.disabled}
-							className={ROW + (on ? " text-[#4a3a9e]" : "")}
+							className={ROW + (on ? " text-secondary-foreground" : "")}
 							onSelect={(e) => {
 								e.preventDefault();
 								item.onClick();

@@ -17,28 +17,28 @@ export function RetellDecisionCard({ payload }: CardComponentProps<RetellDecisio
   return (
     <div className="w-full max-w-md rounded-xl border border-black/10 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-primary">
           Chapter {payload.chapter}
         </span>
         <span className="flex-1" />
         <Badge className="shrink-0">{kept ? "In the retell" : "Cut"}</Badge>
       </div>
-      <div className="mt-1 text-[15px] font-medium text-[#1b1b1b]">{payload.title}</div>
+      <div className="mt-1 text-[15px] font-medium text-foreground">{payload.title}</div>
       {payload.points.length > 0 && (
         <ul className="m-0 mt-2.5 flex list-none flex-col gap-1.5 p-0">
           {payload.points.map((p, i) => (
-            <li key={i} className="flex items-start gap-2 text-[13px] leading-snug text-[#333]">
-              <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-[#d0d0d0]" />
+            <li key={i} className="flex items-start gap-2 text-[13px] leading-snug text-muted-foreground">
+              <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-muted-strong" />
               <span className="min-w-0 flex-1">{p}</span>
             </li>
           ))}
         </ul>
       )}
       {payload.figure && (
-        <div className="mt-2 text-[12px] text-[#666]">Figure: {payload.figure}</div>
+        <div className="mt-2 text-[12px] text-muted-foreground">Figure: {payload.figure}</div>
       )}
       {payload.note && (
-        <div className="mt-2 text-[12px] leading-snug text-[#999]">{payload.note}</div>
+        <div className="mt-2 text-[12px] leading-snug text-faint-foreground">{payload.note}</div>
       )}
     </div>
   );

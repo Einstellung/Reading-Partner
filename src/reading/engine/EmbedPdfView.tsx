@@ -67,6 +67,14 @@ function useSharedEngine(): { engine: PdfEngine | null; isLoading: boolean; erro
   return { engine, isLoading: !engine && !error, error };
 }
 
+// The one colour on this page that is not a token. It paints on the paper, in
+// between the annotation palette's yellow and the text layer's blue selection,
+// and it has to be told apart from both at 24% over white — which is a job for
+// a saturated hue. The moss palette has none: --primary at any usable alpha
+// mixes to a neutral grey on paper (measured 2026-09-06), so the quote keeps
+// the violet it was tuned in, as the annotation palette keeps its own colours.
+const QUOTE_HIGHLIGHT_COLOR = "#4a3a9e";
+
 // Non-interactive overlay for the transient AI-cited-quote highlight. Rendered
 // inside each page box; only paints on the cited page. pointerEvents:none so a
 // click on it still reaches the selection layer's empty-space handler (dismiss).
@@ -92,7 +100,7 @@ function QuoteHighlightLayer(props: {
               top: `${r.origin.y * scale}px`,
               width: `${r.size.width * scale}px`,
               height: `${r.size.height * scale}px`,
-              backgroundColor: "#4a3a9e",
+              backgroundColor: QUOTE_HIGHLIGHT_COLOR,
               opacity: 0.24,
               borderRadius: "2px",
             }}
@@ -120,8 +128,8 @@ function QuoteHighlightLayer(props: {
           maxWidth: "80%",
           padding: "6px 10px",
           borderRadius: "8px",
-          backgroundColor: "#efecfb",
-          color: "#4a3a9e",
+          backgroundColor: "var(--color-secondary)",
+          color: "var(--color-secondary-foreground)",
           fontSize: "13px",
           lineHeight: 1.4,
           boxShadow: "0 1px 4px rgba(0,0,0,0.15)",

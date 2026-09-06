@@ -195,8 +195,6 @@ const PALE_ALLOWED = new Map([
   ["ui/components/info/BriefingPage.tsx", ["bg-[#fdf8ee]"]],
   ["ui/components/info/InfoCards.tsx", ["bg-[#fdf5f3]", "bg-[#f8e8e4]"]],
   ["ui/components/library/SavedArticleView.tsx", ["bg-[#fdf8ec]"]],
-  ["ui/components/markdown/MarkdownRenderer.tsx", ["bg-[#efecfb]", "bg-[#f6f4fd]"]],
-  ["ui/components/reader/MoreMenu.tsx", ["bg-[#efecfb]"]],
 ]);
 
 // 0xe0 is the line: every neutral this palette owns is above it (--muted-strong

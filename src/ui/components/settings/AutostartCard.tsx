@@ -29,7 +29,7 @@ export default function AutostartCard({
         <Checkbox checked={device.autostart} onCheckedChange={(v) => toggle(v === true)} />
         Start Reading Partner when this computer starts
       </Label>
-      <p className="m-0 text-xs text-[#777]">
+      <p className="m-0 text-xs text-faint-foreground">
         Off by default. Turn it on for the machine you want collecting your sources all day —
         together with the tray, it means the briefing is being built whether or not you opened the
         app. This setting belongs to this computer and is not carried to your other devices.

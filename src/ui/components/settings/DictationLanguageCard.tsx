@@ -39,7 +39,7 @@ export default function DictationLanguageCard({
           }
         />
       </FieldGrid>
-      <p className="m-0 text-xs text-[#777]">
+      <p className="m-0 text-xs text-faint-foreground">
         The language the iPhone listens for when you hold the bar and talk. Speech is transcribed on
         the phone and never uploaded. Speaking a language other than this one does not produce a
         rough transcript — it produces a confident wrong one, so set it to the language you actually

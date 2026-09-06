@@ -203,11 +203,11 @@ export default function OAuthCard({
                   Submit
                 </Button>
               </div>
-              <p className="m-0 text-xs text-[#777]">{pasteHint}</p>
+              <p className="m-0 text-xs text-faint-foreground">{pasteHint}</p>
             </div>
           )}
 
-          <p className="m-0 text-xs text-[#777]">Signing in here signs out other providers.</p>
+          <p className="m-0 text-xs text-faint-foreground">Signing in here signs out other providers.</p>
         </>
       )}
       {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
@@ -231,7 +231,7 @@ function DeviceCodePanel({
   onRetry: () => void;
 }) {
   if (!state || state.status === "starting") {
-    return <p className="m-0 text-xs text-[#777]">Requesting a sign-in code…</p>;
+    return <p className="m-0 text-xs text-faint-foreground">Requesting a sign-in code…</p>;
   }
   if (state.status === "awaiting") {
     return (
@@ -244,7 +244,7 @@ function DeviceCodePanel({
             Open sign-in page
           </Button>
         </div>
-        <p className="m-0 text-xs text-[#777]">
+        <p className="m-0 text-xs text-faint-foreground">
           Enter this code at {state.verificationUri}. Waiting for authorization…
         </p>
         <Button type="button" variant="link" size="link" className={LINK} onClick={onCancel}>

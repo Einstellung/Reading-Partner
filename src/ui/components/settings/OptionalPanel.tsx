@@ -27,7 +27,7 @@ export default function OptionalPanel({
 }) {
   return (
     <>
-      <p className="mt-0 mb-5 text-xs text-[#777]">
+      <p className="mt-0 mb-5 text-xs text-faint-foreground">
         Keys for outside services, each of them optional. The two voice keys are kept with this
         device's credentials and never sync, so every device needs its own.
       </p>
@@ -49,7 +49,7 @@ export default function OptionalPanel({
                 }
               />
             </Label>
-            <p className="m-0 text-xs text-[#777]">
+            <p className="m-0 text-xs text-faint-foreground">
               A free key from semanticscholar.org avoids the shared rate limits that make paper
               fetching stall.
             </p>

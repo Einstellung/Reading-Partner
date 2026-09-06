@@ -31,7 +31,7 @@ import { Button } from "../ui/button";
 const BLOCK = "border-l-2 border-muted-strong pl-3";
 
 const LABEL =
-  "shrink-0 text-[calc(0.6875rem*var(--chat-scale,1))] font-medium uppercase tracking-wider text-[#8a7fd0]";
+  "shrink-0 text-[calc(0.6875rem*var(--chat-scale,1))] font-medium uppercase tracking-wider text-primary";
 
 // A Button rather than a bare <button>: the 44px touch target belongs to the
 // size table (ui/button.tsx), and these rows are pressed on a tablet.
@@ -50,16 +50,16 @@ function AsideReceiptRow({
       size="footnote"
       title={item.question}
       onClick={onOpen}
-      className="w-full items-baseline justify-start gap-2 text-left text-[#555]"
+      className="w-full items-baseline justify-start gap-2 text-left text-muted-foreground"
     >
       <span className={LABEL}>Aside</span>
       {anchor !== "" && (
-        <span className="max-w-[10em] shrink-0 truncate tabular-nums text-[#a99f88]">
+        <span className="max-w-[10em] shrink-0 truncate tabular-nums text-faint-foreground">
           {anchor}
         </span>
       )}
       <span className="min-w-0 flex-1 truncate">{item.question}</span>
-      <span aria-hidden className="shrink-0 leading-none text-[#c0b6a0]">
+      <span aria-hidden className="shrink-0 leading-none text-faint-foreground">
         ›
       </span>
     </Button>
@@ -83,12 +83,12 @@ export function AsideReceiptCard({ payload, dispatch }: CardComponentProps<Aside
         asChild
         variant="ghost"
         size="footnote"
-        className="flex w-full cursor-pointer items-baseline justify-start gap-2 text-left text-[#6a6252] [&::-webkit-details-marker]:hidden"
+        className="flex w-full cursor-pointer items-baseline justify-start gap-2 text-left text-muted-foreground [&::-webkit-details-marker]:hidden"
       >
         <summary className="list-none">
           <span
             aria-hidden
-            className="shrink-0 leading-none text-[#c0b6a0] transition-transform group-open:rotate-90"
+            className="shrink-0 leading-none text-faint-foreground transition-transform group-open:rotate-90"
           >
             ›
           </span>
