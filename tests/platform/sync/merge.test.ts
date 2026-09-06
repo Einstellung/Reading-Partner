@@ -52,7 +52,7 @@ test("the files the app writes are classified by what they hold", () => {
   // One line per deleted observation. Records because nothing else propagates a
   // deletion: this module removes no file, so an observation deleted on one
   // device comes back from the other unless its tombstone travels and unions.
-  expect(strategyFor("memory-b3a9f89c/deleted-observations.jsonl")).toBe("records");
+  expect(strategyFor("observations/deleted-observations.jsonl")).toBe("records");
   expect(strategyFor("statements.json")).toBe("records");
   // Named for the device that writes it, so it is matched by pattern rather
   // than by an entry in RECORD_FILES.
@@ -585,7 +585,7 @@ test("settings written before a key existed gain it rather than lose it", () => 
 
 // The distillation bookkeeping of one topic. The directory is the real one on
 // the owner's disk, where three losing copies of this file are parked.
-const META = "memory-b3a9f89c-ae9d-492e-8f69-4e12689af1b1/meta.json";
+const META = "observations/meta.json";
 
 const bookkeeping = (over: Record<string, unknown>) => ({
   lastDistilledAt: 1786615519773,
@@ -601,7 +601,7 @@ test("a topic's bookkeeping is merged, not parked whole in a conflict copy", () 
   // these numbers, not of numbers with this name anywhere.
   expect(strategyFor("meta.json")).toBe("opaque");
   expect(strategyFor("prep-abc/meta.json")).toBe("opaque");
-  expect(strategyFor("memory-b3a9f89c/index.md")).toBe("prose");
+  expect(strategyFor("observations/index.md")).toBe("prose");
 });
 
 test("two devices each advancing a different thread keep both advances", () => {
@@ -997,7 +997,7 @@ const CASES: Case[] = [
   },
   {
     name: "a topic's distillation bookkeeping both devices advanced",
-    path: "memory-b3a9f89c/meta.json",
+    path: "observations/meta.json",
     base: json({
       lastDistilledAt: 1000,
       lastAnnotationDistillAt: null,

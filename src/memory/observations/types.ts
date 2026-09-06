@@ -1,7 +1,8 @@
-// Per-topic AI observations (docs/02 part 2, M8): one observation per markdown
+// AI observations (docs/02 part 2, M8; docs/48): one observation per markdown
 // file with a small frontmatter, plus an index file (one line per observation)
 // that is what gets loaded into context. Dates are absolute ("YYYY-MM-DD") at
-// write time.
+// write time. One flat store for the whole library — `topic` is a field on the
+// record, not a directory the record lives in.
 
 // can-explain / cannot-explain come out of a retell (docs/31): the reader has
 // finished the book and is being asked to give it back out loud. They are not
@@ -68,6 +69,16 @@ export interface Observation {
   // marks. Page numbers in the body are not an answer at all — two of the books
   // measured have the same page range about different subjects (docs/09).
   bookId?: string;
+  // The topic the session that wrote this was in (platform/app/topics.ts). An
+  // archival label, never a retrieval key (docs/48): a topic gets renamed, split
+  // and merged, and one book sits in several at once. What reads it is the
+  // addressing — which observations a prompt for this topic loads, which bucket
+  // a cross-topic search labels a hit with — and nothing scores on it.
+  //
+  // Optional because the field is younger than the files. Everything written
+  // through the adapter carries it, and the migration stamps what each per-topic
+  // directory held onto the entries it moves.
+  topic?: string;
   // Frontmatter pairs this build has no field for, kept so it can write them
   // back out (files.ts). Opaque above the file format: nothing reads a value
   // here, and the store carries it through an update only because it spreads
@@ -87,6 +98,10 @@ export interface ObservationIndexEntry {
   type: ObservationType;
   summary: string;
   updated: string; // YYYY-MM-DD
+  // The topic the entry is filed under, so one topic's prompt can be built from
+  // the index alone rather than by opening every entry file. Dropped from the
+  // projection handed to a model, which is already one topic's worth.
+  topic?: string;
 }
 
 export interface RetainInput {
@@ -104,6 +119,9 @@ export interface RetainInput {
   // Absent only where nothing dates the evidence — a live conversation, which
   // is happening now, so there the clock is the right answer.
   observed?: EvidenceDates;
+  // Stamped by the adapter from the topic it is mounted on, never asked of the
+  // model. Same rule as bookId above.
+  topic?: string;
 }
 
 // A correction patch; every field optional, anchors replace when given.

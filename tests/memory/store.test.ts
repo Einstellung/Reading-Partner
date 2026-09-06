@@ -9,7 +9,7 @@ import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 function makeStore(now: () => number = () => JULY_17) {
   const { fs, files } = makeFakeFs();
-  return { store: new ObservationFileStore("topic-1", fs, now), files };
+  return { store: new ObservationFileStore(fs, now), files };
 }
 
 test("create writes one file per observation and an index line", async () => {
@@ -25,7 +25,7 @@ test("create writes one file per observation and an index line", async () => {
   // minting 8 would grow the store both widths again.
   expect(entry.id).toMatch(/^m-[0-9a-f]{16}$/);
   expect(entry.created).toBe("2026-07-17");
-  expect(files.has(`memory-topic-1/${entry.id}.md`)).toBe(true);
+  expect(files.has(`observations/${entry.id}.md`)).toBe(true);
 
   const index = await store.readIndex();
   expect(index).toEqual([
@@ -122,14 +122,14 @@ test("delete removes the file and its index line", async () => {
   const b = await store.create({ type: "belief", summary: "drop", body: "d" });
 
   expect(await store.delete(b.id)).toBe(true);
-  expect(files.has(`memory-topic-1/${b.id}.md`)).toBe(false);
+  expect(files.has(`observations/${b.id}.md`)).toBe(false);
   expect((await store.readIndex()).map((e) => e.id)).toEqual([a.id]);
 });
 
 test("rebuildIndex regenerates the index from the entry files", async () => {
   const { store, files } = makeStore();
   const a = await store.create({ type: "reading-position", summary: "p42", body: "At page 42." });
-  files.set("memory-topic-1/index.md", "corrupted\n");
+  files.set("observations/index.md", "corrupted\n");
 
   await store.rebuildIndex();
   expect((await store.readIndex()).map((e) => e.id)).toEqual([a.id]);
@@ -138,17 +138,17 @@ test("rebuildIndex regenerates the index from the entry files", async () => {
 test("list skips non-entry and malformed files", async () => {
   const { store, files } = makeStore();
   const a = await store.create({ type: "belief", summary: "s", body: "b" });
-  files.set("memory-topic-1/m-deadbeef.md", "not an observation");
-  files.set("memory-topic-1/notes.md", "unrelated");
+  files.set("observations/m-deadbeef.md", "not an observation");
+  files.set("observations/notes.md", "unrelated");
 
   expect((await store.list()).map((e) => e.id)).toEqual([a.id]);
 });
 
 test("meta round-trips and defaults to no distillation", async () => {
   const { store } = makeStore();
-  expect(await store.getMeta()).toEqual({ lastDistilledAt: null, lastAnnotationDistillAt: null });
-  await store.setMeta({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
-  expect(await store.getMeta()).toEqual({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
+  expect(await store.getMeta("t")).toEqual({ lastDistilledAt: null, lastAnnotationDistillAt: null });
+  await store.setMeta("t", { lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
+  expect(await store.getMeta("t")).toEqual({ lastDistilledAt: 123, lastAnnotationDistillAt: 45 });
 });
 
 // The passthrough seen from the store: an entry read off disk goes back out
@@ -156,7 +156,7 @@ test("meta round-trips and defaults to no distillation", async () => {
 // read. Nothing between here and the file format has to know about them.
 test("update keeps frontmatter keys the store has no field for", async () => {
   const { store, files } = makeStore();
-  const path = "memory-topic-1/m-1a2b3c4d.md";
+  const path = "observations/m-1a2b3c4d.md";
   files.set(
     path,
     [
@@ -217,7 +217,7 @@ test("conflict copies are readable, and still not observations", async () => {
     body: "The version this device had.",
   });
   const bytes = new TextEncoder().encode(losing);
-  const path = conflictCopyPath(`memory-topic-1/${entry.id}.md`, bytes);
+  const path = conflictCopyPath(`observations/${entry.id}.md`, bytes);
   files.set(path, losing);
 
   const conflicts = await store.listConflicts();
@@ -237,9 +237,9 @@ test("conflict copies are readable, and still not observations", async () => {
 
 test("a conflict copy that will not parse is still reported", async () => {
   const { store, files } = makeStore();
-  files.set("memory-topic-1/m-1a2b3c4d.conflict-deadbeef.md", "not frontmatter at all");
+  files.set("observations/m-1a2b3c4d.conflict-deadbeef.md", "not frontmatter at all");
   // A copy of the derived index is not a copy of anything the reader wrote.
-  files.set("memory-topic-1/index.conflict-cafebabe.md", "- [belief] x (updated 2026-07-17, id m-1a2b3c4d)");
+  files.set("observations/index.conflict-cafebabe.md", "- [belief] x (updated 2026-07-17, id m-1a2b3c4d)");
 
   const conflicts = await store.listConflicts();
   expect(conflicts).toHaveLength(1);
@@ -250,17 +250,17 @@ test("a conflict copy that will not parse is still reported", async () => {
 test("rebuilding the index deletes the conflict copies of the index, and only those", async () => {
   const { store, files } = makeStore();
   const entry = await store.create({ type: "belief", summary: "s", body: "b" });
-  const entryCopy = `memory-topic-1/${entry.id}.conflict-deadbeef.md`;
+  const entryCopy = `observations/${entry.id}.conflict-deadbeef.md`;
   files.set(entryCopy, serializeObservation({ ...entry, body: "the other device's version" }));
-  files.set("memory-topic-1/index.conflict-cafebabe.md", "- [belief] s (updated 2026-07-17, id m-1)");
-  files.set("memory-topic-1/index.conflict-0badf00d.md", "");
+  files.set("observations/index.conflict-cafebabe.md", "- [belief] s (updated 2026-07-17, id m-1)");
+  files.set("observations/index.conflict-0badf00d.md", "");
   // A different topic's directory is not this store's to touch.
   files.set("memory-topic-2/index.conflict-cafebabe.md", "");
 
   await store.rebuildIndex();
 
-  expect(files.has("memory-topic-1/index.conflict-cafebabe.md")).toBe(false);
-  expect(files.has("memory-topic-1/index.conflict-0badf00d.md")).toBe(false);
+  expect(files.has("observations/index.conflict-cafebabe.md")).toBe(false);
+  expect(files.has("observations/index.conflict-0badf00d.md")).toBe(false);
   expect(files.has("memory-topic-2/index.conflict-cafebabe.md")).toBe(true);
   expect(files.has(entryCopy)).toBe(true);
   expect(await store.listConflicts()).toHaveLength(1);

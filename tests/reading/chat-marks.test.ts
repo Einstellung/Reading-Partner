@@ -30,7 +30,7 @@ import {
   traceSelectAction,
   type NewChatMark,
 } from "../../src/reading/chat-marks";
-import { annotationPageMap, observationScope } from "../../src/reading/lecture";
+import { annotationPageMap, isAboutOpenBook, isInFocusChapter } from "../../src/reading/lecture";
 import type { Observation } from "../../src/memory";
 
 const pageMark = (id: string, pageIndex = 0): Annotation => ({
@@ -416,11 +416,9 @@ test("an observation anchored on a classroom mark is still about this book", () 
   const pages = annotationPageMap([pageMark("p1"), chatMark("c1")]);
   expect(pages.get("c1")).toBeNull();
   expect(pages.has("c1")).toBe(true);
-  expect(observationScope(observation, "book-1", pages, null)).toBe("book");
+  expect(isAboutOpenBook(observation, "book-1", pages)).toBe(true);
   // No page, so it never counts as the chapter in focus.
-  expect(
-    observationScope(observation, "book-1", pages, { startPage: 1, endPage: 10 }),
-  ).toBe("book");
+  expect(isInFocusChapter(observation, pages, { startPage: 1, endPage: 10 })).toBe(false);
 });
 
 // --- which rows a pen may be drawn across ----------------------------------

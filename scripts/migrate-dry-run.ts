@@ -45,6 +45,9 @@ const readOnly: MigrationFs = {
   async remove(path) {
     throw new Error(`refused: this script never removes (${path})`);
   },
+  async removeDir(path) {
+    throw new Error(`refused: this script never removes (${path})`);
+  },
   async listDir(dir) {
     return entries(dir)
       .filter((e) => !e.isDirectory)

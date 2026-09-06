@@ -12,6 +12,8 @@ import type { MigrationFs } from "./types";
 export class OverlayFs implements MigrationFs {
   // path -> content, or null for "removed". Everything this run has changed.
   private overlay = new Map<string, string | null>();
+  // Directories this run took out, so a listing does not keep reporting them.
+  private removedDirs = new Set<string>();
   readonly written: string[] = [];
   readonly removed: string[] = [];
 
@@ -44,7 +46,15 @@ export class OverlayFs implements MigrationFs {
     if (this.writeThrough) await this.base.remove(path);
   }
 
+  async removeDir(path: string): Promise<void> {
+    if (this.removedDirs.has(path)) return;
+    this.removedDirs.add(path);
+    if (!this.removed.includes(path)) this.removed.push(path);
+    if (this.writeThrough) await this.base.removeDir(path);
+  }
+
   async listDir(dir: string): Promise<string[]> {
+    if (this.removedDirs.has(dir)) return [];
     const names = new Set(await this.base.listDir(dir));
     for (const [path, content] of this.overlay) {
       const at = path.lastIndexOf("/");
@@ -57,9 +67,14 @@ export class OverlayFs implements MigrationFs {
   }
 
   async listSubdirs(dir: string): Promise<string[]> {
-    // No step creates or removes a directory, so the base answer is the whole
-    // answer. The backup directory is written by the runner, outside any step.
-    return this.base.listSubdirs(dir);
+    // No step creates a directory of its own — one appears as a side effect of
+    // writing into it — so the base answer minus what this run removed is the
+    // whole answer. The backup directory is written by the runner, outside any
+    // step.
+    const prefix = dir ? `${dir}/` : "";
+    return (await this.base.listSubdirs(dir)).filter(
+      (name) => !this.removedDirs.has(`${prefix}${name}`),
+    );
   }
 
   // Every path this run changed, for the backup pass.
@@ -68,9 +83,9 @@ export class OverlayFs implements MigrationFs {
   }
 }
 
-// The observation store wants exactly the four operations MigrationFs already
-// has; handed the overlay, ObservationFileStore.rebuildIndex writes through the
-// same accounting as everything else.
+// The observation store wants four of the operations MigrationFs already has;
+// handed the overlay, ObservationFileStore.rebuildIndex writes through the same
+// accounting as everything else.
 export function asObservationFs(fs: MigrationFs): {
   read(path: string): Promise<string | null>;
   write(path: string, content: string): Promise<void>;

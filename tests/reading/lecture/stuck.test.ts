@@ -9,8 +9,9 @@ import type { Annotation } from "../../../src/platform/app/reader-contract";
 import type { Observation, ObservationType } from "../../../src/memory";
 import {
   annotationPageMap,
+  isAboutOpenBook,
+  isInFocusChapter,
   lectureObservationSnapshot,
-  observationScope,
   selectLectureObservations,
   CORRECTION_QUOTA,
   LECTURE_OBSERVATION_CAP,
@@ -45,16 +46,18 @@ test("which book an observation is about comes from its anchors, not its prose",
   const focus = { startPage: 149, endPage: 193 };
 
   const anchored = obs({ id: "m-1", anchors: { annotationIds: ["ann-here"], messageIds: [] } });
-  expect(observationScope(anchored, BOOK, pages, focus)).toBe("chapter");
+  expect(isAboutOpenBook(anchored, BOOK, pages)).toBe(true);
+  expect(isInFocusChapter(anchored, pages, focus)).toBe(true);
 
   // Same page numbers in the body, no anchor on this book: another book's.
   const elsewhere = obs({ id: "m-2", body: "stuck on p.162 of the other book" });
-  expect(observationScope(elsewhere, BOOK, pages, focus)).toBe("other");
+  expect(isAboutOpenBook(elsewhere, BOOK, pages)).toBe(false);
 
   // Stamped at write time (record/types.ts), which needs no lookup at all.
   const stamped = obs({ id: "m-3", bookId: BOOK });
-  expect(observationScope(stamped, BOOK, pages, focus)).toBe("book");
-  expect(observationScope(obs({ id: "m-4", bookId: OTHER }), BOOK, pages, focus)).toBe("other");
+  expect(isAboutOpenBook(stamped, BOOK, pages)).toBe(true);
+  expect(isInFocusChapter(stamped, pages, focus)).toBe(false);
+  expect(isAboutOpenBook(obs({ id: "m-4", bookId: OTHER }), BOOK, pages)).toBe(false);
 });
 
 // The two most useful citations in the measured lecture came out of a different
@@ -73,7 +76,7 @@ test("the chapter's own come first, and everything else is still reachable", () 
     focus: { startPage: 149, endPage: 193 },
   });
   expect(picked.map((p) => p.observation.id)).toEqual(["here", "elsewhere", "cross"]);
-  expect(picked.map((p) => p.scope)).toEqual(["chapter", "book", "other"]);
+  expect(picked.map((p) => p.thisBook)).toEqual([true, true, false]);
 });
 
 // In the shared snapshot corrections sort last under a total cap the types above
@@ -175,10 +178,11 @@ test("this book's entries print their bodies, other books' print their line", ()
     annotationPages: pages,
     focus: { startPage: 149, endPage: 193 },
   });
-  const snapshot = lectureObservationSnapshot(picked, { startPage: 149, endPage: 193 });
+  const snapshot = lectureObservationSnapshot(picked);
   expect(snapshot).toContain("non-AI analogy plus a worked example with real numbers");
-  expect(snapshot).toContain("this book, the chapter in focus");
-  expect(snapshot).toContain("another book in this topic");
   expect(snapshot).not.toContain("a body nobody asked for");
+  // Nothing is labelled with where it came from: the two forms — body, or the
+  // index line alone — are the whole distinction (docs/48).
+  expect(snapshot).not.toContain("another book");
   expect(lectureObservationSnapshot([])).toBe("");
 });

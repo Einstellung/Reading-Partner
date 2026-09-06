@@ -8,8 +8,8 @@ import { JULY_17, makeFakeFs } from "./fakefs";
 
 function makeAdapter() {
   const { fs } = makeFakeFs();
-  const store = new ObservationFileStore("t", fs, () => JULY_17);
-  return { adapter: new FileObservationAdapter(store), store };
+  const store = new ObservationFileStore(fs, () => JULY_17);
+  return { adapter: new FileObservationAdapter(store, "t"), store };
 }
 
 test("recall ranks the relevant observation first and carries the entry", async () => {
@@ -51,10 +51,10 @@ test("correct patches an entry; correct(id, null) deletes it", async () => {
 
 test("rebuild restores a broken index from the files", async () => {
   const { fs, files } = makeFakeFs();
-  const store = new ObservationFileStore("t", fs, () => JULY_17);
-  const adapter = new FileObservationAdapter(store);
+  const store = new ObservationFileStore(fs, () => JULY_17);
+  const adapter = new FileObservationAdapter(store, "t");
   const e = await adapter.retain({ type: "correction", summary: "s", body: "b" });
-  files.delete("memory-t/index.md");
+  files.delete("observations/index.md");
 
   await adapter.rebuild();
   expect((await store.readIndex()).map((x) => x.id)).toEqual([e.id]);

@@ -1,8 +1,12 @@
 // The Observation Adapter narrow interface (docs/02 part 2, the Memory Adapter
 // of that document): business code talks only to this, so the engine behind it
 // can be swapped later without touching tools, distillation, or UI. First
-// engine: the per-topic file store with BM25 recall (reusing the M6 search
+// engine: the flat file store with BM25 recall (reusing the M6 search
 // implementation — each observation is one one-page document).
+//
+// An adapter is bound to one topic even though the store under it is not: what
+// a reading session loads into its prompt is still the topic it is in, and a
+// mount stamps that topic onto everything it writes.
 
 import { rankObservations } from "./recall";
 import type { ObservationFileStore } from "./store";
@@ -45,21 +49,26 @@ export interface ObservationAdapter {
 const RECALL_LIMIT = 6;
 
 export class FileObservationAdapter implements ObservationAdapter {
-  constructor(private store: ObservationFileStore) {}
+  constructor(
+    private store: ObservationFileStore,
+    private topicId: string,
+  ) {}
 
+  // The topic is stamped here and nowhere else: it is a fact about the mount,
+  // the same way bookId is a fact about the session (types.ts).
   retain(input: RetainInput): Promise<Observation> {
-    return this.store.create(input);
+    return this.store.create({ ...input, topic: this.topicId });
   }
 
   // This topic only, and unchanged by the cross-topic widening: the tools rank
   // the other topics in a pass of their own (recall.ts) so that this ranking —
   // its corpus, its idf, its six slots — stays exactly what it was.
   async recall(query: string, limit = RECALL_LIMIT): Promise<ObservationHit[]> {
-    return rankObservations(await this.store.list(), query, limit);
+    return rankObservations(await this.store.list(this.topicId), query, limit);
   }
 
   listObservations(): Promise<Observation[]> {
-    return this.store.list();
+    return this.store.list(this.topicId);
   }
 
   async correct(id: string, patch: ObservationPatch | null): Promise<Observation | null> {

@@ -35,7 +35,7 @@ export interface RemoteEntry {
 }
 
 // Keyed by the AppData-relative path (e.g. "annotations-<id>.json",
-// "memory-<topicId>/m-ab12cd34.md").
+// "observations/m-ab12cd34ef567890.md").
 export type RemoteState = Record<string, RemoteEntry>;
 
 // --- how a failure is classified ------------------------------------------

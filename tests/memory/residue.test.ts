@@ -14,7 +14,7 @@ const NO_ANCHORS = { annotationIds: [], messageIds: [] };
 
 function makeStore() {
   const { fs, files } = makeFakeFs();
-  return { store: new ObservationFileStore("topic-1", fs, () => JULY_17), files };
+  return { store: new ObservationFileStore(fs, () => JULY_17), files };
 }
 
 // Real entries on disk end with a stray closing tag and a parameter tag: written
@@ -88,7 +88,7 @@ test("a created observation is stored clean, with the buried anchors in its fron
     annotationIds: ["ann-9"],
     messageIds: ["t-0123456789abcdef"],
   });
-  const file = files.get(`memory-topic-1/${entry.id}.md`)!;
+  const file = files.get(`observations/${entry.id}.md`)!;
   expect(file).toContain("annotations: ann-9");
   expect(file).not.toContain("<parameter");
   expect(file).not.toContain("</body>");
@@ -120,7 +120,7 @@ test("an update that does not rewrite the body leaves it alone", async () => {
     anchors: { annotationIds: [], messageIds: [] },
   });
   // A file as an older build left it, put back under the store.
-  const path = `memory-topic-1/${entry.id}.md`;
+  const path = `observations/${entry.id}.md`;
   files.set(path, files.get(path)!.replace(/\nb\n/, '\nb\n</body>\n'));
 
   const updated = await store.update(entry.id, { summary: "s2" });

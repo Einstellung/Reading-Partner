@@ -56,6 +56,7 @@ const KNOWN_KEYS = new Set([
   "updated",
   "summary",
   "book",
+  "topic",
   "annotations",
   "messages",
 ]);
@@ -94,6 +95,7 @@ export function serializeObservation(entry: Observation): string {
     line("updated", entry.updated),
     line("summary", oneLine(entry.summary)),
     line("book", entry.bookId ?? ""),
+    line("topic", entry.topic ?? ""),
     line("annotations", entry.anchors.annotationIds.join(", ")),
     line("messages", entry.anchors.messageIds.join(", ")),
   ].filter((l): l is string => l !== null);
@@ -121,6 +123,7 @@ export function parseObservation(text: string): Observation | null {
   const type = fields.get("type") ?? "";
   if (!id || !isObservationType(type)) return null;
   const bookId = fields.get("book") ?? "";
+  const topic = fields.get("topic") ?? "";
   // A key repeated in the file was already last-one-wins for the known fields
   // (Map.set), and stays that way here: the Map carries one entry per key, so a
   // duplicate unknown key comes back as one pair with the last value.
@@ -133,6 +136,7 @@ export function parseObservation(text: string): Observation | null {
     // optional rather than "": a lecture asks "is this about the open book",
     // and "" would have to be special-cased at every asking.
     ...(bookId ? { bookId } : {}),
+    ...(topic ? { topic } : {}),
     body: text.slice(m[0].length).trim(),
     created: fields.get("created") ?? "",
     updated: fields.get("updated") ?? "",
@@ -148,16 +152,35 @@ export function parseObservation(text: string): Observation | null {
 
 // --- index file: one line per observation, loaded into context as-is ---
 
+// One index line as a prompt gets it, with no topic in it. Everything a prompt
+// is built for is already one topic's worth (ObservationFileStore.readIndexText,
+// reading/lecture/stuck.ts), so the id would be the same on every line and say
+// nothing to a model.
 export function serializeIndexLine(e: ObservationIndexEntry): string {
   return `- [${e.type}] ${oneLine(e.summary)} (updated ${e.updated}, id ${e.id})`;
 }
 
-const INDEX_LINE = /^- \[([a-z-]+)\] (.*) \(updated (\d{4}-\d{2}-\d{2}), id ([\w-]+)\)$/;
+// The same line as the index file holds it. The file is one flat list over every
+// topic and has to say which one a line belongs to, or reading one topic's index
+// would mean opening every entry file to find out.
+function indexFileLine(e: ObservationIndexEntry): string {
+  if (!e.topic) return serializeIndexLine(e);
+  return `- [${e.type}] ${oneLine(e.summary)} (updated ${e.updated}, topic ${e.topic}, id ${e.id})`;
+}
+
+const INDEX_LINE =
+  /^- \[([a-z-]+)\] (.*) \(updated (\d{4}-\d{2}-\d{2}), (?:topic ([^,]*), )?id ([\w-]+)\)$/;
 
 export function parseIndexLine(lineText: string): ObservationIndexEntry | null {
   const m = INDEX_LINE.exec(lineText.trim());
   if (!m || !isObservationType(m[1])) return null;
-  return { type: m[1], summary: m[2], updated: m[3], id: m[4] };
+  return {
+    type: m[1],
+    summary: m[2],
+    updated: m[3],
+    ...(m[4] ? { topic: m[4] } : {}),
+    id: m[5],
+  };
 }
 
 // Newest-updated first, ties broken by id for a stable file.
@@ -165,7 +188,7 @@ export function buildIndex(entries: ObservationIndexEntry[]): string {
   const sorted = [...entries].sort(
     (a, b) => b.updated.localeCompare(a.updated) || a.id.localeCompare(b.id),
   );
-  return sorted.map(serializeIndexLine).join("\n") + (sorted.length ? "\n" : "");
+  return sorted.map(indexFileLine).join("\n") + (sorted.length ? "\n" : "");
 }
 
 export function parseIndex(text: string): ObservationIndexEntry[] {

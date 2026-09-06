@@ -10,9 +10,10 @@ import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { logEvent } from "../../platform/app/events";
 import { AI_EVENT_TOPIC } from "../../platform/app/structured-output";
-import { listTopics } from "../../platform/app/topics";
 import { callModel } from "../../ai/model-call";
 import { observationFs } from "../live/live";
+import { observationLayoutFs } from "../live/fs";
+import { legacyObservationLayout } from "../observations/legacy";
 import {
   addEvidence,
   createStatement,
@@ -23,7 +24,7 @@ import {
 import { localDate } from "../observations/files";
 import { ObservationFileStore } from "../observations/store";
 import type { Observation } from "../observations/types";
-import { createDreamGate, migrationPending } from "./gate";
+import { createDreamGate } from "./gate";
 import { runDream, type DreamResult } from "./run";
 import {
   DREAM_STATE_FILE,
@@ -60,23 +61,11 @@ async function saveDreamState(state: DreamState): Promise<void> {
 }
 
 // Every observation there is. Statements are not scoped to a topic, so neither
-// is the input a night reads; a topic whose files will not open is skipped
-// rather than taking the night down, the way collectGuessEvidence does.
+// is the input a night reads; a store that will not open is an empty night
+// rather than a failed one, the same posture collectGuessEvidence takes to a bad
+// read.
 async function allObservations(): Promise<Observation[]> {
-  const all: Observation[] = [];
-  for (const topic of await listTopics()) {
-    const store = new ObservationFileStore(topic.id, observationFs);
-    all.push(...(await store.list().catch((): Observation[] => [])));
-  }
-  return all;
-}
-
-// The topic directories the observation files live in, the same names
-// ObservationFileStore builds. Read straight rather than through migrate/: this
-// is a capability and migrate is a domain, and that directory is deleted at 0.13
-// anyway.
-async function observationDirs(): Promise<string[]> {
-  return (await listTopics()).map((topic) => `memory-${topic.id}`);
+  return await new ObservationFileStore(observationFs).list().catch((): Observation[] => []);
 }
 
 // The one gate for this process, held across every entry point that calls in —
@@ -102,10 +91,12 @@ export async function runDreamIfDue(now = Date.now()): Promise<DreamResult | nul
     if (!isDreamDue(state, now)) return null;
 
     // Before the stores are read, because the whole point is not to read them:
-    // observations still on their 8 hex ids are about to be renamed, and
-    // statements written against those ids would name files that no longer
-    // exist by the time the reader presses the button (docs/pitfall/210).
-    if (await migrationPending(await observationDirs(), (dir) => observationFs.listDir(dir))) {
+    // observations still sitting in a per-topic directory are about to move, and
+    // a statement written against what a half-moved store answers would name a
+    // file that is somewhere else by the time the reader presses the button
+    // (docs/pitfall/210). The same judgement the migration button makes
+    // (migrate/pending.ts), out of the same rule.
+    if (await legacyObservationLayout(observationLayoutFs)) {
       logEvent(AI_EVENT_TOPIC, "dream-run", { outcome: "waiting-migration" });
       return standDown();
     }

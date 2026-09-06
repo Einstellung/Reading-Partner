@@ -28,7 +28,10 @@ import {
   type RetellDistillInput,
   type RetellPassInput,
 } from "../../src/memory/observations/retell";
-import { ObservationFileStore } from "../../src/memory/observations/store";
+import { ObservationFileStore, topicPassStore } from "../../src/memory/observations/store";
+
+// The topic every store in this file is mounted on.
+const TOPIC = "t";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 type ToolReq = { name: string; args: Record<string, any>; id: string };
@@ -87,8 +90,8 @@ function scriptedRunner(turns: Turn[]) {
 
 function makeStore() {
   const { fs } = makeFakeFs();
-  const store = new ObservationFileStore("t", fs, () => JULY_17);
-  return { store, adapter: new FileObservationAdapter(store) };
+  const store = new ObservationFileStore(fs, () => JULY_17);
+  return { store, pass: topicPassStore(store, TOPIC), adapter: new FileObservationAdapter(store, TOPIC) };
 }
 
 function passInput(overrides: Partial<RetellPassInput> = {}): RetellPassInput {
@@ -144,9 +147,9 @@ test("selectNewMessages drops empty rows and takes only what is past the cursor"
 // --- the pass ---
 
 test("a finished pass writes observations and stores the message cursor", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const result = await runRetellDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([
@@ -171,7 +174,7 @@ test("a finished pass writes observations and stores the message cursor", async 
 
   expect(result).toMatchObject({ ran: true, ok: true, created: 1, distilled: 2 });
   expect((await store.list())[0].type).toBe("can-explain");
-  expect(await store.getMeta()).toEqual({
+  expect(await store.getMeta(TOPIC)).toEqual({
     lastDistilledAt: JULY_17,
     lastAnnotationDistillAt: null,
     distilledMessages: { "retell-1": 2 },
@@ -179,16 +182,16 @@ test("a finished pass writes observations and stores the message cursor", async 
 });
 
 test("re-entering and leaving with nothing new distils nothing", async () => {
-  const { store, adapter } = makeStore();
+  const { pass, adapter } = makeStore();
   await runRetellDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
   });
   const runner = scriptedRunner([{ text: "done" }]);
   const second = await runRetellDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_20,
     run: runner.run,
@@ -199,9 +202,9 @@ test("re-entering and leaving with nothing new distils nothing", async () => {
 });
 
 test("a second pass sends only the new stretch, and says what came before it", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   await runRetellDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
@@ -216,7 +219,7 @@ test("a second pass sends only the new stretch, and says what came before it", a
         { role: "user", text: "that one I can only give the conclusion of", ts: 400 },
       ],
     }),
-    { store, adapter, now: () => JULY_20, run: runner.run },
+    { store: pass, adapter, now: () => JULY_20, run: runner.run },
   );
 
   expect(second).toMatchObject({ ran: true, ok: true, distilled: 2 });
@@ -226,27 +229,27 @@ test("a second pass sends only the new stretch, and says what came before it", a
   expect(task).toContain("[2] 1970-01-01 reader: that one I can only give the conclusion of");
   expect(task).not.toContain("lesion studies"); // already folded in
   expect(task).toContain("first 2 message(s)");
-  expect((await store.getMeta()).distilledMessages).toEqual({ "retell-1": 4 });
+  expect((await store.getMeta(TOPIC)).distilledMessages).toEqual({ "retell-1": 4 });
 });
 
 test("a stretch the reader said nothing in is not distilled", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const runner = scriptedRunner([{ text: "done" }]);
   const result = await runRetellDistillPass(
     passInput({ messages: [{ role: "ai", text: "Which chapter shall we take?", ts: 100 }] }),
-    { store, adapter, now: () => JULY_17, run: runner.run },
+    { store: pass, adapter, now: () => JULY_17, run: runner.run },
   );
 
   expect(result).toEqual({ ran: false, skipped: "reader-silent" });
   expect(runner.requests.length).toBe(0);
   // Nothing was folded in, so the next exit sees this message again.
-  expect((await store.getMeta()).distilledMessages).toBeUndefined();
+  expect((await store.getMeta(TOPIC)).distilledMessages).toBeUndefined();
 });
 
 test("a pass that did not finish leaves the cursor where it was", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   const result = await runRetellDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ error: "connection reset" }]),
@@ -255,13 +258,13 @@ test("a pass that did not finish leaves the cursor where it was", async () => {
   expect(result).toMatchObject({ ran: true, ok: false, outcome: "failed" });
   // The next exit redoes this stretch; the alternative is a retell that is
   // never observed and nothing left to say so.
-  expect((await store.getMeta()).distilledMessages).toBeUndefined();
+  expect((await store.getMeta(TOPIC)).distilledMessages).toBeUndefined();
 });
 
 test("the two passes do not overwrite each other's bookkeeping in meta.json", async () => {
-  const { store, adapter } = makeStore();
+  const { store, pass, adapter } = makeStore();
   await runRetellDistillPass(passInput(), {
-    store,
+    store: pass,
     adapter,
     now: () => JULY_17,
     ...scriptedRunner([{ text: "done" }]),
@@ -279,10 +282,10 @@ test("the two passes do not overwrite each other's bookkeeping in meta.json", as
       messages: [{ role: "user", text: "why?", ts: 10 }],
       annotations: [{ id: "a1", page: 3, text: "prediction", createdAt: 700 }],
     },
-    { store, adapter, now: () => JULY_20, ...scriptedRunner([{ text: "done" }]) },
+    { store: pass, adapter, now: () => JULY_20, ...scriptedRunner([{ text: "done" }]) },
   );
 
-  expect(await store.getMeta()).toEqual({
+  expect(await store.getMeta(TOPIC)).toEqual({
     lastDistilledAt: JULY_20,
     lastAnnotationDistillAt: null,
     // The retell's cursor survived the reading pass, and vice versa.

@@ -46,16 +46,16 @@ const TREE: Record<string, fs.DirEntry[]> = {
     entry("topics.json", false),
     entry("vanished.json", false),
     entry("fulltext-abc.json", false),
-    entry("memory-t1", true),
+    entry("observations", true),
     entry("prep-abc", true),
   ],
-  "memory-t1": [entry("index.json", false)],
+  "observations": [entry("index.json", false)],
   "prep-abc": [entry("pdf", true), entry("state.json", false)],
 };
 
 const STATS: Record<string, fs.FileInfo> = {
   "topics.json": info(new Date(1_700_000_000_123), 12),
-  "memory-t1/index.json": info(new Date(1_700_000_111_000), 34),
+  "observations/index.json": info(new Date(1_700_000_111_000), 34),
   "prep-abc/state.json": info(null, 56),
 };
 
@@ -72,7 +72,7 @@ test("list returns every in-range file with its mtime in milliseconds", async ()
   const files = await tauriSyncFs.list();
   expect(files).toEqual([
     { path: "topics.json", mtime: 1_700_000_000_123, size: 12 },
-    { path: "memory-t1/index.json", mtime: 1_700_000_111_000, size: 34 },
+    { path: "observations/index.json", mtime: 1_700_000_111_000, size: 34 },
     // A host that reports no modification time reads as 0, not as a skip.
     { path: "prep-abc/state.json", mtime: 0, size: 56 },
   ]);
@@ -89,7 +89,7 @@ test("the walk does not descend into a directory that holds no in-range file", a
   const asked = (fs.readDir as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(
     (c) => c[0],
   );
-  expect(asked).toContain("memory-t1");
+  expect(asked).toContain("observations");
   expect(asked).not.toContain("prep-abc/pdf");
 });
 

@@ -253,9 +253,8 @@ test("step 6 widens the ids everywhere they appear", async () => {
   const tombstones = parseTombstones(files.get(`${DIR}/deleted-observations.jsonl`) ?? "");
   expect(tombstones.has("m-aaaaaa09")).toBe(true);
   expect(tombstones.has(deriveObservationId("m-aaaaaa09"))).toBe(true);
-  // The index is derived and was rebuilt from the renamed files.
-  expect(files.get(`${DIR}/index.md`)).toContain(wide);
-  expect(files.get(`${DIR}/index.md`)).not.toContain("m-aaaaaa01 ");
+  // The index is not this step's to write: it is derived, and the only copy
+  // that survives is the flat store's, which step 8 rebuilds after the move.
   expect((await stepWidenObservationIds(fs)).changed).toBe(0);
 });
 

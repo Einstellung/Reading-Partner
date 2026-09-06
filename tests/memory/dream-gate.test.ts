@@ -1,13 +1,10 @@
-// The two gates in front of a night (src/memory/dream/gate.ts): one run at a
-// time, one look a day per process, and nothing at all while the store is still
-// half-migrated. Run: bun test.
+// The gate in front of a night (src/memory/dream/gate.ts): one run at a time and
+// one look a day per process. What stands the night down while the store is
+// still laid out the old way is tested with the rule itself
+// (tests/memory/observation-layout.test.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  createDreamGate,
-  hasNarrowObservationFile,
-  migrationPending,
-} from "../../src/memory/dream/gate";
+import { createDreamGate } from "../../src/memory/dream/gate";
 
 const DAY = "2026-09-05";
 
@@ -89,30 +86,4 @@ test("a night that stood down leaves the day open", async () => {
   expect(runs).toBe(2);
 });
 
-test("an 8 hex entry file means the migration has not run", () => {
-  expect(hasNarrowObservationFile(["m-aaaaaa01.md"])).toBe(true);
-  expect(hasNarrowObservationFile(["index.md", "meta.json", "m-1234abcd.md"])).toBe(true);
-});
 
-test("a widened store, and the files beside it, do not hold the night back", () => {
-  expect(
-    hasNarrowObservationFile([
-      "m-1111111111111111.md",
-      "index.md",
-      "meta.json",
-      "deleted-observations.jsonl",
-      // A conflict copy is not an entry file, and the widening renames it too.
-      "m-1111111111111111.conflict-deadbeef.md",
-    ]),
-  ).toBe(false);
-  expect(hasNarrowObservationFile([])).toBe(false);
-});
-
-test("one topic still holding a narrow file stops the night for all of them", async () => {
-  const dirs = { "memory-a": ["m-1111111111111111.md"], "memory-b": ["m-aaaaaa01.md"] };
-  const listDir = async (dir: string) => dirs[dir as keyof typeof dirs] ?? [];
-
-  expect(await migrationPending(["memory-a", "memory-b"], listDir)).toBe(true);
-  expect(await migrationPending(["memory-a"], listDir)).toBe(false);
-  expect(await migrationPending([], listDir)).toBe(false);
-});

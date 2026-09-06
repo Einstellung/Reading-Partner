@@ -1,9 +1,10 @@
-// Live wiring of the observation module: the AppData fs behind ObservationFs, one
-// adapter per topic for the app's lifetime, the distillation entry points — a
-// reading conversation on hangup or a trim, a stretch of silent marking picked
-// up by the arrears sweep, a retell when the reader leaves the retell — all on
-// the real model through runAgentTurn with the same provider config as chat, and
-// a tiny change feed so the observations panel refreshes after background writes.
+// Live wiring of the observation module: the AppData fs behind ObservationFs,
+// the one store and the one adapter per topic over it for the app's lifetime,
+// the distillation entry points — a reading conversation on hangup or a trim, a
+// stretch of silent marking picked up by the arrears sweep, a retell when the
+// reader leaves the retell — all on the real model through runAgentTurn with the
+// same provider config as chat, and a tiny change feed so the observations panel
+// refreshes after background writes.
 
 import { resolveModel } from "../../ai/model-call";
 import { runSubagentTurnLive } from "../../ai/subagent";
@@ -40,7 +41,11 @@ import {
   type ThreadArrears,
   type TopicArrears,
 } from "../observations/arrears";
-import { ObservationFileStore, type ObservationConflict } from "../observations/store";
+import {
+  ObservationFileStore,
+  topicPassStore,
+  type ObservationConflict,
+} from "../observations/store";
 import type { TopicObservations } from "../observations/recall";
 import type { Observation, ObservationIndexEntry } from "../observations/types";
 import {
@@ -69,71 +74,75 @@ import {
 export { observationFs } from "./fs";
 import { observationFs } from "./fs";
 
-const stores = new Map<string, ObservationFileStore>();
+// One store for the whole library (store.ts). The adapters stay per topic
+// because a mount is per topic: what a reading session loads and what it stamps
+// on what it writes is the topic it is in.
+const store = new ObservationFileStore(observationFs);
 const adapters = new Map<string, FileObservationAdapter>();
-
-function getStore(topicId: string): ObservationFileStore {
-  let s = stores.get(topicId);
-  if (!s) {
-    s = new ObservationFileStore(topicId, observationFs);
-    stores.set(topicId, s);
-  }
-  return s;
-}
 
 export function getObservationAdapter(topicId: string): ObservationAdapter {
   let a = adapters.get(topicId);
   if (!a) {
-    a = new FileObservationAdapter(getStore(topicId));
+    a = new FileObservationAdapter(store, topicId);
     adapters.set(topicId, a);
   }
   return a;
 }
 
 export async function getLastDistillation(topicId: string): Promise<number | null> {
-  return (await getStore(topicId).getMeta()).lastDistilledAt;
+  return (await store.getMeta(topicId)).lastDistilledAt;
 }
 
-// The conflict copies sync left in this topic's directory (store.ts). Its own
-// entry point rather than a method on the adapter: a conflict copy is an artifact
-// of the file engine and of sync, not something an observation engine would have
-// to be able to answer for.
-export function listObservationConflicts(topicId: string): Promise<ObservationConflict[]> {
-  return getStore(topicId).listConflicts();
+// The conflict copies sync left in the store (store.ts). Its own entry point
+// rather than a method on the adapter: a conflict copy is an artifact of the
+// file engine and of sync, not something an observation engine would have to be
+// able to answer for. Unfiltered, because a copy is the other device's bytes and
+// this build does not rewrite it — one written before observations carried a
+// topic names none, and filtering would be the one thing that can make it
+// invisible again.
+export function listObservationConflicts(): Promise<ObservationConflict[]> {
+  return store.listConflicts();
 }
 
 // The parsed observation index for one topic (what a prompt would load), read
 // through the live store. Used by the cross-scenario assembly (assemble.ts) to
 // gather a reading-episode signal across every topic.
 export function readObservationIndex(topicId: string): Promise<ObservationIndexEntry[]> {
-  return getStore(topicId).readIndex();
+  return store.readIndex(topicId);
 }
 
 // Every other topic's observations, in full, for the cross-topic half of recall
-// (observations/recall.ts). The same walk assemble.ts already does over the
-// topic list, one level deeper: the signal there needs summaries and reads the
-// index, a search needs bodies and so goes through the adapters.
+// (observations/recall.ts). One read of the flat store, grouped by the topic
+// each entry names, rather than one read per topic directory.
 //
-// A topic that fails to read contributes nothing rather than failing the search
-// — same posture as assembleReadingContext, and for the same reason: the
-// widening is an addition, and an addition must not be able to take away what
-// the topic in hand already answered. Empty topics are dropped so a search does
-// no work for them.
+// A read that fails contributes nothing rather than failing the search — same
+// posture as assembleReadingContext, and for the same reason: the widening is an
+// addition, and an addition must not be able to take away what the topic in hand
+// already answered. A topic with no observations never becomes a group, so a
+// search does no work for it.
 //
 // Cost on the owner's store, 2026-08-31: two peer topics, 37 observations,
 // 56 KB, 0.3 ms to read and parse and 1.3 ms to rank — in front of a model
 // call, which is why this is read per search rather than cached. store.list()
 // holds no cache, so every search sees what the last distillation pass wrote.
 export async function listOtherTopicObservations(topicId: string): Promise<TopicObservations[]> {
-  const out: TopicObservations[] = [];
-  for (const topic of await listTopics()) {
-    if (topic.id === topicId) continue;
-    const entries = await getObservationAdapter(topic.id)
-      .listObservations()
-      .catch((): Observation[] => []);
-    if (entries.length) out.push({ topicId: topic.id, topicName: topic.name, entries });
+  const entries = await store.list().catch((): Observation[] => []);
+  const names = new Map((await listTopics().catch(() => [])).map((t) => [t.id, t.name]));
+  const groups = new Map<string, Observation[]>();
+  for (const entry of entries) {
+    // An entry belonging to no topic at all belongs to no group either: the
+    // label is what names the group, and inventing one would put another book's
+    // record under this reader's current topic name.
+    if (!entry.topic || entry.topic === topicId) continue;
+    const group = groups.get(entry.topic);
+    if (group) group.push(entry);
+    else groups.set(entry.topic, [entry]);
   }
-  return out;
+  return [...groups].map(([id, group]) => ({
+    topicId: id,
+    topicName: names.get(id) ?? id,
+    entries: group,
+  }));
 }
 
 // --- change feed (observations panel refresh after background writes) ---
@@ -251,7 +260,7 @@ export function distillThread(
           statements: await heldAboutReader(),
         },
         {
-          store: getStore(opts.topicId),
+          store: topicPassStore(store, opts.topicId),
           adapter: getObservationAdapter(opts.topicId),
           otherTopics: () => listOtherTopicObservations(opts.topicId),
           statementEdges,
@@ -342,7 +351,7 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
           statements: await heldAboutReader(),
         },
         {
-          store: getStore(opts.topicId),
+          store: topicPassStore(store, opts.topicId),
           adapter: getObservationAdapter(opts.topicId),
           otherTopics: () => listOtherTopicObservations(opts.topicId),
           statementEdges,
@@ -406,7 +415,7 @@ async function collectArrears(
   const topics = await listTopics();
   const out: TopicArrears[] = [];
   for (const topic of topics) {
-    const meta = await getStore(topic.id).getMeta();
+    const meta = await store.getMeta(topic.id);
     const books: BookArrears[] = [];
     const seen = new Set<string>();
     for (const file of topic.files) {
@@ -504,10 +513,9 @@ async function collectGuessEvidence(): Promise<{
   const topics: GuessTopicEvidence[] = [];
   let newest: number | null = null;
   for (const topic of await listTopics()) {
-    const store = getStore(topic.id);
-    const entries = await store.readIndex().catch((): ObservationIndexEntry[] => []);
+    const entries = await store.readIndex(topic.id).catch((): ObservationIndexEntry[] => []);
     if (entries.length) topics.push({ topicName: topic.name, entries });
-    const at = (await store.getMeta()).lastDistilledAt;
+    const at = (await store.getMeta(topic.id)).lastDistilledAt;
     if (at !== null && (newest === null || at > newest)) newest = at;
   }
   return { topics, newestMemoryAt: newest };
@@ -678,7 +686,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
           messages: opts.messages,
         },
         {
-          store: getStore(topicId),
+          store: topicPassStore(store, topicId),
           adapter: getObservationAdapter(topicId),
           otherTopics: () => listOtherTopicObservations(topicId),
           run: runSubagentTurnLive,

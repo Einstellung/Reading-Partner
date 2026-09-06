@@ -9,7 +9,7 @@ import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 function makeStore(now: () => number = () => JULY_17) {
   const { fs, files } = makeFakeFs();
-  return { store: new ObservationFileStore("topic-1", fs, now), files };
+  return { store: new ObservationFileStore(fs, now), files };
 }
 
 const BODY = "Term frequency saturation via k1 didn't click.\n\nSee m-0123456789abcdef.";
@@ -42,7 +42,7 @@ test("appending anchors leaves the body byte for byte where it was", async () =>
   expect(digest(grown?.body ?? "")).toBe(before);
   expect(grown?.summary).toBe(entry.summary);
   // And on disk, not only in the returned object.
-  const reread = parseObservation(files.get(`memory-topic-1/${entry.id}.md`) as string);
+  const reread = parseObservation(files.get(`observations/${entry.id}.md`) as string);
   expect(digest(reread?.body ?? "")).toBe(before);
 });
 

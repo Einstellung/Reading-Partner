@@ -512,11 +512,8 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
         ...(limit === undefined ? {} : { limit }),
       });
     topicObservations = observations;
-    observationSnapshot = lectureObservationSnapshot(pick(), focus);
-    observationSnapshotTight = lectureObservationSnapshot(
-      pick(LECTURE_OBSERVATION_CAP_TIGHT),
-      focus,
-    );
+    observationSnapshot = lectureObservationSnapshot(pick());
+    observationSnapshotTight = lectureObservationSnapshot(pick(LECTURE_OBSERVATION_CAP_TIGHT));
   }
   // Figures (M9): the model can cite one as [fig:N] (rendered inline in chat)
   // and open one to actually see it. The catalog itself is built inside the

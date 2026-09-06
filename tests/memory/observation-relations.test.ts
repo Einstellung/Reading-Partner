@@ -45,8 +45,8 @@ function mount(
   } = {},
 ) {
   const { fs } = makeFakeFs();
-  const store = new ObservationFileStore("t", fs, () => JULY_17);
-  const adapter = new FileObservationAdapter(store);
+  const store = new ObservationFileStore(fs, () => JULY_17);
+  const adapter = new FileObservationAdapter(store, "t");
   const edges: Edge[] = [];
   const writes: [string, WriteRelationOutcome | undefined][] = [];
   const rejects: WriteRejection[] = [];
@@ -184,7 +184,7 @@ test("same-as with no evidence is refused: it exists to add some", async () => {
 // observation printed as row 1 — the sweep coming back with new evidence for
 // something it wrote last week.
 function remount(store: ObservationFileStore, id: string, messageLines: TranscriptLine[]) {
-  const adapter = new FileObservationAdapter(store);
+  const adapter = new FileObservationAdapter(store, "t");
   const writes: [string, WriteRelationOutcome | undefined][] = [];
   const rejects: WriteRejection[] = [];
   const anchors = new Set(messageLines.map((l) => l.anchor));

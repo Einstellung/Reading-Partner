@@ -12,7 +12,7 @@ import type { ObservationConflict } from "../../../src/memory";
 
 function copy(over: Partial<ObservationConflict> = {}): ObservationConflict {
   return {
-    path: "memory-topic-1/m-1a2b3c4d.conflict-deadbeef.md",
+    path: "observations/m-1a2b3c4d.conflict-deadbeef.md",
     id: "m-1a2b3c4d",
     summary: "Thinks attention is a soft lookup",
     body: "The version this device had.",
@@ -34,13 +34,13 @@ test("the notice counts the copies and names where they are", () => {
       entries={[]}
       statements={[]}
       lastDistilledAt={null}
-      conflicts={[copy(), copy({ path: "memory-topic-1/m-99887766.conflict-cafebabe.md" })]}
+      conflicts={[copy(), copy({ path: "observations/m-99887766.conflict-cafebabe.md" })]}
     />,
   );
   expect(html).toContain("2 conflict copies");
   // Findable on disk: the path is in the markup, not only the count.
-  expect(html).toContain("memory-topic-1/m-1a2b3c4d.conflict-deadbeef.md");
-  expect(html).toContain("memory-topic-1/m-99887766.conflict-cafebabe.md");
+  expect(html).toContain("observations/m-1a2b3c4d.conflict-deadbeef.md");
+  expect(html).toContain("observations/m-99887766.conflict-cafebabe.md");
 });
 
 test("one copy is one copy", () => {
@@ -60,6 +60,6 @@ test("a copy that would not parse still shows its path", () => {
       conflicts={[copy({ summary: "", body: "" })]}
     />,
   );
-  expect(html).toContain("memory-topic-1/m-1a2b3c4d.conflict-deadbeef.md");
+  expect(html).toContain("observations/m-1a2b3c4d.conflict-deadbeef.md");
   expect(html).toContain("could not be read");
 });

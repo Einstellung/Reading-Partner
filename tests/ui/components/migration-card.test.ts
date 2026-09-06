@@ -106,7 +106,7 @@ test("a finished run replaces the block, names the backup, and retires the apply
   const done = report({
     dryRun: false,
     backupDir: "migration-backups/2026-09-05T00-00-00-000Z",
-    written: ["memory-t/observations/index.json"],
+    written: ["observations/index.md"],
   });
   const state = run(
     initialMigrationCardState,

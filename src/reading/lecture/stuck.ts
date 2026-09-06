@@ -5,8 +5,8 @@
 // Three things this gets right that the opening snapshot does not:
 //
 // 1. Which book an observation is about is decided by its evidence anchors, not
-//    by page numbers in its text. Observations are stored per topic and a topic
-//    spans several PDFs: measured, 20 entries whose bodies name pages 149-193
+//    by page numbers in its text. One store spans every book the reader has:
+//    measured, 20 entries whose bodies name pages 149-193
 //    were all about Hands-On, and chapter 5 of the book the reader was actually
 //    in is p.149-193. Anything that reads the page number out of the prose picks
 //    the wrong book every time. Newer observations also carry `bookId`
@@ -73,11 +73,17 @@ export interface LectureFocus {
   endPage: number;
 }
 
-export type ObservationScope = "chapter" | "book" | "other";
-
 export interface ObservationPick {
   observation: Observation;
-  scope: ObservationScope;
+  // Whether this observation's own evidence puts it in the open book. It decides
+  // one thing: whether the body rides along or only the one-line index form.
+  //
+  // The three-band scope this replaces also had an "other" band, and printed it
+  // as "another book in this topic" — a claim the judgement behind it could not
+  // make. The band was "not this book", which is every other book the reader has
+  // and every observation with no anchor at all, and the label was false 45% of
+  // the time in a prompt (docs/48).
+  thisBook: boolean;
 }
 
 export interface LectureObservationInput {
@@ -104,34 +110,48 @@ function newestFirst(a: Observation, b: Observation): number {
   return b.updated.localeCompare(a.updated) || a.id.localeCompare(b.id);
 }
 
-// Where an observation sits relative to the open book and the chapter in focus.
-export function observationScope(
+// The marks of the open book this observation is anchored to.
+function openBookAnchors(
+  observation: Observation,
+  annotationPages: ReadonlyMap<string, number | null>,
+): string[] {
+  return observation.anchors.annotationIds.filter((id) => annotationPages.has(id));
+}
+
+// Whether the open book is what this observation is about: it names the book
+// outright, or its evidence is a mark made in it.
+export function isAboutOpenBook(
   observation: Observation,
   bookId: string,
   annotationPages: ReadonlyMap<string, number | null>,
+): boolean {
+  return observation.bookId === bookId || openBookAnchors(observation, annotationPages).length > 0;
+}
+
+// Whether one of those marks falls inside the chapter in focus. Orders, never
+// filters — the two most useful citations in the measured lecture came from
+// outside it.
+export function isInFocusChapter(
+  observation: Observation,
+  annotationPages: ReadonlyMap<string, number | null>,
   focus: LectureFocus | null,
-): ObservationScope {
-  const anchored = observation.anchors.annotationIds.filter((id) => annotationPages.has(id));
-  const isBook = observation.bookId === bookId || anchored.length > 0;
-  if (!isBook) return "other";
-  if (!focus) return "book";
-  const inChapter = anchored.some((id) => {
+): boolean {
+  if (!focus) return false;
+  return openBookAnchors(observation, annotationPages).some((id) => {
     const page = annotationPages.get(id);
     return page !== null && page !== undefined && page >= focus.startPage && page <= focus.endPage;
   });
-  return inChapter ? "chapter" : "book";
 }
 
 // The observations this turn carries, in print order.
 export function selectLectureObservations(input: LectureObservationInput): ObservationPick[] {
   const focus = input.focus ?? null;
   const limit = input.limit ?? LECTURE_OBSERVATION_CAP;
-  const scoped = [...input.observations]
-    .sort(newestFirst)
-    .map((observation) => ({
-      observation,
-      scope: observationScope(observation, input.bookId, input.annotationPages, focus),
-    }));
+  const scoped = [...input.observations].sort(newestFirst).map((observation) => ({
+    observation,
+    thisBook: isAboutOpenBook(observation, input.bookId, input.annotationPages),
+    inChapter: isInFocusChapter(observation, input.annotationPages, focus),
+  }));
 
   const picked: ObservationPick[] = [];
   const taken = new Set<string>();
@@ -141,10 +161,11 @@ export function selectLectureObservations(input: LectureObservationInput): Obser
     picked.push(pick);
   };
 
-  const inBand = (p: ObservationPick, scope: ObservationScope): boolean =>
-    p.scope === scope && !(input.bookLevel === true && p.observation.type === "reading-position");
-  for (const p of scoped.filter((p) => inBand(p, "chapter")).slice(0, CHAPTER_HIT_CAP)) take(p);
-  for (const p of scoped.filter((p) => inBand(p, "book")).slice(0, BOOK_HIT_CAP)) take(p);
+  type Scoped = (typeof scoped)[number];
+  const banded = (p: Scoped): boolean =>
+    p.thisBook && !(input.bookLevel === true && p.observation.type === "reading-position");
+  for (const p of scoped.filter((p) => banded(p) && p.inChapter).slice(0, CHAPTER_HIT_CAP)) take(p);
+  for (const p of scoped.filter((p) => banded(p) && !p.inChapter).slice(0, BOOK_HIT_CAP)) take(p);
   for (const p of scoped
     .filter((p) => p.observation.type === "correction" && !taken.has(p.observation.id))
     .slice(0, CORRECTION_QUOTA)) {
@@ -164,24 +185,19 @@ export function selectLectureObservations(input: LectureObservationInput): Obser
   return picked;
 }
 
-function scopeLabel(scope: ObservationScope, focus: LectureFocus | null): string {
-  if (scope === "chapter") return " — this book, the chapter in focus";
-  if (scope === "book") return focus ? " — this book, elsewhere in it" : " — this book";
-  return " — another book in this topic";
-}
-
 // The snapshot a lecture turn carries, handed to observationPromptSection in
-// place of the opening snapshot. Entries about the open book print their bodies;
-// the rest keep the one-line index form they have everywhere else.
-export function lectureObservationSnapshot(
-  picks: readonly ObservationPick[],
-  focus: LectureFocus | null = null,
-): string {
+// place of the opening snapshot. Entries about the open book print their bodies —
+// the prescription is in the body; the rest keep the one-line index form they
+// have everywhere else, which is what keeps the section inside its budget.
+//
+// Nothing is labelled with where it came from. The one label the data supports
+// is "this book", and that is already what the two forms say.
+export function lectureObservationSnapshot(picks: readonly ObservationPick[]): string {
   if (picks.length === 0) return "";
   const blocks: string[] = [];
-  for (const { observation, scope } of picks) {
-    const head = `${serializeIndexLine(observation)}${scopeLabel(scope, focus)}`;
-    if (scope === "other") {
+  for (const { observation, thisBook } of picks) {
+    const head = serializeIndexLine(observation);
+    if (!thisBook) {
       blocks.push(head);
       continue;
     }

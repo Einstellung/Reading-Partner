@@ -69,9 +69,9 @@ function deps(log: Log, over: Partial<DeleteBookDeps> = {}): DeleteBookDeps {
     unlinkFile: async (topicId, path) => {
       log.calls.push(`unlink ${topicId} ${path}`);
     },
-    listObservations: async (topicId) => OBSERVATIONS[topicId] ?? [],
-    deleteObservation: async (topicId, id) => {
-      log.calls.push(`observation ${topicId} ${id}`);
+    listObservations: async () => Object.values(OBSERVATIONS).flat(),
+    deleteObservation: async (id) => {
+      log.calls.push(`observation ${id}`);
     },
     listStatements: async () => STATEMENTS,
     listRetells: async () => RETELLS,
@@ -94,8 +94,8 @@ test("the whole order, once, from the tombstone down to the files", async () => 
     "unlink t1 /books/a.pdf",
     "unlink t2 /shared/a.pdf",
     // m-2 is a statement's evidence and stays; m-3 is another book's.
-    "observation t1 m-1",
-    "observation t2 m-4",
+    "observation m-1",
+    "observation m-4",
     // The talk goes before the retell it came out of, which is how it is found.
     "outline o-1",
     "retell r-1",
@@ -120,7 +120,7 @@ test("a retell that will not delete leaves the record deletions standing", async
   );
   expect(log.calls.slice(0, 3)).toEqual(["tombstone " + BOOK, "library " + BOOK, "position " + BOOK]);
   expect(log.calls).toContain("unlink t2 /shared/a.pdf");
-  expect(log.calls).toContain("observation t1 m-1");
+  expect(log.calls).toContain("observation m-1");
   // And the files after it still go.
   expect(log.calls).toContain(`file library/${BOOK}.pdf`);
 });

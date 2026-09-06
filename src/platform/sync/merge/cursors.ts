@@ -1,5 +1,5 @@
-// The cursors strategy: memory-<topicId>/meta.json, the bookkeeping that says
-// how much of a topic has already been folded into its observations
+// The cursors strategy: observations/meta.json, the bookkeeping that says how
+// much of each topic has already been folded into observations
 // (memory/observations/store.ts). Fields, plus one rule: when both devices
 // moved the same number, the lower one wins.
 //
@@ -14,11 +14,11 @@
 //   distilledMarks[bookId]       the newest mark folded in for that book
 //     (markCursor, countNewMarks). Same asymmetry: marks at or before it are
 //     never offered to a pass again.
-//   lastAnnotationDistillAt      the topic-wide stamp older versions wrote,
-//     still read as the seed for a book that has no per-book cursor yet. A
-//     cursor too, by the same reading.
-//   lastDistilledAt              not a cursor but a rate limit: isTopicDue
-//     (arrears.ts) makes a topic wait MIN_DISTILL_GAP_MS after it. Too high
+//   lastAnnotationDistillAt[topicId]  the topic-wide stamp older versions
+//     wrote, still read as the seed for a book that has no per-book cursor yet.
+//     A cursor too, by the same reading.
+//   lastDistilledAt[topicId]     not a cursor but a rate limit: isTopicDue
+//     (arrears.ts) makes that topic wait MIN_DISTILL_GAP_MS after it. Too high
 //     holds the next pass back by up to half an hour and tells the profile
 //     guess that memory moved when it did not (isGuessDue, profile/guess.ts);
 //     too low only lets the half-hourly sweep look at the topic sooner, and the
@@ -26,11 +26,15 @@
 //     model call. Lower is the cheap direction here as well, so the file needs
 //     one rule and not two.
 //
+// The last two are keyed by topic id because there is one file for every topic;
+// the two above them are keyed by thread and by book, which are already global.
+//
 // Measured, not hypothetical: meta.json was falling through to opaque, which
 // parks the losing side's whole file at meta.conflict-<digest>.json where no
-// reader in src/ looks for it. The owner's memory-b3a9f89c-* directory holds
+// reader in src/ looks for it. One of the owner's per-topic directories held
 // three such copies — 2026-08-13, and two on 2026-08-19 — carrying 1, 14 and 9
-// distilledMessages cursors that the live file never got.
+// distilledMessages cursors that the live file never got; the flattening step
+// folds those in as it goes past (migrate/flatten.ts).
 
 import { chooseByContent, type Json } from "./text";
 

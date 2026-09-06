@@ -16,11 +16,11 @@ import { mergeFile } from "../../src/platform/sync/merge";
 import { strategyFor } from "../../src/platform/sync/merge/contract";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
-const TOMBSTONES = "memory-topic-1/deleted-observations.jsonl";
+const TOMBSTONES = "observations/deleted-observations.jsonl";
 
 function makeStore(now: () => number = () => JULY_17) {
   const { fs, files } = makeFakeFs();
-  return { store: new ObservationFileStore("topic-1", fs, now), files };
+  return { store: new ObservationFileStore(fs, now), files };
 }
 
 test("delete writes a tombstone naming the id and the day", async () => {
@@ -40,7 +40,7 @@ test("an entry whose file reappears stays out of list and out of the index", asy
   await store.delete(gone.id);
 
   files.set(
-    `memory-topic-1/${gone.id}.md`,
+    `observations/${gone.id}.md`,
     serializeObservation({
       id: gone.id,
       type: "belief",
@@ -57,15 +57,15 @@ test("an entry whose file reappears stays out of list and out of the index", asy
   expect((await store.readIndex()).map((e) => e.id)).toEqual([keep.id]);
   // Nothing is destroyed on the way: the file the other device pushed is still
   // there to be read by hand, it is only not an observation any more.
-  expect(files.has(`memory-topic-1/${gone.id}.md`)).toBe(true);
+  expect(files.has(`observations/${gone.id}.md`)).toBe(true);
 });
 
 test("get answers null for a tombstoned id whose file is still on disk", async () => {
   const { store, files } = makeStore();
   const gone = await store.create({ type: "belief", summary: "drop", body: "d" });
-  const text = files.get(`memory-topic-1/${gone.id}.md`) as string;
+  const text = files.get(`observations/${gone.id}.md`) as string;
   await store.delete(gone.id);
-  files.set(`memory-topic-1/${gone.id}.md`, text);
+  files.set(`observations/${gone.id}.md`, text);
 
   expect(await store.get(gone.id)).toBeNull();
 });
@@ -81,7 +81,7 @@ test("an edit arriving after the delete does not bring the observation back", as
   await store.delete(gone.id);
 
   files.set(
-    `memory-topic-1/${gone.id}.md`,
+    `observations/${gone.id}.md`,
     serializeObservation({
       id: gone.id,
       type: "belief",
@@ -116,7 +116,7 @@ test("deleting an already tombstoned id succeeds and writes no second line", asy
 test("a topic with no tombstone file gets an empty one and loses nothing", async () => {
   const { store, files } = makeStore();
   files.set(
-    "memory-topic-1/m-11111111.md",
+    "observations/m-11111111.md",
     serializeObservation({
       id: "m-11111111",
       type: "belief",
@@ -127,14 +127,14 @@ test("a topic with no tombstone file gets an empty one and loses nothing", async
       anchors: { annotationIds: [], messageIds: [] },
     }),
   );
-  files.set("memory-topic-1/index.md", "");
+  files.set("observations/index.md", "");
   expect(files.has(TOMBSTONES)).toBe(false);
 
   await store.rebuildIndex();
 
   expect(files.get(TOMBSTONES)).toBe("");
   expect((await store.readIndex()).map((e) => e.id)).toEqual(["m-11111111"]);
-  expect(files.has("memory-topic-1/m-11111111.md")).toBe(true);
+  expect(files.has("observations/m-11111111.md")).toBe(true);
 });
 
 // --- the file as sync sees it ------------------------------------------------

@@ -22,6 +22,9 @@ export interface MigrationFs {
   // Replaces the file, creating the directory if it is missing.
   write(path: string, content: string): Promise<void>;
   remove(path: string): Promise<void>;
+  // Removes a directory that has no files left in it. Only the flattening step
+  // calls it, and only after it has moved or dropped everything it found.
+  removeDir(path: string): Promise<void>;
   // File names directly under a directory; "" is the app data root. [] when the
   // directory does not exist.
   listDir(path: string): Promise<string[]>;
