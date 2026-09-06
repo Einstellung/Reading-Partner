@@ -1,47 +1,34 @@
-// Settings: the shell around three tabs. What each of them holds is argued in
-// settings/AccountPanel, settings/FeaturesPanel and settings/OptionalPanel; this
-// file is the frame, the tab strip, and the footer.
+// Settings: a page of the content area, with the sidebar still beside it and
+// the Settings row at its foot lit (docs/51). What each of the three tabs holds
+// is argued in settings/AccountPanel, settings/FeaturesPanel and
+// settings/OptionalPanel; this file is the page, the sub-nav, and the footer.
 //
-// A full-screen Dialog (docs/30, fourth pass): the shell still mounts and
-// unmounts it, so `open` is constant and onOpenChange only ever reports the
-// close Radix decides on — Escape. What the dialog buys is the focus trap, an
-// aria-hidden screen behind, and that Escape.
+// The page is a screen like Today and the briefing: `absolute inset-0` over the
+// column beside the sidebar, one scroller, nothing fixed. Escape and the
+// sidebar are the way out, so there is no Done button — App puts the previous
+// screen back (docs/51).
 //
-// The height chain. The page box is `fixed inset-0` with a scroller of its own,
-// so the column inside it takes `h-full` and becomes a flex column: title row
-// and footer fixed, the tabs in between as `min-h-0 flex-1`, and the panel the
-// only thing that scrolls. Drop the `min-h-0` anywhere along that chain and the
-// flex item refuses to shrink below its content, the page scroller takes over,
-// and the tab strip scrolls away with the panel.
+// SettingsBody is exported for SettingsDialog, the full-screen form the phone
+// and the reader still use: neither of them has a sidebar to show a page
+// beside.
 //
-// The layout is breakpoints, not two components: the strip is a column beside
-// the panel from `sm` up and a row above it below that, and both shapes are the
-// same three triggers. Radix's `orientation` is a prop and cannot follow a media
+// The sub-nav is breakpoints, not two components: a 200px column of rows from
+// `lg` up, a scrollable row of chips below it, and both shapes are the same
+// three triggers. Radix's `orientation` is a prop and cannot follow a media
 // query, so it stays vertical — that decides which arrow keys walk the strip,
 // and the wide shape is the one with a keyboard on it.
-//
-// From `sm` up the strip is a full-height rail rather than a box in the top-left
-// corner: it takes the row's stretch (no `self-start`) and its triggers give up
-// the `flex-1` they wear in the narrow row, which in a column would divide the
-// rail's height between the three of them. The column the whole page sits in is
-// wide enough for that rail plus a panel, and centred, so the weight of the page
-// does not sit in one corner of the window.
 
 import { useEffect, useState } from "react";
 
 import { LICENSE_NAME, readAppVersion, UNPACKAGED_VERSION } from "../../platform/app/version";
 import { type Settings } from "../../platform/app/settings";
 import { type DeviceSettings } from "../../platform/app/device";
-import { cn } from "./lib/utils";
 import AccountPanel from "./settings/AccountPanel";
 import FeaturesPanel from "./settings/FeaturesPanel";
 import OptionalPanel from "./settings/OptionalPanel";
-import { Button } from "./ui/button";
-import { Dialog, DialogFullScreenContent, DialogTitle } from "./ui/dialog";
-import { OVERLAY_SAFE } from "./ui/overlay";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
-interface SettingsViewProps {
+export interface SettingsBodyProps {
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
   // This machine's own settings (docs/36), null until device.json has been read.
@@ -49,12 +36,32 @@ interface SettingsViewProps {
   // being folded into Settings.
   device: DeviceSettings | null;
   onDeviceChange: (next: DeviceSettings) => void;
-  onClose: () => void;
 }
 
-// The scrolling half of the page. `pr-3` from `sm` up is the gutter the
-// scrollbar lives in, so it does not sit against the edge of a card.
-const TAB_PANEL = "min-h-0 min-w-0 flex-1 overflow-y-auto sm:pr-3";
+// The column the page is set in, the same measurements as Today's (Vestibule):
+// 32px top and bottom, 40px sides on a landscape tablet and 32 on a portrait
+// one, where the sidebar has already taken 52px. No max width on the whole
+// page — the cards column carries its own.
+const PAGE = "w-full px-8 py-8 lg:px-10";
+const EYEBROW = "text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
+
+// The sub-nav. Wide: a 200px column of rows. Narrow: a row of chips that
+// scrolls sideways rather than wrapping, so the cards keep the top of the page.
+// The list's own pill fill and padding come off in both shapes.
+const SUBNAV =
+  "shrink-0 justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0 " +
+  "lg:w-[200px] lg:flex-col lg:items-stretch lg:overflow-visible";
+
+// A row of that column, or a chip of that strip. `flex-none` displaces the
+// primitive's `flex-1`, which in a column would divide the sub-nav's height
+// between the three of them and in the strip would stretch the chips instead of
+// letting them scroll. The active one takes the neutral chip fill the sidebar
+// and the reader's panels use, so every list of destinations in the app reads
+// alike.
+const SUBNAV_ROW =
+  "min-h-11 flex-none justify-start rounded-md px-3 text-[14px] font-normal text-muted-foreground " +
+  "data-[state=active]:bg-secondary data-[state=active]:font-medium " +
+  "data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none";
 
 const TABS = [
   { value: "account", label: "Account" },
@@ -62,97 +69,62 @@ const TABS = [
   { value: "optional", label: "Optional" },
 ];
 
-// Narrow: the segmented pill the primitive draws. Wide: a rail down the left of
-// the page, so the strip is a side of the page rather than a box in its corner.
-// The pill's own fill and padding come off for that, and the rule stands in for
-// them — `self-start` is gone with them, which is what makes the rail as tall as
-// the panel beside it.
-const TAB_LIST =
-  "shrink-0 sm:w-44 sm:flex-col sm:items-stretch sm:justify-start sm:rounded-none sm:border-r sm:border-border sm:bg-transparent sm:p-0 sm:pr-2";
+export default function SettingsView(props: SettingsBodyProps) {
+  return (
+    <div className="absolute inset-0 overflow-y-auto bg-background">
+      <div className={PAGE}>
+        <div className={EYEBROW}>Settings</div>
+        <h1 className="mb-6 mt-1 font-display text-[30px] font-semibold text-foreground">
+          Settings
+        </h1>
+        <SettingsBody {...props} />
+      </div>
+    </div>
+  );
+}
 
-// A trigger in the wide shape is a row of the rail, not a segment of a pill: it
-// gives up the `flex-1` that would divide the rail's height between the three of
-// them, reads left to right, and takes the fill the narrow shape puts on the
-// page behind it.
-const TAB_TRIGGER =
-  "sm:grow-0 sm:justify-start sm:px-3 sm:data-[state=active]:bg-muted sm:data-[state=active]:shadow-none";
-
-export default function SettingsView({
+// The sub-nav and the cards, in both forms of the page. The version line sits
+// under the cards rather than under the whole thing: it belongs to the column
+// it follows.
+export function SettingsBody({
   settings,
   onSettingsChange,
   device,
   onDeviceChange,
-  onClose,
-}: SettingsViewProps) {
+}: SettingsBodyProps) {
   return (
-    <Dialog
-      open
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
+    <Tabs
+      defaultValue="account"
+      orientation="vertical"
+      className="flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:gap-8"
     >
-      <DialogFullScreenContent aria-describedby={undefined}>
-        {/* The page is fixed, so the shell's safe-area padding does not reach
-            it and the title row and Done would sit under the notch
-            (docs/pitfall/74). OVERLAY_SAFE.fullscreen is that inset, on the
-            column rather than on the page, so the white still runs to the edge
-            of the screen. */}
-        <div
-          className={cn(
-            OVERLAY_SAFE.fullscreen,
-            "mx-auto flex h-full w-[min(860px,100%)] flex-col",
-          )}
-        >
-          {/* A title bar rather than a title and a stray button: the rule under
-              it is what makes Done belong to the heading it sits a page-width
-              away from. */}
-          <div className="mb-6 flex shrink-0 items-center justify-between border-b border-border pb-4">
-            {/* The classes belong on DialogTitle, not on the <h1>: asChild
-                merges the two className strings by concatenating them, so a
-                class written on the child does not displace the default it
-                contradicts — it only races it in the stylesheet. On DialogTitle
-                they go through cn() and the default is gone. */}
-            <DialogTitle asChild className="m-0 text-[22px] leading-normal font-bold">
-              <h1>Settings</h1>
-            </DialogTitle>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Done
-            </Button>
-          </div>
+      <TabsList className={SUBNAV}>
+        {TABS.map((t) => (
+          <TabsTrigger key={t.value} value={t.value} className={SUBNAV_ROW}>
+            {t.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
 
-          <Tabs
-            defaultValue="account"
-            orientation="vertical"
-            className="min-h-0 flex-1 flex-col sm:flex-row sm:gap-6"
-          >
-            <TabsList className={TAB_LIST}>
-              {TABS.map((t) => (
-                <TabsTrigger key={t.value} value={t.value} className={TAB_TRIGGER}>
-                  {t.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+      <div className="min-w-0 max-w-[720px] flex-1">
+        <TabsContent value="account">
+          <AccountPanel settings={settings} onSettingsChange={onSettingsChange} />
+        </TabsContent>
+        <TabsContent value="features">
+          <FeaturesPanel
+            settings={settings}
+            onSettingsChange={onSettingsChange}
+            device={device}
+            onDeviceChange={onDeviceChange}
+          />
+        </TabsContent>
+        <TabsContent value="optional">
+          <OptionalPanel settings={settings} onSettingsChange={onSettingsChange} />
+        </TabsContent>
 
-            <TabsContent value="account" className={TAB_PANEL}>
-              <AccountPanel settings={settings} onSettingsChange={onSettingsChange} />
-            </TabsContent>
-            <TabsContent value="features" className={TAB_PANEL}>
-              <FeaturesPanel
-                settings={settings}
-                onSettingsChange={onSettingsChange}
-                device={device}
-                onDeviceChange={onDeviceChange}
-              />
-            </TabsContent>
-            <TabsContent value="optional" className={TAB_PANEL}>
-              <OptionalPanel settings={settings} onSettingsChange={onSettingsChange} />
-            </TabsContent>
-          </Tabs>
-
-          <VersionLine />
-        </div>
-      </DialogFullScreenContent>
-    </Dialog>
+        <VersionLine />
+      </div>
+    </Tabs>
   );
 }
 
@@ -173,7 +145,7 @@ function VersionLine() {
   }, []);
 
   return (
-    <p className="m-0 shrink-0 pt-4 text-center text-xs text-faint-foreground">
+    <p className="m-0 pt-4 text-xs text-faint-foreground">
       Reading Partner {version} · {LICENSE_NAME}
     </p>
   );

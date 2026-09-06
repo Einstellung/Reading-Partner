@@ -19,6 +19,7 @@ const ICONS: Record<ShellNavId, (p: { size?: number }) => JSX.Element> = {
   today: IconToday,
   briefing: IconBriefing,
   topics: IconBooks,
+  settings: IconGear,
 };
 
 // One row, in both widths. h-11 is the 44px touch target either way; the rail is
@@ -99,7 +100,8 @@ export default function AppSidebar(props: {
 
       <Row
         label="Settings"
-        icon={IconGear}
+        icon={ICONS.settings}
+        active={props.active === "settings"}
         title={props.settingsAlert ? "Settings — sync needs attention" : "Settings"}
         onClick={props.onOpenSettings}
       >
