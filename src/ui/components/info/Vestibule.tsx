@@ -39,6 +39,11 @@ import {
 const PAGE = "mx-auto w-full max-w-[880px] px-8 py-8 lg:px-10";
 const CARD =
   "rounded-2xl border border-border-soft bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]";
+// The card when it is the button: the shelf card's pointer and its deepening
+// shadow on hover (cardStyles.ts), so it lifts the way a cover does. The
+// placeholder and empty states keep the plain CARD; nothing there is pressable.
+const CARD_BUTTON =
+  `${CARD} cursor-pointer transition-shadow can-hover:hover:border-border can-hover:hover:shadow-[0_2px_10px_rgba(0,0,0,0.10)]`;
 const EYEBROW = "text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
 
 export function Vestibule({
@@ -203,7 +208,7 @@ function ContinueCard(props: {
   const progress = readingProgress(meta);
 
   return (
-    <button className={`${CARD} flex w-full items-center gap-4 text-left`} onClick={props.onContinue}>
+    <button className={`${CARD_BUTTON} flex w-full items-center gap-4 text-left`} onClick={props.onContinue}>
       <span className="relative block w-24 flex-none">
         <CoverBand tiles={singleCoverTile(book.file)} />
         {progress !== null && (
@@ -276,7 +281,7 @@ function BriefingCard(props: {
   const rows = briefing.mustRead.slice(0, TODAY_CARD_ITEMS);
 
   return (
-    <button className={`${CARD} block w-full text-left`} onClick={props.onOpen}>
+    <button className={`${CARD_BUTTON} block w-full text-left`} onClick={props.onOpen}>
       <span className="flex items-center gap-3">
         <span className={`min-w-0 flex-1 ${EYEBROW}`}>{briefingEyebrow(briefing)}</span>
         <span className="flex flex-none text-muted-foreground">
