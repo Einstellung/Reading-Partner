@@ -14,18 +14,21 @@ import { createLiveVoiceCall, NO_VOICE_CALL } from "../../../info/companion/voic
 import type { BriefingControl } from "../../../info/companion/companion-live";
 import type { SessionPhase } from "../../../info/companion/voice-session";
 import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../info/companion/voice-call";
+import type { Briefing } from "../../../info/briefing/types";
 
 export interface VoiceCallOptions {
-  /** The day whose briefing and thread the call is about. */
+  /** The day whose thread the call is about. */
   dateKey: string;
+  /** The day's briefing as the page holds it; see LiveVoiceCallOptions. */
+  briefing: Briefing | null;
   /** What generate_briefing does; see LiveVoiceCallOptions. */
-  briefing?: BriefingControl;
+  control?: BriefingControl;
 }
 
 export type { VoiceCallView };
 
 export function useVoiceCall(opts: VoiceCallOptions): VoiceCallView {
-  const { dateKey, briefing } = opts;
+  const { dateKey, briefing, control } = opts;
   const [phase, setPhase] = useState<SessionPhase>("idle");
   const [error, setError] = useState<VoiceCallError | null>(null);
   const callRef = useRef<VoiceCall | null>(null);
@@ -37,8 +40,8 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallView {
   // The latest options, read at start time: a call is started from a gesture,
   // not from a render, and rebuilding the callbacks per render would churn the
   // orb's props for no reason.
-  const optsRef = useRef({ dateKey, briefing });
-  optsRef.current = { dateKey, briefing };
+  const optsRef = useRef({ dateKey, briefing, control });
+  optsRef.current = { dateKey, briefing, control };
 
   const subscribeLevel = useCallback((cb: (level: number) => void) => {
     levelCbs.current.add(cb);

@@ -110,7 +110,7 @@ function Harness() {
           />
         </div>
       )}
-      <VoiceOrbEntry dateKey="2026-09-05" stub />
+      <VoiceOrbEntry dateKey={BRIEFING.date} briefing={BRIEFING} stub />
     </>
   );
 }

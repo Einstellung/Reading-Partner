@@ -23,7 +23,6 @@ import {
   patchThreadMessage,
 } from "../../platform/app/threads";
 import { loadProfile } from "../../memory/profile/profile";
-import { loadBriefing } from "../briefing/store";
 import { loadSources } from "../sources/source-store";
 import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
@@ -37,18 +36,29 @@ import {
 } from "./voice-call";
 import type { AgentTool } from "../../ai/agent";
 import type { ProviderId } from "../../ai/providers";
+import type { Briefing } from "../briefing/types";
 import type { InfoCallAnchor } from "./anchors";
 
 export interface LiveVoiceCallOptions {
-  /** The day whose briefing and thread the call is about. */
+  /** The day whose thread the call is about, and what it is called. */
   dateKey: string;
+  /**
+   * The day's briefing as the page holds it, or null where the page has none.
+   * Passed in rather than loaded by date: a reader never writes its own
+   * briefing-<date>.json — the file arrives over sync and is read back through
+   * publish.ts (docs/36) — so a by-date load there finds nothing and the call
+   * tells the user there is no briefing while the page is showing it. The text
+   * Ask already anchors on this object (use-info-home.ts); the call takes the
+   * same one so both open the same conversation.
+   */
+  briefing: Briefing | null;
   /**
    * What generate_briefing does. Absent where the caller holds no pipeline
    * view: the tool is still mounted (the model is told about it either way) and
    * saying so through a thrown tool error is the honest answer — better than a
    * controller that reports a run it never started.
    */
-  briefing?: BriefingControl;
+  control?: BriefingControl;
 }
 
 /** Nothing to hold a call with: no plugin, so no microphone and no player. */
@@ -167,8 +177,8 @@ const REFUSE_BRIEFING: BriefingControl = {
  * behind, applied where the bridge is built (conversation.ts).
  */
 export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<VoiceCall | null> {
-  const [briefing, profile, sources, settings, device] = await Promise.all([
-    loadBriefing(opts.dateKey),
+  const briefing = opts.briefing;
+  const [profile, sources, settings, device] = await Promise.all([
     loadProfile(),
     loadSources(),
     loadSettings(),
@@ -218,7 +228,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
             // still answer the model in text, which is what it speaks.
             () => {},
             () => {},
-            opts.briefing ?? REFUSE_BRIEFING,
+            opts.control ?? REFUSE_BRIEFING,
             { collecting },
           ).catch((e) => {
             tools = null;
