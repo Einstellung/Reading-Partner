@@ -275,6 +275,7 @@
 - [65-pi-clamps-max-tokens-to-one-and-calls-it-done](./65-pi-clamps-max-tokens-to-one-and-calls-it-done.md) — 上下文接近窗口时 pi 把允许输出夹到 1，模型吐一个 token 就停，`done` 正常发出、没有 error；聊天里是一个字的回复，解析 JSON 的地方变成"格式错误"。pi 的估算器还是 `chars/4`，中文低估 2.5–4 倍，最该收紧时放行。发请求前自己算，见 `src/budget/`
 - [66-usage-shortcut-freezes-pi-context-estimate](./66-usage-shortcut-freezes-pi-context-estimate.md) — 消息数组里一旦有带 usage 的真 assistant 消息，pi 的估算就等于那个 usage，系统提示词不再计入，压缩 usage 之前的任何东西都不改变它；重放历史里那条没 timestamp 的 assistant 消息又会把捷径整个关掉（NaN 比较），同一个调用点两套计价。判断压缩够不够只能重新量，不能拿字符估的 saving 去减
 - [131-pi-cache-retention-env-never-reaches-the-webview](./131-pi-cache-retention-env-never-reaches-the-webview.md) — `PI_CACHE_RETENTION=long` 在 dev 和打包版都读不到：webview 里没有 `process`，Vite build 又把 `process.env` 换成 `{}`，pi 每次都落回 5 分钟保留期。要换只能在发送路径上传 `cacheRetention`，并把同一个值传给埋点
+- [234-failed-background-pass-records-only-unknown](./234-failed-background-pass-records-only-unknown.md) — 后台蒸馏/画像失败恒记 `reason: "unknown"`：错误对象在 `runAgentTurn` 的 catch 里就丢了，`live.ts` 又只传 outcome，`classifyDistillFailure` 拿到空文本。失败事件改带 `errorName` + `errorMessage`（前 200 字，只在 `outcome: "failed"` 时带）；另附读日志的两条：没有 `prompt-cache` 行等于请求没拿回任何消息，`distill-failed` 的 `from` 是当时的游标而 meta.json 可能已被另一台设备换过
 
 ## 开发环境
 

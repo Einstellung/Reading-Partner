@@ -16,6 +16,7 @@ import type { AgentTool } from "../../ai/agent";
 import {
   runSubagent,
   type SubagentDefinition,
+  type SubagentFailure,
   type SubagentModel,
   type SubagentOutcome,
   type SubagentTurnFn,
@@ -434,6 +435,10 @@ export interface DistillResult {
   // is the observation writes, so that text is discarded. Do not start relaying
   // it — there is no reader-facing place for a bookkeeping message.
   failure?: string;
+  // What the call that did not complete was, when that is what happened: the
+  // error's name and message, neither of them a model's words. The line the
+  // caller writes carries these; `failure` above never goes near a log.
+  cause?: SubagentFailure;
 }
 
 // --- what a failed pass records ---
@@ -533,22 +538,62 @@ export interface DistillFailureInput {
   stage: DistillFailureStage;
   // The sub-agent's outcome, when the pass got as far as a run.
   outcome?: SubagentOutcome;
-  // What was thrown, when it did not. Only its category is recorded.
+  // What was thrown, when it did not.
   error?: unknown;
+  // What the run reported when it did not complete (SubagentFailure). Set only
+  // for outcome "failed", which is the one outcome whose text is the provider's
+  // or this app's own rather than a model's.
+  cause?: SubagentFailure;
   coverage?: DistillCoverage | null;
   // Writes the pass managed before it stopped. They are already on disk.
   counts?: { created: number; updated: number; deleted: number };
 }
 
+// How much of an error message the failure line carries. Long enough for a
+// provider's sentence and the code in it, short enough that nothing composed can
+// hide in the tail.
+export const FAILURE_MESSAGE_CAP = 200;
+
+// The error's own identity, for the failure line: what was thrown and what it
+// said. Never a model's words — an error here was raised by a provider, by pi,
+// or by this app's own code. The outcomes whose message a model wrote are held
+// off structurally rather than by convention: only a run that did not complete
+// at all ("failed"), or a pass that never reached a run (no outcome), has an
+// error of its own to name.
+export function failureIdentity(input: {
+  outcome?: SubagentOutcome;
+  error?: unknown;
+  cause?: SubagentFailure;
+}): {
+  name: string | null;
+  message: string | null;
+} {
+  if (input.outcome !== undefined && input.outcome !== "failed") {
+    return { name: null, message: null };
+  }
+  if (input.cause) {
+    return { name: input.cause.name, message: input.cause.message.slice(0, FAILURE_MESSAGE_CAP) };
+  }
+  const e = input.error;
+  if (e === undefined) return { name: null, message: null };
+  if (e instanceof Error) {
+    return { name: e.constructor.name, message: e.message.slice(0, FAILURE_MESSAGE_CAP) };
+  }
+  return { name: typeof e, message: String(e).slice(0, FAILURE_MESSAGE_CAP) };
+}
+
 // The fields of a `distill-failed` line that describe the failure itself; the
-// caller adds which thread or book it was and what triggered it. Ids and numbers
-// only, like every other line in that log — no transcript, no observation text,
-// no failure sentence.
+// caller adds which thread or book it was and what triggered it. Ids, numbers,
+// and the error's own name and message — no transcript, no observation text, and
+// nothing the model wrote, including its account of its own failure.
 export function distillFailurePayload(input: DistillFailureInput): EventPayload {
   const c = input.coverage ?? null;
+  const identity = failureIdentity(input);
   return {
     stage: input.stage,
     reason: classifyDistillFailure(input),
+    errorName: identity.name,
+    errorMessage: identity.message,
     outcome: input.outcome ?? null,
     from: c?.from ?? null,
     to: c?.to ?? null,
@@ -786,6 +831,7 @@ export async function runDistillation(
     ok,
     outcome: brief.outcome,
     failure: ok ? undefined : brief.brief,
+    ...(brief.failure ? { cause: brief.failure } : {}),
   };
 }
 
@@ -1134,7 +1180,13 @@ export async function runMarksDistillation(
     { run: deps.run },
   );
   const ok = brief.outcome === "answered";
-  return { ...tally.counts, ok, outcome: brief.outcome, failure: ok ? undefined : brief.brief };
+  return {
+    ...tally.counts,
+    ok,
+    outcome: brief.outcome,
+    failure: ok ? undefined : brief.brief,
+    ...(brief.failure ? { cause: brief.failure } : {}),
+  };
 }
 
 export interface MarksPassInput {

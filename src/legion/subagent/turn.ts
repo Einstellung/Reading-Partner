@@ -65,7 +65,15 @@ export function createTurnSettler(
     onToolEnd: () => {},
     onRound,
     onDone: (text) => settle({ kind: "answer", text }),
-    onError: (message) => settle({ kind: "error", message }),
+    // The thrown error's own type crosses with its message. Without it every
+    // provider failure reaches the caller as a bare sentence, and a caller that
+    // records failures by category has nothing to sort them by.
+    onError: (message, _assistant, thrown) =>
+      settle({
+        kind: "error",
+        message,
+        ...(thrown instanceof Error ? { name: thrown.constructor.name } : {}),
+      }),
     // The loop declined for a reason it can state (the round cap, or a round
     // that outgrew the window). Not an error: every request that went out was
     // answered, and the difference decides what the brief says.

@@ -7,10 +7,14 @@
 // refreshes after background writes.
 
 import { resolveModel } from "../../ai/model-call";
-import { runSubagentTurnLive } from "../../legion/subagent";
+import {
+  runSubagentTurnLive,
+  type SubagentFailure,
+  type SubagentOutcome,
+} from "../../legion/subagent";
 import { StoppedError } from "../../legion/execute/watchdog";
 import { peekAnnotations } from "../../platform/app/annotations";
-import { logEvent } from "../../platform/app/events";
+import { logEvent, type EventPayload } from "../../platform/app/events";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
 import { AI_EVENT_TOPIC } from "../../platform/app/structured-output";
 import { peekThreads } from "../../platform/app/threads";
@@ -51,6 +55,7 @@ import type { Observation, ObservationIndexEntry } from "../observations/types";
 import {
   distillFailurePayload,
   distillWritePayload,
+  failureIdentity,
   markCursor,
   messageCursor,
   runDistillPass,
@@ -287,6 +292,7 @@ export function distillThread(
           ...distillFailurePayload({
             stage: "run",
             outcome: result.outcome,
+            ...(result.cause ? { cause: result.cause } : {}),
             coverage: result.coverage,
             counts: result,
           }),
@@ -372,6 +378,7 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
           ...distillFailurePayload({
             stage: "run",
             outcome: result.outcome,
+            ...(result.cause ? { cause: result.cause } : {}),
             coverage: result.coverage,
             counts: result,
           }),
@@ -504,6 +511,18 @@ function runDistillJob(job: DistillJob, trigger: DistillTrigger): Promise<void> 
 
 // --- the profile-guess pass (guess.ts) ---
 
+// What was thrown and what it said, as the two fields a failed line carries. The
+// same pair `distill-failed` carries (distillFailurePayload), so one log can be
+// read across both passes. Never a model's words — see failureIdentity.
+function failureFields(input: {
+  outcome?: SubagentOutcome;
+  error?: unknown;
+  cause?: SubagentFailure;
+}): EventPayload {
+  const { name, message } = failureIdentity(input);
+  return { errorName: name, errorMessage: message };
+}
+
 // Every topic's observation index, plus the newest distillation stamp across all
 // of them — which is the "has the memory actually moved" half of the gate.
 async function collectGuessEvidence(): Promise<{
@@ -567,7 +586,14 @@ async function runGuessPass(trigger: DistillTrigger): Promise<void> {
     }
     if (!result.ok) {
       console.warn("profile guess pass did not finish:", result.failure);
-      logEvent(AI_EVENT_TOPIC, "guess-failed", { trigger, outcome: result.outcome });
+      logEvent(AI_EVENT_TOPIC, "guess-failed", {
+        trigger,
+        outcome: result.outcome,
+        ...failureFields({
+          outcome: result.outcome,
+          ...(result.cause ? { cause: result.cause } : {}),
+        }),
+      });
       return;
     }
     // The model was called, so the stamp moves whatever came of it — including a
@@ -584,7 +610,11 @@ async function runGuessPass(trigger: DistillTrigger): Promise<void> {
   } catch (e) {
     if (e instanceof StoppedError) return;
     console.warn("profile guess pass could not start", e);
-    logEvent(AI_EVENT_TOPIC, "guess-failed", { trigger, outcome: "failed" });
+    logEvent(AI_EVENT_TOPIC, "guess-failed", {
+      trigger,
+      outcome: "failed",
+      ...failureFields({ error: e }),
+    });
   }
 }
 
@@ -711,6 +741,7 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
           ...distillFailurePayload({
             stage: "run",
             outcome: result.outcome,
+            ...(result.cause ? { cause: result.cause } : {}),
             coverage: result.coverage,
             counts: result,
           }),

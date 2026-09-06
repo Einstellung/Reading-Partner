@@ -253,6 +253,7 @@ export async function runRetellDistillation(
     ok,
     outcome: brief.outcome,
     failure: ok ? undefined : brief.brief,
+    ...(brief.failure ? { cause: brief.failure } : {}),
   };
 }
 

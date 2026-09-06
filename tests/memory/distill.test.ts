@@ -33,6 +33,7 @@ import {
   distillCoverage,
   distillFailurePayload,
   distillWritePayload,
+  FAILURE_MESSAGE_CAP,
   evidenceDates,
   formatEvidenceSpan,
   runDistillPass,
@@ -1472,6 +1473,8 @@ test("the failure payload answers where, why and over what — and quotes nothin
   expect(payload).toEqual({
     stage: "run",
     reason: "unknown",
+    errorName: null,
+    errorMessage: null,
     outcome: "failed",
     from: 1,
     to: 3,
@@ -1491,6 +1494,8 @@ test("the failure payload answers where, why and over what — and quotes nothin
   expect(setup).toEqual({
     stage: "setup",
     reason: "no-provider",
+    errorName: "Error",
+    errorMessage: "no default AI provider configured (Settings)",
     outcome: null,
     from: null,
     to: null,
@@ -1508,6 +1513,74 @@ test("the failure payload answers where, why and over what — and quotes nothin
     error: new Error("the reader said the lesion studies were the point"),
   });
   expect(JSON.stringify(quoted)).not.toContain("lesion");
+});
+
+// The failure line's `reason` is a category, and every failure the patterns
+// cannot place lands in "unknown" — which is what twelve hours of half-hourly
+// `distill-failed` lines said on the owner's store while the passes were failing
+// before they ever reached the provider. A category nothing can be fixed from is
+// why these two fields exist beside it.
+
+test("a run that did not complete records what was thrown and what it said", () => {
+  const payload = distillFailurePayload({
+    stage: "run",
+    outcome: "failed",
+    cause: { name: "TypeError", message: "Anthropic is not connected. Open Settings to sign in." },
+    coverage: { from: 0, to: 12, fromTs: 1, toTs: 2 },
+    counts: { created: 0, updated: 0, deleted: 0 },
+  });
+  expect(payload.errorName).toBe("TypeError");
+  expect(payload.errorMessage).toBe("Anthropic is not connected. Open Settings to sign in.");
+  // The category is untouched: it is still the one the patterns give.
+  expect(payload.reason).toBe("unknown");
+});
+
+test("a failure message is cut at the cap, so nothing can ride along in its tail", () => {
+  const long = `x${"y".repeat(FAILURE_MESSAGE_CAP * 2)}`;
+  const payload = distillFailurePayload({
+    stage: "run",
+    outcome: "failed",
+    cause: { name: "Error", message: long },
+  });
+  expect(payload.errorMessage).toBe(long.slice(0, FAILURE_MESSAGE_CAP));
+  expect((payload.errorMessage as string).length).toBe(FAILURE_MESSAGE_CAP);
+
+  const thrown = distillFailurePayload({ stage: "setup", error: new Error(long) });
+  expect((thrown.errorMessage as string).length).toBe(FAILURE_MESSAGE_CAP);
+});
+
+test("an outcome the model wrote the message for carries no error text at all", () => {
+  // Every outcome but "failed" ends with the model or the loop having said
+  // something, and what a model says about its own failure can quote what it was
+  // reading. Structural rather than by convention: the caller cannot opt in.
+  for (const outcome of ["refused", "out-of-turns", "out-of-context", "no-evidence"] as const) {
+    const payload = distillFailurePayload({
+      stage: "run",
+      outcome,
+      cause: { name: "Error", message: "the reader said the lesion studies were the point" },
+    });
+    expect(payload.errorName).toBeNull();
+    expect(payload.errorMessage).toBeNull();
+    expect(JSON.stringify(payload)).not.toContain("lesion");
+  }
+});
+
+test("a pass that failed at the provider hands the caller the error, not only a sentence", async () => {
+  const { pass, adapter } = makeStore();
+  const result = await runDistillPass(passInput(), {
+    store: pass,
+    adapter,
+    run: async () => {
+      throw new TypeError("fetch failed");
+    },
+  });
+  expect(result.ran).toBe(true);
+  if (!result.ran) return;
+  expect(result.ok).toBe(false);
+  expect(result.cause).toEqual({ name: "TypeError", message: "fetch failed" });
+  expect(distillFailurePayload({ stage: "run", outcome: result.outcome, cause: result.cause })).toMatchObject(
+    { errorName: "TypeError", errorMessage: "fetch failed" },
+  );
 });
 
 // --- what the pass dates its observations by ---

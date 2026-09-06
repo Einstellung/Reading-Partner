@@ -279,6 +279,65 @@ test("a failed call is reported as a failure the caller can name", async () => {
   expect(result.usable).toBe(false);
   expect(result.brief).toContain("401 invalid x-api-key");
   expect(result.brief).toContain("failed call, not an empty result");
+  // Beside the sentence, the two fields a caller can log: the brief is written
+  // for a reader and a caller recording the failure must not have to parse it.
+  expect(result.failure).toEqual({ name: "Error", message: "401 invalid x-api-key" });
+});
+
+test("a call that never reached the provider keeps the thrown error's own type", async () => {
+  // What the owner's store recorded for twelve hours: outcome "failed", and the
+  // only category left after that is "unknown". The type of what was thrown is
+  // the difference between a signed-out provider and a broken network, and it
+  // does not survive being turned into a sentence.
+  const stream: StreamFn = () => {
+    throw new TypeError("Load failed");
+  };
+  const run: SubagentTurnFn = (request) => {
+    const settler = createTurnSettler(request.signal, request.onRound);
+    void runAgentLoop({
+      stream,
+      model: MODEL,
+      systemPrompt: request.systemPrompt,
+      messages: [{ role: "user", content: request.task, timestamp: 0 }],
+      tools: request.tools,
+      maxRounds: request.maxRounds,
+      ...settler.callbacks,
+    });
+    return settler.outcome.finally(() => settler.dispose());
+  };
+
+  const result = await runSubagent({ definition: definition(), task: "find work" }, { run });
+
+  expect(result.outcome).toBe("failed");
+  expect(result.failure).toEqual({ name: "TypeError", message: "Load failed" });
+});
+
+test("a turn function that throws is a failure the caller can name, not a rejection", async () => {
+  const run: SubagentTurnFn = async () => {
+    throw new RangeError("no default AI provider configured (Settings)");
+  };
+
+  const result = await runSubagent({ definition: definition(), task: "find work" }, { run });
+
+  expect(result.outcome).toBe("failed");
+  expect(result.failure).toEqual({
+    name: "RangeError",
+    message: "no default AI provider configured (Settings)",
+  });
+});
+
+test("a run that ended in anything but a failed call carries no error of its own", async () => {
+  // "refused", "out-of-turns", "out-of-context" and "no-evidence" all end with
+  // the model or the loop having said something, and that sentence is not an
+  // error — a caller logging one would be logging the model's words.
+  const runner = loopRunner([{ calls: [{ name: "search_papers", args: { query: "x" } }] }]);
+  const result = await runSubagent(
+    { definition: definition({ maxRounds: 1 }), task: "find work" },
+    { run: runner.run },
+  );
+
+  expect(result.outcome).toBe("out-of-turns");
+  expect(result.failure).toBeUndefined();
 });
 
 test("one broken tool among several leaves a usable brief with the failure named", async () => {

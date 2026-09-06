@@ -107,7 +107,11 @@ export interface AgentCallbacks {
 	// The turn's text, plus pi's AssistantMessage for the round that produced it —
 	// usage, responseId, stopReason. A caller that only wants the text ignores it.
 	onDone(finalText: string, assistant?: StreamOutcome): void;
-	onError(message: string, assistant?: StreamOutcome): void;
+	// `thrown` is what was actually caught, when a throw is what ended the turn.
+	// The message alone loses the error's own type, and a caller that records the
+	// failure (the sub-agent runner, memory/live) can then only say "unknown"
+	// about every one of them. Optional: nothing has to look at it.
+	onError(message: string, assistant?: StreamOutcome, thrown?: unknown): void;
 	// The loop gave up for a reason it can state, with nothing having failed: the
 	// call outgrew the model's window mid-turn, or the round cap ran out. Every
 	// request that went out was answered, so presenting this as a failed call
@@ -400,7 +404,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 		refuse(REFUSE_ROUNDS);
 	} catch (e) {
 		if (signal?.aborted) return;
-		onError(e instanceof Error ? e.message : String(e));
+		onError(e instanceof Error ? e.message : String(e), undefined, e);
 	}
 }
 
@@ -462,6 +466,6 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			onRefusal,
 		});
 	} catch (e) {
-		onError(e instanceof Error ? e.message : String(e));
+		onError(e instanceof Error ? e.message : String(e), undefined, e);
 	}
 }

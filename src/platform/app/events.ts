@@ -39,14 +39,19 @@ export type EventType =
   // `fromTs`/`toTs` the timestamps at the ends of that stretch — which is the
   // stretch a later pass has to redo. Fields and the classifier are in
   // memory/observations/distill.ts (distillFailurePayload).
-  | "distill-failed" // { trigger, threadId?, bookId?, retellId?, stage, reason, outcome, from, to, fromTs, toTs, created, updated, deleted }
+  // `errorName`/`errorMessage` are what was actually thrown — the constructor
+  // name and the head of the message — because `reason` is a category and every
+  // failure it cannot place lands in "unknown". Provider and runtime text only,
+  // never a model's.
+  | "distill-failed" // { trigger, threadId?, bookId?, retellId?, stage, reason, errorName, errorMessage, outcome, from, to, fromTs, toTs, created, updated, deleted }
   // A profile-guess pass that finished (memory/profile/guess.ts), in events-ai.jsonl
   // rather than a topic's log: the pass looks across every topic at once.
   // `wrote` says whether the guess section actually changed.
   | "guess-run" // { trigger, wrote, guesses, dropped }
   // One that did not, so the profile was left alone and the stamp did not move.
   // `outcome` is the sub-agent's, or a skip reason from before the model ran.
-  | "guess-failed" // { trigger, outcome }
+  // `errorName`/`errorMessage` as on `distill-failed`, and for the same reason.
+  | "guess-failed" // { trigger, outcome, errorName?, errorMessage? }
   // A night of dream (memory/dream/run.ts), in events-ai.jsonl rather than a
   // topic's log for the same reason as the guess pass: it reads every topic at
   // once. Counts only — what was written is on disk in statements.json, and the
