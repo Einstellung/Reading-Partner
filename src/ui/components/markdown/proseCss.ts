@@ -15,11 +15,11 @@
 export const ARTICLE_PROSE_CLASS = "info-article-body";
 
 export const ARTICLE_PROSE_CSS = `
-.info-article-body { color: #222; font-size: 17px; line-height: 1.75; }
+.info-article-body { color: var(--color-foreground); font-size: 17px; line-height: 1.75; }
 
 .info-article-body p { margin: 0 0 1.1em; }
 .info-article-body h1, .info-article-body h2, .info-article-body h3,
-.info-article-body h4, .info-article-body h5, .info-article-body h6 { line-height: 1.3; margin: 1.6em 0 0.6em; font-weight: 600; color: #111; }
+.info-article-body h4, .info-article-body h5, .info-article-body h6 { line-height: 1.3; margin: 1.6em 0 0.6em; font-weight: 600; color: var(--color-foreground); }
 .info-article-body h1 { font-size: 1.5em; }
 .info-article-body h2 { font-size: 1.3em; }
 .info-article-body h3 { font-size: 1.12em; }
@@ -38,7 +38,7 @@ export const ARTICLE_PROSE_CSS = `
 .info-article-body dt { margin-top: 0.8em; font-weight: 600; }
 .info-article-body dd { margin: 0.2em 0 0 1.4em; }
 
-.info-article-body blockquote { margin: 1.1em 0; padding-left: 1em; border-left: 3px solid #e0dcf3; color: #555; }
+.info-article-body blockquote { margin: 1.1em 0; padding-left: 1em; border-left: 3px solid var(--color-secondary-border); color: var(--color-muted-foreground); }
 .info-article-body pre { margin: 1.1em 0; overflow-x: auto; background: var(--muted-faint); padding: 0.9em; border-radius: 8px; font-size: 0.9em; line-height: 1.6; }
 .info-article-body code, .info-article-body kbd, .info-article-body samp, .info-article-body tt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
 .info-article-body pre code { font-size: 1em; }
@@ -49,7 +49,7 @@ export const ARTICLE_PROSE_CSS = `
 
 .info-article-body img { max-width: 100%; height: auto; border-radius: 8px; margin: 1em 0; display: block; }
 .info-article-body figure { margin: 1.2em 0; }
-.info-article-body figcaption { font-size: 0.85em; color: #888; text-align: center; margin-top: 0.5em; }
+.info-article-body figcaption { font-size: 0.85em; color: var(--color-faint-foreground); text-align: center; margin-top: 0.5em; }
 .info-article-body a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
 `;
 

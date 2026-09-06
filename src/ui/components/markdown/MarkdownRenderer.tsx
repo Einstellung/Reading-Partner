@@ -42,7 +42,7 @@ const rehypePlugins = [rehypeHighlight, rehypeKatex];
 // under a finger, so it takes HIT_44 — a centred pseudo-element carries the
 // target, which is why `relative` here costs the line box nothing.
 const CITATION_CHIP = [
-	'relative !no-underline rounded bg-[#efecfb] px-[0.25em] py-[0.125em] !text-[#4a3a9e] text-[0.9em] hover:bg-[#e2dcf6]',
+	'relative !no-underline rounded bg-secondary px-[0.25em] py-[0.125em] !text-secondary-foreground text-[0.9em] hover:bg-secondary-hover',
 	HIT_44,
 ].join(' ');
 
@@ -64,7 +64,7 @@ const CITATION_CHIP = [
 // 0.5em of padding above and below adds 12 more, and every part of that scales
 // with the container's font size rather than being calibrated for 16px.
 const QUOTE_BLOCK =
-	'my-[0.5em] flex w-full cursor-pointer flex-col items-start gap-[0.25em] rounded-r border-l-2 border-[#4a3a9e] bg-[#f6f4fd] px-[0.75em] py-[0.5em] text-left can-hover:hover:bg-[#efecfb]';
+	'my-[0.5em] flex w-full cursor-pointer flex-col items-start gap-[0.25em] rounded-r border-l-2 border-primary bg-muted-faint px-[0.75em] py-[0.5em] text-left can-hover:hover:bg-secondary';
 
 function QuoteBlock({ quoted, onCitation }: { quoted: QuotedCitation; onCitation: CitationHandler }) {
 	return (
@@ -72,7 +72,7 @@ function QuoteBlock({ quoted, onCitation }: { quoted: QuotedCitation; onCitation
 			{/* No quotation marks around it: the block is already the mark, and a
 			    pair added here would double the ones a CJK reply writes. */}
 			<span className="text-neutral-700">{quoted.quote}</span>
-			{quoted.label ? <span className="text-[0.85em] text-[#4a3a9e]">{quoted.label}</span> : null}
+			{quoted.label ? <span className="text-[0.85em] text-secondary-foreground">{quoted.label}</span> : null}
 		</button>
 	);
 }

@@ -197,9 +197,7 @@ const PALE_ALLOWED = new Map([
   ["ui/components/info/BriefingPage.tsx", ["bg-[#f0eefb]", "bg-[#fdf8ee]"]],
   ["ui/components/info/InfoCards.tsx", ["bg-[#faf9ff]", "bg-[#fdf5f3]", "bg-[#f8e8e4]"]],
   ["ui/components/library/SavedArticleView.tsx", ["bg-[#fdf8ec]"]],
-  ["ui/components/markdown/MarkdownRenderer.tsx", ["bg-[#efecfb]", "bg-[#f6f4fd]"]],
   ["ui/components/phone/PullToAsk.tsx", ["bg-[#f4f2fc]"]],
-  ["ui/components/reader/MoreMenu.tsx", ["bg-[#efecfb]"]],
   ["ui/components/ui/badge.tsx", ["bg-[#f0eefb]"]],
 ]);
 
