@@ -134,3 +134,56 @@ export function createSingleFlight<T>(): SingleFlight<T> {
     },
   };
 }
+
+// --- how many render at once ------------------------------------------------
+
+// A shelf of thirty books asks for thirty covers in the same tick. Each render
+// is a wasm rasterisation on the thread the app draws on, so they go through two
+// at a time: the first cards fill quickly, and the ones below the fold arrive
+// while the reader is already looking at something.
+export const COVER_RENDER_LIMIT = 2;
+
+export interface Gate {
+  run<T>(work: () => Promise<T>): Promise<T>;
+}
+
+/**
+ * Runs at most `limit` pieces of work at once; the rest wait in arrival order.
+ * A rejection releases the slot the way a result does.
+ */
+export function createGate(limit: number): Gate {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+
+  // The waiter takes the slot inside release(), before any other turn of the
+  // loop can run: a queue that handed its slot out in a later microtask would
+  // let a caller arriving in between take it and put `limit + 1` in flight.
+  function acquire(): Promise<void> {
+    if (active < limit) {
+      active += 1;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      waiting.push(() => {
+        active += 1;
+        resolve();
+      });
+    });
+  }
+
+  function release(): void {
+    active -= 1;
+    waiting.shift()?.();
+  }
+
+  return {
+    async run(work) {
+      await acquire();
+      try {
+        return await work();
+      } finally {
+        release();
+      }
+    },
+  };
+}

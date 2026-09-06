@@ -2,6 +2,9 @@
 // AppData/covers so the shelf — the first screen after launch — does not
 // re-render every PDF on every cold start.
 //
+// Two renders at a time (cover-cache.ts): the raster runs on the thread the app
+// draws on, and a topic of thirty books asks for thirty covers in one tick.
+//
 // Rendering goes through engine/raster, which opens a document on the app's one
 // PDFium engine, renders page one and closes it again. No reader instance and no
 // second wasm compile. What is kept, and what a failure costs the next launch,
@@ -24,11 +27,13 @@ import { libraryHas, readLibraryBook } from "../platform/app/library";
 import type { FileRef } from "../platform/app/topics";
 import {
   COVER_JPEG_QUALITY,
+  COVER_RENDER_LIMIT,
   coverFailurePath,
   coverImagePath,
   coverRequestKey,
   coverRetryDue,
   coverScaleFactor,
+  createGate,
   createSingleFlight,
   parseCoverFailure,
   unreadableKey,
@@ -41,6 +46,7 @@ const COVERS_DIR = "covers";
 const MIME = "image/jpeg";
 
 const flight = createSingleFlight<string | null>();
+const renders = createGate(COVER_RENDER_LIMIT);
 
 /**
  * A cover for a shelf entry, as a URL for an `<img src>`, or null when there is
@@ -85,7 +91,7 @@ async function produce(file: FileRef): Promise<string | null> {
     if (await givenUp(bookId)) return null;
   }
 
-  const jpeg = await renderCover(bytes, bookId, file);
+  const jpeg = await renders.run(() => renderCover(bytes, bookId, file));
   if (!jpeg) return null;
   await writeCover(bookId, jpeg);
   return dataUrl(jpeg);
