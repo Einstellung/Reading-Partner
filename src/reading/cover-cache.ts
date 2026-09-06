@@ -134,3 +134,97 @@ export function createSingleFlight<T>(): SingleFlight<T> {
     },
   };
 }
+
+// --- the author line --------------------------------------------------------
+
+// What the PDF's own metadata says about a book, kept beside the cover so the
+// shelf never opens a document again just to put a name under a title. Written
+// even when the author field is empty: the file existing is what says the
+// document has already been asked.
+export interface CoverMeta {
+  author: string;
+}
+
+export function coverMetaPath(bookId: string): string {
+  return `${DIR}/${bookId}.json`;
+}
+
+// The longest author line a card will ever show. Well past a real list of
+// names, and short enough that a producer string dumped into the field cannot
+// become a paragraph on disk.
+const AUTHOR_MAX = 120;
+
+// The Author field as a card may show it: one line, no control characters, no
+// runs of space. A field that carries no letter or digit is no author — PDF
+// writers leave "-", "()" and "unknown" behind — and comes back empty, which is
+// what omits the line.
+export function cleanAuthor(raw: string | null | undefined): string {
+  if (typeof raw !== "string") return "";
+  const oneLine = raw
+    .replace(/\p{C}/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!/\p{L}|\p{N}/u.test(oneLine)) return "";
+  if (/^(?:unknown|anonymous|n\/?a|none|author)$/i.test(oneLine)) return "";
+  return oneLine.length > AUTHOR_MAX ? oneLine.slice(0, AUTHOR_MAX).trimEnd() : oneLine;
+}
+
+export function parseCoverMeta(raw: unknown): CoverMeta | null {
+  if (!raw || typeof raw !== "object") return null;
+  const author = (raw as Partial<CoverMeta>).author;
+  if (author !== undefined && typeof author !== "string") return null;
+  return { author: cleanAuthor(author) };
+}
+
+// --- how many render at once ------------------------------------------------
+
+// A shelf of thirty books asks for thirty covers in the same tick. Each render
+// is a wasm rasterisation on the thread the app draws on, so they go through two
+// at a time: the first cards fill quickly, and the ones below the fold arrive
+// while the reader is already looking at something.
+export const COVER_RENDER_LIMIT = 2;
+
+export interface Gate {
+  run<T>(work: () => Promise<T>): Promise<T>;
+}
+
+/**
+ * Runs at most `limit` pieces of work at once; the rest wait in arrival order.
+ * A rejection releases the slot the way a result does.
+ */
+export function createGate(limit: number): Gate {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+
+  // The waiter takes the slot inside release(), before any other turn of the
+  // loop can run: a queue that handed its slot out in a later microtask would
+  // let a caller arriving in between take it and put `limit + 1` in flight.
+  function acquire(): Promise<void> {
+    if (active < limit) {
+      active += 1;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      waiting.push(() => {
+        active += 1;
+        resolve();
+      });
+    });
+  }
+
+  function release(): void {
+    active -= 1;
+    waiting.shift()?.();
+  }
+
+  return {
+    async run(work) {
+      await acquire();
+      try {
+        return await work();
+      } finally {
+        release();
+      }
+    },
+  };
+}

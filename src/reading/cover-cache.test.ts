@@ -1,14 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import {
+  cleanAuthor,
+  COVER_RENDER_LIMIT,
   COVER_RETRY_AFTER_MS,
   COVER_WIDTH_PX,
   coverFailurePath,
   coverImagePath,
+  coverMetaPath,
   coverRequestKey,
   coverRetryDue,
   coverScaleFactor,
+  createGate,
   createSingleFlight,
   parseCoverFailure,
+  parseCoverMeta,
   unreadableKey,
   type CoverFailure,
 } from "./cover-cache";
@@ -182,5 +187,101 @@ describe("single flight", () => {
     await expect(flight.run("k", work)).rejects.toThrow("boom");
     expect(await flight.run("k", work)).toBe("cover");
     expect(runs).toBe(2);
+  });
+});
+
+describe("the author record", () => {
+  test("it sits beside the cover, under the same book id", () => {
+    expect(coverMetaPath("abc")).toBe("covers/abc.json");
+  });
+
+  test("an author is one line, with no run of space left in it", () => {
+    expect(cleanAuthor("  Ashish Vaswani,\n  Noam Shazeer ")).toBe("Ashish Vaswani, Noam Shazeer");
+    expect(cleanAuthor("\u0000Yann\u0007 LeCun")).toBe("Yann LeCun");
+  });
+
+  test("what a PDF writer leaves behind is no author", () => {
+    expect(cleanAuthor("")).toBe("");
+    expect(cleanAuthor("   ")).toBe("");
+    expect(cleanAuthor("-")).toBe("");
+    expect(cleanAuthor("()")).toBe("");
+    expect(cleanAuthor("unknown")).toBe("");
+    expect(cleanAuthor("N/A")).toBe("");
+    expect(cleanAuthor(null)).toBe("");
+    expect(cleanAuthor(undefined)).toBe("");
+  });
+
+  test("a field with a document dumped in it is cut to a line's worth", () => {
+    expect(cleanAuthor("A".repeat(400))).toHaveLength(120);
+  });
+
+  test("a record survives the round trip, and a wrong shape does not parse", () => {
+    expect(parseCoverMeta({ author: " Kahneman " })).toEqual({ author: "Kahneman" });
+    // Written by a version that had nothing to say: still an answer, so the
+    // book is not rendered again.
+    expect(parseCoverMeta({})).toEqual({ author: "" });
+    expect(parseCoverMeta({ author: 3 })).toBeNull();
+    expect(parseCoverMeta(null)).toBeNull();
+    expect(parseCoverMeta("x")).toBeNull();
+  });
+});
+
+describe("how many render at once", () => {
+  // A gate with the work under manual control: each job reports that it started
+  // and finishes only when its own resolve is called.
+  function jobs(gate: ReturnType<typeof createGate>, n: number) {
+    const started: number[] = [];
+    const finish: (() => void)[] = [];
+    const done = [];
+    for (let i = 0; i < n; i += 1) {
+      done.push(
+        gate.run(() => {
+          started.push(i);
+          return new Promise<number>((resolve) => finish.push(() => resolve(i)));
+        }),
+      );
+    }
+    return { started, finish, done };
+  }
+
+  test("a shelf of thirty asks for thirty and two go at a time", async () => {
+    const gate = createGate(2);
+    const { started, finish } = jobs(gate, 30);
+
+    await Promise.resolve();
+    expect(started).toEqual([0, 1]);
+
+    finish[0]!();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(started).toEqual([0, 1, 2]);
+  });
+
+  test("the queue is served in the order it was joined", async () => {
+    const gate = createGate(1);
+    const { started, finish, done } = jobs(gate, 3);
+
+    await Promise.resolve();
+    expect(started).toEqual([0]);
+    finish[0]!();
+    expect(await done[0]).toBe(0);
+    finish[1]!();
+    expect(await done[1]).toBe(1);
+    finish[2]!();
+    expect(await done[2]).toBe(2);
+    expect(started).toEqual([0, 1, 2]);
+  });
+
+  test("work that throws gives its slot back", async () => {
+    const gate = createGate(1);
+    const failed = gate.run(async () => {
+      throw new Error("render failed");
+    });
+    await expect(failed).rejects.toThrow("render failed");
+    expect(await gate.run(async () => "next")).toBe("next");
+  });
+
+  test("the limit is two, because the raster runs on the drawing thread", () => {
+    expect(COVER_RENDER_LIMIT).toBe(2);
   });
 });

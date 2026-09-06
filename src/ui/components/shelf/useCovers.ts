@@ -1,12 +1,17 @@
-// The cover images for a handful of files, resolved off the render path.
+// The covers for a handful of files, and the author of one book, resolved off
+// the render path.
 //
 // A path missing from the map is still being worked out; null is an answer (this
 // book has no cover) and a string is the image. Both library grids use it, so a
 // card never has to know where a cover comes from.
+//
+// The two hooks make the same request: one render answers for the picture and
+// for the name under it, and repeat callers join it rather than starting a
+// second one (reading/covers.ts).
 
 import { useCallback, useEffect, useState } from "react";
 import type { FileRef } from "../../../platform/app/topics";
-import { coverUrl } from "./cover-source";
+import { bookCover } from "./cover-source";
 
 export type Covers = Record<string, string | null>;
 
@@ -30,10 +35,10 @@ export function useCovers(files: FileRef[]): {
     // One request per cover rather than one Promise.all: a slow book must not
     // hold the others in their loading state.
     for (const file of files) {
-      void coverUrl(file)
+      void bookCover(file)
         .catch(() => null)
-        .then((url) => {
-          if (!cancelled) setCovers((prev) => ({ ...prev, [file.path]: url }));
+        .then((cover) => {
+          if (!cancelled) setCovers((prev) => ({ ...prev, [file.path]: cover?.url ?? null }));
         });
     }
     return () => {
@@ -46,4 +51,26 @@ export function useCovers(files: FileRef[]): {
   }, []);
 
   return { covers, markFailed };
+}
+
+// The PDF's own Author field, for the line under a book's title. Null while it
+// is being worked out and null when the document has none — a card with no
+// author draws no line either way, so the two need not be told apart.
+export function useBookAuthor(file: FileRef): string | null {
+  const [author, setAuthor] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAuthor(null);
+    void bookCover(file)
+      .catch(() => null)
+      .then((cover) => {
+        if (!cancelled) setAuthor(cover?.author ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.path, file.hash]);
+
+  return author;
 }

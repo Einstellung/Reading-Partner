@@ -30,8 +30,18 @@ export interface RenderFirstPageOptions {
   id?: string;
 }
 
+// The document's own catalogue entry, as far as a cover cares about it. Read
+// on the same open as the raster: a second open only to put an author under a
+// title would pay for the whole parse again.
+export interface DocumentMetadata {
+  author: string | null;
+  title: string | null;
+}
+
 export type RenderFirstPageResult =
-  | { kind: "ok"; jpeg: Uint8Array }
+  // `metadata` is null when the engine would not give it up, which says nothing
+  // about the page that did render.
+  | { kind: "ok"; jpeg: Uint8Array; metadata: DocumentMetadata | null }
   // The engine itself is unavailable: nothing about this document is known.
   | { kind: "no-engine"; cause: unknown }
   // Open or render was still running at its deadline. Transient by nature — the
@@ -106,7 +116,11 @@ export async function renderFirstPageJpegOn(
       renderMs,
       "renderPage",
     );
-    return { kind: "ok", jpeg: new Uint8Array(await blob.arrayBuffer()) };
+    return {
+      kind: "ok",
+      jpeg: new Uint8Array(await blob.arrayBuffer()),
+      metadata: await readMetadata(engine, doc, renderMs),
+    };
   } catch (e) {
     if (e instanceof RasterTimeout) return { kind: "timeout", message: e.message };
     return { kind: "render-failed", cause: e };
@@ -130,6 +144,28 @@ function renderOptions(opts: RenderFirstPageOptions, pageWidthPt: number): PdfRe
     imageQuality: opts.quality,
     quality: opts.quality,
   } as PdfRenderPageOptions;
+}
+
+// Never fatal: a cover with no author under it is still a cover. It runs on the
+// open the raster already has, under the render's own deadline, so a hung
+// engine cannot hold the document open behind it.
+async function readMetadata(
+  engine: PdfEngine<Blob>,
+  doc: PdfDocumentObject,
+  ms: number,
+): Promise<DocumentMetadata | null> {
+  const get = (engine as Partial<PdfEngine<Blob>>).getMetadata;
+  if (typeof get !== "function") return null;
+  try {
+    const meta = await withTimeout(get.call(engine, doc).toPromise(), ms, "getMetadata");
+    return {
+      author: typeof meta?.author === "string" ? meta.author : null,
+      title: typeof meta?.title === "string" ? meta.title : null,
+    };
+  } catch (e) {
+    console.warn("failed to read document metadata", e);
+    return null;
+  }
 }
 
 class RasterTimeout extends Error {}

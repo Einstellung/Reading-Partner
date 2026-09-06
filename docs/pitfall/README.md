@@ -58,7 +58,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 224）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 232）。
 
 ## EmbedPDF 引擎
 
@@ -291,6 +291,7 @@
 - [221-two-overlay-components-blank-a-headless-harness](./221-two-overlay-components-blank-a-headless-harness.md) — 无头 Chrome 的静态探针页里挂 `PenToolbar` 或 `MoreMenu`，React #185（更新深度超限）把整棵树打白，别的组件都正常；成因未定，排除过内联 props 和 `.safe-probe` 的量值，两者唯一共同点是 `useOverlaySafePadding()`。探针页别放这两个
 - [224-a-probe-page-only-gets-the-classes-src-uses](./224-a-probe-page-only-gets-the-classes-src-uses.md) — 无头探针页在 `src/` 之外，Tailwind 没扫到就不生成，页面里现写的 `grid-cols-4` 之类静默不存在，图看上去像组件排版坏了；探针页只用组件自带的 class 和它导出的常量，自己搭壳用 inline style
 - [225-the-shot-is-taller-than-the-page-it-shot](./225-the-shot-is-taller-than-the-page-it-shot.md) — 无头截图的视口比 `--window-size` 矮 87px（Chrome 144，实测 834→747），画布仍是外窗尺寸，多出来那条由页面背景补上，看着像页面没排满高度；要拍满 H 就传 H+87，否则只认 PNG 顶上的 H-87
+- [227-virtual-time-shoots-before-the-pdfium-worker-answers](./227-virtual-time-shoots-before-the-pdfium-worker-answers.md) — `--virtual-time-budget` 的虚拟时钟在主线程空闲时直接跳表，不等 worker 里 PDFium 的 wasm 编译和 raster，图拍的是回退态（封面全是首字母块），预算调大只会先撞引擎自己的 15s 超时；要等异步内容改用 CDP 驱动：页面挂个完成标志，脚本轮询到了再 `Page.captureScreenshot`，视口用 `Emulation.setDeviceMetricsOverride`（顺带绕开坑 135、220）
 - [123-vite-serves-node-modules-over-http](./123-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
 - [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id

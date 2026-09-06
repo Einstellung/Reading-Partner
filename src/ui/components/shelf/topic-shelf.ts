@@ -139,3 +139,19 @@ export function coverInitial(fileName: string): string {
   const first = [...stem][0];
   return first ? first.toUpperCase() : "?";
 }
+
+// The line under "Topics": how many questions are on the shelf and how many
+// books stand behind them. Books are counted once however many topics they are
+// filed under — the shelf is a shelf, not a sum of shelves — by book id where
+// there is one and by path for a file that has never been opened.
+export function shelfHeaderLine(topics: Topic[]): string {
+  const books = new Set<string>();
+  for (const topic of topics) {
+    for (const file of topic.files) books.add(file.hash ?? file.path);
+  }
+  return `${plural(topics.length, "topic")} · ${plural(books.size, "book")}`;
+}
+
+function plural(n: number, unit: string): string {
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
+}

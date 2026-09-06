@@ -106,6 +106,13 @@ test("the local paths cover the synced ones, the caches and the blob", () => {
     `fulltext-${BOOK}.json`,
     `figures-${BOOK}.json`,
     `library/${BOOK}.pdf`,
+    // The cover, the author record beside it and the marker that says why there
+    // is no cover: a deleted book must not be a picture on the next shelf, and
+    // covers are filed under the book id, so re-importing the same PDF would
+    // otherwise show the old one.
+    `covers/${BOOK}.jpg`,
+    `covers/${BOOK}.json`,
+    `covers/${BOOK}.failed.json`,
   ]);
   // No trailing slash: this goes to a directory remove, not to a path matcher.
   expect(dirs).toEqual([`prep-${BOOK}`]);

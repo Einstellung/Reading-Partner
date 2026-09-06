@@ -59,16 +59,28 @@ function plural(n: number, unit: string): string {
   return `${n} ${unit}${n === 1 ? "" : "s"}`;
 }
 
-// The line under a book's title. Where the reader is and what they have marked;
-// no timestamp, which says nothing about a book that a page number does not.
-// Empty for a book that was never opened, which renders as no line at all.
+// The line under a book's title. How far in and what has been marked; no
+// timestamp, which says nothing a percentage does not. A percentage rather than
+// a page number because it is the same size for every book, and the bar under
+// the card is already drawing it.
+//
+// A page reached in a book of unknown length falls back to the page number: the
+// length comes from the full-text cache, which a book being read for the first
+// time may not have yet.
 export function readingLabel(meta: BookMeta | undefined): string {
   const parts: string[] = [];
-  if (meta?.page) {
-    parts.push(meta.pages ? `Page ${meta.page} of ${meta.pages}` : `Page ${meta.page}`);
+  const progress = readingProgress(meta);
+  if (progress !== null) {
+    // Never "Read 0%": a reader who has opened a book has read some of it, and
+    // a first page out of four hundred rounds to nothing.
+    parts.push(`Read ${Math.max(1, Math.round(progress * 100))}%`);
+  } else if (meta?.page) {
+    parts.push(`Page ${meta.page}`);
   }
   if (meta?.marks) parts.push(plural(meta.marks, "mark"));
-  return parts.join(" · ");
+  // Said out loud rather than left blank: an empty line under a title reads as
+  // something that failed to load.
+  return parts.length ? parts.join(" · ") : "Not opened yet";
 }
 
 // How far in, 0 to 1, for the bar under the cover. Null when either end of the

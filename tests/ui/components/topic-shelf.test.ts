@@ -13,6 +13,7 @@ import {
   coverTiles,
   fileCountLabel,
   MAX_COVERS,
+  shelfHeaderLine,
   shelfOrder,
   singleCoverTile,
   tileStyle,
@@ -141,4 +142,20 @@ test("the placeholder initial drops the extension and keeps the script", () => {
   // A file whose name is nothing but an extension, and an astral first letter.
   expect(coverInitial(".pdf")).toBe("?");
   expect(coverInitial("𝕏 notes.pdf")).toBe("𝕏");
+});
+
+test("the shelf line counts the questions and the books behind them", () => {
+  const a = { ...file("a.pdf", 1), hash: "h1" };
+  const b = { ...file("b.pdf", 2), hash: "h2" };
+  // The same book filed under a second question, at another path: one book on
+  // the shelf, because a shelf is not a sum of shelves.
+  const aAgain = { ...file("a.pdf", 3), path: "/elsewhere/a.pdf", hash: "h1" };
+  // Never opened, so no book id: counted by its path.
+  const c = file("c.pdf", 4);
+
+  expect(shelfHeaderLine([topic("t1", [a, b]), topic("t2", [aAgain, c])])).toBe(
+    "2 topics · 3 books",
+  );
+  expect(shelfHeaderLine([topic("t1", [a])])).toBe("1 topic · 1 book");
+  expect(shelfHeaderLine([])).toBe("0 topics · 0 books");
 });
