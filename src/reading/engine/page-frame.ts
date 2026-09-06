@@ -27,6 +27,17 @@
 // a box that is exactly the page box (`inset: 0`), so no value in this file can
 // move a tile, a selection rectangle or an annotation relative to the page they
 // belong to.
+//
+// The ground is a token and not a hex. The paper tint is an attribute on <html>
+// (base/paper-tint.ts), which an inline style cannot answer on its own — but a
+// var() can, so the desk warms with the rest of the app without this module
+// knowing the tint exists, and without repainting a single page raster.
+
+// What `background` holds, and the value `--desk` has when nothing overrides it.
+// Duplicated from styles.css because a stylesheet is not importable; the test
+// beside this file reads the stylesheet and fails if the two drift apart.
+export const DESK = "var(--desk)";
+export const DESK_DEFAULT_HEX = "#edece5";
 
 export interface PageFrame {
   // Padding around the whole scroll content, in CSS pixels.
@@ -49,20 +60,21 @@ export interface PageFrame {
 export const HAIRLINE_FRAME: PageFrame = {
   viewportGap: 0,
   pageGap: 2,
-  background: "#dfe3e8",
+  background: DESK,
   pageBackground: "#ffffff",
-  pageEdge: "0 0 0 1px rgba(15, 23, 42, 0.10)",
+  pageEdge: "0 0 0 1px rgba(61, 54, 40, 0.12)",
 };
 
-// Sheets lifted off a darker desk. The gap is wide enough for a shadow to read
-// as depth instead of as a smudge, and the desk is dark enough that the paper
-// is the brightest thing on screen.
+// Sheets lifted off the desk. The gap is wide enough for a shadow to read as
+// depth instead of as a smudge, and the desk is deep enough that the paper is
+// the brightest thing on screen. The shadow is warm-grey rather than the slate
+// it was: on a warm ground a blue-black edge reads as a second colour.
 export const FLOAT_FRAME: PageFrame = {
   viewportGap: 0,
   pageGap: 8,
-  background: "#d5d9de",
+  background: DESK,
   pageBackground: "#ffffff",
-  pageEdge: "0 1px 4px rgba(15, 23, 42, 0.22)",
+  pageEdge: "0 1px 3px rgba(61, 54, 40, 0.16)",
 };
 
 export const PAGE_FRAMES = { hairline: HAIRLINE_FRAME, float: FLOAT_FRAME } as const;

@@ -143,6 +143,14 @@
     --chat-bubble: #ebeae2;
     --chat-code: #f2f1ea;
 
+    /* The desk: the ground behind the pages and in the gap between them. Warm
+       and one step under --background, so the sheet is the brightest thing in
+       the reading area and the area itself belongs to the same room as the
+       chrome around it. Read by the engine through var(--desk) on the viewport
+       (reading/engine/page-frame.ts), which is what lets the paper tint reach a
+       raster it never re-renders. */
+    --desk: #edece5;
+
     /* The colour the reader multiplies over a rasterized page. Nothing on the
        default palette: a PDF page is already paper-white, and the app's own
        ground is close enough to it that multiplying anything would only shift
@@ -211,6 +219,8 @@
     --chat-bubble: #e8e1cf;
     --chat-code: #eee7d7;
 
+    --desk: #e8e2d3;
+
     /* Multiplied over the page raster: white paper comes out exactly this
        colour and black ink stays black, which is why the reader can tint a
        bitmap it never re-renders. One step deeper than the chrome around it, so
@@ -257,6 +267,7 @@
   --color-chat-surface: var(--chat-surface);
   --color-chat-bubble: var(--chat-bubble);
   --color-chat-code: var(--chat-code);
+  --color-desk: var(--desk);
 
   /* The display face, for the few headings that name what the reader is
      looking at (docs/52). No webfont and no <link>: iOS already ships Georgia
