@@ -27,7 +27,7 @@ const ICONS: Record<TopicSection, (p: { size?: number }) => JSX.Element> = {
 const TAB =
   "h-11 flex-none gap-2 rounded-none border-b-2 border-transparent px-3 text-[14px] " +
   "font-medium text-muted-foreground";
-const TAB_ACTIVE = "border-primary text-foreground";
+const TAB_ACTIVE = "border-accent-line text-foreground";
 
 export default function TopicNav(props: {
   section: TopicSection;

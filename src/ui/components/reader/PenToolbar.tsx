@@ -128,9 +128,10 @@ export default function PenToolbar({
 		? 'inline-flex flex-row items-center gap-0.5 p-0.5 select-none'
 		: `inline-flex flex-col items-center gap-1 p-1.5 select-none ${CARD}`;
 	const toolSize = (horizontal ? 'h-8 w-8' : 'h-9 w-9') + ' coarse:h-11 coarse:w-11';
-	// One selected state for the whole rack: --secondary, the tinted fill this app
-	// gives a control that is standing on. The AI pen keeps an accent of its own in
-	// the resting state (--primary) rather than a second selected colour.
+	// One selected state for the whole rack: --secondary, the neutral fill this
+	// app gives a control that is standing on. The AI pen keeps an accent of its
+	// own in the resting state (--accent-line) rather than a second selected
+	// colour.
 	// `can-hover:hover:bg-secondary` is not a no-op: it holds the selected fill
 	// against the ghost variant's hover fill, and has to repeat the modifier chain
 	// exactly to replace it (docs/pitfall/78).
@@ -148,7 +149,7 @@ export default function PenToolbar({
 				? 'bg-secondary text-secondary-foreground can-hover:hover:bg-secondary' +
 					(type === 'navlock' ? ' ring-2 ring-inset ring-primary' : '')
 				: type === 'ai'
-					? 'text-primary'
+					? 'text-accent-line'
 					: 'text-neutral-700');
 
 	return (

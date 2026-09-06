@@ -190,7 +190,7 @@ function TraceRow({ annotation, selected, open, hasThread, onOpenChange, onSelec
 								type="button"
 								variant="ghost"
 								size={null}
-								className="rounded p-0.5 text-primary can-hover:hover:bg-primary/10 coarse:h-11 coarse:w-11"
+								className="rounded p-0.5 text-accent-line can-hover:hover:bg-accent-line/10 coarse:h-11 coarse:w-11"
 								title="Open AI thread"
 								aria-label="Open AI thread"
 								onClick={(e) => {

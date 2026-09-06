@@ -498,7 +498,7 @@ function LiveStrip({
       </span>
       <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-neutral-200">
         <span
-          className={"block h-full rounded-full " + (holding ? "bg-primary" : "bg-neutral-300")}
+          className={"block h-full rounded-full " + (holding ? "bg-accent-line" : "bg-neutral-300")}
           style={{ width: `${Math.round(Math.min(1, Math.max(0, level)) * 100)}%` }}
         />
       </span>

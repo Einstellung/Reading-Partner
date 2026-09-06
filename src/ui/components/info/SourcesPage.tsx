@@ -240,7 +240,7 @@ export function SourcesPage(props: SourcesPageProps) {
               }
             }}
             placeholder="Paste a site or RSS URL…"
-            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-faint-foreground focus:border-primary"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-faint-foreground focus:border-accent-line"
           />
           <Button type="button" variant="cta" size="lg" onClick={() => void probe()} disabled={!url.trim() || probing}>
             {probing ? "Checking…" : "Add"}

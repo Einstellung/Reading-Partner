@@ -67,7 +67,7 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
       </ul>
       <div className="mt-3.5 flex items-center justify-end">
         {added ? (
-          <span className="text-[13px] font-medium text-primary">Added ✓</span>
+          <span className="text-[13px] font-medium text-accent-line">Added ✓</span>
         ) : (
           <Button
             type="button"
@@ -123,8 +123,8 @@ export function BriefingProgressCard({ payload }: CardComponentProps<BriefingPro
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="flex items-center gap-2">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-        <span className="text-[11px] font-medium uppercase tracking-wider text-primary">{heading}</span>
+        <span className="h-2 w-2 animate-pulse rounded-full bg-accent-line" />
+        <span className="text-[11px] font-medium uppercase tracking-wider text-accent-line">{heading}</span>
       </div>
       <div className="mt-1.5 text-[14px] text-muted-foreground">{main}…</div>
       {sub && <div className="mt-0.5 text-[12px] tabular-nums text-faint-foreground">{sub}</div>}
@@ -144,15 +144,15 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
     <button
       type="button"
       onClick={() => dispatch({ kind: "navigate", to: "briefing", arg: payload.date })}
-      className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4 text-left hover:border-primary"
+      className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4 text-left hover:border-accent-line"
     >
-      <div className="text-[11px] font-medium uppercase tracking-wider text-primary">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
         {payload.title ?? "Briefing ready"}
       </div>
       <div className="mt-1 text-[15px] font-medium text-foreground">{payload.date}</div>
       <div className="mt-1 text-[13px] text-muted-foreground">{counts}</div>
       <div className="mt-2 text-[12px] leading-snug text-faint-foreground">{note}</div>
-      <div className="mt-2 text-[13px] font-medium text-primary">Open →</div>
+      <div className="mt-2 text-[13px] font-medium text-accent-line">Open →</div>
     </button>
   );
 }
@@ -164,7 +164,7 @@ export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<Prof
   const applied = payload.phase === "applied";
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-primary">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
         {applied ? "Profile updated" : "Update reading profile"}
       </div>
       <div className="mt-1 text-[14px] font-medium text-foreground">{payload.summary}</div>

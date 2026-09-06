@@ -34,7 +34,7 @@ export const CARD_META = "mt-0.5 block truncate text-[11px] leading-[14px] text-
 // whether it shares their row or sits on one of its own.
 export const ADD_CARD =
   "flex w-full cursor-pointer flex-col rounded-lg border-2 border-dashed border-border " +
-  "bg-background text-muted-foreground can-hover:hover:border-primary can-hover:hover:text-primary";
+  "bg-background text-muted-foreground can-hover:hover:border-accent-line can-hover:hover:text-accent-line";
 export const ADD_CARD_BOX = "flex w-full aspect-[3/4] flex-col items-center justify-center gap-2";
 
 // The grid. Every card is the same size — one cover shape and one label height —

@@ -31,7 +31,7 @@ import { Button } from "../ui/button";
 const BLOCK = "border-l-2 border-muted-strong pl-3";
 
 const LABEL =
-  "shrink-0 text-[calc(0.6875rem*var(--chat-scale,1))] font-medium uppercase tracking-wider text-primary";
+  "shrink-0 text-[calc(0.6875rem*var(--chat-scale,1))] font-medium uppercase tracking-wider text-accent-line";
 
 // A Button rather than a bare <button>: the 44px touch target belongs to the
 // size table (ui/button.tsx), and these rows are pressed on a tablet.

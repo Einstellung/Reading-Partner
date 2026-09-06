@@ -38,7 +38,7 @@ export default function BookCard(props: {
           {progress !== null && (
             <span className="absolute inset-x-0 bottom-0 block h-[3px] bg-black/15">
               <span
-                className="absolute top-0 left-0 block h-full bg-primary"
+                className="absolute top-0 left-0 block h-full bg-accent-line"
                 style={{ width: `${progress * 100}%` }}
               />
             </span>

@@ -70,7 +70,7 @@ function useSharedEngine(): { engine: PdfEngine | null; isLoading: boolean; erro
 // The one colour on this page that is not a token. It paints on the paper, in
 // between the annotation palette's yellow and the text layer's blue selection,
 // and it has to be told apart from both at 24% over white — which is a job for
-// a saturated hue. The moss palette has none: --primary at any usable alpha
+// a saturated hue. The moss palette has none: --accent-line at any usable alpha
 // mixes to a neutral grey on paper (measured 2026-09-06), so the quote keeps
 // the violet it was tuned in, as the annotation palette keeps its own colours.
 const QUOTE_HIGHLIGHT_COLOR = "#4a3a9e";

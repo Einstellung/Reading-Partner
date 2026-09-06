@@ -276,7 +276,7 @@ function HoldOverlay({
 								key={i}
 								className={
 									'w-[3px] rounded-full transition-[height] duration-75 ' +
-									(zone === 'cancel' ? 'bg-muted-foreground' : 'bg-primary')
+									(zone === 'cancel' ? 'bg-muted-foreground' : 'bg-accent-line')
 								}
 								style={{ height: `${Math.round(h * 40)}px` }}
 							/>

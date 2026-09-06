@@ -145,7 +145,7 @@ export function BriefingCardBody({
       <div className="flex flex-1 flex-col justify-between">
         <div>
           <div className="flex items-center gap-2 text-[15px] text-muted-foreground">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+            <span className="h-2 w-2 animate-pulse rounded-full bg-accent-line" />
             {phase}…
           </div>
           <div className="mt-1 text-[13px] tabular-nums text-faint-foreground">
@@ -181,7 +181,7 @@ export function BriefingCardBody({
           <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">{briefing.overview}</p>
           <div className="mt-4 flex items-center justify-between">
             <span className="text-[13px] text-faint-foreground">{counts}</span>
-            <span className="text-[13px] font-medium text-primary">Open →</span>
+            <span className="text-[13px] font-medium text-accent-line">Open →</span>
           </div>
         </button>
         <Notices lines={notices} />

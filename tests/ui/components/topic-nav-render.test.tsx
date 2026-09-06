@@ -23,7 +23,9 @@ test("every tab is a 44px touch target", () => {
   expect(html.match(/h-11/g)?.length).toBe(4);
 });
 
-// The underline is the tab. Exactly one of them carries it.
+// The underline is the tab, and it is one of the few places the green is
+// allowed: a 2px line. Exactly one tab carries it.
 test("only the open tab is underlined", () => {
-  expect(html.match(/border-primary/g)?.length).toBe(1);
+  expect(html.match(/border-accent-line/g)?.length).toBe(1);
+  expect(html).not.toContain("bg-accent-line");
 });

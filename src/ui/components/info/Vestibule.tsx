@@ -209,7 +209,7 @@ function ContinueCard(props: {
         {progress !== null && (
           <span className="absolute inset-x-0 bottom-0 block h-[3px] bg-black/15">
             <span
-              className="absolute left-0 top-0 block h-full bg-primary"
+              className="absolute left-0 top-0 block h-full bg-accent-line"
               style={{ width: `${progress * 100}%` }}
             />
           </span>

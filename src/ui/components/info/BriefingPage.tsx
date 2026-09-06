@@ -107,7 +107,7 @@ export function BriefingPage(props: BriefingPageProps) {
                         aria-label="Ask about this"
                         title="Ask about this"
                         onClick={() => props.onAskArticle(r.itemId)}
-                        className="h-6 w-6 rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:bg-secondary can-hover:hover:text-primary group-hover:opacity-100"
+                        className="h-6 w-6 rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:bg-secondary can-hover:hover:text-foreground group-hover:opacity-100"
                       >
                         <IconSparkle size={14} />
                       </Button>
@@ -140,7 +140,7 @@ export function BriefingPage(props: BriefingPageProps) {
                     <Button
                       variant="link"
                       size="link"
-                      className="coarse:px-0 coarse:py-0 text-[12px] text-primary hover:underline"
+                      className="coarse:px-0 coarse:py-0 text-[12px] text-accent-line hover:underline"
                       onClick={() => props.onOpenArticle(r.itemId)}
                     >
                       {m.sourceName} ↗
@@ -258,7 +258,7 @@ function FilteredSection({
                   <Button
                     variant="link"
                     size="link"
-                    className="flex-none text-[12px] text-primary can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 coarse:py-0 hover:underline group-hover:opacity-100"
+                    className="flex-none text-[12px] text-accent-line can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 coarse:py-0 hover:underline group-hover:opacity-100"
                     onClick={() => onAppeal(f.itemId, m, f.category)}
                   >
                     Show anyway

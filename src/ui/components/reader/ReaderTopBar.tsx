@@ -126,7 +126,7 @@ export default function ReaderTopBar(props: {
           {/* Background-work dot: prep/notes generating while the drawer is
               shut (docs: iPad adaptation). */}
           {props.sidebarBusy && (
-            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent-line ring-2 ring-background" />
           )}
         </Button>
         {/* Library: full label from sm up, back-chevron only on a phone,
