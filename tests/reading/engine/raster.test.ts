@@ -28,6 +28,9 @@ interface Calls {
 interface FakeParts {
   open?: () => Promise<PdfDocumentObject>;
   render?: () => Promise<Blob>;
+  // Absent by default, because the fake is what an engine build without the
+  // call looks like: the raster has to survive one.
+  metadata?: () => Promise<{ author: string | null; title: string | null }>;
 }
 
 const PAGE: PdfPageObject = { index: 0, size: { width: 400, height: 800 } } as PdfPageObject;
@@ -48,6 +51,7 @@ function fakeEngine(parts: FakeParts = {}): { engine: PdfEngine<Blob>; calls: Ca
       calls.closed.push(doc);
       return task(later(true));
     },
+    ...(parts.metadata ? { getMetadata: () => task(parts.metadata!()) } : {}),
   } as unknown as PdfEngine<Blob>;
   return { engine, calls };
 }
@@ -60,7 +64,8 @@ test("a rendered first page comes back as bytes, and the document is closed", as
 
   const result = await renderFirstPageJpegOn(engine, bytes, { ...OPTS, id: "cover:abc" });
 
-  expect(result).toEqual({ kind: "ok", jpeg: new Uint8Array([1, 2, 3]) });
+  // An engine with no getMetadata is not a failure: the page rendered.
+  expect(result).toEqual({ kind: "ok", jpeg: new Uint8Array([1, 2, 3]), metadata: null });
   expect(calls.opened[0].id).toBe("cover:abc");
   expect(calls.rendered[0].page).toBe(PAGE);
   expect(calls.closed).toEqual([DOC]);
@@ -159,5 +164,32 @@ test("a render that never lands times out and the document is closed", async () 
 
   expect(result.kind).toBe("timeout");
   expect(result).toMatchObject({ message: expect.stringContaining("renderPage") });
+  expect(calls.closed).toEqual([DOC]);
+});
+
+test("the document's author comes back on the same open as the page", async () => {
+  const { engine } = fakeEngine({
+    metadata: async () => ({ author: "Vaswani et al.", title: "Attention" }),
+  });
+
+  const result = await renderFirstPageJpegOn(engine, new Uint8Array([1]), OPTS);
+
+  expect(result).toEqual({
+    kind: "ok",
+    jpeg: new Uint8Array([1, 2, 3]),
+    metadata: { author: "Vaswani et al.", title: "Attention" },
+  });
+});
+
+test("metadata that throws costs the cover nothing", async () => {
+  const { engine, calls } = fakeEngine({
+    metadata: async () => {
+      throw new Error("no catalogue");
+    },
+  });
+
+  const result = await renderFirstPageJpegOn(engine, new Uint8Array([1]), OPTS);
+
+  expect(result).toEqual({ kind: "ok", jpeg: new Uint8Array([1, 2, 3]), metadata: null });
   expect(calls.closed).toEqual([DOC]);
 });

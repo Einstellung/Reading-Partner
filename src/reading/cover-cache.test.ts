@@ -1,17 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import {
-COVER_RENDER_LIMIT,
+  cleanAuthor,
+  COVER_RENDER_LIMIT,
   COVER_RETRY_AFTER_MS,
   COVER_WIDTH_PX,
   coverFailurePath,
   coverImagePath,
-coverRequestKey,
+  coverMetaPath,
+  coverRequestKey,
   coverRetryDue,
   coverScaleFactor,
   createGate,
   createSingleFlight,
   parseCoverFailure,
-unreadableKey,
+  parseCoverMeta,
+  unreadableKey,
   type CoverFailure,
 } from "./cover-cache";
 
@@ -184,6 +187,42 @@ describe("single flight", () => {
     await expect(flight.run("k", work)).rejects.toThrow("boom");
     expect(await flight.run("k", work)).toBe("cover");
     expect(runs).toBe(2);
+  });
+});
+
+describe("the author record", () => {
+  test("it sits beside the cover, under the same book id", () => {
+    expect(coverMetaPath("abc")).toBe("covers/abc.json");
+  });
+
+  test("an author is one line, with no run of space left in it", () => {
+    expect(cleanAuthor("  Ashish Vaswani,\n  Noam Shazeer ")).toBe("Ashish Vaswani, Noam Shazeer");
+    expect(cleanAuthor("\u0000Yann\u0007 LeCun")).toBe("Yann LeCun");
+  });
+
+  test("what a PDF writer leaves behind is no author", () => {
+    expect(cleanAuthor("")).toBe("");
+    expect(cleanAuthor("   ")).toBe("");
+    expect(cleanAuthor("-")).toBe("");
+    expect(cleanAuthor("()")).toBe("");
+    expect(cleanAuthor("unknown")).toBe("");
+    expect(cleanAuthor("N/A")).toBe("");
+    expect(cleanAuthor(null)).toBe("");
+    expect(cleanAuthor(undefined)).toBe("");
+  });
+
+  test("a field with a document dumped in it is cut to a line's worth", () => {
+    expect(cleanAuthor("A".repeat(400))).toHaveLength(120);
+  });
+
+  test("a record survives the round trip, and a wrong shape does not parse", () => {
+    expect(parseCoverMeta({ author: " Kahneman " })).toEqual({ author: "Kahneman" });
+    // Written by a version that had nothing to say: still an answer, so the
+    // book is not rendered again.
+    expect(parseCoverMeta({})).toEqual({ author: "" });
+    expect(parseCoverMeta({ author: 3 })).toBeNull();
+    expect(parseCoverMeta(null)).toBeNull();
+    expect(parseCoverMeta("x")).toBeNull();
   });
 });
 

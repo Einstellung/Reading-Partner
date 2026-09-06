@@ -28,6 +28,22 @@ export const CARD_LABEL = "block h-[50px] overflow-hidden px-2.5 py-2 pr-9";
 export const CARD_TITLE = "block truncate text-[13px] leading-[18px] font-medium text-foreground";
 export const CARD_META = "mt-0.5 block truncate text-[11px] leading-[14px] text-muted-foreground";
 
+// A book's label, which says three things where a topic's says two: the title in
+// the display face, the author off the PDF's own metadata, and how far in the
+// reader is. Its height is fixed the same way and by the same arithmetic — 8 +
+// 18 + 2 + 16 + 4 + 14 + 6 + 2 + 10 — so a book with no author is exactly as
+// tall as one with a long one.
+export const BOOK_LABEL = "block h-[80px] overflow-hidden px-2.5 pt-2 pb-2.5 pr-9";
+export const BOOK_TITLE = "block truncate font-display text-[15px] leading-[18px] font-medium text-foreground";
+export const BOOK_AUTHOR =
+  "mt-0.5 block h-4 truncate text-[13px] leading-[16px] text-muted-foreground";
+export const BOOK_READ = "mt-1 block truncate text-[12px] leading-[14px] text-faint-foreground";
+
+// How far in, on the bottom edge of the label. The track is always drawn, so an
+// unopened book is a card with an empty line rather than a shorter card.
+export const BOOK_PROGRESS = "relative mt-1.5 block h-[2px] bg-border";
+export const BOOK_PROGRESS_FILL = "absolute top-0 left-0 block h-full bg-accent-line";
+
 // A card that makes something instead of opening it: the "+" tile at the end of
 // a grid. It is built from the same two pieces as a card — a box of the cover's
 // shape and a label strip — so it is exactly the size of the cards beside it

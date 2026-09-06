@@ -49,11 +49,15 @@ test("a dot that is part of the title survives", () => {
   expect(displayFileTitle("Vol.2 - Standard Lib.pdf")).toBe("Vol.2 - Standard Lib");
 });
 
-test("the reading line carries the page and the marks, and no timestamp", () => {
-  expect(readingLabel({ page: 195, pages: 318, marks: 84 })).toBe("Page 195 of 318 · 84 marks");
+test("the reading line carries how far in and the marks, and no timestamp", () => {
+  expect(readingLabel({ page: 195, pages: 318, marks: 84 })).toBe("Read 61% · 84 marks");
+  // No length known yet (nothing in the full-text cache): the page number is
+  // the most that can be said.
   expect(readingLabel({ page: 12, marks: 1 })).toBe("Page 12 · 1 mark");
-  expect(readingLabel({ marks: 0 })).toBe("");
-  expect(readingLabel(undefined)).toBe("");
+  // A reader who has opened a book has read some of it.
+  expect(readingLabel({ page: 1, pages: 400, marks: 0 })).toBe("Read 1%");
+  expect(readingLabel({ marks: 0 })).toBe("Not opened yet");
+  expect(readingLabel(undefined)).toBe("Not opened yet");
 });
 
 test("progress needs both ends of the fraction, and never runs past the card", () => {

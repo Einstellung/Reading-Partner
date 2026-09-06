@@ -105,6 +105,7 @@ test("the whole order, once, from the tombstone down to the files", async () => 
     `file figures-${BOOK}.json`,
     `file library/${BOOK}.pdf`,
     `file covers/${BOOK}.jpg`,
+    `file covers/${BOOK}.json`,
     `file covers/${BOOK}.failed.json`,
     `dir prep-${BOOK}`,
   ]);

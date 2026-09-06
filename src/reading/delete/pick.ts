@@ -9,7 +9,7 @@
 // Pure by construction: the inputs are the records the caller already read.
 
 import { deadPathsFor } from "../../platform/sync/dead-paths";
-import { coverFailurePath, coverImagePath } from "../cover-cache";
+import { coverFailurePath, coverImagePath, coverMetaPath } from "../cover-cache";
 import { figuresFile } from "../figures/store";
 import { fulltextFile } from "../../fulltext/store";
 import { libraryPdfPath } from "../../platform/app/library";
@@ -99,7 +99,7 @@ export function isLastReferenceToBook(
  * existed here. prep-<bookId>/ goes as a directory, which is what takes its
  * pdf/ sub-cache with it.
  *
- * The cover files go too. Leaving them would be a picture of a deleted
+ * The three cover files go too. Leaving them would be a picture of a deleted
  * book on disk, and — because a cover is filed under the book id — the same
  * picture again the day the reader imports the same PDF.
  */
@@ -112,6 +112,7 @@ export function deadLocalPathsFor(bookId: string): { files: string[]; dirs: stri
       figuresFile(bookId),
       libraryPdfPath(bookId),
       coverImagePath(bookId),
+      coverMetaPath(bookId),
       coverFailurePath(bookId),
     ],
     // Without the trailing slash the sync range wants: these go to a directory
