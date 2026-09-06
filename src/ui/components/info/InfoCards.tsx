@@ -20,7 +20,6 @@ import type {
 } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
 // Live seconds since a start timestamp, for the triage activity readout. Ticks
@@ -49,7 +48,7 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
     <div className="w-full max-w-md rounded-xl border border-border bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-foreground">{descriptor.name}</span>
-        <Badge className="shrink-0">{pipeLabel}</Badge>
+        <span className="shrink-0 text-[12px] text-faint-foreground">{pipeLabel}</span>
       </div>
       {descriptor.line && <div className="mt-0.5 text-[12px] text-faint-foreground">{descriptor.line}</div>}
       <ul className="m-0 mt-3 flex list-none flex-col gap-1.5 p-0">

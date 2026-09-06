@@ -10,13 +10,21 @@
 
 // The launch layer in front of the library. "library" belongs to App, which
 // renders the shelf; it is in the union so the two navigate through one setter.
-export type HomeScreen = "vestibule" | "library" | "briefing" | "article" | "sources";
+// "settings" is one of them too: it is a page of the content area with the
+// sidebar still beside it, not a screen laid over the app (docs/51).
+export type HomeScreen =
+  | "vestibule"
+  | "library"
+  | "briefing"
+  | "article"
+  | "sources"
+  | "settings";
 
-export type ShellNavId = "today" | "briefing" | "topics";
+export type ShellNavId = "today" | "briefing" | "topics" | "settings";
 
 // Top to bottom, in the order a day uses them: what is open now, what came in
-// overnight, everything else. Settings is not one of them — it is pinned to the
-// bottom of the sidebar and opens a view of its own, not a HomeScreen.
+// overnight, everything else. Settings is a nav id but not one of these — it is
+// pinned to the bottom of the sidebar, away from the day's three.
 export const SHELL_NAV_ITEMS: readonly { id: ShellNavId; label: string }[] = [
   { id: "today", label: "Today" },
   { id: "briefing", label: "Briefing" },
@@ -33,6 +41,8 @@ export function screenForNav(id: ShellNavId): HomeScreen {
       return "briefing";
     case "topics":
       return "library";
+    case "settings":
+      return "settings";
   }
 }
 
@@ -50,6 +60,8 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
       return "briefing";
     case "library":
       return "topics";
+    case "settings":
+      return "settings";
     default:
       return null;
   }

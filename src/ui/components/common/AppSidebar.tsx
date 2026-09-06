@@ -4,13 +4,14 @@
 // rules (docs/30) apply.
 //
 // Two widths, chosen by the breakpoint and not by a stored preference: a 52px
-// icon rail below `lg` (a portrait iPad, where 176px of labels costs the shelf a
+// icon rail below `lg` (a portrait iPad, where 192px of labels costs the shelf a
 // card) and the labelled column at or above it. A rail rather than a drawer,
 // because the three destinations have to stay one tap away on a tablet.
 //
 // Which item is lit and where each one goes are in base/shell-nav.ts; this file
 // renders them and binds the events.
 
+import appIcon from "../../assets/app-icon.png";
 import { IconBriefing, IconBooks, IconGear, IconToday } from "../base/icons";
 import { SHELL_NAV_ITEMS, type ShellNavId } from "../base/shell-nav";
 import { Button } from "../ui/button";
@@ -19,6 +20,7 @@ const ICONS: Record<ShellNavId, (p: { size?: number }) => JSX.Element> = {
   today: IconToday,
   briefing: IconBriefing,
   topics: IconBooks,
+  settings: IconGear,
 };
 
 // One row, in both widths. h-11 is the 44px touch target either way; the rail is
@@ -31,11 +33,16 @@ const ROW =
 const ROW_ACTIVE = "bg-secondary text-secondary-foreground can-hover:hover:bg-secondary";
 const LABEL = "hidden truncate text-[14px] font-medium lg:inline";
 
+// A count on the right of a row, for the rail to drop with the labels: a
+// number with nothing naming it is a puzzle, and there is no room for both.
+const COUNT = "ml-auto hidden text-[12px] tabular-nums text-faint-foreground lg:inline";
+
 function Row(props: {
   label: string;
   icon: (p: { size?: number }) => JSX.Element;
   active?: boolean;
   title?: string;
+  count?: number | null;
   onClick: () => void;
   children?: React.ReactNode;
 }) {
@@ -55,6 +62,7 @@ function Row(props: {
     >
       <Icon size={20} />
       <span className={LABEL}>{props.label}</span>
+      {props.count != null && <span className={COUNT}>{props.count}</span>}
       {props.children}
     </Button>
   );
@@ -69,6 +77,10 @@ export default function AppSidebar(props: {
   // running (platform/sync/health). The state rides on the affordance that
   // leads to it, the same as the header's Settings button did.
   settingsAlert: boolean;
+  // How many topics there are, for the row that opens them. Null while the
+  // library is still being read: a 0 that turns into 4 is a wrong answer given
+  // confidently, and this row is not worth one.
+  topicCount: number | null;
 }) {
   return (
     <nav
@@ -78,11 +90,24 @@ export default function AppSidebar(props: {
       // holding its 44px button. 52px is that button plus the two 4px gutters.
       className={
         "flex w-[3.25rem] flex-none flex-col items-center gap-0.5 overflow-y-auto " +
-        "border-r border-border bg-muted-faint px-1 py-4 lg:w-44 lg:items-stretch lg:px-2"
+        "border-r border-border bg-muted-faint px-1 py-4 lg:w-48 lg:items-stretch lg:px-2"
       }
     >
-      <div className="hidden px-3 pb-3 text-[13px] font-semibold text-foreground lg:block">
-        Reading Partner
+      {/* The app's own icon and its name, in the display face the headings
+          use. On the rail the name goes and the icon stands alone, centred over
+          the column of icons under it — the same 44px box as a row, so the
+          three destinations start where they do in the wide shape. */}
+      <div className="mb-2 flex h-11 flex-none items-center justify-center gap-2.5 lg:justify-start lg:px-2.5">
+        <img
+          src={appIcon}
+          alt=""
+          width={28}
+          height={28}
+          className="h-7 w-7 flex-none rounded-[7px]"
+        />
+        <span className="hidden truncate font-display text-[15px] font-semibold text-foreground lg:inline">
+          Reading Partner
+        </span>
       </div>
 
       {SHELL_NAV_ITEMS.map((item) => (
@@ -91,6 +116,7 @@ export default function AppSidebar(props: {
           label={item.label}
           icon={ICONS[item.id]}
           active={props.active === item.id}
+          count={item.id === "topics" ? props.topicCount : null}
           onClick={() => props.onSelect(item.id)}
         />
       ))}
@@ -99,7 +125,8 @@ export default function AppSidebar(props: {
 
       <Row
         label="Settings"
-        icon={IconGear}
+        icon={ICONS.settings}
+        active={props.active === "settings"}
         title={props.settingsAlert ? "Settings — sync needs attention" : "Settings"}
         onClick={props.onOpenSettings}
       >

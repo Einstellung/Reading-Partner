@@ -12,7 +12,6 @@ import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { handleDelegatedLinkClick, openExternal } from "../../../platform/app/external-link";
 import type { ArticleState } from "../../../info/briefing/reader";
 import type { BriefingItemMeta } from "../../../info/briefing/types";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
 // What to say when there is no body. Four cases and four different sentences,
@@ -71,7 +70,7 @@ export function ArticleView({
             ‹ Briefing
           </Button>
           {meta.sourceName && (
-            <Badge>{meta.sourceName}</Badge>
+            <span className="text-[12px] text-faint-foreground">{meta.sourceName}</span>
           )}
           <span className="flex-1" />
           {hasBody && (

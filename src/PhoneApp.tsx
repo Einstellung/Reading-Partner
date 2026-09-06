@@ -44,7 +44,7 @@ import {
 } from "./ui/components/phone/nav-stack";
 import { useEdgeBack } from "./ui/components/phone/useEdgeBack";
 import SavedArticleView from "./ui/components/library/SavedArticleView";
-import SettingsView from "./ui/components/SettingsView";
+import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 
@@ -247,7 +247,7 @@ export default function PhoneApp() {
         <Toast toasts={toasts} onDismiss={dismissToast} />
 
         {showSettings && (
-          <SettingsView
+          <SettingsDialog
             settings={settings}
             onSettingsChange={applySettings}
             device={device}

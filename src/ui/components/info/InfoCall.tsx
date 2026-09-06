@@ -21,7 +21,6 @@
 // Rendering and event binding only: the conversation, the briefing job and the
 // card gestures are in use-info-call.ts.
 
-import { Badge } from "../ui/badge";
 import CallView from "../chat/CallView";
 import ChatPipCard from "../chat/ChatPipCard";
 import { callLayout } from "../chat/call-layout";
@@ -111,7 +110,9 @@ export function InfoCall({
             title={position.title}
             badge={
               position.sourceName ? (
-                <Badge className="shrink-0">{position.sourceName}</Badge>
+                <span className="shrink-0 text-[11px] text-faint-foreground">
+                  {position.sourceName}
+                </span>
               ) : undefined
             }
             body={

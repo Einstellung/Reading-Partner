@@ -71,6 +71,7 @@ import CallView from "./ui/components/chat/CallView";
 import type { ChatMarkHost } from "./ui/components/chat/chat";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
+import SettingsDialog from "./ui/components/SettingsDialog";
 import SettingsView from "./ui/components/SettingsView";
 import { levelGate, toolInCall, type CallRow } from "./reading/call-state";
 import { asideReturn } from "./reading/aside";
@@ -223,7 +224,14 @@ export default function App() {
   // Resolved figure list for the current book (M9), feeding the inline [fig:N]
   // card host and empty until extraction finishes.
   const [figures, setFigures] = useState<Figure[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
+  // Settings is a screen of the shell, not something laid over it (docs/51):
+  // the sidebar stays, and its Settings row is the lit one. The reader has no
+  // sidebar, so there it keeps the full-screen dialog it always had.
+  const settingsShowing = homeScreen === "settings";
+  const [readerSettings, setReaderSettings] = useState(false);
+  // Where Escape and Done put the reader back. A ref, not state: nothing
+  // renders it, and writing it must not re-render the screen it is leaving.
+  const screenBeforeSettings = useRef<HomeScreen>("vestibule");
   // Failure messages (save/load/network errors) live here, not in `status` —
   // `status` is reserved for transient reader progress ("Rendering…").
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
@@ -237,7 +245,7 @@ export default function App() {
     configured,
     ready: bootstrapped,
     syncReport,
-  } = useShellBootstrap({ settingsOpen: showSettings, pushToast });
+  } = useShellBootstrap({ settingsOpen: settingsShowing || readerSettings, pushToast });
   const fingerDraw = !!device?.fingerDraw;
 
 
@@ -988,7 +996,8 @@ export default function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.key === "Escape") {
-        if (showSettings) setShowSettings(false);
+        if (readerSettings) setReaderSettings(false);
+        else if (settingsShowing) setHomeScreen(screenBeforeSettings.current);
         else if (quoteHlActive) viewRef.current?.clearQuoteHighlight();
         else if (currentCall()?.aside) returnFromAside();
         else if (currentCall()) endCall();
@@ -1007,7 +1016,7 @@ export default function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [showSettings, popup, endCall, currentCall, returnFromAside, quoteHlActive, sidebarOpen]);
+  }, [readerSettings, settingsShowing, popup, endCall, currentCall, returnFromAside, quoteHlActive, sidebarOpen]);
 
   // Which half of prep this document gets. Whichever run exists on disk wins;
   // with neither, the citation density decides (reading/prep/kind.ts). Read off
@@ -1036,6 +1045,18 @@ export default function App() {
       : null;
 
   const inReader = !!title;
+
+  // The one way in: the sidebar's bottom row, the reader's top bar, and the
+  // notice that says no provider is configured. Which form Settings takes is
+  // the shell's business, not the caller's.
+  const openSettings = () => {
+    if (inReader) {
+      setReaderSettings(true);
+      return;
+    }
+    if (homeScreen !== "settings") screenBeforeSettings.current = homeScreen;
+    setHomeScreen("settings");
+  };
   // A bubble on a conversation that has not started, with nowhere to send it:
   // the Settings guidance takes the bubble's place. `configured` is what decides
   // it — an empty bubble is now the ordinary opening state (it offers the intent
@@ -1203,7 +1224,7 @@ export default function App() {
             }}
             gate={gate}
             onOpenBookThread={openBookThread}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenSettings={openSettings}
             settingsAlert={syncReport.alert !== "none"}
           />
         </header>
@@ -1219,8 +1240,9 @@ export default function App() {
               if (id === "topics" && homeScreen === "library") setActiveTopicId(null);
               setHomeScreen(screenForNav(id));
             }}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenSettings={openSettings}
             settingsAlert={syncReport.alert !== "none"}
+            topicCount={topics?.length ?? null}
           />
         )}
         {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the
@@ -1311,9 +1333,18 @@ export default function App() {
             }}
             configured={configured}
             launchReady={bootstrapped}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenSettings={openSettings}
             onTopicsChanged={refreshTopics}
           />
+
+          {!inReader && settingsShowing && (
+            <SettingsView
+              settings={settings}
+              onSettingsChange={applySettings}
+              device={device}
+              onDeviceChange={applyDevice}
+            />
+          )}
 
           {!inReader && homeScreen === "library" && (
             <LibraryScreen
@@ -1383,7 +1414,7 @@ export default function App() {
               <Button variant="outline" onClick={endCall}>
                 Dismiss
               </Button>
-              <Button onClick={() => setShowSettings(true)}>
+              <Button onClick={openSettings}>
                 Open Settings
               </Button>
             </div>
@@ -1507,13 +1538,13 @@ export default function App() {
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
 
-      {showSettings && (
-        <SettingsView
+      {readerSettings && (
+        <SettingsDialog
           settings={settings}
           onSettingsChange={applySettings}
           device={device}
           onDeviceChange={applyDevice}
-          onClose={() => setShowSettings(false)}
+          onClose={() => setReaderSettings(false)}
         />
       )}
     </div>

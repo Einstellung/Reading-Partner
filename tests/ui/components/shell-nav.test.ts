@@ -36,7 +36,23 @@ test("the briefing's side rooms keep Briefing lit", () => {
 });
 
 test("no screen is left without an item, and the reader has none", () => {
-  const screens: HomeScreen[] = ["vestibule", "library", "briefing", "article", "sources"];
+  const screens: HomeScreen[] = [
+    "vestibule",
+    "library",
+    "briefing",
+    "article",
+    "sources",
+    "settings",
+  ];
   for (const s of screens) expect(activeNavFor(s)).not.toBe(null);
   expect(activeNavFor(null)).toBe(null);
+});
+
+// Settings is a screen of the content area, not a view laid over it (docs/51),
+// so it is in the union and it lights the row pinned at the sidebar's foot —
+// which is why it is a nav id without being one of the three items above.
+test("Settings is a screen, and it lights the row at the foot", () => {
+  expect(screenForNav("settings")).toBe("settings");
+  expect(activeNavFor("settings")).toBe("settings");
+  expect(SHELL_NAV_ITEMS.map((i) => i.id)).not.toContain("settings");
 });

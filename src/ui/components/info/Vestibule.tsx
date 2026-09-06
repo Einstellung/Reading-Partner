@@ -15,7 +15,6 @@ import { useEffect, useState } from "react";
 import type { InfoSnapshot } from "../../../info/briefing/pipeline";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import { BriefingCardBody, CardBodyPlaceholder } from "./HomeCard";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { IconChevronRight } from "../base/icons";
 import AddCard from "../shelf/AddCard";
@@ -300,16 +299,16 @@ function BriefingCard(props: {
               <span
                 key={r.itemId}
                 className={
-                  "flex h-10 items-center gap-3" +
+                  "flex h-10 items-center" +
                   (i < rows.length - 1 ? " border-b border-border-faint" : "")
                 }
               >
-                {meta.sourceName && (
-                  <span className="flex-none">
-                    <Badge>{meta.sourceName}</Badge>
-                  </span>
-                )}
                 <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">
+                  {meta.sourceName && (
+                    <span className="text-[12px] text-faint-foreground">
+                      {meta.sourceName} ·{" "}
+                    </span>
+                  )}
                   {meta.title}
                 </span>
               </span>
