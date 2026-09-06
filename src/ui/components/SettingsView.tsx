@@ -173,7 +173,7 @@ function VersionLine() {
   }, []);
 
   return (
-    <p className="m-0 shrink-0 pt-4 text-center text-xs text-[#999]">
+    <p className="m-0 shrink-0 pt-4 text-center text-xs text-faint-foreground">
       Reading Partner {version} · {LICENSE_NAME}
     </p>
   );

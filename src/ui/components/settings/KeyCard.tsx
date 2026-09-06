@@ -81,7 +81,7 @@ export default function KeyCard({
           Save
         </Button>
       </div>
-      <p className="m-0 text-xs text-[#777]">Saving a key here signs out other providers.</p>
+      <p className="m-0 text-xs text-faint-foreground">Saving a key here signs out other providers.</p>
     </div>
   );
 }

@@ -54,7 +54,7 @@ export default function SyncCard() {
     return (
       <div className={CARD}>
         <span className="font-medium">Google Drive</span>
-        <p className="m-0 text-sm text-[#777]">Google client not configured.</p>
+        <p className="m-0 text-sm text-faint-foreground">Google client not configured.</p>
         <Button type="button" disabled>
           Sign in with Google
         </Button>
@@ -73,7 +73,7 @@ export default function SyncCard() {
             to resume; nothing local is lost.
           </p>
         ) : (
-          <p className="m-0 text-sm text-[#777]">
+          <p className="m-0 text-sm text-faint-foreground">
             Sync reading progress, marks, and books to your own Google Drive.
           </p>
         )}
@@ -81,7 +81,7 @@ export default function SyncCard() {
           {busy ? "Complete sign-in in your browser…" : "Sign in with Google"}
         </Button>
         {broken && (
-          <span className="text-xs text-[#777]">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
+          <span className="text-xs text-faint-foreground">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
         )}
         {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
       </div>
@@ -116,7 +116,7 @@ export default function SyncCard() {
         <Button type="button" variant="subtle" disabled={busy} onClick={() => run(signOutOfGoogle)}>
           Sign out
         </Button>
-        <span className="text-xs text-[#777]">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
+        <span className="text-xs text-faint-foreground">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
       </div>
       {report.message && (
         <p

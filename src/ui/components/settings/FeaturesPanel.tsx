@@ -55,7 +55,7 @@ export default function FeaturesPanel({
               onChange={(v) => onSettingsChange({ ...settings, aiLanguage: v as AiLanguage })}
             />
           </FieldGrid>
-          <p className="m-0 text-xs text-[#777]">
+          <p className="m-0 text-xs text-faint-foreground">
             The language the AI writes chat replies, notes, and the news briefing in. Auto
             follows the language you write in. Voice transcription always follows what you speak.
           </p>
@@ -66,7 +66,7 @@ export default function FeaturesPanel({
             <Checkbox checked={paperTint} onCheckedChange={(v) => setPaperTint(v === true)} />
             Paper background
           </Label>
-          <p className="m-0 text-xs text-[#777]">
+          <p className="m-0 text-xs text-faint-foreground">
             Turns the white behind the whole app — chats, shelves, sidebars, this dialog, and the
             pages of a book — into an off-white paper colour. There is one shade and no darker
             step; this is not a dark mode. The choice stays on this device.
@@ -86,7 +86,7 @@ export default function FeaturesPanel({
             />
             Draw with your finger
           </Label>
-          <p className="m-0 text-xs text-[#777]">
+          <p className="m-0 text-xs text-faint-foreground">
             Off, a finger only moves the page and a stylus does the marking, whatever tool is
             selected. Turn it on for a device with no stylus, where the finger has to be able to
             highlight and draw. The navigation lock in the reader still overrides both. Whether
@@ -108,7 +108,7 @@ export default function FeaturesPanel({
               />
               Collect from your sources on this computer
             </Label>
-            <p className="m-0 text-xs text-[#777]">
+            <p className="m-0 text-xs text-faint-foreground">
               Each source is checked on its own schedule and what it published is kept until the
               day's briefing is built. Off, this machine stops collecting entirely and another
               collector, if you have one, takes over.
@@ -130,7 +130,7 @@ export default function FeaturesPanel({
                   onChange={(v) => onDeviceChange({ ...device, role: v as DeviceRole })}
                 />
               </FieldGrid>
-              <p className="m-0 text-xs text-[#777]">
+              <p className="m-0 text-xs text-faint-foreground">
                 A collector reads your subscribed sites all day and publishes the briefing for your
                 other devices; a reader shows what a collector published and never fetches from a
                 site itself. Phones and tablets are always readers. If two machines collect, the

@@ -51,7 +51,7 @@ export default function SpeechKeyCard() {
           {configured && <span className="self-center text-xs text-[#5fb236]">Connected</span>}
         </div>
       </Label>
-      <p className="m-0 text-xs text-[#777]">
+      <p className="m-0 text-xs text-faint-foreground">
         A Xiaomi MiMo key, for the voice that reads answers aloud. Without one the app stays silent
         and everything else works as it does now.
       </p>

@@ -16,7 +16,7 @@ export function SettingsSection({
 }) {
   return (
     <section>
-      <h2 className="mt-0 mb-2 text-sm font-semibold text-[#666]">{title}</h2>
+      <h2 className="mt-0 mb-2 text-sm font-semibold text-muted-foreground">{title}</h2>
       <div className="flex flex-col gap-2">{children}</div>
     </section>
   );

@@ -109,7 +109,7 @@ export default function AccountPanel({
       <SettingsSection title="Default conversation">
         <div className={CARD}>
           {connectedProviders.length === 0 ? (
-            <p className="m-0 text-sm text-[#777]">Connect a provider above to choose a default.</p>
+            <p className="m-0 text-sm text-faint-foreground">Connect a provider above to choose a default.</p>
           ) : (
             <>
               <FieldGrid>
@@ -131,7 +131,7 @@ export default function AccountPanel({
                   onChange={(defaultModelId) => onSettingsChange({ ...settings, defaultModelId })}
                 />
               </FieldGrid>
-              <p className="m-0 text-xs text-[#777]">
+              <p className="m-0 text-xs text-faint-foreground">
                 The number beside each model is its context window. This app reads a whole book into
                 it; on a smaller window a reply drops material to fit and says what it dropped.
               </p>
@@ -154,7 +154,7 @@ export default function AccountPanel({
               onChange={(prepThinking) => onSettingsChange({ ...settings, prepThinking })}
             />
           </FieldGrid>
-          <p className="m-0 text-xs text-[#777]">
+          <p className="m-0 text-xs text-faint-foreground">
             Adaptive models decide per question how much to actually think; higher = deeper but
             slower.
           </p>
