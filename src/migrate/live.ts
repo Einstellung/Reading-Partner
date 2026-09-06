@@ -20,8 +20,10 @@ export const appDataMigrationFs: MigrationFs = {
     }
   },
   async write(path, content) {
-    const dir = path.slice(0, path.lastIndexOf("/"));
-    if (dir) await appData.mkdirp(dir);
+    // lastIndexOf is -1 for a root file, and slice(0, -1) of "statements.json"
+    // is "statements.jso" — a stray empty directory per root file the run wrote.
+    const slash = path.lastIndexOf("/");
+    if (slash > 0) await appData.mkdirp(path.slice(0, slash));
     await writeTextAtomic(path, content);
   },
   async remove(path) {
