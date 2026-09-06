@@ -189,10 +189,16 @@ function toolCalls(message: AssistantMessage): ToolCall[] {
 // The provider-agnostic stream contract, matched by Provider.stream and by a
 // scripted fake in tests. Kept as a parameter so the loop core can be driven
 // without any real provider, auth, or network.
+//
+// `options` is optional because pi-agent-core declares its own StreamFn that
+// way, and under strictFunctionTypes a required parameter is not assignable to
+// an optional one — so with it required, the same stream function cannot be
+// handed to both loops. This loop always passes an object; only a caller that
+// omits it sees the difference.
 export type StreamFn = (
 	model: Model<Api>,
 	context: Context,
-	options: SimpleStreamOptions,
+	options?: SimpleStreamOptions,
 ) => AssistantMessageEventStream;
 
 export interface AgentLoopParams extends AgentCallbacks {
