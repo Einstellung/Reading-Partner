@@ -16,7 +16,6 @@ import { createRoot } from "react-dom/client";
 
 // The app's global baseline: what is measured here has to be the app's layout.
 import "../../../styles.css";
-import { Badge } from "../ui/badge";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import { BriefingPage } from "./BriefingPage";
 import { VoiceOrbEntry } from "./VoiceOrbEntry";
@@ -100,7 +99,7 @@ function Harness() {
         <div className="absolute right-3 top-3 z-50">
           <ReadingPipCard
             title="Today's briefing"
-            badge={<Badge className="shrink-0">Example</Badge>}
+            badge={<span className="shrink-0 text-[11px] text-faint-foreground">Example</span>}
             body={
               <span className="line-clamp-3 text-[12px] leading-snug text-faint-foreground">
                 The corner card the text call draws over this screen.

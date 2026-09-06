@@ -1,7 +1,9 @@
 // shadcn/ui Badge with the two pills this app actually draws, not shadcn's six.
-// The `source` one appeared verbatim in six files and in two shades of purple;
-// one string ends that. Non-interactive, so there is no touch target and no
-// hover state here.
+// Non-interactive, so there is no touch target and no hover state here.
+//
+// `source` is a historical name: news no longer wears a pill anywhere (docs/51
+// — a briefing's source is text on the line of its title), and what is left of
+// the variant is the neutral pill the retell cards put a word in.
 //
 // forwardRef anyway: a pill is measured often enough, and React 18 drops a ref
 // handed to a plain function component without a word (docs/pitfall/95).

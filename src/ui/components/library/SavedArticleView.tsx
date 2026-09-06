@@ -14,7 +14,6 @@ import {
   type SavedArticle,
   type SavedArticleBody,
 } from "../../../reading/saved-articles";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
 export default function SavedArticleView({
@@ -59,7 +58,7 @@ export default function SavedArticleView({
             ‹ {backLabel}
           </Button>
           {article.sourceName && (
-            <Badge>{article.sourceName}</Badge>
+            <span className="text-[12px] text-faint-foreground">{article.sourceName}</span>
           )}
           {published && <span className="text-[12px] text-faint-foreground">{published}</span>}
         </div>

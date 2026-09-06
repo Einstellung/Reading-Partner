@@ -6,16 +6,16 @@
 
 import { useState } from "react";
 import type { Briefing, BriefingItemMeta } from "../../../info/briefing/types";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { IconSparkle } from "../base/icons";
 
+// Where a piece of news came from, on the line of the title it belongs to
+// rather than in a pill of its own (docs/51). Small and faint: it is what the
+// eye skips on the way to the headline, and a filled chip is not skippable.
 function SourceTag({ name }: { name: string }) {
   if (!name) return null;
-  return (
-    <Badge>{name}</Badge>
-  );
+  return <span className="text-[12px] text-faint-foreground">{name} · </span>;
 }
 
 // A hover/touch × that logs a dismissal without opening anything.
@@ -93,11 +93,13 @@ export function BriefingPage(props: BriefingPageProps) {
                       width; sm+ keeps them in the right rail. */}
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
                     <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>
-                      <div className="flex items-center gap-2">
+                      <div className="leading-snug">
                         <SourceTag name={m.sourceName} />
-                        {opened && <span className="text-[11px] text-faint-foreground">Read</span>}
+                        <span className="font-display text-[16px] font-medium text-foreground">{m.title}</span>
+                        {opened && (
+                          <span className="ml-2 text-[11px] text-faint-foreground">Read</span>
+                        )}
                       </div>
-                      <div className="mt-1.5 font-display text-[16px] font-medium leading-snug text-foreground">{m.title}</div>
                       <div className="mt-1.5 text-[14px] leading-relaxed text-muted-foreground">{r.reason}</div>
                     </button>
                     <div className="flex flex-none items-center gap-1 self-end sm:self-auto">
@@ -165,11 +167,13 @@ export function BriefingPage(props: BriefingPageProps) {
               <div className="group rounded-xl border border-dashed border-[#d8b26a] bg-[#fdf8ee] p-4">
                 <div className="flex items-start gap-3">
                   <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="aside">Out of your lane</Badge>
-                      <SourceTag name={m.sourceName} />
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
+                      Out of your lane
                     </div>
-                    <div className="mt-1.5 font-display text-[16px] font-medium leading-snug text-[#3a2f12]">{m.title}</div>
+                    <div className="mt-1.5 leading-snug">
+                      <SourceTag name={m.sourceName} />
+                      <span className="font-display text-[16px] font-medium text-[#3a2f12]">{m.title}</span>
+                    </div>
                     <div className="mt-1.5 text-[14px] leading-relaxed text-[#6b5a34]">{r.reason}</div>
                   </button>
                   <DismissButton onDismiss={() => props.onDismiss(r.itemId, m, "out-of-lane")} />
