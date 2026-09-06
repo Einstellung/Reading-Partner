@@ -104,7 +104,7 @@ export default function AppSidebar(props: {
         onClick={props.onOpenSettings}
       >
         {props.settingsAlert && (
-          <span className="absolute left-6 top-2 h-2 w-2 rounded-full bg-[#b45309] ring-2 ring-[#fafafa]" />
+          <span className="absolute left-6 top-2 h-2 w-2 rounded-full bg-[#b45309] ring-2 ring-muted-faint" />
         )}
       </Row>
     </nav>

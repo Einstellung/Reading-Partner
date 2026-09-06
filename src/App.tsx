@@ -1186,7 +1186,7 @@ export default function App() {
           navigation and Settings, and the topic's name is on the topic's own
           page (docs/51). */}
       {inReader && (
-        <header className="relative z-10 flex h-11 flex-none items-center gap-1.5 border-b border-[#dcdcdc] bg-[#fafafa] px-2 sm:gap-2 sm:px-3">
+        <header className="relative z-10 flex h-11 flex-none items-center gap-1.5 border-b border-border bg-muted-faint px-2 sm:gap-2 sm:px-3">
           <ReaderTopBar
             view={viewRef}
             stats={stats}
@@ -1364,7 +1364,7 @@ export default function App() {
             alone — see showGuidance. */}
         {showGuidance && call && (
           <div
-            className={`fixed anchor-safe ${OVERLAY_Z.floating} flex w-[300px] flex-col gap-3 rounded-xl border border-black/10 bg-white p-4 shadow-[0_8px_40px_rgba(0,0,0,0.18)]`}
+            className={`fixed anchor-safe ${OVERLAY_Z.floating} flex w-[300px] flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-[0_8px_40px_rgba(0,0,0,0.18)]`}
             // anchor-safe clamps this inside the safe area (docs/pitfall/74) and
             // re-solves on resize and rotation, which the viewport width read
             // once at render did not. --anchor-h is an estimate: the card holds
@@ -1378,7 +1378,7 @@ export default function App() {
               } as CSSProperties
             }
           >
-            <p className="m-0 text-sm text-neutral-700">Configure a provider in Settings to start chatting.</p>
+            <p className="m-0 text-sm text-muted-foreground">Configure a provider in Settings to start chatting.</p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={endCall}>
                 Dismiss
@@ -1393,7 +1393,7 @@ export default function App() {
         {/* A failed turn stays visible; offer a retry (docs/03: errors not swallowed). */}
         {call?.error && (
           <button
-            className={`fixed bottom-safe-6 left-1/2 ${OVERLAY_Z.floatingTop} -translate-x-1/2 rounded-full border border-[#dcdcdc] bg-white px-4 py-1.5 text-sm shadow-md hover:bg-[#f0f0f0]`}
+            className={`fixed bottom-safe-6 left-1/2 ${OVERLAY_Z.floatingTop} -translate-x-1/2 rounded-full border border-border bg-card px-4 py-1.5 text-sm shadow-md hover:bg-muted`}
             onClick={retryCall}
           >
             Retry
@@ -1471,12 +1471,12 @@ export default function App() {
                     title={title ?? ""}
                     badge={
                       stats?.pageLabel ? (
-                        <span className="shrink-0 text-[11px] text-neutral-400">p. {stats.pageLabel}</span>
+                        <span className="shrink-0 text-[11px] text-faint-foreground">p. {stats.pageLabel}</span>
                       ) : undefined
                     }
                     body={
                       excerpt ? (
-                        <span className="line-clamp-3 text-[12px] italic leading-snug text-neutral-500">
+                        <span className="line-clamp-3 text-[12px] italic leading-snug text-faint-foreground">
                           “{excerpt}”
                         </span>
                       ) : undefined

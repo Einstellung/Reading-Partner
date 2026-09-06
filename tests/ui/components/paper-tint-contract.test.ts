@@ -186,25 +186,21 @@ test("nothing in the UI writes a white hex either", () => {
 });
 
 // A fill this pale is one of two things. Either it is the palette's own
-// neutral, in which case it has a token and must use it, or it is a state
-// colour thinned almost to white — the violet of a chip, the amber of a note,
-// the green of a confirmation, the red of a warning — which carries meaning a
-// neutral token would erase. Only the second kind belongs here, and it is
+// neutral or its own accent, in which case it has a token and must use it, or
+// it is a status colour thinned almost to the page — the amber of a note, the
+// red of a warning — which carries meaning a neutral token would erase. Only the second kind belongs here, and it is
 // listed by file and by exact class so a plain grey added to the same file
 // still fails.
 const PALE_ALLOWED = new Map([
-  ["ui/components/info/ArticleView.tsx", ["bg-[#eff6f0]"]],
-  ["ui/components/info/BriefingPage.tsx", ["bg-[#f0eefb]", "bg-[#fdf8ee]"]],
-  ["ui/components/info/InfoCards.tsx", ["bg-[#faf9ff]", "bg-[#fdf5f3]", "bg-[#f8e8e4]"]],
+  ["ui/components/info/BriefingPage.tsx", ["bg-[#fdf8ee]"]],
+  ["ui/components/info/InfoCards.tsx", ["bg-[#fdf5f3]", "bg-[#f8e8e4]"]],
   ["ui/components/library/SavedArticleView.tsx", ["bg-[#fdf8ec]"]],
   ["ui/components/markdown/MarkdownRenderer.tsx", ["bg-[#efecfb]", "bg-[#f6f4fd]"]],
-  ["ui/components/phone/PullToAsk.tsx", ["bg-[#f4f2fc]"]],
   ["ui/components/reader/MoreMenu.tsx", ["bg-[#efecfb]"]],
-  ["ui/components/ui/badge.tsx", ["bg-[#f0eefb]"]],
 ]);
 
 // 0xe0 is the line: every neutral this palette owns is above it (--muted-strong
-// is the deepest at #e5e5e5) and every fill below it is dark enough to read as
+// is the deepest at #e3e3db) and every fill below it is dark enough to read as
 // a shape rather than as the page.
 const PALE = 0xe0;
 

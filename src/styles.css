@@ -24,68 +24,80 @@
 @custom-variant can-hover (@media (hover: hover));
 @custom-variant coarse (@media (pointer: coarse));
 
-/* The design tokens shadcn/ui is generated against, mapped onto the colours the
-   app already ships rather than shadcn's own grey-blue set, so a component
-   pulled in with `bunx shadcn add` lands on this palette without editing.
-   Every value below is a hex that was already in src/ (docs/30).
+/* The design tokens shadcn/ui is generated against, so a component pulled in
+   with `bunx shadcn add` lands on this palette without editing.
 
-   Two deliberate convergences, both recorded in docs/30:
-   - one --primary. The three purples (#6c4fd0 on the settings buttons, #6d5ae0
-     on the info CTA and on the InfoCards CTA) collapse to #6c4fd0.
-   - one hover fill. #f4f4f4 (info) and #f0f0f0 (shell, reader) collapse to
-     #f0f0f0.
+   The palette is paper and moss: an unbleached off-white ground (--background)
+   with cards a shade lighter than it, warm-grey ink, and a muted green as the
+   single accent. It replaced a white-and-violet set in 0.13 (docs/52); every
+   hex that used to be written into a component now comes from here.
 
    --primary-hover exists because shadcn's `hover:bg-primary/90` lightens a
-   colour over a white page, and every filled button here darkens on hover.
-   --secondary is the violet-tinted chip, which is what a second-rank button
-   looks like in this app; --accent keeps shadcn's meaning (the subtle fill a
-   ghost control takes on hover) and so equals --muted, as it does in shadcn's
-   own default theme. */
+   colour over a light page, and every filled button here darkens on hover.
+   --secondary is the pale-green chip, which is what a second-rank button looks
+   like in this app; --accent keeps shadcn's meaning (the subtle fill a ghost
+   control takes on hover) and so equals --muted, as it does in shadcn's own
+   default theme.
+
+   Status colours (--destructive and the ambers and greens the sync and health
+   indicators use) are not part of the reskin: they carry meaning, not identity.
+   Neither are the PDF annotation colours in platform/app/annotations.ts, which
+   are content. */
 @layer base {
   :root {
-    --background: #ffffff;
-    --foreground: #1b1b1b;
+    --background: #faf9f6;
+    --foreground: #252922;
 
-    --card: #ffffff;
-    --card-foreground: #1b1b1b;
-    --popover: #ffffff;
-    --popover-foreground: #1b1b1b;
+    --card: #fffefa;
+    --card-foreground: #252922;
+    --popover: #fffefa;
+    --popover-foreground: #252922;
 
-    --primary: #6c4fd0;
-    --primary-foreground: #ffffff;
-    --primary-hover: #5a3fbf;
+    --primary: #52664e;
+    --primary-foreground: #fffefa;
+    --primary-hover: #435441;
 
-    --secondary: #efecfb;
-    --secondary-foreground: #4a3a9e;
-    --secondary-border: #c9c2e8;
-    --secondary-hover: #e7e3f7;
+    --secondary: #e6e8db;
+    /* One step lighter than --secondary and barely off the ground: the wash
+       under a whole card that belongs to the accent (the info cards the
+       companion writes), where --secondary would paint the card as a chip. */
+    --secondary-faint: #f2f4ec;
+    --secondary-foreground: #3f5039;
+    --secondary-border: #c9cfbd;
+    --secondary-hover: #dde0cf;
 
-    --muted: #f0f0f0;
-    --muted-foreground: #555555;
-    --accent: #f0f0f0;
-    --accent-foreground: #1b1b1b;
+    --muted: #efefe8;
+    --accent: #efefe8;
+    --accent-foreground: #252922;
+
+    /* Two ranks of text under --foreground. muted is secondary prose: a card
+       subtitle, a description under a field, the body of a list row. faint is
+       metadata: timestamps, counts, source labels, placeholder text. Nothing
+       goes lighter than faint: on --background it is 4.65:1, and 4.5:1 is the
+       floor body-sized text is allowed to reach. */
+    --muted-foreground: #5c6058;
+    --faint-foreground: #6f726a;
 
     /* The neutral fills either side of --muted, named by weight and ordered
-       lightest first. faint is the shallowest step off --background (a note
-       body inset into a panel, a row hover, a code block outside the chat
-       window); soft is the fill that has to read as a shape of its own (a
-       status chip, a loading placeholder, the user bubble outside the chat
-       window); strong is the one that has to read as pressed. Each value is
-       the grey that was already written at those places, so the default
-       palette is unchanged — they are tokens because a neutral grey is the one
-       thing that cannot follow the ground when the ground turns warm. */
-    --muted-faint: #fafafa;
-    --muted-soft: #f5f5f5;
-    --muted-strong: #e5e5e5;
+       lightest first. faint is the shallowest step off --background (the
+       sidebar ground, a note body inset into a panel, a row hover, a code block
+       outside the chat window); soft is the fill that has to read as a shape of
+       its own (a status chip, a loading placeholder, the user bubble outside
+       the chat window); strong is the one that has to read as pressed. They are
+       tokens because a neutral grey is the one thing that cannot follow the
+       ground when the ground turns warm. */
+    --muted-faint: #f3f3ed;
+    --muted-soft: #f1f1ea;
+    --muted-strong: #e3e3db;
 
     --destructive: #b91c1c;
     --destructive-foreground: #ffffff;
     --destructive-border: #f0c8c8;
     --destructive-hover: #991b1b;
 
-    --border: #dcdcdc;
-    --input: #dcdcdc;
-    --ring: #6c4fd0;
+    --border: #e5e5dd;
+    --input: #e5e5dd;
+    --ring: #52664e;
 
     /* Rules lighter than --border, same weight names and again lightest first.
        faint separates the rows of a dense list and only works while it stays
@@ -94,30 +106,30 @@
        the info and library screens, where a full --border reads as a box
        drawn around it. Three steps rather than one because collapsing them
        flattens relations the components are built on. */
-    --border-soft: #e6e6e6;
-    --border-subtle: #ececec;
-    --border-faint: #f6f6f6;
+    --border-soft: #ebebe3;
+    --border-subtle: #f0f0e9;
+    --border-faint: #f6f6f0;
 
-    /* The chat reading surface, three layers stepped down from white: the
-       window, the user bubble on it, a code block inside either. Warm rather
-       than neutral grey, which goes blue against this off-white. The composer
+    /* The chat reading surface, three layers stepped down from the ground: the
+       window, the user bubble on it, a code block inside either. The composer
        keeps --background, so it floats off the window as a card.
 
        Only the window is applied as a class. The bubble and the code block are
        shared with the corner bubble, TalkView and the reader panels, all of
-       which stay on white, so those two reach their elements through
+       which stay on the ground, so those two reach their elements through
        --chat-bubble-bg / --chat-code-bg, set on the CallView root and defaulted
        to --muted-soft / --muted-faint everywhere else. */
-    --chat-surface: #fcfcfb;
-    --chat-bubble: #f2f0ec;
-    --chat-code: #f7f5f1;
+    --chat-surface: #f6f5f0;
+    --chat-bubble: #ebeae2;
+    --chat-code: #f2f1ea;
 
     /* The colour the reader multiplies over a rasterized page. Nothing on the
-       default palette: a PDF page is already paper-white, and multiplying any
-       other colour onto it would shift the ink with it. Declared here and not
-       only under the tint so the default is written down where the rest of the
-       palette is; the reader reads it as `var(--page-wash, transparent)`, and
-       the two answers have to be the same one. */
+       default palette: a PDF page is already paper-white, and the app's own
+       ground is close enough to it that multiplying anything would only shift
+       the ink. Declared here and not only under the tint so the default is
+       written down where the rest of the palette is; the reader reads it as
+       `var(--page-wash, transparent)`, and the two answers have to be the same
+       one. */
     --page-wash: transparent;
 
     /* 8px. The three radii in use fall straight out of it: rounded-sm 4px on
@@ -127,13 +139,14 @@
     --radius: 0.5rem;
   }
 
-  /* The paper tint: one switch, one step, no second one. It is the same palette
-     with the white pulled towards an unbleached paper, so nothing here is a
-     second design — every value below replaces a white or a neutral grey with
-     the warm colour at the same place on the same ladder, and the order of that
-     ladder is what the chat surface is made of (--background above
-     --chat-surface above --chat-code above --chat-bubble). Reorder any two and
-     the chat window stops reading as three stacked layers.
+  /* The paper tint: one switch, one step, no second one. Since 0.13 the default
+     ground is already unbleached, so this is no longer white-to-cream — it is
+     one warmer step off the default, the whole ladder moved together. Every
+     value below replaces a neutral off-white with the warm colour at the same
+     place on the same ladder, and the order of that ladder is what the chat
+     surface is made of (--background above --chat-surface above --chat-code
+     above --chat-bubble). Reorder any two and the chat window stops reading as
+     three stacked layers.
 
      The attribute is set on <html> by ui/components/base/paper-tint.ts, and the
      off state is the attribute being absent rather than carrying another value,
@@ -141,36 +154,35 @@
      specificity as the :root above (`[data-tint="paper"]` and `:root` are both
      0,1,0), so this wins on source order alone — it has to stay below.
 
-     Not redefined: the purples (--primary, --secondary, --ring) and every text
-     colour. Violet sits on cream as happily as it does on white, and a second
-     purple ramp would have to be re-derived against the new ground for no gain.
-     --muted and --accent are redefined even though they are neutral greys,
-     because a neutral grey on a warm ground is what reads as cold.
+     Not redefined: the greens (--primary, --secondary, --ring) and every text
+     colour. Moss sits on cream as happily as it does on the default ground, and
+     a second green ramp would have to be re-derived against the new ground for
+     no gain.
 
-     What is deliberately not here: a dark mode. This is one step off white for
+     What is deliberately not here: a dark mode. This is one step warmer for
      reading in daylight; inverting the app is a different design with different
      text colours, and pretending this switch is halfway there would leave the
      app with a palette that is neither. */
   [data-tint="paper"] {
-    --background: #faf6ec;
-    --card: #faf6ec;
-    --popover: #faf6ec;
+    --background: #f6f1e4;
+    --card: #fbf7ec;
+    --popover: #fbf7ec;
 
-    --muted: #efe8d9;
-    --accent: #efe8d9;
-    --muted-faint: #f7f2e5;
-    --muted-soft: #f2ebdd;
-    --muted-strong: #e7decb;
+    --muted: #ece5d4;
+    --accent: #ece5d4;
+    --muted-faint: #f1ebda;
+    --muted-soft: #eee8d8;
+    --muted-strong: #e0d8c4;
 
-    --border: #ded5c2;
-    --input: #ded5c2;
-    --border-soft: #e9e0cd;
-    --border-subtle: #eee6d5;
-    --border-faint: #f3eee0;
+    --border: #e2dac6;
+    --input: #e2dac6;
+    --border-soft: #e8e1ce;
+    --border-subtle: #eee7d6;
+    --border-faint: #f3ede0;
 
-    --chat-surface: #f8f3e8;
-    --chat-bubble: #f0e9da;
-    --chat-code: #f5eee0;
+    --chat-surface: #f2ecdd;
+    --chat-bubble: #e8e1cf;
+    --chat-code: #eee7d7;
 
     /* Multiplied over the page raster: white paper comes out exactly this
        colour and black ink stays black, which is why the reader can tint a
@@ -192,11 +204,13 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
+  --color-secondary-faint: var(--secondary-faint);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary-border: var(--secondary-border);
   --color-secondary-hover: var(--secondary-hover);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-faint-foreground: var(--faint-foreground);
   --color-muted-faint: var(--muted-faint);
   --color-muted-soft: var(--muted-soft);
   --color-muted-strong: var(--muted-strong);
@@ -215,6 +229,13 @@
   --color-chat-surface: var(--chat-surface);
   --color-chat-bubble: var(--chat-bubble);
   --color-chat-code: var(--chat-code);
+
+  /* The display face, for the few headings that name what the reader is
+     looking at (docs/52). No webfont and no <link>: iOS already ships Georgia
+     and Songti, and a stack whose leading family the engine cannot resolve is
+     paid for on every document (docs/pitfall/178), so the fallbacks are all
+     installed faces. */
+  --font-display: Georgia, "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

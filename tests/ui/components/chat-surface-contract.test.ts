@@ -28,9 +28,9 @@ const chat = read("ui/components/chat/chat.tsx");
 const markdown = read("ui/components/markdown/MarkdownRenderer.tsx");
 
 test("the three surface tokens are declared and mapped to utilities", () => {
-  expect(styles).toContain("--chat-surface: #fcfcfb;");
-  expect(styles).toContain("--chat-bubble: #f2f0ec;");
-  expect(styles).toContain("--chat-code: #f7f5f1;");
+  expect(styles).toContain("--chat-surface: #f6f5f0;");
+  expect(styles).toContain("--chat-bubble: #ebeae2;");
+  expect(styles).toContain("--chat-code: #f2f1ea;");
   // Without the @theme inline entry the variable exists and `bg-chat-surface`
   // is simply never generated, which fails as an unstyled element rather than
   // as an error (docs/30).

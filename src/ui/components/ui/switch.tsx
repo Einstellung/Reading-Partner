@@ -25,7 +25,7 @@ const Switch = React.forwardRef<
         "relative inline-flex h-5 w-9 flex-none cursor-pointer rounded-full transition-colors",
         // The off track is the app's own grey, not a palette step: neutral-300
         // is an oklch value that lands a shade lighter.
-        "data-[state=checked]:bg-primary data-[state=unchecked]:bg-[#d4d4d4]",
+        "data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted-strong",
         HIT_44,
         className,
       )}

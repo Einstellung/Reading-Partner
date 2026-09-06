@@ -83,7 +83,7 @@ export function ArticleView({
                 // unavailable control — so the variant's dimming is cancelled.
                 className={
                   saved
-                    ? "border-[#cfe3d2] bg-[#eff6f0] text-[#3e6b48] disabled:opacity-100"
+                    ? "border-secondary-border bg-secondary text-secondary-foreground disabled:opacity-100"
                     : undefined
                 }
                 onClick={onSave}
@@ -110,7 +110,7 @@ export function ArticleView({
           )}
         </div>
 
-        <h1 className="m-0 mb-4 text-[22px] font-semibold leading-tight text-[#141414] sm:mb-6 sm:text-[26px]">{meta.title}</h1>
+        <h1 className="m-0 mb-4 font-display text-[22px] font-semibold leading-tight text-foreground sm:mb-6 sm:text-[26px]">{meta.title}</h1>
 
         {body ? (
           <div
@@ -123,11 +123,11 @@ export function ArticleView({
           />
         ) : (
           state && (
-            <p className="my-3.5 text-[15px] leading-relaxed text-[#777]">{noBodyLine(state)}</p>
+            <p className="my-3.5 text-[15px] leading-relaxed text-faint-foreground">{noBodyLine(state)}</p>
           )
         )}
 
-        <div className="mt-8 border-t border-border-subtle pt-4 text-[12px] text-[#bbb] sm:mt-10">{meta.url}</div>
+        <div className="mt-8 border-t border-border-subtle pt-4 text-[12px] text-faint-foreground sm:mt-10">{meta.url}</div>
       </div>
     </div>
   );

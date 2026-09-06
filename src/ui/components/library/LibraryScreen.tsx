@@ -241,7 +241,7 @@ export default function LibraryScreen(props: {
             >
               ‹ All topics
             </Button>
-            <h1 className="mx-0 mb-0 mt-1.5 text-[22px] font-bold">{activeTopic.name}</h1>
+            <h1 className="mx-0 mb-0 mt-1.5 font-display text-[22px] font-bold">{activeTopic.name}</h1>
             <p className="mx-0 mb-0 mt-1.5 text-[13px] text-muted-foreground">
               {topicHeaderLine(activeTopic, meta, new Date())}
             </p>

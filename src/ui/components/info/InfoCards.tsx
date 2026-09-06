@@ -46,19 +46,19 @@ function useSecondsSince(startedAt: number | null): number {
 export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<ProbeConfirmCardData>) {
   const { descriptor, pipeLabel, samples, added } = payload;
   return (
-    <div className="w-full max-w-md rounded-xl border border-black/10 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+    <div className="w-full max-w-md rounded-xl border border-border bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-[#1b1b1b]">{descriptor.name}</span>
+        <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-foreground">{descriptor.name}</span>
         <Badge className="shrink-0">{pipeLabel}</Badge>
       </div>
-      {descriptor.line && <div className="mt-0.5 text-[12px] text-[#999]">{descriptor.line}</div>}
+      {descriptor.line && <div className="mt-0.5 text-[12px] text-faint-foreground">{descriptor.line}</div>}
       <ul className="m-0 mt-3 flex list-none flex-col gap-1.5 p-0">
         {samples.map((s, i) => (
           <li key={i} className="flex items-start gap-2 text-[13px] leading-snug">
-            <span className="mt-2 h-1 w-1 flex-none rounded-full bg-[#d0d0d0]" />
-            <span className="min-w-0 flex-1 text-[#333]">
+            <span className="mt-2 h-1 w-1 flex-none rounded-full bg-muted-strong" />
+            <span className="min-w-0 flex-1 text-muted-foreground">
               <span className="line-clamp-2">{s.title}</span>
-              <span className="text-[12px] text-[#999]">
+              <span className="text-[12px] text-faint-foreground">
                 {s.chars} chars · {s.fullText ? "full text" : "summary only"}
               </span>
             </span>
@@ -121,13 +121,13 @@ export function BriefingProgressCard({ payload }: CardComponentProps<BriefingPro
   }
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-[#c9c2e8] bg-[#faf9ff] p-4">
+    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="flex items-center gap-2">
         <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-        <span className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">{heading}</span>
+        <span className="text-[11px] font-medium uppercase tracking-wider text-primary">{heading}</span>
       </div>
-      <div className="mt-1.5 text-[14px] text-[#2a2a2a]">{main}…</div>
-      {sub && <div className="mt-0.5 text-[12px] tabular-nums text-[#999]">{sub}</div>}
+      <div className="mt-1.5 text-[14px] text-muted-foreground">{main}…</div>
+      {sub && <div className="mt-0.5 text-[12px] tabular-nums text-faint-foreground">{sub}</div>}
     </div>
   );
 }
@@ -144,14 +144,14 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
     <button
       type="button"
       onClick={() => dispatch({ kind: "navigate", to: "briefing", arg: payload.date })}
-      className="w-full max-w-md rounded-xl border border-[#c9c2e8] bg-[#faf9ff] p-4 text-left hover:border-[#b3a8e0]"
+      className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4 text-left hover:border-primary"
     >
-      <div className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-primary">
         {payload.title ?? "Briefing ready"}
       </div>
-      <div className="mt-1 text-[15px] font-medium text-[#1b1b1b]">{payload.date}</div>
-      <div className="mt-1 text-[13px] text-[#666]">{counts}</div>
-      <div className="mt-2 text-[12px] leading-snug text-[#999]">{note}</div>
+      <div className="mt-1 text-[15px] font-medium text-foreground">{payload.date}</div>
+      <div className="mt-1 text-[13px] text-muted-foreground">{counts}</div>
+      <div className="mt-2 text-[12px] leading-snug text-faint-foreground">{note}</div>
       <div className="mt-2 text-[13px] font-medium text-primary">Open →</div>
     </button>
   );
@@ -163,12 +163,12 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
 export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<ProfileUpdateCardData>) {
   const applied = payload.phase === "applied";
   return (
-    <div className="w-full max-w-md rounded-xl border border-[#c9c2e8] bg-[#faf9ff] p-4">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-[#8a7fd0]">
+    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-primary">
         {applied ? "Profile updated" : "Update reading profile"}
       </div>
-      <div className="mt-1 text-[14px] font-medium text-[#1b1b1b]">{payload.summary}</div>
-      <pre className="m-0 mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-lg border border-black/10 bg-card p-3 font-sans text-[12px] leading-relaxed text-[#333]">
+      <div className="mt-1 text-[14px] font-medium text-foreground">{payload.summary}</div>
+      <pre className="m-0 mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-card p-3 font-sans text-[12px] leading-relaxed text-muted-foreground">
         {payload.profile.trim()}
       </pre>
       <div className="mt-3 flex items-center justify-end gap-2">
@@ -184,7 +184,7 @@ export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<Prof
               Re-run today's triage
             </Button>
           ) : (
-            <span className="text-[12px] text-[#999]">Applies to your next briefing.</span>
+            <span className="text-[12px] text-faint-foreground">Applies to your next briefing.</span>
           )
         ) : (
           <Button

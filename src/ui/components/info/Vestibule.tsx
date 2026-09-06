@@ -88,7 +88,7 @@ export function Vestibule({
   return (
     <div className={PAGE}>
       <div className="text-[13px] text-muted-foreground">{todayDateLine(new Date())}</div>
-      <h1 className="mb-5 mt-1 text-[26px] font-semibold text-foreground">Today</h1>
+      <h1 className="mb-5 mt-1 font-display text-[26px] font-semibold text-foreground">Today</h1>
 
       <ContinueCard book={continueBook} onContinue={onContinue} onOpenLibrary={onOpenLibrary} />
 
@@ -217,7 +217,7 @@ function ContinueCard(props: {
       </span>
       <span className="min-w-0 flex-1">
         <span className={`block ${EYEBROW}`}>Continue reading</span>
-        <span className="mt-1.5 block text-[18px] font-medium leading-snug text-foreground">
+        <span className="mt-1.5 block font-display text-[18px] font-medium leading-snug text-foreground">
           {displayFileTitle(book.file.name)}
         </span>
         <span className="mt-1 block text-[13px] text-muted-foreground">
@@ -283,7 +283,7 @@ function BriefingCard(props: {
           <IconChevronRight />
         </span>
       </span>
-      <span className="mt-2.5 block text-[15px] leading-relaxed text-[#2a2a2a]">
+      <span className="mt-2.5 block text-[15px] leading-relaxed text-muted-foreground">
         {briefing.overview}
       </span>
       {rows.length > 0 && (

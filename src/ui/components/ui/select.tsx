@@ -63,7 +63,7 @@ const SelectTrigger = React.forwardRef<
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <span className="flex-none text-[#555]">
+        <span className="flex-none text-muted-foreground">
           <IconChevronDown size={16} />
         </span>
       </SelectPrimitive.Icon>
@@ -87,7 +87,7 @@ const SelectContent = React.forwardRef<
           OVERLAY_SAFE.anchored,
           OVERLAY_Z.anchored,
           "relative min-w-[var(--radix-select-trigger-width)] overflow-x-hidden overflow-y-auto",
-          "rounded-lg border border-black/10 bg-popover p-1 text-popover-foreground shadow-lg",
+          "rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg",
           "data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2",
           "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
@@ -116,7 +116,7 @@ const SelectItem = React.forwardRef<
       data-slot="select-item"
       className={cn(
         "relative flex w-full cursor-pointer items-center gap-2 rounded-md py-0 pr-8 pl-2.5",
-        "min-h-[36px] coarse:min-h-[44px] text-left text-sm coarse:text-base text-[#333]",
+        "min-h-[36px] coarse:min-h-[44px] text-left text-sm coarse:text-base text-muted-foreground",
         "outline-hidden select-none focus:bg-accent focus:text-accent-foreground",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
         className,
@@ -141,7 +141,7 @@ const SelectScrollUpButton = React.forwardRef<
     <SelectPrimitive.ScrollUpButton
       ref={ref}
       data-slot="select-scroll-up-button"
-      className={cn("flex cursor-default items-center justify-center py-1 text-[#555]", className)}
+      className={cn("flex cursor-default items-center justify-center py-1 text-muted-foreground", className)}
       {...props}
     >
       <IconChevronUp size={16} />
@@ -157,7 +157,7 @@ const SelectScrollDownButton = React.forwardRef<
     <SelectPrimitive.ScrollDownButton
       ref={ref}
       data-slot="select-scroll-down-button"
-      className={cn("flex cursor-default items-center justify-center py-1 text-[#555]", className)}
+      className={cn("flex cursor-default items-center justify-center py-1 text-muted-foreground", className)}
       {...props}
     >
       <IconChevronDown size={16} />
