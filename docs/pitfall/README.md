@@ -58,7 +58,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 221）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 224）。
 
 ## EmbedPDF 引擎
 
@@ -249,7 +249,7 @@
 
 ## 排版基线与 Tailwind
 
-- [219-library-grid-carries-no-columns](./219-library-grid-carries-no-columns.md) — `LIBRARY_GRID` 只有 `display:grid` 和间距，列数写在每个调用点（`TOPIC_GRID_COLUMNS_CLASS` / Today 自己的 `grid-cols-3 lg:grid-cols-5`）；光用这个常量拼出来的网格是单列，卡片被拉满宽，看着像布局炸了
+- [223-library-grid-carries-no-columns](./223-library-grid-carries-no-columns.md) — `LIBRARY_GRID` 只有 `display:grid` 和间距，列数写在每个调用点（`TOPIC_GRID_COLUMNS_CLASS` / Today 自己的 `grid-cols-3 lg:grid-cols-5`）；光用这个常量拼出来的网格是单列，卡片被拉满宽，看着像布局炸了
 
 - [74-fixed-overlay-misses-shell-safe-area](./74-fixed-overlay-misses-shell-safe-area.md) — `position: fixed` 的包含块是视口，外壳按 `env(safe-area-inset-*)` 加的 padding 对它不存在，设置页被灵动岛压住、toast 落在 home indicator 上；`env()` 收进 `src/styles.css` 一组 `@utility`（`p-safe` / `pt-safe-*` / `bottom-safe-*` / `anchor-safe`），取 max(原有间距, inset) 而不是相加
 - [75-split-tailwind-import-sorts-base-last](./75-split-tailwind-import-sorts-base-last.md) — 拆开 import 的 Tailwind 少了 `@layer theme, base, components, utilities;` 那行声明，layer 顺序按物理位置排，preflight 落到 utilities 后面，反过来压过每一个 utility class；验收看产物里 `@layer` 的首次出现顺序
@@ -287,7 +287,7 @@
 - [122-spyon-swaps-an-esm-export-and-puts-it-back](./122-spyon-swaps-an-esm-export-and-puts-it-back.md) — bun 的 ESM 命名空间可写：`spyOn(ns, "导出名")` 导入方看得见，`mockRestore()` 能还原，命名导出/默认导出/再导出链都成立；这是 119 之外替换模块导出的另一条路，还原写在 finally 里。`createXStore(io)` 的接线表在 import 时求值，`loadPdfjs,` 这种抄值的字段读不到那个槽，spy 就白装了（实测 store-disk 6 个用例红 4 个），一律写成 `() => loadPdfjs()`
 - [135-headless-chrome-window-size-is-not-the-viewport](./135-headless-chrome-window-size-is-not-the-viewport.md) — 无头截图核对渲染时 `--window-size` 给的是外窗，视口矮 87px、宽度还有 500px 下限，图底部被裁掉一截还容易误判成布局出界；窗口开大 + `--force-device-scale-factor=1` + 零边距包装页
 - [220-a-phone-width-screenshot-is-cropped-not-laid-out](./220-a-phone-width-screenshot-is-cropped-not-laid-out.md) — 坑 135 那条「宽度有 500px 下限」抬的是视口：`--window-size=390` 的图是按 500 排完裁到 390 的，换行位置全是假的；要量手机宽度就开 ≥500 的窗口，把形态包进一个 `w-[390px]` 的盒子（组件里有断点的除外）。这台机器上视口高度已经等于 window-size 的高度，135 那 87px 是版本相关的
-- [218-virtual-time-budget-hangs-on-a-vite-dev-page](./218-virtual-time-budget-hangs-on-a-vite-dev-page.md) — `--virtual-time-budget` 在 vite dev server 的页面上永远等不到「加载完」（HMR 的 WebSocket 一直挂着），Chrome 不退出也不写 PNG；拍 dev server 就别加这个 flag，要等异步内容就拍 `vite preview` 的静态产物
+- [222-virtual-time-budget-hangs-on-a-vite-dev-page](./222-virtual-time-budget-hangs-on-a-vite-dev-page.md) — `--virtual-time-budget` 在 vite dev server 的页面上永远等不到「加载完」（HMR 的 WebSocket 一直挂着），Chrome 不退出也不写 PNG；拍 dev server 就别加这个 flag，要等异步内容就拍 `vite preview` 的静态产物
 - [221-two-overlay-components-blank-a-headless-harness](./221-two-overlay-components-blank-a-headless-harness.md) — 无头 Chrome 的静态探针页里挂 `PenToolbar` 或 `MoreMenu`，React #185（更新深度超限）把整棵树打白，别的组件都正常；成因未定，排除过内联 props 和 `.safe-probe` 的量值，两者唯一共同点是 `useOverlaySafePadding()`。探针页别放这两个
 - [123-vite-serves-node-modules-over-http](./123-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
