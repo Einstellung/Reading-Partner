@@ -1,10 +1,11 @@
-// The provider-required request headers (src/ai/request-headers.ts) and the
-// session id they carry. OpenCode answers 400 MissingSessionID to any request
-// without `x-opencode-session`, and the value has to be one stable id per
-// conversation — a fresh id per call clears the 400 and gives up the routing
-// and caching the header exists for. So both halves are tested: that the header
-// goes only to the providers that need it, and that the id it carries is the
-// conversation's rather than the call's.
+// The per-provider call setup (src/ai/call-setup.ts) and the session id it
+// carries. OpenCode answers 400 MissingSessionID to any request without
+// `x-opencode-session`; Fireworks gets the same conversation id as pi's own
+// `sessionId`, which pi turns into session-affinity headers. Either way the
+// value has to be one stable id per conversation — a fresh id per call clears
+// the 400 and gives up the routing and caching it exists for. So both halves
+// are tested: that each provider gets only what it asked for, and that the id
+// it carries is the conversation's rather than the call's.
 //
 // The provider catalog is real (a model id comes out of it, so `resolveCall`
 // resolves), but nothing reaches the network: the provider's `streamSimple` is
@@ -22,7 +23,7 @@ import {
 import { runAgentTurn } from "../../src/ai/agent";
 import { callModel } from "../../src/ai/model-call";
 import { getModels, providers, streamChat, PROVIDER_IDS, type ProviderId } from "../../src/ai/providers";
-import { providerRequestHeaders } from "../../src/ai/request-headers";
+import { providerCallSetup } from "../../src/ai/call-setup";
 import * as credentials from "../../src/ai/credentials";
 import { chatCleanupRunner } from "../../src/ai/voice";
 import * as cacheTelemetry from "../../src/platform/app/cache-telemetry";
@@ -108,15 +109,44 @@ function turn(id: ProviderId, thread: string | undefined, tools: typeof NOOP_TOO
 
 // --- the table ---------------------------------------------------------------
 
-test("the OpenCode providers ask for x-opencode-session; no other provider gets a header", () => {
-	expect(providerRequestHeaders("opencode-go", "s1")).toEqual({ [SESSION]: "s1" });
-	expect(providerRequestHeaders("opencode", "s1")).toEqual({ [SESSION]: "s1" });
-	const others = PROVIDER_IDS.filter((id) => id !== "opencode" && id !== "opencode-go");
-	for (const id of others) {
-		expect(providerRequestHeaders(id, "s1")).toBeUndefined();
+test("the OpenCode providers ask for x-opencode-session and nothing else", () => {
+	expect(providerCallSetup("opencode-go", "s1")).toEqual({ headers: { [SESSION]: "s1" } });
+	expect(providerCallSetup("opencode", "s1")).toEqual({ headers: { [SESSION]: "s1" } });
+});
+
+// Fireworks needs no header of its own: every model pi lists for it sets compat
+// sendSessionAffinityHeaders, so handing pi the session id is the whole change.
+test("Fireworks carries pi's sessionId and no header", () => {
+	expect(providerCallSetup("fireworks", "s1")).toEqual({ sessionId: "s1" });
+});
+
+test("a provider that needs neither gets an empty setup", () => {
+	for (const id of ["anthropic", "openai", "deepseek"] as ProviderId[]) {
+		expect(providerCallSetup(id, "s1")).toEqual({});
 	}
-	// The whole table, so a provider added to it has to be added here too.
-	expect(PROVIDER_IDS.filter((id) => providerRequestHeaders(id, "s1"))).toEqual(["opencode", "opencode-go"]);
+});
+
+// The whole table, so a provider added to it has to be added here too.
+test("the table is exactly these providers, and each half only where declared", () => {
+	const withHeaders = PROVIDER_IDS.filter((id) => providerCallSetup(id, "s1").headers);
+	const withSessionId = PROVIDER_IDS.filter((id) => providerCallSetup(id, "s1").sessionId);
+	expect(withHeaders).toEqual(["opencode", "opencode-go"]);
+	expect(withSessionId).toEqual(["fireworks"]);
+	const named = new Set([...withHeaders, ...withSessionId]);
+	for (const id of PROVIDER_IDS.filter((other) => !named.has(other))) {
+		expect(providerCallSetup(id, "s1")).toEqual({});
+	}
+});
+
+// A call must never name one conversation in a header and another in sessionId.
+// No provider carries both today; this pins the invariant so one that does has
+// to derive them from the same value.
+test("whenever both halves are present they are the same id", () => {
+	for (const id of PROVIDER_IDS) {
+		const setup = providerCallSetup(id, "the-session");
+		const header = setup.headers?.[SESSION];
+		if (header && setup.sessionId) expect(header).toBe(setup.sessionId);
+	}
 });
 
 // --- the agent loop ----------------------------------------------------------
@@ -146,11 +176,19 @@ test("a turn with no conversation of its own gets a fresh session each run", asy
 	expect(first).not.toBe(second);
 });
 
-test("a turn on a provider that needs nothing carries no headers at all", async () => {
+test("a turn on a provider that needs nothing carries neither header nor sessionId", async () => {
 	const h = harness("deepseek", [answer("hi")]);
 	await turn("deepseek", "thread-c", []);
 	expect(h.seen().length).toBe(1);
 	expect(h.seen()[0].headers).toBeUndefined();
+	expect(h.seen()[0].sessionId).toBeUndefined();
+});
+
+test("every round of a Fireworks turn carries the thread as pi's sessionId, no header", async () => {
+	const h = harness("fireworks", [wantsTool("look"), answer("done")]);
+	await turn("fireworks", "thread-f", [NOOP_TOOL]);
+	expect(h.seen().map((o) => o.sessionId)).toEqual(["thread-f", "thread-f"]);
+	expect(h.seen().every((o) => o.headers === undefined)).toBe(true);
 });
 
 // --- plain streaming ---------------------------------------------------------
@@ -174,9 +212,17 @@ test("streamChat sends the session it was given, and nothing on other providers"
 	await chat("opencode-go", "session-1");
 	expect(go.seen()[0].headers).toEqual({ [SESSION]: "session-1" });
 
+	expect(go.seen()[0].sessionId).toBeUndefined();
+
+	const fw = harness("fireworks", [answer("hi")]);
+	await chat("fireworks", "session-1");
+	expect(fw.seen()[0].sessionId).toBe("session-1");
+	expect(fw.seen()[0].headers).toBeUndefined();
+
 	const ds = harness("deepseek", [answer("hi")]);
 	await chat("deepseek", "session-1");
 	expect(ds.seen()[0].headers).toBeUndefined();
+	expect(ds.seen()[0].sessionId).toBeUndefined();
 });
 
 // --- the one-off callers -----------------------------------------------------
