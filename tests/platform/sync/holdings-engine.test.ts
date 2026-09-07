@@ -6,7 +6,8 @@
 // What is pinned here: both devices publish a holdings and cache the other's,
 // an idle pass adds no request, a holdings never reaches either device's
 // AppData, and — with the inference armed — a deletion on one device travels,
-// an edit beats a delete, and a device with no cached base concludes nothing.
+// an edit beats a delete, a device with no cached base concludes nothing, and a
+// purge that failed keeps the base it was taken against until it lands.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -478,4 +479,95 @@ test("the inference is off unless it is asked for", async () => {
 
   expect(B.text("topics.json")).toBe("topics");
   expect(b.engine.holdingsReport()).toContain("inferred deletions (off): none");
+});
+
+// --- tier 2: a purge that did not land --------------------------------------
+//
+// The cached tree is what the next difference is taken against, so it may only
+// move once the deletions this one produced have actually gone. Advancing it
+// over a failed purge differences the peer's tree against itself next pass: the
+// path is in neither side, nothing ever names it again, and the file stays on
+// this device for good (docs/59 §8.4 allows one pass late, not forever).
+
+// One device whose local delete fails the first `fails` times it is asked.
+function refusingRemove(dev: ReturnType<typeof makeDevice>, path: string, fails: number): SyncFs {
+  let left = fails;
+  return {
+    ...dev.fs,
+    async remove(p) {
+      if (p === path && left > 0) {
+        left -= 1;
+        throw new Error(`EBUSY ${p}`);
+      }
+      await dev.fs.remove(p);
+    },
+  };
+}
+
+test("a purge that failed keeps the peer's tree from becoming the next base", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": "topics" });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A, { inferDeletions: true });
+  const b = engineFor(remote, B, {
+    inferDeletions: true,
+    fs: refusingRemove(B, "topics.json", 1),
+  });
+  await settle(a.engine, b.engine);
+  expect(B.text("topics.json")).toBe("topics");
+
+  A.files.delete("topics.json");
+  await a.engine.syncNow();
+
+  // B takes the difference and hands the path to purgeDead, whose local delete
+  // will not go through. Nothing else of the purge is attempted: deleting the
+  // remote copy of a file this device still holds would make it the only device
+  // with it.
+  await b.engine.syncNow();
+  expect(B.text("topics.json")).toBe("topics");
+  expect(remote.names()).toContain("topics.json");
+  expect(b.engine.holdingsReport()).toContain("inferred deletions (on): topics.json");
+  // The base is still the tree that had the file — which is the whole of the
+  // retry: without it the next pass has nothing to difference.
+  expect(Object.keys(B.cached("d-a")!.files)).toContain("topics.json");
+
+  await b.engine.syncNow();
+
+  expect(B.text("topics.json")).toBeNull();
+  expect(remote.names()).not.toContain("topics.json");
+  expect(B.trashed().map((e) => e.path)).toContain("topics.json");
+  expect(B.trashed().every((e) => e.record === "topics")).toBe(true);
+  expect(b.snapshot["topics.json"]).toBeUndefined();
+  // Only now, with the path gone, is the peer's tree allowed to be the base.
+  expect(Object.keys(B.cached("d-a")!.files)).not.toContain("topics.json");
+});
+
+test("a purge that never lands names the same path every pass", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": "topics" });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A, { inferDeletions: true });
+  const b = engineFor(remote, B, {
+    inferDeletions: true,
+    fs: refusingRemove(B, "topics.json", Number.MAX_SAFE_INTEGER),
+  });
+  await settle(a.engine, b.engine);
+
+  A.files.delete("topics.json");
+  await a.engine.syncNow();
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    await b.engine.syncNow();
+    // The file is still here and the pass says so, both in the report and in
+    // the error the status carries. A deletion that cannot be executed is not
+    // allowed to become a deletion nobody remembers.
+    expect(B.text("topics.json")).toBe("topics");
+    expect(b.engine.holdingsReport()).toContain("inferred deletions (on): topics.json");
+    expect(b.engine.status().lastError ?? "").toContain("remove topics.json");
+    expect(Object.keys(B.cached("d-a")!.files)).toContain("topics.json");
+  }
+
+  // And the remote copy is untouched, so a third device is not looking at a
+  // path this one half deleted.
+  expect(remote.names()).toContain("topics.json");
 });

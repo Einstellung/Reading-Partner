@@ -302,6 +302,31 @@ class PassFailures {
   }
 }
 
+// What one purge did. `changed` is for the caches keyed by path: this device
+// had the file and no longer has it. `done` is stricter — the path left every
+// side it was on — and it is what a peer's cached tree is allowed to advance
+// past.
+interface PurgeResult {
+  changed: boolean;
+  done: boolean;
+}
+
+// A peer's tree this pass fetched, waiting to become the base of the next
+// difference (docs/59 §8.4). It may not become one until the deletions its own
+// difference produced have actually left this device: a cache advanced over a
+// purge that failed differences the peer's tree against itself next pass, and
+// the path is never named again.
+interface PeerAdvance {
+  device: string;
+  bytes: Uint8Array;
+  // The rev the listing gave this copy, for peerHoldingsRev.
+  rev: number;
+  // The paths this peer's difference put in front of purgeDead. Contested paths
+  // are not here: nothing was asked of the purge for them, so nothing about
+  // them can hold the cache back.
+  deletions: string[];
+}
+
 export class SyncEngine {
   private readonly d: EngineDeps;
   private readonly now: () => number;
@@ -650,11 +675,20 @@ export class SyncEngine {
   //
   // The remote delete failing is not the pass's problem to solve twice: the
   // tombstone is still there next pass, and reconcile will name the path again.
+  // An inferred deletion has no tombstone to come back to, so what has to name
+  // it again is the same difference of two peer trees — which is why `done` is
+  // reported: the caller holds that peer's cached tree back until the path has
+  // actually left (docs/59 §8.4).
+  //
+  // The local remove failing stops the rest: deleting the remote copy of a file
+  // this device is still holding would leave it the only device with it, and
+  // the next pass would upload it back at a higher rev. Nothing structural has
+  // moved when that happens, so the retry is the same work over again.
   private async purgeDead(
     path: string,
     inRemote: boolean,
     failures: PassFailures,
-  ): Promise<boolean> {
+  ): Promise<PurgeResult> {
     let bytes: Uint8Array | null = null;
     try {
       bytes = await this.d.fs.read(path);
@@ -662,13 +696,20 @@ export class SyncEngine {
       // Not on this device, or unreadable. Either way there is nothing to
       // journal and nothing to delete.
     }
+    let changed = false;
     if (bytes !== null) {
       await this.d.trash
         .append([
           { at: this.now(), path, id: path, record: new TextDecoder().decode(bytes) },
         ])
         .catch(() => {});
-      await this.d.fs.remove(path).catch(() => {});
+      try {
+        await this.d.fs.remove(path);
+      } catch (e) {
+        failures.record(`remove ${path}`, e);
+        return { changed: false, done: false };
+      }
+      changed = true;
     }
     if (inRemote) {
       try {
@@ -676,13 +717,13 @@ export class SyncEngine {
       } catch (e) {
         if (isAuthFailure(e)) throw e;
         failures.record(`delete ${path}`, e);
-        return bytes !== null;
+        return { changed, done: false };
       }
       failures.succeeded();
     }
     delete this.snapshot[path];
     await this.d.base.remove(path).catch(() => {});
-    return bytes !== null;
+    return { changed, done: true };
   }
 
   // --- holdings (docs/59) ---------------------------------------------------
@@ -714,18 +755,21 @@ export class SyncEngine {
   // Fetch every peer holdings whose rev moved, and work out what they say this
   // device should delete. The order is the whole of the safety: the cached copy
   // is read (that is the base), the current one is fetched, the difference is
-  // taken, and only then is the cache advanced. Advancing it first would erase
-  // the base and turn every deletion into a difference nobody can see.
+  // taken, and the cache is not advanced here at all. Advancing it before the
+  // difference would erase the base; advancing it before the purge ran would
+  // erase it just as surely a moment later, so the fetched copy is handed back
+  // and advancePeerHoldings decides after the executing half of the pass.
   private async pullPeerHoldings(
     pass: HoldingsPass,
     local: LocalFile[],
     remote: RemoteState,
     failures: PassFailures,
-  ): Promise<Set<string>> {
+  ): Promise<{ inferred: Set<string>; advances: PeerAdvance[] }> {
     const inferred = new Set<string>();
+    const advances: PeerAdvance[] = [];
     const store = this.holdingsStore();
     const listed = this.d.backend.listedHoldings?.();
-    if (!store || !listed) return inferred;
+    if (!store || !listed) return { inferred, advances };
     const me = this.device();
 
     const localTree = new Map(local.map((f) => [f.path, { hash: f.hash }]));
@@ -763,27 +807,53 @@ export class SyncEngine {
       const current = bytes === null ? cached : parseHoldings(bytes);
       pass.peers.push({ device, cached, current });
 
+      let deletions: string[] = [];
       if (pass.enabled) {
         const out = inferDeletions({ base: cached, current, local: localTree, remoteHashes });
+        deletions = out.deletions;
         for (const path of out.deletions) inferred.add(path);
         pass.contested.push(...out.contested);
       }
 
       if (bytes !== null) {
-        // The rev is claimed only for a copy that actually landed on disk.
-        // Claiming it for a write that failed would leave this device
-        // differencing against a base it no longer has and never fetching
-        // again — safe, in that it infers nothing, and silent, which is worse.
-        const stored = await store.write(device, bytes).then(
-          () => true,
-          () => false,
-        );
-        if (stored) this.peerHoldingsRev.set(device, listed[device].rev);
+        advances.push({ device, bytes, rev: listed[device].rev, deletions });
         pass.fetched += 1;
       }
     }
     pass.inferred = [...inferred].sort();
-    return inferred;
+    return { inferred, advances };
+  }
+
+  // Move each peer's cached tree up to the copy this pass read — but only for a
+  // peer whose whole difference actually left this device. One purge that
+  // failed holds that peer's cache where it is, so the next pass takes the same
+  // difference, names the same paths, and does the same thing; an advance here
+  // would leave the next pass differencing the peer's tree against itself, with
+  // the file on this device and nothing left that could ever name it (docs/59
+  // §8.4 promises one pass late, not forever).
+  //
+  // Deferred to after the purges rather than remembered as a list of pending
+  // deletions: the difference is recomputable from two trees this device
+  // already has, and a persisted list would be a second thing that has to stay
+  // true across a crash.
+  private async advancePeerHoldings(
+    advances: readonly PeerAdvance[],
+    purged: ReadonlySet<string>,
+  ): Promise<void> {
+    const store = this.holdingsStore();
+    if (!store) return;
+    for (const a of advances) {
+      if (!a.deletions.every((path) => purged.has(path))) continue;
+      // The rev is claimed only for a copy that actually landed on disk.
+      // Claiming it for a write that failed would leave this device
+      // differencing against a base it no longer has and never fetching
+      // again — safe, in that it infers nothing, and silent, which is worse.
+      const stored = await store.write(a.device, a.bytes).then(
+        () => true,
+        () => false,
+      );
+      if (stored) this.peerHoldingsRev.set(a.device, a.rev);
+    }
   }
 
   // Publish this device's tree, but only when it is not the tree already
@@ -874,7 +944,12 @@ export class SyncEngine {
       // is no second way to delete anything.
       const holdings = emptyHoldingsPass();
       holdings.enabled = this.d.inferDeletions ?? HOLDINGS_INFER_DELETIONS;
-      const inferred = await this.pullPeerHoldings(holdings, local, remote, failures);
+      const { inferred, advances } = await this.pullPeerHoldings(
+        holdings,
+        local,
+        remote,
+        failures,
+      );
       const plan = reconcile(
         local,
         remote,
@@ -905,10 +980,18 @@ export class SyncEngine {
       // this pass is about to take away has no business in one. The paths are
       // reported as changed so the caches keyed by book drop what they hold
       // (pull-routes.ts) — a deleted file is as good a reason as a pulled one.
+      const purged = new Set<string>();
       for (const path of plan.purges) {
         if (failures.halted()) break;
-        if (await this.purgeDead(path, remote[path] !== undefined, failures)) changed.push(path);
+        const out = await this.purgeDead(path, remote[path] !== undefined, failures);
+        if (out.changed) changed.push(path);
+        if (out.done) purged.add(path);
       }
+      // Only now may a peer's tree become the base of the next difference: what
+      // it is allowed to say has been deleted is exactly what this pass got rid
+      // of. A halted pass never reaches most of its purges, so most of its
+      // peers stay where they were, which is the same statement.
+      await this.advancePeerHoldings(advances, purged);
 
       // Pull first so library.json is current before the books channel reads it.
       await runPool(plan.downloads, DATA_CONCURRENCY, () => failures.halted(), async (dl) => {
