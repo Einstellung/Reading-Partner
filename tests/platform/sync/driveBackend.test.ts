@@ -379,6 +379,38 @@ test("listRemote builds every entry from the file's own metadata", async () => {
   expect(drive.requests.some((r) => r.url.includes("files?q="))).toBe(false);
 });
 
+test("a holdings file is taken out of the listing and answered for separately", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({
+    name: "holdings-d-3f9a1c.json",
+    parents: [seeded.dataFolderId],
+    body: "{}",
+    appProperties: { rev: "3", mtime: "9", hash: "h1" },
+  });
+  drive.add({
+    name: "settings.json",
+    parents: [seeded.dataFolderId],
+    body: "ab",
+    appProperties: { rev: "4", mtime: "9", hash: "h2" },
+  });
+  const { backend, ids } = makeBackend(drive, seeded);
+
+  // Never in RemoteState: reconcile would treat it as one of the user's files
+  // and write it into their AppData (docs/59 §8.12).
+  expect(await backend.listRemote()).toEqual({
+    "settings.json": { rev: 4, mtime: 9, size: 2, hash: "h2" },
+  });
+  // The same listing answers where each device's tree is and what rev it is at,
+  // which is what makes noticing that a peer's tree moved cost no request.
+  expect(backend.listedHoldings()).toEqual({
+    "d-3f9a1c": { rev: 3, mtime: 9, size: 2, hash: "h1" },
+  });
+  // And its id was learned with everything else's, so fetching it is one
+  // request rather than a search and a fetch.
+  expect(ids.fileIds["holdings-d-3f9a1c.json"]).toBe(drive.one("holdings-d-3f9a1c.json").id);
+});
+
 test("a file the user dropped into the data folder is not pulled into their AppData", async () => {
   const drive = makeDrive();
   const seeded = seedTree(drive);

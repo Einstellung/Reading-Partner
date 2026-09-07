@@ -38,6 +38,7 @@ import {
   type RemoteState,
   type SyncBackend,
 } from "./backend";
+import { holdingsDeviceOf } from "./holdings";
 import type { DriveIds } from "./state";
 import { inSyncRange } from "./syncFs";
 
@@ -219,6 +220,10 @@ export function resumeOffset(range: string | null): number {
 type ChunkAck = { done: true; id: string } | { done: false; at: number };
 
 export class DriveBackend implements SyncBackend {
+  // The holdings files the last listRemote() enumerated, by device id
+  // (holdings.ts). Empty until a listing has run.
+  private holdings: Record<string, RemoteEntry> = {};
+
   constructor(private readonly d: DriveBackendDeps) {}
 
   private get ids(): DriveIds {
@@ -466,8 +471,31 @@ export class DriveBackend implements SyncBackend {
     const seen = new Set<string>();
     let learnedIds = false;
 
+    const holdings: Record<string, RemoteEntry> = {};
+
     for (const f of files) {
       const name = f.name!;
+      // Before the range test, because a holdings file is deliberately out of
+      // range: it is enumerated by the same listing so a peer's tree costs no
+      // request, and it must not reach RemoteState, where reconcile would treat
+      // it as one of the user's files and write it into AppData (docs/59 §8.12).
+      const device = holdingsDeviceOf(name);
+      if (device !== null) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        if (this.ids.fileIds[name] !== f.id) {
+          this.ids.fileIds[name] = f.id;
+          learnedIds = true;
+        }
+        // No hash is not a reason to skip it: what a fetch is decided on is the
+        // rev, and a holdings uploaded by this build always carries one.
+        holdings[device] = entryOf(f) ?? {
+          rev: 0,
+          mtime: driveMtime(f),
+          size: Number(f.size ?? 0),
+        };
+        continue;
+      }
       if (!inSyncRange(name) || seen.has(name)) continue;
       seen.add(name);
       if (this.ids.fileIds[name] !== f.id) {
@@ -479,9 +507,17 @@ export class DriveBackend implements SyncBackend {
       else unseeded.push(f);
     }
     if (learnedIds) await this.d.persistIds();
+    this.holdings = holdings;
 
     if (unseeded.length > 0) await this.seedFromManifest(unseeded, out);
     return out;
+  }
+
+  // What the last listing saw, answered without a request. Kept from the
+  // listing rather than fetched on demand: the whole point of putting holdings
+  // in data/ is that the listing a pass already makes enumerates them.
+  listedHoldings(): Record<string, RemoteEntry> {
+    return this.holdings;
   }
 
   // Files uploaded before appProperties existed. Their rev lives in the old
