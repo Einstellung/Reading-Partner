@@ -18,6 +18,7 @@
 | 加自动跑的后台/夜间任务、写数据迁移 | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
+| 改合并策略、往 settings.json 加字段 | 存储与数据目录 |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 + 开发环境 |
 | 不出整包，只验原生插件的 Swift / Rust 编得过 | iOS 构建与签名 |
@@ -58,7 +59,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 237）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 239）。
 
 ## EmbedPDF 引擎
 
@@ -138,6 +139,7 @@
 - [210-a-nightly-pass-runs-once-per-entry-point-and-before-the-migration](./210-a-nightly-pass-runs-once-per-entry-point-and-before-the-migration.md) — dream 的日闸只看跑完才写的状态文件，一次启动里启动/回前台/定时器三个入口打进来跑了四遍，十条结论落盘两组（一中一英）；同一次启动它还抢在用户点迁移按钮前 20 秒跑完，19 条 statement 的证据指着马上要被改名的 8 位 id，全部悬空。闸放在被调用的那一侧：进程内在飞标记 + 进程内当日标记 + 观察目录里还有 8 位文件就 `waiting-migration`
 - [235-a-silent-drop-plus-two-exclusive-uis-loses-everything](./235-a-silent-drop-plus-two-exclusive-uis-loses-everything.md) — `appendMessage` 对不存在的线程静默返回 `undefined`，而建线程的只有文字聊天那条路；球和文字聊天在 `InfoHome` 里互斥，于是「今天没开过文字聊天」时整场语音通话一句不落盘，全程无报错。建记录的责任放在会写它的那一侧（`threadTranscript` 的 `begin()`），store 的契约不动
 - [236-a-destination-sync-already-delivered-locks-the-gate](./236-a-destination-sync-already-delivered-locks-the-gate.md) — 桌面先跑完迁移，`observations/` 同步到 iPad；iPad 再跑第 8 步时每个目标都已存在，全被 `refuse`，源文件原地不动，而全屏蒙层的判据看的正是源，于是 Try again 永远是同一句「old files are still there」，只能重装。目标已存在改成：字节相同就删源，不同就把源的版本按内容 digest 停成 `m-<id>.conflict-<hex>.md` 再删源；闸门读的那份数据不许有「跳过」这条出路
+- [237-per-field-merge-splits-a-pair](./237-per-field-merge-splits-a-pair.md) — `settings.json` 走 `fields` 策略，每个键独立按内容 hash 定胜负，等于一个键掷一次硬币；`defaultProviderId` 和 `defaultModelId` 因此被拆成双方都没有过的组合（22 组实测 10 组不存在），此后每次调用都 `unknown model 'X' for DeepSeek`。`fieldGroupsFor` 按路径声明字段组，`fields` 把一组键当一个复合值整组定胜负；`enforceKnownModel` 留在两条读盘的路上兜合并层看不见的原因（下架的模型、更老的构建），`resolveModel` 从磁盘读，所以必须写回盘
 - [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
 
 ## 提取（壳侧 pdf.js）
@@ -278,6 +280,7 @@
 - [66-usage-shortcut-freezes-pi-context-estimate](./66-usage-shortcut-freezes-pi-context-estimate.md) — 消息数组里一旦有带 usage 的真 assistant 消息，pi 的估算就等于那个 usage，系统提示词不再计入，压缩 usage 之前的任何东西都不改变它；重放历史里那条没 timestamp 的 assistant 消息又会把捷径整个关掉（NaN 比较），同一个调用点两套计价。判断压缩够不够只能重新量，不能拿字符估的 saving 去减
 - [131-pi-cache-retention-env-never-reaches-the-webview](./131-pi-cache-retention-env-never-reaches-the-webview.md) — `PI_CACHE_RETENTION=long` 在 dev 和打包版都读不到：webview 里没有 `process`，Vite build 又把 `process.env` 换成 `{}`，pi 每次都落回 5 分钟保留期。要换只能在发送路径上传 `cacheRetention`，并把同一个值传给埋点
 - [234-failed-background-pass-records-only-unknown](./234-failed-background-pass-records-only-unknown.md) — 后台蒸馏/画像失败恒记 `reason: "unknown"`：错误对象在 `runAgentTurn` 的 catch 里就丢了，`live.ts` 又只传 outcome，`classifyDistillFailure` 拿到空文本。失败事件改带 `errorName` + `errorMessage`（前 200 字，只在 `outcome: "failed"` 时带）；另附读日志的两条：没有 `prompt-cache` 行等于请求没拿回任何消息，`distill-failed` 的 `from` 是当时的游标而 meta.json 可能已被另一台设备换过
+- [238-opencode-requires-a-session-header-pi-never-sends](./238-opencode-requires-a-session-header-pi-never-sends.md) — OpenCode Go 每次调用回 400 `MissingSessionID`：它要求每个请求带 `x-opencode-session`，pi-ai 整个包里没有这个头，`options.sessionId` 发的是另外四个名字。用 `ProviderRequestOptions.headers`（三个 api 都 merge 在最后），映射表在 `src/ai/request-headers.ts` 一 provider 一行，值取会话 id（工具循环用 `TurnTelemetry.thread`）而不是每次一个随机值，否则路由和缓存白搭；不要放按 host 分发的 fetch 桥
 
 ## 开发环境
 

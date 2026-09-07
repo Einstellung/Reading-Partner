@@ -1,7 +1,8 @@
 // The rules of the shared shell start-up (src/ui/components/common/
 // useShellBootstrap.ts), which both shells now mount: a stored default model the
-// catalog dropped is corrected and written back once, the deferred read of a
-// sync pull waits for the pending save, a provider id the catalog no longer
+// catalog dropped is corrected and written back once on both reads that take
+// settings off disk, the deferred read of a sync pull waits for the pending
+// save, a provider id the catalog no longer
 // carries counts as unconfigured, and the sync-health toast is said once and
 // then never again. The hook itself is four lines of wiring around these; they
 // are what can be wrong.
@@ -15,7 +16,7 @@ import { expect, test } from "bun:test";
 import type { SyncHealthReport } from "../../../src/platform/sync/health";
 import type { ProviderInfo } from "../../../src/ai/providers";
 import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
-import { defaultModelFor } from "../../../src/ai/providers";
+import { defaultModelFor, isSelectableModel } from "../../../src/ai/providers";
 import { corruptFileMessage } from "../../../src/platform/app/store-errors";
 import {
   healthToastMessage,
@@ -103,7 +104,43 @@ test("the deferred read flushes the pending save before it reads", async () => {
 
   // The read is taken after the bytes are down, not after the flush was started.
   expect(order).toEqual(["flush called", "bytes down", "load"]);
-  expect(adopted.aiLanguage).toBe("ko");
+  expect(adopted.settings.aiLanguage).toBe("ko");
+});
+
+// A pull can still land a provider paired with some other provider's model,
+// which every call rejects. The merge is no longer the cause — settings.json
+// binds the two keys into one group and settles them together (pitfall 237) —
+// but a model the provider retired, and a settings file written by a build that
+// predates the group, both arrive this way and no merge can see either.
+// Correcting at start-up alone is not enough: resolveModel reads settings off
+// disk, so lesson prep, the briefing and distillation keep failing on the file
+// until the app is restarted.
+test("a pull that lands one provider's model under another is corrected and written back", async () => {
+  const store = fakeStore({
+    ...DEFAULT_SETTINGS,
+    defaultProviderId: "deepseek",
+    defaultModelId: defaultModelFor("cerebras"),
+  });
+
+  const { settings, notice } = await pulledSettings(store);
+  expect(store.flushes).toBe(1);
+  expect(isSelectableModel("deepseek", settings.defaultModelId)).toBe(true);
+  expect(notice).toContain(defaultModelFor("cerebras") as string);
+  // On disk too, not only in this shell's copy.
+  expect(store.saved).toEqual([settings]);
+});
+
+test("a pull whose provider and model still go together writes nothing", async () => {
+  const store = fakeStore({
+    ...DEFAULT_SETTINGS,
+    defaultProviderId: "deepseek",
+    defaultModelId: defaultModelFor("deepseek"),
+  });
+
+  const { settings, notice } = await pulledSettings(store);
+  expect(settings.defaultModelId).toBe(defaultModelFor("deepseek"));
+  expect(notice).toBeNull();
+  expect(store.saved).toEqual([]);
 });
 
 const provider = (id: string, configured: boolean): ProviderInfo =>

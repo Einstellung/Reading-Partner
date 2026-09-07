@@ -9,7 +9,13 @@
 // content, and the copy the loser goes into is named from its own bytes, so
 // both devices write the same file under the same name.
 
-import { strategyFor, type ConflictCopy, type MergeInput, type MergeOutput } from "./contract";
+import {
+  fieldGroupsFor,
+  strategyFor,
+  type ConflictCopy,
+  type MergeInput,
+  type MergeOutput,
+} from "./contract";
 import { lowerCursorWins } from "./cursors";
 import { mergeObject, type ResolveConflict } from "./fields";
 import { mergeProse } from "./prose";
@@ -175,7 +181,14 @@ function mergeFieldFile(input: MergeInput, resolve?: ResolveConflict): MergeOutp
   if (!isPlainObject(local) || !isPlainObject(remote)) return null;
   const base = t.base === null ? undefined : parseJson(t.base);
 
-  const merged = mergeObject(isPlainObject(base) ? base : undefined, local, remote, "", resolve);
+  const merged = mergeObject(
+    isPlainObject(base) ? base : undefined,
+    local,
+    remote,
+    "",
+    resolve,
+    fieldGroupsFor(input.path),
+  );
   return {
     merged: write(merged.value, t.base, t.local, t.remote),
     copies: [],

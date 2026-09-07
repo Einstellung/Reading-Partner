@@ -48,6 +48,7 @@ import type {
 	Message,
 	Model,
 	Provider,
+	ProviderHeaders,
 	ProviderResponse,
 	SimpleStreamOptions,
 	ThinkingLevel,
@@ -56,6 +57,7 @@ import type {
 import { getValidAnthropicAuth } from "./anthropic-oauth";
 import { getValidOpenAIAuth } from "./openai-oauth";
 import { activeProviderId, loadCredentials, setActiveCredential } from "./credentials";
+import { providerRequestHeaders } from "./request-headers";
 import {
 	API_KEY_PROVIDER_IDS,
 	AUTH_KIND,
@@ -131,6 +133,14 @@ export interface StreamChatOptions {
 	systemPrompt?: string;
 	messages: ChatMessage[];
 	signal?: AbortSignal;
+	// The conversation this call belongs to. Providers that route and cache per
+	// conversation are sent it as a header (src/ai/request-headers.ts), so it has
+	// to be the same value on every call of one conversation and a different one
+	// for a call that is not part of any — which is what every caller of this
+	// function is today, and each of them says so at its call site. A caller with
+	// a real conversation passes that conversation's id; the tool-loop path takes
+	// it from its telemetry thread (src/ai/agent.ts).
+	sessionId: string;
 	// Extended-thinking effort. undefined = off. Passed to pi-ai's streamSimple,
 	// which maps it per provider and ignores it on models without reasoning. We
 	// also omit it up front when the target model's metadata says reasoning:false.
@@ -413,6 +423,10 @@ export interface StreamChatCoreParams {
 	reasoning?: ThinkingLevel;
 	// Provider transport preference (SSE for OpenAI; see transportFor).
 	transport?: Transport;
+	// Provider-required headers, already decided from the provider id and the
+	// call's session (streamChat). Data rather than a lookup, so the injected
+	// stream in tests is handed exactly what pi would be.
+	headers?: ProviderHeaders;
 	// Client-side retries on the opening request; DEFAULT_MAX_RETRIES when unset.
 	maxRetries?: number;
 	onDelta(text: string): void;
@@ -429,14 +443,14 @@ export interface StreamChatCoreParams {
 // to onDone after the iterator drains, so the accounting for a turn (usage,
 // responseId) is available on this path too and not only in the agent loop.
 export async function streamChatCore(params: StreamChatCoreParams): Promise<void> {
-	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning, transport } = params;
+	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning, transport, headers } = params;
 	const { onDelta, onThinking, onResponse, onDone, onError } = params;
 	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 	try {
 		const s = stream(
 			model,
 			{ systemPrompt, messages },
-			{ apiKey, signal, reasoning, transport, maxRetries, onResponse },
+			{ apiKey, signal, reasoning, transport, maxRetries, headers, onResponse },
 		);
 		let full = "";
 		let final: StreamOutcome | undefined;
@@ -460,7 +474,7 @@ export async function streamChatCore(params: StreamChatCoreParams): Promise<void
 }
 
 export async function streamChat(options: StreamChatOptions): Promise<void> {
-	const { providerId, modelId, systemPrompt, messages, signal, reasoning } = options;
+	const { providerId, modelId, systemPrompt, messages, signal, reasoning, sessionId } = options;
 	const { onDelta, onThinking, onResponse, onDone, onError } = options;
 	try {
 		const call = await resolveCall(providerId, modelId, messages, reasoning);
@@ -473,6 +487,8 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 			signal,
 			reasoning: call.reasoning,
 			transport: call.transport,
+			// Decided here, where the provider id is known, and passed down as data.
+			headers: providerRequestHeaders(providerId, sessionId),
 			onDelta,
 			onThinking,
 			onResponse,

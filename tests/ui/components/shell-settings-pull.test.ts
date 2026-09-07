@@ -34,6 +34,8 @@ import {
 } from "../../../src/platform/app/settings";
 import { mergeFile } from "../../../src/platform/sync/merge";
 import { dispatchPull } from "../../../src/platform/sync/pull-routes";
+import { defaultModelFor, isSelectableModel } from "../../../src/ai/providers";
+import type { ToastKind } from "../../../src/ui/components/common/toast-list";
 import {
   useShellBootstrap,
   type ShellBootstrap,
@@ -78,13 +80,9 @@ const onDisk = (): Record<string, unknown> =>
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-// Stable, the way both shells pass it (useToasts memoises push). The start-up
-// effect depends on it, so a new function every render would re-run the effect
-// on every render for the life of the hook.
-const NOTHING = (): void => {};
-
 interface View {
   current: () => ShellBootstrap;
+  toasts: string[];
   setPanel: (open: boolean) => Promise<void>;
   unmount: () => void;
 }
@@ -92,17 +90,27 @@ interface View {
 // The hook, mounted and settled, with the mount's own reads discounted: start-up
 // reads settings.json twice (loadShellSettings, and the one-time device.json
 // migration behind it) and neither is what any of this is about.
+//
+// pushToast is one stable function for the life of the mount, the way both
+// shells pass it (useToasts memoises push): a new one every render would re-run
+// the start-up effect on every render.
 async function mountShell(settingsOpen = false): Promise<View> {
+  const toasts: string[] = [];
+  const pushToast = (_kind: ToastKind, message: string): void => {
+    toasts.push(message);
+  };
   const view = renderHook(
-    ({ open }: { open: boolean }) => useShellBootstrap({ settingsOpen: open, pushToast: NOTHING }),
+    ({ open }: { open: boolean }) => useShellBootstrap({ settingsOpen: open, pushToast }),
     { initialProps: { open: settingsOpen } },
   );
   await act(async () => {
     await settle();
   });
   settingsReads = 0;
+  toasts.length = 0;
   return {
     current: () => view.result.current,
+    toasts,
     setPanel: async (open: boolean) => {
       await act(async () => {
         view.rerender({ open });
@@ -245,6 +253,32 @@ test("a pulled field survives this shell's next save", async () => {
     await waitFor(() => onDisk().sttModel === "sense");
   });
   expect(onDisk().aiLanguage).toBe("ja");
+});
+
+// A pair settings.json can arrive holding that no call can resolve. The merge
+// does not make one any more — it settles defaultProviderId and defaultModelId
+// as one group (pitfall 237) — so what is left is the other device having held
+// the bad pair already: a model its provider has since retired, or a file from a
+// build older than the group. Every call then throws "unknown model", and the
+// unattended ones read the file rather than this shell's copy, so the repair has
+// to reach disk.
+test("a pull that lands a foreign model under the provider is repaired on disk and told", async () => {
+  const shell = await mountShell(false);
+
+  landRemote({ defaultProviderId: "deepseek", defaultModelId: defaultModelFor("cerebras") });
+  await pull([SETTINGS_FILE]);
+
+  const shown = shell.current().settings.defaultModelId;
+  expect(isSelectableModel("deepseek", shown)).toBe(true);
+  expect(shell.toasts).toHaveLength(1);
+  expect(shell.toasts[0]).toContain(defaultModelFor("cerebras") as string);
+
+  // The real 500ms debounce: what lesson prep, the briefing and distillation
+  // will read is the file, not this shell.
+  await act(async () => {
+    await waitFor(() => onDisk().defaultModelId === shown);
+  });
+  expect(onDisk().defaultProviderId).toBe("deepseek");
 });
 
 // Up to two seconds, checked on the same real timer the store's debounce runs

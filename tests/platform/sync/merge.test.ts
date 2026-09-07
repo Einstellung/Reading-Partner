@@ -5,7 +5,11 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { strategyFor, type MergeOutput } from "../../../src/platform/sync/merge/contract";
+import {
+  fieldGroupsFor,
+  strategyFor,
+  type MergeOutput,
+} from "../../../src/platform/sync/merge/contract";
 import { conflictCopyPath, mergeFile } from "../../../src/platform/sync/merge";
 
 const enc = new TextEncoder();
@@ -528,6 +532,128 @@ test("one setting changed on both sides is settled by content and journalled", (
   expect([kept, out.dropped[0].record].sort()).toEqual(["opus", "sonnet"]);
 });
 
+// --- field groups -----------------------------------------------------------
+
+// Two keys that are only meaningful together. A model id says nothing outside
+// its own provider, so settling them one at a time — each by its own content
+// hash — hands back a provider from one device and a model from the other: a
+// pair neither device ever held, and one no call can resolve (pitfall 237).
+// settings.json therefore declares them as a group and the merge decides them
+// as one value.
+const PAIR = { deepseek: "deepseek-v4-flash", cerebras: "qwen-3-235b-a22b" };
+
+const pairOf = (b: Uint8Array): [string | undefined, string | undefined] => {
+  const out = JSON.parse(text(b)) as Record<string, string | undefined>;
+  return [out.defaultProviderId, out.defaultModelId];
+};
+
+const withPair = (provider: keyof typeof PAIR, over: Record<string, unknown> = {}) =>
+  json(settings({ defaultProviderId: provider, defaultModelId: PAIR[provider], ...over }));
+
+const BASE_PAIR = json(
+  settings({ defaultProviderId: "anthropic", defaultModelId: "claude-opus-4" }),
+);
+
+test("the provider and the model survive as a pair one of the devices really held", () => {
+  const forward = merge("settings.json", BASE_PAIR, withPair("deepseek"), withPair("cerebras"));
+  const backward = merge("settings.json", BASE_PAIR, withPair("cerebras"), withPair("deepseek"));
+  const [provider, model] = pairOf(forward.merged);
+  expect(PAIR[provider as keyof typeof PAIR]).toBe(model as string);
+  // Both devices merge the same pair independently and have to agree.
+  expect(pairOf(backward.merged)).toEqual([provider, model]);
+});
+
+test("the pair that lost is journalled whole and the merge is contested", () => {
+  const out = merge("settings.json", BASE_PAIR, withPair("deepseek"), withPair("cerebras"));
+  expect(out.contested).toBe(true);
+  const [provider, model] = pairOf(out.merged);
+  expect(model).toBe(PAIR[provider as keyof typeof PAIR]);
+  const lost = provider === "deepseek" ? "cerebras" : "deepseek";
+  // One entry per key, keyed the way a single field's drop is, so the journal
+  // keeps the shape every other reader of it expects.
+  expect(out.dropped.map((d) => [d.id, d.record]).sort()).toEqual(
+    [
+      ["defaultProviderId", lost],
+      ["defaultModelId", PAIR[lost as keyof typeof PAIR]],
+    ].sort(),
+  );
+});
+
+test("a pair only one device moved is taken from that device, with nothing journalled", () => {
+  const moved = withPair("deepseek");
+  for (const [a, b] of [
+    [BASE_PAIR, moved],
+    [moved, BASE_PAIR],
+  ]) {
+    const out = merge("settings.json", BASE_PAIR, a, b);
+    expect(text(out.merged)).toBe(text(moved));
+    expect(out.dropped).toEqual([]);
+    expect(out.contested).toBe(false);
+  }
+});
+
+test("a pair both devices moved the same way is not a conflict", () => {
+  const out = merge(
+    "settings.json",
+    BASE_PAIR,
+    withPair("deepseek", { chatThinking: "high" }),
+    withPair("deepseek"),
+  );
+  expect(pairOf(out.merged)).toEqual(["deepseek", PAIR.deepseek]);
+  expect(out.dropped).toEqual([]);
+  expect(out.contested).toBe(false);
+});
+
+// A device that cleared its default model has a group of one key. The winning
+// group is taken as it stands, so the model does not come back from the other
+// side to sit under a provider that never had it; the value that left is
+// journalled the way a single deleted field is.
+test("a member missing on the winning side stays missing", () => {
+  const cleared = json(settings({ defaultProviderId: "deepseek", defaultModelId: undefined }));
+  for (const [a, b] of [
+    [BASE_PAIR, cleared],
+    [cleared, BASE_PAIR],
+  ]) {
+    const out = merge("settings.json", BASE_PAIR, a, b);
+    expect(pairOf(out.merged)).toEqual(["deepseek", undefined]);
+    expect(out.dropped).toEqual([{ id: "defaultModelId", record: "claude-opus-4" }]);
+  }
+});
+
+test("the group's keys keep the positions they already had", () => {
+  const out = merge(
+    "settings.json",
+    BASE_PAIR,
+    withPair("deepseek"),
+    withPair("cerebras", { chatThinking: "high" }),
+  );
+  expect(Object.keys(JSON.parse(text(out.merged)) as object)).toEqual(Object.keys(settings({})));
+});
+
+test("a settled pair merged against itself again changes nothing", () => {
+  const local = withPair("deepseek");
+  const remote = withPair("cerebras");
+  const once = merge("settings.json", BASE_PAIR, local, remote).merged;
+  expect(text(merge("settings.json", BASE_PAIR, once, once).merged)).toBe(text(once));
+  // And the device that merged second lands on the same file.
+  expect(text(merge("settings.json", BASE_PAIR, once, local).merged)).toBe(text(once));
+  expect(text(merge("settings.json", BASE_PAIR, once, remote).merged)).toBe(text(once));
+});
+
+// The grouping is declared per file, not per key name. A prep state carrying
+// keys of the same name declares no group and is settled key by key, exactly as
+// every fields file was before.
+test("a file that declares no group is merged key by key as before", () => {
+  expect(fieldGroupsFor("settings.json")).toEqual([["defaultProviderId", "defaultModelId"]]);
+  expect(fieldGroupsFor("prep-abc/state.json")).toEqual([]);
+
+  const base = json({ defaultProviderId: "anthropic", defaultModelId: "claude-opus-4" });
+  const local = json({ defaultProviderId: "deepseek", defaultModelId: PAIR.deepseek });
+  const remote = json({ defaultProviderId: "cerebras", defaultModelId: PAIR.cerebras });
+  const [provider, model] = pairOf(merge("prep-abc/state.json", base, local, remote).merged);
+  expect(PAIR[provider as keyof typeof PAIR]).not.toBe(model as string);
+});
+
 test("a nested object merges key by key", () => {
   const base = json({ version: 1, plan: { status: "pending", source: "outline" } });
   const local = json({ version: 1, plan: { status: "done", source: "outline" } });
@@ -866,6 +992,12 @@ function fieldCase(seed: number): Case {
   const baseValue = {
     version: 1,
     provider: "anthropic",
+    // The two settings.json binds into a group. Half these cases run under a
+    // path that declares it and half under one that does not, so the invariants
+    // hold over both — a group is settled as one value, and everything else
+    // still key by key.
+    defaultProviderId: "anthropic",
+    defaultModelId: "claude-opus-4",
     thinking: "low",
     nested: { a: 1, b: 2, c: 3 },
     list: [1, 2, 3],
@@ -874,6 +1006,21 @@ function fieldCase(seed: number): Case {
     const out: Record<string, unknown> = { ...baseValue, nested: { ...baseValue.nested } };
     if (pick(3) === 0) delete out.provider;
     else if (pick(2) === 0) out.provider = `provider-${salt}`;
+    switch (pick(4)) {
+      case 0:
+        out.defaultProviderId = `provider-${salt}`;
+        out.defaultModelId = `model-${salt}`;
+        break;
+      case 1:
+        // Half a pair moved: the group has to carry the other half with it.
+        out.defaultModelId = `model-${salt}`;
+        break;
+      case 2:
+        delete out.defaultModelId;
+        break;
+      default:
+        break;
+    }
     if (pick(3) === 0) out.thinking = `level-${salt}`;
     if (pick(3) === 0) (out.nested as Record<string, number>).a = salt;
     if (pick(3) === 0) delete (out.nested as Record<string, number>).b;
