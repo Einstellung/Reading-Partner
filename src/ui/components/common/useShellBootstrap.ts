@@ -75,13 +75,18 @@ const SETTINGS_STORE: SettingsAccess = {
   flush: flushSettings,
 };
 
+// Settings off disk, and the sentence to show the user if reading them changed
+// anything.
+export interface SettingsRead {
+  settings: Settings;
+  notice: string | null;
+}
+
 // The settings a shell starts on. A stored default model the provider's catalog
 // no longer carries is corrected here and written back once, with a sentence for
 // the user: the app keeps working on a model that resolves, and the swap is
 // never silent.
-export async function loadShellSettings(
-  store: SettingsAccess = SETTINGS_STORE,
-): Promise<{ settings: Settings; notice: string | null }> {
+export async function loadShellSettings(store: SettingsAccess = SETTINGS_STORE): Promise<SettingsRead> {
   const { settings, notice } = enforceKnownModel(await store.load());
   if (notice) store.save(settings);
   return { settings, notice };
@@ -99,9 +104,15 @@ export async function loadShellSettings(
 // pull, so writing it out does undo the field the pull merged in. The user's own
 // edit wins over the remote one, which is the right way round, and shell and
 // disk agree afterwards either way.
-export async function pulledSettings(store: SettingsAccess = SETTINGS_STORE): Promise<Settings> {
+//
+// The read itself is loadShellSettings, correction and all. settings.json merges
+// field by field, so the provider and the model are decided separately and the
+// file can name a model of some other provider (pitfall 237); repairing that
+// only at start-up leaves every unattended call — which resolves the model off
+// disk, not off this shell's copy — failing until the app is restarted.
+export async function pulledSettings(store: SettingsAccess = SETTINGS_STORE): Promise<SettingsRead> {
   await store.flush();
-  return store.load();
+  return loadShellSettings(store);
 }
 
 // The sync-health message to show, or null. Once per app start and then never
@@ -216,9 +227,12 @@ export function useShellBootstrap({
 
   const adoptPulledSettings = useCallback(() => {
     pulledSettings()
-      .then(setSettings)
+      .then(({ settings: next, notice }) => {
+        setSettings(next);
+        if (notice) pushToast("warn", notice);
+      })
       .catch(() => {});
-  }, []);
+  }, [pushToast]);
 
   useEffect(
     () =>

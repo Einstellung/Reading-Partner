@@ -528,6 +528,32 @@ test("one setting changed on both sides is settled by content and journalled", (
   expect([kept, out.dropped[0].record].sort()).toEqual(["opus", "sonnet"]);
 });
 
+// Two fields that are only meaningful together, decided one at a time. A model
+// id means nothing outside its own provider, but "fields" knows nothing about
+// that: each key is settled on its own by content hash, so a device that picked
+// DeepSeek merged against one on Cerebras comes back naming a provider from one
+// side and a model from the other — a pair neither device ever held, and one no
+// call can resolve.
+//
+// Pinned here rather than assumed away: the repair lives in the shell
+// (enforceKnownModel, pitfall 237), and it only makes sense as long as this is
+// what the merge really does.
+test("a settings merge can split defaultProviderId from defaultModelId", () => {
+  const base = json(settings({ defaultProviderId: "anthropic", defaultModelId: "claude-opus-4" }));
+  const local = json(settings({ defaultProviderId: "deepseek", defaultModelId: "deepseek-v4-flash" }));
+  const remote = json(
+    settings({ defaultProviderId: "cerebras", defaultModelId: "qwen-3-235b-a22b" }),
+  );
+  for (const [a, b] of [
+    [local, remote],
+    [remote, local],
+  ]) {
+    const out = JSON.parse(text(merge("settings.json", base, a, b).merged)) as Record<string, string>;
+    expect(out.defaultProviderId).toBe("cerebras");
+    expect(out.defaultModelId).toBe("deepseek-v4-flash");
+  }
+});
+
 test("a nested object merges key by key", () => {
   const base = json({ version: 1, plan: { status: "pending", source: "outline" } });
   const local = json({ version: 1, plan: { status: "done", source: "outline" } });

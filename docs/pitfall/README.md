@@ -18,6 +18,7 @@
 | 加自动跑的后台/夜间任务、写数据迁移 | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
+| 改合并策略、往 settings.json 加字段 | 存储与数据目录 |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
 | 出 iOS 包、签名、图标、深链接 | iOS 构建与签名 + 开发环境 |
 | 不出整包，只验原生插件的 Swift / Rust 编得过 | iOS 构建与签名 |
@@ -58,7 +59,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 234）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 238）。
 
 ## EmbedPDF 引擎
 
@@ -138,6 +139,7 @@
 - [210-a-nightly-pass-runs-once-per-entry-point-and-before-the-migration](./210-a-nightly-pass-runs-once-per-entry-point-and-before-the-migration.md) — dream 的日闸只看跑完才写的状态文件，一次启动里启动/回前台/定时器三个入口打进来跑了四遍，十条结论落盘两组（一中一英）；同一次启动它还抢在用户点迁移按钮前 20 秒跑完，19 条 statement 的证据指着马上要被改名的 8 位 id，全部悬空。闸放在被调用的那一侧：进程内在飞标记 + 进程内当日标记 + 观察目录里还有 8 位文件就 `waiting-migration`
 - [235-a-silent-drop-plus-two-exclusive-uis-loses-everything](./235-a-silent-drop-plus-two-exclusive-uis-loses-everything.md) — `appendMessage` 对不存在的线程静默返回 `undefined`，而建线程的只有文字聊天那条路；球和文字聊天在 `InfoHome` 里互斥，于是「今天没开过文字聊天」时整场语音通话一句不落盘，全程无报错。建记录的责任放在会写它的那一侧（`threadTranscript` 的 `begin()`），store 的契约不动
 - [236-a-destination-sync-already-delivered-locks-the-gate](./236-a-destination-sync-already-delivered-locks-the-gate.md) — 桌面先跑完迁移，`observations/` 同步到 iPad；iPad 再跑第 8 步时每个目标都已存在，全被 `refuse`，源文件原地不动，而全屏蒙层的判据看的正是源，于是 Try again 永远是同一句「old files are still there」，只能重装。目标已存在改成：字节相同就删源，不同就把源的版本按内容 digest 停成 `m-<id>.conflict-<hex>.md` 再删源；闸门读的那份数据不许有「跳过」这条出路
+- [237-per-field-merge-splits-a-pair](./237-per-field-merge-splits-a-pair.md) — `settings.json` 走 `fields` 策略，每个键独立按内容 hash 定胜负，等于一个键掷一次硬币；`defaultProviderId` 和 `defaultModelId` 因此被拆成双方都没有过的组合（22 组实测 10 组不存在），此后每次调用都 `unknown model 'X' for DeepSeek`。合并层不知道键之间的约束，修正只能挂在读盘那一侧，而拉取那条路当时不走 `enforceKnownModel`，坏的对活到重启为止；`resolveModel` 从磁盘读，所以必须写回盘
 - [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
 
 ## 提取（壳侧 pdf.js）
