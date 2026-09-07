@@ -20,7 +20,7 @@
 // Nothing here reads a clock, a device name or a listing order: the difference
 // of two trees is the whole input, so two devices reach the same conclusion.
 //
-// Pure: no IO. Unit-tested directly (tests/platform/sync/infer-deletions.test.ts).
+// Pure: no IO. Unit-tested directly (tests/platform/sync/holdings.test.ts).
 
 import type { Holdings } from "./holdings";
 import { NEVER_INFER_DELETE } from "./syncFs";
