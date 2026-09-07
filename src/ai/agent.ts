@@ -40,7 +40,7 @@ import {
 	type TurnTelemetry,
 } from "../platform/app/cache-telemetry";
 import { recordToolArgs } from "../platform/app/structured-output";
-import { providerRequestHeaders } from "./request-headers";
+import { providerCallSetup } from "./call-setup";
 import {
 	DEFAULT_MAX_RETRIES,
 	resolveCall,
@@ -219,6 +219,10 @@ export interface AgentLoopParams extends AgentCallbacks {
 	// so a lookup here would be invisible to every test that drives it. One
 	// object for the whole turn: every round of it carries the same session.
 	headers?: ProviderHeaders;
+	// pi's own session id for this turn, set only for the providers whose models
+	// ask pi to send session-affinity headers (src/ai/call-setup.ts). Decided
+	// from the same thread as `headers`, and likewise one value for every round.
+	sessionId?: string;
 	// Client-side retries on the request that opens each round's stream;
 	// DEFAULT_MAX_RETRIES when unset. See providers.ts for why it must be passed.
 	maxRetries?: number;
@@ -236,6 +240,7 @@ export interface AgentLoopParams extends AgentCallbacks {
 export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, headers, maxRounds } =
 		params;
+	const { sessionId } = params;
 	const { onDelta, onThinking, onResponse, onRound, onToolStart, onToolEnd, onDone, onError } = params;
 	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 	const refuse = params.onRefusal ?? ((message: string) => onError(message));
@@ -313,6 +318,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 				transport,
 				maxRetries,
 				headers,
+				sessionId,
 				onResponse,
 			});
 
@@ -448,12 +454,13 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		...(options.telemetry.inline ? { inline: options.telemetry.inline } : {}),
 	};
 
-	// The turn's session for providers that route on one (OpenCode). It is the
-	// thread the cache accounting is already keyed by, and deliberately the same
-	// value: both answer the same question — which conversation this turn
-	// continues — so successive turns of one conversation send one id, and every
-	// round of one turn sends it too (the loop is handed this object once).
-	const headers = providerRequestHeaders(providerId, telemetry.thread);
+	// The turn's session for providers that route on one — OpenCode as a header,
+	// Fireworks as pi's own sessionId. It is the thread the cache accounting is
+	// already keyed by, and deliberately the same value: they answer the same
+	// question — which conversation this turn continues — so successive turns of
+	// one conversation send one id, and every round of one turn sends it too
+	// (the loop is handed this object once).
+	const setup = providerCallSetup(providerId, telemetry.thread);
 
 	try {
 		const call = await resolveCall(providerId, modelId, messages, reasoning);
@@ -468,7 +475,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			signal,
 			reasoning: call.reasoning,
 			transport: call.transport,
-			headers,
+			...setup,
 			maxRounds,
 			purpose,
 			telemetry,

@@ -57,7 +57,7 @@ import type {
 import { getValidAnthropicAuth } from "./anthropic-oauth";
 import { getValidOpenAIAuth } from "./openai-oauth";
 import { activeProviderId, loadCredentials, setActiveCredential } from "./credentials";
-import { providerRequestHeaders } from "./request-headers";
+import { providerCallSetup } from "./call-setup";
 import {
 	API_KEY_PROVIDER_IDS,
 	AUTH_KIND,
@@ -134,9 +134,9 @@ export interface StreamChatOptions {
 	messages: ChatMessage[];
 	signal?: AbortSignal;
 	// The conversation this call belongs to. Providers that route and cache per
-	// conversation are sent it as a header (src/ai/request-headers.ts), so it has
-	// to be the same value on every call of one conversation and a different one
-	// for a call that is not part of any — which is what every caller of this
+	// conversation are told which one — as a header, or as pi's own sessionId
+	// (src/ai/call-setup.ts) — so it has to be the same value on every call of
+	// one conversation and a different one for a call that is not part of any — which is what every caller of this
 	// function is today, and each of them says so at its call site. A caller with
 	// a real conversation passes that conversation's id; the tool-loop path takes
 	// it from its telemetry thread (src/ai/agent.ts).
@@ -427,6 +427,11 @@ export interface StreamChatCoreParams {
 	// call's session (streamChat). Data rather than a lookup, so the injected
 	// stream in tests is handed exactly what pi would be.
 	headers?: ProviderHeaders;
+	// pi's own session id, set only for the providers whose models ask pi to
+	// send session-affinity headers (src/ai/call-setup.ts). Decided from the
+	// same session value as `headers`, so a call can never name one conversation
+	// in a header and another one here.
+	sessionId?: string;
 	// Client-side retries on the opening request; DEFAULT_MAX_RETRIES when unset.
 	maxRetries?: number;
 	onDelta(text: string): void;
@@ -444,13 +449,14 @@ export interface StreamChatCoreParams {
 // responseId) is available on this path too and not only in the agent loop.
 export async function streamChatCore(params: StreamChatCoreParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning, transport, headers } = params;
+	const { sessionId } = params;
 	const { onDelta, onThinking, onResponse, onDone, onError } = params;
 	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 	try {
 		const s = stream(
 			model,
 			{ systemPrompt, messages },
-			{ apiKey, signal, reasoning, transport, maxRetries, headers, onResponse },
+			{ apiKey, signal, reasoning, transport, maxRetries, headers, sessionId, onResponse },
 		);
 		let full = "";
 		let final: StreamOutcome | undefined;
@@ -488,7 +494,8 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 			reasoning: call.reasoning,
 			transport: call.transport,
 			// Decided here, where the provider id is known, and passed down as data.
-			headers: providerRequestHeaders(providerId, sessionId),
+			// Both halves come from the one session value.
+			...providerCallSetup(providerId, sessionId),
 			onDelta,
 			onThinking,
 			onResponse,
