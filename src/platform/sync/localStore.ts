@@ -21,8 +21,13 @@
 // first pass after this landed has none, nor does a file this device never
 // pulled, and the merge contract handles that case.
 
+// sync-holdings/ — the tree snapshot this device last published, and the one it
+//               last reasoned from for each peer (holdings.ts). Outside the
+//               sync range like the base mirror, and for the same reason.
+
 import { appData } from "../app/appdata";
 import { writeBytesAtomic, writeTextAtomic } from "../app/atomic-fs";
+import { holdingsPath, isDeviceId, SELF_KEY, type HoldingsStore } from "./holdings";
 
 export const BASE_DIR = "sync-base";
 export const TRASH_FILE = "sync-trash.jsonl";
@@ -74,6 +79,31 @@ export const tauriBaseStore: BaseStore = {
     } catch {
       // Already gone, which is the state this asks for.
     }
+  },
+};
+
+// --- the cached holdings ----------------------------------------------------
+
+// A key is SELF_KEY or a peer's device id, and a peer's arrives from a name in
+// the remote — so it is checked before it becomes a path. An unusable key reads
+// as nothing cached and writes nowhere: a device whose id this build does not
+// recognise is one this device does not reason about, which is the safe end of
+// that decision.
+export const tauriHoldingsStore: HoldingsStore = {
+  async read(key) {
+    if (key !== SELF_KEY && !isDeviceId(key)) return null;
+    try {
+      return await appData.readBytes(holdingsPath(key));
+    } catch {
+      return null;
+    }
+  },
+  // Atomically, like the base mirror: half a holdings still parses as JSON, and
+  // a tree with the second half of its files missing is a tree that reads as a
+  // hundred deletions.
+  async write(key, bytes) {
+    if (key !== SELF_KEY && !isDeviceId(key)) return;
+    await writeBytesAtomic(holdingsPath(key), bytes);
   },
 };
 

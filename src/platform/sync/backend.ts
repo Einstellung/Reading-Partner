@@ -101,8 +101,22 @@ export interface SyncBackend {
   // absent, remembering their ids. Idempotent.
   ensureLayout(): Promise<void>;
 
-  // Everything the data folder holds, from its own metadata.
+  // Everything the data folder holds, from its own metadata. Names outside the
+  // sync range are left out, holdings files (holdings.ts) included: they live
+  // in the same folder so one listing covers them, but they are sync's own
+  // bookkeeping and reconcile must never see one.
   listRemote(): Promise<RemoteState>;
+
+  // The holdings files that same listing saw, by device id, with the rev each
+  // is published at. Read after listRemote() and answered from what it already
+  // fetched — noticing that a peer's tree moved is meant to cost no request at
+  // all (docs/59 §2). The bytes are fetched with the ordinary download() and
+  // published with the ordinary upload(), under the holdings-<deviceId>.json
+  // name; nothing else here is special about them.
+  //
+  // Optional: a backend that does not implement it simply has no holdings, and
+  // the engine publishes and infers nothing.
+  listedHoldings?(): Record<string, RemoteEntry>;
 
   // Throws RemoteGoneError when the name is not in the remote any more.
   download(name: string): Promise<Uint8Array>;

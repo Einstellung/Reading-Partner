@@ -2,7 +2,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { inSyncRange } from "../../../src/platform/sync/syncFs";
+import { inSyncRange, NEVER_INFER_DELETE } from "../../../src/platform/sync/syncFs";
 
 test("core user-data files are in range", () => {
   for (const p of [
@@ -125,8 +125,27 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     // Per-device settings (docs/36). One machine starting with the computer says
     // nothing about another, and there is no merge that could resolve the two.
     "device.json",
+    // Every device's tree snapshot (docs/59). They live in the same Drive
+    // folder so one listing enumerates them, and listRemote takes them out by
+    // name before reconcile ever sees one; being out of range is the second
+    // half of the same rule, and the local caches are out for the reason
+    // sync-base/ is.
+    "holdings-d-3f9a1c.json",
+    "sync-holdings/self.json",
+    "sync-holdings/d-3f9a1c.json",
     "random.txt",
   ]) {
     expect(inSyncRange(p)).toBe(false);
+  }
+});
+
+// The other list this file has to be read against (docs/59 §10.2): a new data
+// file is a decision about both, and the one that gets forgotten is this one.
+// Every path a tree comparison may never delete has to be a path that syncs at
+// all — a name that drifted out of range would silently stop being protected
+// because nothing would ever compare it.
+test("nothing on the never-infer list has fallen out of the sync range", () => {
+  for (const p of NEVER_INFER_DELETE) {
+    expect(inSyncRange(p)).toBe(true);
   }
 });

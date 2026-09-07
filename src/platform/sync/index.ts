@@ -20,7 +20,8 @@ import { SyncEngine, type EngineDeps } from "./engine";
 import { dispatchPull } from "./pull-routes";
 import { tauriSyncFs } from "./syncFs";
 import { tauriBookFs } from "./books";
-import { tauriBaseStore, tauriTrashJournal } from "./localStore";
+import { tauriBaseStore, tauriHoldingsStore, tauriTrashJournal } from "./localStore";
+import { currentDeviceId } from "../app/device";
 import { isGoogleConfigured } from "./googleConfig";
 import {
   currentEmail,
@@ -133,6 +134,12 @@ export function engineDeps(forShell: Shell): EngineDeps {
     booksPolicy: forShell === "phone" ? "off" : "mirror",
     base: tauriBaseStore,
     trash: tauriTrashJournal,
+    // Who this device is, for the tree it publishes (docs/59). Read at pass
+    // time rather than now: the engine can be built before device.json has been
+    // loaded, and an id that is not there yet means one pass publishes nothing
+    // rather than a device publishing under an empty name.
+    deviceId: currentDeviceId,
+    holdings: tauriHoldingsStore,
     snapshot: state.snapshot,
     purge: state.purge,
     restoredLastSyncAt: state.lastSyncAt,
@@ -210,6 +217,7 @@ export async function initSync(mounted: Shell): Promise<void> {
   if (initialized) return;
   initialized = true;
   shell = mounted;
+  (window as unknown as { __syncHoldings?: () => string }).__syncHoldings = syncHoldingsReport;
   const queued = state.purge;
   state = await loadState();
   // A purge requested before the file was read (the shells kick both off on the
@@ -311,6 +319,16 @@ export async function requestRemotePurge(paths: readonly string[]): Promise<void
   // the real file. initSync merges the queue forward instead.
   if (initialized) await saveState(state);
   if (engineStarted) void engine?.syncNow().catch(() => {});
+}
+
+// What the last pass made of the devices' trees (docs/59 §7): this device's
+// holdings, each peer's, and the deletions inferred from them. Two devices that
+// disagree about a file are diagnosed from this and nothing else records why a
+// path went, so it is reachable without a screen — `__syncHoldings()` in the
+// webview console, on the desktop and over the iPad debug channel alike. A pass
+// that did something also logs one line of it (engine.ts).
+export function syncHoldingsReport(): string {
+  return engine?.holdingsReport() ?? "sync: no engine";
 }
 
 export async function syncNow(): Promise<void> {

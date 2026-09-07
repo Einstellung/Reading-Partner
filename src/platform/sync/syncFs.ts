@@ -99,6 +99,23 @@ export const ROOT_FILES = new Set([
   "deleted-books.jsonl",
 ]);
 
+// The paths a tree comparison may never conclude are deleted (docs/59 §8.8).
+// They are cursors and append-only logs: losing observations/meta.json throws
+// away every distillation cursor and re-reads every conversation from zero, and
+// losing a tombstone log makes a deletion that already travelled come back. A
+// deletion of one of these is only ever accepted from an explicit tombstone.
+//
+// Here rather than beside the inference because this is the same kind of
+// question inSyncRange answers, and a new data file has to be held against both
+// lists at once; tests/platform/sync/range.test.ts watches them together.
+export const NEVER_INFER_DELETE = new Set([
+  "observations/meta.json",
+  "statements.json",
+  "deleted-books.jsonl",
+  "observations/deleted-observations.jsonl",
+  "info-feedback.jsonl",
+]);
+
 // Whether an AppData-relative path (forward-slash separators) is synced.
 export function inSyncRange(path: string): boolean {
   const parts = path.split("/");
