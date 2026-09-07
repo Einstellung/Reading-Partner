@@ -4,6 +4,7 @@
 // unit testing.
 
 import { streamChat } from "../providers";
+import { newRunId } from "../../platform/app/cache-telemetry";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
 import type { CleanupRunner } from "./cleanup";
 import type { SttFetch } from "./stt";
@@ -107,6 +108,11 @@ export const chatCleanupRunner: CleanupRunner = (model, systemPrompt, userText, 
       systemPrompt,
       messages: [{ role: "user", text: userText }],
       signal,
+      // One cleanup pass over one utterance. The runner is handed a model, a
+      // prompt and the text and nothing else: there is no session here to
+      // continue, and a fresh id per call says that rather than inventing an
+      // identity for passes that are not a conversation.
+      sessionId: newRunId(),
       reasoning: model.reasoning,
       onDelta: () => {},
       onDone: resolve,

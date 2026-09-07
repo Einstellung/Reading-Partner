@@ -21,6 +21,7 @@ import type {
 	Context,
 	Message,
 	Model,
+	ProviderHeaders,
 	SimpleStreamOptions,
 	ThinkingLevel,
 	Tool,
@@ -39,6 +40,7 @@ import {
 	type TurnTelemetry,
 } from "../platform/app/cache-telemetry";
 import { recordToolArgs } from "../platform/app/structured-output";
+import { providerRequestHeaders } from "./request-headers";
 import {
 	DEFAULT_MAX_RETRIES,
 	resolveCall,
@@ -212,6 +214,11 @@ export interface AgentLoopParams extends AgentCallbacks {
 	reasoning?: ThinkingLevel;
 	// Provider transport preference (SSE for OpenAI; see transportFor).
 	transport?: Transport;
+	// Provider-required headers for this turn, decided by runAgentTurn where the
+	// provider id is known and passed down as data — the loop is stream-injected,
+	// so a lookup here would be invisible to every test that drives it. One
+	// object for the whole turn: every round of it carries the same session.
+	headers?: ProviderHeaders;
 	// Client-side retries on the request that opens each round's stream;
 	// DEFAULT_MAX_RETRIES when unset. See providers.ts for why it must be passed.
 	maxRetries?: number;
@@ -227,7 +234,8 @@ export interface AgentLoopParams extends AgentCallbacks {
 // (mid-stream or between tool calls) stop the loop silently — the caller raised
 // the signal, so it already knows; no onDone/onError fires.
 export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
-	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, maxRounds } = params;
+	const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, headers, maxRounds } =
+		params;
 	const { onDelta, onThinking, onResponse, onRound, onToolStart, onToolEnd, onDone, onError } = params;
 	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
 	const refuse = params.onRefusal ?? ((message: string) => onError(message));
@@ -304,6 +312,7 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 				reasoning,
 				transport,
 				maxRetries,
+				headers,
 				onResponse,
 			});
 
@@ -439,6 +448,13 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		...(options.telemetry.inline ? { inline: options.telemetry.inline } : {}),
 	};
 
+	// The turn's session for providers that route on one (OpenCode). It is the
+	// thread the cache accounting is already keyed by, and deliberately the same
+	// value: both answer the same question — which conversation this turn
+	// continues — so successive turns of one conversation send one id, and every
+	// round of one turn sends it too (the loop is handed this object once).
+	const headers = providerRequestHeaders(providerId, telemetry.thread);
+
 	try {
 		const call = await resolveCall(providerId, modelId, messages, reasoning);
 
@@ -452,6 +468,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			signal,
 			reasoning: call.reasoning,
 			transport: call.transport,
+			headers,
 			maxRounds,
 			purpose,
 			telemetry,

@@ -59,7 +59,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 238）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 239）。
 
 ## EmbedPDF 引擎
 
@@ -280,6 +280,7 @@
 - [66-usage-shortcut-freezes-pi-context-estimate](./66-usage-shortcut-freezes-pi-context-estimate.md) — 消息数组里一旦有带 usage 的真 assistant 消息，pi 的估算就等于那个 usage，系统提示词不再计入，压缩 usage 之前的任何东西都不改变它；重放历史里那条没 timestamp 的 assistant 消息又会把捷径整个关掉（NaN 比较），同一个调用点两套计价。判断压缩够不够只能重新量，不能拿字符估的 saving 去减
 - [131-pi-cache-retention-env-never-reaches-the-webview](./131-pi-cache-retention-env-never-reaches-the-webview.md) — `PI_CACHE_RETENTION=long` 在 dev 和打包版都读不到：webview 里没有 `process`，Vite build 又把 `process.env` 换成 `{}`，pi 每次都落回 5 分钟保留期。要换只能在发送路径上传 `cacheRetention`，并把同一个值传给埋点
 - [234-failed-background-pass-records-only-unknown](./234-failed-background-pass-records-only-unknown.md) — 后台蒸馏/画像失败恒记 `reason: "unknown"`：错误对象在 `runAgentTurn` 的 catch 里就丢了，`live.ts` 又只传 outcome，`classifyDistillFailure` 拿到空文本。失败事件改带 `errorName` + `errorMessage`（前 200 字，只在 `outcome: "failed"` 时带）；另附读日志的两条：没有 `prompt-cache` 行等于请求没拿回任何消息，`distill-failed` 的 `from` 是当时的游标而 meta.json 可能已被另一台设备换过
+- [238-opencode-requires-a-session-header-pi-never-sends](./238-opencode-requires-a-session-header-pi-never-sends.md) — OpenCode Go 每次调用回 400 `MissingSessionID`：它要求每个请求带 `x-opencode-session`，pi-ai 整个包里没有这个头，`options.sessionId` 发的是另外四个名字。用 `ProviderRequestOptions.headers`（三个 api 都 merge 在最后），映射表在 `src/ai/request-headers.ts` 一 provider 一行，值取会话 id（工具循环用 `TurnTelemetry.thread`）而不是每次一个随机值，否则路由和缓存白搭；不要放按 host 分发的 fetch 桥
 
 ## 开发环境
 

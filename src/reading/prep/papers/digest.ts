@@ -8,6 +8,7 @@ import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../../ai/agent";
 import { runAgentTurn } from "../../../ai/agent";
 import { streamChat, type ProviderId } from "../../../ai/providers";
+import { newRunId } from "../../../platform/app/cache-telemetry";
 import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings";
 import { formatPages, formatSearch } from "../../../fulltext/format";
 import type { Fulltext } from "../../../fulltext/types";
@@ -176,6 +177,11 @@ export function runDigest(params: {
         systemPrompt,
         messages: [{ role: "user", text: inlineDigestMessage(fulltext) }],
         signal,
+        // One digest is one exchange about one paper, with no turn before or
+        // after it, so a fresh id per call is the whole truth. The tool-loop
+        // branch below is the same run and gets the same thing, from
+        // runAgentTurn standing an id in for a telemetry thread it was not given.
+        sessionId: newRunId(),
         reasoning: model.reasoning,
         onDelta,
         onThinking,

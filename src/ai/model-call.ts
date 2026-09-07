@@ -5,6 +5,7 @@
 
 import type { Api, Context, Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import { contextBudget, fitsBudget, OUTPUT_FLOOR, REFUSE_FLOOR_OVER, type BudgetPurpose } from "../budget";
+import { newRunId } from "../platform/app/cache-telemetry";
 import { loadSettings, toReasoning, type AiLanguage, type Settings } from "../platform/app/settings";
 import {
 	defaultModelFor,
@@ -172,6 +173,11 @@ export function callModel(
 					systemPrompt: prompt,
 					messages: [{ role: "user", text: userText }],
 					signal: opts.signal,
+					// A pipeline call is one exchange with nothing before or after it: it
+					// takes its material entire and has no conversation to name. A fresh
+					// id per call says that; a constant would claim unrelated calls are
+					// one conversation and have the provider route them as one.
+					sessionId: newRunId(),
 					reasoning: model.reasoning,
 					onDelta: bump,
 					onThinking: bump,
