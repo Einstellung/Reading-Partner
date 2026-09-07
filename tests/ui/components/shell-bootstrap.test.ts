@@ -107,13 +107,14 @@ test("the deferred read flushes the pending save before it reads", async () => {
   expect(adopted.settings.aiLanguage).toBe("ko");
 });
 
-// settings.json is merged field by field, and defaultProviderId and
-// defaultModelId are two fields the merge decides separately (pitfall 237, and
-// tests/platform/sync/merge.test.ts pins that it really does). What lands on
-// disk is then a provider paired with some other provider's model, which every
-// call rejects. Correcting it only at start-up is not enough: resolveModel reads
-// settings off disk, so lesson prep, the briefing and distillation keep failing
-// on the file until the app is restarted.
+// A pull can still land a provider paired with some other provider's model,
+// which every call rejects. The merge is no longer the cause — settings.json
+// binds the two keys into one group and settles them together (pitfall 237) —
+// but a model the provider retired, and a settings file written by a build that
+// predates the group, both arrive this way and no merge can see either.
+// Correcting at start-up alone is not enough: resolveModel reads settings off
+// disk, so lesson prep, the briefing and distillation keep failing on the file
+// until the app is restarted.
 test("a pull that lands one provider's model under another is corrected and written back", async () => {
   const store = fakeStore({
     ...DEFAULT_SETTINGS,

@@ -255,12 +255,13 @@ test("a pulled field survives this shell's next save", async () => {
   expect(onDisk().aiLanguage).toBe("ja");
 });
 
-// The pair settings.json can arrive holding but no device ever chose: the merge
-// settles defaultProviderId and defaultModelId one at a time, so a device on
-// DeepSeek merged against one on another provider lands on one side's provider
-// and the other side's model (pitfall 237). Every call then throws "unknown
-// model", and the unattended ones read the file rather than this shell's copy,
-// so the repair has to reach disk.
+// A pair settings.json can arrive holding that no call can resolve. The merge
+// does not make one any more — it settles defaultProviderId and defaultModelId
+// as one group (pitfall 237) — so what is left is the other device having held
+// the bad pair already: a model its provider has since retired, or a file from a
+// build older than the group. Every call then throws "unknown model", and the
+// unattended ones read the file rather than this shell's copy, so the repair has
+// to reach disk.
 test("a pull that lands a foreign model under the provider is repaired on disk and told", async () => {
   const shell = await mountShell(false);
 

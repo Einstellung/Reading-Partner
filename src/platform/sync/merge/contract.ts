@@ -92,6 +92,33 @@ const RECORD_FILES = new Set([
   "statements.json",
 ]);
 
+// Keys of one file that only mean anything together. `strategyFor` says how a
+// file is merged; this says which of that file's keys the fields strategy is
+// forbidden to settle one at a time. A member is named by the same dotted path
+// the merge journals a key under (`mergeObject`'s prefix), so a group nested
+// inside an object is expressible; the one group there is sits at the top
+// level.
+//
+// A group belongs here only when splitting it produces a state that cannot
+// exist, not merely an unexpected one. sttApiBase and sttModel are the two
+// halves of one endpoint and are deliberately absent: settings.ts says they
+// sync freely, and a base from one device with a model name from the other is
+// a configuration, not a contradiction.
+export type FieldGroups = readonly (readonly string[])[];
+
+// A model id is only meaningful under its own provider — "qwen-3-235b-a22b"
+// says nothing to DeepSeek. Decided a key at a time, a device on DeepSeek
+// merged against one on Cerebras lands on a pair neither device ever held, and
+// every call then throws `unknown model 'X' for DeepSeek` out of resolveCall
+// (pitfall 237).
+const SETTINGS_GROUPS: FieldGroups = [["defaultProviderId", "defaultModelId"]];
+
+const NO_GROUPS: FieldGroups = [];
+
+export function fieldGroupsFor(path: string): FieldGroups {
+  return path.slice(path.lastIndexOf("/") + 1) === "settings.json" ? SETTINGS_GROUPS : NO_GROUPS;
+}
+
 export function strategyFor(path: string): MergeStrategy {
   // What the reader said on one pass over a talk (docs/44),
   // runs/<rehearsalId>/<runId>.json. Judged by where it sits and not by its

@@ -105,11 +105,15 @@ export async function loadShellSettings(store: SettingsAccess = SETTINGS_STORE):
 // edit wins over the remote one, which is the right way round, and shell and
 // disk agree afterwards either way.
 //
-// The read itself is loadShellSettings, correction and all. settings.json merges
-// field by field, so the provider and the model are decided separately and the
-// file can name a model of some other provider (pitfall 237); repairing that
-// only at start-up leaves every unattended call — which resolves the model off
-// disk, not off this shell's copy — failing until the app is restarted.
+// The read itself is loadShellSettings, correction and all. The merge no longer
+// splits the provider from the model — settings.json declares them as one group
+// (fieldGroupsFor, platform/sync/merge/contract.ts, pitfall 237) — but that
+// closes one cause of an uncallable pair, not all of them: a model the provider
+// retired and a file written by an older build both arrive over a pull as well,
+// and no merge can know about either. The two layers have distinct jobs; neither
+// makes the other redundant. Correcting only at start-up would leave every
+// unattended call — which resolves the model off disk, not off this shell's
+// copy — failing until the app is restarted.
 export async function pulledSettings(store: SettingsAccess = SETTINGS_STORE): Promise<SettingsRead> {
   await store.flush();
   return loadShellSettings(store);
