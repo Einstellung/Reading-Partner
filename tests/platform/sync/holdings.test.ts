@@ -183,6 +183,7 @@ test("the report names both trees and what was concluded", () => {
     peers: [
       { device: "d-b", cached: holdings({ device: "d-b", files: {} }), current: null },
     ],
+    fetched: 0,
     inferred: ["topics.json"],
     contested: [],
     enabled: true,
