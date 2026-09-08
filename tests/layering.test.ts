@@ -67,6 +67,11 @@ const LAYER: Record<string, Layer> = {
   // the rest of memory: the collector election that decides which machine runs
   // it lives in info/, and the call goes that way round — info calls dream,
   // dream never reaches for info.
+  // Which conversations are raw material for a distillation pass, and what the
+  // sweep owes each of them (docs/58). A capability with a registry in it: the
+  // domains register their own kinds at startup, so nothing here reaches up into
+  // one. memory/live reads it; it never reads memory/live.
+  "memory/distill": "capability",
   "memory/dream": "capability",
   "memory/live": "capability",
   "memory/observations": "capability",

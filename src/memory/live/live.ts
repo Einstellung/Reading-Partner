@@ -42,13 +42,16 @@ import {
   countNewMarks,
   type BookArrears,
   type DistillJob,
+  type SourceUnit,
   type ThreadArrears,
   type TopicArrears,
 } from "../observations/arrears";
+import { collectSourceArrears, findSourceUnit } from "../distill/info-thread";
 import {
   ObservationFileStore,
   topicPassStore,
   type ObservationConflict,
+  type ObservationMeta,
 } from "../observations/store";
 import type { TopicObservations } from "../observations/recall";
 import type { Observation, ObservationIndexEntry } from "../observations/types";
@@ -171,7 +174,10 @@ export type { DistillTrigger };
 export interface DistillThreadOptions {
   topicId: string;
   topicName: string;
-  bookId: string;
+  // Absent on a conversation that hangs off no book — a briefing, a call about
+  // one article. Nothing is stamped with a book then, and the pass has no mark
+  // cursor to move (distill.ts).
+  bookId?: string;
   bookName: string;
   threadId: string;
   trigger: DistillTrigger;
@@ -410,6 +416,65 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
   });
 }
 
+// --- conversations that hang off no book (memory/distill) ---
+
+// One registered source's unit, distilled as the conversation it is: no book id,
+// so nothing it writes is stamped with a book and no mark cursor moves; the
+// source's label is what the prompt calls it. Everything else — the gate, the
+// cursor under the unit's id, the two log lines — is the transcript pass.
+function distillSourceUnit(
+  topicId: string,
+  topicName: string,
+  unit: SourceUnit,
+  trigger: DistillTrigger,
+): Promise<void> {
+  return distillThread({
+    topicId,
+    topicName,
+    bookName: unit.label,
+    threadId: unit.id,
+    annotationId: "",
+    page: null,
+    markedText: "",
+    messages: unit.messages,
+    trigger,
+  });
+}
+
+export interface DistillInfoThreadOptions {
+  // The thread that just closed. A thread no registered source lists — the
+  // onboarding one, whose id repeats across days (docs/pitfall/209) — distils
+  // nothing rather than being guessed at.
+  threadId: string;
+  trigger: DistillTrigger;
+}
+
+/**
+ * Distil one info conversation on the way out: the chat closed, or the voice
+ * call hung up.
+ *
+ * Never throws and never surfaces UI, the same posture as every other trigger:
+ * the reader closed a conversation and is owed nothing about the bookkeeping
+ * behind it. A conversation this misses is picked up by the half-hourly sweep,
+ * which reads the same source.
+ */
+export async function distillInfoThread(opts: DistillInfoThreadOptions): Promise<void> {
+  try {
+    const found = await findSourceUnit(opts.threadId);
+    if (!found) return;
+    const topic = (await listTopics()).find((t) => t.id === found.unit.topicId);
+    await distillSourceUnit(
+      found.unit.topicId,
+      topic?.name ?? found.unit.topicId,
+      found.unit,
+      opts.trigger,
+    );
+  } catch (e) {
+    if (e instanceof StoppedError) return;
+    console.warn("info distillation could not start", e);
+  }
+}
+
 // --- the arrears sweep ---
 
 // What every topic still owes, read off disk. Books the topic lists but has
@@ -420,9 +485,29 @@ async function collectArrears(
   threadBusy: (threadId: string) => boolean,
 ): Promise<TopicArrears[]> {
   const topics = await listTopics();
+  // One read of each topic's meta for the whole sweep: the source units are
+  // grouped by a topic id the sweep has not reached yet when their cursor is
+  // asked for, and re-reading meta.json per unit would be a file read per
+  // conversation on disk.
+  const metas = new Map<string, ObservationMeta>();
+  const metaOf = async (topicId: string): Promise<ObservationMeta> => {
+    let meta = metas.get(topicId);
+    if (!meta) {
+      meta = await store.getMeta(topicId);
+      metas.set(topicId, meta);
+    }
+    return meta;
+  };
+  // What the registered sources owe, by topic (memory/distill). Collected up
+  // front so a topic that owns no book still gets its conversations looked at —
+  // "brief" is exactly that topic.
+  const sourceArrears = await collectSourceArrears(
+    async (topicId, unitId) => messageCursor(await metaOf(topicId), unitId),
+    { isBusy: threadBusy },
+  );
   const out: TopicArrears[] = [];
   for (const topic of topics) {
-    const meta = await store.getMeta(topic.id);
+    const meta = await metaOf(topic.id);
     const books: BookArrears[] = [];
     const seen = new Set<string>();
     for (const file of topic.files) {
@@ -469,12 +554,28 @@ async function collectArrears(
         threads,
       });
     }
-    if (books.length === 0) continue;
+    const units = sourceArrears.get(topic.id) ?? [];
+    if (books.length === 0 && units.length === 0) continue;
     out.push({
       topicId: topic.id,
       topicName: topic.name,
       lastDistilledAt: meta.lastDistilledAt,
       books,
+      ...(units.length > 0 ? { units } : {}),
+    });
+  }
+  // A source may name a topic that topics.json does not have — one deleted while
+  // its conversations stayed on disk. Its debt is still the reader's, so it is
+  // swept under its own id rather than dropped; the id stands in for the name.
+  const listed = new Set(topics.map((t) => t.id));
+  for (const [topicId, units] of sourceArrears) {
+    if (listed.has(topicId)) continue;
+    out.push({
+      topicId,
+      topicName: topicId,
+      lastDistilledAt: (await metaOf(topicId)).lastDistilledAt,
+      books: [],
+      units,
     });
   }
   return out;
@@ -497,6 +598,9 @@ function runDistillJob(job: DistillJob, trigger: DistillTrigger): Promise<void> 
       annotations: job.book.marks,
       trigger,
     });
+  }
+  if (job.kind === "source") {
+    return distillSourceUnit(job.topicId, job.topicName, job.unit, trigger);
   }
   return distillMarks({
     topicId: job.topicId,

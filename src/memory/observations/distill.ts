@@ -716,6 +716,11 @@ export function relationSection(input: {
 }
 
 export function buildDistillSystemPrompt(input: DistillInput): string {
+  // A conversation with no book behind it — a day's briefing, a call about one
+  // article (memory/distill/sources.ts). The two rules below name a book, a
+  // page and an annotation id, none of which exists here; a prompt that asks for
+  // an anchor its input cannot carry gets answered as if the input carried one.
+  const bookless = input.bookId === undefined;
   return [
     "You keep a reading companion's observations of its reader. A conversation",
     "with the reader just ended; distill from its transcript what is worth",
@@ -733,13 +738,26 @@ export function buildDistillSystemPrompt(input: DistillInput): string {
     "",
     "Curation rules:",
     ...datingRule("conversation", input.dates),
-    "- Record only what cannot be re-derived from the book or the reader's",
-    "  annotations: their understanding, confusions, beliefs, corrections, and where",
-    "  they are. Do not copy book content or annotation text into an observation.",
-    "- Anchor evidence: every observation you create must cite where it came",
-    "  from — the annotation id, and the transcript line numbers (messageIndices:",
-    "  the [n] printed in front of each line). Numbers, not ids: turning a number",
-    "  back into a message id is the program's job, not yours.",
+    ...(bookless
+      ? [
+          "- Record only what cannot be re-derived from the material the two of you",
+          "  were talking about: the reader's understanding, confusions, beliefs,",
+          "  corrections, and what they are following. Do not copy the material's own",
+          "  content into an observation.",
+          "- Anchor evidence: every observation you create must cite where it came",
+          "  from — the transcript line numbers (messageIndices: the [n] printed in",
+          "  front of each line). Numbers, not ids: turning a number back into a",
+          "  message id is the program's job, not yours.",
+        ]
+      : [
+          "- Record only what cannot be re-derived from the book or the reader's",
+          "  annotations: their understanding, confusions, beliefs, corrections, and where",
+          "  they are. Do not copy book content or annotation text into an observation.",
+          "- Anchor evidence: every observation you create must cite where it came",
+          "  from — the annotation id, and the transcript line numbers (messageIndices:",
+          "  the [n] printed in front of each line). Numbers, not ids: turning a number",
+          "  back into a message id is the program's job, not yours.",
+        ]),
     "- A short or shallow conversation may yield nothing worth keeping; making no",
     "  tool call at all is a fine outcome.",
     ...((input.silentMarks?.length ?? 0) > 0
@@ -757,14 +775,17 @@ export function buildDistillSystemPrompt(input: DistillInput): string {
 }
 
 export function buildDistillUserMessage(input: DistillInput): string {
+  const bookless = input.bookId === undefined;
   const lines = [
     `Topic: ${input.topicName}`,
-    `Book: ${input.bookName}`,
+    bookless ? `Conversation: ${input.bookName}` : `Book: ${input.bookName}`,
     // Omitted rather than filled in with today when the messages carry no usable
     // timestamp: a date the transcript cannot support is the bug this line had.
     ...(input.dates ? [`Conversation date: ${formatEvidenceSpan(input.dates)}`] : []),
-    `Thread ${input.threadId}, anchored on annotation ${input.annotationId}` +
-      (input.page !== null ? ` (page ${input.page})` : ""),
+    bookless
+      ? `Thread ${input.threadId}`
+      : `Thread ${input.threadId}, anchored on annotation ${input.annotationId}` +
+        (input.page !== null ? ` (page ${input.page})` : ""),
   ];
   if (input.markedText.trim()) lines.push(`Marked passage: "${input.markedText.trim()}"`);
   lines.push("", "Transcript. Cite a message by the [n] in front of it:");
@@ -855,7 +876,12 @@ export interface DistillPassDeps extends DistillDeps {
 // (live.ts) to resolve the store, the adapter and the event log.
 export interface DistillPassInput {
   topicName: string;
-  bookId: string;
+  // The book the conversation was about, stamped onto what the pass writes.
+  // Absent on a conversation that hangs off no book — a day's briefing, a call
+  // about one article (memory/distill/sources.ts) — which also means the pass
+  // has no mark cursor to move and no silent marks to fold in.
+  bookId?: string;
+  // What to call the conversation: the book's name, or the source's label.
   bookName: string;
   threadId: string;
   annotationId: string;
@@ -971,7 +997,7 @@ export async function runDistillPass(
 
   const { marks, capped, cursor: markCursorNext } = selectSilentMarks(
     input.annotations ?? [],
-    markCursor(meta, input.bookId),
+    input.bookId === undefined ? null : markCursor(meta, input.bookId),
   );
   // The stretch the cursors would move over. The whole transcript still goes to
   // the model — a conversation about one passage is one unit — so the dates come
@@ -1020,7 +1046,7 @@ export async function runDistillPass(
       ...(meta.distilledMessages ?? {}),
       ...Object.fromEntries(parts.map((p) => [p.threadId, p.messages.length])),
     },
-    ...(markCursorNext !== null
+    ...(markCursorNext !== null && input.bookId !== undefined
       ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: markCursorNext } }
       : {}),
   });

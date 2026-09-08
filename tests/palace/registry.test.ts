@@ -10,8 +10,17 @@
 // The desk and distill-source assertions arrive with the packages that register
 // them (P2, P3a). Until then this holds the resolution guard alone. Run: bun test.
 
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
+import { registerInfoDistillSource } from "../../src/info/companion/distill-source";
+import { distillSourceOf } from "../../src/memory/distill/sources";
 import { PALACE, resolvePalace, rowOf, rowsWhere, type PalaceKind } from "../../src/palace";
+
+// The shell registers the domains on the way up (useShellBootstrap.bootDomains);
+// a test that asserts what is registered has to boot them itself.
+const booted = [registerInfoDistillSource()];
+afterAll(() => {
+  for (const undo of booted) undo();
+});
 
 test("a sample path finds one row, and it is the row that named it", () => {
   for (const row of PALACE) {
@@ -34,6 +43,22 @@ test("a path nothing claims resolves to nothing", () => {
 test("every distilled kind has an id to key its cursor under", () => {
   const keyless = rowsWhere((r) => r.distill !== undefined && r.id === "fixed").map((r) => r.kind);
   expect(keyless).toEqual([]);
+});
+
+// The kinds a distillation source has been written for. The other rows with
+// `distill` are the ones docs/58 leaves for later — a guard against them would
+// be failing against work nobody has claimed.
+const SOURCED = ["info-thread"];
+
+test("every kind a source was written for has one registered", () => {
+  const missing = rowsWhere((r) => SOURCED.includes(r.kind) && r.distill !== undefined)
+    .map((r) => r.kind)
+    .filter((kind) => distillSourceOf(kind) === null);
+  expect(missing).toEqual([]);
+});
+
+test("a source only ever speaks for a row the catalogue calls raw material", () => {
+  for (const kind of SOURCED) expect(rowOf(kind as PalaceKind).distill).toBeDefined();
 });
 
 test("no kind is registered as being on the desk yet", () => {

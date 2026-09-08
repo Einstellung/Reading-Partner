@@ -132,6 +132,8 @@ export {
   type BookArrears,
   type DistillJob,
   type DistillUnit,
+  type SourceArrears,
+  type SourceUnit,
   type ThreadArrears,
   type TopicArrears,
   type UnitThread,
@@ -187,7 +189,17 @@ export {
   type RetellPassResult,
   type RetellPassStore,
 } from "./observations/retell";
+// Which conversations outside reading are raw material for distillation
+// (docs/58): a domain registers its kind at startup and the sweep reads it.
 export {
+  distillSourceOf,
+  distillSources,
+  registerDistillSource,
+  type DistillSource,
+} from "./distill/sources";
+export { collectSourceArrears, findSourceUnit } from "./distill/info-thread";
+export {
+  distillInfoThread,
   distillMarks,
   distillRetell,
   distillThread,
@@ -200,6 +212,7 @@ export {
   startDistillSweeps,
   sweepDistillation,
   sweepProfileGuess,
+  type DistillInfoThreadOptions,
   type DistillMarksOptions,
   type DistillRetellOptions,
   type DistillThreadOptions,

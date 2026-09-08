@@ -32,6 +32,7 @@ import {
   type Settings,
 } from "../../../platform/app/settings";
 import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai";
+import { registerInfoDistillSource } from "../../../info/companion/distill-source";
 import type { SyncHealthReport } from "../../../platform/sync";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";
@@ -153,6 +154,22 @@ export const SETTINGS_PULL_ROUTE: PullMatcher = {
   matches: (path) => path === SETTINGS_FILE,
 };
 
+// What every domain has to say about itself before the app can run: which of its
+// data a distillation pass may read, and (from P3a on) what of it can be opened
+// on the desk. Both are registries keyed by a palace kind (docs/61), and both
+// are filled here rather than at import time — a module that registers itself on
+// import registers itself in every test that touches anything near it.
+//
+// Idempotent: the two shells share this file and a registration is by kind, so a
+// second call replaces what the first put there.
+let booted = false;
+
+export function bootDomains(): void {
+  if (booted) return;
+  booted = true;
+  registerInfoDistillSource();
+}
+
 export interface ShellBootstrap {
   settings: Settings;
   // A settings change the user made: set and persist.
@@ -200,6 +217,7 @@ export function useShellBootstrap({
   }, []);
 
   useEffect(() => {
+    bootDomains();
     const unsubErrors = subscribeStoreErrors(pushToast);
 
     loadShellSettings()
