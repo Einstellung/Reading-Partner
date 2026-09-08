@@ -188,6 +188,8 @@ export const PALACE = [
     sync: "books",
     deleteWith: "book",
     gc: "never",
+    desk: true,
+    deskKind: "book",
     note: "the authoritative copy of the file, on the content-addressed channel and never on the data one",
   },
   {
@@ -647,6 +649,7 @@ export const PALACE = [
     shape: ARRAY_ID,
     deleteWith: "never",
     gc: "never",
+    desk: true,
   },
   {
     kind: "article-body",
