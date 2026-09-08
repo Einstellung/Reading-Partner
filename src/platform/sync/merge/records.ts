@@ -3,6 +3,7 @@
 // the same annotation get one of the two, not a blend of both — which is the
 // difference between this and the fields strategy.
 
+import { resolvePalace } from "../../../palace";
 import type { RecordShape } from "../../../palace/merge-types";
 import type { DroppedRecord } from "./contract";
 import { mergeField } from "./fields";
@@ -15,81 +16,31 @@ import {
   type Json,
 } from "./text";
 
-// Where each record file keeps its records and what identifies one, read off
-// the writers rather than guessed:
-//   annotations-<bookId>.json  array of Annotation, `id`      (platform/app/annotations.ts)
-//   info-sources.json          array of SourceDescriptor, `id` (info/sources/source-store.ts)
-//   saved-articles.json        array of SavedArticle, `id`     (reading/saved-articles.ts)
-//   topics.json                { topics: Topic[] }, `id`       (platform/app/topics.ts)
-//   threads-<key>.json         { threads: Record<id, Thread> } (platform/app/threads.ts)
-//   runs-rehearsal-<id>.json   { runs: RehearsalRunEntry[] }, `id` (reading/rehearsal/store.ts)
-//   outline-<id>.json          { segments: TalkSegment[] }, `id` (reading/talk/store.ts)
-//   library.json               { books: Record<hash, Entry> }  (platform/app/library.ts)
-//   reading-state.json         { states: Record<bookId, ViewState> } (platform/app/storage.ts)
-//   info-feedback.jsonl        one JSON object per line        (memory/profile/feedback.ts)
-//   observations/deleted-observations.jsonl  one JSON object per line (memory/observations/store.ts)
-//   statements.json            { statements: Statement[] }, `id` (memory/statements/store.ts)
-//   memory-usage-<deviceId>.jsonl  one JSON object per line   (memory/usage/log.ts)
-// A map's key is the identity. A JSONL line is its own identity: the events
-// carry no id of their own and the log is append-only.
 export type { RecordShape };
 
+// A tombstone log that is not where the table expects it: the per-topic memory
+// directories of an older build. Lines rather than a map so that the record is
+// its own identity — two devices deleting the same observation on the same day
+// write identical bytes and the union holds one line, where a map would hand
+// two dated versions of one fact to chooseByContent and journal the loser to
+// sync-trash (pitfall 208).
+const LEGACY_TOMBSTONES: RecordShape = { kind: "lines", container: null, idField: null };
+
+/**
+ * Where this file keeps its records and what identifies one, or null when it is
+ * not a record file and the caller should fall back to opaque.
+ *
+ * The shape is the palace row's (palace/kinds.ts), read off the writers and
+ * written down once beside everything else that is true of the file, so that
+ * the shape and the strategy that needs it cannot drift apart. The one answer
+ * not in the table is the legacy tombstone path, which strategyFor's own tail
+ * still calls records.
+ */
 export function recordShape(path: string): RecordShape | null {
+  const row = resolvePalace(path)?.row;
+  if (row) return row.shape ?? null;
   const name = path.slice(path.lastIndexOf("/") + 1);
-  if (name === "info-feedback.jsonl") return { kind: "lines", container: null, idField: null };
-  // Deleted observations. Lines rather than a map keyed by id so that the record
-  // is its own identity: two devices deleting the same observation on the same
-  // day write identical bytes and the union holds one line, where a map would
-  // hand two dated versions of one fact to chooseByContent and journal the loser
-  // to sync-trash. Nothing can make this shape unreadable either — a map that
-  // turned out not to be an object degrades the whole file to opaque.
-  if (name === "deleted-observations.jsonl") {
-    return { kind: "lines", container: null, idField: null };
-  }
-  // Deleted books (platform/app/deleted-books.ts), for the same reasons as the
-  // line above: two devices deleting the same book on the same day write
-  // identical bytes, and the union holds one line.
-  if (name === "deleted-books.jsonl") {
-    return { kind: "lines", container: null, idField: null };
-  }
-  // One line per memory shown, cited or rejected (memory/usage/log.ts). Lines
-  // rather than a map because the file is named for the device that writes it
-  // and nothing else ever appends to it, so the line is the whole identity.
-  if (/^memory-usage-.+\.jsonl$/.test(name)) {
-    return { kind: "lines", container: null, idField: null };
-  }
-  if (name === "info-sources.json") return { kind: "array", container: null, idField: "id" };
-  if (name === "saved-articles.json") return { kind: "array", container: null, idField: "id" };
-  if (name === "topics.json") return { kind: "array", container: "topics", idField: "id" };
-  // Statements about the reader, each under an id minted where it was written
-  // (memory/statements/store.ts). A wrapper key over the array, like topics, so
-  // a field added beside the collection later merges as a field.
-  if (name === "statements.json") {
-    return { kind: "array", container: "statements", idField: "id" };
-  }
-  if (name === "library.json") return { kind: "map", container: "books", idField: null };
-  if (name === "reading-state.json") return { kind: "map", container: "states", idField: null };
-  // Keyed by item id (info/extract/id.ts), which is a hash of source:key and so
-  // is the same on every device. `version` sits beside `marks` as a wrapper key
-  // and readCollection keeps it.
-  if (name === "info-pool-marks.json") return { kind: "map", container: "marks", idField: null };
-  if (/^annotations-.+\.json$/.test(name)) return { kind: "array", container: null, idField: "id" };
-  // A talk's segments, in the order the talk is given, each under an id minted
-  // where it was written (reading/talk/edit.ts). Everything else in the file —
-  // `spine` above all — is a wrapper key, and writeCollection merges those as
-  // fields, recursing into the spine's own keys.
-  if (/^outline-.+\.json$/.test(name)) {
-    return { kind: "array", container: "segments", idField: "id" };
-  }
-  if (/^threads-.+\.json$/.test(name)) return { kind: "map", container: "threads", idField: null };
-  // A rehearsal's passes, one row each, keyed by the run id the device that
-  // recorded the pass minted (reading/rehearsal/store.ts). `version` and
-  // `rehearsalId` sit beside `runs` as wrapper keys and readCollection keeps
-  // them.
-  if (/^runs-rehearsal-.+\.json$/.test(name)) {
-    return { kind: "array", container: "runs", idField: "id" };
-  }
-  return null;
+  return name === "deleted-observations.jsonl" ? LEGACY_TOMBSTONES : null;
 }
 
 // The records of one file, plus the wrapper keys sitting beside them (none

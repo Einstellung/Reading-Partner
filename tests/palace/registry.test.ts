@@ -36,6 +36,27 @@ test("every distilled kind has an id to key its cursor under", () => {
   expect(keyless).toEqual([]);
 });
 
+// The cursor a row names is a real key in observations/meta.json, and the units
+// keyed under it are what the distiller already reads: a conversation's cursor
+// is the thread id (distill.ts, retell.ts) and a book's marks are keyed by the
+// book id (distill.ts). A row naming the wrong map would resume a pass from a
+// number nobody wrote and re-read every message in it.
+test("the distilled kinds are the ones the passes already read", () => {
+  const under = (cursor: string) =>
+    rowsWhere((r) => r.distill?.cursor === cursor)
+      .map((r) => r.kind)
+      .sort();
+  expect(under("distilledMessages")).toEqual(
+    ["info-thread", "reading-thread", "retell-thread"].sort(),
+  );
+  expect(under("distilledMarks")).toEqual(["annotations"]);
+  // Whatever keys distilledMessages is a conversation, and its id is a thread
+  // id — not the file's, which is a book, a retell or a day (pitfall 209).
+  for (const row of rowsWhere((r) => r.distill?.cursor === "distilledMessages")) {
+    expect(`${row.kind}: ${row.distill?.unit}`).toBe(`${row.kind}: thread`);
+  }
+});
+
 test("no kind is registered as being on the desk yet", () => {
   // P3a registers the first opener. Until a package registers one, a desk mark
   // here would be a guard failing against nothing.
