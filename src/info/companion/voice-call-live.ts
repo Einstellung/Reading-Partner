@@ -23,6 +23,7 @@ import {
   loadThreads,
   patchThreadMessage,
 } from "../../platform/app/threads";
+import { distillInfoThread } from "../../memory";
 import { loadProfile } from "../../memory/profile/profile";
 import { loadSources } from "../sources/source-store";
 import { briefingAnchor, noBriefingAnchor } from "./anchors";
@@ -228,7 +229,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
   // (companion-live.ts) and a call is many turns. A failure to load it fails
   // the turn that asked for it, which is where the driver can say so.
   let tools: Promise<AgentTool[]> | null = null;
-  return createVoiceCall({
+  const call = createVoiceCall({
     bridge,
     model: askOnThread({
       bookId,
@@ -252,4 +253,15 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     }),
     transcript: threadTranscript(bookId, anchor.threadId),
   });
+  // Hanging up is what the text chat's close is: the call's turns are on the
+  // thread by now (the transcript writes them as they settle), so the pass is
+  // started here and not awaited — it has to outlive the call, and the caller is
+  // waiting to take the orb off the screen.
+  return {
+    ...call,
+    async stop(): Promise<void> {
+      await call.stop();
+      void distillInfoThread({ threadId: anchor.threadId, trigger: "info-close" });
+    },
+  };
 }

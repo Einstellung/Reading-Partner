@@ -168,16 +168,48 @@ export interface BookArrears {
   threads: ThreadArrears[];
 }
 
+// One conversation handed over by a registered distillation source
+// (memory/distill/sources.ts): a briefing conversation, a call about an
+// article — raw material that hangs off no book.
+//
+// The shape lives here, beside the rule that spends a pass on it, so that the
+// registry can import the arrears and never the other way round.
+export interface SourceUnit {
+  // The thread id, which is also the key its cursor is kept under
+  // (distilledMessages). Unique across every thread file, not just inside its
+  // own (docs/pitfall/209) — a source that cannot promise that must leave the
+  // repeating unit out.
+  id: string;
+  topicId: string;
+  // What the pass calls this conversation, in place of a book's name.
+  label: string;
+  messages: DistillMessage[];
+}
+
+// A source's unit and what it still owes.
+export interface SourceArrears {
+  // The palace kind the unit came from, for the log and for finding the source
+  // again when the job is run.
+  source: string;
+  unit: SourceUnit;
+  newMessages: number;
+}
+
 export interface TopicArrears {
   topicId: string;
   topicName: string;
   lastDistilledAt: number | null;
   books: BookArrears[];
+  // What the registered sources owe this topic. Absent is the ordinary case:
+  // every topic before info conversations became material, and every topic no
+  // source speaks for.
+  units?: SourceArrears[];
 }
 
 export type DistillJob =
   | { kind: "thread"; topicId: string; topicName: string; book: BookArrears; thread: ThreadArrears }
-  | { kind: "marks"; topicId: string; topicName: string; book: BookArrears };
+  | { kind: "marks"; topicId: string; topicName: string; book: BookArrears }
+  | { kind: "source"; topicId: string; topicName: string; source: string; unit: SourceUnit };
 
 // Engine annotations reduced to what distillation reads. `now` fills in for a
 // mark whose stored date is missing or unparseable — treating it as new is the
@@ -240,6 +272,9 @@ export function topicDebt(topic: TopicArrears): { marks: number; messages: numbe
     marks += book.newMarks;
     for (const thread of book.threads) messages += thread.newMessages;
   }
+  // A source's conversation is a conversation: it counts towards the same debt
+  // and passes the same threshold, which is the whole point of registering one.
+  for (const unit of topic.units ?? []) messages += unit.newMessages;
   return { marks, messages };
 }
 
@@ -293,13 +328,37 @@ export function selectDistillJob(
       if (!talked || thread.newMessages > talked.thread.newMessages) talked = { book, thread };
     }
   }
-  if (talked) {
+  // The registered sources' conversations stand beside the books' threads, most
+  // owed first. A tie goes to the book, which is the order that held before any
+  // source existed; among units it goes to the earlier id, so a sweep is
+  // reproducible.
+  let unit: SourceArrears | null = null;
+  for (const owed of topic.units ?? []) {
+    if (owed.newMessages === 0) continue;
+    if (
+      !unit ||
+      owed.newMessages > unit.newMessages ||
+      (owed.newMessages === unit.newMessages && owed.unit.id < unit.unit.id)
+    ) {
+      unit = owed;
+    }
+  }
+  if (talked && (!unit || talked.thread.newMessages >= unit.newMessages)) {
     return {
       kind: "thread",
       topicId: topic.topicId,
       topicName: topic.topicName,
       book: talked.book,
       thread: talked.thread,
+    };
+  }
+  if (unit) {
+    return {
+      kind: "source",
+      topicId: topic.topicId,
+      topicName: topic.topicName,
+      source: unit.source,
+      unit: unit.unit,
     };
   }
 

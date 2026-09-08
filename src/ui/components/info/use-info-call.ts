@@ -32,6 +32,7 @@ import {
 import { addSourceFromCard, applyProfileUpdate } from "../../../info/companion/card-actions";
 import type { InfoCallAnchor } from "../../../info/companion/anchors";
 import { addSource, hasSources } from "../../../info/sources/source-store";
+import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { AgentTool } from "../../../ai/agent";
@@ -102,6 +103,20 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // An info call ends by its component unmounting, where a reading call ends at
   // call === null and App clears the whole store.
   useEffect(() => () => forgetScroll(stickKey), [stickKey]);
+
+  // Closing the conversation is this side's hangup: what the reader said goes to
+  // a distillation pass (memory/distill). Fired and forgotten — a pass has to
+  // outlive the component that started it, it never surfaces UI, and a
+  // conversation this misses is picked up by the half-hourly sweep, which reads
+  // the same source. The onboarding thread is not a unit any source lists, so
+  // naming it here distils nothing.
+  const threadId = anchor.threadId;
+  useEffect(
+    () => () => {
+      void distillInfoThread({ threadId, trigger: "info-close" });
+    },
+    [threadId],
+  );
 
   // Latest messages, mirrored to a ref so the (id-keyed) card dispatcher can look
   // up a card's payload without being torn down and rebuilt on every delta.

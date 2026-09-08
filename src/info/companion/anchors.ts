@@ -40,6 +40,13 @@ export interface InfoCallAnchor {
   onboarding?: boolean;
 }
 
+/**
+ * The first-run add-source flow's thread. A constant because the flow happens
+ * once — which also means the id repeats in every day's file
+ * (docs/pitfall/209), so nothing keyed globally by thread id may use it.
+ */
+export const ONBOARDING_THREAD_ID = "onboarding";
+
 const BRIEFING_TITLE = "Today's briefing";
 const BRIEFING_PLACEHOLDER = "Ask about today's briefing…";
 
@@ -143,7 +150,7 @@ export function articleAnchor(
 /** The first-run / add-source chat: the info call in add-source mode. */
 export function onboardingAnchor(aiLanguage?: AiLanguage): InfoCallAnchor {
   return {
-    threadId: "onboarding",
+    threadId: ONBOARDING_THREAD_ID,
     mode: "add-source",
     onboarding: true,
     emptyTitle: "Let's set up your sources",

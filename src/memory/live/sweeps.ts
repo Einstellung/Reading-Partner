@@ -20,7 +20,11 @@ export type DistillTrigger =
   | "startup"
   | "foreground"
   | "book-switch"
-  | "talk-exit";
+  | "talk-exit"
+  // An info conversation closed: the chat unmounted, or the voice call hung up
+  // (src/info/companion). The counterpart of "hangup" for the conversations that
+  // hang off no book.
+  | "info-close";
 
 // One pass at a time per subject: a thread id for a transcript pass,
 // "marks:<bookId>" for a silent-marking pass. Every trigger goes through it, so

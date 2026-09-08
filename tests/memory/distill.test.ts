@@ -117,6 +117,10 @@ function scriptedRunner(turns: Turn[]): { run: SubagentTurnFn } {
 function makeInput(overrides: Partial<DistillInput> = {}): DistillInput {
   return {
     topicName: "attention",
+    // A pass about a book, which every reading conversation is. Its absence is
+    // what puts the prompt into conversation wording (see the bookless case
+    // below), so the ordinary fixture has to carry one.
+    bookId: "book-1",
     bookName: "survey.pdf",
     threadId: "thread-1",
     annotationId: "ann-1",
@@ -649,6 +653,75 @@ test("a finished pass advances both cursors", async () => {
     distilledMessages: { "thread-1": 2 },
     distilledMarks: { "book-1": 900 }, // the newest mark this pass was shown
   });
+});
+
+// A conversation that hangs off no book: a day's briefing, a call about one
+// article (memory/distill). Same pass, same cursor, minus everything that only a
+// book can answer — which is the half that used to be assumed.
+test("a bookless pass writes an unstamped observation and moves only the message cursor", async () => {
+  const { store, pass, adapter } = makeStore();
+  const result = await runDistillPass(
+    passInput({
+      bookId: undefined,
+      bookName: "Info briefing 2026-07-17",
+      threadId: "briefing-2026-07-17",
+      annotationId: "",
+      page: null,
+      markedText: "",
+      annotations: [],
+    }),
+    {
+      store: pass,
+      adapter,
+      now: () => JULY_17,
+      ...scriptedRunner([
+        {
+          calls: [
+            {
+              name: "observation_update",
+              id: "c1",
+              args: {
+                action: "create",
+                relation: "new",
+                type: "belief",
+                summary: "Reads the briefing for the compute-cost angle",
+                body: "Asked on 2026-07-17 why attention is quadratic.",
+                messageIndices: [1],
+              },
+            },
+          ],
+        },
+        { text: "done" },
+      ]),
+    },
+  );
+
+  expect(result).toMatchObject({ ran: true, ok: true, created: 1 });
+  const entries = await store.list();
+  expect(entries).toHaveLength(1);
+  // Nothing to stamp: an observation carrying a book id would name a book that
+  // was never open.
+  expect(entries[0].bookId).toBeUndefined();
+  // The thread's cursor moved; no book's mark cursor exists to move.
+  expect(await store.getMeta(TOPIC)).toEqual({
+    lastDistilledAt: JULY_17,
+    lastAnnotationDistillAt: null,
+    distilledMessages: { "briefing-2026-07-17": 2 },
+  });
+});
+
+test("a bookless prompt asks about a conversation, not about a book and a page", () => {
+  const bookless = makeInput({ bookId: undefined, annotationId: "", page: null, markedText: "" });
+  const msg = buildDistillUserMessage(bookless);
+  expect(msg).toContain("Conversation: survey.pdf");
+  expect(msg).not.toContain("Book: ");
+  expect(msg).not.toContain("page");
+  expect(msg).not.toContain("annotation");
+  const system = buildDistillSystemPrompt(bookless);
+  expect(system).not.toContain("annotation id");
+  expect(system).toContain("messageIndices");
+  // The book pass keeps every word it had.
+  expect(buildDistillSystemPrompt(makeInput())).toContain("the annotation id, and the transcript");
 });
 
 test("a second pass over the same transcript does not run", async () => {
