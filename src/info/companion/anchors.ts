@@ -1,6 +1,6 @@
 // What one info conversation is anchored to (docs/16, docs/17): which thread it
-// writes to, the system prompt it opens with, and the corner position card that
-// recalls what it is about.
+// writes to, what it lays on the desk, and the corner position card that recalls
+// what it is about.
 //
 // Four anchors, one per way in: the briefing, the briefing before there is one,
 // an article, and the first-run add-source flow. They are assembled from things
@@ -8,15 +8,11 @@
 // the briefing itself — so nothing here awaits anything and every anchor is
 // decidable from its inputs.
 
+import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND } from "./desk";
+import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
 import type { Briefing } from "../briefing/types";
-import { addSourceSystemPrompt } from "../sources/source-skill";
-import {
-  articleChatSystemPrompt,
-  briefingChatSystemPrompt,
-  noBriefingChatSystemPrompt,
-  type CompanionContext,
-} from "./chat";
+import type { CompanionContext } from "./chat";
 
 export interface InfoCallAnchor {
   // The thread this conversation writes to. Unique across every thread file, not
@@ -29,7 +25,11 @@ export interface InfoCallAnchor {
   // The chat window's empty-state heading and composer placeholder.
   emptyTitle: string;
   placeholder: string;
-  systemPrompt: string;
+  // What this conversation lays on the desk, in prompt order (src/desk). The
+  // companion tools are bound to it by whoever runs the turn
+  // (desk.ts: withCompanionTools), so an anchor stays decidable from what has
+  // already been read off disk.
+  desk: DeskRef[];
   // The corner position card: the article/briefing shrunk to a title, an
   // optional source name tag, and a one-line reason/overview.
   position: { title: string; sourceName?: string; line: string | null };
@@ -73,7 +73,7 @@ export function briefingAnchor(b: Briefing, ctx: CompanionContext): InfoCallAnch
     threadId: briefingThreadId(b.date),
     emptyTitle: BRIEFING_TITLE,
     placeholder: BRIEFING_PLACEHOLDER,
-    systemPrompt: briefingChatSystemPrompt(b, ctx),
+    desk: [briefingRef(b.date, b, ctx)],
     position: { title: BRIEFING_TITLE, line: b.overview },
   };
 }
@@ -94,11 +94,18 @@ export function noBriefingAnchor(
     threadId: briefingThreadId(opts.dateKey),
     emptyTitle: BRIEFING_TITLE,
     placeholder: BRIEFING_PLACEHOLDER,
-    systemPrompt: noBriefingChatSystemPrompt(ctx, {
-      error: opts.error ?? undefined,
-      collecting: ctx.collecting,
-      notices: opts.notices,
-    }),
+    desk: [
+      {
+        kind: INFO_BRIEFING_KIND,
+        ref: {
+          dateKey: opts.dateKey,
+          briefing: null,
+          ctx,
+          error: opts.error ?? null,
+          notices: opts.notices,
+        },
+      },
+    ],
     position: {
       title: BRIEFING_TITLE,
       line: opts.error ?? opts.notices[0] ?? "Not collected yet",
@@ -142,7 +149,16 @@ export function articleAnchor(
     threadId: articleThreadId(b.date, itemId),
     emptyTitle: title,
     placeholder: "Ask about this article…",
-    systemPrompt: articleChatSystemPrompt(b.overview, meta?.title ?? "", bodyText, ctx),
+    // Both, briefing first: an article chat is the day's conversation with one
+    // piece pulled to the front, so the companion still has the day's document,
+    // the profile and the tools.
+    desk: [
+      briefingRef(b.date, b, ctx),
+      {
+        kind: INFO_ARTICLE_KIND,
+        ref: { dateKey: b.date, itemId, title: meta?.title ?? "", overview: b.overview, bodyText },
+      },
+    ],
     position: { title, sourceName: meta?.sourceName, line: articleReason(b, itemId) },
   };
 }
@@ -155,7 +171,13 @@ export function onboardingAnchor(aiLanguage?: AiLanguage): InfoCallAnchor {
     onboarding: true,
     emptyTitle: "Let's set up your sources",
     placeholder: "Tell me what you follow, or paste a link…",
-    systemPrompt: addSourceSystemPrompt({ aiLanguage, onboarding: true }),
+    desk: [{ kind: INFO_BRIEFING_KIND, ref: { onboarding: true, aiLanguage } }],
     position: { title: "Subscriptions", line: "Set up your information sources" },
   };
+}
+
+// The day's briefing on the desk. One place because two anchors put it there —
+// the briefing's own, and an article's.
+function briefingRef(dateKey: string, b: Briefing, ctx: CompanionContext): DeskRef {
+  return { kind: INFO_BRIEFING_KIND, ref: { dateKey, briefing: b, ctx } };
 }

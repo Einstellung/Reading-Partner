@@ -854,6 +854,8 @@ export const PALACE = [
     merge: "opaque",
     deleteWith: "never",
     gc: "never",
+    desk: true,
+    deskKind: "info-briefing",
     note: "what the collector publishes for the readers: a fixed name replaced whole, so nothing grows by the day",
   },
   {

@@ -26,6 +26,7 @@ import * as readableLazy from "../../../src/info/extract/readable-lazy";
 import * as settings from "../../../src/platform/app/settings";
 import * as threads from "../../../src/platform/app/threads";
 import { DEFAULT_SETTINGS } from "../../../src/platform/app/settings";
+import { INFO_BRIEFING_KIND, registerInfoDesk } from "../../../src/info/companion/desk";
 import type { InfoCallAnchor } from "../../../src/info/companion/anchors";
 import type { BriefingView } from "../../../src/info/briefing/reader";
 import type { Thread } from "../../../src/platform/app/threads";
@@ -58,12 +59,25 @@ function stubView(): BriefingView {
   };
 }
 
+// The briefing on the desk, which is what builds the companion tools and so
+// what awaits the chunk (info/companion/desk.ts).
+registerInfoDesk();
+
 function anchor(opts: { onboarding?: boolean } = {}): InfoCallAnchor {
   return {
     threadId: "briefing",
     emptyTitle: "Today's briefing",
     placeholder: "Ask…",
-    systemPrompt: "you are the companion",
+    desk: [
+      {
+        kind: INFO_BRIEFING_KIND,
+        ref: {
+          dateKey: "2026-08-13",
+          briefing: null,
+          ctx: { profile: "", sources: [], collecting: true },
+        },
+      },
+    ],
     position: { title: "Today's briefing", line: null },
     ...opts,
   };

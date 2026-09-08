@@ -32,6 +32,7 @@ import {
   type Settings,
 } from "../../../platform/app/settings";
 import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai";
+import { registerInfoDesk } from "../../../info/companion/desk";
 import { registerInfoDistillSource } from "../../../info/companion/distill-source";
 import { registerReadingDesk } from "../../../reading/desk";
 import type { SyncHealthReport } from "../../../platform/sync";
@@ -171,6 +172,7 @@ export function bootDomains(): void {
   booted = true;
   registerInfoDistillSource();
   registerReadingDesk();
+  registerInfoDesk();
 }
 
 export interface ShellBootstrap {

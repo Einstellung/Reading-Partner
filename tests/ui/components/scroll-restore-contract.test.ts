@@ -61,7 +61,7 @@ const ANCHOR: InfoCallAnchor = {
   threadId: "briefing",
   emptyTitle: "",
   placeholder: "",
-  systemPrompt: "",
+  desk: [],
   position: { title: "", line: null },
 };
 
