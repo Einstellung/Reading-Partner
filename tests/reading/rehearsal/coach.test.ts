@@ -103,8 +103,10 @@ test("the turn mounts the five tools that write a talk, over the live outline", 
   });
   expect(turn.tools.map((t) => t.name).sort()).toEqual([
     "move_talk_segment",
+    "read_conversation",
     "read_talk_outline",
     "remove_talk_segment",
+    "search_conversations",
     "set_talk_spine",
     "write_talk_segment",
   ]);
