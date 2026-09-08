@@ -1,10 +1,12 @@
-// System prompts for the floating info chat (docs/16). Two anchors: a
-// briefing-level thread (the whole briefing as context) and an article thread
-// (that article's full text plus the day's overview). Both carry the shared
-// companion tool set (docs/17): update_profile, probe/trial/add_source, and —
-// where the host can open one — the site sign-in window. Pure string assembly so
-// the calling component stays thin; the AI call reuses the agent loop, and the
-// tools surface confirm cards.
+// The text the info companion's prompt is made of (docs/16): the briefing as
+// context, the day before there is one, and one article's own block. Which of
+// them go into a turn and in what order is the desk's (companion/desk.ts); this
+// file only writes them.
+//
+// The briefing blocks carry the shared companion tool set's guidance (docs/17):
+// update_profile, probe/trial/add_source, and — where the host can open one —
+// the site sign-in window. Pure string assembly, so it is testable without a
+// provider; the tools themselves are bound in companion-live.ts.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
 import { profileForPrompt } from "../../memory/profile/guess";
@@ -249,15 +251,15 @@ function preamble(ctx: CompanionContext): string[] {
   ];
 }
 
-export function articleChatSystemPrompt(
-  overview: string,
-  title: string,
-  text: string,
-  ctx: CompanionContext,
-): string {
+/**
+ * The one article the reader opened, as its own block: the day's overview in a
+ * line, the title, and the body capped. Only the article's own half — the
+ * companion's preamble, tools and profile come from the briefing that lies on
+ * the desk beside it (companion/desk.ts), because an article chat is the
+ * briefing conversation with one piece pulled to the front.
+ */
+export function articleContextSection(overview: string, title: string, text: string): string {
   return [
-    ...preamble(ctx),
-    "",
     `Today's briefing, in one line: ${overview}`,
     "",
     `The user is reading this article: "${title}".`,

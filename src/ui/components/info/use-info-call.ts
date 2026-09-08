@@ -12,7 +12,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../ai/agent";
+import { assembleTurn, type AssembledTurn } from "../../../ai/assemble";
+import { openDesk } from "../../../desk";
+import { withCompanionTools } from "../../../info/companion/desk";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
+import { BRIEF_TOPIC_ID } from "../../../platform/app/topics";
 import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../../platform/app/threads";
 import { buildLiveCompanionTools } from "../../../info/companion/companion-live";
 import { companionToolStatusLabel } from "../../../info/companion/companion-tools";
@@ -35,7 +39,6 @@ import { addSource, hasSources } from "../../../info/sources/source-store";
 import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
-import type { AgentTool } from "../../../ai/agent";
 import { navigateAway } from "../chat/call-layout";
 import { refusalRow, replayableHistory } from "../../../ai/turn-rows";
 import {
@@ -352,7 +355,9 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [handleAddFromCard, handleApplyProfile, onOpenBriefing, onHangUp, pipCards, noteTurn],
   );
 
-  // The companion's agent turn: probe/trial/add tools, tool trace, confirm cards.
+  // The companion's agent turn: the anchor's desk (the day's briefing, and the
+  // article where there is one) assembled into one call (src/ai/assemble), then
+  // run with the tool trace and confirm cards this surface draws.
   // `seedStreaming` starts the streaming reply without a visible user message (the
   // onboarding opener); otherwise the caller already appended the user turn.
   async function runAgent(history: ChatMessage[], opts?: { seedStreaming?: boolean }) {
@@ -369,29 +374,49 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     // a run started here, a run was already going here, or the request was left
     // for the machine that collects — so the companion reports the right one.
     //
-    // Built before the turn is marked streaming, and caught: it awaits the
-    // article extractor's chunk (info/extract/readable-lazy), which is a fetch,
-    // and a fetch can fail — a chunk 404ing after a redeploy, a dropped
-    // connection, a CSP that turns it down. Nothing upstream would catch it.
+    // The desk is laid before the turn is marked streaming, and caught: opening
+    // the briefing builds those tools, which awaits the article extractor's
+    // chunk (info/extract/readable-lazy). That is a fetch, and a fetch can fail
+    // — a chunk 404ing after a redeploy, a dropped connection, a CSP that turns
+    // it down. Nothing upstream would catch it.
     // `send` is handed to the composer as a void-returning prop and the
     // onboarding opener kicks this with `void`, so an escaping rejection is an
     // unhandled one and the reply row spins for good. The turn stops here
     // instead, in the row the reader is already looking at; the next send tries
     // the chunk again, since cacheUntilFailure drops a rejected load.
-    let tools: AgentTool[];
+    const controller = new AbortController();
+    let turn: AssembledTurn | null;
     try {
-      tools = await buildLiveCompanionTools(
-        (payload) => insertCard("probe", payload),
-        (payload) => insertCard("profile", payload),
-        { start: (scope) => runBriefingJob(scope) },
-        { collecting },
+      const desk = await openDesk(
+        withCompanionTools(anchor.desk, () =>
+          buildLiveCompanionTools(
+            (payload) => insertCard("probe", payload),
+            (payload) => insertCard("profile", payload),
+            { start: (scope) => runBriefingJob(scope) },
+            { collecting },
+          ),
+        ),
+        {
+          settings,
+          // The brief topic until a thread carries one of its own.
+          topic: { id: BRIEF_TOPIC_ID, name: "Brief" },
+          thread: { key: bookId, id: anchor.threadId },
+          signal: controller.signal,
+        },
       );
+      turn = await assembleTurn({ desk, messages: history });
     } catch (e) {
       console.error("failed to load the article extractor", e);
       patchLast({ text: "The article extractor could not be loaded. Try again.", failed: true, streaming: false });
       return;
     }
-    const controller = new AbortController();
+    // The reader walked away while the desk was being laid.
+    if (!turn) return;
+    // Too big to leave the model room to answer, and nothing to retry.
+    if (turn.refusal) {
+      patchLast({ text: turn.refusal, failed: true, streaming: false });
+      return;
+    }
     abortRef.current = controller;
     setStreaming(true);
     let full = "";
@@ -399,9 +424,9 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     void runAgentTurn({
       providerId: settings.defaultProviderId as ProviderId,
       modelId: settings.defaultModelId,
-      systemPrompt: anchor.systemPrompt,
-      messages: history,
-      tools,
+      systemPrompt: turn.systemPrompt,
+      messages: turn.messages,
+      tools: turn.tools,
       reasoning: toReasoning(settings.chatThinking),
       signal: controller.signal,
       telemetry: { surface: "info", thread: anchor.threadId },

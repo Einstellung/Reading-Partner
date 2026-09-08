@@ -11,11 +11,14 @@
 // stream of text, an ending, and an abort, and that is what askOnThread is.
 
 import { runAgentTurn } from "../../ai/agent";
+import { assembleTurn } from "../../ai/assemble";
 import { replayableHistory } from "../../ai/turn-rows";
 import { glossaryTerms } from "../../ai/voice/cleanup";
+import { openDesk } from "../../desk";
 import { loadDeviceSettings } from "../../platform/app/device";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { loadSettings, toReasoning } from "../../platform/app/settings";
+import { BRIEF_TOPIC_ID } from "../../platform/app/topics";
 import {
   appendMessage,
   createThread,
@@ -30,6 +33,7 @@ import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
 import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
 import { nativeConversation } from "./conversation";
+import { withCompanionTools } from "./desk";
 import {
   createVoiceCall,
   type VoiceCall,
@@ -133,12 +137,30 @@ export function askOnThread(opts: {
           if (tail?.role === "user" && tail.text === text) rows.pop();
           rows.push({ role: "user", text });
 
+          // The same desk the text chat lays for this day, assembled the same
+          // way: a call is the info conversation in another modality, not a
+          // second AI.
+          const desk = await openDesk(withCompanionTools(opts.anchor.desk, opts.tools), {
+            settings,
+            topic: { id: BRIEF_TOPIC_ID, name: "Brief" },
+            thread: { key: opts.bookId, id: opts.anchor.threadId },
+            signal,
+          });
+          const turn = await assembleTurn({ desk, messages: rows });
+          // Abandoned, or too big to leave the model room to answer. Nothing was
+          // said and nothing is worth retrying, so the floor goes back to the
+          // user the way an empty answer does.
+          if (!turn || turn.refusal) {
+            resolve();
+            return;
+          }
+
           await runAgentTurn({
             providerId: settings.defaultProviderId as ProviderId,
             modelId: settings.defaultModelId,
-            systemPrompt: opts.anchor.systemPrompt,
-            messages: rows,
-            tools: await opts.tools(),
+            systemPrompt: turn.systemPrompt,
+            messages: turn.messages,
+            tools: turn.tools,
             reasoning: toReasoning(settings.chatThinking),
             signal,
             telemetry: { surface: "info", thread: opts.anchor.threadId },

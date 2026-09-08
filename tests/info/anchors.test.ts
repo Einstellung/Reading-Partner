@@ -107,7 +107,40 @@ test("an article's thread is the day's item, and its card carries the item's own
     sourceName: "Example",
     line: "must-read reason",
   });
-  expect(anchor.systemPrompt).toContain("the full body text");
+});
+
+// An article chat is the day's conversation with one piece pulled to the front,
+// so both go on the desk and the briefing goes first (docs/61).
+test("an article lays the briefing and then the article", () => {
+  const anchor = articleAnchor(briefing(), "x", "the full body text", CTX);
+  expect(anchor.desk.map((d) => d.kind)).toEqual(["info-briefing", "info-article"]);
+  expect(anchor.desk[1].ref).toEqual({
+    dateKey: "2026-07-25",
+    itemId: "x",
+    title: "The paper",
+    overview: "Two real papers, the rest is vendor noise.",
+    bodyText: "the full body text",
+  });
+});
+
+test("the briefing anchors put one briefing on the desk, with and without one", () => {
+  expect(briefingAnchor(briefing(), CTX).desk).toEqual([
+    { kind: "info-briefing", ref: { dateKey: "2026-07-25", briefing: briefing(), ctx: CTX } },
+  ]);
+  expect(
+    noBriefingAnchor(CTX, { dateKey: "2026-07-25", error: "no provider", notices: ["a notice"] }).desk,
+  ).toEqual([
+    {
+      kind: "info-briefing",
+      ref: {
+        dateKey: "2026-07-25",
+        briefing: null,
+        ctx: CTX,
+        error: "no provider",
+        notices: ["a notice"],
+      },
+    },
+  ]);
 });
 
 test("onboarding opens its own thread in add-source mode", () => {
@@ -115,6 +148,8 @@ test("onboarding opens its own thread in add-source mode", () => {
   expect(anchor.threadId).toBe("onboarding");
   expect(anchor.mode).toBe("add-source");
   expect(anchor.onboarding).toBe(true);
-  // The onboarding half of the add-source prompt, not the bare tool guide.
-  expect(anchor.systemPrompt).toContain("first run");
+  // The same briefing item in its onboarding variant, not a kind of its own.
+  expect(anchor.desk).toEqual([
+    { kind: "info-briefing", ref: { onboarding: true, aiLanguage: "zh-CN" } },
+  ]);
 });
