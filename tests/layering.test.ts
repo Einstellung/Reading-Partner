@@ -40,6 +40,11 @@ type Layer = "platform" | "capability" | "domain" | "ui" | "shell" | "entry";
 // too. A new directory or root file must be added here or the first test fails:
 // deciding where it sits is the point.
 const LAYER: Record<string, Layer> = {
+  // The catalogue of every kind of data the app keeps (docs/61). Platform
+  // because platform/sync derives its range, its never-infer-delete set and its
+  // merge strategies from it, and platform may only import platform. It imports
+  // nothing at all itself, which is what makes that safe.
+  palace: "platform",
   platform: "platform",
   "platform/app": "platform",
   "platform/http": "platform",

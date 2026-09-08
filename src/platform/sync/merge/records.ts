@@ -3,6 +3,7 @@
 // the same annotation get one of the two, not a blend of both — which is the
 // difference between this and the fields strategy.
 
+import type { RecordShape } from "../../../palace/merge-types";
 import type { DroppedRecord } from "./contract";
 import { mergeField } from "./fields";
 import {
@@ -31,14 +32,7 @@ import {
 //   memory-usage-<deviceId>.jsonl  one JSON object per line   (memory/usage/log.ts)
 // A map's key is the identity. A JSONL line is its own identity: the events
 // carry no id of their own and the log is append-only.
-export interface RecordShape {
-  kind: "array" | "map" | "lines";
-  // The key the collection sits under, or null when it is the whole file.
-  container: string | null;
-  // The field carrying a record's identity in an array. Null for a map, whose
-  // key is the identity.
-  idField: string | null;
-}
+export type { RecordShape };
 
 export function recordShape(path: string): RecordShape | null {
   const name = path.slice(path.lastIndexOf("/") + 1);

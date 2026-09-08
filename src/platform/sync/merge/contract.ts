@@ -7,20 +7,14 @@
 // must land on the same bytes, so nothing may depend on which side happens to
 // be "local", on a wall clock, or on the order the two devices sync in.
 
-export type MergeStrategy =
-  // JSON collections of identified records: three-way per record. Covers an
-  // array of objects carrying an id, an object keyed by id, and JSONL (one
-  // record per line, the line itself is the identity).
-  | "records"
-  // JSON objects of scalar settings: three-way per field.
-  | "fields"
-  // Fields, where the scalars are watermarks and the lower of two is the safe
-  // one: observations/meta.json and nothing else (cursors.ts).
-  | "cursors"
-  // Markdown the user writes: three-way per line, conflict copy on overlap.
-  | "prose"
-  // Anything else: keep ours, park theirs beside it.
-  | "opaque";
+import type { FieldGroups, MergeStrategy } from "../../../palace/merge-types";
+
+// How sync merges two edits of one file, and which of a file's keys the fields
+// strategy may not settle one at a time. Both are declared beside the palace
+// table (palace/merge-types.ts) so a row can name a strategy without the table
+// depending on the code that runs it; re-exported here because this is where
+// every caller has always reached for them.
+export type { MergeStrategy };
 
 export interface MergeInput {
   // AppData-relative path of the file being merged.
@@ -104,7 +98,7 @@ const RECORD_FILES = new Set([
 // halves of one endpoint and are deliberately absent: settings.ts says they
 // sync freely, and a base from one device with a model name from the other is
 // a configuration, not a contradiction.
-export type FieldGroups = readonly (readonly string[])[];
+export type { FieldGroups };
 
 // A model id is only meaningful under its own provider — "qwen-3-235b-a22b"
 // says nothing to DeepSeek. Decided a key at a time, a device on DeepSeek

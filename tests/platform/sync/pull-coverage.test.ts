@@ -8,15 +8,13 @@
 // It had already happened four times over, one shell registering a subset the
 // other did not.
 //
-// So the range is read out of syncFs.ts rather than restated here — the root
-// files from the exported set, the per-key patterns out of the source of
-// inSyncRange — and each one must be claimed by a route or written down below
-// with the reason it needs no route. A new synced file is neither until someone
-// decides which. Run: bun test.
+// So the range is read out of the palace table rather than restated here — one
+// representative path per kind that travels on the data channel — and each one
+// must be claimed by a route or written down below with the reason it needs no
+// route. A new synced file is neither until someone decides which. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { PALACE } from "../../../src/palace";
 import { ASK_PULL_ROUTE } from "../../../src/info/briefing/handoff";
 import { READER_PULL_ROUTE } from "../../../src/info/briefing/reader";
 import { SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
@@ -71,84 +69,29 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "prep-": "a document's prep material is read when the document it belongs to opens",
 };
 
-const SRC = fileURLToPath(new URL("../../../src/platform/sync/syncFs.ts", import.meta.url));
-const source = readFileSync(SRC, "utf8");
-// The body of inSyncRange alone: the walker below it repeats the directory
-// prefixes as a pre-filter, and counting those would mask a prefix that is only
-// ever accepted by one of the two.
-const rangeStart = source.indexOf("export function inSyncRange");
-const inRangeBody = source.slice(rangeStart, source.indexOf("\n}\n", rangeStart));
-
-// A representative path for each per-key pattern, derived from the pattern
-// itself rather than written out beside it, so a pattern that changes shape
-// takes its sample with it.
-function sampleForRegex(literal: string): string {
-  return literal
-    .replace(/^\/\^/, "")
-    .replace(/\$\/$/, "")
-    .replace(/\\\./g, ".")
-    .replace(/\.\+/g, "sample");
-}
-
-// The nested ranges are directory prefixes, and a directory needs a file under
-// it before inSyncRange will take it. What that file is called is the one thing
-// the prefix cannot say, so it is said here.
-const DIRECTORY_SAMPLES: Record<string, string[]> = {
-  "article-bodies": ["article-bodies/0123456789abcdef0123456789abcdef.json"],
-  runs: ["runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json"],
-  observations: [
-    "observations/m-ab12cd34ef567890.md",
-    "observations/index.md",
-    "observations/deleted-observations.jsonl",
-  ],
-  "prep-": [
-    "prep-book1/state.json",
-    "prep-book1/attention-is-all-you-need.md",
-    "prep-book1/chapters/state.json",
-    "prep-book1/chapters/chapter-03.md",
-  ],
-};
-
-function perKeySamples(): { pattern: string; paths: string[] }[] {
-  const out: { pattern: string; paths: string[] }[] = [];
-  for (const m of inRangeBody.matchAll(/\/\^[^/\n]+\$\//g)) {
-    out.push({ pattern: m[0], paths: [sampleForRegex(m[0])] });
-  }
-  // Two ways inSyncRange names a directory: a prefix its name varies inside
-  // (prep-<bookId>), and a fixed name (observations). Both need a sample,
-  // because what a directory holds is the one thing its name cannot say.
-  const dirs = [
-    ...inRangeBody.matchAll(/startsWith\("([^"]+)"\)/g),
-    ...inRangeBody.matchAll(/top === "([^"]+)"/g),
-  ];
-  for (const m of dirs) {
-    const prefix = m[1];
-    const paths = DIRECTORY_SAMPLES[prefix];
-    if (!paths) {
-      throw new Error(
-        `inSyncRange accepts everything under "${prefix}" and DIRECTORY_SAMPLES in ` +
-          "tests/platform/sync/pull-coverage.test.ts has no example of one. Add one, then " +
-          "decide whether it needs a pull route.",
-      );
-    }
-    out.push({ pattern: `${prefix}*`, paths });
-  }
-  return out;
-}
+// Every path the range is checked through: one row per kind, its own samples.
+// Derived from the table rather than written out beside it, so a kind that
+// changes shape takes its sample with it and a kind that is added arrives here
+// unclaimed until someone decides what hears about it.
+const SYNCED_SAMPLES: { kind: string; paths: readonly string[] }[] = PALACE.filter(
+  (row) => row.sync === "data",
+).map((row) => ({ kind: row.kind, paths: row.samples }));
 
 // Nothing below means anything if the samples are not really in range.
 test("the samples this test is built from are all in sync range", () => {
   expect(ROOT_FILES.size).toBeGreaterThan(10);
   for (const file of ROOT_FILES) expect(inSyncRange(file)).toBe(true);
 
-  const patterns = perKeySamples();
-  // Nine filename patterns and four directories, as of this writing; the
-  // count is asserted so a pattern that stops being found by the scan is
-  // noticed rather than quietly dropping its files from the check.
-  expect(patterns.length).toBe(13);
-  for (const { pattern, paths } of patterns) {
+  // Every root file is one of the samples, so the two halves of the check
+  // cannot come apart.
+  const sampled = new Set(SYNCED_SAMPLES.flatMap((s) => s.paths));
+  for (const file of ROOT_FILES) expect(sampled.has(file)).toBe(true);
+
+  expect(SYNCED_SAMPLES.length).toBeGreaterThan(ROOT_FILES.size);
+  for (const { kind, paths } of SYNCED_SAMPLES) {
+    expect(`${kind}: ${paths.length}`).not.toBe(`${kind}: 0`);
     for (const path of paths) {
-      expect(`${pattern} -> ${path}: ${inSyncRange(path)}`).toBe(`${pattern} -> ${path}: true`);
+      expect(`${kind} -> ${path}: ${inSyncRange(path)}`).toBe(`${kind} -> ${path}: true`);
     }
   }
 });
@@ -165,7 +108,7 @@ function claim(path: string): string | null {
 test("every synced file is claimed by a pull route or written down as having no state", () => {
   const unclaimed: string[] = [];
   for (const file of ROOT_FILES) if (!claim(file)) unclaimed.push(file);
-  for (const { paths } of perKeySamples()) {
+  for (const { paths } of SYNCED_SAMPLES) {
     for (const path of paths) if (!claim(path)) unclaimed.push(path);
   }
   if (unclaimed.length > 0) {
@@ -182,10 +125,7 @@ test("every synced file is claimed by a pull route or written down as having no 
 // The other direction: an allowlist entry that a route has since taken over, or
 // that names a file sync no longer carries, is a note nobody will re-read.
 test("no allowlist entry is stale", () => {
-  const inRange = [
-    ...ROOT_FILES,
-    ...perKeySamples().flatMap((p) => p.paths),
-  ];
+  const inRange = [...ROOT_FILES, ...SYNCED_SAMPLES.flatMap((p) => p.paths)];
   const stale: string[] = [];
   for (const key of Object.keys(NO_IN_MEMORY_STATE)) {
     const covered = inRange.filter((f) => f === key || f.startsWith(key));
