@@ -50,7 +50,7 @@ export const FIND_PAPER_PROMPT =
   "never repair a citation from memory.";
 
 export interface CitationToolDeps extends CitationDeps {
-  // Whether add_source is mounted this turn, which decides what a result tells the
+  // Whether ingest_url is mounted this turn, which decides what a result tells the
   // model it can do next with a paper.
   canIngest: boolean;
 }

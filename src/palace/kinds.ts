@@ -523,6 +523,7 @@ export const PALACE = [
     merge: "opaque",
     deleteWith: "book",
     gc: "never",
+    desk: true,
     note: "opaque today; it dies with a book only when every one of its materials was that book",
   },
   {
@@ -538,6 +539,7 @@ export const PALACE = [
     shape: { kind: "array", container: "segments", idField: "id" },
     deleteWith: "retell",
     gc: "never",
+    desk: true,
     note: "the segments are what two devices edit at once; the spine beside them is a wrapper key and merges as fields",
   },
   {

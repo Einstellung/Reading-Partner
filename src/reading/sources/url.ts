@@ -57,7 +57,7 @@ export interface UrlSource {
   slugBase: string;
 }
 
-// Read a pasted link. Throws on a non-https URL so the caller (add_source tool /
+// Read a pasted link. Throws on a non-https URL so the caller (ingest_url tool /
 // PrepPanel) can surface a clear rejection.
 export function resolveUrlSource(url: string): UrlSource {
   const trimmed = url.trim();

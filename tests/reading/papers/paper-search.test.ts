@@ -162,15 +162,15 @@ test("the rendered list carries the red line, the ids, and how to read one in fu
   expect(text).toContain("2007 · One Author, Two Author, Three Author et al. · PNAS · PubMed + OpenAlex");
   expect(text).toContain("doi:10.1073/pnas.123");
   expect(text).toContain("PMID:17553422");
-  expect(text).toContain("add_source");
+  expect(text).toContain("ingest_url");
 });
 
-test("without add_source the result never promises to fetch the paper", () => {
+test("without ingest_url the result never promises to fetch the paper", () => {
   const text = formatPaperSearch(
     { candidates: [candidate()], failures: [], asked: ["openalex"] },
     { query: "q", canIngest: false },
   );
-  expect(text).not.toContain("add_source");
+  expect(text).not.toContain("ingest_url");
   expect(text).toContain("give the reader the link");
 });
 

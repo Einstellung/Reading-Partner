@@ -200,7 +200,7 @@ export interface PreparedArticle {
   // The prep paper this article becomes, minted against the slugs already taken.
   mint(taken: Set<string>): PrepPaper;
   // What the pipeline's fetch stage returns for it, so the post-fetch bookkeeping
-  // (title, kind, page count) is the one add_source already goes through.
+  // (title, kind, page count) is the one ingest_url already goes through.
   fetched: FetchOutcome;
   // The same text as fetched.fulltext, for the caller to write into the fulltext
   // cache under the slug the paper got — that cache is where read_paper looks,

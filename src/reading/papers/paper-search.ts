@@ -54,7 +54,7 @@ export interface PaperCandidate {
   s2PaperId: string | null;
   venue: string | null;
   // Where to go next: an open-access PDF when the library named one, else a
-  // landing page. This is what add_source would ingest.
+  // landing page. This is what ingest_url would ingest.
   url: string | null;
   abstract: string;
   // How often the paper has been cited, when the library said. The ranking signal
@@ -101,7 +101,7 @@ export const DEFAULT_LIMIT = 8;
 export const MAX_LIMIT = 12;
 
 // Abstract kept per candidate: enough to tell whether the paper answers the
-// question, not enough to answer it from. Full text is add_source's job.
+// question, not enough to answer it from. Full text is ingest_url's job.
 export const ABSTRACT_CHARS = 420;
 
 // --- normalization ---
@@ -335,9 +335,9 @@ export function candidateBlock(
 
 export interface FormatOptions {
   query: string;
-  // Whether add_source is mounted in this conversation. When it is not, the model
+  // Whether ingest_url is mounted in this conversation. When it is not, the model
   // must not promise to read one of these in full — it can only hand over the
-  // link (the ingestion gate, docs/09: add_source needs a prep pipeline).
+  // link (the ingestion gate, docs/09: ingest_url needs a prep pipeline).
   canIngest: boolean;
 }
 
@@ -353,7 +353,7 @@ export function formatPaperSearch(result: PaperSearchResult, opts: FormatOptions
     parts.push(
       opts.canIngest
         ? "These are candidates, not full text. To read one properly, ingest its link with " +
-            "add_source and then read_paper it."
+            "ingest_url and then read_paper it."
         : "These are candidates, not full text, and this conversation cannot fetch a paper — " +
             "give the reader the link or DOI and let them open it.",
     );

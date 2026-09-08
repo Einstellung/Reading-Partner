@@ -91,7 +91,7 @@ test("a talk with nothing on it yet still assembles a prompt", () => {
 
 test("the turn mounts the five tools that write a talk, over the live outline", async () => {
   let outline = talk();
-  const turn = buildCoachTurn({
+  const turn = await buildCoachTurn({
     outline,
     settings,
     history: [{ role: "user", text: "I have just given this talk out loud — pass 1" }],
@@ -120,13 +120,13 @@ test("the turn mounts the five tools that write a talk, over the live outline", 
 
 // A conversation anchored on the outline collects every pass ever given, and a
 // pass is tens of KB. The one rung the ladder has is the history.
-test("a conversation too long for the window is trimmed rather than refused", () => {
+test("a conversation too long for the window is trimmed rather than refused", async () => {
   const long = "word ".repeat(20_000);
   const history = Array.from({ length: 12 }, (_, i) => ({
     role: (i % 2 === 0 ? "user" : "ai") as "user" | "ai",
     text: `${long} ${i}`,
   }));
-  const turn = buildCoachTurn({
+  const turn = await buildCoachTurn({
     outline: talk(),
     settings: { ...settings, defaultModelId: "claude-opus-4-5" },
     history,

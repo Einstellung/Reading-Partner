@@ -15,6 +15,8 @@ import { deskKindRegistered } from "../../src/desk";
 import { registerInfoDistillSource } from "../../src/info/companion/distill-source";
 import { distillSourceOf } from "../../src/memory/distill/sources";
 import { registerReadingDesk } from "../../src/reading/desk";
+import { registerRehearsalDesk } from "../../src/reading/rehearsal/desk";
+import { registerRetellDesk } from "../../src/reading/retell/desk";
 import { PALACE, resolvePalace, rowOf, rowsWhere, type PalaceKind } from "../../src/palace";
 
 // The shell registers the domains on the way up (useShellBootstrap.bootDomains);
@@ -91,6 +93,8 @@ test("the distilled kinds are the ones the passes already read", () => {
 // the real openers and not against a fixture.
 test("every kind marked as desk material has an opener registered", () => {
   registerReadingDesk();
+  registerRetellDesk();
+  registerRehearsalDesk();
   const unopenable = rowsWhere((r) => r.desk === true)
     .map((r) => r.deskKind ?? r.kind)
     .filter((kind) => !deskKindRegistered(kind));

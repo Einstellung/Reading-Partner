@@ -103,7 +103,7 @@ export interface ReadingContext {
 // call a tool that answers "unknown tool" — and one empty call is enough to
 // teach it to stop reaching for any of them.
 //
-// Absent on purpose: add_source, find_paper, research_literature, the
+// Absent on purpose: ingest_url, find_paper, research_literature, the
 // saved-article pair and the observation tools. Each carries its own paragraph
 // wherever it is mounted, and a second mention here would be a second place to
 // keep true.

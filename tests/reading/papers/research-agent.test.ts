@@ -164,11 +164,11 @@ test("the three literature tools are the sub-agent's own set", () => {
   ]);
 });
 
-// add_source belongs to the reader's turn; the sub-agent cannot reach it, so a result
+// ingest_url belongs to the reader's turn; the sub-agent cannot reach it, so a result
 // telling this run to ingest a paper would point at a tool that is not mounted.
 test("the sub-agent's tools never offer to ingest a paper", async () => {
   const search = agent().tools.find((t) => t.name === "search_papers")!;
-  expect(await search.execute({ query: "cortical scaling" })).not.toContain("add_source");
+  expect(await search.execute({ query: "cortical scaling" })).not.toContain("ingest_url");
 });
 
 test("the brief is capped well under the capability's default", () => {

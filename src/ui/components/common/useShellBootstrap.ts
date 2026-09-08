@@ -34,6 +34,8 @@ import {
 import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai";
 import { registerInfoDistillSource } from "../../../info/companion/distill-source";
 import { registerReadingDesk } from "../../../reading/desk";
+import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
+import { registerRetellDesk } from "../../../reading/retell/desk";
 import type { SyncHealthReport } from "../../../platform/sync";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";
@@ -171,6 +173,8 @@ export function bootDomains(): void {
   booted = true;
   registerInfoDistillSource();
   registerReadingDesk();
+  registerRetellDesk();
+  registerRehearsalDesk();
 }
 
 export interface ShellBootstrap {

@@ -9,6 +9,7 @@ import type { Rung } from "../../budget";
 
 export type RetellReductionId =
   | "figure-catalog"
+  | "reader-statements"
   | "observation-trim"
   | "prep-notes-trim"
   | "retell-notes"
@@ -19,6 +20,12 @@ export type RetellReductionId =
 export const RETELL_LADDER: readonly Rung<RetellReductionId>[] = [
   // tier 1: redundancy.
   { id: "figure-catalog" },
+  // The standing statements about the reader, which the retell reads for the
+  // first time now that it is assembled like every other turn (docs/61). Same
+  // place as on the reading ladder: they are a handful of lines, they are about
+  // the reader rather than about the material, and a retell that gives them up
+  // still has the material it is a retell of.
+  { id: "reader-statements" },
   { id: "observation-trim" },
   // tier 2: gone from the prompt, still reachable by a tool.
   //

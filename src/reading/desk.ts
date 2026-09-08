@@ -106,7 +106,7 @@ import {
   type TableChapter,
 } from "./chapters";
 import { buildClassroomTools } from "./prep/papers/tools";
-import { ADD_SOURCE_PROMPT, buildSourceTools } from "./prep/papers/source-tool";
+import { INGEST_URL_PROMPT, buildSourceTools } from "./prep/papers/source-tool";
 import {
   buildSavedArticleTools,
   prepareSavedArticle,
@@ -493,7 +493,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   }));
 
   // Link ingestion (docs/09): when a prep pipeline exists for this book, the
-  // model can ingest a user-pasted URL with add_source and read it with the
+  // model can ingest a user-pasted URL with ingest_url and read it with the
   // paper tools, on any thread — "compare this link with ch.3" is a question a
   // marked passage can raise as easily as the book-level thread can.
   const livePipeline = getPipeline();
@@ -681,7 +681,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       // came out in before the desk existed is the order the provider's cache
       // still remembers.
       toolPrompts: [
-        ...(canIngestUrl ? [ADD_SOURCE_PROMPT] : []),
+        ...(canIngestUrl ? [INGEST_URL_PROMPT] : []),
         ...view.toolPrompts,
         FIND_PAPER_PROMPT,
         RESEARCH_PROMPT,

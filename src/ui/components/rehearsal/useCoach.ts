@@ -136,7 +136,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
     void (async () => {
       const stored = await openCoachThread(outlineId).catch((): StoredMessage[] => []);
       if (controller.signal.aborted) return;
-      const turn = buildCoachTurn({
+      const turn = await buildCoachTurn({
         outline: current,
         topicName: topicNameRef.current,
         settings: s,

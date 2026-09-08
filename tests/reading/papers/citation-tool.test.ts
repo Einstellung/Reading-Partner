@@ -140,12 +140,12 @@ test("a seed matched only by title says so above the results", async () => {
   expect(text).toContain("Seed matched by title, not by identifier");
 });
 
-test("without add_source the results never promise to fetch a paper", async () => {
+test("without ingest_url the results never promise to fetch a paper", async () => {
   const { find } = tools(
     { "api.openalex.org": () => jsonResponse(OA_SEED), "api.semanticscholar.org": () => jsonResponse(S2_SEED) },
     false,
   );
-  expect(await find.execute({ paper: "10.1073/pnas.0611396104" })).not.toContain("add_source");
+  expect(await find.execute({ paper: "10.1073/pnas.0611396104" })).not.toContain("ingest_url");
 });
 
 // find_paper is the one literature tool left on the reader's own turn, and the

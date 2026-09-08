@@ -124,8 +124,8 @@ test("partial results survive a failing library", async () => {
   expect(out).toContain("Did not answer: OpenAlex");
 });
 
-test("with no ingestion path the result says so instead of offering add_source", async () => {
+test("with no ingestion path the result says so instead of offering ingest_url", async () => {
   const t = tool({}, undefined, false);
   const out = (await t.execute({ query: "x" })) as string;
-  expect(out).not.toContain("add_source");
+  expect(out).not.toContain("ingest_url");
 });

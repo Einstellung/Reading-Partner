@@ -37,7 +37,7 @@ export {
 export { buildClassroomTools } from "./tools";
 export {
   buildSourceTools,
-  ADD_SOURCE_PROMPT,
+  INGEST_URL_PROMPT,
   type SourceIngestor,
   type IngestResult,
 } from "./source-tool";
