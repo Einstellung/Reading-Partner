@@ -58,8 +58,8 @@ test("the files the app writes are classified by what they hold", () => {
   // device comes back from the other unless its tombstone travels and unions.
   expect(strategyFor("observations/deleted-observations.jsonl")).toBe("records");
   expect(strategyFor("statements.json")).toBe("records");
-  // Named for the device that writes it, so it is matched by pattern rather
-  // than by an entry in RECORD_FILES.
+  // Named for the device that writes it, so its row matches a pattern rather
+  // than a fixed name.
   expect(strategyFor("memory-usage-device1.jsonl")).toBe("records");
   expect(strategyFor("settings.json")).toBe("fields");
   // One device writes each of these and nobody else touches it, so there is

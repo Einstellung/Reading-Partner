@@ -99,7 +99,8 @@ export interface PalaceRow {
   sync: SyncChannel;
   // How sync merges two edits of it. Present exactly when sync is "data".
   merge?: MergeStrategy;
-  // When merge is "records": where the records sit and what identifies one.
+  // When merge is "records": where the records sit and what identifies one,
+  // read off the writer rather than guessed.
   shape?: RecordShape;
   fieldGroups?: FieldGroups;
   // A tree comparison may never conclude this path was deleted (docs/59 §8.8):
@@ -535,6 +536,7 @@ export const PALACE = [
     shape: { kind: "array", container: "segments", idField: "id" },
     deleteWith: "retell",
     gc: "never",
+    note: "the segments are what two devices edit at once; the spine beside them is a wrapper key and merges as fields",
   },
   {
     kind: "rehearsal",
@@ -575,6 +577,7 @@ export const PALACE = [
     shape: { kind: "array", container: "runs", idField: "id" },
     deleteWith: "rehearsal",
     gc: "never",
+    note: "a row is a pass that happened and nothing edits one, so two devices that each gave the talk a turn keep both; it could only be records once the transcripts moved out of it",
   },
   {
     kind: "rehearsal-run",
@@ -744,6 +747,7 @@ export const PALACE = [
     neverInferDelete: true,
     deleteWith: "never",
     gc: "never",
+    note: "two devices offline both add to it — a dream pass here, something the reader said there — and opaque would park one of the two in a conflict copy nobody opens",
   },
   {
     kind: "memory-usage",
@@ -873,6 +877,7 @@ export const PALACE = [
     shape: { kind: "map", container: "marks", idField: null },
     deleteWith: "never",
     gc: "never",
+    note: "what the collector has already put in a briefing (docs/35): not derived, and it travels so a machine taking over collection does not send the same item twice",
   },
   {
     kind: "info-collector",

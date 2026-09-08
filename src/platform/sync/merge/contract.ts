@@ -7,6 +7,7 @@
 // must land on the same bytes, so nothing may depend on which side happens to
 // be "local", on a wall clock, or on the order the two devices sync in.
 
+import { resolvePalace, rowOf } from "../../../palace";
 import type { FieldGroups, MergeStrategy } from "../../../palace/merge-types";
 
 // How sync merges two edits of one file, and which of a file's keys the fields
@@ -57,107 +58,55 @@ export interface MergeOutput {
 
 export type MergeFile = (input: MergeInput) => MergeOutput;
 
-const RECORD_FILES = new Set([
-  "library.json",
-  "topics.json",
-  "reading-state.json",
-  "info-sources.json",
-  "info-feedback.jsonl",
-  "saved-articles.json",
-  // What the collector has already put in a briefing (docs/35). Not derived —
-  // losing it means pushing the same item twice — and it travels so that a
-  // machine taking over collection knows what its predecessor already sent.
-  "info-pool-marks.json",
-  // One line per deleted observation, in observations/
-  // (memory/observations/store.ts). Records because a deletion only survives by
-  // travelling as a record: this module removes nothing at file level, so the
-  // device that still holds the entry file republishes it and the observation
-  // comes back. Union across devices, and a tombstone is never dropped.
-  "deleted-observations.jsonl",
-  // One line per deleted book, at the AppData root
-  // (platform/app/deleted-books.ts). Records for the same reason the line above
-  // is: the deletion only survives by travelling as a record, and the union
-  // never drops a tombstone.
-  "deleted-books.jsonl",
-  // Statements about the reader (memory/statements/store.ts). Records because
-  // two devices offline both add to one file: a dream pass on the desktop and
-  // something the reader said on the iPad are two additions, and opaque would
-  // park one of them in a conflict copy nobody opens.
-  "statements.json",
-]);
-
-// Keys of one file that only mean anything together. `strategyFor` says how a
-// file is merged; this says which of that file's keys the fields strategy is
-// forbidden to settle one at a time. A member is named by the same dotted path
-// the merge journals a key under (`mergeObject`'s prefix), so a group nested
-// inside an object is expressible; the one group there is sits at the top
-// level.
+// Which of a file's keys the fields strategy is forbidden to settle one at a
+// time. The groups are declared on the rows (palace/kinds.ts); this is where
+// the callers have always reached for the type.
 //
-// A group belongs here only when splitting it produces a state that cannot
-// exist, not merely an unexpected one. sttApiBase and sttModel are the two
-// halves of one endpoint and are deliberately absent: settings.ts says they
-// sync freely, and a base from one device with a model name from the other is
-// a configuration, not a contradiction.
+// sttApiBase and sttModel are the two halves of one endpoint and deliberately
+// not a group: settings.ts says they sync freely, and a base from one device
+// with a model name from the other is a configuration, not a contradiction.
 export type { FieldGroups };
-
-// A model id is only meaningful under its own provider — "qwen-3-235b-a22b"
-// says nothing to DeepSeek. Decided a key at a time, a device on DeepSeek
-// merged against one on Cerebras lands on a pair neither device ever held, and
-// every call then throws `unknown model 'X' for DeepSeek` out of resolveCall
-// (pitfall 237).
-const SETTINGS_GROUPS: FieldGroups = [["defaultProviderId", "defaultModelId"]];
 
 const NO_GROUPS: FieldGroups = [];
 
+// The one group there is, taken off the settings row rather than written out
+// again here: a model id is only meaningful under its own provider, and a
+// device on DeepSeek merged key by key against one on Cerebras lands on a pair
+// neither device ever held (pitfall 237).
+
+const SETTINGS_GROUPS: FieldGroups = rowOf("settings").fieldGroups ?? NO_GROUPS;
+
 export function fieldGroupsFor(path: string): FieldGroups {
+  const row = resolvePalace(path)?.row;
+  if (row) return row.fieldGroups ?? NO_GROUPS;
+  // A settings file somewhere the table has never heard of still gets the
+  // group: the tail of strategyFor merges it as fields, and fields without the
+  // group is exactly the split the group exists to prevent.
   return path.slice(path.lastIndexOf("/") + 1) === "settings.json" ? SETTINGS_GROUPS : NO_GROUPS;
 }
 
+/**
+ * How sync merges two edits of this file.
+ *
+ * The answer is the palace row's (palace/kinds.ts), where every kind of file
+ * the app writes is described once. The strategy, the record shape and the sync
+ * range used to be three hand-written lists that agreed only by accident. A
+ * file the table claims but does not sync carries no strategy at all and falls
+ * through to the same tail as a file the table has never heard of.
+ *
+ * The tail is for paths from older builds and from directories no longer in
+ * range: markdown is prose, a settings or plan state is fields, a tombstone log
+ * is records wherever it sits — opaque would park one device's whole list in a
+ * conflict copy and undo every deletion in it (pitfall 208) — and anything else
+ * keeps ours.
+ */
 export function strategyFor(path: string): MergeStrategy {
-  // What the reader said on one pass over a talk (docs/44),
-  // runs/<rehearsalId>/<runId>.json. Judged by where it sits and not by its
-  // name, because its name is a run id: an id that happened to read as
-  // "state.json" would otherwise be merged field by field. Opaque, and never
-  // exercised — the file is written once, under an id nothing else will ever
-  // use, so the same path on two devices is the same pass.
-  if (path.startsWith("runs/")) return "opaque";
-  // How much of each topic has already been distilled, observations/meta.json
-  // (memory/observations/store.ts). Qualified by its directory like the runs
-  // above, because "meta.json" is a name anything could take and the rule this
-  // strategy applies — lower number wins — is true of this file's numbers and
-  // not of numbers in general. It was falling through to opaque: three losing
-  // copies are parked in the owner's memory-b3a9f89c-* directory, holding 1, 14
-  // and 9 message cursors that the file in use never got, and nothing in src/
-  // can even see them (store.ts matches only entry and index conflict copies).
-  if (path === "observations/meta.json") return "cursors";
+  const strategy = resolvePalace(path)?.row.merge;
+  if (strategy) return strategy;
   const name = path.slice(path.lastIndexOf("/") + 1);
   if (name.endsWith(".md")) return "prose";
-  if (RECORD_FILES.has(name)) return "records";
+  if (name === "deleted-observations.jsonl") return "records";
   if (name === "settings.json" || name === "state.json") return "fields";
-  if (/^annotations-.+\.json$/.test(name)) return "records";
-  // A talk's outline (docs/44). The segments are identified records — two
-  // devices working on different parts of the same talk must keep both, and
-  // opaque would park one whole file in a conflict copy nobody opens. The spine
-  // beside them is fields, which is what a record file's wrapper keys already
-  // get (writeCollection, records.ts), so one file covers both layers.
-  if (/^outline-.+\.json$/.test(name)) return "records";
-  if (/^threads-.+\.json$/.test(name)) return "records";
-  // What memory this device showed, cited or rejected (memory/usage/log.ts). Named
-  // for the device that writes it, so it cannot be an entry in RECORD_FILES the
-  // way the other logs are — the name is only known at runtime. Records, like
-  // every other append-only log here: the line is its own identity and the
-  // union across devices is the whole history.
-  if (/^memory-usage-.+\.jsonl$/.test(name)) return "records";
-  // A rehearsal's index of passes (docs/43): identified rows in a `runs` array,
-  // and a row is a pass that happened — nothing ever edits one. Records, so two
-  // devices that each gave the talk a turn keep both passes; opaque would park
-  // one of them in a conflict copy nobody opens. It could only be records once
-  // the transcripts moved out: merging row by row is cheap, merging thirty KB of
-  // talk per row was not the shape to grow into.
-  if (/^runs-rehearsal-.+\.json$/.test(name)) return "records";
-  // article-bodies/<hash>.json falls through here on purpose. A body file is
-  // named after the hash of its own bytes, so two devices holding the same name
-  // hold the same content and there is no conflict to resolve; keeping ours is
-  // the right answer and the conflict copy never gets written.
   return "opaque";
 }
+

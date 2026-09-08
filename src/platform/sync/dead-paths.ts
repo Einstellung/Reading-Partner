@@ -24,30 +24,48 @@
 // (reading/prep/papers/store.ts, reading/prep/chapters/store.ts), which is the
 // book id, so prep-<bookId>/ covers both kinds of material.
 //
-// Pure: no IO, no imports. Unit-tested directly
+// Both answers are folds over the palace (palace/kinds.ts) rather than a list
+// of shapes written out here: a row says what a file's deletion rides on, and
+// the two that matter are that it rides on the book and that the id in its name
+// is the book id. A retell rides on the book too, but by a rule about its
+// materials rather than by its name (reading/delete/pick.ts), so it is not a
+// path anything can derive from a bookId and the second condition leaves it
+// out.
+//
+// Pure: no IO, and the only import is the table. Unit-tested directly
 // (tests/platform/sync/dead-paths.test.ts).
+
+import { resolvePalace, rowsWhere, type PalaceRow } from "../../palace";
+
+function namedForABook(row: PalaceRow): boolean {
+  return row.deleteWith === "book" && row.id === "bookId";
+}
 
 /** The paths one deleted book owns, as prefixes and exact names. */
 export function deadPathsFor(bookId: string): { files: string[]; dirs: string[] } {
-  return {
-    files: [`annotations-${bookId}.json`, `threads-${bookId}.json`],
-    dirs: [`prep-${bookId}/`],
-  };
+  const files: string[] = [];
+  const dirs: string[] = [];
+  // Only the synced half: this is what a pass takes off every device, and a
+  // file the reconcile loop never sees has no business in a plan. The local
+  // caches are deleted by the domain side (reading/delete/pick.ts).
+  for (const row of rowsWhere((r) => namedForABook(r) && r.sync === "data")) {
+    const path = row.pathFor?.(bookId);
+    if (path === undefined) continue;
+    const into = path.endsWith("/") ? dirs : files;
+    if (!into.includes(path)) into.push(path);
+  }
+  return { files, dirs };
 }
-
-const ANNOTATIONS = /^annotations-(.+)\.json$/;
-const THREADS = /^threads-(.+)\.json$/;
-const PREP = /^prep-([^/]+)\//;
 
 /**
  * Whether this AppData-relative path is a deleted book's. Called for every path
- * in a pass's plan, so it matches the path against the shapes rather than
- * building a set of paths per deleted book: the tombstone list grows for the
- * life of the install and most of what it names is not on this device.
+ * in a pass's plan, so it resolves the path rather than building a set of paths
+ * per deleted book: the tombstone list grows for the life of the install and
+ * most of what it names is not on this device.
  */
 export function isDeadPath(path: string, deadBooks: ReadonlySet<string>): boolean {
   if (deadBooks.size === 0) return false;
-  const owner =
-    ANNOTATIONS.exec(path)?.[1] ?? THREADS.exec(path)?.[1] ?? PREP.exec(path)?.[1] ?? null;
-  return owner !== null && deadBooks.has(owner);
+  const hit = resolvePalace(path);
+  if (!hit || hit.id === null || !namedForABook(hit.row)) return false;
+  return deadBooks.has(hit.id);
 }

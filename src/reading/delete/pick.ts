@@ -8,11 +8,7 @@
 //
 // Pure by construction: the inputs are the records the caller already read.
 
-import { deadPathsFor } from "../../platform/sync/dead-paths";
-import { coverFailurePath, coverImagePath, coverMetaPath } from "../cover-cache";
-import { figuresFile } from "../figures/store";
-import { fulltextFile } from "../../fulltext/store";
-import { libraryPdfPath } from "../../platform/app/library";
+import { rowOf, type PalaceKind } from "../../palace";
 import type { FileRef, Topic } from "../../platform/app/topics";
 import type { Observation } from "../../memory/observations/types";
 import type { Statement } from "../../memory/statements/types";
@@ -87,36 +83,54 @@ export function isLastReferenceToBook(
   return true;
 }
 
+// Every kind of file named for a book id, in the order deleteBook removes them:
+// the marks, threads and prep the engine purges on every device off the
+// tombstone, then the caches, the blob and the covers, which only ever existed
+// on this one. The paths themselves
+// are the table's (palace/kinds.ts) — the shapes are written down once, beside
+// the sync range and the merge strategy that read them — and a book-owned kind
+// missing from this list fails the guard in tests/palace/derived.test.ts.
+const OWNED_BY_A_BOOK: readonly PalaceKind[] = [
+  "annotations",
+  "reading-thread",
+  "prep-state",
+  "prep-note",
+  "prep-cache",
+  "fulltext",
+  "figures",
+  "book-pdf",
+  "cover-image",
+  "cover-meta",
+  "cover-failure",
+];
+
 /**
  * Everything of this book's that is a file on this device, as AppData-relative
  * paths.
  *
- * The synced half comes from dead-paths.ts rather than being written out again:
- * the engine purges exactly those paths on every device off the tombstone, and
- * two lists of the same paths would drift. This device deletes its own copies
- * now so the shelf is right before the next pass. The rest — the full-text and
- * figure caches and the PDF blob — is out of sync range entirely and only ever
- * existed here. prep-<bookId>/ goes as a directory, which is what takes its
- * pdf/ sub-cache with it.
+ * The synced half is deleted here as well as by the engine: the tombstone takes
+ * those paths off every device on the next pass, and this device deletes its
+ * own copies now so the shelf is right before that pass runs. prep-<bookId>/
+ * goes as a directory, which is what takes its pdf/ sub-cache with it.
  *
  * The three cover files go too. Leaving them would be a picture of a deleted
  * book on disk, and — because a cover is filed under the book id — the same
  * picture again the day the reader imports the same PDF.
  */
 export function deadLocalPathsFor(bookId: string): { files: string[]; dirs: string[] } {
-  const synced = deadPathsFor(bookId);
-  return {
-    files: [
-      ...synced.files,
-      fulltextFile(bookId),
-      figuresFile(bookId),
-      libraryPdfPath(bookId),
-      coverImagePath(bookId),
-      coverMetaPath(bookId),
-      coverFailurePath(bookId),
-    ],
-    // Without the trailing slash the sync range wants: these go to a directory
-    // remove, not to a path matcher.
-    dirs: synced.dirs.map((d) => d.replace(/\/$/, "")),
-  };
+  const files: string[] = [];
+  const dirs: string[] = [];
+  for (const kind of OWNED_BY_A_BOOK) {
+    const path = rowOf(kind).pathFor?.(bookId);
+    if (path === undefined) continue;
+    if (path.endsWith("/")) {
+      // Without the trailing slash the sync range wants: these go to a
+      // directory remove, not to a path matcher.
+      const dir = path.slice(0, -1);
+      if (!dirs.includes(dir)) dirs.push(dir);
+    } else if (!files.includes(path)) {
+      files.push(path);
+    }
+  }
+  return { files, dirs };
 }
