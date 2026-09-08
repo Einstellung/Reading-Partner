@@ -448,7 +448,7 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
     if (fetched.arxivId) paper.arxivId = fetched.arxivId;
     paper.abstract = fetched.abstract || paper.abstract;
     // Link ingestion: refine the provisional title/kind and set the page count
-    // now (a pre-extracted full text carries it), so add_source can report the
+    // now (a pre-extracted full text carries it), so ingest_url can report the
     // source the moment the fetch stage finishes — before digestion.
     if (fetched.title) paper.title = fetched.title;
     if (fetched.kind) paper.kind = fetched.kind;

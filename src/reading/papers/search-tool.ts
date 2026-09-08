@@ -52,7 +52,7 @@ export function parseLibraries(raw: unknown): PaperLibrary[] | undefined {
 
 export interface PaperSearchToolDeps {
   search: PaperSearchFn;
-  // Whether add_source is mounted in this turn, which decides what the result text
+  // Whether ingest_url is mounted in this turn, which decides what the result text
   // tells the model to do next with a paper it likes.
   canIngest: boolean;
 }

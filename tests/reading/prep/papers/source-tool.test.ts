@@ -1,4 +1,4 @@
-// Unit tests for the add_source chat tool (src/reading/prep/source-tool.ts).
+// Unit tests for the ingest_url chat tool (src/reading/prep/source-tool.ts).
 // The pipeline work is a fake ingestor, so there is no network/AI. Run: bun test.
 
 import { expect, test } from "bun:test";

@@ -13,6 +13,7 @@ const FITS_AT = WINDOW - PI_CONTEXT_SAFETY_TOKENS - 4096;
 
 const EVEN: Record<RetellReductionId, number> = {
   "figure-catalog": 5_000,
+  "reader-statements": 5_000,
   "observation-trim": 5_000,
   "prep-notes-trim": 5_000,
   "retell-notes": 5_000,
@@ -35,6 +36,7 @@ function plan(used: number) {
 test("the retell ladder's order and its wording are pinned", () => {
   expect(RETELL_LADDER.map((r) => [r.id, r.notice ?? ""])).toEqual([
     ["figure-catalog", ""],
+    ["reader-statements", ""],
     ["observation-trim", ""],
     ["prep-notes-trim", "some of my notes on the reference papers were left out to make room"],
     ["retell-notes", ""],
@@ -52,7 +54,7 @@ test("the retell ladder's order and its wording are pinned", () => {
 // prompt naming every slug, and read_note hands any of them back whole. Said out
 // loud anyway: which papers the retell was run against is the reader's business.
 test("the papers' notes go first of tier 2, and the reader is told", () => {
-  const p = plan(FITS_AT + 11_000);
+  const p = plan(FITS_AT + 16_000);
   expect(p.apply[p.apply.length - 1]).toBe("prep-notes-trim");
   expect(p.apply).not.toContain("retell-notes");
   expect(p.notice).toBe("Note: some of my notes on the reference papers were left out to make room.");
@@ -62,7 +64,7 @@ test("the papers' notes go first of tier 2, and the reader is told", () => {
 // read_chapter_note fetches it straight back, so it goes without a word, and it
 // goes before the results the model asked for itself.
 test("the chapter note goes silently, ahead of the tool results", () => {
-  const p = plan(FITS_AT + 16_000);
+  const p = plan(FITS_AT + 21_000);
   expect(p.apply[p.apply.length - 1]).toBe("retell-notes");
   expect(p.apply).not.toContain("tool-result-stubs");
 });
@@ -70,7 +72,7 @@ test("the chapter note goes silently, ahead of the tool results", () => {
 // The reader's own marks are evidence, so shortening them is said out loud — and
 // the line says how to get them back, because read_annotations really can.
 test("shortening the reader's marks is told to the reader", () => {
-  const p = plan(FITS_AT + 26_000);
+  const p = plan(FITS_AT + 31_000);
   expect(p.apply[p.apply.length - 1]).toBe("retell-marks");
   expect(p.apply).not.toContain("history-trim");
   expect(p.notice).toBe(
@@ -80,7 +82,7 @@ test("shortening the reader's marks is told to the reader", () => {
 });
 
 test("history is the last thing given up here too", () => {
-  const p = plan(FITS_AT + 31_000);
+  const p = plan(FITS_AT + 36_000);
   expect(p.apply[p.apply.length - 1]).toBe("history-trim");
   expect(p.notice).toBe(
     "Note: some of my notes on the reference papers were left out to make room; " +
@@ -96,6 +98,7 @@ test("the rungs that are not priced like the rest say so on the table", () => {
   const priced = Object.fromEntries(RETELL_LADDER.map((r) => [r.id, r.price ?? "prompt"]));
   expect(priced).toEqual({
     "figure-catalog": "prompt",
+    "reader-statements": "prompt",
     "observation-trim": "prompt",
     "prep-notes-trim": "bulk",
     "retell-notes": "bulk",

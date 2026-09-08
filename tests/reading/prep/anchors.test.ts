@@ -187,7 +187,7 @@ test("a well-shaped citation the prep list does not know stays plain text", () =
   }
 });
 
-// A paper whose title was Chinese gets a Chinese slug, and add_source tells the
+// A paper whose title was Chinese gets a Chinese slug, and ingest_url tells the
 // model to cite exactly that. There is no charset it could be filtered by.
 test("a slug in the list is citable whatever script it is in", () => {
   const slugs = new Set(["注意力就是你所需要的一切"]);

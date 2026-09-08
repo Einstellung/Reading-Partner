@@ -548,7 +548,7 @@ export function formatWalk(result: WalkResult, opts: WalkFormatOptions): string 
   }
   parts.push(
     opts.canIngest
-      ? "To read one of these properly, ingest its link with add_source and then read_paper it."
+      ? "To read one of these properly, ingest its link with ingest_url and then read_paper it."
       : "This conversation cannot fetch a paper — give the reader the link or DOI.",
   );
   if (failures.length > 0) {

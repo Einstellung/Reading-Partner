@@ -134,7 +134,7 @@ export interface ResearchAgentDeps extends CitationDeps {
 
 // The three literature tools, as the sub-agent's own set.
 //
-// canIngest is false and stays false: add_source belongs to the reader's turn, the
+// canIngest is false and stays false: ingest_url belongs to the reader's turn, the
 // sub-agent has no way to reach it, and a result text telling this run it can ingest a
 // paper would be telling it to call a tool that is not there. The brief carries links,
 // so the companion can ingest a paper the reader wants.

@@ -1,74 +1,38 @@
-// Assembly of one turn of the conversation a talk is coached in (docs/44).
+// One turn of the conversation a talk is coached in (docs/44), as the rehearsal
+// view asks for it.
 //
-// The counterpart of reading/retell/turn.ts and much smaller, because the
-// material is smaller: a retell is assembled out of whole books, and this is
-// assembled out of the outline and what the reader just said to it. There is no
-// figure catalog, no chapter notes and no marks — the pass is the evidence.
-//
-// The conversation is anchored on the outline and not on a rehearsal or a pass
-// (docs/43, "对话锚在 PPT 上", with the anchor now the outline): one thread
-// spans every pass over this talk, so the second time the reader gives it the
-// coach has the first pass and everything said about it still in front of it.
-// Three passes in three conversations would be three strangers, and coming back
-// to give it again is the whole of what a rehearsal is for.
+// The assembly itself is no longer here. What the talk contributes to a call is
+// reading/rehearsal/desk.ts, what the brain contributes is src/ai/assemble, and
+// putting the two together is one function every domain now shares (docs/61).
+// This file is what is left of the old entry point.
 //
 // Pure assembly plus reads. It never touches React state and never starts the
 // stream; the caller owns runAgentTurn.
 
 import type { AgentTool } from "../../ai/agent";
-import { toPiMessages } from "../../ai/providers";
-import { fitToBudget, type Rung } from "../../budget";
-import { languageInstruction, type Settings } from "../../platform/app/settings";
-import { configuredModel, HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../turn";
+import { assembleTurn } from "../../ai/assemble";
+import { deskKindRegistered, openDesk, type DeskEnv } from "../../desk";
+import type { Settings } from "../../platform/app/settings";
+import { talkThreadKey } from "../talk";
 import {
-  buildArrangeTools,
-  type TalkArrangementCardData,
-  type TalkOutline,
-} from "../talk";
-import { buildCoachSystemPrompt } from "./coach";
+  registerRehearsalDesk,
+  OUTLINE_KIND,
+  type CoachTurnMessage,
+  type OutlineDeskRef,
+} from "./desk";
 
-// What a coach turn gives up when it does not fit the model's context window.
-// One rung, and it is the last resort on every other ladder: a pass is tens of
-// KB of transcript and several of them add up, but the outline is what every
-// reply is about and the instructions are what stop the reply being a rubric,
-// so neither can go.
-export type CoachReductionId = "history-trim";
+// The coach's own vocabulary, still reached through this module: every caller
+// has always imported these from here.
+export {
+  COACH_LADDER,
+  type CoachReductionId,
+  type CoachTalkAccess,
+  type CoachTurnMessage,
+  type OutlineDeskRef,
+} from "./desk";
 
-export const COACH_LADDER: readonly Rung<CoachReductionId>[] = [
-  {
-    id: "history-trim",
-    price: "messages",
-    notice: "earlier passes over this talk were left out to make room",
-  },
-];
-
-export interface CoachTurnMessage {
-  role: "user" | "ai";
-  text: string;
-}
-
-// How a turn reaches the outline: two calls rather than the outline itself, for
-// the same reason the retell's access is (reading/retell/turn.ts) — the tools
-// write during the turn, so what they work on has to be the file as it stands.
-export interface CoachTalkAccess {
-  read(): Promise<TalkOutline | null>;
-  edit(change: (outline: TalkOutline) => TalkOutline): Promise<TalkOutline | null>;
-}
-
-export interface CoachTurnInput {
-  // The talk as it was when the turn was assembled, for the prompt. The tools
-  // read it again themselves.
-  outline: TalkOutline;
-  topicName?: string;
+export interface CoachTurnInput extends OutlineDeskRef {
   settings: Settings;
-  // The conversation so far, oldest first, with the passes in it as the reader's
-  // own messages (handoff.ts).
-  history: CoachTurnMessage[];
-  talk: CoachTalkAccess;
-  // Raised when the coach writes to the outline, so the shell can put the card
-  // in the conversation. Absent = the write still happens, it just is not shown.
-  onCard?(card: TalkArrangementCardData): void;
-  now?(): number;
 }
 
 export interface CoachTurn {
@@ -83,55 +47,32 @@ export interface CoachTurn {
   refusal: string;
 }
 
-export function buildCoachTurn(input: CoachTurnInput): CoachTurn {
-  const { outline, topicName, settings: s, history, talk, onCard, now } = input;
-
-  // The five that write a talk (reading/talk/tools.ts), the same five the
-  // arrangement uses. What comes out of a pass is a change to the outline
-  // (docs/44), so the coach has to be able to make one.
-  const tools = buildArrangeTools({
-    readOutline: () => talk.read(),
-    editOutline: (change) => talk.edit(change),
-    onCard,
-    now,
-  });
-
-  function composePrompt(): string {
-    let prompt = buildCoachSystemPrompt({ outline, topicName });
-    const lang = languageInstruction(s.aiLanguage);
-    if (lang) prompt += "\n\n" + lang;
-    return prompt;
-  }
-
-  function composeMessages(dropped: ReadonlySet<CoachReductionId>): CoachTurnMessage[] {
-    const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
-    return history.length > keep ? history.slice(history.length - keep) : history;
-  }
-
-  const model = configuredModel(s);
-  if (!model) {
-    return {
-      systemPrompt: composePrompt(),
-      tools,
-      messages: composeMessages(new Set()),
-      notice: "",
-      refusal: "",
-    };
-  }
-  const fitted = fitToBudget<CoachReductionId, CoachTurnMessage>({
-    model,
-    tools,
-    composePrompt,
-    composeMessages,
-    toPi: toPiMessages,
-    rungs: COACH_LADDER,
-    purpose: "chat",
-  });
+export async function buildCoachTurn(input: CoachTurnInput): Promise<CoachTurn> {
+  // The shell registers the rehearsal's opener when it boots
+  // (useShellBootstrap); a turn assembled without one registers it on the way in
+  // rather than failing on a desk this module owns anyway.
+  if (!deskKindRegistered(OUTLINE_KIND)) registerRehearsalDesk();
+  const { settings, ...outlineRef } = input;
+  const env: DeskEnv = {
+    settings,
+    // No topic scope: the coach hears a pass and edits the talk, and nothing
+    // here writes an observation about a book. Naming the outline's topic would
+    // mount the observation tools on a conversation that has no reading in it.
+    topic: { id: null, name: input.topicName ?? "" },
+    // A talk has exactly one conversation, and its id is the outline's
+    // (reading/talk/store.ts writes it to threads-talk-<id>.json).
+    thread: { key: talkThreadKey(input.outline.id), id: input.outline.id },
+  };
+  const desk = await openDesk([{ kind: OUTLINE_KIND, ref: outlineRef }], env);
+  const assembled = await assembleTurn({ desk });
+  // The assembly answers null only on an aborted signal, and no signal rides a
+  // coach turn: the view drops the reply rather than the assembly.
+  if (!assembled) throw new Error("coach: the assembly abandoned a turn that carries no signal");
   return {
-    systemPrompt: fitted.systemPrompt,
-    tools,
-    messages: fitted.messages,
-    notice: fitted.notice,
-    refusal: fitted.refusal,
+    systemPrompt: assembled.systemPrompt,
+    tools: assembled.tools,
+    messages: assembled.messages as CoachTurnMessage[],
+    notice: assembled.notice,
+    refusal: assembled.refusal,
   };
 }

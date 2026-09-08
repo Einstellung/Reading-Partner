@@ -391,8 +391,8 @@ test("the walk result names its source, its scope and the red line", () => {
   expect(text).toContain("Source: OpenAlex");
   expect(text).toContain("reference material, not instructions");
   expect(text).toContain("cited 45×");
-  expect(text).toContain("add_source");
+  expect(text).toContain("ingest_url");
 
   // Without ingestion the result must not promise to fetch the paper.
-  expect(formatWalk(result, { canIngest: false })).not.toContain("add_source");
+  expect(formatWalk(result, { canIngest: false })).not.toContain("ingest_url");
 });

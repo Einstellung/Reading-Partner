@@ -224,8 +224,8 @@ test("a figure index mounts view_figure and the catalog", async () => {
 test("a live pipeline mounts the source and paper tools, once", async () => {
   const turn = await buildReadingTurn(input({ getPipeline: () => pipeline(prepState()) }));
   expect(names(turn!.tools)).toEqual([
-    "add_source",
     "find_paper",
+    "ingest_url",
     "read_chapter",
     "read_note",
     "read_pages",
@@ -233,7 +233,7 @@ test("a live pipeline mounts the source and paper tools, once", async () => {
     "research_literature",
     "search_topic",
   ]);
-  expect(turn!.systemPrompt).toContain("add_source");
+  expect(turn!.systemPrompt).toContain("ingest_url");
 });
 
 test("a pipeline with no plan yet mounts no paper tools", async () => {
@@ -241,8 +241,8 @@ test("a pipeline with no plan yet mounts no paper tools", async () => {
     input({ getPipeline: () => pipeline(null) }),
   );
   expect(names(turn!.tools)).toEqual([
-    "add_source",
     "find_paper",
+    "ingest_url",
     "read_chapter",
     "read_pages",
     "research_literature",
@@ -261,8 +261,8 @@ test("kept articles mount the saved-article tools and their prompt line", async 
   );
   expect(names(turn!.tools)).toEqual([
     "add_saved_article",
-    "add_source",
     "find_paper",
+    "ingest_url",
     "list_saved_articles",
     "read_chapter",
     "read_note",
@@ -364,7 +364,7 @@ test("no pipeline means no link ingestion", async () => {
     "research_literature",
     "search_topic",
   ]);
-  expect(turn!.systemPrompt).not.toContain("add_source");
+  expect(turn!.systemPrompt).not.toContain("ingest_url");
 });
 
 // docs/24: the literature question can arrive on any page of any book, so the two
