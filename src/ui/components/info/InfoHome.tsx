@@ -275,6 +275,7 @@ export default function InfoHome(props: {
           onHangUp={info.closeCall}
           voice={info.infoVoice}
           onSourcesChanged={info.refreshSources}
+          onTopicsChanged={() => void props.onTopicsChanged()}
           onOpenBriefing={() => onNavigate("briefing")}
           pipCards={props.pipCards}
         />

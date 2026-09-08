@@ -143,6 +143,15 @@ export interface Thread {
   // can be asked to teach chapter 3 and will, but it stays a conversation about
   // the mark, so nothing is written down.
   focusChapter?: number;
+  // The topic this conversation is filed under (docs/21, docs/61), where the
+  // file keeps one topic per thread rather than one per file — which today is
+  // the info briefings alone, whose file key is a date and not a book. Written
+  // when the reader confirms the AI's proposal, and absent until then: an info
+  // conversation with none belongs to the Brief topic, which is where all of
+  // them were. A reading thread never carries it — the book's topic is the
+  // topic — and neither does a record written before this existed, the same
+  // additive discipline as `focusChapter` and `parentThreadId`.
+  topicId?: string;
 }
 
 type ThreadMap = Record<string, Thread>;
@@ -246,6 +255,7 @@ export interface ThreadStore {
   append: (bookId: string, threadId: string, message: ThreadMessage) => Thread | undefined;
   patch: (bookId: string, threadId: string, ts: number, patch: Partial<ThreadMessage>) => void;
   setFocusChapter: (bookId: string, threadId: string, chapter: number | null) => void;
+  setTopic: (bookId: string, threadId: string, topicId: string | null) => void;
   flush: () => Promise<void>;
 }
 
@@ -656,6 +666,21 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       entry.gen++;
       schedule(bookId);
     },
+    // File the conversation under a topic, or unfile it (docs/21). On the thread
+    // for the same reason the chapter is: two conversations in one file are two
+    // conversations, and an info day's file holds one per briefing and one per
+    // article. Written only where the reader confirmed a proposal.
+    setTopic: (bookId, threadId, topicId) => {
+      const entry = cache.get(bookId);
+      const thread = entry?.threads[threadId];
+      if (!entry || !thread) return;
+      const next = topicId === null || topicId === "" ? undefined : topicId;
+      if (thread.topicId === next) return;
+      if (next === undefined) delete thread.topicId;
+      else thread.topicId = next;
+      entry.gen++;
+      schedule(bookId);
+    },
     flush: writer.flush,
   };
 }
@@ -715,6 +740,11 @@ export const setThreadFocusChapter = (
   threadId: string,
   chapter: number | null,
 ): void => store.setFocusChapter(bookId, threadId, chapter);
+export const setThreadTopic = (
+  bookId: string,
+  threadId: string,
+  topicId: string | null,
+): void => store.setTopic(bookId, threadId, topicId);
 
 // Thread images live one directory per thread. Mirrors annotations.ts's base64
 // <-> bytes helpers; here `data` is bare base64 (no data: prefix), matching the

@@ -60,9 +60,30 @@ export interface BriefingFailedCardData {
   message: string;
 }
 
+// Shown when propose_topic offers a home for what was just kept (docs/21): the
+// topic it belongs under — one the reader already has, or a new one — and what
+// it adds to that topic. The tool writes nothing; Apply creates the topic where
+// it is new, files the article, and files this conversation.
+export interface TopicProposalCardData {
+  kind: "topic-proposal";
+  // The kept article this is about. Absent when the proposal is about the
+  // conversation itself and there is nothing kept to file.
+  articleId?: string;
+  // The conversation the proposal files, so a card read back off disk still
+  // knows what it was about.
+  threadId: string;
+  // An existing topic, or a name for one that does not exist yet.
+  topic: { id: string; name: string } | { newName: string };
+  // What this material adds to that topic: what it contributes, and whether it
+  // confirms or contradicts what the reader has already read.
+  meaning: string;
+  phase: "draft" | "applied";
+}
+
 export type InfoCard =
   | ProbeConfirmCardData
   | BriefingProgressCardData
   | BriefingReadyCardData
   | ProfileUpdateCardData
+  | TopicProposalCardData
   | BriefingFailedCardData;

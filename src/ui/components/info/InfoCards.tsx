@@ -17,7 +17,9 @@ import type {
   BriefingReadyCardData,
   InfoCard,
   ProfileUpdateCardData,
+  TopicProposalCardData,
 } from "../../../info/briefing/cards";
+import { proposedTopicName } from "../../../info/companion/topic-tool";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";
@@ -201,6 +203,44 @@ export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<Prof
   );
 }
 
+// The topic-proposal card: the companion says where a kept article belongs and
+// what it adds, the reader nods (docs/21). Presentational — Apply only raises
+// intent; the host mints the topic and files both the article and the
+// conversation.
+export function TopicProposalCard({ payload, dispatch }: CardComponentProps<TopicProposalCardData>) {
+  const applied = payload.phase === "applied";
+  const isNew = !("id" in payload.topic);
+  return (
+    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
+        {applied ? "Filed" : "Where this belongs"}
+      </div>
+      <div className="mt-1 text-[15px] font-medium text-foreground">
+        {proposedTopicName(payload.topic)}
+      </div>
+      {isNew && !applied ? (
+        <div className="mt-0.5 text-[12px] text-faint-foreground">A new topic</div>
+      ) : null}
+      <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{payload.meaning}</div>
+      <div className="mt-3 flex items-center justify-end gap-2">
+        {applied ? (
+          <span className="text-[12px] text-faint-foreground">On your shelf.</span>
+        ) : (
+          <Button
+            type="button"
+            variant="cta"
+            size="chip"
+            className="px-3.5 py-1.5"
+            onClick={() => dispatch({ kind: "mutate", op: "apply-topic" })}
+          >
+            {isNew ? "Create and file" : "File it"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<BriefingFailedCardData>) {
   return (
     <div className="w-full max-w-md rounded-xl border border-[#e6c3bd] bg-[#fdf5f3] p-4">
@@ -231,5 +271,6 @@ export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "briefing-progress": BriefingProgressCard,
   "briefing-ready": BriefingReadyCard,
   "profile-update": ProfileUpdateCard,
+  "topic-proposal": TopicProposalCard,
   "briefing-failed": BriefingFailedCard,
 };

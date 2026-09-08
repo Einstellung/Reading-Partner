@@ -10,7 +10,9 @@ import type {
   BriefingProgressCardData,
   BriefingReadyCardData,
   ProfileUpdateCardData,
+  TopicProposalCardData,
 } from "../briefing/cards";
+import { proposedTopicName } from "./topic-tool";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { InfoSnapshot, RunStart } from "../briefing/pipeline";
 import type { RequestOutcome } from "../briefing/reader";
@@ -237,4 +239,13 @@ export function sourceAddedNote(card: ProbeConfirmCardData): string {
 
 export function profileAppliedNote(card: ProfileUpdateCardData): string {
   return `Applied the profile update: ${card.summary}.`;
+}
+
+// Filed under the topic the companion proposed. Said in the reader's voice, like
+// the other two, because it is their gesture the AI is being told about.
+export function topicFiledNote(card: TopicProposalCardData): string {
+  const where = proposedTopicName(card.topic);
+  return card.articleId
+    ? `Filed this under "${where}", and this conversation with it.`
+    : `Filed this conversation under "${where}".`;
 }

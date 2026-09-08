@@ -14,7 +14,8 @@
 //
 // This is also where info first reads memory: the briefing item anchors the
 // retrieval, so the assembly hands it the statements and the topic's
-// observations (docs/48). The topic is the caller's — today always the brief.
+// observations (docs/48). The topic is the caller's — the conversation's own
+// once it has been given one, the brief queue until then (docs/21).
 
 import {
   buildObservationSnapshot,
@@ -30,7 +31,9 @@ import {
   type DeskPromptView,
   type DeskRef,
 } from "../../desk";
+import { listTopics } from "../../platform/app/topics";
 import { addSourceSystemPrompt } from "../sources/source-skill";
+import { topicGuidance, type TopicChoice } from "./topic-tool";
 import {
   articleContextSection,
   briefingChatSystemPrompt,
@@ -68,6 +71,12 @@ export type CompanionTools = () => Promise<AgentTool[]>;
  */
 export type ListObservations = (topicId: string) => Promise<Observation[]>;
 
+/**
+ * The reader's topics, for the roster propose_topic proposes out of (docs/21).
+ * Injected the same way, and for the same reason.
+ */
+export type ListTopicChoices = () => Promise<TopicChoice[]>;
+
 /** The day's briefing on the desk, in one of its three states. */
 export type InfoBriefingDeskRef =
   | {
@@ -90,6 +99,7 @@ export type InfoBriefingDeskRef =
       notices?: string[];
       tools?: CompanionTools;
       listObservations?: ListObservations;
+      listTopics?: ListTopicChoices;
     };
 
 export interface InfoArticleDeskRef {
@@ -147,7 +157,7 @@ async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<Des
   if (env.signal?.aborted) return null;
   const observations = await topicObservations(env.topic.id, ref.listObservations);
   if (env.signal?.aborted) return null;
-  const base = briefingPrompt(ref);
+  const base = join(briefingPrompt(ref), await topicSection(ref));
   return {
     kind: INFO_BRIEFING_KIND,
     label: ref.onboarding ? "Subscriptions" : "Today's briefing",
@@ -192,6 +202,22 @@ function briefingPrompt(ref: InfoBriefingDeskRef): string {
     collecting: ref.ctx.collecting,
     notices: ref.notices ?? [],
   });
+}
+
+// The roster propose_topic proposes out of, and the standing instruction to
+// propose. Left out of onboarding: there is nothing kept yet and no briefing to
+// keep anything from, so the only thing that conversation is for is sources.
+async function topicSection(ref: InfoBriefingDeskRef): Promise<string> {
+  if (ref.onboarding) return "";
+  const list = ref.listTopics ?? liveTopicChoices;
+  // A roster that will not read leaves the companion proposing new topics rather
+  // than failing the turn the reader is waiting for.
+  const topics = await list().catch((): TopicChoice[] => []);
+  return topicGuidance(topics);
+}
+
+function liveTopicChoices(): Promise<TopicChoice[]> {
+  return listTopics().then((topics) => topics.map(({ id, name }) => ({ id, name })));
 }
 
 async function topicObservations(

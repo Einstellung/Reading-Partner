@@ -23,6 +23,7 @@ import {
 import type { FetchFn } from "../extract/http";
 import type { SessionStatus, SignInOutcome } from "../extract/webview-session";
 import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "../extract/read-page";
+import { buildProposeTopicTool, type ProposeTopicDeps } from "./topic-tool";
 
 export type BriefingScope = "retriage" | "full";
 
@@ -74,6 +75,10 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // Present only where a sign-in window can really be opened; omitted elsewhere,
   // and then open_site_sign_in is not among the tools.
   siteSignIn?: SiteSignInDeps;
+  // Where kept material belongs (topic-tool.ts, docs/21). Needs the conversation
+  // it is filing and the reader's topics, so it is passed by whoever knows both;
+  // without it propose_topic is not mounted.
+  topicProposal?: ProposeTopicDeps;
 }
 
 // The update_profile tool: draft a complete revised profile and show it for
@@ -375,6 +380,7 @@ export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
     buildReadPageTool(deps),
     buildUpdateProfileTool(deps),
     buildGenerateBriefingTool(deps),
+    ...(deps.topicProposal ? [buildProposeTopicTool(deps.topicProposal)] : []),
     ...(deps.siteSignIn ? [buildSignInTool(deps.siteSignIn)] : []),
   ];
 }
@@ -383,6 +389,7 @@ export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
 export function companionToolStatusLabel(name: string, args: Record<string, unknown>): string {
   if (name === "read_page") return `Reading ${String(args.url ?? "the page")}`;
   if (name === "update_profile") return "Drafting a profile update";
+  if (name === "propose_topic") return `Proposing this belongs under ${String(args.topic ?? "a topic")}`;
   if (name === "generate_briefing") {
     return args.scope === "retriage" ? "Re-sorting today's briefing" : "Regenerating the briefing";
   }
