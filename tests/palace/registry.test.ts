@@ -7,10 +7,12 @@
 // rest on is that a path resolves to exactly one row, and that the row it
 // resolves to is the one that claims it.
 //
-// The desk and distill-source assertions arrive with the packages that register
-// them (P2, P3a). Until then this holds the resolution guard alone. Run: bun test.
+// The distill-source assertion arrives with the package that registers them
+// (P2). Run: bun test.
 
 import { expect, test } from "bun:test";
+import { deskKindRegistered } from "../../src/desk";
+import { registerReadingDesk } from "../../src/reading/desk";
 import { PALACE, resolvePalace, rowOf, rowsWhere, type PalaceKind } from "../../src/palace";
 
 test("a sample path finds one row, and it is the row that named it", () => {
@@ -36,8 +38,22 @@ test("every distilled kind has an id to key its cursor under", () => {
   expect(keyless).toEqual([]);
 });
 
-test("no kind is registered as being on the desk yet", () => {
-  // P3a registers the first opener. Until a package registers one, a desk mark
-  // here would be a guard failing against nothing.
-  expect(rowsWhere((r) => r.desk === true || r.deskKind !== undefined)).toEqual([]);
+// A row marked `desk` says this data can be put in front of the AI. Nothing on
+// the desk opens itself: a domain registers the opener at startup
+// (useShellBootstrap's bootDomains), and the mark on the row is the claim that
+// one exists. Registered here the way the shell does it, so the guard is against
+// the real openers and not against a fixture.
+test("every kind marked as desk material has an opener registered", () => {
+  registerReadingDesk();
+  const unopenable = rowsWhere((r) => r.desk === true)
+    .map((r) => r.deskKind ?? r.kind)
+    .filter((kind) => !deskKindRegistered(kind));
+  expect(unopenable).toEqual([]);
+});
+
+// deskKind is how a row says the opener goes by another name; on its own it
+// says nothing, and the guard above would never read it.
+test("a row naming a desk kind is marked as desk material", () => {
+  const dangling = rowsWhere((r) => r.deskKind !== undefined && r.desk !== true).map((r) => r.kind);
+  expect(dangling).toEqual([]);
 });

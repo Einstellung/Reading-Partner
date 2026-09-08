@@ -32,6 +32,7 @@ import {
   type Settings,
 } from "../../../platform/app/settings";
 import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai";
+import { registerReadingDesk } from "../../../reading/desk";
 import type { SyncHealthReport } from "../../../platform/sync";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";
@@ -153,6 +154,18 @@ export const SETTINGS_PULL_ROUTE: PullMatcher = {
   matches: (path) => path === SETTINGS_FILE,
 };
 
+// What every domain has to have registered before the first turn is assembled:
+// the openers that say how its material goes on the desk (docs/61). Called once,
+// on the way up, from the one place both shells go through — a registration made
+// where the feature is used would be a registration the other shell does not
+// make.
+//
+// Registering is idempotent (src/desk/registry.ts), so a second boot in one
+// process replaces the openers rather than doubling them.
+export function bootDomains(): void {
+  registerReadingDesk();
+}
+
 export interface ShellBootstrap {
   settings: Settings;
   // A settings change the user made: set and persist.
@@ -228,6 +241,12 @@ export function useShellBootstrap({
       .catch(() => {})
       .finally(() => markAnswered("providers"));
   }, [settingsOpen, markAnswered]);
+
+  // Both shells come through here, and nothing draws before it does: the domain
+  // registrations are made once, on the way up.
+  useEffect(() => {
+    bootDomains();
+  }, []);
 
   const adoptPulledSettings = useCallback(() => {
     pulledSettings()

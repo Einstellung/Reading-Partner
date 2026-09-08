@@ -52,8 +52,17 @@ const LAYER: Record<string, Layer> = {
   "platform/sync/merge": "platform",
 
   ai: "capability",
+  // One assembly for every turn (docs/61): a laid desk plus what is known about
+  // the reader, priced against the model's window. Its own node rather than a
+  // corner of ai/, because it may reach for the desk and for memory and ai
+  // itself must not — ai is the send path, and the assembly is a caller of it.
+  "ai/assemble": "capability",
   "ai/voice": "capability",
   budget: "capability",
+  // What the reader has put in front of the AI (docs/61): the registry of what
+  // can be opened onto the desk, and the laying of one. A capability because
+  // every domain registers into it and none of it knows what a book is.
+  desk: "capability",
   fulltext: "capability",
   // Running an agent: the stall watchdog and the pacing limiter every unattended
   // call goes through, the observable shell the long pipelines share, and the
