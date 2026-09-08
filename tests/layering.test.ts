@@ -59,6 +59,10 @@ const LAYER: Record<string, Layer> = {
   "ai/assemble": "capability",
   "ai/voice": "capability",
   budget: "capability",
+  // Every conversation the app holds, searchable across the desks it happened
+  // on (docs/61). A capability: it reads the catalogue and the thread store, and
+  // knows what neither a book nor a briefing is.
+  conversations: "capability",
   // What the reader has put in front of the AI (docs/61): the registry of what
   // can be opened onto the desk, and the laying of one. A capability because
   // every domain registers into it and none of it knows what a book is.

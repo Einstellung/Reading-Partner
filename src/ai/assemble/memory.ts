@@ -19,13 +19,14 @@ import {
   statementStore,
   type Statement,
 } from "../../memory";
+import { buildConversationTools } from "../../conversations";
 import type { DeskEnv, DeskMemory } from "../../desk";
 import { getThread } from "../../platform/app/threads";
 import type { AgentTool } from "../agent";
 
 export interface Brain {
-  // statement_write, and the observation tools wherever there is a topic to
-  // scope them to.
+  // statement_write, the conversation tools, and the observation tools wherever
+  // there is a topic to scope them to.
   tools: AgentTool[];
   // Every statement there is. Which of them ride the prompt is the ladder's
   // call, one pass at a time, so they are read once and filtered per pass.
@@ -49,6 +50,11 @@ export async function openBrain(env: DeskEnv, anchor: DeskMemory | undefined): P
     message: latestReaderMessage(messages),
     threadId: env.thread.id,
   });
+  // Its own past conversations, on every desk and whether or not a topic is
+  // settled (src/conversations): what was said is the reader's, the same way
+  // the statements are, and the desk it was said over is only where to look
+  // first.
+  tools.push(...buildConversationTools({ topicId }));
   if (topicId) {
     tools.push(
       ...buildObservationTools(getObservationAdapter(topicId), {

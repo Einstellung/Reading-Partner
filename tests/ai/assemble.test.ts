@@ -92,9 +92,25 @@ test("the tools are the brain's and then each item's", async () => {
   const turn = await assembleTurn({ desk: laid });
   expect(turn!.tools.map((t) => t.name)).toEqual([
     "statement_write",
+    "search_conversations",
+    "read_conversation",
     "read_pages",
     "list_saved_articles",
   ]);
+});
+
+// The AI can reach for what it and the reader already said, wherever they said
+// it (src/conversations, docs/61). Part of the brain rather than of any item:
+// what was said belongs to the reader, and the desk it was said over is only
+// where the search starts. So it rides an empty desk and a desk with no topic
+// settled, which is exactly where the observation tools do not.
+test("the brain brings the conversation search to every desk", async () => {
+  const empty = await assembleTurn({ desk: await desk([]) });
+  expect(empty!.tools.map((t) => t.name)).toContain("search_conversations");
+  expect(empty!.tools.map((t) => t.name)).toContain("read_conversation");
+  const laid = await desk([item("a")], env({ topic: { id: "t-1", name: "Attention" } }));
+  const scoped = await assembleTurn({ desk: laid });
+  expect(scoped!.tools.map((t) => t.name)).toContain("search_conversations");
 });
 
 test("an item is told every tool name on the desk, the brain's included", async () => {
@@ -112,7 +128,13 @@ test("an item is told every tool name on the desk, the brain's included", async 
     item("guest", { tools: [tool("list_saved_articles")] }),
   ]);
   await assembleTurn({ desk: laid });
-  expect([...seen]).toEqual(["statement_write", "read_pages", "list_saved_articles"]);
+  expect([...seen]).toEqual([
+    "statement_write",
+    "search_conversations",
+    "read_conversation",
+    "read_pages",
+    "list_saved_articles",
+  ]);
 });
 
 // An item's own paragraphs are left out of its view: it has them already and

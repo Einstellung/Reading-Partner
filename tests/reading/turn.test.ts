@@ -173,8 +173,10 @@ test("companion turn: reading tools only, kickoff as the first message", async (
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "read_chapter",
+    "read_conversation",
     "read_pages",
     "research_literature",
+    "search_conversations",
     "search_topic",
   ]);
   expect(turn!.messages).toEqual([{ role: "user", text: EXPLAIN_KICKOFF }]);
@@ -185,7 +187,12 @@ test("companion turn: reading tools only, kickoff as the first message", async (
 // text layer mounts nothing that can read it, and the literature is still open.
 test("a book with no text layer gets no read_pages tool", async () => {
   const turn = await buildReadingTurn(input({ fulltext: fulltext("no-text-layer") }));
-  expect(names(turn!.tools)).toEqual(["find_paper", "research_literature"]);
+  expect(names(turn!.tools)).toEqual([
+    "find_paper",
+    "read_conversation",
+    "research_literature",
+    "search_conversations",
+  ]);
 });
 
 test("a topic id mounts the observation tools", async () => {
@@ -198,8 +205,10 @@ test("a topic id mounts the observation tools", async () => {
     "observation_search",
     "observation_update",
     "read_chapter",
+    "read_conversation",
     "read_pages",
     "research_literature",
+    "search_conversations",
     "search_topic",
   ]);
 });
@@ -210,8 +219,10 @@ test("a figure index mounts view_figure and the catalog", async () => {
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "read_chapter",
+    "read_conversation",
     "read_pages",
     "research_literature",
+    "search_conversations",
     "search_topic",
     "view_figure",
   ]);
@@ -227,10 +238,12 @@ test("a live pipeline mounts the source and paper tools, once", async () => {
     "add_source",
     "find_paper",
     "read_chapter",
+    "read_conversation",
     "read_note",
     "read_pages",
     "read_paper",
     "research_literature",
+    "search_conversations",
     "search_topic",
   ]);
   expect(turn!.systemPrompt).toContain("add_source");
@@ -244,8 +257,10 @@ test("a pipeline with no plan yet mounts no paper tools", async () => {
     "add_source",
     "find_paper",
     "read_chapter",
+    "read_conversation",
     "read_pages",
     "research_literature",
+    "search_conversations",
     "search_topic",
   ]);
 });
@@ -265,10 +280,12 @@ test("kept articles mount the saved-article tools and their prompt line", async 
     "find_paper",
     "list_saved_articles",
     "read_chapter",
+    "read_conversation",
     "read_note",
     "read_pages",
     "read_paper",
     "research_literature",
+    "search_conversations",
     "search_topic",
   ]);
   expect(turn!.systemPrompt).toContain("list_saved_articles");
@@ -360,8 +377,10 @@ test("no pipeline means no link ingestion", async () => {
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "read_chapter",
+    "read_conversation",
     "read_pages",
     "research_literature",
+    "search_conversations",
     "search_topic",
   ]);
   expect(turn!.systemPrompt).not.toContain("add_source");
