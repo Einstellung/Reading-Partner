@@ -39,6 +39,7 @@ export function InfoCall({
   onHangUp,
   voice,
   onSourcesChanged,
+  onTopicsChanged,
   onOpenBriefing,
   pipCards = true,
 }: {
@@ -56,6 +57,8 @@ export function InfoCall({
   voice?: ComposerVoice | false;
   // Called after the source list changes (add), so the host refreshes hasSources.
   onSourcesChanged?: () => void;
+  // Called after a topic proposal is applied, so the host reloads the shelf.
+  onTopicsChanged?: () => void;
   // Clicking the briefing-ready card: open the briefing as the main screen.
   onOpenBriefing?: (date: string) => void;
   // Whether the call keeps its corner cards, and with them the swapped layout.
@@ -71,6 +74,7 @@ export function InfoCall({
     pipCards,
     onHangUp,
     onSourcesChanged,
+    onTopicsChanged,
     onOpenBriefing,
   });
   // Whether the reader has tapped the call out of the way. With no corner cards

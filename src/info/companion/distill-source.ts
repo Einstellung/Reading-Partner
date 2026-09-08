@@ -52,9 +52,10 @@ export async function listInfoUnits(): Promise<SourceUnit[]> {
       if (thread.messages.length === 0) continue;
       units.push({
         id: thread.id,
-        // The thread's own topic once it has one (P4 writes it); "brief" until
-        // then, which is where every info conversation has been filed anyway.
-        topicId: (thread as { topicId?: string }).topicId ?? BRIEF_TOPIC_ID,
+        // The thread's own topic once the reader has confirmed one (docs/21);
+        // "brief" until then, which is where every info conversation was filed
+        // anyway.
+        topicId: thread.topicId ?? BRIEF_TOPIC_ID,
         label: infoUnitLabel(date),
         messages: thread.messages.map(({ id, role, text, ts }) => ({
           ...(id ? { id } : {}),

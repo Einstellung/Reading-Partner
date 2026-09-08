@@ -20,6 +20,8 @@ import { liveWebviewFetch } from "../sources/source-live";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { ProfileUpdateCardData } from "../briefing/cards";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
+import { listTopics } from "../../platform/app/topics";
+import type { ProposeTopicDeps } from "./topic-tool";
 import type { AgentTool } from "../../ai/agent";
 import type { RequestOutcome } from "../briefing/reader";
 
@@ -30,6 +32,13 @@ import type { RequestOutcome } from "../briefing/reader";
 // small interface so the pure tool set stays host-agnostic.
 export interface BriefingControl {
   start(scope: BriefingScope): RequestOutcome;
+}
+
+export interface LiveCompanionOptions {
+  collecting?: boolean;
+  // The conversation propose_topic files, and where its card goes. Omitted where
+  // there is no conversation to file, and then the tool is not mounted.
+  topic?: Omit<ProposeTopicDeps, "topics">;
 }
 
 // The sign-in half, bound to the real windows. The site list is read from the
@@ -67,9 +76,15 @@ export async function buildLiveCompanionTools(
   onProbeCard: (card: ProbeConfirmCardData) => void,
   onProfileCard: (card: ProfileUpdateCardData) => void,
   briefing: BriefingControl,
-  opts: { collecting?: boolean } = {},
+  opts: LiveCompanionOptions = {},
 ): Promise<AgentTool[]> {
   return buildCompanionTools({
+    // Where kept material belongs (docs/21). The reader's topics are read per
+    // call, not when the conversation opened, so one created a few turns ago is
+    // proposed rather than minted a second time.
+    topicProposal: opts.topic
+      ? { ...opts.topic, topics: async () => (await listTopics()).map(({ id, name }) => ({ id, name })) }
+      : undefined,
     fetchFn: infoFetch,
     extract: await loadExtractReadable(),
     // trial_source proves a `webview` source only if it can open the window the

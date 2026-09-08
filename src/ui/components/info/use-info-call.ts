@@ -16,8 +16,17 @@ import { assembleTurn, type AssembledTurn } from "../../../ai/assemble";
 import { openDesk } from "../../../desk";
 import { withCompanionTools } from "../../../info/companion/desk";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
-import { BRIEF_TOPIC_ID } from "../../../platform/app/topics";
-import { appendMessage, createThread, getThread, loadThreads, patchThreadMessage } from "../../../platform/app/threads";
+import { createTopic } from "../../../platform/app/topics";
+import { threadTopic } from "../../../info/companion/topic-tool";
+import {
+  appendMessage,
+  createThread,
+  getThread,
+  loadThreads,
+  patchThreadMessage,
+  setThreadTopic,
+} from "../../../platform/app/threads";
+import { setSavedArticleTopic } from "../../../reading/saved-articles";
 import { buildLiveCompanionTools } from "../../../info/companion/companion-live";
 import { companionToolStatusLabel } from "../../../info/companion/companion-tools";
 import {
@@ -31,9 +40,14 @@ import {
   infoBookId,
   profileAppliedNote,
   sourceAddedNote,
+  topicFiledNote,
   type BriefingJob,
 } from "../../../info/companion/call";
-import { addSourceFromCard, applyProfileUpdate } from "../../../info/companion/card-actions";
+import {
+  addSourceFromCard,
+  applyProfileUpdate,
+  applyTopicProposal,
+} from "../../../info/companion/card-actions";
 import type { InfoCallAnchor } from "../../../info/companion/anchors";
 import { addSource, hasSources } from "../../../info/sources/source-store";
 import { distillInfoThread } from "../../../memory";
@@ -54,7 +68,7 @@ import {
 } from "../chat/chatParts";
 import type { ChatMessage, ProviderId } from "../../../ai/providers";
 import type { BriefingView, RequestOutcome } from "../../../info/briefing/reader";
-import type { ProfileUpdateCardData } from "../../../info/briefing/cards";
+import type { ProfileUpdateCardData, TopicProposalCardData } from "../../../info/briefing/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../chat/types";
 
@@ -67,6 +81,9 @@ export interface InfoCallOptions {
   pipCards: boolean;
   onHangUp: () => void;
   onSourcesChanged?: () => void;
+  // Filing something under a new topic puts a topic on the shelf that was not
+  // there, so the host reloads it.
+  onTopicsChanged?: () => void;
   onOpenBriefing?: (date: string) => void;
 }
 
@@ -95,7 +112,8 @@ export function infoStickKey(dateKey: string, threadId: string): string {
 }
 
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
-  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onOpenBriefing } = opts;
+  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing } =
+    opts;
   const [swapped, setSwapped] = useState(false);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -251,7 +269,10 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // — probe-confirm and profile-update are both durable. The tools hand back a
   // structured payload; this closure is the one place that turns a payload into a
   // card part.
-  function insertCard(prefix: string, payload: ProbeConfirmCardData | ProfileUpdateCardData) {
+  function insertCard(
+    prefix: string,
+    payload: ProbeConfirmCardData | ProfileUpdateCardData | TopicProposalCardData,
+  ) {
     const cardId = nextCardId(prefix);
     const ts = Date.now();
     setMessages((prev) => insertBeforeLast(prev, cardRow(cardId, payload, ts)));
@@ -317,6 +338,38 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, noteTurn, collecting, view],
   );
 
+  // File what the companion proposed when the user clicks a topic card's Apply:
+  // mint the topic where it is new, move the kept article under it, file this
+  // conversation with it, and tell the AI. Three writes for one gesture; the
+  // order and what a failure stops are in info/companion/card-actions.
+  //
+  // Filing the thread is what makes the next turn's desk, its distillation and
+  // its conversation search all read the topic the reader chose rather than the
+  // brief queue.
+  const handleApplyTopic = useCallback(
+    async (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "topic-proposal") return;
+      const card = found.payload;
+      const { ok } = await applyTopicProposal(card, {
+        createTopic,
+        fileArticle: async (articleId, topicId) => {
+          await setSavedArticleTopic(articleId, topicId);
+        },
+        fileThread: (threadId, topicId) => setThreadTopic(bookId, threadId, topicId),
+        topicsChanged: () => onTopicsChanged?.(),
+      });
+      if (!ok) return;
+      const applied: TopicProposalCardData = { ...card, phase: "applied" };
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
+      patchThreadMessage(bookId, anchor.threadId, found.ts, {
+        parts: [toPersistedCardPart(cardId, applied)],
+      });
+      noteTurn(topicFiledNote(card));
+    },
+    [bookId, anchor.threadId, noteTurn, onTopicsChanged],
+  );
+
   // The card action dispatcher wired into the message list. Stable across
   // streaming deltas, so the memoized rows never churn. It owns orchestration:
   // one gesture may fan out to several effects (see handleAddFromCard).
@@ -326,6 +379,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         case "mutate":
           if (action.op === "add-source") void handleAddFromCard(cardId);
           else if (action.op === "apply-profile") void handleApplyProfile(cardId);
+          else if (action.op === "apply-topic") void handleApplyTopic(cardId);
           else if (action.op === "retriage") runBriefingJob("retriage");
           else if (action.op === "retry-briefing") runBriefingJob(lastJobRef.current);
           break;
@@ -350,9 +404,9 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           break;
       }
     },
-    // handleAddFromCard/handleApplyProfile are stable; runBriefingJob reads refs.
+    // The three handlers are stable; runBriefingJob reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handleAddFromCard, handleApplyProfile, onOpenBriefing, onHangUp, pipCards, noteTurn],
+    [handleAddFromCard, handleApplyProfile, handleApplyTopic, onOpenBriefing, onHangUp, pipCards, noteTurn],
   );
 
   // The companion's agent turn: the anchor's desk (the day's briefing, and the
@@ -393,13 +447,18 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
             (payload) => insertCard("probe", payload),
             (payload) => insertCard("profile", payload),
             { start: (scope) => runBriefingJob(scope) },
-            { collecting },
+            {
+              collecting,
+              topic: {
+                threadId: anchor.threadId,
+                onTopicCard: (payload) => insertCard("topic", payload),
+              },
+            },
           ),
         ),
         {
           settings,
-          // The brief topic until a thread carries one of its own.
-          topic: { id: BRIEF_TOPIC_ID, name: "Brief" },
+          topic: await threadTopic(bookId, anchor.threadId),
           thread: { key: bookId, id: anchor.threadId },
           signal: controller.signal,
         },

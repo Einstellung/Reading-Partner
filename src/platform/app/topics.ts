@@ -36,7 +36,7 @@ export interface TopicFile {
 // recognizable. Both devices derive the same id, so the two copies merge as one
 // topic record rather than becoming two topics named "Brief".
 export const BRIEF_TOPIC_ID = "brief";
-const BRIEF_TOPIC_NAME = "Brief";
+export const BRIEF_TOPIC_NAME = "Brief";
 
 // Pure: repair references stored before paths were normalized on the way in —
 // an iOS import wrote the percent-encoded file URL as the path and its last

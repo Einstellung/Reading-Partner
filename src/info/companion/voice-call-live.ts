@@ -18,7 +18,6 @@ import { openDesk } from "../../desk";
 import { loadDeviceSettings } from "../../platform/app/device";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { loadSettings, toReasoning } from "../../platform/app/settings";
-import { BRIEF_TOPIC_ID } from "../../platform/app/topics";
 import {
   appendMessage,
   createThread,
@@ -34,6 +33,7 @@ import { infoBookId } from "./call";
 import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
 import { nativeConversation } from "./conversation";
 import { withCompanionTools } from "./desk";
+import { threadTopic } from "./topic-tool";
 import {
   createVoiceCall,
   type VoiceCall,
@@ -142,7 +142,7 @@ export function askOnThread(opts: {
           // second AI.
           const desk = await openDesk(withCompanionTools(opts.anchor.desk, opts.tools), {
             settings,
-            topic: { id: BRIEF_TOPIC_ID, name: "Brief" },
+            topic: await threadTopic(opts.bookId, opts.anchor.threadId),
             thread: { key: opts.bookId, id: opts.anchor.threadId },
             signal,
           });
@@ -264,7 +264,14 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
             () => {},
             () => {},
             opts.control ?? REFUSE_BRIEFING,
-            { collecting },
+            {
+              collecting,
+              // propose_topic is mounted here too, with nowhere to draw its
+              // card: the companion is one companion, and a call that could not
+              // even offer to file what was just talked about would be a
+              // different one. Its answer is text, which is what gets spoken.
+              topic: { threadId: anchor.threadId, onTopicCard: () => {} },
+            },
           ).catch((e) => {
             tools = null;
             throw e;

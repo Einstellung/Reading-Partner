@@ -597,6 +597,31 @@ export function splitSavedArticleBodiesOnce(
   return (splitRun ??= splitSavedArticleBodies(io));
 }
 
+// Move a kept article to another topic (docs/21): the write behind the reader
+// confirming where the companion proposed it belongs. Answers with whether the
+// record moved — false when there is no such record, and false when the file
+// could not be rewritten.
+//
+// The record is rewritten rather than the topic being stored anywhere else: a
+// kept article's topic is a field on the article, which is what lets two devices
+// each file their own without either overwriting the other's (the file merges
+// record by record).
+export async function setSavedArticleTopic(
+  id: string,
+  topicId: string,
+  io: SavedArticlesIo = savedArticlesIo,
+): Promise<boolean> {
+  const read = await readSavedArticles(io);
+  const i = read.list.findIndex((a) => a.id === id);
+  // Nothing to move. Not a write even when the read had to set an entry aside:
+  // the quarantine belongs to the write that drops it, and there is none.
+  if (i < 0) return false;
+  if (read.list[i].topicId === topicId && !read.repaired) return true;
+  const next = [...read.list];
+  next[i] = { ...next[i], topicId };
+  return save(io, next, read.repaired);
+}
+
 // Un-save an article: a real removal, not an archive (docs/21).
 export async function removeSavedArticle(
   id: string,
