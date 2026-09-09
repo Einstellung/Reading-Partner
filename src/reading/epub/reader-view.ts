@@ -15,11 +15,19 @@
 
 import type {
   Annotation,
+  AnnotationPopupParams,
   Tool,
   ViewInstance,
   ViewState,
   ViewStats,
 } from "../../platform/app/reader-contract";
+import { DEFAULT_MARK_COLOR } from "./annotation";
+import {
+  createAnnotationLayer,
+  type AnnotationLayer,
+  type EpubContents,
+} from "./annotation-layer";
+import { routeEpubPointer, strokeOfTool, type EpubPointerAction } from "./pen";
 import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
 import type { Pagination } from "./paginate";
 import {
@@ -50,6 +58,11 @@ export interface EpubReaderCallbacks {
   onChangeViewState(state: ViewState): void;
   onChangeViewStats(stats: ViewStats): void;
   onQuoteHighlightChange(active: boolean): void;
+  /** A mark the reader just made, for the host to write down.  */
+  onSaveAnnotations(anns: Annotation[]): void;
+  /** The mark the reader just tapped, or nothing when one was let go of. */
+  onSelectAnnotations(ids: string[]): void;
+  onAnnotationPopup(params?: AnnotationPopupParams): void;
 }
 
 export interface EpubReaderController extends ViewInstance {
@@ -59,16 +72,25 @@ export interface EpubReaderController extends ViewInstance {
   currentLayout(): "vertical" | "paged";
   /** Re-read the app's colours into the book's frame. */
   refreshTheme(): void;
-  destroy(): void;
-}
 
-interface Contents {
-  index: number;
-  doc: Document;
-  overlayer?: {
-    add(key: string, range: Range, draw: unknown, options?: unknown): void;
-    remove(key: string): void;
-  };
+  // The marks, driven from the pane: nothing in the book's frame dispatches an
+  // event (docs/pitfall/244), so every pointer that reaches the text arrives
+  // here as a call in the parent page's coordinates.
+
+  /** Whether a pointer of this kind marks the book or moves it. */
+  pointerAction(pointerType: string): EpubPointerAction;
+  /** Start dragging a selection out of the text. False when it missed. */
+  beginDraw(x: number, y: number): boolean;
+  extendDraw(x: number, y: number): void;
+  endDraw(): void;
+  cancelDraw(): void;
+  /**
+   * A pointer lifting: a finished selection becomes a mark, or a mark under it
+   * opens. True when it was one of those and the pane should do nothing more.
+   */
+  consumeUp(x: number, y: number): boolean;
+
+  destroy(): void;
 }
 
 interface FoliateView extends HTMLElement {
@@ -78,9 +100,11 @@ interface FoliateView extends HTMLElement {
   goTo(target: unknown): Promise<unknown>;
   next(): Promise<void>;
   prev(): Promise<void>;
+  getCFI(index: number, range: Range): string;
+  resolveCFI(cfi: string): { index: number; anchor: (doc: Document) => Range };
   lastLocation?: { cfi?: string; range?: Range };
   renderer: HTMLElement & {
-    getContents(): Contents[];
+    getContents(): EpubContents[];
     render(): void;
     setStyles(styles: string): void;
     scrollToAnchor(anchor: Range | Element, select?: boolean): Promise<void>;
@@ -94,6 +118,10 @@ export interface EpubReaderOptions {
   viewState: ViewState | null;
   /** The element the app's custom properties are declared on (documentElement). */
   themeRoot: HTMLElement | null;
+  /** The book's page marks, drawn as soon as a section is on screen. */
+  annotations: Annotation[];
+  /** Whose name goes on a mark this reader makes. */
+  authorName: string;
   callbacks: EpubReaderCallbacks;
 }
 
@@ -141,8 +169,12 @@ export async function createEpubReader(
     return entry;
   }
 
-  function contents(): Contents | null {
+  function contents(): EpubContents | null {
     return view.renderer?.getContents?.()[0] ?? null;
+  }
+
+  function allContents(): EpubContents[] {
+    return view.renderer?.getContents?.() ?? [];
   }
 
   function applyStyles(): void {
@@ -180,6 +212,41 @@ export async function createEpubReader(
     renderer.setAttribute(name, value);
   }
   applyStyles();
+
+  // The marks, before the first section is laid out: `create-overlay` fires
+  // inside init() for the section it opens on, and a layer built after it would
+  // miss the paint.
+  let tool: Tool | undefined;
+  let fingerDraw = false;
+  const marks: AnnotationLayer = createAnnotationLayer({
+    host: {
+      getCFI: (index, range) => view.getCFI(index, range),
+      resolveCFI: (cfi) => view.resolveCFI(cfi),
+      goTo: (target) => view.goTo(target),
+    },
+    overlayer: Overlayer,
+    pagination,
+    contents: allContents,
+    textOf,
+    authorName: opts.authorName,
+    onSaveAnnotations: (anns) => callbacks.onSaveAnnotations(anns),
+    onSelectAnnotations: (ids) => callbacks.onSelectAnnotations(ids),
+    onAnnotationPopup: (params) => callbacks.onAnnotationPopup(params),
+  });
+  marks.set(opts.annotations);
+
+  // A section's overlayer exists a moment after this event: view.js emits it
+  // from inside #createOverlayer, and the renderer only takes the overlayer
+  // back on the line after that call returns. A microtask is the wait.
+  function onCreateOverlay(e: Event): void {
+    const index = (e as CustomEvent<{ index?: number }>).detail?.index;
+    if (typeof index !== "number") return;
+    queueMicrotask(() => {
+      if (!destroyed) marks.paintSection(index);
+    });
+  }
+  view.addEventListener("create-overlay", onCreateOverlay);
+
   // open() hands the book over and lays nothing out; without init() the
   // renderer sits on an empty frame and `relocate` never fires, which reads
   // exactly like a hang (docs/62 §3).
@@ -245,8 +312,8 @@ export async function createEpubReader(
 
     navigate: (target) => {
       clearQuote();
+      if (target.annotationID && marks.goToMark(target.annotationID)) return;
       if (typeof target.pageIndex === "number") void goToBlock(target.pageIndex);
-      // target.annotationID is stage 4: an EPUB has no marks yet (docs/39 §5).
     },
 
     highlightQuote: async (page, req) => {
@@ -269,15 +336,41 @@ export async function createEpubReader(
 
     clearQuoteHighlight: clearQuote,
 
-    // Marks on an EPUB are stage 4 (docs/39 §5): the selection-to-CFI path, the
-    // overlayer's hit testing and the pen routing all still have to be built on
-    // the parent page. Until then these are answered rather than thrown, so the
-    // shell can drive one reader without asking which format it is.
-    setTool: (_tool?: Tool) => {},
-    setFingerDraw: (_on: boolean) => {},
-    setAnnotations: (_anns: Annotation[]) => {},
-    unsetAnnotations: (_ids: string[]) => {},
-    selectAnnotations: (_ids: string[]) => {},
+    // The tool and the finger setting are routing state and nothing else: this
+    // side publishes nothing when either changes, so a tool switch can never be
+    // mistaken for a selection the reader made (pitfall 59).
+    setTool: (next?: Tool) => {
+      tool = next;
+    },
+    setFingerDraw: (on: boolean) => {
+      fingerDraw = on;
+    },
+    setAnnotations: (anns: Annotation[]) => marks.set(anns),
+    unsetAnnotations: (ids: string[]) => marks.unset(ids),
+    selectAnnotations: (ids: string[]) => marks.select(ids),
+
+    pointerAction: (pointerType) => routeEpubPointer(tool, pointerType, fingerDraw),
+    beginDraw: (x, y) => marks.beginDrag(x, y),
+    extendDraw: (x, y) => marks.extendDrag(x, y),
+    endDraw: () => {
+      const stroke = strokeOfTool(tool);
+      if (!stroke) {
+        marks.cancelDrag();
+        return;
+      }
+      marks.endDrag(stroke, tool?.color ?? DEFAULT_MARK_COLOR);
+    },
+    cancelDraw: () => marks.cancelDrag(),
+
+    // A pen out takes the selection first: the reader dragged those words in
+    // order to mark them, and the mark may well cover one that is already
+    // there. With no pen out, the only thing a lift can mean is the mark under
+    // it (the annotation editor, exactly as tapping one on a page does).
+    consumeUp: (x, y) => {
+      const stroke = strokeOfTool(tool);
+      if (stroke && marks.takeSelection(stroke, tool?.color ?? DEFAULT_MARK_COLOR)) return true;
+      return marks.hit(x, y);
+    },
 
     turn: (direction) => {
       clearQuote();
@@ -288,6 +381,7 @@ export async function createEpubReader(
     destroy: () => {
       destroyed = true;
       view.removeEventListener("relocate", onRelocate);
+      view.removeEventListener("create-overlay", onCreateOverlay);
       try {
         view.close();
       } catch {

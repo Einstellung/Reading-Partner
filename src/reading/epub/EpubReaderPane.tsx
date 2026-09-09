@@ -13,19 +13,30 @@
 // and a scroll is not a DOM event.
 
 import { memo, useCallback, useEffect, useRef } from "react";
-import type { ViewInstance, ViewState, ViewStats } from "../../platform/app/reader-contract";
+import type {
+  Annotation,
+  AnnotationPopupParams,
+  ViewInstance,
+  ViewState,
+  ViewStats,
+} from "../../platform/app/reader-contract";
 import { SWIPE_MIN, keyTurn, swipeTurn, tapZone, type Turn } from "./reader-logic";
 import { createEpubReader, type EpubReaderController } from "./reader-view";
 
 export interface EpubReaderPaneProps {
   bookId: string;
   buffer: ArrayBuffer;
+  annotations: Annotation[];
+  authorName: string;
   viewState: ViewState | null;
   onView: (view: ViewInstance) => void;
   onInitialized: () => void;
   onError: (e: Error) => void;
   onChangeViewState: (s: ViewState) => void;
   onChangeViewStats: (s: ViewStats) => void;
+  onSaveAnnotations: (anns: Annotation[]) => void;
+  onSelectAnnotations: (ids: string[]) => void;
+  onSetAnnotationPopup: (params?: AnnotationPopupParams) => void;
   onQuoteHighlightChange?: (active: boolean) => void;
   className?: string;
 }
@@ -39,6 +50,9 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
   // Where a finger or a mouse went down, so the pointer that comes up can be
   // read as a swipe or as a tap.
   const downRef = useRef<{ x: number; y: number; id: number } | null>(null);
+  // The pointer currently dragging a selection out of the text, if any. It is
+  // captured, so it does not become a page turn on the way up.
+  const drawingRef = useRef<number | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -51,10 +65,15 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       buffer: p.buffer,
       viewState: p.viewState,
       themeRoot: document.documentElement,
+      annotations: p.annotations,
+      authorName: p.authorName,
       callbacks: {
         onChangeViewState: (s) => propsRef.current.onChangeViewState(s),
         onChangeViewStats: (s) => propsRef.current.onChangeViewStats(s),
         onQuoteHighlightChange: (a) => propsRef.current.onQuoteHighlightChange?.(a),
+        onSaveAnnotations: (anns) => propsRef.current.onSaveAnnotations(anns),
+        onSelectAnnotations: (ids) => propsRef.current.onSelectAnnotations(ids),
+        onAnnotationPopup: (params) => propsRef.current.onSetAnnotationPopup(params),
       },
     })
       .then((controller) => {
@@ -105,16 +124,43 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
   }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const controller = controllerRef.current;
+    if (
+      controller &&
+      controller.pointerAction(e.pointerType) === "draw" &&
+      controller.beginDraw(e.clientX, e.clientY)
+    ) {
+      drawingRef.current = e.pointerId;
+      // Captured so the rest of the stroke arrives here even when it leaves the
+      // pane, and so the frame's own scrolling does not take it.
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      e.preventDefault();
+      return;
+    }
     downRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (drawingRef.current !== e.pointerId) return;
+    controllerRef.current?.extendDraw(e.clientX, e.clientY);
+    e.preventDefault();
   }, []);
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      const controller = controllerRef.current;
+      if (drawingRef.current === e.pointerId) {
+        drawingRef.current = null;
+        controller?.endDraw();
+        return;
+      }
       const down = downRef.current;
       downRef.current = null;
-      const controller = controllerRef.current;
       const surface = surfaceRef.current;
       if (!down || down.id !== e.pointerId || !controller || !surface) return;
+      // A finished selection, or a mark under the finger: either is what this
+      // pointer was for, and neither turns a page.
+      if (controller.consumeUp(e.clientX, e.clientY)) return;
       const layout = controller.currentLayout();
       const dx = e.clientX - down.x;
       const dy = e.clientY - down.y;
@@ -151,9 +197,12 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       // would turn pages while the reader types in the chat.
       tabIndex={-1}
       onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => {
         downRef.current = null;
+        drawingRef.current = null;
+        controllerRef.current?.cancelDraw();
       }}
       onKeyDown={onKeyDown}
     >

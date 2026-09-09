@@ -60,6 +60,10 @@ declare module "foliate-js/view.js" {
       setStyles(styles: string | [string, string]): void;
       scrollToAnchor(anchor: Range | Element, select?: boolean): Promise<void>;
     };
+    /// A range in a loaded section as a CFI, spelled with the book's own spine
+    /// step: the same string resolveCFI takes back.
+    getCFI(index: number, range: Range): string;
+    resolveCFI(cfi: string): { index: number; anchor: (doc: Document) => Range };
     /// Where the renderer last reported being. `range` is the visible range in
     /// the frame's document, which is how a position becomes a block number.
     lastLocation?: { cfi?: string; range?: Range; fraction?: number };
@@ -79,12 +83,15 @@ declare module "foliate-js/epubcfi.js" {
 
 declare module "foliate-js/overlayer.js" {
   export class Overlayer {
-    static highlight: unknown;
-    static underline: unknown;
+    static highlight: (rects: ArrayLike<DOMRect> & Iterable<DOMRect>, options?: unknown) => Element;
+    static underline: (rects: ArrayLike<DOMRect> & Iterable<DOMRect>, options?: unknown) => Element;
+    static outline: (rects: ArrayLike<DOMRect> & Iterable<DOMRect>, options?: unknown) => Element;
     element: Element;
     add(key: string, range: Range, draw: unknown, options?: unknown): void;
     remove(key: string): void;
-    hitTest(event: Event): [string, Range] | [];
+    /// Takes anything with x/y in the frame document's client coordinates: an
+    /// event there, or a point the parent page converted (annotation-layer.ts).
+    hitTest(point: { x: number; y: number }): [string, Range] | [];
   }
 }
 
