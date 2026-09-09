@@ -1,5 +1,5 @@
 // Putting one spine document on the paper: the shadow root a page card and the
-// ruler both fill (docs/63). The sanitized document's <html> element is cloned
+// ruler both fill (docs/64). The sanitized document's <html> element is cloned
 // whole into a multi-column box the size of the text block, so column k of the
 // layout is page k of the document. Nothing is added inside that <html>
 // element — the baseline stylesheet, the clip box and the overlay sit beside

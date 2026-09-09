@@ -1,4 +1,4 @@
-// The fixed paper (docs/63): its geometry, the zoom over it, the CSS the book
+// The fixed paper (docs/64): its geometry, the zoom over it, the CSS the book
 // may lay on it, the CFI arithmetic a page card resolves with, and the one
 // migration a book ever goes through.
 

@@ -1,4 +1,4 @@
-// Sanitizing a book's CSS. The book's stylesheet reaches the page (docs/63):
+// Sanitizing a book's CSS. The book's stylesheet reaches the page (docs/64):
 // its <style> blocks, its linked sheets and its style attributes are kept, laid
 // over the app's own baseline inside the page card's shadow root. What is not
 // kept is anything that reaches out of the book — the network, the app's own
@@ -37,7 +37,7 @@ export interface CssSanitizeOptions {
 // font-family is rewritten onto these: a named family the book does not embed
 // resolves to whatever a device has, and a generic one to the device's
 // default, and either way the same book would paginate differently on two
-// devices (docs/63, docs/pitfall/268). Monospace stays generic — code is set
+// devices (docs/64, docs/pitfall/268). Monospace stays generic — code is set
 // in whatever the device has, and the pages it lands on may differ by a line.
 export const SHIPPED_FAMILIES = ["Noto Serif", "Noto Serif CJK SC"] as const;
 export const SHIPPED_FONT_STACK = '"Noto Serif", "Noto Serif CJK SC", serif';

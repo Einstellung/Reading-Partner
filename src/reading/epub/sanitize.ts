@@ -29,7 +29,7 @@
 // something the renderer can load is the rendering line's job; what this side
 // owes it is the list of archive entries a document points at.
 //
-// The book's CSS survives (docs/63): <style> blocks, <link rel="stylesheet">
+// The book's CSS survives (docs/64): <style> blocks, <link rel="stylesheet">
 // and style attributes are kept, each put through css-sanitize.ts, which
 // removes what reaches out of the archive or out of the page box. What a page
 // card lays over the app's baseline is exactly this tree's CSS.

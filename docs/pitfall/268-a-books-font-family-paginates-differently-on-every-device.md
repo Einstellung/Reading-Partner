@@ -6,7 +6,7 @@
 
 ## 原因
 
-书的 CSS 保留了（docs/63），它的 `body { font-family: Georgia, serif }` 压过基线。Georgia 没装就回退到通用 `serif`，通用族名解析成设备的默认字体——Linux 是 DejaVu，Mac 是 Times，iPad 又是一套。分页表按字形宽度切页，字体一变页数就变，而表是跨设备同步、写一次不重算的。
+书的 CSS 保留了（docs/64），它的 `body { font-family: Georgia, serif }` 压过基线。Georgia 没装就回退到通用 `serif`，通用族名解析成设备的默认字体——Linux 是 DejaVu，Mac 是 Times，iPad 又是一套。分页表按字形宽度切页，字体一变页数就变，而表是跨设备同步、写一次不重算的。
 
 ## 解法
 

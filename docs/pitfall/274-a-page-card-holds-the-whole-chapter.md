@@ -11,7 +11,7 @@
 
 ## 原因
 
-页卡片挂的是整份消毒后的 spine 文档（docs/63）：`.rp-columns` 用 multicol 把整章排成列，`translateX(-k×480)` 把第 k 列推到版心里，`.rp-clip` 的 `overflow: hidden` 把别的列裁掉。裁掉的列还在 DOM 里，只是看不见——`innerText` 不看 `overflow`。`<style>` 是 `<html>` 原样克隆的一部分，`textContent` 不区分它和正文。
+页卡片挂的是整份消毒后的 spine 文档（docs/64）：`.rp-columns` 用 multicol 把整章排成列，`translateX(-k×480)` 把第 k 列推到版心里，`.rp-clip` 的 `overflow: hidden` 把别的列裁掉。裁掉的列还在 DOM 里，只是看不见——`innerText` 不看 `overflow`。`<style>` 是 `<html>` 原样克隆的一部分，`textContent` 不区分它和正文。
 
 ## 解法
 

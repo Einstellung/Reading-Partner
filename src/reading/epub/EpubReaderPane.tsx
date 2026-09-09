@@ -1,5 +1,5 @@
 // The reading area for an EPUB: one element for the desk, and the events that
-// reach it. The sheets are in the app's own DOM (docs/63), so a tap, a swipe
+// reach it. The sheets are in the app's own DOM (docs/64), so a tap, a swipe
 // and an arrow key all land where they happen; what is here is only the
 // reading of them — reader-logic.ts says what each means, the controller
 // (reader-view.ts) does it.

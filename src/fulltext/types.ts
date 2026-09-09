@@ -24,7 +24,7 @@ export interface Fulltext {
   kind?: "pdf" | "epub";
   // EPUB only: the version of the pagination table the pages were cut on. A
   // text cut on an older table is stale even though FULLTEXT_VERSION did not
-  // move (docs/63); the EPUB reader passes a freshness check that reads this.
+  // move (docs/64); the EPUB reader passes a freshness check that reads this.
   paginationVersion?: number;
   // EPUB only. A page is a laid-out page, and these hold each page's start as a
   // CFI — the precise layer under a page number, for navigating to [p.N] and

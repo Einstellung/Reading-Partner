@@ -1,5 +1,5 @@
 // The webview as a ruler: lay a spine document out on the paper and say where
-// each page begins (docs/63). This is the one place the pagination touches
+// each page begins (docs/64). This is the one place the pagination touches
 // layout; paginate.ts turns the answers into the table and never sees a pixel.
 //
 // The document goes into an off-screen page card exactly as a visible card

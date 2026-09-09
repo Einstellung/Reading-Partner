@@ -1,5 +1,5 @@
 // A shelf cover for an EPUB: the image the package document names, decoded by
-// the webview and scaled to the shelf's size as a JPEG (docs/63). Only the
+// the webview and scaled to the shelf's size as a JPEG (docs/64). Only the
 // container and the package are read — the spine stays zipped — so this costs
 // one small inflate and one image decode per book, once.
 

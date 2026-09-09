@@ -296,7 +296,7 @@ export function markKind(ann: { type?: unknown } | null | undefined): MarkKind |
  * A free stroke on a sheet. Unlike the three text pens, ink is not on any
  * words: there is no range to write a CFI for and no quote to repair it with,
  * so it is stored the way the PDF side stores one — a page and the points —
- * with the page coordinates of docs/63 (576 by 864, origin top-left) in place
+ * with the page coordinates of docs/64 (576 by 864, origin top-left) in place
  * of PDF points. `annotationPage()` reads the same `position.pageIndex` off it
  * as off every other mark.
  */

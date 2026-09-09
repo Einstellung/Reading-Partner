@@ -2,7 +2,7 @@
 // anchor and does not change; what changes when the table is recut is the page
 // number beside it — position.pageIndex, pageLabel and the sort key — which the
 // trace list, the [p.N] anchors and the distillation read (docs/39 §5). This
-// runs once, when a version-1 table is replaced by a version-2 one (docs/63).
+// runs once, when a version-1 table is replaced by a version-2 one (docs/64).
 
 import type { Annotation } from "../../platform/app/reader-contract";
 import { makeEpubSortIndex } from "./annotation";

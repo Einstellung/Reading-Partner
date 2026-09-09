@@ -2,7 +2,7 @@
 // The pane is the wiring; this is what the wiring means, and it is here
 // because a .ts can be tested and a .tsx cannot.
 //
-// The vocabulary is the PDF side's (docs/63): pages on a desk, a zoom that
+// The vocabulary is the PDF side's (docs/64): pages on a desk, a zoom that
 // scales the sheet, a vertical column or a paged flip. The map between a CFI
 // and a page number is the pagination table (paginate.ts); both directions of
 // it are crossed here.

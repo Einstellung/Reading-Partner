@@ -1,6 +1,6 @@
 # EPUB 渲染 spike
 
-iframe 那条路已被 [63](./63-epub纸页.md) 取代：正文在 shadow DOM 页卡片里，事件在 app 的 DOM 里。第二、七节的事件结论只当历史。
+iframe 那条路已被 [64](./64-epub纸页.md) 取代：正文在 shadow DOM 页卡片里，事件在 app 的 DOM 里。第二、七节的事件结论只当历史。
 
 把 docs/39 第七节里"只有真机才能验的"逐条量了一遍，并把 foliate-js vendor 进仓库跑通。产出是结论，不是功能。
 

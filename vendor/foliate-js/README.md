@@ -18,4 +18,4 @@ commit can be diffed in.
 The renderer (`view.js`, `paginator.js`, `epub.js`, `overlayer.js`,
 `progress.js`, `fixed-layout.js`) and the stubs that kept it importable were
 removed when the EPUB reading area moved to fixed pages in shadow-DOM cards
-(docs/63). Nothing under `src/` imports this directory at runtime.
+(docs/64). Nothing under `src/` imports this directory at runtime.

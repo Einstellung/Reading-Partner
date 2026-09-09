@@ -125,7 +125,7 @@ export async function openBook(
     shell.pushToast("warn", "Saved reading position could not be loaded");
   }
   // The pages of an EPUB, before its marks: a mark's page number is read off
-  // the table, and the table may be about to be replaced (docs/63).
+  // the table, and the table may be about to be replaced (docs/64).
   try {
     await io.preparePages?.(bookId, bytes.slice().buffer as ArrayBuffer, format);
   } catch (e) {

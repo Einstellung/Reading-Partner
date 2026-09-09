@@ -1,4 +1,4 @@
-// One sheet on the desk (docs/63). A page card is the EPUB counterpart of a
+// One sheet on the desk (docs/64). A page card is the EPUB counterpart of a
 // PDF page box: paper-coloured, shadowed, PAGE_WIDTH by PAGE_HEIGHT in unscaled
 // units, scaled as a whole by a transform. Inside, a shadow root holds the
 // spine document laid out in columns (page-mount.ts), translated so that the

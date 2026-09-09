@@ -392,7 +392,7 @@ html {
   overscroll-behavior-x: none;
 }
 
-/* The faces an EPUB's pages are set in (docs/63). Shipped in public/fonts so
+/* The faces an EPUB's pages are set in (docs/64). Shipped in public/fonts so
    the same book paginates the same on every device: the page table is cut
    against these and synced, and a device with other fonts would show other
    pages. Declared at document level, which is what a shadow root can use. */

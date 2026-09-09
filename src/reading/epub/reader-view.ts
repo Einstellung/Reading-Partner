@@ -1,6 +1,6 @@
 // The desk: the imperative half of the EPUB reading area, and the place the
 // shell's ViewInstance is implemented (platform/app/reader-contract). Pages
-// are sheets on a scrolling desk, exactly as the PDF side lays them (docs/63):
+// are sheets on a scrolling desk, exactly as the PDF side lays them (docs/64):
 // a vertical column at fit-width, or a paged flip at fit-page; zoom scales the
 // sheets; the top bar's page number is the sheet under the viewport's top.
 //

@@ -1,4 +1,4 @@
-// Reading an EPUB (docs/39, docs/63). Two halves that meet at the sanitized
+// Reading an EPUB (docs/39, docs/64). Two halves that meet at the sanitized
 // tree: the headless ingestion (zip, sanitize, paginate, full text), and the
 // reading area that lays those same documents out on fixed sheets of paper.
 

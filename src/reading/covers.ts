@@ -129,7 +129,7 @@ async function renderCover(
   file: FileRef,
 ): Promise<{ jpeg: Uint8Array; author: string } | null> {
   // An EPUB names its cover in the package document; there is no page one to
-  // raster, and a book that names none gets the no-cover card (docs/63).
+  // raster, and a book that names none gets the no-cover card (docs/64).
   if (isEpub(bytes)) {
     const epub = await renderEpubCover(bytes, { width: COVER_WIDTH_PX, quality: COVER_JPEG_QUALITY });
     if (epub.kind === "ok") return { jpeg: epub.jpeg, author: cleanAuthor(epub.author) };

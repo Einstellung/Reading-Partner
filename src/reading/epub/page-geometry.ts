@@ -1,4 +1,4 @@
-// The paper an EPUB is set on (docs/63). A page is a sheet of fixed CSS pixels,
+// The paper an EPUB is set on (docs/64). A page is a sheet of fixed CSS pixels,
 // 6 by 9 inches at 96 dpi, with a fixed text block inside it and a fixed base
 // type size. The book's own stylesheet is laid over this baseline; the baseline
 // itself never moves, because the page numbers it produces are written into

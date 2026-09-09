@@ -1,6 +1,6 @@
 // Cutting a book into pages — what Fulltext.pages[] holds and what [p.N]
 // counts. A page is a page: what fits on one sheet of the fixed paper
-// (page-geometry.ts) when the spine document is laid out on it (docs/63).
+// (page-geometry.ts) when the spine document is laid out on it (docs/64).
 //
 // The laying out is not done here. This module takes a ruler — a function that
 // says where each page of a document begins — and turns its answers into the

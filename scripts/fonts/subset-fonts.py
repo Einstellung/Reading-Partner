@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the reading faces the EPUB pages are set in (docs/63).
+"""Build the reading faces the EPUB pages are set in (docs/64).
 
 Page numbers have to agree across devices, so the page layout may not depend on
 whatever fonts a device happens to have: the faces ship with the app. Noto

@@ -3,7 +3,7 @@
 // pagination table, the reading position and the annotations are written in
 // (docs/39 §1), and it is resolved here against the very same tree it was
 // computed on — the sanitized spine document, whether that is the parsed copy
-// the ingestion walks or the clone a page card holds (docs/63).
+// the ingestion walks or the clone a page card holds (docs/64).
 //
 // Step numbering, from the spec: a node's element children take the even
 // numbers 2, 4, 6, … in document order, and the character data between two of

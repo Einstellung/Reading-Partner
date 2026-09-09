@@ -1,6 +1,6 @@
 // The one invariant the two halves of EPUB support stand on: a page's CFI,
 // computed by the ingestion against the sanitized tree, resolves in the page
-// card's tree to the same place in the same text (docs/63).
+// card's tree to the same place in the same text (docs/64).
 //
 // The card's tree is a deep clone of the sanitized document's <html> element
 // hung under a div in a shadow root, and it is resolved with the app's own

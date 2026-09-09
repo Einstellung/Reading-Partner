@@ -81,7 +81,7 @@ export interface FiguresIndex {
   version: typeof FIGURES_VERSION;
   status: FiguresStatus;
   figures: Figure[];
-  // EPUB only: the pagination table version the pages were numbered by (docs/63).
+  // EPUB only: the pagination table version the pages were numbered by (docs/64).
   paginationVersion?: number;
   // When the extraction failed. Only on a "failed" index, and what the retry
   // window is measured from.
