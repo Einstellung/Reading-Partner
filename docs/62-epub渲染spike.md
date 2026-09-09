@@ -1,0 +1,117 @@
+# EPUB 渲染 spike
+
+把 docs/39 第七节里"只有真机才能验的"逐条量了一遍，并把 foliate-js vendor 进仓库跑通。产出是结论，不是功能。
+
+测的地方：iPad Pro 11-inch (M5) 模拟器 / iOS 26.5 的 WKWebView，页面在 `tauri://localhost` 下；以及 Ubuntu 上 xvfb 里的 WebKitGTK（Version/60.5），页面在 `http://localhost:1430`。工具是 `epub-spike.html` + `src/reading/epub/spike-harness.tsx`，通过 `scripts/ios-sim.sh eval` 驱动。两本书有版权，没进仓库，由一个带 CORS 和 CORP 头的小 HTTP server 从仓库外喂给 harness。
+
+`tauri ios dev` 在模拟器里也走自定义协议：`location.origin` 是 `tauri://localhost`，不是 `devUrl` 的 `http://localhost:1420`。所以下面每条 iOS 的数都是生产协议下的数，不用等打包再验一遍。Linux 的 dev 走的是 http 源，那一侧的协议差异没覆盖到。
+
+## 一、blob: iframe
+
+能用，而且是同源的。
+
+在 `tauri://localhost` 下 `URL.createObjectURL(new Blob([xhtml], {type:"application/xhtml+xml"}))` 建 iframe，`sandbox="allow-same-origin"`（不给 `allow-scripts`）：
+
+| | iOS WKWebView | WebKitGTK |
+|---|---|---|
+| frame 加载 | 成功，203ms 首次 / 16-20ms 之后 | 成功，6-8ms |
+| `contentDocument` | 可读，`origin` 是 `tauri://localhost` | 可读 |
+| `contentType` | `application/xhtml+xml` 保住了 | 同 |
+| 书里的 `<script>` | 不执行 | 不执行 |
+| 内联 `on*` | 不执行 | 不执行 |
+| blob 图 / CSS / 字体 | 全部加载 | 全部加载 |
+
+COEP `require-corp` 不拦任何一条：blob 是同源 local scheme，CORP 不适用。iOS 下 `crossOriginIsolated` 仍是 `false`（与坑 33 一致），Linux 下是 `true`；两边行为没差别。
+
+Tauri 的 `on_navigation` 也不拦：`navigation.rs` 已经显式放行 `blob:` 并带单测，实测两个后端都放行。
+
+CSP 的结论和 docs/39 的预判相反，见坑 245：`frame-src 'self'` 在 WebKit 上拦不住 blob frame，真正被拦的是 frame 里的 blob CSS 和字体（`style-src`、`font-src` 里没有 `blob:`）。图能出，因为 `img-src` 已经有 `blob:`。违规事件派发在子文档上，父页收不到，所以只能看效果判断。
+
+量这条时踩了坑 246：iframe 插进 DOM 会先为 about:blank 发一次 `load`，第一版探针因此把一次没发生的导航报成了成功。
+
+## 二、不给 allow-scripts 的代价
+
+代价是 iframe 里一个 DOM 事件都不派发，两个后端一致。见坑 244（WebKit bug 218086，foliate-js 上游就是因为它才写 `allow-scripts` 的）。
+
+DOM 读写、`Range`、CFI 计算、`getComputedStyle` 全部正常。不正常的只有事件：父页在 `contentDocument` 上装的监听器收不到任何东西，连父页自己 `dispatchEvent` 派进去的合成事件都收不到。
+
+系统那一层不受影响。模拟器里对正文长按 1.2 秒，iOS 的选区手柄和 `Copy | Look Up | Translate | Search Web | Share…` callout 照常弹出（有截图），选区落在 frame 的 document 上，父页 `contentDocument.getSelection()` 读得到内容。坑 49 在阅读区根节点关 `user-select` 的那套在这里要重新做一遍——frame 里 `userSelect` 实测是 `text`。
+
+## 三、foliate-js vendor 进来
+
+`vendor/foliate-js/`，上游 commit `78914aef`（2026-05-01），MIT LICENSE 原样带上，来源和拷贝日期写在 `vendor/foliate-js/README.md`。vite 里配了 `foliate-js` 别名指向它。`tests/layering.test.ts` 只扫 `src/`，`vendor/` 不用登记，实测九个用例全绿；新目录 `reading/epub` 已登记进 LAYER 表。
+
+用得上的九个文件：`view.js`、`paginator.js`、`epub.js`、`epubcfi.js`、`overlayer.js`、`search.js`、`progress.js`、`text-walker.js`、`fixed-layout.js`。
+
+另外七个（`mobi.js`、`fb2.js`、`comic-book.js`、`pdf.js`、`tts.js`、`vendor/zip.js`、`vendor/fflate.js`）是抛异常的桩：`view.js` 从 `makeBook()` 和 `initTTS()` 里动态 import 它们，那些分支我们永远不走，但 vite 在 transform 阶段就要解析字面量的动态 import，缺文件整个模块报错。见坑 243。存桩而不删分支，`view.js` 才能和上游逐字节相同。
+
+上游只改了一处：`paginator.js` 的正文 iframe 从 `allow-same-origin allow-scripts` 改成 `allow-same-origin`（可用 `globalThis.__foliateSandbox` 覆盖，供 A/B）。改动带 `PATCHED:` 注释，README 里列着。
+
+book 对象按 docs/39 说的自己实现：zip 用 fflate 的 `unzipSync`，喂 `new EPUB({loadText, loadBlob, getSize, sha1}).init()`。`view.open(book)` 之后必须再 `view.init({})`，否则 renderer 拿到书但不排版，`relocate` 永不触发，看起来像挂死。
+
+消毒的挂点是 `EPUB` 实例的 `transformTarget`：每个资源变成 blob URL 之前发一个 `data` 事件，可以换掉 `detail.data` 和 `detail.type`。消毒这条线不归本 spike。
+
+## 四、分页耗时与内存
+
+`具身智能_从大模型到世界模型_中英对照.epub`（2.3 MB，19 个条目，整本书一个 158 KB 的 spine 文件）：
+
+| | ms |
+|---|---|
+| fetch | 16 |
+| unzip | 44 |
+| 解析 OPF 建 book | 3 |
+| open + 首屏可读（`relocate`） | 83 |
+| 总计 | 251 |
+| 翻页 | 中位数 103（跨进大章那一次 850） |
+
+`Fundamentals of Active Inference…zh-bilingual.epub`（71 MB，2255 个条目，70 个 spine 项，最大单章 307 KB）：
+
+| | ms |
+|---|---|
+| fetch | 52 |
+| unzip | 1241 |
+| 解析 OPF 建 book | 9 |
+| open + 首屏可读 | 13 |
+| 总计 | 1420 |
+| 开头翻页 | 中位数 150 |
+| 跳到 50%（换到 137 K 字符、214 张图的一章） | 475 |
+| 在那一章里翻页 | 中位数 104 |
+| 跳到 97% | 16 |
+
+首屏不受书大小影响：foliate 一次只排一个 spine 项，13ms 就有东西可读。花钱的是 `unzipSync` 一次把 71 MB 解开。
+
+内存看 WebContent 进程的 RSS（iOS 上 `performance.memory` 不存在，数只能从进程外取）：打开 71 MB 那本前 621 MB，打开后 775 MB，读到中段峰值 775 MB，回落到 691 MB。一本书 +154 MB，而 PDFium 的堆已经占着一份。docs/08 记的页面进程内存上限在这里是真实约束。
+
+翻到书的最后一页之后 `next()` 不再发 `relocate`，等它的代码会一直等——探针里要有超时。
+
+## 五、Web Crypto SHA-1 与 Intl.Segmenter
+
+都可用，两个后端一致。`tauri://localhost` 是 secure context（`isSecureContext: true`），`crypto.subtle.digest("SHA-1", …)` 算 `"abc"` 得 `a9993e364706816aba3e25717850c26c9cd0d89d`，正确。`Intl.Segmenter` 存在，`具身智能的世界模型` 按 word 粒度切成 6 段。字体解混淆和搜索分词都没有障碍。
+
+## 六、CJK 字体回退
+
+模拟器上没有豆腐块。中英对照正文两种模式下都正常：中文一套 CJK 字体、拉丁一套衬线，混排行距正常，行内公式、矩阵和图注都对。foliate 默认字体栈在没有书内 CSS 时是 `Georgia, serif`；带自己 CSS 的书（Active Inference 那本）算出来是 `-webkit-standard`。
+
+`flow` 属性在运行时从 `paginated` 改成 `scrolled`，正文会重排成滚动流，但不重算宽度：正文只占屏幕左边约 55%，右边空着。切模式要连着重设布局，或者重新 `open`。
+
+字号、行距、边距还没调过，现在是 foliate 的默认值。
+
+## 七、阶段 3 的接法
+
+CSP 改三项，不是一项。`tauri.conf.json` 的 `csp` 里：
+
+- `style-src 'self' 'unsafe-inline' blob:`
+- `font-src 'self' data: blob:`
+- `frame-src 'self' blob:`
+
+前两项是 WebKit 上真正需要的；`frame-src` 在 WebKit 上不加也能跑，加是为了 Chromium/WebView2 那边成立，以及让策略读起来和意图一致。`img-src` 已经有 `blob:`，不动。
+
+资源走 blob，不走 `img:` 自定义协议。 理由是 foliate 的 `Loader` 本来就把每个条目变成 blob URL 并自己引用计数、换章时 revoke；改成自定义协议要重写这一层，还要把整本书的字节留在 Rust 侧。`img:` 协议留给它现在的差事（外链文章图，坑 30）。
+
+foliate 的文件：用九个，桩七个，清单在 `vendor/foliate-js/README.md`。`search.js` 现在没接上，但先留着——它是 `[p.N]` 跳转按引文定位那条路（`jumpToQuote`）在 EPUB 侧的对应件。
+
+事件全在父页做。 坑 244 是这次最硬的约束：正文 iframe 里收不到事件，所以点击翻页、笔手路由、`overlayer.hitTest` 都要在包着 iframe 的容器上监听，按坐标换算进 frame。`touch-routing.ts` 那些纯函数照搬，接线重写。选区靠父页手势加轮询 `contentDocument.getSelection()`，不能等 frame 里的 `selectionchange`。
+
+摄入和渲染共用一次解包。 `unzipSync` 一本 71 MB 的书要 1.2 秒、150 MB 内存，不能在摄入时解一次、渲染时再解一次。解包结果的持有者和生命周期要在阶段 2/3 交界处定死。
+
+还没量的：真机（模拟器的内存上限和 jetsam 行为与真机不同）；笔手路由在 iframe 上的接管参数（坑 117 那套要在新的容器结构上重量）；固定版式（`fixed-layout.js` 一次没跑过）；书内 CSS 与 app 主题的冲突。

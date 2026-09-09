@@ -118,9 +118,12 @@ const LAYER: Record<string, Layer> = {
   "reading/engine": "domain",
   "reading/engine/gesture": "domain",
   // Reading an EPUB: unpack, sanitize, paginate, and the conversion to the same
-  // Fulltext a PDF produces (docs/39). A domain, and that is what decides where
-  // the conversion lives: fulltext/ is a capability and may not import a domain,
+  // Fulltext a PDF produces (docs/39), plus the reader pane on vendored
+  // foliate-js (docs/62). A domain, and that is what decides where the
+  // conversion lives: fulltext/ is a capability and may not import a domain,
   // so it owns the type and the cache while the reading of a book stays here.
+  // A peer of reading/engine rather than a corner of it: that directory is
+  // PDFium geometry all the way down, and the two share the shell's contract.
   "reading/epub": "domain",
   "reading/figures": "domain",
   "reading/lecture": "domain",

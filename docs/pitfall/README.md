@@ -11,6 +11,7 @@
 | iPad 触摸、笔、缩放、翻页 | 触摸与手势 + EmbedPDF 引擎 |
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 鼠标滚轮、触控板 pinch | 触摸与手势 |
+| EPUB 渲染、书里的 iframe、blob 资源 | WebKit / webview + 网络与 CSP + 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
 | 比不同供应商的网络延迟、量首包时间 | 网络与 CSP |
 | 改 deck / 幻灯片的宿主桥、iframe srcdoc | 网络与 CSP |
@@ -126,6 +127,7 @@
 - [72-arxiv-sortby-submitteddate-hangs](./72-arxiv-sortby-submitteddate-hangs.md) — arXiv 加 `sortBy=submittedDate` 25 秒不返回或 429，六个请求就把 IP 限流几分钟；"最新"要用 `submittedDate` 区间过滤，四个文献库一律"新是过滤、排序留给相关性"（OpenAlex 按日期排序会把管理学论文排到神经科学查询第一位）
 - [73-s2-citation-edges-null-and-ignored-year](./73-s2-citation-edges-null-and-ignored-year.md) — S2 的 `/references`、`/citations` 会回 `data: null`（出版商抽掉字段，照文档写就抛 TypeError），`year=` 参数静默忽略；引用图往后由 S2 领跑、往前只有 OpenAlex 能服务端过滤加排序，空结果必须能降级到下一个库
 - [152-srcdoc-iframe-inherits-the-parent-csp](./152-srcdoc-iframe-inherits-the-parent-csp.md) — `srcdoc`（和 `blob:`）iframe 不过 `frame-src`，CSP 从父页继承：deck 的内联脚本是靠 app 自己的 `script-src 'unsafe-inline'` 在跑；22 MB 的 srcdoc load 415 ms，CSP 一个字不用改
+- [245-frame-src-does-not-stop-a-blob-frame-but-style-src-stops-its-css](./245-frame-src-does-not-stop-a-blob-frame-but-style-src-stops-its-css.md) — WebKit 不按 `frame-src` 判 blob: 的 frame 导航（`'self'` 照样放行，Chromium 会拦），但那个 frame 继承父页 CSP 去判自己的子资源：`img-src` 有 `blob:` 图能出，`style-src`/`font-src` 没有，CSS 和字体静静失效。违规事件派发在子文档上，父页的监听器一条都收不到；判有没有被拦只能读 `getComputedStyle` 和 `document.fonts.size`。EPUB 渲染要三项一起加 `blob:`
 - [186-fake-ip-dns-does-not-say-what-is-proxied](./186-fake-ip-dns-does-not-say-what-is-proxied.md) — fake-ip 模式下 DNS 永远返回 `198.18.0.x` 占位 IP，分流在连接建立时才按反查回的域名匹配，「三个域名解析结果一样」推不出「三家路径相同」（`dns-hijack: any:53` 让 `dig` 也拿不到真实 IP）；`geosite.dat` 停在 2025-11-19，2026 年才上线的 `api.xiaomimimo.com` 没命中 `GEOSITE,CN,DIRECT`，落到兜底走代理，TLS 882ms 对另两家 93/82ms，被写成「小米服务端慢」。确诊查 mihomo 的 `/connections` 看每条连接的 `rule` 和 `chains`，解法是最前面加 `DOMAIN-SUFFIX,<域名>,DIRECT` 再热重载；走代理时「请求→首帧」也含代理往返，去掉隧道后服务端那一段同样快了一倍
 
 ## 存储与数据目录
@@ -239,6 +241,8 @@
 - [116-no-sign-in-control-is-not-a-session](./116-no-sign-in-control-is-not-a-session.md) — 「页面上还有没有登录入口」在登录窗口里两头不成立：彭博登录页上一个可点标签都不匹配（写的是 Continue），按这个信号读出来用户正在输密码的那页是"已登录"；未登录首页的登录入口第 2 次 poll（约 6 秒）才渲染出来，而 readyState 到 21 秒才 complete。要同站、非登录路径、字符数 ≥2000、且字符数不再变化连续两次才认
 - [141-a-blocked-main-thread-stops-the-scroll-outright](./141-a-blocked-main-thread-stops-the-scroll-outright.md) — 主线程占多久屏幕就冻多久（90ms 阻塞冻 82-119ms），和挂不挂 wheel 监听、passive 与否无关，Chromium 同样冻；滚动路径上别占主线程，判据用屏幕像素不用页内计数
 - [178-webkit-pays-per-font-family-before-first-paint](./178-webkit-pays-per-font-family-before-first-paint.md) — 生产构建提交到出像素之间 WebKit 空 78ms、Chromium 12ms、Firefox 25ms，和 JS 体积无关；`body` 字体栈里 WebKit 解析不出的每个 family（`system-ui`、`"Segoe UI"`）各查询约 33ms，Chromium/Firefox 换栈没差别。字体栈至今没按平台拆分，坑还在
+- [244-a-scriptless-sandboxed-iframe-dispatches-no-events-in-webkit](./244-a-scriptless-sandboxed-iframe-dispatches-no-events-in-webkit.md) — `sandbox="allow-same-origin"` 不给 `allow-scripts` 时，WebKit 连 DOM 事件都不派发（bug 218086，iOS 26.5 与 WebKitGTK 一致）：父页在 `contentDocument` 上装的监听器收不到任何东西，DOM 读写、Range、CFI 全都正常。EPUB 正文 iframe 里的点击翻页、笔手路由、`overlayer.hitTest` 都得挪到父页做；系统的长按选区和 callout 不受影响，选区照样读得到
+- [246-an-iframes-first-load-event-is-about-blank](./246-an-iframes-first-load-event-is-about-blank.md) — iframe 一插进 DOM，WebKit 立刻为它的初始 about:blank 发一次 `load`，早于取 `src`；配上坑 99 那种静默取消，一次没发生的导航看起来和成功一模一样。判导航成功要看 `documentURI` 落在哪，不看事件
 
 ## 浮层与 shadcn 原语
 
@@ -327,6 +331,7 @@
 - [185-tauri-command-args-are-taken-by-parameter-name](./185-tauri-command-args-are-taken-by-parameter-name.md) — Tauri 命令的参数按参数名从 JS 对象里取，写 `payload: T` 就逼 JS 多包一层；想收平铺对象就把字段列成独立参数
 - [232-a-virtual-clock-on-setTimeout-costs-real-time](./232-a-virtual-clock-on-setTimeout-costs-real-time.md) — 「跑在虚拟时钟上所以不花真实时间」的测试，时钟自己是 `setTimeout(r, 0)` 推的：宿主把 0 钳到约 1ms，`settle()` 空转 200 轮就是 200 毫秒，七个用例 1.4 秒。被测代码自己不碰真定时器时改用 `Promise.resolve()` 推进，1408ms → 130ms，空转不要钱之后轮数还能往上加
 - [233-a-failing-fetch-test-pays-the-retry-ladder](./233-a-failing-fetch-test-pays-the-retry-ladder.md) — 注入了 fetch 不等于注入了时间：故意发 500 的用例照走生产的重试退避（0.5s + 1s 真定时器），六个用例 7.5 秒，而 bun 对这个量级的用例一个 per-test 时间都不打。编排层把 `sleep` 一起收成可选注入转发给 `fetchText`，默认值不变；定位靠失败路径上的 `console.warn` 行数，验收拿 `expect() calls` 总数不变当闸
+- [243-vite-resolves-a-dynamic-import-that-never-runs](./243-vite-resolves-a-dynamic-import-that-never-runs.md) — `vite:import-analysis` 对带字面量的动态 import 和静态 import 一视同仁，transform 阶段就要解析：一条永远跑不到的分支里 `await import('./x.js')` 解析不到，整个模块变错误页。vendor 一个库时，它引用过的文件都得存在，哪怕只是抛异常的桩
 
 ## 历史（zotero/reader 引擎时代）
 

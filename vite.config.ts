@@ -35,7 +35,14 @@ export default defineConfig({
   // Matches the `paths` entry in tsconfig.json; the shadcn CLI writes `@/`
   // imports into every component it generates.
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // foliate-js is vendored, not a package: the author publishes none. The
+      // alias is what lets app code write `foliate-js/view.js` instead of
+      // counting `../` out of src/ into the repo root. vendor/foliate-js/README.md
+      // records the upstream commit and the patches.
+      "foliate-js": fileURLToPath(new URL("./vendor/foliate-js", import.meta.url)),
+    },
   },
   server: {
     host: devHost,
