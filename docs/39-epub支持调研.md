@@ -18,7 +18,11 @@
 
 iOS 模拟器上还一次没跑过，正式打开路径（文件对话框那条）也没走过——目前的验证是把 `createEpubReader` 直接挂进运行中的 app。
 
-标注（阶段 4）没做，`setTool` / `setAnnotations` 那几个实现成 no-op。
+阶段 4 落地：EPUB 上的高亮、划线、AI 笔、痕迹列表、蒸馏、笔记和同步全部闭环。盘上的形状见第五节。三条实现上的事：
+
+- 选区只能靠父页。iframe 里零事件（坑 244），所以父页事件层在 pointerup 后读 `contentDocument.getSelection()`，非空且笔在手上就转成 Range → range CFI（foliate 的 `view.getCFI`）+ 引文 + 块号，落一条标注并清掉系统选区。系统的选区手柄留着（用户靠它调选区），callout 用注进 iframe 的 `-webkit-touch-callout: none` 压掉，`user-select` 不关。
+- 画和命中都在父页的 overlayer 上，坐标要减 iframe 的 box（坑 255），换章后重画的挂点是 `create-overlay` 加一个微任务（坑 254）。高亮和划线同一个不透明度 `MARKUP_OPACITY`；AI 笔画的就是划线，靠 `aiThreadId` 区分。
+- 笔手路由复用 `engine/gesture/touch-routing.ts` 的纯函数（`routePointer`/`toolKindOf`/`pointerKindOf`），只在上面加一条：EPUB 上 ink 不画——自由笔迹锚在页面坐标上，重排的书没有页面。接线在父页，笔按下就用 `caretRangeFromPoint` 拖选区。
 
 阶段 1（EPUB 只当 PDF 的图源）跳过：用户手上没有同一本书的两个格式，这个阶段的前提不成立。
 
@@ -74,7 +78,7 @@ CFI 的下标数的是子节点序号，往 DOM 里注入或删除节点就会�
 | 文件 | LOC | 改动 |
 |---|---|---|
 | `src/fulltext/types.ts` | 33 | 加 `kind` / `pageLocators` / `pageLabels` |
-| `src/platform/app/reader-contract.ts` | 119 | 实际只加了 `ViewState.cfi`。`navigate` 和 `highlightQuote` 继续收位置块号：块号到 CFI 的翻译在 EPUB 那一侧（`reader-logic.ts`），壳因此一份代码驱动两个引擎。`annotationPage()` 等阶段 4 |
+| `src/platform/app/reader-contract.ts` | 119 | 实际只加了 `ViewState.cfi`。`navigate` 和 `highlightQuote` 继续收位置块号：块号到 CFI 的翻译在 EPUB 那一侧（`reader-logic.ts`），壳因此一份代码驱动两个引擎。`annotationPage()` 不用改：EPUB 标注的 `position.pageIndex` 也是块号 |
 | `src/reading/engine/convert.ts` | 318 | 现有 318 行一行不动，旁边加 EPUB 的 position 编解码 |
 | `src/reading/figures/types.ts` | 50 | `bbox` 换成 `source` 联合，见第三节 |
 | 新增 `src/reading/locator.ts` | ~60 | `Locator` 和两边的转换 |
@@ -182,9 +186,11 @@ export type FigureSource =
   "value": "epubcfi(/6/18!/4/68/2,/3:189,/3:491)" }
 ```
 
-`sortIndex` 那边 Zotero 的 PDF 是三段 `页|上边距|左边距`，EPUB 是两段 `spine 序号|字符偏移`。`makeSortIndex` 加个同族函数即可，同一本书内不会混用两种键，字典序仍然正确。
+`position` 里多两个字段：`pageIndex` 填位置块序号（0-based，和 PDF 标注一样），旁边的顶层 `quote` 是 `TextQuoteSelector` 形状的引文加前后各 32 字。CFI 是主锚点，引文是修复——CFI 失效（解析抛错、落在别的 spine 项、解出空区间、解出的字和引文对不上）就按引文回到那段话，重复的句子靠前后文和上一次的字符偏移挑出是哪一份。
 
-`annotationPage()` 对 EPUB 标注返回 null。调用方的类型已经是 `number | null`（`distill.ts`、`arrears.ts`、`use-notes.ts` 都是），要检查的是痕迹列表那行 `Page {pageLabel}` 的显示——改读 `Annotation.pageLabel`，Zotero 给 EPUB 标注也填这个字段。
+`sortIndex` 那边 Zotero 的 PDF 是三段 `页|上边距|左边距`，EPUB 是两段 `spine 序号|字符偏移`（`00003|0001234`，定宽补零）。`makeSortIndex` 旁边加同族函数即可，同一本书内不会混用两种键，字典序仍然正确。
+
+`annotationPage()` 对 EPUB 标注返回块号，不返回 null。写这句时块号的概念还没定下来；定下来之后 `position.pageIndex` 在两种格式里是同一件东西——`[p.N]` 的那个 N——`distill.ts`、`arrears.ts`、`use-notes.ts`、`use-prep-trigger.ts` 因此一行不用改，蒸馏和笔记直接拿到 EPUB 标注的页码。痕迹列表那行 `Page {pageLabel}` 也照旧：`pageLabel` 填 `pageLabels[i]`，有 page-list 的书显示的是纸书页码。
 
 顺带：zotero/reader 是 AGPLv3（`COPYING` 明写），代码一行都不能抄。上面引的是它公开的数据格式，不是实现。
 
@@ -195,7 +201,7 @@ export type FigureSource =
 | 1 | EPUB 当图源（第四节） | 1–2 天 | 有 EPUB 的书，图注和图第一次是真的 | 跳过：用户没有同书双格式 |
 | 2 | intake 认 EPUB + EPUB → `Fulltext` + 分页表 + 大纲，不接引擎 | 3–5 天 | 只有 EPUB 的书第一次能被 AI 通读和讲；阅读区先给纯文本降级视图 | 已完成 |
 | 3 | 接 foliate-js：滚动/翻页、主题字号、位置持久化、`[p.N]` 跳转 | 1–2 周 | 能读了 | 已完成 |
-| 4 | EPUB 标注：选区 ↔ CFI、overlayer、同步 | 1 周 | 痕迹、蒸馏、笔记在 EPUB 上闭环 | 没做 |
+| 4 | EPUB 标注：选区 ↔ CFI、overlayer、同步 | 1 周 | 痕迹、蒸馏、笔记在 EPUB 上闭环 | 已完成 |
 | 5 | 图的视觉描述与落盘缓存；iPad 手势对齐 | 1 周 | 没图注的书也有图目录 | 没做 |
 
 阶段 2 要顺带改的小东西：`sources/url.ts` 的 `SniffedKind = "pdf" | "html"` 加 `"epub"`（magic 是 zip 的 `PK\x03\x04` 加 `mimetype` 条目内容 `application/epub+zip`）；`library.ts:22` 的 `libraryPdfPath` 把 `.pdf` 写死在路径里，要按 format 取扩展名；`library.json` 的 `LibraryEntry` 加 `format`。书的身份仍是字节的 SHA-256，与格式无关，这块不用动。
