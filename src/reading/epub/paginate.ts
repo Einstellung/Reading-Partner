@@ -15,7 +15,7 @@
 // notes as [p.N] strings that nothing rewrites, so recutting a book moves all
 // of them at once.
 
-import { elementSteps, epubCfi, pointSteps, textSteps } from "./cfi";
+import { elementSteps, epubCfi, parseEpubCfi, pointSteps, resolvePoint, textSteps } from "./cfi";
 import type { NavEntry } from "./nav";
 import { PAGE_GEOMETRY, type PageGeometry } from "./page-geometry";
 import type { EpubBook, SpineDocument } from "./parse";
@@ -85,12 +85,20 @@ interface Cut {
 // A ruler's points, as offsets and local CFIs, in order and without repeats.
 // A point on an element is a page that begins at a picture or a rule; its CFI
 // names the element and its offset is where the element's text would start.
+//
+// The ruler's nodes belong to whatever tree it laid out — the webview's clone,
+// not the parsed document the offsets are counted on — so a point goes through
+// its CFI: steps off the ruler's node, resolved back on the parsed tree, and
+// only then an offset (docs/pitfall/267).
 function cutsOf(doc: SpineDocument, points: PagePoint[]): Cut[] {
   const runs = indexRuns(doc.text);
   const cuts: Cut[] = [];
+  const root = doc.doc.documentElement;
   for (const point of points) {
-    const offset = offsetOfPoint(doc.text, runs, point.node, point.offset ?? 0);
-    const local = pointSteps(point.node, point.offset) ?? localOf(doc, offset);
+    const local = pointSteps(point.node, point.offset) ?? localOf(doc, 0);
+    const parsed = parseEpubCfi(epubCfi(doc.index, doc.idref, local));
+    const own = parsed ? resolvePoint(root, parsed) : null;
+    const offset = own ? offsetOfPoint(doc.text, runs, own.node, own.offset) : 0;
     const last = cuts[cuts.length - 1];
     if (last && (offset < last.offset || (offset === last.offset && local === last.local))) continue;
     cuts.push({ offset, local });

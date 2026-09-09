@@ -154,6 +154,27 @@ describe("the book's CSS", () => {
     expect(rewriteCssUrls(out, (t) => `blob:${t}`)).toContain('url("blob:img/a.png")');
   });
 
+  test("a font the book does not carry becomes the shipped faces", () => {
+    const opts = { resolveUrl: resolve };
+    expect(sanitizeDeclarations("font-family: Georgia, serif", opts)).toBe(
+      'font-family: "Noto Serif", "Noto Serif CJK SC", serif',
+    );
+    expect(sanitizeDeclarations("font-family: 'Courier New', monospace", opts)).toBe(
+      'font-family: monospace, "Noto Serif", "Noto Serif CJK SC", serif',
+    );
+    expect(sanitizeDeclarations("font-family: monospace", opts)).toBe("font-family: monospace");
+    expect(sanitizeDeclarations("font-family: inherit", opts)).toBe("font-family: inherit");
+    expect(sanitizeDeclarations("font: italic bold 12px/1.4 Georgia, serif", opts)).toBe("");
+    expect(sanitizeDeclarations("font: bold 1.2em serif", opts)).toBe(
+      'font: bold 1.2em "Noto Serif", "Noto Serif CJK SC", serif',
+    );
+    // A face the book embeds is the book's to use, with the shipped ones behind it.
+    const sheet = `@font-face { font-family: "Fira"; src: url(x.ttf) } p { font-family: Fira, Georgia, serif }`;
+    const out = sanitizeCss(sheet, opts);
+    expect(out).toContain('p { font-family: "Fira", "Noto Serif", "Noto Serif CJK SC", serif }');
+    expect(sanitizeCss(out, opts)).toBe(out);
+  });
+
   test("a style attribute is a declaration list under the same rules", () => {
     expect(sanitizeDeclarations("text-align:center; position:fixed; x:javascript:1", { resolveUrl: () => null })).toBe(
       "text-align: center; position: relative",
@@ -215,6 +236,27 @@ describe("CFI arithmetic on a card's tree", () => {
     expect(compareLocal(at("/4/2"), at("/4/2/1:5"))).toBeLessThan(0);
     expect(compareLocal(at("/4/4"), at("/4/2/3:0"))).toBeGreaterThan(0);
     expect(compareLocal(at("/4/2/1:5"), at("/4/2/1:5"))).toBe(0);
+  });
+});
+
+describe("a ruler over a cloned tree", () => {
+  test("its points are counted on the parsed document, not on the clone", async () => {
+    const book = parseEpub(buildEpub({ docs: [{ name: "c1.xhtml", body: prose(12, 300) }] }));
+    const own = await paginate(book, characterRuler(500));
+    // The same cuts, but every node handed back is the clone's, as the webview's ruler does.
+    const cloned = await paginate(book, async (doc) => {
+      const holder = doc.doc.createElement("div");
+      holder.append(doc.doc.documentElement.cloneNode(true));
+      const points = await characterRuler(500)(doc);
+      const paras = Array.from(holder.querySelectorAll("p"));
+      return points.map((p) => {
+        const i = Array.from(doc.doc.querySelectorAll("p")).findIndex((q) => q.contains(p.node));
+        return { node: paras[i].firstChild!, offset: p.offset };
+      });
+    });
+    expect(cloned.blocks.map((b) => [b.charOffset, b.cfi])).toEqual(own.blocks.map((b) => [b.charOffset, b.cfi]));
+    expect(cloned.blocks.length).toBeGreaterThan(3);
+    expect(cloned.blocks[2].charOffset).toBeGreaterThan(cloned.blocks[1].charOffset);
   });
 });
 

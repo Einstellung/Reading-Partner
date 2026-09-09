@@ -27,6 +27,86 @@ export type CssUrlResolver = (raw: string) => string | null;
 export interface CssSanitizeOptions {
   /** Resolves a url() to what should be written in its place. */
   resolveUrl: CssUrlResolver;
+  /** Family names the sheet's own @font-face rules declare; filled in by sanitizeCss. */
+  fontFaces?: ReadonlySet<string>;
+  /** Inside an @font-face block, where font-family names the face rather than choosing one. */
+  inFontFace?: boolean;
+}
+
+// The faces shipped with the app (public/fonts, styles.css). A book's
+// font-family is rewritten onto these: a named family the book does not embed
+// resolves to whatever a device has, and a generic one to the device's
+// default, and either way the same book would paginate differently on two
+// devices (docs/63, docs/pitfall/268). Monospace stays generic — code is set
+// in whatever the device has, and the pages it lands on may differ by a line.
+export const SHIPPED_FAMILIES = ["Noto Serif", "Noto Serif CJK SC"] as const;
+export const SHIPPED_FONT_STACK = '"Noto Serif", "Noto Serif CJK SC", serif';
+
+const GENERIC_FAMILIES = new Set([
+  "serif", "sans-serif", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif",
+  "ui-rounded", "math", "emoji", "fangsong",
+]);
+const MONO_FAMILIES = new Set(["monospace", "ui-monospace"]);
+const KEYWORDS = new Set(["inherit", "initial", "unset", "revert"]);
+
+function unquote(name: string): string {
+  const t = name.trim();
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return t.slice(1, -1);
+  return t;
+}
+
+/**
+ * A font-family value with every family the pages cannot count on removed:
+ * the book's own embedded faces and the shipped ones stay, monospace stays
+ * generic, everything else becomes the shipped stack. Null when nothing is
+ * left to say.
+ */
+function fontFamilyValue(value: string, faces: ReadonlySet<string> | undefined): string | null {
+  const important = /!important$/i.test(value);
+  const raw = value.replace(/\s*!important$/i, "");
+  if (KEYWORDS.has(raw.trim().toLowerCase())) return value;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (s: string) => {
+    if (seen.has(s)) return;
+    seen.add(s);
+    out.push(s);
+  };
+  let shipped = false;
+  for (const part of splitOutside(raw, ",")) {
+    const name = unquote(part);
+    if (name === "") continue;
+    const lower = name.toLowerCase();
+    if (MONO_FAMILIES.has(lower)) {
+      push(lower);
+      continue;
+    }
+    if ((SHIPPED_FAMILIES as readonly string[]).includes(name) || faces?.has(name)) {
+      push(`"${name}"`);
+      continue;
+    }
+    if (!GENERIC_FAMILIES.has(lower) && !faces?.has(name)) {
+      // A named family the book does not carry: replaced by the shipped stack.
+      shipped = true;
+      continue;
+    }
+    shipped = true;
+  }
+  if (shipped || out.some((s) => s.startsWith('"'))) {
+    for (const name of SHIPPED_FAMILIES) push(`"${name}"`);
+    push("serif");
+  }
+  if (out.length === 0) return null;
+  return out.join(", ") + (important ? " !important" : "");
+}
+
+const FONT_FACE_NAME = /@font-face\s*\{[^}]*?font-family\s*:\s*("([^"]+)"|'([^']+)'|([^;}]+))/gi;
+
+/** The family names a sheet declares with @font-face. */
+export function declaredFontFaces(css: string): Set<string> {
+  const faces = new Set<string>();
+  for (const m of css.matchAll(FONT_FACE_NAME)) faces.add((m[2] ?? m[3] ?? m[4] ?? "").trim());
+  return faces;
 }
 
 const DROP_AT_RULES = new Set([
@@ -146,6 +226,17 @@ function sanitizeDeclaration(raw: string, opts: CssSanitizeOptions): string | nu
   if (prop === "position" && ESCAPING_POSITIONS.has(value.toLowerCase().replace(/\s*!important$/, ""))) {
     value = value.toLowerCase().includes("!important") ? "relative !important" : "relative";
   }
+  if (prop === "font-family" && !opts.inFontFace) {
+    const families = fontFamilyValue(value, opts.fontFaces);
+    if (families === null) return null;
+    value = families;
+  }
+  // The shorthand carries a family list at its end; one naming a face the
+  // pages cannot count on is dropped whole rather than half-rewritten.
+  if (prop === "font" && /[,"']/.test(value)) return null;
+  if (prop === "font") {
+    value = value.replace(/\b(serif|sans-serif|system-ui|cursive|fantasy)\s*$/i, SHIPPED_FONT_STACK);
+  }
   let dropped = false;
   value = value.replace(URL_TOKEN, (_m, dq: string | undefined, sq: string | undefined, bare: string | undefined) => {
     const target = (dq ?? sq ?? bare ?? "").trim();
@@ -205,7 +296,7 @@ function sanitizeBlock(css: string, opts: CssSanitizeOptions): string[] {
         continue;
       }
       if (name === "font-face") {
-        const decls = sanitizeDeclarations(body, opts);
+        const decls = sanitizeDeclarations(body, { ...opts, inFontFace: true });
         // A face with no src it may load is a face that loads nothing.
         if (/(^|; )src: /.test(decls)) out.push(`@font-face { ${decls} }`);
         continue;
@@ -221,7 +312,9 @@ function sanitizeBlock(css: string, opts: CssSanitizeOptions): string[] {
 
 /** A whole stylesheet, sanitized and written back in canonical form. */
 export function sanitizeCss(css: string, opts: CssSanitizeOptions): string {
-  return sanitizeBlock(stripComments(css), opts).join("\n");
+  const clean = stripComments(css);
+  const withFaces = opts.fontFaces ? opts : { ...opts, fontFaces: declaredFontFaces(clean) };
+  return sanitizeBlock(clean, withFaces).join("\n");
 }
 
 /**

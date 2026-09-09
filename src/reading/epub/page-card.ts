@@ -48,6 +48,12 @@ export interface PageCard {
   cfiOf(range: Range): string | null;
   /** Page-space rects of a live Range, clipped to nothing: the caller clips. */
   rectsOf(range: Range): DOMRect[];
+  /**
+   * Bring the column a Range starts in onto the sheet. For a range the table
+   * put on this page but this device's layout put on the next column: the
+   * sheet follows the words rather than the number.
+   */
+  showColumnOf(range: Range): boolean;
 }
 
 export function createPageCard(owner: Document, resources: PageResources): PageCard {
@@ -132,6 +138,15 @@ export function createPageCard(owner: Document, resources: PageResources): PageC
       return doc ? rangeToCfi(range, doc.index, doc.idref) : null;
     },
 
+    showColumnOf(range) {
+      const m = card.mounted;
+      if (!m) return false;
+      const column = columnOfRange(m, range);
+      if (column === null) return false;
+      m.columns.style.transform = `translateX(${-column * BODY_WIDTH}px)`;
+      return true;
+    },
+
     rectsOf(range) {
       const box = el.getBoundingClientRect();
       return Array.from(range.getClientRects()).map(
@@ -150,24 +165,35 @@ function columnOfCfi(m: MountedDocument, cfi: string): number | null {
   if (!parsed) return null;
   const at = resolvePoint(m.root, parsed);
   if (!at) return null;
+  const owner = m.root.ownerDocument;
+  const range = owner.createRange();
+  if (at.node.nodeType === 3) {
+    const text = at.node as Text;
+    range.setStart(text, at.offset);
+    range.setEnd(text, Math.min(text.data.length, at.offset + 1));
+  } else {
+    range.selectNode(at.node);
+  }
+  return columnOfRange(m, range);
+}
+
+// The column a range's first box sits in, measured with the columns box
+// untransformed so the answer does not depend on the page shown before. Client
+// rects are in viewport pixels, which the sheet's scale has multiplied: the
+// distance from the columns box's left edge is divided back by that scale,
+// read off the box itself, before it is counted in columns.
+function columnOfRange(m: MountedDocument, range: Range): number | null {
   const previous = m.columns.style.transform;
   m.columns.style.transform = "none";
   try {
-    const origin = m.columns.getBoundingClientRect().left;
-    const owner = m.root.ownerDocument;
-    const range = owner.createRange();
-    if (at.node.nodeType === 3) {
-      const text = at.node as Text;
-      range.setStart(text, at.offset);
-      range.setEnd(text, Math.min(text.data.length, at.offset + 1));
-    } else {
-      range.selectNode(at.node);
-    }
+    const box = m.columns.getBoundingClientRect();
+    const scale = box.width > 0 ? box.width / BODY_WIDTH : 1;
+    const at = (left: number) => columnOf((left - box.left) / scale, BODY_WIDTH);
     for (const r of Array.from(range.getClientRects())) {
-      if (r.width > 0 || r.height > 0) return columnOf(r.left - origin, BODY_WIDTH);
+      if (r.width > 0 || r.height > 0) return at(r.left);
     }
-    const box = range.getBoundingClientRect();
-    return box.width > 0 || box.height > 0 ? columnOf(box.left - origin, BODY_WIDTH) : null;
+    const whole = range.getBoundingClientRect();
+    return whole.width > 0 || whole.height > 0 ? at(whole.left) : null;
   } finally {
     m.columns.style.transform = previous;
   }

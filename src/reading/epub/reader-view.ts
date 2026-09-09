@@ -93,6 +93,8 @@ export interface EpubReaderOptions {
 interface Slot {
   el: HTMLElement;
   card: PageCard | null;
+  /** Resolves once the card shows its page: mounted, pictures settled, column in place. */
+  shown: Promise<void> | null;
 }
 
 /**
@@ -133,7 +135,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     el.style.position = "absolute";
     el.dataset.page = String(i);
     strip.append(el);
-    slots.push({ el, card: null });
+    slots.push({ el, card: null, shown: null });
   }
 
   // --- state --------------------------------------------------------------
@@ -147,7 +149,6 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   let mountedFrom = 0;
   let mountedTo = -1;
   let scrollTimer: number | null = null;
-  let pendingShow = 0;
 
   const viewport = () => ({ clientWidth: scroller.clientWidth, clientHeight: scroller.clientHeight });
 
@@ -213,10 +214,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     const block = pagination.blocks[i];
     const doc = book.docs[block.spine];
     const ordinal = i - firstPageOfSpine(block.spine);
-    const token = ++pendingShow;
-    void card.show(doc, block.cfi, ordinal).then(() => {
-      if (destroyed || token < 0) return;
-    });
+    slot.shown = card.show(doc, block.cfi, ordinal);
     return card;
   }
 
@@ -227,6 +225,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     slot.card.clear();
     cardPool.push(slot.card);
     slot.card = null;
+    slot.shown = null;
   }
 
   const spineStarts = new Map<number, number>();
@@ -329,7 +328,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
 
   async function cardReady(i: number): Promise<PageCard | null> {
     const card = mountSlot(i);
-    if (card.mounted) await card.mounted.ready;
+    await slots[i].shown;
     return destroyed ? null : card;
   }
 
@@ -350,11 +349,15 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     const range = owner.createRange();
     range.setStart(start.node, start.offset);
     range.setEnd(end.node, end.offset);
-    const rects = card.rectsOf(range);
+    let rects = card.rectsOf(range);
+    const onSheet = (r: DOMRect) => r.right >= 0 && r.left <= PAGE_WIDTH && r.bottom >= 0 && r.top <= PAGE_HEIGHT;
+    // The table put the quote on this page; this device's layout may have put
+    // it a column over. The sheet follows the words.
+    if (rects.length > 0 && !rects.some(onSheet) && card.showColumnOf(range)) rects = card.rectsOf(range);
     if (rects.length === 0) return false;
     card.overlay.replaceChildren();
     for (const r of rects) {
-      if (r.right < 0 || r.left > PAGE_WIDTH || r.bottom < 0 || r.top > PAGE_HEIGHT) continue;
+      if (!onSheet(r)) continue;
       const d = owner.createElement("div");
       d.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:${QUOTE_COLOR};opacity:${QUOTE_OPACITY};border-radius:2px;`;
       card.overlay.append(d);

@@ -1,5 +1,7 @@
 # EPUB 渲染 spike
 
+iframe 那条路已被 [63](./63-epub纸页.md) 取代：正文在 shadow DOM 页卡片里，事件在 app 的 DOM 里。第二、七节的事件结论只当历史。
+
 把 docs/39 第七节里"只有真机才能验的"逐条量了一遍，并把 foliate-js vendor 进仓库跑通。产出是结论，不是功能。
 
 测的地方：iPad Pro 11-inch (M5) 模拟器 / iOS 26.5 的 WKWebView，页面在 `tauri://localhost` 下；以及 Ubuntu 上 xvfb 里的 WebKitGTK（Version/60.5），页面在 `http://localhost:1430`。工具是 `epub-spike.html` + `src/reading/epub/spike-harness.tsx`，通过 `scripts/ios-sim.sh eval` 驱动。两本书有版权，没进仓库，由一个带 CORS 和 CORP 头的小 HTTP server 从仓库外喂给 harness。

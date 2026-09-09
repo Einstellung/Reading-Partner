@@ -11,7 +11,7 @@
 // urls rewritten) and the url()s of a <style>. Attribute values change; the
 // tree's shape does not.
 
-import { rewriteCssUrls, sanitizeCss } from "./css-sanitize";
+import { SHIPPED_FONT_STACK, rewriteCssUrls, sanitizeCss } from "./css-sanitize";
 import {
   BASE_FONT_PX,
   BASE_LINE_HEIGHT,
@@ -27,7 +27,7 @@ import { XLINK_NS } from "./sanitize";
 import { resolveZipPath, type EpubZip } from "./zip";
 
 /** The faces shipped in public/fonts, declared in styles.css. */
-export const READING_FONT_STACK = '"Noto Serif", "Noto Serif CJK SC", serif';
+export const READING_FONT_STACK = SHIPPED_FONT_STACK;
 
 // The baseline under the book's CSS. Everything a book is likely to restyle
 // is set without !important so the book wins; the box geometry is on elements
