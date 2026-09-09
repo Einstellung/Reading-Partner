@@ -32,6 +32,13 @@ export interface ViewState {
   // Reading layout, per book: "vertical" continuous scroll (default) or "paged"
   // horizontal fit-page flip (touch devices). Absent restores to vertical.
   layout?: "vertical" | "paged";
+  // The exact place an EPUB was left, as a canonical fragment identifier
+  // (docs/39 §1). pageIndex stays beside it and keeps counting position blocks,
+  // which is what the top bar and every [p.N] speak; this is the layer under
+  // it, and restoring prefers it when it is there. The PDF engine never writes
+  // it — a page plus an in-page offset is already exact — so a state that
+  // carries one was written by the EPUB reader.
+  cfi?: string;
 }
 
 export interface ViewStats {

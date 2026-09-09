@@ -52,7 +52,17 @@ declare module "foliate-js/view.js" {
       getContents(): { doc: Document; index: number }[];
       next(): Promise<void>;
       prev(): Promise<void>;
+      /// Re-lay-out at the current geometry. Public because a flow change has
+      /// to be rendered twice (docs/pitfall/247).
+      render(): void;
+      /// The stylesheet injected into the book's frame, which is the only CSS
+      /// the frame has (render-book.ts drops the book's own).
+      setStyles(styles: string | [string, string]): void;
+      scrollToAnchor(anchor: Range | Element, select?: boolean): Promise<void>;
     };
+    /// Where the renderer last reported being. `range` is the visible range in
+    /// the frame's document, which is how a position becomes a block number.
+    lastLocation?: { cfi?: string; range?: Range; fraction?: number };
     book: unknown;
     lastLocation: unknown;
     isFixedLayout: boolean;
@@ -79,5 +89,17 @@ declare module "foliate-js/overlayer.js" {
 }
 
 declare module "foliate-js/search.js" {
-  export function searchMatcher(walker: unknown, options: unknown): unknown;
+  export function searchMatcher(
+    walker: unknown,
+    options: {
+      defaultLocale?: string;
+      matchCase?: boolean;
+      matchDiacritics?: boolean;
+      matchWholeWords?: boolean;
+    },
+  ): (doc: Document, query: string) => Iterable<{ range: Range; excerpt: unknown }>;
+}
+
+declare module "foliate-js/text-walker.js" {
+  export const textWalker: unknown;
 }
