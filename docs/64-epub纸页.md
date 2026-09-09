@@ -33,7 +33,7 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 `page-card.ts`：一张 `.rp-page`（纸色、阴影同 `engine/page-frame.ts`），shadow root 里：基线样式 + `.rp-paper`（混合组，见「纸色」）> `.rp-clip`（版心，`overflow: hidden; contain: paint`）> `.rp-columns`（multicol，`translateX(-k×480)`）> 原样克隆的 `<html>`，组外一层 `.rp-overlay`（页坐标，给标注层用）。`<html>` 里不加任何节点，CFI 在摄入树和卡片树上同一棵。资源用 blob URL（`page-mount.ts`）：img/svg image/link 样式表（内联为 `<style>`）/style 里的 url()。
 
-`reader-view.ts` 是桌子：一个滚动容器，每页一个固定尺寸的槽位，只有视口附近的槽位挂卡片（前后各一张），其余空着；同一 spine 文档在几张卡片里各有一份克隆。竖排一叠纸，翻页一屏一槽 scroll-snap。事件全在 app DOM 里：点击区、滑动、方向键在 `EpubReaderPane.tsx`，链接命中用 `shadowRoot.elementFromPoint`。引文高亮：在抽取文本里找到引文 → 定页 → 卡片树里同偏移取 Range → rects 画进 overlay；rect 落在纸外时把卡片移到引文所在列。
+`reader-view.ts` 是桌子：一个滚动容器，每页一个固定尺寸的槽位，只有视口附近的槽位挂卡片（前后各一张），其余空着；同一 spine 文档在几张卡片里各有一份克隆。竖排一叠纸，翻页一屏一槽 scroll-snap。事件全在 app DOM 里：点击区、滑动、方向键在 `EpubReaderPane.tsx`，链接命中用 `shadowRoot.elementFromPoint`。引文高亮：在抽取文本里找到引文 → 定页 → 卡片树里同偏移取 Range → rects 裁到版心画进 overlay；版心里一点也看不见时（`mark-geometry.ts` 的 `showsThroughBody`，判据和裁着画的是同一个盒子，亚像素的碎片不算数）按 `showColumnOf` 把卡片移到引文所在列，并重画这张卡片的标注；清引文时把卡片放回自己的列。一页的正文能排在这一页起点所在列的前面——比版心宽的表格被 multicol 切开摊在几列上就会这样，坑 283。
 
 标注挂在这几个上：`card.overlay`、`card.rangeOf(cfi)`/`card.cfiOf(range)`、`card.rectsOf(range)`、`card.toViewport`/`fromViewport`、`controller.cardAt(x, y)`。
 
@@ -49,7 +49,7 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 事件全在 app DOM：pane 的 pointer 先给标注层（`markPointerDown`），它按 `engine/gesture/touch-routing.ts` 的表判笔/手指/`fingerDraw`，接下了就 `setPointerCapture`，翻页和点击区再也读不到这个指针。文字笔从落点到抬手两次 `caretAtPoint` 建 Range —— 不走系统选区，阅读区 `user-select: none`（坑 49、262）；取字符位置：shadow root 上有 `caretRangeFromPoint` 就用它，没有就试 document 上的（WebKitGTK 实测 ShadowRoot 上没有，document 上的能穿进 shadow root），都没有就自己量——点下的元素、最近的文本节点、节点内按 caret box 二分（`caret.ts`）。两条路在同一句话上拖出来的 range CFI 逐字符相同。抬手写下 CFI、引文、页号，交给 `onSaveAnnotations`。没有工具在手就不消费指针，手势那边照常翻页。
 
-点标注在页坐标里做命中测试（矩形 / 离墨迹路径的距离），发 `onAnnotationPopup({rect, annotation})`，rect 换回视口坐标。`navigate({annotationID})` 滚到那一页，标注落在纸外时按 `showColumnOf` 把卡片挪到它所在的列。
+点标注在页坐标里做命中测试（矩形 / 离墨迹路径的距离），发 `onAnnotationPopup({rect, annotation})`，rect 换回视口坐标。`navigate({annotationID})` 滚到那一页，标注在版心里看不见时按 `showColumnOf` 把卡片挪到它所在的列，判据和引文的是同一个。
 
 ## 纸色
 
@@ -94,7 +94,7 @@ Linux WebKitGTK，xvfb，窗口 1280×860，阅读区 1280×816。三本书经 `
 | 翻页跟顶栏 | 翻页模式点右侧点击区 → `2 / 75` |
 | 大纲跳转 | 「C. Hardware」→ `31 / 75` |
 | `[p.N]` 芯片 | 裸芯片 `[p.12]` → `12 / 75`，带引文的 `[p.31 "…"]` → `31 / 75` |
-| 引文高亮 | 没验成：造引文时从卡片 `innerText` 截的字不在那一页上（坑 274），跳页对、`.rp-overlay` 空 |
+| 引文高亮 | 随机取 `Fulltext.pages[]` 里 20 页各一段引文，20/20 高亮落在版心里；引文所在列和页起点所在列不是同一列的两页（23 和 63）也对上了，卡片跟着字挪列，清掉再挪回来（坑 283）。造引文的字要从分页表切，不能从卡片 `innerText` 截（坑 274）|
 | Zoom out | 卡片 1280→1152（2.22→2.0），居中 |
 | Fit page / Fit page width | 处在布局锁的那个 fit 时置灰，缩放过之后可点 |
 | Paged flip | 开关都对：`scroll-snap-type` 在 `none` 和 `x mandatory` 之间切，一屏一页 fit-page（544×816） |
