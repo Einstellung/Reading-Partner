@@ -230,6 +230,41 @@ export function keyTurn(key: string, rtl = false): Turn {
   }
 }
 
+// --------------------------------------------------------------- the links --
+//
+// A book's own links — a footnote marker, a cross-reference, the note that
+// sends you back — are anchors in the frame, and the frame's click listener
+// never fires (docs/pitfall/244). So the pane hit-tests a tap against the
+// frame's document itself, and this says what the anchor it found means.
+//
+// The href is read as the book wrote it. foliate rewrites `src`, `link[href]`
+// and the rest into blob URLs when it loads a section, but never an `<a>`, so
+// what is on the element is the relative path in the archive.
+
+export type BookLink =
+  /** A place in this book: a path into the archive, a fragment, or both. */
+  | { kind: "internal"; href: string }
+  /** The web. It leaves the app, so it goes to the system browser. */
+  | { kind: "external"; url: string };
+
+const SCHEME = /^([a-zA-Z][a-zA-Z0-9+.\-]*):/;
+
+/**
+ * What following this anchor should do, or null for one that goes nowhere the
+ * reader wants to be taken: an empty href, a protocol-relative URL an EPUB has
+ * no business carrying, and every scheme that is neither the book nor the web
+ * (`javascript:`, `data:`, `mailto:`, a blob left over from a rewrite).
+ */
+export function bookLinkTarget(raw: string | null | undefined): BookLink | null {
+  const href = raw?.trim();
+  if (!href) return null;
+  const scheme = SCHEME.exec(href)?.[1]?.toLowerCase();
+  if (scheme === "http" || scheme === "https") return { kind: "external", url: href };
+  if (scheme) return null;
+  if (href.startsWith("//")) return null;
+  return { kind: "internal", href };
+}
+
 // --------------------------------------------------------------- the quote --
 
 /**

@@ -115,3 +115,42 @@ foliate 的文件：用九个，桩七个，清单在 `vendor/foliate-js/README.
 摄入和渲染共用一次解包。 `unzipSync` 一本 71 MB 的书要 1.2 秒、150 MB 内存，不能在摄入时解一次、渲染时再解一次。解包结果的持有者和生命周期要在阶段 2/3 交界处定死。
 
 还没量的：真机（模拟器的内存上限和 jetsam 行为与真机不同）；笔手路由在 iframe 上的接管参数（坑 117 那套要在新的容器结构上重量）；固定版式（`fixed-layout.js` 一次没跑过）；书内 CSS 与 app 主题的冲突。
+
+## 模拟器验证（2026-09-09，阶段 3）
+
+iPad Pro 11-inch (M5) / iOS 26.5，`tauri ios dev`，竖屏，阅读区 834×1114 CSS px。三本书从 app 容器里按正式路径进：`addFileToTopic` 收下路径，再在 Materials 里点卡片，走 `resolveBookSource` → `importBook` → `openInReader`。系统文件选择器那一步没驱动（模拟器里点不了），它下游全走过了。截图在 `scratchpad/epub-ios/shots/`，书有版权，没进仓库。
+
+### 逐项
+
+| 项 | 结论 |
+|---|---|
+| 正式打开路径 | 通。《具身智能》59 块、《Active Inference》1088 块，首屏都直接可读 |
+| CJK 混排 | 无豆腐。中英同段、连字符断词、行内公式都正常 |
+| 书里的图 | 出得来。`blob:tauri://localhost/…`，`naturalWidth` 918 / 2137 / 1905，按 720px 正文宽缩排 |
+| frame | `tauri://localhost` 同源、`application/xhtml+xml`、`sandbox="allow-same-origin"`、0 个 `<script>`、0 个 `<link>`、head 里 2 个注入的 `<style>` |
+| CSP 三项 | `img-src blob:` 生效（图出得来）。`style-src`/`font-src` 的 `blob:` 这条路根本没用上：书自己的 CSS 被消毒器整块丢掉，也不加载任何 web 字体，`document.fonts.size` 是 0。排版全来自注入的 `<style>`，走的是 `'unsafe-inline'` |
+| 正文宽度 | 修前滚动 456px、翻页 674px；修后两个模式都 720px（坑 251） |
+| 字号 | Zoom in 一次 19px → 21px |
+| 翻页/滚动模式切换 | 菜单里 Paged flip 开关生效，切过去正文重排，宽度不变 |
+| 关书重开 | 位置留住。回首页显示「p. 1 of 59」，Materials 里显示「Read 5%」 |
+| 点击区翻页、滑动翻页、书内链接 | 全部无效。落在正文 iframe 上的触摸，父页一个事件都收不到（坑 252） |
+| 长按正文 | 系统选区手柄和 callout 正常弹，父页 `contentDocument.getSelection()` 读得到（实测 9 个字符）。阶段 4 的事，没动 |
+| iOS 文档类型 | `CFBundleDocumentTypes` 已在构建产物 `.app/Info.plist` 里（EPUB + PDF，Viewer / Alternate）。但 app 里没有任何东西消费进来的 file URL，见下 |
+
+### 71 MB 那本
+
+`Fundamentals of Active Inference`（71 MB，1088 个位置块），点卡片到首屏可读 709 ms（含一次 bridge 往返，是上界）。
+
+WebContent 进程 RSS：打开前 524 MB，打开后 1019 MB。一本书 +495 MB，是 docs/62 第四节只量渲染那半时（+154 MB）的三倍多——摄入解包、消毒后的整棵树、分页表和渲染各持有一份。docs/08 记的页面进程内存上限在这里是硬约束，71 MB 已经在能开的上限附近。
+
+### 三件没解决的
+
+事件层在真机上从来没通过。坑 252。翻页点击区、滑动翻页、这次加的书内链接命中测试，全都挂在父页的 pointer 事件上，而落在 iframe 上的触摸父页收不到。frame 上 `pointer-events: none` 能修（实测立刻从 2/59 翻到 3/59），代价是 iOS 长按选区同时归零（实测选中字符数 9 → 0）。两个都要就得做一层可开关的盖板，这次没动，留给标注那一阶段。（后续：标注那边取了 `pointer-events: none`，系统选区不要，选区改在父页用 `caretRangeFromPoint` 自己做。）
+
+分享进来的书没人接。`CFBundleDocumentTypes` 让「文件」和分享面板愿意把 EPUB 交给这个 app，但全仓库只有 OAuth 那条路在听 `onOpenUrl`（`platform/sync/auth.ts`，而且只在登录挂起时才注册）。一个 EPUB 送到 Inbox 之后不会发生任何事。要接得先定：进哪个 topic、没有 topic 时怎么办、进来之后是直接打开还是只入库。
+
+Materials 页的按钮还写着「+ Add PDF」，文件选择器早就收 epub 了。
+
+### Android
+
+仓库里没有 Android 的 intent-filter，PDF 也没有——`src-tauri/gen/android/` 不在版本控制里，`tauri.conf.json` 里也没写。EPUB 这条等 Android 真要做的时候和 PDF 一起加。

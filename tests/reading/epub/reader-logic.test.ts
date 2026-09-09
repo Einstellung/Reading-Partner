@@ -21,6 +21,7 @@ import {
   labelForBlock,
   offsetOfPoint,
   openingFontStep,
+  bookLinkTarget,
   quoteQueries,
   restoreTarget,
   statsOf,
@@ -250,4 +251,47 @@ test("the extraction of a frame document is the extraction of the archive's", ()
   const book = parseEpub(bytes);
   const again = extractDocumentText(book.docs[0].doc);
   expect(again.text).toBe(book.docs[0].text.text);
+});
+
+describe("the book's own links", () => {
+  test("a path in the archive is followed inside the book", () => {
+    expect(bookLinkTarget("chapter3.xhtml")).toEqual({ kind: "internal", href: "chapter3.xhtml" });
+    expect(bookLinkTarget("../text/notes.xhtml#fn12")).toEqual({
+      kind: "internal",
+      href: "../text/notes.xhtml#fn12",
+    });
+  });
+
+  test("a bare fragment stays in this document", () => {
+    expect(bookLinkTarget("#fn12")).toEqual({ kind: "internal", href: "#fn12" });
+  });
+
+  test("the web goes to the system browser", () => {
+    expect(bookLinkTarget("https://example.org/a")).toEqual({
+      kind: "external",
+      url: "https://example.org/a",
+    });
+    expect(bookLinkTarget("HTTP://example.org")).toEqual({
+      kind: "external",
+      url: "HTTP://example.org",
+    });
+  });
+
+  test("nothing else is followed", () => {
+    expect(bookLinkTarget("javascript:alert(1)")).toBeNull();
+    expect(bookLinkTarget("data:text/html,x")).toBeNull();
+    expect(bookLinkTarget("mailto:a@b.c")).toBeNull();
+    expect(bookLinkTarget("blob:tauri://localhost/abc")).toBeNull();
+    expect(bookLinkTarget("//example.org/a")).toBeNull();
+    expect(bookLinkTarget("   ")).toBeNull();
+    expect(bookLinkTarget(null)).toBeNull();
+    expect(bookLinkTarget(undefined)).toBeNull();
+  });
+
+  test("the href is taken as written, surrounding space aside", () => {
+    expect(bookLinkTarget("  chapter3.xhtml  ")).toEqual({
+      kind: "internal",
+      href: "chapter3.xhtml",
+    });
+  });
 });

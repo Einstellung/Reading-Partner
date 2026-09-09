@@ -127,18 +127,27 @@ sup, sub { line-height: 0; }
 `;
 }
 
-// The renderer's own geometry, as attributes on <foliate-paginator>. Every one
-// of these is read with parseFloat and used as a pixel count, so none of them
-// may carry a unit. The margin is what gives the columns room for the head and
-// foot marginals; the gap is a percentage of the container, not a length (see
-// the derivation in paginator.js). max-column-count 1 keeps one column per
-// screen on a phone and on a tablet alike — two columns of a bilingual book on
-// an iPad read as four. The line's own width is capped on the element
-// (reader-view.ts), which is the only thing that caps it in paginated flow.
+// The renderer's own geometry, as attributes on <foliate-paginator>. Each value
+// is written verbatim into a custom property that is read twice: by parseFloat
+// in the layout arithmetic, and by the shadow stylesheet's own calc(). So every
+// length carries a unit — parseFloat ignores a "px" or "%" suffix, while the
+// stylesheet's grid template is dropped whole without one (docs/pitfall/251).
+// The unit has to be the one the property is used as: --_gap is divided by 100
+// and is a percentage of the container (see the derivation in paginator.js).
+//
+// The gap is zero because it is the one number the two flows read differently:
+// paginated takes one gap out of the column, continuous takes two out of a
+// container that is a different width again, and that is what put the same book
+// at two measures. The reading margin is inline padding on the element instead
+// (reader-view.ts), which both flows are inside.
+//
+// margin is the block-axis room for the head and foot marginals.
+// max-column-count 1 keeps one column per screen on a phone and on a tablet
+// alike — two columns of a bilingual book on an iPad read as four.
 export const RENDERER_GEOMETRY = {
-  gap: "6",
-  margin: "24",
-  "max-inline-size": "720",
-  "max-block-size": "1440",
+  gap: "0%",
+  margin: "24px",
+  "max-inline-size": "720px",
+  "max-block-size": "1440px",
   "max-column-count": "1",
 } as const;
