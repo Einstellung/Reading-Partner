@@ -129,6 +129,16 @@ sup, sub { line-height: 0; }
 // The cap on the line is that grid track: `max-inline-size × max-column-count`.
 // One column per screen on a phone and on a tablet alike — two columns of a
 // bilingual book on an iPad read as four.
+//
+// Known and deliberate: the two flows spend the gap differently, so they are a
+// stripe apart. Paginated takes one gap out of a container that is already the
+// middle grid track; scrolled gives the container the whole element and pays a
+// gap of padding on each side of the document. Measured on an iPad (768px
+// element) that is 674 paginated against 670 scrolled. Zeroing the gap makes
+// both reduce to min(max-inline-size, element width) and the two match exactly,
+// at the price of having to put the white space back as padding on the element.
+// Keeping the gap: the stripe is four pixels and the gap is what the renderer's
+// own geometry is written around.
 export const RENDERER_GEOMETRY = {
   gap: "6%",
   margin: "48px",
