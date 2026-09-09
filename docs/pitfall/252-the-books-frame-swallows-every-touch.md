@@ -31,4 +31,6 @@ frame 上 `pointer-events: none`，事件就落到 `<foliate-view>` 上，父页
 | `auto` | 9 个字符（"compliant"），系统手柄和 callout 正常弹 | 无 |
 | `none` | 0 个字符 | 有 |
 
-两个都要就得自己做：一层盖在 frame 上的透明元素接手势，判成"要选字"时把它的 `pointer-events` 关掉再把触摸交回去。这条归标注那一阶段，本文只记这个二选一是真的、量过的。
+落地取的是 `none` 那一行：frame 一律不接触摸，系统选区不要了，选区改在父页自己做（`caretRangeFromPoint` 进 frame 取位置，拖出来的范围自己画）。盖一层能开关 `pointer-events` 的透明元素、按手势判断把触摸交回去，是没走的那条。
+
+滚动不受影响：滚动模式下滚的本来就是父页那侧的 `#container`，不是 iframe——foliate 把 iframe 撑成整章高。这条在 WebKitGTK 上量过，iOS 上没复量。
