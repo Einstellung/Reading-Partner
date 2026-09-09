@@ -31,7 +31,7 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 ## 页卡片
 
-`page-card.ts`：一张 `.rp-page`（纸色、阴影同 `engine/page-frame.ts`），shadow root 里：基线样式 + `.rp-clip`（版心，`overflow: hidden; contain: paint`）> `.rp-columns`（multicol，`translateX(-k×480)`）> 原样克隆的 `<html>`，旁边一层 `.rp-overlay`（页坐标，给标注层用）。`<html>` 里不加任何节点，CFI 在摄入树和卡片树上同一棵。资源用 blob URL（`page-mount.ts`）：img/svg image/link 样式表（内联为 `<style>`）/style 里的 url()。
+`page-card.ts`：一张 `.rp-page`（纸色、阴影同 `engine/page-frame.ts`），shadow root 里：基线样式 + `.rp-paper`（混合组，见「纸色」）> `.rp-clip`（版心，`overflow: hidden; contain: paint`）> `.rp-columns`（multicol，`translateX(-k×480)`）> 原样克隆的 `<html>`，组外一层 `.rp-overlay`（页坐标，给标注层用）。`<html>` 里不加任何节点，CFI 在摄入树和卡片树上同一棵。资源用 blob URL（`page-mount.ts`）：img/svg image/link 样式表（内联为 `<style>`）/style 里的 url()。
 
 `reader-view.ts` 是桌子：一个滚动容器，每页一个固定尺寸的槽位，只有视口附近的槽位挂卡片（前后各一张），其余空着；同一 spine 文档在几张卡片里各有一份克隆。竖排一叠纸，翻页一屏一槽 scroll-snap。事件全在 app DOM 里：点击区、滑动、方向键在 `EpubReaderPane.tsx`，链接命中用 `shadowRoot.elementFromPoint`。引文高亮：在抽取文本里找到引文 → 定页 → 卡片树里同偏移取 Range → rects 画进 overlay；rect 落在纸外时把卡片移到引文所在列。
 
@@ -50,6 +50,16 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 事件全在 app DOM：pane 的 pointer 先给标注层（`markPointerDown`），它按 `engine/gesture/touch-routing.ts` 的表判笔/手指/`fingerDraw`，接下了就 `setPointerCapture`，翻页和点击区再也读不到这个指针。文字笔从落点到抬手两次 `caretAtPoint` 建 Range —— 不走系统选区，阅读区 `user-select: none`（坑 49、262）；取字符位置：shadow root 上有 `caretRangeFromPoint` 就用它，没有就试 document 上的（WebKitGTK 实测 ShadowRoot 上没有，document 上的能穿进 shadow root），都没有就自己量——点下的元素、最近的文本节点、节点内按 caret box 二分（`caret.ts`）。两条路在同一句话上拖出来的 range CFI 逐字符相同。抬手写下 CFI、引文、页号，交给 `onSaveAnnotations`。没有工具在手就不消费指针，手势那边照常翻页。
 
 点标注在页坐标里做命中测试（矩形 / 离墨迹路径的距离），发 `onAnnotationPopup({rect, annotation})`，rect 换回视口坐标。`navigate({annotationID})` 滚到那一页，标注落在纸外时按 `showColumnOf` 把卡片挪到它所在的列。
+
+## 纸色
+
+护眼开关（docs/42）在 EPUB 和 PDF 上是同一层：`engine/page-wash.ts` 的两个常量，PDF 侧当 React style 用，卡片侧当 cssText 用（`PAGE_WASH_GROUP_CSS`/`PAGE_WASH_CSS`）。shadow root 里 `.rp-paper`（`isolation: isolate`）装 `.rp-clip` 和 `.rp-wash`，`.rp-overlay` 在组外，标注和引文高亮不被乘。组上不写 `pointer-events: none`：PDF 那半的组里只有光栅，这半装着书的正文，笔要从里面取 caret。
+
+纸的白画在宿主 `.rp-page` 上，在组外面，乘出来仍然正好是 `--page-wash`（坑 281）。实测页边距 EPUB `#f6efdc` == PDF `#f6efdc`，关掉一起回 `#ffffff`。
+
+书自己画的底色（段落底、代码块、表格，以及 `html`/`body` 的背景）在组里，跟着被乘一道，这是要的。消毒器不动这些背景色：`html { background-color: #fdfdfd }` 乘成 `#f4edda`，肉眼看不出；写深色底的书得到「纸色页边 + 深色版心」，正文字被同一道乘暖（`#eeeeee` → `#e5dfcd`）仍读得出。两色纸是纸色之前就有的（坑 282），真遇到这样一本书再决定要不要在 `css-sanitize.ts` 里丢掉 `html`/`body` 的背景。
+
+不做深色模式，照 PDF：纸仍是白的，只换 `--desk`，不反色。
 
 ## 消毒边界
 
