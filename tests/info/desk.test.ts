@@ -1,4 +1,4 @@
-// What info puts on the desk (src/info/companion/desk.ts, docs/61): the day's
+// What info puts on the desk (src/info/briefer/desk.ts, docs/61): the day's
 // briefing, and one article beside it. What is asserted here is the composition
 // — which blocks come out in which order, where the tools come from, and that
 // the companion now reads memory — rather than the prompt text, which is
@@ -12,7 +12,7 @@ import {
   INFO_BRIEFING_KIND,
   registerInfoDesk,
   withCompanionTools,
-} from "../../src/info/companion/desk";
+} from "../../src/info/briefer/desk";
 import { statementStore, type Observation } from "../../src/memory";
 import { DEFAULT_SETTINGS } from "../../src/platform/app/settings";
 import { BRIEF_TOPIC_ID } from "../../src/platform/app/topics";
@@ -23,8 +23,8 @@ import {
 } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 import type { AgentTool } from "../../src/ai/agent";
-import type { CompanionContext } from "../../src/info/companion/chat";
-import type { Briefing } from "../../src/info/briefing/types";
+import type { CompanionContext } from "../../src/info/briefer/chat";
+import type { Briefing } from "../../src/info/collect/types";
 
 const CTX: CompanionContext = { profile: "Reads robotics.", sources: [], collecting: true };
 

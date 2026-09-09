@@ -156,7 +156,7 @@ export async function loadSources(io: SourcesIo = sourcesIo): Promise<SourceDesc
 // (docs/17): false means show first-run source setup. It has to be false only
 // for a reader who really has none, which is why an unreadable file raises out
 // of here rather than answering — the two call sites decide for themselves
-// (info/companion/card-actions.ts assumes some exist, use-info-home.ts leaves
+// (info/briefer/card-actions.ts assumes some exist, use-info-home.ts leaves
 // the card on its loading state).
 export async function hasSources(io: SourcesIo = sourcesIo): Promise<boolean> {
   return (await loadSources(io)).length > 0;

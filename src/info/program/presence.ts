@@ -17,7 +17,7 @@ import {
   mayClaim,
   type AskRecord,
   type CollectorClaim,
-} from "./handoff";
+} from "../briefer/handoff";
 
 // The election result, held briefly. Every poll cycle asks, and the answer
 // changes on the scale of hours; re-reading every claim file for each of them

@@ -15,8 +15,8 @@
 // sanitized, and both know whether the article itself was ever read — so there
 // is no guessing left to do here.
 
-import type { ArticleBody } from "../../../info/briefing/reader";
-import type { BriefingItemMeta } from "../../../info/briefing/types";
+import type { ArticleBody } from "../../../info/briefer/reader";
+import type { BriefingItemMeta } from "../../../info/collect/types";
 import type { SavedArticleInput } from "../../../reading/saved-articles";
 
 export function toSavedArticleInput(ctx: {

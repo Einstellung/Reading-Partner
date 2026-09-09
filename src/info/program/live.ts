@@ -18,7 +18,7 @@ import {
   InfoReader,
   type ArticleState,
   type BriefingView,
-} from "./reader";
+} from "../briefer/reader";
 import type { AiCallOptions } from "../../legion/execute/watchdog";
 import { INFO_EVENT_TOPIC, logEvent } from "../../platform/app/events";
 import { newTally, reportParse } from "../../platform/app/structured-output";
@@ -39,15 +39,15 @@ import {
 import { loadFeedback } from "../../memory/profile/feedback";
 import { loadProfile } from "../../memory/profile/profile";
 import { assembleReadingContext } from "../../memory/live/assemble";
-import { InfoPipeline, type InfoSourceRef, type SourceResult } from "./pipeline";
+import { InfoPipeline, type InfoSourceRef, type SourceResult } from "../collect/pipeline";
 import {
   parseScreenVerdicts,
   screenSystemPrompt,
   screenUserMessage,
   type ScreenParseOutcome,
   type ScreenVerdict,
-} from "./screen";
-import type { InfoRunPhase } from "./run-state";
+} from "../collect/screen";
+import type { InfoRunPhase } from "../collect/run-state";
 import {
   clearRun,
   loadArticle,
@@ -63,19 +63,19 @@ import {
   saveItems,
   saveRun,
   todayLocal,
-} from "./store";
+} from "../collect/store";
 import { runDreamIfDue } from "../../memory/dream/live";
 import { dailyAction, DAILY_TICK_MS, lastAnchorDate } from "./daily";
-import { collectorStatusLine, InfoCollector } from "./collector";
+import { collectorStatusLine, InfoCollector } from "../collect/collector";
 import { createCollectorSession, type CollectorSession } from "./presence";
-import { backfillPublish, loadPublishedBriefing, publishBriefing } from "./publish";
+import { backfillPublish, loadPublishedBriefing, publishBriefing } from "../boxes/publish";
 import {
   ASK_PULL_ROUTE,
   readAsks,
   readCollectorClaims,
   readOwnClaim,
   writeCollectorClaim,
-} from "./handoff";
+} from "../briefer/handoff";
 import { subscribeSyncStatus } from "../../platform/sync";
 import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
@@ -86,16 +86,16 @@ import {
   savePoolDay,
   savePoolMarks,
   savePoolPolled,
-} from "./pool-store";
+} from "../collect/pool-store";
 import type { SourceDescriptor } from "../sources/descriptor";
 import {
   parseTriageResult,
   triageSystemPrompt,
   triageUserMessage,
   type ParseOutcome,
-} from "./triage";
+} from "../collect/triage";
 import type { FeedbackEvent } from "../../memory/profile/feedback";
-import type { Briefing, TriageResult } from "./types";
+import type { Briefing, TriageResult } from "../collect/types";
 import type { InfoItem } from "../sources/item";
 
 // One tool-less streaming call. `extra` lets the parse-retry append a corrective

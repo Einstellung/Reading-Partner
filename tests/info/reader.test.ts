@@ -1,4 +1,4 @@
-// The reading end of the briefing (src/info/briefing/reader.ts, docs/36): which
+// The reading end of the briefing (src/info/briefer/reader.ts, docs/36): which
 // of the four answers an article gets, and what a reader is told about the
 // machine that does the collecting. Run: bun test.
 
@@ -7,10 +7,10 @@ import {
   articleState,
   collectorNotices,
   sinceLabel,
-} from "../../src/info/briefing/reader";
-import type { PublishedBodies } from "../../src/info/briefing/publish";
-import type { CollectorClaim } from "../../src/info/briefing/handoff";
-import type { Briefing } from "../../src/info/briefing/types";
+} from "../../src/info/briefer/reader";
+import type { PublishedBodies } from "../../src/info/boxes/publish";
+import type { CollectorClaim } from "../../src/info/briefer/handoff";
+import type { Briefing } from "../../src/info/collect/types";
 
 const NOW = 1_800_000_000_000;
 

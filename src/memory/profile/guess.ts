@@ -172,7 +172,7 @@ export function composeProfile(split: ProfileSplit, guesses: ProfileGuess[]): st
 
 // The other direction: a new declared half, written by the user applying an
 // update_profile card, with the guess section left standing. The card's model
-// only ever sees the declared half (info/companion/chat.ts), so without this the
+// only ever sees the declared half (info/briefer/chat.ts), so without this the
 // Apply would drop the guesses on the floor — and a card that had been shown the
 // guesses would instead promote them into the declared half, where nothing can
 // ever revise them again.
@@ -603,7 +603,7 @@ export async function runProfileGuessPass(
 
   // Read the document again. `split` was taken before the sub-agent ran, and
   // that call is tens of seconds to minutes of a reader's evening: the Apply
-  // button on a profile card (info/companion/card-actions.ts) writes the
+  // button on a profile card (info/briefer/card-actions.ts) writes the
   // declared half in exactly that window, and a sync pull can land a whole new
   // file. Splicing onto the stale copy puts the reader's own paragraph back to
   // what it said before they edited it, silently, once every six hours.

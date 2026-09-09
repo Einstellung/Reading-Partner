@@ -4,7 +4,7 @@
 #
 #   turn-replay-run.sh [seconds to wait]
 #
-# VoiceTurn.swift is a transliteration of src/info/companion/turn-detect.ts. This
+# VoiceTurn.swift is a transliteration of src/info/briefer/turn-detect.ts. This
 # is what makes that a checkable claim: the app is built with
 # VITE_SMOKE=turn-replay, src/smoke/turn-replay.ts hands the device one recorded
 # or synthetic level sequence per case, and compares the events the Swift machine

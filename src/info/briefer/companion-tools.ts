@@ -12,8 +12,8 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
 import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile/profile";
-import type { ProfileUpdateCardData } from "../briefing/cards";
-import type { RequestOutcome } from "../briefing/reader";
+import type { ProfileUpdateCardData } from "../boxes/cards";
+import type { RequestOutcome } from "./reader";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
 import {
   resolveSignInSite,

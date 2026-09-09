@@ -26,9 +26,9 @@ import * as readableLazy from "../../../src/info/extract/readable-lazy";
 import * as settings from "../../../src/platform/app/settings";
 import * as threads from "../../../src/platform/app/threads";
 import { DEFAULT_SETTINGS } from "../../../src/platform/app/settings";
-import { INFO_BRIEFING_KIND, registerInfoDesk } from "../../../src/info/companion/desk";
-import type { InfoCallAnchor } from "../../../src/info/companion/anchors";
-import type { BriefingView } from "../../../src/info/briefing/reader";
+import { INFO_BRIEFING_KIND, registerInfoDesk } from "../../../src/info/briefer/desk";
+import type { InfoCallAnchor } from "../../../src/info/briefer/anchors";
+import type { BriefingView } from "../../../src/info/briefer/reader";
 import type { Thread } from "../../../src/platform/app/threads";
 
 // The browser's own words when a chunk cannot be fetched.
@@ -60,7 +60,7 @@ function stubView(): BriefingView {
 }
 
 // The briefing on the desk, which is what builds the companion tools and so
-// what awaits the chunk (info/companion/desk.ts).
+// what awaits the chunk (info/briefer/desk.ts).
 registerInfoDesk();
 
 function anchor(opts: { onboarding?: boolean } = {}): InfoCallAnchor {

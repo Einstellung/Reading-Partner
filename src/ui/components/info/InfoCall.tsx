@@ -11,7 +11,7 @@
 //
 // Every info thread runs the same agent loop with the shared companion tool set
 // (docs/16/17): probe/trial/add_source plus update_profile, surfacing inline
-// confirm cards. The anchors differ only in context (info/companion/anchors.ts):
+// confirm cards. The anchors differ only in context (info/briefer/anchors.ts):
 // the briefing/article companion, or the onboarding add-source flow (the AI
 // opens, and on the first source added a background first-briefing shows its
 // progress/readiness as a card). update_profile drafts a profile change the user
@@ -28,8 +28,8 @@ import ReadingPipCard from "../chat/ReadingPipCard";
 import { useInfoCall } from "./use-info-call";
 import type { ComposerVoice } from "../chat/chat";
 import { chatGlance } from "../chat/chatParts";
-import type { BriefingView } from "../../../info/briefing/reader";
-import type { InfoCallAnchor } from "../../../info/companion/anchors";
+import type { BriefingView } from "../../../info/briefer/reader";
+import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 
 export function InfoCall({
   anchor,

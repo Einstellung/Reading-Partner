@@ -2,22 +2,22 @@
 // currently streaming, the briefing job the one card is tracking, and what each
 // card gesture fans out to.
 //
-// It sits in the ui layer rather than in info/companion because it is where the
+// It sits in the ui layer rather than in info/briefer because it is where the
 // domain meets the chat rendering (chatParts): a card is both a payload the
 // tools produced and a row in the conversation, and one of those two is a render
 // concern. Everything decidable without React — which card a start attempt draws
-// (companion/call.ts), what an Add or an Apply does in what order
-// (companion/card-actions.ts) — is in the domain and tested there; what is left
+// (briefer/call.ts), what an Add or an Apply does in what order
+// (briefer/card-actions.ts) — is in the domain and tested there; what is left
 // here is wiring and the effects it drives.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../ai/agent";
 import { assembleTurn, type AssembledTurn } from "../../../ai/assemble";
 import { openDesk } from "../../../desk";
-import { withCompanionTools } from "../../../info/companion/desk";
+import { withCompanionTools } from "../../../info/briefer/desk";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
 import { createTopic } from "../../../platform/app/topics";
-import { threadTopic } from "../../../info/companion/topic-tool";
+import { threadTopic } from "../../../info/briefer/topic-tool";
 import {
   appendMessage,
   createThread,
@@ -27,8 +27,8 @@ import {
   setThreadTopic,
 } from "../../../platform/app/threads";
 import { setSavedArticleTopic } from "../../../reading/saved-articles";
-import { buildLiveCompanionTools } from "../../../info/companion/companion-live";
-import { companionToolStatusLabel } from "../../../info/companion/companion-tools";
+import { buildLiveCompanionTools } from "../../../info/briefer/companion-live";
+import { companionToolStatusLabel } from "../../../info/briefer/companion-tools";
 import {
   BRIEFING_CARD_ID,
   OPENING_KICKOFF,
@@ -42,13 +42,13 @@ import {
   sourceAddedNote,
   topicFiledNote,
   type BriefingJob,
-} from "../../../info/companion/call";
+} from "../../../info/briefer/call";
 import {
   addSourceFromCard,
   applyProfileUpdate,
   applyTopicProposal,
-} from "../../../info/companion/card-actions";
-import type { InfoCallAnchor } from "../../../info/companion/anchors";
+} from "../../../info/briefer/card-actions";
+import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources } from "../../../info/sources/source-store";
 import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
@@ -67,8 +67,8 @@ import {
   type CardAction,
 } from "../chat/chatParts";
 import type { ChatMessage, ProviderId } from "../../../ai/providers";
-import type { BriefingView, RequestOutcome } from "../../../info/briefing/reader";
-import type { ProfileUpdateCardData, TopicProposalCardData } from "../../../info/briefing/cards";
+import type { BriefingView, RequestOutcome } from "../../../info/briefer/reader";
+import type { ProfileUpdateCardData, TopicProposalCardData } from "../../../info/boxes/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../chat/types";
 
@@ -214,7 +214,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // addressed by BRIEFING_CARD_ID through the patchPart channel (upsertCardRow)
   // across its whole progress -> ready/failed lifecycle; what that card shows,
   // the note the outcome injects, and whether either is durable is decided in
-  // info/companion/call.
+  // info/briefer/call.
   useEffect(() => {
     const unsub = view.subscribe(() => {
       if (!awaitingBriefing.current) return;
@@ -288,7 +288,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // three effects: mutate (addSource, the local write path, not the AI's
   // add_source), local (flip `added` on the card, in the UI and on disk), and
   // reply (note the add in the thread so the AI knows). The order and the guards
-  // are in info/companion/card-actions.
+  // are in info/briefer/card-actions.
   const handleAddFromCard = useCallback(
     async (cardId: string) => {
       const found = findCardPart(messagesRef.current, cardId);
@@ -341,7 +341,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // File what the companion proposed when the user clicks a topic card's Apply:
   // mint the topic where it is new, move the kept article under it, file this
   // conversation with it, and tell the AI. Three writes for one gesture; the
-  // order and what a failure stops are in info/companion/card-actions.
+  // order and what a failure stops are in info/briefer/card-actions.
   //
   // Filing the thread is what makes the next turn's desk, its distillation and
   // its conversation search all read the topic the reader chose rather than the

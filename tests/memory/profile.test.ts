@@ -8,7 +8,7 @@
 import { beforeEach, expect, test } from "bun:test";
 // The live Apply path, over the real store rather than an injected one: what
 // the wiring does with a failed read is the whole question here.
-import { applyProfileUpdate } from "../../src/info/companion/card-actions";
+import { applyProfileUpdate } from "../../src/info/briefer/card-actions";
 import {
   LEGACY_PROFILE_FILE,
   PROFILE_FILE,

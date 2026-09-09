@@ -11,7 +11,7 @@
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND } from "./desk";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
-import type { Briefing } from "../briefing/types";
+import type { Briefing } from "../collect/types";
 import type { CompanionContext } from "./chat";
 
 export interface InfoCallAnchor {

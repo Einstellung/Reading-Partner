@@ -1,5 +1,5 @@
 // Which machine collects, and which request it acts on
-// (src/info/briefing/handoff.ts, docs/36). Every device runs the same election
+// (src/info/briefer/handoff.ts, docs/36). Every device runs the same election
 // over the same files and has to reach the same answer, so these are pure
 // functions of the claims and the clock. Run: bun test.
 
@@ -16,7 +16,7 @@ import {
   mayClaim,
   type AskRecord,
   type CollectorClaim,
-} from "../../src/info/briefing/handoff";
+} from "../../src/info/briefer/handoff";
 
 const NOW = 1_800_000_000_000;
 

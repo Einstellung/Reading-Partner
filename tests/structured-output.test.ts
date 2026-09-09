@@ -17,7 +17,7 @@ import {
 import type { EventPayload, EventType } from "../src/platform/app/events";
 import { parsePlan } from "../src/reading/prep/papers/plan";
 import { parseChapterSpinePlan } from "../src/reading/prep/chapters/plan";
-import { parseTriageResult } from "../src/info/briefing/triage";
+import { parseTriageResult } from "../src/info/collect/triage";
 
 const MODEL = { providerId: "anthropic", modelId: "claude-sonnet-4-5" };
 

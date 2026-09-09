@@ -11,16 +11,16 @@
 // Run: bun test tests/info/voice-transcript-thread.test.ts
 
 import { beforeEach, expect, test } from "bun:test";
-import { briefingThreadId } from "../../src/info/companion/anchors";
-import { infoBookId } from "../../src/info/companion/call";
-import type { ConversationEvent, ConversationSource } from "../../src/info/companion/conversation";
+import { briefingThreadId } from "../../src/info/briefer/anchors";
+import { infoBookId } from "../../src/info/briefer/call";
+import type { ConversationEvent, ConversationSource } from "../../src/info/briefer/conversation";
 import {
   KICKOFF_TURN,
   createVoiceCall,
   type VoiceCall,
   type VoiceCallModel,
-} from "../../src/info/companion/voice-call";
-import { threadTranscript } from "../../src/info/companion/voice-call-live";
+} from "../../src/info/briefer/voice-call";
+import { threadTranscript } from "../../src/info/briefer/voice-call-live";
 import {
   createThread,
   getThread,

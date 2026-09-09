@@ -1,4 +1,4 @@
-// The info-briefing orchestrator (src/info/briefing/pipeline.ts) as a resumable
+// The info-briefing orchestrator (src/info/collect/pipeline.ts) as a resumable
 // state machine: the snapshot it exposes must carry live progress so the
 // chat/vestibule UI can show a run is alive, and a run cut off halfway must come
 // back without paying again for what it already has — in any of the funnel's
@@ -12,10 +12,10 @@ import {
   type InfoDeps,
   type InfoSnapshot,
   type InfoSourceRef,
-} from "../../src/info/briefing/pipeline";
-import type { CollectProgress, InfoRunState } from "../../src/info/briefing/run-state";
-import type { ScreenVerdict } from "../../src/info/briefing/screen";
-import type { Briefing, TriageResult } from "../../src/info/briefing/types";
+} from "../../src/info/collect/pipeline";
+import type { CollectProgress, InfoRunState } from "../../src/info/collect/run-state";
+import type { ScreenVerdict } from "../../src/info/collect/screen";
+import type { Briefing, TriageResult } from "../../src/info/collect/types";
 import type { InfoItem } from "../../src/info/sources/item";
 
 const TODAY = "2026-07-22";

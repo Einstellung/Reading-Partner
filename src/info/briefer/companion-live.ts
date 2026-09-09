@@ -18,12 +18,12 @@ import {
 import { applySessionCheck, signInSites } from "../sources/site-session";
 import { liveWebviewFetch } from "../sources/source-live";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { ProfileUpdateCardData } from "../briefing/cards";
+import type { ProfileUpdateCardData } from "../boxes/cards";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
 import { listTopics } from "../../platform/app/topics";
 import type { ProposeTopicDeps } from "./topic-tool";
 import type { AgentTool } from "../../ai/agent";
-import type { RequestOutcome } from "../briefing/reader";
+import type { RequestOutcome } from "./reader";
 
 // The briefing controller the host hands in so generate_briefing can kick a
 // background job through the host's card lifecycle and hear what happened to it

@@ -1,4 +1,4 @@
-// propose_topic (src/info/companion/topic-tool.ts, docs/21): the companion says
+// propose_topic (src/info/briefer/topic-tool.ts, docs/21): the companion says
 // where kept material belongs and what it adds, and writes nothing. What is
 // asserted here is that it only drafts — the card is the whole effect — plus how
 // a proposal is matched to a topic the reader already has, and the roster the
@@ -12,7 +12,7 @@ import {
   threadTopic,
   topicGuidance,
   type TopicChoice,
-} from "../../src/info/companion/topic-tool";
+} from "../../src/info/briefer/topic-tool";
 import {
   createThread,
   loadThreads,
@@ -21,7 +21,7 @@ import {
 } from "../../src/platform/app/threads";
 import { createTopic } from "../../src/platform/app/topics";
 import { installAppData } from "../support/appdata-fake";
-import type { TopicProposalCardData } from "../../src/info/briefing/cards";
+import type { TopicProposalCardData } from "../../src/info/boxes/cards";
 
 const TOPICS: TopicChoice[] = [
   { id: "brief", name: "Brief" },

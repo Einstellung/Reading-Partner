@@ -13,7 +13,7 @@ import { profileForPrompt } from "../../memory/profile/guess";
 import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile/profile";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
 import { signInSiteLine, signInSites } from "../sources/site-session";
-import type { Briefing } from "../briefing/types";
+import type { Briefing } from "../collect/types";
 
 // How much article text the chat carries as context (chat models take a big
 // window; a very long piece still gets a sane cap).

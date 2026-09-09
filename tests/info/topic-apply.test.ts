@@ -1,4 +1,4 @@
-// The topic card's Apply (src/info/companion/card-actions.ts, docs/21): one
+// The topic card's Apply (src/info/briefer/card-actions.ts, docs/21): one
 // gesture, three writes — mint the topic where it is new, file the kept article
 // under it, file this conversation with it. Over ports, so the order and what a
 // failure stops are assertable without React and without a filesystem; the
@@ -6,7 +6,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { applyTopicProposal, type TopicProposalPorts } from "../../src/info/companion/card-actions";
+import { applyTopicProposal, type TopicProposalPorts } from "../../src/info/briefer/card-actions";
 import {
   SAVED_ARTICLES_FILE,
   loadSavedArticles,
@@ -14,7 +14,7 @@ import {
   type SavedArticle,
 } from "../../src/reading/saved-articles";
 import { createFakeAppData } from "../support/guarded-appdata";
-import type { TopicProposalCardData } from "../../src/info/briefing/cards";
+import type { TopicProposalCardData } from "../../src/info/boxes/cards";
 
 function card(over: Partial<TopicProposalCardData> = {}): TopicProposalCardData {
   return {

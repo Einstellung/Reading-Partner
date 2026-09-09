@@ -11,12 +11,12 @@ import type {
   BriefingReadyCardData,
   ProfileUpdateCardData,
   TopicProposalCardData,
-} from "../briefing/cards";
+} from "../boxes/cards";
 import { proposedTopicName } from "./topic-tool";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { InfoSnapshot, RunStart } from "../briefing/pipeline";
-import type { RequestOutcome } from "../briefing/reader";
-import type { Briefing } from "../briefing/types";
+import type { InfoSnapshot, RunStart } from "../collect/pipeline";
+import type { RequestOutcome } from "./reader";
+import type { Briefing } from "../collect/types";
 
 // Info threads hang off a per-day pseudo-book, so a day's briefing, article and
 // onboarding conversations file together.

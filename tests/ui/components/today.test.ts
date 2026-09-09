@@ -3,7 +3,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import type { Briefing } from "../../../src/info/briefing/types";
+import type { Briefing } from "../../../src/info/collect/types";
 import {
   briefingEyebrow,
   briefingFooterLine,

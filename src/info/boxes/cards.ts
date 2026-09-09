@@ -6,7 +6,7 @@
 // bottom is the whole set the chat renders, add-source cards included.
 
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { CollectProgress } from "./pipeline";
+import type { CollectProgress } from "../collect/pipeline";
 
 // A persistent progress card shown while the first briefing generates in the
 // background: it updates in place from the pipeline snapshot (collection counts,

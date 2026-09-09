@@ -5,7 +5,7 @@
 // wrong about a number the app already knows (memory: no facts through the
 // model).
 
-import type { Briefing } from "../../../info/briefing/types";
+import type { Briefing } from "../../../info/collect/types";
 import type { BookMeta } from "../shelf/file-title";
 
 function plural(n: number, unit: string): string {

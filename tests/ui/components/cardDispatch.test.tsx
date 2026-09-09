@@ -12,7 +12,7 @@ import type { CardAction } from "../../../src/ui/components/chat/chatParts";
 import type {
   BriefingFailedCardData,
   BriefingReadyCardData,
-} from "../../../src/info/briefing/cards";
+} from "../../../src/info/boxes/cards";
 import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
 
 // Walk a React element tree collecting every button with an onClick. A card's

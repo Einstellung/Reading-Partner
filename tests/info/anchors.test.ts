@@ -1,4 +1,4 @@
-// What one info conversation is anchored to (src/info/companion/anchors.ts):
+// What one info conversation is anchored to (src/info/briefer/anchors.ts):
 // which thread it writes to, what the corner position card recalls, and — the
 // part with a rule in it — which of the briefing's tiers the article card's one
 // line comes from. Pure: no React, no filesystem, no provider. Run: bun test.
@@ -10,9 +10,9 @@ import {
   briefingAnchor,
   noBriefingAnchor,
   onboardingAnchor,
-} from "../../src/info/companion/anchors";
-import type { CompanionContext } from "../../src/info/companion/chat";
-import type { Briefing, BriefingItemMeta } from "../../src/info/briefing/types";
+} from "../../src/info/briefer/anchors";
+import type { CompanionContext } from "../../src/info/briefer/chat";
+import type { Briefing, BriefingItemMeta } from "../../src/info/collect/types";
 
 const CTX: CompanionContext = { profile: "Reads robotics.", sources: [], collecting: true };
 

@@ -1,4 +1,4 @@
-// The shared companion tools (src/info/companion/companion-tools.ts): the update_profile
+// The shared companion tools (src/info/briefer/companion-tools.ts): the update_profile
 // tool drafts a confirm card and writes nothing; the tool set includes the three
 // source tools; the status label extends the source labels. Card sink injected;
 // no save, no fetch. Run: bun test.
@@ -13,13 +13,13 @@ import {
   companionToolStatusLabel,
   type BriefingScope,
   type SiteSignInDeps,
-} from "../../src/info/companion/companion-tools";
+} from "../../src/info/briefer/companion-tools";
 import { signInSites } from "../../src/info/sources/site-session";
-import type { ProfileUpdateCardData } from "../../src/info/briefing/cards";
+import type { ProfileUpdateCardData } from "../../src/info/boxes/cards";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SessionStatus, SignInOutcome } from "../../src/info/extract/webview-session";
-import type { RunStart } from "../../src/info/briefing/pipeline";
+import type { RunStart } from "../../src/info/collect/pipeline";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 

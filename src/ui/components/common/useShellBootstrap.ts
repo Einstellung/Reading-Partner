@@ -32,8 +32,8 @@ import {
   type Settings,
 } from "../../../platform/app/settings";
 import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai";
-import { registerInfoDesk } from "../../../info/companion/desk";
-import { registerInfoDistillSource } from "../../../info/companion/distill-source";
+import { registerInfoDesk } from "../../../info/briefer/desk";
+import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
 import { registerReadingDesk } from "../../../reading/desk";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
 import { registerRetellDesk } from "../../../reading/retell/desk";

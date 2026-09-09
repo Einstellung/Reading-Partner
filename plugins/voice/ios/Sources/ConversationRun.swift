@@ -1,7 +1,7 @@
 // The full-duplex call (docs/33 M-voice-3, docs/45): the microphone stays open
 // while the companion speaks, and who is talking is decided here, on the phone,
 // without a frame or a verdict ever waiting on the webview. This file is the
-// native half of the contract in src/info/companion/conversation.ts; that file's
+// native half of the contract in src/info/briefer/conversation.ts; that file's
 // event kinds and payload fields are the specification, voice-session.ts is
 // the consumer that says in which order they have to arrive, and voice-call.ts
 // is the driver that holds the call open.

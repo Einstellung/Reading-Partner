@@ -1,5 +1,5 @@
 // Chat-card payloads for the reading domain (docs/17's parts protocol). Kept in
-// the domain, like info/briefing/cards.ts, so the tool that produces one and the
+// the domain, like info/boxes/cards.ts, so the tool that produces one and the
 // component that renders it import the same definition and the dependency
 // direction stays components -> reading.
 

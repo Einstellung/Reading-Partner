@@ -15,14 +15,14 @@ import {
   type ConversationBridge,
   type ConversationEvent,
   type ConversationSource,
-} from "../../src/info/companion/conversation";
+} from "../../src/info/briefer/conversation";
 import {
   INTERRUPTED_MARK,
   createVoiceSession,
   type SessionEffect,
   type VoiceSession,
   type VoiceTurn,
-} from "../../src/info/companion/voice-session";
+} from "../../src/info/briefer/voice-session";
 
 // A reply with a boundary in the middle of it. The splitter can only freeze text
 // that has something after the boundary, so a sentence goes out mid-stream only

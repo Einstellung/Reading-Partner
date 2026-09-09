@@ -1,4 +1,4 @@
-// The table the Swift port is checked against (src/info/companion/turn-replay.ts).
+// The table the Swift port is checked against (src/info/briefer/turn-replay.ts).
 // Nothing here tests the detector — tests/info/turn-detect.test.ts does that.
 // What is at stake is the table's provenance: it is a copy of the fixtures, and
 // a copy that quietly stops matching what it was copied from would let the two
@@ -9,7 +9,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveTurnDetectConfig } from "../../src/info/companion/turn-detect";
+import { resolveTurnDetectConfig } from "../../src/info/briefer/turn-detect";
 import {
   REPLAY_SOURCES,
   diffReplay,
@@ -18,7 +18,7 @@ import {
   turnReplayCasesJson,
   type ReplayEvent,
   type ReplaySequence,
-} from "../../src/info/companion/turn-replay";
+} from "../../src/info/briefer/turn-replay";
 
 const ASSETS = join(import.meta.dir, "../../docs/assets");
 

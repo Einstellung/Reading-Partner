@@ -1,4 +1,4 @@
-// Triage prompt assembly + strict-JSON validation (src/info/briefing/triage.ts).
+// Triage prompt assembly + strict-JSON validation (src/info/collect/triage.ts).
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -7,7 +7,7 @@ import {
   parseTriageResult,
   triageSystemPrompt,
   triageUserMessage,
-} from "../../src/info/briefing/triage";
+} from "../../src/info/collect/triage";
 import type { FeedbackEvent } from "../../src/memory/profile/feedback";
 import { composeProfile, splitProfile } from "../../src/memory/profile/guess";
 import type { InfoItem } from "../../src/info/sources/item";

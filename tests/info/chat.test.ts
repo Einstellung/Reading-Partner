@@ -1,5 +1,5 @@
 // The info companion's system prompt, as the desk assembles it (src/info/
-// companion/desk.ts over src/info/companion/chat.ts): the output-language wiring
+// briefer/desk.ts over src/info/briefer/chat.ts): the output-language wiring
 // on both threads, and the shared companion context — profile, source roster,
 // per-item source, the full filtered clip list, and the update_profile
 // anti-over-trigger rule.
@@ -17,18 +17,18 @@ import {
   formatSignInSites,
   formatSources,
   type CompanionContext,
-} from "../../src/info/companion/chat";
+} from "../../src/info/briefer/chat";
 import {
   INFO_ARTICLE_KIND,
   INFO_BRIEFING_KIND,
   registerInfoDesk,
-} from "../../src/info/companion/desk";
+} from "../../src/info/briefer/desk";
 import { DEFAULT_SETTINGS } from "../../src/platform/app/settings";
 import { BRIEF_TOPIC_ID } from "../../src/platform/app/topics";
 import { rebuildThreadStoreForTests } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
-import type { Briefing } from "../../src/info/briefing/types";
+import type { Briefing } from "../../src/info/collect/types";
 import { languageInstruction } from "../../src/platform/app/settings";
 
 const SOURCES: SourceDescriptor[] = [

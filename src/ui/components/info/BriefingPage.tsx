@@ -5,7 +5,7 @@
 // Presentational; the host owns the pipeline, feedback log, and article opening.
 
 import { useState } from "react";
-import type { Briefing, BriefingItemMeta } from "../../../info/briefing/types";
+import type { Briefing, BriefingItemMeta } from "../../../info/collect/types";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { IconSparkle } from "../base/icons";

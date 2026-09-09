@@ -9,12 +9,12 @@
 // Run: bun test tests/info/speech-source.test.ts
 
 import { expect, test } from "bun:test";
-import { normalizeForSpeech } from "../../src/info/briefing/speech/normalize";
+import { normalizeForSpeech } from "../../src/info/briefer/speech/normalize";
 import {
   createSourcedSplitter,
   createSpeechSplitter,
   type SourcedSentence,
-} from "../../src/info/briefing/speech/split";
+} from "../../src/info/briefer/speech/split";
 
 function stream(chunks: string[]): SourcedSentence[] {
   const splitter = createSourcedSplitter();

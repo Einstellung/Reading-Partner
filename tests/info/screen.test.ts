@@ -1,4 +1,4 @@
-// The screening stage (src/info/briefing/screen.ts): the prompt it sends, the
+// The screening stage (src/info/collect/screen.ts): the prompt it sends, the
 // replies it accepts, and the two pure rules the funnel's cost guarantee rests
 // on — batching every item exactly once, and a cap that cuts by confidence and
 // reports what it cut. No network, no model. Run: bun test.
@@ -13,7 +13,7 @@ import {
   screenUserMessage,
   SCREEN_BATCH_SIZE,
   SCREEN_SUMMARY_CHARS,
-} from "../../src/info/briefing/screen";
+} from "../../src/info/collect/screen";
 import { GUESS_BEGIN, GUESS_END } from "../../src/memory/profile/guess";
 import type { InfoItem } from "../../src/info/sources/item";
 

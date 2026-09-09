@@ -120,7 +120,7 @@ import {
   type ChatPart,
 } from "./ui/components/chat/chatParts";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
-import { refreshInfoCollector } from "./info/briefing/live";
+import { refreshInfoCollector } from "./info/program/live";
 
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
 // Per conversation, like the staging list itself.
