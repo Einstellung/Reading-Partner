@@ -111,10 +111,17 @@ function cutsOf(doc: SpineDocument, points: PagePoint[]): Cut[] {
  * The book's pages. Written once per book and then read forever: the caller
  * persists this and never asks for it again (pagination-store.ts).
  */
-export async function paginate(book: EpubBook, ruler: PageRuler): Promise<Pagination> {
+export async function paginate(
+  book: EpubBook,
+  ruler: PageRuler,
+  // How far the cut has got, in spine documents. A long book is minutes of the
+  // reader looking at nothing otherwise (docs/64).
+  onProgress?: (done: number, total: number) => void,
+): Promise<Pagination> {
   const blocks: PositionBlock[] = [];
   for (const doc of book.docs) {
     const cuts = cutsOf(doc, await ruler(doc));
+    onProgress?.(doc.index + 1, book.docs.length);
     for (let i = 0; i < cuts.length; i++) {
       const next = cuts[i + 1];
       blocks.push({

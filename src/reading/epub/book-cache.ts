@@ -57,6 +57,8 @@ export async function ensurePagination(
   bookId: string,
   book: EpubBook,
   host?: HTMLElement,
+  // Only the first caller in gets to watch: the rest join the same job.
+  onProgress?: (done: number, total: number) => void,
 ): Promise<Pagination> {
   const running = cutting.get(bookId);
   if (running) return running;
@@ -67,7 +69,7 @@ export async function ensurePagination(
     const ruler = createLayoutRuler(at, book);
     let cut: Pagination;
     try {
-      cut = await paginate(book, ruler);
+      cut = await paginate(book, ruler, onProgress);
     } finally {
       ruler.dispose();
     }

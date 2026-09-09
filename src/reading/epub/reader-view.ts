@@ -25,21 +25,31 @@ import type {
 import { openExternal } from "../../platform/app/external-link";
 import { LAYOUT_SETTINGS, type ReadingLayout } from "../engine/layout-modes";
 import { PAGE_FRAME } from "../engine/page-frame";
+import { attachTouchRouter } from "../engine/gesture/attach-touch";
+import { attachPinchZoom } from "../engine/gesture/pinch-zoom";
+import { attachWheelZoom } from "../engine/gesture/wheel-zoom";
+import type { PagedGestureCtx } from "../engine/gesture/context";
 import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
 import {
   PAGE_GAP,
   PAGE_HEIGHT,
   PAGE_WIDTH,
+  anchorAt,
+  clampZoom,
   columnPosition,
   columnScrollTop,
+  deskMetrics,
+  fitZoom,
   flipPosition,
   mountRange,
   openingEpubZoom,
-  stripMetrics,
+  scrollForAnchor,
+  settleFlip,
   visibleColumnRange,
   zoomScale,
   zoomStepDown,
   zoomStepUp,
+  type DeskView,
   type Zoom,
 } from "./page-geometry";
 import { createMarkLayer, type MarkLayer, type SpineText } from "./mark-layer";
@@ -170,51 +180,62 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   let mountedTo = -1;
   let scrollTimer: number | null = null;
 
+  // The touch router's live context (reading/engine/gesture). The same object
+  // the PDF side fills in from its plugins: the desk answers the five methods
+  // itself, and has no interaction manager or selection plugin to hand over
+  // because nothing under it selects text.
+  const gestures: PagedGestureCtx = {
+    paged: layout === "paged",
+    tool: "pointer",
+    zoomedIn: false,
+    fingerDraw: false,
+    scroll: { getCurrentPage: () => pageIndex + 1, getTotalPages: () => pagesCount },
+    interaction: null,
+    selection: null,
+    setTouchLock: null,
+    viewport: null,
+    indicator: null,
+    resetGestures: null,
+    turnToPage: null,
+  };
+
   const viewport = () => ({ clientWidth: scroller.clientWidth, clientHeight: scroller.clientHeight });
 
   // Slot geometry for the layout in force. Vertical: sheets stacked with a
   // gap, centred when narrower than the desk. Paged: one viewport-sized slot
   // per page, side by side, the sheet centred in it.
   function slotSize(): { w: number; h: number; pitchX: number; pitchY: number } {
-    const { pageWidth, pageHeight, pitch } = stripMetrics(scale);
-    if (layout === "vertical") {
-      const w = Math.max(scroller.clientWidth, pageWidth);
-      return { w, h: pageHeight, pitchX: 0, pitchY: pitch };
-    }
-    const w = Math.max(scroller.clientWidth, pageWidth);
-    const h = Math.max(scroller.clientHeight, pageHeight);
-    return { w, h, pitchX: w, pitchY: 0 };
+    const m = deskMetrics(layout, scale, viewport());
+    return { w: m.slotWidth, h: m.slotHeight, pitchX: m.pitchX, pitchY: m.pitchY };
   }
 
   function applyGeometry(): void {
     scale = zoomScale(zoom, layout, viewport());
-    const { pageWidth, pageHeight } = stripMetrics(scale);
-    const s = slotSize();
+    const m = deskMetrics(layout, scale, viewport());
     if (layout === "vertical") {
-      strip.style.width = `${s.w}px`;
-      strip.style.height = `${pagesCount * s.pitchY + PAGE_GAP}px`;
-      scroller.style.scrollSnapType = "none";
+      strip.style.width = `${m.slotWidth}px`;
+      strip.style.height = `${pagesCount * m.pitchY + PAGE_GAP}px`;
     } else {
-      strip.style.width = `${pagesCount * s.pitchX}px`;
-      strip.style.height = `${s.h}px`;
-      scroller.style.scrollSnapType = "x mandatory";
+      strip.style.width = `${pagesCount * m.pitchX}px`;
+      strip.style.height = `${m.slotHeight}px`;
     }
-    const left = Math.max(0, (s.w - pageWidth) / 2);
-    const top = layout === "vertical" ? 0 : Math.max(0, (s.h - pageHeight) / 2);
     for (let i = 0; i < slots.length; i++) {
       const el = slots[i].el;
-      el.style.width = `${s.w}px`;
-      el.style.height = `${s.h}px`;
-      el.style.left = `${i * s.pitchX}px`;
-      el.style.top = `${layout === "vertical" ? i * s.pitchY + PAGE_GAP / 2 : 0}px`;
-      el.style.scrollSnapAlign = layout === "paged" ? "start" : "none";
+      el.style.width = `${m.slotWidth}px`;
+      el.style.height = `${m.slotHeight}px`;
+      el.style.left = `${i * m.pitchX}px`;
+      el.style.top = `${layout === "vertical" ? i * m.pitchY + PAGE_GAP / 2 : 0}px`;
       const card = slots[i].card;
       if (card) {
         card.setScale(scale);
-        card.el.style.left = `${left}px`;
-        card.el.style.top = `${top}px`;
+        card.el.style.left = `${m.cardLeft}px`;
+        card.el.style.top = `${m.cardTop}px`;
       }
     }
+    gestures.paged = layout === "paged";
+    // What "zoomed in" means to the paged gesture machine: bigger than one
+    // whole page on this screen, so a swipe pans the sheet instead of turning.
+    gestures.zoomedIn = scale > fitZoom("fit-page", viewport()) + 1e-3;
   }
 
   // --- mounting ---------------------------------------------------------------
@@ -225,11 +246,10 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     if (slot.card) return slot.card;
     const card = cardPool.pop() ?? createPageCard(owner, resources);
     slot.card = card;
-    const { pageWidth, pageHeight } = stripMetrics(scale);
-    const s = slotSize();
+    const m = deskMetrics(layout, scale, viewport());
     card.setScale(scale);
-    card.el.style.left = `${Math.max(0, (s.w - pageWidth) / 2)}px`;
-    card.el.style.top = `${layout === "vertical" ? 0 : Math.max(0, (s.h - pageHeight) / 2)}px`;
+    card.el.style.left = `${m.cardLeft}px`;
+    card.el.style.top = `${m.cardTop}px`;
     slot.el.append(card.el);
     const block = pagination.blocks[i];
     const doc = book.docs[block.spine];
@@ -356,6 +376,11 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     emit();
   }
 
+  // Fingers on the glass. The paged strip settles onto one whole page when the
+  // scrolling stops, and it must not do that under a finger that is still
+  // dragging it.
+  let contacts = 0;
+
   function onScroll(): void {
     if (destroyed) return;
     readPosition();
@@ -363,10 +388,23 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     if (scrollTimer !== null) clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => {
       scrollTimer = null;
+      settle();
       emit();
     }, 120) as unknown as number;
   }
   scroller.addEventListener("scroll", onScroll, { passive: true });
+
+  // The flip carries no CSS scroll snapping: a mandatory snap re-snaps every
+  // scrollLeft the gesture machine writes, so a follow-finger drag would never
+  // leave the page it started on. The strip is put back on a whole page here
+  // instead, once nothing is driving it.
+  function settle(): void {
+    if (layout !== "paged" || contacts > 0) return;
+    const to = settleFlip(scroller.scrollLeft, slotSize().pitchX, pagesCount);
+    if (to === null) return;
+    scroller.scrollLeft = to;
+    readPosition();
+  }
 
   // A fit follows the viewport: the sheet is re-scaled and the reader stays on
   // the page they were on.
@@ -467,6 +505,70 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     return blockIndexAt(pagination, doc.index, offset);
   }
 
+  // --- zoom ---------------------------------------------------------------------------
+  function deskView(): DeskView {
+    return {
+      layout,
+      scale,
+      clientWidth: scroller.clientWidth,
+      clientHeight: scroller.clientHeight,
+      scrollLeft: scroller.scrollLeft,
+      scrollTop: scroller.scrollTop,
+      pagesCount,
+    };
+  }
+
+  /**
+   * Zoom to a scale, keeping the paper under a point in the viewport where it
+   * is. What a pinch and a ctrl+wheel both ask for; the buttons keep the page
+   * they were on instead.
+   */
+  function zoomTo(next: number, centre: { vx: number; vy: number }): void {
+    const wanted = clampZoom(next);
+    if (Math.abs(wanted - scale) < 1e-4) return;
+    const anchor = anchorAt(deskView(), centre.vx, centre.vy);
+    zoom = { kind: "scale", scale: wanted };
+    applyGeometry();
+    const to = scrollForAnchor(deskView(), anchor, centre.vx, centre.vy);
+    scroller.scrollLeft = to.scrollLeft;
+    scroller.scrollTop = to.scrollTop;
+    readPosition();
+    syncMounted();
+    emit();
+  }
+
+  // --- the gestures -------------------------------------------------------------------
+  // The same router the PDF pages run under (reading/engine/gesture): the
+  // finger follows and coasts in the column, drags and flips in the paged
+  // strip, and a stylus is left alone for the marks. The pinch and the
+  // ctrl+wheel are separate listeners on the same element, as they are there.
+  gestures.turnToPage = (pageNumber: number) => {
+    zoom = { kind: "lock", lock: LAYOUT_SETTINGS[layout].zoom };
+    applyGeometry();
+    placePage(pageNumber - 1, 0);
+  };
+  const countDown = () => {
+    contacts++;
+  };
+  const countUp = () => {
+    contacts = Math.max(0, contacts - 1);
+  };
+  scroller.addEventListener("pointerdown", countDown, { capture: true });
+  scroller.addEventListener("pointerup", countUp, { capture: true });
+  scroller.addEventListener("pointercancel", countUp, { capture: true });
+  const detachTouch = attachTouchRouter(scroller as HTMLDivElement, {
+    documentId: bookId,
+    ctx: { current: gestures },
+  });
+  const detachWheel = attachWheelZoom(scroller, {
+    currentZoom: () => scale,
+    requestZoom: (level, centre) => zoomTo(level, centre),
+  });
+  const detachPinch = attachPinchZoom(scroller, {
+    currentScale: () => scale,
+    requestScale: (next, centre) => zoomTo(next, centre),
+  });
+
   // --- first paint --------------------------------------------------------------------
   applyGeometry();
   const target = restoreTarget(pagination, viewState);
@@ -497,7 +599,11 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
       const keep = pageIndex;
       layout = mode;
       zoom = { kind: "lock", lock: LAYOUT_SETTINGS[layout].zoom };
+      // Nothing the old layout had in flight — a drag, a fling, a rubber band,
+      // a captured pointer — may survive into the new geometry.
+      gestures.resetGestures?.();
       applyGeometry();
+      gestures.setTouchLock?.(LAYOUT_SETTINGS[layout].touchLock);
       placePage(keep, 0);
     },
 
@@ -528,13 +634,33 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
 
     // The marks are the layer's (mark-layer.ts); the desk only says which sheet
     // is which page and hands the pointers on.
-    setTool: (tool?: Tool) => marks.setTool(tool),
-    setFingerDraw: (on: boolean) => marks.setFingerDraw(on),
+    // The tool and the setting go to both halves: the marks decide whether to
+    // start a stroke, the touch router whether the pointer was ever theirs.
+    setTool: (tool?: Tool) => {
+      gestures.tool = tool?.type ?? "pointer";
+      marks.setTool(tool);
+    },
+    setFingerDraw: (on: boolean) => {
+      gestures.fingerDraw = on;
+      marks.setFingerDraw(on);
+    },
     setAnnotations: (anns: Annotation[]) => marks.setAnnotations(anns),
     unsetAnnotations: (ids: string[]) => marks.unsetAnnotations(ids),
     selectAnnotations: (ids: string[]) => marks.selectAnnotations(ids),
 
-    markPointerDown: (e) => marks.pointerDown(e),
+    // A pointer the pens take is captured to the desk, not to the pane above
+    // it: the touch router listens on the desk in the capture phase, and a
+    // capture higher up would take every later event out of its reach and
+    // leave the lifted contact in its books for good.
+    markPointerDown: (e) => {
+      if (!marks.pointerDown(e)) return false;
+      try {
+        scroller.setPointerCapture(e.pointerId);
+      } catch {
+        // The pointer may already be gone; the stroke still ends on its up.
+      }
+      return true;
+    },
     markPointerMove: (e) => marks.pointerMove(e),
     markPointerUp: (e) => marks.pointerUp(e),
     markPointerCancel: () => marks.pointerCancel(),
@@ -574,8 +700,14 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     destroy: () => {
       destroyed = true;
       marks.pointerCancel();
+      detachPinch();
+      detachWheel();
+      detachTouch();
       observer.disconnect();
       scroller.removeEventListener("scroll", onScroll);
+      scroller.removeEventListener("pointerdown", countDown, { capture: true });
+      scroller.removeEventListener("pointerup", countUp, { capture: true });
+      scroller.removeEventListener("pointercancel", countUp, { capture: true });
       if (scrollTimer !== null) clearTimeout(scrollTimer);
       for (let i = 0; i < slots.length; i++) unmountSlot(i);
       resources.revoke();

@@ -93,4 +93,31 @@ Linux WebKitGTK，xvfb，窗口 1280×860，阅读区 1280×816。三本书经 `
 
 页数 1625 和上面那张表的 1557 不一样：那一行是字体改写落地之前量的。
 
-手势、深色模式和 iPad 模拟器这一轮没做。
+深色模式和 iPad 模拟器这一轮没做。
+
+## 手势
+
+和 PDF 同一套代码：`engine/gesture/` 的触摸路由（`attach-touch.ts` + `paged-gesture.ts` / `vertical-gesture.ts` / `rubber-band.ts` / `touch-routing.ts`）挂在桌子那个滚动容器上，纸页填 `PagedGestureCtx`。
+
+`context.ts` 原来直接用 EmbedPDF 的三个能力类型，真正调的只有五个方法，改成本地结构类型（`GestureScroll`/`GestureInteraction`/`GestureSelection`），`engine/gesture` 不再 import `@embedpdf`。纸页填的是：`scroll` = `{ getCurrentPage: () => pageIndex + 1, getTotalPages: () => pagesCount }`，`turnToPage` = 复位 fit 再 `placePage`，`interaction`/`selection` 给 null（纸页下面没有引擎的指针管线，也不用系统选区）。`tool` 和 `fingerDraw` 由 `setTool`/`setFingerDraw` 同时写给标注层和路由。
+
+| 手势 | 做法 |
+|---|---|
+| 竖排手指滚动 | 路由在 JS 里跟手 + 惯性 + 橡皮筋，和 PDF 同一条 `vertical-gesture.ts` |
+| 翻页滑动 | `paged-gesture.ts` 跟手拖，抬手过阈值走 `turnToPage`；到头橡皮筋 |
+| 翻页点击区 | 仍在 pane 里（`tapZone`），路由不管点 |
+| 鼠标拖动翻页 | 留在 pane（`swipeTurn` 只对 `pointerType === "mouse"`）——路由从不驱动鼠标 |
+| pinch | `engine/gesture/pinch-zoom.ts`（新）：按落手时的指距做绝对缩放，`PINCH_SLOP_PX` 12 起步 |
+| ctrl/⌘+滚轮 | `wheel-zoom.ts` 直接接上 |
+| 笔 | `routesAsContact` 判定笔不归路由，落到 pane → 标注层；指针 capture 挂在桌子上（挂 pane 上路由就再也收不到这个指针的 move/up） |
+| 缩放锚点 | pinch 和滚轮都保持手指下的纸不动（`page-geometry.ts` 的 `anchorAt`/`scrollForAnchor`）；按钮仍保持所在页 |
+
+两处几何改动：纸（`.rp-page`）和 shadow 里的 `html, body` 都写 `touch-action: none`（坑 37：不写就原生滚动和 JS 滚动叠加，双倍速）；翻页模式去掉 `scroll-snap-type: x mandatory`（mandatory snap 会把手势机器写的每一次 `scrollLeft` 重新吸回去），改成滚动停下 120 ms 后 `settleFlip` 归位，手指还在玻璃上时不归。
+
+shadow 里的 `html, body` 另加 `user-select: none`/`-webkit-touch-callout: none`，带 `!important`——书自己的 CSS 会把继承来的那份改回去。
+
+缩放档位、`canZoom*`、fit-width/fit-page 的语义没动，仍是 `layout-modes.ts` 那一份。
+
+## 打开时的进度
+
+`open-book.ts` 的 `showTitle` 提前到「上一本书结算完」之后、分页之前：阅读器带标题和 `Rendering…` 先出来，不再是书架上枯坐七秒。分页按 spine 逐篇报数（`paginate` 的 `onProgress` → `ensurePagination` → `preparePages`），顶栏写成 `Rendering… 12/70`，一篇 spine 的书不显示数字。
