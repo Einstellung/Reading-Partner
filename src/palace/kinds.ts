@@ -64,6 +64,7 @@ export type PalaceId =
   | "hash"
   | "observationId"
   | "threadId"
+  | "labId"
   | "fixed";
 
 export interface PalaceRow {
@@ -878,6 +879,48 @@ export const PALACE = [
     shape: ARRAY_ID,
     deleteWith: "never",
     gc: "never",
+  },
+  {
+    kind: "info-labs",
+    domain: "info",
+    match: fixed("info-labs.json"),
+    samples: ["info-labs.json"],
+    id: "fixed",
+    refs: [{ kind: "info-sources", via: "sourceId" }],
+    sync: "data",
+    merge: "records",
+    shape: { kind: "array", container: "labs", idField: "id" },
+    deleteWith: "never",
+    gc: "never",
+    note: "the reader's research rooms (docs/63): authored in conversation, so records-merged on the room id rather than last-writer-wins over the list",
+  },
+  {
+    kind: "info-picture",
+    domain: "info",
+    match: keyed(/^info-picture-(lab-[0-9a-f]{8})\.json$/),
+    pathFor: (id: string) => `info-picture-${id}.json`,
+    samples: ["info-picture-lab-4d9f1b0a.json"],
+    id: "labId",
+    refs: [{ kind: "info-labs", via: "labId" }],
+    sync: "data",
+    merge: "opaque",
+    deleteWith: "never",
+    gc: "never",
+    note: "one room's standing picture, written only by the device holding the collector claim, so there are never two halves to reconcile",
+  },
+  {
+    kind: "info-cables",
+    domain: "info",
+    match: keyed(new RegExp(`^info-cables-(${DATE})\\.json$`)),
+    pathFor: (id: string) => `info-cables-${id}.json`,
+    samples: ["info-cables-2026-07-21.json"],
+    id: "date",
+    refs: [{ kind: "info-labs", via: "labId" }],
+    sync: "data",
+    merge: "opaque",
+    deleteWith: "never",
+    gc: "domain-housekeeping",
+    note: "the day's kept items as evidence: synced because a picture's judgments cite cable ids, and kept for thirty days after the bodies are gone",
   },
   {
     kind: "info-briefing-published",

@@ -99,16 +99,21 @@ const LAYER: Record<string, Layer> = {
   "memory/usage": "capability",
 
   info: "domain",
-  // The five nouns the info side is cut along (docs/63), in the order they may
-  // depend on each other: extract and sources, then collect (what the sources
-  // published and what survived screening), boxes (what is assembled out of it),
+  // The nouns the info side is cut along (docs/63), in the order they may depend
+  // on each other: cable and labs are leaves and reach for nothing else under
+  // info, then picture (which may read labs), then extract and sources, then
+  // collect (what the sources published and what survived screening), analysis
+  // (what a room makes of its cables), boxes (what is assembled out of it),
   // briefer (everything the AI says about it) and program (the day's wiring).
   // Only the acyclic test enforces that; the order itself is a reading rule.
   "info/boxes": "domain",
   "info/briefer": "domain",
   "info/briefer/speech": "domain",
+  "info/cable": "domain",
   "info/collect": "domain",
   "info/extract": "domain",
+  "info/labs": "domain",
+  "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",
   // The 0.12 data migration, deleted wholesale at 0.13. A domain rather than a

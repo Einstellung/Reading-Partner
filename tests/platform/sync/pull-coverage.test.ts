@@ -51,6 +51,11 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-profile.md": "the profile's old name, read the same way",
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
+  "info-labs.json": "the roster is read from disk each time it is wanted — a run, a prompt, a card",
+  "info-picture-":
+    "a room's picture is read at the start of its analysis run and written by the collector alone",
+  "info-cables-":
+    "a day's cables are read when that day's analysis runs, and the day is written once",
   "retell-": "a retell is read from disk when it is opened",
   "outline-": "a talk's outline is read from disk when it is opened, and again before each edit",
   "rehearsal-": "a rehearsal is read from disk when the topic's list is drawn",
