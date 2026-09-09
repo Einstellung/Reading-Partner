@@ -290,12 +290,17 @@ test("the alt text is the caption when there is no figcaption", () => {
   expect(figure.captionSource).toBe("alt");
 });
 
-test("a figure's bytes come straight out of the archive", () => {
+test("a figure's bytes come straight out of the archive", async () => {
   const bytes = simpleBook();
   const book = parseEpub(bytes);
   const [figure] = epubFigures(book, paginate(book)).figures;
-  const rendered = renderEpubFigure(bytes.buffer.slice(0) as ArrayBuffer, "OEBPS/images/a.png");
-  expect(rendered?.mimeType).toBe("image/png");
-  expect(rendered?.dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+  const buffer = bytes.buffer.slice(0) as ArrayBuffer;
+  // Under the view tier's cap and not a vector, so both tiers send the
+  // publisher's own file; the redraw the model's tier can do is raster.test.ts.
+  for (const tier of ["card", "view"] as const) {
+    const rendered = await renderEpubFigure("a-book", buffer, "OEBPS/images/a.png", tier);
+    expect(rendered?.mimeType).toBe("image/png");
+    expect(rendered?.dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+  }
   expect(figure.source.kind).toBe("epub");
 });
