@@ -241,7 +241,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     readSidebarOpen(browserPrefStore(window), columnLayoutNow(window)),
   );
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("traces");
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("outline");
 
   // The shell sidebar's own collapsed state (docs/51), the same kind of
   // per-device preference and read the same way: synchronously at the first
