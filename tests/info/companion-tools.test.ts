@@ -177,11 +177,11 @@ test("generate_briefing starts a full regeneration and returns without claiming 
   expect(out).toMatch(/do not say the briefing is done/i);
 });
 
-test("generate_briefing scope 'retriage' re-sorts without re-collecting", async () => {
+test("generate_briefing scope 'retriage' re-analyzes without re-collecting", async () => {
   const h = briefingDeps();
   const out = String(await buildGenerateBriefingTool(h.deps).execute({ scope: "retriage" }));
   expect(h.started).toEqual(["retriage"]);
-  expect(out).toMatch(/re-triage of today's items/i);
+  expect(out).toMatch(/re-analysis of today's cables/i);
 });
 
 // The bug this guards: the refusal used to be invisible to the host, so the chat

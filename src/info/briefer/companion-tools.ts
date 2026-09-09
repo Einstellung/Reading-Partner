@@ -93,7 +93,7 @@ export function buildUpdateProfileTool(deps: Pick<CompanionToolDeps, "onProfileC
     name: "update_profile",
     description:
       "Draft a change to the user's profile — the cross-scenario identity that steers both " +
-      "the daily triage and the reading companion. Call this ONLY when the user states a " +
+      "the labs' analysts and the reading companion. Call this ONLY when the user states a " +
       "standing preference (e.g. 'be harsher on vendor PR', 'keep 量子位's paper explainers'), " +
       "never on your own initiative and never from a one-off reaction to a single item. Pass " +
       "the COMPLETE revised profile text (not a fragment) and a one-line summary of what " +
@@ -136,9 +136,9 @@ export function buildGenerateBriefingTool(
       "Regenerate today's briefing. Call this ONLY when the user explicitly asks to redo it " +
       "('regenerate today's, drop the old one', 're-run with the new source', 'this sorting is " +
       "wrong, redo it'), never on your own initiative — not after adding a source, not to be " +
-      "helpful. `scope` picks the depth: 'retriage' re-sorts today's already-collected items " +
-      "with the current profile (no new fetching — use it after a profile change or a bad sort); " +
-      "'full' re-collects every source (including any just added) and re-triages, replacing " +
+      "helpful. `scope` picks the depth: 'retriage' re-runs the labs' analysis over today's " +
+      "already-collected cables (no new fetching — use it after a lab or profile change); " +
+      "'full' re-collects every source (including any just added) and re-analyzes, replacing " +
       "today's briefing. It starts a background job and returns at once: tell the user it's " +
       "running and a progress card will show it — do NOT claim the briefing is already " +
       "regenerated. Only one run goes at a time: if one was already under way this starts " +
@@ -147,8 +147,8 @@ export function buildGenerateBriefingTool(
     parameters: Type.Object({
       scope: Type.String({
         description:
-          "'retriage' to re-sort today's cached items with the current profile (no fetch), or " +
-          "'full' to re-collect every source and re-triage (replaces today's briefing).",
+          "'retriage' to re-run the labs' analysis over today's cached cables (no fetch), or " +
+          "'full' to re-collect every source and re-analyze (replaces today's briefing).",
       }),
     }),
     execute: async (args) => {
@@ -176,8 +176,8 @@ export function buildGenerateBriefingTool(
       }
       const what =
         scope === "full"
-          ? "Started a full regeneration (re-collecting every source, then re-triaging)"
-          : "Started a re-triage of today's items with the current profile";
+          ? "Started a full regeneration (re-collecting every source, then re-analyzing)"
+          : "Started a re-analysis of today's cables";
       return (
         `${what} in the background. A progress card is now showing it. Do NOT say the briefing is ` +
         `done — it is still running; a note will report the new briefing when it settles.`

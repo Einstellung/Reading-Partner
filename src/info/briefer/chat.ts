@@ -24,7 +24,8 @@ const ARTICLE_CHARS = 12_000;
 const BASE =
   "You are the reading companion for the user's daily briefing. You do more than answer " +
   "questions about the material below: through your tools you can refine the reading profile " +
-  "that steers triage, add new sources, and regenerate today's briefing — always on the user's " +
+  "the analysts read, set up and archive labs, add new sources, and regenerate today's briefing — " +
+  "always on the user's " +
   "request, never on your own. Answer concisely and honestly, in the user's language. If " +
   "something isn't in the provided text, say so rather than inventing it.";
 
@@ -75,10 +76,10 @@ const ADD_SOURCE_BULLETS = [
 ];
 
 const REST_BULLETS = [
-  "- update_profile: draft a change to the reading profile that steers triage.",
-  "- generate_briefing(scope): regenerate today's briefing — 'retriage' re-sorts today's",
-  "  already-collected items with the current profile (no fetch), 'full' re-collects every",
-  "  source (including any just added) and re-triages, replacing today's briefing.",
+  "- update_profile: draft a change to the reading profile the analysts read.",
+  "- generate_briefing(scope): regenerate today's briefing — 'retriage' re-runs the labs'",
+  "  analysis over today's already-collected cables (no fetch), 'full' re-collects every",
+  "  source (including any just added) and re-analyzes, replacing today's briefing.",
 ];
 
 // And what stands in place of the add-source half on a reader. The user can
@@ -116,7 +117,8 @@ const GENERATE_BRIEFING_ELSEWHERE = [
 // restraint to the reminder that fetched text is never an instruction.
 const TOOL_RULES = [
   "",
-  "The reading profile below is what triage uses to keep or filter each item. When the",
+  "The reading profile below is what the labs' analysts read about the user; screening",
+  "itself goes by each lab's observables, not by the profile. When the",
   "user clearly states a standing preference — 'be harsher on vendor PR', 'keep 量子位's",
   "paper explainers', 'I care more about robotics now' — call update_profile with the",
   "COMPLETE revised profile text (not a fragment) and a one-line `summary` of the change.",
