@@ -118,18 +118,21 @@ sup, sub { line-height: 0; }
 `;
 }
 
-// The renderer's own geometry, as attributes on <foliate-paginator>. Every one
-// of these is read with parseFloat and used as a pixel count, so none of them
-// may carry a unit. The margin is what gives the columns room for the head and
-// foot marginals; the gap is a percentage of the container, not a length (see
-// the derivation in paginator.js). max-column-count 1 keeps one column per
-// screen on a phone and on a tablet alike — two columns of a bilingual book on
-// an iPad read as four. The line's own width is capped on the element
-// (reader-view.ts), which is the only thing that caps it in paginated flow.
+// The renderer's own geometry, as attributes on <foliate-paginator>. Each one
+// becomes a custom property that is read twice, and both readings have to work:
+// once by `parseFloat` in JavaScript, and once by the shadow DOM's own grid,
+// where the values go through `calc()`. So every value keeps its unit — a
+// unitless one parses fine and makes the calc invalid, which drops the rule
+// that caps the text (docs/pitfall/247) — and `gap` is a percentage, because
+// that is what it is: a share of the container, not a length.
+//
+// The cap on the line is that grid track: `max-inline-size × max-column-count`.
+// One column per screen on a phone and on a tablet alike — two columns of a
+// bilingual book on an iPad read as four.
 export const RENDERER_GEOMETRY = {
-  gap: "6",
-  margin: "24",
-  "max-inline-size": "720",
-  "max-block-size": "1440",
+  gap: "6%",
+  margin: "48px",
+  "max-inline-size": "720px",
+  "max-block-size": "1440px",
   "max-column-count": "1",
 } as const;

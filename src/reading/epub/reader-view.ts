@@ -120,13 +120,6 @@ export async function createEpubReader(
   view.style.display = "block";
   view.style.width = "100%";
   view.style.height = "100%";
-  // The measure. Paginated flow gives its container's whole width to one
-  // column — `max-inline-size` only decides how many columns fit, not how wide
-  // one is — so a desktop window was measured putting 120 characters on a line.
-  // Capping the element is what caps the line; the surface around it stays full
-  // width, so the tap zones still reach the edges of the screen.
-  view.style.maxWidth = "48rem";
-  view.style.margin = "0 auto";
   host.replaceChildren(view);
 
   let layout: "vertical" | "paged" = viewState?.layout ?? "vertical";
