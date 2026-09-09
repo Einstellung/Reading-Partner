@@ -3,7 +3,12 @@
 // is joined only if the reader is still on the same book. No React. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { openBook, openingViewState, type BookOpenIo } from "../../../src/reading/session/open-book";
+import {
+  cuttingStatus,
+  openBook,
+  openingViewState,
+  type BookOpenIo,
+} from "../../../src/reading/session/open-book";
 import type { ReaderShell } from "../../../src/reading/session/shell";
 import type { Annotation, ViewState } from "../../../src/platform/app/reader-contract";
 import type { Fulltext } from "../../../src/fulltext";
@@ -317,4 +322,26 @@ test("the pane is mounted last, with the title", async () => {
   expect(argsOf(log, "showTitle")).toEqual(["A Book.pdf"]);
   // The engine is told it has nothing drawable before it is handed a document.
   before(log, "readerNotReady", "mountReader");
+});
+
+test("the reader is on screen before the pages are cut, and counts them off", async () => {
+  const log: Call[] = [];
+  const io: BookOpenIo = {
+    ...fakeIo(log),
+    preparePages: async (_id, _buffer, _format, onProgress) => {
+      onProgress?.(1, 70);
+      onProgress?.(70, 70);
+    },
+  };
+  await openBook(fakeShell(log), book, io);
+  before(log, "showTitle", "loadAnnotations");
+  const said = log.filter((c) => c.name === "showStatus").map((c) => c.args[0]);
+  expect(said).toEqual(["Rendering\u2026", "Rendering\u2026 1/70", "Rendering\u2026 70/70"]);
+});
+
+test("the cut says how far it has got, and says nothing it does not know", () => {
+  expect(cuttingStatus(12, 70)).toBe("Rendering\u2026 12/70");
+  expect(cuttingStatus(0, 70)).toBe("Rendering\u2026");
+  expect(cuttingStatus(1, 1)).toBe("Rendering\u2026");
+  expect(cuttingStatus(99, 70)).toBe("Rendering\u2026 70/70");
 });

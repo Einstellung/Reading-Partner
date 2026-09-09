@@ -1,16 +1,8 @@
-// The reading area for an EPUB: one element for the renderer, and the events
-// that reach it.
-//
-// The events are the whole reason there is anything here at all. The book is in
-// a sandboxed frame with no scripts, and WebKit dispatches no DOM event inside
-// such a frame (docs/pitfall/244) — so a tap on the right edge, a swipe, an
-// arrow key: none of them can be heard where they land. They are heard on the
-// element wrapping the frame, turned into a page turn by reader-logic.ts, and
-// handed to the renderer as a call.
-//
-// Continuous scrolling is the exception and needs nothing: the element that
-// scrolls in that layout is foliate's own container, on this side of the frame,
-// and a scroll is not a DOM event.
+// The reading area for an EPUB: one element for the desk, and the events that
+// reach it. The sheets are in the app's own DOM (docs/64), so a tap, a swipe
+// and an arrow key all land where they happen; what is here is only the
+// reading of them — reader-logic.ts says what each means, the controller
+// (reader-view.ts) does it.
 
 import { memo, useCallback, useEffect, useRef } from "react";
 import type {
@@ -20,14 +12,7 @@ import type {
   ViewState,
   ViewStats,
 } from "../../platform/app/reader-contract";
-import {
-  SWIPE_MIN,
-  claimsTouch,
-  keyTurn,
-  swipeTurn,
-  tapZone,
-  type Turn,
-} from "./reader-logic";
+import { SWIPE_MIN, claimsTouch, keyTurn, swipeTurn, tapZone, type Turn } from "./reader-logic";
 import { createEpubReader, type EpubReaderController } from "./reader-view";
 
 export interface EpubReaderPaneProps {
@@ -50,16 +35,14 @@ export interface EpubReaderPaneProps {
 
 function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const surfaceRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<EpubReaderController | null>(null);
   const propsRef = useRef(props);
   propsRef.current = props;
   // Where a finger or a mouse went down, so the pointer that comes up can be
   // read as a swipe or as a tap.
   const downRef = useRef<{ x: number; y: number; id: number } | null>(null);
-  // The pointer currently dragging a selection out of the text, if any. It is
-  // captured, so it does not become a page turn on the way up.
-  const drawingRef = useRef<number | null>(null);
+  // The pointer a pen has taken, so the page never reads a turn out of it.
+  const markingRef = useRef<number | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -71,7 +54,6 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       bookId: p.bookId,
       buffer: p.buffer,
       viewState: p.viewState,
-      themeRoot: document.documentElement,
       annotations: p.annotations,
       authorName: p.authorName,
       callbacks: {
@@ -103,45 +85,23 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       host.replaceChildren();
     };
     // The book is the identity of this pane; App remounts it by key on a book
-    // switch, and nothing else here may restart the renderer.
+    // switch, and nothing else here may restart the desk.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.bookId]);
 
-  // The app's palette can change under an open book (the paper tint, the system
-  // switching to dark). The frame does not inherit custom properties, so it is
-  // re-styled rather than re-cascaded (reader-styles.ts).
+  // Taking the touch off the browser in the paged flip, on the moves the
+  // pointer events cannot speak for (docs/pitfall/117). React's own touch
+  // handlers are passive, so this listener is attached by hand.
   useEffect(() => {
-    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    const refresh = () => controllerRef.current?.refreshTheme();
-    media?.addEventListener("change", refresh);
-    const observer = new MutationObserver(refresh);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "data-theme", "data-tint"],
-    });
-    return () => {
-      media?.removeEventListener("change", refresh);
-      observer.disconnect();
-    };
-  }, []);
-
-  // Taking the touch off the browser, on the moves the pointer events cannot
-  // speak for. Preventing the default on a pointermove does not stop WebKit
-  // scrolling; preventing it on the touchmove does, and it has to happen on the
-  // first one (docs/pitfall/117). React's own touch handlers are passive, so
-  // this listener is attached by hand.
-  useEffect(() => {
-    const surface = surfaceRef.current;
-    if (!surface) return;
+    const host = hostRef.current;
+    if (!host) return;
     const onTouchMove = (e: TouchEvent) => {
       const controller = controllerRef.current;
       if (!controller) return;
-      if (claimsTouch(controller.currentLayout(), drawingRef.current !== null)) {
-        e.preventDefault();
-      }
+      if (claimsTouch(controller.currentLayout(), controller.isDrawing())) e.preventDefault();
     };
-    surface.addEventListener("touchmove", onTouchMove, { passive: false });
-    return () => surface.removeEventListener("touchmove", onTouchMove);
+    host.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => host.removeEventListener("touchmove", onTouchMove);
   }, []);
 
   const apply = useCallback((turn: Turn) => {
@@ -150,59 +110,54 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
   }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    const controller = controllerRef.current;
-    if (
-      controller &&
-      controller.pointerAction(e.pointerType) === "draw" &&
-      controller.beginDraw(e.clientX, e.clientY)
-    ) {
-      drawingRef.current = e.pointerId;
-      // Captured so the rest of the stroke arrives here even when it leaves the
-      // pane, and so the frame's own scrolling does not take it.
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-      e.preventDefault();
+    // The pens get the pointer first. One they take is theirs to the end — the
+    // desk captures it, so a stroke that leaves the pane still finishes — and
+    // no tap is read out of it.
+    if (controllerRef.current?.markPointerDown(e.nativeEvent)) {
+      markingRef.current = e.pointerId;
+      downRef.current = null;
       return;
     }
     downRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (drawingRef.current !== e.pointerId) return;
-    controllerRef.current?.extendDraw(e.clientX, e.clientY);
-    e.preventDefault();
+    if (markingRef.current !== e.pointerId) return;
+    controllerRef.current?.markPointerMove(e.nativeEvent);
   }, []);
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const controller = controllerRef.current;
-      if (drawingRef.current === e.pointerId) {
-        drawingRef.current = null;
-        controller?.endDraw();
+      if (markingRef.current === e.pointerId) {
+        markingRef.current = null;
+        controller?.markPointerUp(e.nativeEvent);
         return;
       }
       const down = downRef.current;
       downRef.current = null;
-      const surface = surfaceRef.current;
-      if (!down || down.id !== e.pointerId || !controller || !surface) return;
-      // A finished selection, or a mark under the finger: either is what this
-      // pointer was for, and neither turns a page.
-      if (controller.consumeUp(e.clientX, e.clientY)) return;
+      const host = hostRef.current;
+      if (!down || down.id !== e.pointerId || !controller || !host) return;
       const layout = controller.currentLayout();
       const dx = e.clientX - down.x;
       const dy = e.clientY - down.y;
-      const swipe = swipeTurn(layout, dx, dy);
+      // A finger's swipe is the touch router's (reading/engine/gesture): it
+      // follows the sheet and commits the turn, exactly as it does on a PDF.
+      // The mouse is the one device the router never drives, so a drag with it
+      // is read here.
+      const swipe = e.pointerType === "mouse" ? swipeTurn(layout, dx, dy) : "none";
       if (swipe !== "none") {
         apply(swipe);
         return;
       }
-      // Not a swipe. A pointer that barely moved is a tap; one that moved and
-      // was not a swipe was a drag over the text and turns nothing.
       if (Math.abs(dx) >= SWIPE_MIN || Math.abs(dy) >= SWIPE_MIN) return;
+      // A press on a mark opens it, before anything under it is consulted: the
+      // mark is what the reader can see at that point.
+      if (controller.markTapAt(e.clientX, e.clientY)) return;
       // A tap on one of the book's own links follows it, wherever on the page
-      // it landed — a footnote marker sitting in the right-hand tap zone is a
-      // footnote, not a page turn.
+      // it landed — a footnote marker in the right-hand tap zone is a footnote.
       if (controller.followLinkAt(e.clientX, e.clientY)) return;
-      const box = surface.getBoundingClientRect();
+      const box = host.getBoundingClientRect();
       apply(tapZone(layout, e.clientX - box.left, box.width));
     },
     [apply],
@@ -220,32 +175,20 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
 
   return (
     <div
-      ref={surfaceRef}
+      ref={hostRef}
       className={`relative h-full w-full overflow-hidden bg-desk outline-none ${props.className ?? ""}`}
       data-testid="epub-reader"
-      // The same attribute the PDF surface carries (styles.css): no native
-      // selection, no touch callout. The frame takes no pointers, so a long
-      // press on the text now lands on this element instead, and iOS answered
-      // it with an edit menu over an empty selection of the page around the
-      // book (docs/pitfall/262). The book's own document is not this document
-      // and does not inherit the rule, so the text inside it stays selectable
-      // for the pen to drag.
-      data-reader-surface=""
-      // Focusable so the arrow keys reach it without a global listener that
-      // would turn pages while the reader types in the chat.
       tabIndex={-1}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => {
         downRef.current = null;
-        drawingRef.current = null;
-        controllerRef.current?.cancelDraw();
+        markingRef.current = null;
+        controllerRef.current?.markPointerCancel();
       }}
       onKeyDown={onKeyDown}
-    >
-      <div ref={hostRef} className="h-full w-full" />
-    </div>
+    />
   );
 }
 

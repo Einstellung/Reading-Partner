@@ -278,3 +278,92 @@ export function newEpubMark(args: NewEpubMark): Record<string, unknown> {
     isAuthorNameAuthoritative: true,
   };
 }
+
+// ------------------------------------------------------------- the strokes --
+
+/** What is painted for a mark, or null for one this renderer does not draw. */
+export type MarkKind = "highlight" | "underline" | "ink";
+
+export function markKind(ann: { type?: unknown } | null | undefined): MarkKind | null {
+  const type = ann?.type;
+  if (type === "highlight" || type === "underline" || type === "ink") return type;
+  return null;
+}
+
+// -------------------------------------------------------------------- ink ---
+
+/**
+ * A free stroke on a sheet. Unlike the three text pens, ink is not on any
+ * words: there is no range to write a CFI for and no quote to repair it with,
+ * so it is stored the way the PDF side stores one — a page and the points —
+ * with the page coordinates of docs/64 (576 by 864, origin top-left) in place
+ * of PDF points. `annotationPage()` reads the same `position.pageIndex` off it
+ * as off every other mark.
+ */
+export interface EpubInkPosition {
+  pageIndex: number;
+  /** One flat `[x0,y0,x1,y1,…]` per stroke, in page coordinates. */
+  paths: number[][];
+  width: number;
+}
+
+export function epubInkOf(
+  ann: { position?: unknown; [key: string]: unknown } | null | undefined,
+): EpubInkPosition | null {
+  const raw = ann?.position as Partial<EpubInkPosition> | undefined;
+  if (!raw || typeof raw !== "object") return null;
+  if (!Array.isArray(raw.paths)) return null;
+  const paths = raw.paths.filter(
+    (p): p is number[] =>
+      Array.isArray(p) && p.length >= 2 && p.every((n) => typeof n === "number" && Number.isFinite(n)),
+  );
+  if (paths.length === 0) return null;
+  const pageIndex =
+    typeof raw.pageIndex === "number" && Number.isInteger(raw.pageIndex) && raw.pageIndex >= 0
+      ? raw.pageIndex
+      : 0;
+  const width = typeof raw.width === "number" && raw.width > 0 ? raw.width : 2;
+  return { pageIndex, paths, width };
+}
+
+export interface NewEpubInk {
+  id: string;
+  color: string;
+  paths: number[][];
+  width: number;
+  pageIndex: number;
+  pageLabel: string;
+  /** The spine item and the offset the page begins at: where the stroke sorts. */
+  spineIndex: number;
+  charOffset: number;
+  authorName: string;
+  now: string;
+}
+
+/**
+ * The entry a free stroke leaves behind. It sorts at the head of the page it
+ * was drawn on: the sort key is a spine item and a character offset, and a
+ * stroke is on neither a word nor a line, so it takes the offset the page
+ * begins at and ties with whatever else starts there.
+ */
+export function newEpubInk(args: NewEpubInk): Record<string, unknown> {
+  return {
+    id: args.id,
+    type: "ink",
+    color: args.color,
+    text: "",
+    comment: "",
+    tags: [],
+    pageLabel: args.pageLabel,
+    sortIndex: makeEpubSortIndex(args.spineIndex, args.charOffset),
+    position: {
+      pageIndex: args.pageIndex,
+      paths: args.paths,
+      width: args.width,
+    } satisfies EpubInkPosition,
+    dateCreated: args.now,
+    dateModified: args.now,
+    authorName: args.authorName,
+    isAuthorNameAuthoritative: true,
+  };
+}

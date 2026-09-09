@@ -6,14 +6,36 @@
 // half fills them in. Declaring it one level up and importing it back down
 // would make engine and engine/gesture import each other.
 
-import type { ScrollScope } from "@embedpdf/plugin-scroll";
-import type { InteractionManagerCapability } from "@embedpdf/plugin-interaction-manager";
-import type { SelectionCapability } from "@embedpdf/plugin-selection";
+import type { ToolType } from "../../../platform/app/reader-contract";
 
 // "pointer" is the tool group's all-unselected state (no annotation tool);
 // "navlock" is the palm toggle, which activates no annotation tool either but
 // puts the touch router in charge of every pointer.
 export type EmbedTool = "pointer" | "navlock" | "highlight" | "underline" | "ink";
+
+// The three engine handles the router reaches for, declared here by the five
+// methods it calls rather than by the plugin types they arrive as. EmbedPDF's
+// capability objects satisfy them structurally, and so does a reader with no
+// plugins under it at all — which is what lets the EPUB desk (reading/epub)
+// run this same router without engine/gesture knowing @embedpdf exists.
+
+/** Where the reader is in the document, in 1-based pages. */
+export interface GestureScroll {
+  getCurrentPage(): number;
+  getTotalPages(): number;
+}
+
+/** The engine's own pointer pipeline, shut off under a gesture that owns the touch. */
+export interface GestureInteraction {
+  pause(): void;
+  resume(): void;
+}
+
+/** The text selection a gesture may have to drop on its way in. */
+export interface GestureSelection {
+  getBoundingRects(documentId: string): readonly unknown[];
+  clear(documentId: string): void;
+}
 
 // Live gesture context, shared by a ref between the imperative engine wiring
 // (which fills in the engine handles) and the TouchInputRouter touch component
@@ -21,16 +43,16 @@ export type EmbedTool = "pointer" | "navlock" | "highlight" | "underline" | "ink
 // re-render the memoized engine subtree.
 export interface PagedGestureCtx {
   paged: boolean;
-  tool: EmbedTool;
+  tool: ToolType;
   zoomedIn: boolean;
   // The "draw with your finger" setting, mirrored here so the touch router can
   // read it synchronously on every event. Off by default: the finger only moves
   // the page and the stylus marks it.
   fingerDraw: boolean;
-  scroll: ScrollScope | null;
-  interaction: InteractionManagerCapability | null;
+  scroll: GestureScroll | null;
+  interaction: GestureInteraction | null;
   // Used by the touch router to drop a text selection its own gesture caused.
-  selection: SelectionCapability | null;
+  selection: GestureSelection | null;
   // Set by the touch router so setLayout can toggle the viewport's touch-action
   // (paged locks native pan/zoom; vertical restores it).
   setTouchLock: ((locked: boolean) => void) | null;

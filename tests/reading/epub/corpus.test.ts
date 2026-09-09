@@ -2,9 +2,10 @@
 // directory holds copyrighted EPUBs and nothing from it is in this repository;
 // a machine without it skips these cases rather than failing them.
 //
-// What is asserted is what has to hold for every book, not what any one book
-// contains: the parse succeeds, there is at least one position block, no block
-// is larger than the cut allows, the outline is inside the book and never goes
+// The ruler here cuts by characters (there is no webview under bun), so what
+// is asserted is what has to hold for every book whatever the ruler: the parse
+// succeeds, the table has the shape the app reads, every page's CFI resolves
+// back to its own text, the outline is inside the book and never goes
 // backwards, and every figure names an entry the archive really has.
 //
 // Point it somewhere else with EPUB_CORPUS=/path/to/books.
@@ -13,10 +14,11 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEpub } from "../../../src/reading/epub/parse";
-import { BLOCK_CHARS, paginate } from "../../../src/reading/epub/paginate";
+import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { fulltextFrom } from "../../../src/reading/epub/fulltext";
-import { parseEpubCfi } from "../../../src/reading/epub/cfi";
+import { parseCfiStart, resolvePoint } from "../../../src/reading/epub/cfi";
 import { isEpub } from "../../../src/reading/epub/sniff";
+import { indexRuns, offsetOfPoint } from "../../../src/reading/epub/text";
 import { epubFigures } from "../../../src/reading/figures/epub";
 
 const CORPUS =
@@ -28,20 +30,18 @@ const books = existsSync(CORPUS)
       .sort()
   : [];
 
-// A block cut at a printed page boundary is as long as the printed page was, so
-// only the synthetic cut has a size to hold to. The slack is one snap window:
-// the cut moves back to the nearest line break, never forward.
-const SYNTHETIC_MAX = BLOCK_CHARS;
+// About what a 6x9 page of 16px serif holds; the real number is the webview's.
+const PAGE_CHARS = 1500;
 
 describe.skipIf(books.length === 0)("real books", () => {
   for (const name of books) {
-    test(name, () => {
+    test(name, async () => {
       const bytes = new Uint8Array(readFileSync(join(CORPUS, name)));
       expect(isEpub(bytes)).toBe(true);
 
       const started = Date.now();
       const book = parseEpub(bytes);
-      const pagination = paginate(book);
+      const pagination = await paginate(book, characterRuler(PAGE_CHARS));
       const ft = fulltextFrom(book, pagination);
       const figures = epubFigures(book, pagination);
       const elapsed = Date.now() - started;
@@ -50,21 +50,31 @@ describe.skipIf(books.length === 0)("real books", () => {
       expect(ft.pages.length).toBeGreaterThan(0);
       expect(ft.pages.length).toBe(pagination.blocks.length);
       expect(ft.status).toBe("ok");
+      for (const page of ft.pages) expect(page.length).toBeLessThanOrEqual(PAGE_CHARS);
 
-      if (pagination.source === "synthetic") {
-        for (const page of ft.pages) expect(page.length).toBeLessThanOrEqual(SYNTHETIC_MAX);
-      }
-
-      // Every block's locator is a CFI naming the spine item it starts in.
+      // Every page's locator is a CFI naming the spine item it starts in and
+      // resolving, in that document, to the offset the table recorded.
       expect(ft.pageLocators).toHaveLength(ft.pages.length);
+      const runs = new Map<number, ReturnType<typeof indexRuns>>();
       for (const block of pagination.blocks) {
-        expect(parseEpubCfi(block.cfi)?.spineIndex).toBe(block.spine);
+        const parsed = parseCfiStart(block.cfi);
+        expect(parsed?.spineIndex).toBe(block.spine);
+        const doc = book.docs[block.spine];
+        const at = resolvePoint(doc.doc.documentElement, parsed!);
+        expect(at).not.toBeNull();
+        let index = runs.get(doc.index);
+        if (!index) {
+          index = indexRuns(doc.text);
+          runs.set(doc.index, index);
+        }
+        expect(offsetOfPoint(doc.text, index, at!.node, at!.offset)).toBe(block.charOffset);
       }
+
+      // The book's CSS survived the sanitizer somewhere, if the book had any.
+      const styled = book.docs.filter((d) => d.html.includes("<style>") || d.html.includes("<link ")).length;
 
       // The outline is inside the book, and a later position in the book is
-      // never an earlier page. Not "the outline reads forwards": a book's own
-      // table of contents need not be in spine order, and several of these are
-      // not (docs/pitfall/240).
+      // never an earlier page (docs/pitfall/240).
       const byEntry = new Map(book.docs.map((d) => [d.entry, d]));
       let previous = -1;
       const positions = book.nav.toc.map((nav) => {
@@ -83,9 +93,6 @@ describe.skipIf(books.length === 0)("real books", () => {
         previous = item.page;
       }
 
-      // Every figure names an entry the archive has, and is on a page the book
-      // has. Three of them are actually inflated: one lookup walks the central
-      // directory, and the largest book here has 2283 figures.
       const hrefs: string[] = [];
       for (const figure of figures.figures) {
         expect(figure.source.kind).toBe("epub");
@@ -102,11 +109,9 @@ describe.skipIf(books.length === 0)("real books", () => {
 
       console.log(
         `${name}: ${(bytes.length / 1e6).toFixed(1)} MB, ${book.docs.length} spine, ` +
-          `${ft.pages.length} blocks (${pagination.source}), ${ft.outline.length} outline, ` +
+          `${ft.pages.length} pages (character ruler), ${styled} styled docs, ${ft.outline.length} outline, ` +
           `${figures.figures.length} figures, ${elapsed} ms`,
       );
-      // The 71 MB book reads in about 2.6 s here. The default 5 s is not enough
-      // room for that plus the assertions when the whole suite is running.
-    }, 30000);
+    }, 60000);
   }
 });

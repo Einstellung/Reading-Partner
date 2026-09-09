@@ -7,7 +7,14 @@
 // owns the type and the cache, and the conversion is called from here.
 
 import { FULLTEXT_VERSION, type Fulltext, type OutlineItem } from "../../fulltext/types";
-import { blockNumberAt, blockTexts, paginate, type Pagination } from "./paginate";
+import {
+  PAGINATION_VERSION,
+  blockNumberAt,
+  blockTexts,
+  paginate,
+  type PageRuler,
+  type Pagination,
+} from "./paginate";
 import { parseEpub, type EpubBook } from "./parse";
 
 /**
@@ -52,6 +59,7 @@ export function fulltextFrom(book: EpubBook, pagination: Pagination): Omit<Fullt
   const labels = pagination.blocks.map((b) => b.label ?? "");
   return {
     kind: "epub",
+    paginationVersion: PAGINATION_VERSION,
     status: pages.join("").trim() === "" ? "no-text-layer" : "ok",
     pages,
     outline: outlineFor(book, pagination),
@@ -67,9 +75,13 @@ export function fulltextFrom(book: EpubBook, pagination: Pagination): Omit<Fullt
  * it has one; passing it is what keeps a re-extraction from moving every [p.N]
  * already written down.
  */
-export function readEpub(bytes: Uint8Array, existing?: Pagination | null): EpubFulltext {
+export async function readEpub(
+  bytes: Uint8Array,
+  ruler: PageRuler,
+  existing?: Pagination | null,
+): Promise<EpubFulltext> {
   const book = parseEpub(bytes);
-  const pagination = existing ?? paginate(book);
+  const pagination = existing ?? (await paginate(book, ruler));
   return { fulltext: fulltextFrom(book, pagination), pagination, book };
 }
 

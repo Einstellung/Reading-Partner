@@ -61,7 +61,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 267）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 281）。
 
 ## EmbedPDF 引擎
 
@@ -99,8 +99,16 @@
 ## 触摸与手势
 
 - [265-a-paginator-renders-before-its-iframe-has-a-document](./265-a-paginator-renders-before-its-iframe-has-a-document.md) — foliate 的容器 ResizeObserver 在 iframe 还没有文档的那一小段里就调 `render()`，`columnize`/`expand` 读 `this.document.documentElement` 抛 TypeError；每开一本书一次，首屏照常出来，只在 `window.onerror` 上看得见。`View.render()`/`View.expand()` 各加一条 `if (!this.document) return`
+- [267-a-rulers-nodes-belong-to-the-clone-it-laid-out](./267-a-rulers-nodes-belong-to-the-clone-it-laid-out.md) — 分页量尺交回的是离屏克隆树的节点，按节点身份查摄入树的偏移表全部落空成 0：CFI 对、charOffset 错、单测全绿（测试量尺用的是原树）。先取 CFI 步，在摄入树上解析回节点再取偏移
+- [268-a-books-font-family-paginates-differently-on-every-device](./268-a-books-font-family-paginates-differently-on-every-device.md) — 书的 `font-family: Georgia, serif` 压过基线，Georgia 没装就回退到设备默认字体，同一本书 73 页对 74 页，而分页表是跨设备同步写一次不重算的。消毒器把通用族名和未内嵌的具名字体一律改写成打包的字体栈，书自带 `@font-face` 的名字保留
+- [274-a-page-card-holds-the-whole-chapter](./274-a-page-card-holds-the-whole-chapter.md) — 页卡片挂的是整份 spine 文档，看不见的列还在 DOM 里：`innerText` 给整章，`textContent` 还夹着书自带 `<style>` 的 CSS 源码。页的文本只从分页表的 `charOffset` 或 `Fulltext.pages[]` 来
+- [279-marks-live-inside-the-cards-shadow-root](./279-marks-live-inside-the-cards-shadow-root.md) — `.rp-overlay` 和它的 `.rp-marks`/`.rp-quote` 在页卡片的 shadow root 里，`pane.querySelectorAll(".rp-marks > *")` 永远 0；盘上明明多了三条标注。数标注要逐张卡片进 `shadowRoot`
+- [280-page-counts-differ-between-webkitgtk-and-wkwebview](./280-page-counts-differ-between-webkitgtk-and-wkwebview.md) — 同一本书同一份几何，WebKitGTK 75 页、iOS WKWebView 77 页：改写字体（坑 268）解决不了两个 WebKit 分支的断行差异。分页表按设备算，页码不是跨设备的稳定标识
+- [278-caretrangefrompoint-stops-at-the-shadow-host](./278-caretrangefrompoint-stops-at-the-shadow-host.md) — `document.caretRangeFromPoint` 在 WebKitGTK 上穿进 shadow root，在 WKWebView 上停在宿主给 `DIV@0`；iOS 上走的一直是 `caret.ts` 自己二分的那条。在 Linux 上验过 caret 不等于在 iOS 上验过
 - [260-foliate-turns-the-page-itself-once-the-frame-is-transparent](./260-foliate-turns-the-page-itself-once-the-frame-is-transparent.md) — foliate 的 paginator 构造函数里自带 touchstart/move/end，跟手平移列、抬手按速度 snap。书的 iframe 透明之后触摸够得着它，和父页 pane 一起翻：一次滑动翻三页，笔拖选区顺带把页翻回去。按 vendor README 的 `PATCHED:` 约定不注册那三个监听器，手势只留 pane 一个读法；滚动模式本来就不归它（`if (this.scrolled) return`）
 - [261-a-selection-drag-on-an-epub-is-taken-by-the-scroller](./261-a-selection-drag-on-an-epub-is-taken-by-the-scroller.md) — 滚动模式下拖选区，六个 pointermove 之后 WebKit 把序列收走去滚容器，`pointercancel`、选区没了，也就是所有跨行的选区。`pointermove` 上 preventDefault 无效，只有 `touchmove` 拦得住；EPUB 又不能像 PDF 那样全局 touch-action:none。pane 上挂 `{passive:false}` 的 touchmove，`claimsTouch()` 判：拖选区时抢、翻页模式一律抢。React 的 onTouchMove 是 passive 的
+- [271-a-ranges-client-rects-cover-every-column](./271-a-ranges-client-rects-cover-every-column.md) — 页卡片里整章都排进 multi-column，一个 Range 的 `getClientRects()` 报的是所有列里的位置，被 `overflow:hidden` 裁掉的照样有矩形，跨十几列的段落矩形散在一万像素宽里。按纸的边框（576）裁不干净，下一列开头 48 像素会漏进页边距；标注矩形一律裁到版心 `BODY_BOX`，墨迹裁到整张纸
+- [272-two-painters-on-one-overlay-erase-each-other](./272-two-painters-on-one-overlay-erase-each-other.md) — 引文高亮和标注共用一层 `.rp-overlay`，两边各自 `replaceChildren()` 清的都是整层：AI 一引用，这页的高亮和墨迹全没。一层 overlay 里开 `.rp-marks` 和 `.rp-quote` 两个子层各清各的；判据是「谁清场」
 - [262-the-long-press-moves-to-the-parent-page](./262-the-long-press-moves-to-the-parent-page.md) — frame 不收触摸之后，长按落到阅读区自己身上：书里的 `-webkit-touch-callout: none` 管不着父页，iOS 给一个空选区配 Copy/Translate/Share。阅读区补 `data-reader-surface`（PDF 那侧一直带着的那条规则）；书的文档不继承它，笔要拖的选区不受影响
 - [37-embedpdf-page-touch-action-none-all-modes](./37-embedpdf-page-touch-action-none-all-modes.md) — 每页 div 所有模式都 touch-action:none，页面上原生触摸滚动不可能；笔手路由必须在 viewport 容器 capture 阶段按 pointerType 逐事件做
 - [38-embedpdf-pinch-selection-global-pause](./38-embedpdf-pinch-selection-global-pause.md) — 缩放走原生 touch 通道、选区 handler 不分 pointerId、pause 是全局的；多指/手掌/笔占用期间要逐指针 stopPropagation 而不是 pause。附：`setPointerCapture` 重定向掉引擎的 pointerup，每次滚动都留活 anchor，之后任意一个 move 就把整页选蓝；接管时要补发合成 pointerup
@@ -136,6 +144,7 @@
 
 ## 存储与数据目录
 
+- [277-a-pdfium-cover-failure-outlives-pdfium](./277-a-pdfium-cover-failure-outlives-pdfium.md) — 上一版 PDFium 写下的 `covers/*.failed.json`（`FPDF_LoadMemDocument failed`）在 24 小时内一律当数，升级后书架上的 EPUB 还是无封面卡片。失败记号写下是哪个 reader 失败的，没写的不算证据
 - [240-an-epub-toc-is-not-in-spine-order](./240-an-epub-toc-is-not-in-spine-order.md) — EPUB 的 nav 目录是目录不是阅读顺序，spine 才是；11 本真书里有一本目录把 contents 排在 dedication 前面而 spine 反过来。大纲页码的不变量只能按 (spine 序号, 文档内偏移) 排完再断言单调，界面照 nav 的顺序显示
 - [241-whitespace-between-head-and-body-shifts-every-anchor](./241-whitespace-between-head-and-body-shifts-every-anchor.md) — `</head>` 和 `<body>` 之间那个排版换行在 XML 解析里是 `<html>` 的文本子节点（HTML 解析器会挪进 body，XML 不会），计入正文偏移后整篇文档每个锚点推后一格，page-list 的第一个印刷页锚点于是看着不在文档开头。抽取正文时处在块边界上的纯空白文本节点整个跳过，块内的空格照留
 
@@ -343,6 +352,9 @@
 - [233-a-failing-fetch-test-pays-the-retry-ladder](./233-a-failing-fetch-test-pays-the-retry-ladder.md) — 注入了 fetch 不等于注入了时间：故意发 500 的用例照走生产的重试退避（0.5s + 1s 真定时器），六个用例 7.5 秒，而 bun 对这个量级的用例一个 per-test 时间都不打。编排层把 `sleep` 一起收成可选注入转发给 `fetchText`，默认值不变；定位靠失败路径上的 `console.warn` 行数，验收拿 `expect() calls` 总数不变当闸
 - [243-vite-resolves-a-dynamic-import-that-never-runs](./243-vite-resolves-a-dynamic-import-that-never-runs.md) — `vite:import-analysis` 对带字面量的动态 import 和静态 import 一视同仁，transform 阶段就要解析：一条永远跑不到的分支里 `await import('./x.js')` 解析不到，整个模块变错误页。vendor 一个库时，它引用过的文件都得存在，哪怕只是抛异常的桩
 - [264-evaluate-javascript-only-returns-a-string](./264-evaluate-javascript-only-returns-a-string.md) — python 的 WebKit2 绑定跑无头页面时，`evaluate_javascript_finish` 只认字符串，脚本收尾是 Promise 或 null 就报 `Unsupported result type`，看着像页面炸了其实已经跑了；每段 JS 以字符串收尾，异步结果挂 `window` 上轮询
+- [269-vite-serves-a-worktree-edit-stale-until-it-restarts](./269-vite-serves-a-worktree-edit-stale-until-it-restarts.md) — `vite.config.ts` 把 `.claude/` 排除在 watcher 外，worktree 里改了源码、重载页面，跑着的 vite 还给旧 transform；改完要重启 vite
+- [273-an-evaled-probe-gets-no-bare-specifiers](./273-an-evaled-probe-gets-no-bare-specifiers.md) — sim bridge 探针里 `import("react")` 抛错、`import("/src/**")` 没事：裸模块名靠 vite 的 import-analysis 改写，eval 进去的字符串没经过 transform。从 `/src/main.tsx` 的 transform 结果里抠出 `deps/react.js?v=` 的 URL 再 import；`react-dom_client.js` 是 CJS 预打包，`createRoot` 在 `default` 上
+- [270-xwd-on-xvfb-run-needs-the-runs-own-xauthority](./270-xwd-on-xvfb-run-needs-the-runs-own-xauthority.md) — `xvfb-run` 的显示带自己的临时 Xauthority，另一个 shell 里 `xwd -root` 直接退 1；`XAUTHORITY=/tmp/xvfb-run.*/Xauthority`，xwd 原始输出用 PIL 解成 PNG
 
 ## 历史（zotero/reader 引擎时代）
 

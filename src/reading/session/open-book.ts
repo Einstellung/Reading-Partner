@@ -14,7 +14,7 @@ import { pageMarks, type Annotation, type ViewState } from "../../platform/app/r
 import { formatOfBytes, type BookFormat } from "../../platform/app/library";
 import { ensureFulltext, type Fulltext } from "../../fulltext";
 import { sweepDistillation } from "../../memory";
-import { acquireEpub, ensurePagination, extractEpubFulltext } from "../epub";
+import { PAGINATION_VERSION, acquireEpub, ensurePagination, extractEpubFulltext } from "../epub";
 import { epubFigures } from "../figures/epub";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
 import { seedReadingPosition } from "../reading-position";
@@ -28,6 +28,12 @@ export interface BookOpenIo {
   loadThreads(bookId: string): Promise<unknown>;
   ensureFulltext(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<Fulltext>;
   ensureFigures(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<FiguresIndex>;
+  preparePages?(
+    bookId: string,
+    buffer: ArrayBuffer,
+    format: BookFormat,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<void>;
   clearFigureCache(): void;
   seedReadingPosition(bookId: string, state: ViewState | null): void;
   // What the book being left still owes (docs/02).
@@ -43,17 +49,34 @@ export const bookOpenIo: BookOpenIo = {
   // everything downstream of these two calls is shared (docs/39 §1).
   ensureFulltext: (bookId, buffer, format) =>
     format === "epub"
-      ? ensureFulltext(bookId, buffer, (b) => extractEpubFulltext(bookId, b))
+      ? ensureFulltext(
+          bookId,
+          buffer,
+          (b) => extractEpubFulltext(bookId, b),
+          (ft) => ft.paginationVersion === PAGINATION_VERSION,
+        )
       : ensureFulltext(bookId, buffer),
   ensureFigures: (bookId, buffer, format) =>
     format === "epub"
-      ? ensureFigures(bookId, buffer, Date.now, async (b) => {
-          // The same parsed book the full text and the reading pane read: an
-          // EPUB is unzipped once per open, not once per consumer (book-cache.ts).
-          const book = acquireEpub(bookId, b);
-          return epubFigures(book, await ensurePagination(bookId, book));
-        })
+      ? ensureFigures(
+          bookId,
+          buffer,
+          Date.now,
+          async (b) => {
+            // The same parsed book the full text and the reading pane read: an
+            // EPUB is unzipped once per open, not once per consumer (book-cache.ts).
+            const book = acquireEpub(bookId, b);
+            return epubFigures(book, await ensurePagination(bookId, book));
+          },
+          (idx) => idx.paginationVersion === PAGINATION_VERSION,
+        )
       : ensureFigures(bookId, buffer),
+  // The pages of an EPUB are cut (or read back) before its marks are loaded, so
+  // a book whose table was just replaced shows its marks on the new pages.
+  preparePages: async (bookId, buffer, format, onProgress) => {
+    if (format !== "epub") return;
+    await ensurePagination(bookId, acquireEpub(bookId, buffer), undefined, onProgress);
+  },
   clearFigureCache,
   seedReadingPosition,
   sweepDistillation: (trigger) => void sweepDistillation(trigger),
@@ -64,6 +87,16 @@ export const bookOpenIo: BookOpenIo = {
 // scrolls, like Notability / PDF Expert). Paged horizontal flip stays available
 // as an opt-in in the reader's More menu, off by default.
 export const DEFAULT_LAYOUT = "vertical" as const;
+
+/**
+ * The status line while a book's pages are being cut. Same word the reader
+ * says for a PDF, with the one number there is to show: a book is cut spine
+ * document by spine document, so that is what the count is in.
+ */
+export function cuttingStatus(done: number, total: number): string {
+  if (!(total > 1) || !(done > 0)) return "Rendering…";
+  return `Rendering… ${Math.min(done, total)}/${total}`;
+}
 
 // The state the reader is mounted with: what was saved, with a layout for a
 // book that never chose one, so it opens in the right mode on the first paint.
@@ -96,6 +129,12 @@ export async function openBook(
   shell.discardStagedImages();
   shell.clearSelectedMark();
   shell.resetTool();
+  // The reader is on screen before the book is, and says so. A PDF is mounted
+  // in the same breath, so this wait never showed; an EPUB's pages are cut
+  // first, and on a 71 MB book that is seven seconds of the shelf sitting
+  // there with nothing happening on it (docs/64). The book being left is
+  // settled by now, so this is the first moment the new name may go up.
+  shell.showTitle(name);
 
   // Every read here is optional: the book opens either way, and being told which
   // part of it could not be loaded beats being told the book could not be.
@@ -105,6 +144,15 @@ export async function openBook(
   } catch (e) {
     console.error("failed to load the reading position", e);
     shell.pushToast("warn", "Saved reading position could not be loaded");
+  }
+  // The pages of an EPUB, before its marks: a mark's page number is read off
+  // the table, and the table may be about to be replaced (docs/64).
+  try {
+    await io.preparePages?.(bookId, bytes.slice().buffer as ArrayBuffer, format, (done, total) =>
+      shell.showStatus(cuttingStatus(done, total)),
+    );
+  } catch (e) {
+    console.error("failed to lay the book's pages out", e);
   }
   let saved: Annotation[] = [];
   try {

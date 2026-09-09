@@ -1,10 +1,12 @@
 // Reading an EPUB into the app's stores. The one place that knows both halves:
-// the book's position blocks are cut once and kept (pagination-store.ts), and
-// the full text is derived from whatever table is in force.
+// the book's pages are cut once and kept (pagination-store.ts), and the full
+// text is derived from whatever table is in force.
 //
 // The order matters and is the reason this is a function rather than two calls
 // at the call site: a re-extraction must be handed the stored table, never a
-// fresh cut, or every [p.N] already written down moves (docs/39 §1).
+// fresh cut, or every [p.N] already written down moves (docs/39 §1). When
+// there is no table the webview cuts one here (book-cache.ts): the full text
+// of an EPUB is never built without the pages it counts.
 
 import type { Fulltext } from "../../fulltext/types";
 import { acquireEpub, ensurePagination } from "./book-cache";

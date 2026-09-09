@@ -8,7 +8,7 @@ import { isEpub, looksLikeZip } from "../../../src/reading/epub/sniff";
 import { openZip, resolveZipPath } from "../../../src/reading/epub/zip";
 import { sanitize, sanitizeDocument } from "../../../src/reading/epub/sanitize";
 import { parseEpub } from "../../../src/reading/epub/parse";
-import { BLOCK_CHARS, blockTexts, paginate } from "../../../src/reading/epub/paginate";
+import { blockTexts, characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { fulltextFrom } from "../../../src/reading/epub/fulltext";
 import { epubCfi, parseEpubCfi } from "../../../src/reading/epub/cfi";
 import { decodeEpubLocator, encodeEpubLocator } from "../../../src/reading/locator";
@@ -156,22 +156,29 @@ test("the package, the spine and the navigation come out of the archive", () => 
 
 // --- pagination --------------------------------------------------------------
 
-test("a book with no page list is cut into blocks of a fixed size", () => {
+const PAGE_CHARS = 700;
+const ruler = characterRuler(PAGE_CHARS);
+
+test("a book is cut into the pages the ruler lays out", async () => {
   const book = parseEpub(simpleBook());
-  const pagination = paginate(book);
-  expect(pagination.source).toBe("synthetic");
-  expect(pagination.blockChars).toBe(1800);
+  const pagination = await paginate(book, ruler);
+  expect(pagination.version).toBe(2);
+  expect(pagination.source).toBe("layout");
+  expect(pagination.geometry.width).toBe(576);
   expect(pagination.blocks.length).toBeGreaterThan(1);
   const pages = blockTexts(book, pagination);
   expect(pages.length).toBe(pagination.blocks.length);
-  for (const page of pages) expect(page.length).toBeLessThanOrEqual(BLOCK_CHARS);
+  for (const page of pages) expect(page.length).toBeLessThanOrEqual(PAGE_CHARS);
+  // Every spine document starts a page of its own.
+  expect(pagination.blocks.some((b) => b.spine === 1 && b.charOffset === 0)).toBe(true);
+  for (const b of pagination.blocks) expect(b.endOffset).toBeGreaterThanOrEqual(b.charOffset);
   // Nothing is lost and nothing is duplicated: the blocks are the documents.
   const joined = pages.join("").replace(/\s+/g, "");
   const whole = book.docs.map((d) => d.text.text).join("").replace(/\s+/g, "");
   expect(joined).toBe(whole);
 });
 
-test("a book with a page list is cut at its printed pages", () => {
+test("a book with a page list shows its printed page numbers on our pages", async () => {
   const bytes = buildEpub({
     docs: [
       {
@@ -189,15 +196,20 @@ test("a book with a page list is cut at its printed pages", () => {
     ],
   });
   const book = parseEpub(bytes);
-  const pagination = paginate(book);
-  expect(pagination.source).toBe("page-list");
+  // A ruler that puts each printed page on a page of its own.
+  const pagination = await paginate(book, characterRuler(310));
+  expect(pagination.source).toBe("layout");
   expect(pagination.blocks.map((b) => b.label)).toEqual(["1", "2", "3"]);
   const ft = fulltextFrom(book, pagination);
   expect(ft.pageLabels).toEqual(["1", "2", "3"]);
   expect(ft.pages).toHaveLength(3);
+  expect(ft.paginationVersion).toBe(2);
+  // A wider page holds two printed pages and shows the one it begins in.
+  const wide = await paginate(book, characterRuler(620));
+  expect(wide.blocks.map((b) => b.label)).toEqual(["1", "3"]);
 });
 
-test("a page-list entry pointing at nothing is dropped, not guessed at", () => {
+test("a page-list entry pointing at nothing is dropped, not guessed at", async () => {
   const bytes = buildEpub({
     docs: [{ name: "c1.xhtml", body: `<span epub:type="pagebreak" id="pg1" title="1"></span>${prose(4)}` }],
     pageList: [
@@ -205,16 +217,16 @@ test("a page-list entry pointing at nothing is dropped, not guessed at", () => {
       { label: "2", href: "c1.xhtml#missing" },
     ],
   });
-  const pagination = paginate(parseEpub(bytes));
-  // One anchor left is not a page list; the book falls back to fixed blocks.
-  expect(pagination.source).toBe("synthetic");
+  const pagination = await paginate(parseEpub(bytes), ruler);
+  // One anchor left is not a page list; the pages carry no printed numbers.
+  expect(pagination.blocks.every((b) => b.label === null)).toBe(true);
 });
 
 // --- the Fulltext ------------------------------------------------------------
 
-test("an EPUB produces the Fulltext shape a PDF produces", () => {
+test("an EPUB produces the Fulltext shape a PDF produces", async () => {
   const book = parseEpub(simpleBook());
-  const pagination = paginate(book);
+  const pagination = await paginate(book, ruler);
   const ft = fulltextFrom(book, pagination);
   expect(ft.kind).toBe("epub");
   expect(ft.status).toBe("ok");
@@ -249,9 +261,9 @@ test("a locator round-trips through its string form", () => {
   expect(decodeEpubLocator("epubcfi(/6/4!/4/2,/1:0,/1:5)")).toBeNull();
 });
 
-test("every position block's locator is a CFI naming that block's spine item", () => {
+test("every page's locator is a CFI naming that page's spine item", async () => {
   const book = parseEpub(simpleBook());
-  for (const block of paginate(book).blocks) {
+  for (const block of (await paginate(book, ruler)).blocks) {
     const parsed = parseEpubCfi(block.cfi);
     expect(parsed?.spineIndex).toBe(block.spine);
     expect(parsed?.idref).toBe(book.docs[block.spine].idref);
@@ -260,9 +272,9 @@ test("every position block's locator is a CFI naming that block's spine item", (
 
 // --- figures -----------------------------------------------------------------
 
-test("figures come off the markup, with the caption ladder and the printed id", () => {
+test("figures come off the markup, with the caption ladder and the printed id", async () => {
   const book = parseEpub(simpleBook());
-  const index = epubFigures(book, paginate(book));
+  const index = epubFigures(book, await paginate(book, ruler));
   expect(index.status).toBe("ok");
   expect(index.figures).toHaveLength(2);
 
@@ -279,13 +291,13 @@ test("figures come off the markup, with the caption ladder and the printed id", 
   expect(nearby.captionSource).toBe("nearby");
 });
 
-test("the alt text is the caption when there is no figcaption", () => {
+test("the alt text is the caption when there is no figcaption", async () => {
   const bytes = buildEpub({
     docs: [{ name: "c1.xhtml", body: `<p><img src="images/a.png" alt="A diagram"/></p>` }],
     images: IMAGES,
   });
   const book = parseEpub(bytes);
-  const [figure] = epubFigures(book, paginate(book)).figures;
+  const [figure] = epubFigures(book, await paginate(book, ruler)).figures;
   expect(figure.caption).toBe("A diagram");
   expect(figure.captionSource).toBe("alt");
 });
@@ -293,7 +305,7 @@ test("the alt text is the caption when there is no figcaption", () => {
 test("a figure's bytes come straight out of the archive", async () => {
   const bytes = simpleBook();
   const book = parseEpub(bytes);
-  const [figure] = epubFigures(book, paginate(book)).figures;
+  const [figure] = epubFigures(book, await paginate(book, ruler)).figures;
   const buffer = bytes.buffer.slice(0) as ArrayBuffer;
   // Under the view tier's cap and not a vector, so both tiers send the
   // publisher's own file; the redraw the model's tier can do is raster.test.ts.
