@@ -20,7 +20,14 @@ import type {
   ViewState,
   ViewStats,
 } from "../../platform/app/reader-contract";
-import { SWIPE_MIN, keyTurn, swipeTurn, tapZone, type Turn } from "./reader-logic";
+import {
+  SWIPE_MIN,
+  claimsTouch,
+  keyTurn,
+  swipeTurn,
+  tapZone,
+  type Turn,
+} from "./reader-logic";
 import { createEpubReader, type EpubReaderController } from "./reader-view";
 
 export interface EpubReaderPaneProps {
@@ -116,6 +123,25 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       media?.removeEventListener("change", refresh);
       observer.disconnect();
     };
+  }, []);
+
+  // Taking the touch off the browser, on the moves the pointer events cannot
+  // speak for. Preventing the default on a pointermove does not stop WebKit
+  // scrolling; preventing it on the touchmove does, and it has to happen on the
+  // first one (docs/pitfall/117). React's own touch handlers are passive, so
+  // this listener is attached by hand.
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    const onTouchMove = (e: TouchEvent) => {
+      const controller = controllerRef.current;
+      if (!controller) return;
+      if (claimsTouch(controller.currentLayout(), drawingRef.current !== null)) {
+        e.preventDefault();
+      }
+    };
+    surface.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => surface.removeEventListener("touchmove", onTouchMove);
   }, []);
 
   const apply = useCallback((turn: Turn) => {

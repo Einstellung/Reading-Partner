@@ -25,6 +25,7 @@ import {
   quoteQueries,
   restoreTarget,
   statsOf,
+  claimsTouch,
   swipeTurn,
   tapZone,
   viewStateOf,
@@ -293,5 +294,20 @@ describe("the book's own links", () => {
       kind: "internal",
       href: "chapter3.xhtml",
     });
+  });
+});
+
+describe("the touch the reader takes off the browser", () => {
+  test("a selection being dragged is claimed in either layout", () => {
+    expect(claimsTouch("vertical", true)).toBe(true);
+    expect(claimsTouch("paged", true)).toBe(true);
+  });
+
+  test("paged claims every touch, because nothing there scrolls", () => {
+    expect(claimsTouch("paged", false)).toBe(true);
+  });
+
+  test("a finger on a scrolling page is left to the browser", () => {
+    expect(claimsTouch("vertical", false)).toBe(false);
   });
 });
