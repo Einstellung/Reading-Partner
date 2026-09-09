@@ -2,9 +2,15 @@
 
 EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 docs/62 的 iframe 重排路线，docs/39 的「位置块」概念改为「排出来的页」。
 
-## 页几何
+## 纸的尺寸
 
-一页 576×864 CSS 像素（6×9 英寸 @96dpi），版心 480×752（左右 48、上下 56），基础字号 16px、行高 1.55。常量在 `src/reading/epub/page-geometry.ts`，写进分页表的 `geometry` 字段；几何或字体名一变，旧表按不同的书对待（读作不存在）。
+一页 816×1056 CSS 像素（US Letter，8.5×11 英寸 @96dpi），版心 720×944（左右 48、上下 56），基础字号 16px、行高 1.55。常量在 `src/reading/epub/page-geometry.ts`，写进分页表的 `geometry` 字段。
+
+原来是 6×9。页边距和字号固定，纸的宽度就决定一行多少字：6×9 是 65 个英文字符，Letter 约 90。iPad 上开「适应宽度」把 6×9 那张纸放大到屏幕宽，16px 的字被放到 24px 大，一行还是那 65 个字；Letter 在同一屏上接近字号原大。
+
+只有这一种纸，不给选。页码依赖设置就等于两台设备页码不一致，而 `[p.N]` 已经写进笔记出了 app。
+
+几何变了会自动重算：打开书时表里的 `geometry` 和当前常量不一致（字体名也算），表读作不存在，按新几何重排一次并覆盖，走的是 v1→v2 那条路。这是「写一次永不重算」的第二个也是最后一个例外，触发条件是代码里的常量变了，不是谁点了什么。同步不受影响：两台设备跑同一个版本就分出同一张表。
 
 缩放是对整张纸做 `transform: scale()`。档位 0.5–3；竖排锁 fit-width，翻页锁 fit-page，fit 的算法复用 `engine/layout-settle.ts` 的 `fitScale`。`ViewState` 存 `pageIndex` + `pageX/pageY`（竖排时视口顶边在页内的未缩放坐标）+ `scale` + `layout`，`cfi` 存该页起点，恢复时按 CFI 在表里找页。
 
@@ -25,13 +31,13 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 一页一条：所在 spine、抽取文本里的起止偏移、起点 CFI、印刷页码（有 page-list 的书按该页起点落在哪个印刷页取）。每个 spine 文档从新的一页开始，一页不跨文档。`blockTexts`/`blockNumberAt` 不变，`Fulltext.pages[]` 仍是每页正文。
 
-排版在 webview 里做（`page-ruler.ts`）：把消毒后的 spine 文档挂进一张离屏页卡片，CSS multi-column（列宽 480、列高 752、gap 0），第 k 列就是第 k 页；逐文本节点看 client rects 跨了哪些列，列边界上对字符偏移二分找第一个字；图/svg/hr 单独算一个原子。量尺接口 `PageRuler = (doc) => Promise<PagePoint[]>`，`paginate(book, ruler)` 只管把点变成表；测试用 `characterRuler(n)`。量尺返回的节点是克隆树的，必须经 CFI 解析回摄入树再取偏移（坑 267）。
+排版在 webview 里做（`page-ruler.ts`）：把消毒后的 spine 文档挂进一张离屏页卡片，CSS multi-column（列宽 720、列高 944、gap 0），第 k 列就是第 k 页；逐文本节点看 client rects 跨了哪些列，列边界上对字符偏移二分找第一个字；图/svg/hr 单独算一个原子。量尺接口 `PageRuler = (doc) => Promise<PagePoint[]>`，`paginate(book, ruler)` 只管把点变成表；测试用 `characterRuler(n)`。量尺返回的节点是克隆树的，必须经 CFI 解析回摄入树再取偏移（坑 267）。
 
 一本书算一次：`ensurePagination` 单飞，摄入和阅读面板谁先到谁算，另一个等同一个 promise；`open-book.ts` 在读标注之前先算（`preparePages`）。同步来的表直接用；卡片按表里的起点 CFI 在自己的排版里找列，排版差一行也落在表说的那一行上。
 
 ## 页卡片
 
-`page-card.ts`：一张 `.rp-page`（纸色、阴影同 `engine/page-frame.ts`），shadow root 里：基线样式 + `.rp-paper`（混合组，见「纸色」）> `.rp-clip`（版心，`overflow: hidden; contain: paint`）> `.rp-columns`（multicol，`translateX(-k×480)`）> 原样克隆的 `<html>`，组外一层 `.rp-overlay`（页坐标，给标注层用）。`<html>` 里不加任何节点，CFI 在摄入树和卡片树上同一棵。资源用 blob URL（`page-mount.ts`）：img/svg image/link 样式表（内联为 `<style>`）/style 里的 url()。
+`page-card.ts`：一张 `.rp-page`（纸色、阴影同 `engine/page-frame.ts`），shadow root 里：基线样式 + `.rp-paper`（混合组，见「纸色」）> `.rp-clip`（版心，`overflow: hidden; contain: paint`）> `.rp-columns`（multicol，`translateX(-k×版心宽)`）> 原样克隆的 `<html>`，组外一层 `.rp-overlay`（页坐标，给标注层用）。`<html>` 里不加任何节点，CFI 在摄入树和卡片树上同一棵。资源用 blob URL（`page-mount.ts`）：img/svg image/link 样式表（内联为 `<style>`）/style 里的 url()。
 
 `reader-view.ts` 是桌子：一个滚动容器，每页一个固定尺寸的槽位，只有视口附近的槽位挂卡片（前后各一张），其余空着；同一 spine 文档在几张卡片里各有一份克隆。竖排一叠纸，翻页一屏一槽 scroll-snap。事件全在 app DOM 里：点击区、滑动、方向键在 `EpubReaderPane.tsx`，链接命中用 `shadowRoot.elementFromPoint`。引文高亮：在抽取文本里找到引文 → 定页 → 卡片树里同偏移取 Range → rects 裁到版心画进 overlay；版心里一点也看不见时（`mark-geometry.ts` 的 `showsThroughBody`，判据和裁着画的是同一个盒子，亚像素的碎片不算数）按 `showColumnOf` 把卡片移到引文所在列，并重画这张卡片的标注；清引文时把卡片放回自己的列。一页的正文能排在这一页起点所在列的前面——比版心宽的表格被 multicol 切开摊在几列上就会这样，坑 283。
 
@@ -41,7 +47,7 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 盘上形状和 docs/39 §5 一样：高亮、划线、AI 笔是 `position` 里一条 range CFI（`FragmentSelector`）加顶层 `quote`，外加 `position.pageIndex`（新页号）、`pageLabel`、`sortIndex`（`spine|字符偏移`）。CFI 是主锚点，引文是修复；解出来的字和引文头 24 个非空白字符对不上就按引文重找（`sameWords`）。AI 笔到这一层就是划线加一个固定的紫，开线程是壳做的（`use-mark-doors.ts`），阅读器不知道有这回事。
 
-墨迹是唯一按几何存的：`position` 是 `{ pageIndex, paths, width }`，`paths` 是每笔一条 `[x0,y0,x1,y1,…]`，单位是**页坐标**——576×864 的纸，原点左上，y 向下。这就是 overlay 自己的坐标系，不翻转。PDF 那边存的是 PDF 点、原点左下，`convert.ts` 进出各翻一次 y；EPUB 页没有 PDF 点，也没有那个约定要守。墨迹的 `sortIndex` 取所在页起点的字符偏移，一页上的几笔并列。
+墨迹是唯一按几何存的：`position` 是 `{ pageIndex, paths, width }`，`paths` 是每笔一条 `[x0,y0,x1,y1,…]`，单位是**页坐标**——816×1056 的纸，原点左上，y 向下。这就是 overlay 自己的坐标系，不翻转。PDF 那边存的是 PDF 点、原点左下，`convert.ts` 进出各翻一次 y；EPUB 页没有 PDF 点，也没有那个约定要守。墨迹的 `sortIndex` 取所在页起点的字符偏移，一页上的几笔并列。
 
 `annotationPage()` 两种格式读的都是 `position.pageIndex`，同步侧零改动。
 
@@ -67,13 +73,38 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 ## 迁移
 
-v1 表读作不存在，打开时重算 v2 并覆盖（唯一一次允许重写），`annotations-<bookId>.json` 里带 CFI 的标注按 CFI 在新表里重算 `position.pageIndex`/`pageLabel`/`sortIndex`（`migrate.ts`）。`fulltext-*`/`figures-*` 缓存带 `paginationVersion`，不是 2 的视为过期重建（`FULLTEXT_VERSION`/`FIGURES_VERSION` 不动，PDF 缓存不受影响）。笔记里旧的 `[p.N]` 不管。
+两种表读作不存在，打开时重排并覆盖：v1 表，和几何不是当前常量的 v2 表（6×9 那批）。`preparePagination`（`book-cache.ts`）报告这次是不是重排过。
+
+标注（`annotations-<bookId>.json`）跟着走：
+
+- 文字标注（高亮、划线、AI 笔）按 CFI 在新表里重算 `position.pageIndex`/`pageLabel`/`sortIndex`。
+- 墨迹没有 CFI。按旧表迁：旧页起点的 `spine`+`charOffset` 落到新表的哪一页，墨迹就到哪一页；坐标按两种纸的版心比例缩（`scaleInkPath`，页边距两种纸一样，所以从版心角量起、按版心尺寸缩、再放回新版心，越出的按纸边裁）；`sortIndex` 仍用旧页起点的偏移，几张旧页并到一张新页时它们的先后不丢。旧表读不出来（v1）时墨迹不动。
+
+`fulltext-*`/`figures-*` 缓存带 `paginationVersion`，不是 2 的视为过期重建（`FULLTEXT_VERSION`/`FIGURES_VERSION` 不动，PDF 缓存不受影响）；重排过的那次另外强制重建，因为版本号没变而页变了。阅读位置按存下的当前页起点 CFI 在新表里找页（`restoreTarget`）。笔记里旧的 `[p.N]` 不管。
+
+### 换纸那次量到的（Linux WebKitGTK，xvfb :112，阅读区 1280×860）
+
+《具身智能》：6×9 的表 75 页，Letter 47 页。卡片 CSS 816×1056，fit-width 下在 1280 宽的阅读区里放到 1280×1656（scale 1.569）。
+
+在 6×9 的表上放一条文字高亮（第 31 页正文里 60 个字）和一笔墨迹（版心左上角 → 纸中心 → 版心右下角，`[[48,56,288,432,528,808]]`）。改成 Letter 重开：
+
+| | 6×9 | Letter |
+|---|---|---|
+| 页数 | 75 | 47 |
+| 两条标注的页 | 30（`pageLabel` 31） | 19（`pageLabel` 20） |
+| 高亮解出来的字 | — | 和存下的引文逐字相同 |
+| 墨迹 | `48,56 288,432 528,808` | `48,56 408,528 768,1000` |
+| `sortIndex` | 文字 `00001\|0041707`、墨迹 `00001\|0041507` | 不变 |
+
+墨迹三个点分别是新版心左上角、新纸中心（816/2、1056/2）、新版心右下角。再开一次 `recut` 为 false，标注文件一个字节没改。
 
 ## 封面
 
 `covers.ts` 遇到 EPUB 走 `epub-cover.ts`：只解 container 和 OPF，取 `cover-image`/`<meta name="cover">` 指的图，`<img>` + canvas 缩到 `COVER_WIDTH_PX` 出 JPEG，作者取 `dc:creator`。没封面图的书走现有的无封面卡片。
 
 ## 量出来的数（Linux WebKitGTK，xvfb，1280×860 阅读区）
+
+下面两张表都是 6×9 那一版量的，Letter 一页装的字多约一半，页数相应少。
 
 | 书 | spine | 页数 | 首次分页含 fetch/解包 | 表大小 |
 |---|---|---|---|---|
