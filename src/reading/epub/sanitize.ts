@@ -14,10 +14,16 @@
 // byte (docs/pitfall/126). Two things here exist only for that and cost nothing
 // to safety: namespace declarations are written at fixed places with fixed
 // prefixes rather than being copied from the source (an XMLSerializer renames
-// them to ns1, ns2, … and the numbering moves between passes), and a <pre>
-// whose text starts with a newline gets one extra (docs/pitfall/127: the HTML
-// tree builder eats the first one, and the text/html fallback below is a real
-// HTML parse).
+// them to ns1, ns2, … and the numbering moves between passes), and a literal CR
+// is written as an entity (docs/pitfall/127).
+//
+// What that pitfall's other four cases needed — the extra newline after <pre>,
+// the re-parse loop around scope boundaries — is not needed here, and the
+// reason is worth stating because leaving it out looks like an omission: the
+// output is well-formed XML, so the pass that reads it back is the XML parser,
+// which has neither the tree builder's scope rules nor its rule about eating
+// the newline after a <pre>. The text/html fallback below reads books whose
+// markup is not well-formed; what it writes is.
 //
 // Resource references are recorded, not rewritten. Turning an <img src> into
 // something the renderer can load is the rendering line's job; what this side
@@ -113,10 +119,17 @@ function urlAllowed(raw: string): boolean {
   return scheme === null || SAFE_SCHEMES.has(scheme);
 }
 
-/** What one document points at, for the rendering line to resolve later. */
+/**
+ * What one document points at, for the rendering line to resolve later. The two
+ * archive lists are kept apart because they are resolved differently: a resource
+ * has to become something the renderer can load before the page is shown, while
+ * a link is followed only when the reader clicks it.
+ */
 export interface ResourceRefs {
-  /** Archive entry paths, already resolved against the document's own path. */
+  /** Archive entries loaded with the page: images, stylesheets, fonts. */
   entries: string[];
+  /** Archive entries linked to: another chapter, a footnote's document. */
+  links: string[];
   /** Absolute http(s) references, which no archive entry can satisfy. */
   external: string[];
 }
@@ -153,12 +166,13 @@ interface WalkState {
   out: string[];
   refs: ResourceRefs;
   entrySet: Set<string>;
+  linkSet: Set<string>;
   externalSet: Set<string>;
   /** The archive path of the document being sanitized, for resolving hrefs. */
   entryPath: string;
 }
 
-function recordRef(state: WalkState, raw: string): void {
+function recordRef(state: WalkState, raw: string, kind: "resource" | "link"): void {
   const scheme = schemeOf(raw);
   if (scheme !== null) {
     if (scheme === "http:" || scheme === "https:") {
@@ -172,9 +186,10 @@ function recordRef(state: WalkState, raw: string): void {
   if (raw.startsWith("#")) return; // an anchor inside this same document
   const entry = resolveZipPath(state.entryPath, raw);
   if (entry === "" || entry === state.entryPath) return;
-  if (state.entrySet.has(entry)) return;
-  state.entrySet.add(entry);
-  state.refs.entries.push(entry);
+  const seen = kind === "resource" ? state.entrySet : state.linkSet;
+  if (seen.has(entry)) return;
+  seen.add(entry);
+  (kind === "resource" ? state.refs.entries : state.refs.links).push(entry);
 }
 
 // url(...) inside a style attribute or a <style> block. Style elements are
@@ -184,7 +199,7 @@ function recordRef(state: WalkState, raw: string): void {
 const CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
 
 function recordCssUrls(state: WalkState, css: string): void {
-  for (const m of css.matchAll(CSS_URL)) recordRef(state, m[2].trim());
+  for (const m of css.matchAll(CSS_URL)) recordRef(state, m[2].trim(), "resource");
 }
 
 function attrName(attr: Attr): string {
@@ -223,7 +238,7 @@ function attrsFor(state: WalkState, el: Element, tag: string): string {
     const value = attr.value;
     if (URL_ATTRS.has(attr.localName)) {
       if (!urlAllowed(value)) continue;
-      recordRef(state, value);
+      recordRef(state, value, tag === "a" ? "link" : "resource");
     }
     kept.push([name, value]);
   }
@@ -259,7 +274,9 @@ function emit(state: WalkState, node: Node): void {
   if (style) recordCssUrls(state, style);
 
   let open = `<${tag}`;
-  if (tag === "html") open += ` xmlns="${XHTML_NS}" xmlns:epub="${EPUB_NS}"`;
+  // Declared on the root whether or not this document uses them, so a prefixed
+  // attribute anywhere below is bound and the output parses back as XML.
+  if (tag === "html") open += ` xmlns="${XHTML_NS}" xmlns:epub="${EPUB_NS}" xmlns:xlink="${XLINK_NS}"`;
   if (tag === "svg") open += ` xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}"`;
   open += attrsFor(state, el, tag);
 
@@ -268,16 +285,7 @@ function emit(state: WalkState, node: Node): void {
     return;
   }
   state.out.push(`${open}>`);
-  const before = state.out.length;
   emitChildren(state, el);
-  if (tag === "pre") {
-    // The tree builder drops the newline right after a <pre> start tag, so an
-    // output that begins with one loses a line on every pass. Look at the first
-    // character actually written, not at the first child: a comment sitting in
-    // front of the newline is gone by now (docs/pitfall/127).
-    const first = state.out[before];
-    if (first !== undefined && first.startsWith("\n")) state.out[before] = `\n${first}`;
-  }
   state.out.push(`</${tag}>`);
 }
 
@@ -305,8 +313,9 @@ export function sanitizeDocument(source: string, entryPath: string): SanitizedDo
   if (!parsed) return null;
   const state: WalkState = {
     out: [],
-    refs: { entries: [], external: [] },
+    refs: { entries: [], links: [], external: [] },
     entrySet: new Set(),
+    linkSet: new Set(),
     externalSet: new Set(),
     entryPath,
   };

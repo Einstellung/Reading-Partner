@@ -76,7 +76,9 @@ export function syntheticCuts(text: string): number[] {
   let at = 0;
   while (text.length - at > BLOCK_CHARS) {
     const target = at + BLOCK_CHARS;
-    const back = text.lastIndexOf("\n", target);
+    // From target - 1, not from target: a line break sitting exactly on the cut
+    // would move it to target + 1 and make that one block a character over.
+    const back = text.lastIndexOf("\n", target - 1);
     const cut = back > target - SNAP_WINDOW && back > at ? back + 1 : target;
     cuts.push(cut);
     at = cut;
@@ -136,13 +138,6 @@ function pageListCuts(book: EpubBook, pageList: NavEntry[]): PositionBlock[] {
     });
   }
   blocks.sort((a, b) => a.spine - b.spine || a.charOffset - b.charOffset);
-  // The front matter before the first numbered page is a block of its own, with
-  // no printed number to give it.
-  const first = blocks[0];
-  if (first && (first.spine > 0 || first.charOffset > 0)) {
-    const doc = book.docs[0];
-    blocks.unshift({ spine: 0, charOffset: 0, cfi: locate(doc, doc.idref, 0), label: null });
-  }
   return blocks;
 }
 
@@ -152,9 +147,17 @@ function pageListCuts(book: EpubBook, pageList: NavEntry[]): PositionBlock[] {
  */
 export function paginate(book: EpubBook): Pagination {
   const cuts = pageListCuts(book, book.nav.pageList);
-  // Two anchors is the least that says the book really carries printed page
-  // numbers; one is a stray link.
+  // Two resolved anchors is the least that says the book really carries printed
+  // page numbers; one is a stray link. Counted before the front-matter block is
+  // added, or a book with one usable anchor would look like a book with two.
   if (cuts.length < 2) return syntheticPagination(book);
+  // The front matter before the first numbered page is a block of its own, with
+  // no printed number to give it.
+  const first = cuts[0];
+  if (first.spine > 0 || first.charOffset > 0) {
+    const doc = book.docs[0];
+    cuts.unshift({ spine: 0, charOffset: 0, cfi: locate(doc, doc.idref, 0), label: null });
+  }
   return {
     version: PAGINATION_VERSION,
     kind: "epub",

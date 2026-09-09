@@ -60,7 +60,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 240）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 247）。
 
 ## EmbedPDF 引擎
 
@@ -129,6 +129,9 @@
 - [186-fake-ip-dns-does-not-say-what-is-proxied](./186-fake-ip-dns-does-not-say-what-is-proxied.md) — fake-ip 模式下 DNS 永远返回 `198.18.0.x` 占位 IP，分流在连接建立时才按反查回的域名匹配，「三个域名解析结果一样」推不出「三家路径相同」（`dns-hijack: any:53` 让 `dig` 也拿不到真实 IP）；`geosite.dat` 停在 2025-11-19，2026 年才上线的 `api.xiaomimimo.com` 没命中 `GEOSITE,CN,DIRECT`，落到兜底走代理，TLS 882ms 对另两家 93/82ms，被写成「小米服务端慢」。确诊查 mihomo 的 `/connections` 看每条连接的 `rule` 和 `chains`，解法是最前面加 `DOMAIN-SUFFIX,<域名>,DIRECT` 再热重载；走代理时「请求→首帧」也含代理往返，去掉隧道后服务端那一段同样快了一倍
 
 ## 存储与数据目录
+
+- [240-an-epub-toc-is-not-in-spine-order](./240-an-epub-toc-is-not-in-spine-order.md) — EPUB 的 nav 目录是目录不是阅读顺序，spine 才是；11 本真书里有一本目录把 contents 排在 dedication 前面而 spine 反过来。大纲页码的不变量只能按 (spine 序号, 文档内偏移) 排完再断言单调，界面照 nav 的顺序显示
+- [241-whitespace-between-head-and-body-shifts-every-anchor](./241-whitespace-between-head-and-body-shifts-every-anchor.md) — `</head>` 和 `<body>` 之间那个排版换行在 XML 解析里是 `<html>` 的文本子节点（HTML 解析器会挪进 body，XML 不会），计入正文偏移后整篇文档每个锚点推后一格，page-list 的第一个印刷页锚点于是看着不在文档开头。抽取正文时处在块边界上的纯空白文本节点整个跳过，块内的空格照留
 
 - [09-appdata-glob-capability](./09-appdata-glob-capability.md) — Tauri 权限 glob 不匹配目录本身；且持久化失败绝不静默吞
 - [36-appdata-root-not-created-first-write](./36-appdata-root-not-created-first-write.md) — iOS 首装首跑第一个写入者报 os error 2，数据根目录由 Rust setup 的 create_dir_all 保障，前端不再各自兜底
@@ -222,6 +225,7 @@
 - [125-a-regex-tag-matcher-ends-the-tag-early](./125-a-regex-tag-matcher-ends-the-tag-early.md) — 正则清洗器把标签当成到第一个 `>` 为止，双引号属性值里的 `>` 让 `<marquee title="a>" onstart=...>` 整条穿过去；删属性替换成空串又把 `on` 和 `click=alert(1)` 粘成输入里没有的处理器。改成 DOMParser 解析 + 白名单走树 + 重新写出标签；测试用 jsdom 给 bun 补 DOMParser，判定用 `HTMLRewriter` 问浏览器看到什么
 - [126-a-sanitizer-that-is-safe-is-not-yet-stable](./126-a-sanitizer-that-is-safe-is-not-yet-stable.md) — 清洗器在读的时候也跑，同一条正文要过很多趟；属性值不转义 `&`，`https://&#101;vil.example/a.jpg` 下一趟就换了主机。判定要 `sanitize(sanitize(x)) === sanitize(x)` 逐字节相等，「清两遍都安全」比它弱；`HTMLRewriter` 报的是源码原文不解码实体，当裁判时看不出这类漂移。转义 `&` 之后，用正则读 `src` 的 image-proxy 要先反解
 - [127-a-parsed-tree-written-back-does-not-reparse-to-itself](./127-a-parsed-tree-written-back-does-not-reparse-to-itself.md) — 把解析出来的树原样写回去，下一趟解析不一定还原：`<pre>` 后面的换行每趟被吃一个，`&#13;` 的 CR 变成 LF，起始标签会关掉已经开着的同类元素（scope boundary 被 unwrap、`h1`-`h6` 只看 current node 所以任何元素都是挡板、foster parenting 把 `<li>` 从表格里搬到外层 `<li>` 里）。前两个写出去时补偿，第三个不建模规则，维护输出侧的开启栈发现这种位置就重新喂给解析器；fuzz 必须嵌套且判据逐字节相等，平铺的 fuzzer 一条都发现不了
+- [242-an-xml-sanitizer-does-not-need-the-html-compensations](./242-an-xml-sanitizer-does-not-need-the-html-compensations.md) — EPUB 的 XHTML 清洗器照抄坑 127 的 `<pre>` 补偿，`sanitize(sanitize(x))` 每趟多一个换行：那条补偿是 HTML 树构建器的规则，而良构 XML 输出的回程走 XML 解析器，没有这条规则，scope boundary 和 foster parenting 那三类也没有。判据是「回程用哪个解析器」不是「输入像不像 HTML」；只有字面 CR 写成 `&#13;` 要留。命名空间声明必须自己用固定前缀写在 `<html>` 上，`XMLSerializer` 生成的 `ns1`/`ns2` 编号两趟之间会变
 - [98-tauri-replaces-window-confirm-with-a-promise](./98-tauri-replaces-window-confirm-with-a-promise.md) — dialog 插件的 init 脚本把 `window.confirm` 换成 async 版本，返回的 Promise 恒为真值（`lib.dom.d.ts` 仍写 `boolean`，tsc 全绿），`if (!confirm(...)) return` 形同虚设；那次 invoke 还被 ACL 拒掉，只留一条没人接的 rejection。破坏性确认一律走 AlertDialog
 - [99-on-navigation-sees-every-frame-and-cancels-in-silence](./99-on-navigation-sees-every-frame-and-cancels-in-silence.md) — `on_navigation` 拿到的是每个 frame 的导航（WKWebView 不看 `targetFrame`，WebKitGTK 的 NavigationAction 含子框架；Windows 只接顶层，反而盖不到 iframe），而取消是静默的：没有 error、不算 CSP 违规、控制台无输出。`blob:` 放行（自己页面的产物），`data:` 继续取消，所有 Cancel 打日志
 - [108-a-modernised-user-agent-is-what-gets-you-blocked](./108-a-modernised-user-agent-is-what-gets-you-blocked.md) — 把 WebKitGTK 默认 UA 的 `Version/60.5` 换新、或只去掉 `Ubuntu;`、或换成 Chrome UA，彭博冷 profile 一律 403 + 验证码；显式 pin 成引擎默认那一整条才 200。PerimeterX 拿 UA 和引擎其他特征对账，任何偏离都不行

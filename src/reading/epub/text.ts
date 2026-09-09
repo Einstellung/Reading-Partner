@@ -54,6 +54,11 @@ export function extractDocumentText(doc: Document): DocumentText {
   function pushText(node: Text): void {
     const value = node.nodeValue ?? "";
     if (value === "") return;
+    // Whitespace at a block boundary is layout, not text. Counting it would put
+    // the first character of the book at offset 1 whenever the markup has a
+    // newline between </head> and <body>, and every anchor in the document
+    // would then land one past where it points.
+    if (atBoundary && value.trim() === "") return;
     runs.push({ node, start: length, length: value.length });
     parts.push(value);
     length += value.length;
