@@ -80,10 +80,47 @@ export interface TopicProposalCardData {
   phase: "draft" | "applied";
 }
 
+// Shown when propose_lab drafts a research lab out of the conversation (docs/63
+// 章程): its name, the field of view its charter draws, the questions it exists
+// to answer, and the sources it claims. The AI drafts the charter and the reader
+// nods — there is no form, and corrections are made by talking. The tool writes
+// nothing; Apply opens the room and claims the sources.
+export interface LabProposalCardData {
+  kind: "lab-proposal";
+  // The conversation the proposal was made in, so a card read back off disk
+  // still knows what it belonged to.
+  threadId: string;
+  name: string;
+  // 视野边界: one paragraph saying what is inside the room's field of view.
+  scope: string;
+  // The questions the room exists to answer.
+  questions: string[];
+  // Source descriptor ids the room claims. Resolved against the reader's own
+  // list when the card was drafted, and again on Apply.
+  sources: string[];
+  // The same sources by display name, for the chips on the card. Ids are what
+  // Apply writes; a reader reads names.
+  sourceNames?: string[];
+  phase: "draft" | "applied";
+}
+
+// Shown when archive_lab proposes closing a room. The record stays on disk —
+// its picture and its cables still name the id — so this is a close, not a
+// delete (docs/63 态势归档，不删).
+export interface LabArchiveCardData {
+  kind: "lab-archive";
+  threadId: string;
+  labId: string;
+  name: string;
+  phase: "draft" | "applied";
+}
+
 export type InfoCard =
   | ProbeConfirmCardData
   | BriefingProgressCardData
   | BriefingReadyCardData
   | ProfileUpdateCardData
   | TopicProposalCardData
+  | LabProposalCardData
+  | LabArchiveCardData
   | BriefingFailedCardData;

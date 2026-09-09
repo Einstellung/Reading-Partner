@@ -12,7 +12,13 @@
 
 import type { SourceDescriptor } from "../sources/descriptor";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { TopicProposalCardData } from "../boxes/cards";
+import type {
+  LabArchiveCardData,
+  LabProposalCardData,
+  TopicProposalCardData,
+} from "../boxes/cards";
+import { newLabId } from "../labs/labs";
+import type { Lab } from "../labs/types";
 import { replaceDeclared } from "../../memory/profile/guess";
 import { loadProfileForWrite, saveProfile } from "../../memory/profile/profile";
 
@@ -158,6 +164,112 @@ export async function applyTopicProposal(
   ports.fileThread(card.threadId, topicId);
   ports.topicsChanged();
   return { ok: true, topicId };
+}
+
+// --- open and close a research room -----------------------------------------
+
+export interface LabProposalPorts {
+  // Open the room. The Lab is minted here rather than by the tool, so the id and
+  // the timestamp belong to the gesture that actually wrote it.
+  addLab(lab: Lab): Promise<unknown>;
+  // Hand the room its sources. Additive in the store, which is why it is a
+  // second call rather than a field on the lab above: claiming a source is its
+  // own act, and the room exists whether or not it lands (docs/63).
+  claimSources(labId: string, sourceIds: string[]): Promise<unknown>;
+  // The reader's sources as they are NOW. A card sits in the conversation for
+  // the rest of the day, and a source removed since it was drafted must not be
+  // claimed.
+  listSources(): Promise<SourceDescriptor[]>;
+  now(): number;
+  // Pinned by a test so the minted id is an equality assertion rather than a
+  // regex; production passes nothing.
+  random?: () => number;
+  // The host reloads whatever shows the roster.
+  labsChanged(): void;
+}
+
+export interface LabApplied {
+  // False when nothing was opened — the card was already applied, or the write
+  // failed and the sequence stopped.
+  ok: boolean;
+  labId: string | null;
+}
+
+/**
+ * The lab card's Apply: open the room, then hand it the sources its charter
+ * claimed. Apply is the only write; the tool that drafted the card never saves.
+ *
+ * A second click on an applied card does nothing, for the reason every other
+ * card here has the guard: it stays on screen for the rest of the conversation
+ * and comes back on reopen, and without it a second click would open a second
+ * room under a second id with the same name.
+ *
+ * A failed claim does NOT undo the room or fail the Apply. The room is what the
+ * reader asked for and it is open; a source it did not manage to claim is a
+ * source no room has claimed, and labsForSource offers those to every open room
+ * anyway — so the failure costs nothing the next sentence cannot fix.
+ */
+export async function applyLabProposal(
+  card: LabProposalCardData,
+  ports: LabProposalPorts,
+): Promise<LabApplied> {
+  if (card.phase === "applied") return { ok: false, labId: null };
+  const labId = newLabId(ports.random);
+  const lab: Lab = {
+    id: labId,
+    name: card.name,
+    // Only rooms are opened this release; a study comes later (docs/63 三档渐变).
+    kind: "lab",
+    status: "active",
+    charter: {
+      scope: card.scope,
+      questions: card.questions,
+      // Where this room's drafts would file. Unused this release.
+      topicId: null,
+    },
+    sources: [],
+    createdAt: ports.now(),
+  };
+  try {
+    await ports.addLab(lab);
+  } catch {
+    return { ok: false, labId: null };
+  }
+  if (card.sources.length) {
+    try {
+      const live = new Set((await ports.listSources()).map((s) => s.id));
+      const claimed = card.sources.filter((id) => live.has(id));
+      if (claimed.length) await ports.claimSources(labId, claimed);
+    } catch {
+      // The room stands; see above.
+    }
+  }
+  ports.labsChanged();
+  return { ok: true, labId };
+}
+
+export interface LabArchivePorts {
+  archiveLab(labId: string, now: number): Promise<unknown>;
+  now(): number;
+  labsChanged(): void;
+}
+
+/**
+ * The archive card's Apply. The record stays on disk — its picture and the
+ * cables it filed still name the id — so this only closes the room.
+ */
+export async function applyLabArchive(
+  card: LabArchiveCardData,
+  ports: LabArchivePorts,
+): Promise<LabApplied> {
+  if (card.phase === "applied") return { ok: false, labId: null };
+  try {
+    await ports.archiveLab(card.labId, ports.now());
+  } catch {
+    return { ok: false, labId: null };
+  }
+  ports.labsChanged();
+  return { ok: true, labId: card.labId };
 }
 
 /**

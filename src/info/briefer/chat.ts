@@ -13,6 +13,8 @@ import { profileForPrompt } from "../../memory/profile/guess";
 import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile/profile";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
 import { signInSiteLine, signInSites } from "../sources/site-session";
+import { labGuidance } from "./lab-tool";
+import type { Lab } from "../labs/types";
 import type { Briefing } from "../collect/types";
 
 // How much article text the chat carries as context (chat models take a big
@@ -184,41 +186,23 @@ export function formatProfile(profile: string): string {
   ].join("\n");
 }
 
-// The full triage-level filtered list: every dropped item with its source and
-// the category triage assigned, so the companion can defend or revisit a call.
-// This is only the second of two filters (docs/35) — the header says so, because
-// a companion that read it as the day's whole discard pile would tell the user
-// "nine things were dropped today" on a day that discarded four hundred.
-function formatFiltered(b: Briefing): string[] {
-  if (!(b.filtered ?? []).length) return [];
-  const src = (id: string) => b.items[id]?.sourceName || b.items[id]?.source || "?";
-  return [
-    "",
-    `Filtered as noise after reading the full text (${(b.filtered ?? []).length}):`,
-    ...(b.filtered ?? []).map((f) => `- ${b.items[f.itemId]?.title ?? f.itemId} — ${src(f.itemId)} — ${f.category}`),
-  ];
-}
-
-// The screening stage's tally (docs/35). Counts only: the headlines it dropped
-// are on record by id, and putting hundreds of them in this prompt would undo
-// the very thing the screen is for. Being told the number, and told that the
-// titles are not here, is what keeps the companion honest about the day's size.
-function formatScreened(b: Briefing): string[] {
-  const s = b.screen;
-  if (!s || s.dropped === 0) return [];
-  const capped = s.cappedOut
-    ? ` ${s.cappedOut} more cleared the screen but were cut by the daily fetch ceiling.`
-    : "";
-  return [
-    "",
-    `Screened out before fetching: ${s.dropped} of ${s.discovered} items the sources published ` +
-      `today were judged, on headline and blurb alone, not worth fetching the full text for.` +
-      capped,
-    "Their titles are NOT in this context — only their count. The list above covers what was",
-    "fetched and triaged, not the whole day. If the user asks what else was published, say",
-    "plainly that you only see the day's survivors, and offer to widen the profile instead of",
-    "guessing at what was dropped.",
-  ];
+// Where each open room stands, as its own block under the briefing (docs/63
+// 态势). This is what lets the briefer answer "what changed since last time" out
+// of the room's own record rather than out of today's headlines: the summary
+// carries the baseline, the observables and when each last fired, and the
+// judgments that stand.
+//
+// Only rooms the caller summarized print. A room that has never run has an empty
+// picture, and a heading over nothing would read as a room with nothing in it.
+function formatPictures(ctx: CompanionContext): string[] {
+  const pictures = ctx.pictures ?? {};
+  const out: string[] = [];
+  for (const lab of ctx.labs ?? []) {
+    const summary = pictures[lab.id];
+    if (!summary) continue;
+    out.push("", `Picture — ${lab.name} (id: ${lab.id}):`, summary);
+  }
+  return out;
 }
 
 // The anchor context shared by both threads: profile, source roster, language,
@@ -229,6 +213,14 @@ export interface CompanionContext {
   sources: SourceDescriptor[];
   aiLanguage?: AiLanguage;
   canSignIn?: boolean;
+  // The reader's open research rooms (docs/63), for the roster the companion
+  // proposes out of and for the picture blocks. Absent reads as none, which is
+  // the first-run shape: the prompt then says nothing is being followed yet.
+  labs?: Lab[];
+  // Where each room stands, already summarized by the caller (companion-live.ts
+  // labCompanionContext) so this layer stays pure string assembly. Keyed by lab
+  // id; a room with no entry prints without one.
+  pictures?: Record<string, string>;
   // Whether this device is the one that collects (docs/36). It decides which
   // tools are mounted, so it has to decide which tools the prompt describes: a
   // companion told about add_source on a device that does not have it will
@@ -248,6 +240,8 @@ function preamble(ctx: CompanionContext): string[] {
     "",
     formatSources(ctx.sources),
     ...(ctx.canSignIn ? ["", formatSignInSites(ctx.sources)] : []),
+    "",
+    labGuidance(ctx.labs ?? [], ctx.sources, ctx.pictures ?? {}),
   ];
 }
 
@@ -310,8 +304,10 @@ export function noBriefingChatSystemPrompt(
 
 // The briefing-level thread: the whole document as context (overview + every
 // tier's titles, sources, and the reasons/lines triage wrote), plus the full
-// triage-level filtered clip list so the companion sees what was dropped and
-// why, and the screening tally so it knows that list is not the whole day.
+// picture of each open room, so the companion can say where a room stands and
+// what today moved. What the funnel dropped is not in here at all any more
+// (docs/63): the day is cut by lab, and a discard pile the reader never asked
+// about only taught the companion to talk about its own machinery.
 export function briefingChatSystemPrompt(b: Briefing, ctx: CompanionContext): string {
   const title = (id: string) => b.items[id]?.title ?? id;
   const src = (id: string) => b.items[id]?.sourceName || b.items[id]?.source || "?";
@@ -333,6 +329,6 @@ export function briefingChatSystemPrompt(b: Briefing, ctx: CompanionContext): st
       ...b.outOfLane.map((r) => `- ${title(r.itemId)} — ${src(r.itemId)} — ${r.reason}`),
     );
   }
-  parts.push(...formatFiltered(b), ...formatScreened(b));
+  parts.push(...formatPictures(ctx));
   return parts.join("\n");
 }

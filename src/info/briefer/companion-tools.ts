@@ -24,6 +24,7 @@ import type { FetchFn } from "../extract/http";
 import type { SessionStatus, SignInOutcome } from "../extract/webview-session";
 import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "../extract/read-page";
 import { buildProposeTopicTool, type ProposeTopicDeps } from "./topic-tool";
+import { buildArchiveLabTool, buildProposeLabTool, type LabToolDeps } from "./lab-tool";
 
 export type BriefingScope = "retriage" | "full";
 
@@ -79,6 +80,10 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // it is filing and the reader's topics, so it is passed by whoever knows both;
   // without it propose_topic is not mounted.
   topicProposal?: ProposeTopicDeps;
+  // The research rooms (lab-tool.ts, docs/63). Needs the conversation the
+  // proposal is made in and the roster to validate against, so it is passed by
+  // whoever knows both; without it propose_lab and archive_lab are not mounted.
+  labs?: LabToolDeps;
 }
 
 // The update_profile tool: draft a complete revised profile and show it for
@@ -381,6 +386,7 @@ export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
     buildUpdateProfileTool(deps),
     buildGenerateBriefingTool(deps),
     ...(deps.topicProposal ? [buildProposeTopicTool(deps.topicProposal)] : []),
+    ...(deps.labs ? [buildProposeLabTool(deps.labs), buildArchiveLabTool(deps.labs)] : []),
     ...(deps.siteSignIn ? [buildSignInTool(deps.siteSignIn)] : []),
   ];
 }
@@ -390,6 +396,8 @@ export function companionToolStatusLabel(name: string, args: Record<string, unkn
   if (name === "read_page") return `Reading ${String(args.url ?? "the page")}`;
   if (name === "update_profile") return "Drafting a profile update";
   if (name === "propose_topic") return `Proposing this belongs under ${String(args.topic ?? "a topic")}`;
+  if (name === "propose_lab") return `Drafting a lab for ${String(args.name ?? "what you follow")}`;
+  if (name === "archive_lab") return `Proposing to close ${String(args.labId ?? "a lab")}`;
   if (name === "generate_briefing") {
     return args.scope === "retriage" ? "Re-sorting today's briefing" : "Regenerating the briefing";
   }

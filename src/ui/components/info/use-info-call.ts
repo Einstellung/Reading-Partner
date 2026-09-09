@@ -38,6 +38,8 @@ import {
   briefingJobPlan,
   briefingJobUpdate,
   infoBookId,
+  labArchivedNote,
+  labFiledNote,
   profileAppliedNote,
   sourceAddedNote,
   topicFiledNote,
@@ -45,11 +47,14 @@ import {
 } from "../../../info/briefer/call";
 import {
   addSourceFromCard,
+  applyLabArchive,
+  applyLabProposal,
   applyProfileUpdate,
   applyTopicProposal,
 } from "../../../info/briefer/card-actions";
+import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
-import { addSource, hasSources } from "../../../info/sources/source-store";
+import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
 import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
@@ -68,7 +73,12 @@ import {
 } from "../chat/chatParts";
 import type { ChatMessage, ProviderId } from "../../../ai/providers";
 import type { BriefingView, RequestOutcome } from "../../../info/briefer/reader";
-import type { ProfileUpdateCardData, TopicProposalCardData } from "../../../info/boxes/cards";
+import type {
+  LabArchiveCardData,
+  LabProposalCardData,
+  ProfileUpdateCardData,
+  TopicProposalCardData,
+} from "../../../info/boxes/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../chat/types";
 
@@ -271,7 +281,12 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // card part.
   function insertCard(
     prefix: string,
-    payload: ProbeConfirmCardData | ProfileUpdateCardData | TopicProposalCardData,
+    payload:
+      | ProbeConfirmCardData
+      | ProfileUpdateCardData
+      | TopicProposalCardData
+      | LabProposalCardData
+      | LabArchiveCardData,
   ) {
     const cardId = nextCardId(prefix);
     const ts = Date.now();
@@ -370,6 +385,54 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, noteTurn, onTopicsChanged],
   );
 
+  // Open the room the companion drafted a charter for, and hand it the sources
+  // the charter claimed (docs/63). Two writes for one gesture; the order and
+  // what a failed claim does not undo are in info/briefer/card-actions.
+  const handleApplyLab = useCallback(
+    async (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "lab-proposal") return;
+      const card = found.payload;
+      const { ok } = await applyLabProposal(card, {
+        addLab: (lab) => addLab(lab),
+        claimSources: (labId, sourceIds) => claimSources(labId, sourceIds),
+        listSources: () => loadSources(),
+        now: () => Date.now(),
+        labsChanged: () => {},
+      });
+      if (!ok) return;
+      const applied: LabProposalCardData = { ...card, phase: "applied" };
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
+      patchThreadMessage(bookId, anchor.threadId, found.ts, {
+        parts: [toPersistedCardPart(cardId, applied)],
+      });
+      noteTurn(labFiledNote(card));
+    },
+    [bookId, anchor.threadId, noteTurn],
+  );
+
+  // Close a room. The record and its picture stay on disk; only the status flips.
+  const handleArchiveLab = useCallback(
+    async (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "lab-archive") return;
+      const card = found.payload;
+      const { ok } = await applyLabArchive(card, {
+        archiveLab: (labId, now) => archiveLab(labId, now),
+        now: () => Date.now(),
+        labsChanged: () => {},
+      });
+      if (!ok) return;
+      const applied: LabArchiveCardData = { ...card, phase: "applied" };
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
+      patchThreadMessage(bookId, anchor.threadId, found.ts, {
+        parts: [toPersistedCardPart(cardId, applied)],
+      });
+      noteTurn(labArchivedNote(card));
+    },
+    [bookId, anchor.threadId, noteTurn],
+  );
+
   // The card action dispatcher wired into the message list. Stable across
   // streaming deltas, so the memoized rows never churn. It owns orchestration:
   // one gesture may fan out to several effects (see handleAddFromCard).
@@ -380,6 +443,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           if (action.op === "add-source") void handleAddFromCard(cardId);
           else if (action.op === "apply-profile") void handleApplyProfile(cardId);
           else if (action.op === "apply-topic") void handleApplyTopic(cardId);
+          else if (action.op === "apply-lab") void handleApplyLab(cardId);
+          else if (action.op === "apply-lab-archive") void handleArchiveLab(cardId);
           else if (action.op === "retriage") runBriefingJob("retriage");
           else if (action.op === "retry-briefing") runBriefingJob(lastJobRef.current);
           break;
@@ -406,7 +471,17 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     },
     // The three handlers are stable; runBriefingJob reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [handleAddFromCard, handleApplyProfile, handleApplyTopic, onOpenBriefing, onHangUp, pipCards, noteTurn],
+    [
+      handleAddFromCard,
+      handleApplyProfile,
+      handleApplyTopic,
+      handleApplyLab,
+      handleArchiveLab,
+      onOpenBriefing,
+      onHangUp,
+      pipCards,
+      noteTurn,
+    ],
   );
 
   // The companion's agent turn: the anchor's desk (the day's briefing, and the
@@ -452,6 +527,10 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
               topic: {
                 threadId: anchor.threadId,
                 onTopicCard: (payload) => insertCard("topic", payload),
+              },
+              lab: {
+                threadId: anchor.threadId,
+                onLabCard: (payload) => insertCard("lab", payload),
               },
             },
           ),

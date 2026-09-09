@@ -62,6 +62,24 @@ test("buildCompanionTools mounts the source tools plus read_page, update_profile
   expect(names).toContain("generate_briefing");
 });
 
+// The lab tools need the conversation they are proposing in and the roster to
+// validate against, so they are mounted only where the host knows both — the
+// same gate propose_topic is behind (docs/63).
+test("the lab tools are mounted only where the host passes the rooms", () => {
+  expect(buildCompanionTools(deps([])).map((t) => t.name)).not.toContain("propose_lab");
+  const names = buildCompanionTools({
+    ...deps([]),
+    labs: {
+      threadId: "briefing-2026-09-09",
+      labs: async () => [],
+      sources: async () => [],
+      onLabCard: () => {},
+    },
+  }).map((t) => t.name);
+  expect(names).toContain("propose_lab");
+  expect(names).toContain("archive_lab");
+});
+
 // A reader has no webview to fetch an article with, so trial_source cannot
 // prove what it exists to prove: the same Bloomberg source trials to a standfirst
 // there and to a full story on the collector (docs/36). read_page stays — that is
@@ -120,6 +138,8 @@ test("read_page rejects an empty or invalid URL", async () => {
 test("companionToolStatusLabel labels the companion tools and defers to source labels", () => {
   expect(companionToolStatusLabel("read_page", { url: "https://site.com" })).toMatch(/Reading https:\/\/site\.com/);
   expect(companionToolStatusLabel("update_profile", {})).toMatch(/Drafting a profile update/);
+  expect(companionToolStatusLabel("propose_lab", { name: "Embodied AI" })).toMatch(/Drafting a lab for Embodied AI/);
+  expect(companionToolStatusLabel("archive_lab", { labId: "lab-1234abcd" })).toMatch(/close lab-1234abcd/);
   expect(companionToolStatusLabel("generate_briefing", { scope: "full" })).toMatch(/Regenerating the briefing/);
   expect(companionToolStatusLabel("generate_briefing", { scope: "retriage" })).toMatch(/Re-sorting today's briefing/);
   expect(companionToolStatusLabel("add_source", {})).toMatch(/Adding the source/);

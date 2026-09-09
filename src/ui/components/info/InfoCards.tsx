@@ -16,6 +16,8 @@ import type {
   BriefingProgressCardData,
   BriefingReadyCardData,
   InfoCard,
+  LabArchiveCardData,
+  LabProposalCardData,
   ProfileUpdateCardData,
   TopicProposalCardData,
 } from "../../../info/boxes/cards";
@@ -241,6 +243,96 @@ export function TopicProposalCard({ payload, dispatch }: CardComponentProps<Topi
   );
 }
 
+// The lab-proposal card: the companion drafts a room's charter out of the
+// conversation and the reader nods (docs/63 章程). The charter is shown whole —
+// the scope paragraph, the questions, the sources it claims — because what the
+// reader is agreeing to is the field of view, not a name. Corrections are made
+// by talking, so there is nothing to edit here. Presentational: Apply only
+// raises intent; the host opens the room and claims the sources.
+export function LabProposalCard({ payload, dispatch }: CardComponentProps<LabProposalCardData>) {
+  const applied = payload.phase === "applied";
+  const chips = payload.sourceNames ?? payload.sources;
+  return (
+    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
+        {applied ? "Lab opened" : "A lab to keep watch"}
+      </div>
+      <div className="mt-1 text-[15px] font-medium text-foreground">{payload.name}</div>
+      <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{payload.scope}</div>
+      {payload.questions.length > 0 && (
+        <ul className="m-0 mt-2.5 flex list-none flex-col gap-1 p-0">
+          {payload.questions.map((q, i) => (
+            <li key={i} className="flex items-start gap-2 text-[13px] leading-snug">
+              <span className="mt-2 h-1 w-1 flex-none rounded-full bg-muted-strong" />
+              <span className="min-w-0 flex-1 text-muted-foreground">{q}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {chips.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {chips.map((name) => (
+            <span
+              key={name}
+              className="rounded-full border border-border bg-card px-2 py-0.5 text-[12px] text-faint-foreground"
+            >
+              {name}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="mt-3.5 flex items-center justify-end gap-2">
+        {applied ? (
+          <span className="text-[12px] text-faint-foreground">Watching from the next briefing on.</span>
+        ) : (
+          <Button
+            type="button"
+            variant="cta"
+            size="chip"
+            className="px-3.5 py-1.5"
+            onClick={() => dispatch({ kind: "mutate", op: "apply-lab" })}
+          >
+            Open this lab
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Closing a room. The record and its picture stay — the card says so, because
+// "close" and "delete" are the same gesture on most screens and here they are
+// not.
+export function LabArchiveCard({ payload, dispatch }: CardComponentProps<LabArchiveCardData>) {
+  const applied = payload.phase === "applied";
+  return (
+    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
+        {applied ? "Lab closed" : "Close this lab"}
+      </div>
+      <div className="mt-1 text-[15px] font-medium text-foreground">{payload.name}</div>
+      <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+        {applied
+          ? "Nothing is collected for it any more. What it worked out is kept."
+          : "It stops watching. What it has worked out is kept, and it can be reopened."}
+      </div>
+      <div className="mt-3.5 flex items-center justify-end gap-2">
+        {applied ? null : (
+          <Button
+            type="button"
+            variant="cta"
+            size="chip"
+            className="px-3.5 py-1.5"
+            onClick={() => dispatch({ kind: "mutate", op: "apply-lab-archive" })}
+          >
+            Close it
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<BriefingFailedCardData>) {
   return (
     <div className="w-full max-w-md rounded-xl border border-[#e6c3bd] bg-[#fdf5f3] p-4">
@@ -272,5 +364,7 @@ export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "briefing-ready": BriefingReadyCard,
   "profile-update": ProfileUpdateCard,
   "topic-proposal": TopicProposalCard,
+  "lab-proposal": LabProposalCard,
+  "lab-archive": LabArchiveCard,
   "briefing-failed": BriefingFailedCard,
 };
