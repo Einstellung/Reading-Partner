@@ -23,5 +23,39 @@
        them. -->
   <key>NSMicrophoneUsageDescription</key>
   <string>Reading Partner uses the microphone when you hold the bar to talk. Your speech is transcribed on this iPhone and never uploaded.</string>
+  <!-- The formats the reader can open, so Files and the share sheet offer this
+       app for one. Both UTIs are declared by the system, so there is no
+       UTImportedTypeDeclarations to go with them: importing a type the system
+       already owns only adds a second, weaker declaration of it. Viewer, not
+       Editor — an opened book is copied into the library and the original is
+       never written back. Alternate rank leaves Books and the PDF viewers
+       ranked above us, which is what a reading companion should be. -->
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>EPUB Book</string>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>LSHandlerRank</key>
+      <string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>org.idpf.epub-container</string>
+      </array>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>PDF Document</string>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>LSHandlerRank</key>
+      <string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.adobe.pdf</string>
+      </array>
+    </dict>
+  </array>
 </dict>
 </plist>
