@@ -69,6 +69,7 @@ describe("failure records", () => {
     path: "/books/a.pdf",
     name: "a.pdf",
     at: 1_000,
+    reader: "pdfium",
   };
 
   test("a round trip keeps what a diagnosis needs", () => {
@@ -84,13 +85,18 @@ describe("failure records", () => {
   });
 
   test("a record with the strings missing still blocks a retry", () => {
-    expect(parseCoverFailure({ reason: "render", at: 5 })).toEqual({
+    expect(parseCoverFailure({ reason: "render", at: 5, reader: "pdfium" })).toEqual({
       reason: "render",
       message: "",
       path: "",
       name: "",
       at: 5,
+      reader: "pdfium",
     });
+  });
+
+  test("a reader nobody has heard of reads as no reader at all", () => {
+    expect(parseCoverFailure({ reason: "render", at: 5, reader: "mupdf" })?.reader).toBeNull();
   });
 });
 
@@ -101,6 +107,7 @@ describe("retry policy", () => {
     path: "",
     name: "",
     at: t,
+    reader: "pdfium",
   });
 
   test("no record means nothing has been tried", () => {
@@ -114,6 +121,12 @@ describe("retry policy", () => {
 
   test("an old failure is tried again, so an offline file is not written off", () => {
     expect(coverRetryDue(at("unreadable", 1_000), 1_000 + COVER_RETRY_AFTER_MS)).toBe(true);
+  });
+
+  test("a record that names no reader is retried at once", () => {
+    // Written by a build whose only reader was PDFium, which refuses every
+    // EPUB: it says nothing about a book the shelf can read today.
+    expect(coverRetryDue({ ...at("open", 1_000), reader: null }, 1_000)).toBe(true);
   });
 });
 

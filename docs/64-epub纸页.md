@@ -121,3 +121,46 @@ shadow 里的 `html, body` 另加 `user-select: none`/`-webkit-touch-callout: no
 ## 打开时的进度
 
 `open-book.ts` 的 `showTitle` 提前到「上一本书结算完」之后、分页之前：阅读器带标题和 `Rendering…` 先出来，不再是书架上枯坐七秒。分页按 spine 逐篇报数（`paginate` 的 `onProgress` → `ensurePagination` → `preparePages`），顶栏写成 `Rendering… 12/70`，一篇 spine 的书不显示数字。
+
+## 验证（iPad 模拟器与 PDF 回归）
+
+iPad Pro 11-inch (M5)、iOS 26.5、`bun tauri ios dev`，触摸经 idb 的 HID 通道注入，读数经 sim bridge。截图 `scratchpad/epub-pages-verify/shots/`。
+
+### PDF 回归
+
+`scripts/ios-sim/baseline.md` 那一批场景逐条重跑，全部落在基线里：
+
+| 场景 | 基线 | 这次 |
+|---|---|---|
+| vertical-top | 橡皮筋 90px，scrollTop 不动 | 一样 |
+| vertical-bottom | 14086 不动，橡皮筋 90px | 一样 |
+| ink-finger | 3268 → 3740–3760，svgPaths 0 | 3268 → 3749 |
+| ink-finger-horizontal | 两个方向都不动 | 一样 |
+| paged-flip | 一次滑动 +844 | +845，落到 pageIndex 3 |
+| pinch out 2.0 | zoom 1.362 → 5.77，selChars 0 | 一样 |
+| webkit-claim native | pointercancel、无 pointerup、滚 670–771px | 滚 749px |
+
+`context.ts` 换成本地结构类型没有动 PDF 的行为。桌面 ctrl+滚轮没跑（`wheel-zoom.ts` 这轮一行没改）。
+
+### EPUB 纸页
+
+| 项 | 结论 |
+|---|---|
+| 书架封面 | 两本有封面图的出封面和 `dc:creator`（Andy Clark 安迪·克拉克 / Sanjeev V. Namjoshi 桑吉夫·V.·纳姆乔希），《具身智能》走无封面卡片。**先踩了坑 277**：旧 PDFium 的失败记号把三本全挡住了 |
+| 首屏与顶栏 | 上次读到的页和布局都回来了：`24 / 77`、翻页模式、`scrollLeft` 19182 |
+| 页数 | 77，Linux 上是 75（坑 280） |
+| `scroll-snap` | `none`，翻页模式靠 `settleFlip` 归位 |
+| `touch-action` | `.rp-page` 和 shadow 里的 `html/body` 都是 `none`；翻页时桌子本身也是 `none`，竖排时 `auto` |
+| 翻页点击区 | 右区 24→25→26，左区 26→25，每次 `scrollLeft` 走一个槽宽 834 |
+| 滑动翻页 | 跟手，抬手 20016 → 20850（正好一页），26 页；反向回 25 页 |
+| 归位 | 拖 80px 不到阈值：最远 20096，松手回 20016，不停在两页之间，也没有吸回去的抖动 |
+| 竖排手指滚动 | 480px 的拖动走 634px（含惯性），没有双倍速 |
+| 竖排到顶 | scrollTop 钉在 0，页码 `1 / 77`（橡皮筋位移这轮没量） |
+| pinch | 手指下的纸不动：缩放前后同一屏幕点对应的页内坐标差 1.3 页单位。fit-width 834 →（out 2.0）1728，正好是 3.0 档的上限，再 pinch out 不动；in 0.5 依次 869、437。缩放之后手指照样滚 |
+| Fit page width | 缩放过之后可点，点回 834 |
+| 长按正文 1.2 秒 | 不弹系统选区菜单，选区 0 字，UIKit 树上只有 app 自己 |
+| 用手指画 | 开着时手指横拖出一条高亮，落盘 `pageIndex` 2 / `pageLabel` "3"，卡片 shadow 里 `.rp-marks` 三个子元素（数它要穿 shadow root，坑 279） |
+| caret | iOS 上 `document.caretRangeFromPoint` 不穿 shadow root，走的是 `caret.ts` 自己二分的那条，同一行 x=200/400/600 给 647/655/664（坑 278） |
+| 图 | 7 张图都解码了（blob URL，`naturalWidth` 对）。页上大片空白是书自己的表格在 multicol 里裂开留下的，不是没加载 |
+
+没做的：大纲跳转、`[p.N]` 芯片、引文高亮、点标注弹编辑器与改色、关「用手指画」后同样的拖动、71 MB 那本从书架点开的进度提示和 RSS、深色模式、《The Experience Machine》的印刷页码。这些都是上一轮在 Linux 壳上验过的路，iPad 上仍是空白。

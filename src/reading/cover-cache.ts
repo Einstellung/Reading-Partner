@@ -74,6 +74,11 @@ export type CoverFailureReason =
   // Page one failed to raster.
   | "render";
 
+// Which reader was holding the file when it failed. A marker only speaks for
+// the reader that wrote it: PDFium refusing an EPUB says nothing about the
+// book, only about the build that had no other reader to try.
+export type CoverReader = "pdfium" | "epub" | "file";
+
 export interface CoverFailure {
   reason: CoverFailureReason;
   // The engine's or the filesystem's own words, so a cover that never appears
@@ -83,9 +88,12 @@ export interface CoverFailure {
   path: string;
   name: string;
   at: number;
+  // Absent in markers written before the shelf had a second reader.
+  reader: CoverReader | null;
 }
 
 const REASONS: CoverFailureReason[] = ["unreadable", "open", "no-pages", "render"];
+const READERS: CoverReader[] = ["pdfium", "epub", "file"];
 
 export function parseCoverFailure(raw: unknown): CoverFailure | null {
   if (!raw || typeof raw !== "object") return null;
@@ -98,6 +106,7 @@ export function parseCoverFailure(raw: unknown): CoverFailure | null {
     path: typeof r.path === "string" ? r.path : "",
     name: typeof r.name === "string" ? r.name : "",
     at: r.at,
+    reader: READERS.includes(r.reader as CoverReader) ? (r.reader as CoverReader) : null,
   };
 }
 
@@ -108,6 +117,10 @@ export const COVER_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 
 export function coverRetryDue(failure: CoverFailure | null, now: number): boolean {
   if (!failure) return true;
+  // A marker that does not say which reader failed was written by a build that
+  // only had PDFium, which refuses every EPUB (docs/pitfall/277). It is not
+  // evidence about the file, so the shelf tries once more.
+  if (!failure.reader) return true;
   return now - failure.at >= COVER_RETRY_AFTER_MS;
 }
 
