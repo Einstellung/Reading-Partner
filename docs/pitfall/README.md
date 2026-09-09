@@ -61,7 +61,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 271）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 277）。
 
 ## EmbedPDF 引擎
 
@@ -101,6 +101,7 @@
 - [265-a-paginator-renders-before-its-iframe-has-a-document](./265-a-paginator-renders-before-its-iframe-has-a-document.md) — foliate 的容器 ResizeObserver 在 iframe 还没有文档的那一小段里就调 `render()`，`columnize`/`expand` 读 `this.document.documentElement` 抛 TypeError；每开一本书一次，首屏照常出来，只在 `window.onerror` 上看得见。`View.render()`/`View.expand()` 各加一条 `if (!this.document) return`
 - [267-a-rulers-nodes-belong-to-the-clone-it-laid-out](./267-a-rulers-nodes-belong-to-the-clone-it-laid-out.md) — 分页量尺交回的是离屏克隆树的节点，按节点身份查摄入树的偏移表全部落空成 0：CFI 对、charOffset 错、单测全绿（测试量尺用的是原树）。先取 CFI 步，在摄入树上解析回节点再取偏移
 - [268-a-books-font-family-paginates-differently-on-every-device](./268-a-books-font-family-paginates-differently-on-every-device.md) — 书的 `font-family: Georgia, serif` 压过基线，Georgia 没装就回退到设备默认字体，同一本书 73 页对 74 页，而分页表是跨设备同步写一次不重算的。消毒器把通用族名和未内嵌的具名字体一律改写成打包的字体栈，书自带 `@font-face` 的名字保留
+- [274-a-page-card-holds-the-whole-chapter](./274-a-page-card-holds-the-whole-chapter.md) — 页卡片挂的是整份 spine 文档，看不见的列还在 DOM 里：`innerText` 给整章，`textContent` 还夹着书自带 `<style>` 的 CSS 源码。页的文本只从分页表的 `charOffset` 或 `Fulltext.pages[]` 来
 - [260-foliate-turns-the-page-itself-once-the-frame-is-transparent](./260-foliate-turns-the-page-itself-once-the-frame-is-transparent.md) — foliate 的 paginator 构造函数里自带 touchstart/move/end，跟手平移列、抬手按速度 snap。书的 iframe 透明之后触摸够得着它，和父页 pane 一起翻：一次滑动翻三页，笔拖选区顺带把页翻回去。按 vendor README 的 `PATCHED:` 约定不注册那三个监听器，手势只留 pane 一个读法；滚动模式本来就不归它（`if (this.scrolled) return`）
 - [261-a-selection-drag-on-an-epub-is-taken-by-the-scroller](./261-a-selection-drag-on-an-epub-is-taken-by-the-scroller.md) — 滚动模式下拖选区，六个 pointermove 之后 WebKit 把序列收走去滚容器，`pointercancel`、选区没了，也就是所有跨行的选区。`pointermove` 上 preventDefault 无效，只有 `touchmove` 拦得住；EPUB 又不能像 PDF 那样全局 touch-action:none。pane 上挂 `{passive:false}` 的 touchmove，`claimsTouch()` 判：拖选区时抢、翻页模式一律抢。React 的 onTouchMove 是 passive 的
 - [262-the-long-press-moves-to-the-parent-page](./262-the-long-press-moves-to-the-parent-page.md) — frame 不收触摸之后，长按落到阅读区自己身上：书里的 `-webkit-touch-callout: none` 管不着父页，iOS 给一个空选区配 Copy/Translate/Share。阅读区补 `data-reader-surface`（PDF 那侧一直带着的那条规则）；书的文档不继承它，笔要拖的选区不受影响
