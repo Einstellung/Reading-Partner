@@ -7,16 +7,20 @@
 // chapter files, prep notes and observations, and nothing rewrites them
 // (docs/39 §1). Recutting the book would move all of them at once, silently.
 //
-// The one exception is a version-1 table (the 1800-character blocks the first
-// EPUB release cut). It is read as absent, so the book is cut again, and the
-// caller is told it was a v1 so the marks can be moved (migrate.ts). A file that
+// The one exception is a table this build cannot lay pages by: a version-1
+// table (the 1800-character blocks the first EPUB release cut) or one cut on
+// another sheet of paper (the 6x9 the first paged release used, docs/64). Such
+// a table is read as absent, so the book is cut again, and the caller is handed
+// the old one so the marks can be moved onto the new pages (migrate.ts). The
+// geometry is in the code, not in a setting: two devices on the same build cut
+// the same table, and no reader action ever moves a page number. A file that
 // will not parse is reported and treated as absent too — that is a table for a
 // book whose old numbers are unreadable anyway.
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { reportStoreError } from "../../platform/app/store-errors";
-import { sameGeometry } from "./page-geometry";
+import { readStoredGeometry, sameGeometry } from "./page-geometry";
 import { PAGINATION_VERSION, type Pagination } from "./paginate";
 
 /** One book's table. Exported so a delete names it the same way. */
@@ -24,14 +28,24 @@ export function paginationFile(bookId: string): string {
   return `pagination-${bookId}.json`;
 }
 
-export function parsePagination(raw: unknown): Pagination | null {
+/**
+ * A stored table, whatever paper it names: version 2, an EPUB, with pages and a
+ * sheet they were laid on. What the marks of a re-cut book are moved off.
+ */
+export function parseStoredPagination(raw: unknown): Pagination | null {
   if (!raw || typeof raw !== "object") return null;
   const p = raw as Partial<Pagination>;
   if (p.version !== PAGINATION_VERSION) return null;
   if (p.kind !== "epub") return null;
-  if (!sameGeometry(p.geometry)) return null;
+  if (!readStoredGeometry(p.geometry)) return null;
   if (!Array.isArray(p.blocks) || p.blocks.length === 0) return null;
   return p as Pagination;
+}
+
+/** A stored table this build can lay pages by: the paper has to be this one. */
+export function parsePagination(raw: unknown): Pagination | null {
+  const stored = parseStoredPagination(raw);
+  return stored && sameGeometry(stored.geometry) ? stored : null;
 }
 
 /** The version number a stored file declares, whatever else is in it. */
@@ -52,6 +66,13 @@ export interface StoredPagination {
   pagination: Pagination | null;
   /** The version the file on disk declares; null when there is no file. */
   storedVersion: number | null;
+  /**
+   * The table on disk when it is readable but not usable: a version-2 table cut
+   * on another sheet. Null when there is no file, when it is a version-1 table
+   * (which names no pages this one could be moved off) and when the file on
+   * disk is the table in force.
+   */
+  outdated: Pagination | null;
 }
 
 export interface PaginationStore {
@@ -65,12 +86,17 @@ export function createPaginationStore(io: PaginationIo): PaginationStore {
   async function read(bookId: string): Promise<StoredPagination> {
     try {
       const text = await io.read(paginationFile(bookId));
-      if (text === null) return { pagination: null, storedVersion: null };
+      if (text === null) return { pagination: null, storedVersion: null, outdated: null };
       const raw: unknown = JSON.parse(text);
-      return { pagination: parsePagination(raw), storedVersion: storedVersionOf(raw) };
+      const pagination = parsePagination(raw);
+      return {
+        pagination,
+        storedVersion: storedVersionOf(raw),
+        outdated: pagination ? null : parseStoredPagination(raw),
+      };
     } catch (e) {
       io.onError(e);
-      return { pagination: null, storedVersion: null };
+      return { pagination: null, storedVersion: null, outdated: null };
     }
   }
   return {

@@ -29,13 +29,19 @@ import {
   flipPosition,
   mountRange,
   openingEpubZoom,
+  readStoredGeometry,
   sameGeometry,
   visibleColumnRange,
   zoomStepDown,
   zoomStepUp,
 } from "../../../src/reading/epub/page-geometry";
-import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
-import { parsePagination, storedVersionOf } from "../../../src/reading/epub/pagination-store";
+import { blockNumberAt, characterRuler, paginate } from "../../../src/reading/epub/paginate";
+import {
+  createPaginationStore,
+  parsePagination,
+  paginationFile,
+  storedVersionOf,
+} from "../../../src/reading/epub/pagination-store";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import { sanitize } from "../../../src/reading/epub/sanitize";
 import { makeEpubSortIndex } from "../../../src/reading/epub/annotation";
@@ -45,14 +51,28 @@ import { PAGE_WASH_GROUP_STYLE, PAGE_WASH_STYLE } from "../../../src/reading/eng
 import { buildEpub, prose } from "./fixture";
 
 describe("the paper", () => {
-  test("six by nine inches at 96 dpi, with the text block inside it", () => {
-    expect(PAGE_GEOMETRY.width).toBe(576);
-    expect(PAGE_GEOMETRY.height).toBe(864);
+  test("US Letter at 96 dpi, with the text block inside it", () => {
+    expect(PAGE_GEOMETRY.width).toBe(816);
+    expect(PAGE_GEOMETRY.height).toBe(1056);
     expect(BODY_WIDTH).toBe(PAGE_GEOMETRY.width - 2 * PAGE_GEOMETRY.padX);
     expect(BODY_HEIGHT).toBe(PAGE_GEOMETRY.height - 2 * PAGE_GEOMETRY.padY);
     expect(sameGeometry({ ...PAGE_GEOMETRY })).toBe(true);
     expect(sameGeometry({ ...PAGE_GEOMETRY, fontSize: 17 })).toBe(false);
     expect(sameGeometry(undefined)).toBe(false);
+    // The sheet the first paged release cut on is not this one.
+    expect(sameGeometry({ ...PAGE_GEOMETRY, width: 576, height: 864 })).toBe(false);
+  });
+
+  test("a sheet a table names is read back whether or not it is ours", () => {
+    expect(readStoredGeometry({ ...PAGE_GEOMETRY, width: 576, height: 864 })).toEqual({
+      ...PAGE_GEOMETRY,
+      width: 576,
+      height: 864,
+    });
+    expect(readStoredGeometry(undefined)).toBeNull();
+    expect(readStoredGeometry({})).toBeNull();
+    // Margins that leave no text block are not a sheet.
+    expect(readStoredGeometry({ ...PAGE_GEOMETRY, width: 96 })).toBeNull();
   });
 
   test("a column is found from an x offset, forgiving a subpixel", () => {
@@ -75,9 +95,9 @@ describe("zoom", () => {
   });
 
   test("the fits are the PDF side's rule over this page", () => {
-    expect(fitZoom("fit-width", { clientWidth: 1152, clientHeight: 500 })).toBe(2);
-    expect(fitZoom("fit-page", { clientWidth: 1152, clientHeight: 864 })).toBe(1);
-    expect(fitZoom("fit-page", { clientWidth: 288, clientHeight: 2000 })).toBe(0.5);
+    expect(fitZoom("fit-width", { clientWidth: 1632, clientHeight: 500 })).toBe(2);
+    expect(fitZoom("fit-page", { clientWidth: 1632, clientHeight: 1056 })).toBe(1);
+    expect(fitZoom("fit-page", { clientWidth: 408, clientHeight: 2000 })).toBe(0.5);
     expect(fitZoom("fit-width", { clientWidth: 0, clientHeight: 0 })).toBe(1);
   });
 
@@ -109,12 +129,12 @@ describe("where the reader is on the desk", () => {
   });
 
   test("the sheets mounted are the visible ones and a margin", () => {
-    const visible = visibleColumnRange(0, 1000, 1, 20);
+    const visible = visibleColumnRange(0, 1200, 1, 20);
     expect(visible.first).toBe(0);
     expect(visible.last).toBe(1);
     expect(mountRange(visible.first, visible.last, 20, 1)).toEqual({ from: 0, to: 2 });
     expect(mountRange(18, 19, 20, 2)).toEqual({ from: 16, to: 19 });
-    expect(visibleColumnRange(0, 1000, 1, 0)).toEqual({ first: 0, last: -1 });
+    expect(visibleColumnRange(0, 1200, 1, 0)).toEqual({ first: 0, last: -1 });
   });
 });
 
@@ -276,6 +296,65 @@ describe("the one migration", () => {
     const table = await paginate(book, characterRuler(500));
     expect(parsePagination(JSON.parse(JSON.stringify(table)))).not.toBeNull();
     expect(parsePagination({ ...table, geometry: { ...table.geometry, fonts: "other" } })).toBeNull();
+  });
+
+  test("a table cut on another sheet is not in force, and is what the marks move off", async () => {
+    const book = parseEpub(buildEpub({ docs: [{ name: "c1.xhtml", body: prose(3) }] }));
+    const table = await paginate(book, characterRuler(500));
+    const onOldPaper = { ...table, geometry: { ...table.geometry, width: 576, height: 864 } };
+    const files = new Map<string, string>([[paginationFile("b"), JSON.stringify(onOldPaper)]]);
+    const store = createPaginationStore({
+      read: async (file) => files.get(file) ?? null,
+      write: async (file, contents) => void files.set(file, contents),
+      onError: () => undefined,
+    });
+
+    const stored = await store.read("b");
+    expect(stored.pagination).toBeNull();
+    expect(stored.storedVersion).toBe(2);
+    expect(stored.outdated?.geometry.width).toBe(576);
+
+    // The book is cut again, and that cut is written over the old table.
+    expect(await store.put("b", table)).toEqual(table);
+    expect((await store.read("b")).pagination?.geometry.width).toBe(816);
+    expect((await store.read("b")).outdated).toBeNull();
+
+    // A version-1 table names no pages a mark could be moved off.
+    files.set(paginationFile("b"), JSON.stringify({ version: 1, kind: "epub", blocks: [{}] }));
+    expect((await store.read("b")).outdated).toBeNull();
+  });
+
+  test("ink lands on the page its old page began on, scaled between the blocks", async () => {
+    const book = parseEpub(buildEpub({ docs: [{ name: "c1.xhtml", body: prose(20, 300) }] }));
+    // The old sheet cut longer pages; the new one cuts shorter ones.
+    const before = await paginate(book, characterRuler(900));
+    const previous = { ...before, geometry: { ...before.geometry, width: 576, height: 864 } };
+    const table = await paginate(book, characterRuler(400));
+    expect(previous.blocks.length).toBeGreaterThan(2);
+
+    const was = previous.blocks[2];
+    const ink = {
+      id: "i1",
+      type: "ink",
+      pageLabel: "3",
+      sortIndex: makeEpubSortIndex(0, was.charOffset),
+      position: { pageIndex: 2, paths: [[48, 56, 528, 808]], width: 2 },
+    };
+    const out = remapEpubAnnotations([ink], book, table, previous);
+    expect(out.changed).toBe(true);
+    const moved = out.annotations[0] as typeof ink;
+
+    // The page the old page's first character is on in the new table.
+    const expected = blockNumberAt(table, 0, was.charOffset) - 1;
+    expect(moved.position.pageIndex).toBe(expected);
+    expect(expected).toBeGreaterThan(2);
+    expect(moved.pageLabel).toBe(String(expected + 1));
+    // The stroke sorts where it was drawn, not at the new page's own start.
+    expect(moved.sortIndex).toBe(makeEpubSortIndex(0, was.charOffset));
+    // The old text block's two corners are the new one's two corners.
+    expect(moved.position.paths).toEqual([[48, 56, 768, 1000]]);
+    // Without the old table there is nothing to move ink by.
+    expect(remapEpubAnnotations([ink], book, table).changed).toBe(false);
   });
 
   test("marks keep their CFI and get the new table's page numbers", async () => {

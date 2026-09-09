@@ -164,7 +164,7 @@ test("a book is cut into the pages the ruler lays out", async () => {
   const pagination = await paginate(book, ruler);
   expect(pagination.version).toBe(2);
   expect(pagination.source).toBe("layout");
-  expect(pagination.geometry.width).toBe(576);
+  expect(pagination.geometry.width).toBe(816);
   expect(pagination.blocks.length).toBeGreaterThan(1);
   const pages = blockTexts(book, pagination);
   expect(pages.length).toBe(pagination.blocks.length);

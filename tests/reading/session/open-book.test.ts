@@ -331,6 +331,7 @@ test("the reader is on screen before the pages are cut, and counts them off", as
     preparePages: async (_id, _buffer, _format, onProgress) => {
       onProgress?.(1, 70);
       onProgress?.(70, 70);
+      return { recut: false };
     },
   };
   await openBook(fakeShell(log), book, io);

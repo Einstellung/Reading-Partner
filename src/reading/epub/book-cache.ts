@@ -10,8 +10,11 @@
 //
 // The pagination is cut in the webview (page-ruler.ts) and only there, so the
 // ingestion and the pane converge on one table: whichever asks first cuts it,
-// the other joins the same promise. A book whose stored table is the old
-// 1800-character kind is cut again, once, and its marks moved (migrate.ts).
+// the other joins the same promise. A book whose stored table is one this build
+// cannot lay pages by — the old 1800-character kind, or one cut on the 6x9
+// sheet the first paged release used — is cut again, once, and its marks moved
+// (migrate.ts). That is the only thing that ever replaces a table, and it is
+// nobody's choice: the sheet is a constant in the code (docs/64).
 
 import { loadAnnotations, saveAnnotations } from "../../platform/app/annotations";
 import { remapEpubAnnotations } from "./migrate";
@@ -20,8 +23,18 @@ import { paginate, type Pagination } from "./paginate";
 import { putPagination, readPagination } from "./pagination-store";
 import { parseEpub, type EpubBook } from "./parse";
 
+/** A book's table, and whether getting it meant cutting the book over again. */
+export interface PreparedPagination {
+  pagination: Pagination;
+  /**
+   * The stored table was replaced, so every page number in this book has moved
+   * and everything counted in them has to be built again (open-book.ts).
+   */
+  recut: boolean;
+}
+
 let held: { bookId: string; book: EpubBook } | null = null;
-const cutting = new Map<string, Promise<Pagination>>();
+const cutting = new Map<string, Promise<PreparedPagination>>();
 
 /**
  * The parsed book for `bookId`, parsing it if this is the first caller. The
@@ -49,35 +62,38 @@ export function releaseEpub(bookId?: string): void {
 }
 
 /**
- * The book's pagination table: the stored one, or a fresh cut written once.
+ * The book's pagination table, and whether the book had to be cut for it.
  * `host` is where the ruler lays pages out off-screen; the app's body when
  * the caller has no better element.
  */
-export async function ensurePagination(
+export async function preparePagination(
   bookId: string,
   book: EpubBook,
   host?: HTMLElement,
   // Only the first caller in gets to watch: the rest join the same job.
   onProgress?: (done: number, total: number) => void,
-): Promise<Pagination> {
+): Promise<PreparedPagination> {
   const running = cutting.get(bookId);
   if (running) return running;
   const job = (async () => {
     const stored = await readPagination(bookId);
-    if (stored.pagination) return stored.pagination;
+    if (stored.pagination) return { pagination: stored.pagination, recut: false };
     const at = host ?? document.body;
     const ruler = createLayoutRuler(at, book);
-    let cut: Pagination;
+    let fresh: Pagination;
     try {
-      cut = await paginate(book, ruler, onProgress);
+      fresh = await paginate(book, ruler, onProgress);
     } finally {
       ruler.dispose();
     }
-    const table = await putPagination(bookId, cut);
-    if (stored.storedVersion !== null && stored.storedVersion < table.version) {
-      await migrateMarks(bookId, book, table);
-    }
-    return table;
+    // put writes when the book has no table this build reads, which is exactly
+    // the case here: a first cut and a replacement land the same way.
+    const table = await putPagination(bookId, fresh);
+    // A table was on disk and is not this one, so the book was cut again and
+    // the marks move before anything reads a page number off them.
+    const recut = stored.storedVersion !== null;
+    if (recut) await migrateMarks(bookId, book, table, stored.outdated ?? undefined);
+    return { pagination: table, recut };
   })();
   cutting.set(bookId, job);
   try {
@@ -87,12 +103,29 @@ export async function ensurePagination(
   }
 }
 
-// The one time a table is replaced: the marks keep their CFIs and get their
-// page numbers from the new table.
-async function migrateMarks(bookId: string, book: EpubBook, table: Pagination): Promise<void> {
+/** The book's pagination table, for the callers that do not care how it got there. */
+export async function ensurePagination(
+  bookId: string,
+  book: EpubBook,
+  host?: HTMLElement,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Pagination> {
+  return (await preparePagination(bookId, book, host, onProgress)).pagination;
+}
+
+// The one time a table is replaced: the text marks keep their CFIs and get
+// their page numbers from the new table; ink, which is anchored on no words, is
+// carried over by the old table (migrate.ts).
+async function migrateMarks(
+  bookId: string,
+  book: EpubBook,
+  table: Pagination,
+  previous?: Pagination,
+): Promise<void> {
   try {
     const marks = await loadAnnotations(bookId);
-    const moved = remapEpubAnnotations(marks, book, table);
+    if (marks.length === 0) return;
+    const moved = remapEpubAnnotations(marks, book, table, previous);
     if (moved.changed) saveAnnotations(bookId, moved.annotations);
   } catch (e) {
     console.warn("failed to move the marks of a repaginated book", bookId, e);
