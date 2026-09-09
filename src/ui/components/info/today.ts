@@ -54,7 +54,7 @@ export function briefingFooterLine(briefing: Briefing): string {
   return [
     `${briefing.outOfLane.length} out of your lane`,
     plural(briefing.oneLiners.length, "one-liner"),
-    `${briefing.filtered.length} filtered`,
+    `${(briefing.filtered ?? []).length} filtered`,
   ].join(" · ");
 }
 

@@ -187,9 +187,9 @@ export function BriefingPage(props: BriefingPageProps) {
           Shown for a screen-only day too (docs/35): the day's discards are
           mostly headlines that never got fetched, and a page that stayed silent
           about them would read as a day with nothing in it. */}
-      {(b.filtered.length > 0 || !!b.screen?.dropped) && (
+      {((b.filtered ?? []).length > 0 || !!b.screen?.dropped) && (
         <FilteredSection
-          filtered={b.filtered}
+          filtered={b.filtered ?? []}
           screen={b.screen}
           meta={meta}
           onAppeal={props.onAppeal}
@@ -211,7 +211,7 @@ function FilteredSection({
   onAppeal,
   openedIds,
 }: {
-  filtered: Briefing["filtered"];
+  filtered: NonNullable<Briefing["filtered"]>;
   screen: Briefing["screen"];
   meta: (id: string) => BriefingItemMeta | undefined;
   onAppeal: (itemId: string, meta: BriefingItemMeta, category: string) => void;

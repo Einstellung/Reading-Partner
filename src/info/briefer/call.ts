@@ -137,7 +137,7 @@ function completionNote(job: BriefingJob, b: Briefing): string {
     : "";
   return (
     `Today's briefing has been ${verb}. Overview: ${b.overview} — worth your time: ${worth}, ` +
-    `one-liners: ${b.oneLiners.length}, filtered: ${b.filtered.length}${screened}. Answer from ` +
+    `one-liners: ${b.oneLiners.length}, filtered: ${(b.filtered ?? []).length}${screened}. Answer from ` +
     `this updated briefing now, not the earlier one.`
   );
 }
@@ -216,7 +216,7 @@ export function briefingJobUpdate(job: BriefingJob, s: InfoSnapshot): BriefingJo
         date: b.date,
         worth: b.mustRead.length + b.outOfLane.length,
         oneLiners: b.oneLiners.length,
-        filtered: b.filtered.length,
+        filtered: (b.filtered ?? []).length,
         ...readyCopy(job),
       },
       note: completionNote(job, b),

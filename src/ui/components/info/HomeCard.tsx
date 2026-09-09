@@ -173,7 +173,7 @@ export function BriefingCardBody({
       builtAt(briefing.generatedAt),
       `${worth} worth reading`,
       `${briefing.oneLiners.length} one-liner${briefing.oneLiners.length === 1 ? "" : "s"}`,
-      `${briefing.filtered.length} filtered`,
+      `${(briefing.filtered ?? []).length} filtered`,
     ].join(" · ");
     return (
       <div className="flex min-h-0 flex-1 flex-col">

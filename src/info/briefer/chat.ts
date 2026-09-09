@@ -190,12 +190,12 @@ export function formatProfile(profile: string): string {
 // a companion that read it as the day's whole discard pile would tell the user
 // "nine things were dropped today" on a day that discarded four hundred.
 function formatFiltered(b: Briefing): string[] {
-  if (!b.filtered.length) return [];
+  if (!(b.filtered ?? []).length) return [];
   const src = (id: string) => b.items[id]?.sourceName || b.items[id]?.source || "?";
   return [
     "",
-    `Filtered as noise after reading the full text (${b.filtered.length}):`,
-    ...b.filtered.map((f) => `- ${b.items[f.itemId]?.title ?? f.itemId} — ${src(f.itemId)} — ${f.category}`),
+    `Filtered as noise after reading the full text (${(b.filtered ?? []).length}):`,
+    ...(b.filtered ?? []).map((f) => `- ${b.items[f.itemId]?.title ?? f.itemId} — ${src(f.itemId)} — ${f.category}`),
   ];
 }
 
