@@ -41,6 +41,8 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
   // Where a finger or a mouse went down, so the pointer that comes up can be
   // read as a swipe or as a tap.
   const downRef = useRef<{ x: number; y: number; id: number } | null>(null);
+  // The pointer a pen has taken, so the page never reads a turn out of it.
+  const markingRef = useRef<number | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -53,10 +55,14 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       buffer: p.buffer,
       viewState: p.viewState,
       annotations: p.annotations,
+      authorName: p.authorName,
       callbacks: {
         onChangeViewState: (s) => propsRef.current.onChangeViewState(s),
         onChangeViewStats: (s) => propsRef.current.onChangeViewStats(s),
         onQuoteHighlightChange: (a) => propsRef.current.onQuoteHighlightChange?.(a),
+        onSaveAnnotations: (anns) => propsRef.current.onSaveAnnotations(anns),
+        onSelectAnnotations: (ids) => propsRef.current.onSelectAnnotations(ids),
+        onAnnotationPopup: (params) => propsRef.current.onSetAnnotationPopup(params),
       },
     })
       .then((controller) => {
@@ -92,7 +98,7 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
     const onTouchMove = (e: TouchEvent) => {
       const controller = controllerRef.current;
       if (!controller) return;
-      if (claimsTouch(controller.currentLayout(), false)) e.preventDefault();
+      if (claimsTouch(controller.currentLayout(), controller.isDrawing())) e.preventDefault();
     };
     host.addEventListener("touchmove", onTouchMove, { passive: false });
     return () => host.removeEventListener("touchmove", onTouchMove);
@@ -104,12 +110,31 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
   }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // The pens get the pointer first. One they take is theirs to the end: it
+    // is captured here so a stroke that leaves the pane still finishes, and no
+    // swipe or tap is read out of it.
+    if (controllerRef.current?.markPointerDown(e.nativeEvent)) {
+      markingRef.current = e.pointerId;
+      downRef.current = null;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     downRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (markingRef.current !== e.pointerId) return;
+    controllerRef.current?.markPointerMove(e.nativeEvent);
   }, []);
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const controller = controllerRef.current;
+      if (markingRef.current === e.pointerId) {
+        markingRef.current = null;
+        controller?.markPointerUp(e.nativeEvent);
+        return;
+      }
       const down = downRef.current;
       downRef.current = null;
       const host = hostRef.current;
@@ -123,6 +148,9 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
         return;
       }
       if (Math.abs(dx) >= SWIPE_MIN || Math.abs(dy) >= SWIPE_MIN) return;
+      // A press on a mark opens it, before anything under it is consulted: the
+      // mark is what the reader can see at that point.
+      if (controller.markTapAt(e.clientX, e.clientY)) return;
       // A tap on one of the book's own links follows it, wherever on the page
       // it landed — a footnote marker in the right-hand tap zone is a footnote.
       if (controller.followLinkAt(e.clientX, e.clientY)) return;
@@ -149,9 +177,12 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       data-testid="epub-reader"
       tabIndex={-1}
       onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => {
         downRef.current = null;
+        markingRef.current = null;
+        controllerRef.current?.markPointerCancel();
       }}
       onKeyDown={onKeyDown}
     />

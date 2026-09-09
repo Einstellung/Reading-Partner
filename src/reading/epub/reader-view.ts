@@ -16,6 +16,7 @@
 
 import type {
   Annotation,
+  AnnotationPopupParams,
   Tool,
   ViewInstance,
   ViewState,
@@ -41,6 +42,7 @@ import {
   zoomStepUp,
   type Zoom,
 } from "./page-geometry";
+import { createMarkLayer, type MarkLayer, type SpineText } from "./mark-layer";
 import { createPageCard, type PageCard } from "./page-card";
 import { createPageResources } from "./page-mount";
 import type { Pagination } from "./paginate";
@@ -53,7 +55,7 @@ import {
   statsOf,
   viewStateOf,
 } from "./reader-logic";
-import { extractDocumentText, runAt } from "./text";
+import { extractDocumentText, indexRuns, runAt } from "./text";
 import { hrefFragment, resolveZipPath } from "./zip";
 
 // The same violet the PDF side paints an AI-cited quote in
@@ -68,6 +70,10 @@ export interface EpubReaderCallbacks {
   onChangeViewState(state: ViewState): void;
   onChangeViewStats(stats: ViewStats): void;
   onQuoteHighlightChange(active: boolean): void;
+  /** A mark the reader just drew, for the shell to persist (and to open on). */
+  onSaveAnnotations(annotations: Annotation[]): void;
+  onSelectAnnotations(ids: string[]): void;
+  onAnnotationPopup(params?: AnnotationPopupParams): void;
 }
 
 export interface EpubReaderController extends ViewInstance {
@@ -76,8 +82,20 @@ export interface EpubReaderController extends ViewInstance {
   /** Turn one page (paged) or one screen (vertical). */
   turn(direction: "prev" | "next"): void;
   currentLayout(): ReadingLayout;
-  /** The sheet under a viewport point, for the annotation layer to come. */
+  /** The sheet under a viewport point. */
   cardAt(clientX: number, clientY: number): PageCard | null;
+  /**
+   * The marks' half of the pointer. The pane forwards every pointer here
+   * first: a down the pens take is a down the page turn never sees, and a tap
+   * that lands on a mark opens it instead of turning.
+   */
+  markPointerDown(e: PointerEvent): boolean;
+  markPointerMove(e: PointerEvent): void;
+  markPointerUp(e: PointerEvent): boolean;
+  markPointerCancel(): void;
+  markTapAt(clientX: number, clientY: number): boolean;
+  /** Whether a stroke is being drawn, so the pane can claim the touch. */
+  isDrawing(): boolean;
   destroy(): void;
 }
 
@@ -87,6 +105,8 @@ export interface EpubReaderOptions {
   buffer: ArrayBuffer;
   viewState: ViewState | null;
   annotations: Annotation[];
+  /** Who a mark drawn here is by, the same string the PDF side is handed. */
+  authorName: string;
   callbacks: EpubReaderCallbacks;
 }
 
@@ -214,7 +234,11 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     const block = pagination.blocks[i];
     const doc = book.docs[block.spine];
     const ordinal = i - firstPageOfSpine(block.spine);
-    slot.shown = card.show(doc, block.cfi, ordinal);
+    slot.shown = card.show(doc, block.cfi, ordinal).then(() => {
+      // The sheet is only now showing this page's column, which is the only
+      // state the marks' rects can be measured against.
+      if (!destroyed && slots[i].card === card) marks.paint(card, i);
+    });
     return card;
   }
 
@@ -236,6 +260,43 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   function firstPageOfSpine(spine: number): number {
     return spineStarts.get(spine) ?? 0;
   }
+
+  // --- the marks ----------------------------------------------------------
+  // One index of a spine item's text per book, built when a mark on it is first
+  // written or repaired. It is the ingestion tree's, never a card's clone's
+  // (docs/pitfall/267).
+  const spineTexts = new Map<number, SpineText>();
+  function spineOf(index: number): SpineText | null {
+    const hit = spineTexts.get(index);
+    if (hit) return hit;
+    const doc = book.docs[index];
+    const root = doc?.doc.documentElement;
+    if (!doc || !root) return null;
+    const entry: SpineText = { index, idref: doc.idref, root, text: doc.text, runs: indexRuns(doc.text) };
+    spineTexts.set(index, entry);
+    return entry;
+  }
+
+  const marks: MarkLayer = createMarkLayer({
+    owner,
+    authorName: opts.authorName,
+    cardAt: (x, y) => cardAt(x, y),
+    pageOfCard: (card) => {
+      for (let i = 0; i < slots.length; i++) if (slots[i].card === card) return i;
+      return null;
+    },
+    cardOfPage: (i) => slots[i]?.card ?? null,
+    blockAt: (i) => {
+      const block = pagination.blocks[i];
+      return block ? { spine: block.spine, charOffset: block.charOffset, label: block.label ?? null } : undefined;
+    },
+    pageOfPoint: (spine, charOffset) => blockIndexAt(pagination, spine, charOffset),
+    spineOf,
+    onSave: (annotations) => callbacks.onSaveAnnotations(annotations),
+    onSelect: (ids) => callbacks.onSelectAnnotations(ids),
+    onPopup: (params) => callbacks.onAnnotationPopup(params),
+  });
+  marks.reset(opts.annotations);
 
   function visibleRange(): { first: number; last: number } {
     if (layout === "vertical") {
@@ -318,11 +379,25 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   observer.observe(scroller);
 
   // --- the quote ------------------------------------------------------------------
+  // The overlay carries two sublayers: the marks' and the quote's. Each clears
+  // only its own, or a cited quote would wipe the page's marks off the sheet.
+  function quoteLayer(card: PageCard): HTMLElement | null {
+    const overlay = card.overlay;
+    if (!overlay) return null;
+    const existing = overlay.querySelector<HTMLElement>(".rp-quote");
+    if (existing) return existing;
+    const el = owner.createElement("div");
+    el.className = "rp-quote";
+    el.style.cssText = "position:absolute;inset:0;pointer-events:none";
+    overlay.append(el);
+    return el;
+  }
+
   function clearQuote(): void {
     if (!quote) return;
     const card = slots[quote.pageIndex]?.card;
     quote = null;
-    if (card?.overlay) card.overlay.replaceChildren();
+    if (card) quoteLayer(card)?.replaceChildren();
     callbacks.onQuoteHighlightChange(false);
   }
 
@@ -355,12 +430,14 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     // it a column over. The sheet follows the words.
     if (rects.length > 0 && !rects.some(onSheet) && card.showColumnOf(range)) rects = card.rectsOf(range);
     if (rects.length === 0) return false;
-    card.overlay.replaceChildren();
+    const layer = quoteLayer(card);
+    if (!layer) return false;
+    layer.replaceChildren();
     for (const r of rects) {
       if (!onSheet(r)) continue;
       const d = owner.createElement("div");
       d.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:${QUOTE_COLOR};opacity:${QUOTE_OPACITY};border-radius:2px;`;
-      card.overlay.append(d);
+      layer.append(d);
     }
     quote = { pageIndex: target };
     callbacks.onQuoteHighlightChange(true);
@@ -426,6 +503,18 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
 
     navigate: (target) => {
       clearQuote();
+      if (target.annotationID) {
+        const page = marks.pageOf(target.annotationID);
+        if (page === null) return;
+        placePage(page, 0);
+        const id = target.annotationID;
+        // The sheet has to be mounted and its pictures settled before the mark
+        // has rects to be brought onto it.
+        void cardReady(page).then((card) => {
+          if (card) marks.reveal(page, id);
+        });
+        return;
+      }
       if (typeof target.pageIndex === "number") placePage(target.pageIndex, 0);
     },
 
@@ -437,14 +526,20 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
 
     clearQuoteHighlight: clearQuote,
 
-    // Marks on the new page cards are the next stage (docs/63): the overlay on
-    // every card, rangeOf/cfiOf and the two coordinate conversions are the hooks
-    // it hangs on. Until then the tool rack does nothing on an EPUB.
-    setTool: (_tool?: Tool) => {},
-    setFingerDraw: (_on: boolean) => {},
-    setAnnotations: (_anns: Annotation[]) => {},
-    unsetAnnotations: (_ids: string[]) => {},
-    selectAnnotations: (_ids: string[]) => {},
+    // The marks are the layer's (mark-layer.ts); the desk only says which sheet
+    // is which page and hands the pointers on.
+    setTool: (tool?: Tool) => marks.setTool(tool),
+    setFingerDraw: (on: boolean) => marks.setFingerDraw(on),
+    setAnnotations: (anns: Annotation[]) => marks.setAnnotations(anns),
+    unsetAnnotations: (ids: string[]) => marks.unsetAnnotations(ids),
+    selectAnnotations: (ids: string[]) => marks.selectAnnotations(ids),
+
+    markPointerDown: (e) => marks.pointerDown(e),
+    markPointerMove: (e) => marks.pointerMove(e),
+    markPointerUp: (e) => marks.pointerUp(e),
+    markPointerCancel: () => marks.pointerCancel(),
+    markTapAt: (x, y) => marks.tapAt(x, y),
+    isDrawing: () => marks.isDrawing(),
 
     followLinkAt: (clientX, clientY) => {
       const card = cardAt(clientX, clientY);
@@ -478,6 +573,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     cardAt,
     destroy: () => {
       destroyed = true;
+      marks.pointerCancel();
       observer.disconnect();
       scroller.removeEventListener("scroll", onScroll);
       if (scrollTimer !== null) clearTimeout(scrollTimer);
