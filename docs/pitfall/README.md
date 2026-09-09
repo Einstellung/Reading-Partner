@@ -57,6 +57,7 @@
 | 查首屏耗时、字体加载开销 | WebKit / webview |
 | 渲染 AI 回复的 markdown、加 remark/rehype 插件 | markdown 渲染 |
 | 无头截图核对渲染 | 开发环境 |
+| 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
@@ -333,6 +334,7 @@
 - [227-virtual-time-shoots-before-the-pdfium-worker-answers](./227-virtual-time-shoots-before-the-pdfium-worker-answers.md) — `--virtual-time-budget` 的虚拟时钟在主线程空闲时直接跳表，不等 worker 里 PDFium 的 wasm 编译和 raster，图拍的是回退态（封面全是首字母块），预算调大只会先撞引擎自己的 15s 超时；要等异步内容改用 CDP 驱动：页面挂个完成标志，脚本轮询到了再 `Page.captureScreenshot`，视口用 `Emulation.setDeviceMetricsOverride`（顺带绕开坑 135、220）
 - [230-virtual-time-never-lets-the-pdf-engine-come-up](./230-virtual-time-never-lets-the-pdf-engine-come-up.md) — `--virtual-time-budget` 在静态产物上也拍不到阅读器：虚拟时钟不等 PDFium 的 wasm 编译、init 和跨 worker 握手，图里侧栏都在、页面那半是空的，资源面板还显示 `pdfium.wasm` 200；要跑引擎的页面走 CDP 用真实时间等，`Emulation.setDeviceMetricsOverride` 钉视口
 - [231-a-thrown-render-blanks-the-page-and-says-nothing](./231-a-thrown-render-blanks-the-page-and-says-nothing.md) — React 18 吃到未捕获异常会卸掉整棵根树，留下空的 `#root`，于是「没挂载」和「挂载后炸了」在 DOM 上一模一样，无头 Chrome 又不打印页面异常；截图脚本一律 `Runtime.enable` 并把 `exceptionThrown` 和 error 级 `consoleAPICalled` 打出来
+- [284-a-photo-of-a-screen-is-mostly-the-room](./284-a-photo-of-a-screen-is-mostly-the-room.md) — 用户拍的屏幕照片里八成的光是屋里反射的（实测反射项占纸面亮度 78–83%），对比度被整体压平成「蒙了一层」，照度不匀又在同一页里排出假的深浅次序；判渲染问题只认设备截图或 `scripts/ios-sim.sh shot`，非要用照片就先拿同图里两块真实同色的面对读数
 - [123-vite-serves-node-modules-over-http](./123-vite-serves-node-modules-over-http.md) — `node_modules` 在 `server.fs.allow` 默认的根下面，dev server 照样按 HTTP 发出去（还给套一层明文 sourcemap）；秘密要写在服务的树之外，`.gitignore` 和 0600 都拦不住
 - [124-fs-deny-replaces-the-defaults](./124-fs-deny-replaces-the-defaults.md) — vite 解析 `server.fs?.deny || ['.env', '.env.*', '*.{crt,pem}']`，插件从 `config()` 返回一份 deny 就把这三条默认值整个顶掉，dev server 当场 200 发出 `.env` 正文外加明文 sourcemap；要加只能在 `configResolved` 里往已解析的数组 push。凡是 `x || 默认值` 解析的 vite 字段都是提供即替换
 - [134-dropthreadcache-reloads-instead-of-dropping](./134-dropthreadcache-reloads-instead-of-dropping.md) — `dropThreadCache` 不删缓存条目，它从文件重读一遍再合进去；`beforeEach` 里调它不隔离用例，同一个 `threadId` 会继承上一个用例追加的整段历史，用例之间要换 id
