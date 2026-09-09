@@ -78,7 +78,7 @@ test("only today's unhalted run is resumable", () => {
   expect(isResumable(null, "2026-07-22")).toBe(false);
   expect(isResumable({ ...s, halt: { kind: "stopped" } }, "2026-07-22")).toBe(false);
   expect(isResumable({ ...s, halt: { kind: "failed", error: "x" } }, "2026-07-22")).toBe(false);
-  expect(isResumable({ ...s, version: 1 as unknown as 2 }, "2026-07-22")).toBe(false);
+  expect(isResumable({ ...s, version: 2 as unknown as 3 }, "2026-07-22")).toBe(false);
 });
 
 test("syncSources adopts a new source, drops an unsubscribed one, keeps what already ran", () => {
@@ -117,8 +117,10 @@ function discovered(): InfoRunState {
   );
 }
 
-function verdict(id: string, keep: boolean, confidence = 2) {
-  return { id, keep, why: "", confidence };
+// A hit on one room, or nothing at all. Which room does not matter here — what
+// run-state does with a verdict is ask whether it kept anything.
+function verdict(id: string, keep: boolean, confidence = 0.5) {
+  return { id, hits: keep ? [{ labId: "lab-a", observables: ["o-a1"] }] : [], confidence };
 }
 
 test("only unjudged items are owed to the screen, so a resumed run never rejudges", () => {
@@ -129,11 +131,13 @@ test("only unjudged items are owed to the screen, so a resumed run never rejudge
   expect(collectProgress(after)).toMatchObject({ screened: 2, kept: 1, dropped: 1 });
 });
 
-test("an item the model skipped in its reply is kept, not silently dropped", () => {
-  // The batch asked about both; the reply mentions only one.
+test("an item the model skipped in its reply is judged anyway, as hitting nothing", () => {
+  // The batch asked about both; the reply mentions only one. The unjudged one
+  // cannot be kept — a cable has to name the room it belongs to and there is no
+  // room to name — but it must not stay owed either, or the resume rejudges it.
   const s = applyVerdicts(discovered(), ["a1", "a2"], [verdict("a2", false)], 4000);
-  expect(s.verdicts.a1).toEqual({ id: "a1", keep: true, why: "not judged; kept by default", confidence: 0 });
-  expect(s.verdicts.a2.keep).toBe(false);
+  expect(s.verdicts.a1).toEqual({ id: "a1", hits: [], confidence: 0 });
+  expect(unscreenedItems(s).map((i) => i.id)).toEqual(["b1", "b2"]);
 });
 
 test("finishing the screen selects the keeps in discovery order and moves to fetching", () => {
@@ -155,7 +159,12 @@ test("the cap cuts the least confident keeps and says how many it cut", () => {
   const judged = applyVerdicts(
     discovered(),
     ["a1", "a2", "b1", "b2"],
-    [verdict("a1", true, 1), verdict("a2", true, 3), verdict("b1", true, 0), verdict("b2", true, 2)],
+    [
+      verdict("a1", true, 0.3),
+      verdict("a2", true, 0.9),
+      verdict("b1", true, 0),
+      verdict("b2", true, 0.6),
+    ],
     4000,
   );
   const done = finishScreening(judged, 2, 5000);
@@ -204,9 +213,10 @@ test("a carried verdict means the screen never sees that item again", () => {
 });
 
 test("a verdict the run produced itself wins over the pool's older one", () => {
-  const judged = applyVerdicts(discovered(), ["a1"], [verdict("a1", true, 3)], 4000);
+  const judged = applyVerdicts(discovered(), ["a1"], [verdict("a1", true, 0.9)], 4000);
   const s = seedRun(judged, seed({ verdicts: { a1: verdict("a1", false, 0) } }), 9000);
-  expect(s.verdicts.a1).toMatchObject({ keep: true, confidence: 3 });
+  expect(s.verdicts.a1).toMatchObject({ confidence: 0.9 });
+  expect(s.verdicts.a1.hits.length).toBe(1);
 });
 
 test("a verdict for an item nobody is holding is not carried in", () => {

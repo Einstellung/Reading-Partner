@@ -45,6 +45,7 @@ import {
   screenSystemPrompt,
   screenUserMessage,
   type ScreenParseOutcome,
+  type ScreenTarget,
   type ScreenVerdict,
 } from "../collect/screen";
 import type { InfoRunPhase } from "../collect/run-state";
@@ -194,6 +195,7 @@ async function listSources(): Promise<InfoSourceRef[]> {
 async function attemptScreen(
   model: ResolvedModel,
   userText: string,
+  targets: ScreenTarget[],
   validIds: Set<string>,
   opts: AiCallOptions,
   extra?: string,
@@ -206,7 +208,7 @@ async function attemptScreen(
     opts,
   );
   const tally = newTally();
-  const parsed = parseScreenVerdicts(text, validIds, tally);
+  const parsed = parseScreenVerdicts(text, targets, validIds, tally);
   reportParse({
     site: "info-screen",
     model,
@@ -223,17 +225,21 @@ async function attemptScreen(
 // parse failure gets one corrective retry, then throws so the watchdog treats it
 // as transient.
 async function screen(
-  input: { profile: string; items: InfoItem[] },
+  // `targets` is optional only so the pipeline's current call site still
+  // typechecks; the integrator wires the rooms through and the profile out.
+  input: { profile: string; items: InfoItem[]; targets?: ScreenTarget[] },
   opts: AiCallOptions,
 ): Promise<ScreenVerdict[]> {
-  const userText = screenUserMessage(input.profile, input.items);
+  const targets = input.targets ?? [];
+  const userText = screenUserMessage(targets, input.items);
   const validIds = new Set(input.items.map((it) => it.id));
   const model = await resolveModel("chat");
-  const parsed = await attemptScreen(model, userText, validIds, opts);
+  const parsed = await attemptScreen(model, userText, targets, validIds, opts);
   if (parsed.ok) return parsed.verdicts;
   const reparsed = await attemptScreen(
     model,
     userText,
+    targets,
     validIds,
     opts,
     "\n\nYour previous reply was not valid JSON in the required shape. Reply with ONLY the JSON object, no prose, no markdown fence.",

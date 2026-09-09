@@ -45,7 +45,9 @@ function marksOnDisk(): Record<string, PoolMark> {
 // What a run's checkpoint does with the pool it was handed.
 function checkpoint(): Parameters<typeof recordRun>[2] {
   return {
-    verdicts: { "item-c": { id: "item-c", keep: true, why: "new", confidence: 0.8 } },
+    verdicts: {
+      "item-c": { id: "item-c", hits: [{ labId: "lab-a", observables: [] }], confidence: 0.8 },
+    },
     briefed: ["item-c"],
   };
 }

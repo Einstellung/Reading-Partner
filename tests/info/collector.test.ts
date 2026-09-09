@@ -289,8 +289,8 @@ test("the draw resolves already-fetched bodies against the day's article cache, 
   await c.ingest([item("kept"), item("lost")]);
   await c.record("2026-08-11", {
     verdicts: {
-      kept: { id: "kept", keep: true, why: "", confidence: 3 },
-      lost: { id: "lost", keep: true, why: "", confidence: 3 },
+      kept: { id: "kept", hits: [{ labId: "lab-a", observables: [] }], confidence: 0.9 },
+      lost: { id: "lost", hits: [{ labId: "lab-a", observables: [] }], confidence: 0.9 },
     },
     bodies: ["kept", "lost"],
   });
@@ -300,8 +300,9 @@ test("the draw resolves already-fetched bodies against the day's article cache, 
   expect(seed.items.map((it) => it.id)).toEqual(["kept", "lost"]);
   expect(Object.keys(seed.bodies)).toEqual(["kept"]);
   expect(seed.bodies["kept"].textContent).toBe("the body");
-  // Carried verdicts mean the screen never sees either of them again.
-  expect(seed.verdicts["lost"].keep).toBe(true);
+  // A keep is not carried — the mark cannot say which room it hit — so both go
+  // back to the screen; what the draw saved is the body it already has.
+  expect(seed.verdicts["lost"]).toBeUndefined();
 });
 
 test("drawing sweeps first, so a device that only ever opens the app still expires its old days", async () => {
