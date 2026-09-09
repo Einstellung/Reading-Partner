@@ -2,7 +2,7 @@
 
 ## 现象
 
-`src/info/briefing/speech/split.ts` 要在流式下产出和整段
+`src/info/briefer/speech/split.ts` 要在流式下产出和整段
 `normalizeForSpeech` + 切句一模一样的句子序列，办法是把缓冲区里已经安全的一段冻结下来先
 规范化。冻结规则手工推演过一遍——前一个字符是硬边界 `。！？；：` 或换行，后一个字符是词
 字符——推演漏了三处。三处都要拿对抗性随机文本跑属性测试才暴露：正常简报语料（日期、URL、

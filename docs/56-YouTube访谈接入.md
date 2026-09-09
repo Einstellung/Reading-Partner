@@ -41,7 +41,7 @@ yt-dlp 不打包进 Tauri。`externalBin` 写进主配置，iOS 构建会去找 
 
 不单开一条不进分拣的 lane，那样访谈不参与跨源去重，播客讲过、彭博社也报过的同一件事会在简报里出现两遍。
 
-新文件 `src/info/briefing/digest.ts`，纯函数（提示词加解析），编排在 `live.ts`，接在 fetching 相位之后。按分层规矩留在 info 域，不进 capability。
+新文件 `src/info/collect/digest.ts`，纯函数（提示词加解析），编排在 `live.ts`，接在 fetching 相位之后。按分层规矩留在 info 域，不进 capability。
 
 成本（4 字符约 1 token）：
 

@@ -38,7 +38,7 @@ Rust 侧工作量差得明显。硅基流动是 OpenAI 兼容的 `POST {base}/v1
 
 **v2（等 TTS 落地再做）：**speaking 的振幅。别在 Swift 里给播放装第二个 tap 按帧往外推——按句合成的时候 Swift 手上已经有整句 PCM，顺手算一条 25 ms 窗的 RMS 包络（40 值/秒），随句子开始一次性发过去，TS 侧按本地时钟回放。这条包络和 docs/33 里「按这一句共 N 字、总时长 T 线性插值」用的是同一套机器，本来就要有。一句一条事件，20 分钟简报总共几十条 IPC。
 
-**落在哪。** 纯函数（level → scale/glow、平滑、状态到动画参数的映射）进 `src/ui/components/orb/orb.ts` 配 `orb.test.ts`，渲染进同目录 `Orb.tsx`——`hold-zones.ts` 就是这个先例：ui 层里的纯显示数学，`.ts` 可测。新目录必须在 `tests/layering.test.ts` 的 LAYER 表里登记 `"ui/components/orb": "ui"`，否则第一个测试就红。不产生任何新的跨层边：ui 可以 import capability（`ai/voice`）和 domain（`info/briefing`），状态推导放在 orb 模块里就行，别为了「共用」把它塞进 `ai/voice`——那是 headless capability，显示数学不属于它。
+**落在哪。** 纯函数（level → scale/glow、平滑、状态到动画参数的映射）进 `src/ui/components/orb/orb.ts` 配 `orb.test.ts`，渲染进同目录 `Orb.tsx`——`hold-zones.ts` 就是这个先例：ui 层里的纯显示数学，`.ts` 可测。新目录必须在 `tests/layering.test.ts` 的 LAYER 表里登记 `"ui/components/orb": "ui"`，否则第一个测试就红。不产生任何新的跨层边：ui 可以 import capability（`ai/voice`）和 domain（`info/briefer`），状态推导放在 orb 模块里就行，别为了「共用」把它塞进 `ai/voice`——那是 headless capability，显示数学不属于它。
 
 **10 Hz 够不够：够，前提是只画一个会呼吸的团。** 语音包络的调制谱峰在 4–5 Hz（音节率），10 Hz 正好是 Nyquist，每音节两个采样。但一个带 48 ms 起振、167 ms 回落的团，它自己的平滑已经把截止频率压到远低于 10 Hz，眼睛看到的是句子级的呼吸，不是音节。代价是峰值被削平、整体晚约 100 ms，对一个情绪指示器不可见。10 Hz 真正不够的是多柱波形图——那个要看起来像语音，2 采样/音节会露馅。别画波形图。
 

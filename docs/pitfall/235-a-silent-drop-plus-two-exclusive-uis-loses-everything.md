@@ -14,6 +14,6 @@ info 的语音通话，整场对话一句都不落盘。看不出任何异常：
 
 ## 解法
 
-建记录的责任放在会写它的那一侧，不要下沉进 store：语音通话在 `threadTranscript` 的 `begin()` 里，第一条 `record` 之前，按文字聊天同样的 id 和 `"info"` 锚建线程（`src/info/companion/voice-call-live.ts`）。store 保持原样——返回 `undefined` 是它的契约，改成自动新建会动到所有调用方。
+建记录的责任放在会写它的那一侧，不要下沉进 store：语音通话在 `threadTranscript` 的 `begin()` 里，第一条 `record` 之前，按文字聊天同样的 id 和 `"info"` 锚建线程（`src/info/briefer/voice-call-live.ts`）。store 保持原样——返回 `undefined` 是它的契约，改成自动新建会动到所有调用方。
 
 判据：一个写入口静默丢弃时，先问"谁负责先把记录建出来"，再看那个负责人是不是在所有入口都会跑到。互斥的两个界面就是两个入口。

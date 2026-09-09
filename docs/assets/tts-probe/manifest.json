@@ -17,7 +17,7 @@
   },
   "text_pipeline": {
     "source": "SAMPLE briefing corpus + one added sentence",
-    "normalizer": "src/info/briefing/speech/normalize.ts (normalizeForSpeech)",
+    "normalizer": "src/info/briefer/speech/normalize.ts (normalizeForSpeech)",
     "split": "on 。！？； keeping the terminator"
   },
   "trim": {

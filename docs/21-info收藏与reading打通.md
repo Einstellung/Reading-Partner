@@ -30,7 +30,7 @@ briefing 卡片今天只有三个手势：打开、×（dismiss）、滤掉区�
 
 AI 提议的不只是 topic，还有这条材料对这个 topic 加了什么、跟已读的是印证还是冲突。这段判断和 topic 提议一起进确认卡，用户点头才落。
 
-确认卡的机制现成，`update_profile` 走的就是这条路：工具只起草并推一张卡，UI 的 Apply 才写盘（`src/info/companion/companion-tools.ts` → `src/info/briefing/cards.ts` → `InfoCards.tsx` → `use-info-call.ts` 的 `handleApplyProfile`）。收藏沿用同一形状。
+确认卡的机制现成，`update_profile` 走的就是这条路：工具只起草并推一张卡，UI 的 Apply 才写盘（`src/info/briefer/companion-tools.ts` → `src/info/boxes/cards.ts` → `InfoCards.tsx` → `use-info-call.ts` 的 `handleApplyProfile`）。收藏沿用同一形状。
 
 ## 归属与默认 topic
 
@@ -52,7 +52,7 @@ info 和 reading 各有一个根聊天。新收下的材料浮现在 reading 的
 
 纠错在对话里做，不为它加界面元素。归错了就跟 AI 说一声改掉。取消收下是真的移除，不是归档。
 
-抓不到正文是常态不是异常（付费墙、要 JS 的站、公众号）。"证据不全"是一等状态：引用时明说原文没拿到，不能让 AI 拿摘要当原文讲。`InfoItem.summaryOnly` 已经是一等字段，triage 的 prompt 标 `[summary only]` 并禁止装作读过（`src/info/briefing/triage.ts`），缺的是这个标记跟着材料进 reading。
+抓不到正文是常态不是异常（付费墙、要 JS 的站、公众号）。"证据不全"是一等状态：引用时明说原文没拿到，不能让 AI 拿摘要当原文讲。`InfoItem.summaryOnly` 已经是一等字段，triage 的 prompt 标 `[summary only]` 并禁止装作读过（`src/info/collect/triage.ts`），缺的是这个标记跟着材料进 reading。
 
 时效跟着走。发表时间必须存下来，引用时必须带上，否则三个月前的"最新进展"会被讲成新闻。`publishedAt` 在 `InfoItem` 和 `BriefingItemMeta` 上都已存下，引用路径上没有。
 
@@ -82,12 +82,12 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - reading 的根聊天。现在没有。所有阅读对话都在 `threads-<bookId>.json` 里，只能从打开的书里进（划线气泡、标记列表、顶栏 AI 按钮的书级 thread）；`LibraryScreen` 一个聊天入口都没有。要新加一个不属于任何书的 thread key 和一个进得去的屏，新收下的材料在那儿浮现。
 
-- info 的根聊天跨天。现在按天分文件：`infoBookId(date)` 返回 `info-<date>`，落成 `threads-info-<date>.json`，thread id 只有 `briefing` / `onboarding` / itemId 三种（`src/info/companion/call.ts`、`use-info-call.ts`）。"info 有一个根聊天"要一个跨天不变的 key，否则每天换一个根。
+- info 的根聊天跨天。现在按天分文件：`infoBookId(date)` 返回 `info-<date>`，落成 `threads-info-<date>.json`，thread id 只有 `briefing` / `onboarding` / itemId 三种（`src/info/briefer/call.ts`、`use-info-call.ts`）。"info 有一个根聊天"要一个跨天不变的 key，否则每天换一个根。
 
 - 共用的记忆作用域。AI observations 只有按 topic 一种形态：`ObservationFileStore` 的构造参数就是 topicId，目录是 `memory-<topicId>/`（历史名）。info 侧一条观察也不写，只读画像和反馈日志。跨场景共用的今天只有 `user-profile.md` 一份文件。两个根共用记忆要一个不属于任何 topic 的记忆作用域，且从第一天就是它——先按 topic 建再合并就是那次要避免的迁移。
 
 - 引用时的三件事。时效、证据不全两条已落地，见 `src/reading/saved-article-tools.ts`：`publishedAt` 进了引用路径（`publishedDay`），`summaryOnly` 跟着材料进了 reading 的 prompt，工具由 `src/reading/turn.ts` 装配（`buildSavedArticleTools`、`SAVED_ARTICLES_PROMPT`）。只剩第三条：用了哪几条材料的可见性。现在没有落点：工具痕迹是瞬时的，成功即从行里消失，从不落盘（`src/ai/tool-status.ts`）。可见性既然是闸的一部分，就不能靠一个成功就消失的东西。
 
-反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/memory/live/assemble.ts` → `src/info/briefing/live.ts`）。reading→info 通了，info→reading 一条都没有。
+反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/memory/live/assemble.ts` → `src/info/program/live.ts`）。reading→info 通了，info→reading 一条都没有。
 
 *讨论：2026-07-27*
