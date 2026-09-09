@@ -31,7 +31,8 @@ export type ParseSite =
   | "prep-plan"
   | "notes-plan"
   | "info-screen"
-  | "info-triage"
+  | "info-analyst"
+  | "info-synthesis"
   | "tool-args";
 
 // Why the output was unusable.

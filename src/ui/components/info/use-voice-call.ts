@@ -14,7 +14,7 @@ import { createLiveVoiceCall, NO_VOICE_CALL } from "../../../info/briefer/voice-
 import type { BriefingControl } from "../../../info/briefer/companion-live";
 import type { SessionPhase } from "../../../info/briefer/voice-session";
 import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../info/briefer/voice-call";
-import type { Briefing } from "../../../info/collect/types";
+import type { Briefing } from "../../../info/boxes/types";
 
 export interface VoiceCallOptions {
   /** The day whose thread the call is about. */

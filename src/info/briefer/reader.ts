@@ -35,8 +35,8 @@ import {
   type CollectorReport,
 } from "./handoff";
 import { currentDeviceId } from "../../platform/app/device";
-import type { InfoSnapshot, RunStart } from "../collect/pipeline";
-import type { Briefing } from "../collect/types";
+import type { InfoSnapshot, RunStart } from "../boxes/pipeline";
+import type { Briefing } from "../boxes/types";
 
 // What asking for a briefing did. Two of the three come from the pipeline (it
 // started a run, or it was already running one and this start was refused); the
@@ -144,9 +144,11 @@ export function articleState(
   bodies: PublishedBodies | null,
   itemId: string,
 ): ArticleState {
+  // A briefing only carries the items it points at, so an id it does not know
+  // is one the day never delivered — a link out of an older briefing, or a
+  // headline the screen dropped. "unknown" is the honest answer to both, and it
+  // is the one the article view already renders.
   if (!briefing || !briefing.items[itemId]) return { kind: "unknown" };
-  const dropped = (briefing.filtered ?? []).find((f) => f.itemId === itemId);
-  if (dropped) return { kind: "filtered", category: dropped.category };
   if (!bodiesMatch(briefing, bodies)) return { kind: "pending" };
   const body = bodies!.bodies[itemId];
   if (!body || (!body.text && !body.html)) return { kind: "summaryOnly" };

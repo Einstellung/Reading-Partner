@@ -78,7 +78,7 @@ test("only today's unhalted run is resumable", () => {
   expect(isResumable(null, "2026-07-22")).toBe(false);
   expect(isResumable({ ...s, halt: { kind: "stopped" } }, "2026-07-22")).toBe(false);
   expect(isResumable({ ...s, halt: { kind: "failed", error: "x" } }, "2026-07-22")).toBe(false);
-  expect(isResumable({ ...s, version: 2 as unknown as 3 }, "2026-07-22")).toBe(false);
+  expect(isResumable({ ...s, version: 3 as unknown as 4 }, "2026-07-22")).toBe(false);
 });
 
 test("syncSources adopts a new source, drops an unsubscribed one, keeps what already ran", () => {

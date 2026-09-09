@@ -16,9 +16,10 @@ import type {
 } from "../boxes/cards";
 import { proposedTopicName } from "./topic-tool";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { InfoSnapshot, RunStart } from "../collect/pipeline";
+import type { InfoSnapshot, RunStart } from "../boxes/pipeline";
 import type { RequestOutcome } from "./reader";
-import type { Briefing } from "../collect/types";
+import { briefingOverview } from "../boxes/briefing";
+import type { Briefing } from "../boxes/types";
 
 // Info threads hang off a per-day pseudo-book, so a day's briefing, article and
 // onboarding conversations file together.
@@ -131,16 +132,15 @@ function completionNote(job: BriefingJob, b: Briefing): string {
   const worth = b.mustRead.length + b.outOfLane.length;
   const verb =
     job === "retriage" ? "re-sorted" : job === "full" ? "regenerated" : job === "joined" ? "updated" : "generated";
-  // The screened-out count belongs in the note for the same reason it belongs in
-  // the chat prompt (docs/35): "filtered: 3" over a day of four hundred headlines
-  // would otherwise read as a quiet day.
-  const screened = b.screen?.dropped
-    ? `, screened out before fetching: ${b.screen.dropped} of ${b.screen.discovered} discovered`
-    : "";
+  // The quiet rooms belong in the note as much as the loud ones (docs/63): a day
+  // where four rooms had nothing is a fact about the day, and without it the
+  // companion reads three covers as the whole bureau.
+  const quiet = b.quiet.length ? `, quiet rooms: ${b.quiet.join(", ")}` : "";
   return (
-    `Today's briefing has been ${verb}. Overview: ${b.overview} — worth your time: ${worth}, ` +
-    `one-liners: ${b.oneLiners.length}, filtered: ${(b.filtered ?? []).length}${screened}. Answer from ` +
-    `this updated briefing now, not the earlier one.`
+    `Today's briefing has been ${verb}. ${briefingOverview(b) || "Nothing moved in any room."} — ` +
+    `rooms that moved: ${b.labs.length}, worth your time: ${worth}, ` +
+    `one-liners: ${b.oneLiners.length}${quiet}. Answer from this updated briefing now, not the ` +
+    `earlier one.`
   );
 }
 
@@ -174,12 +174,12 @@ export const ASK_FAILED_NOTE =
 // a re-triage never fetches; afterwards it comes from the snapshot.
 export function briefingProgressCard(job: BriefingJob, s: InfoSnapshot | null): BriefingProgressCardData {
   const phase =
-    s && s.phase !== "idle" ? s.phase : job === "retriage" ? "triaging" : "discovering";
+    s && s.phase !== "idle" ? s.phase : job === "retriage" ? "analyzing" : "discovering";
   return {
     kind: "briefing-progress",
     phase,
     collect: s?.collect ?? null,
-    triage: s?.activity
+    analysis: s?.activity
       ? {
           startedAt: s.activity.startedAt,
           chars: s.activity.chars,
@@ -218,7 +218,7 @@ export function briefingJobUpdate(job: BriefingJob, s: InfoSnapshot): BriefingJo
         date: b.date,
         worth: b.mustRead.length + b.outOfLane.length,
         oneLiners: b.oneLiners.length,
-        filtered: (b.filtered ?? []).length,
+        labs: b.labs.length,
         ...readyCopy(job),
       },
       note: completionNote(job, b),

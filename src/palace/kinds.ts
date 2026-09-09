@@ -1001,7 +1001,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     gc: "domain-housekeeping",
-    note: "the day's own triage output, derived and rebuilt rather than carried between devices",
+    note: "the day boxed by room, derived and rebuilt rather than carried between devices",
   },
   {
     kind: "info-daily-articles",

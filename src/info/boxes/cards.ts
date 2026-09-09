@@ -6,7 +6,7 @@
 // bottom is the whole set the chat renders, add-source cards included.
 
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { CollectProgress } from "../collect/pipeline";
+import type { CollectProgress } from "./pipeline";
 
 // A persistent progress card shown while the first briefing generates in the
 // background: it updates in place from the pipeline snapshot (collection counts,
@@ -16,11 +16,11 @@ export interface BriefingProgressCardData {
   kind: "briefing-progress";
   // The funnel phase (docs/35). "fetching" is the article-body step, after
   // screening, not the whole collection.
-  phase: "discovering" | "screening" | "fetching" | "triaging";
+  phase: "discovering" | "screening" | "fetching" | "analyzing";
   // Funnel counts (present from the first phase onward).
   collect: CollectProgress | null;
-  // Triage streaming liveness, once the AI call starts.
-  triage: { startedAt: number; chars: number; attempt: number; attempts: number } | null;
+  // Streaming liveness of the room being analyzed, once its AI call starts.
+  analysis: { startedAt: number; chars: number; attempt: number; attempts: number } | null;
   // The user pressed Stop and the run is unwinding. The card says so instead of
   // going on counting sources it is no longer collecting.
   stopping?: boolean;
@@ -35,7 +35,9 @@ export interface BriefingReadyCardData {
   date: string;
   worth: number;
   oneLiners: number;
-  filtered: number;
+  // How many rooms changed today (docs/63). What the day discarded used to be
+  // the third count here; it is nobody's business now.
+  labs: number;
   title?: string;
   note?: string;
 }

@@ -4,7 +4,7 @@
 // processed. Reactions (open / dismiss) flow back as feedback. Presentational;
 // the host owns the pipeline, feedback log, and article opening.
 
-import type { Briefing, BriefingItemMeta } from "../../../info/collect/types";
+import type { Briefing, BriefingItemMeta } from "../../../info/boxes/types";
 import { Button } from "../ui/button";
 import { IconSparkle } from "../base/icons";
 import { NOTHING_CHANGED, briefingCovers, isEmptyDay, labTag, quietLine } from "./briefing-view";
@@ -79,19 +79,19 @@ export function BriefingPage(props: BriefingPageProps) {
           </p>
           {quiet && <p className="m-0 mt-2 text-[13px] text-faint-foreground">{quiet}</p>}
         </div>
-      ) : covers.length > 0 ? (
+      ) : (
         <div className="mb-6 flex flex-col gap-5 sm:mb-9 sm:gap-6">
           {covers.map((c) => (
             <div key={c.labId}>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">{c.name}</div>
+              {c.name && (
+                <div className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">{c.name}</div>
+              )}
               <p className="m-0 mt-1.5 font-display text-[17px] font-medium leading-relaxed text-foreground sm:text-[19px]">
                 {c.cover}
               </p>
             </div>
           ))}
         </div>
-      ) : (
-        <p className="m-0 mb-6 font-display text-[17px] font-medium leading-relaxed text-foreground sm:mb-9 sm:text-[19px]">{b.overview}</p>
       )}
 
       {/* Worth your time. */}

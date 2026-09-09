@@ -48,7 +48,7 @@ test("an already-added ProbeConfirmCard shows no Add button", () => {
 
 test("BriefingReadyCard dispatches navigate:briefing with the date", () => {
   let action: CardAction | undefined;
-  const payload: BriefingReadyCardData = { kind: "briefing-ready", date: "2026-07-22", worth: 3, oneLiners: 1, filtered: 2 };
+  const payload: BriefingReadyCardData = { kind: "briefing-ready", date: "2026-07-22", worth: 3, oneLiners: 1, labs: 2 };
   const el = BriefingReadyCard({ payload, surface: "call", dispatch: (a) => (action = a) }) as ReactElement;
   buttons(el)[0].props.onClick();
   expect(action).toEqual({ kind: "navigate", to: "briefing", arg: "2026-07-22" });

@@ -16,7 +16,7 @@
 // is no guessing left to do here.
 
 import type { ArticleBody } from "../../../info/briefer/reader";
-import type { BriefingItemMeta } from "../../../info/collect/types";
+import type { BriefingItemMeta } from "../../../info/boxes/types";
 import type { SavedArticleInput } from "../../../reading/saved-articles";
 
 export function toSavedArticleInput(ctx: {

@@ -10,7 +10,7 @@ import { savedArticleId } from "../../../reading/saved-articles";
 import type { HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
-import type { InfoSnapshot } from "../../../info/collect/pipeline";
+import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
 import { liveProbeAndTrial } from "../../../info/sources/source-live";
 import type { SignInSite } from "../../../info/sources/site-session";

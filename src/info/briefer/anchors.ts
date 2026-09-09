@@ -11,7 +11,8 @@
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND } from "./desk";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
-import type { Briefing } from "../collect/types";
+import { briefingOverview } from "../boxes/briefing";
+import type { Briefing } from "../boxes/types";
 import type { CompanionContext } from "./chat";
 
 export interface InfoCallAnchor {
@@ -74,7 +75,7 @@ export function briefingAnchor(b: Briefing, ctx: CompanionContext): InfoCallAnch
     emptyTitle: BRIEFING_TITLE,
     placeholder: BRIEFING_PLACEHOLDER,
     desk: [briefingRef(b.date, b, ctx)],
-    position: { title: BRIEFING_TITLE, line: b.overview ?? "" },
+    position: { title: BRIEFING_TITLE, line: briefingOverview(b) },
   };
 }
 
@@ -156,7 +157,7 @@ export function articleAnchor(
       briefingRef(b.date, b, ctx),
       {
         kind: INFO_ARTICLE_KIND,
-        ref: { dateKey: b.date, itemId, title: meta?.title ?? "", overview: b.overview, bodyText },
+        ref: { dateKey: b.date, itemId, title: meta?.title ?? "", overview: briefingOverview(b), bodyText },
       },
     ],
     position: { title, sourceName: meta?.sourceName, line: articleReason(b, itemId) },

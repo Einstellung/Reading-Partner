@@ -10,7 +10,7 @@ import {
 } from "../../src/info/briefer/reader";
 import type { PublishedBodies } from "../../src/info/boxes/publish";
 import type { CollectorClaim } from "../../src/info/briefer/handoff";
-import type { Briefing } from "../../src/info/collect/types";
+import type { Briefing } from "../../src/info/boxes/types";
 
 const NOW = 1_800_000_000_000;
 
@@ -27,12 +27,13 @@ function meta(id: string) {
 const briefing: Briefing = {
   date: "2026-08-12",
   generatedAt: 1_000,
-  overview: "a day",
+  version: 2,
+  labs: [{ labId: "lab-a", name: "Room", cover: "a day", judgments: [] }],
+  quiet: [],
   mustRead: [{ itemId: "a", reason: "because" }],
   oneLiners: [{ itemId: "b", line: "the point" }],
   outOfLane: [],
-  filtered: [{ itemId: "d", category: "vendor PR" }],
-  items: { a: meta("a"), b: meta("b"), d: meta("d") },
+  items: { a: meta("a"), b: meta("b") },
 };
 
 function bodies(over: Partial<PublishedBodies> = {}): PublishedBodies {
@@ -76,13 +77,6 @@ test("what came over the wire is sanitized before it is handed over", () => {
 test("a briefing newer than its bodies is a wait, not a wrong article", () => {
   expect(articleState(briefing, bodies({ generatedAt: 999 }), "a").kind).toBe("pending");
   expect(articleState(briefing, null, "a").kind).toBe("pending");
-});
-
-// A dropped item never had a body, so no fingerprint can make one appear and
-// telling the reader to wait would be a wait with no end.
-test("an item triage dropped says what it was dropped for, whatever the bodies say", () => {
-  expect(articleState(briefing, bodies(), "d")).toEqual({ kind: "filtered", category: "vendor PR" });
-  expect(articleState(briefing, null, "d")).toEqual({ kind: "filtered", category: "vendor PR" });
 });
 
 test("a source that only publishes summaries says so", () => {

@@ -17,7 +17,8 @@ import {
 import type { EventPayload, EventType } from "../src/platform/app/events";
 import { parsePlan } from "../src/reading/prep/papers/plan";
 import { parseChapterSpinePlan } from "../src/reading/prep/chapters/plan";
-import { parseTriageResult } from "../src/info/collect/triage";
+import { parseSynthesisOutput } from "../src/info/analysis/synthesis";
+import type { Cable } from "../src/info/cable/types";
 
 const MODEL = { providerId: "anthropic", modelId: "claude-sonnet-4-5" };
 
@@ -209,33 +210,33 @@ test("defaults the parse substituted are counted as repairs, not failures", () =
   expect(lines[0].payload.repaired).toBe(1);
 });
 
-test("triage records the refs it drops for naming ids that were never offered", () => {
+test("the synthesis records the picks it drops for naming cables nobody sent it", () => {
   const { r, lines } = reporter();
-  const ids = new Set(["a", "b"]);
+  const cables: Cable[] = [
+    { id: "a", date: "2026-07-21", title: "A", url: "", source: "s", sourceName: "S", publishedAt: "", hits: [] },
+  ];
   const text = JSON.stringify({
-    overview: "A quiet day.",
+    changed: true,
+    cover: "A quiet day.",
     mustRead: [{ itemId: "a", reason: "worth it" }],
     oneLiners: [{ itemId: "ghost", line: "made up" }],
-    outOfLane: [],
-    filtered: [{ itemId: "b", category: "" }],
   });
   const tally = newTally();
-  const parsed = parseTriageResult(text, ids, tally);
-  r.reportParse({ site: "info-triage", model: MODEL, text, tally });
+  const parsed = parseSynthesisOutput(text, cables, tally);
+  r.reportParse({ site: "info-synthesis", model: MODEL, text, tally });
 
   expect(parsed.ok).toBe(true);
-  expect(lines[0].payload.seen).toBe(3);
-  expect(lines[0].payload.kept).toBe(2);
-  expect(lines[0].payload.repaired).toBe(1); // the empty category became "other"
+  expect(lines[0].payload.seen).toBe(2);
+  expect(lines[0].payload.kept).toBe(1);
 });
 
-test("a triage reply with no overview is a missing field, not a syntax problem", () => {
+test("a synthesis that says the room changed and writes no cover is a missing field", () => {
   const { r, lines } = reporter();
-  const text = '{"mustRead": [], "oneLiners": [], "outOfLane": [], "filtered": []}';
+  const text = '{"changed": true, "cover": "", "mustRead": [], "oneLiners": []}';
   const tally = newTally();
-  const parsed = parseTriageResult(text, new Set(), tally);
+  const parsed = parseSynthesisOutput(text, [], tally);
   expect(parsed.ok).toBe(false);
-  r.reportParse({ site: "info-triage", model: MODEL, text, tally, error: "missing overview" });
+  r.reportParse({ site: "info-synthesis", model: MODEL, text, tally, error: "missing cover" });
   expect(lines[0].payload.ok).toBe(false);
   expect(lines[0].payload.fail).toBe("missing-field");
 });

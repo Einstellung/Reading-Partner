@@ -19,7 +19,7 @@ import type { ProfileUpdateCardData } from "../../src/info/boxes/cards";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { ExtractReadable } from "../../src/info/extract/readable-select";
 import type { SessionStatus, SignInOutcome } from "../../src/info/extract/webview-session";
-import type { RunStart } from "../../src/info/collect/pipeline";
+import type { RunStart } from "../../src/info/boxes/pipeline";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 

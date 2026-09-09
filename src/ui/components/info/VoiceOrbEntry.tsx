@@ -20,7 +20,7 @@ import { orbErrorLine, type OrbPhase, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
 import { useVoiceCall, type VoiceCallView } from "./use-voice-call";
-import type { Briefing } from "../../../info/collect/types";
+import type { Briefing } from "../../../info/boxes/types";
 
 // `briefing` is the day's briefing as this page holds it, passed down rather
 // than loaded by the call: see LiveVoiceCallOptions.

@@ -34,8 +34,10 @@
 import { appData } from "../../platform/app/appdata";
 import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { stripDataImages } from "../extract/sanitize";
-import { loadArticles, loadItems, loadLatestBriefing, type CachedArticle } from "../collect/store";
-import type { Briefing } from "../collect/types";
+import { loadArticles, loadItems, type CachedArticle } from "../collect/store";
+import { parseBriefing } from "./briefing";
+import { loadLatestBriefing } from "./store";
+import type { Briefing } from "./types";
 import type { InfoItem } from "../sources/item";
 
 export const PUBLISHED_BRIEFING_FILE = "info-briefing.json";
@@ -314,8 +316,11 @@ export async function backfillPublish(): Promise<BackfillOutcome> {
 // date check, deliberately (docs/36): the date is the collector's, and a reader
 // opened at half past midnight or in another timezone should see the latest
 // briefing labelled with the day it is for, not an empty screen.
-export function loadPublishedBriefing(): Promise<Briefing | null> {
-  return readJson<Briefing>(PUBLISHED_BRIEFING_FILE);
+export async function loadPublishedBriefing(): Promise<Briefing | null> {
+  // Through the parse, because this is the one name a briefing arrives at from
+  // another device: a collector still on the triage build publishes its own
+  // shape, and normalizing it here is what keeps that out of the pages.
+  return parseBriefing(await readJson<unknown>(PUBLISHED_BRIEFING_FILE));
 }
 
 export function loadPublishedBodies(): Promise<PublishedBodies | null> {

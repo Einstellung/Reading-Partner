@@ -74,11 +74,11 @@ test("insertBeforeLast drops a card row above the last (streaming) row", () => {
 
 test("upsertCardRow appends when the id is new, then updates that row in place", () => {
   let msgs: ThreadMessage[] = [{ role: "ai", ts: 1, text: "reply" }];
-  msgs = upsertCardRow(msgs, "briefing", { kind: "briefing-progress", phase: "fetching", collect: null, triage: null });
+  msgs = upsertCardRow(msgs, "briefing", { kind: "briefing-progress", phase: "fetching", collect: null, analysis: null });
   expect(msgs).toHaveLength(2);
   expect(findCardPart(msgs, "briefing")?.payload.kind).toBe("briefing-progress");
 
-  const ready: CardPayload = { kind: "briefing-ready", date: "2026-07-22", worth: 3, oneLiners: 1, filtered: 2 };
+  const ready: CardPayload = { kind: "briefing-ready", date: "2026-07-22", worth: 3, oneLiners: 1, labs: 2 };
   const after = upsertCardRow(msgs, "briefing", ready);
   expect(after).toHaveLength(2); // reused the same row, not appended
   expect(findCardPart(after, "briefing")?.payload).toEqual(ready);

@@ -16,14 +16,16 @@ import {
   type ScreenVerdict,
   type Selection,
 } from "./screen";
+import type { LabCover, MustRead, OneLiner } from "../analysis/types";
 import type { InfoItem } from "../sources/item";
 
 // Bumped whenever a checkpoint stops being readable by the code that resumes it.
-// Version 1 was the two-phase run with no verdicts at all; version 2 held keep/why
-// verdicts, which say nothing about which room an item belongs to. loadRun rejects
-// anything but the current version, so a day starts over rather than resuming into
-// a shape this file cannot read.
-export const INFO_RUN_VERSION = 3 as const;
+// Version 1 was the two-phase run with no verdicts at all; version 2 held
+// keep/why verdicts, which say nothing about which room an item belongs to;
+// version 3's last phase was "triaging", a stage that no longer exists. loadRun
+// rejects anything but the current version, so a day starts over rather than
+// resuming into a shape this file cannot read.
+export const INFO_RUN_VERSION = 4 as const;
 
 // A source the run owes work for. Ids are descriptor ids (docs/17), stable
 // across runs, so a checkpoint can name what has already been fetched.
@@ -48,16 +50,17 @@ export interface SourceRun {
   error?: string;
 }
 
-// How far the run got, in funnel order (docs/35):
+// How far the run got, in funnel order (docs/35, docs/63):
 //
 //   discovering — headlines from every source, one request each, no bodies.
-//   screening   — one cheap AI call per batch of headlines: fetch this or not.
+//   screening   — one cheap AI call per batch of headlines: which room does it hit.
 //   fetching    — article bodies, for the survivors only.
-//   triaging    — the one triage call, over what is left.
+//   analyzing   — the day's cables, then two AI calls per room that was hit.
 //
-// The first three are checkpointed at a finer grain than the phase (per source,
-// per batch, per body); triage is a single AI call, so it is all or nothing.
-export type InfoRunPhase = "discovering" | "screening" | "fetching" | "triaging";
+// Every one of them is checkpointed at a finer grain than the phase: per source,
+// per batch, per body, per room. Boxing the briefing is not a phase — it is what
+// happens once the last room is in, and it spends nothing that could be lost.
+export type InfoRunPhase = "discovering" | "screening" | "fetching" | "analyzing";
 
 // Why a parked run is not advancing. Absent means it was cut off mid-flight,
 // which is the only case a startup resume may spend tokens on unasked: the user
@@ -99,7 +102,31 @@ export interface InfoRunState {
   material: string[];
   // Display name of the source that settled last, for the progress caption.
   lastSettled?: string;
+  // The rooms this run has already analyzed, in the order they finished. Two AI
+  // calls and a picture written to disk each, so a resume that ran one twice
+  // would fold the same day into the same picture twice — this is what says it
+  // is paid for. Absent on a checkpoint written before the analysis started.
+  analysis?: LabOutcome[];
+  // How many rooms this run is analyzing, for the progress line. Set when the
+  // analysis phase opens, because until then nobody has asked.
+  labsTotal?: number;
+  // What the run could not act on and did not fail for: a room whose analysis
+  // would not parse, an id a model invented. Kept on the checkpoint so a resume
+  // does not lose the half of the day that already went wrong.
+  warnings?: string[];
   halt?: RunHalt;
+}
+
+// One room's day, as the checkpoint holds it. The picture is already on disk by
+// the time this is written; what is here is only what the briefing needs.
+export interface LabOutcome {
+  labId: string;
+  // Denormalized so a quiet room can be named without loading the labs file.
+  name: string;
+  // Null when the room ran and had nothing to report.
+  cover: LabCover | null;
+  mustRead: MustRead[];
+  oneLiners: OneLiner[];
 }
 
 export function createRunState(
@@ -367,6 +394,40 @@ export function applyBody(state: InfoRunState, item: InfoItem, now: number): Inf
   };
 }
 
+// --- analysis ---------------------------------------------------------------
+
+// Open the analysis phase: the rooms are counted so the progress line has a
+// denominator, and the phase moves so a resume comes straight back here.
+export function startAnalysis(state: InfoRunState, labs: number, now: number): InfoRunState {
+  return { ...state, updatedAt: now, phase: "analyzing", labsTotal: labs };
+}
+
+// Fold one finished room into the run. The picture it produced is already
+// written; this is what makes the run stop owing it.
+export function applyLabOutcome(
+  state: InfoRunState,
+  outcome: LabOutcome,
+  now: number,
+): InfoRunState {
+  const kept = (state.analysis ?? []).filter((o) => o.labId !== outcome.labId);
+  return { ...state, updatedAt: now, analysis: [...kept, outcome] };
+}
+
+// The rooms this run has already paid for.
+export function analyzedLabIds(state: InfoRunState): Set<string> {
+  return new Set((state.analysis ?? []).map((o) => o.labId));
+}
+
+// Note something the run could not act on. Warnings never fail a day.
+export function addWarnings(
+  state: InfoRunState,
+  warnings: readonly string[],
+  now: number,
+): InfoRunState {
+  if (warnings.length === 0) return state;
+  return { ...state, updatedAt: now, warnings: [...(state.warnings ?? []), ...warnings] };
+}
+
 // --- progress ---------------------------------------------------------------
 
 // Live funnel progress derived from the checkpoint, so a resumed run's progress
@@ -390,6 +451,8 @@ export interface CollectProgress {
   // Material: bodies fetched, out of how many were selected.
   bodies: number;
   bodiesTotal: number;
+  // Analysis: rooms finished, out of how many were hit today.
+  labs: { total: number; done: number };
 }
 
 export function emptyProgress(items = 0): CollectProgress {
@@ -405,6 +468,7 @@ export function emptyProgress(items = 0): CollectProgress {
     cappedOut: 0,
     bodies: 0,
     bodiesTotal: 0,
+    labs: { total: 0, done: 0 },
   };
 }
 
@@ -437,5 +501,6 @@ export function collectProgress(state: InfoRunState): CollectProgress {
     cappedOut: selection?.cappedOut ?? 0,
     bodies: state.material.length,
     bodiesTotal: selection?.ids.length ?? 0,
+    labs: { total: state.labsTotal ?? 0, done: (state.analysis ?? []).length },
   };
 }

@@ -4,7 +4,7 @@
 // exactly the bug a second copy would produce.
 
 import { useEffect, useRef, useState } from "react";
-import type { InfoSnapshot } from "../../../info/collect/pipeline";
+import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { Button } from "../ui/button";
 import { briefingCardBody, briefingFooterLine, builtAt } from "./today";
 
@@ -115,7 +115,7 @@ export function BriefingCardBody({
           ? "Screening headlines"
           : snap?.phase === "fetching"
             ? "Fetching articles"
-            : "Triaging";
+            : "Analyzing the day";
     const detail = (() => {
       const c = snap?.collect ?? null;
       if (snap?.phase === "discovering") {

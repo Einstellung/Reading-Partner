@@ -36,10 +36,8 @@ import {
   saveSourceHealth,
   SOURCES_PULL_ROUTE,
 } from "../sources/source-store";
-import { loadFeedback } from "../../memory/profile/feedback";
 import { loadProfile } from "../../memory/profile/profile";
-import { assembleReadingContext } from "../../memory/live/assemble";
-import { InfoPipeline, type InfoSourceRef, type SourceResult } from "../collect/pipeline";
+import { InfoPipeline, type InfoSourceRef, type SourceResult } from "../boxes/pipeline";
 import {
   parseScreenVerdicts,
   screenSystemPrompt,
@@ -53,18 +51,24 @@ import {
   clearRun,
   loadArticle,
   loadArticles,
-  loadBriefing,
   loadDailyRunDate,
   loadItems,
   loadRun,
   pruneStaleDailyFiles,
   saveArticles,
-  saveBriefing,
   saveDailyRunDate,
   saveItems,
   saveRun,
   todayLocal,
 } from "../collect/store";
+import { loadBriefing, saveBriefing } from "../boxes/store";
+import { loadCableDay, saveCableDay } from "../cable/store";
+import { activeLabs, loadLabs } from "../labs/store";
+import { loadPicture, savePicture } from "../picture/store";
+import { runLabAnalysis } from "../analysis/run";
+import type { AnalystInput, LabRunResult } from "../analysis/types";
+import { getObservationAdapter } from "../../memory/live/live";
+import { buildObservationSnapshot, trimObservations } from "../../memory/observations/select";
 import { runDreamIfDue } from "../../memory/dream/live";
 import { dailyAction, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { collectorStatusLine, InfoCollector } from "../collect/collector";
@@ -89,71 +93,39 @@ import {
   savePoolPolled,
 } from "../collect/pool-store";
 import type { SourceDescriptor } from "../sources/descriptor";
-import {
-  parseTriageResult,
-  triageSystemPrompt,
-  triageUserMessage,
-  type ParseOutcome,
-} from "../collect/triage";
-import type { FeedbackEvent } from "../../memory/profile/feedback";
-import type { Briefing, TriageResult } from "../collect/types";
+import type { Briefing } from "../boxes/types";
 import type { InfoItem } from "../sources/item";
 
-// One tool-less streaming call. `extra` lets the parse-retry append a corrective
-// nudge. Triage wants some deliberation but not a marathon, so it reuses the
-// prep effort setting. Budgeted as a plan: the reply is a verdict on every item
-// collected, so it grows with the input and needs the wider output floor.
-function runTriageCall(userText: string, opts: AiCallOptions, extra?: string): Promise<string> {
-  return callModel(
-    "prep",
-    "plan",
-    (model) => triageSystemPrompt(model.aiLanguage) + (extra ?? ""),
-    userText,
-    opts,
-  );
-}
-
-// One triage attempt: run the model, validate, and record how the parse went
-// (structured-output.ts) whichever way it lands. The in-band retry below is a
-// second attempt, so it logs a second line.
-async function attemptTriage(
-  model: ResolvedModel,
-  userText: string,
-  validIds: Set<string>,
-  opts: AiCallOptions,
-  extra?: string,
-): Promise<ParseOutcome> {
-  const text = await runTriageCall(userText, opts, extra);
-  const tally = newTally();
-  const parsed = parseTriageResult(text, validIds, tally);
-  reportParse({
-    site: "info-triage",
-    model,
-    text,
-    tally,
-    error: parsed.ok ? undefined : parsed.error,
-  });
-  return parsed;
-}
-
-// The triage dep: stream the model, validate the JSON, retry once on a parse
-// failure with a corrective instruction. A second failure throws so the watchdog
-// treats it as a transient error and retries the whole attempt.
-async function triage(
-  input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[]; readerContext?: string },
-  opts: AiCallOptions,
-): Promise<TriageResult> {
-  // One watchdog attempt, timed against the collection numbers above: the two
-  // together are the only answer to "why did that take four minutes".
+// One room's day (docs/63 加工): the analyst call and the synthesis call, with
+// the two prompts, the parse and the one in-band retry in analysis/run.ts. Both
+// want some deliberation but not a marathon, so they reuse the prep effort
+// setting, and both are budgeted as a plan: the reply covers every cable the
+// room was handed, so it grows with the input and needs the wider output floor.
+//
+// The parse tallies are reported per call from here rather than from run.ts,
+// which does not know which model it is talking to. run.ts hands the text back
+// through the same parse it used, so what is counted is what was kept.
+async function analyze(input: AnalystInput, opts: AiCallOptions): Promise<LabRunResult> {
+  const model = await resolveModel("prep");
   const startedAt = Date.now();
   const done = (ok: boolean) =>
-    logEvent(INFO_EVENT_TOPIC, "info-triage", {
+    logEvent(INFO_EVENT_TOPIC, "info-analyze", {
       ms: Date.now() - startedAt,
-      items: input.items.length,
+      cables: input.cables.length,
       ok,
     });
   try {
-    const result = await runTriageAttempt(input, opts);
+    const result = await runLabAnalysis(
+      {
+        callModel: (system, user, o) => callModel("prep", "plan", () => system, user, o),
+        now: Date.now,
+        onParse: (report) => reportParse({ ...report, model }),
+      },
+      // The reply's language is the model's, the same way every other prompt in
+      // the app takes it; the pipeline has no business reading settings.
+      { ...input, aiLanguage: model.aiLanguage },
+      opts,
+    );
     done(true);
     return result;
   } catch (e) {
@@ -162,26 +134,16 @@ async function triage(
   }
 }
 
-async function runTriageAttempt(
-  input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[]; readerContext?: string },
-  opts: AiCallOptions,
-): Promise<TriageResult> {
-  const userText = triageUserMessage(input.profile, input.feedback, input.items, {
-    readerContext: input.readerContext,
-  });
-  const validIds = new Set(input.items.map((it) => it.id));
-  const model = await resolveModel("prep");
-  const parsed = await attemptTriage(model, userText, validIds, opts);
-  if (parsed.ok) return parsed.result;
-  const reparsed = await attemptTriage(
-    model,
-    userText,
-    validIds,
-    opts,
-    "\n\nYour previous reply was not valid JSON in the required shape. Reply with ONLY the JSON object, no prose, no markdown fence.",
-  );
-  if (reparsed.ok) return reparsed.result;
-  throw new Error(`triage produced invalid JSON: ${reparsed.error}`);
+// What is remembered about the reader on a room's topic, as the paragraph the
+// analyst reads (docs/48). The same snapshot the briefing conversation gets, so
+// the room writes for the person the companion is talking to. It is never
+// evidence for a judgment, and a store that will not answer costs the analyst
+// its context and not the day.
+const ANALYST_OBSERVATIONS = 12;
+
+async function loadObservations(topicId: string): Promise<string> {
+  const entries = await getObservationAdapter(topicId).listObservations();
+  return buildObservationSnapshot(trimObservations(entries, ANALYST_OBSERVATIONS));
 }
 
 // The roster a run is checkpointed against: the enabled sources, in list order.
@@ -225,12 +187,10 @@ async function attemptScreen(
 // parse failure gets one corrective retry, then throws so the watchdog treats it
 // as transient.
 async function screen(
-  // `targets` is optional only so the pipeline's current call site still
-  // typechecks; the integrator wires the rooms through and the profile out.
-  input: { profile: string; items: InfoItem[]; targets?: ScreenTarget[] },
+  input: { targets: ScreenTarget[]; items: InfoItem[] },
   opts: AiCallOptions,
 ): Promise<ScreenVerdict[]> {
-  const targets = input.targets ?? [];
+  const targets = input.targets;
   const userText = screenUserMessage(targets, input.items);
   const validIds = new Set(input.items.map((it) => it.id));
   const model = await resolveModel("chat");
@@ -361,10 +321,15 @@ async function saveAndPublishBriefing(briefing: Briefing): Promise<void> {
 // the election. That order only started mattering when a timer began asking the
 // question: it is the difference between two file reads a tick and none, on a
 // device whose answer was never going to be yes.
+// A room to collect for is the fourth (docs/63): the screen matches headlines
+// against a room's observables and the briefing is cut by room, so a bureau with
+// none of them has nothing to spend the day on. The companion asks for one
+// instead.
 async function canAutoGenerate(): Promise<boolean> {
   if (!(await session.amICollecting())) return false;
-  const [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
+  const [settings, sources, labs] = await Promise.all([loadSettings(), loadSources(), loadLabs()]);
   if (!settings.defaultProviderId || !settings.defaultModelId) return false;
+  if (activeLabs(labs).length === 0) return false;
   return sources.some((d) => d.enabled);
 }
 
@@ -489,12 +454,16 @@ async function fetchBodies(
 
 // The per-phase timing lines (events-info.jsonl), alongside the per-source ones
 // discovery writes and the triage line the call itself writes.
-const PHASE_EVENT: Record<InfoRunPhase, "info-discover" | "info-screen" | "info-material" | null> = {
+const PHASE_EVENT: Record<
+  InfoRunPhase,
+  "info-discover" | "info-screen" | "info-material" | "info-analyze"
+> = {
   discovering: "info-discover",
   screening: "info-screen",
   fetching: "info-material",
-  // Triage logs its own line, per watchdog attempt, with the outcome.
-  triaging: null,
+  // The analysis writes one line per room as well (info-analyze), so this is
+  // the phase total over however many rooms the day hit.
+  analyzing: "info-analyze",
 };
 
 function logPhase(phase: InfoRunPhase, data: Record<string, number>): void {
@@ -565,15 +534,17 @@ export function getInfoPipeline(): InfoPipeline {
     pipeline = new InfoPipeline({
       loadBriefing: loadBriefingForToday,
       loadProfile,
-      loadFeedback,
-      // Reading-side signal for triage: assembled from per-topic observations, guarded
-      // so a failure yields "" and the section is simply omitted.
-      loadReaderContext: () => assembleReadingContext(),
+      loadLabs,
+      loadPicture,
+      savePicture,
+      loadObservations,
       listSources,
       discover,
       screen,
       fetchBodies,
-      triage,
+      analyze,
+      saveCableDay,
+      loadCableDay,
       logPhase,
       saveBriefing: saveAndPublishBriefing,
       saveArticles,
@@ -681,9 +652,9 @@ function collectorView(): BriefingView {
     collectorSites: () => null,
     async article(itemId: string): Promise<ArticleState> {
       const briefing = p.snapshot().briefing;
+      // A briefing carries only the items it points at, so an id it does not
+      // know is one this day never delivered (briefer/reader.ts says the same).
       if (!briefing || !briefing.items[itemId]) return { kind: "unknown" };
-      const dropped = (briefing.filtered ?? []).find((f) => f.itemId === itemId);
-      if (dropped) return { kind: "filtered", category: dropped.category };
       const [cached, items] = await Promise.all([
         loadArticle(briefing.date, itemId).catch(() => null),
         loadItems(briefing.date).catch(() => [] as InfoItem[]),

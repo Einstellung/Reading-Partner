@@ -4,9 +4,11 @@
 
 import { expect, test } from "bun:test";
 import {
+  CABLE_DAYS,
   leanItems,
   localDateString,
   newestBriefingDate,
+  staleCableFiles,
   staleDailyFiles,
   todayLocal,
 } from "../../src/info/collect/store";
@@ -93,6 +95,39 @@ test("staleDailyFiles ignores names whose date suffix is malformed", () => {
 
 test("staleDailyFiles on an empty listing is empty", () => {
   expect(staleDailyFiles([], "2026-07-25")).toEqual([]);
+});
+
+// The cables are the exception to the today-only sweep (docs/63): a picture's
+// judgments cite cable ids, so the record of what a judgment was made on outlives
+// the bodies it was made from.
+test("the day's sweep never touches a cables file", () => {
+  expect(staleDailyFiles(["info-cables-2026-07-24.json"], "2026-07-25")).toEqual([]);
+});
+
+test("cables are kept for thirty days and go on the thirty-first", () => {
+  expect(CABLE_DAYS).toBe(30);
+  const names = [
+    "info-cables-2026-07-25.json", // today
+    "info-cables-2026-06-25.json", // 30 days back, the last one kept
+    "info-cables-2026-06-24.json", // 31 days back
+    "info-cables-2025-12-01.json",
+  ];
+  expect(staleCableFiles(names, "2026-07-25")).toEqual([
+    "info-cables-2026-06-24.json",
+    "info-cables-2025-12-01.json",
+  ]);
+});
+
+test("staleCableFiles leaves every other prefix and every name it cannot date alone", () => {
+  const names = [
+    "briefing-2026-01-01.json",
+    "info-articles-2026-01-01.json",
+    "info-cables-.json",
+    "info-cables-2026-1-1.json",
+    "info-cables-backup.json",
+    "info-labs.json",
+  ];
+  expect(staleCableFiles(names, "2026-07-25")).toEqual([]);
 });
 
 // What the startup backfill publishes is the latest briefing this machine has,

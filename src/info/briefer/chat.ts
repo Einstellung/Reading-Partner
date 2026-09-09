@@ -15,7 +15,7 @@ import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";
 import { signInSiteLine, signInSites } from "../sources/site-session";
 import { labGuidance } from "./lab-tool";
 import type { Lab } from "../labs/types";
-import type { Briefing } from "../collect/types";
+import type { Briefing } from "../boxes/types";
 
 // How much article text the chat carries as context (chat models take a big
 // window; a very long piece still gets a sane cap).
@@ -314,7 +314,7 @@ export function briefingChatSystemPrompt(b: Briefing, ctx: CompanionContext): st
   const parts = [
     ...preamble(ctx),
     "",
-    `Overview: ${b.overview}`,
+    ...(b.labs.length ? ["Rooms that moved today:", ...b.labs.map((l) => `- ${l.name || "the day"}: ${l.cover}`)] : ["Nothing moved in any room today."]),
     "",
     "Worth your time:",
     ...b.mustRead.map((r) => `- ${title(r.itemId)} — ${src(r.itemId)} — ${r.reason}`),
