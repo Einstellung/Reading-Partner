@@ -106,6 +106,7 @@ const LAYER: Record<string, Layer> = {
   // (what a room makes of its cables), boxes (what is assembled out of it),
   // briefer (everything the AI says about it) and program (the day's wiring).
   // Only the acyclic test enforces that; the order itself is a reading rule.
+  "info/analysis": "domain",
   "info/boxes": "domain",
   "info/briefer": "domain",
   "info/briefer/speech": "domain",
