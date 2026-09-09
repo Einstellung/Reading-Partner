@@ -26,6 +26,8 @@ iOS 模拟器上还一次没跑过，正式打开路径（文件对话框那条�
 
 `pointer-events: none` 之后滚动还在，在 WebKitGTK 上量过：滚动模式里 foliate 把 iframe 撑成整章高（一章 72602px），滚的是父页那一侧的 `#container`（`overflow-y: auto`，`scrollHeight` 72698 对 `clientHeight` 860），不是 iframe 自己。所以触摸落在正文上会穿到容器上照常滚，程序滚 2000px 阅读位置从第 29 块走到第 31 块。事件也照常冒出 shadow：在 `#container` 上派发 composed 的 pointerdown，父页收到 1 次（非 composed 收到 0 次），`target` 重定向成 `FOLIATE-VIEW`。量法见坑 258。
 
+图管线补上 SVG 和超大图两条（第三节）。在 xvfb 的 WebKitGTK 上量过：《UCSD-suture》那张 2070x1594、2.4 MB 的 PNG 在 `view` 档出 1568x1207、224 KB 的 JPEG（101ms），只有 `viewBox` 的 SVG 出 1568x784、28 KB（60ms），两张都能再解码回来；`card` 档两张都原样，0.4 MB 的 PNG 在 `view` 档也原样。`createImageBitmap` 不解 SVG，只有 `<img>` 那条能画（坑 263）。取图不再每看一张就重扫中央目录：走 `book-cache.ts` 持有的那份 zip，不是开着的那本书才自己占一个槽位，免得看一眼别的书的图就把读者手上的书顶掉。
+
 阶段 1（EPUB 只当 PDF 的图源）跳过：用户手上没有同一本书的两个格式，这个阶段的前提不成立。
 
 ## 结论
@@ -160,7 +162,9 @@ export type FigureSource =
 
 `Figure.page` 保留（合成页号），`catalog.ts` 的 `- [fig:3] p.7 — 图注` 和按当前页就近截断照旧。
 
-`view_figure` 的入参 schema 不用改，它本来就只收 `{ id }`。改的是取图：`render.ts`（138 行）现在用 pdf.js 重画整页再平移裁剪，EPUB 分支直接把 zip 里的图片字节原样返回，比裁 PDF 更清楚也更快。两个例外要处理：SVG 要先画到 canvas 再转位图；超大图要压到 `view` 档现有的约 1 MB 上限内。
+`view_figure` 的入参 schema 不用改，它本来就只收 `{ id }`。改的是取图：`render.ts` 用 pdf.js 重画整页再平移裁剪，EPUB 分支把 zip 里的图片字节原样返回，比裁 PDF 更清楚也更快。
+
+两个例外走 canvas 重画，只在 `view` 档（卡片那档是 app 自己 DOM 里的 `<img>`，SVG 和原尺寸都收）。尺寸决策在 `figures/raster.ts`，是纯函数配单测；画在 `render.ts`，rasterizer 注入进去，测试环境没有 canvas 也能跑整条循环。SVG：尺寸按 `width`/`height` → `viewBox` → 默认方块算出来写回根节点，再当矢量画到长边 1568；SVG 里引到的外部资源不解析，zip 内的 `<image href>` 也不解，它是当一张独立文档画的。超大图：按长边缩到 1568（再往上供应商自己降采样），画在白底上编成 JPEG q0.82，一遍还超上限就按超出量的平方根再缩，最多三遍，缩到长边 320 为止。
 
 `slides/live.ts` 的 `renderFigureAsset` 现在硬要求 `bbox` 非空，改成"`source` 可解析"。
 

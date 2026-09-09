@@ -152,6 +152,7 @@
 
 - [24-pdfjs-operatorlist-needs-dom](./24-pdfjs-operatorlist-needs-dom.md) — getOperatorList/render 要 DOMMatrix，只能在 webview 跑，bun 测试只覆盖纯函数；另附矢量图 bbox 的算子解析细节
 - [25-embedpdf-no-region-raster](./25-embedpdf-no-region-raster.md) — EmbedPDF 适配层没有区域截图，图片裁剪改用自带 pdf.js 渲染
+- [263-createimagebitmap-refuses-every-svg](./263-createimagebitmap-refuses-every-svg.md) — WebKitGTK 的 `createImageBitmap` 对任何 SVG blob 都抛 `InvalidStateError`，画 SVG 只能走 `<img>` + object URL；`<img>` 的自然尺寸只有 `viewBox` 时按 box 报，三样都没有才报 300x150，所以尺寸自己从 SVG 文本算并写回根节点
 
 ## iOS 构建与签名
 
@@ -337,6 +338,7 @@
 - [232-a-virtual-clock-on-setTimeout-costs-real-time](./232-a-virtual-clock-on-setTimeout-costs-real-time.md) — 「跑在虚拟时钟上所以不花真实时间」的测试，时钟自己是 `setTimeout(r, 0)` 推的：宿主把 0 钳到约 1ms，`settle()` 空转 200 轮就是 200 毫秒，七个用例 1.4 秒。被测代码自己不碰真定时器时改用 `Promise.resolve()` 推进，1408ms → 130ms，空转不要钱之后轮数还能往上加
 - [233-a-failing-fetch-test-pays-the-retry-ladder](./233-a-failing-fetch-test-pays-the-retry-ladder.md) — 注入了 fetch 不等于注入了时间：故意发 500 的用例照走生产的重试退避（0.5s + 1s 真定时器），六个用例 7.5 秒，而 bun 对这个量级的用例一个 per-test 时间都不打。编排层把 `sleep` 一起收成可选注入转发给 `fetchText`，默认值不变；定位靠失败路径上的 `console.warn` 行数，验收拿 `expect() calls` 总数不变当闸
 - [243-vite-resolves-a-dynamic-import-that-never-runs](./243-vite-resolves-a-dynamic-import-that-never-runs.md) — `vite:import-analysis` 对带字面量的动态 import 和静态 import 一视同仁，transform 阶段就要解析：一条永远跑不到的分支里 `await import('./x.js')` 解析不到，整个模块变错误页。vendor 一个库时，它引用过的文件都得存在，哪怕只是抛异常的桩
+- [264-evaluate-javascript-only-returns-a-string](./264-evaluate-javascript-only-returns-a-string.md) — python 的 WebKit2 绑定跑无头页面时，`evaluate_javascript_finish` 只认字符串，脚本收尾是 Promise 或 null 就报 `Unsupported result type`，看着像页面炸了其实已经跑了；每段 JS 以字符串收尾，异步结果挂 `window` 上轮询
 
 ## 历史（zotero/reader 引擎时代）
 
