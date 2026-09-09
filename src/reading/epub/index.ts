@@ -40,7 +40,7 @@ export {
 } from "./pagination-store";
 export { fulltextFrom, outlineFor, readEpub, type EpubFulltext } from "./fulltext";
 export { extractEpubFulltext } from "./live";
-export { acquireEpub, ensurePagination, heldEpub, releaseEpub } from "./book-cache";
+export { acquireEpub, ensurePagination, heldEpub, preparePagination, releaseEpub } from "./book-cache";
 export { remapEpubAnnotations } from "./migrate";
 export { renderEpubCover } from "./epub-cover";
 export { default as EpubReaderPane } from "./EpubReaderPane";

@@ -19,6 +19,7 @@ import {
   pathsHit,
   pointsToPath,
   polylinePoints,
+  scaleInkPath,
   popupRect,
   rectsHit,
   shouldAppendInkPoint,
@@ -35,7 +36,14 @@ import {
   quoteSelectorAt,
 } from "../../../src/reading/epub/annotation";
 import { epubRangeCfi, parseEpubRangeCfi, rangeToCfi, resolveSteps, textSteps } from "../../../src/reading/epub/cfi";
-import { BODY_WIDTH, PAGE_HEIGHT, PAGE_PAD_X, PAGE_PAD_Y, PAGE_WIDTH } from "../../../src/reading/epub/page-geometry";
+import {
+  BODY_WIDTH,
+  PAGE_GEOMETRY,
+  PAGE_HEIGHT,
+  PAGE_PAD_X,
+  PAGE_PAD_Y,
+  PAGE_WIDTH,
+} from "../../../src/reading/epub/page-geometry";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import { extractDocumentText, indexRuns, offsetOfPoint, runAt } from "../../../src/reading/epub/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
@@ -71,12 +79,13 @@ describe("a mark is clipped to the text block, not to the sheet", () => {
   });
 
   // A line in the column beside this one, in page coordinates: the column is
-  // BODY_WIDTH wide and the body starts PAGE_PAD_X in, so a line that begins
-  // 295 into the previous column is painted at 48 + 295 - 480. This is the
-  // rect measured on page 23 of 具身智能 for the quote the reader cited
-  // (docs/pitfall/283) — a wide table sliced by the multicol had put the words
-  // after it in a column to the left of the words before it.
-  const previousColumn = { left: PAGE_PAD_X + 295 - BODY_WIDTH, top: 284, width: 182, height: 22 };
+  // BODY_WIDTH wide and the body starts PAGE_PAD_X in, so a line ending three
+  // pixels short of the previous column's right edge is painted at
+  // 48 + (BODY_WIDTH - 185) - BODY_WIDTH. This is the rect measured on page 23
+  // of 具身智能 for the quote the reader cited (docs/pitfall/283) — a wide table
+  // sliced by the multicol had put the words after it in a column to the left
+  // of the words before it.
+  const previousColumn = { left: PAGE_PAD_X - 185, top: 284, width: 182, height: 22 };
   const nextColumn = { left: PAGE_PAD_X + BODY_WIDTH + 12, top: 300, width: 160, height: 22 };
   const onThisPage = { left: 100, top: 300, width: 200, height: 22 };
 
@@ -124,6 +133,45 @@ describe("a mark is clipped to the text block, not to the sheet", () => {
     expect(BODY_BOX.top).toBe(PAGE_PAD_Y);
     expect(PAGE_BOX).toEqual({ left: 0, top: 0, right: PAGE_WIDTH, bottom: PAGE_HEIGHT });
     expect(clampPoint({ x: -40, y: PAGE_HEIGHT + 90 })).toEqual({ x: 0, y: PAGE_HEIGHT });
+  });
+});
+
+// The sheet the first paged release cut on, which some books on disk still
+// name. Same margins and same type; a smaller sheet, so a smaller text block.
+const SIX_BY_NINE = {
+  width: 576,
+  height: 864,
+  padX: 48,
+  padY: 56,
+  fontSize: 16,
+  lineHeight: 1.55,
+  fonts: "noto-serif-1",
+};
+
+describe("ink carried from one sheet to another", () => {
+  test("the corners of the old text block land on the corners of the new one", () => {
+    const oldTopLeft = [SIX_BY_NINE.padX, SIX_BY_NINE.padY];
+    const oldBottomRight = [SIX_BY_NINE.width - SIX_BY_NINE.padX, SIX_BY_NINE.height - SIX_BY_NINE.padY];
+    const moved = scaleInkPath(SIX_BY_NINE, PAGE_GEOMETRY, [...oldTopLeft, ...oldBottomRight]);
+    expect(moved).toEqual([PAGE_PAD_X, PAGE_PAD_Y, PAGE_WIDTH - PAGE_PAD_X, PAGE_HEIGHT - PAGE_PAD_Y]);
+  });
+
+  test("a stroke keeps where it sat in the block, proportionally", () => {
+    // A quarter across and a half down the old block is a quarter across and a
+    // half down the new one, whatever the two blocks measure.
+    const x = SIX_BY_NINE.padX + (SIX_BY_NINE.width - 2 * SIX_BY_NINE.padX) * 0.25;
+    const y = SIX_BY_NINE.padY + (SIX_BY_NINE.height - 2 * SIX_BY_NINE.padY) * 0.5;
+    const [mx, my] = scaleInkPath(SIX_BY_NINE, PAGE_GEOMETRY, [x, y]);
+    expect((mx - PAGE_PAD_X) / (PAGE_WIDTH - 2 * PAGE_PAD_X)).toBeCloseTo(0.25, 6);
+    expect((my - PAGE_PAD_Y) / (PAGE_HEIGHT - 2 * PAGE_PAD_Y)).toBeCloseTo(0.5, 6);
+  });
+
+  test("a stroke that ran off the sheet is held on it, and the same paper is a no-op", () => {
+    expect(scaleInkPath(SIX_BY_NINE, PAGE_GEOMETRY, [-500, -500])).toEqual([0, 0]);
+    expect(scaleInkPath(SIX_BY_NINE, PAGE_GEOMETRY, [9000, 9000])).toEqual([PAGE_WIDTH, PAGE_HEIGHT]);
+    expect(scaleInkPath(PAGE_GEOMETRY, PAGE_GEOMETRY, [100, 200, 300.25, 400])).toEqual([
+      100, 200, 300.3, 400,
+    ]);
   });
 });
 

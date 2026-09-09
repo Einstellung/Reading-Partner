@@ -23,12 +23,12 @@ const DESK: DeskView = {
 
 describe("the desk's slots", () => {
   test("stack down the column with a gap and centre the sheet across the desk", () => {
-    const m = deskMetrics("vertical", 1, { clientWidth: 800, clientHeight: 600 });
-    expect(m.slotWidth).toBe(800);
+    const m = deskMetrics("vertical", 1, { clientWidth: 1000, clientHeight: 600 });
+    expect(m.slotWidth).toBe(1000);
     expect(m.slotHeight).toBe(PAGE_HEIGHT);
     expect(m.pitchY).toBe(PAGE_HEIGHT + PAGE_GAP);
     expect(m.pitchX).toBe(0);
-    expect(m.cardLeft).toBe((800 - PAGE_WIDTH) / 2);
+    expect(m.cardLeft).toBe((1000 - PAGE_WIDTH) / 2);
     expect(m.cardTop).toBe(0);
   });
 

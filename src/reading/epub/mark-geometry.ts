@@ -13,7 +13,15 @@
 // resolving it, which is what survives a re-paginated book. Only ink is stored
 // as geometry, because free strokes are not on any words.
 
-import { BODY_HEIGHT, BODY_WIDTH, PAGE_HEIGHT, PAGE_PAD_X, PAGE_PAD_Y, PAGE_WIDTH } from "./page-geometry";
+import {
+  BODY_HEIGHT,
+  BODY_WIDTH,
+  PAGE_HEIGHT,
+  PAGE_PAD_X,
+  PAGE_PAD_Y,
+  PAGE_WIDTH,
+  type PageGeometry,
+} from "./page-geometry";
 
 export interface PageRect {
   left: number;
@@ -219,6 +227,33 @@ export function pathToPoints(flat: readonly number[]): PagePoint[] {
 
 function round(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+/**
+ * One stored stroke moved from the sheet it was drawn on to the sheet in force.
+ *
+ * Only ink needs this. A text mark is a CFI and finds its own words again on
+ * any paper; a free stroke is on no words at all, so when the book is cut again
+ * on another sheet there is nothing to anchor it to. What is kept is where it
+ * sat in the text block, proportionally: the margins are outside the block on
+ * both sheets, so the point is measured from the block's corner, scaled by the
+ * ratio of the two blocks, and put back inside the new one. A stroke that ran
+ * into the margin stays in the margin.
+ *
+ * It does not put the stroke back over the words it was drawn on — after a
+ * re-cut those words are on another page — and nothing can. It keeps the
+ * strokes of a page in the shape and the place on that page that they had.
+ */
+export function scaleInkPath(from: PageGeometry, to: PageGeometry, flat: readonly number[]): number[] {
+  const kx = (to.width - 2 * to.padX) / (from.width - 2 * from.padX);
+  const ky = (to.height - 2 * to.padY) / (from.height - 2 * from.padY);
+  const out: number[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) {
+    const x = Math.min(to.width, Math.max(0, to.padX + (flat[i] - from.padX) * kx));
+    const y = Math.min(to.height, Math.max(0, to.padY + (flat[i + 1] - from.padY) * ky));
+    out.push(round(x), round(y));
+  }
+  return out;
 }
 
 /** The `points` attribute of an SVG polyline for one stored stroke. */

@@ -1,9 +1,16 @@
 // The paper an EPUB is set on (docs/64). A page is a sheet of fixed CSS pixels,
-// 6 by 9 inches at 96 dpi, with a fixed text block inside it and a fixed base
-// type size. The book's own stylesheet is laid over this baseline; the baseline
-// itself never moves, because the page numbers it produces are written into
-// notes and synced between devices, and a different geometry is a different
-// book.
+// US Letter at 96 dpi, with a fixed text block inside it and a fixed base type
+// size. The book's own stylesheet is laid over this baseline. There is one
+// sheet and the reader cannot choose it: a page number that depends on a
+// setting is a page number two devices disagree about, and [p.N] strings have
+// already left the app.
+//
+// Letter rather than the 6x9 the first release cut. The margins and the type
+// are fixed, so the sheet decides the line: 6x9 gives 65 characters, Letter
+// about 90. Fitted to an iPad's width a 6x9 sheet is blown up until 16px type
+// reads as 24 and the line still holds those 65 characters; Letter fits at
+// roughly the type's own size. A book cut on the old sheet is cut again the
+// next time it is opened (pagination-store.ts, book-cache.ts).
 //
 // Zoom is what zoom is on a PDF: the sheet scaled as a whole. The steps and the
 // two fits are the PDF side's (reading/engine/layout-modes.ts) applied to this
@@ -12,12 +19,15 @@
 import { LAYOUT_SETTINGS, type ReadingLayout, type ZoomLock } from "../engine/layout-modes";
 import { fitScale } from "../engine/layout-settle";
 
-export const PAGE_WIDTH = 576;
-export const PAGE_HEIGHT = 864;
+/** CSS pixels per inch: what a CSS inch is, and what the sheet is sized in. */
+const DPI = 96;
+
+export const PAGE_WIDTH = 8.5 * DPI; // 816
+export const PAGE_HEIGHT = 11 * DPI; // 1056
 export const PAGE_PAD_X = 48;
 export const PAGE_PAD_Y = 56;
-export const BODY_WIDTH = PAGE_WIDTH - 2 * PAGE_PAD_X; // 480
-export const BODY_HEIGHT = PAGE_HEIGHT - 2 * PAGE_PAD_Y; // 752
+export const BODY_WIDTH = PAGE_WIDTH - 2 * PAGE_PAD_X; // 720
+export const BODY_HEIGHT = PAGE_HEIGHT - 2 * PAGE_PAD_Y; // 944
 export const BASE_FONT_PX = 16;
 export const BASE_LINE_HEIGHT = 1.55;
 
@@ -57,6 +67,46 @@ export function sameGeometry(a: PageGeometry | undefined, b: PageGeometry = PAGE
     a.lineHeight === b.lineHeight &&
     a.fonts === b.fonts
   );
+}
+
+/**
+ * The sheet a stored table says it was cut on, whether or not it is this one.
+ *
+ * `sameGeometry` answers whether a table can still be used; this answers what
+ * paper it was on, which is what an ink stroke has to be moved off when the
+ * answer to the first question is no (migrate.ts). Null for a record that is
+ * not a sheet at all — a table from before the field existed, or one whose
+ * numbers make no page.
+ */
+export function readStoredGeometry(raw: unknown): PageGeometry | null {
+  if (!raw || typeof raw !== "object") return null;
+  const g = raw as Record<string, unknown>;
+  const size = (key: string): number | null => {
+    const v = g[key];
+    return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+  };
+  const pad = (key: string): number | null => {
+    const v = g[key];
+    return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+  };
+  const width = size("width");
+  const height = size("height");
+  const padX = pad("padX");
+  const padY = pad("padY");
+  const fontSize = size("fontSize");
+  const lineHeight = size("lineHeight");
+  if (width === null || height === null || padX === null || padY === null) return null;
+  if (fontSize === null || lineHeight === null) return null;
+  if (width - 2 * padX <= 0 || height - 2 * padY <= 0) return null;
+  return {
+    width,
+    height,
+    padX,
+    padY,
+    fontSize,
+    lineHeight,
+    fonts: typeof g.fonts === "string" ? g.fonts : "",
+  };
 }
 
 // --------------------------------------------------------------------- zoom --

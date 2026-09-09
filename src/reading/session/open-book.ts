@@ -14,7 +14,13 @@ import { pageMarks, type Annotation, type ViewState } from "../../platform/app/r
 import { formatOfBytes, type BookFormat } from "../../platform/app/library";
 import { ensureFulltext, type Fulltext } from "../../fulltext";
 import { sweepDistillation } from "../../memory";
-import { PAGINATION_VERSION, acquireEpub, ensurePagination, extractEpubFulltext } from "../epub";
+import {
+  PAGINATION_VERSION,
+  acquireEpub,
+  ensurePagination,
+  extractEpubFulltext,
+  preparePagination,
+} from "../epub";
 import { epubFigures } from "../figures/epub";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
 import { seedReadingPosition } from "../reading-position";
@@ -26,14 +32,16 @@ export interface BookOpenIo {
   getViewState(bookId: string): Promise<ViewState | null>;
   loadAnnotations(bookId: string): Promise<Annotation[]>;
   loadThreads(bookId: string): Promise<unknown>;
-  ensureFulltext(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<Fulltext>;
-  ensureFigures(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<FiguresIndex>;
+  // `stale` says the book was just laid out again, so a cache counted in its
+  // old page numbers is not a cache of this book any more.
+  ensureFulltext(bookId: string, buffer: ArrayBuffer, format: BookFormat, stale: boolean): Promise<Fulltext>;
+  ensureFigures(bookId: string, buffer: ArrayBuffer, format: BookFormat, stale: boolean): Promise<FiguresIndex>;
   preparePages?(
     bookId: string,
     buffer: ArrayBuffer,
     format: BookFormat,
     onProgress?: (done: number, total: number) => void,
-  ): Promise<void>;
+  ): Promise<{ recut: boolean }>;
   clearFigureCache(): void;
   seedReadingPosition(bookId: string, state: ViewState | null): void;
   // What the book being left still owes (docs/02).
@@ -47,16 +55,16 @@ export const bookOpenIo: BookOpenIo = {
   // The two extractions are one dispatch on the format and nothing else: an
   // EPUB produces the same Fulltext and the same figure index a PDF does, so
   // everything downstream of these two calls is shared (docs/39 §1).
-  ensureFulltext: (bookId, buffer, format) =>
+  ensureFulltext: (bookId, buffer, format, stale) =>
     format === "epub"
       ? ensureFulltext(
           bookId,
           buffer,
           (b) => extractEpubFulltext(bookId, b),
-          (ft) => ft.paginationVersion === PAGINATION_VERSION,
+          (ft) => !stale && ft.paginationVersion === PAGINATION_VERSION,
         )
       : ensureFulltext(bookId, buffer),
-  ensureFigures: (bookId, buffer, format) =>
+  ensureFigures: (bookId, buffer, format, stale) =>
     format === "epub"
       ? ensureFigures(
           bookId,
@@ -68,14 +76,15 @@ export const bookOpenIo: BookOpenIo = {
             const book = acquireEpub(bookId, b);
             return epubFigures(book, await ensurePagination(bookId, book));
           },
-          (idx) => idx.paginationVersion === PAGINATION_VERSION,
+          (idx) => !stale && idx.paginationVersion === PAGINATION_VERSION,
         )
       : ensureFigures(bookId, buffer),
   // The pages of an EPUB are cut (or read back) before its marks are loaded, so
   // a book whose table was just replaced shows its marks on the new pages.
   preparePages: async (bookId, buffer, format, onProgress) => {
-    if (format !== "epub") return;
-    await ensurePagination(bookId, acquireEpub(bookId, buffer), undefined, onProgress);
+    if (format !== "epub") return { recut: false };
+    const prepared = await preparePagination(bookId, acquireEpub(bookId, buffer), undefined, onProgress);
+    return { recut: prepared.recut };
   },
   clearFigureCache,
   seedReadingPosition,
@@ -147,10 +156,19 @@ export async function openBook(
   }
   // The pages of an EPUB, before its marks: a mark's page number is read off
   // the table, and the table may be about to be replaced (docs/64).
+  //
+  // Whether it was is what the two extractions below are told. Both are sliced
+  // page by page off the table, so a book laid out again on another sheet has
+  // pages the cached ones are not a stale copy of — they are another book's.
+  let recut = false;
   try {
-    await io.preparePages?.(bookId, bytes.slice().buffer as ArrayBuffer, format, (done, total) =>
-      shell.showStatus(cuttingStatus(done, total)),
+    const prepared = await io.preparePages?.(
+      bookId,
+      bytes.slice().buffer as ArrayBuffer,
+      format,
+      (done, total) => shell.showStatus(cuttingStatus(done, total)),
     );
+    recut = prepared?.recut ?? false;
   } catch (e) {
     console.error("failed to lay the book's pages out", e);
   }
@@ -196,7 +214,7 @@ export async function openBook(
   shell.showFigures([]);
   io.clearFigureCache();
 
-  const figures = io.ensureFigures(bookId, buffer, format).catch((e) => {
+  const figures = io.ensureFigures(bookId, buffer, format, recut).catch((e) => {
     console.warn("failed to extract figures", e);
     return null;
   });
@@ -206,7 +224,7 @@ export async function openBook(
     shell.showFigures(idx?.figures ?? []);
   });
 
-  const fulltext = io.ensureFulltext(bookId, buffer, format).catch((e) => {
+  const fulltext = io.ensureFulltext(bookId, buffer, format, recut).catch((e) => {
     console.warn("failed to extract fulltext", e);
     return null;
   });
