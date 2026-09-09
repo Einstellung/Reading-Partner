@@ -31,4 +31,4 @@ parseFloat(style.getPropertyValue('--_max-inline-size'))
 
 行宽在元素上限，不在 foliate 的属性里限：`<foliate-view>` 上 `max-width: 48rem; margin: 0 auto`。包着它的那层保持满宽，翻页的左右点击区因此还是够到屏幕边缘的。
 
-`RENDERER_GEOMETRY`（`src/reading/epub/reader-styles.ts`）里的每个值都写成不带单位的数字。
+单位那半的结论后来推翻了，见坑 251：不能带的是 `em`，`px` 和 `%` 必须带——影子样式表自己也读这几个自定义属性，没单位整条 `grid-template-columns` 就废了。

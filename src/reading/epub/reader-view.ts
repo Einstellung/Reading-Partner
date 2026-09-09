@@ -120,13 +120,17 @@ export async function createEpubReader(
   view.style.display = "block";
   view.style.width = "100%";
   view.style.height = "100%";
-  // The measure. Paginated flow gives its container's whole width to one
-  // column — `max-inline-size` only decides how many columns fit, not how wide
-  // one is — so a desktop window was measured putting 120 characters on a line.
-  // Capping the element is what caps the line; the surface around it stays full
-  // width, so the tap zones still reach the edges of the screen.
+  // The measure, and the margin, both on the element — because the renderer
+  // sizes its two flows against two different containers, and anything left to
+  // it comes out at two widths (docs/pitfall/251). Capping the element caps the
+  // line: paginated flow gives its container's whole width to one column, and
+  // `max-inline-size` only decides how many columns fit, not how wide one is
+  // (docs/pitfall/247). The padding is the white space beside the text, which
+  // is the same on both sides of the frame in both flows. The surface around
+  // the element stays full width, so the tap zones still reach the screen edge.
   view.style.maxWidth = "48rem";
   view.style.margin = "0 auto";
+  view.style.paddingInline = "1.5rem";
   host.replaceChildren(view);
 
   let layout: "vertical" | "paged" = viewState?.layout ?? "vertical";

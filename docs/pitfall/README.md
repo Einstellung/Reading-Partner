@@ -61,7 +61,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 251）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 258）。
 
 ## EmbedPDF 引擎
 
@@ -242,7 +242,8 @@
 - [141-a-blocked-main-thread-stops-the-scroll-outright](./141-a-blocked-main-thread-stops-the-scroll-outright.md) — 主线程占多久屏幕就冻多久（90ms 阻塞冻 82-119ms），和挂不挂 wheel 监听、passive 与否无关，Chromium 同样冻；滚动路径上别占主线程，判据用屏幕像素不用页内计数
 - [178-webkit-pays-per-font-family-before-first-paint](./178-webkit-pays-per-font-family-before-first-paint.md) — 生产构建提交到出像素之间 WebKit 空 78ms、Chromium 12ms、Firefox 25ms，和 JS 体积无关；`body` 字体栈里 WebKit 解析不出的每个 family（`system-ui`、`"Segoe UI"`）各查询约 33ms，Chromium/Firefox 换栈没差别。字体栈至今没按平台拆分，坑还在
 - [244-a-scriptless-sandboxed-iframe-dispatches-no-events-in-webkit](./244-a-scriptless-sandboxed-iframe-dispatches-no-events-in-webkit.md) — `sandbox="allow-same-origin"` 不给 `allow-scripts` 时，WebKit 连 DOM 事件都不派发（bug 218086，iOS 26.5 与 WebKitGTK 一致）：父页在 `contentDocument` 上装的监听器收不到任何东西，DOM 读写、Range、CFI 全都正常。EPUB 正文 iframe 里的点击翻页、笔手路由、`overlayer.hitTest` 都得挪到父页做；系统的长按选区和 callout 不受影响，选区照样读得到
-- [247-max-inline-size-does-not-limit-a-foliate-column](./247-max-inline-size-does-not-limit-a-foliate-column.md) — foliate 的 `max-inline-size` 只进 `divisor`（这么宽放得下几栏），栏宽永远是容器宽除以栏数：`max-column-count: 1` 下正文满屏一行一百二十个字符，滚动模式却正常（那条路把它写成 `body` 的 `max-width`）。而且这些属性一律 `parseFloat` 当像素用，`"40em"` 读成 `40`，错得离谱也看不出来。行宽要在 `<foliate-view>` 元素上 `max-width` 限，属性值不许带单位
+- [247-max-inline-size-does-not-limit-a-foliate-column](./247-max-inline-size-does-not-limit-a-foliate-column.md) — foliate 的 `max-inline-size` 只进 `divisor`（这么宽放得下几栏），栏宽永远是容器宽除以栏数：`max-column-count: 1` 下正文满屏一行一百二十个字符，滚动模式却正常（那条路把它写成 `body` 的 `max-width`）。而且这些属性一律 `parseFloat` 当像素用，`"40em"` 读成 `40`，错得离谱也看不出来。行宽要在 `<foliate-view>` 元素上 `max-width` 限（单位那半见坑 251）
+- [251-foliate-geometry-attributes-need-units-in-css](./251-foliate-geometry-attributes-need-units-in-css.md) — foliate 的 `gap`/`margin`/`max-inline-size` 属性原样进自定义属性，影子样式表自己也拿它们算 `calc()`：不带单位 `calc(720 * 1)` 不是长度，整条 `grid-template-columns` 退回 `none`，滚动 456px、翻页 674px，同一本书两个宽度。`parseFloat` 认 `px` 和 `%`，两边都要带对单位；gap 归零、留白改成元素上的 `padding-inline`，两种流才量得出同一个数
 - [246-an-iframes-first-load-event-is-about-blank](./246-an-iframes-first-load-event-is-about-blank.md) — iframe 一插进 DOM，WebKit 立刻为它的初始 about:blank 发一次 `load`，早于取 `src`；配上坑 99 那种静默取消，一次没发生的导航看起来和成功一模一样。判导航成功要看 `documentURI` 落在哪，不看事件
 
 ## 浮层与 shadcn 原语
