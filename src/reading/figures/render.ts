@@ -6,8 +6,11 @@
 // page (scanned pages / failed pairing). Results are memo-cached per book so a
 // figure card and the view_figure tool never re-raster the same crop.
 
+import { decodeBlob } from "../../ai/image-utils";
 import { loadPdfjs } from "../../fulltext/extract";
-import { openZip } from "../epub/zip";
+import { heldEpub } from "../epub/book-cache";
+import { openZip, type EpubZip } from "../epub/zip";
+import { planEpubView, rasterizeEpubFigure, type Rasterizer } from "./raster";
 import { pdfBBox, type Figure } from "./types";
 
 export interface RenderedFigure {
@@ -51,15 +54,14 @@ const PAGE_JPEG_QUALITY = 0.72;
 
 const cache = new Map<string, RenderedFigure>();
 
-// An EPUB's figure is a file in the archive, so there is nothing to raster: the
-// publisher's own picture at the publisher's own resolution is better than
-// anything a re-render could produce, and it costs one inflate.
+// An EPUB's figure is a file in the archive, so usually there is nothing to
+// raster: the publisher's own picture at the publisher's own resolution is
+// better than anything a re-render could produce, and it costs one inflate.
 //
-// TODO (docs/39 §3, stage 5): an SVG has to be drawn to a canvas before a vision
-// model can be handed it, and a picture over the ~1 MB the view tier allows has
-// to be scaled down. Neither is done here — an SVG and an oversized JPEG are
-// both returned as they are — because both need a canvas and this stage runs
-// headless.
+// The two the vision model cannot be handed are the exception — an SVG, which no
+// model accepts, and a picture over the view tier's byte cap. Those are drawn to
+// a canvas and re-encoded as JPEG: raster.ts decides whether and at what size,
+// this file does the drawing (docs/39 §3).
 const EPUB_IMAGE_TYPES: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
@@ -86,17 +88,88 @@ function base64Of(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export function renderEpubFigure(buffer: ArrayBuffer, href: string): RenderedFigure | null {
+// The archive a figure comes out of. The open book's own zip when this is the
+// open book — book-cache.ts holds it parsed already — and a slot of our own
+// otherwise, so that rendering a figure from a book that is not open (the retell
+// view's materials come from several) cannot evict the reader's book. Either way
+// the central directory is walked once per book rather than once per picture.
+let zipSlot: { hash: string; zip: EpubZip } | null = null;
+
+function figureZip(hash: string, buffer: ArrayBuffer): EpubZip {
+  const held = heldEpub(hash);
+  if (held) return held.zip;
+  if (zipSlot && zipSlot.hash === hash) return zipSlot.zip;
+  const zip = openZip(new Uint8Array(buffer));
+  zipSlot = { hash, zip };
+  return zip;
+}
+
+// The canvas half of the redraw. createImageBitmap first and an <img> when it
+// refuses — the decode ai/image-utils already does for a pasted blob. An SVG
+// always comes out of the second one: no engine measured here decodes one into
+// a bitmap (docs/pitfall/263).
+export const domRasterizer: Rasterizer = {
+  decode: async (bytes, mimeType) => {
+    let decoded: Awaited<ReturnType<typeof decodeBlob>>;
+    try {
+      decoded = await decodeBlob(new Blob([bytes as BlobPart], { type: mimeType }));
+    } catch {
+      return null;
+    }
+    return {
+      width: decoded.width,
+      height: decoded.height,
+      encode: async (size) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = size.width;
+        canvas.height = size.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("no canvas context");
+        // White under the picture: a JPEG carries no alpha, and a transparent
+        // PNG would otherwise come out on black.
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, size.width, size.height);
+        ctx.drawImage(decoded.source, 0, 0, size.width, size.height);
+        const url = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+        return url.slice(url.indexOf(",") + 1);
+      },
+      release: decoded.cleanup,
+    };
+  },
+};
+
+export async function renderEpubFigure(
+  hash: string,
+  buffer: ArrayBuffer,
+  href: string,
+  tier: FigureTier,
+  rasterizer: Rasterizer = domRasterizer,
+): Promise<RenderedFigure | null> {
   const mimeType = epubImageType(href);
   if (!mimeType) return null;
   let bytes: Uint8Array | null = null;
   try {
-    bytes = openZip(new Uint8Array(buffer)).bytes(href);
+    bytes = figureZip(hash, buffer).bytes(href);
   } catch (e) {
     console.warn("failed to read a figure out of the book", href, e);
     return null;
   }
   if (!bytes) return null;
+
+  // Only what goes to the model is redrawn. The card is an <img> in the app's
+  // own DOM, which takes an SVG and any size the book ships.
+  if (tier === "view" && planEpubView(mimeType, bytes.length).action === "raster") {
+    const out = await rasterizeEpubFigure(bytes, mimeType, rasterizer);
+    if (!out) return null;
+    return {
+      dataUrl: `data:${out.mimeType};base64,${out.base64}`,
+      base64: out.base64,
+      mimeType: out.mimeType,
+      width: out.width,
+      height: out.height,
+    };
+  }
+
   const base64 = base64Of(bytes);
   return { dataUrl: `data:${mimeType};base64,${base64}`, base64, mimeType, width: 0, height: 0 };
 }
@@ -111,10 +184,11 @@ function pageKey(hash: string, page: number, widthPx: number): string {
   return `${hash}:page-${page}@${widthPx}`;
 }
 
-// Drop cached crops. Called on book close/switch so only the open book's figures
-// stay resident.
+// Drop cached crops, and the archive they were read out of. Called on book
+// close/switch so only the open book's figures stay resident.
 export function clearFigureCache(): void {
   cache.clear();
+  zipSlot = null;
 }
 
 // One open pdf.js document per book, reused across a burst of figure renders and
@@ -146,7 +220,7 @@ export async function renderFigure(
   const hit = cache.get(k);
   if (hit) return hit;
   if (figure.source.kind === "epub") {
-    const out = renderEpubFigure(buffer, figure.source.href);
+    const out = await renderEpubFigure(hash, buffer, figure.source.href, tier);
     if (out) cache.set(k, out);
     return out;
   }

@@ -71,8 +71,12 @@ function encodeDrawable(source: Drawable, srcW: number, srcH: number, probeAlpha
 
 // Decode a blob to a drawable. Prefer createImageBitmap; fall back to an <img>
 // element, since WebKitGTK's createImageBitmap has been unreliable for pasted
-// blobs. Returns a cleanup to release the bitmap / object URL after drawing.
-async function decodeBlob(blob: Blob): Promise<{ source: Drawable; width: number; height: number; cleanup: () => void }> {
+// blobs, and it refuses every SVG outright (docs/pitfall/263). Returns a
+// cleanup to release the bitmap / object URL after drawing.
+//
+// Exported for the EPUB figure raster (reading/figures/render.ts), which draws
+// at its own size against its own byte cap but needs the same two-step decode.
+export async function decodeBlob(blob: Blob): Promise<{ source: Drawable; width: number; height: number; cleanup: () => void }> {
   if (typeof createImageBitmap === "function") {
     try {
       const bmp = await createImageBitmap(blob);
