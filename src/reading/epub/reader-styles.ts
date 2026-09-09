@@ -81,6 +81,15 @@ body {
   text-align: start;
   overflow-wrap: break-word;
   font-variant-numeric: oldstyle-nums proportional-nums;
+  /* The system's touch-and-hold callout, and nothing else. Selecting text is
+     how a mark is made on an EPUB (docs/39 §5) — the frame dispatches no events
+     (docs/pitfall/244), so the system's own selection is the only selection
+     there is — which is why user-select is deliberately left alone here, unlike
+     the PDF reading area (pitfall 49). The handles stay: they are what the
+     reader adjusts the passage with. The menu over them is what the app
+     replaces, and CSS is the only lever on it that works inside a frame with no
+     scripts. */
+  -webkit-touch-callout: none;
 }
 p { margin: 0 0 0.85em; text-indent: 0; }
 p + p { margin-top: 0; }

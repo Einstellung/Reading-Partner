@@ -1351,6 +1351,8 @@ export default function App() {
               key={embedDoc.bookId}
               bookId={embedDoc.bookId}
               buffer={embedDoc.buffer}
+              annotations={embedDoc.annotations}
+              authorName="Reading-Partner"
               viewState={embedDoc.viewState}
               className="block"
               onView={onEmbedView}
@@ -1358,6 +1360,9 @@ export default function App() {
               onError={onEmbedError}
               onChangeViewState={persist}
               onChangeViewStats={setStats}
+              onSaveAnnotations={onSaveAnnotations}
+              onSelectAnnotations={onEmbedSelect}
+              onSetAnnotationPopup={onSetAnnotationPopup}
               onQuoteHighlightChange={setQuoteHlActive}
             />
           )}
