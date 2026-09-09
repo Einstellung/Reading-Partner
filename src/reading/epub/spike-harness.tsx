@@ -152,9 +152,27 @@ async function blobIframe(opts: { sandbox?: string | null; timeoutMs?: number } 
   });
 
   const result: Record<string, unknown> = { sandbox, blobUrl: doc };
+  // Appending an iframe fires `load` for its initial about:blank, in WebKit
+  // before the assigned src has even been fetched. Waiting for the first load
+  // event therefore reports success for a navigation that was cancelled — which
+  // is the exact failure docs/pitfall/99 says leaves no trace. So a load only
+  // counts once the frame's document is no longer about:blank; a navigation
+  // that never happens ends in the timeout instead.
+  const blanks: string[] = [];
   const settled = await new Promise<string>((resolve) => {
     const timer = setTimeout(() => resolve("timeout"), timeoutMs);
     frame.addEventListener("load", () => {
+      let uri: string | null = null;
+      try {
+        uri = frame.contentDocument?.documentURI ?? null;
+      } catch {
+        // Cross-origin: whatever it is, it is not about:blank.
+        uri = "opaque";
+      }
+      if (uri === "about:blank") {
+        blanks.push(uri);
+        return;
+      }
       clearTimeout(timer);
       resolve("load");
     });
@@ -165,6 +183,7 @@ async function blobIframe(opts: { sandbox?: string | null; timeoutMs?: number } 
     document.body.append(frame);
     frame.src = doc;
   });
+  result.blankLoads = blanks.length;
   result.event = settled;
   result.loadMs = Math.round(performance.now() - started);
 
