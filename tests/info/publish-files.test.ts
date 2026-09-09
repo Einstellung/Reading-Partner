@@ -24,7 +24,7 @@ import {
   publishBriefing,
 } from "../../src/info/boxes/publish";
 import type { CachedArticle } from "../../src/info/collect/store";
-import type { Briefing } from "../../src/info/collect/types";
+import type { Briefing } from "../../src/info/boxes/types";
 import type { InfoItem } from "../../src/info/sources/item";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 
@@ -50,11 +50,12 @@ function briefing(generatedAt: number): Briefing {
   return {
     date: DATE,
     generatedAt,
-    overview: "a day",
+    version: 2,
+    labs: [{ labId: "lab-a", name: "Room", cover: "a day", judgments: [] }],
+    quiet: [],
     mustRead: [{ itemId: "a", reason: "because" }],
     oneLiners: [{ itemId: "b", line: "the point" }],
     outOfLane: [],
-    filtered: [],
     items: { a: meta("a"), b: meta("b") },
   };
 }

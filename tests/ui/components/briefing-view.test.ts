@@ -4,12 +4,11 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import type { Briefing, LabCover } from "../../../src/info/collect/types";
+import type { Briefing, LabCover } from "../../../src/info/boxes/types";
 import {
   NOTHING_CHANGED,
   briefingCovers,
   isEmptyDay,
-  isLabBriefing,
   labTag,
   quietLine,
 } from "../../../src/ui/components/info/briefing-view";
@@ -22,6 +21,9 @@ function briefingWith(over: Partial<Briefing>): Briefing {
   return {
     date: "2026-09-09",
     generatedAt: 0,
+    version: 2,
+    labs: [],
+    quiet: [],
     mustRead: [],
     outOfLane: [],
     oneLiners: [],
@@ -30,19 +32,8 @@ function briefingWith(over: Partial<Briefing>): Briefing {
   } as Briefing;
 }
 
-// A day with no labs at all is a briefing from before labs existed; a day with
-// an empty lab list is one where every lab ran and found nothing. The page says
-// different things about them, so presence and length are different questions.
-test("no labs at all is a legacy briefing, not an empty day", () => {
-  const legacy = briefingWith({ overview: "A quiet day." });
-  expect(isLabBriefing(legacy)).toBe(false);
-  expect(isEmptyDay(legacy)).toBe(false);
-  expect(briefingCovers(legacy)).toEqual([]);
-});
-
 test("an empty lab list is an empty day", () => {
   const empty = briefingWith({ labs: [] });
-  expect(isLabBriefing(empty)).toBe(true);
   expect(isEmptyDay(empty)).toBe(true);
   expect(NOTHING_CHANGED).toBe("Nothing changed today.");
 });
@@ -71,5 +62,5 @@ test("the lab tag is looked up by id and is empty when there is nothing to name"
   expect(labTag(b, "lab-1")).toBe("Robotics");
   expect(labTag(b, "lab-9")).toBe("");
   expect(labTag(b, undefined)).toBe("");
-  expect(labTag(briefingWith({ overview: "x" }), "lab-1")).toBe("");
+  expect(labTag(briefingWith({}), "lab-1")).toBe("");
 });

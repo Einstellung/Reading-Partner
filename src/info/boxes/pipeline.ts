@@ -1,28 +1,36 @@
-// The info-briefing orchestrator (docs/16, docs/35): a funnel of four phases —
-// discover headlines, screen them, fetch the survivors' bodies, triage what is
-// left — ending in the briefing and the article cache. Like the notes pipeline
-// it is a resumable state machine — the run checkpoint in run-state.ts is its
-// state.json — with the same shape besides: injected deps so it runs headless in
-// tests, subscribe/snapshot so the vestibule can show liveness, stoppable.
+// The day's run (docs/16, docs/35, docs/63): discover the headlines, screen them
+// against the research rooms, fetch the survivors' bodies, file them as cables,
+// let each room that was hit make something of its day, and box the result into
+// the briefing. Like the notes pipeline it is a resumable state machine — the
+// run checkpoint in collect/run-state.ts is its state.json — with the same shape
+// besides: injected deps so it runs headless in tests, subscribe/snapshot so the
+// vestibule can show liveness, stoppable.
+//
+// It lives with the boxes rather than with the funnel because the briefing is
+// what it produces, and the briefing is here. Everything below it — the sources,
+// the screen, the checkpoint — is collect's; everything it hands the model is
+// analysis's.
 //
 // The funnel is what keeps a briefing's cost off the subscription count: the two
-// expensive steps (a page fetch per article, a triage prompt carrying every
-// article's text) only ever see the few items screening kept, while the cheap
-// steps scale with the day.
+// expensive steps (a page fetch per article, an analyst prompt carrying the
+// day's text) only ever see the few items screening kept, while the cheap steps
+// scale with the day.
 //
 // Discovery is no longer where the day's material comes from — the pool is
-// (item-pool.ts, collector.ts). Background collection polls each source on its
-// own interval, and a run draws from what has accumulated: everything nobody has
-// judged, plus what today's briefing already carries, so a refresh merges into
-// the day's one briefing instead of starting a second. What the run settles goes
-// back into the pool, so tomorrow morning does not re-judge tonight's headlines.
+// (collect/item-pool.ts, collect/collector.ts). Background collection polls each
+// source on its own interval, and a run draws from what has accumulated:
+// everything nobody has judged, plus what today's briefing already carries, so a
+// refresh merges into the day's one briefing instead of starting a second. What
+// the run settles goes back into the pool, so tomorrow morning does not re-judge
+// tonight's headlines.
 //
 // Resumable because of where it runs (docs/22): on a phone a run takes minutes,
 // and the OS may suspend or kill a backgrounded webview at any point in it.
 // Every phase spends something the reader cannot get back — requests, tokens,
 // patience — so a run that is cut off keeps what each phase already paid for and
 // the next start picks up from there: discovered sources are not rediscovered,
-// judged items are not rejudged, fetched bodies are not refetched.
+// judged items are not rejudged, fetched bodies are not refetched, and a room
+// whose analysis has already landed in a picture is not analyzed a second time.
 
 import { isAbortError } from "../../platform/app/abort";
 import {
@@ -33,17 +41,31 @@ import {
   type WatchdogConfig,
 } from "../../legion/execute/watchdog";
 import { mapSettled } from "../sources/pool";
+import { ANALYST_TEXT_CHARS } from "../analysis/analyst";
+import type { AnalystCable, AnalystInput, LabRunResult } from "../analysis/types";
+import { cablesForLab } from "../cable/cable";
+import type { CableDay } from "../cable/types";
+import { cablesFromRun, cableText } from "../collect/cables";
+import { activeLabs } from "../labs/labs";
+import type { Lab } from "../labs/types";
+import type { Picture } from "../picture/types";
 import {
   SCREEN_BATCH_SIZE,
   SCREEN_CONCURRENCY,
   SCREEN_MAX_KEEP,
   screenBatches,
+  screenTargets,
+  targetsForItem,
+  type ScreenTarget,
   type ScreenVerdict,
-} from "./screen";
-import type { CachedArticle } from "./store";
-import { todayLocal } from "./store";
+} from "../collect/screen";
+import type { CachedArticle } from "../collect/store";
+import { todayLocal } from "../collect/store";
 import {
+  addWarnings,
+  analyzedLabIds,
   applyBody,
+  applyLabOutcome,
   applySourceResult,
   applyVerdicts,
   collectProgress,
@@ -55,6 +77,7 @@ import {
   retryFailedSources,
   seedRun,
   selectedItems,
+  startAnalysis,
   startupAction,
   syncSources,
   unscreenedItems,
@@ -62,18 +85,25 @@ import {
   type InfoRunPhase,
   type InfoRunState,
   type InfoSourceRef,
+  type LabOutcome,
   type RunSeed,
   type SourceResult,
-} from "./run-state";
-import type { PoolRecord } from "./item-pool";
-import type { FeedbackEvent } from "../../memory/profile/feedback";
-import type { Briefing, BriefingItemMeta, ScreenSummary, TriageResult } from "./types";
+} from "../collect/run-state";
+import type { PoolRecord } from "../collect/item-pool";
+import { boxBriefing } from "./briefing";
+import type { Briefing } from "./types";
 import type { InfoItem } from "../sources/item";
 
 export type { AiCallOptions };
 export type { CollectProgress, InfoSourceRef, SourceResult };
 
 const ACTIVITY_NOTIFY_MS = 250;
+
+// What a run says when the bureau has no rooms. Nothing downstream has a
+// question to ask without one — the screen has nothing to match against and the
+// briefing would have nothing to be cut by — so the day stops here and the
+// companion is told to propose one (docs/63 章程冷启动).
+export const NO_LABS_ERROR = "No labs yet.";
 
 // How many settled bodies may accumulate before the checkpoint is written. Per
 // body would be correct and wasteful: the checkpoint is one self-contained file
@@ -86,17 +116,23 @@ const PHASE_RANK: Record<InfoRunPhase, number> = {
   discovering: 0,
   screening: 1,
   fetching: 2,
-  triaging: 3,
+  analyzing: 3,
 };
 
 export interface InfoDeps {
   loadBriefing(date: string): Promise<Briefing | null>;
   loadProfile(): Promise<string>;
-  loadFeedback(): Promise<FeedbackEvent[]>;
-  // Optional reading-side signal (docs/16): what the reader is reading and stuck
-  // on lately, injected into triage as background relevance context. Absent, or
-  // returning "" / throwing, simply omits the section — it never blocks a briefing.
-  loadReaderContext?(): Promise<string>;
+  // The rooms, open and archived alike; the run reads the open ones. A run with
+  // none of them refuses rather than collecting a day nothing can be made of.
+  loadLabs(): Promise<Lab[]>;
+  // One room's picture: what the screen matches against, and what the analyst
+  // grows. Saved back after each room's run, before the next one starts.
+  loadPicture(labId: string): Promise<Picture>;
+  savePicture(picture: Picture): Promise<void>;
+  // What is remembered about the reader, per room: the episodic observations of
+  // the topic its charter files under. Optional, and "" is the ordinary answer —
+  // a room with no topic has none, and memory is never evidence for a judgment.
+  loadObservations?(topicId: string): Promise<string>;
   // The enabled sources, in list order. The run checkpoint is per source, so the
   // roster has to be known before any fetching starts.
   listSources(): Promise<InfoSourceRef[]>;
@@ -125,11 +161,11 @@ export interface InfoDeps {
     opts: { force: boolean },
   ): Promise<void>;
   // Screening: one AI call over one batch of discovered items, answering only
-  // "is this worth fetching the body for". The pipeline owns the batching and
-  // the concurrency; this is the single call, wrapped by the watchdog outside.
-  // Throws on a stall/error so the watchdog can retry the attempt.
+  // "which rooms' observables does this headline hit". The pipeline owns the
+  // batching, the targets and the concurrency; this is the single call, wrapped
+  // by the watchdog outside. Throws on a stall/error so the watchdog can retry.
   screen(
-    input: { profile: string; items: InfoItem[] },
+    input: { targets: ScreenTarget[]; items: InfoItem[] },
     opts: AiCallOptions,
   ): Promise<ScreenVerdict[]>;
   // Material: fetch the article bodies of the items screening kept. `onSettled`
@@ -141,24 +177,27 @@ export interface InfoDeps {
     onSettled: (item: InfoItem) => Promise<void>,
     signal: AbortSignal,
   ): Promise<void>;
-  // The one triage AI call, wrapped by the watchdog. Validates + retries parse
-  // internally; throws on a stall/error so the watchdog can retry the attempt.
-  triage(
-    input: { profile: string; feedback: FeedbackEvent[]; items: InfoItem[]; readerContext?: string },
-    opts: AiCallOptions,
-  ): Promise<TriageResult>;
+  // One room's day: the analyst call and the synthesis call, wrapped by the
+  // watchdog here (analysis/run.ts owns the two prompts and the one in-band
+  // parse retry). Throws when a reply could not be read twice, which costs the
+  // room its day and not the day.
+  analyze(input: AnalystInput, opts: AiCallOptions): Promise<LabRunResult>;
+  // The day's cables (docs/63 电报). Written once the bodies are in, read again
+  // by a re-analysis that collects nothing.
+  saveCableDay(day: CableDay): Promise<void>;
+  loadCableDay(date: string): Promise<CableDay | null>;
   // Where a run's wall clock went, one line per phase (live.ts writes them to
   // events-info.jsonl). Optional: instrumentation never decides whether a
   // briefing generates.
   logPhase?(phase: InfoRunPhase, data: Record<string, number>): void;
   saveBriefing(briefing: Briefing): Promise<void>;
   saveArticles(date: string, articles: Record<string, CachedArticle>): Promise<void>;
-  // Persist / load the day's item snapshot so a profile change can re-triage the
-  // cached items without re-collecting. Written only when a run completes: a
-  // half-collected day must never become the snapshot a re-triage reads.
+  // Persist / load the day's item snapshot so the day can be re-analyzed without
+  // re-collecting. Written only when a run completes: a half-collected day must
+  // never become the snapshot a re-analysis reads.
   saveItems(date: string, items: InfoItem[]): Promise<void>;
   loadItems(date: string): Promise<InfoItem[]>;
-  // The run checkpoint (run-state.ts).
+  // The run checkpoint (collect/run-state.ts).
   loadRun(date: string): Promise<InfoRunState | null>;
   saveRun(state: InfoRunState): Promise<void>;
   clearRun(date: string): Promise<void>;
@@ -174,8 +213,8 @@ export interface InfoDeps {
   poolDraw?(date: string): Promise<RunSeed>;
   poolRecord?(date: string, record: PoolRecord): Promise<void>;
   // Whether a briefing may be generated without being asked for: a provider is
-  // configured and at least one source is subscribed. Absent means no — nothing
-  // spends the reader's money on a guess.
+  // configured, at least one source is subscribed, and at least one room is
+  // open. Absent means no — nothing spends the reader's money on a guess.
   canAutoGenerate?(): Promise<boolean>;
   // Optional housekeeping: drop the derived per-day info files of every day but
   // the given one. Absent, or throwing, leaves the old files on disk.
@@ -188,6 +227,7 @@ export interface InfoDeps {
   sleep(ms: number): Promise<void>;
   setTimer(ms: number, cb: () => void): () => void;
   today?(): string;
+  random?(): number;
 }
 
 // The run phases as the UI names them, plus idle. Same four as InfoRunPhase
@@ -230,20 +270,6 @@ export interface RunHandle {
   done: Promise<void>;
 }
 
-function itemsMeta(items: InfoItem[]): Record<string, BriefingItemMeta> {
-  const out: Record<string, BriefingItemMeta> = {};
-  for (const it of items) {
-    out[it.id] = {
-      title: it.title,
-      url: it.url,
-      source: it.source,
-      sourceName: it.sourceName,
-      publishedAt: it.publishedAt,
-    };
-  }
-  return out;
-}
-
 function articleCache(items: InfoItem[]): Record<string, CachedArticle> {
   const out: Record<string, CachedArticle> = {};
   for (const it of items) {
@@ -278,6 +304,11 @@ export class InfoPipeline {
   // The run in flight and whether it has changes not yet on disk. Null between
   // runs: the checkpoint file, not this field, is what a resume reads.
   private run: InfoRunState | null = null;
+  // The open rooms this run is for, and their pictures as they were when it
+  // started. Read once: the screen matches against them, and the analysis walks
+  // them in the same order, which is the order the briefing is cut in.
+  private labs: Lab[] = [];
+  private pictures = new Map<string, Picture>();
   // The run in flight, as something to await. The UI subscribes instead; this is
   // for init and for the tests, and it is what a refused start hands back so the
   // caller can still wait on the run it lost the race to.
@@ -296,20 +327,9 @@ export class InfoPipeline {
     return this.deps.today ? this.deps.today() : todayLocal();
   }
 
-  // The reading-side signal, guarded: absent dep, an empty result, or a thrown
-  // error all resolve to "" so triage simply omits the context section.
-  private async readerContext(): Promise<string> {
-    if (!this.deps.loadReaderContext) return "";
-    try {
-      return (await this.deps.loadReaderContext()) || "";
-    } catch {
-      return "";
-    }
-  }
-
   // Housekeeping before a generation, guarded: it only ever removes days other
   // than today, and a failure must not cost the reader a briefing. Not called
-  // from retriage, which reads today's item snapshot.
+  // from a re-analysis, which reads today's own files.
   private async prune(): Promise<void> {
     if (!this.deps.pruneStaleDays) return;
     try {
@@ -452,18 +472,17 @@ export class InfoPipeline {
     this.stopController?.abort();
   }
 
-  // Collect, triage, and save. A second call while running is a no-op. There is
+  // Collect, analyze, and box. A second call while running is a no-op. There is
   // no button behind this any more (docs/35): the day's first briefing comes
   // from init, and a regenerate comes from the companion's generate_briefing.
   //
   // A regenerate is a refresh, not a second briefing. It polls every source, and
   // the pool hands back today's items alongside whatever has come in since, so
-  // the triage that follows produces one briefing for the day with the new
-  // material merged into it.
+  // the day that follows produces one briefing with the new material merged in.
   //
   // It is also the resume the user asks for by hand: an unfinished run for today
-  // is continued, not restarted, so asking again after a failed triage (a bad
-  // key, no network) costs one AI call and no refetching.
+  // is continued, not restarted, so asking again after a failed analysis (a bad
+  // key, no network) costs the rooms that are still owed and no refetching.
   //
   // A second call while one is going is refused, and the refusal is the return
   // value: it used to be a bare `return`, which reads to the caller exactly like
@@ -491,11 +510,13 @@ export class InfoPipeline {
       this.notify();
       const date = this.today();
       await this.prune();
+      await this.openRooms();
       await this.startOrContinue(date, opts.retryFailed);
       await this.discoverPhase();
       await this.screenPhase();
       await this.materialPhase();
-      await this.triagePhase(date);
+      const day = await this.analyzePhase(date);
+      await this.boxPhase(date, day);
     } catch (e) {
       const stopped = e instanceof StoppedError;
       this.error = stopped ? null : e instanceof Error ? e.message : String(e);
@@ -518,8 +539,22 @@ export class InfoPipeline {
       this.activity = null;
       this.stopController = null;
       this.run = null;
+      this.labs = [];
+      this.pictures.clear();
       this.deps.keepAwake?.(false);
       this.notify();
+    }
+  }
+
+  // The rooms and their pictures, read before anything is spent. A bureau with
+  // no open room has no question to collect against, and the refusal is the
+  // answer the companion turns into "what would you like followed?".
+  private async openRooms(): Promise<void> {
+    this.labs = activeLabs(await this.deps.loadLabs());
+    if (this.labs.length === 0) throw new Error(NO_LABS_ERROR);
+    this.pictures.clear();
+    for (const lab of this.labs) {
+      this.pictures.set(lab.id, await this.deps.loadPicture(lab.id));
     }
   }
 
@@ -638,9 +673,9 @@ export class InfoPipeline {
   }
 
   // Hand back to the pool what this run has settled. Called at the end of
-  // screening (so a crash before triage does not cost the verdicts) and again
-  // when the briefing lands (bodies and deliveries). Guarded for the same reason
-  // the draw is: the pool is a saving, not a dependency.
+  // screening (so a crash before the analysis does not cost the verdicts) and
+  // again when the briefing lands (bodies and deliveries). Guarded for the same
+  // reason the draw is: the pool is a saving, not a dependency.
   private async recordToPool(record: PoolRecord): Promise<void> {
     if (!this.deps.poolRecord || !this.run) return;
     try {
@@ -655,20 +690,24 @@ export class InfoPipeline {
   // twice. A batch that fails after its watchdog retries fails the run rather
   // than guessing on the reader's behalf — the batches that landed are kept, so
   // the next Generate pays only for the rest.
+  //
+  // Each batch is shown only the rooms its items are screened against
+  // (targetsForItem): a source a room claimed is read for the claimants and
+  // nobody else (docs/63 源归局不归人).
   private async screenPhase(): Promise<void> {
     if (this.past("screening")) return;
     const startedAt = this.enter("screening");
     const owed = unscreenedItems(this.run!);
+    const targets = screenTargets(this.labs, this.pictures);
     const batches = screenBatches(owed, SCREEN_BATCH_SIZE);
     if (batches.length > 0) {
-      const profile = await this.deps.loadProfile();
       const signal = this.stopController!.signal;
       const results = await mapSettled(
         batches,
         async (batch) => {
           const ids = batch.map((it) => it.id);
           const verdicts = await runWithWatchdog(
-            (opts) => this.deps.screen({ profile, items: batch }, opts),
+            (opts) => this.deps.screen({ targets: batchTargets(targets, batch), items: batch }, opts),
             this.config,
             { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
             { onAttempt: () => {}, onProgress: () => {} },
@@ -692,8 +731,8 @@ export class InfoPipeline {
     const screened = finishScreening(this.run!, SCREEN_MAX_KEEP, this.deps.now());
     const cappedOut = screened.selection!.cappedOut;
     if (cappedOut > 0) {
-      // Never a silent trim: the log, the progress line and the briefing all
-      // carry it, so a day that lost items to the ceiling says so.
+      // Never a silent trim: the log and the progress line both carry it, so a
+      // day that lost items to the ceiling says so.
       console.warn(
         `briefing screen kept ${screened.selection!.ids.length} items and cut ${cappedOut} more at the ${SCREEN_MAX_KEEP} cap`,
       );
@@ -736,32 +775,145 @@ export class InfoPipeline {
       items: this.run!.selection?.ids.length ?? 0,
       fetched: this.run!.material.length,
     });
-    await this.advance({ ...this.run!, phase: "triaging", updatedAt: this.deps.now() });
+    await this.advance({ ...this.run!, phase: "analyzing", updatedAt: this.deps.now() });
   }
 
-  // The one AI call, then the day's files. The checkpoint goes last: until the
-  // briefing is on disk the run is still worth resuming.
-  private async triagePhase(date: string): Promise<void> {
-    this.phase = "triaging";
-    this.notify();
-    // Only what screening kept, with bodies: the screened-out items were never
-    // fetched, so they have nothing for triage to read. They survive in the
-    // briefing as a count and a list of ids (screenSummary).
+  // The day's cables, then one room at a time (docs/63 加工). The cables are
+  // derived from the checkpoint, so a resumed run writes the same file rather
+  // than needing to read the one it wrote before being cut off.
+  //
+  // Each room's picture is saved the moment its run lands, and the checkpoint
+  // records the room as paid for: two AI calls and an increment folded into a
+  // file that nothing can rebuild, so a resume that ran it again would fold the
+  // same day in twice.
+  private async analyzePhase(date: string): Promise<CableDay> {
+    const startedAt = this.enter("analyzing");
     const items = selectedItems(this.run!);
-    const screen = screenSummary(this.run!);
-    const [profile, feedback, readerContext] = await Promise.all([
-      this.deps.loadProfile(),
-      this.deps.loadFeedback(),
-      this.readerContext(),
-    ]);
-    const briefing = await this.triageToBriefing(
-      items,
-      profile,
-      feedback,
-      readerContext,
+    const day = cablesFromRun({
       date,
-      screen,
-    );
+      items,
+      verdicts: this.run!.verdicts,
+      selected: this.run!.selection?.ids ?? [],
+    });
+    await this.deps.saveCableDay(day);
+    // Only the rooms the day hit are analyzed, and they are what the progress
+    // line counts: a room nothing landed in has nothing to read and is quiet by
+    // arithmetic, not by an AI call.
+    const hit = this.labs.filter((lab) => cablesForLab(day, lab.id).length > 0);
+    await this.advance(startAnalysis(this.run!, hit.length, this.deps.now()));
+    const done = analyzedLabIds(this.run!);
+    const bodies = new Map(items.map((it) => [it.id, it]));
+    let calls = 0;
+    for (const lab of hit) {
+      if (done.has(lab.id)) continue;
+      calls++;
+      const outcome = await this.runLab(lab, cablesForLab(day, lab.id), bodies, date);
+      if (!outcome) continue;
+      this.run = applyLabOutcome(this.run!, outcome, this.deps.now());
+      this.touch();
+      await this.persist();
+    }
+    this.logPhase("analyzing", startedAt, {
+      cables: day.cables.length,
+      labs: hit.length,
+      analyzed: calls,
+    });
+    return day;
+  }
+
+  // One room's run under the watchdog. A room that will not come back after the
+  // retries costs its own day and not the bureau's: the day goes on with the
+  // rooms that did answer, and the reason is on the run as a warning. Only a
+  // Stop propagates.
+  private async runLab(
+    lab: Lab,
+    cables: AnalystCable[],
+    bodies: Map<string, InfoItem>,
+    date: string,
+  ): Promise<LabOutcome | null> {
+    const input: AnalystInput = {
+      lab,
+      picture: this.pictures.get(lab.id) ?? (await this.deps.loadPicture(lab.id)),
+      date,
+      cables: cables.map((c) => {
+        const item = bodies.get(c.id);
+        const text = item ? cableText(item, ANALYST_TEXT_CHARS) : undefined;
+        return text ? { ...c, text } : c;
+      }),
+      memory: {
+        profile: await this.deps.loadProfile(),
+        observations: await this.observations(lab),
+      },
+    };
+    let result: LabRunResult;
+    try {
+      result = await runWithWatchdog(
+        (opts) => this.deps.analyze(input, opts),
+        this.config,
+        { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
+        {
+          onAttempt: ({ attempt, attempts, startedAt }) => {
+            this.activity = { startedAt, chars: 0, attempt, attempts };
+            this.lastActivityNotify = this.deps.now();
+            this.notify();
+          },
+          onProgress: (chars) => this.bumpActivity(chars),
+        },
+        this.stopController!.signal,
+      );
+    } catch (e) {
+      if (e instanceof StoppedError || isAbortError(e)) throw e;
+      const why = e instanceof Error ? e.message : String(e);
+      console.warn(`the ${lab.name} room could not be analyzed`, e);
+      this.run = addWarnings(this.run!, [`${lab.name}: ${why}`], this.deps.now());
+      this.touch();
+      await this.persist();
+      return null;
+    }
+    await this.deps.savePicture(result.picture);
+    this.pictures.set(lab.id, result.picture);
+    if (result.warnings.length > 0) {
+      this.run = addWarnings(
+        this.run!,
+        result.warnings.map((w) => `${lab.name}: ${w}`),
+        this.deps.now(),
+      );
+    }
+    return {
+      labId: lab.id,
+      name: lab.name,
+      cover: result.cover,
+      mustRead: result.mustRead,
+      oneLiners: result.oneLiners,
+    };
+  }
+
+  // What is remembered about the reader on this room's topic. Guarded: a room
+  // with no topic, an absent dep, or a read that failed all mean the analyst
+  // works from the profile alone, which is what it did before memory existed.
+  private async observations(lab: Lab): Promise<string> {
+    const topicId = lab.charter.topicId;
+    if (!topicId || !this.deps.loadObservations) return "";
+    try {
+      return (await this.deps.loadObservations(topicId)) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  // Boxing (docs/63 呈现): the covers of the rooms that moved, the names of the
+  // ones that did not, and the day's picks in room order. The checkpoint goes
+  // last — until the briefing is on disk the run is still worth resuming.
+  private async boxPhase(date: string, day: CableDay): Promise<void> {
+    const items = selectedItems(this.run!);
+    const briefing = boxBriefing({
+      date,
+      generatedAt: this.deps.now(),
+      labs: this.labs,
+      outcomes: this.run!.analysis ?? [],
+      cables: day,
+      items,
+    });
     await this.deps.saveArticles(date, articleCache(items));
     await this.deps.saveItems(date, items);
     await this.deps.saveBriefing(briefing);
@@ -779,13 +931,13 @@ export class InfoPipeline {
     await this.deps.clearRun(date);
   }
 
-  // Re-triage today's cached items with the current profile — no re-collection.
-  // Used after the user applies a profile change (docs/16): one triage call over
-  // the saved item snapshot, reusing the same running/phase/activity machinery so
-  // the briefing page and the chat progress card stay in step. A second call
-  // while running is refused the same way generate is, and says so. It does not
-  // touch the run checkpoint: the snapshot it reads is only ever written by a
-  // run that finished.
+  // Re-run the day's analysis over the cables already on disk — no collection.
+  // Used after the user applies a profile change (docs/16) and whenever the
+  // reader asks for the cheap half of a regenerate: the rooms read the same day
+  // again, which is an increment on top of the pictures they wrote the first
+  // time, not a replay of them. A second call while running is refused the same
+  // way generate is, and says so. It does not touch the run checkpoint: the
+  // files it reads are only ever written by a run that finished.
   retriage(): RunHandle {
     return this.launch(() => this.runRetriage());
   }
@@ -795,39 +947,40 @@ export class InfoPipeline {
     try {
       this.stopping = false;
       this.error = null;
-      this.phase = "triaging";
+      this.phase = "analyzing";
       this.activity = null;
       this.collect = null;
       this.stopController = new AbortController();
       this.deps.keepAwake?.(true);
       this.notify();
       const date = this.today();
-      const items = await this.deps.loadItems(date);
-      if (items.length === 0) {
-        throw new Error("No cached items to re-triage. Generate a briefing first.");
+      await this.openRooms();
+      const day = await this.deps.loadCableDay(date);
+      if (!day || day.cables.length === 0) {
+        throw new Error("No cables to analyze. Generate a briefing first.");
       }
       if (this.stopController.signal.aborted) throw new StoppedError();
-      // Surface the item total so the progress card reads "triaging N items".
-      this.collect = emptyProgress(items.length);
+      const items = await this.deps.loadItems(date);
+      const bodies = new Map(items.map((it) => [it.id, it]));
+      // Surface the totals so the progress card reads "analyzing N of M rooms".
+      const hit = this.labs.filter((lab) => cablesForLab(day, lab.id).length > 0);
+      this.collect = { ...emptyProgress(day.cables.length), labs: { total: hit.length, done: 0 } };
       this.notify();
-      const [profile, feedback, readerContext] = await Promise.all([
-        this.deps.loadProfile(),
-        this.deps.loadFeedback(),
-        this.readerContext(),
-      ]);
-      // The screen's tally belongs to the day, not to the triage call, so a
-      // re-triage carries the one the collecting run wrote rather than dropping
-      // it — otherwise the companion would read the new briefing as the whole
-      // day when most of it was screened out hours ago.
-      const screen = this.briefing?.date === date ? this.briefing.screen : undefined;
-      const briefing = await this.triageToBriefing(
-        items,
-        profile,
-        feedback,
-        readerContext,
+      const outcomes: LabOutcome[] = [];
+      for (const lab of hit) {
+        const outcome = await this.runLab(lab, cablesForLab(day, lab.id), bodies, date);
+        if (outcome) outcomes.push(outcome);
+        this.collect = { ...this.collect, labs: { total: hit.length, done: outcomes.length } };
+        this.notify();
+      }
+      const briefing = boxBriefing({
         date,
-        screen,
-      );
+        generatedAt: this.deps.now(),
+        labs: this.labs,
+        outcomes,
+        cables: day,
+        items,
+      });
       await this.deps.saveBriefing(briefing);
       this.briefing = briefing;
     } catch (e) {
@@ -840,62 +993,24 @@ export class InfoPipeline {
       this.collect = null;
       this.activity = null;
       this.stopController = null;
+      this.labs = [];
+      this.pictures.clear();
       this.deps.keepAwake?.(false);
       this.notify();
     }
   }
-
-  // The one triage call under the watchdog, folded into a Briefing. Shared by
-  // generate (after collection) and retriage (over the cached snapshot). Streams
-  // activity for the progress card; keeps only references to items we hold.
-  private async triageToBriefing(
-    items: InfoItem[],
-    profile: string,
-    feedback: FeedbackEvent[],
-    readerContext: string,
-    date: string,
-    screen?: ScreenSummary,
-  ): Promise<Briefing> {
-    const validIds = new Set(items.map((it) => it.id));
-    const result = await runWithWatchdog(
-      (opts) => this.deps.triage({ profile, feedback, items, readerContext }, opts),
-      this.config,
-      { now: this.deps.now, sleep: this.deps.sleep, setTimer: this.deps.setTimer },
-      {
-        onAttempt: ({ attempt, attempts, startedAt }) => {
-          this.activity = { startedAt, chars: 0, attempt, attempts };
-          this.lastActivityNotify = this.deps.now();
-          this.notify();
-        },
-        onProgress: (chars) => this.bumpActivity(chars),
-      },
-      this.stopController!.signal,
-    );
-    return {
-      date,
-      generatedAt: this.deps.now(),
-      overview: result.overview,
-      mustRead: result.mustRead.filter((r) => validIds.has(r.itemId)),
-      oneLiners: result.oneLiners.filter((r) => validIds.has(r.itemId)),
-      outOfLane: result.outOfLane.filter((r) => validIds.has(r.itemId)),
-      filtered: result.filtered.filter((r) => validIds.has(r.itemId)),
-      items: itemsMeta(items),
-      ...(screen ? { screen } : {}),
-    };
-  }
 }
 
-// What the screen did, for the briefing to carry (docs/35). Counts plus the ids
-// it dropped and nothing more: the companion can be asked about them, and they
-// can never fill its context the way the triage-level filtered list does.
-function screenSummary(state: InfoRunState): ScreenSummary {
-  const keptIds = new Set(state.selection?.ids ?? []);
-  const droppedIds = state.items.map((it) => it.id).filter((id) => !keptIds.has(id));
-  return {
-    discovered: state.items.length,
-    kept: keptIds.size,
-    dropped: droppedIds.length,
-    cappedOut: state.selection?.cappedOut ?? 0,
-    droppedIds,
-  };
+// The rooms one batch is screened against: the union of the rooms each of its
+// items belongs to, in roster order. A batch drawn from one claimed source
+// therefore carries one room's scope and not the whole bureau's.
+function batchTargets(
+  targets: readonly ScreenTarget[],
+  batch: readonly InfoItem[],
+): ScreenTarget[] {
+  const wanted = new Set<string>();
+  for (const item of batch) {
+    for (const t of targetsForItem(targets, item)) wanted.add(t.labId);
+  }
+  return targets.filter((t) => wanted.has(t.labId));
 }

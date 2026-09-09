@@ -11,6 +11,7 @@
 // duplicating that here would only make two nested retry budgets.
 
 import type { AiCallOptions } from "../../ai/call-options";
+import { newTally, type ParseTally } from "../../platform/app/structured-output";
 import { applyDelta, driftAlerts } from "../picture/picture";
 import type { Picture } from "../picture/types";
 import { analystSystemPrompt, analystUserMessage, parseAnalystOutput } from "./analyst";
@@ -43,16 +44,23 @@ const RETRY_NUDGE =
 async function callAndParse<T>(
   deps: AnalysisDeps,
   opts: AiCallOptions,
-  what: string,
+  site: "info-analyst" | "info-synthesis",
   system: string,
   user: string,
-  parse: (raw: string) => ParseOutcome<T>,
+  parse: (raw: string, tally: ParseTally) => ParseOutcome<T>,
 ): Promise<T> {
-  const first = parse(await deps.callModel(system, user, opts));
+  const attempt = async (extra: string): Promise<ParseOutcome<T>> => {
+    const text = await deps.callModel(system + extra, user, opts);
+    const tally = newTally();
+    const parsed = parse(text, tally);
+    deps.onParse?.({ site, text, tally, error: parsed.ok ? undefined : parsed.error });
+    return parsed;
+  };
+  const first = await attempt("");
   if (first.ok) return first.output;
-  const second = parse(await deps.callModel(system + RETRY_NUDGE, user, opts));
+  const second = await attempt(RETRY_NUDGE);
   if (second.ok) return second.output;
-  throw new Error(`${what} produced invalid JSON: ${second.error}`);
+  throw new Error(`${site === "info-analyst" ? "analyst" : "synthesis"} produced invalid JSON: ${second.error}`);
 }
 
 /**
@@ -70,10 +78,10 @@ export async function runLabAnalysis(
   const analyst: AnalystOutput = await callAndParse(
     deps,
     opts,
-    "analyst",
+    "info-analyst",
     analystSystemPrompt(input.aiLanguage),
     analystUserMessage(input),
-    (raw) => parseAnalystOutput(raw, input.picture),
+    (raw, tally) => parseAnalystOutput(raw, input.picture, tally),
   );
 
   const applied = applyDelta(input.picture, analyst.delta, {
@@ -104,10 +112,10 @@ export async function runLabAnalysis(
   const synthesis: SynthesisOutput = await callAndParse(
     deps,
     opts,
-    "synthesis",
+    "info-synthesis",
     synthesisSystemPrompt(input.aiLanguage),
     synthesisUserMessage(synthesisInput),
-    (raw) => parseSynthesisOutput(raw, input.cables),
+    (raw, tally) => parseSynthesisOutput(raw, input.cables, tally),
   );
 
   const added = judgmentsAddedToday(input.picture, after);

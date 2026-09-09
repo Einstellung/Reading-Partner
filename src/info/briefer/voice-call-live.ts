@@ -42,7 +42,7 @@ import {
 } from "./voice-call";
 import type { AgentTool } from "../../ai/agent";
 import type { ProviderId } from "../../ai/providers";
-import type { Briefing } from "../collect/types";
+import type { Briefing } from "../boxes/types";
 import type { InfoCallAnchor } from "./anchors";
 
 export interface LiveVoiceCallOptions {

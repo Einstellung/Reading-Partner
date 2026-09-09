@@ -67,7 +67,7 @@ export type EventType =
   | "info-discover" // { ms, sources, items, pooled }
   | "info-screen" // { ms, items, batches, kept, dropped, cappedOut }
   | "info-material" // { ms, items, fetched }
-  | "info-triage" // { ms, items, ok }
+  | "info-analyze" // { ms, cables, ok } per room, then { ms, cables, labs, analyzed }
   | "prep-status" // { slug, status }
   | "notes-run" // { phase: "start" | "done" | "failed" }
   | "notes-chapter-regenerate" // { index }

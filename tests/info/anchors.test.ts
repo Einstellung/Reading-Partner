@@ -12,7 +12,7 @@ import {
   onboardingAnchor,
 } from "../../src/info/briefer/anchors";
 import type { CompanionContext } from "../../src/info/briefer/chat";
-import type { Briefing, BriefingItemMeta } from "../../src/info/collect/types";
+import type { Briefing, BriefingItemMeta } from "../../src/info/boxes/types";
 
 const CTX: CompanionContext = { profile: "Reads robotics.", sources: [], collecting: true };
 
@@ -33,11 +33,12 @@ function briefing(patch: Partial<Briefing> = {}): Briefing {
   return {
     date: "2026-07-25",
     generatedAt: 1_700_000_000_000,
-    overview: "Two real papers, the rest is vendor noise.",
+    version: 2,
+    labs: [{ labId: "lab-a", name: "Papers", cover: "Two real papers, the rest is vendor noise.", judgments: [] }],
+    quiet: [],
     mustRead: [{ itemId: "x", reason: "must-read reason" }],
     oneLiners: [{ itemId: "x", line: "one-liner line" }],
     outOfLane: [{ itemId: "x", reason: "out-of-lane reason" }],
-    filtered: [{ itemId: "y", category: "vendor PR" }],
     items: { x: meta({ title: "The paper", sourceName: "Example" }), y: meta({ title: "Dropped" }) },
     ...patch,
   };

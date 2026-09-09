@@ -1,12 +1,12 @@
-// Briefing + article-cache persistence (docs/16). Derived and rebuildable, so
-// out of sync range: one briefing JSON per day and one article-cache JSON per
-// day, both keyed by the local date. Only today's briefing is ever shown;
-// regenerate overwrites. Persisted under AppData.
+// The day's derived files (docs/16): the article cache, the item snapshot, the
+// run checkpoint and the morning round's anchor, all keyed by the local date and
+// all out of sync range because a run can rebuild every one of them. The
+// briefing itself is written by boxes/store.ts; its file name lives here with
+// the rest of the day's names, because this is where they are pruned.
 
 import { appData } from "../../platform/app/appdata";
 import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
-import type { Briefing } from "./types";
 import type { InfoItem } from "../sources/item";
 
 // The full article body kept per item, split out of the briefing so the briefing
@@ -35,7 +35,7 @@ const BRIEFING_PREFIX = "briefing-";
 // same strict way: the newest-briefing lookup below and the pruning at the end.
 const DATED_JSON = /^\d{4}-\d{2}-\d{2}\.json$/;
 
-function briefingFile(date: string): string {
+export function briefingFile(date: string): string {
   return `${BRIEFING_PREFIX}${date}.json`;
 }
 
@@ -51,22 +51,6 @@ function runFile(date: string): string {
   return `info-run-${date}.json`;
 }
 
-export async function saveBriefing(briefing: Briefing): Promise<void> {
-  await writeTextAtomic(briefingFile(briefing.date), JSON.stringify(briefing, null, 2));
-}
-
-// Load a day's briefing (default: today). Missing/corrupt reads as null so the
-// vestibule shows the "generate" state instead of crashing.
-export async function loadBriefing(date: string = todayLocal()): Promise<Briefing | null> {
-  try {
-    if (!(await appData.exists(briefingFile(date)))) return null;
-    const parsed = JSON.parse(await appData.readText(briefingFile(date))) as Briefing;
-    return parsed && parsed.date === date ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 // The newest day a briefing file on disk is for, out of a directory listing.
 // Pure, unit-tested. Comparing the names as strings is comparing the dates —
 // they are zero-padded ISO days.
@@ -80,21 +64,6 @@ export function newestBriefingDate(names: string[]): string | null {
     if (best === null || date > best) best = date;
   }
   return best;
-}
-
-// The latest briefing this machine holds, whatever day it is for: today's on a
-// machine that has already collected, yesterday's on one that has not yet, since
-// the day's files are pruned by a run and not by the clock.
-export async function loadLatestBriefing(): Promise<Briefing | null> {
-  let names: string[];
-  try {
-    const entries = await appData.readDir("");
-    names = entries.filter((e) => e.isFile).map((e) => e.name);
-  } catch {
-    return null;
-  }
-  const date = newestBriefingDate(names);
-  return date === null ? null : await loadBriefing(date);
 }
 
 export async function saveArticles(
@@ -225,6 +194,13 @@ export async function saveDailyRunDate(date: string): Promise<void> {
 // delete would just be re-downloaded.
 const DAILY_PREFIXES = [BRIEFING_PREFIX, "info-articles-", "info-items-", "info-run-"];
 
+// The cables are the exception, and they are dated the same way (docs/63): a
+// picture's judgments cite cable ids, so the record of what a judgment was made
+// on has to outlive the bodies it was made from. Thirty days of them, then they
+// go the way of the rest of their day.
+const CABLES_PREFIX = "info-cables-";
+export const CABLE_DAYS = 30;
+
 // The names to delete, given a directory listing and today's local date. Pure,
 // unit-tested; the clock is the caller's business.
 export function staleDailyFiles(names: string[], today: string): string[] {
@@ -239,8 +215,34 @@ export function staleDailyFiles(names: string[], today: string): string[] {
   return out;
 }
 
-// Delete every past day's derived info file. Best effort: a listing failure or a
-// file that will not go away is swallowed, since a briefing must still generate.
+// The cables files past the keep window, given a listing and today's local date.
+// Pure, unit-tested. A name whose date will not parse is left alone, the same
+// rule the daily sweep follows.
+export function staleCableFiles(names: string[], today: string, days = CABLE_DAYS): string[] {
+  const now = dayNumber(today);
+  if (now === null) return [];
+  const out: string[] = [];
+  for (const name of names) {
+    if (!name.startsWith(CABLES_PREFIX)) continue;
+    const tail = name.slice(CABLES_PREFIX.length);
+    if (!DATED_JSON.test(tail)) continue;
+    const date = dayNumber(tail.slice(0, -".json".length));
+    if (date !== null && now - date > days) out.push(name);
+  }
+  return out;
+}
+
+// A local date as a day count, for the one subtraction above. Read at midnight
+// UTC on purpose: both ends are local dates already, and that keeps the
+// arithmetic clear of daylight saving.
+function dayNumber(date: string): number | null {
+  const ms = Date.parse(`${date}T00:00:00Z`);
+  return Number.isFinite(ms) ? Math.round(ms / 86_400_000) : null;
+}
+
+// Delete every past day's derived info file, and the cables older than the keep
+// window. Best effort: a listing failure or a file that will not go away is
+// swallowed, since a briefing must still generate.
 export async function pruneStaleDailyFiles(today: string): Promise<void> {
   let names: string[];
   try {
@@ -249,7 +251,7 @@ export async function pruneStaleDailyFiles(today: string): Promise<void> {
   } catch {
     return;
   }
-  for (const name of staleDailyFiles(names, today)) {
+  for (const name of [...staleDailyFiles(names, today), ...staleCableFiles(names, today)]) {
     try {
       await appData.remove(name);
     } catch {

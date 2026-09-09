@@ -19,7 +19,7 @@ import "../../../styles.css";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import { BriefingPage } from "./BriefingPage";
 import { VoiceOrbEntry } from "./VoiceOrbEntry";
-import type { Briefing } from "../../../info/collect/types";
+import type { Briefing } from "../../../info/boxes/types";
 
 const BRIEFING: Briefing = {
   date: "2026-09-05",

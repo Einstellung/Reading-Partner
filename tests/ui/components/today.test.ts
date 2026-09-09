@@ -3,7 +3,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import type { Briefing, LabCover } from "../../../src/info/collect/types";
+import type { Briefing, LabCover } from "../../../src/info/boxes/types";
 import {
   briefingCardBody,
   briefingEyebrow,
@@ -43,11 +43,12 @@ function briefingWith(over: Partial<Briefing>): Briefing {
   return {
     date: "2026-09-05",
     generatedAt: 0,
-    overview: "",
+    version: 2,
+    labs: [],
+    quiet: [],
     mustRead: [],
     outOfLane: [],
     oneLiners: [],
-    filtered: [],
     items: {},
     ...over,
   } as Briefing;
@@ -62,7 +63,6 @@ test("the footer counts the labs that moved and what is worth opening", () => {
     mustRead: [{ itemId: "a", reason: "r" }],
     outOfLane: [{ itemId: "b", reason: "r" }],
     oneLiners: [{ itemId: "c", line: "l" }],
-    filtered: [{ itemId: "d", category: "vendor PR" }],
   });
   expect(briefingFooterLine(b)).toBe("2 labs changed · 2 worth reading");
   expect(briefingFooterLine(b)).not.toContain("filtered");
@@ -82,14 +82,16 @@ test("an empty day counts the labs and stops", () => {
   expect(briefingCardBody(b)).toBe("Nothing changed today.");
 });
 
-// A briefing made before labs existed has no lab count to give.
-test("a legacy briefing counts only what is worth reading", () => {
+// A briefing written by the triage build arrives normalized (boxes/briefing.ts):
+// its overview is the day's one cover, under no lab. The card still has a body
+// and the footer still counts a lab, because that is what one cover is.
+test("a normalized legacy briefing shows its overview as the day's one cover", () => {
   const b = briefingWith({
-    overview: "A quiet day in AI.",
+    labs: [{ labId: "", name: "", cover: "A quiet day in AI.", judgments: [] }],
     mustRead: [{ itemId: "a", reason: "r" }],
     oneLiners: [{ itemId: "c", line: "l" }],
   });
-  expect(briefingFooterLine(b)).toBe("1 worth reading");
+  expect(briefingFooterLine(b)).toBe("1 lab changed · 1 worth reading");
   expect(briefingCardBody(b)).toBe("A quiet day in AI.");
 });
 

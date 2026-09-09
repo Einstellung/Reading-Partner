@@ -28,7 +28,7 @@ import { BRIEF_TOPIC_ID } from "../../src/platform/app/topics";
 import { rebuildThreadStoreForTests } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
-import type { Briefing } from "../../src/info/collect/types";
+import type { Briefing } from "../../src/info/boxes/types";
 import type { Lab } from "../../src/info/labs/types";
 import { languageInstruction } from "../../src/platform/app/settings";
 
@@ -58,7 +58,9 @@ const LAB: Lab = {
 const BRIEFING: Briefing = {
   date: "2026-07-21",
   generatedAt: 0,
-  overview: "A slow day.",
+  version: 2,
+  labs: [{ labId: "lab-a", name: "Models", cover: "A slow day.", judgments: [] }],
+  quiet: [],
   items: {
     a1: { title: "Model X ships", url: "https://x.test", source: "qbitai", sourceName: "量子位", publishedAt: "2026-07-21" },
     f1: { title: "Vendor Y announces", url: "https://y.test", source: "qbitai", sourceName: "量子位", publishedAt: "2026-07-21" },
@@ -66,7 +68,7 @@ const BRIEFING: Briefing = {
   mustRead: [{ itemId: "a1", reason: "you track releases" }],
   oneLiners: [{ line: "Z raised a round.", itemId: "z1" }],
   outOfLane: [],
-  filtered: [{ itemId: "f1", category: "vendor PR" }],
+
 };
 
 registerInfoDesk();
@@ -126,7 +128,7 @@ function articlePrompt(title: string, text: string, ctx: CompanionContext): Prom
         dateKey: BRIEFING.date,
         itemId: "a1",
         title,
-        overview: BRIEFING.overview,
+        overview: "A slow day.",
         bodyText: text,
       },
     },
@@ -159,10 +161,10 @@ test("the article thread pins output only when a language is set", async () => {
 // so the companion still has the briefing, the profile and every tool.
 test("the article desk is the briefing and then the article", async () => {
   const prompt = await articlePrompt("The paper", "the full body text", CTX);
-  expect(prompt).toContain("Overview: A slow day.");
+  expect(prompt).toContain("- Models: A slow day.");
   expect(prompt).toContain('The user is reading this article: "The paper".');
   expect(prompt).toContain("the full body text");
-  expect(prompt.indexOf("Overview: A slow day.")).toBeLessThan(
+  expect(prompt.indexOf("- Models: A slow day.")).toBeLessThan(
     prompt.indexOf("The user is reading this article"),
   );
 });
@@ -226,7 +228,7 @@ test("neither the filtered clip list nor the screening tally reaches the compani
   const prompt = await briefingPrompt(
     {
       ...BRIEFING,
-      screen: { discovered: 412, kept: 9, dropped: 403, cappedOut: 22, droppedIds: ["d1"] },
+
     },
     CTX,
   );

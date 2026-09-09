@@ -26,7 +26,7 @@ import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";
 
-// Live seconds since a start timestamp, for the triage activity readout. Ticks
+// Live seconds since a start timestamp, for the analysis activity readout. Ticks
 // on its own so the card keeps moving even while the user scrolls or chats.
 function useSecondsSince(startedAt: number | null): number {
   const [secs, setSecs] = useState(0);
@@ -88,10 +88,10 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
 }
 
 export function BriefingProgressCard({ payload }: CardComponentProps<BriefingProgressCardData>) {
-  const secs = useSecondsSince(payload.triage?.startedAt ?? null);
+  const secs = useSecondsSince(payload.analysis?.startedAt ?? null);
   const heading = payload.title ?? "Building your first briefing";
   const c = payload.collect;
-  const t = payload.triage;
+  const t = payload.analysis;
 
   let main: string;
   let sub: string | null = null;
@@ -113,10 +113,9 @@ export function BriefingProgressCard({ payload }: CardComponentProps<BriefingPro
     // A ceiling that trimmed the day says so here, not only in the log.
     sub = c && c.cappedOut > 0 ? `${c.cappedOut} over the daily cap were left out` : null;
   } else {
-    // What triage is actually reading: the items that survived screening. On a
-    // re-triage there is no funnel, so the cached item count stands in.
-    const items = c?.bodiesTotal || c?.items || 0;
-    main = items ? `Reading and triaging ${items} items` : "Reading and triaging";
+    // One room at a time (docs/63), so the count is rooms and not items.
+    const labs = c?.labs;
+    main = labs?.total ? `Analyzing ${labs.done}/${labs.total} labs` : "Analyzing the day";
     const parts: string[] = [`${secs}s`];
     if (t && t.chars > 0) parts.push(`${t.chars} chars`);
     if (t && t.attempt > 1) parts.push(`attempt ${t.attempt}/${t.attempts}`);
@@ -137,9 +136,9 @@ export function BriefingProgressCard({ payload }: CardComponentProps<BriefingPro
 
 export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<BriefingReadyCardData>) {
   const counts = [
+    `${payload.labs} lab${payload.labs === 1 ? "" : "s"} changed`,
     `${payload.worth} worth reading`,
     `${payload.oneLiners} one-liner${payload.oneLiners === 1 ? "" : "s"}`,
-    `${payload.filtered} filtered`,
   ].join(" · ");
   const note =
     payload.note ?? "A first briefing from one source is thin — it gets richer as you add more.";
@@ -162,7 +161,7 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
 
 // The profile-update confirm card: the AI drafts a complete revised profile, the
 // user reads it verbatim and Applies (which saves and, when today's briefing
-// exists, offers a re-triage). Presentational — Apply/Re-run only raise intent.
+// exists, offers a re-run of the day). Presentational — Apply/Re-run only raise intent.
 export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<ProfileUpdateCardData>) {
   const applied = payload.phase === "applied";
   return (
@@ -184,7 +183,7 @@ export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<Prof
               className="px-3.5 py-1.5"
               onClick={() => dispatch({ kind: "mutate", op: "retriage" })}
             >
-              Re-run today's triage
+              Re-run today's analysis
             </Button>
           ) : (
             <span className="text-[12px] text-faint-foreground">Applies to your next briefing.</span>

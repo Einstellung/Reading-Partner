@@ -7,6 +7,7 @@
 // and the synthesis's ends at a cover plus two lists of cable ids.
 
 import type { AiCallOptions } from "../../ai/call-options";
+import type { ParseTally } from "../../platform/app/structured-output";
 import type { AiLanguage } from "../../platform/app/settings";
 import type { Cable } from "../cable/types";
 import type { Lab } from "../labs/types";
@@ -96,6 +97,15 @@ export interface AnalysisDeps {
   callModel(system: string, user: string, opts: AiCallOptions): Promise<string>;
   now(): number;
   random?: () => number;
+  // How each reply parsed (platform/app/structured-output). Optional and
+  // out-of-band, because the parse happens here and the model that produced it
+  // is the caller's: reporting from in here would mean knowing which one it was.
+  onParse?(report: {
+    site: "info-analyst" | "info-synthesis";
+    text: string;
+    tally: ParseTally;
+    error?: string;
+  }): void;
 }
 
 // The outcome of reading a model's reply. Same shape for both calls, because

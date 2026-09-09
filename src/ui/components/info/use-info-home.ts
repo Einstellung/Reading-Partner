@@ -17,7 +17,7 @@ import type { DeviceRole } from "../../../platform/app/device";
 import { buildGlossary } from "../../../ai/voice";
 import { getInfoView } from "../../../info/program/live";
 import { todayLocal } from "../../../info/collect/store";
-import type { InfoSnapshot } from "../../../info/collect/pipeline";
+import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import {
   clearCollectorLeftovers,
   READER_PULL_ROUTE,
@@ -25,7 +25,7 @@ import {
   type BriefingView,
 } from "../../../info/briefer/reader";
 import { registerPullRoute } from "../../../platform/sync/pull-routes";
-import type { BriefingItemMeta } from "../../../info/collect/types";
+import type { BriefingItemMeta } from "../../../info/boxes/types";
 import { ensureBriefTopic } from "../../../platform/app/topics";
 import {
   loadSavedArticles,

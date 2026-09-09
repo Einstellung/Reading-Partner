@@ -17,8 +17,8 @@ import {
   trackedJob,
   type BriefingJobPlan,
 } from "../../src/info/briefer/call";
-import type { InfoSnapshot } from "../../src/info/collect/pipeline";
-import type { Briefing } from "../../src/info/collect/types";
+import type { InfoSnapshot } from "../../src/info/boxes/pipeline";
+import type { Briefing } from "../../src/info/boxes/types";
 import type { ProfileUpdateCardData } from "../../src/info/boxes/cards";
 import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 
@@ -36,22 +36,20 @@ function snapshot(patch: Partial<InfoSnapshot>): InfoSnapshot {
   return { ...IDLE, ...patch };
 }
 
-// Two must-reads + one out-of-lane = 3 "worth your time"; one one-liner; two filtered.
+// Two must-reads + one out-of-lane = 3 "worth your time"; one one-liner; one room.
 function briefing(patch: Partial<Briefing> = {}): Briefing {
   return {
     date: "2026-07-25",
     generatedAt: 1_700_000_000_000,
-    overview: "Two real papers, the rest is vendor noise.",
+    version: 2,
+    labs: [{ labId: "lab-a", name: "Robotics", cover: "Two real papers, the rest is vendor noise.", judgments: [] }],
+    quiet: [],
     mustRead: [
       { itemId: "a", reason: "matches your robotics lane" },
       { itemId: "b", reason: "the eval you asked about" },
     ],
     oneLiners: [{ itemId: "c", line: "A funding round, nothing technical." }],
     outOfLane: [{ itemId: "d", reason: "outside your lane but load-bearing" }],
-    filtered: [
-      { itemId: "e", category: "vendor PR" },
-      { itemId: "f", category: "conference recap" },
-    ],
     items: {},
     ...patch,
   };
@@ -70,13 +68,13 @@ test("the card a job starts with takes its phase from the job, not a snapshot", 
     kind: "briefing-progress",
     phase: "discovering",
     collect: null,
-    triage: null,
+    analysis: null,
     stopping: false,
     title: undefined,
   });
   // A re-triage never fetches: it opens straight in the triaging phase.
   expect(briefingProgressCard("retriage", null)).toMatchObject({
-    phase: "triaging",
+    phase: "analyzing",
     title: "Re-running today's triage",
   });
   expect(briefingProgressCard("full", null)).toMatchObject({
@@ -98,12 +96,13 @@ test("the progress card mirrors the snapshot's phase and collection counts", () 
     cappedOut: 0,
     bodies: 0,
     bodiesTotal: 0,
+    labs: { total: 0, done: 0 },
   };
   expect(briefingProgressCard("first", snapshot({ running: true, phase: "discovering", collect }))).toEqual({
     kind: "briefing-progress",
     phase: "discovering",
     collect,
-    triage: null,
+    analysis: null,
     stopping: false,
     title: undefined,
   });
@@ -112,7 +111,7 @@ test("the progress card mirrors the snapshot's phase and collection counts", () 
 test("the progress card carries triage liveness once the AI call starts", () => {
   const s = snapshot({
     running: true,
-    phase: "triaging",
+    phase: "analyzing",
     collect: {
       total: 4,
       done: 4,
@@ -125,12 +124,13 @@ test("the progress card carries triage liveness once the AI call starts", () => 
       cappedOut: 0,
       bodies: 5,
       bodiesTotal: 5,
+    labs: { total: 2, done: 1 },
     },
     activity: { startedAt: 1000, chars: 240, attempt: 2, attempts: 3 },
   });
   const card = briefingProgressCard("full", s);
-  expect(card.phase).toBe("triaging");
-  expect(card.triage).toEqual({ startedAt: 1000, chars: 240, attempt: 2, attempts: 3 });
+  expect(card.phase).toBe("analyzing");
+  expect(card.analysis).toEqual({ startedAt: 1000, chars: 240, attempt: 2, attempts: 3 });
 });
 
 // --- the job update (running -> ready / failed) -----------------------------
@@ -147,7 +147,7 @@ test("a settled first briefing becomes the ready card, keeping the onboarding co
   const update = briefingJobUpdate("first", snapshot({ briefing: briefing() }));
   expect(update).toMatchObject({
     status: "ready",
-    card: { kind: "briefing-ready", date: "2026-07-25", worth: 3, oneLiners: 1, filtered: 2 },
+    card: { kind: "briefing-ready", date: "2026-07-25", worth: 3, oneLiners: 1, labs: 1 },
   });
   // "first" overrides nothing, so the card falls back to its onboarding heading/note.
   const card = update.card as { title?: string; note?: string };
@@ -155,14 +155,14 @@ test("a settled first briefing becomes the ready card, keeping the onboarding co
   expect(card.note).toBeUndefined();
 });
 
-test("the completion note re-anchors the AI on the new briefing's overview and counts", () => {
+test("the completion note re-anchors the AI on the new briefing’s covers and counts", () => {
   const update = briefingJobUpdate("first", snapshot({ briefing: briefing() }));
   const note = update.status === "ready" ? update.note : "";
   expect(note).toContain("has been generated");
   expect(note).toContain("Two real papers, the rest is vendor noise.");
   expect(note).toContain("worth your time: 3");
   expect(note).toContain("one-liners: 1");
-  expect(note).toContain("filtered: 2");
+  expect(note).toContain("rooms that moved: 1");
   expect(note).toContain("not the earlier one");
 });
 
@@ -269,7 +269,7 @@ function startedPlan(plan: BriefingJobPlan): Extract<BriefingJobPlan, { kind: "s
 
 test("a run started here opens the one card on the job it started", () => {
   const plan = startedPlan(
-    briefingJobPlan("retriage", "started", snapshot({ running: true, phase: "triaging" })),
+    briefingJobPlan("retriage", "started", snapshot({ running: true, phase: "analyzing" })),
   );
   expect(plan.job).toBe("retriage");
   expect(plan.cardId).toBe(BRIEFING_CARD_ID);

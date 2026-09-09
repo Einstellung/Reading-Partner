@@ -12,7 +12,7 @@ import {
   tieredItemIds,
 } from "../../src/info/boxes/publish";
 import type { CachedArticle } from "../../src/info/collect/store";
-import type { Briefing } from "../../src/info/collect/types";
+import type { Briefing } from "../../src/info/boxes/types";
 import type { InfoItem } from "../../src/info/sources/item";
 
 function meta(id: string) {
@@ -29,11 +29,12 @@ function briefing(over: Partial<Briefing> = {}): Briefing {
   return {
     date: "2026-08-12",
     generatedAt: 1_000,
-    overview: "a day",
+    version: 2,
+    labs: [{ labId: "lab-a", name: "Room", cover: "a day", judgments: [] }],
+    quiet: [],
     mustRead: [{ itemId: "a", reason: "because" }],
     oneLiners: [{ itemId: "b", line: "the point" }],
     outOfLane: [{ itemId: "c", reason: "widening" }],
-    filtered: [{ itemId: "d", category: "vendor PR" }],
     items: { a: meta("a"), b: meta("b"), c: meta("c"), d: meta("d") },
     ...over,
   };

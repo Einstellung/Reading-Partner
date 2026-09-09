@@ -12,7 +12,7 @@
 // and the briefing card's other states in HomeCard (shared with the phone).
 
 import { useEffect, useState } from "react";
-import type { InfoSnapshot } from "../../../info/collect/pipeline";
+import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import { BriefingCardBody, CardBodyPlaceholder } from "./HomeCard";
 import { Button } from "../ui/button";

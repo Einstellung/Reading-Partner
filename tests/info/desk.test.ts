@@ -24,14 +24,16 @@ import {
 import { installAppData } from "../support/appdata-fake";
 import type { AgentTool } from "../../src/ai/agent";
 import type { CompanionContext } from "../../src/info/briefer/chat";
-import type { Briefing } from "../../src/info/collect/types";
+import type { Briefing } from "../../src/info/boxes/types";
 
 const CTX: CompanionContext = { profile: "Reads robotics.", sources: [], collecting: true };
 
 const BRIEFING: Briefing = {
   date: "2026-07-21",
   generatedAt: 0,
-  overview: "A slow day.",
+  version: 2,
+  labs: [{ labId: "lab-a", name: "Models", cover: "A slow day.", judgments: [] }],
+  quiet: [],
   items: {
     a1: {
       title: "Model X ships",
@@ -44,7 +46,6 @@ const BRIEFING: Briefing = {
   mustRead: [{ itemId: "a1", reason: "you track releases" }],
   oneLiners: [],
   outOfLane: [],
-  filtered: [],
 };
 
 registerInfoDesk();
@@ -81,7 +82,7 @@ const articleRef: DeskRef = {
     dateKey: BRIEFING.date,
     itemId: "a1",
     title: "Model X ships",
-    overview: BRIEFING.overview,
+    overview: "A slow day.",
     bodyText: "the full body text",
   },
 };
@@ -115,14 +116,14 @@ async function assemble(refs: DeskRef[], tools: AgentTool[] = []) {
 
 test("the briefing desk is the companion, whole", async () => {
   const turn = await assemble([briefingRef]);
-  expect(turn.systemPrompt).toContain("Overview: A slow day.");
+  expect(turn.systemPrompt).toContain("- Models: A slow day.");
   expect(turn.systemPrompt).toContain("Model X ships — 量子位 — you track releases");
   expect(turn.systemPrompt).not.toContain("The user is reading this article");
 });
 
 test("an article desk keeps the briefing first and the article after it", async () => {
   const turn = await assemble([briefingRef, articleRef]);
-  const briefingAt = turn.systemPrompt.indexOf("Overview: A slow day.");
+  const briefingAt = turn.systemPrompt.indexOf("- Models: A slow day.");
   const articleAt = turn.systemPrompt.indexOf('The user is reading this article: "Model X ships".');
   expect(briefingAt).toBeGreaterThanOrEqual(0);
   expect(articleAt).toBeGreaterThan(briefingAt);
@@ -187,7 +188,7 @@ test("the companion reads what is known about the reader, and the topic's observ
   // The memory paragraph is the briefing item's, so it rides the briefing block
   // rather than trailing the article.
   expect(turn.systemPrompt.indexOf("I have no linear algebra.")).toBeGreaterThan(
-    turn.systemPrompt.indexOf("Overview: A slow day."),
+    turn.systemPrompt.indexOf("- Models: A slow day."),
   );
 });
 
