@@ -72,3 +72,25 @@ v1 表读作不存在，打开时重算 v2 并覆盖（唯一一次允许重写�
 | Active Inference（71 MB） | 70 | 1557 | 6.8 s（fetch 0.6 s） | 154 KB |
 
 有表的书重开 110–130 ms。翻页 3–4 ms。71 MB 那本打开后 WebKitWebProcess RSS 1.19 GB（对照另一个空闲 WebContent 进程 572 MB）。Chromium 与 WebKitGTK 的分页差异没量。
+
+## 验证（壳路径）
+
+Linux WebKitGTK，xvfb，窗口 1280×860，阅读区 1280×816。三本书经 `addFileToTopic` 进 topic，之后全部在真界面上点，没有探针挂 reader。
+
+| 项 | 结论 |
+|---|---|
+| 书架封面 | 《Active Inference》《The Experience Machine》出封面图和 `dc:creator`；《具身智能》没有封面图，走无封面卡片 |
+| 打开到首屏 | 顶栏 `1 / 75`，竖排 fit-width（卡片 1280×1920，scale 2.22） |
+| 翻页跟顶栏 | 翻页模式点右侧点击区 → `2 / 75` |
+| 大纲跳转 | 「C. Hardware」→ `31 / 75` |
+| `[p.N]` 芯片 | 裸芯片 `[p.12]` → `12 / 75`，带引文的 `[p.31 "…"]` → `31 / 75` |
+| 引文高亮 | 没验成：造引文时从卡片 `innerText` 截的字不在那一页上（坑 274），跳页对、`.rp-overlay` 空 |
+| Zoom out | 卡片 1280→1152（2.22→2.0），居中 |
+| Fit page / Fit page width | 处在布局锁的那个 fit 时置灰，缩放过之后可点 |
+| Paged flip | 开关都对：`scroll-snap-type` 在 `none` 和 `x mandatory` 之间切，一屏一页 fit-page（544×816） |
+| 关书重开 | 回到 `31 / 75`，翻页模式也留着 |
+| 71 MB 那本 | 从书架点到首屏 7.1 s，`1 / 1625`，其间界面没有进度提示 |
+
+页数 1625 和上面那张表的 1557 不一样：那一行是字体改写落地之前量的。
+
+手势、深色模式和 iPad 模拟器这一轮没做。
