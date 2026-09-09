@@ -14,7 +14,7 @@ import { pageMarks, type Annotation, type ViewState } from "../../platform/app/r
 import { formatOfBytes, type BookFormat } from "../../platform/app/library";
 import { ensureFulltext, type Fulltext } from "../../fulltext";
 import { sweepDistillation } from "../../memory";
-import { acquireEpub, ensurePagination, extractEpubFulltext } from "../epub";
+import { PAGINATION_VERSION, acquireEpub, ensurePagination, extractEpubFulltext } from "../epub";
 import { epubFigures } from "../figures/epub";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
 import { seedReadingPosition } from "../reading-position";
@@ -28,6 +28,7 @@ export interface BookOpenIo {
   loadThreads(bookId: string): Promise<unknown>;
   ensureFulltext(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<Fulltext>;
   ensureFigures(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<FiguresIndex>;
+  preparePages?(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<void>;
   clearFigureCache(): void;
   seedReadingPosition(bookId: string, state: ViewState | null): void;
   // What the book being left still owes (docs/02).
@@ -43,17 +44,34 @@ export const bookOpenIo: BookOpenIo = {
   // everything downstream of these two calls is shared (docs/39 §1).
   ensureFulltext: (bookId, buffer, format) =>
     format === "epub"
-      ? ensureFulltext(bookId, buffer, (b) => extractEpubFulltext(bookId, b))
+      ? ensureFulltext(
+          bookId,
+          buffer,
+          (b) => extractEpubFulltext(bookId, b),
+          (ft) => ft.paginationVersion === PAGINATION_VERSION,
+        )
       : ensureFulltext(bookId, buffer),
   ensureFigures: (bookId, buffer, format) =>
     format === "epub"
-      ? ensureFigures(bookId, buffer, Date.now, async (b) => {
-          // The same parsed book the full text and the reading pane read: an
-          // EPUB is unzipped once per open, not once per consumer (book-cache.ts).
-          const book = acquireEpub(bookId, b);
-          return epubFigures(book, await ensurePagination(bookId, book));
-        })
+      ? ensureFigures(
+          bookId,
+          buffer,
+          Date.now,
+          async (b) => {
+            // The same parsed book the full text and the reading pane read: an
+            // EPUB is unzipped once per open, not once per consumer (book-cache.ts).
+            const book = acquireEpub(bookId, b);
+            return epubFigures(book, await ensurePagination(bookId, book));
+          },
+          (idx) => idx.paginationVersion === PAGINATION_VERSION,
+        )
       : ensureFigures(bookId, buffer),
+  // The pages of an EPUB are cut (or read back) before its marks are loaded, so
+  // a book whose table was just replaced shows its marks on the new pages.
+  preparePages: async (bookId, buffer, format) => {
+    if (format !== "epub") return;
+    await ensurePagination(bookId, acquireEpub(bookId, buffer));
+  },
   clearFigureCache,
   seedReadingPosition,
   sweepDistillation: (trigger) => void sweepDistillation(trigger),
@@ -105,6 +123,13 @@ export async function openBook(
   } catch (e) {
     console.error("failed to load the reading position", e);
     shell.pushToast("warn", "Saved reading position could not be loaded");
+  }
+  // The pages of an EPUB, before its marks: a mark's page number is read off
+  // the table, and the table may be about to be replaced (docs/63).
+  try {
+    await io.preparePages?.(bookId, bytes.slice().buffer as ArrayBuffer, format);
+  } catch (e) {
+    console.error("failed to lay the book's pages out", e);
   }
   let saved: Annotation[] = [];
   try {

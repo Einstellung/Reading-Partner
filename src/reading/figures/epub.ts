@@ -9,7 +9,7 @@
 // point: figures reads reading/epub, reading/epub never reads figures, so the
 // two never close a cycle.
 
-import { blockNumberAt, type Pagination } from "../epub/paginate";
+import { PAGINATION_VERSION, blockNumberAt, type Pagination } from "../epub/paginate";
 import type { EpubBook, SpineDocument } from "../epub/parse";
 import { SVG_NS, XLINK_NS } from "../epub/sanitize";
 import { resolveZipPath } from "../epub/zip";
@@ -121,5 +121,5 @@ export function epubFigures(book: EpubBook, pagination: Pagination): FiguresInde
     }
   }
   figures.sort((a, b) => a.page - b.page || compareFigureIds(a.id, b.id));
-  return { version: FIGURES_VERSION, status: "ok", figures };
+  return { version: FIGURES_VERSION, status: "ok", figures, paginationVersion: PAGINATION_VERSION };
 }

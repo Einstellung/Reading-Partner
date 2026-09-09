@@ -1,26 +1,20 @@
-// What the EPUB reading pane decides, without a renderer under it.
+// What the EPUB reading pane decides, without a desk under it.
 
 import { describe, expect, test } from "bun:test";
 import type { ViewState } from "../../../src/platform/app/reader-contract";
 import { extractDocumentText } from "../../../src/reading/epub/text";
-import { paginate, type Pagination } from "../../../src/reading/epub/paginate";
+import { characterRuler, paginate, type Pagination } from "../../../src/reading/epub/paginate";
+import { PAGE_GEOMETRY } from "../../../src/reading/epub/page-geometry";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import {
-  DEFAULT_FONT_STEP,
-  FONT_SIZES,
   blockIndexAt,
-  canGrow,
-  canResetType,
-  canShrink,
   cfiForBlock,
-  clampFontStep,
-  flowFor,
-  fontSizeAt,
+  findQuoteAt,
   indexRuns,
   keyTurn,
   labelForBlock,
   offsetOfPoint,
-  openingFontStep,
+  pageIndexOfCfi,
   bookLinkTarget,
   quoteQueries,
   restoreTarget,
@@ -32,57 +26,18 @@ import {
 } from "../../../src/reading/epub/reader-logic";
 import { buildEpub, prose } from "./fixture";
 
-const paged = (blocks: Pagination["blocks"]): Pagination => ({
-  version: 1,
+const ruler = characterRuler(700);
+
+const paged = (blocks: Array<Omit<Pagination["blocks"][number], "endOffset">>): Pagination => ({
+  version: 2,
   kind: "epub",
-  source: "synthetic",
-  blockChars: 1800,
+  source: "layout",
+  geometry: { ...PAGE_GEOMETRY },
   spineCount: 2,
-  blocks,
-});
-
-describe("type size", () => {
-  test("the steps run in one direction and the default is one of them", () => {
-    expect([...FONT_SIZES]).toEqual([...FONT_SIZES].sort((a, b) => a - b));
-    expect(FONT_SIZES[DEFAULT_FONT_STEP]).toBeGreaterThan(0);
-  });
-
-  test("a step outside the table is pulled back into it", () => {
-    expect(clampFontStep(-3)).toBe(0);
-    expect(clampFontStep(99)).toBe(FONT_SIZES.length - 1);
-    expect(clampFontStep(Number.NaN)).toBe(DEFAULT_FONT_STEP);
-    expect(fontSizeAt(99)).toBe(FONT_SIZES[FONT_SIZES.length - 1]);
-  });
-
-  test("the buttons go dead at the ends and reset goes dead at the default", () => {
-    expect(canShrink(0)).toBe(false);
-    expect(canGrow(0)).toBe(true);
-    expect(canGrow(FONT_SIZES.length - 1)).toBe(false);
-    expect(canResetType(DEFAULT_FONT_STEP)).toBe(false);
-    expect(canResetType(DEFAULT_FONT_STEP + 1)).toBe(true);
-  });
-
-  test("a saved size comes back as the step that wrote it", () => {
-    for (let step = 0; step < FONT_SIZES.length; step++) {
-      const state = viewStateOf({ pageIndex: 0, cfi: null, fontStep: step, layout: "vertical" });
-      expect(openingFontStep(state)).toBe(step);
-    }
-  });
-
-  test("a size from another engine opens at the nearest step, not at the default", () => {
-    // "auto" is the sentinel a book that was never opened carries.
-    expect(openingFontStep({ pageIndex: 0, scale: "auto", scrollMode: 0 })).toBe(DEFAULT_FONT_STEP);
-    expect(openingFontStep(null)).toBe(DEFAULT_FONT_STEP);
-    const nearest = openingFontStep({ pageIndex: 0, scale: FONT_SIZES[0] + 0.4, scrollMode: 0 });
-    expect(nearest).toBe(0);
-  });
-});
-
-describe("layout", () => {
-  test("the two layouts are the renderer's two flows", () => {
-    expect(flowFor("vertical")).toBe("scrolled");
-    expect(flowFor("paged")).toBe("paginated");
-  });
+  blocks: blocks.map((b, i) => ({
+    ...b,
+    endOffset: blocks[i + 1]?.spine === b.spine ? blocks[i + 1].charOffset : b.charOffset + 900,
+  })),
 });
 
 describe("where the reader is", () => {
@@ -97,21 +52,38 @@ describe("where the reader is", () => {
     expect(cfiForBlock(pagination, 99)).toBeNull();
   });
 
-  test("a saved CFI is preferred over the block number beside it", () => {
-    const state: ViewState = {
-      pageIndex: 0,
-      scale: 19,
-      scrollMode: 0,
-      cfi: "epubcfi(/6/4[c2]!/4/2/1:12)",
-    };
-    expect(restoreTarget(pagination, state)).toBe("epubcfi(/6/4[c2]!/4/2/1:12)");
+  test("a CFI names the page it falls in", () => {
+    expect(pageIndexOfCfi(pagination, "epubcfi(/6/2[c1]!/4/2/1:0)")).toBe(0);
+    expect(pageIndexOfCfi(pagination, "epubcfi(/6/2[c1]!/4/4/1:3)")).toBe(0);
+    expect(pageIndexOfCfi(pagination, "epubcfi(/6/2[c1]!/4/6/1:0)")).toBe(1);
+    expect(pageIndexOfCfi(pagination, "epubcfi(/6/2[c1]!/4/8/3:9)")).toBe(1);
+    expect(pageIndexOfCfi(pagination, "epubcfi(/6/4[c2]!/4/2,/1:0,/1:5)")).toBe(2);
+    expect(pageIndexOfCfi(pagination, "epubcfi(/6/8[c4]!/4/2/1:0)")).toBeNull();
+    expect(pageIndexOfCfi(pagination, "nope")).toBeNull();
   });
 
-  test("a state with no CFI restores by block, and no state opens at the start", () => {
-    expect(restoreTarget(pagination, { pageIndex: 2, scale: "auto", scrollMode: 0 })).toBe(
-      "epubcfi(/6/4[c2]!/4/2/1:0)",
-    );
-    expect(restoreTarget(pagination, null)).toBeNull();
+  test("a saved CFI is preferred over the page number beside it", () => {
+    const state: ViewState = {
+      pageIndex: 0,
+      scale: 1.2,
+      scrollMode: 0,
+      pageY: 300,
+      cfi: "epubcfi(/6/4[c2]!/4/2/1:12)",
+    };
+    // The CFI names another page than the number: the offset was for that
+    // page, so the new one opens at its top.
+    expect(restoreTarget(pagination, state)).toEqual({ pageIndex: 2, pageX: 0, pageY: 0 });
+    expect(restoreTarget(pagination, { ...state, pageIndex: 2 })).toEqual({ pageIndex: 2, pageX: 0, pageY: 300 });
+  });
+
+  test("a state with no CFI restores by page, and no state opens at the start", () => {
+    expect(restoreTarget(pagination, { pageIndex: 2, scale: "auto", scrollMode: 0, pageY: 40 })).toEqual({
+      pageIndex: 2,
+      pageX: 0,
+      pageY: 40,
+    });
+    expect(restoreTarget(pagination, { pageIndex: 99, scale: "auto", scrollMode: 0 }).pageIndex).toBe(2);
+    expect(restoreTarget(pagination, null)).toEqual({ pageIndex: 0, pageX: 0, pageY: 0 });
   });
 
   test("a point in a spine document is the block it falls in, 0-based", () => {
@@ -125,27 +97,40 @@ describe("where the reader is", () => {
     expect(labelForBlock(pagination, 0)).toBe("1");
     expect(labelForBlock(pagination, 2)).toBeNull();
     // With no printed number the position block's own number is what shows.
-    expect(statsOf({ pageIndex: 2, pagination, fontStep: 2, layout: "paged" }).pageLabel).toBe("3");
-    expect(statsOf({ pageIndex: 0, pagination, fontStep: 2, layout: "paged" }).pageLabel).toBe("1");
+    const zoom = { kind: "lock" as const, lock: "fit-page" as const };
+    expect(statsOf({ pageIndex: 2, pagination, layout: "paged", zoom, scale: 1 }).pageLabel).toBe("3");
+    expect(statsOf({ pageIndex: 0, pagination, layout: "paged", zoom, scale: 1 }).pageLabel).toBe("1");
   });
 
   test("the stats say how many blocks the book has and which layout it is in", () => {
-    const stats = statsOf({ pageIndex: 1, pagination, fontStep: 0, layout: "vertical" });
+    const lock = { kind: "lock" as const, lock: "fit-width" as const };
+    const stats = statsOf({ pageIndex: 1, pagination, layout: "vertical", zoom: lock, scale: 0.5 });
     expect(stats.pagesCount).toBe(3);
     expect(stats.layout).toBe("vertical");
     expect(stats.canZoomOut).toBe(false);
     expect(stats.canZoomIn).toBe(true);
+    expect(stats.canZoomReset).toBe(false);
+    const pinched = statsOf({ pageIndex: 1, pagination, layout: "vertical", zoom: { kind: "scale", scale: 3 }, scale: 3 });
+    expect(pinched.canZoomIn).toBe(false);
+    expect(pinched.canZoomReset).toBe(true);
+    // The paged flip's lock is fit-page; a fit-width lock there is a reset away.
+    expect(statsOf({ pageIndex: 1, pagination, layout: "paged", zoom: lock, scale: 1 }).canZoomReset).toBe(true);
   });
 
   test("a state without a CFI does not carry an empty one", () => {
-    const state = viewStateOf({ pageIndex: 3, cfi: null, fontStep: 1, layout: "paged" });
+    const state = viewStateOf({ pageIndex: 3, cfi: null, scale: 1.25, layout: "paged" });
     expect("cfi" in state).toBe(false);
     expect(state.pageIndex).toBe(3);
     expect(state.layout).toBe("paged");
+    expect(state.scale).toBe(1.25);
+    expect("pageY" in state).toBe(false);
+    const column = viewStateOf({ pageIndex: 3, cfi: "x", scale: 1, layout: "vertical", pageX: 0, pageY: 120 });
+    expect(column.pageY).toBe(120);
+    expect(column.cfi).toBe("x");
   });
 });
 
-describe("a range in the frame becomes an offset", () => {
+describe("a range in the card becomes an offset", () => {
   const bytes = buildEpub({
     docs: [{ name: "c1.xhtml", body: `<p id="a">${prose(1, 120)}</p><p id="b">Second one.</p>` }],
   });
@@ -172,11 +157,11 @@ describe("a range in the frame becomes an offset", () => {
     expect(offsetOfPoint(doc.text, runs, null, 0)).toBe(0);
   });
 
-  test("the round trip lands in the block the pagination cut", () => {
+  test("the round trip lands in the page the pagination cut", async () => {
     const big = parseEpub(
       buildEpub({ docs: [{ name: "c1.xhtml", body: prose(30, 400) }] }),
     );
-    const pagination = paginate(big);
+    const pagination = await paginate(big, ruler);
     const text = big.docs[0].text;
     const index = indexRuns(text);
     for (const [i, block] of pagination.blocks.entries()) {
@@ -187,7 +172,17 @@ describe("a range in the frame becomes an offset", () => {
   });
 });
 
-describe("the events the frame cannot hear", () => {
+describe("finding a cited quote in the text", () => {
+  const text = "One two three.\nFour five six seven.\nEight nine ten.";
+  test("the quote is found from the cited page first, then anywhere", () => {
+    expect(findQuoteAt(text, "five six", 0)).toEqual({ start: 20, end: 28 });
+    expect(findQuoteAt(text, "five six", 30)).toEqual({ start: 20, end: 28 });
+    expect(findQuoteAt(text, "Four five\n six", 0)?.start).toBe(15);
+    expect(findQuoteAt(text, "nothing like it", 0)).toBeNull();
+  });
+});
+
+describe("the events on the desk", () => {
   test("the edges turn the page and the middle does not", () => {
     expect(tapZone("paged", 10, 800)).toBe("prev");
     expect(tapZone("paged", 790, 800)).toBe("next");

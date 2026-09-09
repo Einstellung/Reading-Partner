@@ -41,7 +41,8 @@ export interface DocumentText {
   ids: Map<string, Element>;
 }
 
-export function extractDocumentText(doc: Document): DocumentText {
+/** The text of a document, or of a content root (a cloned <html> in a page card). */
+export function extractDocumentText(doc: Document | Element): DocumentText {
   const parts: string[] = [];
   const runs: TextRun[] = [];
   const offsets = new Map<Element, number>();
@@ -90,7 +91,8 @@ export function extractDocumentText(doc: Document): DocumentText {
     if (block) boundary();
   }
 
-  if (doc.documentElement) walk(doc.documentElement);
+  const root = doc.nodeType === 9 ? (doc as Document).documentElement : (doc as Element);
+  if (root) walk(root);
   return { text: parts.join(""), runs, offsets, ids };
 }
 
@@ -110,4 +112,45 @@ export function runAt(runs: TextRun[], offset: number): { node: Text; offset: nu
   }
   const run = runs[lo];
   return { node: run.node, offset: Math.min(Math.max(0, offset - run.start), run.length) };
+}
+
+/** Text nodes by identity, so a range's container finds its run in one lookup. */
+export function indexRuns(text: DocumentText): Map<Node, TextRun> {
+  const map = new Map<Node, TextRun>();
+  for (const run of text.runs) map.set(run.node, run);
+  return map;
+}
+
+/**
+ * A point in the tree as an offset into the extracted text — the same offsets
+ * the pagination was cut on, because a page card shows the same sanitized
+ * document the ingestion read.
+ *
+ * A container that is not a text node addresses a place between children, so
+ * the element's own start offset is the answer; a node the extraction never
+ * saw (something in <head>) has none, and the caller gets 0 rather than a
+ * guess.
+ */
+export function offsetOfPoint(
+  text: DocumentText,
+  runs: Map<Node, TextRun>,
+  node: Node | null,
+  offset: number,
+): number {
+  if (!node) return 0;
+  const run = runs.get(node);
+  if (run) return run.start + Math.min(Math.max(0, offset), run.length);
+  if (node.nodeType === 1) {
+    const el = node as Element;
+    const own = text.offsets.get(el);
+    if (own !== undefined) return own;
+    const child = el.childNodes[Math.min(offset, el.childNodes.length - 1)];
+    if (child && child !== node) return offsetOfPoint(text, runs, child, 0);
+  }
+  const parent = node.parentElement;
+  if (parent) {
+    const own = text.offsets.get(parent);
+    if (own !== undefined) return own;
+  }
+  return 0;
 }

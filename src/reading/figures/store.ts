@@ -91,6 +91,9 @@ export interface FiguresStore {
     buffer: ArrayBuffer,
     now?: () => number,
     extract?: FiguresExtractor,
+    // Whether a same-version cache is still the right one (fulltext/store.ts
+    // has the same argument, for the same reason).
+    fresh?: (index: FiguresIndex) => boolean,
   ) => Promise<FiguresIndex>;
 }
 
@@ -141,10 +144,10 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
     // Fire-and-forget safe: extraction runs on the pdf.js worker off the UI
     // thread. An extraction failure resolves to an empty index marked "failed",
     // which is cached for a day and then tried again.
-    ensure: async (key, buffer, now = Date.now, extract) => {
+    ensure: async (key, buffer, now = Date.now, extract, fresh) => {
       const hash = key;
       const cached = await readCache(hash);
-      if (cached && figuresCacheFresh(cached, now())) return cached;
+      if (cached && figuresCacheFresh(cached, now()) && (!fresh || fresh(cached))) return cached;
       const existing = inFlight.get(hash);
       if (existing) return existing;
 
@@ -215,6 +218,7 @@ export function ensureFigures(
   buffer: ArrayBuffer,
   now: () => number = Date.now,
   extract?: FiguresExtractor,
+  fresh?: (index: FiguresIndex) => boolean,
 ): Promise<FiguresIndex> {
-  return store.ensure(key, buffer, now, extract);
+  return store.ensure(key, buffer, now, extract, fresh);
 }

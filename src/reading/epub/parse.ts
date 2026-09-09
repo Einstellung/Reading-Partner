@@ -48,7 +48,7 @@ export function parseEpub(bytes: Uint8Array): EpubBook {
   for (const item of pkg.spine) {
     const source = zip.text(item.entry);
     if (source === null) continue;
-    const sanitized = sanitizeDocument(source, item.entry);
+    const sanitized = sanitizeDocument(source, item.entry, (entry) => zip.has(entry));
     if (!sanitized) throw new EpubParseError("no DOMParser: an EPUB cannot be read unsanitized");
     docs.push({
       index: docs.length,

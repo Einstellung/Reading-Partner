@@ -30,6 +30,7 @@ import {
   cleanAuthor,
   COVER_JPEG_QUALITY,
   COVER_RENDER_LIMIT,
+  COVER_WIDTH_PX,
   coverFailurePath,
   coverImagePath,
   coverMetaPath,
@@ -46,6 +47,8 @@ import {
   type CoverMeta,
 } from "./cover-cache";
 import { renderFirstPageJpeg } from "./engine/raster";
+import { renderEpubCover } from "./epub/epub-cover";
+import { isEpub } from "./epub/sniff";
 
 const COVERS_DIR = "covers";
 const MIME = "image/jpeg";
@@ -125,6 +128,14 @@ async function renderCover(
   bookId: string,
   file: FileRef,
 ): Promise<{ jpeg: Uint8Array; author: string } | null> {
+  // An EPUB names its cover in the package document; there is no page one to
+  // raster, and a book that names none gets the no-cover card (docs/63).
+  if (isEpub(bytes)) {
+    const epub = await renderEpubCover(bytes, { width: COVER_WIDTH_PX, quality: COVER_JPEG_QUALITY });
+    if (epub.kind === "ok") return { jpeg: epub.jpeg, author: cleanAuthor(epub.author) };
+    await recordFailure(bookId, file, epub.kind === "no-cover" ? "no-pages" : "render", epub.cause);
+    return null;
+  }
   const result = await renderFirstPageJpeg(bytes, {
     id: `cover:${bookId}`,
     scaleFactor: coverScaleFactor,

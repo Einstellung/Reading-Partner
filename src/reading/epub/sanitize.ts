@@ -28,7 +28,13 @@
 // Resource references are recorded, not rewritten. Turning an <img src> into
 // something the renderer can load is the rendering line's job; what this side
 // owes it is the list of archive entries a document points at.
+//
+// The book's CSS survives (docs/63): <style> blocks, <link rel="stylesheet">
+// and style attributes are kept, each put through css-sanitize.ts, which
+// removes what reaches out of the archive or out of the page box. What a page
+// card lays over the app's baseline is exactly this tree's CSS.
 
+import { sanitizeCss, sanitizeDeclarations, type CssUrlResolver } from "./css-sanitize";
 import { hrefFragment, resolveZipPath } from "./zip";
 
 export const XHTML_NS = "http://www.w3.org/1999/xhtml";
@@ -44,10 +50,10 @@ const ALLOWED_ELEMENTS = new Set([
   "a", "abbr", "address", "article", "aside", "b", "bdi", "bdo", "blockquote", "body", "br",
   "caption", "cite", "code", "col", "colgroup", "dd", "del", "details", "dfn", "div", "dl", "dt",
   "em", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header",
-  "hgroup", "hr", "html", "i", "img", "ins", "kbd", "li", "main", "mark", "nav", "ol", "p", "pre",
-  "q", "rp", "rt", "ruby", "s", "samp", "section", "small", "span", "strong", "sub", "summary",
-  "sup", "table", "tbody", "td", "tfoot", "th", "thead", "time", "title", "tr", "u", "ul", "var",
-  "wbr",
+  "hgroup", "hr", "html", "i", "img", "ins", "kbd", "li", "link", "main", "mark", "nav", "ol", "p",
+  "pre", "q", "rp", "rt", "ruby", "s", "samp", "section", "small", "span", "strong", "style", "sub",
+  "summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "time", "title", "tr", "u", "ul",
+  "var", "wbr",
 ]);
 
 // The SVG subset kept, so a book whose figures are <svg><image> keeps them.
@@ -62,13 +68,13 @@ const ALLOWED_SVG = new Set(["svg", "image", "g", "title", "desc", "path", "rect
 // (docs/pitfall/127).
 const DROP_WITH_CONTENT = new Set([
   "applet", "audio", "base", "button", "canvas", "embed", "foreignobject", "form", "frame",
-  "frameset", "iframe", "input", "link", "marquee", "meta", "noembed", "noframes", "noscript",
-  "object", "optgroup", "option", "plaintext", "script", "select", "style", "template", "textarea",
+  "frameset", "iframe", "input", "marquee", "meta", "noembed", "noframes", "noscript",
+  "object", "optgroup", "option", "plaintext", "script", "select", "template", "textarea",
   "video", "xmp",
 ]);
 
 // No end tag, no children.
-const VOID_ELEMENTS = new Set(["br", "col", "hr", "img", "wbr"]);
+const VOID_ELEMENTS = new Set(["br", "col", "hr", "img", "link", "wbr"]);
 
 // Attributes carried over from the source, per element. Nothing else survives,
 // which is what makes "on*, in every form it can be written" a non-question
@@ -85,6 +91,7 @@ const ATTRS: Record<string, readonly string[]> = {
   th: ["colspan", "rowspan", "headers", "scope"],
   time: ["datetime"],
   image: ["width", "height", "x", "y"],
+  link: ["href", "rel", "type", "media"],
   svg: ["width", "height", "viewBox", "preserveAspectRatio"],
   use: [],
 };
@@ -170,6 +177,22 @@ interface WalkState {
   externalSet: Set<string>;
   /** The archive path of the document being sanitized, for resolving hrefs. */
   entryPath: string;
+  /** Whether an archive entry exists, when the caller can say. */
+  hasEntry: ((entry: string) => boolean) | null;
+}
+
+// A url() in the book's CSS is kept when it names an entry of the archive and
+// is written back as the book spelled it, so the next pass resolves it the same
+// way. Anything with a scheme is out: the sheet may not fetch.
+function cssResolver(state: WalkState): CssUrlResolver {
+  return (raw) => {
+    if (schemeOf(raw) !== null || raw.startsWith("#")) return null;
+    const entry = resolveZipPath(state.entryPath, raw);
+    if (entry === "" || entry === state.entryPath) return null;
+    if (state.hasEntry && !state.hasEntry(entry)) return null;
+    recordRef(state, raw, "resource");
+    return raw.replace(/[\s"'()]/g, "");
+  };
 }
 
 function recordRef(state: WalkState, raw: string, kind: "resource" | "link"): void {
@@ -190,16 +213,6 @@ function recordRef(state: WalkState, raw: string, kind: "resource" | "link"): vo
   if (seen.has(entry)) return;
   seen.add(entry);
   (kind === "resource" ? state.refs.entries : state.refs.links).push(entry);
-}
-
-// url(...) inside a style attribute or a <style> block. Style elements are
-// dropped with their content, but a book's stylesheet is still an archive entry
-// the renderer will want, and the CSS files are listed from the manifest rather
-// than from here; this reads the inline ones.
-const CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
-
-function recordCssUrls(state: WalkState, css: string): void {
-  for (const m of css.matchAll(CSS_URL)) recordRef(state, m[2].trim(), "resource");
 }
 
 function attrName(attr: Attr): string {
@@ -230,6 +243,11 @@ function attrsFor(state: WalkState, el: Element, tag: string): string {
   for (const attr of Array.from(el.attributes)) {
     const name = attrName(attr);
     if (name.startsWith("xmlns")) continue; // written by the emitter, not copied
+    if (attr.namespaceURI === null && name === "style") {
+      const decls = sanitizeDeclarations(attr.value, { resolveUrl: cssResolver(state) });
+      if (decls !== "") kept.push(["style", decls]);
+      continue;
+    }
     const plain = attr.namespaceURI === null;
     const allowed = plain
       ? GLOBAL_ATTRS.has(name) || isAria(name) || (ATTRS[tag]?.includes(name) ?? false)
@@ -260,18 +278,27 @@ function emit(state: WalkState, node: Node): void {
   if (node.nodeType !== 1) return; // comments, PIs and doctypes are dropped
   const el = node as Element;
   const tag = el.localName.toLowerCase();
-  if (DROP_WITH_CONTENT.has(tag)) {
-    if (tag === "style") recordCssUrls(state, el.textContent ?? "");
-    return;
-  }
+  if (DROP_WITH_CONTENT.has(tag)) return;
   const svg = el.namespaceURI === SVG_NS;
+  // A <style> inside an <svg> belongs to the SVG subset, which does not carry it.
+  if (svg && tag === "style") return;
   const allowed = svg ? ALLOWED_SVG.has(tag) : ALLOWED_ELEMENTS.has(tag);
   if (!allowed) {
     emitChildren(state, el);
     return;
   }
-  const style = el.getAttribute("style");
-  if (style) recordCssUrls(state, style);
+  if (tag === "style") {
+    const css = sanitizeCss(el.textContent ?? "", { resolveUrl: cssResolver(state) });
+    if (css !== "") state.out.push(`<style>${escapeText(css)}</style>`);
+    return;
+  }
+  // A <link> is a stylesheet of the archive or nothing: any other relation
+  // (preload, icon, alternate) reaches for something the page does not load.
+  if (tag === "link") {
+    const rel = (el.getAttribute("rel") ?? "").trim().toLowerCase().split(/\s+/);
+    const href = el.getAttribute("href") ?? "";
+    if (!rel.includes("stylesheet") || href === "" || schemeOf(href) !== null) return;
+  }
 
   let open = `<${tag}`;
   // Declared on the root whether or not this document uses them, so a prefixed
@@ -308,7 +335,11 @@ function parse(source: string): { doc: Document; fallback: boolean } | null {
  * result, never an unchecked one, and the caller decides what a document it
  * cannot read means for the book.
  */
-export function sanitizeDocument(source: string, entryPath: string): SanitizedDocument | null {
+export function sanitizeDocument(
+  source: string,
+  entryPath: string,
+  hasEntry: ((entry: string) => boolean) | null = null,
+): SanitizedDocument | null {
   const parsed = parse(source);
   if (!parsed) return null;
   const state: WalkState = {
@@ -318,6 +349,7 @@ export function sanitizeDocument(source: string, entryPath: string): SanitizedDo
     linkSet: new Set(),
     externalSet: new Set(),
     entryPath,
+    hasEntry,
   };
   emit(state, parsed.doc.documentElement);
   const html = state.out.join("");

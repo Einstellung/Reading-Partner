@@ -31,6 +31,8 @@ export interface EpubPackage {
   opfEntry: string;
   version: string;
   title: string | null;
+  /** dc:creator, first of them: the name under the title on a shelf card. */
+  creator: string | null;
   language: string | null;
   /** Manifest by item id. */
   manifest: Map<string, ManifestItem>;
@@ -137,11 +139,13 @@ export function parsePackage(source: string, opfEntry: string): EpubPackage | nu
   const language = textOf(
     byLocalName(doc, "language").find((el) => el.namespaceURI?.includes("/dc/")),
   );
+  const creator = textOf(byLocalName(doc, "creator").find((el) => el.namespaceURI?.includes("/dc/")));
 
   return {
     opfEntry,
     version: pkg.getAttribute("version") ?? "",
     title,
+    creator,
     language,
     manifest,
     spine,

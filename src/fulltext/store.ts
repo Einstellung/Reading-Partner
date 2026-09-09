@@ -38,7 +38,15 @@ export type FulltextExtractor = (buffer: ArrayBuffer) => Promise<Omit<Fulltext, 
 export interface FulltextStore {
   get: (hash: string) => Promise<Fulltext | null>;
   save: (key: string, ft: Fulltext) => Promise<void>;
-  ensure: (key: string, buffer: ArrayBuffer, extract?: FulltextExtractor) => Promise<Fulltext>;
+  ensure: (
+    key: string,
+    buffer: ArrayBuffer,
+    extract?: FulltextExtractor,
+    // Whether a same-version cache is still the right one. A caller whose
+    // pages depend on something outside FULLTEXT_VERSION (an EPUB's pagination
+    // table) says so here; absent, any same-version cache is taken.
+    fresh?: (ft: Fulltext) => boolean,
+  ) => Promise<Fulltext>;
 }
 
 export function createFulltextStore(io: FulltextIo): FulltextStore {
@@ -80,10 +88,10 @@ export function createFulltextStore(io: FulltextIo): FulltextStore {
     // Idempotent: a second call while extraction is running joins the same job.
     // Safe to call fire-and-forget at book-open time; the pdf.js worker keeps
     // parsing off the UI.
-    ensure: async (key, buffer, extract) => {
+    ensure: async (key, buffer, extract, fresh) => {
       const hash = key;
       const cached = await get(hash);
-      if (cached) return cached;
+      if (cached && (!fresh || fresh(cached))) return cached;
       const existing = inFlight.get(hash);
       if (existing) return existing;
 
@@ -132,6 +140,7 @@ export function ensureFulltext(
   key: string,
   buffer: ArrayBuffer,
   extract?: FulltextExtractor,
+  fresh?: (ft: Fulltext) => boolean,
 ): Promise<Fulltext> {
-  return store.ensure(key, buffer, extract);
+  return store.ensure(key, buffer, extract, fresh);
 }
