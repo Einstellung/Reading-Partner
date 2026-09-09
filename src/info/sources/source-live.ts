@@ -15,7 +15,7 @@ import { trialSource, trialUsesWebview } from "./source-tools";
 import type { ProbeConfirmCardData } from "./source-cards";
 
 // The hidden-webview article fetcher where the host has one, wired exactly as
-// the collection path wires it (briefing/live.ts). A trial without it answers
+// the collection path wires it (program/live.ts). A trial without it answers
 // "summary only" for every `webview` source — which is the wrong answer to the
 // question the trial is asked, since that is the gate a source has to pass to be
 // added at all.

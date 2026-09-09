@@ -1,4 +1,4 @@
-// What the collector publishes for the readers (src/info/briefing/publish.ts):
+// What the collector publishes for the readers (src/info/boxes/publish.ts):
 // which items get a body, what is taken out of it, and how a reader tells a
 // matched pair from a briefing whose text has not arrived yet (docs/36).
 // Run: bun test.
@@ -10,9 +10,9 @@ import {
   bodiesMatch,
   buildPublishedBodies,
   tieredItemIds,
-} from "../../src/info/briefing/publish";
-import type { CachedArticle } from "../../src/info/briefing/store";
-import type { Briefing } from "../../src/info/briefing/types";
+} from "../../src/info/boxes/publish";
+import type { CachedArticle } from "../../src/info/collect/store";
+import type { Briefing } from "../../src/info/collect/types";
 import type { InfoItem } from "../../src/info/sources/item";
 
 function meta(id: string) {

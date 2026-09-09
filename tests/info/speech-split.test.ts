@@ -4,13 +4,13 @@
 // answer without having seen the end of the text.
 
 import { expect, test } from "bun:test";
-import { normalizeForSpeech } from "../../src/info/briefing/speech/normalize";
+import { normalizeForSpeech } from "../../src/info/briefer/speech/normalize";
 import {
   type SpokenSentence,
   createSpeechSplitter,
   splitForSpeech,
   splitSentences,
-} from "../../src/info/briefing/speech/split";
+} from "../../src/info/briefer/speech/split";
 
 function texts(sentences: SpokenSentence[]): string[] {
   return sentences.map((s) => s.text);

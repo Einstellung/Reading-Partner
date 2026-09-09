@@ -22,7 +22,7 @@ export type DistillTrigger =
   | "book-switch"
   | "talk-exit"
   // An info conversation closed: the chat unmounted, or the voice call hung up
-  // (src/info/companion). The counterpart of "hangup" for the conversations that
+  // (src/info/briefer). The counterpart of "hangup" for the conversations that
   // hang off no book.
   | "info-close";
 

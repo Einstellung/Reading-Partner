@@ -15,8 +15,8 @@
 
 import { expect, test } from "bun:test";
 import { PALACE } from "../../../src/palace";
-import { ASK_PULL_ROUTE } from "../../../src/info/briefing/handoff";
-import { READER_PULL_ROUTE } from "../../../src/info/briefing/reader";
+import { ASK_PULL_ROUTE } from "../../../src/info/briefer/handoff";
+import { READER_PULL_ROUTE } from "../../../src/info/briefer/reader";
 import { SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
 import {
   BOOK_CACHE_PULL_ROUTE,

@@ -12,9 +12,9 @@
 
 import { afterAll, expect, test } from "bun:test";
 import { deskKindRegistered } from "../../src/desk";
-import { registerInfoDistillSource } from "../../src/info/companion/distill-source";
+import { registerInfoDistillSource } from "../../src/info/briefer/distill-source";
 import { distillSourceOf } from "../../src/memory/distill/sources";
-import { registerInfoDesk } from "../../src/info/companion/desk";
+import { registerInfoDesk } from "../../src/info/briefer/desk";
 import { registerReadingDesk } from "../../src/reading/desk";
 import { registerRehearsalDesk } from "../../src/reading/rehearsal/desk";
 import { registerRetellDesk } from "../../src/reading/retell/desk";

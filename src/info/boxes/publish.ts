@@ -34,8 +34,8 @@
 import { appData } from "../../platform/app/appdata";
 import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { stripDataImages } from "../extract/sanitize";
-import { loadArticles, loadItems, loadLatestBriefing, type CachedArticle } from "./store";
-import type { Briefing } from "./types";
+import { loadArticles, loadItems, loadLatestBriefing, type CachedArticle } from "../collect/store";
+import type { Briefing } from "../collect/types";
 import type { InfoItem } from "../sources/item";
 
 export const PUBLISHED_BRIEFING_FILE = "info-briefing.json";

@@ -1,10 +1,10 @@
-// The morning round's rule (src/info/briefing/daily.ts): which anchor has gone
+// The morning round's rule (src/info/program/daily.ts): which anchor has gone
 // by, and whether it has been run for. Every timestamp is built from local-time
 // components so the assertions hold in whatever timezone the test runs in.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { dailyAction, DAILY_ANCHOR_HOUR, lastAnchorDate } from "../../src/info/briefing/daily";
+import { dailyAction, DAILY_ANCHOR_HOUR, lastAnchorDate } from "../../src/info/program/daily";
 
 // Local wall-clock time as an epoch, the way the machine reads its own clock.
 function at(y: number, m: number, d: number, h: number, min = 0): number {

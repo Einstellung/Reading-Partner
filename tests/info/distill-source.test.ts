@@ -4,12 +4,12 @@
 // Run: bun test tests/info/distill-source.test.ts
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { ONBOARDING_THREAD_ID } from "../../src/info/companion/anchors";
-import { infoBookId } from "../../src/info/companion/call";
+import { ONBOARDING_THREAD_ID } from "../../src/info/briefer/anchors";
+import { infoBookId } from "../../src/info/briefer/call";
 import {
   listInfoUnits,
   registerInfoDistillSource,
-} from "../../src/info/companion/distill-source";
+} from "../../src/info/briefer/distill-source";
 import { collectSourceArrears } from "../../src/memory/distill/info-thread";
 import { rebuildThreadStoreForTests } from "../../src/platform/app/threads";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";

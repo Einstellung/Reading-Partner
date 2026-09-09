@@ -18,8 +18,8 @@ import type {
   InfoCard,
   ProfileUpdateCardData,
   TopicProposalCardData,
-} from "../../../info/briefing/cards";
-import { proposedTopicName } from "../../../info/companion/topic-tool";
+} from "../../../info/boxes/cards";
+import { proposedTopicName } from "../../../info/briefer/topic-tool";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";

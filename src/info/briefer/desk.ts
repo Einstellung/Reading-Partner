@@ -42,7 +42,7 @@ import {
 } from "./chat";
 import type { AgentTool } from "../../ai/agent";
 import type { AiLanguage } from "../../platform/app/settings";
-import type { Briefing } from "../briefing/types";
+import type { Briefing } from "../collect/types";
 
 /** The day's briefing, which is the companion itself. Marked on the palace row. */
 export const INFO_BRIEFING_KIND = "info-briefing";

@@ -23,9 +23,9 @@ import {
   PUBLISHED_BODIES_FILE,
   PUBLISHED_BRIEFING_FILE,
   type PublishedBodies,
-} from "./publish";
-import { removeCollectedPoolFiles } from "./pool-store";
-import { pruneStaleDailyFiles, todayLocal } from "./store";
+} from "../boxes/publish";
+import { removeCollectedPoolFiles } from "../collect/pool-store";
+import { pruneStaleDailyFiles, todayLocal } from "../collect/store";
 import {
   collectorReport,
   readCollectorClaims,
@@ -35,8 +35,8 @@ import {
   type CollectorReport,
 } from "./handoff";
 import { currentDeviceId } from "../../platform/app/device";
-import type { InfoSnapshot, RunStart } from "./pipeline";
-import type { Briefing } from "./types";
+import type { InfoSnapshot, RunStart } from "../collect/pipeline";
+import type { Briefing } from "../collect/types";
 
 // What asking for a briefing did. Two of the three come from the pipeline (it
 // started a run, or it was already running one and this start was refused); the

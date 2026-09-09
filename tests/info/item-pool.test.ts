@@ -1,4 +1,4 @@
-// The item pool (src/info/briefing/item-pool.ts): what keeps a briefing from
+// The item pool (src/info/collect/item-pool.ts): what keeps a briefing from
 // only ever seeing whatever the feeds happen to be showing at generation time.
 // Everything here is pure — the schedule, the dedupe, the cross-day bookkeeping,
 // the eviction — so it is checked with a fake clock and no filesystem.
@@ -20,10 +20,10 @@ import {
   recordRun,
   unstockedSources,
   type Pool,
-} from "../../src/info/briefing/item-pool";
+} from "../../src/info/collect/item-pool";
 import { DEFAULT_POLL_MINUTES, type SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { InfoItem } from "../../src/info/sources/item";
-import type { ScreenVerdict } from "../../src/info/briefing/screen";
+import type { ScreenVerdict } from "../../src/info/collect/screen";
 
 const MIN = 60_000;
 

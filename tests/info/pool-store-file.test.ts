@@ -1,4 +1,4 @@
-// What the item pool is allowed to lose (src/info/briefing/pool-store.ts).
+// What the item pool is allowed to lose (src/info/collect/pool-store.ts).
 //
 // Its day files and its poll schedule are derived: losing them costs one round
 // of polling. info-pool-marks.json is not. It is the record of what has already
@@ -12,8 +12,8 @@
 // Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { loadPool, savePoolMarks, savePoolPolled } from "../../src/info/briefing/pool-store";
-import { POOL_VERSION, recordRun, type PoolMark } from "../../src/info/briefing/item-pool";
+import { loadPool, savePoolMarks, savePoolPolled } from "../../src/info/collect/pool-store";
+import { POOL_VERSION, recordRun, type PoolMark } from "../../src/info/collect/item-pool";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 
 const MARKS = "info-pool-marks.json";

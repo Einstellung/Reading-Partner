@@ -1,10 +1,10 @@
 // The spoken-briefing normalizer (docs/33). Every case here is a form taken
-// from a real briefing (src/info/briefing writes them; the two on disk when this
+// from a real briefing (src/info/collect writes them; the two on disk when this
 // was written were 2026-07-21 in English and 2026-08-12 in Chinese), or one of
 // the five readings docs/33 names by hand.
 
 import { expect, test } from "bun:test";
-import { chineseInteger, normalizeForSpeech } from "../../src/info/briefing/speech/normalize";
+import { chineseInteger, normalizeForSpeech } from "../../src/info/briefer/speech/normalize";
 
 // --- the five readings docs/33 names --------------------------------------
 

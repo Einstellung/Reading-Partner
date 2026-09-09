@@ -132,7 +132,7 @@ pub fn hide_on_close<R: Runtime>(app: &AppHandle<R>) {
 }
 
 // What the collector is up to, in one sentence the frontend writes
-// (src/info/briefing/collector.ts). Both places it can be read are set from it:
+// (src/info/collect/collector.ts). Both places it can be read are set from it:
 // the tooltip, which Linux ignores, and the disabled first menu item, which is
 // where Linux reads it.
 #[tauri::command]

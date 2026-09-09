@@ -1,4 +1,4 @@
-// The two published names on disk (src/info/briefing/publish.ts), against an
+// The two published names on disk (src/info/boxes/publish.ts), against an
 // in-memory AppData: what a collector writes over them, and the two cases where
 // it must write nothing at all. tests/info/publish.test.ts covers the pure half;
 // this file is here for the writes.
@@ -22,9 +22,9 @@ import {
   PUBLISHED_BRIEFING_FILE,
   backfillPublish,
   publishBriefing,
-} from "../../src/info/briefing/publish";
-import type { CachedArticle } from "../../src/info/briefing/store";
-import type { Briefing } from "../../src/info/briefing/types";
+} from "../../src/info/boxes/publish";
+import type { CachedArticle } from "../../src/info/collect/store";
+import type { Briefing } from "../../src/info/collect/types";
 import type { InfoItem } from "../../src/info/sources/item";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 

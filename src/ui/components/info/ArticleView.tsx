@@ -10,8 +10,8 @@ import { IconCheck, IconFileInto, IconSparkle } from "../base/icons";
 import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../markdown/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { handleDelegatedLinkClick, openExternal } from "../../../platform/app/external-link";
-import type { ArticleState } from "../../../info/briefing/reader";
-import type { BriefingItemMeta } from "../../../info/briefing/types";
+import type { ArticleState } from "../../../info/briefer/reader";
+import type { BriefingItemMeta } from "../../../info/collect/types";
 import { Button } from "../ui/button";
 
 // What to say when there is no body. Four cases and four different sentences,

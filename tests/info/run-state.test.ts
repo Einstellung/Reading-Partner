@@ -1,4 +1,4 @@
-// The briefing run checkpoint (src/info/briefing/run-state.ts): the pure rules
+// The briefing run checkpoint (src/info/collect/run-state.ts): the pure rules
 // that decide what a resumed run still owes and what it must never fetch twice.
 // Run: bun test.
 
@@ -23,7 +23,7 @@ import {
   type CollectProgress,
   type InfoRunState,
   type RunSeed,
-} from "../../src/info/briefing/run-state";
+} from "../../src/info/collect/run-state";
 import type { InfoItem } from "../../src/info/sources/item";
 
 // An expectation names only the counters it is about.

@@ -28,7 +28,7 @@
 // reading it today. The html keeps its external image URLs — they render
 // through the img: proxy (docs/pitfall/30) — but any data: image is stripped,
 // since a base64 body would dominate the file. Same rule and same function as
-// the bodies the collector publishes (info/briefing/publish.ts), so an article
+// the bodies the collector publishes (info/boxes/publish.ts), so an article
 // read from the briefing and the copy kept from it hold the same markup.
 //
 // Nothing deletes a body file. File-level deletes do not propagate (docs/13),

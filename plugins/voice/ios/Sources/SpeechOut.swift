@@ -178,7 +178,7 @@ final class SpeechOut {
     /// duck event and its full value on the resume, so the values train
     /// themselves — and the native side applies them first, at the verdict,
     /// without waiting for the round trip. Defaults match
-    /// DEFAULT_VOICE_SESSION in src/info/companion/voice-session.ts.
+    /// DEFAULT_VOICE_SESSION in src/info/briefer/voice-session.ts.
     private var fullVolume: Float = 1
     private var duckVolume: Float = 0.25
     private var ducked = false

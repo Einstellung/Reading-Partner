@@ -15,8 +15,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recallScroll, rememberScroll } from "../../../src/ui/components/common/scroll-memory";
 import { infoStickKey, useInfoCall } from "../../../src/ui/components/info/use-info-call";
-import type { BriefingView } from "../../../src/info/briefing/reader";
-import type { InfoCallAnchor } from "../../../src/info/companion/anchors";
+import type { BriefingView } from "../../../src/info/briefer/reader";
+import type { InfoCallAnchor } from "../../../src/info/briefer/anchors";
 import { useDom } from "../../support/dom";
 
 const { cleanup, renderHook } = await useDom();

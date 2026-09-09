@@ -7,8 +7,8 @@ import {
   keepBriefingArticle,
   type KeepArticlePorts,
 } from "../../../src/ui/components/info/use-info-home";
-import type { ArticleState } from "../../../src/info/briefing/reader";
-import type { BriefingItemMeta } from "../../../src/info/briefing/types";
+import type { ArticleState } from "../../../src/info/briefer/reader";
+import type { BriefingItemMeta } from "../../../src/info/collect/types";
 import type { SavedArticle, SavedArticleInput } from "../../../src/reading/saved-articles";
 
 const META: BriefingItemMeta = {

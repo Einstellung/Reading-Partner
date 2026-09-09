@@ -1,4 +1,4 @@
-// The collector session (src/info/briefing/presence.ts): which machine holds the
+// The collector session (src/info/program/presence.ts): which machine holds the
 // claim, when it gives it up, and what it does with the requests readers leave
 // behind (docs/36). Every dependency is injected, so this runs with a fake clock,
 // fake interval, no disk and no Tauri — which is the only way these paths get
@@ -11,14 +11,14 @@ import {
   type CollectorSession,
   type CollectorSessionDeps,
   type SessionSyncStatus,
-} from "../../src/info/briefing/presence";
+} from "../../src/info/program/presence";
 import {
   ASK_PULL_ROUTE,
   CLAIM_SYNC_GRACE_MS,
   HEARTBEAT_MS,
   type AskRecord,
   type CollectorClaim,
-} from "../../src/info/briefing/handoff";
+} from "../../src/info/briefer/handoff";
 import { SOURCES_FILE, SOURCES_PULL_ROUTE } from "../../src/info/sources/source-store";
 const MIN = 60_000;
 

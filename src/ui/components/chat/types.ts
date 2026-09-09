@@ -2,7 +2,7 @@
 
 import type { CompressedImage } from "../../../ai/image-utils";
 import type { ToolStatus } from "../../../ai/tool-status";
-import type { InfoCard } from "../../../info/briefing/cards";
+import type { InfoCard } from "../../../info/boxes/cards";
 import type { ChatPart } from "./chatParts";
 
 // A staged (pre-send) image. It appears instantly as a placeholder while the

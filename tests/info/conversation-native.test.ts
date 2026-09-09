@@ -16,7 +16,7 @@ import {
   type ConversationBridge,
   type ConversationEvent,
   type ConversationState,
-} from "../../src/info/companion/conversation";
+} from "../../src/info/briefer/conversation";
 
 interface Call {
   command: string;

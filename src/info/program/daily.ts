@@ -20,7 +20,7 @@
 // timer, the settings, the claim and the pipeline are the assembly's business
 // (live.ts).
 
-import { localDateString } from "./store";
+import { localDateString } from "../collect/store";
 
 // Five in the morning: late enough that the overnight feeds have published,
 // early enough to be there before the reader is. Not a setting — a briefing has

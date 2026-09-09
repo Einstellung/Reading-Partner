@@ -2,7 +2,7 @@
 // the real model call.
 //
 // The only entry point is runDreamIfDue, and the only caller is the collector's
-// daily tick (info/briefing/live.ts). Dream runs on one machine — the elected
+// daily tick (info/program/live.ts). Dream runs on one machine — the elected
 // collector (docs/36) — because two machines would each pay for the night and
 // write two readings of the same observations.
 

@@ -1,4 +1,4 @@
-// The React-free half of the info call (src/info/companion/call.ts): the thread
+// The React-free half of the info call (src/info/briefer/call.ts): the thread
 // id, the one briefing card's progress -> ready/failed lifecycle read off a
 // pipeline snapshot, and the synthetic turns the thread carries. Pure — no
 // React, no pipeline, no filesystem. Run: bun test.
@@ -16,10 +16,10 @@ import {
   sourceAddedNote,
   trackedJob,
   type BriefingJobPlan,
-} from "../../src/info/companion/call";
-import type { InfoSnapshot } from "../../src/info/briefing/pipeline";
-import type { Briefing } from "../../src/info/briefing/types";
-import type { ProfileUpdateCardData } from "../../src/info/briefing/cards";
+} from "../../src/info/briefer/call";
+import type { InfoSnapshot } from "../../src/info/collect/pipeline";
+import type { Briefing } from "../../src/info/collect/types";
+import type { ProfileUpdateCardData } from "../../src/info/boxes/cards";
 import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";
 
 const IDLE: InfoSnapshot = {

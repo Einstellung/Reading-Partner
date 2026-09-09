@@ -26,7 +26,7 @@ import {
   createSourcedSplitter,
   type SourcedSentence,
   type SourcedSplitter,
-} from "../briefing/speech/split";
+} from "./speech/split";
 import { joinSpeech } from "../../ai/voice/dictation";
 import {
   speechCut,

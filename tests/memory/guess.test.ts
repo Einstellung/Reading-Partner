@@ -525,7 +525,7 @@ test("a pass that never reached the provider names what was thrown", async () =>
 // The pass reads the profile, calls a sub-agent, and writes. The call takes tens
 // of seconds to minutes and the reader is awake for them: the Apply button on a
 // profile card writes the declared half in exactly that window
-// (info/companion/card-actions.ts). What the guesses are spliced onto has to be
+// (info/briefer/card-actions.ts). What the guesses are spliced onto has to be
 // the document as it is when the write happens, not the copy the pass took
 // before the call.
 

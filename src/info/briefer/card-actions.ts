@@ -12,7 +12,7 @@
 
 import type { SourceDescriptor } from "../sources/descriptor";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { TopicProposalCardData } from "../briefing/cards";
+import type { TopicProposalCardData } from "../boxes/cards";
 import { replaceDeclared } from "../../memory/profile/guess";
 import { loadProfileForWrite, saveProfile } from "../../memory/profile/profile";
 

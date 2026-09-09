@@ -18,7 +18,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { getThread } from "../../platform/app/threads";
 import { BRIEF_TOPIC_ID, BRIEF_TOPIC_NAME, listTopics, type Topic } from "../../platform/app/topics";
 import type { AgentTool } from "../../ai/agent";
-import type { TopicProposalCardData } from "../briefing/cards";
+import type { TopicProposalCardData } from "../boxes/cards";
 
 /** A topic as this tool needs it: enough to name one and to match one. */
 export interface TopicChoice {

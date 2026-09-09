@@ -1,4 +1,4 @@
-// Briefing store date logic (src/info/briefing/store.ts) plus the item-snapshot
+// Briefing store date logic (src/info/collect/store.ts) plus the item-snapshot
 // leaning. Only the pure helpers are exercised here; the fs read/write paths
 // need the Tauri plugin. Run: bun test.
 
@@ -9,7 +9,7 @@ import {
   newestBriefingDate,
   staleDailyFiles,
   todayLocal,
-} from "../../src/info/briefing/store";
+} from "../../src/info/collect/store";
 import type { InfoItem } from "../../src/info/sources/item";
 
 test("localDateString is local YYYY-MM-DD, zero-padded", () => {

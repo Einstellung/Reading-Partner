@@ -8,20 +8,20 @@
 // Run: bun test tests/info/voice-call.test.ts
 
 import { expect, test } from "bun:test";
-import { VOICE_OPENING_KICKOFF } from "../../src/info/companion/call";
+import { VOICE_OPENING_KICKOFF } from "../../src/info/briefer/call";
 import type {
   ConversationEvent,
   ConversationSource,
   SpeechStopped,
-} from "../../src/info/companion/conversation";
+} from "../../src/info/briefer/conversation";
 import {
   KICKOFF_TURN,
   createVoiceCall,
   type VoiceCall,
   type VoiceCallModel,
   type VoiceCallTranscript,
-} from "../../src/info/companion/voice-call";
-import { INTERRUPTED_MARK, type VoiceTurn } from "../../src/info/companion/voice-session";
+} from "../../src/info/briefer/voice-call";
+import { INTERRUPTED_MARK, type VoiceTurn } from "../../src/info/briefer/voice-session";
 
 // Three sentences as the splitter cuts them (a fullwidth comma is a boundary),
 // so two go out mid-stream and the last waits for the model to finish.

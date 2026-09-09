@@ -5,7 +5,7 @@
 //
 // It sits in the ui layer because it holds React state and drives effects. The
 // decidable parts are one layer down and tested there: the anchors an Ask
-// assembles (info/companion/anchors.ts) and the site-session sequencing
+// assembles (info/briefer/anchors.ts) and the site-session sequencing
 // (info/sources/session-flow.ts). The one sequence that cannot go down is
 // keeping an article — it maps info's shapes onto reading's, and ui is the only
 // layer allowed to touch both (saveArticle.ts) — so it is a plain exported
@@ -15,17 +15,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadSettings } from "../../../platform/app/settings";
 import type { DeviceRole } from "../../../platform/app/device";
 import { buildGlossary } from "../../../ai/voice";
-import { getInfoView } from "../../../info/briefing/live";
-import { todayLocal } from "../../../info/briefing/store";
-import type { InfoSnapshot } from "../../../info/briefing/pipeline";
+import { getInfoView } from "../../../info/program/live";
+import { todayLocal } from "../../../info/collect/store";
+import type { InfoSnapshot } from "../../../info/collect/pipeline";
 import {
   clearCollectorLeftovers,
   READER_PULL_ROUTE,
   type ArticleState,
   type BriefingView,
-} from "../../../info/briefing/reader";
+} from "../../../info/briefer/reader";
 import { registerPullRoute } from "../../../platform/sync/pull-routes";
-import type { BriefingItemMeta } from "../../../info/briefing/types";
+import type { BriefingItemMeta } from "../../../info/collect/types";
 import { ensureBriefTopic } from "../../../platform/app/topics";
 import {
   loadSavedArticles,
@@ -42,7 +42,7 @@ import {
   noBriefingAnchor,
   onboardingAnchor,
   type InfoCallAnchor,
-} from "../../../info/companion/anchors";
+} from "../../../info/briefer/anchors";
 import {
   addSource as addSourceStore,
   hasSources,
@@ -73,7 +73,7 @@ import {
   openSiteSignIn,
 } from "../../../info/extract/webview-session";
 import { hasWebviewFetch } from "../../../platform/app/platform";
-import type { CollectorSites } from "../../../info/briefing/reader";
+import type { CollectorSites } from "../../../info/briefer/reader";
 import type { ComposerVoice } from "../chat/chat";
 import type { HomeScreen } from "./InfoHome";
 

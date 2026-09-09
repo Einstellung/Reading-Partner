@@ -1,5 +1,5 @@
 // What a card gesture in the info conversation fans out to
-// (src/info/companion/card-actions.ts): the confirm card's Add and the profile
+// (src/info/briefer/card-actions.ts): the confirm card's Add and the profile
 // card's Apply. Over ports — the effects are recorded, nothing is written — so
 // the guards and the order can be asserted without React and without a
 // filesystem. Run: bun test.
@@ -11,7 +11,7 @@ import {
   canRetriage,
   type AddSourcePorts,
   type ProfileStore,
-} from "../../src/info/companion/card-actions";
+} from "../../src/info/briefer/card-actions";
 import { GUESS_BEGIN, GUESS_END, GUESS_HEADING } from "../../src/memory/profile/guess";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { ProbeConfirmCardData } from "../../src/info/sources/source-cards";

@@ -1,4 +1,4 @@
-// Background collection (src/info/briefing/collector.ts): the polling that keeps
+// Background collection (src/info/collect/collector.ts): the polling that keeps
 // the pool stocked so a briefing is not limited to whatever the feeds happen to
 // be showing when it runs. Deps are injected, so this runs with a fake clock,
 // fake timers and no network — the point being that the schedule is decided from
@@ -11,9 +11,9 @@ import {
   InfoCollector,
   type CollectorDeps,
   type CollectorStatus,
-} from "../../src/info/briefing/collector";
-import { emptyPool, type Pool } from "../../src/info/briefing/item-pool";
-import type { CachedArticle } from "../../src/info/briefing/store";
+} from "../../src/info/collect/collector";
+import { emptyPool, type Pool } from "../../src/info/collect/item-pool";
+import type { CachedArticle } from "../../src/info/collect/store";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { InfoItem } from "../../src/info/sources/item";
 

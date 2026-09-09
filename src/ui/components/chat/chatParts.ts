@@ -12,7 +12,7 @@
 // not fold a card into text.
 
 import type { FC } from "react";
-import type { InfoCard } from "../../../info/briefing/cards";
+import type { InfoCard } from "../../../info/boxes/cards";
 import type { AsideCard } from "../../../reading/aside";
 import type { ReadingCard } from "../../../reading/retell/cards";
 import type {
@@ -24,7 +24,7 @@ import type { ThreadMessage } from "./types";
 import type { ToolStatus } from "../../../ai/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
-// (info/briefing/cards.ts, reading/retell/cards.ts, reading/aside.ts); this
+// (info/boxes/cards.ts, reading/retell/cards.ts, reading/aside.ts); this
 // protocol only references the union, so the dependency direction stays
 // components -> domain and never the reverse. Each unit contributes its own
 // member — a unit, not a whole domain: reading/aside contributes separately from

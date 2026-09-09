@@ -4,7 +4,7 @@
 // exactly the bug a second copy would produce.
 
 import { useEffect, useRef, useState } from "react";
-import type { InfoSnapshot } from "../../../info/briefing/pipeline";
+import type { InfoSnapshot } from "../../../info/collect/pipeline";
 import { Button } from "../ui/button";
 import { builtAt } from "./today";
 
