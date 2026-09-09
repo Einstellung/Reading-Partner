@@ -197,6 +197,25 @@ export function tapZone(
   return "none";
 }
 
+/**
+ * Whether the reader takes this touch away from the browser, by preventing the
+ * default on its moves.
+ *
+ * WebKit hands a touch sequence to its own scrolling a few moves in and sends
+ * `pointercancel` instead of the rest of it, and the only way to keep the
+ * sequence is to claim it before that (docs/pitfall/117). Measured on the iPad:
+ * a drag with any vertical component was gone after six pointermoves, which is
+ * every selection longer than one line (docs/pitfall/261).
+ *
+ * Two cases claim it. A selection being dragged out of the text, in either
+ * layout: it is a mark being made, never a scroll. And every touch in the paged
+ * layout, where nothing scrolls at all — the pane turns the page itself, and a
+ * swipe that gets cancelled halfway turns nothing.
+ */
+export function claimsTouch(layout: "vertical" | "paged", drawing: boolean): boolean {
+  return drawing || layout === "paged";
+}
+
 // How far a finger must travel across the page before it is a page turn rather
 // than a tap, and how much of that travel has to be horizontal. The same shape
 // as the reader's other swipe test (engine/gesture/touch-routing.ts): a

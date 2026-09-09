@@ -569,15 +569,16 @@ export class Paginator extends HTMLElement {
             }
         }, 250))
 
-        const opts = { passive: false }
-        this.addEventListener('touchstart', this.#onTouchStart.bind(this), opts)
-        this.addEventListener('touchmove', this.#onTouchMove.bind(this), opts)
-        this.addEventListener('touchend', this.#onTouchEnd.bind(this))
-        this.addEventListener('load', ({ detail: { doc } }) => {
-            doc.addEventListener('touchstart', this.#onTouchStart.bind(this), opts)
-            doc.addEventListener('touchmove', this.#onTouchMove.bind(this), opts)
-            doc.addEventListener('touchend', this.#onTouchEnd.bind(this))
-        })
+        // PATCHED: the paginator's own swipe handling is not registered.
+        // Upstream binds #onTouchStart/#onTouchMove/#onTouchEnd here (on this
+        // element and on every section's document), which pans the columns with
+        // the finger and turns pages by velocity on release. This app reads
+        // every gesture one level up, on the pane around the view
+        // (reading/epub/EpubReaderPane.tsx), so with both of them listening a
+        // single swipe turned three pages and a pen dragging a selection also
+        // flipped the page (docs/pitfall/260). The three handlers are left in
+        // the class: nothing calls them, and a later upstream commit still
+        // diffs cleanly against this one hunk.
 
         this.addEventListener('relocate', ({ detail }) => {
             if (detail.reason === 'selection') setSelectionTo(this.#anchor, 0)

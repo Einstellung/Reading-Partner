@@ -154,3 +154,31 @@ Materials 页的按钮还写着「+ Add PDF」，文件选择器早就收 epub �
 ### Android
 
 仓库里没有 Android 的 intent-filter，PDF 也没有——`src-tauri/gen/android/` 不在版本控制里，`tauri.conf.json` 里也没写。EPUB 这条等 Android 真要做的时候和 PDF 一起加。
+
+## 模拟器验证（第二轮：触摸与标注）
+
+2026-09-09，iPad Pro 11-inch (M5)、iOS 26.5，`tauri ios dev`，触摸走 idb 的 HID 通道。验的是 frame 透明（坑 252 的解法）和阶段 4 的标注在真触摸下成不成立。
+
+| 项 | 结论 |
+|---|---|
+| 点击区翻页 | 通。右区一次一页（`scrollLeft` +720），左区回一页 |
+| 滑动翻页 | 修前一次翻三页，修后一次一页（坑 260） |
+| 滚动模式手指滚动 | 通。600px 拖动滚 1076px，惯性再走 54px。`pointerdown` → 6 个 `pointermove` → `pointercancel`，没有 `pointerup`：滚动归 WebKit，pane 收 cancel 收场 |
+| vertical / paged 切换 | 通。菜单里的 Paged flip 开关，位置留住 |
+| 高亮：横拖 | 通。落标注、overlayer 画一个 `g`、盘上 JSON 和 Linux 那轮逐字段一致（range CFI 带两个逗号、`pageLabel`、`quote` 三件套） |
+| 高亮：斜拖/竖拖 | 修前六个 move 之后被滚动抢走，标注落不下（坑 261）。修后 81 个 move 一路到 `pointerup`，`scrollTop` 不动，标注落下 |
+| 翻页模式下拖选区 | 修前落标注的同时页面往回翻一页，修后只落标注（坑 260） |
+| 点已有标注 | 弹编辑器（七个色块 + Delete）。改色后盘上 `color` 变 `#2ea8e5`，overlayer 仍是一个 |
+| 笔在手上时点标注 | 不弹。笔在手上，`pointerAction` 是 draw，落点走 `beginDraw`/`endDraw`，够不到 `consumeUp`。要点标注先收笔——和 PDF 那侧一样 |
+| 痕迹列表页码 | 对。盘上 `pageLabel` 7 的那条显示 Page 7，6 的显示 Page 6 |
+| 长按正文 | 修前 iOS 照弹 Copy / Translate / Share，选区是父页上的一个换行（坑 262）。修后菜单不弹、选区为空 |
+| 点痕迹跳到位置 | 通。翻页模式下点痕迹那行，标注出现在屏幕上（x 204、y 895、宽 420），选中态多画一个 `g` |
+| 关书重开 | 标注还在。HMR 整页重载后回首页，点 Continue reading 重开，overlayer 照画 |
+
+改动：`vendor/foliate-js/paginator.js` 不再注册它自己的三个 touch 监听器（`PATCHED:`），pane 上挂 `{passive:false}` 的 `touchmove` 按 `claimsTouch()` 抢触摸，阅读区补 `data-reader-surface`。
+
+### 还没验的
+
+大纲跳转、`[p.N]` 链接、`highlightQuote` 三条经过壳的路，这轮又没点到（第一轮也没有）。书内链接（脚注、章节间）没在有 `<a>` 的书上点过，《The Experience Machine》的 page-list 页码模拟器上仍没看过，71 MB 那本加了标注层之后的内存和翻页耗时没重量。
+
+冷启动后第一次开书卡住过一次：宿主 div 空着、界面停在 Rendering…，18 秒没有 `foliate-view`；退回去再开就正常，之后再没复现。只有一次，没有第二个样本。

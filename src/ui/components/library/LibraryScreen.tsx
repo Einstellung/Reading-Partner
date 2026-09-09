@@ -258,11 +258,11 @@ export default function LibraryScreen(props: {
                 </p>
               </div>
               {/* Only on Materials: the other three sections have nothing to add
-                  a PDF to, and a button that acts on a section you cannot see is
-                  a button in the wrong place. */}
+                  a book to, and a button that acts on a section you cannot see
+                  is a button in the wrong place. */}
               {section === "materials" && (
                 <Button className={HEADER_ACTION} onClick={props.onAddFile}>
-                  + Add PDF
+                  + Add book
                 </Button>
               )}
             </div>
@@ -513,8 +513,8 @@ function TopicMaterials(props: {
       {files.length === 0 ? (
         <EmptyState
           title="No books in this topic yet"
-          blurb="Add the PDFs you want to read against this question. They are read where they are; nothing is copied or moved."
-          action="Add PDF"
+          blurb="Add the books you want to read against this question. They are read where they are; nothing is copied or moved."
+          action="Add book"
           onAction={props.onAddFile}
         />
       ) : (
