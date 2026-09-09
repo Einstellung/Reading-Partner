@@ -42,6 +42,7 @@ declare module "foliate-js/epub.js" {
 declare module "foliate-js/view.js" {
   export class View extends HTMLElement {
     open(book: unknown): Promise<void>;
+    init(opts: { lastLocation?: unknown; showTextStart?: boolean }): Promise<void>;
     close(): void;
     goTo(target: unknown): Promise<void>;
     goToFraction(fraction: number): Promise<void>;

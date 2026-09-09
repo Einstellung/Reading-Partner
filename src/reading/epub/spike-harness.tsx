@@ -356,6 +356,10 @@ async function openBook(url: string, opts: { flow?: string; maxColumn?: number }
   el.renderer.setAttribute("gap", "6");
   el.renderer.setAttribute("max-column-count", String(opts.maxColumn ?? 1));
   t.openMs = Math.round(performance.now() - t4);
+  // open() only hands the book over; nothing is laid out until a navigation.
+  // Without this the renderer sits on an empty frame forever and `relocate`
+  // never fires — which reads exactly like a hang.
+  await el.init({ lastLocation: null, showTextStart: false });
   const painted = await firstPaint;
   t.firstReadableMs = Number.isNaN(painted) ? "timeout" : Math.round(painted - t4);
   t.totalMs = Math.round(performance.now() - t0);
