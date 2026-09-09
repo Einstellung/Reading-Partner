@@ -1,6 +1,6 @@
 # Reading Partner
 
-An AI reading companion for academic surveys and technical books. It doesn't just chat next to your PDF — it reads the same book you do, prepares lessons from the papers the book cites, remembers what you understood and where you got stuck, and teaches with citations you can click to jump back into the text.
+An AI reading companion for academic surveys and technical books. It doesn't just chat next to the page — it reads the same book you do, prepares lessons from the papers the book cites, remembers what you understood and where you got stuck, and teaches with citations you can click to jump back into the text.
 
 ![Reading a survey with the lesson-prep panel open](docs/assets/app-overview.png)
 
@@ -75,6 +75,21 @@ What you declared — interests, taste, background, what you're reading now — 
 
 The other half is what the AI guesses, and it writes that one itself. Not a reading log — that is on disk already — but a read on why you do what you do: you pick macro-trend investment books and mark the capital-flow passages, so what you are after is a judgment about the era, not a stock-picking method. At most eight guesses, each dated and carrying the one behavior it came from; a guess it cannot source doesn't get written. An automatic write may replace that half and nothing else, and both sides go into prompts labeled for what they are, so a guess is used as a hunch rather than a rule.
 
+## PDF and EPUB
+
+A topic holds both. An EPUB is set by the app rather than by the book: the archive's own stylesheets and `<style>` blocks are dropped and the text is laid out in the app's typography, on the same paper ground the PDF pages sit on, following dark mode and the paper tint. Nothing the book brought runs — scripts and inline handlers are removed before a page is built, and the frame the text is rendered in is not allowed to execute any.
+
+A book that reflows has no pages, so one is cut into fixed 1800-character blocks and those are numbered instead. A book made from a printed edition usually carries that edition's own page list, and then the cuts are the printed page breaks and a mark's page is the number on the paper page. Either way `[p.N]` means what it means in a PDF, so lesson prep, chapter spines, clickable citations, full-text search and the outline all read an EPUB without knowing it is one. Where the cuts fall is decided once per book and stored, never recomputed: a page number already written into a note cannot be allowed to move.
+
+Highlights, underlines, the AI pen, the list of what you marked, notes, the observations a conversation leaves, and Drive sync are the same on both formats. A mark on an EPUB is stored as a CFI with the quoted sentence and its neighbours beside it, so it is found again by its words when the markup shifts under it. Figures are the book's own images with their `<figcaption>` as the caption, so the AI looks at the picture the book shipped. Ink is the one tool with nothing to do here: a free path is anchored to a page's coordinates, and a book that reflows has none.
+
+On an iPad, open a book through Files; on the desktop the file picker takes `.epub` beside `.pdf`.
+
+<!-- Screenshot to add: an EPUB open in the reader — the app's own typography and
+     paper ground, a highlight, and the AI's reply anchored to it. Save it as
+     docs/assets/epub-reading.png and replace this comment with:
+     ![An EPUB in the reader](docs/assets/epub-reading.png) -->
+
 ## Marking and asking
 
 Mark a passage with the AI pen and it explains it in place, like a video call with the book: the reply opens in a bubble you can expand to cover the page, and the thread stays anchored to your highlight forever. The AI can turn pages on its own, run full-text search across the books in your topic, and read your existing highlights and their comments when the conversation needs them. A button in the top bar opens a book-level thread for questions that belong to no particular passage ("what is this chapter about?").
@@ -100,7 +115,7 @@ Both kinds of note carry `[p.N]` and `[fig:N]` anchors, so a reply quoting one g
 
 ## Citations you can click
 
-The AI cites what it teaches. Page references render as chips — click one and the reader jumps to the page, with the exact quoted sentence flashed as a transient violet highlight so you see precisely what was referenced. Figures render as inline cards cropped from the actual page (vector diagrams included); click to jump, or ask about a figure and the AI will look at the image itself through its vision tool.
+The AI cites what it teaches. Page references render as chips — click one and the reader jumps to the page, with the exact quoted sentence flashed as a transient violet highlight so you see precisely what was referenced. Figures render as inline cards cropped from the actual page (vector diagrams included), or, in an EPUB, the book's own image; click to jump, or ask about a figure and the AI will look at the image itself through its vision tool.
 
 ![Page citations inline in an explanation](docs/assets/citations.png)
 
@@ -132,7 +147,7 @@ Every chat composer on the desktop has a push-to-talk mic. Hold to record, relea
 
 ## Sync across devices
 
-Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, prep material, retells and talk outlines, your profile, your sources, and the briefing the collector published — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same PDF opened on two devices lines up, and phones stay out of that channel entirely — they don't open books. AI provider credentials are the one thing that never leaves the device.
+Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, prep material, retells and talk outlines, your profile, your sources, and the briefing the collector published — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same book opened on two devices lines up, and phones stay out of that channel entirely — they don't open books. AI provider credentials are the one thing that never leaves the device.
 
 ## Thinking levels
 
@@ -172,15 +187,15 @@ Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.
 - `src/platform/` — `app/` is the host (settings, per-device settings, lifecycle, filesystem); `sync/` is the Drive backend and the record-level merge.
 - `src/ai/` — provider streaming, the agent tool loop, and sub-agents. `src/budget/` — context-window accounting. `src/fulltext/` — the search index.
 - `src/info/` — the briefing half: `sources/` holds the descriptor format and the generic engine that runs one, `extract/` turns a page into text (including the hidden-webview path), `briefing/` is the collector, the funnel, the item pool and the reader-side view of what a collector published, `companion/` is the chat over a briefing.
-- `src/reading/` — the book half: `engine/` is the EmbedPDF adapter (assembles the headless core + plugins, renders from in-memory bytes, converts annotations at the boundary), `prep/` prepares a document in one of two kinds (`papers/` for a survey's citations, `chapters/` for a book's chapter spines), `papers/` is the citation graph and the four literature clients, `chapters/` is the book's own chapter table, `lecture/` decides what a teaching turn is handed, `figures/` crops figures off the page, `sources/` fetches and extracts a pasted link, and `retell/`, `talk/` and `rehearsal/` are the second stage — the questioning, the outline it settles, and giving the talk out loud.
+- `src/reading/` — the book half: `engine/` is the EmbedPDF adapter (assembles the headless core + plugins, renders from in-memory bytes, converts annotations at the boundary), `epub/` is the other engine (unzip, sanitize, position blocks, CFI marks, and the foliate-js pane behind the same reader contract), `prep/` prepares a document in one of two kinds (`papers/` for a survey's citations, `chapters/` for a book's chapter spines), `papers/` is the citation graph and the four literature clients, `chapters/` is the book's own chapter table, `lecture/` decides what a teaching turn is handed, `figures/` crops figures off the page, `sources/` fetches and extracts a pasted link, and `retell/`, `talk/` and `rehearsal/` are the second stage — the questioning, the outline it settles, and giving the talk out loud.
 - `src/memory/` — what the AI has noticed about the reader: `observations/` is one observation on disk (format, per-topic store, recall and cross-topic search, agent tools) plus the silent passes that write them and the arrears that decide when one runs, `profile/` the user profile document and the guess pass, `live/` the running state and the background sweeps.
-- `public/pdfium/pdfium.wasm` — the PDFium engine binary, self-hosted (gitignored; staged by `bun run wasm` from the npm package, no CDN at build or runtime). `src-tauri/` — Tauri 2 app, including the tray and the hidden-webview fetch. `plugins/voice/` — the Tauri plugin behind recording and the phone's on-device dictation.
+- `public/pdfium/pdfium.wasm` — the PDFium engine binary, self-hosted (gitignored; staged by `bun run wasm` from the npm package, no CDN at build or runtime). `vendor/foliate-js/` — the EPUB renderer, copied byte for byte from a pinned upstream commit (MIT), with the formats this app never opens left as stubs. `src-tauri/` — Tauri 2 app, including the tray and the hidden-webview fetch. `plugins/voice/` — the Tauri plugin behind recording and the phone's on-device dictation.
 - Design consensus documents (in Chinese) live in `docs/`; hard-won engine/Tauri surprises are indexed in `docs/pitfall/`.
 
 ## Status
 
-Early development, PDF only, moving fast. Features get removed as well as added: the generated slide deck and the whole-book notes tab both shipped and are both gone. The screenshots above come from real reading sessions and lag behind the current interface.
+Early development, moving fast. Books are PDF or EPUB; EPUB arrived in 0.16.0. Features get removed as well as added: the generated slide deck and the whole-book notes tab both shipped and are both gone. The screenshots above come from real reading sessions and lag behind the current interface.
 
 ## License
 
-Copyright (c) 2026 Xinyuan ([Einstellung](https://github.com/Einstellung)). Source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE): free for personal use and academic research; any commercial use needs a separate commercial license — contact einstellungsu@gmail.com. The PDF engine is [EmbedPDF](https://github.com/embedpdf/embed-pdf-viewer) (MIT), which renders through [PDFium](https://pdfium.googlesource.com/pdfium/) compiled to WebAssembly (Apache-2.0).
+Copyright (c) 2026 Xinyuan ([Einstellung](https://github.com/Einstellung)). Source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE): free for personal use and academic research; any commercial use needs a separate commercial license — contact einstellungsu@gmail.com. The PDF engine is [EmbedPDF](https://github.com/embedpdf/embed-pdf-viewer) (MIT), which renders through [PDFium](https://pdfium.googlesource.com/pdfium/) compiled to WebAssembly (Apache-2.0). EPUBs are rendered by [foliate-js](https://github.com/johnfactotum/foliate-js) (MIT), vendored in `vendor/foliate-js/`.
