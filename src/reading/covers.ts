@@ -44,6 +44,7 @@ import {
   unreadableKey,
   type CoverFailure,
   type CoverFailureReason,
+  type CoverReader,
   type CoverMeta,
 } from "./cover-cache";
 import { renderFirstPageJpeg } from "./engine/raster";
@@ -95,7 +96,7 @@ async function produce(file: FileRef): Promise<BookCover> {
         ? await readLibraryBook(file.hash)
         : await appData.readPicked(file.path);
   } catch (e) {
-    await recordFailure(unreadableKey(file.path), file, "unreadable", e);
+    await recordFailure(unreadableKey(file.path), file, "unreadable", e, "file");
     return NONE;
   }
 
@@ -133,7 +134,7 @@ async function renderCover(
   if (isEpub(bytes)) {
     const epub = await renderEpubCover(bytes, { width: COVER_WIDTH_PX, quality: COVER_JPEG_QUALITY });
     if (epub.kind === "ok") return { jpeg: epub.jpeg, author: cleanAuthor(epub.author) };
-    await recordFailure(bookId, file, epub.kind === "no-cover" ? "no-pages" : "render", epub.cause);
+    await recordFailure(bookId, file, epub.kind === "no-cover" ? "no-pages" : "render", epub.cause, "epub");
     return null;
   }
   const result = await renderFirstPageJpeg(bytes, {
@@ -156,13 +157,13 @@ async function renderCover(
       console.warn(`cover render gave up on ${file.name}`, file.path, result.message);
       return null;
     case "open-failed":
-      await recordFailure(bookId, file, "open", result.cause);
+      await recordFailure(bookId, file, "open", result.cause, "pdfium");
       return null;
     case "no-pages":
-      await recordFailure(bookId, file, "no-pages", result.cause);
+      await recordFailure(bookId, file, "no-pages", result.cause, "pdfium");
       return null;
     case "render-failed":
-      await recordFailure(bookId, file, "render", result.cause);
+      await recordFailure(bookId, file, "render", result.cause, "pdfium");
       return null;
   }
 }
@@ -258,6 +259,7 @@ async function recordFailure(
   file: FileRef,
   reason: CoverFailureReason,
   cause: unknown,
+  reader: CoverReader,
 ): Promise<void> {
   const message = cause instanceof Error ? cause.message : String(cause);
   console.warn(`cover failed for ${file.name} (${reason})`, file.path, cause);
@@ -267,6 +269,7 @@ async function recordFailure(
     path: file.path,
     name: file.name,
     at: Date.now(),
+    reader,
   };
   try {
     await writeTextAtomic(coverFailurePath(key), JSON.stringify(failure, null, 2));
