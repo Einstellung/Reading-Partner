@@ -182,3 +182,28 @@ Materials 页的按钮还写着「+ Add PDF」，文件选择器早就收 epub �
 大纲跳转、`[p.N]` 链接、`highlightQuote` 三条经过壳的路，这轮又没点到（第一轮也没有）。书内链接（脚注、章节间）没在有 `<a>` 的书上点过，《The Experience Machine》的 page-list 页码模拟器上仍没看过，71 MB 那本加了标注层之后的内存和翻页耗时没重量。
 
 冷启动后第一次开书卡住过一次：宿主 div 空着、界面停在 Rendering…，18 秒没有 `foliate-view`；退回去再开就正常，之后再没复现。只有一次，没有第二个样本。
+
+## 模拟器验证（第三轮：发版前）
+
+2026-09-09，iPad Pro 11-inch (M5)、iOS 26.5、`tauri ios dev`。截图在
+`scratchpad/epub-ios-3/shots/`，探针在 Mac `/tmp/epub-ios-3/`。聊天那两条靠往
+`threads-<bookId>.json` 里写一条带引文的 AI 消息造出来（这台机器没配 provider）。
+
+| 项 | 结论 |
+|---|---|
+| 冷启动首开 | 四次都没卡。到 `<foliate-view>` 468 / 378 / 414 / 549 ms，到首个 contents 523 / 429 / 414 / 598 ms。第四次是 `down` 后整套重起（dev server 也是新的） |
+| 大纲跳转 | 通。点「VI. EMBODIED AI APPLICATIONS」，顶栏 6/59 → 50/59 |
+| `[p.N]` 芯片（带引文） | 通。点 `[p.7 "…"]` 跳到 7/59，引文在正文上画出高亮，压在已有标注上面 |
+| `[p.N]` 芯片（不带引文） | 跳。点 `[p.20]` 落在 18/59——顶栏报的是这一屏左上角所在的块，翻页流里可以早于目标块 |
+| 顶栏页码 | 显示块号，不是纸书页码：`ReaderTopBar` 只有 `pageIndex + 1 / pagesCount` |
+| 纸书页码（page-list） | 数据是对的。《The Experience Machine》pagination `source: "page-list"`、294 条，`labelForBlock` 给块 50/137/200/239 的标签是 42/129/192/287。界面上只有痕迹和 pip 卡（`p. <label>`）用它 |
+| `createImageBitmap` 解 SVG | 在 WKWebView 上也抛 `InvalidStateError`，和 WebKitGTK 一致（坑 263）。`<img>` 按 `viewBox` 报 400×200、`drawImage` 画对颜色、JPEG 编得出来 |
+| Materials 的按钮 | 「+ Add book」 |
+| 开书时的异常 | 每开一本抛一次 `columnize` 的 null document（坑 265），已修 |
+
+### 没验完的
+
+书内链接（脚注、章节间、外链 opener）：《The Experience Machine》翻到的几屏
+一个带 `href` 的 `<a>` 都没有，没点成。71 MB 那本加标注层之后的开销：卡片位置
+换了，点到的是另一本，没重量。`renderEpubFigure` 的 view 档没跑起来（探针取书里
+图片的路子写错，`zip.entries` 不是那个形状），SVG 那半是照同一条解码路子单独量的。
