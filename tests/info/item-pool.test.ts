@@ -43,8 +43,10 @@ function source(id: string, pollMinutes?: number): SourceDescriptor {
   };
 }
 
-function verdict(id: string, keep: boolean, confidence = 2): ScreenVerdict {
-  return { id, keep, why: "", confidence };
+// A hit on one room, or nothing at all. The pool only records whether a verdict
+// kept anything, so which room it was does not matter here.
+function verdict(id: string, keep: boolean, confidence = 0.5): ScreenVerdict {
+  return { id, hits: keep ? [{ labId: "lab-a", observables: ["o-a1"] }] : [], confidence };
 }
 
 function verdicts(...vs: ScreenVerdict[]): Record<string, ScreenVerdict> {
@@ -186,10 +188,11 @@ test("the day draws what nobody judged and what was judged worth keeping but nev
   const seed = drawForDay(dayPool(), "2026-08-11");
   // "briefed" went out yesterday and "dropped" was judged not worth fetching
   // yesterday; neither is re-decided. "capped" cleared the screen but the daily
-  // ceiling cut it, so it gets another chance, and it keeps its verdict.
+  // ceiling cut it, so it gets another chance — and it comes back without its
+  // verdict, because a mark cannot say which room it hit and a keep with no room
+  // is not a cable.
   expect(seed.items.map((it) => it.id)).toEqual(["capped", "overnight"]);
-  expect(Object.keys(seed.verdicts)).toEqual(["capped"]);
-  expect(seed.verdicts["capped"].keep).toBe(true);
+  expect(Object.keys(seed.verdicts)).toEqual([]);
   expect(seed.bodied).toEqual([]);
 });
 
@@ -207,8 +210,10 @@ test("a second run the same day merges into it: today's items come back, with th
   // Everything today's briefing carries, plus what has come in since. Not a
   // second briefing: the same one, re-triaged over more material.
   expect(seed.items.map((it) => it.id)).toEqual(["capped", "overnight", "fresh", "later"]);
-  // Judged today, so it stays visible to the day's tally, and it is not rejudged.
-  expect(seed.verdicts["overnight"].keep).toBe(false);
+  // Judged today and dropped, so it stays visible to the day's tally and is not
+  // rejudged; "capped" was a keep, so it is offered to the screen again.
+  expect(seed.verdicts["overnight"].hits).toEqual([]);
+  expect(seed.verdicts["capped"]).toBeUndefined();
   expect(seed.bodied.sort()).toEqual(["capped", "fresh"]);
   expect(seed.verdicts["later"]).toBeUndefined();
 });
@@ -245,18 +250,18 @@ test("recording a run marks what it judged, fetched and delivered", () => {
   let pool = emptyPool();
   ({ pool } = addDiscovered(pool, [item("a"), item("b")], "2026-08-11"));
   pool = recordRun(pool, "2026-08-11", {
-    verdicts: verdicts(verdict("a", true, 3), verdict("b", false, 1)),
+    verdicts: verdicts(verdict("a", true, 0.9), verdict("b", false, 0.2)),
     bodies: ["a"],
     briefed: ["a"],
   });
   expect(pool.marks["a"]).toEqual({
     keep: true,
-    confidence: 3,
+    confidence: 0.9,
     screenedOn: "2026-08-11",
     bodyOn: "2026-08-11",
     briefedOn: "2026-08-11",
   });
-  expect(pool.marks["b"]).toEqual({ keep: false, confidence: 1, screenedOn: "2026-08-11" });
+  expect(pool.marks["b"]).toEqual({ keep: false, confidence: 0.2, screenedOn: "2026-08-11" });
 });
 
 test("a body or a delivery for an item nobody screened invents no mark", () => {

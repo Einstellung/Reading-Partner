@@ -27,7 +27,7 @@
 
 import { pollIntervalMs, type SourceDescriptor } from "../sources/descriptor";
 import type { InfoItem } from "../sources/item";
-import type { ScreenVerdict } from "./screen";
+import { keepVerdict, type ScreenVerdict } from "./screen";
 
 export const POOL_VERSION = 1 as const;
 
@@ -261,8 +261,6 @@ export interface PoolSeed {
   settled: string[];
 }
 
-const CARRIED = "carried over from an earlier screening";
-
 // The pool's candidates for one day's briefing, oldest first.
 //
 // In: anything nobody has judged (the overnight items a once-a-day collection
@@ -284,7 +282,12 @@ export function drawForDay(pool: Pool, today: string): PoolSeed {
       if (mark && !drawable(mark, today)) continue;
       items.push(it);
       if (mark) {
-        verdicts[it.id] = { id: it.id, keep: mark.keep, why: CARRIED, confidence: mark.confidence };
+        // Only a drop is carried. A mark records that an item was screened and
+        // how sure the screen was, not which room it hit (docs/63) — so a keep
+        // read back out of the pool could not be turned into a cable, and the
+        // item is screened again to find out. A drop needs nothing more than
+        // being a drop, and re-judging it is spending on a settled question.
+        if (!mark.keep) verdicts[it.id] = { id: it.id, hits: [], confidence: mark.confidence };
         if (mark.bodyOn === today) bodied.push(it.id);
       }
     }
@@ -320,7 +323,12 @@ export interface PoolRecord {
 export function recordRun(pool: Pool, date: string, record: PoolRecord): Pool {
   const marks = { ...pool.marks };
   for (const v of Object.values(record.verdicts ?? {})) {
-    marks[v.id] = { ...marks[v.id], keep: v.keep, confidence: v.confidence, screenedOn: date };
+    marks[v.id] = {
+      ...marks[v.id],
+      keep: keepVerdict(v),
+      confidence: v.confidence,
+      screenedOn: date,
+    };
   }
   for (const id of record.bodies ?? []) {
     // A body without a verdict cannot happen (only the selection is fetched),

@@ -58,8 +58,11 @@ const EMPTY_TRIAGE: TriageResult = {
 // A screen that keeps everything, which is what most of these tests want: they
 // are about the state machine, not about the judging.
 function keepAll(items: InfoItem[]): ScreenVerdict[] {
-  return items.map((it) => ({ id: it.id, keep: true, why: "", confidence: 3 }));
+  return items.map((it) => ({ id: it.id, hits: [HIT], confidence: 0.9 }));
 }
+
+// One room's scope-level hit, which is all these tests need a verdict to carry.
+const HIT = { labId: "lab-a", observables: [] as string[] };
 
 // The per-day files the pipeline reads and writes, in memory. `until` lets a
 // test wait for a checkpoint to land without knowing how many writes it took.
@@ -226,9 +229,8 @@ test("only the items screening kept get bodies fetched and reach triage", async 
         for (const it of items) fx.screened.push(it.id);
         return items.map((it) => ({
           id: it.id,
-          keep: it.id.startsWith("keep"),
-          why: "",
-          confidence: 2,
+          hits: it.id.startsWith("keep") ? [HIT] : [],
+          confidence: 0.5,
         }));
       },
     }),
@@ -284,9 +286,8 @@ test("more keeps than the cap allows: the lowest-confidence ones are cut, and th
       screen: async ({ items }) =>
         items.map((it) => ({
           id: it.id,
-          keep: true,
-          why: "",
-          confidence: Number(it.id.slice(1)) >= 110 ? 0 : 3,
+          hits: [HIT],
+          confidence: Number(it.id.slice(1)) >= 110 ? 0 : 0.9,
         })),
     }),
   );
@@ -442,7 +443,7 @@ test("a run killed mid-collection resumes: only the source it never got is fetch
 test("a resumed run's progress bar carries on from the checkpoint instead of restarting", async () => {
   const fx = fixture([source("a"), source("b"), source("c")]);
   fx.disk.runs.set(TODAY, {
-    version: 2,
+    version: 3,
     verdicts: {},
     material: [],
     date: TODAY,
@@ -469,7 +470,7 @@ test("a resumed run's progress bar carries on from the checkpoint instead of res
 test("a run killed while triaging resumes straight into triage, collecting nothing", async () => {
   const fx = fixture([source("a")]);
   fx.disk.runs.set(TODAY, {
-    version: 2,
+    version: 3,
     verdicts: {},
     material: [],
     date: TODAY,
@@ -492,7 +493,7 @@ test("a run killed while triaging resumes straight into triage, collecting nothi
 test("an overnight leftover is not resumed, and the next generate collects the day afresh", async () => {
   const fx = fixture([source("a")]);
   fx.disk.runs.set("2026-07-21", {
-    version: 2,
+    version: 3,
     verdicts: {},
     material: [],
     date: "2026-07-21",
@@ -524,7 +525,7 @@ test("an overnight leftover is not resumed, and the next generate collects the d
 test("a stopped run is left parked, and a hand-driven generate continues it", async () => {
   const fx = fixture([source("a"), source("b")]);
   fx.disk.runs.set(TODAY, {
-    version: 2,
+    version: 3,
     verdicts: {},
     material: [],
     date: TODAY,
@@ -590,7 +591,7 @@ test("a failed run is not resumed on its own; generate retries the sources that 
 test("a source subscribed to after the run started joins it; one removed is dropped", async () => {
   const fx = fixture([source("a"), source("c")]);
   fx.disk.runs.set(TODAY, {
-    version: 2,
+    version: 3,
     verdicts: {},
     material: [],
     date: TODAY,
@@ -874,7 +875,7 @@ test("Stop while screening parks the run with the verdicts it already bought", a
 test("a resumed screen rejudges nothing and rediscovers nothing", async () => {
   const fx = fixture([source("a")]);
   fx.disk.runs.set(TODAY, {
-    version: 2,
+    version: 3,
     date: TODAY,
     startedAt: 1,
     updatedAt: 1,
@@ -882,8 +883,8 @@ test("a resumed screen rejudges nothing and rediscovers nothing", async () => {
     sources: [{ id: "a", name: "A", status: "done", items: 3 }],
     items: [item("x1"), item("x2"), item("x3")],
     verdicts: {
-      x1: { id: "x1", keep: true, why: "", confidence: 3 },
-      x2: { id: "x2", keep: false, why: "", confidence: 3 },
+      x1: { id: "x1", hits: [HIT], confidence: 0.9 },
+      x2: { id: "x2", hits: [], confidence: 0.9 },
     },
     material: [],
     halt: { kind: "stopped" },
@@ -900,7 +901,7 @@ test("a resumed screen rejudges nothing and rediscovers nothing", async () => {
 test("a resumed body fetch pays only for the bodies it does not have", async () => {
   const fx = fixture([source("a")]);
   fx.disk.runs.set(TODAY, {
-    version: 2,
+    version: 3,
     date: TODAY,
     startedAt: 1,
     updatedAt: 1,
@@ -951,14 +952,14 @@ test("Stop while fetching bodies keeps the ones that landed and parks the rest",
 test("a source subscribed to mid-run is screened with the rest, and nothing already paid for is repeated", async () => {
   const fx = fixture([source("a"), source("b")]);
   fx.disk.runs.set(TODAY, {
-    version: 2,
+    version: 3,
     date: TODAY,
     startedAt: 1,
     updatedAt: 1,
     phase: "fetching",
     sources: [{ id: "a", name: "A", status: "done", items: 1 }],
     items: [{ ...item("a1"), textContent: "already fetched" }],
-    verdicts: { a1: { id: "a1", keep: true, why: "", confidence: 3 } },
+    verdicts: { a1: { id: "a1", hits: [HIT], confidence: 0.9 } },
     selection: { ids: ["a1"], cappedOut: 0 },
     material: ["a1"],
     halt: { kind: "stopped" },
@@ -999,7 +1000,7 @@ test("a day where nothing clears the screen still produces a briefing", async ()
   const p = new InfoPipeline(
     withItems(fx, ["x1", "x2"], {
       screen: async ({ items }) =>
-        items.map((it) => ({ id: it.id, keep: false, why: "noise", confidence: 3 })),
+        items.map((it) => ({ id: it.id, hits: [], confidence: 0.9 })),
     }),
   );
   await p.generate().done;
@@ -1059,7 +1060,7 @@ test("today's briefing already on disk answers the open by itself", async () => 
 test("a run the user stopped is not restarted by opening the app, however auto-collection is set", async () => {
   const fx = fixture([source("a")]);
   fx.disk.runs.set(TODAY, {
-    version: 2,
+    version: 3,
     verdicts: {},
     material: [],
     date: TODAY,
@@ -1089,7 +1090,7 @@ test("the pool's items join the run's own, and what it already judged is not jud
     makeDeps(fx, {
       poolDraw: async () => ({
         items: [item("overnight"), item("judged")],
-        verdicts: { judged: { id: "judged", keep: true, why: "carried", confidence: 3 } },
+        verdicts: { judged: { id: "judged", hits: [HIT], confidence: 0.9 } },
         bodies: { judged: { textContent: "fetched hours ago" } },
         settled: [],
       }),

@@ -9,13 +9,21 @@
 //
 // Pure: the clock, the filesystem, and the fetching are the caller's business.
 
-import { capKept, fillMissingVerdicts, type ScreenVerdict, type Selection } from "./screen";
+import {
+  fillMissingVerdicts,
+  keepVerdict,
+  selectKept,
+  type ScreenVerdict,
+  type Selection,
+} from "./screen";
 import type { InfoItem } from "../sources/item";
 
-// Bumped for the funnel: a version-1 file is a two-phase run whose `items` are a
-// mix of fetched and unfetched, with no verdicts. loadRun rejects it, so the day
-// starts over rather than resuming into a shape this file cannot read.
-export const INFO_RUN_VERSION = 2 as const;
+// Bumped whenever a checkpoint stops being readable by the code that resumes it.
+// Version 1 was the two-phase run with no verdicts at all; version 2 held keep/why
+// verdicts, which say nothing about which room an item belongs to. loadRun rejects
+// anything but the current version, so a day starts over rather than resuming into
+// a shape this file cannot read.
+export const INFO_RUN_VERSION = 3 as const;
 
 // A source the run owes work for. Ids are descriptor ids (docs/17), stable
 // across runs, so a checkpoint can name what has already been fetched.
@@ -77,9 +85,10 @@ export interface InfoRunState {
   // written from when the run ends, which is why the file is heavy and why it is
   // deleted the moment the briefing lands.
   items: InfoItem[];
-  // Screening verdicts by item id. An item absent from this map has not been
-  // judged, which is exactly what a resumed run still owes the screen — so a
-  // Stop halfway through the batches costs nothing already spent.
+  // Screening verdicts by item id: which rooms each headline hit. An item absent
+  // from this map has not been judged, which is exactly what a resumed run still
+  // owes the screen — so a Stop halfway through the batches costs nothing already
+  // spent.
   verdicts: Record<string, ScreenVerdict>;
   // Set once every item has a verdict: what goes on to have a body fetched, and
   // how many keeps the cap cut. Its presence is what says screening is finished.
@@ -318,19 +327,19 @@ export function finishScreening(
   max: number,
   now: number,
 ): InfoRunState {
-  const keptIds: string[] = [];
-  const confidence = new Map<string, number>();
+  // Walked in discovery order, so the selection and the cables the run writes
+  // from it agree on which item came first — which is what decides the day's one
+  // out-of-lane cable.
+  const ordered: ScreenVerdict[] = [];
   for (const it of state.items) {
     const v = state.verdicts[it.id];
-    if (!v || !v.keep) continue;
-    keptIds.push(it.id);
-    confidence.set(it.id, v.confidence);
+    if (v) ordered.push(v);
   }
   return {
     ...state,
     updatedAt: now,
     phase: "fetching",
-    selection: capKept(keptIds, confidence, max),
+    selection: selectKept(ordered, max),
   };
 }
 
@@ -411,7 +420,7 @@ export function collectProgress(state: InfoRunState): CollectProgress {
   let kept = 0;
   for (const v of Object.values(state.verdicts)) {
     screened++;
-    if (v.keep) kept++;
+    if (keepVerdict(v)) kept++;
   }
   const selection = state.selection;
   return {
