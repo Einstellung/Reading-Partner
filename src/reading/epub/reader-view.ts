@@ -20,11 +20,13 @@ import type {
   ViewState,
   ViewStats,
 } from "../../platform/app/reader-contract";
+import { openExternal } from "../../platform/app/external-link";
 import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
 import type { Pagination } from "./paginate";
 import {
   DEFAULT_FONT_STEP,
   blockIndexAt,
+  bookLinkTarget,
   cfiForBlock,
   clampFontStep,
   flowFor,
@@ -53,6 +55,11 @@ export interface EpubReaderCallbacks {
 }
 
 export interface EpubReaderController extends ViewInstance {
+  /**
+   * Follow the book's own link under this point in the page, if there is one.
+   * True when the tap was spent on a link and must not also turn the page.
+   */
+  followLinkAt(clientX: number, clientY: number): boolean;
   /** Turn one page (paged) or one screen (continuous). */
   turn(direction: "prev" | "next"): void;
   /** The layout in force, for the pane's event routing. */
@@ -232,6 +239,18 @@ export async function createEpubReader(
     if (cfi) await view.goTo(cfi);
   }
 
+  // The anchor at a point on the page, hit-tested inside the frame. The frame
+  // is same-origin, so its document answers elementFromPoint; the coordinates
+  // are the page's, and the frame's own box is what puts them in its space.
+  function anchorAt(clientX: number, clientY: number): Element | null {
+    const c = contents();
+    const frame = c?.doc?.defaultView?.frameElement;
+    if (!c?.doc || !frame) return null;
+    const box = frame.getBoundingClientRect();
+    const el = c.doc.elementFromPoint(clientX - box.left, clientY - box.top);
+    return el?.closest?.("a[href]") ?? null;
+  }
+
   const controller: EpubReaderController = {
     zoomIn: () => setFontStep(fontStep + 1),
     zoomOut: () => setFontStep(fontStep - 1),
@@ -289,6 +308,25 @@ export async function createEpubReader(
     setAnnotations: (_anns: Annotation[]) => {},
     unsetAnnotations: (_ids: string[]) => {},
     selectAnnotations: (_ids: string[]) => {},
+
+    followLinkAt: (clientX, clientY) => {
+      const c = contents();
+      const anchor = anchorAt(clientX, clientY);
+      if (!c || !anchor) return false;
+      const target = bookLinkTarget(anchor.getAttribute("href"));
+      if (!target) return false;
+      if (target.kind === "external") {
+        openExternal(target.url);
+        return true;
+      }
+      // Against the section the anchor is in, so a relative path is resolved
+      // the same way foliate resolves the ones it loads.
+      const section = rendition.sections[c.index];
+      const href = section?.resolveHref?.(target.href) ?? target.href;
+      clearQuote();
+      void view.goTo(href);
+      return true;
+    },
 
     turn: (direction) => {
       clearQuote();

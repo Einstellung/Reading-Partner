@@ -126,6 +126,10 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       // Not a swipe. A pointer that barely moved is a tap; one that moved and
       // was not a swipe was a drag over the text and turns nothing.
       if (Math.abs(dx) >= SWIPE_MIN || Math.abs(dy) >= SWIPE_MIN) return;
+      // A tap on one of the book's own links follows it, wherever on the page
+      // it landed — a footnote marker sitting in the right-hand tap zone is a
+      // footnote, not a page turn.
+      if (controller.followLinkAt(e.clientX, e.clientY)) return;
       const box = surface.getBoundingClientRect();
       apply(tapZone(layout, e.clientX - box.left, box.width));
     },

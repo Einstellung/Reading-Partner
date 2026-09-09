@@ -126,7 +126,9 @@ export function renderLoader(book: EpubBook): RenderLoader {
 
 /** What the reading pane hands `view.open()`. */
 export interface RenderBook {
-  sections: { id: string; size: number }[];
+  // resolveHref turns a link the book wrote — relative to the section it sits
+  // in — into one the renderer can navigate to.
+  sections: { id: string; size: number; resolveHref?(href: string): string }[];
   destroy(): void;
 }
 
