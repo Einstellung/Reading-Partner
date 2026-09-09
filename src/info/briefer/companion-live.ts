@@ -18,7 +18,12 @@ import {
 import { applySessionCheck, signInSites } from "../sources/site-session";
 import { liveWebviewFetch } from "../sources/source-live";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
-import type { ProfileUpdateCardData } from "../boxes/cards";
+import type { LabArchiveCardData, LabProposalCardData, ProfileUpdateCardData } from "../boxes/cards";
+import { activeLabs, loadLabs } from "../labs/store";
+import type { Lab } from "../labs/types";
+import { loadPicture } from "../picture/store";
+import { pictureSummary } from "../picture/picture";
+import type { Picture } from "../picture/types";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
 import { listTopics } from "../../platform/app/topics";
 import type { ProposeTopicDeps } from "./topic-tool";
@@ -39,6 +44,53 @@ export interface LiveCompanionOptions {
   // The conversation propose_topic files, and where its card goes. Omitted where
   // there is no conversation to file, and then the tool is not mounted.
   topic?: Omit<ProposeTopicDeps, "topics">;
+  // The conversation a lab proposal is made in, and where its card goes. Same
+  // shape and same reason as `topic`: without it propose_lab and archive_lab are
+  // not mounted.
+  lab?: {
+    threadId: string;
+    onLabCard(card: LabProposalCardData | LabArchiveCardData): void;
+  };
+}
+
+// The lab stores as the companion reaches them. Read per call rather than when
+// the conversation opened, so a room opened three turns ago is in the roster the
+// next proposal is validated against.
+export interface LiveLabs {
+  list(): Promise<Lab[]>;
+  pictures(labId: string): Promise<Picture>;
+}
+
+export const liveLabs: LiveLabs = {
+  list: () => loadLabs(),
+  pictures: (labId) => loadPicture(labId),
+};
+
+// How much of each room's picture rides the prompt. The whole thing is on disk;
+// what the briefer needs is enough to say what changed since last time.
+export const LAB_PICTURE_CHARS = 1_200;
+
+/**
+ * The labs half of the companion's context: the open rooms and a summary of
+ * where each one stands, summarized HERE rather than in the prompt layer so
+ * chat.ts stays a pure string assembly (docs/63 呈现).
+ *
+ * A picture that will not read leaves its room in the roster without one — the
+ * roster is the thing the conversation cannot do without, and a room that has
+ * never run has an empty picture anyway.
+ */
+export async function labCompanionContext(
+  labs: LiveLabs = liveLabs,
+): Promise<{ labs: Lab[]; pictures: Record<string, string> }> {
+  const open = activeLabs(await labs.list());
+  const pictures: Record<string, string> = {};
+  for (const lab of open) {
+    const picture = await labs.pictures(lab.id).catch(() => null);
+    if (!picture) continue;
+    const summary = pictureSummary(picture, { maxChars: LAB_PICTURE_CHARS }).trim();
+    if (summary) pictures[lab.id] = summary;
+  }
+  return { labs: open, pictures };
 }
 
 // The sign-in half, bound to the real windows. The site list is read from the
@@ -84,6 +136,12 @@ export async function buildLiveCompanionTools(
     // proposed rather than minted a second time.
     topicProposal: opts.topic
       ? { ...opts.topic, topics: async () => (await listTopics()).map(({ id, name }) => ({ id, name })) }
+      : undefined,
+    // The research rooms (docs/63). The roster and the source list are both read
+    // per call, so a room or a source added earlier in this same conversation is
+    // proposed against rather than duplicated.
+    labs: opts.lab
+      ? { ...opts.lab, labs: () => liveLabs.list(), sources: () => loadSources() }
       : undefined,
     fetchFn: infoFetch,
     extract: await loadExtractReadable(),

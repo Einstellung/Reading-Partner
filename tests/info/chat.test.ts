@@ -1,8 +1,8 @@
 // The info companion's system prompt, as the desk assembles it (src/info/
 // briefer/desk.ts over src/info/briefer/chat.ts): the output-language wiring
 // on both threads, and the shared companion context — profile, source roster,
-// per-item source, the full filtered clip list, and the update_profile
-// anti-over-trigger rule.
+// per-item source, the lab roster with each room's picture, and the
+// update_profile anti-over-trigger rule.
 //
 // Asserted through openDesk + assembleTurn rather than off the prompt functions,
 // because that is now the only way the app builds one: the briefing is a thing on
@@ -29,6 +29,7 @@ import { rebuildThreadStoreForTests } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
 import type { Briefing } from "../../src/info/collect/types";
+import type { Lab } from "../../src/info/labs/types";
 import { languageInstruction } from "../../src/platform/app/settings";
 
 const SOURCES: SourceDescriptor[] = [
@@ -43,6 +44,16 @@ const SOURCES: SourceDescriptor[] = [
 ];
 
 const CTX: CompanionContext = { profile: "I like hard technical substance.", sources: SOURCES };
+
+const LAB: Lab = {
+  id: "lab-1234abcd",
+  name: "Embodied AI",
+  kind: "lab",
+  status: "active",
+  charter: { scope: "Robot learning and the hardware under it.", questions: [], topicId: null },
+  sources: ["qbitai"],
+  createdAt: 0,
+};
 
 const BRIEFING: Briefing = {
   date: "2026-07-21",
@@ -203,42 +214,51 @@ test("the tool guidance carries the four-section skeleton and size discipline", 
   expect(prompt).toContain("under half a page");
 });
 
-test("the briefing thread names each item's source and lists every filtered clip", async () => {
+test("the briefing thread names each item's source", async () => {
   const prompt = await briefingPrompt(BRIEFING, CTX);
-  // must-read item carries its source name
   expect(prompt).toContain("Model X ships — 量子位 — you track releases");
-  // filtered items appear in full: title, source, category (not just a count),
-  // and the heading says which of the two filters they came from (docs/35).
-  expect(prompt).toContain("Filtered as noise after reading the full text (1)");
-  expect(prompt).toContain("Vendor Y announces — 量子位 — vendor PR");
-  // No screen ran on this briefing, so nothing claims one did.
+});
+
+// What the funnel dropped is no longer in the prompt at all (docs/63): the day
+// is cut by lab, and the discard pile only taught the companion to talk about
+// its own machinery.
+test("neither the filtered clip list nor the screening tally reaches the companion", async () => {
+  const prompt = await briefingPrompt(
+    {
+      ...BRIEFING,
+      screen: { discovered: 412, kept: 9, dropped: 403, cappedOut: 22, droppedIds: ["d1"] },
+    },
+    CTX,
+  );
+  expect(prompt).not.toContain("Filtered as noise");
+  expect(prompt).not.toContain("Vendor Y announces");
   expect(prompt).not.toContain("Screened out before fetching");
+  expect(prompt).not.toContain("daily fetch ceiling");
 });
 
-test("the screening tally reaches the companion as a count, never as a list of titles", async () => {
-  const prompt = await briefingPrompt(
-    {
-      ...BRIEFING,
-      screen: { discovered: 412, kept: 9, dropped: 403, cappedOut: 0, droppedIds: ["d1", "d2"] },
-    },
-    CTX,
-  );
-  expect(prompt).toContain("Screened out before fetching: 403 of 412");
-  // The ids are on record in the briefing file, not in the prompt.
-  expect(prompt).not.toContain("d1");
-  // And the companion is told the list it can see is not the whole day.
-  expect(prompt).toContain("not the whole day");
+// The room's own record, so the briefer can say what today moved rather than
+// reading the headlines back (docs/63 态势).
+test("each open lab's picture rides the briefing prompt under its own heading", async () => {
+  const prompt = await briefingPrompt(BRIEFING, {
+    ...CTX,
+    labs: [LAB],
+    pictures: { "lab-1234abcd": "Baseline: two demos a month.\n- [o-aa11] real-hardware demos" },
+  });
+  expect(prompt).toContain("Picture — Embodied AI (id: lab-1234abcd):");
+  expect(prompt).toContain("Baseline: two demos a month.");
+  // The roster is there too, in the preamble both threads share.
+  expect(prompt).toContain("WHAT IS BEING FOLLOWED");
+  expect(prompt).toContain("- Embodied AI (id: lab-1234abcd)");
+  // A room with no summary prints no heading over nothing.
+  const noPicture = await briefingPrompt(BRIEFING, { ...CTX, labs: [LAB] });
+  expect(noPicture).not.toContain("Picture — ");
 });
 
-test("a briefing trimmed by the fetch ceiling says so in the companion's context", async () => {
-  const prompt = await briefingPrompt(
-    {
-      ...BRIEFING,
-      screen: { discovered: 500, kept: 120, dropped: 380, cappedOut: 22, droppedIds: [] },
-    },
-    CTX,
-  );
-  expect(prompt).toContain("22 more cleared the screen but were cut by the daily fetch ceiling");
+// The state the whole release turns on: nothing is being followed, so the
+// conversation's job is to find out what should be.
+test("with no labs both threads say nothing is followed yet", async () => {
+  expect(await briefingPrompt(BRIEFING, CTX)).toContain("Nothing yet");
+  expect(await noBriefingPrompt(CTX)).toContain("propose_lab");
 });
 
 // --- the thread before there is a briefing (docs/35) -------------------------

@@ -9,6 +9,8 @@ import type {
   BriefingFailedCardData,
   BriefingProgressCardData,
   BriefingReadyCardData,
+  LabArchiveCardData,
+  LabProposalCardData,
   ProfileUpdateCardData,
   TopicProposalCardData,
 } from "../boxes/cards";
@@ -239,6 +241,20 @@ export function sourceAddedNote(card: ProbeConfirmCardData): string {
 
 export function profileAppliedNote(card: ProfileUpdateCardData): string {
   return `Applied the profile update: ${card.summary}.`;
+}
+
+// Opened the room the companion drafted a charter for (docs/63). The AI is told
+// what it now follows, because the next thing it says about the lab has to be
+// about one that exists.
+export function labFiledNote(card: LabProposalCardData): string {
+  const claims = card.sourceNames?.length
+    ? ` It reads ${card.sourceNames.join(", ")}.`
+    : " It claims no sources of its own yet.";
+  return `Opened the "${card.name}" lab.${claims}`;
+}
+
+export function labArchivedNote(card: LabArchiveCardData): string {
+  return `Closed the "${card.name}" lab. Stop treating it as something being followed.`;
 }
 
 // Filed under the topic the companion proposed. Said in the reader's voice, like

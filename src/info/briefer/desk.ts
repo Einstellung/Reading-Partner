@@ -34,6 +34,7 @@ import {
 import { listTopics } from "../../platform/app/topics";
 import { addSourceSystemPrompt } from "../sources/source-skill";
 import { topicGuidance, type TopicChoice } from "./topic-tool";
+import { labGuidance } from "./lab-tool";
 import {
   articleContextSection,
   briefingChatSystemPrompt,
@@ -157,7 +158,7 @@ async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<Des
   if (env.signal?.aborted) return null;
   const observations = await topicObservations(env.topic.id, ref.listObservations);
   if (env.signal?.aborted) return null;
-  const base = join(briefingPrompt(ref), await topicSection(ref));
+  const base = join(briefingPrompt(ref), await topicSection(ref), labSection(ref));
   return {
     kind: INFO_BRIEFING_KIND,
     label: ref.onboarding ? "Subscriptions" : "Today's briefing",
@@ -214,6 +215,15 @@ async function topicSection(ref: InfoBriefingDeskRef): Promise<string> {
   // than failing the turn the reader is waiting for.
   const topics = await list().catch((): TopicChoice[] => []);
   return topicGuidance(topics);
+}
+
+// The rooms half of the same instruction (docs/63). The other two prompts carry
+// it in their preamble, where the source roster it talks about is; onboarding's
+// prompt is the add-source skill, which knows nothing about rooms, so it is
+// appended here. There are none yet by construction at that point, which is
+// exactly the state the guidance is written for: ask what to keep watch on.
+function labSection(ref: InfoBriefingDeskRef): string {
+  return ref.onboarding ? labGuidance([], []) : "";
 }
 
 function liveTopicChoices(): Promise<TopicChoice[]> {

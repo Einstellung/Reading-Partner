@@ -271,6 +271,11 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
               // even offer to file what was just talked about would be a
               // different one. Its answer is text, which is what gets spoken.
               topic: { threadId: anchor.threadId, onTopicCard: () => {} },
+              // And the lab tools, for the same reason plus one: the prompt the
+              // call shares tells the companion to propose a lab when the reader
+              // says what they want followed, and a described tool that is not
+              // mounted is a call that fails mid-sentence.
+              lab: { threadId: anchor.threadId, onLabCard: () => {} },
             },
           ).catch((e) => {
             tools = null;
