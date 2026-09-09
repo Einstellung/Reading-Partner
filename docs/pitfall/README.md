@@ -61,7 +61,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 258）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 260）。
 
 ## EmbedPDF 引擎
 
@@ -243,6 +243,7 @@
 - [178-webkit-pays-per-font-family-before-first-paint](./178-webkit-pays-per-font-family-before-first-paint.md) — 生产构建提交到出像素之间 WebKit 空 78ms、Chromium 12ms、Firefox 25ms，和 JS 体积无关；`body` 字体栈里 WebKit 解析不出的每个 family（`system-ui`、`"Segoe UI"`）各查询约 33ms，Chromium/Firefox 换栈没差别。字体栈至今没按平台拆分，坑还在
 - [254-the-overlayer-is-attached-after-create-overlay-fires](./254-the-overlayer-is-attached-after-create-overlay-fires.md) — foliate 的 `create-overlay` 是在 `#createOverlayer` 里同步发的，`attach` 在它 return 之后才跑：事件处理器里读 `getContents()` 拿不到覆盖层，画进去的标注全丢，而且事件只发一次不会补。挂点里 `queueMicrotask` 再画
 - [255-overlayer-coordinates-are-the-frames-not-the-pages](./255-overlayer-coordinates-are-the-frames-not-the-pages.md) — overlayer 的 SVG 挂在父页（父页事件够得着），里面的矩形却是 frame 的视口坐标；滚动模式下 foliate 把 iframe 撑成整章高、由父页容器滚，两个空间差一个很大的负数。`hitTest` 和 `caretRangeFromPoint` 要减 `frameElement.getBoundingClientRect()`，出去的 rect 要加回来
+- [258-a-closed-shadow-root-is-open-from-the-inside-out](./258-a-closed-shadow-root-is-open-from-the-inside-out.md) — `attachShadow({mode:'closed'})` 只挡「从外面拿 shadowRoot」，从里面一个节点 `parentElement` 往上是通的：`getContents()[0].doc.defaultView.frameElement.parentElement.parentElement` 就是 foliate 关着的 `#container`，读写都行。量 vendor 的 shadow DOM 不用改源码。配套两条：挑够长的一节（书名页只有 182px 高，看起来像不能滚），派发合成事件验冒泡要写 `composed: true`（实测同一个容器上 true 收到 1 次、false 收到 0 次）
 - [244-a-scriptless-sandboxed-iframe-dispatches-no-events-in-webkit](./244-a-scriptless-sandboxed-iframe-dispatches-no-events-in-webkit.md) — `sandbox="allow-same-origin"` 不给 `allow-scripts` 时，WebKit 连 DOM 事件都不派发（bug 218086，iOS 26.5 与 WebKitGTK 一致）：父页在 `contentDocument` 上装的监听器收不到任何东西，DOM 读写、Range、CFI 全都正常。EPUB 正文 iframe 里的点击翻页、笔手路由、`overlayer.hitTest` 都得挪到父页做；系统的长按选区和 callout 不受影响，选区照样读得到
 - [247-a-unitless-gap-drops-the-rule-that-caps-the-text](./247-a-unitless-gap-drops-the-rule-that-caps-the-text.md) — foliate 的 `gap` 写成不带单位的 `6`，正文行宽上限整条消失（1280px 窗口下栏宽 1198px，一行一百二十个字符）：那批属性变成自定义属性后被读两遍，JS 侧 `parseFloat` 照样得 6，CSS 侧 `calc(720px - 6)` 是长度减数字、非法，撑着行宽的那条 `grid-template-columns` 整条作废。隔离量过是 `gap` 一个值造成的，`max-inline-size` 本身管用。gap 是百分比不是长度，每个值都要带单位
 - [246-an-iframes-first-load-event-is-about-blank](./246-an-iframes-first-load-event-is-about-blank.md) — iframe 一插进 DOM，WebKit 立刻为它的初始 about:blank 发一次 `load`，早于取 `src`；配上坑 99 那种静默取消，一次没发生的导航看起来和成功一模一样。判导航成功要看 `documentURI` 落在哪，不看事件

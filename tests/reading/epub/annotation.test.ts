@@ -29,7 +29,7 @@ import { renderLoader } from "../../../src/reading/epub/render-book";
 import { extractDocumentText } from "../../../src/reading/epub/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
 import { toDistillAnnotations } from "../../../src/memory/observations/arrears";
-import { routeEpubPointer, selectionMarks, strokeOfTool } from "../../../src/reading/epub/pen";
+import { routeEpubPointer, strokeOfTool } from "../../../src/reading/epub/pen";
 import { buildEpub, prose } from "./fixture";
 
 const EPUBCFI = "../../../vendor/foliate-js/epubcfi.js";
@@ -249,7 +249,6 @@ describe("which pointer marks the book and which moves it", () => {
   test("no pen out, nothing draws", () => {
     expect(routeEpubPointer(undefined, "pen", true)).toBe("navigate");
     expect(routeEpubPointer({ type: "pointer" }, "mouse", true)).toBe("navigate");
-    expect(selectionMarks(undefined)).toBe(false);
   });
 
   test("a pen out: stylus and mouse draw, the finger asks the setting", () => {
@@ -257,7 +256,6 @@ describe("which pointer marks the book and which moves it", () => {
     expect(routeEpubPointer(highlight, "mouse", false)).toBe("draw");
     expect(routeEpubPointer(highlight, "touch", false)).toBe("navigate");
     expect(routeEpubPointer(highlight, "touch", true)).toBe("draw");
-    expect(selectionMarks(underline)).toBe(true);
   });
 
   test("the navigation lock takes the stylus too", () => {

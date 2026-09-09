@@ -20,9 +20,11 @@ iOS 模拟器上还一次没跑过，正式打开路径（文件对话框那条�
 
 阶段 4 落地：EPUB 上的高亮、划线、AI 笔、痕迹列表、蒸馏、笔记和同步全部闭环。盘上的形状见第五节。三条实现上的事：
 
-- 选区只能靠父页。iframe 里零事件（坑 244），所以父页事件层在 pointerup 后读 `contentDocument.getSelection()`，非空且笔在手上就转成 Range → range CFI（foliate 的 `view.getCFI`）+ 引文 + 块号，落一条标注并清掉系统选区。系统的选区手柄留着（用户靠它调选区），callout 用注进 iframe 的 `-webkit-touch-callout: none` 压掉，`user-select` 不关。
+- 选区只能靠父页，而且只有拖出来的那一种。iframe 不只是里面零事件（坑 244），它还把触摸整个吃掉，父页也收不到（坑 252）——所以正文 iframe 一律 `pointer-events: none`，翻页点击区、滑动、拖选区全部落在父页。代价是系统的长按选区没有了，这是有意的：和 PDF 侧一致，这个 app 在两种格式上都不靠系统选区做标注，笔拖出来的就是选区（`caretRangeFromPoint` 定锚点和落点，画进 frame 自己的 Selection 让用户看见，抬笔时转成 range CFI + 引文 + 块号）。原来那条「pointerup 后读 `contentDocument.getSelection()`」已经删掉。`-webkit-touch-callout: none` 留着不碍事，`user-select` 不能关——关了父页画进去的选区也不显示了。
 - 画和命中都在父页的 overlayer 上，坐标要减 iframe 的 box（坑 255），换章后重画的挂点是 `create-overlay` 加一个微任务（坑 254）。高亮和划线同一个不透明度 `MARKUP_OPACITY`；AI 笔画的就是划线，靠 `aiThreadId` 区分。
 - 笔手路由复用 `engine/gesture/touch-routing.ts` 的纯函数（`routePointer`/`toolKindOf`/`pointerKindOf`），只在上面加一条：EPUB 上 ink 不画——自由笔迹锚在页面坐标上，重排的书没有页面。接线在父页，笔按下就用 `caretRangeFromPoint` 拖选区。
+
+`pointer-events: none` 之后滚动还在，在 WebKitGTK 上量过：滚动模式里 foliate 把 iframe 撑成整章高（一章 72602px），滚的是父页那一侧的 `#container`（`overflow-y: auto`，`scrollHeight` 72698 对 `clientHeight` 860），不是 iframe 自己。所以触摸落在正文上会穿到容器上照常滚，程序滚 2000px 阅读位置从第 29 块走到第 31 块。事件也照常冒出 shadow：在 `#container` 上派发 composed 的 pointerdown，父页收到 1 次（非 composed 收到 0 次），`target` 重定向成 `FOLIATE-VIEW`。量法见坑 258。
 
 阶段 1（EPUB 只当 PDF 的图源）跳过：用户手上没有同一本书的两个格式，这个阶段的前提不成立。
 

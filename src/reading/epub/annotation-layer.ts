@@ -89,13 +89,12 @@ export interface AnnotationLayer {
 
   /** A tap at parent-page coordinates that landed on a mark. */
   hit(x: number, y: number): boolean;
-  /**
-   * The reader's own selection, turned into a mark. Returns the mark, or null
-   * when nothing was selected.
-   */
-  takeSelection(stroke: "highlight" | "underline", color: string): Annotation | null;
 
-  /** A stylus or a drawing finger dragging a selection out of the text. */
+  /**
+   * A stylus or a drawing finger dragging a selection out of the text. The only
+   * way a selection is made here: the frame takes no pointers, so the system's
+   * own long press never starts one (docs/pitfall/252).
+   */
   beginDrag(x: number, y: number): boolean;
   extendDrag(x: number, y: number): void;
   endDrag(stroke: "highlight" | "underline", color: string): Annotation | null;
@@ -379,17 +378,6 @@ export function createAnnotationLayer(deps: AnnotationLayerDeps): AnnotationLaye
       deps.onSelectAnnotations([id]);
       deps.onAnnotationPopup({ rect, annotation: ann });
       return true;
-    },
-
-    takeSelection(stroke, color) {
-      for (const c of sectionsOf()) {
-        const range = liveRange(c.doc);
-        if (!range) continue;
-        const ann = createMark(range, c, stroke, color);
-        clearSelection(c.doc);
-        return ann;
-      }
-      return null;
     },
 
     beginDrag(x, y) {

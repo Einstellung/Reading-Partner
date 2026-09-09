@@ -51,12 +51,3 @@ export function routeEpubPointer(
     : "navigate";
 }
 
-/**
- * Whether a selection the reader made by hand — the system's own long-press and
- * handles, which are the only selection gesture inside the frame — should
- * become a mark when the pointer lifts. It should exactly when a pen is out:
- * with none, a selection is a selection.
- */
-export function selectionMarks(tool: Tool | undefined): boolean {
-  return strokeOfTool(tool) !== null;
-}
