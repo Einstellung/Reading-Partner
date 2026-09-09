@@ -14,6 +14,10 @@
 - 消毒的挂点不是 `transformTarget` 的 `data` 事件，是 `loadText`：`data` 事件拿到的已经是 foliate 改写过 href 的序列化结果，在那里消毒会把 blob 地址一起删掉。渲染侧的 `loadText` 直接返回摄入侧的消毒结果，两边因此是同一棵树，CFI 指同一个节点（`tests/reading/epub/render-cfi.test.ts` 断言这条）。
 - 书自己的 CSS 不进页面：消毒器整块丢弃 `<style>` 和 `<link>`，正文用 app 自己的排版（`reader-styles.ts`），底色取 `--desk`，跟着暗色和纸色走。留住书的 CSS 就得让它进消毒后的树，那棵树摄入侧也在读。
 
+在 Linux 的 WebKitGTK 上（xvfb 里跑真的桌面 app，通过 sim bridge 驱动）量过：《具身智能》那本 fetch 6ms、open 到首屏可读 395ms，59 个块；frame 是 `allow-same-origin`、同源、`application/xhtml+xml`，书里 0 个 `<script>`；正文底色是 `--desk` 的 `rgb(237,236,229)`，字号 19px，字体栈是 app 的。块号跳转（第 30 块落在 pageIndex 29）、翻页、vertical↔paged 来回切（第二次 render 之后栏宽正确）、字号加减重置、引文高亮命中和落空、关掉重开回到同一块，全部对。《The Experience Machine》有 page-list，第 120 块显示的是纸书的 112 页。行宽那条踩了坑 247。
+
+iOS 模拟器上还一次没跑过，正式打开路径（文件对话框那条）也没走过——目前的验证是把 `createEpubReader` 直接挂进运行中的 app。
+
 标注（阶段 4）没做，`setTool` / `setAnnotations` 那几个实现成 no-op。
 
 阶段 1（EPUB 只当 PDF 的图源）跳过：用户手上没有同一本书的两个格式，这个阶段的前提不成立。
