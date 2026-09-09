@@ -27,10 +27,18 @@ export interface FulltextIo {
   onError: (e: unknown) => void;
 }
 
+/**
+ * How a document's bytes become a full text. The default reads a PDF; an EPUB
+ * is read by reading/epub, which passes its own. It comes in as an argument
+ * rather than being imported here because this is a capability: it may not
+ * reach up into the domain that knows what an EPUB is (docs/39 §1).
+ */
+export type FulltextExtractor = (buffer: ArrayBuffer) => Promise<Omit<Fulltext, "version">>;
+
 export interface FulltextStore {
   get: (hash: string) => Promise<Fulltext | null>;
   save: (key: string, ft: Fulltext) => Promise<void>;
-  ensure: (key: string, buffer: ArrayBuffer) => Promise<Fulltext>;
+  ensure: (key: string, buffer: ArrayBuffer, extract?: FulltextExtractor) => Promise<Fulltext>;
 }
 
 export function createFulltextStore(io: FulltextIo): FulltextStore {
@@ -72,7 +80,7 @@ export function createFulltextStore(io: FulltextIo): FulltextStore {
     // Idempotent: a second call while extraction is running joins the same job.
     // Safe to call fire-and-forget at book-open time; the pdf.js worker keeps
     // parsing off the UI.
-    ensure: async (key, buffer) => {
+    ensure: async (key, buffer, extract) => {
       const hash = key;
       const cached = await get(hash);
       if (cached) return cached;
@@ -80,7 +88,7 @@ export function createFulltextStore(io: FulltextIo): FulltextStore {
       if (existing) return existing;
 
       const job = (async () => {
-        const result = await io.extract(buffer);
+        const result = await (extract ?? io.extract)(buffer);
         const ft: Fulltext = { version: FULLTEXT_VERSION, ...result };
         try {
           await io.write(fulltextFile(hash), JSON.stringify(ft));
@@ -120,6 +128,10 @@ export function saveFulltext(key: string, ft: Fulltext): Promise<void> {
   return store.save(key, ft);
 }
 
-export function ensureFulltext(key: string, buffer: ArrayBuffer): Promise<Fulltext> {
-  return store.ensure(key, buffer);
+export function ensureFulltext(
+  key: string,
+  buffer: ArrayBuffer,
+  extract?: FulltextExtractor,
+): Promise<Fulltext> {
+  return store.ensure(key, buffer, extract);
 }

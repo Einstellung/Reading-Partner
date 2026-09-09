@@ -193,6 +193,21 @@ export const PALACE = [
     note: "the authoritative copy of the file, on the content-addressed channel and never on the data one",
   },
   {
+    kind: "book-epub",
+    domain: "reading",
+    match: keyed(new RegExp(`^library/(${HEX32})\\.epub$`)),
+    pathFor: (id: string) => `library/${id}.epub`,
+    samples: ["library/0123456789abcdef0123456789abcdef.epub"],
+    id: "bookId",
+    refs: [{ kind: "library", via: "hash" }],
+    sync: "books",
+    deleteWith: "book",
+    gc: "never",
+    desk: true,
+    deskKind: "book",
+    note: "the same row as book-pdf for the other format; a book id is a hash of bytes, so only one of the two names exists per id",
+  },
+  {
     kind: "reading-state",
     domain: "reading",
     match: fixed("reading-state.json"),
@@ -443,6 +458,25 @@ export const PALACE = [
     deleteWith: "never",
     gc: "domain-housekeeping",
     note: "orphan: a downloaded paper's cache is keyed by a synthetic prep path, so deleting the book leaves it behind",
+  },
+  // Not a derived cache, which is why it sits among them with a different
+  // deletion and a different life: an EPUB's position blocks are cut once, on
+  // the first read, and never again. The [p.N] strings the AI has already
+  // written into chapter files and notes point into this table, and nothing
+  // rewrites those, so recutting the book would move all of them (docs/39 §1).
+  {
+    kind: "pagination",
+    domain: "reading",
+    match: keyed(/^pagination-(.+)\.json$/),
+    pathFor: (id: string) => `pagination-${id}.json`,
+    samples: ["pagination-0123456789abcdef0123456789abcdef.json"],
+    id: "bookId",
+    refs: [{ kind: "library", via: "bookId" }],
+    sync: "data",
+    merge: "opaque",
+    deleteWith: "book",
+    gc: "never",
+    note: "written once and never rewritten, so two devices that cut it independently keep whichever copy this one already has",
   },
   {
     kind: "figures",

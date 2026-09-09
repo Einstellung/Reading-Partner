@@ -214,7 +214,7 @@ test("a topic id mounts the observation tools", async () => {
 });
 
 test("a figure index mounts view_figure and the catalog", async () => {
-  const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }];
+  const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", source: { kind: "pdf" as const, bbox: null } }];
   const turn = await buildReadingTurn(input({ figures }));
   expect(names(turn!.tools)).toEqual([
     "find_paper",
@@ -648,7 +648,7 @@ function cjkSurvey(pages: number, charsPerPage = 1000): Fulltext {
 }
 
 test("a turn that fits keeps everything and says nothing", async () => {
-  const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }];
+  const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", source: { kind: "pdf" as const, bbox: null } }];
   const turn = await buildReadingTurn(input({ figures, settings: small }));
   expect(turn!.notice).toBe("");
   expect(turn!.refusal).toBe("");
@@ -756,7 +756,7 @@ test("the reading ladder drops the catalog, then the book, and leaves the conver
       ts: i,
     });
   }
-  const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", bbox: null }];
+  const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", source: { kind: "pdf" as const, bbox: null } }];
   const turn = await buildReadingTurn(
     input({ fulltext: INLINE_BOOK, figures, settings: tiny }),
   );
@@ -789,7 +789,7 @@ test("a model the catalog doesn't know skips the budget rather than blocking the
 test("a figure the conversation has already cited keeps its catalog", async () => {
   createThread(BOOK, "ann-1", "thread-1");
   appendMessage(BOOK, "thread-1", { role: "ai", text: "see [fig:1] for the layout", ts: 1 });
-  const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", bbox: null }];
+  const figures: Figure[] = [{ id: "1", page: 2, caption: "内联缓存布局", source: { kind: "pdf" as const, bbox: null } }];
   const turn = await buildReadingTurn(
     input({ fulltext: cjkSurvey(300), figures, settings: small }),
   );
@@ -1001,7 +1001,7 @@ const withWindow = (
   input({
     threadId,
     fulltext: dense(),
-    figures: [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }] as Figure[],
+    figures: [{ id: "1", page: 2, caption: "Inline cache layout", source: { kind: "pdf" as const, bbox: null } }] as Figure[],
     renderPage,
     ...over,
   });

@@ -5,7 +5,7 @@ import { buildFigureCatalog, selectCatalogFigures } from "../../../src/reading/f
 import type { Figure } from "../../../src/reading/figures/types";
 
 function fig(id: string, page: number, caption = `Caption for ${id}`): Figure {
-  return { id, page, caption, bbox: null };
+  return { id, page, caption, source: { kind: "pdf" as const, bbox: null } };
 }
 
 test("empty index yields an empty catalog", () => {

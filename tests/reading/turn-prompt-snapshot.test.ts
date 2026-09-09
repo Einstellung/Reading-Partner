@@ -102,7 +102,7 @@ const settings: Settings = {
   defaultModelId: "claude-sonnet-4-5",
 };
 
-const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }];
+const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", source: { kind: "pdf" as const, bbox: null } }];
 
 // Everything a turn can carry that does not need a canvas: a text layer, a
 // chapter, a figure index, a prep run with a note on disk, a kept article, and a

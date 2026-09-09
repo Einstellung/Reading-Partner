@@ -50,7 +50,7 @@ const marks: AnnotationLite[] = [
   },
 ];
 
-const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", bbox: null }];
+const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", source: { kind: "pdf" as const, bbox: null } }];
 
 function material(): LoadedMaterial {
   return {

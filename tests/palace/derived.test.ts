@@ -21,7 +21,8 @@ import {
 } from "../../src/reading/cover-cache";
 import { figuresFile } from "../../src/reading/figures/store";
 import { fulltextFile } from "../../src/fulltext/store";
-import { libraryPdfPath } from "../../src/platform/app/library";
+import { libraryBookPath } from "../../src/platform/app/library";
+import { paginationFile } from "../../src/reading/epub/pagination-store";
 
 // A book id is the content hash of the file's bytes, and three kinds only match
 // that shape: a made-up id would resolve to the orphan row beside them instead.
@@ -94,7 +95,9 @@ test("what a deleted book takes covers every kind named for a book", () => {
 // table can answer for a path nobody handed it. Restating it is the risk.
 test("the paths the domain builds resolve to the row that restates them", () => {
   const cases: ReadonlyArray<[string, string]> = [
-    [libraryPdfPath(BOOK), "book-pdf"],
+    [libraryBookPath(BOOK), "book-pdf"],
+    [libraryBookPath(BOOK, "epub"), "book-epub"],
+    [paginationFile(BOOK), "pagination"],
     [fulltextFile(BOOK), "fulltext"],
     [figuresFile(BOOK), "figures"],
     [coverImagePath(BOOK), "cover-image"],

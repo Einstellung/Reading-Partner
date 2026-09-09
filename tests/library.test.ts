@@ -10,7 +10,7 @@ import {
   getLibraryEntry,
   healLibrary,
   importBook,
-  libraryPdfPath,
+  libraryBookPath,
   removeEntry,
   removeLibraryEntry,
   type LibraryStore,
@@ -37,8 +37,10 @@ test("contentHash accepts an ArrayBuffer and a Uint8Array alike", async () => {
   expect(await contentHash(bytes)).toBe(await contentHash(bytes.buffer));
 });
 
-test("libraryPdfPath keys the copy by book id", () => {
-  expect(libraryPdfPath("deadbeef")).toBe("library/deadbeef.pdf");
+test("libraryBookPath keys the copy by book id, and names it by format", () => {
+  expect(libraryBookPath("deadbeef")).toBe("library/deadbeef.pdf");
+  expect(libraryBookPath("deadbeef", "pdf")).toBe("library/deadbeef.pdf");
+  expect(libraryBookPath("deadbeef", "epub")).toBe("library/deadbeef.epub");
 });
 
 test("addEntry registers a new book and is a no-op on re-import", () => {

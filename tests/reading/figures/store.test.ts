@@ -9,7 +9,7 @@ test("accepts a same-version index", () => {
   const idx = {
     version: FIGURES_VERSION,
     status: "ok",
-    figures: [{ id: "1", page: 2, caption: "c", bbox: null }],
+    figures: [{ id: "1", page: 2, caption: "c", source: { kind: "pdf" as const, bbox: null } }],
   };
   expect(parseFiguresCache(idx)).toBe(idx as never);
 });

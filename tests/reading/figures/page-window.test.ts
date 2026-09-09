@@ -21,7 +21,7 @@ import {
 } from "../../../src/reading/figures/page-window";
 
 function figure(page: number): Figure {
-  return { id: "3", page, caption: "Figure 3: a schematic", bbox: null };
+  return { id: "3", page, caption: "Figure 3: a schematic", source: { kind: "pdf" as const, bbox: null } };
 }
 
 // A document whose pages are ordinary typeset prose: plenty of text, no figures.

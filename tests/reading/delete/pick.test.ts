@@ -106,6 +106,8 @@ test("the local paths cover the synced ones, the caches and the blob", () => {
     `fulltext-${BOOK}.json`,
     `figures-${BOOK}.json`,
     `library/${BOOK}.pdf`,
+    `library/${BOOK}.epub`,
+    `pagination-${BOOK}.json`,
     // The cover, the author record beside it and the marker that says why there
     // is no cover: a deleted book must not be a picture on the next shelf, and
     // covers are filed under the book id, so re-importing the same PDF would

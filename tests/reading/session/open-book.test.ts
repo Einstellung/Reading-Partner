@@ -14,7 +14,7 @@ const NO_TEXT: Fulltext = { version: 1, status: "no-text-layer", pages: [], outl
 const FIGURES: FiguresIndex = {
   version: FIGURES_VERSION,
   status: "ok",
-  figures: [{ id: "1", page: 2, caption: "Figure 1: a schematic", bbox: null }],
+  figures: [{ id: "1", page: 2, caption: "Figure 1: a schematic", source: { kind: "pdf" as const, bbox: null } }],
 };
 
 interface Call {

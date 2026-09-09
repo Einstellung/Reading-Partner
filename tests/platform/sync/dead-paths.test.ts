@@ -65,7 +65,7 @@ test("several deleted books are all claimed", () => {
 // again where deleteBook lives.
 test("the paths one book owns are named in one place", () => {
   const { files, dirs } = deadPathsFor("h1");
-  expect(files).toEqual(["annotations-h1.json", "threads-h1.json"]);
+  expect(files).toEqual(["annotations-h1.json", "threads-h1.json", "pagination-h1.json"]);
   expect(dirs).toEqual(["prep-h1/"]);
   for (const f of files) expect(isDeadPath(f, dead)).toBe(true);
   for (const d of dirs) expect(isDeadPath(`${d}state.json`, dead)).toBe(true);

@@ -13,7 +13,7 @@ import {
 import type { Figure } from "../../../src/reading/figures/types";
 
 function fig(id: string, page = 1): Figure {
-  return { id, page, caption: `Figure ${id}`, bbox: null };
+  return { id, page, caption: `Figure ${id}`, source: { kind: "pdf" as const, bbox: null } };
 }
 
 test("the label, spacing and trailing punctuation come off an id", () => {

@@ -11,8 +11,11 @@ import { getViewState } from "../../platform/app/storage";
 import { loadAnnotations } from "../../platform/app/annotations";
 import { loadThreads } from "../../platform/app/threads";
 import { pageMarks, type Annotation, type ViewState } from "../../platform/app/reader-contract";
+import { formatOfBytes, type BookFormat } from "../../platform/app/library";
 import { ensureFulltext, type Fulltext } from "../../fulltext";
 import { sweepDistillation } from "../../memory";
+import { extractEpubFulltext, paginate, parseEpub, getPagination, putPagination } from "../epub";
+import { epubFigures } from "../figures/epub";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
 import { seedReadingPosition } from "../reading-position";
 import type { ReaderShell } from "./shell";
@@ -23,8 +26,8 @@ export interface BookOpenIo {
   getViewState(bookId: string): Promise<ViewState | null>;
   loadAnnotations(bookId: string): Promise<Annotation[]>;
   loadThreads(bookId: string): Promise<unknown>;
-  ensureFulltext(bookId: string, buffer: ArrayBuffer): Promise<Fulltext>;
-  ensureFigures(bookId: string, buffer: ArrayBuffer): Promise<FiguresIndex>;
+  ensureFulltext(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<Fulltext>;
+  ensureFigures(bookId: string, buffer: ArrayBuffer, format: BookFormat): Promise<FiguresIndex>;
   clearFigureCache(): void;
   seedReadingPosition(bookId: string, state: ViewState | null): void;
   // What the book being left still owes (docs/02).
@@ -35,8 +38,22 @@ export const bookOpenIo: BookOpenIo = {
   getViewState,
   loadAnnotations,
   loadThreads,
-  ensureFulltext,
-  ensureFigures,
+  // The two extractions are one dispatch on the format and nothing else: an
+  // EPUB produces the same Fulltext and the same figure index a PDF does, so
+  // everything downstream of these two calls is shared (docs/39 §1).
+  ensureFulltext: (bookId, buffer, format) =>
+    format === "epub"
+      ? ensureFulltext(bookId, buffer, (b) => extractEpubFulltext(bookId, b))
+      : ensureFulltext(bookId, buffer),
+  ensureFigures: (bookId, buffer, format) =>
+    format === "epub"
+      ? ensureFigures(bookId, buffer, Date.now, async (b) => {
+          const book = parseEpub(new Uint8Array(b));
+          const stored = await getPagination(bookId);
+          const pagination = stored ?? (await putPagination(bookId, paginate(book)));
+          return epubFigures(book, pagination);
+        })
+      : ensureFigures(bookId, buffer),
   clearFigureCache,
   seedReadingPosition,
   sweepDistillation: (trigger) => void sweepDistillation(trigger),
@@ -62,6 +79,10 @@ export async function openBook(
   io: BookOpenIo = bookOpenIo,
 ): Promise<void> {
   const { bookId, name, bytes } = book;
+  // The bytes say what the book is; nothing has to carry the format down here
+  // alongside them, and a copy that arrived over sync before its registry entry
+  // did is read the same way as one this device imported.
+  const format = formatOfBytes(bytes);
   shell.showStatus("Rendering…");
   shell.closeAnnotationPopup();
   // Leaving a book with a call open ends that conversation, same as closing the
@@ -127,7 +148,7 @@ export async function openBook(
   shell.showFigures([]);
   io.clearFigureCache();
 
-  const figures = io.ensureFigures(bookId, buffer).catch((e) => {
+  const figures = io.ensureFigures(bookId, buffer, format).catch((e) => {
     console.warn("failed to extract figures", e);
     return null;
   });
@@ -137,7 +158,7 @@ export async function openBook(
     shell.showFigures(idx?.figures ?? []);
   });
 
-  const fulltext = io.ensureFulltext(bookId, buffer).catch((e) => {
+  const fulltext = io.ensureFulltext(bookId, buffer, format).catch((e) => {
     console.warn("failed to extract fulltext", e);
     return null;
   });
@@ -160,6 +181,7 @@ export async function openBook(
   shell.mountReader({
     bookId,
     name,
+    format,
     buffer,
     annotations: pageMarks(saved),
     viewState: openingViewState(state),

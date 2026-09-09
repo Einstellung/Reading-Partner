@@ -18,6 +18,17 @@ export interface Fulltext {
   status: FulltextStatus;
   pages: string[]; // pages[i] is the plain text of page i+1
   outline: OutlineItem[];
+  // Which kind of document this was read out of. Absent means PDF: every file
+  // written before EPUB ingestion existed is one, so nothing is owed a
+  // migration and FULLTEXT_VERSION does not move (docs/39 §1).
+  kind?: "pdf" | "epub";
+  // EPUB only. A page is a position block, and these hold each block's start as
+  // a CFI — the precise layer under a block number, for navigating to [p.N] and
+  // for placing a mark. Same length as pages.
+  pageLocators?: string[];
+  // EPUB only, and only for a book that carries the printed edition's own page
+  // numbers: what to show in place of the block number. Same length as pages.
+  pageLabels?: string[];
 }
 
 export interface SearchDoc {

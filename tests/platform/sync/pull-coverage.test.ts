@@ -67,6 +67,9 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
     "a kept article's body is read when the article is opened, and the file is named " +
     "after its own bytes, so a pull can add one but never change the one on screen",
   "prep-": "a document's prep material is read when the document it belongs to opens",
+  "pagination-":
+    "a book's position blocks are read when the book is opened, and the file is written " +
+    "once and never rewritten, so a pull can add one but never change the one on screen",
 };
 
 // Every path the range is checked through: one row per kind, its own samples.
