@@ -1,121 +1,84 @@
-// Driving foliate-js: the imperative half of the EPUB reading area, and the
-// place the shell's ViewInstance is implemented (platform/app/reader-contract).
+// The desk: the imperative half of the EPUB reading area, and the place the
+// shell's ViewInstance is implemented (platform/app/reader-contract). Pages
+// are sheets on a scrolling desk, exactly as the PDF side lays them (docs/63):
+// a vertical column at fit-width, or a paged flip at fit-page; zoom scales the
+// sheets; the top bar's page number is the sheet under the viewport's top.
 //
-// It is not a component because none of it is rendering. The pane below it owns
-// one element and the events landing on it; everything that happens to the book
-// happens here.
+// It is not a component because none of it is rendering. The pane owns one
+// element and the events landing on it; everything that happens to the book
+// happens here. Every event is in the app's own DOM — the sheets are shadow
+// roots, not frames — so nothing here works around a frame that hears nothing.
 //
-// Two facts shape the whole file. The book's frame is sandboxed without
-// allow-scripts, so it dispatches no events at all (docs/pitfall/244) — every
-// gesture is read by the pane on the element around the frame and arrives here
-// as a call. And the renderer speaks CFIs, while the rest of the app speaks
-// position block numbers, so both directions of that map are crossed here:
-// going in, `pagination.blocks[i].cfi`; coming out, the visible range's offset
-// into the same extracted text the blocks were cut from.
+// Only the sheets near the viewport carry a document (a spine document is
+// cloned into every card that shows one of its pages); the others are empty
+// slots of the right size, which is what keeps a 1,000-page book at a handful
+// of layouts at a time.
 
 import type {
   Annotation,
-  AnnotationPopupParams,
   Tool,
   ViewInstance,
   ViewState,
   ViewStats,
 } from "../../platform/app/reader-contract";
-import { DEFAULT_MARK_COLOR } from "./annotation";
-import {
-  createAnnotationLayer,
-  type AnnotationLayer,
-  type EpubContents,
-} from "./annotation-layer";
-import { routeEpubPointer, strokeOfTool, type EpubPointerAction } from "./pen";
 import { openExternal } from "../../platform/app/external-link";
+import { LAYOUT_SETTINGS, type ReadingLayout } from "../engine/layout-modes";
+import { PAGE_FRAME } from "../engine/page-frame";
 import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
-import type { Pagination } from "./paginate";
 import {
-  DEFAULT_FONT_STEP,
+  PAGE_GAP,
+  PAGE_HEIGHT,
+  PAGE_WIDTH,
+  columnPosition,
+  columnScrollTop,
+  flipPosition,
+  mountRange,
+  openingEpubZoom,
+  stripMetrics,
+  visibleColumnRange,
+  zoomScale,
+  zoomStepDown,
+  zoomStepUp,
+  type Zoom,
+} from "./page-geometry";
+import { createPageCard, type PageCard } from "./page-card";
+import { createPageResources } from "./page-mount";
+import type { Pagination } from "./paginate";
+import type { EpubBook } from "./parse";
+import {
   blockIndexAt,
   bookLinkTarget,
-  cfiForBlock,
-  clampFontStep,
-  flowFor,
-  indexRuns,
-  offsetOfPoint,
-  openingFontStep,
-  quoteQueries,
+  findQuoteAt,
   restoreTarget,
   statsOf,
   viewStateOf,
 } from "./reader-logic";
-import { RENDERER_GEOMETRY, readerCss, readerThemeOf } from "./reader-styles";
-import { createRenderBook } from "./render-book";
-import { extractDocumentText, type DocumentText, type TextRun } from "./text";
+import { extractDocumentText, runAt } from "./text";
+import { hrefFragment, resolveZipPath } from "./zip";
 
 // The same violet the PDF side paints an AI-cited quote in
-// (reading/engine/EmbedPdfView.tsx). One quote is on screen at a time, so it
-// needs one key.
+// (reading/engine/EmbedPdfView.tsx), at the same opacity.
 const QUOTE_COLOR = "#4a3a9e";
-const QUOTE_KEY = "reading-partner:quote";
+const QUOTE_OPACITY = "0.24";
+
+// Sheets kept mounted beyond the visible ones, each side.
+const MOUNT_MARGIN = 1;
 
 export interface EpubReaderCallbacks {
   onChangeViewState(state: ViewState): void;
   onChangeViewStats(stats: ViewStats): void;
   onQuoteHighlightChange(active: boolean): void;
-  /** A mark the reader just made, for the host to write down.  */
-  onSaveAnnotations(anns: Annotation[]): void;
-  /** The mark the reader just tapped, or nothing when one was let go of. */
-  onSelectAnnotations(ids: string[]): void;
-  onAnnotationPopup(params?: AnnotationPopupParams): void;
 }
 
 export interface EpubReaderController extends ViewInstance {
-  /**
-   * Follow the book's own link under this point in the page, if there is one.
-   * True when the tap was spent on a link and must not also turn the page.
-   */
+  /** Follow the book's own link under this viewport point, if there is one. */
   followLinkAt(clientX: number, clientY: number): boolean;
-  /** Turn one page (paged) or one screen (continuous). */
+  /** Turn one page (paged) or one screen (vertical). */
   turn(direction: "prev" | "next"): void;
-  /** The layout in force, for the pane's event routing. */
-  currentLayout(): "vertical" | "paged";
-  /** Re-read the app's colours into the book's frame. */
-  refreshTheme(): void;
-
-  // The marks, driven from the pane: nothing in the book's frame dispatches an
-  // event (docs/pitfall/244), so every pointer that reaches the text arrives
-  // here as a call in the parent page's coordinates.
-
-  /** Whether a pointer of this kind marks the book or moves it. */
-  pointerAction(pointerType: string): EpubPointerAction;
-  /** Start dragging a selection out of the text. False when it missed. */
-  beginDraw(x: number, y: number): boolean;
-  extendDraw(x: number, y: number): void;
-  endDraw(): void;
-  cancelDraw(): void;
-  /**
-   * A pointer lifting: a finished selection becomes a mark, or a mark under it
-   * opens. True when it was one of those and the pane should do nothing more.
-   */
-  consumeUp(x: number, y: number): boolean;
-
+  currentLayout(): ReadingLayout;
+  /** The sheet under a viewport point, for the annotation layer to come. */
+  cardAt(clientX: number, clientY: number): PageCard | null;
   destroy(): void;
-}
-
-interface FoliateView extends HTMLElement {
-  open(book: unknown): Promise<void>;
-  init(opts: { lastLocation?: unknown; showTextStart?: boolean }): Promise<void>;
-  close(): void;
-  goTo(target: unknown): Promise<unknown>;
-  next(): Promise<void>;
-  prev(): Promise<void>;
-  getCFI(index: number, range: Range): string;
-  resolveCFI(cfi: string): { index: number; anchor: (doc: Document) => Range };
-  lastLocation?: { cfi?: string; range?: Range };
-  renderer: HTMLElement & {
-    getContents(): EpubContents[];
-    render(): void;
-    setStyles(styles: string): void;
-    scrollToAnchor(anchor: Range | Element, select?: boolean): Promise<void>;
-  };
 }
 
 export interface EpubReaderOptions {
@@ -123,347 +86,405 @@ export interface EpubReaderOptions {
   bookId: string;
   buffer: ArrayBuffer;
   viewState: ViewState | null;
-  /** The element the app's custom properties are declared on (documentElement). */
-  themeRoot: HTMLElement | null;
-  /** The book's page marks, drawn as soon as a section is on screen. */
   annotations: Annotation[];
-  /** Whose name goes on a mark this reader makes. */
-  authorName: string;
   callbacks: EpubReaderCallbacks;
+}
+
+interface Slot {
+  el: HTMLElement;
+  card: PageCard | null;
 }
 
 /**
  * Open a book into `host` and hand back the handle the shell drives. Resolves
- * once the first screen has been laid out; a failure to get that far rejects,
- * and the shell says the book could not be opened rather than showing an empty
- * reading area.
+ * once the first sheets are on the desk; a failure to get that far rejects.
  */
-export async function createEpubReader(
-  opts: EpubReaderOptions,
-): Promise<EpubReaderController> {
-  const { host, bookId, buffer, viewState, themeRoot, callbacks } = opts;
+export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubReaderController> {
+  const { host, bookId, buffer, viewState, callbacks } = opts;
+  const owner = host.ownerDocument;
 
-  const book = acquireEpub(bookId, buffer);
-  const pagination: Pagination = await ensurePagination(bookId, book);
-  const rendition = await createRenderBook(book);
+  const book: EpubBook = acquireEpub(bookId, buffer);
+  const pagination: Pagination = await ensurePagination(bookId, book, host);
+  const pagesCount = pagination.blocks.length;
+  const resources = createPageResources(book.zip);
 
-  // Registering <foliate-view> is a side effect of importing view.js.
-  await import("foliate-js/view.js");
-  const { Overlayer } = await import("foliate-js/overlayer.js");
+  // --- the desk ------------------------------------------------------------
+  const scroller = owner.createElement("div");
+  scroller.className = "rp-desk";
+  scroller.setAttribute("data-reader-surface", "");
+  scroller.style.cssText = [
+    "position:relative",
+    "width:100%",
+    "height:100%",
+    "overflow:auto",
+    `background:${PAGE_FRAME.background}`,
+    "overscroll-behavior:contain",
+  ].join(";");
+  const strip = owner.createElement("div");
+  strip.className = "rp-strip";
+  strip.style.position = "relative";
+  scroller.append(strip);
+  host.replaceChildren(scroller);
 
-  const view = document.createElement("foliate-view") as FoliateView;
-  view.style.display = "block";
-  view.style.width = "100%";
-  view.style.height = "100%";
-  // The white space beside the text is inline padding on the element, which
-  // both flows are inside: the renderer's gap is zero because paginated and
-  // scrolled spend a gap against two different containers and come out a
-  // stripe apart (docs/pitfall/247). The line itself is capped by the
-  // renderer's grid track, max-inline-size times max-column-count; the cap on
-  // the element is the same measure once more, so the surface around it stays
-  // full width and the tap zones still reach the screen edge.
-  view.style.maxWidth = "48rem";
-  view.style.margin = "0 auto";
-  view.style.paddingInline = "1.5rem";
-  host.replaceChildren(view);
+  const slots: Slot[] = [];
+  for (let i = 0; i < pagesCount; i++) {
+    const el = owner.createElement("div");
+    el.className = "rp-slot";
+    el.style.position = "absolute";
+    el.dataset.page = String(i);
+    strip.append(el);
+    slots.push({ el, card: null });
+  }
 
-  let layout: "vertical" | "paged" = viewState?.layout ?? "vertical";
-  let fontStep = openingFontStep(viewState);
-  let pageIndex = viewState?.pageIndex ?? 0;
-  let quoteActive = false;
+  // --- state --------------------------------------------------------------
+  let layout: ReadingLayout = viewState?.layout ?? "vertical";
+  let zoom: Zoom = openingEpubZoom(layout, viewState?.scale);
+  let scale = 1;
+  let pageIndex = 0;
+  let pageY = 0;
   let destroyed = false;
+  let quote: { pageIndex: number } | null = null;
+  let mountedFrom = 0;
+  let mountedTo = -1;
+  let scrollTimer: number | null = null;
+  let pendingShow = 0;
 
-  // The extracted text of each frame document, so a visible range becomes an
-  // offset. Keyed on the document itself: the renderer builds a new one for
-  // every section it loads and drops the old one, and this map goes with it.
-  const texts = new WeakMap<Document, { text: DocumentText; runs: Map<Node, TextRun> }>();
-  function textOf(doc: Document): { text: DocumentText; runs: Map<Node, TextRun> } {
-    const cached = texts.get(doc);
-    if (cached) return cached;
-    const text = extractDocumentText(doc);
-    const entry = { text, runs: indexRuns(text) };
-    texts.set(doc, entry);
-    return entry;
+  const viewport = () => ({ clientWidth: scroller.clientWidth, clientHeight: scroller.clientHeight });
+
+  // Slot geometry for the layout in force. Vertical: sheets stacked with a
+  // gap, centred when narrower than the desk. Paged: one viewport-sized slot
+  // per page, side by side, the sheet centred in it.
+  function slotSize(): { w: number; h: number; pitchX: number; pitchY: number } {
+    const { pageWidth, pageHeight, pitch } = stripMetrics(scale);
+    if (layout === "vertical") {
+      const w = Math.max(scroller.clientWidth, pageWidth);
+      return { w, h: pageHeight, pitchX: 0, pitchY: pitch };
+    }
+    const w = Math.max(scroller.clientWidth, pageWidth);
+    const h = Math.max(scroller.clientHeight, pageHeight);
+    return { w, h, pitchX: w, pitchY: 0 };
   }
 
-  function contents(): EpubContents | null {
-    return view.renderer?.getContents?.()[0] ?? null;
+  function applyGeometry(): void {
+    scale = zoomScale(zoom, layout, viewport());
+    const { pageWidth, pageHeight } = stripMetrics(scale);
+    const s = slotSize();
+    if (layout === "vertical") {
+      strip.style.width = `${s.w}px`;
+      strip.style.height = `${pagesCount * s.pitchY + PAGE_GAP}px`;
+      scroller.style.scrollSnapType = "none";
+    } else {
+      strip.style.width = `${pagesCount * s.pitchX}px`;
+      strip.style.height = `${s.h}px`;
+      scroller.style.scrollSnapType = "x mandatory";
+    }
+    const left = Math.max(0, (s.w - pageWidth) / 2);
+    const top = layout === "vertical" ? 0 : Math.max(0, (s.h - pageHeight) / 2);
+    for (let i = 0; i < slots.length; i++) {
+      const el = slots[i].el;
+      el.style.width = `${s.w}px`;
+      el.style.height = `${s.h}px`;
+      el.style.left = `${i * s.pitchX}px`;
+      el.style.top = `${layout === "vertical" ? i * s.pitchY + PAGE_GAP / 2 : 0}px`;
+      el.style.scrollSnapAlign = layout === "paged" ? "start" : "none";
+      const card = slots[i].card;
+      if (card) {
+        card.setScale(scale);
+        card.el.style.left = `${left}px`;
+        card.el.style.top = `${top}px`;
+      }
+    }
   }
 
-  function allContents(): EpubContents[] {
-    return view.renderer?.getContents?.() ?? [];
-  }
+  // --- mounting ---------------------------------------------------------------
+  const cardPool: PageCard[] = [];
 
-  function applyStyles(): void {
-    view.renderer?.setStyles?.(readerCss(fontStep, readerThemeOf(themeRoot)));
-  }
-
-  function emit(cfi: string | null): void {
-    callbacks.onChangeViewStats(statsOf({ pageIndex, pagination, fontStep, layout }));
-    callbacks.onChangeViewState(viewStateOf({ pageIndex, cfi, fontStep, layout }));
-  }
-
-  // Where the renderer says it is, in the numbers the app speaks. The visible
-  // range's start is the point: it is the first thing on the screen, which is
-  // what "the page you are on" means in both layouts.
-  function onRelocate(): void {
-    if (destroyed) return;
-    const c = contents();
-    if (!c?.doc) return;
-    const loc = view.lastLocation;
-    const { text, runs } = textOf(c.doc);
-    const range = loc?.range;
-    const offset = range
-      ? offsetOfPoint(text, runs, range.startContainer, range.startOffset)
-      : 0;
-    pageIndex = blockIndexAt(pagination, c.index, offset);
-    emit(loc?.cfi ?? null);
-  }
-
-  view.addEventListener("relocate", onRelocate);
-
-  await view.open(rendition);
-  const renderer = view.renderer;
-  renderer.setAttribute("flow", flowFor(layout));
-  for (const [name, value] of Object.entries(RENDERER_GEOMETRY)) {
-    renderer.setAttribute(name, value);
-  }
-  applyStyles();
-
-  // The marks, before the first section is laid out: `create-overlay` fires
-  // inside init() for the section it opens on, and a layer built after it would
-  // miss the paint.
-  let tool: Tool | undefined;
-  let fingerDraw = false;
-  const marks: AnnotationLayer = createAnnotationLayer({
-    host: {
-      getCFI: (index, range) => view.getCFI(index, range),
-      resolveCFI: (cfi) => view.resolveCFI(cfi),
-      goTo: (target) => view.goTo(target),
-    },
-    overlayer: Overlayer,
-    pagination,
-    contents: allContents,
-    textOf,
-    authorName: opts.authorName,
-    onSaveAnnotations: (anns) => callbacks.onSaveAnnotations(anns),
-    onSelectAnnotations: (ids) => callbacks.onSelectAnnotations(ids),
-    onAnnotationPopup: (params) => callbacks.onAnnotationPopup(params),
-  });
-  marks.set(opts.annotations);
-
-  // A section's overlayer exists a moment after this event: view.js emits it
-  // from inside #createOverlayer, and the renderer only takes the overlayer
-  // back on the line after that call returns. A microtask is the wait.
-  function onCreateOverlay(e: Event): void {
-    const index = (e as CustomEvent<{ index?: number }>).detail?.index;
-    if (typeof index !== "number") return;
-    queueMicrotask(() => {
-      if (!destroyed) marks.paintSection(index);
+  function mountSlot(i: number): PageCard {
+    const slot = slots[i];
+    if (slot.card) return slot.card;
+    const card = cardPool.pop() ?? createPageCard(owner, resources);
+    slot.card = card;
+    const { pageWidth, pageHeight } = stripMetrics(scale);
+    const s = slotSize();
+    card.setScale(scale);
+    card.el.style.left = `${Math.max(0, (s.w - pageWidth) / 2)}px`;
+    card.el.style.top = `${layout === "vertical" ? 0 : Math.max(0, (s.h - pageHeight) / 2)}px`;
+    slot.el.append(card.el);
+    const block = pagination.blocks[i];
+    const doc = book.docs[block.spine];
+    const ordinal = i - firstPageOfSpine(block.spine);
+    const token = ++pendingShow;
+    void card.show(doc, block.cfi, ordinal).then(() => {
+      if (destroyed || token < 0) return;
     });
-  }
-  view.addEventListener("create-overlay", onCreateOverlay);
-
-  // Every section's frame, made transparent to pointers as it loads.
-  //
-  // The frame does not merely fail to dispatch events inside itself
-  // (docs/pitfall/244) — it swallows them, so a touch that lands on the text
-  // reaches nothing at all, the parent page included (docs/pitfall/252). With
-  // pointer-events off, that touch hits the renderer's own container behind it
-  // and bubbles out to the pane, which is where every gesture this reader has
-  // is read: tapping an edge to turn, swiping, dragging a selection out of the
-  // text with caretRangeFromPoint (annotation-layer.ts).
-  //
-  // What it costs is the system's own long-press selection, which needs the
-  // frame to receive the touch. That is deliberate and it matches the PDF side:
-  // this app never marks by way of a system selection, on either format — the
-  // pen drags and that is the selection (docs/39 §5).
-  function onSectionLoad(e: Event): void {
-    const doc = (e as CustomEvent<{ doc?: Document }>).detail?.doc;
-    const frame = doc?.defaultView?.frameElement as HTMLElement | null | undefined;
-    if (frame) frame.style.pointerEvents = "none";
-  }
-  view.addEventListener("load", onSectionLoad);
-
-  // open() hands the book over and lays nothing out; without init() the
-  // renderer sits on an empty frame and `relocate` never fires, which reads
-  // exactly like a hang (docs/62 §3).
-  await view.init({ lastLocation: restoreTarget(pagination, viewState), showTextStart: false });
-
-  function setFontStep(next: number): void {
-    const step = clampFontStep(next);
-    if (step === fontStep) return;
-    fontStep = step;
-    applyStyles();
-    emit(view.lastLocation?.cfi ?? null);
+    return card;
   }
 
+  function unmountSlot(i: number): void {
+    const slot = slots[i];
+    if (!slot.card) return;
+    slot.card.el.remove();
+    slot.card.clear();
+    cardPool.push(slot.card);
+    slot.card = null;
+  }
+
+  const spineStarts = new Map<number, number>();
+  for (let i = 0; i < pagination.blocks.length; i++) {
+    const s = pagination.blocks[i].spine;
+    if (!spineStarts.has(s)) spineStarts.set(s, i);
+  }
+  function firstPageOfSpine(spine: number): number {
+    return spineStarts.get(spine) ?? 0;
+  }
+
+  function visibleRange(): { first: number; last: number } {
+    if (layout === "vertical") {
+      return visibleColumnRange(scroller.scrollTop, scroller.clientHeight, scale, pagesCount);
+    }
+    const s = slotSize();
+    const first = Math.max(0, Math.floor(scroller.scrollLeft / s.pitchX));
+    const last = Math.min(pagesCount - 1, Math.floor((scroller.scrollLeft + scroller.clientWidth - 1) / s.pitchX));
+    return { first, last: Math.max(first, last) };
+  }
+
+  function syncMounted(): void {
+    const { first, last } = visibleRange();
+    const { from, to } = mountRange(first, last, pagesCount, MOUNT_MARGIN);
+    for (let i = mountedFrom; i <= mountedTo; i++) if (i < from || i > to) unmountSlot(i);
+    for (let i = from; i <= to; i++) mountSlot(i);
+    mountedFrom = from;
+    mountedTo = to;
+  }
+
+  // --- position -----------------------------------------------------------------
+  function readPosition(): void {
+    if (layout === "vertical") {
+      const at = columnPosition(scroller.scrollTop, scale, pagesCount);
+      pageIndex = at.pageIndex;
+      pageY = at.pageY;
+    } else {
+      pageIndex = flipPosition(scroller.scrollLeft, slotSize().pitchX, pagesCount);
+      pageY = 0;
+    }
+  }
+
+  function emit(): void {
+    if (destroyed) return;
+    callbacks.onChangeViewStats(statsOf({ pageIndex, pagination, layout, zoom, scale }));
+    callbacks.onChangeViewState(
+      viewStateOf({
+        pageIndex,
+        cfi: pagination.blocks[pageIndex]?.cfi ?? null,
+        scale,
+        layout,
+        pageX: 0,
+        pageY: layout === "vertical" ? Math.round(pageY) : 0,
+      }),
+    );
+  }
+
+  function placePage(index: number, y = 0): void {
+    const i = Math.min(Math.max(0, index), pagesCount - 1);
+    if (layout === "vertical") {
+      scroller.scrollTop = columnScrollTop(i, y, scale);
+    } else {
+      scroller.scrollLeft = i * slotSize().pitchX;
+    }
+    readPosition();
+    syncMounted();
+    emit();
+  }
+
+  function onScroll(): void {
+    if (destroyed) return;
+    readPosition();
+    syncMounted();
+    if (scrollTimer !== null) clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      scrollTimer = null;
+      emit();
+    }, 120) as unknown as number;
+  }
+  scroller.addEventListener("scroll", onScroll, { passive: true });
+
+  // A fit follows the viewport: the sheet is re-scaled and the reader stays on
+  // the page they were on.
+  const observer = new ResizeObserver(() => {
+    if (destroyed) return;
+    const keep = { pageIndex, pageY };
+    applyGeometry();
+    placePage(keep.pageIndex, keep.pageY);
+  });
+  observer.observe(scroller);
+
+  // --- the quote ------------------------------------------------------------------
   function clearQuote(): void {
-    if (!quoteActive) return;
-    quoteActive = false;
-    contents()?.overlayer?.remove(QUOTE_KEY);
+    if (!quote) return;
+    const card = slots[quote.pageIndex]?.card;
+    quote = null;
+    if (card?.overlay) card.overlay.replaceChildren();
     callbacks.onQuoteHighlightChange(false);
   }
 
-  async function findQuote(doc: Document, searchText: string): Promise<Range | null> {
-    const [{ searchMatcher }, { textWalker }] = await Promise.all([
-      import("foliate-js/search.js"),
-      import("foliate-js/text-walker.js"),
-    ]);
-    const matcher = searchMatcher(textWalker, {
-      defaultLocale: doc.documentElement.lang || "en",
-    }) as (d: Document, q: string) => Iterable<{ range: Range }>;
-    for (const query of quoteQueries(searchText)) {
-      for (const hit of matcher(doc, query)) {
-        if (hit?.range) return hit.range;
-      }
+  async function cardReady(i: number): Promise<PageCard | null> {
+    const card = mountSlot(i);
+    if (card.mounted) await card.mounted.ready;
+    return destroyed ? null : card;
+  }
+
+  async function paintQuote(i: number, searchText: string): Promise<boolean> {
+    const block = pagination.blocks[i];
+    const doc = book.docs[block.spine];
+    if (!doc) return false;
+    const span = findQuoteAt(doc.text.text, searchText, block.charOffset);
+    if (!span) return false;
+    const target = blockIndexAt(pagination, block.spine, span.start);
+    if (target !== i) placePage(target);
+    const card = await cardReady(target);
+    if (!card?.mounted || !card.overlay) return false;
+    const text = extractDocumentText(card.mounted.root);
+    const start = runAt(text.runs, span.start);
+    const end = runAt(text.runs, span.end);
+    if (!start || !end) return false;
+    const range = owner.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    const rects = card.rectsOf(range);
+    if (rects.length === 0) return false;
+    card.overlay.replaceChildren();
+    for (const r of rects) {
+      if (r.right < 0 || r.left > PAGE_WIDTH || r.bottom < 0 || r.top > PAGE_HEIGHT) continue;
+      const d = owner.createElement("div");
+      d.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:${QUOTE_COLOR};opacity:${QUOTE_OPACITY};border-radius:2px;`;
+      card.overlay.append(d);
+    }
+    quote = { pageIndex: target };
+    callbacks.onQuoteHighlightChange(true);
+    return true;
+  }
+
+  // --- links --------------------------------------------------------------------------
+  function cardAt(clientX: number, clientY: number): PageCard | null {
+    const hit = owner.elementFromPoint(clientX, clientY);
+    if (!hit) return null;
+    for (const slot of slots) {
+      if (slot.card && (slot.card.el === hit || slot.card.el.contains(hit))) return slot.card;
     }
     return null;
   }
 
-  async function goToBlock(index: number): Promise<void> {
-    const cfi = cfiForBlock(pagination, index);
-    if (cfi) await view.goTo(cfi);
+  function pageOfHref(fromEntry: string, href: string): number | null {
+    const entry = resolveZipPath(fromEntry, href);
+    const fragment = hrefFragment(href);
+    const doc = book.docs.find((d) => d.entry === entry) ?? (href.startsWith("#") ? book.docs.find((d) => d.entry === fromEntry) : undefined);
+    if (!doc) return null;
+    let offset = 0;
+    if (fragment) {
+      const el = doc.text.ids.get(fragment);
+      if (el) offset = doc.text.offsets.get(el) ?? 0;
+    }
+    return blockIndexAt(pagination, doc.index, offset);
   }
 
-  // The anchor at a point on the page, hit-tested inside the frame. The frame
-  // is same-origin, so its document answers elementFromPoint; the coordinates
-  // are the page's, and the frame's own box is what puts them in its space.
-  function anchorAt(clientX: number, clientY: number): Element | null {
-    const c = contents();
-    const frame = c?.doc?.defaultView?.frameElement;
-    if (!c?.doc || !frame) return null;
-    const box = frame.getBoundingClientRect();
-    const el = c.doc.elementFromPoint(clientX - box.left, clientY - box.top);
-    return el?.closest?.("a[href]") ?? null;
-  }
+  // --- first paint --------------------------------------------------------------------
+  applyGeometry();
+  const target = restoreTarget(pagination, viewState);
+  placePage(target.pageIndex, target.pageY);
 
   const controller: EpubReaderController = {
-    zoomIn: () => setFontStep(fontStep + 1),
-    zoomOut: () => setFontStep(fontStep - 1),
-    zoomReset: () => setFontStep(DEFAULT_FONT_STEP),
+    zoomIn: () => {
+      const keep = { pageIndex, pageY };
+      zoom = { kind: "scale", scale: zoomStepUp(scale) };
+      applyGeometry();
+      placePage(keep.pageIndex, keep.pageY);
+    },
+    zoomOut: () => {
+      const keep = { pageIndex, pageY };
+      zoom = { kind: "scale", scale: zoomStepDown(scale) };
+      applyGeometry();
+      placePage(keep.pageIndex, keep.pageY);
+    },
+    zoomReset: () => {
+      const keep = { pageIndex, pageY };
+      zoom = { kind: "lock", lock: LAYOUT_SETTINGS[layout].zoom };
+      applyGeometry();
+      placePage(keep.pageIndex, keep.pageY);
+    },
 
     setLayout: (mode) => {
       if (mode === layout) return;
+      const keep = pageIndex;
       layout = mode;
-      renderer.setAttribute("flow", flowFor(mode));
-      // Changing `flow` at runtime does not recompute the column width: the
-      // spike measured the text keeping about 55% of the screen after a switch
-      // (docs/62 §6). The attribute change is answered synchronously, against
-      // the container the layout being left had sized. A second render, once
-      // layout has run, is what makes the switch land.
-      requestAnimationFrame(() => {
-        if (destroyed) return;
-        renderer.render();
-        emit(view.lastLocation?.cfi ?? null);
-      });
-      emit(view.lastLocation?.cfi ?? null);
+      zoom = { kind: "lock", lock: LAYOUT_SETTINGS[layout].zoom };
+      applyGeometry();
+      placePage(keep, 0);
     },
 
     navigate: (target) => {
       clearQuote();
-      if (target.annotationID && marks.goToMark(target.annotationID)) return;
-      if (typeof target.pageIndex === "number") void goToBlock(target.pageIndex);
+      if (typeof target.pageIndex === "number") placePage(target.pageIndex, 0);
     },
 
     highlightQuote: async (page, req) => {
       clearQuote();
-      await goToBlock(page);
-      const c = contents();
-      if (!c?.doc || !c.overlayer) return false;
-      const range = await findQuote(c.doc, req.searchText);
-      if (!range) return false;
-      await renderer.scrollToAnchor(range);
-      // Re-read the contents: scrolling to the anchor may have moved to another
-      // section, which is a different document and a different overlayer.
-      const after = contents();
-      if (!after?.overlayer) return false;
-      after.overlayer.add(QUOTE_KEY, range, Overlayer.highlight, { color: QUOTE_COLOR });
-      quoteActive = true;
-      callbacks.onQuoteHighlightChange(true);
-      return true;
+      placePage(page, 0);
+      return paintQuote(Math.min(Math.max(0, page), pagesCount - 1), req.searchText);
     },
 
     clearQuoteHighlight: clearQuote,
 
-    // The tool and the finger setting are routing state and nothing else: this
-    // side publishes nothing when either changes, so a tool switch can never be
-    // mistaken for a selection the reader made (pitfall 59).
-    setTool: (next?: Tool) => {
-      tool = next;
-    },
-    setFingerDraw: (on: boolean) => {
-      fingerDraw = on;
-    },
-    setAnnotations: (anns: Annotation[]) => marks.set(anns),
-    unsetAnnotations: (ids: string[]) => marks.unset(ids),
-    selectAnnotations: (ids: string[]) => marks.select(ids),
-
-    pointerAction: (pointerType) => routeEpubPointer(tool, pointerType, fingerDraw),
-    beginDraw: (x, y) => marks.beginDrag(x, y),
-    extendDraw: (x, y) => marks.extendDrag(x, y),
-    endDraw: () => {
-      const stroke = strokeOfTool(tool);
-      if (!stroke) {
-        marks.cancelDrag();
-        return;
-      }
-      marks.endDrag(stroke, tool?.color ?? DEFAULT_MARK_COLOR);
-    },
-    cancelDraw: () => marks.cancelDrag(),
-
-    // A lift that was not the end of a drag can only mean the mark under it:
-    // the annotation editor, exactly as tapping one on a page does. There is no
-    // second path here for a selection the system made, because there is no
-    // system selection to read — the frame takes no pointers at all
-    // (docs/pitfall/252), so every selection in this reader was dragged by
-    // beginDraw/extendDraw and ends in endDraw.
-    consumeUp: (x, y) => marks.hit(x, y),
+    // Marks on the new page cards are the next stage (docs/63): the overlay on
+    // every card, rangeOf/cfiOf and the two coordinate conversions are the hooks
+    // it hangs on. Until then the tool rack does nothing on an EPUB.
+    setTool: (_tool?: Tool) => {},
+    setFingerDraw: (_on: boolean) => {},
+    setAnnotations: (_anns: Annotation[]) => {},
+    unsetAnnotations: (_ids: string[]) => {},
+    selectAnnotations: (_ids: string[]) => {},
 
     followLinkAt: (clientX, clientY) => {
-      const c = contents();
-      const anchor = anchorAt(clientX, clientY);
-      if (!c || !anchor) return false;
-      const target = bookLinkTarget(anchor.getAttribute("href"));
-      if (!target) return false;
-      if (target.kind === "external") {
-        openExternal(target.url);
+      const card = cardAt(clientX, clientY);
+      if (!card || card.spine === null) return false;
+      const inner = card.shadow.elementFromPoint(clientX, clientY);
+      const anchor = inner?.closest?.("a[href]");
+      if (!anchor) return false;
+      const link = bookLinkTarget(anchor.getAttribute("href"));
+      if (!link) return false;
+      if (link.kind === "external") {
+        openExternal(link.url);
         return true;
       }
-      // Against the section the anchor is in, so a relative path is resolved
-      // the same way foliate resolves the ones it loads.
-      const section = rendition.sections[c.index];
-      const href = section?.resolveHref?.(target.href) ?? target.href;
+      const page = pageOfHref(book.docs[card.spine].entry, link.href);
+      if (page === null) return false;
       clearQuote();
-      void view.goTo(href);
+      placePage(page, 0);
       return true;
     },
 
     turn: (direction) => {
       clearQuote();
-      void (direction === "prev" ? view.prev() : view.next());
+      if (layout === "paged") {
+        placePage(pageIndex + (direction === "next" ? 1 : -1), 0);
+        return;
+      }
+      const step = scroller.clientHeight * 0.9;
+      scroller.scrollTop += direction === "next" ? step : -step;
     },
     currentLayout: () => layout,
-    refreshTheme: applyStyles,
+    cardAt,
     destroy: () => {
       destroyed = true;
-      view.removeEventListener("relocate", onRelocate);
-      view.removeEventListener("create-overlay", onCreateOverlay);
-      view.removeEventListener("load", onSectionLoad);
-      try {
-        view.close();
-      } catch {
-        // A view that never finished opening has nothing to close.
-      }
-      view.remove();
-      (rendition as { destroy?: () => void }).destroy?.();
+      observer.disconnect();
+      scroller.removeEventListener("scroll", onScroll);
+      if (scrollTimer !== null) clearTimeout(scrollTimer);
+      for (let i = 0; i < slots.length; i++) unmountSlot(i);
+      resources.revoke();
+      scroller.remove();
       releaseEpub(bookId);
     },
   };
 
-  // The first screen: init() has laid it out, and relocate has already fired
-  // with it, but a book restored to a saved CFI reports its position before the
-  // shell has the handle. One more emit, so the top bar is right on arrival.
-  onRelocate();
+  emit();
   return controller;
 }

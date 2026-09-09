@@ -392,6 +392,46 @@ html {
   overscroll-behavior-x: none;
 }
 
+/* The faces an EPUB's pages are set in (docs/63). Shipped in public/fonts so
+   the same book paginates the same on every device: the page table is cut
+   against these and synced, and a device with other fonts would show other
+   pages. Declared at document level, which is what a shadow root can use. */
+@font-face {
+  font-family: "Noto Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/NotoSerif-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Serif";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/NotoSerif-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/NotoSerif-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Serif";
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/NotoSerif-BoldItalic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Serif CJK SC";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/NotoSerifCJKsc-Regular.woff2") format("woff2");
+}
+
 /* The app's own stack, kept over preflight's `--default-font-family` on <html>
    (a rule on body outranks an inherited one). Controls inherit it too, since
    preflight gives them `font: inherit`. */

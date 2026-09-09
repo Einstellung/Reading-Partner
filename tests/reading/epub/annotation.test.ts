@@ -22,14 +22,12 @@ import {
   rangeAtSpan,
   sameWords,
 } from "../../../src/reading/epub/annotation";
-import { paginate } from "../../../src/reading/epub/paginate";
+import { characterRuler, paginate, type Pagination } from "../../../src/reading/epub/paginate";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import { indexRuns, offsetOfPoint } from "../../../src/reading/epub/reader-logic";
-import { renderLoader } from "../../../src/reading/epub/render-book";
 import { extractDocumentText } from "../../../src/reading/epub/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
 import { toDistillAnnotations } from "../../../src/memory/observations/arrears";
-import { routeEpubPointer, strokeOfTool } from "../../../src/reading/epub/pen";
 import { buildEpub, prose } from "./fixture";
 
 const EPUBCFI = "../../../vendor/foliate-js/epubcfi.js";
@@ -50,16 +48,16 @@ function frameDocument(source: string): Document {
   return parser.parseFromString(new XMLSerializer().serializeToString(once), "application/xhtml+xml");
 }
 
-// One synthetic book, rendered the way the reader renders it.
-function frames(spec: Parameters<typeof buildEpub>[0]): {
+// One synthetic book, rendered the way the reader renders it: the sanitized
+// markup, parsed once more the way a page card's clone is.
+async function frames(spec: Parameters<typeof buildEpub>[0]): Promise<{
   docs: Document[];
-  pagination: ReturnType<typeof paginate>;
-} {
+  pagination: Pagination;
+}> {
   const book = parseEpub(buildEpub(spec));
-  const loader = renderLoader(book);
   return {
-    docs: book.docs.map((d) => frameDocument(loader.loadText(d.entry)!)),
-    pagination: paginate(book),
+    docs: book.docs.map((d) => frameDocument(d.html)),
+    pagination: await paginate(book, characterRuler(700)),
   };
 }
 
@@ -76,9 +74,9 @@ function rangeOf(doc: Document, cfi: string): Range {
   return CFI.toRange(doc, parts);
 }
 
-describe("a marked range survives being written as a CFI", () => {
-  test("round trip lands on the same characters", () => {
-    const { docs } = frames({
+describe("a marked range survives being written as a CFI", async () => {
+  test("round trip lands on the same characters", async () => {
+    const { docs } = await frames({
       docs: [
         { name: "c1.xhtml", body: `<h1>One</h1>${prose(8, 300)}` },
         { name: "c2.xhtml", body: `<h1>Two</h1><p>alpha beta gamma</p>${prose(6, 260)}` },
@@ -100,8 +98,8 @@ describe("a marked range survives being written as a CFI", () => {
     }
   });
 
-  test("a range CFI is a range, not a point", () => {
-    const { docs } = frames({ docs: [{ name: "c1.xhtml", body: `<p>alpha beta gamma delta</p>` }] });
+  test("a range CFI is a range, not a point", async () => {
+    const { docs } = await frames({ docs: [{ name: "c1.xhtml", body: `<p>alpha beta gamma delta</p>` }] });
     const text = extractDocumentText(docs[0]);
     const range = rangeAtSpan(docs[0], text, { start: 6, end: 15 })!;
     const cfi = cfiOf(0, range);
@@ -110,9 +108,9 @@ describe("a marked range survives being written as a CFI", () => {
   });
 });
 
-describe("the quote is the repair when the CFI is not", () => {
-  test("the words are found again in a document whose tree moved", () => {
-    const { docs } = frames({
+describe("the quote is the repair when the CFI is not", async () => {
+  test("the words are found again in a document whose tree moved", async () => {
+    const { docs } = await frames({
       docs: [{ name: "c1.xhtml", body: `<p>one</p><p>the passage that was marked</p><p>three</p>` }],
     });
     const text = extractDocumentText(docs[0]);
@@ -121,7 +119,7 @@ describe("the quote is the repair when the CFI is not", () => {
 
     // The same book with a paragraph inserted ahead of it: every CFI step past
     // the insertion now names a different node, and the quote does not care.
-    const moved = frames({
+    const moved = await frames({
       docs: [
         {
           name: "c1.xhtml",
@@ -239,34 +237,5 @@ describe("the order the trace list reads marks in", () => {
     expect(epubSortOffset(makeEpubSortIndex(4, 1234))).toBe(1234);
     expect(epubSortOffset("00004|000123|00045")).toBeNull();
     expect(epubSortOffset(undefined)).toBeNull();
-  });
-});
-
-describe("which pointer marks the book and which moves it", () => {
-  const highlight = { type: "highlight" as const, color: "#ffd400" };
-  const underline = { type: "underline" as const, color: "#a28ae5" };
-
-  test("no pen out, nothing draws", () => {
-    expect(routeEpubPointer(undefined, "pen", true)).toBe("navigate");
-    expect(routeEpubPointer({ type: "pointer" }, "mouse", true)).toBe("navigate");
-  });
-
-  test("a pen out: stylus and mouse draw, the finger asks the setting", () => {
-    expect(routeEpubPointer(highlight, "pen", false)).toBe("draw");
-    expect(routeEpubPointer(highlight, "mouse", false)).toBe("draw");
-    expect(routeEpubPointer(highlight, "touch", false)).toBe("navigate");
-    expect(routeEpubPointer(highlight, "touch", true)).toBe("draw");
-  });
-
-  test("the navigation lock takes the stylus too", () => {
-    expect(routeEpubPointer({ type: "navlock" }, "pen", true)).toBe("navigate");
-    expect(routeEpubPointer({ type: "navlock" }, "touch", true)).toBe("navigate");
-  });
-
-  test("ink has nothing to hold onto in a reflowing book", () => {
-    expect(strokeOfTool({ type: "ink", color: "#a28ae5" })).toBeNull();
-    expect(routeEpubPointer({ type: "ink" }, "pen", false)).toBe("navigate");
-    expect(strokeOfTool(highlight)).toBe("highlight");
-    expect(strokeOfTool(underline)).toBe("underline");
   });
 });

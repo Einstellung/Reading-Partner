@@ -476,7 +476,7 @@ export const PALACE = [
     merge: "opaque",
     deleteWith: "book",
     gc: "never",
-    note: "written once and never rewritten, so two devices that cut it independently keep whichever copy this one already has",
+    note: "written once and never rewritten (a version-1 table is replaced by a version-2 one exactly once, docs/63), so two devices that cut it independently keep whichever copy this one already has",
   },
   {
     kind: "figures",
