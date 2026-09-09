@@ -223,6 +223,14 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       ref={surfaceRef}
       className={`relative h-full w-full overflow-hidden bg-desk outline-none ${props.className ?? ""}`}
       data-testid="epub-reader"
+      // The same attribute the PDF surface carries (styles.css): no native
+      // selection, no touch callout. The frame takes no pointers, so a long
+      // press on the text now lands on this element instead, and iOS answered
+      // it with an edit menu over an empty selection of the page around the
+      // book (docs/pitfall/262). The book's own document is not this document
+      // and does not inherit the rule, so the text inside it stays selectable
+      // for the pen to drag.
+      data-reader-surface=""
       // Focusable so the arrow keys reach it without a global listener that
       // would turn pages while the reader types in the chat.
       tabIndex={-1}
