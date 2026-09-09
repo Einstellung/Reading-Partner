@@ -676,7 +676,7 @@ function collectorView(): BriefingView {
     async article(itemId: string): Promise<ArticleState> {
       const briefing = p.snapshot().briefing;
       if (!briefing || !briefing.items[itemId]) return { kind: "unknown" };
-      const dropped = briefing.filtered.find((f) => f.itemId === itemId);
+      const dropped = (briefing.filtered ?? []).find((f) => f.itemId === itemId);
       if (dropped) return { kind: "filtered", category: dropped.category };
       const [cached, items] = await Promise.all([
         loadArticle(briefing.date, itemId).catch(() => null),

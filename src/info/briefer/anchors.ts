@@ -74,7 +74,7 @@ export function briefingAnchor(b: Briefing, ctx: CompanionContext): InfoCallAnch
     emptyTitle: BRIEFING_TITLE,
     placeholder: BRIEFING_PLACEHOLDER,
     desk: [briefingRef(b.date, b, ctx)],
-    position: { title: BRIEFING_TITLE, line: b.overview },
+    position: { title: BRIEFING_TITLE, line: b.overview ?? "" },
   };
 }
 

@@ -5,16 +5,31 @@
 
 // Each tier references an item by id; the Briefing carries a denormalized
 // `items` map so the page can render titles/links without the article cache.
+// What one room has to say about the day (docs/63): the cover it wrote, and the
+// judgments it added while writing it. Lives here rather than in boxes/ only
+// until the briefing itself moves.
+export interface LabCover {
+  labId: string;
+  name: string;
+  // One paragraph: what changed in this room today.
+  cover: string;
+  // Judgment ids added today, so the cover can be read against the picture.
+  judgments: string[];
+}
+
 export interface MustRead {
   itemId: string;
   // A personal reason written to the user, referencing their profile.
   reason: string;
+  // Which room picked it. Absent on a legacy briefing.
+  labId?: string;
 }
 
 export interface OneLiner {
   itemId: string;
   // The whole point of the article in one line — reading it is the consumption.
   line: string;
+  labId?: string;
 }
 
 export interface OutOfLane {
@@ -55,20 +70,32 @@ export interface ScreenSummary {
   droppedIds: string[];
 }
 
+// The two shapes in one type, for as long as both exist. Version 2 is cut by
+// room: covers on top and no overview. Absent version is the triage-era
+// briefing, which a device that has not run since the rebuild still has on disk
+// and which the UI still has to render.
 export interface Briefing {
+  // Absent means the legacy shape.
+  version?: 2;
   // Local "YYYY-MM-DD" the briefing is for; only today's is ever shown.
   date: string;
   generatedAt: number;
-  // One honest line summarizing the day (allowed to say it's mostly noise).
-  overview: string;
+  // The rooms that changed today. [] means every room that ran was quiet, which
+  // is a different day from `labs` being absent.
+  labs?: LabCover[];
+  // Names of the rooms that ran and had nothing to say.
+  quiet?: string[];
+  // Legacy: one honest line summarizing the day.
+  overview?: string;
   mustRead: MustRead[];
   oneLiners: OneLiner[];
   // Zero or one anti-echo-chamber pick.
   outOfLane: OutOfLane[];
-  filtered: Filtered[];
+  // Legacy, and never rendered again once the pages are cut over.
+  filtered?: Filtered[];
   items: Record<string, BriefingItemMeta>;
-  // Absent on briefings written before the funnel, and on any run where nothing
-  // was screened.
+  // Legacy. Absent on briefings written before the funnel, and on any run where
+  // nothing was screened.
   screen?: ScreenSummary;
 }
 

@@ -145,7 +145,7 @@ export function articleState(
   itemId: string,
 ): ArticleState {
   if (!briefing || !briefing.items[itemId]) return { kind: "unknown" };
-  const dropped = briefing.filtered.find((f) => f.itemId === itemId);
+  const dropped = (briefing.filtered ?? []).find((f) => f.itemId === itemId);
   if (dropped) return { kind: "filtered", category: dropped.category };
   if (!bodiesMatch(briefing, bodies)) return { kind: "pending" };
   const body = bodies!.bodies[itemId];
