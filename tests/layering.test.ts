@@ -117,6 +117,10 @@ const LAYER: Record<string, Layer> = {
   "reading/delete": "domain",
   "reading/engine": "domain",
   "reading/engine/gesture": "domain",
+  // The EPUB side of the reader, on vendored foliate-js. Peer of reading/engine
+  // rather than a corner of it: that directory is PDFium geometry all the way
+  // down (docs/39), and the two share the shell's contract, not their innards.
+  "reading/epub": "domain",
   "reading/figures": "domain",
   "reading/lecture": "domain",
   "reading/papers": "domain",
