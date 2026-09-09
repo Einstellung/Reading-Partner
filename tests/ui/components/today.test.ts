@@ -3,8 +3,9 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import type { Briefing } from "../../../src/info/collect/types";
+import type { Briefing, LabCover } from "../../../src/info/collect/types";
 import {
+  briefingCardBody,
   briefingEyebrow,
   briefingFooterLine,
   continueMetaLine,
@@ -34,6 +35,10 @@ test("one mark is a mark, one page with no length is just the page", () => {
   expect(continueMetaLine("t", { page: 2, marks: 1 })).toBe("t · p. 2 · 1 mark");
 });
 
+function cover(labId: string, name: string, text: string): LabCover {
+  return { labId, name, cover: text, judgments: [] };
+}
+
 function briefingWith(over: Partial<Briefing>): Briefing {
   return {
     date: "2026-09-05",
@@ -48,18 +53,56 @@ function briefingWith(over: Partial<Briefing>): Briefing {
   } as Briefing;
 }
 
-test("the footer counts what the card is not showing", () => {
+// The card says how much of the day is behind it: how many labs moved, and how
+// much of what they found is worth opening. Not how many headlines were thrown
+// away — a reader with no time is not owed that number.
+test("the footer counts the labs that moved and what is worth opening", () => {
   const b = briefingWith({
-    outOfLane: [{ itemId: "a" }] as Briefing["outOfLane"],
-    oneLiners: [{ itemId: "b" }, { itemId: "c" }] as Briefing["oneLiners"],
-    filtered: [{ itemId: "d" }, { itemId: "e" }, { itemId: "f" }] as Briefing["filtered"],
+    labs: [cover("lab-1", "Robotics", "Arms got cheaper."), cover("lab-2", "Chips", "TSMC slipped.")],
+    mustRead: [{ itemId: "a", reason: "r" }],
+    outOfLane: [{ itemId: "b", reason: "r" }],
+    oneLiners: [{ itemId: "c", line: "l" }],
+    filtered: [{ itemId: "d", category: "vendor PR" }],
   });
-  expect(briefingFooterLine(b)).toBe("1 out of your lane · 2 one-liners · 3 filtered");
+  expect(briefingFooterLine(b)).toBe("2 labs changed · 2 worth reading");
+  expect(briefingFooterLine(b)).not.toContain("filtered");
 });
 
-test("one one-liner is a one-liner", () => {
-  const b = briefingWith({ oneLiners: [{ itemId: "b" }] as Briefing["oneLiners"] });
-  expect(briefingFooterLine(b)).toBe("0 out of your lane · 1 one-liner · 0 filtered");
+test("one lab is a lab", () => {
+  const b = briefingWith({ labs: [cover("lab-1", "Robotics", "Arms got cheaper.")] });
+  expect(briefingFooterLine(b)).toBe("1 lab changed · 0 worth reading");
+});
+
+// A day where every lab ran and none of them changed. Nothing is worth reading
+// by definition, and saying "0 worth reading" would be a second way of saying
+// the same nothing.
+test("an empty day counts the labs and stops", () => {
+  const b = briefingWith({ labs: [], quiet: ["Robotics", "Chips"] });
+  expect(briefingFooterLine(b)).toBe("0 labs changed");
+  expect(briefingCardBody(b)).toBe("Nothing changed today.");
+});
+
+// A briefing made before labs existed has no lab count to give.
+test("a legacy briefing counts only what is worth reading", () => {
+  const b = briefingWith({
+    overview: "A quiet day in AI.",
+    mustRead: [{ itemId: "a", reason: "r" }],
+    oneLiners: [{ itemId: "c", line: "l" }],
+  });
+  expect(briefingFooterLine(b)).toBe("1 worth reading");
+  expect(briefingCardBody(b)).toBe("A quiet day in AI.");
+});
+
+// The card has room for two covers. A third is not summarized, it is elided:
+// the page below has all of them.
+test("the card body is the first two covers, and says when there are more", () => {
+  const two = briefingWith({ labs: [cover("l1", "A", "One."), cover("l2", "B", "Two.")] });
+  expect(briefingCardBody(two)).toBe("One. Two.");
+
+  const three = briefingWith({
+    labs: [cover("l1", "A", "One."), cover("l2", "B", "Two."), cover("l3", "C", "Three.")],
+  });
+  expect(briefingCardBody(three)).toBe("One. Two. …");
 });
 
 // A briefing built today says the time; one built earlier says the date too,

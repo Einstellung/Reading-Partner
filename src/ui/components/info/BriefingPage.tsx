@@ -1,14 +1,13 @@
-// The briefing page (docs/16): the day's four-part document, top to bottom,
-// finite with a clear end. Worth-your-time cards, one-liners, the out-of-lane
-// pick, and a collapsed Filtered row that expands to a title list with
-// "Show anyway". Reactions (open / dismiss / appeal) flow back as feedback.
-// Presentational; the host owns the pipeline, feedback log, and article opening.
+// The briefing page (docs/63): what each lab has to say about the day, then the
+// items worth opening, then the one out-of-lane pick. Written for a reader with
+// no time — nothing here counts what was discarded or describes how the day was
+// processed. Reactions (open / dismiss) flow back as feedback. Presentational;
+// the host owns the pipeline, feedback log, and article opening.
 
-import { useState } from "react";
 import type { Briefing, BriefingItemMeta } from "../../../info/collect/types";
 import { Button } from "../ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { IconSparkle } from "../base/icons";
+import { NOTHING_CHANGED, briefingCovers, isEmptyDay, labTag, quietLine } from "./briefing-view";
 
 // Where a piece of news came from, on the line of the title it belongs to
 // rather than in a pill of its own (docs/51). Small and faint: it is what the
@@ -43,7 +42,6 @@ export interface BriefingPageProps {
   dismissedIds: Set<string>;
   onOpenArticle: (itemId: string) => void;
   onDismiss: (itemId: string, meta: BriefingItemMeta, category?: string) => void;
-  onAppeal: (itemId: string, meta: BriefingItemMeta, category: string) => void;
   onAskBriefing: () => void;
   onAskArticle: (itemId: string) => void;
   onOpenSources: () => void;
@@ -52,6 +50,8 @@ export interface BriefingPageProps {
 export function BriefingPage(props: BriefingPageProps) {
   const { briefing: b } = props;
   const meta = (id: string): BriefingItemMeta | undefined => b.items[id];
+  const covers = briefingCovers(b);
+  const quiet = quietLine(b);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
@@ -68,8 +68,31 @@ export function BriefingPage(props: BriefingPageProps) {
         </Button>
       </div>
 
-      {/* Overview: one honest line. */}
-      <p className="m-0 mb-6 font-display text-[17px] font-medium leading-relaxed text-foreground sm:mb-9 sm:text-[19px]">{b.overview}</p>
+      {/* What the labs have to say, one block each. An empty day says so in the
+          same voice and lists who looked; a briefing from before labs existed
+          still has its overview line. The sections below are empty on an empty
+          day, so each of them draws nothing. */}
+      {isEmptyDay(b) ? (
+        <div className="mb-6 sm:mb-9">
+          <p className="m-0 font-display text-[17px] font-medium leading-relaxed text-foreground sm:text-[19px]">
+            {NOTHING_CHANGED}
+          </p>
+          {quiet && <p className="m-0 mt-2 text-[13px] text-faint-foreground">{quiet}</p>}
+        </div>
+      ) : covers.length > 0 ? (
+        <div className="mb-6 flex flex-col gap-5 sm:mb-9 sm:gap-6">
+          {covers.map((c) => (
+            <div key={c.labId}>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">{c.name}</div>
+              <p className="m-0 mt-1.5 font-display text-[17px] font-medium leading-relaxed text-foreground sm:text-[19px]">
+                {c.cover}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="m-0 mb-6 font-display text-[17px] font-medium leading-relaxed text-foreground sm:mb-9 sm:text-[19px]">{b.overview}</p>
+      )}
 
       {/* Worth your time. */}
       {b.mustRead.length > 0 && (
@@ -95,6 +118,9 @@ export function BriefingPage(props: BriefingPageProps) {
                     <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>
                       <div className="leading-snug">
                         <SourceTag name={m.sourceName} />
+                        {/* Which lab picked it, in the same faint style as the
+                            source: both are context the eye skips past. */}
+                        <SourceTag name={labTag(b, r.labId)} />
                         <span className="font-display text-[16px] font-medium text-foreground">{m.title}</span>
                         {opened && (
                           <span className="ml-2 text-[11px] text-faint-foreground">Read</span>
@@ -136,6 +162,7 @@ export function BriefingPage(props: BriefingPageProps) {
                 <li key={r.itemId} className={"group flex items-start gap-3 " + (dismissed ? "opacity-45" : "")}>
                   <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-muted-strong" />
                   <span className="min-w-0 flex-1 text-[14px] leading-relaxed text-muted-foreground">
+                    <SourceTag name={labTag(b, r.labId)} />
                     {r.line}{" "}
                     {/* Inline in the sentence, so the target comes from HIT_44:
                         padding here would break the line. */}
@@ -182,100 +209,6 @@ export function BriefingPage(props: BriefingPageProps) {
             </section>
           );
         })()}
-
-      {/* Filtered: collapsed summary expanding to titles with "Show anyway".
-          Shown for a screen-only day too (docs/35): the day's discards are
-          mostly headlines that never got fetched, and a page that stayed silent
-          about them would read as a day with nothing in it. */}
-      {((b.filtered ?? []).length > 0 || !!b.screen?.dropped) && (
-        <FilteredSection
-          filtered={b.filtered ?? []}
-          screen={b.screen}
-          meta={meta}
-          onAppeal={props.onAppeal}
-          openedIds={props.openedIds}
-        />
-      )}
-
-      <div className="mt-4 flex items-center justify-center py-6 text-[12px] text-faint-foreground">
-        · end of today's briefing ·
-      </div>
     </div>
-  );
-}
-
-function FilteredSection({
-  filtered,
-  screen,
-  meta,
-  onAppeal,
-  openedIds,
-}: {
-  filtered: NonNullable<Briefing["filtered"]>;
-  screen: Briefing["screen"];
-  meta: (id: string) => BriefingItemMeta | undefined;
-  onAppeal: (itemId: string, meta: BriefingItemMeta, category: string) => void;
-  openedIds: Set<string>;
-}) {
-  const [open, setOpen] = useState(false);
-
-  // Category tallies for the collapsed line: "vendor PR ×8, conference recap ×6".
-  const tally = new Map<string, number>();
-  for (const f of filtered) tally.set(f.category, (tally.get(f.category) ?? 0) + 1);
-  const summary = [...tally.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([cat, n]) => `${cat} ×${n}`)
-    .join(", ");
-
-  // What the screen dropped on headlines alone (docs/35). A count, not a list:
-  // the titles were never fetched, and appealing one means widening the profile,
-  // not reopening an article.
-  const dropped = screen?.dropped ?? 0;
-  const screenLine = dropped
-    ? `${dropped} more of the day's ${screen!.discovered} headlines were skipped before fetching` +
-      (screen!.cappedOut ? `, ${screen!.cappedOut} of them at the daily fetch cap` : "")
-    : null;
-
-  // Controlled: the arrow is a glyph swap rather than a rotation, so the render
-  // needs the state either way.
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} asChild>
-      <section className="mb-2">
-        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] text-faint-foreground coarse:min-h-[44px] hover:text-muted-foreground">
-          <span className="text-[11px]">{open ? "▾" : "▸"}</span>
-          <span className="font-medium">Filtered {filtered.length}</span>
-          <span className="min-w-0 flex-1 truncate text-faint-foreground">
-            {summary && `— ${summary}`}
-            {screenLine && `${summary ? " · " : "— "}+${dropped} skipped on the headline`}
-          </span>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
-            {filtered.map((f) => {
-              const m = meta(f.itemId);
-              if (!m) return null;
-              return (
-                <li key={f.itemId} className="group flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted-faint">
-                  <span className="w-24 flex-none truncate text-[11px] text-faint-foreground">{f.category}</span>
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-faint-foreground">{m.title}</span>
-                  {openedIds.has(f.itemId) && <span className="text-[11px] text-faint-foreground">Read</span>}
-                  <Button
-                    variant="link"
-                    size="link"
-                    className="flex-none text-[12px] text-accent-line can-hover:opacity-0 transition-opacity coarse:min-h-[44px] coarse:px-2 coarse:py-0 hover:underline group-hover:opacity-100"
-                    onClick={() => onAppeal(f.itemId, m, f.category)}
-                  >
-                    Show anyway
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-          {screenLine && (
-            <div className="mt-1 px-2 py-1.5 text-[12px] text-faint-foreground">{screenLine}.</div>
-          )}
-        </CollapsibleContent>
-      </section>
-    </Collapsible>
   );
 }

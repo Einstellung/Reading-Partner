@@ -162,7 +162,6 @@ export interface InfoHomeController {
   openArticle: (itemId: string) => Promise<void>;
   keepArticle: (itemId: string) => Promise<void>;
   dismissItem: (itemId: string, meta: BriefingItemMeta, category?: string) => void;
-  appealItem: (itemId: string, meta: BriefingItemMeta, category: string) => void;
   askBriefing: () => Promise<void>;
   askLaunch: () => Promise<void>;
   askArticle: (itemId: string) => Promise<void>;
@@ -394,14 +393,6 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     appendFeedback({ itemId, title: meta.title, action: "dismissed", category }).catch(() => {});
   }, []);
 
-  const appealItem = useCallback(
-    (itemId: string, meta: BriefingItemMeta, category: string) => {
-      appendFeedback({ itemId, title: meta.title, action: "appealed", category }).catch(() => {});
-      void openArticle(itemId);
-    },
-    [openArticle],
-  );
-
   // What every anchor needs beside the briefing itself: who the reader is, what
   // they subscribe to, and what this device can do about it.
   const companionContext = useCallback(async () => {
@@ -489,7 +480,6 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     openArticle,
     keepArticle,
     dismissItem,
-    appealItem,
     askBriefing,
     askLaunch,
     askArticle,
