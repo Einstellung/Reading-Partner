@@ -32,8 +32,6 @@ import type { PagedGestureCtx } from "../engine/gesture/context";
 import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
 import {
   PAGE_GAP,
-  PAGE_HEIGHT,
-  PAGE_WIDTH,
   anchorAt,
   clampZoom,
   columnPosition,
@@ -52,6 +50,7 @@ import {
   type DeskView,
   type Zoom,
 } from "./page-geometry";
+import { showsThroughBody, visibleRects } from "./mark-geometry";
 import { createMarkLayer, type MarkLayer, type SpineText } from "./mark-layer";
 import { createPageCard, type PageCard } from "./page-card";
 import { createPageResources } from "./page-mount";
@@ -175,7 +174,9 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   let pageIndex = 0;
   let pageY = 0;
   let destroyed = false;
-  let quote: { pageIndex: number } | null = null;
+  // Which sheet carries the cited quote, and whether painting it pulled that
+  // sheet off its own column onto the one the words are in.
+  let quote: { pageIndex: number; shifted: boolean } | null = null;
   let mountedFrom = 0;
   let mountedTo = -1;
   let scrollTimer: number | null = null;
@@ -431,11 +432,26 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     return el;
   }
 
+  // A sheet a quote pulled off its own column goes back to it, so the page
+  // under the number in the top bar is the page the table says it is once the
+  // citation is gone.
+  function restoreColumn(i: number): void {
+    const card = slots[i]?.card;
+    const block = pagination.blocks[i];
+    const doc = card ? book.docs[block.spine] : undefined;
+    if (!card || !doc) return;
+    void card.show(doc, block.cfi, i - firstPageOfSpine(block.spine)).then(() => {
+      if (!destroyed && slots[i].card === card) marks.paint(card, i);
+    });
+  }
+
   function clearQuote(): void {
     if (!quote) return;
-    const card = slots[quote.pageIndex]?.card;
+    const { pageIndex: at, shifted } = quote;
+    const card = slots[at]?.card;
     quote = null;
     if (card) quoteLayer(card)?.replaceChildren();
+    if (shifted) restoreColumn(at);
     callbacks.onQuoteHighlightChange(false);
   }
 
@@ -462,22 +478,30 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     const range = owner.createRange();
     range.setStart(start.node, start.offset);
     range.setEnd(end.node, end.offset);
-    let rects = card.rectsOf(range);
-    const onSheet = (r: DOMRect) => r.right >= 0 && r.left <= PAGE_WIDTH && r.bottom >= 0 && r.top <= PAGE_HEIGHT;
     // The table put the quote on this page; this device's layout may have put
-    // it a column over. The sheet follows the words.
-    if (rects.length > 0 && !rects.some(onSheet) && card.showColumnOf(range)) rects = card.rectsOf(range);
-    if (rects.length === 0) return false;
+    // it in a neighbouring column — a wide table sliced by the multicol lays
+    // the words after it to the left of the words before it, so a page's own
+    // text can run backwards. The sheet follows the words: the page number
+    // stays what the table says, and the column shown is the one they are in.
+    let rects = card.rectsOf(range);
+    let shifted = false;
+    if (rects.length > 0 && !showsThroughBody(rects) && card.showColumnOf(range)) {
+      rects = card.rectsOf(range);
+      shifted = true;
+      // The marks were measured against the column the sheet showed before.
+      marks.paint(card, target);
+    }
+    const bands = visibleRects(rects);
+    if (bands.length === 0) return false;
     const layer = quoteLayer(card);
     if (!layer) return false;
     layer.replaceChildren();
-    for (const r of rects) {
-      if (!onSheet(r)) continue;
+    for (const r of bands) {
       const d = owner.createElement("div");
       d.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:${QUOTE_COLOR};opacity:${QUOTE_OPACITY};border-radius:2px;`;
       layer.append(d);
     }
-    quote = { pageIndex: target };
+    quote = { pageIndex: target, shifted };
     callbacks.onQuoteHighlightChange(true);
     return true;
   }

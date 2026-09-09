@@ -72,6 +72,38 @@ export function clipRects(rects: readonly PageRect[], box: Box = BODY_BOX): Page
   return out;
 }
 
+/**
+ * A rect showing less than this through the box shows nothing: it is a column
+ * edge landing on the clip's own edge, not a word.
+ */
+export const VISIBLE_MIN = 1;
+
+/**
+ * What these rects actually show through the text block: clipped to it, with
+ * the slivers dropped.
+ *
+ * The sheet's own frame is not the box to ask. The column beside this one
+ * begins PAGE_PAD_X past the body's right edge and ends PAGE_PAD_X short of
+ * its left one, so a line lying entirely in a neighbouring column still
+ * overlaps the sheet through its margin (docs/pitfall/271). A line in the
+ * previous column can also end exactly on the body's left edge, and the
+ * sheet's scale divided back out of a client rect leaves a sub-pixel of it
+ * inside — which clips to a hairline nobody can see (docs/pitfall/283).
+ */
+export function visibleRects(rects: readonly PageRect[], box: Box = BODY_BOX): PageRect[] {
+  return clipRects(rects, box).filter((r) => r.width >= VISIBLE_MIN && r.height >= VISIBLE_MIN);
+}
+
+/**
+ * Whether any of these rects shows through the text block — the question that
+ * decides whether the sheet has to be moved to the column the words are in.
+ * Asked of the same box that clips the painting, so "there is nothing to see"
+ * and "nothing was painted" stay the same sentence.
+ */
+export function showsThroughBody(rects: readonly PageRect[], box: Box = BODY_BOX): boolean {
+  return visibleRects(rects, box).length > 0;
+}
+
 /** A point held inside a box. */
 export function clampPoint(p: PagePoint, box: Box = PAGE_BOX): PagePoint {
   return {

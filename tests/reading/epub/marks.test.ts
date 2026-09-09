@@ -22,8 +22,10 @@ import {
   popupRect,
   rectsHit,
   shouldAppendInkPoint,
+  showsThroughBody,
   underlineBand,
   unionRect,
+  visibleRects,
 } from "../../../src/reading/epub/mark-geometry";
 import {
   epubInkOf,
@@ -33,7 +35,7 @@ import {
   quoteSelectorAt,
 } from "../../../src/reading/epub/annotation";
 import { epubRangeCfi, parseEpubRangeCfi, rangeToCfi, resolveSteps, textSteps } from "../../../src/reading/epub/cfi";
-import { PAGE_HEIGHT, PAGE_PAD_X, PAGE_PAD_Y, PAGE_WIDTH } from "../../../src/reading/epub/page-geometry";
+import { BODY_WIDTH, PAGE_HEIGHT, PAGE_PAD_X, PAGE_PAD_Y, PAGE_WIDTH } from "../../../src/reading/epub/page-geometry";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import { extractDocumentText, indexRuns, offsetOfPoint, runAt } from "../../../src/reading/epub/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
@@ -66,6 +68,55 @@ describe("a mark is clipped to the text block, not to the sheet", () => {
       { left: 120, top: 240, width: 30, height: 18 },
     ];
     expect(clipRects(rects).map((r) => r.left)).toEqual([100, 120]);
+  });
+
+  // A line in the column beside this one, in page coordinates: the column is
+  // BODY_WIDTH wide and the body starts PAGE_PAD_X in, so a line that begins
+  // 295 into the previous column is painted at 48 + 295 - 480. This is the
+  // rect measured on page 23 of 具身智能 for the quote the reader cited
+  // (docs/pitfall/283) — a wide table sliced by the multicol had put the words
+  // after it in a column to the left of the words before it.
+  const previousColumn = { left: PAGE_PAD_X + 295 - BODY_WIDTH, top: 284, width: 182, height: 22 };
+  const nextColumn = { left: PAGE_PAD_X + BODY_WIDTH + 12, top: 300, width: 160, height: 22 };
+  const onThisPage = { left: 100, top: 300, width: 200, height: 22 };
+
+  test("a quote in the neighbouring column shows nothing of itself", () => {
+    expect(previousColumn.left).toBe(-137);
+    expect(showsThroughBody([previousColumn])).toBe(false);
+    expect(showsThroughBody([nextColumn])).toBe(false);
+    expect(clipRects([previousColumn, nextColumn])).toEqual([]);
+  });
+
+  test("the sheet's own frame would have called that same quote visible", () => {
+    // Why the frame is the wrong box to ask: the previous column's last 48
+    // page-pixels lie in the sheet's left margin and the next column's first
+    // 48 in its right one, so both rects touch the sheet while every word they
+    // belong to is on another page. Asked this way the sheet never moves and
+    // the highlight is painted at left -137.
+    const touchesSheet = (r: { left: number; width: number }) => r.left + r.width >= 0 && r.left <= PAGE_WIDTH;
+    expect(touchesSheet(previousColumn)).toBe(true);
+    expect(touchesSheet(nextColumn)).toBe(true);
+  });
+
+  test("a quote broken over the column foot stays where it is", () => {
+    // Part of it is on this page and the rest continues in the next column:
+    // the sheet must not follow the tail, and only the visible part is painted.
+    expect(showsThroughBody([onThisPage, nextColumn])).toBe(true);
+    expect(visibleRects([onThisPage, nextColumn])).toEqual([onThisPage]);
+  });
+
+  test("a line ending on the body's left edge is a hairline, not a sighting", () => {
+    // Page 63 of the same book: the whole quote is in the previous column and
+    // its first line ends within half a pixel of the body's left edge, which
+    // the sheet's scale divided back out of the client rect puts just inside.
+    // Counting that as visible leaves the sheet where it is and paints a band
+    // 0.4px wide.
+    const hairline = { left: PAGE_PAD_X - 384, top: 699, width: 384.4, height: 22 };
+    const cut = clipRects([hairline]);
+    expect(cut).toHaveLength(1);
+    expect(cut[0].width).toBeCloseTo(0.4, 5);
+    expect(showsThroughBody([hairline])).toBe(false);
+    expect(visibleRects([hairline])).toEqual([]);
   });
 
   test("the body box is the page's margins, and ink may use the whole sheet", () => {
