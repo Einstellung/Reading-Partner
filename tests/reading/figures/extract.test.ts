@@ -19,6 +19,7 @@ import {
   type OpList,
   type TextItem,
 } from "../../../src/reading/figures/extract";
+import { pdfBBox } from "../../../src/reading/figures/types";
 
 // Synthetic op numbering (the real pdfjs codes differ; injected either way).
 const CODES: OpCodes = { save: 1, restore: 2, transform: 3, image: new Set([10]) };
@@ -84,7 +85,7 @@ test("pairs a caption with the image directly above it", () => {
   const boxes = imageBoxesFromOps(ops([transform([200, 0, 0, 150, 100, 500]), IMAGE]), CODES);
   const captions = captionLinesFromText([caption("Figure 1: x", 110, 485)]);
   const figs = pairFiguresOnPage(boxes, captions, 3, 800);
-  expect(figs).toEqual([{ id: "1", page: 3, caption: "Figure 1: x", bbox: { x: 100, y: 150, width: 200, height: 150 } }]);
+  expect(figs).toEqual([{ id: "1", page: 3, caption: "Figure 1: x", source: { kind: "pdf" as const, bbox: { x: 100, y: 150, width: 200, height: 150 } } }]);
 });
 
 test("multi-panel images sharing one caption merge into a single bbox", () => {
@@ -100,7 +101,7 @@ test("multi-panel images sharing one caption merge into a single bbox", () => {
   const figs = pairFiguresOnPage(boxes, captions, 1, 800);
   expect(figs).toHaveLength(1);
   // Union spans both panels: x 50..260, y (top-left) 800-720=80, height 120.
-  expect(figs[0].bbox).toEqual({ x: 50, y: 80, width: 210, height: 120 });
+  expect(pdfBBox(figs[0])).toEqual({ x: 50, y: 80, width: 210, height: 120 });
 });
 
 test("a caption with no image nearby keeps bbox null", () => {
@@ -108,7 +109,7 @@ test("a caption with no image nearby keeps bbox null", () => {
   const boxes = imageBoxesFromOps(ops([transform([100, 0, 0, 100, 50, 50]), IMAGE]), CODES);
   const captions = captionLinesFromText([caption("Figure 3: unreachable", 60, 700)]);
   const figs = pairFiguresOnPage(boxes, captions, 1, 800);
-  expect(figs).toEqual([{ id: "3", page: 1, caption: "Figure 3: unreachable", bbox: null }]);
+  expect(figs).toEqual([{ id: "3", page: 1, caption: "Figure 3: unreachable", source: { kind: "pdf" as const, bbox: null } }]);
 });
 
 test("separately-captioned sub-figures become distinct figures", () => {
@@ -123,7 +124,7 @@ test("separately-captioned sub-figures become distinct figures", () => {
   );
   const figs = pairFiguresOnPage(boxes, captionLinesFromText(items), 2, 800);
   expect(figs.map((f) => f.id).sort()).toEqual(["4a", "4b"]);
-  expect(figs.every((f) => f.bbox !== null)).toBe(true);
+  expect(figs.every((f) => pdfBBox(f) !== null)).toBe(true);
 });
 
 test("figuresForPage ties boxes and captions together", () => {
@@ -135,7 +136,7 @@ test("figuresForPage ties boxes and captions together", () => {
   };
   const figs = figuresForPage(page, CODES);
   expect(figs).toEqual([
-    { id: "7", page: 5, caption: "Figure 7: end to end", bbox: { x: 100, y: 150, width: 200, height: 150 } },
+    { id: "7", page: 5, caption: "Figure 7: end to end", source: { kind: "pdf" as const, bbox: { x: 100, y: 150, width: 200, height: 150 } } },
   ]);
 });
 
@@ -267,7 +268,7 @@ test("labels inside the region expand the bbox; text outside is left alone", () 
   ];
   const figs = pairFiguresOnPage([region], [caption], 1, 800, { textBoxes, pageWidth: 600 });
   // Top grew from y1 600 to 605 (page-space y = 800-605 = 195, height 105).
-  expect(figs[0].bbox).toEqual({ x: 100, y: 195, width: 200, height: 105 });
+  expect(pdfBBox(figs[0])).toEqual({ x: 100, y: 195, width: 200, height: 105 });
 });
 
 test("a bbox narrower than the caption triggers the caption-anchored fallback", () => {
@@ -279,7 +280,7 @@ test("a bbox narrower than the caption triggers the caption-anchored fallback", 
   const figs = pairFiguresOnPage([sliver], [caption], 1, 800, { textBoxes });
   // Fallback: caption span (100..300) from caption top (410) up to the body line
   // (550). page-space: y = 800-550 = 250, height = 550-410 = 140.
-  expect(figs[0].bbox).toEqual({ x: 100, y: 250, width: 200, height: 140 });
+  expect(pdfBBox(figs[0])).toEqual({ x: 100, y: 250, width: 200, height: 140 });
 });
 
 // --- caption-anchored fallback geometry ---
@@ -297,9 +298,9 @@ test("fallback returns null when it can't size the width", () => {
 });
 
 test("assembleIndex dedups by id, preferring the occurrence with a bbox", () => {
-  const withBox = { id: "1", page: 4, caption: "Figure 1", bbox: { x: 0, y: 0, width: 10, height: 10 } };
-  const noBox = { id: "1", page: 2, caption: "Figure 1 (running header)", bbox: null };
-  const other = { id: "2", page: 3, caption: "Figure 2", bbox: null };
+  const withBox = { id: "1", page: 4, caption: "Figure 1", source: { kind: "pdf" as const, bbox: { x: 0, y: 0, width: 10, height: 10 } } };
+  const noBox = { id: "1", page: 2, caption: "Figure 1 (running header)", source: { kind: "pdf" as const, bbox: null } };
+  const other = { id: "2", page: 3, caption: "Figure 2", source: { kind: "pdf" as const, bbox: null } };
   const idx = assembleIndex([[noBox], [other], [withBox]]);
   expect(idx.figures).toHaveLength(2);
   expect(idx.figures.find((f) => f.id === "1")).toEqual(withBox);
@@ -372,28 +373,28 @@ test("assembleIndex keeps one entry per figure across a bilingual book", () => {
     id: "3-1",
     page: 40,
     caption: "Figure 3-1. Tokenization",
-    bbox: { x: 0, y: 0, width: 90, height: 60 },
+    source: { kind: "pdf" as const, bbox: { x: 0, y: 0, width: 90, height: 60 } },
   };
-  const zh = { id: "3-1", page: 40, caption: "图3-1. 分词", bbox: null };
+  const zh = { id: "3-1", page: 40, caption: "图3-1. 分词", source: { kind: "pdf" as const, bbox: null } };
   const idx = assembleIndex([[en, zh]]);
   expect(idx.figures).toHaveLength(1);
   expect(idx.figures[0]).toEqual(en);
 });
 
 test("assembleIndex folds a separator written both ways into one entry", () => {
-  const dot = { id: "3.1", page: 4, caption: "Figure 3.1", bbox: null };
+  const dot = { id: "3.1", page: 4, caption: "Figure 3.1", source: { kind: "pdf" as const, bbox: null } };
   const dash = {
     id: "3-1",
     page: 9,
     caption: "Figure 3-1",
-    bbox: { x: 0, y: 0, width: 10, height: 10 },
+    source: { kind: "pdf" as const, bbox: { x: 0, y: 0, width: 10, height: 10 } },
   };
   const idx = assembleIndex([[dot], [dash]]);
   expect(idx.figures.map((f) => f.id)).toEqual(["3-1"]);
 });
 
 test("assembleIndex orders figures on a page by their printed number", () => {
-  const mk = (id: string, page: number) => ({ id, page, caption: `Figure ${id}`, bbox: null });
+  const mk = (id: string, page: number) => ({ id, page, caption: `Figure ${id}`, source: { kind: "pdf" as const, bbox: null } });
   const idx = assembleIndex([[mk("3.10", 7), mk("3.8", 7), mk("3.8a", 7), mk("3.2", 7)]]);
   expect(idx.figures.map((f) => f.id)).toEqual(["3.2", "3.8", "3.8a", "3.10"]);
 });
@@ -402,7 +403,7 @@ test("every figure of a chapter survives, not just the first", () => {
   // The regression: "(\\d+[a-z]?)" captured "3" for 3-1, 3-2 and 3-3 alike, and
   // the de-duplication then left one figure per chapter.
   const pages = [1, 2, 3].map((n) => [
-    { id: `3-${n}`, page: 20 + n, caption: `Figure 3-${n}. Step ${n}`, bbox: null },
+    { id: `3-${n}`, page: 20 + n, caption: `Figure 3-${n}. Step ${n}`, source: { kind: "pdf" as const, bbox: null } },
   ]);
   const idx = assembleIndex(pages);
   expect(idx.figures.map((f) => f.id)).toEqual(["3-1", "3-2", "3-3"]);
@@ -417,7 +418,7 @@ test("a Chinese caption line pairs with the art above it", () => {
       id: "3.8",
       page: 6,
       caption: "图 3.8 总体目标是计算上下文向量",
-      bbox: { x: 100, y: 150, width: 200, height: 150 },
+      source: { kind: "pdf" as const, bbox: { x: 100, y: 150, width: 200, height: 150 } },
     },
   ]);
 });

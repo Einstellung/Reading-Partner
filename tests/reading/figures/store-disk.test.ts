@@ -61,7 +61,7 @@ const T0 = 1_700_000_000_000;
 const GOOD = JSON.stringify({
   version: FIGURES_VERSION,
   status: "ok",
-  figures: [{ id: "3", page: 2, caption: "Figure 3: ganglion density", bbox: null }],
+  figures: [{ id: "3", page: 2, caption: "Figure 3: ganglion density", source: { kind: "pdf" as const, bbox: null } }],
 });
 
 beforeEach(() => {

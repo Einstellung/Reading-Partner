@@ -272,7 +272,7 @@ test("the figure index comes off disk too, with no engine", async () => {
     JSON.stringify({
       version: FIGURES_VERSION,
       status: "ok",
-      figures: [{ id: "3", page: 2, caption: "Ganglion density", bbox: null }],
+      figures: [{ id: "3", page: 2, caption: "Ganglion density", source: { kind: "pdf" as const, bbox: null } }],
     }),
   );
   const m = await loadMaterial({ bookId: BOOK, title: "x" });

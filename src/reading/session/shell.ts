@@ -7,6 +7,7 @@
 // reader of the sequence should be able to follow it without knowing which of
 // them is a useState and which is a ref assignment.
 
+import type { BookFormat } from "../../platform/app/library";
 import type { Annotation, ViewState } from "../../platform/app/reader-contract";
 import type { Fulltext } from "../../fulltext/types";
 import type { FiguresIndex } from "../figures";
@@ -69,6 +70,10 @@ export interface ReaderShell {
   mountReader(doc: {
     bookId: string;
     name: string;
+    // Which reading area to put up. PDFium is handed a PDF and nothing else —
+    // an EPUB is a zip, and giving it one is an engine error, not a book that
+    // will not open (docs/39 §6).
+    format: BookFormat;
     buffer: ArrayBuffer;
     annotations: Annotation[];
     viewState: ViewState;

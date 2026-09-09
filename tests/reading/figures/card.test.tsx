@@ -8,7 +8,7 @@ import { cardDisplayWidth } from "../../../src/reading/figures/render";
 import type { Figure } from "../../../src/reading/figures/types";
 
 test("chip label reads Fig. <id> · p.<page>", () => {
-  const fig: Figure = { id: "3a", page: 12, caption: "x", bbox: null };
+  const fig: Figure = { id: "3a", page: 12, caption: "x", source: { kind: "pdf" as const, bbox: null } };
   expect(figureChipLabel(fig)).toBe("Fig. 3a · p.12");
 });
 

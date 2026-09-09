@@ -39,6 +39,7 @@ export type StoreScope =
   | "reading-position"
   | "fulltext"
   | "figures"
+  | "pagination"
   | "corrupt-file";
 
 // The same set as a value, for the test that walks it. Kept in step with the
@@ -50,6 +51,7 @@ export const STORE_SCOPES = [
   "reading-position",
   "fulltext",
   "figures",
+  "pagination",
   "corrupt-file",
 ] as const satisfies readonly StoreScope[];
 
@@ -107,6 +109,15 @@ const COPY: Record<StoreScope, ScopeCopy> = {
     log: "failed to build or persist the figure index",
     level: "warn",
     message: () => null,
+  },
+  // Not a derived cache, and that is why it is loud where the two above are
+  // quiet: an EPUB's position blocks are cut once and then referred to by every
+  // [p.N] the AI has written down. A table that could not be written means the
+  // next open cuts a different one and moves all of them (docs/39 §1).
+  pagination: {
+    log: "failed to read or persist the pagination table",
+    level: "error",
+    message: () => "Page positions for this book could not be saved",
   },
   // Not a failed write but a failed read, and the one scope whose sentence
   // depends on what happened: whether the bad copy could be moved aside.

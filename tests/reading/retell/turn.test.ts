@@ -357,7 +357,7 @@ test("read_retell_outline reads back in the retell's combined numbering", async 
 // library copy, read only when it is actually called.
 test("view_figure is mounted and crops from the library copy of the book", async () => {
   const figures: Figure[] = [
-    { id: "3", page: 2, caption: "Ganglion density against eccentricity", bbox: null } as Figure,
+    { id: "3", page: 2, caption: "Ganglion density against eccentricity", source: { kind: "pdf" as const, bbox: null } } as Figure,
   ];
   let readFor = "";
   const turn = await buildRetellTurn(
@@ -388,7 +388,7 @@ test("view_figure is mounted and crops from the library copy of the book", async
 
 test("each material's figures are listed under its own name", async () => {
   const fig = (id: string): Figure =>
-    ({ id, page: 1, caption: `Figure ${id}`, bbox: null }) as Figure;
+    ({ id, page: 1, caption: `Figure ${id}`, source: { kind: "pdf" as const, bbox: null } }) as Figure;
   const turn = await buildRetellTurn(
     input({
       retell: retell({
@@ -449,7 +449,7 @@ test("the retell ladder drops the catalog, then shortens the marks, and leaves t
     role: (i % 2 === 0 ? "user" : "ai") as "user" | "ai",
     text: `m${i}`,
   }));
-  const figures: Figure[] = [{ id: "1", page: 1, caption: "内联缓存布局", bbox: null } as Figure];
+  const figures: Figure[] = [{ id: "1", page: 1, caption: "内联缓存布局", source: { kind: "pdf" as const, bbox: null } } as Figure];
   const turn = await buildRetellTurn(
     input({ materials: [material({ annotations, figures })], history, settings: small }),
   );

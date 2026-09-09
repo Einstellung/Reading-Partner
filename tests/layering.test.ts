@@ -117,6 +117,11 @@ const LAYER: Record<string, Layer> = {
   "reading/delete": "domain",
   "reading/engine": "domain",
   "reading/engine/gesture": "domain",
+  // Reading an EPUB: unpack, sanitize, paginate, and the conversion to the same
+  // Fulltext a PDF produces (docs/39). A domain, and that is what decides where
+  // the conversion lives: fulltext/ is a capability and may not import a domain,
+  // so it owns the type and the cache while the reading of a book stays here.
+  "reading/epub": "domain",
   "reading/figures": "domain",
   "reading/lecture": "domain",
   "reading/papers": "domain",

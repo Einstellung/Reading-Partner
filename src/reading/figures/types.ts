@@ -16,7 +16,13 @@
 // chapter and nothing else — both are wrong about the document, not merely
 // thinner, so they are discarded rather than kept until something else evicts
 // them.
-export const FIGURES_VERSION = 4 as const;
+//
+// 5: a figure says where its picture is rather than where its rectangle is. A
+// PDF's is a box on a page it has to be cropped out of; an EPUB's is a file in
+// the archive, which is the picture itself at its own resolution (docs/39 §3).
+// One field cannot mean both, and a version-4 index has no answer for the
+// second, so the bump discards them.
+export const FIGURES_VERSION = 5 as const;
 
 // Tight bounding box of a figure in top-left page space (PDF points).
 export interface FigureBBox {
@@ -25,6 +31,18 @@ export interface FigureBBox {
   width: number;
   height: number;
 }
+
+// Where the picture is. A PDF has to say which part of which page to crop, and
+// the box can be null when pairing found a caption but no art near it. An EPUB
+// names an archive entry, which is the picture as the publisher shipped it.
+export type FigureSource =
+  | { kind: "pdf"; bbox: FigureBBox | null }
+  | { kind: "epub"; href: string };
+
+// Which rung of the EPUB caption ladder this caption came off (docs/39 §3).
+// Absent on a PDF figure: there is one place a caption can come from there, the
+// caption line printed on the page.
+export type CaptionSource = "figcaption" | "alt" | "aria" | "nearby" | "none";
 
 export interface Figure {
   // Figure number as the document prints it, minus the label and lower-cased:
@@ -37,10 +55,19 @@ export interface Figure {
   page: number;
   // The full caption line ("Figure 3: A schematic of ...").
   caption: string;
-  // Tight image box, or null when pairing found the caption but no image near
-  // it (scanned page / cross-column figure) — the card falls back to the whole
-  // page.
-  bbox: FigureBBox | null;
+  // Where the picture is, and in which of the two languages.
+  source: FigureSource;
+  // EPUB only.
+  captionSource?: CaptionSource;
+}
+
+/**
+ * A PDF figure's box: the crop, or null for one whose pairing found no art (a
+ * scanned page, a cross-column figure), which makes the card fall back to the
+ * whole page. Null for an EPUB figure, which is not cropped out of anything.
+ */
+export function pdfBBox(figure: Figure): FigureBBox | null {
+  return figure.source.kind === "pdf" ? figure.source.bbox : null;
 }
 
 // "ok" is an answer about the document — including the honest empty one, for a

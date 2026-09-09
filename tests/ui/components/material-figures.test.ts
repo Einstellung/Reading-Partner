@@ -11,7 +11,7 @@ import {
 import type { Figure } from "../../../src/reading/figures";
 
 function fig(id: string, page: number): Figure {
-  return { id, page, caption: `Figure ${id}`, bbox: null };
+  return { id, page, caption: `Figure ${id}`, source: { kind: "pdf" as const, bbox: null } };
 }
 
 test("no material has a figure: no host", () => {

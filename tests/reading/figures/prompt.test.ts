@@ -7,8 +7,8 @@ import { buildVisualAidGuidance } from "../../../src/reading/figures/prompt";
 import type { Figure } from "../../../src/reading/figures/types";
 
 const figures: Figure[] = [
-  { id: "1", page: 3, caption: "Figure 1: The transformer architecture.", bbox: null },
-  { id: "2", page: 7, caption: "Figure 2: Attention weights over a sentence.", bbox: null },
+  { id: "1", page: 3, caption: "Figure 1: The transformer architecture.", source: { kind: "pdf" as const, bbox: null } },
+  { id: "2", page: 7, caption: "Figure 2: Attention weights over a sentence.", source: { kind: "pdf" as const, bbox: null } },
 ];
 
 test("the figure list and the rule for using it arrive as one block, list first", () => {
@@ -50,7 +50,7 @@ test("the catalog cap keeps the figures nearest the reader", () => {
     id: String(i + 1),
     page: i + 1,
     caption: `Figure ${i + 1}: something.`,
-    bbox: null,
+    source: { kind: "pdf" as const, bbox: null },
   }));
   const block = buildVisualAidGuidance({ figures: many, max: 2, currentPage: 9 });
   expect(block).toContain("[fig:9]");

@@ -7,13 +7,14 @@
 // figure card and the view_figure tool never re-raster the same crop.
 
 import { loadPdfjs } from "../../fulltext/extract";
-import type { Figure } from "./types";
+import { openZip } from "../epub/zip";
+import { pdfBBox, type Figure } from "./types";
 
 export interface RenderedFigure {
   dataUrl: string; // "data:image/jpeg;base64,…" for an <img src>
   base64: string; // bare base64 (no prefix) for a pi-ai image block
-  mimeType: "image/jpeg";
-  width: number; // natural pixel width of the crop
+  mimeType: string; // "image/jpeg" for a crop; an EPUB's own type for an entry
+  width: number; // natural pixel width of the crop, 0 when it was not measured
   height: number; // natural pixel height of the crop
 }
 
@@ -49,6 +50,56 @@ export function cardDisplayWidth(naturalWidthPx: number, devicePixelRatio: numbe
 const PAGE_JPEG_QUALITY = 0.72;
 
 const cache = new Map<string, RenderedFigure>();
+
+// An EPUB's figure is a file in the archive, so there is nothing to raster: the
+// publisher's own picture at the publisher's own resolution is better than
+// anything a re-render could produce, and it costs one inflate.
+//
+// TODO (docs/39 §3, stage 5): an SVG has to be drawn to a canvas before a vision
+// model can be handed it, and a picture over the ~1 MB the view tier allows has
+// to be scaled down. Neither is done here — an SVG and an oversized JPEG are
+// both returned as they are — because both need a canvas and this stage runs
+// headless.
+const EPUB_IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+};
+
+export function epubImageType(href: string): string | null {
+  const dot = href.lastIndexOf(".");
+  if (dot < 0) return null;
+  return EPUB_IMAGE_TYPES[href.slice(dot + 1).toLowerCase()] ?? null;
+}
+
+function base64Of(bytes: Uint8Array): string {
+  let binary = "";
+  // In chunks: String.fromCharCode spread over a multi-megabyte array overflows
+  // the argument list.
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+export function renderEpubFigure(buffer: ArrayBuffer, href: string): RenderedFigure | null {
+  const mimeType = epubImageType(href);
+  if (!mimeType) return null;
+  let bytes: Uint8Array | null = null;
+  try {
+    bytes = openZip(new Uint8Array(buffer)).bytes(href);
+  } catch (e) {
+    console.warn("failed to read a figure out of the book", href, e);
+    return null;
+  }
+  if (!bytes) return null;
+  const base64 = base64Of(bytes);
+  return { dataUrl: `data:${mimeType};base64,${base64}`, base64, mimeType, width: 0, height: 0 };
+}
 
 function key(hash: string, figureId: string, tier: FigureTier): string {
   return `${hash}:${figureId}:${tier}`;
@@ -94,6 +145,11 @@ export async function renderFigure(
   const k = key(hash, figure.id, tier);
   const hit = cache.get(k);
   if (hit) return hit;
+  if (figure.source.kind === "epub") {
+    const out = renderEpubFigure(buffer, figure.source.href);
+    if (out) cache.set(k, out);
+    return out;
+  }
   try {
     const doc = await getDoc(hash, buffer);
     const page = await doc.getPage(figure.page);
@@ -106,11 +162,12 @@ export async function renderFigure(
     let ry = 0;
     let rw = pageW;
     let rh = pageH;
-    if (figure.bbox && figure.bbox.width > 0 && figure.bbox.height > 0) {
-      rx = Math.max(0, figure.bbox.x - MARGIN_PT);
-      ry = Math.max(0, figure.bbox.y - MARGIN_PT);
-      rw = Math.min(pageW - rx, figure.bbox.width + 2 * MARGIN_PT);
-      rh = Math.min(pageH - ry, figure.bbox.height + 2 * MARGIN_PT);
+    const bbox = pdfBBox(figure);
+    if (bbox && bbox.width > 0 && bbox.height > 0) {
+      rx = Math.max(0, bbox.x - MARGIN_PT);
+      ry = Math.max(0, bbox.y - MARGIN_PT);
+      rw = Math.min(pageW - rx, bbox.width + 2 * MARGIN_PT);
+      rh = Math.min(pageH - ry, bbox.height + 2 * MARGIN_PT);
     }
 
     const scale = cropScale(tier, rw);

@@ -55,6 +55,8 @@ import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
+import EpubPlaceholderPane from "./ui/components/reader/EpubPlaceholderPane";
+import type { BookFormat } from "./platform/app/library";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
   CitationContext,
@@ -214,6 +216,7 @@ export default function App() {
   const [embedDoc, setEmbedDoc] = useState<{
     bookId: string;
     name: string;
+    format: BookFormat;
     buffer: ArrayBuffer;
     annotations: Annotation[];
     viewState: ViewState | null;
@@ -876,7 +879,10 @@ export default function App() {
 
   const addFile = useCallback(async () => {
     if (!activeTopicId) return;
-    const selected = await open({ multiple: false, filters: [{ name: "PDF", extensions: ["pdf"] }] });
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "Books", extensions: ["pdf", "epub"] }],
+    });
     if (typeof selected !== "string") return;
     await addFileToTopic(activeTopicId, selected);
     await refreshTopics();
@@ -1340,7 +1346,8 @@ export default function App() {
           onPointerDownCapture={dismissOnPaneTouch}
           onPointerUpCapture={onPanePointerUp}
         >
-          {embedDoc && (
+          {embedDoc?.format === "epub" && <EpubPlaceholderPane className="h-full w-full" />}
+          {embedDoc && embedDoc.format !== "epub" && (
             <EmbedReaderPane
               key={embedDoc.bookId}
               buffer={embedDoc.buffer}

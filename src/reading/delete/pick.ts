@@ -99,6 +99,8 @@ const OWNED_BY_A_BOOK: readonly PalaceKind[] = [
   "fulltext",
   "figures",
   "book-pdf",
+  "book-epub",
+  "pagination",
   "cover-image",
   "cover-meta",
   "cover-failure",

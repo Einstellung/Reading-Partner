@@ -77,9 +77,21 @@ export interface FiguresIo {
   onError: (e: unknown) => void;
 }
 
+/**
+ * How a document's bytes become a figure index. The default reads a PDF; an
+ * EPUB's is built by figures/epub.ts and passed in by the domain, because a
+ * book that says where its pictures are does not need pdf.js at all.
+ */
+export type FiguresExtractor = (buffer: ArrayBuffer) => Promise<FiguresIndex>;
+
 export interface FiguresStore {
   get: (hash: string, now?: number) => Promise<FiguresIndex | null>;
-  ensure: (key: string, buffer: ArrayBuffer, now?: () => number) => Promise<FiguresIndex>;
+  ensure: (
+    key: string,
+    buffer: ArrayBuffer,
+    now?: () => number,
+    extract?: FiguresExtractor,
+  ) => Promise<FiguresIndex>;
 }
 
 export function createFiguresStore(io: FiguresIo): FiguresStore {
@@ -129,7 +141,7 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
     // Fire-and-forget safe: extraction runs on the pdf.js worker off the UI
     // thread. An extraction failure resolves to an empty index marked "failed",
     // which is cached for a day and then tried again.
-    ensure: async (key, buffer, now = Date.now) => {
+    ensure: async (key, buffer, now = Date.now, extract) => {
       const hash = key;
       const cached = await readCache(hash);
       if (cached && figuresCacheFresh(cached, now())) return cached;
@@ -139,21 +151,25 @@ export function createFiguresStore(io: FiguresIo): FiguresStore {
       const job = (async () => {
         let index: FiguresIndex = failedFigures(now());
         try {
-          const pdfjs = (await io.loadPdfjs()) as Awaited<ReturnType<typeof loadPdfjs>>;
-          // pdf.js detaches the buffer; copy so the caller's bytes survive.
-          const data = new Uint8Array(buffer.slice(0));
-          const doc = await pdfjs.getDocument({
-            data,
-            isEvalSupported: false,
-            useSystemFonts: true,
-          }).promise;
-          try {
-            index = await extractFiguresFromDocument(
-              doc as unknown as Parameters<typeof extractFiguresFromDocument>[0],
-              (pdfjs as unknown as { OPS: Record<string, number> }).OPS,
-            );
-          } finally {
-            await doc.destroy();
+          if (extract) {
+            index = await extract(buffer);
+          } else {
+            const pdfjs = (await io.loadPdfjs()) as Awaited<ReturnType<typeof loadPdfjs>>;
+            // pdf.js detaches the buffer; copy so the caller's bytes survive.
+            const data = new Uint8Array(buffer.slice(0));
+            const doc = await pdfjs.getDocument({
+              data,
+              isEvalSupported: false,
+              useSystemFonts: true,
+            }).promise;
+            try {
+              index = await extractFiguresFromDocument(
+                doc as unknown as Parameters<typeof extractFiguresFromDocument>[0],
+                (pdfjs as unknown as { OPS: Record<string, number> }).OPS,
+              );
+            } finally {
+              await doc.destroy();
+            }
           }
         } catch (e) {
           // Reported, not logged here: the line for this scope is the channel's
@@ -198,6 +214,7 @@ export function ensureFigures(
   key: string,
   buffer: ArrayBuffer,
   now: () => number = Date.now,
+  extract?: FiguresExtractor,
 ): Promise<FiguresIndex> {
-  return store.ensure(key, buffer, now);
+  return store.ensure(key, buffer, now, extract);
 }

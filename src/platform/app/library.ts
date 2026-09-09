@@ -14,8 +14,19 @@ const LIBRARY_DIR = "library";
 // Exported so the shelf's pull route can name it once (reading/pull-routes.ts).
 export const LIBRARY_FILE = "library.json";
 
-export function libraryPdfPath(bookId: string): string {
-  return `${LIBRARY_DIR}/${bookId}.pdf`;
+// Which of the two kinds of book file this is. Absent means PDF: every entry
+// written before EPUB ingestion existed is one, and library.json is a synced
+// file that is never migrated in place (docs/39 §6).
+export type BookFormat = "pdf" | "epub";
+
+export function bookExtension(format: BookFormat | undefined): string {
+  return format === "epub" ? "epub" : "pdf";
+}
+
+// The library copy's path. The extension follows the format, so nothing on the
+// way to opening a book has to be told what kind it is a second time.
+export function libraryBookPath(bookId: string, format?: BookFormat): string {
+  return `${LIBRARY_DIR}/${bookId}.${bookExtension(format)}`;
 }
 
 export interface LibraryEntry {
@@ -23,6 +34,7 @@ export interface LibraryEntry {
   title: string;
   originalFilename: string;
   addedAt: number;
+  format?: BookFormat;
 }
 
 export interface LibraryStore {
@@ -116,30 +128,64 @@ export async function repairLibraryNames(): Promise<boolean> {
   return true;
 }
 
-// Whether the library holds the authoritative copy of a book.
-export function libraryHas(bookId: string): Promise<boolean> {
-  return appData.exists(libraryPdfPath(bookId));
+// The formats, in the order the library is searched for a copy whose format the
+// caller does not already know. A book id is the hash of the file's bytes, so at
+// most one of the two names can ever exist for one id.
+const FORMATS: readonly BookFormat[] = ["pdf", "epub"];
+
+// The library copy's path for a book whose format is not known up front, or null
+// when the library holds no copy of it. Every read below goes through this, so
+// an entry with no `format` field — every entry written before EPUB ingestion —
+// still resolves.
+export async function findLibraryBookPath(bookId: string): Promise<string | null> {
+  for (const format of FORMATS) {
+    const path = libraryBookPath(bookId, format);
+    if (await appData.exists(path)) return path;
+  }
+  return null;
 }
 
-// Read a book's authoritative copy back for opening.
-export function readLibraryBook(bookId: string): Promise<Uint8Array> {
-  return appData.readBytes(libraryPdfPath(bookId));
+// Whether the library holds the authoritative copy of a book.
+export async function libraryHas(bookId: string): Promise<boolean> {
+  return (await findLibraryBookPath(bookId)) !== null;
+}
+
+// Read a book's authoritative copy back for opening. Throws the same way a
+// missing file always did when there is no copy.
+export async function readLibraryBook(bookId: string): Promise<Uint8Array> {
+  const path = (await findLibraryBookPath(bookId)) ?? libraryBookPath(bookId, "pdf");
+  return appData.readBytes(path);
+}
+
+// What a set of book bytes is, from the bytes themselves. Two formats, two
+// magic numbers, and no third answer: this only ever sees a file some caller has
+// already decided is a book (intake sniffs properly, reading/epub/sniff.ts, and
+// the sync channel carries what another device imported).
+export function formatOfBytes(bytes: Uint8Array): BookFormat {
+  const zip =
+    bytes.length >= 4 &&
+    bytes[0] === 0x50 &&
+    bytes[1] === 0x4b &&
+    bytes[2] === 0x03 &&
+    bytes[3] === 0x04;
+  return zip ? "epub" : "pdf";
 }
 
 export async function getLibraryEntry(bookId: string): Promise<LibraryEntry | null> {
   return (await loadStore()).books[bookId] ?? null;
 }
 
-// Import a PDF by its bytes: compute the book id, copy the bytes into the library
-// on first sight, and register title/originalFilename. Idempotent — re-importing
-// the same content neither re-copies the blob nor overwrites the registry.
-// originalPath is always a stored topic file path, which topics.ts normalized on
-// the way in (path.ts), so the basename here is the real filename.
+// Import a book by its bytes: compute the book id, copy the bytes into the
+// library on first sight, and register title/originalFilename/format. Idempotent
+// — re-importing the same content neither re-copies the blob nor overwrites the
+// registry. originalPath is always a stored topic file path, which topics.ts
+// normalized on the way in (path.ts), so the basename here is the real filename.
 export async function importBook(bytes: Uint8Array, originalPath: string): Promise<LibraryEntry> {
   const hash = await contentHash(bytes);
+  const format = formatOfBytes(bytes);
   await ensureDir();
   if (!(await libraryHas(hash))) {
-    await appData.writeBytes(libraryPdfPath(hash), bytes);
+    await appData.writeBytes(libraryBookPath(hash, format), bytes);
   }
   const store = await loadStore();
   const existing = store.books[hash];
@@ -149,6 +195,7 @@ export async function importBook(bytes: Uint8Array, originalPath: string): Promi
     title: basename(originalPath),
     originalFilename: basename(originalPath),
     addedAt: Date.now(),
+    format,
   };
   await saveStore(addEntry(store, entry));
   return entry;

@@ -12,7 +12,7 @@ import MarkdownRenderer from './MarkdownRenderer';
 import { CitationContext, FigureContext, type FigureHost } from './Markdown';
 import type { Figure } from '../../../reading/figures';
 
-const FIG3: Figure = { id: '3', page: 5, caption: 'A schematic of the loop', bbox: null };
+const FIG3: Figure = { id: '3', page: 5, caption: 'A schematic of the loop', source: { kind: "pdf" as const, bbox: null } };
 
 const HOST: FigureHost = {
 	getFigure: (id) => (id === '3' ? FIG3 : null),

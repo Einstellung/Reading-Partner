@@ -65,9 +65,18 @@ function heard(scope: StoreScope, error: unknown): StoreError[] {
   return events;
 }
 
-// The four stores whose failure means the user lost something they did, against
-// the two derived caches, which are re-extracted from the document on demand.
-const LOSES_DATA: StoreScope[] = ["settings", "annotations", "threads", "reading-position"];
+// The stores whose failure means the user lost something they did, against the
+// two derived caches, which are re-extracted from the document on demand. The
+// pagination table is on the first list and not the second: it is cut once and
+// then referred to by every [p.N] already written down, so losing it is not a
+// second extraction, it is those references moving (docs/39 §1).
+const LOSES_DATA: StoreScope[] = [
+  "settings",
+  "annotations",
+  "threads",
+  "reading-position",
+  "pagination",
+];
 const COSTS_WORK: StoreScope[] = ["fulltext", "figures"];
 
 test("every scope is classified, and the sentence matches what the failure costs", () => {

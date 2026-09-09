@@ -3,7 +3,13 @@
 // books-channel logic is testable without the real filesystem.
 
 import { appData } from "../app/appdata";
-import { libraryHas, libraryPdfPath, readLibraryBook, type LibraryStore } from "../app/library";
+import {
+  formatOfBytes,
+  libraryBookPath,
+  libraryHas,
+  readLibraryBook,
+  type LibraryStore,
+} from "../app/library";
 
 export interface BookFs {
   // Book ids listed in library.json (the authoritative set to reconcile).
@@ -31,6 +37,8 @@ export const tauriBookFs: BookFs = {
   },
   async write(hash, bytes) {
     await appData.mkdirp("library");
-    await appData.writeBytes(libraryPdfPath(hash), bytes);
+    // The name follows the bytes, not the registry: a book can arrive on this
+    // channel before the library.json revision that announces it does.
+    await appData.writeBytes(libraryBookPath(hash, formatOfBytes(bytes)), bytes);
   },
 };

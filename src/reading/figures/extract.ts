@@ -14,7 +14,7 @@
 // page space (see types.ts) for the renderer.
 
 import { canonicalFigureId, compareFigureIds, FIGURE_ID_PATTERN } from "./lookup";
-import { FIGURES_VERSION, type Figure, type FigureBBox, type FiguresIndex } from "./types";
+import { FIGURES_VERSION, pdfBBox, type Figure, type FigureBBox, type FiguresIndex } from "./types";
 
 // Sub-op codes inside a constructPath op, needed to decode its flat argument
 // array (each verb consumes a fixed number of coordinates).
@@ -550,7 +550,7 @@ export function pairFiguresOnPage(
         bbox = fb && wideEnough(fb, c, opts.pageWidth) ? toTopLeft(fb, pageHeight) : null;
       }
     }
-    return { id: c.id, page, caption: c.caption, bbox };
+    return { id: c.id, page, caption: c.caption, source: { kind: "pdf", bbox } };
   });
 }
 
@@ -600,7 +600,7 @@ export function assembleIndex(perPage: Figure[][]): FiguresIndex {
       const key = canonicalFigureId(fig.id);
       const prev = byId.get(key);
       if (!prev) byId.set(key, fig);
-      else if (!prev.bbox && fig.bbox) byId.set(key, fig);
+      else if (!pdfBBox(prev) && pdfBBox(fig)) byId.set(key, fig);
     }
   }
   const figures = [...byId.values()].sort(

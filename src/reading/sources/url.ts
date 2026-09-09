@@ -71,7 +71,7 @@ export function resolveUrlSource(url: string): UrlSource {
   };
 }
 
-export type SniffedKind = "pdf" | "html";
+export type SniffedKind = "pdf" | "epub" | "html";
 
 // Decide whether a fetched response is a PDF or an HTML page. The magic bytes
 // win (a "%PDF" prefix is definitive even when the server mislabels it); the
@@ -87,7 +87,36 @@ export function sniffContentType(firstBytes: Uint8Array, contentType?: string | 
   ) {
     return "pdf";
   }
+  // "PK\x03\x04" plus the container's mimetype string. This one is a header
+  // sniff on the first bytes of a response, so it reads the layout the format
+  // requires — mimetype first, stored, so its content sits in the clear right
+  // after the local header. A book repacked by an ordinary zip tool fails this
+  // and is recognised from the whole file instead (reading/epub/sniff.ts); no
+  // prefix of the bytes can answer for the central directory.
+  if (
+    firstBytes.length >= 4 &&
+    firstBytes[0] === 0x50 &&
+    firstBytes[1] === 0x4b &&
+    firstBytes[2] === 0x03 &&
+    firstBytes[3] === 0x04
+  ) {
+    if (indexOfAscii(firstBytes, "application/epub+zip") >= 0) return "epub";
+  }
   const ct = (contentType ?? "").toLowerCase();
   if (ct.includes("application/pdf")) return "pdf";
+  if (ct.includes("application/epub+zip")) return "epub";
   return "html";
+}
+
+// A byte-wise search for an ASCII needle. No TextDecoder: the bytes are the head
+// of a zip, and decoding compressed data as UTF-8 is meaningless work.
+function indexOfAscii(haystack: Uint8Array, needle: string): number {
+  const limit = haystack.length - needle.length;
+  outer: for (let i = 0; i <= limit; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle.charCodeAt(j)) continue outer;
+    }
+    return i;
+  }
+  return -1;
 }
