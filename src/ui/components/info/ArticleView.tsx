@@ -16,13 +16,15 @@ import { Button } from "../ui/button";
 
 // What to say when there is no body. Four cases and four different sentences,
 // because they call for four different things from the reader (docs/36): wait,
-// don't wait, open it yourself, or nothing at all.
+// don't wait, open it yourself, or nothing at all. The one that was screened out
+// says only that, with nothing to argue against: what the day did not fetch is
+// not the reader's problem (docs/63).
 function noBodyLine(state: ArticleState): string {
   switch (state.kind) {
     case "pending":
       return "The text of this article is still on its way from the computer that collected it.";
     case "filtered":
-      return `Filtered out of today's briefing as ${state.category}, so the full text was never fetched.`;
+      return "This one was not fetched.";
     case "summaryOnly":
       return "The full text of this article could not be retrieved. It may be summarized in the briefing.";
     default:

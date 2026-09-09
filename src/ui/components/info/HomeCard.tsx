@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { InfoSnapshot } from "../../../info/collect/pipeline";
 import { Button } from "../ui/button";
-import { builtAt } from "./today";
+import { briefingCardBody, briefingFooterLine, builtAt } from "./today";
 
 // Live elapsed seconds since a generation started, for the running state.
 function useElapsed(running: boolean): number {
@@ -166,19 +166,16 @@ export function BriefingCardBody({
   }
 
   if (briefing) {
-    const worth = briefing.mustRead.length + briefing.outOfLane.length;
     const counts = [
       // When it was built, not when it was received: on a reader the two can be
       // hours apart, and the first is the one that answers "how old is this".
       builtAt(briefing.generatedAt),
-      `${worth} worth reading`,
-      `${briefing.oneLiners.length} one-liner${briefing.oneLiners.length === 1 ? "" : "s"}`,
-      `${(briefing.filtered ?? []).length} filtered`,
+      briefingFooterLine(briefing),
     ].join(" · ");
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <button className="flex flex-1 flex-col justify-between text-left" onClick={onOpen}>
-          <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">{briefing.overview}</p>
+          <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">{briefingCardBody(briefing)}</p>
           <div className="mt-4 flex items-center justify-between">
             <span className="text-[13px] text-faint-foreground">{counts}</span>
             <span className="text-[13px] font-medium text-accent-line">Open →</span>

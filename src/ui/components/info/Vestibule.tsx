@@ -27,6 +27,7 @@ import { displayFileTitle, readingProgress, type BookMeta } from "../shelf/file-
 import { shelfOrder, singleCoverTile } from "../shelf/topic-shelf";
 import {
   briefingEyebrow,
+  briefingCardBody,
   briefingFooterLine,
   continueMetaLine,
   todayDateLine,
@@ -288,7 +289,7 @@ function BriefingCard(props: {
         </span>
       </span>
       <span className="mt-2.5 block text-[15px] leading-relaxed text-muted-foreground">
-        {briefing.overview}
+        {briefingCardBody(briefing)}
       </span>
       {rows.length > 0 && (
         <span className="mt-2.5 block">

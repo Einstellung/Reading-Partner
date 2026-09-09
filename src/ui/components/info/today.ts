@@ -6,6 +6,7 @@
 // model).
 
 import type { Briefing } from "../../../info/collect/types";
+import { NOTHING_CHANGED, briefingCovers, isEmptyDay, isLabBriefing } from "./briefing-view";
 import type { BookMeta } from "../shelf/file-title";
 
 function plural(n: number, unit: string): string {
@@ -47,16 +48,29 @@ export function briefingEyebrow(briefing: Briefing | null, now: Date = new Date(
   return briefing ? `Today's briefing · built ${builtAt(briefing.generatedAt, now)}` : "Today's briefing";
 }
 
-// The line under the card's two rows: what the card is not showing. The
-// out-of-lane pick and the one-liners are on the briefing page; the filtered
-// ones are a count the reader can open and argue with.
-export function briefingFooterLine(briefing: Briefing): string {
-  return [
-    `${briefing.outOfLane.length} out of your lane`,
-    plural(briefing.oneLiners.length, "one-liner"),
-    `${(briefing.filtered ?? []).length} filtered`,
-  ].join(" · ");
+// What the card says the day was: the covers of the labs that changed, cut to
+// the two the card has room for. A legacy briefing has one overview line and
+// that is what it gets.
+export function briefingCardBody(briefing: Briefing): string {
+  if (isEmptyDay(briefing)) return NOTHING_CHANGED;
+  const covers = briefingCovers(briefing);
+  if (covers.length === 0) return briefing.overview ?? "";
+  const shown = covers.slice(0, TODAY_CARD_COVERS).map((c) => c.cover);
+  return covers.length > TODAY_CARD_COVERS ? `${shown.join(" ")} …` : shown.join(" ");
 }
 
-// How many of the day's picks the card shows before the footer takes over.
+// The line under the card's body: how much of the day is behind the card. How
+// many labs moved, and how much of what they found is worth opening — the
+// one-liners are read on the card's own page, and what the day discarded is
+// nobody's business (docs/63).
+export function briefingFooterLine(briefing: Briefing): string {
+  const worth = `${briefing.mustRead.length + briefing.outOfLane.length} worth reading`;
+  if (!isLabBriefing(briefing)) return worth;
+  const labs = `${plural(briefingCovers(briefing).length, "lab")} changed`;
+  return isEmptyDay(briefing) ? labs : `${labs} · ${worth}`;
+}
+
+// How many of the day's picks the card shows before the footer takes over, and
+// how many lab covers fit above them.
 export const TODAY_CARD_ITEMS = 2;
+export const TODAY_CARD_COVERS = 2;

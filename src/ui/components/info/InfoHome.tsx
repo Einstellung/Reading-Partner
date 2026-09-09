@@ -177,7 +177,6 @@ export default function InfoHome(props: {
               dismissedIds={info.dismissedItemIds}
               onOpenArticle={info.openArticle}
               onDismiss={info.dismissItem}
-              onAppeal={info.appealItem}
               onAskBriefing={info.askBriefing}
               onAskArticle={info.askArticle}
               onOpenSources={info.openSourcesPage}

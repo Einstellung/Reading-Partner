@@ -24,19 +24,38 @@ import type { Briefing } from "../../../info/collect/types";
 const BRIEFING: Briefing = {
   date: "2026-09-05",
   generatedAt: Date.now(),
-  overview: "Three things worth your time today, and a long tail of vendor noise.",
+  version: 2,
+  labs: [
+    {
+      labId: "lab-1",
+      name: "Interpretability",
+      cover: "The decoder measurement you wanted landed, and it does not say what the summaries said.",
+      judgments: [],
+    },
+    {
+      labId: "lab-2",
+      name: "Scaling",
+      cover: "The other half of the argument was restated, with the same gap in it.",
+      judgments: [],
+    },
+  ],
+  quiet: ["Robotics"],
   mustRead: [
     {
       itemId: "a",
       reason: "It is the measurement you wanted for the thing you read last week.",
+      labId: "lab-1",
     },
-    { itemId: "b", reason: "The other half of the argument you have been following." },
+    {
+      itemId: "b",
+      reason: "The other half of the argument you have been following.",
+      labId: "lab-2",
+    },
   ],
   oneLiners: [
-    { itemId: "c", line: "A second lab reproduces the result, with a smaller model." },
+    { itemId: "c", line: "A second lab reproduces the result, with a smaller model.", labId: "lab-1" },
   ],
   outOfLane: [{ itemId: "d", reason: "Nothing to do with your lane, and it will be." }],
-  filtered: [{ itemId: "e", category: "vendor PR" }],
   items: {
     a: {
       title: "Measuring what the decoder actually attends to",
@@ -66,13 +85,6 @@ const BRIEFING: Briefing = {
       sourceName: "Example",
       publishedAt: "2026-09-05",
     },
-    e: {
-      title: "Vendor announces partnership",
-      url: "https://example.com/e",
-      source: "example",
-      sourceName: "Example",
-      publishedAt: "2026-09-05",
-    },
   },
 };
 
@@ -89,7 +101,6 @@ function Harness() {
           dismissedIds={new Set()}
           onOpenArticle={noop}
           onDismiss={noop}
-          onAppeal={noop}
           onAskBriefing={noop}
           onAskArticle={noop}
           onOpenSources={noop}
