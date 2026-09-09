@@ -230,11 +230,11 @@ export async function createEpubReader(
       if (mode === layout) return;
       layout = mode;
       renderer.setAttribute("flow", flowFor(mode));
-      // The attribute change is answered synchronously, and the container it
-      // measures has not been re-laid-out by the flow's own grid rules yet, so
-      // the first render sizes the columns for the layout being left
-      // (docs/pitfall/247). A second render, once layout has run, is what makes
-      // the switch land.
+      // Changing `flow` at runtime does not recompute the column width: the
+      // spike measured the text keeping about 55% of the screen after a switch
+      // (docs/62 §6). The attribute change is answered synchronously, against
+      // the container the layout being left had sized. A second render, once
+      // layout has run, is what makes the switch land.
       requestAnimationFrame(() => {
         if (destroyed) return;
         renderer.render();

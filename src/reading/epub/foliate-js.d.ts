@@ -53,7 +53,7 @@ declare module "foliate-js/view.js" {
       next(): Promise<void>;
       prev(): Promise<void>;
       /// Re-lay-out at the current geometry. Public because a flow change has
-      /// to be rendered twice (docs/pitfall/247).
+      /// to be rendered twice (docs/62 §6).
       render(): void;
       /// The stylesheet injected into the book's frame, which is the only CSS
       /// the frame has (render-book.ts drops the book's own).

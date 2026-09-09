@@ -2,6 +2,22 @@
 
 只读代码得出的结论，没有跑过任何 EPUB。取代 `north-star/epub.md` 里"位置体系全面分叉"的判断。
 
+## 进度（2026-09-09）
+
+阶段 2 落地：`src/reading/epub/` 解 zip、消毒、分页、全文、大纲、图目录，intake 认 EPUB，阅读区先给占位。
+
+渲染 spike 见 [62](./62-epub渲染spike.md)：blob iframe 在 iOS 和 WebKitGTK 上都能用且同源；不给 `allow-scripts` 的代价是 iframe 里一个 DOM 事件都不派发（坑 244），事件全部挪到父页；CSP 要 `style-src`/`font-src`/`frame-src` 三项一起加 `blob:`（坑 245）。
+
+阶段 3 落地：`EpubReaderPane` 实现 `ViewInstance`，阅读位置（CFI）、`[p.N]` 跳转、引文高亮、布局切换、字号、大纲跳转都走现有的壳。三条与本文原判断不同的做法：
+
+- 摄入和渲染共用一次解包（`book-cache.ts` 一个槽位按 bookId 持有），不是各解一次。
+- 消毒的挂点不是 `transformTarget` 的 `data` 事件，是 `loadText`：`data` 事件拿到的已经是 foliate 改写过 href 的序列化结果，在那里消毒会把 blob 地址一起删掉。渲染侧的 `loadText` 直接返回摄入侧的消毒结果，两边因此是同一棵树，CFI 指同一个节点（`tests/reading/epub/render-cfi.test.ts` 断言这条）。
+- 书自己的 CSS 不进页面：消毒器整块丢弃 `<style>` 和 `<link>`，正文用 app 自己的排版（`reader-styles.ts`），底色取 `--desk`，跟着暗色和纸色走。留住书的 CSS 就得让它进消毒后的树，那棵树摄入侧也在读。
+
+标注（阶段 4）没做，`setTool` / `setAnnotations` 那几个实现成 no-op。
+
+阶段 1（EPUB 只当 PDF 的图源）跳过：用户手上没有同一本书的两个格式，这个阶段的前提不成立。
+
 ## 结论
 
 页码不用废掉。EPUB 3 自己就带印刷页码（`<nav epub:type="page-list">` 加 `epub:type="pagebreak"` 锚点，从纸书转的书基本都有），没有的按固定字符数切合成页。`Fulltext.pages[]`、`[p.N]`、章节页区间、BM25 检索单元、observation 全部原样保留。真正要新增的是一层精确位置，只有阅读位置和标注两样东西用它。这比"接引擎"小，不比它大。
@@ -54,7 +70,7 @@ CFI 的下标数的是子节点序号，往 DOM 里注入或删除节点就会�
 | 文件 | LOC | 改动 |
 |---|---|---|
 | `src/fulltext/types.ts` | 33 | 加 `kind` / `pageLocators` / `pageLabels` |
-| `src/platform/app/reader-contract.ts` | 119 | `ViewState` 加 `cfi`；`navigate` 和 `highlightQuote` 收 `Locator`；`annotationPage()` 对 EPUB 返回 null |
+| `src/platform/app/reader-contract.ts` | 119 | 实际只加了 `ViewState.cfi`。`navigate` 和 `highlightQuote` 继续收位置块号：块号到 CFI 的翻译在 EPUB 那一侧（`reader-logic.ts`），壳因此一份代码驱动两个引擎。`annotationPage()` 等阶段 4 |
 | `src/reading/engine/convert.ts` | 318 | 现有 318 行一行不动，旁边加 EPUB 的 position 编解码 |
 | `src/reading/figures/types.ts` | 50 | `bbox` 换成 `source` 联合，见第三节 |
 | 新增 `src/reading/locator.ts` | ~60 | `Locator` 和两边的转换 |
@@ -170,13 +186,13 @@ export type FigureSource =
 
 ## 六、分阶段
 
-| 阶段 | 内容 | 量级 | 独立价值 |
-|---|---|---|---|
-| 1 | EPUB 当图源（第四节） | 1–2 天 | 有 EPUB 的书，图注和图第一次是真的 |
-| 2 | intake 认 EPUB + EPUB → `Fulltext` + 分页表 + 大纲，不接引擎 | 3–5 天 | 只有 EPUB 的书第一次能被 AI 通读和讲；阅读区先给纯文本降级视图 |
-| 3 | 接 foliate-js：滚动/翻页、主题字号、位置持久化、`[p.N]` 跳转 | 1–2 周 | 能读了 |
-| 4 | EPUB 标注：选区 ↔ CFI、overlayer、同步 | 1 周 | 痕迹、蒸馏、笔记在 EPUB 上闭环 |
-| 5 | 图的视觉描述与落盘缓存；iPad 手势对齐 | 1 周 | 没图注的书也有图目录 |
+| 阶段 | 内容 | 量级 | 独立价值 | 状态 |
+|---|---|---|---|---|
+| 1 | EPUB 当图源（第四节） | 1–2 天 | 有 EPUB 的书，图注和图第一次是真的 | 跳过：用户没有同书双格式 |
+| 2 | intake 认 EPUB + EPUB → `Fulltext` + 分页表 + 大纲，不接引擎 | 3–5 天 | 只有 EPUB 的书第一次能被 AI 通读和讲；阅读区先给纯文本降级视图 | 已完成 |
+| 3 | 接 foliate-js：滚动/翻页、主题字号、位置持久化、`[p.N]` 跳转 | 1–2 周 | 能读了 | 已完成 |
+| 4 | EPUB 标注：选区 ↔ CFI、overlayer、同步 | 1 周 | 痕迹、蒸馏、笔记在 EPUB 上闭环 | 没做 |
+| 5 | 图的视觉描述与落盘缓存；iPad 手势对齐 | 1 周 | 没图注的书也有图目录 | 没做 |
 
 阶段 2 要顺带改的小东西：`sources/url.ts` 的 `SniffedKind = "pdf" | "html"` 加 `"epub"`（magic 是 zip 的 `PK\x03\x04` 加 `mimetype` 条目内容 `application/epub+zip`）；`library.ts:22` 的 `libraryPdfPath` 把 `.pdf` 写死在路径里，要按 format 取扩展名；`library.json` 的 `LibraryEntry` 加 `format`。书的身份仍是字节的 SHA-256，与格式无关，这块不用动。
 
