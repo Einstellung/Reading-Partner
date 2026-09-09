@@ -70,6 +70,17 @@ export function createPageCard(owner: Document, resources: PageResources): PageC
     `box-shadow:${PAGE_FRAME.pageEdge}`,
     "overflow:hidden",
     "contain:paint",
+    // The sheet takes the touch away from the browser, exactly as a PDF page
+    // div does (docs/pitfall/37): the desk's scroll is driven in JS by the
+    // touch router, and a sheet that also scrolls natively moves twice as far.
+    "touch-action:none",
+    // The book's own text is never the system's to select: the marks read a
+    // caret out of the page themselves, and a long press must not raise iOS's
+    // Copy/Translate bar (docs/pitfall/49, 262). The shell's rule stops at the
+    // shadow boundary, so the sheet says it again on this side of it.
+    "user-select:none",
+    "-webkit-user-select:none",
+    "-webkit-touch-callout:none",
   ].join(";");
   const shadow = el.attachShadow({ mode: "open" });
   let scale = 1;

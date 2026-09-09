@@ -77,6 +77,18 @@ figure { margin: 1em 0; break-inside: avoid; }
 table { border-collapse: collapse; break-inside: auto; max-width: 100%; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 a { color: inherit; }
+/* The one place the book does not get a say. The marks read a caret out of the
+   sheet themselves and never use the system selection, so a long press here
+   must raise nothing (docs/pitfall/49, 262, 277) — and a touch on the sheet
+   belongs to the desk's own scroll (docs/pitfall/37). Inheritance from the host
+   would carry the first two in, but a book that sets user-select on its own
+   body would take them back, which is what the !important is for. */
+html, body {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+  touch-action: none !important;
+}
 `;
 
 /** What answers the book's resource references. */

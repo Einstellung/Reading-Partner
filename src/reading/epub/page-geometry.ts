@@ -219,3 +219,120 @@ export function columnOf(x: number, columnWidth: number = BODY_WIDTH): number {
   // A glyph's box can sit a fraction of a pixel left of its column.
   return Math.max(0, Math.floor((x + 0.5) / columnWidth));
 }
+
+// ---------------------------------------------------------------- the desk --
+
+// The desk's geometry at one scale: how big a slot is, how far apart the slots
+// sit, and where the sheet sits inside its slot. Vertical stacks the sheets
+// with a gap and centres them across the desk; paged gives each page a
+// viewport-sized slot and centres the whole sheet in it.
+export interface DeskMetrics {
+  slotWidth: number;
+  slotHeight: number;
+  pitchX: number;
+  pitchY: number;
+  pageWidth: number;
+  pageHeight: number;
+  /** The sheet's offset inside its slot. */
+  cardLeft: number;
+  cardTop: number;
+}
+
+export function deskMetrics(layout: ReadingLayout, scale: number, viewport: Viewport): DeskMetrics {
+  const { pageWidth, pageHeight, pitch } = stripMetrics(scale);
+  const slotWidth = Math.max(viewport.clientWidth, pageWidth);
+  const slotHeight = layout === "vertical" ? pageHeight : Math.max(viewport.clientHeight, pageHeight);
+  return {
+    slotWidth,
+    slotHeight,
+    pitchX: layout === "vertical" ? 0 : slotWidth,
+    pitchY: layout === "vertical" ? pitch : 0,
+    pageWidth,
+    pageHeight,
+    cardLeft: Math.max(0, (slotWidth - pageWidth) / 2),
+    cardTop: layout === "vertical" ? 0 : Math.max(0, (slotHeight - pageHeight) / 2),
+  };
+}
+
+/** Everything a zoom anchor has to be resolved against. */
+export interface DeskView {
+  layout: ReadingLayout;
+  scale: number;
+  clientWidth: number;
+  clientHeight: number;
+  scrollLeft: number;
+  scrollTop: number;
+  pagesCount: number;
+}
+
+/** A point on a sheet, in unscaled page coordinates. */
+export interface PageAnchor {
+  pageIndex: number;
+  pageX: number;
+  pageY: number;
+}
+
+function viewportOf(v: DeskView): Viewport {
+  return { clientWidth: v.clientWidth, clientHeight: v.clientHeight };
+}
+
+/**
+ * The point on the paper under a point in the viewport. The y half of the
+ * vertical column is columnPosition's, so a zoom anchored here and a scroll
+ * placed by columnScrollTop measure from the same origin.
+ */
+export function anchorAt(v: DeskView, vx: number, vy: number): PageAnchor {
+  const m = deskMetrics(v.layout, v.scale, viewportOf(v));
+  const scale = v.scale > 0 ? v.scale : 1;
+  if (v.layout === "vertical") {
+    const at = columnPosition(v.scrollTop + vy, scale, v.pagesCount);
+    return { ...at, pageX: (v.scrollLeft + vx - m.cardLeft) / scale };
+  }
+  const contentX = v.scrollLeft + vx;
+  const pageIndex =
+    m.pitchX > 0
+      ? Math.min(Math.max(0, v.pagesCount - 1), Math.max(0, Math.floor(contentX / m.pitchX)))
+      : 0;
+  return {
+    pageIndex,
+    pageX: (contentX - (pageIndex * m.pitchX + m.cardLeft)) / scale,
+    pageY: (v.scrollTop + vy - m.cardTop) / scale,
+  };
+}
+
+/** The scroll that puts `a` back under (vx, vy), at the view's scale. */
+export function scrollForAnchor(
+  v: DeskView,
+  a: PageAnchor,
+  vx: number,
+  vy: number,
+): { scrollLeft: number; scrollTop: number } {
+  const m = deskMetrics(v.layout, v.scale, viewportOf(v));
+  const scale = v.scale > 0 ? v.scale : 1;
+  if (v.layout === "vertical") {
+    return {
+      scrollLeft: m.cardLeft + a.pageX * scale - vx,
+      scrollTop: columnScrollTop(a.pageIndex, a.pageY, scale) - vy,
+    };
+  }
+  // The flip never pans sideways: its slot is as wide as the viewport or as
+  // the sheet, whichever is bigger, so there is no room beside the page and a
+  // zoom that moved x would leave the strip between two pages. The page stays
+  // where it is and only the height is anchored.
+  return {
+    scrollLeft: a.pageIndex * m.pitchX,
+    scrollTop: m.cardTop + a.pageY * scale - vy,
+  };
+}
+
+/**
+ * Where a paged strip left to itself has to come to rest: on one whole page.
+ * The flip has no scroll snapping under it — a mandatory snap fights every
+ * scrollLeft the gesture machine writes — so the desk settles the strip once
+ * the scrolling stops. Null when it is already resting on a page.
+ */
+export function settleFlip(scrollLeft: number, pitchX: number, pagesCount: number): number | null {
+  if (pitchX <= 0 || pagesCount <= 0) return null;
+  const target = flipPosition(scrollLeft, pitchX, pagesCount) * pitchX;
+  return Math.abs(target - scrollLeft) < 1 ? null : target;
+}

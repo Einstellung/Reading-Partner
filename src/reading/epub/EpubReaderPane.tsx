@@ -110,13 +110,12 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
   }, []);
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    // The pens get the pointer first. One they take is theirs to the end: it
-    // is captured here so a stroke that leaves the pane still finishes, and no
-    // swipe or tap is read out of it.
+    // The pens get the pointer first. One they take is theirs to the end — the
+    // desk captures it, so a stroke that leaves the pane still finishes — and
+    // no tap is read out of it.
     if (controllerRef.current?.markPointerDown(e.nativeEvent)) {
       markingRef.current = e.pointerId;
       downRef.current = null;
-      e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
     downRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
@@ -142,7 +141,11 @@ function EpubReaderPaneImpl(props: EpubReaderPaneProps) {
       const layout = controller.currentLayout();
       const dx = e.clientX - down.x;
       const dy = e.clientY - down.y;
-      const swipe = swipeTurn(layout, dx, dy);
+      // A finger's swipe is the touch router's (reading/engine/gesture): it
+      // follows the sheet and commits the turn, exactly as it does on a PDF.
+      // The mouse is the one device the router never drives, so a drag with it
+      // is read here.
+      const swipe = e.pointerType === "mouse" ? swipeTurn(layout, dx, dy) : "none";
       if (swipe !== "none") {
         apply(swipe);
         return;
