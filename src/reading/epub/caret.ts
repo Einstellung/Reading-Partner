@@ -7,12 +7,17 @@
 // offset, and the Range between them is built by hand.
 //
 // `caretRangeFromPoint` is the engine's own answer and is used when it reaches
-// into the shadow root. WebKit and Blink both put it on Document; whether it
-// resolves past a shadow host differs, and a range that stops at the host is no
-// answer at all. So every answer is checked to be inside the card's content
-// root, and a measuring fallback stands behind it: the text node nearest the
-// point, then a binary search over the caret boxes inside it. The search is
-// logarithmic because it runs on every move of a live drag.
+// into the shadow root. Measured on WebKitGTK: ShadowRoot does not carry it at
+// all, and the one on Document does resolve past a shadow host — so the two are
+// tried in that order and every answer is checked to be inside the card's own
+// content root, a range that stopped at the host being no answer.
+//
+// Behind them is a measuring fallback: the text node nearest the point, then a
+// binary search over the caret boxes inside it. It is not dead weight — no
+// engine is promised to have either method, and iOS has not been measured. Both
+// paths were driven over the same words on the same sheet and wrote the same
+// range CFI, character for character. The search is logarithmic because it runs
+// on every move of a live drag.
 
 export interface CaretPoint {
   node: Text;
