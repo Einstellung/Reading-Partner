@@ -39,6 +39,9 @@ import { parsePagination, storedVersionOf } from "../../../src/reading/epub/pagi
 import { parseEpub } from "../../../src/reading/epub/parse";
 import { sanitize } from "../../../src/reading/epub/sanitize";
 import { makeEpubSortIndex } from "../../../src/reading/epub/annotation";
+import { createPageCard } from "../../../src/reading/epub/page-card";
+import { createPageResources, mountDocument } from "../../../src/reading/epub/page-mount";
+import { PAGE_WASH_GROUP_STYLE, PAGE_WASH_STYLE } from "../../../src/reading/engine/page-wash";
 import { buildEpub, prose } from "./fixture";
 
 describe("the paper", () => {
@@ -298,5 +301,69 @@ describe("the one migration", () => {
     expect(out.annotations[1]).toBe(pdfMark);
     // Already right: nothing to write.
     expect(remapEpubAnnotations(out.annotations, book, table).changed).toBe(false);
+  });
+});
+
+// --- the sheet's layers ------------------------------------------------------
+//
+// The paper tint is a multiply, so what it reaches is decided by which layers
+// share a blend group (docs/42, engine/page-wash.ts). jsdom lays nothing out and
+// blends nothing, but it builds the tree and keeps the inline styles, and the
+// tree is the whole of the rule: sheet and book inside the group, marks and the
+// quote band outside it.
+
+// A card's shadow root with a document on it. The tree is mounted the way
+// show() mounts it; the step show() takes afterwards — locating the page's
+// column — measures client rects, which jsdom's Range does not have.
+function mountedShadow(): ShadowRoot {
+  const book = parseEpub(buildEpub({ docs: [{ name: "c1.xhtml", body: prose(6, 300) }] }));
+  const owner = new DOMParser().parseFromString(
+    "<!doctype html><html><body></body></html>",
+    "text/html",
+  );
+  const resources = createPageResources(book.zip);
+  const card = createPageCard(owner, resources);
+  mountDocument(card.shadow, book.docs[0], resources);
+  return card.shadow;
+}
+
+describe("the paper tint on a sheet", () => {
+  test("the book is inside the blend group and the marks are outside it", () => {
+    const shadow = mountedShadow();
+    const children = Array.from(shadow.children);
+    expect(children.map((c) => c.tagName.toLowerCase())).toEqual(["style", "div", "div"]);
+    const paper = children[1] as HTMLElement;
+    const overlay = children[2] as HTMLElement;
+    expect(paper.className).toBe("rp-paper");
+    expect(overlay.className).toBe("rp-overlay");
+
+    // Inside the group: the sheet's text block, then the tint over it.
+    expect(Array.from(paper.children).map((c) => c.className)).toEqual(["rp-clip", "rp-wash"]);
+
+    // Outside it: the marks and the quote band hang on the overlay, which the
+    // group does not contain, so their yellow and purple are never multiplied.
+    expect(paper.contains(overlay)).toBe(false);
+    expect(overlay.previousElementSibling).toBe(paper);
+  });
+
+  test("the group isolates, and the tint is the one the PDF pages use", () => {
+    const shadow = mountedShadow();
+    const paper = shadow.querySelector<HTMLElement>(".rp-paper")!;
+    const wash = shadow.querySelector<HTMLElement>(".rp-wash")!;
+
+    // Without this the blend would climb to whatever ancestor makes a stacking
+    // context and take the marks with it.
+    expect(paper.style.isolation).toBe(PAGE_WASH_GROUP_STYLE.isolation as string);
+    expect(paper.style.position).toBe("absolute");
+
+    // One tint, spelled once: these are the PDF reader's own constants.
+    expect(wash.style.mixBlendMode).toBe(PAGE_WASH_STYLE.mixBlendMode as string);
+    expect(wash.style.backgroundColor).toBe(PAGE_WASH_STYLE.backgroundColor as string);
+    expect(wash.style.pointerEvents).toBe("none");
+
+    // The group's own pointer-events is not the PDF's: a PDF group holds a
+    // raster nothing is read out of, this one holds the book's text and the pen
+    // resolves a caret by hit-testing into it (caret.ts).
+    expect(paper.style.pointerEvents).toBe("");
   });
 });
