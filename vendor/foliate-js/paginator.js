@@ -289,6 +289,13 @@ class View {
     }
     render(layout) {
         if (!layout) return
+        // PATCHED: upstream reads `this.document` unconditionally below. The
+        // view is constructed before its iframe has a document, and the
+        // container's ResizeObserver calls render() in that window, so every
+        // book open threw once out of columnize (docs/pitfall/265). Nothing is
+        // lost by returning: load() renders again as soon as the document is
+        // there.
+        if (!this.document) return
         this.#column = layout.flow !== 'scrolled'
         this.#layout = layout
         if (this.#column) this.columnize(layout)
@@ -365,6 +372,9 @@ class View {
         }
     }
     expand() {
+        // PATCHED: same window as render() above (docs/pitfall/265) — the body
+        // observer can fire against a document that is already gone.
+        if (!this.document) return
         const { documentElement } = this.document
         if (this.#column) {
             const side = this.#vertical ? 'height' : 'width'

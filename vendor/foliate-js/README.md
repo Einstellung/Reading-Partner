@@ -41,3 +41,13 @@ Patches applied (grep `PATCHED:`):
 - `paginator.js` — the content iframe's `sandbox` no longer carries
   `allow-scripts`. Upstream ships `allow-same-origin allow-scripts`; a book's
   inline script would then run with the app's own privileges.
+
+- `paginator.js` — the paginator's own touch listeners are not registered. The
+  book's iframe takes no pointers, so the pane above it is the one reading of a
+  swipe; upstream's listeners turned a second and a third page
+  (`docs/pitfall/260`).
+
+- `paginator.js` — `View.render()` and `View.expand()` return when the iframe
+  has no document yet. The container's ResizeObserver calls render() before the
+  first section has loaded, and upstream reads `this.document.documentElement`
+  straight away (`docs/pitfall/265`).
