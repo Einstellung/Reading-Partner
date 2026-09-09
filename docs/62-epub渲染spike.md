@@ -172,13 +172,12 @@ Materials 页的按钮还写着「+ Add PDF」，文件选择器早就收 epub �
 | 笔在手上时点标注 | 不弹。笔在手上，`pointerAction` 是 draw，落点走 `beginDraw`/`endDraw`，够不到 `consumeUp`。要点标注先收笔——和 PDF 那侧一样 |
 | 痕迹列表页码 | 对。盘上 `pageLabel` 7 的那条显示 Page 7，6 的显示 Page 6 |
 | 长按正文 | 修前 iOS 照弹 Copy / Translate / Share，选区是父页上的一个换行（坑 262）。修后菜单不弹、选区为空 |
+| 点痕迹跳到位置 | 通。翻页模式下点痕迹那行，标注出现在屏幕上（x 204、y 895、宽 420），选中态多画一个 `g` |
 | 关书重开 | 标注还在。HMR 整页重载后回首页，点 Continue reading 重开，overlayer 照画 |
 
 改动：`vendor/foliate-js/paginator.js` 不再注册它自己的三个 touch 监听器（`PATCHED:`），pane 上挂 `{passive:false}` 的 `touchmove` 按 `claimsTouch()` 抢触摸，阅读区补 `data-reader-surface`。
 
 ### 还没验的
-
-点痕迹跳转的落点不对：点一行痕迹，顶栏从 6 走到 5，但两条标注的 overlay 都在 x≈1640，也就是屏幕右边两页开外。是点中了别的行还是 `navigate` 走的是块号而不是标注 ID，要再跑一次才知道。
 
 大纲跳转、`[p.N]` 链接、`highlightQuote` 三条经过壳的路，这轮又没点到（第一轮也没有）。书内链接（脚注、章节间）没在有 `<a>` 的书上点过，《The Experience Machine》的 page-list 页码模拟器上仍没看过，71 MB 那本加了标注层之后的内存和翻页耗时没重量。
 
