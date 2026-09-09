@@ -47,6 +47,7 @@ import {
   popupRect,
   rectsHit,
   shouldAppendInkPoint,
+  showsThroughBody,
   underlineBand,
   unionRect,
   type PagePoint,
@@ -573,7 +574,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
         const range = rangeForMark(card, ann);
         // The table put the mark on this page; this device's layout may have
         // put it a column over, exactly as it may a cited quote.
-        if (range && clipRects(card.rectsOf(range)).length === 0) card.showColumnOf(range);
+        if (range && !showsThroughBody(card.rectsOf(range))) card.showColumnOf(range);
       }
       paint(card, pageIndex);
     },
