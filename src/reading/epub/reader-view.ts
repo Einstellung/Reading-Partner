@@ -155,14 +155,13 @@ export async function createEpubReader(
   view.style.display = "block";
   view.style.width = "100%";
   view.style.height = "100%";
-  // The measure, and the margin, both on the element — because the renderer
-  // sizes its two flows against two different containers, and anything left to
-  // it comes out at two widths (docs/pitfall/251). Capping the element caps the
-  // line: paginated flow gives its container's whole width to one column, and
-  // `max-inline-size` only decides how many columns fit, not how wide one is
-  // (docs/pitfall/247). The padding is the white space beside the text, which
-  // is the same on both sides of the frame in both flows. The surface around
-  // the element stays full width, so the tap zones still reach the screen edge.
+  // The white space beside the text is inline padding on the element, which
+  // both flows are inside: the renderer's gap is zero because paginated and
+  // scrolled spend a gap against two different containers and come out a
+  // stripe apart (docs/pitfall/247). The line itself is capped by the
+  // renderer's grid track, max-inline-size times max-column-count; the cap on
+  // the element is the same measure once more, so the surface around it stays
+  // full width and the tap zones still reach the screen edge.
   view.style.maxWidth = "48rem";
   view.style.margin = "0 auto";
   view.style.paddingInline = "1.5rem";
@@ -264,6 +263,27 @@ export async function createEpubReader(
     });
   }
   view.addEventListener("create-overlay", onCreateOverlay);
+
+  // Every section's frame, made transparent to pointers as it loads.
+  //
+  // The frame does not merely fail to dispatch events inside itself
+  // (docs/pitfall/244) — it swallows them, so a touch that lands on the text
+  // reaches nothing at all, the parent page included (docs/pitfall/252). With
+  // pointer-events off, that touch hits the renderer's own container behind it
+  // and bubbles out to the pane, which is where every gesture this reader has
+  // is read: tapping an edge to turn, swiping, dragging a selection out of the
+  // text with caretRangeFromPoint (annotation-layer.ts).
+  //
+  // What it costs is the system's own long-press selection, which needs the
+  // frame to receive the touch. That is deliberate and it matches the PDF side:
+  // this app never marks by way of a system selection, on either format — the
+  // pen drags and that is the selection (docs/39 §5).
+  function onSectionLoad(e: Event): void {
+    const doc = (e as CustomEvent<{ doc?: Document }>).detail?.doc;
+    const frame = doc?.defaultView?.frameElement as HTMLElement | null | undefined;
+    if (frame) frame.style.pointerEvents = "none";
+  }
+  view.addEventListener("load", onSectionLoad);
 
   // open() hands the book over and lays nothing out; without init() the
   // renderer sits on an empty frame and `relocate` never fires, which reads
@@ -392,15 +412,13 @@ export async function createEpubReader(
     },
     cancelDraw: () => marks.cancelDrag(),
 
-    // A pen out takes the selection first: the reader dragged those words in
-    // order to mark them, and the mark may well cover one that is already
-    // there. With no pen out, the only thing a lift can mean is the mark under
-    // it (the annotation editor, exactly as tapping one on a page does).
-    consumeUp: (x, y) => {
-      const stroke = strokeOfTool(tool);
-      if (stroke && marks.takeSelection(stroke, tool?.color ?? DEFAULT_MARK_COLOR)) return true;
-      return marks.hit(x, y);
-    },
+    // A lift that was not the end of a drag can only mean the mark under it:
+    // the annotation editor, exactly as tapping one on a page does. There is no
+    // second path here for a selection the system made, because there is no
+    // system selection to read — the frame takes no pointers at all
+    // (docs/pitfall/252), so every selection in this reader was dragged by
+    // beginDraw/extendDraw and ends in endDraw.
+    consumeUp: (x, y) => marks.hit(x, y),
 
     followLinkAt: (clientX, clientY) => {
       const c = contents();
@@ -431,6 +449,7 @@ export async function createEpubReader(
       destroyed = true;
       view.removeEventListener("relocate", onRelocate);
       view.removeEventListener("create-overlay", onCreateOverlay);
+      view.removeEventListener("load", onSectionLoad);
       try {
         view.close();
       } catch {

@@ -81,14 +81,15 @@ body {
   text-align: start;
   overflow-wrap: break-word;
   font-variant-numeric: oldstyle-nums proportional-nums;
-  /* The system's touch-and-hold callout, and nothing else. Selecting text is
-     how a mark is made on an EPUB (docs/39 §5) — the frame dispatches no events
-     (docs/pitfall/244), so the system's own selection is the only selection
-     there is — which is why user-select is deliberately left alone here, unlike
-     the PDF reading area (pitfall 49). The handles stay: they are what the
-     reader adjusts the passage with. The menu over them is what the app
-     replaces, and CSS is the only lever on it that works inside a frame with no
-     scripts. */
+  /* The system's touch-and-hold callout. Belt and braces now: the frame takes
+     no pointers at all (docs/pitfall/252), so no long press reaches the text to
+     raise one. Kept because CSS is the only lever on that menu that works
+     inside a frame with no scripts, and it costs nothing.
+
+     The selection this reader makes is dragged from the parent page with
+     caretRangeFromPoint and painted into the frame's own Selection
+     (annotation-layer.ts), so user-select stays alone — turning it off, the way
+     the PDF reading area does (pitfall 49), would stop the painting too. */
   -webkit-touch-callout: none;
 }
 p { margin: 0 0 0.85em; text-indent: 0; }
@@ -131,7 +132,7 @@ sup, sub { line-height: 0; }
 // is written verbatim into a custom property that is read twice: by parseFloat
 // in the layout arithmetic, and by the shadow stylesheet's own calc(). So every
 // length carries a unit — parseFloat ignores a "px" or "%" suffix, while the
-// stylesheet's grid template is dropped whole without one (docs/pitfall/251).
+// stylesheet's grid template is dropped whole without one (docs/pitfall/247).
 // The unit has to be the one the property is used as: --_gap is divided by 100
 // and is a percentage of the container (see the derivation in paginator.js).
 //

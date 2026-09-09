@@ -129,7 +129,7 @@ iPad Pro 11-inch (M5) / iOS 26.5，`tauri ios dev`，竖屏，阅读区 834×111
 | 书里的图 | 出得来。`blob:tauri://localhost/…`，`naturalWidth` 918 / 2137 / 1905，按 720px 正文宽缩排 |
 | frame | `tauri://localhost` 同源、`application/xhtml+xml`、`sandbox="allow-same-origin"`、0 个 `<script>`、0 个 `<link>`、head 里 2 个注入的 `<style>` |
 | CSP 三项 | `img-src blob:` 生效（图出得来）。`style-src`/`font-src` 的 `blob:` 这条路根本没用上：书自己的 CSS 被消毒器整块丢掉，也不加载任何 web 字体，`document.fonts.size` 是 0。排版全来自注入的 `<style>`，走的是 `'unsafe-inline'` |
-| 正文宽度 | 修前滚动 456px、翻页 674px；修后两个模式都 720px（坑 251） |
+| 正文宽度 | 修前滚动 456px、翻页 674px；修后两个模式都 720px（坑 247） |
 | 字号 | Zoom in 一次 19px → 21px |
 | 翻页/滚动模式切换 | 菜单里 Paged flip 开关生效，切过去正文重排，宽度不变 |
 | 关书重开 | 位置留住。回首页显示「p. 1 of 59」，Materials 里显示「Read 5%」 |
