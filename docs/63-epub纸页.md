@@ -35,7 +35,21 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 `reader-view.ts` 是桌子：一个滚动容器，每页一个固定尺寸的槽位，只有视口附近的槽位挂卡片（前后各一张），其余空着；同一 spine 文档在几张卡片里各有一份克隆。竖排一叠纸，翻页一屏一槽 scroll-snap。事件全在 app DOM 里：点击区、滑动、方向键在 `EpubReaderPane.tsx`，链接命中用 `shadowRoot.elementFromPoint`。引文高亮：在抽取文本里找到引文 → 定页 → 卡片树里同偏移取 Range → rects 画进 overlay；rect 落在纸外时把卡片移到引文所在列。
 
-给标注层留的挂点：`card.overlay`、`card.rangeOf(cfi)`/`card.cfiOf(range)`、`card.toViewport`/`fromViewport`、`controller.cardAt(x, y)`。五个标注方法现在是 no-op。
+标注挂在这几个上：`card.overlay`、`card.rangeOf(cfi)`/`card.cfiOf(range)`、`card.rectsOf(range)`、`card.toViewport`/`fromViewport`、`controller.cardAt(x, y)`。
+
+## 标注
+
+盘上形状和 docs/39 §5 一样：高亮、划线、AI 笔是 `position` 里一条 range CFI（`FragmentSelector`）加顶层 `quote`，外加 `position.pageIndex`（新页号）、`pageLabel`、`sortIndex`（`spine|字符偏移`）。CFI 是主锚点，引文是修复；解出来的字和引文头 24 个非空白字符对不上就按引文重找（`sameWords`）。AI 笔到这一层就是划线加一个固定的紫，开线程是壳做的（`use-mark-doors.ts`），阅读器不知道有这回事。
+
+墨迹是唯一按几何存的：`position` 是 `{ pageIndex, paths, width }`，`paths` 是每笔一条 `[x0,y0,x1,y1,…]`，单位是**页坐标**——576×864 的纸，原点左上，y 向下。这就是 overlay 自己的坐标系，不翻转。PDF 那边存的是 PDF 点、原点左下，`convert.ts` 进出各翻一次 y；EPUB 页没有 PDF 点，也没有那个约定要守。墨迹的 `sortIndex` 取所在页起点的字符偏移，一页上的几笔并列。
+
+`annotationPage()` 两种格式读的都是 `position.pageIndex`，同步侧零改动。
+
+画在每张卡片的 `.rp-overlay` 里，`.rp-marks` 一层、引文的 `.rp-quote` 一层，各清各的（坑 272）。文字标注按 CFI 解成 Range 取 `getClientRects()` 换页坐标，裁到版心（坑 271）；高亮铺整行、划线只画行底 2px，两者都是 `MARKUP_OPACITY`。墨迹一条 SVG polyline。选中态是绕外接框的一圈描边。卡片一换页就重画；缩放不用重画，overlay 在纸的坐标系里，跟着 `scale()` 走。
+
+事件全在 app DOM：pane 的 pointer 先给标注层（`markPointerDown`），它按 `engine/gesture/touch-routing.ts` 的表判笔/手指/`fingerDraw`，接下了就 `setPointerCapture`，翻页和点击区再也读不到这个指针。文字笔从落点到抬手两次 `caretAtPoint` 建 Range —— 不走系统选区，阅读区 `user-select: none`（坑 49、262）；shadow root 上有 `caretRangeFromPoint` 就用它，没有就退回自己量：点下的元素、最近的文本节点、节点内二分找字符边界（`caret.ts`）。抬手写下 CFI、引文、页号，交给 `onSaveAnnotations`。没有工具在手就不消费指针，手势那边照常翻页。
+
+点标注在页坐标里做命中测试（矩形 / 离墨迹路径的距离），发 `onAnnotationPopup({rect, annotation})`，rect 换回视口坐标。`navigate({annotationID})` 滚到那一页，标注落在纸外时按 `showColumnOf` 把卡片挪到它所在的列。
 
 ## 消毒边界
 

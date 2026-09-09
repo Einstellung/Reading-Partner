@@ -202,7 +202,11 @@ export type FigureSource =
 
 `sortIndex` 那边 Zotero 的 PDF 是三段 `页|上边距|左边距`，EPUB 是两段 `spine 序号|字符偏移`（`00003|0001234`，定宽补零）。`makeSortIndex` 旁边加同族函数即可，同一本书内不会混用两种键，字典序仍然正确。
 
-`annotationPage()` 对 EPUB 标注返回块号，不返回 null。写这句时块号的概念还没定下来；定下来之后 `position.pageIndex` 在两种格式里是同一件东西——`[p.N]` 的那个 N——`distill.ts`、`arrears.ts`、`use-notes.ts`、`use-prep-trigger.ts` 因此一行不用改，蒸馏和笔记直接拿到 EPUB 标注的页码。痕迹列表那行 `Page {pageLabel}` 也照旧：`pageLabel` 填 `pageLabels[i]`，有 page-list 的书显示的是纸书页码。
+墨迹是唯一不走 CFI 的：自由笔迹不在任何字上，没有 range 可写、没有引文可修，所以照 PDF 的形状存 `position = { pageIndex, paths, width }`，`paths` 每笔一条 `[x0,y0,x1,y1,…]`，单位是 576×864 纸的页坐标、原点左上（docs/63「标注」）。`sortIndex` 取所在页起点的字符偏移。
+
+`annotationPage()` 对 EPUB 标注返回页号，不返回 null。`position.pageIndex` 在两种格式里是同一件东西——`[p.N]` 的那个 N——`distill.ts`、`arrears.ts`、`use-notes.ts`、`use-prep-trigger.ts` 因此一行不用改，蒸馏和笔记直接拿到 EPUB 标注的页码。痕迹列表那行 `Page {pageLabel}` 也照旧：`pageLabel` 是排出来那一页的印刷页码，没有 page-list 的书填页序号。
+
+这里说的「位置块」现在是 docs/63 的排出来的页：一页一条，`pageIndex` 是页序号。表重算时按 CFI 重新落页（`migrate.ts`）。
 
 顺带：zotero/reader 是 AGPLv3（`COPYING` 明写），代码一行都不能抄。上面引的是它公开的数据格式，不是实现。
 
