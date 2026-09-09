@@ -61,7 +61,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 281）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 283）。
 
 ## EmbedPDF 引擎
 
@@ -103,6 +103,7 @@
 - [268-a-books-font-family-paginates-differently-on-every-device](./268-a-books-font-family-paginates-differently-on-every-device.md) — 书的 `font-family: Georgia, serif` 压过基线，Georgia 没装就回退到设备默认字体，同一本书 73 页对 74 页，而分页表是跨设备同步写一次不重算的。消毒器把通用族名和未内嵌的具名字体一律改写成打包的字体栈，书自带 `@font-face` 的名字保留
 - [274-a-page-card-holds-the-whole-chapter](./274-a-page-card-holds-the-whole-chapter.md) — 页卡片挂的是整份 spine 文档，看不见的列还在 DOM 里：`innerText` 给整章，`textContent` 还夹着书自带 `<style>` 的 CSS 源码。页的文本只从分页表的 `charOffset` 或 `Fulltext.pages[]` 来
 - [279-marks-live-inside-the-cards-shadow-root](./279-marks-live-inside-the-cards-shadow-root.md) — `.rp-overlay` 和它的 `.rp-marks`/`.rp-quote` 在页卡片的 shadow root 里，`pane.querySelectorAll(".rp-marks > *")` 永远 0；盘上明明多了三条标注。数标注要逐张卡片进 `shadowRoot`
+- [282-a-books-page-background-only-fills-the-text-block](./282-a-books-page-background-only-fills-the-text-block.md) — 书的 `html`/`body` 背景只铺到版心为止，纸的页边距露的是卡片自己的白：同一张纸量出 `#f4edda`（版心，书写了 `background-color: #fdfdfd`）和 `#f6efdc`（页边），按哪个都能得出相反结论。量纸面颜色取页边距
 - [280-page-counts-differ-between-webkitgtk-and-wkwebview](./280-page-counts-differ-between-webkitgtk-and-wkwebview.md) — 同一本书同一份几何，WebKitGTK 75 页、iOS WKWebView 77 页：改写字体（坑 268）解决不了两个 WebKit 分支的断行差异。分页表按设备算，页码不是跨设备的稳定标识
 - [278-caretrangefrompoint-stops-at-the-shadow-host](./278-caretrangefrompoint-stops-at-the-shadow-host.md) — `document.caretRangeFromPoint` 在 WebKitGTK 上穿进 shadow root，在 WKWebView 上停在宿主给 `DIV@0`；iOS 上走的一直是 `caret.ts` 自己二分的那条。在 Linux 上验过 caret 不等于在 iOS 上验过
 - [260-foliate-turns-the-page-itself-once-the-frame-is-transparent](./260-foliate-turns-the-page-itself-once-the-frame-is-transparent.md) — foliate 的 paginator 构造函数里自带 touchstart/move/end，跟手平移列、抬手按速度 snap。书的 iframe 透明之后触摸够得着它，和父页 pane 一起翻：一次滑动翻三页，笔拖选区顺带把页翻回去。按 vendor README 的 `PATCHED:` 约定不注册那三个监听器，手势只留 pane 一个读法；滚动模式本来就不归它（`if (this.scrolled) return`）
@@ -231,6 +232,7 @@
 
 ## WebKit / webview
 
+- [281-a-multiply-over-a-transparent-backdrop-paints-the-source](./281-a-multiply-over-a-transparent-backdrop-paints-the-source.md) — `isolation: isolate` 的组里，`mix-blend-mode: multiply` 盖在没人画过的地方直接画出乘数色本身（αb 为 0 时 `(1-αb)·Cs + αb·B` 就是 Cs）：纸留在组外，整张纸照样正好乘成 `--page-wash`。组里放什么按「谁该被乘」定，别为了垫底把纸搬进组，也别把「组里空的」当成 no-op
 - [219-ios-webkit-clips-a-blur-to-the-elements-box](./219-ios-webkit-clips-a-blur-to-the-elements-box.md) — iOS WebKit 把 `filter: blur()` 的结果裁在元素自己的盒子上，`rounded-full` 也不管，模糊的光晕在真 iPad webview 里是个硬边方块（桌面 Chromium 和 WebKitGTK 都是圆的）；光晕改用径向渐变，不用 filter
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板

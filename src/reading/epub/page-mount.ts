@@ -2,9 +2,9 @@
 // ruler both fill (docs/64). The sanitized document's <html> element is cloned
 // whole into a multi-column box the size of the text block, so column k of the
 // layout is page k of the document. Nothing is added inside that <html>
-// element — the baseline stylesheet, the clip box and the overlay sit beside
-// it — which is what keeps a CFI computed on the ingestion's tree true on this
-// one (cfi.ts).
+// element — the baseline stylesheet, the clip box, the paper tint and the
+// overlay sit beside it — which is what keeps a CFI computed on the ingestion's
+// tree true on this one (cfi.ts).
 //
 // The book's resources are answered from the archive as blob URLs: an <img>'s
 // src, an SVG image's href, a linked stylesheet (inlined, sanitized, its own
@@ -12,6 +12,7 @@
 // tree's shape does not.
 
 import { SHIPPED_FONT_STACK, rewriteCssUrls, sanitizeCss } from "./css-sanitize";
+import { PAGE_WASH_CSS, PAGE_WASH_GROUP_CSS } from "../engine/page-wash";
 import {
   BASE_FONT_PX,
   BASE_LINE_HEIGHT,
@@ -247,9 +248,21 @@ export function mountDocument(shadow: ShadowRoot, doc: SpineDocument, res: PageR
   rewriteResources(root, doc, res);
   columns.append(root);
   clip.append(columns);
+  // The paper and the tint over it, blended as one group and finished before
+  // the overlay is drawn (engine/page-wash.ts, docs/42). The book's own text and
+  // whatever colour its stylesheet paints under it are inside; the marks and the
+  // quote band are in the overlay, outside, so the tint never multiplies them.
+  const paper = owner.createElement("div");
+  paper.className = "rp-paper";
+  paper.style.cssText = PAGE_WASH_GROUP_CSS;
+  const wash = owner.createElement("div");
+  wash.className = "rp-wash";
+  wash.setAttribute("aria-hidden", "true");
+  wash.style.cssText = PAGE_WASH_CSS;
+  paper.append(clip, wash);
   const overlay = owner.createElement("div");
   overlay.className = "rp-overlay";
-  shadow.append(base, clip, overlay);
+  shadow.append(base, paper, overlay);
   return { root, clip, columns, overlay, ready: imagesSettled(root) };
 }
 
