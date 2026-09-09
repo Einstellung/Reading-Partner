@@ -3,6 +3,7 @@
 // still point at it.
 
 import { sweepDistillation } from "../../memory";
+import { releaseEpub } from "../epub";
 import type { ReaderShell } from "./shell";
 
 export function closeBook(
@@ -29,4 +30,8 @@ export function closeBook(
   // Detach the prep UI; the pipeline keeps prepping in the background.
   shell.resetPrep();
   shell.releaseBook();
+  // The unzipped archive, if this was an EPUB. The reading pane lets go of it
+  // as it unmounts; this is for the book whose pane never came up, whose bytes
+  // the ingestion is still holding open (book-cache.ts).
+  if (bookId) releaseEpub(bookId);
 }

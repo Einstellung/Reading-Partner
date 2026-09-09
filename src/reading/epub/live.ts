@@ -7,10 +7,8 @@
 // fresh cut, or every [p.N] already written down moves (docs/39 §1).
 
 import type { Fulltext } from "../../fulltext/types";
+import { acquireEpub, ensurePagination } from "./book-cache";
 import { fulltextFrom } from "./fulltext";
-import { paginate } from "./paginate";
-import { getPagination, putPagination } from "./pagination-store";
-import { parseEpub } from "./parse";
 
 /**
  * An EPUB's full text, in the shape a PDF's has. The pagination table is read
@@ -20,8 +18,6 @@ export async function extractEpubFulltext(
   bookId: string,
   buffer: ArrayBuffer,
 ): Promise<Omit<Fulltext, "version">> {
-  const book = parseEpub(new Uint8Array(buffer));
-  const stored = await getPagination(bookId);
-  const pagination = stored ?? (await putPagination(bookId, paginate(book)));
-  return fulltextFrom(book, pagination);
+  const book = acquireEpub(bookId, buffer);
+  return fulltextFrom(book, await ensurePagination(bookId, book));
 }

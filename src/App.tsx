@@ -55,7 +55,7 @@ import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
 import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
-import EpubPlaceholderPane from "./ui/components/reader/EpubPlaceholderPane";
+import EpubReaderPane from "./reading/epub/EpubReaderPane";
 import type { BookFormat } from "./platform/app/library";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -1346,7 +1346,21 @@ export default function App() {
           onPointerDownCapture={dismissOnPaneTouch}
           onPointerUpCapture={onPanePointerUp}
         >
-          {embedDoc?.format === "epub" && <EpubPlaceholderPane className="h-full w-full" />}
+          {embedDoc?.format === "epub" && (
+            <EpubReaderPane
+              key={embedDoc.bookId}
+              bookId={embedDoc.bookId}
+              buffer={embedDoc.buffer}
+              viewState={embedDoc.viewState}
+              className="block"
+              onView={onEmbedView}
+              onInitialized={onEmbedInitialized}
+              onError={onEmbedError}
+              onChangeViewState={persist}
+              onChangeViewStats={setStats}
+              onQuoteHighlightChange={setQuoteHlActive}
+            />
+          )}
           {embedDoc && embedDoc.format !== "epub" && (
             <EmbedReaderPane
               key={embedDoc.bookId}

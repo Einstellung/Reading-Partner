@@ -14,7 +14,7 @@ import { pageMarks, type Annotation, type ViewState } from "../../platform/app/r
 import { formatOfBytes, type BookFormat } from "../../platform/app/library";
 import { ensureFulltext, type Fulltext } from "../../fulltext";
 import { sweepDistillation } from "../../memory";
-import { extractEpubFulltext, paginate, parseEpub, getPagination, putPagination } from "../epub";
+import { acquireEpub, ensurePagination, extractEpubFulltext } from "../epub";
 import { epubFigures } from "../figures/epub";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
 import { seedReadingPosition } from "../reading-position";
@@ -48,10 +48,10 @@ export const bookOpenIo: BookOpenIo = {
   ensureFigures: (bookId, buffer, format) =>
     format === "epub"
       ? ensureFigures(bookId, buffer, Date.now, async (b) => {
-          const book = parseEpub(new Uint8Array(b));
-          const stored = await getPagination(bookId);
-          const pagination = stored ?? (await putPagination(bookId, paginate(book)));
-          return epubFigures(book, pagination);
+          // The same parsed book the full text and the reading pane read: an
+          // EPUB is unzipped once per open, not once per consumer (book-cache.ts).
+          const book = acquireEpub(bookId, b);
+          return epubFigures(book, await ensurePagination(bookId, book));
         })
       : ensureFigures(bookId, buffer),
   clearFigureCache,
