@@ -6,7 +6,7 @@
 
 ## 原因
 
-iPad 到日落自动切系统深色外观，WKWebView 的 `prefers-color-scheme` 跟着变。书自己的 CSS 里有 `@media (prefers-color-scheme: dark)`，规则是给黑底写的：正文改成浅灰、背景改成黑。背景那条被卡片挡住不生效，字色那条生效，于是浅灰字配浅色纸。图是位图，不受 CSS 影响，所以只有字出问题。
+iPad 到日落自动切系统深色外观，WKWebView 的 `prefers-color-scheme` 跟着变。书自己的 CSS 里有 `@media (prefers-color-scheme: dark)`，规则是给黑底写的，正文改成浅灰；这本书的深色分支没有把版心底色一起改黑，于是浅灰字落在浅色纸上。图是位图，不受 CSS 影响，所以只有字出问题。
 
 ## 解法
 
