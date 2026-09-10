@@ -19,7 +19,6 @@ import {
   type GestureState,
 } from "./paged-gesture";
 import {
-  planFinger,
   planPointer,
   pointerKindOf,
   routesAsContact,
@@ -51,7 +50,6 @@ import {
   type BandOffset,
 } from "./rubber-band";
 import { INDICATOR_FADE_AFTER_MS, thumbMetrics } from "./scroll-indicator";
-import { isTouchDebugEnabled, publishTouchDebug, type TouchDebugContact } from "./touch-debug";
 import type { PagedGestureCtx } from "./context";
 
 // Long press (ms) before a stationary finger in paged mode is handed to native
@@ -130,8 +128,6 @@ export function attachTouchRouter(
   // True only while the synthetic pointerup below is being dispatched: it
   // travels through this router's own listeners on the way to the page.
   let synthesizing = false;
-  // Every live contact (pen included), for the on-device probe only.
-  const contacts = new Map<number, TouchDebugContact>();
   // Latched once a second finger lands, cleared when the glass is empty.
   let multiTouch = false;
   // Latched when a pen lands on top of resting fingers: they are dead until
@@ -568,32 +564,6 @@ export function attachTouchRouter(
     }
     panBase = c;
   };
-  // --- probe -----------------------------------------------------------
-  const publishDebug = () => {
-    if (!isTouchDebugEnabled()) return;
-    publishTouchDebug({
-      contacts: [...contacts.values()],
-      fingers: fingers.size,
-      mode: touchGestureMode(fingers.size),
-      multi: multiTouch,
-      penLock,
-      fingerDraw: ctx.current.fingerDraw,
-      // What the next finger to land will do, from the same routing table
-      // the router itself uses — the one number that says whether a dead
-      // swipe is a routing verdict or something further down.
-      fingerPlan: planFinger(toolKindOf(ctx.current.tool), ctx.current.fingerDraw).action,
-      navLock: toolKindOf(ctx.current.tool) === "navlock",
-    });
-  };
-  const trackContact = (e: PointerEvent) => {
-    contacts.set(e.pointerId, {
-      id: e.pointerId,
-      type: e.pointerType,
-      width: e.width,
-      height: e.height,
-    });
-  };
-
   // --- shared dispatch ------------------------------------------------
   // Eat the event here: the engine's page providers sit below this capture
   // listener, so stopping propagation is a per-contact block (unlike the
@@ -607,13 +577,11 @@ export function attachTouchRouter(
   // go inert until they lift, so the hand a user writes with cannot
   // interrupt the stroke. Under the navigation lock the stylus is a contact
   // like any other and never gets here.
-  const onPenDown = (e: PointerEvent) => {
-    trackContact(e);
+  const onPenDown = () => {
     feedVertical({ type: "cancelFling" });
     if (fingers.size > 0) suspendFingerGesture();
     penLock = fingerLockAfterPen(penLock, true, fingers.size);
     resetPanBase();
-    publishDebug();
   };
 
   const onDown = (e: PointerEvent) => {
@@ -631,14 +599,12 @@ export function attachTouchRouter(
     // whether the engine may watch it move at all.
     const plan = planPointer(tool, kind, ctx.current.fingerDraw);
     if (!routesAsContact(tool, kind)) {
-      if (kind === "pen") onPenDown(e);
+      if (kind === "pen") onPenDown();
       return;
     }
     fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, plan });
-    trackContact(e);
     const wasMulti = multiTouch;
     multiTouch = multiTouchLatch(multiTouch, fingers.size);
-    publishDebug();
     if (fingerVerdict(touchGestureMode(fingers.size), multiTouch, penLock) === "swallow") {
       swallow(e);
       if (!wasMulti) {
@@ -697,8 +663,6 @@ export function attachTouchRouter(
     if (!f) return;
     f.x = e.clientX;
     f.y = e.clientY;
-    trackContact(e);
-    publishDebug();
     const mode = touchGestureMode(fingers.size);
     if (fingerVerdict(mode, multiTouch, penLock) === "swallow") {
       swallow(e);
@@ -721,13 +685,11 @@ export function attachTouchRouter(
 
   const onEnd = (e: PointerEvent, cancelled: boolean) => {
     if (synthesizing) return;
-    const wasContact = contacts.delete(e.pointerId);
     const leaving = fingers.get(e.pointerId);
     const known = fingers.delete(e.pointerId);
     if (!known && pointerKindOf(e.pointerType) !== "touch") {
       // A pointer this router never drove (a mouse, or a stylus outside the
       // navigation lock): the engine owns its whole lifetime.
-      if (wasContact) publishDebug();
       return;
     }
     resetPanBase();
@@ -784,7 +746,6 @@ export function attachTouchRouter(
     // that drops a contact without ending it would leak an entry, and a stale
     // engineSaw entry hands the engine an up it never asked for.
     if (fingers.size === 0) engineSaw.clear();
-    publishDebug();
   };
   const onUp = (e: PointerEvent) => onEnd(e, false);
   const onCancel = (e: PointerEvent) => onEnd(e, true);
