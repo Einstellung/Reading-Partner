@@ -69,7 +69,7 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 ## 消毒边界
 
-安全边界是消毒器。`sanitize.ts` 保留 `<style>`、`<link rel="stylesheet">`（只认 zip 内相对路径）和 `style` 属性，内容都过 `css-sanitize.ts`：删 `@import`/`@charset`/`@namespace`/`@page`/`@keyframes`，删 `behavior`/binding/`expression()`/script 协议，url() 只认 zip 条目（带协议一律删），`position: fixed/sticky` 改 `relative`，`font-family` 按上面的规则改写。输出规范化、幂等，`sanitize(sanitize(x)) === sanitize(x)` 仍成立。
+安全边界是消毒器。`sanitize.ts` 保留 `<style>`、`<link rel="stylesheet">`（只认 zip 内相对路径）和 `style` 属性，内容都过 `css-sanitize.ts`：删 `@import`/`@charset`/`@namespace`/`@page`/`@keyframes`，删 `behavior`/binding/`expression()`/script 协议，url() 只认 zip 条目（带协议一律删），`position: fixed/sticky` 改 `relative`，`font-family` 按上面的规则改写。条件含 `prefers-color-scheme` 的 `@media` 块整个丢掉，dark 和 light 都丢，嵌在 `@supports` 里的那层也丢（坑 288）。输出规范化、幂等，`sanitize(sanitize(x)) === sanitize(x)` 仍成立。
 
 ## 迁移
 
