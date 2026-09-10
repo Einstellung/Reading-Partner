@@ -1,8 +1,8 @@
-// propose_topic (src/info/briefer/topic-tool.ts, docs/21): the companion says
-// where kept material belongs and what it adds, and writes nothing. What is
-// asserted here is that it only drafts — the card is the whole effect — plus how
-// a proposal is matched to a topic the reader already has, and the roster the
-// model proposes out of. Run: bun test.
+// propose_topic (src/soul/topic/propose.ts, docs/21): the AI says where this
+// conversation belongs and what it adds, and writes nothing. What is asserted
+// here is that it only drafts — the card is the whole effect — plus how a
+// proposal is matched to a topic the reader already has, the roster the model
+// proposes out of, and the topic a desk is laid under. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -12,7 +12,8 @@ import {
   threadTopic,
   topicGuidance,
   type TopicChoice,
-} from "../../src/info/briefer/topic-tool";
+  type TopicProposalCardData,
+} from "../../src/soul";
 import {
   createThread,
   loadThreads,
@@ -21,7 +22,6 @@ import {
 } from "../../src/platform/app/threads";
 import { createTopic } from "../../src/platform/app/topics";
 import { installAppData } from "../support/appdata-fake";
-import type { TopicProposalCardData } from "../../src/info/boxes/cards";
 
 const TOPICS: TopicChoice[] = [
   { id: "brief", name: "Brief" },
@@ -45,12 +45,10 @@ test("proposing an existing topic drafts a card and writes nothing", async () =>
   const said = await t.execute({
     topic: "t-9f2",
     meaning: "First eval of the new refusal set.",
-    articleId: "a-1",
   });
   expect(cards).toEqual([
     {
       kind: "topic-proposal",
-      articleId: "a-1",
       threadId: "briefing-2026-09-08",
       topic: { id: "t-9f2", name: "AI safety" },
       meaning: "First eval of the new refusal set.",
@@ -66,8 +64,6 @@ test("a name no topic answers to is a proposal for a new one", async () => {
   const { t, cards } = tool();
   await t.execute({ topic: "Robot learning", meaning: "A second line of work." });
   expect(cards[0].topic).toEqual({ newName: "Robot learning" });
-  // Nothing was kept, so nothing is filed but the conversation.
-  expect(cards[0].articleId).toBeUndefined();
 });
 
 // The model repeats what it was shown at least as often as it repeats an id,
@@ -101,18 +97,17 @@ test("a proposal reads by name whichever half of the union it is", () => {
 
 // --- the topic the desk is laid under ---------------------------------------
 
-// The info desk used to be laid under the brief queue whatever the conversation
-// was about. Now it is laid under the conversation's own topic, which is what
-// makes the memory it reads — and the distillation of what was said — the
-// topic's rather than the queue's.
-test("a conversation lays its desk under its own topic, and the brief queue until it has one", async () => {
+// A conversation is laid under its own topic once the reader has confirmed one,
+// and under none until then: there is no queue to fall back on, and what follows
+// from having no topic — no observation tools, nothing distilled — is the point.
+test("a conversation lays its desk under its own topic, and under none until it has one", async () => {
   installAppData();
   rebuildThreadStoreForTests();
   const bookId = "info-2026-09-08";
   await loadThreads(bookId).catch(() => {});
   createThread(bookId, "info", "briefing-2026-09-08");
 
-  expect(await threadTopic(bookId, "briefing-2026-09-08")).toEqual({ id: "brief", name: "Brief" });
+  expect(await threadTopic(bookId, "briefing-2026-09-08")).toEqual({ id: null, name: "" });
 
   const topic = await createTopic("AI safety");
   setThreadTopic(bookId, "briefing-2026-09-08", topic.id);
@@ -121,6 +116,6 @@ test("a conversation lays its desk under its own topic, and the brief queue unti
     name: "AI safety",
   });
 
-  // A conversation nobody has opened is the queue's, not an error.
-  expect(await threadTopic(bookId, "2026-09-08:a1")).toEqual({ id: "brief", name: "Brief" });
+  // A conversation nobody has opened has no topic, which is not an error.
+  expect(await threadTopic(bookId, "2026-09-08:a1")).toEqual({ id: null, name: "" });
 });

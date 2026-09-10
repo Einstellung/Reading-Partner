@@ -19,9 +19,8 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
   ProfileUpdateCardData,
-  TopicProposalCardData,
 } from "../../../info/boxes/cards";
-import { proposedTopicName } from "../../../info/briefer/topic-tool";
+import { proposedTopicName, type TopicProposalCardData } from "../../../soul";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";

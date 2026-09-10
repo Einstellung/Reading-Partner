@@ -42,9 +42,11 @@ const line = (id: string, summary = "a thing that happened", type = "stuck-point
 test("the three blocks come out in order: statements, what is open, observations", () => {
   const out = memorySection({
     statements: [statement({ id: "s-a" })],
-    observations: [observation({ id: STUCK })],
-    bookId: BOOK,
-    observationSnapshot: line(READ, "asked about entropy", "belief"),
+    anchor: {
+      observations: [observation({ id: STUCK })],
+      bookId: BOOK,
+      observationSnapshot: line(READ, "asked about entropy", "belief"),
+    },
     hasObservationTools: true,
   });
   const at = (needle: string) => out.indexOf(needle);
@@ -59,9 +61,11 @@ test("each statement carries its id, and the reader's own come before the conclu
       statement({ id: "s-guessed", text: "reads past the maths" }),
       statement({ id: "s-said", text: "no diagrams", author: "reader" }),
     ],
-    observations: [],
-    bookId: BOOK,
-    observationSnapshot: "",
+    anchor: {
+      observations: [],
+      bookId: BOOK,
+      observationSnapshot: "",
+    },
     hasObservationTools: false,
   });
   expect(out).toContain("- no diagrams (id s-said)");
@@ -76,9 +80,11 @@ test("superseded statements, concerns and empty text are not in the block", () =
       statement({ id: "s-concern", text: "watching the RL papers", kind: "concern" }),
       statement({ id: "s-blank", text: "   " }),
     ],
-    observations: [],
-    bookId: BOOK,
-    observationSnapshot: "",
+    anchor: {
+      observations: [],
+      bookId: BOOK,
+      observationSnapshot: "",
+    },
     hasObservationTools: false,
   });
   expect(out).toBe("");
@@ -89,9 +95,11 @@ test("superseded statements, concerns and empty text are not in the block", () =
 test("a block with nothing in it does not appear at all", () => {
   const out = memorySection({
     statements: [],
-    observations: [observation({ id: STUCK })],
-    bookId: BOOK,
-    observationSnapshot: "",
+    anchor: {
+      observations: [observation({ id: STUCK })],
+      bookId: BOOK,
+      observationSnapshot: "",
+    },
     hasObservationTools: false,
   });
   expect(out).not.toMatch(/known about this reader/i);
@@ -105,9 +113,11 @@ test("observations a standing statement rests on are left out of the third block
   );
   const out = memorySection({
     statements: [statement({ id: "s-a", evidence: [READ] })],
-    observations: [],
-    bookId: BOOK,
-    observationSnapshot: snapshot,
+    anchor: {
+      observations: [],
+      bookId: BOOK,
+      observationSnapshot: snapshot,
+    },
     hasObservationTools: false,
   });
   expect(out).not.toContain("explained attention back");
@@ -119,12 +129,34 @@ test("a superseded statement stops covering its evidence", () => {
   const covering = statement({ id: "s-a", evidence: [READ] });
   const out = memorySection({
     statements: [{ ...covering, supersededBy: "s-b" }],
-    observations: [],
-    bookId: BOOK,
-    observationSnapshot: snapshot,
+    anchor: {
+      observations: [],
+      bookId: BOOK,
+      observationSnapshot: snapshot,
+    },
     hasObservationTools: false,
   });
   expect(out).toContain("explained attention back");
+});
+
+// The standing statements are about the reader and not about the material
+// (docs/48): they ride a turn with nothing on the desk to be stuck in, where the
+// other two blocks have nothing to be about. Only the observation tools' own
+// paragraph joins them, because the tools do ride such a turn.
+test("with no anchor the profile still prints and the book's blocks do not", () => {
+  const out = memorySection({
+    statements: [statement({ id: "s-said", text: "no diagrams", author: "reader" })],
+    hasObservationTools: false,
+  });
+  expect(out).toBe(
+    memorySection({
+      statements: [statement({ id: "s-said", text: "no diagrams", author: "reader" })],
+      anchor: { observations: [observation({ id: STUCK })], bookId: BOOK, observationSnapshot: "" },
+      hasObservationTools: false,
+    }).split("\n\nStill open in this book")[0],
+  );
+  expect(out).toContain("- no diagrams (id s-said)");
+  expect(out).not.toContain("Still open in this book");
 });
 
 test("dropping an entry takes its body and leaves the rest of the snapshot alone", () => {

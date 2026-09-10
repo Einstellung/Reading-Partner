@@ -96,6 +96,10 @@ const LAYER: Record<string, Layer> = {
   // holds, plus the assembly. A capability because it reaches for desk, memory,
   // conversations, palace and ai, and for no domain.
   soul: "capability",
+  // Where this conversation belongs (docs/21): the tool that proposes a topic,
+  // the card it draws and the apply that files it. The soul's, not any one
+  // domain's — every desk has a conversation, and only some have a book.
+  "soul/topic": "capability",
 
   info: "domain",
   // The nouns the info side is cut along (docs/63), in the order they may depend

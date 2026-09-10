@@ -172,6 +172,7 @@ test("companion turn: reading tools only, kickoff as the first message", async (
   expect(turn).not.toBeNull();
   expect(names(turn!.tools)).toEqual([
     "find_paper",
+    "propose_topic",
     "read_chapter",
     "read_conversation",
     "read_pages",
@@ -189,6 +190,7 @@ test("a book with no text layer gets no read_pages tool", async () => {
   const turn = await buildReadingTurn(input({ fulltext: fulltext("no-text-layer") }));
   expect(names(turn!.tools)).toEqual([
     "find_paper",
+    "propose_topic",
     "read_conversation",
     "research_literature",
     "search_conversations",
@@ -218,6 +220,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
   const turn = await buildReadingTurn(input({ figures }));
   expect(names(turn!.tools)).toEqual([
     "find_paper",
+    "propose_topic",
     "read_chapter",
     "read_conversation",
     "read_pages",
@@ -237,6 +240,7 @@ test("a live pipeline mounts the source and paper tools, once", async () => {
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "ingest_url",
+    "propose_topic",
     "read_chapter",
     "read_conversation",
     "read_note",
@@ -256,6 +260,7 @@ test("a pipeline with no plan yet mounts no paper tools", async () => {
   expect(names(turn!.tools)).toEqual([
     "find_paper",
     "ingest_url",
+    "propose_topic",
     "read_chapter",
     "read_conversation",
     "read_pages",
@@ -279,6 +284,7 @@ test("kept articles mount the saved-article tools and their prompt line", async 
     "find_paper",
     "ingest_url",
     "list_saved_articles",
+    "propose_topic",
     "read_chapter",
     "read_conversation",
     "read_note",
@@ -376,6 +382,7 @@ test("no pipeline means no link ingestion", async () => {
   const turn = await buildReadingTurn(input());
   expect(names(turn!.tools)).toEqual([
     "find_paper",
+    "propose_topic",
     "read_chapter",
     "read_conversation",
     "read_pages",

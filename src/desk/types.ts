@@ -109,6 +109,13 @@ export interface DeskItem {
   // instrumentation an item can only write after the fact — whether the pictures
   // it planned actually went.
   afterFit?(dropped: ReadonlySet<string>): void;
+  // Called when the reader confirms a topic for this conversation (docs/21).
+  // Filing the conversation is the soul's; what else follows from the topic
+  // being settled is the item's own — the info article files its kept copy
+  // under it. Not called on the turn that laid the desk: the proposal is a card
+  // the reader confirms later, and the host hands the hooks to the Apply
+  // (soul/topic/settle.ts).
+  onTopicSettled?(topicId: string): Promise<void>;
 }
 
 // How a domain opens one of its own kinds. Registered at startup, keyed by the

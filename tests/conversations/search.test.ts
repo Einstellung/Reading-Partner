@@ -127,7 +127,8 @@ test("the same thread id in two day files is two conversations, not one", async 
       "info-2026-07-22": [thread("onboarding", [msg("user", "papers again, on the train home")])],
     },
   );
-  const { hits } = await searchConversations("papers", { topicId: "brief", widen: false }, disk);
+  // Neither thread carries a topic, so the search is the unscoped one.
+  const { hits } = await searchConversations("papers", { topicId: null, widen: false }, disk);
   expect(hits.length).toBe(2);
   expect(hits.every((h) => h.threadId === "onboarding")).toBe(true);
   expect(hits.map((h) => h.fileKey).sort()).toEqual(["info-2026-07-21", "info-2026-07-22"]);

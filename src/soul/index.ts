@@ -4,3 +4,20 @@
 
 export { assembleTurn, configuredModel, type AssembleInput, type AssembledTurn } from "./turn";
 export { soulMemorySection, openSoul, type Soul } from "./self";
+export { proposedTopicName, type TopicProposalCardData } from "./topic/card";
+export {
+  buildProposeTopicTool,
+  liveTopicChoices,
+  resolveProposedTopic,
+  threadTopic,
+  topicGuidance,
+  type ProposeTopicDeps,
+  type TopicChoice,
+  type TopicProposalSurface,
+} from "./topic/propose";
+export {
+  applyTopicProposal,
+  type TopicApplied,
+  type TopicSettledHook,
+  type TopicSettlePorts,
+} from "./topic/settle";

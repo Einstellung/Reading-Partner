@@ -30,6 +30,8 @@ import { ensureBriefTopic } from "../../../platform/app/topics";
 import {
   loadSavedArticles,
   saveArticle,
+  savedArticleId,
+  setSavedArticleTopic,
   type SavedArticle,
   type SavedArticleInput,
 } from "../../../reading/saved-articles";
@@ -442,7 +444,16 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
         companionContext(),
       ]);
       if (state.kind !== "body") return;
-      setInfoCall(articleAnchor(b, itemId, state.body.text, ctx));
+      const meta = b.items[itemId];
+      setInfoCall(
+        articleAnchor(b, itemId, state.body.text, ctx, {
+          // Whether or not the reader has kept it: the id is derived from the
+          // address and the title, and moving one that was never kept writes
+          // nothing (reading/saved-articles.ts).
+          savedId: savedArticleId(meta.url, meta.title),
+          fileArticle: setSavedArticleTopic,
+        }),
+      );
     },
     [companionContext],
   );

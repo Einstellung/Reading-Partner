@@ -33,7 +33,7 @@ import { infoBookId } from "./call";
 import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
 import { nativeConversation } from "./conversation";
 import { withCompanionTools } from "./desk";
-import { threadTopic } from "./topic-tool";
+import { threadTopic } from "../../soul";
 import {
   createVoiceCall,
   type VoiceCall,
@@ -266,15 +266,12 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
             opts.control ?? REFUSE_BRIEFING,
             {
               collecting,
-              // propose_topic is mounted here too, with nowhere to draw its
-              // card: the companion is one companion, and a call that could not
-              // even offer to file what was just talked about would be a
-              // different one. Its answer is text, which is what gets spoken.
-              topic: { threadId: anchor.threadId, onTopicCard: () => {} },
-              // And the lab tools, for the same reason plus one: the prompt the
-              // call shares tells the companion to propose a lab when the reader
-              // says what they want followed, and a described tool that is not
-              // mounted is a call that fails mid-sentence.
+              // The lab tools ride a call as well: the prompt the call shares
+              // tells the companion to propose a lab when the reader says what
+              // they want followed, and a described tool that is not mounted is
+              // a call that fails mid-sentence. (propose_topic is the soul's and
+              // is mounted by the assembly, with nowhere here to draw its card:
+              // its answer is text, which is what gets spoken.)
               lab: { threadId: anchor.threadId, onLabCard: () => {} },
             },
           ).catch((e) => {

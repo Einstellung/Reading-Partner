@@ -12,9 +12,8 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
   ProfileUpdateCardData,
-  TopicProposalCardData,
 } from "../boxes/cards";
-import { proposedTopicName } from "./topic-tool";
+import { proposedTopicName, type TopicProposalCardData } from "../../soul";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { InfoSnapshot, RunStart } from "../boxes/pipeline";
 import type { RequestOutcome } from "./reader";
@@ -260,8 +259,5 @@ export function labArchivedNote(card: LabArchiveCardData): string {
 // Filed under the topic the companion proposed. Said in the reader's voice, like
 // the other two, because it is their gesture the AI is being told about.
 export function topicFiledNote(card: TopicProposalCardData): string {
-  const where = proposedTopicName(card.topic);
-  return card.articleId
-    ? `Filed this under "${where}", and this conversation with it.`
-    : `Filed this conversation under "${where}".`;
+  return `Filed this conversation under "${proposedTopicName(card.topic)}".`;
 }

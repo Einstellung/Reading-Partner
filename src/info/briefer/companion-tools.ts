@@ -23,7 +23,6 @@ import {
 import type { FetchFn } from "../extract/http";
 import type { SessionStatus, SignInOutcome } from "../extract/webview-session";
 import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "../extract/read-page";
-import { buildProposeTopicTool, type ProposeTopicDeps } from "./topic-tool";
 import { buildArchiveLabTool, buildProposeLabTool, type LabToolDeps } from "./lab-tool";
 
 export type BriefingScope = "retriage" | "full";
@@ -76,10 +75,6 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // Present only where a sign-in window can really be opened; omitted elsewhere,
   // and then open_site_sign_in is not among the tools.
   siteSignIn?: SiteSignInDeps;
-  // Where kept material belongs (topic-tool.ts, docs/21). Needs the conversation
-  // it is filing and the reader's topics, so it is passed by whoever knows both;
-  // without it propose_topic is not mounted.
-  topicProposal?: ProposeTopicDeps;
   // The research rooms (lab-tool.ts, docs/63). Needs the conversation the
   // proposal is made in and the roster to validate against, so it is passed by
   // whoever knows both; without it propose_lab and archive_lab are not mounted.
@@ -385,7 +380,6 @@ export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
     buildReadPageTool(deps),
     buildUpdateProfileTool(deps),
     buildGenerateBriefingTool(deps),
-    ...(deps.topicProposal ? [buildProposeTopicTool(deps.topicProposal)] : []),
     ...(deps.labs ? [buildProposeLabTool(deps.labs), buildArchiveLabTool(deps.labs)] : []),
     ...(deps.siteSignIn ? [buildSignInTool(deps.siteSignIn)] : []),
   ];
