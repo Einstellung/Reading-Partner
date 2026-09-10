@@ -46,12 +46,15 @@ export async function collectSourceArrears(
     }
     for (const unit of units) {
       if (opts.isBusy?.(unit.id)) continue;
+      // Grouped by topic, so a unit with none has nowhere to go.
+      if (unit.topicId === null) continue;
+      const topicId = unit.topicId;
       const newMessages = countNewReaderMessages(
         unit.messages,
-        await cursorOf(unit.topicId, unit.id),
+        await cursorOf(topicId, unit.id),
       );
       const owed: SourceArrears = { source: source.kind, unit, newMessages };
-      byTopic.set(unit.topicId, [...(byTopic.get(unit.topicId) ?? []), owed]);
+      byTopic.set(topicId, [...(byTopic.get(topicId) ?? []), owed]);
     }
   }
   return byTopic;

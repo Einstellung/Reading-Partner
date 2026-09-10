@@ -4,3 +4,44 @@
 
 export { assembleTurn, configuredModel, type AssembleInput, type AssembledTurn } from "./turn";
 export { soulMemorySection, openSoul, type Soul } from "./self";
+export {
+  DOOR_KIND,
+  doorDate,
+  doorKey,
+  doorLabel,
+  listDoorUnits,
+  openDoorTurn,
+  registerDoorDistillSource,
+  type DoorTurnInput,
+} from "./door";
+export {
+  EMPTY_SEQUENCE,
+  SEQUENCE_FILE,
+  SEQUENCE_VERSION,
+  appSequenceIo,
+  currentStamp,
+  deskOfFile,
+  isStale,
+  orderSpans,
+  readSequence,
+  rebuildSequence,
+  spanOf,
+  type ConversationSpan,
+  type DeskOf,
+  type Sequence,
+  type SequenceIo,
+  type SpanKind,
+  type Stamp,
+} from "./sequence";
+export {
+  TAIL_RUNG,
+  TAIL_RUNG_ID,
+  TURN_KEEP,
+  assembleTail,
+  bookTitles,
+  deskLabel,
+  soulTail,
+  type TailInput,
+  type TailMessage,
+  type TailSpan,
+} from "./tail";
