@@ -6,7 +6,9 @@
 //
 // Dropped whole: @import (a fetch), @charset and @namespace (meaningless once
 // the sheet is inline), @page and @keyframes (paper does not animate, and the
-// page box is ours). Dropped per declaration: behavior, bindings, expression()
+// page box is ours), and any @media asking about prefers-color-scheme (the
+// page is paper, light in either appearance — docs/pitfall/288). Dropped per
+// declaration: behavior, bindings, expression()
 // and anything spelling a script scheme; a url() that is not an entry of the
 // archive; and the positions that escape a clipping box — fixed and sticky are
 // written back as relative, so the box the rule was sizing keeps its size.
@@ -114,6 +116,12 @@ const DROP_AT_RULES = new Set([
   "viewport", "-ms-viewport", "counter-style", "property", "layer",
 ]);
 const NESTED_AT_RULES = new Set(["media", "supports", "container"]);
+// A @media asking about the reader's colour scheme, at any nesting depth. The
+// page is paper and stays light whatever the system appearance is, so a book's
+// dark-mode rules would land their pale text on a light page; the light branch
+// goes too, because the book's unconditional rules already are the light ones
+// (docs/64, docs/pitfall/288).
+const COLOR_SCHEME_QUERY = /prefers-color-scheme/i;
 const DROP_PROPERTIES = new Set([
   "behavior", "-moz-binding", "-webkit-binding", "binding", "filter", "-ms-filter", "zoom",
   "content-visibility", "pointer-events", "cursor",
@@ -291,6 +299,7 @@ function sanitizeBlock(css: string, opts: CssSanitizeOptions): string[] {
       const name = atRuleName(prelude);
       if (DROP_AT_RULES.has(name)) continue;
       if (NESTED_AT_RULES.has(name)) {
+        if (name === "media" && COLOR_SCHEME_QUERY.test(prelude)) continue;
         const inner = sanitizeBlock(body, opts);
         if (inner.length > 0) out.push(`${prelude} { ${inner.join(" ")} }`);
         continue;

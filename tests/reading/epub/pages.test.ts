@@ -177,6 +177,29 @@ describe("the book's CSS", () => {
     expect(rewriteCssUrls(out, (t) => `blob:${t}`)).toContain('url("blob:img/a.png")');
   });
 
+  test("a colour-scheme query does not follow the system appearance onto the page", () => {
+    const css = `
+      p { color: #222 }
+      @media (prefers-color-scheme: dark) { p { color: #ddd } body { background: #000 } }
+      @media (prefers-color-scheme: light) { p { color: #111 } }
+      @media screen and (prefers-color-scheme: dark) { p { color: #eee } }
+      @media screen { p { line-height: 1.5 } }
+      @media (prefers-color-scheme: dark) { @supports (display: grid) { p { color: #ccc } } }
+      @supports (display: grid) { @media (prefers-color-scheme: dark) { p { color: #bbb } } p { margin: 0 } }
+    `;
+    const out = sanitizeCss(css, { resolveUrl: resolve });
+    expect(out).not.toContain("prefers-color-scheme");
+    expect(out).not.toContain("#ddd");
+    expect(out).not.toContain("#111");
+    expect(out).not.toContain("#eee");
+    expect(out).not.toContain("#ccc");
+    expect(out).not.toContain("#bbb");
+    expect(out).toContain("p { color: #222 }");
+    expect(out).toContain("@media screen { p { line-height: 1.5 } }");
+    expect(out).toContain("@supports (display: grid) { p { margin: 0 } }");
+    expect(sanitizeCss(out, { resolveUrl: resolve })).toBe(out);
+  });
+
   test("a font the book does not carry becomes the shipped faces", () => {
     const opts = { resolveUrl: resolve };
     expect(sanitizeDeclarations("font-family: Georgia, serif", opts)).toBe(

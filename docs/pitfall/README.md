@@ -267,6 +267,7 @@
 - [247-a-unitless-gap-drops-the-rule-that-caps-the-text](./247-a-unitless-gap-drops-the-rule-that-caps-the-text.md) — foliate 的几何属性进自定义属性后被读两遍：JS 侧 `parseFloat` 认不认单位都得 6，CSS 侧影子样式表拿它们算 `calc()`，`calc(720px - 6)` 非法，撑着行宽的整条 `grid-template-columns` 作废——1280px 窗口一行一百二十个字符，iPad 上滚动 456px、翻页 674px 两个宽度。每个值按用途带单位（`gap` 是 `%`，长度是 `px`）；带对之后两种流仍差 4px（各扣几个 gap 不同），gap 归零、留白改成 `<foliate-view>` 上的 `padding-inline`，两边才都是 720px
 - [252-the-books-frame-swallows-every-touch](./252-the-books-frame-swallows-every-touch.md) — 坑 244 的另一半：落在书的 iframe 上的触摸，父页一条事件都收不到（frame 的 padding 里和元素外面都正常）。翻页点击区、滑动、书内链接命中测试在真机上从来没生效过。frame 上 `pointer-events: none` 能把事件让给父页，代价是 iOS 长按选区同时没了；两个都要得自己做一层可开关的盖板
 - [246-an-iframes-first-load-event-is-about-blank](./246-an-iframes-first-load-event-is-about-blank.md) — iframe 一插进 DOM，WebKit 立刻为它的初始 about:blank 发一次 `load`，早于取 `src`；配上坑 99 那种静默取消，一次没发生的导航看起来和成功一模一样。判导航成功要看 `documentURI` 落在哪，不看事件
+- [288-a-books-dark-mode-rides-the-system-appearance-into-a-light-page](./288-a-books-dark-mode-rides-the-system-appearance-into-a-light-page.md) — iPad 日落自动切系统深色，WKWebView 的 `prefers-color-scheme` 跟着变，书自带的 `@media (prefers-color-scheme: dark)` 把正文改成为黑底准备的浅灰，浮在 app 那张始终浅色的纸上（图是位图不受影响）。消毒器把条件含 `prefers-color-scheme` 的 `@media` 整块丢掉，dark 和 light 都丢
 
 ## 浮层与 shadcn 原语
 
