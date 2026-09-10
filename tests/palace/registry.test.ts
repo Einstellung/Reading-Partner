@@ -77,7 +77,7 @@ test("the distilled kinds are the ones the passes already read", () => {
       .map((r) => r.kind)
       .sort();
   expect(under("distilledMessages")).toEqual(
-    ["info-thread", "reading-thread", "retell-thread"].sort(),
+    ["conversation", "info-thread", "reading-thread", "retell-thread"].sort(),
   );
   expect(under("distilledMarks")).toEqual(["annotations"]);
   // Whatever keys distilledMessages is a conversation, and its id is a thread

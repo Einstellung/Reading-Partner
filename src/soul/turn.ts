@@ -17,6 +17,9 @@ import type { ProviderId } from "../ai/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
 import type { AgentTool } from "../ai/agent";
 import { soulMemorySection, openSoul } from "./self";
+import { appSequenceIo, readSequence, type SequenceIo } from "./sequence";
+import { soulTail, TAIL_RUNG, TAIL_RUNG_ID, TURN_KEEP } from "./tail";
+import { appConversationIo, type ConversationIo } from "../conversations";
 
 export interface AssembleInput {
   desk: OpenedDesk;
@@ -25,6 +28,10 @@ export interface AssembleInput {
   // Which budget this call is spent out of (src/budget). Chat unless the caller
   // says otherwise, because a turn the reader is waiting for is the default.
   purpose?: BudgetPurpose;
+  // The two stores the soul's tail is read out of (tail.ts). Injected for the
+  // tests; the ones on disk otherwise.
+  sequenceIo?: SequenceIo;
+  conversationIo?: ConversationIo;
 }
 
 export interface AssembledTurn {
@@ -58,7 +65,13 @@ export function configuredModel(s: Settings): Model<Api> | null {
  * soul was being read — the caller has already been superseded.
  */
 export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn | null> {
-  const { desk, messages = [], purpose = "chat" } = input;
+  const {
+    desk,
+    messages = [],
+    purpose = "chat",
+    sequenceIo = appSequenceIo,
+    conversationIo = appConversationIo,
+  } = input;
   const { items, env } = desk;
   const anchor = items.find((i) => i.memory !== undefined);
   const teller = items.find((i) => i.history !== undefined);
@@ -99,11 +112,36 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
       .join("\n\n");
   }
 
-  function composeMessages(dropped: ReadonlySet<string>): DeskMessage[] {
+  function ownMessages(dropped: ReadonlySet<string>): DeskMessage[] {
     return teller ? teller.history!.compose(dropped) : [...messages];
   }
 
-  const rungs: readonly Rung<string>[] = teller?.rungs ?? [];
+  // What the reader last said anywhere, whatever desk they said it over
+  // (tail.ts). It fills what the item's own span leaves of the forty messages a
+  // turn replays, so a desk carrying a long conversation gets none of it — and
+  // on a device with nothing else on it there is none to be had, which is what
+  // keeps a fresh install's call byte for byte what it was.
+  const own = ownMessages(new Set());
+  const sequence = await readSequence(sequenceIo);
+  if (env.signal?.aborted) return null;
+  const tail = await soulTail({
+    spans: sequence.spans,
+    exclude: { fileKey: env.thread.key, threadId: env.thread.id },
+    keep: Math.max(0, TURN_KEEP - own.length),
+    io: conversationIo,
+  });
+  if (env.signal?.aborted) return null;
+
+  function composeMessages(dropped: ReadonlySet<string>): DeskMessage[] {
+    const span = ownMessages(dropped);
+    // The tight rung takes the tail with it: a turn cutting into what the reader
+    // said here has no business carrying what they said somewhere else.
+    if (tail.length === 0 || dropped.has(TAIL_RUNG_ID) || dropped.has("history-trim")) return span;
+    return [...tail, ...span];
+  }
+
+  const rungs: readonly Rung<string>[] =
+    tail.length === 0 ? (teller?.rungs ?? []) : [TAIL_RUNG, ...(teller?.rungs ?? [])];
   const skip = new Set<string>();
   for (const item of items) for (const id of item.skip ?? []) skip.add(id);
 

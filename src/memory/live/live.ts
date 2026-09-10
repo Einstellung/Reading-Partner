@@ -462,10 +462,14 @@ export async function distillInfoThread(opts: DistillInfoThreadOptions): Promise
   try {
     const found = await findSourceUnit(opts.threadId);
     if (!found) return;
-    const topic = (await listTopics()).find((t) => t.id === found.unit.topicId);
+    // A conversation nothing has filed yet distils nothing: an observation has
+    // to be written under a topic, and there is none to write it under.
+    const topicId = found.unit.topicId;
+    if (topicId === null) return;
+    const topic = (await listTopics()).find((t) => t.id === topicId);
     await distillSourceUnit(
-      found.unit.topicId,
-      topic?.name ?? found.unit.topicId,
+      topicId,
+      topic?.name ?? topicId,
       found.unit,
       opts.trigger,
     );

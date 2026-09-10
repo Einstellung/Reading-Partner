@@ -4,7 +4,8 @@
 // putting together. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { assembleTurn, configuredModel } from "../../src/soul";
+import { assembleTurn, configuredModel, type SequenceIo } from "../../src/soul";
+import type { ConversationIo } from "../../src/conversations";
 import {
   openDesk,
   registerDeskItemKind,
@@ -17,6 +18,8 @@ import {
   appendMessage,
   createBookThread,
   rebuildThreadStoreForTests,
+  type Thread,
+  type ThreadMessage,
 } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 
@@ -299,4 +302,122 @@ test("a turn the reader has already walked away from assembles nothing", async (
   controller.abort();
   const laid = await desk([item("only")], env({ signal: controller.signal }));
   expect(await assembleTurn({ desk: laid })).toBeNull();
+});
+
+// --- the soul's tail (src/soul/tail.ts) ------------------------------------
+
+// A store of conversations to read the tail out of, in place of the disk. The
+// index and the messages come off the same literal files, the way they do in
+// the app.
+function store(files: Record<string, Record<string, ThreadMessage[]>>) {
+  const threads = (name: string): Thread[] =>
+    Object.entries(files[name] ?? {}).map(
+      ([id, messages]) => ({ id, annotationId: "", path: "", createdAt: 0, messages }) as Thread,
+    );
+  const conversationIo: ConversationIo = {
+    listRoot: async () => Object.keys(files),
+    readText: async () => null,
+    peekThreads: async (fileKey) => threads(`threads-${fileKey}.json`),
+  };
+  const sequenceIo: SequenceIo = {
+    conversations: conversationIo,
+    mtime: async () => 1,
+    readText: async () => null,
+    writeText: async () => {},
+  };
+  return { conversationIo, sequenceIo };
+}
+
+function said(role: "user" | "ai", text: string, ts: number): ThreadMessage {
+  return { id: `${role}-${ts}`, role, text, ts };
+}
+
+// The pin: nothing else on the device means nothing in front of the item's own
+// span, byte for byte what the desk composed before any of this existed.
+test("a fresh install replays exactly what the item carries and nothing else", async () => {
+  const laid = await desk([
+    item("teller", {
+      history: {
+        compose: () => [
+          { role: "user", text: "why is this fast?" },
+          { role: "ai", text: "because of the cache" },
+        ],
+      },
+    }),
+  ]);
+  const turn = await assembleTurn({ desk: laid, ...store({}) });
+  expect(turn!.messages).toEqual([
+    { role: "user", text: "why is this fast?" },
+    { role: "ai", text: "because of the cache" },
+  ]);
+});
+
+test("what the reader said over another desk rides in front of the item's own span", async () => {
+  const laid = await desk([
+    item("teller", { history: { compose: () => [{ role: "user", text: "here, now" }] } }),
+  ]);
+  const turn = await assembleTurn({
+    desk: laid,
+    ...store({
+      "threads-info-2026-07-21.json": { t0: [said("user", "about the debt cycle", 10)] },
+    }),
+  });
+  expect(turn!.messages).toEqual([
+    { role: "user", text: "[over the briefing of 2026-07-21]\nabout the debt cycle" },
+    { role: "user", text: "here, now" },
+  ]);
+});
+
+// The item's span wins when the two compete: a conversation long enough to fill
+// the turn by itself leaves the tail nothing.
+test("an item carrying a full span leaves no room for the tail", async () => {
+  const full = Array.from({ length: 40 }, (_, i) => ({
+    role: (i % 2 === 0 ? "user" : "ai") as "user" | "ai",
+    text: `mine ${i}`,
+  }));
+  const laid = await desk([item("teller", { history: { compose: () => full } })]);
+  const turn = await assembleTurn({
+    desk: laid,
+    ...store({ "threads-info-2026-07-21.json": { t0: [said("user", "elsewhere", 10)] } }),
+  });
+  expect(turn!.messages).toEqual(full);
+});
+
+test("the conversation being held is never replayed twice", async () => {
+  const laid = await desk([
+    item("teller", { history: { compose: () => [{ role: "user", text: "here, now" }] } }),
+  ]);
+  const turn = await assembleTurn({
+    desk: laid,
+    // The desk's own env names threads-book-1.json / thread-1; the store holds
+    // that file and one other.
+    ...store({
+      "threads-book-1.json": { "thread-1": [said("user", "here, now", 10)] },
+      "threads-door-2026-09-10.json": { t0: [said("user", "at the door", 20)] },
+    }),
+  });
+  expect(turn!.messages.map((m) => m.text)).toEqual([
+    "[at the door]\nat the door",
+    "here, now",
+  ]);
+});
+
+// The tail is the first thing on the ladder: a call that does not fit gives up
+// what was said over another desk before it touches what was said over this one.
+test("the tail is what a call over its window gives up first", async () => {
+  const huge = "the block. ".repeat(800_000);
+  const laid = await desk([
+    item("teller", {
+      rungs: [{ id: "big-block", notice: "the big block was left out" }],
+      history: { compose: () => [{ role: "user", text: "here, now" }] },
+      prompt: (view) => (view.dropped.has("big-block") ? "small" : huge),
+    }),
+  ]);
+  const turn = await assembleTurn({
+    desk: laid,
+    ...store({ "threads-info-2026-07-21.json": { t0: [said("user", "elsewhere", 10)] } }),
+  });
+  expect(turn!.messages).toEqual([{ role: "user", text: "here, now" }]);
+  // And it goes silently: the reader has no stake in it.
+  expect(turn!.notice).toBe("Note: the big block was left out.");
 });
