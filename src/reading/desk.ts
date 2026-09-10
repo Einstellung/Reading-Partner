@@ -4,7 +4,7 @@
 // tools the book mounts, how much of it is inlined, the prompt those blocks come
 // out in, the replayed conversation and the ladder of what to give up when the
 // window is tight (M6/M9, docs/03, docs/09, docs/14, docs/21, docs/24). What it
-// does not do is assemble a call — the desk hands these items to src/ai/assemble,
+// does not do is assemble a call — the desk hands these items to src/soul,
 // which is the one place a turn is put together, whatever is lying on it.
 //
 // There is one prompt (docs/09, 2026-08-19). What used to be two modes is now
@@ -412,8 +412,8 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // them ride is reading/lecture/stuck.ts's judgement — anchored to this book
   // first, this chapter first of all, with corrections on a quota of their own.
   //
-  // The observation tools themselves are the brain's and are mounted by the
-  // assembly (src/ai/assemble): they are about the reader, not about the book,
+  // The observation tools themselves are the soul's and are mounted by the
+  // assembly (src/soul): they are about the reader, not about the book,
   // and every kind of turn carries them.
   let observationSnapshot = "";
   let observationSnapshotTight = "";
@@ -625,7 +625,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // is the cache order (docs/09).
   //
   // What the prompt is allowed to say exists is `view.toolNames`: every tool
-  // this turn mounted, the brain's and the other items' included. The tools
+  // this turn mounted, the soul's and the other items' included. The tools
   // paragraph is rendered from those names, so a tool that was not mounted —
   // read_annotations on a book with no marks, read_paper with no prep run — is
   // not announced (platform/app/context.ts).

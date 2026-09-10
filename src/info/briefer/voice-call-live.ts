@@ -11,7 +11,7 @@
 // stream of text, an ending, and an abort, and that is what askOnThread is.
 
 import { runAgentTurn } from "../../ai/agent";
-import { assembleTurn } from "../../ai/assemble";
+import { assembleTurn } from "../../soul";
 import { replayableHistory } from "../../ai/turn-rows";
 import { glossaryTerms } from "../../ai/voice/cleanup";
 import { openDesk } from "../../desk";

@@ -1,7 +1,7 @@
 // One turn of a retell's conversation (docs/31), as the retell view asks for it.
 //
 // The assembly itself is no longer here. What a retell contributes to a call is
-// reading/retell/desk.ts, what the brain contributes is src/ai/assemble, and
+// reading/retell/desk.ts, what the soul contributes is src/soul, and
 // putting the two together is one function every domain now shares (docs/61).
 // This file is what is left of the old entry point: it lays a desk with the
 // retell on it, asks for a turn, and hands the answer back in the shape the view
@@ -11,7 +11,7 @@
 // stream; the caller owns runAgentTurn.
 
 import type { AgentTool } from "../../ai/agent";
-import { assembleTurn } from "../../ai/assemble";
+import { assembleTurn } from "../../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../../desk";
 import type { Settings } from "../../platform/app/settings";
 import {
@@ -33,7 +33,7 @@ export {
 } from "./desk";
 // The configured model's metadata, re-exported for the same reason it is from
 // reading/turn.ts: this is where the retell's callers have always asked for it.
-export { configuredModel } from "../../ai/assemble";
+export { configuredModel } from "../../soul";
 
 export interface RetellTurnInput extends RetellDeskRef {
   settings: Settings;

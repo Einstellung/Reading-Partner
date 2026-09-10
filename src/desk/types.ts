@@ -3,7 +3,7 @@
 // A desk item is one piece of material the reader has put in front of the AI: a
 // book, an article they kept, a briefing, a talk being rehearsed. It is not the
 // AI and it is not a mode — the same assembly runs over whatever is lying there
-// (ai/assemble), and an item only says what its own material contributes:
+// (soul), and an item only says what its own material contributes:
 // tools, a paragraph of prompt, the conversation it carries, the retrieval it
 // anchors.
 //
@@ -54,7 +54,7 @@ export interface DeskPromptView {
   // The memory paragraph the assembly built (docs/48), handed to the one item
   // that anchors the retrieval and to no other. Empty for every other item.
   memory: string;
-  // Every tool mounted this turn, the brain's included: an item that renders a
+  // Every tool mounted this turn, the soul's included: an item that renders a
   // frame naming the tools has to name all of them.
   toolNames: readonly string[];
   // The paragraphs the other items' tools brought, in desk order. An item that

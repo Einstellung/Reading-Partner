@@ -122,7 +122,7 @@ async function openOutline(ref: OutlineDeskRef, env: DeskEnv): Promise<DeskItem 
     prompt: composePrompt,
     // Nothing retrieved: a talk is not a book and has no observations scoped to
     // it. The anchor is carried all the same, because it is what says the
-    // standing statements ride this turn (ai/assemble/memory.ts).
+    // standing statements ride this turn (soul/self.ts).
     memory: { bookId: "", observations: [], snapshot: () => "" },
     history: { compose: composeMessages },
   };

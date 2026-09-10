@@ -10,7 +10,7 @@
 // helpers are still pure and still asserted directly. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { assembleTurn } from "../../src/ai/assemble";
+import { assembleTurn } from "../../src/soul";
 import { openDesk, type DeskEnv, type DeskRef } from "../../src/desk";
 import {
   formatProfile,

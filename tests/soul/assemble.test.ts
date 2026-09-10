@@ -1,10 +1,10 @@
-// The one assembly (src/ai/assemble, docs/61): a laid desk plus what is known
+// The one assembly (src/soul, docs/61): a laid desk plus what is known
 // about the reader, put together into one call. Fake items throughout — what a
 // book contributes is tested in tests/reading, and what is tested here is the
 // putting together. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { assembleTurn, configuredModel } from "../../src/ai/assemble";
+import { assembleTurn, configuredModel } from "../../src/soul";
 import {
   openDesk,
   registerDeskItemKind,
@@ -82,7 +82,7 @@ test("the items' prompts come out in desk order, and an empty one leaves no gap"
 });
 
 // What is always there, then what this desk happens to hold.
-test("the tools are the brain's and then each item's", async () => {
+test("the tools are the soul's and then each item's", async () => {
   createBookThread("book-1", "thread-1");
   appendMessage("book-1", "thread-1", { role: "user", text: "why is this fast?", ts: 1000 });
   const laid = await desk([
@@ -100,11 +100,11 @@ test("the tools are the brain's and then each item's", async () => {
 });
 
 // The AI can reach for what it and the reader already said, wherever they said
-// it (src/conversations, docs/61). Part of the brain rather than of any item:
+// it (src/conversations, docs/61). Part of the soul rather than of any item:
 // what was said belongs to the reader, and the desk it was said over is only
 // where the search starts. So it rides an empty desk and a desk with no topic
 // settled, which is exactly where the observation tools do not.
-test("the brain brings the conversation search to every desk", async () => {
+test("the soul brings the conversation search to every desk", async () => {
   const empty = await assembleTurn({ desk: await desk([]) });
   expect(empty!.tools.map((t) => t.name)).toContain("search_conversations");
   expect(empty!.tools.map((t) => t.name)).toContain("read_conversation");
@@ -113,7 +113,7 @@ test("the brain brings the conversation search to every desk", async () => {
   expect(scoped!.tools.map((t) => t.name)).toContain("search_conversations");
 });
 
-test("an item is told every tool name on the desk, the brain's included", async () => {
+test("an item is told every tool name on the desk, the soul's included", async () => {
   createBookThread("book-1", "thread-1");
   appendMessage("book-1", "thread-1", { role: "user", text: "why is this fast?", ts: 1000 });
   let seen: readonly string[] = [];
@@ -227,7 +227,7 @@ test("with no item carrying the history, the caller's messages are replayed", as
   expect(turn!.messages).toEqual([{ role: "user", text: "from the caller" }]);
 });
 
-// The desk with nothing on it (docs/61): no material, no prompt, and the brain
+// The desk with nothing on it (docs/61): no material, no prompt, and the soul
 // still there. It assembles rather than failing, which is what the companion
 // with no book open will stand on.
 test("an empty desk assembles", async () => {

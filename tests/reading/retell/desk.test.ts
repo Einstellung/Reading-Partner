@@ -8,7 +8,7 @@
 // Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { assembleTurn } from "../../../src/ai/assemble";
+import { assembleTurn } from "../../../src/soul";
 import { openDesk, type DeskEnv } from "../../../src/desk";
 import type { Fulltext } from "../../../src/fulltext/types";
 import { createThread, rebuildThreadStoreForTests } from "../../../src/platform/app/threads";
@@ -105,7 +105,7 @@ test("the retell opens into its own prompt and its own tools", async () => {
   expect(names).toContain("search_topic");
   expect(names).toContain("record_chapter_decision");
   expect(names).toContain("write_talk_segment");
-  // The tools that write memory are the brain's and are not the item's.
+  // The tools that write memory are the soul's and are not the item's.
   expect(names).not.toContain("observation_update");
   expect(names).not.toContain("statement_write");
   // The kickoff still opens the replay, and the item carries the history.
@@ -130,7 +130,7 @@ test("what is known about the reader rides the assembled retell turn", async () 
       ],
     }),
   );
-  // A reader message on the retell's own thread, so the brain has something to
+  // A reader message on the retell's own thread, so the soul has something to
   // hang a new statement's evidence on.
   createThread(retellThreadKey(retell.id), "", retell.id);
   const desk = await openDesk([{ kind: RETELL_KIND, ref: ref() }], env);

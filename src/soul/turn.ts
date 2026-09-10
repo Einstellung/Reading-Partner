@@ -1,7 +1,7 @@
 // One assembly, for every turn the app takes (docs/61). What used to be a
 // buildXTurn per domain — a reading turn, a retell turn, a coach turn, an info
 // turn — each with its own copy of "gather the tools, compose the prompt, fit it
-// to the window", is this: the desk says what is in front of the AI, the brain
+// to the window", is this: the desk says what is in front of the AI, the soul
 // says what is known about the reader, and this puts the two together and prices
 // the result.
 //
@@ -10,13 +10,13 @@
 // items have tools, prompts, a history and a ladder.
 
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { fitToBudget, type BudgetPurpose, type Rung } from "../../budget";
-import type { DeskItem, DeskMessage, OpenedDesk } from "../../desk";
-import type { Settings } from "../../platform/app/settings";
-import type { ProviderId } from "../provider-ids";
-import { providers, toPiMessages } from "../providers";
-import type { AgentTool } from "../agent";
-import { brainMemorySection, openBrain } from "./memory";
+import { fitToBudget, type BudgetPurpose, type Rung } from "../budget";
+import type { DeskItem, DeskMessage, OpenedDesk } from "../desk";
+import type { Settings } from "../platform/app/settings";
+import type { ProviderId } from "../ai/provider-ids";
+import { providers, toPiMessages } from "../ai/providers";
+import type { AgentTool } from "../ai/agent";
+import { soulMemorySection, openSoul } from "./self";
 
 export interface AssembleInput {
   desk: OpenedDesk;
@@ -55,22 +55,22 @@ export function configuredModel(s: Settings): Model<Api> | null {
 
 /**
  * Assemble one turn from a laid desk. Null when the signal aborted while the
- * brain was being read — the caller has already been superseded.
+ * soul was being read — the caller has already been superseded.
  */
 export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn | null> {
   const { desk, messages = [], purpose = "chat" } = input;
   const { items, env } = desk;
   const anchor = items.find((i) => i.memory !== undefined);
   const teller = items.find((i) => i.history !== undefined);
-  const brain = await openBrain(env, anchor?.memory);
+  const soul = await openSoul(env, anchor?.memory);
   if (env.signal?.aborted) return null;
 
-  // The brain's tools first, then each item's in the order it lies on the desk.
+  // The soul's tools first, then each item's in the order it lies on the desk.
   // Which order they go out in is nothing to the model — the prompt names them
   // from a table of its own (platform/app/context.ts) — but it is the order a
   // reader of this list would expect: what is always there, then what this desk
   // happens to hold.
-  const tools = [...brain.tools, ...items.flatMap((i) => i.tools)];
+  const tools = [...soul.tools, ...items.flatMap((i) => i.tools)];
   const toolNames = tools.map((t) => t.name);
   // What each item is told the rest of the desk brought. Its own paragraphs are
   // left out: it already has them and decides where they sit.
@@ -85,7 +85,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // A desk with one item on it produces that item's prompt byte for byte, which
   // is what keeps the provider's cache prefix where it was (docs/09).
   function composePrompt(dropped: ReadonlySet<string>): string {
-    const memory = brainMemorySection(brain, env, anchor?.memory, dropped);
+    const memory = soulMemorySection(soul, env, anchor?.memory, dropped);
     return items
       .map((item) =>
         item.prompt({

@@ -52,11 +52,6 @@ const LAYER: Record<string, Layer> = {
   "platform/sync/merge": "platform",
 
   ai: "capability",
-  // One assembly for every turn (docs/61): a laid desk plus what is known about
-  // the reader, priced against the model's window. Its own node rather than a
-  // corner of ai/, because it may reach for the desk and for memory and ai
-  // itself must not — ai is the send path, and the assembly is a caller of it.
-  "ai/assemble": "capability",
   "ai/voice": "capability",
   budget: "capability",
   // Every conversation the app holds, searchable across the desks it happened
@@ -97,6 +92,10 @@ const LAYER: Record<string, Layer> = {
   // the live binding of the usage log has to import the log itself: at the root
   // of memory/ that import is a cycle.
   "memory/usage": "capability",
+  // The person at the desk (docs/61): what rides every turn whatever the desk
+  // holds, plus the assembly. A capability because it reaches for desk, memory,
+  // conversations, palace and ai, and for no domain.
+  soul: "capability",
 
   info: "domain",
   // The nouns the info side is cut along (docs/63), in the order they may depend
