@@ -1,7 +1,8 @@
-// What the orb's render layer owes the maths (src/ui/components/orb/VoiceOrb.tsx):
-// one rAF loop writing two custom properties, a subscription that comes down
-// with the component, and — the reason any of it is shaped this way — not one
-// re-render per level event.
+// What Lumen's render layer owes the maths (src/ui/components/lumen/Lumen.tsx):
+// one rAF loop writing custom properties onto one element, a loop that stops
+// when nobody can see it, a subscription that comes down with the component,
+// and — the reason any of it is shaped this way — not one re-render per level
+// event, per breath or per blink.
 //
 // The frame loop is driven by hand. A real rAF in a headless window fires on a
 // timer, and a test that waited for it would be asserting the timer.
@@ -16,7 +17,7 @@ import { useDom } from "../../../support/dom";
 const { cleanup, fireEvent, render } = await useDom();
 afterEach(cleanup);
 
-const { VoiceOrb } = await import("../../../../src/ui/components/orb/VoiceOrb");
+const { Lumen } = await import("../../../../src/ui/components/lumen/Lumen");
 
 // The frame queue, standing in for the browser's.
 let pending: FrameRequestCallback[] = [];
@@ -102,84 +103,125 @@ function session(phase: OrbPhase) {
 	};
 }
 
-function orb(container: HTMLElement): HTMLElement {
-	const el = container.querySelector("[aria-hidden='true']");
+function body(container: HTMLElement): HTMLElement {
+	const el = container.querySelector("[data-lumen]");
 	expect(el).toBeTruthy();
 	return el as HTMLElement;
 }
 
-const scaleOf = (el: HTMLElement) => Number(el.style.getPropertyValue("--orb-scale"));
-const glowOf = (el: HTMLElement) => Number(el.style.getPropertyValue("--orb-glow"));
+const num = (el: HTMLElement, name: string) => Number(el.style.getPropertyValue(name));
 
-test("a frame writes the scale and the glow onto the element", () => {
+test("a frame writes the whole pose onto one element", () => {
 	const s = session("listening");
-	const { container } = render(<VoiceOrb handle={s.handle} />);
+	const { container } = render(<Lumen handle={s.handle} />);
 	frame(0);
-	const el = orb(container);
-	expect(scaleOf(el)).toBeCloseTo(MOTION.listening.base, 3);
-	expect(glowOf(el)).toBeCloseTo(MOTION.listening.glowBase, 3);
+	const el = body(container);
+	for (const name of [
+		"--lumen-sx",
+		"--lumen-sy",
+		"--lumen-glow",
+		"--lumen-core",
+		"--lumen-pool",
+		"--lumen-tuft-y",
+		"--lumen-eye",
+		"--lumen-gx",
+	]) {
+		expect(Number.isFinite(num(el, name))).toBe(true);
+	}
+	expect(el.style.getPropertyValue("--lumen-tilt")).toMatch(/deg$/);
+	expect(el.style.getPropertyValue("--lumen-x")).toMatch(/%$/);
+	expect(num(el, "--lumen-sx")).toBeCloseTo(MOTION.listening.base, 1);
+	expect(num(el, "--lumen-glow")).toBeCloseTo(MOTION.listening.glowBase, 2);
 });
 
-test("the level reaches the orb through the frame loop", () => {
+test("the level reaches the body through the frame loop", () => {
 	const s = session("listening");
-	const { container } = render(<VoiceOrb handle={s.handle} />);
-	const el = orb(container);
+	const { container } = render(<Lumen handle={s.handle} />);
+	const el = body(container);
 	frame(0);
-	const quiet = scaleOf(el);
+	const quiet = num(el, "--lumen-glow");
 	s.level(1);
 	for (let i = 1; i <= 20; i++) frame(i * (1000 / 60));
-	expect(scaleOf(el)).toBeGreaterThan(quiet);
-	expect(glowOf(el)).toBeGreaterThan(MOTION.listening.glowBase);
-	// And it comes back down when the room goes quiet.
-	const loud = scaleOf(el);
+	expect(num(el, "--lumen-glow")).toBeGreaterThan(quiet);
+	const loud = num(el, "--lumen-glow");
 	s.level(0);
 	for (let i = 21; i <= 80; i++) frame(i * (1000 / 60));
-	expect(scaleOf(el)).toBeLessThan(loud);
+	expect(num(el, "--lumen-glow")).toBeLessThan(loud);
 });
 
-test("no level event re-renders anything", () => {
-	// The whole reason the level is a subscription and not a prop: this runs at
-	// 10 Hz for the length of a call.
+test("the body keeps moving with no level at all", () => {
+	// The breath is the clock's, not the microphone's: an idle Lumen with a
+	// closed microphone is still alive.
+	const s = session("idle");
+	const { container } = render(<Lumen handle={s.handle} />);
+	const el = body(container);
+	frame(0);
+	const first = el.style.getPropertyValue("--lumen-tilt");
+	for (let i = 1; i <= 90; i++) frame(i * (1000 / 60));
+	expect(el.style.getPropertyValue("--lumen-tilt")).not.toBe(first);
+});
+
+test("no level event and no frame re-renders anything", () => {
+	// The whole reason the level is a subscription and the pose is a custom
+	// property: this runs at 60 Hz for the length of a reading session.
 	const s = session("listening");
-	render(<VoiceOrb handle={s.handle} />);
+	render(<Lumen handle={s.handle} />);
 	frame(0);
 	const settled = s.renders;
-	for (let i = 1; i <= 60; i++) {
+	for (let i = 1; i <= 120; i++) {
 		s.level(i % 2 === 0 ? 0.9 : 0.1);
 		frame(i * (1000 / 60));
 	}
 	expect(s.renders).toBe(settled);
 });
 
-test("reduced motion holds the orb still", () => {
+test("reduced motion keeps the body nearly still", () => {
 	reducedMotion(true);
-	const s = session("listening");
-	const { container } = render(<VoiceOrb handle={s.handle} />);
-	const el = orb(container);
+	const s = session("idle");
+	const { container } = render(<Lumen handle={s.handle} />);
+	const el = body(container);
+	let worst = 0;
+	for (let i = 0; i <= 240; i++) {
+		frame(i * (1000 / 60));
+		worst = Math.max(worst, Math.abs(parseFloat(el.style.getPropertyValue("--lumen-tilt"))));
+	}
+	expect(worst).toBeGreaterThan(0);
+	expect(worst).toBeLessThan(0.3);
+});
+
+test("asleep shuts the eyes and settles the body", () => {
+	const s = session("idle");
+	const { container, rerender } = render(<Lumen handle={s.handle} />);
+	const el = body(container);
 	frame(0);
-	s.level(1);
-	for (let i = 1; i <= 40; i++) frame(i * (1000 / 60));
-	expect(scaleOf(el)).toBeCloseTo(MOTION.listening.base, 3);
-	expect(glowOf(el)).toBeCloseTo(MOTION.listening.glowBase, 3);
+	const awakeY = num(el, "--lumen-sy");
+	expect(num(el, "--lumen-eye")).toBeGreaterThan(0.9);
+
+	rerender(<Lumen handle={s.handle} rest />);
+	// Past the settle ramp.
+	for (let i = 1; i <= 120; i++) frame(i * (1000 / 60));
+	expect(num(el, "--lumen-eye")).toBe(0);
+	expect(num(el, "--lumen-sy")).toBeLessThan(awakeY);
+	expect(num(el, "--lumen-sx")).toBeGreaterThan(1);
 });
 
 test("unmounting takes the subscription and the loop with it", () => {
 	const s = session("listening");
-	const view = render(<VoiceOrb handle={s.handle} />);
+	const view = render(<Lumen handle={s.handle} />);
 	frame(0);
 	view.unmount();
 	expect(s.unsubscribed).toBe(1);
-	expect(cancelled).toHaveLength(1);
+	expect(cancelled.length).toBeGreaterThanOrEqual(1);
 });
 
 test("a tap opens the call, and the next one ends it", () => {
 	const idle = session("idle");
-	const first = render(<VoiceOrb handle={idle.handle} />);
+	const first = render(<Lumen handle={idle.handle} />);
 	fireEvent.click(first.container.querySelector("button")!);
 	expect(idle.calls).toEqual(["start"]);
 
 	const live = session("speaking");
-	const second = render(<VoiceOrb handle={live.handle} />);
+	const second = render(<Lumen handle={live.handle} />);
 	fireEvent.click(second.container.querySelector("button")!);
 	expect(live.calls).toEqual(["stop"]);
 });

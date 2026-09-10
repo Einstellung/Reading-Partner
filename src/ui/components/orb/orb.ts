@@ -4,10 +4,10 @@
 // between two sentences.
 //
 // A ui-layer display module with no React in it, the way hold-zones.ts is: the
-// numbers below decide what the orb looks like, and eyeballing them on a device
-// is not a way to find out whether they are right. VoiceOrb.tsx is rendering and
-// one rAF loop over these functions — named that and not Orb.tsx, which bun's
-// resolver cannot tell from this file (docs/pitfall/218).
+// numbers below decide what the companion looks like, and eyeballing them on a
+// device is not a way to find out whether they are right. The renderer is now
+// ui/components/lumen/Lumen.tsx, which draws a body rather than a disc and adds
+// its own arithmetic in lumen.ts; everything here is what the two share.
 //
 // One colour for the whole conversation loop, four kinds of motion. Every orb
 // with a published state list says the same thing — the states are pipeline
@@ -26,7 +26,7 @@ export type OrbPhase = "idle" | "listening" | "thinking" | "speaking";
 // `subscribeLevel` and not a `level` field: the level arrives about ten times a
 // second for as long as the call lasts, and a twenty-minute call is not a
 // re-render budget. The subscriber writes to a ref and a single rAF loop reads
-// it (VoiceOrb.tsx).
+// it (Lumen.tsx).
 export interface VoiceCallHandle {
 	phase: OrbPhase;
 	start: () => void;

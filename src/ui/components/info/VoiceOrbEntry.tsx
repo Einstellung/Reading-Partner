@@ -1,9 +1,10 @@
-// The way into the info voice session (docs/33, docs/45): a small orb resting in
-// the corner of the briefing, tapped to start talking. It grows to the call and
+// The way into the info voice session (docs/33, docs/45): Lumen resting in the
+// corner of the briefing, tapped to start talking. It grows to the call and
 // shrinks back when the call ends — there is no other screen, no transcript
 // panel and no controls, because the conversation is the interface.
 //
-// Rendering and event binding only; the orb's own numbers are ui/components/orb.
+// Rendering and event binding only; the numbers are ui/components/lumen and
+// ui/components/orb.
 //
 // Placement. Bottom right at rest and out of the way of the briefing's own
 // sticky header and its Ask button; centred during a call on a tablet or a
@@ -15,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { hasNativeSpeech } from "../../../platform/app/platform";
-import { VoiceOrb } from "../orb/VoiceOrb";
+import { Lumen } from "../lumen/Lumen";
 import { orbErrorLine, type OrbPhase, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
@@ -49,8 +50,12 @@ function VoiceOrbLayer({ dateKey, briefing }: { dateKey: string; briefing: Brief
 	return <OrbLayer call={asHandle(call)} />;
 }
 
-function StubOrbLayer() {
-	return <OrbLayer call={useStubCall()} />;
+// Exported for the dev harness (orb-spike-harness.tsx), which has no native
+// speech behind it and so never gets past the gate above. Everything below it
+// is the same code the real entry runs.
+export function StubOrbLayer() {
+	const { handle, rest } = useStubCall();
+	return <OrbLayer call={handle} rest={rest} />;
 }
 
 // The orb reads an error as a key into its own lines (interrupted, lost) or as
@@ -65,7 +70,7 @@ function asHandle(call: VoiceCallView): VoiceCallHandle {
 	return { phase: call.phase, start: call.start, stop: call.stop, error, subscribeLevel: call.subscribeLevel };
 }
 
-function OrbLayer({ call }: { call: VoiceCallHandle }) {
+function OrbLayer({ call, rest = false }: { call: VoiceCallHandle; rest?: boolean }) {
 	const line = orbErrorLine(call.error);
 	const calling = call.phase !== "idle";
 
@@ -78,7 +83,7 @@ function OrbLayer({ call }: { call: VoiceCallHandle }) {
 				)}
 			>
 				{line && <ErrorLine line={line} />}
-				<VoiceOrb handle={call} className="pointer-events-auto h-14 w-14" />
+				<Lumen handle={call} rest={rest} className="pointer-events-auto h-14 w-14" />
 			</div>
 		);
 	}
@@ -90,7 +95,7 @@ function OrbLayer({ call }: { call: VoiceCallHandle }) {
 				OVERLAY_Z.floating,
 			)}
 		>
-			<VoiceOrb handle={call} className="pointer-events-auto h-40 w-40" />
+			<Lumen handle={call} rest={rest} className="pointer-events-auto h-40 w-40" />
 		</div>
 	);
 }
@@ -113,9 +118,12 @@ function ErrorLine({ line }: { line: string }) {
 // level and the error line — which is the only way to see the four states in the
 // iOS simulator, where the audio stack cannot start at all (docs/pitfall/193).
 // `import.meta.env.DEV` keeps the handle off a production build.
-function useStubCall(): VoiceCallHandle {
+function useStubCall(): { handle: VoiceCallHandle; rest: boolean } {
 	const [phase, setPhase] = useState<OrbPhase>("idle");
 	const [error, setError] = useState<string | null>(null);
+	// Asleep is not a phase (src/ui/components/lumen/lumen-motion.ts) and nothing in the
+	// app sets it yet, so the harness is the only thing that can show it.
+	const [rest, setRest] = useState(false);
 	const subscribers = useRef(new Set<(value: number) => void>());
 
 	const subscribeLevel = useCallback((cb: (value: number) => void) => {
@@ -131,6 +139,7 @@ function useStubCall(): VoiceCallHandle {
 			phase: setPhase,
 			error: setError,
 			level: (value: number) => subscribers.current.forEach((cb) => cb(value)),
+			rest: setRest,
 		};
 		return () => {
 			delete window.__orbStub;
@@ -138,14 +147,17 @@ function useStubCall(): VoiceCallHandle {
 	}, []);
 
 	return {
-		phase,
-		start: () => setPhase("listening"),
-		stop: () => {
-			setPhase("idle");
-			setError(null);
+		handle: {
+			phase,
+			start: () => setPhase("listening"),
+			stop: () => {
+				setPhase("idle");
+				setError(null);
+			},
+			error,
+			subscribeLevel,
 		},
-		error,
-		subscribeLevel,
+		rest,
 	};
 }
 
@@ -155,6 +167,7 @@ declare global {
 			phase: (phase: OrbPhase) => void;
 			error: (message: string | null) => void;
 			level: (value: number) => void;
+			rest: (asleep: boolean) => void;
 		};
 	}
 }
