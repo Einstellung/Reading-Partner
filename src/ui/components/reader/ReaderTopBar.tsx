@@ -1,13 +1,12 @@
 // The reader's top bar: navigation on the left, the annotation rack and page
 // indicator in the middle, the AI entry and the "More" overflow on the right.
-// The bar owns the overflow menu's contents and the touch-probe toggle; every
-// other control reports up to App.
+// The bar owns the overflow menu's contents; every other control reports up to
+// App.
 
-import { useState, type RefObject } from "react";
+import type { RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
 import type { LevelGate } from "../../../reading/call-state";
 import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
-import { setTouchDebugEnabled } from "../../../reading/engine/gesture/touch-debug";
 import type { ToolType } from "./types";
 import {
   IconLessonPath,
@@ -15,7 +14,6 @@ import {
   IconGear,
   IconPagedLayout,
   IconSidebar,
-  IconTouchProbe,
   IconZoomIn,
   IconZoomOut,
 } from "../base/icons";
@@ -50,14 +48,12 @@ export default function ReaderTopBar(props: {
   settingsAlert: boolean;
 }) {
   const { view, stats, sidebarOpen, gate } = props;
-  // On-device touch probe. Off by default, never persisted.
-  const [touchDebug, setTouchDebug] = useState(false);
 
   const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
   const paged = stats?.layout === "paged";
 
   // The "More" overflow: low-frequency view controls collapsed out of the main
-  // bar (zoom, fit, the paged-flip opt-in, the touch probe).
+  // bar (zoom, fit, the paged-flip opt-in).
   const moreItems: MoreItem[] = [
     {
       kind: "action",
@@ -88,17 +84,6 @@ export default function ReaderTopBar(props: {
       on: paged,
       disabled: !props.viewReady,
       onClick: () => view.current?.setLayout(paged ? "vertical" : "paged"),
-    },
-    {
-      kind: "toggle",
-      label: "Touch debug",
-      icon: IconTouchProbe,
-      on: touchDebug,
-      onClick: () => {
-        const next = !touchDebug;
-        setTouchDebug(next);
-        setTouchDebugEnabled(next);
-      },
     },
     { kind: "divider" },
     {

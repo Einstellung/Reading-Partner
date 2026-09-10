@@ -36,7 +36,6 @@ import { MARKUP_TOOL_OVERRIDES } from "./convert";
 import { SELECT_AFTER_CREATE } from "./annotation-selection";
 import { PAGE_FRAME } from "./page-frame";
 import { PAGE_WASH_GROUP_STYLE, PAGE_WASH_STYLE } from "./page-wash";
-import { TouchDebugOverlay } from "./gesture/touch-debug";
 import { attachTouchRouter } from "./gesture/attach-touch";
 import { attachWheelZoom } from "./gesture/wheel-zoom";
 import { perfMark, wireEngine } from "./wire-engine";
@@ -473,7 +472,6 @@ export default function EmbedPdfView(props: EmbedPdfViewProps): ReactNode {
               </ZoomGestureWrapper>
               <TouchInputRouter documentId={activeDocumentId} ctx={pagedRef} />
               <WheelZoomInput documentId={activeDocumentId} />
-              <TouchDebugOverlay />
             </Viewport>
           )
         }

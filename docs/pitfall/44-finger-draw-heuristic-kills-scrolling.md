@@ -13,6 +13,6 @@
 
 解法：删掉启发式，判定收口成一个显式设置 `fingerDraw`（Settings → Reader input → Draw with your finger），默认关闭——手指永远只移动页面，标注归触控笔，任何平台一样。没有触控笔的设备用户自己打开。navlock（手掌锁）优先级仍然最高：开着的时候连触控笔也只导航。路由表在 `src/reading/engine/gesture/touch-routing.ts`，`fingerDraw` 两个取值 × 三种工具 × 三种设备全表锁进单测。
 
-配套：Touch debug 浮层加了 `finger:draw|scroll` 和 `fingerDraw`，真机上一眼能分清"滑不动"是路由判定还是更下面的问题。
+配套：Touch debug 浮层加了 `finger:draw|scroll` 和 `fingerDraw`，真机上一眼能分清"滑不动"是路由判定还是更下面的问题。（探针已于 2026-09-10 删除）
 
 教训：设备能力靠事件去猜，猜错的那一刻用户没有任何线索，而且"还没发生的事"和"不会发生的事"在锁存里长得一模一样。能做成设置项就别做成推断。
