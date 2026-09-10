@@ -4,10 +4,15 @@
 //   1. the standing profile statements — what is held to be true about this
 //      reader. Always there, because how they want things explained is
 //      triggered by the act of explaining and has no wording in common with the
-//      material, so nothing retrieves it.
+//      material, so nothing retrieves it. It does not wait for an anchor: it is
+//      about the reader and not about what is on the desk (docs/61).
 //   2. what is still open in this book, decided from the links (open-stuck.ts).
 //   3. the observations retrieval brought back, minus the ones a standing
 //      statement has already read.
+//
+// Blocks 2 and 3 are about material and print only where something anchors the
+// retrieval. Block 3's second half is the observation tools' own paragraph,
+// which rides wherever the tools do.
 //
 // Pure, and given the snapshot retrieval already built rather than doing any
 // selecting of its own: what comes back is reading/lecture/stuck.ts's judgement
@@ -25,26 +30,34 @@ export interface MemorySectionInput {
   // a concern is what the reader is watching for, whose consumers are the info
   // triage and the nightly pass, and it is not what this conversation is.
   statements: readonly Statement[];
-  // This topic's observations, whole — the open-stuck decision reads bodies.
-  observations: readonly Observation[];
-  // The book the conversation is in, which is what "still open" is scoped to.
-  bookId: string;
-  // The snapshot retrieval built for this turn (lectureObservationSnapshot):
-  // one `- [type] summary (…, id m-…)` line per observation, some followed by
-  // the observation's body.
-  observationSnapshot: string;
+  // What the retrieval was anchored to, where something on the desk anchors it.
+  // Absent with nothing to be anchored to — an empty desk, a talk being
+  // rehearsed — and then only the profile prints: it is about the reader, and
+  // the other two blocks are about material there is none of.
+  anchor?: {
+    // This topic's observations, whole — the open-stuck decision reads bodies.
+    observations: readonly Observation[];
+    // The book the conversation is in, which is what "still open" is scoped to.
+    bookId: string;
+    // The snapshot retrieval built for this turn (lectureObservationSnapshot):
+    // one `- [type] summary (…, id m-…)` line per observation, some followed by
+    // the observation's body.
+    observationSnapshot: string;
+  };
   // Whether the observation tools ride this turn, which decides whether the
-  // block explains them.
+  // block explains them. Independent of the anchor: the tools are the soul's and
+  // are mounted wherever there is a topic to scope them to.
   hasObservationTools: boolean;
 }
 
 export function memorySection(input: MemorySectionInput): string {
   const covered = coveredObservationIds(input.statements);
+  const anchor = input.anchor;
   const blocks = [
     profileBlock(input.statements),
-    openBlock(input.observations, input.bookId),
+    anchor ? openBlock(anchor.observations, anchor.bookId) : "",
     observationPromptSection(
-      dropCoveredObservations(input.observationSnapshot, covered),
+      anchor ? dropCoveredObservations(anchor.observationSnapshot, covered) : "",
       input.hasObservationTools,
     ),
   ];

@@ -180,9 +180,10 @@ export interface SourceUnit {
   // own (docs/pitfall/209) — a source that cannot promise that must leave the
   // repeating unit out.
   id: string;
-  // Null for a conversation nothing has filed yet — the door, where no material
-  // said what it was about. Such a unit is listed and not distilled: there is no
-  // topic to write the observation under (collectSourceArrears).
+  // The topic the conversation is filed under, or null where the reader has not
+  // said what it is about (docs/21). No topic, no distillation: there is nothing
+  // to file what was said under, and the sweep leaves the unit alone until the
+  // soul proposes a topic and the reader nods (soul/topic).
   topicId: string | null;
   // What the pass calls this conversation, in place of a book's name.
   label: string;

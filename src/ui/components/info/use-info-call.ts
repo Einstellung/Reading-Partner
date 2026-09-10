@@ -12,12 +12,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../ai/agent";
-import { assembleTurn, type AssembledTurn } from "../../../soul";
-import { openDesk } from "../../../desk";
+import {
+  applyTopicProposal,
+  assembleTurn,
+  threadTopic,
+  type AssembledTurn,
+  type TopicProposalCardData,
+} from "../../../soul";
+import { openDesk, type DeskItem } from "../../../desk";
 import { withCompanionTools } from "../../../info/briefer/desk";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
 import { createTopic } from "../../../platform/app/topics";
-import { threadTopic } from "../../../info/briefer/topic-tool";
 import {
   appendMessage,
   createThread,
@@ -26,7 +31,6 @@ import {
   patchThreadMessage,
   setThreadTopic,
 } from "../../../platform/app/threads";
-import { setSavedArticleTopic } from "../../../reading/saved-articles";
 import { buildLiveCompanionTools } from "../../../info/briefer/companion-live";
 import { companionToolStatusLabel } from "../../../info/briefer/companion-tools";
 import {
@@ -50,7 +54,6 @@ import {
   applyLabArchive,
   applyLabProposal,
   applyProfileUpdate,
-  applyTopicProposal,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
@@ -77,7 +80,6 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
   ProfileUpdateCardData,
-  TopicProposalCardData,
 } from "../../../info/boxes/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../chat/types";
@@ -153,6 +155,11 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // up a card's payload without being torn down and rebuilt on every delta.
   const messagesRef = useRef<UiMessage[]>(messages);
   messagesRef.current = messages;
+
+  // The desk the last turn was assembled over, for the card gestures that reach
+  // back into it: applying a topic tells every item it settled (src/desk:
+  // onTopicSettled), and the items are the running turn's, not the card's.
+  const deskRef = useRef<DeskItem[]>([]);
 
   // First-briefing tracking (add-source mode): whether we are waiting on a
   // generation we kicked. The progress -> ready/failed card rides a single
@@ -353,14 +360,14 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, noteTurn, collecting, view],
   );
 
-  // File what the companion proposed when the user clicks a topic card's Apply:
-  // mint the topic where it is new, move the kept article under it, file this
-  // conversation with it, and tell the AI. Three writes for one gesture; the
-  // order and what a failure stops are in info/briefer/card-actions.
+  // File what the AI proposed when the user clicks a topic card's Apply: mint
+  // the topic where it is new, file this conversation under it, let what is on
+  // the desk follow the topic (the article files its kept copy), and tell the
+  // AI. The order and what a failure stops are in soul/topic/settle.ts.
   //
   // Filing the thread is what makes the next turn's desk, its distillation and
-  // its conversation search all read the topic the reader chose rather than the
-  // brief queue.
+  // its conversation search all read the topic the reader chose; until they have
+  // chosen one there is none (soul/topic/propose.ts: threadTopic).
   const handleApplyTopic = useCallback(
     async (cardId: string) => {
       const found = findCardPart(messagesRef.current, cardId);
@@ -368,10 +375,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       const card = found.payload;
       const { ok } = await applyTopicProposal(card, {
         createTopic,
-        fileArticle: async (articleId, topicId) => {
-          await setSavedArticleTopic(articleId, topicId);
-        },
         fileThread: (threadId, topicId) => setThreadTopic(bookId, threadId, topicId),
+        settled: deskRef.current.flatMap((i) => (i.onTopicSettled ? [i.onTopicSettled.bind(i)] : [])),
         topicsChanged: () => onTopicsChanged?.(),
       });
       if (!ok) return;
@@ -524,10 +529,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
             { start: (scope) => runBriefingJob(scope) },
             {
               collecting,
-              topic: {
-                threadId: anchor.threadId,
-                onTopicCard: (payload) => insertCard("topic", payload),
-              },
               lab: {
                 threadId: anchor.threadId,
                 onLabCard: (payload) => insertCard("lab", payload),
@@ -542,7 +543,13 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           signal: controller.signal,
         },
       );
-      turn = await assembleTurn({ desk, messages: history });
+      deskRef.current = desk.items;
+      turn = await assembleTurn({
+        desk,
+        messages: history,
+        // Where a proposal for this conversation's topic is drawn (soul/topic).
+        topic: { onCard: (payload) => insertCard("topic", payload) },
+      });
     } catch (e) {
       console.error("failed to load the article extractor", e);
       patchLast({ text: "The article extractor could not be loaded. Try again.", failed: true, streaming: false });

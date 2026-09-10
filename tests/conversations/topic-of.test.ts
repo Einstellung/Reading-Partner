@@ -53,14 +53,14 @@ test("a talk's thread goes through its outline to the retell", async () => {
   expect(await topicOfThreadFile("talk-10", disk)).toBeNull();
 });
 
-test("an info thread carries its own topic, and falls back to the brief", async () => {
+test("an info thread carries its own topic, and none until it has one", async () => {
   const disk = io({});
   expect(await topicOfThreadFile("info-2026-07-21", disk, { topicId: "t-attention" })).toBe(
     "t-attention",
   );
-  // The field arrives with the topic work; every briefing written before it
-  // belongs where those conversations were.
-  expect(await topicOfThreadFile("info-2026-07-21", disk)).toBe("brief");
+  // No queue to fall back on: a conversation nobody has said what is about is
+  // filed under nothing (docs/21).
+  expect(await topicOfThreadFile("info-2026-07-21", disk)).toBeNull();
 });
 
 test("a file the catalogue does not know is nobody's conversation", async () => {

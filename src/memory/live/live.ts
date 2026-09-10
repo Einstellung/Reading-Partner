@@ -462,17 +462,12 @@ export async function distillInfoThread(opts: DistillInfoThreadOptions): Promise
   try {
     const found = await findSourceUnit(opts.threadId);
     if (!found) return;
-    // A conversation nothing has filed yet distils nothing: an observation has
-    // to be written under a topic, and there is none to write it under.
+    // No topic, no distillation (docs/21): an observation is filed under a topic
+    // and this conversation has none yet.
     const topicId = found.unit.topicId;
     if (topicId === null) return;
     const topic = (await listTopics()).find((t) => t.id === topicId);
-    await distillSourceUnit(
-      topicId,
-      topic?.name ?? topicId,
-      found.unit,
-      opts.trigger,
-    );
+    await distillSourceUnit(topicId, topic?.name ?? topicId, found.unit, opts.trigger);
   } catch (e) {
     if (e instanceof StoppedError) return;
     console.warn("info distillation could not start", e);

@@ -57,9 +57,9 @@ test("every day's threads are units, oldest day first", async () => {
     "briefing-2026-09-08",
     "2026-09-08:item-9",
   ]);
-  // Until a thread carries a topic of its own (P4), every info conversation is
-  // filed where it has always been filed.
-  expect(new Set(units.map((u) => u.topicId))).toEqual(new Set(["brief"]));
+  // A conversation with no topic of its own is filed under nothing, and the
+  // sweep spends no pass on it until the reader confirms one (docs/21).
+  expect(new Set(units.map((u) => u.topicId))).toEqual(new Set([null]));
   expect(units[0].label).toBe("Info briefing 2026-09-06");
   expect(units[0].messages).toEqual([
     { role: "user", text: "what is new", ts: 1000 },
@@ -95,9 +95,23 @@ test("a day with an empty thread offers nothing, and other files are not read", 
 });
 
 test("what the day owes is counted against the cursor the pass keeps", async () => {
-  day("2026-09-08", { "briefing-2026-09-08": thread("briefing-2026-09-08", ["one", "two"]) });
+  day("2026-09-08", {
+    "briefing-2026-09-08": {
+      ...thread("briefing-2026-09-08", ["one", "two"]),
+      topicId: "attention",
+    },
+  });
   const owed = await collectSourceArrears((_topicId, unitId) =>
     unitId === "briefing-2026-09-08" ? 2 : 0,
   );
-  expect(owed.get("brief")?.map((a) => [a.source, a.newMessages])).toEqual([["info-thread", 1]]);
+  expect(owed.get("attention")?.map((a) => [a.source, a.newMessages])).toEqual([
+    ["info-thread", 1],
+  ]);
+});
+
+// No topic, no distillation (docs/21): there is nothing to file an observation
+// under until the reader confirms one, and the sweep leaves the unit alone.
+test("a conversation with no topic owes nothing", async () => {
+  day("2026-09-08", { "briefing-2026-09-08": thread("briefing-2026-09-08", ["one", "two"]) });
+  expect((await collectSourceArrears(() => 0)).size).toBe(0);
 });

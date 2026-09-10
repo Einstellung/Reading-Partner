@@ -8,7 +8,7 @@
 // the briefing itself — so nothing here awaits anything and every anchor is
 // decidable from its inputs.
 
-import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND } from "./desk";
+import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND, type FileArticle } from "./desk";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
 import { briefingOverview } from "../boxes/briefing";
@@ -143,6 +143,10 @@ export function articleAnchor(
   itemId: string,
   bodyText: string,
   ctx: CompanionContext,
+  // The kept copy of this article and how to move it, where the caller can say:
+  // what the item files when the conversation's topic settles (docs/21). The
+  // store is the reading side's, so it arrives from whoever already reads it.
+  kept?: { savedId: string; fileArticle: FileArticle },
 ): InfoCallAnchor {
   const meta = b.items[itemId];
   const title = meta?.title ?? "Article";
@@ -157,7 +161,14 @@ export function articleAnchor(
       briefingRef(b.date, b, ctx),
       {
         kind: INFO_ARTICLE_KIND,
-        ref: { dateKey: b.date, itemId, title: meta?.title ?? "", overview: briefingOverview(b), bodyText },
+        ref: {
+          dateKey: b.date,
+          itemId,
+          title: meta?.title ?? "",
+          overview: briefingOverview(b),
+          bodyText,
+          ...(kept ?? {}),
+        },
       },
     ],
     position: { title, sourceName: meta?.sourceName, line: articleReason(b, itemId) },

@@ -18,7 +18,7 @@
 // under this would show up as an unresolved topic, never as a wrong one.
 
 import { resolvePalace, rowOf, type PalaceKind } from "../palace";
-import { BRIEF_TOPIC_ID, TOPICS_FILE } from "../platform/app/topics";
+import { TOPICS_FILE } from "../platform/app/topics";
 import { threadFileName, type ConversationIo } from "./io";
 
 /** The kinds of file that hold a conversation. */
@@ -91,11 +91,11 @@ export async function topicOfThreadFile(
 ): Promise<string | null> {
   const kind = threadKindOf(threadFileName(fileKey));
   if (!kind) return null;
-  if (kind === "info-thread") return thread?.topicId ?? BRIEF_TOPIC_ID;
+  // An info conversation is filed under its own topic once the reader has
+  // confirmed one, and under none until then (docs/21).
+  if (kind === "info-thread") return thread?.topicId ?? null;
   // The door (src/soul/door.ts): nothing was on the desk, so the conversation
-  // carries its own topic or none at all. No fallback — a conversation held at
-  // the door about nothing in particular belongs to no topic, and filing it
-  // under one would be a guess.
+  // carries its own topic or none at all.
   if (kind === "conversation") return thread?.topicId ?? null;
   if (kind === "retell-thread") {
     return topicOfRetell(fileKey.slice("retell-".length), io);

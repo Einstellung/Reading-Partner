@@ -45,14 +45,13 @@ export async function collectSourceArrears(
       continue;
     }
     for (const unit of units) {
-      if (opts.isBusy?.(unit.id)) continue;
-      // Grouped by topic, so a unit with none has nowhere to go.
-      if (unit.topicId === null) continue;
+      // Nothing has said what this conversation is about, so nothing distils it:
+      // an observation is filed under a topic and there is none. It comes back
+      // the moment the reader confirms one (soul/topic).
       const topicId = unit.topicId;
-      const newMessages = countNewReaderMessages(
-        unit.messages,
-        await cursorOf(topicId, unit.id),
-      );
+      if (topicId === null) continue;
+      if (opts.isBusy?.(unit.id)) continue;
+      const newMessages = countNewReaderMessages(unit.messages, await cursorOf(topicId, unit.id));
       const owed: SourceArrears = { source: source.kind, unit, newMessages };
       byTopic.set(topicId, [...(byTopic.get(topicId) ?? []), owed]);
     }
@@ -64,7 +63,9 @@ export async function collectSourceArrears(
  * The unit one thread id names, across every registered source. Null when no
  * source lists it — a conversation a source leaves out (the onboarding thread,
  * whose id repeats across days: docs/pitfall/209) is not distillable, and a
- * trigger that names one asks for nothing rather than for a guess.
+ * trigger that names one asks for nothing rather than for a guess. The unit may
+ * still be one with no topic; whether that is distillable is the caller's rule
+ * (collectSourceArrears skips it).
  */
 export async function findSourceUnit(
   unitId: string,

@@ -20,6 +20,7 @@ import { soulMemorySection, openSoul } from "./self";
 import { appSequenceIo, readSequence, type SequenceIo } from "./sequence";
 import { soulTail, TAIL_RUNG, TAIL_RUNG_ID, TURN_KEEP } from "./tail";
 import { appConversationIo, type ConversationIo } from "../conversations";
+import type { TopicProposalSurface } from "./topic/propose";
 
 export interface AssembleInput {
   desk: OpenedDesk;
@@ -32,6 +33,10 @@ export interface AssembleInput {
   // tests; the ones on disk otherwise.
   sequenceIo?: SequenceIo;
   conversationIo?: ConversationIo;
+  // Where a topic proposal is drawn, for a conversation that has no topic yet
+  // (soul/topic). A caller that passes nothing still gets the tool; what it
+  // loses is the card.
+  topic?: TopicProposalSurface;
 }
 
 export interface AssembledTurn {
@@ -75,7 +80,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   const { items, env } = desk;
   const anchor = items.find((i) => i.memory !== undefined);
   const teller = items.find((i) => i.history !== undefined);
-  const soul = await openSoul(env, anchor?.memory);
+  const soul = await openSoul(env, anchor?.memory, input.topic);
   if (env.signal?.aborted) return null;
 
   // The soul's tools first, then each item's in the order it lies on the desk.
@@ -99,17 +104,22 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // is what keeps the provider's cache prefix where it was (docs/09).
   function composePrompt(dropped: ReadonlySet<string>): string {
     const memory = soulMemorySection(soul, env, anchor?.memory, dropped);
-    return items
-      .map((item) =>
-        item.prompt({
-          dropped,
-          memory: item === anchor ? memory : "",
-          toolNames,
-          toolPrompts: othersToolPrompts.get(item) ?? [],
-        }),
-      )
-      .filter((p) => p !== "")
-      .join("\n\n");
+    const blocks = items.map((item) =>
+      item.prompt({
+        dropped,
+        memory: item === anchor ? memory : "",
+        toolNames,
+        toolPrompts: othersToolPrompts.get(item) ?? [],
+      }),
+    );
+    // What no item speaks for. The memory paragraph goes to the item that
+    // anchors the retrieval, and where no item does — an empty desk, a talk
+    // being rehearsed — the soul prints it itself: what is known about the
+    // reader is not about the material (docs/48). The soul's own paragraph goes
+    // last either way.
+    if (!anchor) blocks.push(memory);
+    blocks.push(soul.prompt);
+    return blocks.filter((p) => p !== "").join("\n\n");
   }
 
   function ownMessages(dropped: ReadonlySet<string>): DeskMessage[] {

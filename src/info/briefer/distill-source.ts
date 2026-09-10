@@ -20,7 +20,6 @@ import {
 import { resolvePalace } from "../../palace";
 import { appData } from "../../platform/app/appdata";
 import { peekThreads } from "../../platform/app/threads";
-import { BRIEF_TOPIC_ID } from "../../platform/app/topics";
 import { ONBOARDING_THREAD_ID } from "./anchors";
 import { infoBookId } from "./call";
 
@@ -52,10 +51,11 @@ export async function listInfoUnits(): Promise<SourceUnit[]> {
       if (thread.messages.length === 0) continue;
       units.push({
         id: thread.id,
-        // The thread's own topic once the reader has confirmed one (docs/21);
-        // "brief" until then, which is where every info conversation was filed
-        // anyway.
-        topicId: thread.topicId ?? BRIEF_TOPIC_ID,
+        // The thread's own topic once the reader has confirmed one, and null
+        // until then: a conversation nobody has said what is about is not
+        // distilled (docs/21). A thread filed under the old "brief" queue keeps
+        // it — the topic is on disk and its observations are real.
+        topicId: thread.topicId ?? null,
         label: infoUnitLabel(date),
         messages: thread.messages.map(({ id, role, text, ts }) => ({
           ...(id ? { id } : {}),

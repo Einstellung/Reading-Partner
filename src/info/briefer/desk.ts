@@ -15,7 +15,8 @@
 // This is also where info first reads memory: the briefing item anchors the
 // retrieval, so the assembly hands it the statements and the topic's
 // observations (docs/48). The topic is the caller's — the conversation's own
-// once it has been given one, the brief queue until then (docs/21).
+// once the reader has confirmed one, and null until then, which is the turn the
+// soul offers to give it one (soul/topic, docs/21).
 
 import {
   buildObservationSnapshot,
@@ -31,9 +32,7 @@ import {
   type DeskPromptView,
   type DeskRef,
 } from "../../desk";
-import { listTopics } from "../../platform/app/topics";
 import { addSourceSystemPrompt } from "../sources/source-skill";
-import { topicGuidance, type TopicChoice } from "./topic-tool";
 import { labGuidance } from "./lab-tool";
 import {
   articleContextSection,
@@ -73,10 +72,12 @@ export type CompanionTools = () => Promise<AgentTool[]>;
 export type ListObservations = (topicId: string) => Promise<Observation[]>;
 
 /**
- * The reader's topics, for the roster propose_topic proposes out of (docs/21).
- * Injected the same way, and for the same reason.
+ * Filing the kept copy of an article under the topic the reader confirmed
+ * (reading/saved-articles.ts: setSavedArticleTopic). Handed in with the ref
+ * rather than reached for here: the kept articles are the reading side's store,
+ * and info has no business importing it.
  */
-export type ListTopicChoices = () => Promise<TopicChoice[]>;
+export type FileArticle = (savedId: string, topicId: string) => Promise<unknown>;
 
 /** The day's briefing on the desk, in one of its three states. */
 export type InfoBriefingDeskRef =
@@ -100,7 +101,6 @@ export type InfoBriefingDeskRef =
       notices?: string[];
       tools?: CompanionTools;
       listObservations?: ListObservations;
-      listTopics?: ListTopicChoices;
     };
 
 export interface InfoArticleDeskRef {
@@ -110,6 +110,11 @@ export interface InfoArticleDeskRef {
   // The day's overview, so the article block can say what it was one of.
   overview: string;
   bodyText: string;
+  // The kept copy of this article, where the reader has kept one
+  // (reading/saved-articles.ts: savedArticleId). What the item files when the
+  // conversation's topic settles; absent, and nothing is filed.
+  savedId?: string;
+  fileArticle?: FileArticle;
 }
 
 const briefingKind: DeskItemKind<InfoBriefingDeskRef> = {
@@ -158,7 +163,7 @@ async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<Des
   if (env.signal?.aborted) return null;
   const observations = await topicObservations(env.topic.id, ref.listObservations);
   if (env.signal?.aborted) return null;
-  const base = join(briefingPrompt(ref), await topicSection(ref), labSection(ref));
+  const base = join(briefingPrompt(ref), labSection(ref));
   return {
     kind: INFO_BRIEFING_KIND,
     label: ref.onboarding ? "Subscriptions" : "Today's briefing",
@@ -185,6 +190,7 @@ async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<Des
 // do is the briefing's, and mounting a second copy of it here would be two names
 // for one thing on the same desk.
 async function openArticle(ref: InfoArticleDeskRef): Promise<DeskItem | null> {
+  const { savedId, fileArticle } = ref;
   return {
     kind: INFO_ARTICLE_KIND,
     label: ref.title,
@@ -192,6 +198,12 @@ async function openArticle(ref: InfoArticleDeskRef): Promise<DeskItem | null> {
     toolPrompts: [],
     rungs: [],
     prompt: () => articleContextSection(ref.overview, ref.title, ref.bodyText),
+    // The conversation was filed under a topic, so the kept copy of what it is
+    // about goes with it (docs/21). The proposal itself is the soul's and says
+    // nothing about articles (soul/topic); this is the article's own half of it.
+    ...(savedId && fileArticle
+      ? { onTopicSettled: async (topicId: string) => void (await fileArticle(savedId, topicId)) }
+      : {}),
   };
 }
 
@@ -205,18 +217,6 @@ function briefingPrompt(ref: InfoBriefingDeskRef): string {
   });
 }
 
-// The roster propose_topic proposes out of, and the standing instruction to
-// propose. Left out of onboarding: there is nothing kept yet and no briefing to
-// keep anything from, so the only thing that conversation is for is sources.
-async function topicSection(ref: InfoBriefingDeskRef): Promise<string> {
-  if (ref.onboarding) return "";
-  const list = ref.listTopics ?? liveTopicChoices;
-  // A roster that will not read leaves the companion proposing new topics rather
-  // than failing the turn the reader is waiting for.
-  const topics = await list().catch((): TopicChoice[] => []);
-  return topicGuidance(topics);
-}
-
 // The rooms half of the same instruction (docs/63). The other two prompts carry
 // it in their preamble, where the source roster it talks about is; onboarding's
 // prompt is the add-source skill, which knows nothing about rooms, so it is
@@ -224,10 +224,6 @@ async function topicSection(ref: InfoBriefingDeskRef): Promise<string> {
 // exactly the state the guidance is written for: ask what to keep watch on.
 function labSection(ref: InfoBriefingDeskRef): string {
   return ref.onboarding ? labGuidance([], []) : "";
-}
-
-function liveTopicChoices(): Promise<TopicChoice[]> {
-  return listTopics().then((topics) => topics.map(({ id, name }) => ({ id, name })));
 }
 
 async function topicObservations(

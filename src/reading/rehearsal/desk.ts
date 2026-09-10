@@ -16,7 +16,6 @@ import {
   type DeskEnv,
   type DeskItem,
   type DeskItemKind,
-  type DeskPromptView,
 } from "../../desk";
 import type { Rung } from "../../budget";
 import { languageInstruction } from "../../platform/app/settings";
@@ -97,14 +96,10 @@ async function openOutline(ref: OutlineDeskRef, env: DeskEnv): Promise<DeskItem 
     now,
   });
 
-  function composePrompt(view: DeskPromptView): string {
+  function composePrompt(): string {
     let prompt = buildCoachSystemPrompt({ outline, topicName });
     const lang = languageInstruction(s.aiLanguage);
     if (lang) prompt += "\n\n" + lang;
-    // What is known about the reader (docs/48). A talk is pitched at an
-    // audience, but it is given by this reader, and how they want things put to
-    // them is as true here as anywhere else.
-    if (view.memory) prompt += "\n\n" + view.memory;
     return prompt;
   }
 
@@ -120,10 +115,9 @@ async function openOutline(ref: OutlineDeskRef, env: DeskEnv): Promise<DeskItem 
     toolPrompts: [],
     rungs: COACH_LADDER,
     prompt: composePrompt,
-    // Nothing retrieved: a talk is not a book and has no observations scoped to
-    // it. The anchor is carried all the same, because it is what says the
-    // standing statements ride this turn (soul/self.ts).
-    memory: { bookId: "", observations: [], snapshot: () => "" },
+    // No anchor: a talk is not a book and has no observations scoped to it. What
+    // is known about the reader rides the turn all the same — the soul prints it
+    // itself where nothing on the desk anchors it (soul/turn.ts).
     history: { compose: composeMessages },
   };
 }

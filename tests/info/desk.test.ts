@@ -192,7 +192,11 @@ test("the companion reads what is known about the reader, and the topic's observ
   );
 });
 
-test("an article desk with no briefing anchors no retrieval", async () => {
+// The retrieval needs an anchor; what is known about the reader does not
+// (docs/48). With the briefing left off the desk nothing anchors the retrieval,
+// and the standing statements ride the turn all the same — the soul prints them
+// itself, after the article.
+test("an article desk with no briefing keeps the statements and drops the retrieval", async () => {
   await statementStore.createStatement({
     kind: "profile",
     author: "reader",
@@ -200,6 +204,41 @@ test("an article desk with no briefing anchors no retrieval", async () => {
     evidence: [],
     confirmedOn: "2026-07-20",
   });
-  const turn = await assemble([articleRef]);
-  expect(turn.systemPrompt).not.toContain("I have no linear algebra.");
+  const turn = await assemble([withObservations(articleRef, [observation()])]);
+  expect(turn.systemPrompt).toContain("I have no linear algebra.");
+  expect(turn.systemPrompt).not.toContain("[stuck-point] attention as a weighted average");
+  expect(turn.systemPrompt.indexOf("I have no linear algebra.")).toBeGreaterThan(
+    turn.systemPrompt.indexOf("the full body text"),
+  );
+});
+
+// What the reader confirmed a topic for reaches the desk items that asked to
+// hear it (src/desk: onTopicSettled). Filing the conversation is the soul's and
+// says nothing about articles (soul/topic); the kept copy of this article is the
+// article item's own half of the gesture.
+test("the article files its kept copy when the conversation's topic settles", async () => {
+  const filed: string[] = [];
+  const laid = await openDesk(
+    [
+      {
+        kind: INFO_ARTICLE_KIND,
+        ref: {
+          ...(articleRef.ref as object),
+          savedId: "https://example.com/a",
+          fileArticle: async (savedId: string, topicId: string) => {
+            filed.push(`${savedId}:${topicId}`);
+            return true;
+          },
+        },
+      },
+    ],
+    env(),
+  );
+  await laid.items[0].onTopicSettled!("t-9f2");
+  expect(filed).toEqual(["https://example.com/a:t-9f2"]);
+});
+
+test("an article with no kept copy asks to hear nothing", async () => {
+  const laid = await openDesk([articleRef], env());
+  expect(laid.items[0].onTopicSettled).toBeUndefined();
 });

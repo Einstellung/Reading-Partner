@@ -25,8 +25,6 @@ import { loadPicture } from "../picture/store";
 import { pictureSummary } from "../picture/picture";
 import type { Picture } from "../picture/types";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
-import { listTopics } from "../../platform/app/topics";
-import type { ProposeTopicDeps } from "./topic-tool";
 import type { AgentTool } from "../../ai/agent";
 import type { RequestOutcome } from "./reader";
 
@@ -41,12 +39,8 @@ export interface BriefingControl {
 
 export interface LiveCompanionOptions {
   collecting?: boolean;
-  // The conversation propose_topic files, and where its card goes. Omitted where
-  // there is no conversation to file, and then the tool is not mounted.
-  topic?: Omit<ProposeTopicDeps, "topics">;
-  // The conversation a lab proposal is made in, and where its card goes. Same
-  // shape and same reason as `topic`: without it propose_lab and archive_lab are
-  // not mounted.
+  // The conversation a lab proposal is made in, and where its card goes. Without
+  // it propose_lab and archive_lab are not mounted.
   lab?: {
     threadId: string;
     onLabCard(card: LabProposalCardData | LabArchiveCardData): void;
@@ -131,12 +125,6 @@ export async function buildLiveCompanionTools(
   opts: LiveCompanionOptions = {},
 ): Promise<AgentTool[]> {
   return buildCompanionTools({
-    // Where kept material belongs (docs/21). The reader's topics are read per
-    // call, not when the conversation opened, so one created a few turns ago is
-    // proposed rather than minted a second time.
-    topicProposal: opts.topic
-      ? { ...opts.topic, topics: async () => (await listTopics()).map(({ id, name }) => ({ id, name })) }
-      : undefined,
     // The research rooms (docs/63). The roster and the source list are both read
     // per call, so a room or a source added earlier in this same conversation is
     // proposed against rather than duplicated.
