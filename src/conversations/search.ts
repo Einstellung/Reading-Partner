@@ -19,7 +19,8 @@
 // So a hit is keyed by the file as well as the thread, nothing here builds an
 // index by thread id, and two days' onboarding threads are two conversations.
 
-import { appConversationIo, threadFileKey, threadFileName, type ConversationIo } from "./io";
+import { appConversationIo, threadFileName, type ConversationIo } from "./io";
+import { memoizeIo, walkThreadFiles } from "./walk";
 import { messageTerms, queryTerms } from "./tokens";
 import { threadKindOf, topicOfThreadFile, type ThreadKind, type TopicCarrier } from "./topic-of";
 
@@ -88,29 +89,6 @@ function snippetAround(text: string, terms: readonly string[]): string {
   return `${start > 0 ? "…" : ""}${body}${end < text.length ? "…" : ""}`;
 }
 
-// One pass over the store reads topics.json, and every retell and outline a
-// talk thread points at, once each. Without this the resolution runs per thread
-// and a library of thirty books reads topics.json thirty times.
-function memoize(io: ConversationIo): ConversationIo {
-  const texts = new Map<string, Promise<string | null>>();
-  let root: Promise<string[]> | null = null;
-  return {
-    listRoot() {
-      root ??= io.listRoot();
-      return root;
-    },
-    readText(path) {
-      let hit = texts.get(path);
-      if (!hit) {
-        hit = io.readText(path);
-        texts.set(path, hit);
-      }
-      return hit;
-    },
-    peekThreads: (fileKey) => io.peekThreads(fileKey),
-  };
-}
-
 /**
  * Every message matching the query, ranked by how many of its terms they hold
  * and, at equal score, by how recent they are.
@@ -126,13 +104,11 @@ export async function searchConversations(
 ): Promise<SearchResult> {
   const terms = queryTerms(query);
   if (terms.length === 0) return { hits: [], widened: false };
-  const disk = memoize(io);
+  const disk = memoizeIo(io);
   const all: ConversationHit[] = [];
-  for (const name of await disk.listRoot()) {
-    const kind = threadKindOf(name);
-    const fileKey = kind ? threadFileKey(name) : null;
-    if (!kind || !fileKey) continue;
-    for (const thread of await disk.peekThreads(fileKey)) {
+  for await (const file of walkThreadFiles(disk)) {
+    const { fileKey, kind } = file;
+    for (const thread of file.threads) {
       const topicId = await topicOfThreadFile(fileKey, disk, thread as TopicCarrier);
       for (const message of thread.messages ?? []) {
         const text = message.text ?? "";

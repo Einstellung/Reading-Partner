@@ -18,6 +18,7 @@ export {
   type SearchResult,
   type SearchScope,
 } from "./search";
+export { memoizeIo, walkThreadFiles, type ThreadFile } from "./walk";
 export {
   THREAD_KINDS,
   threadKindOf,

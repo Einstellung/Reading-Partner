@@ -1,6 +1,6 @@
 // Which topic a conversation belongs to.
 //
-// Four kinds of thread file exist (src/palace) and no two of them say it the
+// Five kinds of thread file exist (src/palace) and no two of them say it the
 // same way, because none of them was written to be searched across:
 //
 //   reading-thread  the file key is the book id, and the topic is whichever one
@@ -10,6 +10,7 @@
 //   retell-thread   the file key names a retell, and the retell says its topic
 //   talk-thread     the file key names an outline, the outline names the retell
 //                   it came from, and the retell says the topic
+//   conversation    the door: the thread carries its own topic, or none
 //
 // Read here rather than asked of each domain, so that nothing in this capability
 // has to know what a book or a retell is. The files are read as JSON and one
@@ -26,6 +27,7 @@ export const THREAD_KINDS = [
   "retell-thread",
   "talk-thread",
   "info-thread",
+  "conversation",
 ] as const;
 
 export type ThreadKind = (typeof THREAD_KINDS)[number];
@@ -90,6 +92,11 @@ export async function topicOfThreadFile(
   const kind = threadKindOf(threadFileName(fileKey));
   if (!kind) return null;
   if (kind === "info-thread") return thread?.topicId ?? BRIEF_TOPIC_ID;
+  // The door (src/soul/door.ts): nothing was on the desk, so the conversation
+  // carries its own topic or none at all. No fallback — a conversation held at
+  // the door about nothing in particular belongs to no topic, and filing it
+  // under one would be a guess.
+  if (kind === "conversation") return thread?.topicId ?? null;
   if (kind === "retell-thread") {
     return topicOfRetell(fileKey.slice("retell-".length), io);
   }
