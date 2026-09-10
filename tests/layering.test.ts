@@ -160,6 +160,8 @@ const LAYER: Record<string, Layer> = {
   "ui/components/common": "ui",
   "ui/components/info": "ui",
   "ui/components/lib": "ui",
+  // Lumen: the companion's body, its motion maths and its two raster layers.
+  "ui/components/lumen": "ui",
   "ui/components/library": "ui",
   "ui/components/library/topic": "ui",
   "ui/components/markdown": "ui",

@@ -18,7 +18,7 @@ import { createRoot } from "react-dom/client";
 import "../../../styles.css";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import { BriefingPage } from "./BriefingPage";
-import { VoiceOrbEntry } from "./VoiceOrbEntry";
+import { StubOrbLayer } from "./VoiceOrbEntry";
 import type { Briefing } from "../../../info/boxes/types";
 
 const BRIEFING: Briefing = {
@@ -120,7 +120,11 @@ function Harness() {
           />
         </div>
       )}
-      <VoiceOrbEntry dateKey={BRIEFING.date} briefing={BRIEFING} stub />
+      {/* The stub layer and not VoiceOrbEntry: the entry draws nothing on a
+          host with no native speech, which a plain browser is, and the
+          headless screenshots are taken in one. On the simulator the entry
+          reaches the same layer through its own `stub` branch. */}
+      <StubOrbLayer />
     </>
   );
 }
