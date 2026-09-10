@@ -1,10 +1,9 @@
-// The brain's half of an assembled turn (docs/48, docs/61): what is known about
-// the reader, and the tools that write it down. It rides every turn whatever is
-// on the desk, because it is about the reader and not about the material — the
-// same statements pitch an explanation of a book, of a briefing, of a talk being
-// rehearsed.
+// What the soul carries into every turn, whatever lies on the desk (docs/48,
+// docs/61): what is known about the reader, and the tools that write it down.
+// It is about the reader and not about the material — the same statements pitch
+// an explanation of a book, of a briefing, of a talk being rehearsed.
 //
-// Kept apart from turn.ts so that "what the brain contributes" can be read
+// Kept apart from turn.ts so that "what the soul contributes" can be read
 // without reading how a call is fitted to a window.
 
 import {
@@ -18,13 +17,13 @@ import {
   notifyObservationChange,
   statementStore,
   type Statement,
-} from "../../memory";
-import { buildConversationTools } from "../../conversations";
-import type { DeskEnv, DeskMemory } from "../../desk";
-import { getThread } from "../../platform/app/threads";
-import type { AgentTool } from "../agent";
+} from "../memory";
+import { buildConversationTools } from "../conversations";
+import type { DeskEnv, DeskMemory } from "../desk";
+import { getThread } from "../platform/app/threads";
+import type { AgentTool } from "../ai/agent";
 
-export interface Brain {
+export interface Soul {
   // statement_write, the conversation tools, and the observation tools wherever
   // there is a topic to scope them to.
   tools: AgentTool[];
@@ -34,12 +33,12 @@ export interface Brain {
 }
 
 /**
- * Read what the brain brings to this turn: the tools it mounts and the
+ * Read what the soul brings to this turn: the tools it mounts and the
  * statements it may print. `anchor` is the memory of the item that anchors the
  * retrieval, which is where the observation tools get the book they are scoped
  * to.
  */
-export async function openBrain(env: DeskEnv, anchor: DeskMemory | undefined): Promise<Brain> {
+export async function openSoul(env: DeskEnv, anchor: DeskMemory | undefined): Promise<Soul> {
   const topicId = env.topic.id;
   const messages = getThread(env.thread.key, env.thread.id)?.messages ?? [];
   // What the reader says about themselves, in their words (docs/48): evidenced
@@ -76,15 +75,15 @@ export async function openBrain(env: DeskEnv, anchor: DeskMemory | undefined): P
  * retrieval — nothing on the desk is something the reader is working through,
  * so there is nothing for the statements to be about.
  */
-export function brainMemorySection(
-  brain: Brain,
+export function soulMemorySection(
+  soul: Soul,
   env: DeskEnv,
   anchor: DeskMemory | undefined,
   dropped: ReadonlySet<string>,
 ): string {
   if (!anchor) return "";
   return memorySection({
-    statements: dropped.has("reader-statements") ? [] : brain.statements,
+    statements: dropped.has("reader-statements") ? [] : soul.statements,
     observations: anchor.observations,
     bookId: anchor.bookId,
     observationSnapshot: anchor.snapshot(dropped.has("observation-trim")),

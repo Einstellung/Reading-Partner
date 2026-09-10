@@ -5,7 +5,7 @@
 // Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { assembleTurn } from "../../../src/ai/assemble";
+import { assembleTurn } from "../../../src/soul";
 import { openDesk, type DeskEnv } from "../../../src/desk";
 import { createThread, rebuildThreadStoreForTests } from "../../../src/platform/app/threads";
 import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";

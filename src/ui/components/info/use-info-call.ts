@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../ai/agent";
-import { assembleTurn, type AssembledTurn } from "../../../ai/assemble";
+import { assembleTurn, type AssembledTurn } from "../../../soul";
 import { openDesk } from "../../../desk";
 import { withCompanionTools } from "../../../info/briefer/desk";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
@@ -485,7 +485,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   );
 
   // The companion's agent turn: the anchor's desk (the day's briefing, and the
-  // article where there is one) assembled into one call (src/ai/assemble), then
+  // article where there is one) assembled into one call (src/soul), then
   // run with the tool trace and confirm cards this surface draws.
   // `seedStreaming` starts the streaming reply without a visible user message (the
   // onboarding opener); otherwise the caller already appended the user turn.

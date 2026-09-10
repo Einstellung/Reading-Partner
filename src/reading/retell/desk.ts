@@ -5,7 +5,7 @@
 // pass is heading into, the prep notes behind the materials, the tools that
 // record a decision and write the talk, and the prompt those come out in. What
 // it does not do is assemble a call — the desk hands this item to
-// src/ai/assemble, the one place a turn is put together whatever is lying on it.
+// src/soul, the one place a turn is put together whatever is lying on it.
 //
 // Deliberately not a branch of the book's item (reading/desk.ts): that one is
 // assembled out of the book the reader has open and the page they are on, this
@@ -227,8 +227,8 @@ async function openRetell(ref: RetellDeskRef, env: DeskEnv): Promise<DeskItem | 
   const hasReadingTools = tools.length > 0;
 
   // The topic's observations (docs/02, docs/31: the retell opens by handing the
-  // reader their own trail back). The tools that write them are the brain's and
-  // ride whatever is on the desk (ai/assemble/memory.ts); what is read here is
+  // reader their own trail back). The tools that write them are the soul's and
+  // ride whatever is on the desk (soul/self.ts); what is read here is
   // the material the memory paragraph is built out of.
   let topicObservations: Observation[] = [];
   let observationSnapshot = "";

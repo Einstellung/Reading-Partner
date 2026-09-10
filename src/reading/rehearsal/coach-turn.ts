@@ -2,7 +2,7 @@
 // view asks for it.
 //
 // The assembly itself is no longer here. What the talk contributes to a call is
-// reading/rehearsal/desk.ts, what the brain contributes is src/ai/assemble, and
+// reading/rehearsal/desk.ts, what the soul contributes is src/soul, and
 // putting the two together is one function every domain now shares (docs/61).
 // This file is what is left of the old entry point.
 //
@@ -10,7 +10,7 @@
 // stream; the caller owns runAgentTurn.
 
 import type { AgentTool } from "../../ai/agent";
-import { assembleTurn } from "../../ai/assemble";
+import { assembleTurn } from "../../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../../desk";
 import type { Settings } from "../../platform/app/settings";
 import { talkThreadKey } from "../talk";

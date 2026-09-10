@@ -3,7 +3,7 @@
 // replayed history for the AI-pen bubble and the book-level thread.
 //
 // The assembly itself is no longer here. What a book contributes to a call is
-// reading/desk.ts, what the brain contributes is src/ai/assemble, and putting
+// reading/desk.ts, what the soul contributes is src/soul, and putting
 // the two together is one function every domain now shares (docs/61). This file
 // is what is left of the old entry point: it lays the desk — the open book, and
 // the articles the reader kept beside it — asks for a turn, and hands the answer
@@ -13,7 +13,7 @@
 // stream; the caller owns runAgentTurn.
 
 import type { AgentTool } from "../ai/agent";
-import { assembleTurn } from "../ai/assemble";
+import { assembleTurn } from "../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../desk";
 import { EXPLAIN_KICKOFF } from "./intents";
 import type { InlineMode } from "./lecture";
@@ -48,7 +48,7 @@ export {
 // The configured model's metadata, now that every turn is fitted by the same
 // assembly. Re-exported because the retell and coach turns still ask for it
 // here (reading/retell/turn.ts, reading/rehearsal/coach-turn.ts).
-export { configuredModel } from "../ai/assemble";
+export { configuredModel } from "../soul";
 
 export interface ReadingTurnInput extends BookDeskRef {
   settings: Settings;

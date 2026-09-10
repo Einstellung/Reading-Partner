@@ -5,7 +5,7 @@
 // tests/info/chat.test.ts. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { assembleTurn } from "../../src/ai/assemble";
+import { assembleTurn } from "../../src/soul";
 import { openDesk, type DeskEnv, type DeskRef } from "../../src/desk";
 import {
   INFO_ARTICLE_KIND,
@@ -134,7 +134,7 @@ test("an article desk keeps the briefing first and the article after it", async 
 // is the briefing's, and a second copy of it on the same desk would be two names
 // for one thing (openDesk refuses that outright).
 test("the tools come from the briefing item alone", async () => {
-  // The brain's statement tool rides on the reader having just said something.
+  // The soul's statement tool rides on the reader having just said something.
   createThread("info-2026-07-21", "info", "briefing-2026-07-21");
   appendMessage("info-2026-07-21", "briefing-2026-07-21", {
     role: "user",
@@ -154,7 +154,7 @@ test("the tools come from the briefing item alone", async () => {
   ]);
 });
 
-test("an article on its own desk brings no tools but the brain's", async () => {
+test("an article on its own desk brings no tools but the soul's", async () => {
   const turn = await assemble([articleRef], [tool("probe_source")]);
   expect(turn.tools.map((t) => t.name)).not.toContain("probe_source");
 });
