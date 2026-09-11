@@ -36,6 +36,7 @@
 | 出 Android 包、签名、对齐 | Android 构建与签名 |
 | 桌面 webview 行为异常 | WebKit / webview |
 | 画光晕、阴影、模糊之类的装饰效果 | WebKit / webview |
+| 用 transform 让一个 SVG 形状变形、压平一条描边 | WebKit / webview |
 | 隐藏 webview 取正文、反爬、UA、站点登录与退出 | WebKit / webview + 网络与 CSP |
 | 渲染链接、点外链、开系统浏览器 | WebKit / webview |
 | 清洗第三方 HTML、往 innerHTML 里塞正文 | WebKit / webview |
@@ -52,6 +53,7 @@
 | 搬目录、切子域、动分层表 | 开发环境 |
 | 拿 grep 判断"这东西没人用"、按结论删代码 | 开发环境 |
 | 在 worktree 里起 dev server 做实验 | 开发环境 |
+| 杀掉自己起的 dev server 再起一份 | 开发环境 |
 | 无头截图核对界面配色 | 开发环境 |
 | vite dev server 端口占用起不来、写 Tauri 插件命令的参数 | 开发环境 |
 | 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
@@ -236,6 +238,7 @@
 ## WebKit / webview
 
 - [281-a-multiply-over-a-transparent-backdrop-paints-the-source](./281-a-multiply-over-a-transparent-backdrop-paints-the-source.md) — `isolation: isolate` 的组里，`mix-blend-mode: multiply` 盖在没人画过的地方直接画出乘数色本身（αb 为 0 时 `(1-αb)·Cs + αb·B` 就是 Cs）：纸留在组外，整张纸照样正好乘成 `--page-wash`。组里放什么按「谁该被乘」定，别为了垫底把纸搬进组，也别把「组里空的」当成 no-op
+- [291-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it](./291-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it.md) — `scaleY(0)` 的矩阵不可逆，浏览器整个不画这个元素；加 `vector-effect="non-scaling-stroke"` 保线宽之后线宽按屏幕像素算，1000 见方的 viewBox 里 `strokeWidth={9}` 在 72 px 的元素上从 0.65 px 变成 9 px。形状之间要变就画几张交叉淡入，缩放一律留不为零的下限
 - [219-ios-webkit-clips-a-blur-to-the-elements-box](./219-ios-webkit-clips-a-blur-to-the-elements-box.md) — iOS WebKit 把 `filter: blur()` 的结果裁在元素自己的盒子上，`rounded-full` 也不管，模糊的光晕在真 iPad webview 里是个硬边方块（桌面 Chromium 和 WebKitGTK 都是圆的）；光晕改用径向渐变，不用 filter
 - [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板
@@ -323,6 +326,7 @@
 - [286-vite-started-outside-the-worktree-root-kills-the-sim-bridge](./286-vite-started-outside-the-worktree-root-kills-the-sim-bridge.md) — 验证脚本把 vite 起在 scratchpad 而不是 worktree 根，vite 报 ready 但 `/` 是 404，webview 白屏；sim bridge 是 vite 插件、eval 要页面自己连上来，没加载就没人接，`drive.py` 一律 `page never answered`，连 reload 都送不进去。起完先 curl 断言 200，白屏了只能按 PID 重启 app
 - [289-playwright-from-bunx-brings-no-browser](./289-playwright-from-bunx-brings-no-browser.md) — `bunx playwright` 每次拉当天最新包，它只认自己那版钉死的 chromium revision，`~/.cache/ms-playwright/` 里已有的别的 revision 一律不用，`chromium.launch()` 直接报 executable 不存在。别去 `playwright install`，launch 时用 `executablePath` 指到 cache 里现成的 headless shell
 - [290-networkidle-never-comes-on-an-animated-page](./290-networkidle-never-comes-on-an-animated-page.md) — vite 的 HMR websocket 加页面自己的 rAF 循环把连接数顶住，`waitUntil: "networkidle"` 必超时；改 `domcontentloaded` 加 `waitForSelector`
+- [292-killing-vite-by-its-wrapper-pid-leaves-the-server-up](./292-killing-vite-by-its-wrapper-pid-leaves-the-server-up.md) — `bun run vite` 是外壳，监听端口的是它的子进程；kill 外壳不带走它，新起的那份撞 `strictPort` 当场退出（只写进日志），`curl` 的 200 是旧服务器答的，于是三轮改动截图一模一样。按 `lsof -ti:<port>` 杀，起完 grep 一句刚加的标识符确认服务器是新的
 - [55-worktree-dev-server-serves-stale-modules](./55-worktree-dev-server-serves-stale-modules.md) — worktree 在 `.claude/` 下，正好被 Vite 的 watch ignore 命中，dev server 看不见自己的改动；每次改完要重启
 - [239-vite-prebundle-freezes-a-dependency](./239-vite-prebundle-freezes-a-dependency.md) — `node_modules/.vite/deps` 把 pi-ai 的模型表整份内联冻在几周前，pull 后没 `bun install` 也没重建缓存，app 看到的表比磁盘旧，`enforceKnownModel` 如实把「不在目录里」的模型换掉并写回盘；`bun install && rm -rf node_modules/.vite` 再重启，判据是拿 `bun -e` 直读 `node_modules` 和 app 里看到的对比
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`

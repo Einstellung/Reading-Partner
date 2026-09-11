@@ -18,7 +18,7 @@
 // plus a slow value noise, so two minutes apart the body is never in the same
 // pose it was in.
 
-import { MOTION, clampLevel, type OrbPhase } from "../orb/orb";
+import { SILENCE_HOLD_MS, clampLevel, type OrbPhase } from "../orb/orb";
 
 // The five periods are Live2D's own, kept to the tenth of a millisecond they
 // are published at (docs/45): breath 3.2345 s, head X 6.5345 s, head Y 3.5345 s,
@@ -182,9 +182,10 @@ export function clampGaze(gaze: Gaze): Gaze {
 // that snapped to the pointer would read as a cursor, not as a glance.
 export const GAZE_K = 0.08;
 
-export function easeGaze(current: Gaze, target: Gaze, dtMs: number): Gaze {
+export function easeGaze(current: Gaze, target: Gaze, dtMs: number, k: number = GAZE_K): Gaze {
 	if (!Number.isFinite(dtMs) || dtMs <= 0) return current;
-	const factor = 1 - Math.pow(1 - GAZE_K, dtMs / (1000 / 60));
+	const pull = Number.isFinite(k) ? clamp(k, 0.001, 1) : GAZE_K;
+	const factor = 1 - Math.pow(1 - pull, dtMs / (1000 / 60));
 	return {
 		x: current.x + (target.x - current.x) * factor,
 		y: current.y + (target.y - current.y) * factor,
@@ -209,32 +210,299 @@ export function wanderGaze(tMs: number, seed: number = 2): Gaze {
 // How long a pointer has to be away before the gaze goes back to wandering.
 export const GAZE_RELEASE_MS = 3000;
 
-// What a phase does to a body, on top of what MOTION already says about scale
-// and glow. The four fields here are the ones a disc had nowhere to put: the
-// core inside the light, the height of the tuft, how fast the breath runs, and
-// how much of the pool below is lit.
-export interface PhaseBody {
-	// Multiplies the breath period: thinking breathes fast, speaking barely
-	// breathes at all because the answer's envelope is already moving it.
-	breathRate: number;
-	// The bright middle, 0..1, and the level's share of it.
-	coreBase: number;
-	coreDrive: number;
-	// The tuft's height as a multiple of its resting height, and the level's
-	// share. Thinking stands it up; nothing else touches it.
-	tuftBase: number;
-	tuftDrive: number;
+// --- the four acts --------------------------------------------------------
+//
+// Lumen does not animate states, it performs four acts: watch you, look up,
+// glance down at the desk and scan it, look back and talk. The eye direction
+// and the three mouth shapes carry the story; everything else stays small
+// enough that the whole thing still reads at 72 px.
+
+// Where the soul says its attention is (docs/66). Deliberately not folded into
+// OrbPhase: the pipeline reports four states and this is a second axis, so
+// every switch over a phase stays exhaustive.
+export type Attention = "reader" | "work" | "away";
+
+// The act, which is the phase crossed with the attention. `rest` is idle —
+// named for what the body is doing rather than for the pipeline, because the
+// table below is about a body.
+export type LumenAct = "rest" | "listen" | "think" | "check" | "speak";
+
+export function actFor(phase: OrbPhase, attention: Attention = "reader"): LumenAct {
+	switch (phase) {
+		case "listening":
+			return "listen";
+		// Checking is thinking with the attention on the desk. If a turn never
+		// puts it there, the act never happens and the answer comes straight
+		// back from the look upward — a glance down at nothing would be a lie
+		// about what the soul was doing.
+		case "thinking":
+			return attention === "work" ? "check" : "think";
+		case "speaking":
+			return "speak";
+		default:
+			return "rest";
+	}
 }
 
-export const BODY: Record<OrbPhase, PhaseBody> = {
-	idle: { breathRate: 1, coreBase: 0.42, coreDrive: 0, tuftBase: 1, tuftDrive: 0 },
-	listening: { breathRate: 1.15, coreBase: 0.5, coreDrive: 0.34, tuftBase: 1.04, tuftDrive: 0.06 },
-	// The one state that reads as effort. The core is the brightest it gets and
-	// the tuft stands up: docs/45 asks the states to be told apart by movement,
-	// and a tuft is the fastest-reading movement a round body has.
-	thinking: { breathRate: 3.6, coreBase: 0.72, coreDrive: 0, tuftBase: 1.16, tuftDrive: 0 },
-	speaking: { breathRate: 1, coreBase: 0.58, coreDrive: 0.4, tuftBase: 1.06, tuftDrive: 0.1 },
+// Everything an act does to the body. What the disc's MOTION table said about
+// scale and glow is restated here rather than borrowed: the acts changed the
+// rules it encoded (listening no longer pulses with the room), and orb.ts stays
+// the owner of the two things the acts did not touch, the smoothing and the
+// hold.
+export interface ActBody {
+	// The resting size, and the level's share of it.
+	base: number;
+	drive: number;
+	// The act's own breath: depth and period.
+	breath: number;
+	periodMs: number;
+	// The halo, at rest and per unit of level.
+	glowBase: number;
+	glowDrive: number;
+	// The bright middle — the electricity half of docs/66.
+	coreBase: number;
+	coreDrive: number;
+	// The tuft's height as a multiple of its resting height. The tuft is the one
+	// part the microphone always moves, in every act that has a signal.
+	tuftBase: number;
+	tuftDrive: number;
+	// How much of the never-repeating idle motion survives. Listening is zero:
+	// going still is how a body says it is paying attention.
+	idleMix: number;
+	// The act's own sway, which stands in for the idle one where it is damped.
+	swayMs: number;
+	swayAmp: number;
+	// Leaning toward the reader, who is below and to the left of the corner the
+	// body sits in: a tilt, a shift down, and the body a little closer.
+	leanDeg: number;
+	leanY: number;
+	// How wide the eyes are held, as a multiple of their painted size.
+	eyeScale: number;
+	// The two brow strokes. They exist only while it is working.
+	brow: number;
+	// The mouth: 1 is the closed smile and 0 the flat line. `mouthOpen` is the
+	// crossfade to the third shape, the small round one.
+	mouthCurve: number;
+	mouthOpen: number;
+}
+
+export const ACT: Record<LumenAct, ActBody> = {
+	// Nothing is happening. One slow breath, the blink, the drift: alive, not
+	// inflating.
+	rest: {
+		base: 1,
+		drive: 0,
+		breath: 0.026,
+		periodMs: 4200,
+		glowBase: 0.3,
+		glowDrive: 0,
+		coreBase: 0.42,
+		coreDrive: 0,
+		tuftBase: 1,
+		tuftDrive: 0,
+		idleMix: 1,
+		swayMs: 0,
+		swayAmp: 0,
+		leanDeg: 0,
+		leanY: 0,
+		eyeScale: 1,
+		brow: 0,
+		mouthCurve: 1,
+		mouthOpen: 0,
+	},
+	// Leaning in, eyes wide and fixed, and nothing else moving. The level only
+	// reaches the tuft: a body that swelled at the room would be reporting the
+	// microphone rather than listening to it.
+	listen: {
+		base: 1.06,
+		drive: 0,
+		breath: 0,
+		periodMs: 0,
+		glowBase: 0.44,
+		glowDrive: 0.16,
+		coreBase: 0.5,
+		coreDrive: 0.2,
+		tuftBase: 1.04,
+		tuftDrive: 0.18,
+		idleMix: 0,
+		swayMs: 0,
+		swayAmp: 0,
+		leanDeg: 3.5,
+		leanY: 0.022,
+		eyeScale: 1.1,
+		brow: 0,
+		mouthCurve: 1,
+		mouthOpen: 0,
+	},
+	// Looking up and away, brows in, tuft up, core bright, and a slow sway on a
+	// three-second period so the stillness of listening is not mistaken for it.
+	think: {
+		base: 1.02,
+		drive: 0,
+		breath: 0.012,
+		periodMs: 1600,
+		glowBase: 0.52,
+		glowDrive: 0,
+		coreBase: 0.78,
+		coreDrive: 0,
+		tuftBase: 1.18,
+		tuftDrive: 0,
+		idleMix: 0.2,
+		swayMs: 3000,
+		swayAmp: 1,
+		leanDeg: 0,
+		leanY: 0,
+		eyeScale: 0.96,
+		brow: 1,
+		mouthCurve: 0,
+		mouthOpen: 0,
+	},
+	// The same body as thinking, with the eyes down on the desk. The sway stops:
+	// the scan is the movement, and two movements at once is a wobble.
+	check: {
+		base: 1.02,
+		drive: 0,
+		breath: 0.012,
+		periodMs: 1600,
+		glowBase: 0.5,
+		glowDrive: 0,
+		coreBase: 0.7,
+		coreDrive: 0,
+		tuftBase: 1.12,
+		tuftDrive: 0,
+		idleMix: 0.1,
+		swayMs: 0,
+		swayAmp: 0,
+		leanDeg: 0,
+		leanY: 0.01,
+		eyeScale: 0.94,
+		brow: 1,
+		mouthCurve: 0,
+		mouthOpen: 0,
+	},
+	// Talking. The mouth carries it, so the body only leans back toward the
+	// reader and keeps the smallest drive it can be seen to have.
+	speak: {
+		base: 1.03,
+		drive: 0.05,
+		breath: 0,
+		periodMs: 0,
+		glowBase: 0.5,
+		glowDrive: 0.45,
+		coreBase: 0.58,
+		coreDrive: 0.4,
+		tuftBase: 1.06,
+		tuftDrive: 0.2,
+		idleMix: 0.45,
+		swayMs: 0,
+		swayAmp: 0,
+		leanDeg: 2,
+		leanY: 0.01,
+		eyeScale: 1.02,
+		brow: 0,
+		mouthCurve: 0.35,
+		mouthOpen: 1,
+	},
 };
+
+// Where each act points the eyes, in the same eye-widths `gazeToward` returns.
+// Positive y is down.
+export const EYE_TARGET: Record<LumenAct, Gaze> = {
+	rest: { x: 0, y: 0 },
+	listen: { x: 0, y: 0.08 },
+	// Up and to one side, as in docs/assets/lumen/lumen-thinking.png.
+	think: { x: 0.62, y: -0.72 },
+	check: { x: 0, y: 0.8 },
+	speak: { x: 0, y: 0.06 },
+};
+
+// How hard each act pulls the eyes toward their target, per frame at 60 fps.
+// The scan is the one place an eye is allowed to snap: a hop that eased would
+// still be halfway across when the next one started.
+export const GAZE_K_ACT: Record<LumenAct, number> = {
+	rest: GAZE_K,
+	listen: 0.16,
+	think: 0.14,
+	check: 0.45,
+	speak: 0.16,
+};
+
+// The scan: two passes left and right across the desk, each hop about the
+// length of a saccade plus its fixation, then a beat holding the middle before
+// it goes round again.
+export const SCAN_HOP_MS = 120;
+export const SCAN_HOPS = 4;
+export const SCAN_BEAT_MS = 520;
+export const SCAN_CYCLE_MS = SCAN_HOP_MS * SCAN_HOPS + SCAN_BEAT_MS;
+export const SCAN_REACH = 0.5;
+export const SCAN_DOWN = 0.8;
+
+// Deterministic in the time since the act began, so a test states a moment and
+// reads the hop back. Hop 0 goes left: the desk is read the way a page is.
+export function scanGaze(actMs: number): Gaze {
+	const t = Number.isFinite(actMs) && actMs > 0 ? actMs % SCAN_CYCLE_MS : 0;
+	const hop = Math.floor(t / SCAN_HOP_MS);
+	if (hop >= SCAN_HOPS) return { x: 0, y: SCAN_DOWN };
+	return { x: hop % 2 === 0 ? -SCAN_REACH : SCAN_REACH, y: SCAN_DOWN };
+}
+
+// The gaze an act asks for at a moment in it. Everything but the scan is a
+// fixed direction — the story is told by where the eyes are, not by how they
+// travel.
+export function actGaze(act: LumenAct, actMs: number): Gaze {
+	return act === "check" ? scanGaze(actMs) : EYE_TARGET[act];
+}
+
+// The mouth. Three shapes and no fourth: a closed smile, a flat line, and a
+// small round opening whose height follows the level. Never a phoneme — an
+// envelope at 10 Hz is two samples a syllable (docs/45), and a mouth driven off
+// it is a puppet, not a face.
+//
+// The level is the mic level today. The TTS envelope docs/45 plans does not
+// reach the WebView yet, so during `speak` the mouth follows whatever the
+// handle carries.
+export const MOUTH_MIN_OPEN = 0.15;
+// Under this the room counts as quiet. Above the noise floor a closed
+// microphone reports, and below the quietest syllable in an answer.
+export const MOUTH_VOICE_LEVEL = 0.06;
+
+// When the level was last loud enough to be a voice, or null. The hold that
+// keeps the gaps between words from chattering the mouth shut is the orb's own
+// SILENCE_HOLD_MS: the same 450 ms that keeps the phase from flickering.
+export interface MouthState {
+	voicedAt: number | null;
+}
+
+export const MOUTH_SHUT: MouthState = { voicedAt: null };
+
+export function stepMouth(state: MouthState, act: LumenAct, level: number, now: number): MouthState {
+	if (act !== "speak") return state.voicedAt === null ? state : MOUTH_SHUT;
+	if (clampLevel(level) > MOUTH_VOICE_LEVEL) return { voicedAt: now };
+	return state;
+}
+
+// 0 shut, MOUTH_MIN_OPEN barely open, 1 wide. Shut in every act but speaking,
+// and shut in speaking only once the hold has run out.
+export function mouthOpenness(state: MouthState, act: LumenAct, level: number, now: number): number {
+	if (act !== "speak") return 0;
+	const value = clampLevel(level);
+	const voiced = value > MOUTH_VOICE_LEVEL;
+	const held = state.voicedAt !== null && now - state.voicedAt < SILENCE_HOLD_MS;
+	if (!voiced && !held) return 0;
+	return MOUTH_MIN_OPEN + (1 - MOUTH_MIN_OPEN) * value;
+}
+
+// How long one act takes to become the next. Long enough to read as a turn of
+// the head and short enough that the answer does not arrive before the face
+// has finished asking for it.
+export const ACT_EASE_MS = 280;
+
+// Cubic ease-in-out over 0..1. The acts are poses, and a linear cut between two
+// poses reads as a slide.
+export function actEase(t: number): number {
+	const x = clamp(t, 0, 1);
+	return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
 
 // Asleep. Not an OrbPhase — the pipeline never reports it, and putting it in the
 // phase union would make every switch over the four states wrong. It is a
@@ -278,11 +546,20 @@ export interface LumenVisual {
 	tuftLeanDeg: number;
 	// 1 open, 0 shut. The blink and the rest state both write here.
 	eyeOpen: number;
+	// How wide the eyes are held, before the blink closes them.
+	eyeScale: number;
 	gaze: Gaze;
+	// The two brow strokes, 0 absent and 1 there.
+	browOpacity: number;
+	// The mouth: 1 is the closed smile and 0 the flat line; `mouthMix` fades
+	// from that stroke to the small round opening, which is `mouthOpen` high.
+	mouthCurve: number;
+	mouthMix: number;
+	mouthOpen: number;
 }
 
 export interface LumenInput {
-	phase: OrbPhase;
+	act: LumenAct;
 	// 0..1, already smoothed by orb.ts's smoothLevel.
 	level: number;
 	// Since this phase began, for the breath's own zero.
@@ -295,6 +572,8 @@ export interface LumenInput {
 	// From the blink scheduler.
 	eyeOpen: number;
 	gaze: Gaze;
+	// How open the mouth is this frame, from mouthOpenness above.
+	mouthOpen: number;
 	// prefers-reduced-motion: the resting pose, a breath small enough to see only
 	// if you are looking for it, and no drift. The blink stays — an eye that never
 	// closes is not a motion effect, it is a stare.
@@ -303,8 +582,7 @@ export interface LumenInput {
 }
 
 export function lumenVisual(input: LumenInput): LumenVisual {
-	const m = MOTION[input.phase];
-	const b = BODY[input.phase];
+	const a = ACT[input.act];
 	const level = clampLevel(input.level);
 	const rest = clamp(input.rest, 0, 1);
 	const awake = 1 - rest;
@@ -315,30 +593,37 @@ export function lumenVisual(input: LumenInput): LumenVisual {
 	// the setting is to stop motion pulling an eye, not to kill the character.
 	const damp = input.reduced ? 0.1 : 1;
 
-	// The phase's own breath, on the phase's clock, so it starts at its resting
-	// size on every change of phase exactly as the orb's did.
-	const rate = input.reduced ? 1 : b.breathRate;
+	// The act's own breath, on the act's clock, so it starts at its resting size
+	// on every change of act exactly as the orb's did. Nothing here inflates:
+	// the depth is a fraction of a percent of the body at every act that has
+	// one, and listening and speaking have none at all.
 	const swell =
-		m.breath > 0 && m.periodMs > 0
-			? (m.breath *
-					(1 - Math.cos((2 * Math.PI * input.elapsedMs * rate) / m.periodMs))) /
-				2
+		a.breath > 0 && a.periodMs > 0
+			? (a.breath * (1 - Math.cos((2 * Math.PI * input.elapsedMs) / a.periodMs))) / 2
 			: 0;
 
-	const scale = m.base + swell * damp + m.drive * level;
+	const scale = a.base + swell * damp + a.drive * level;
 	// Volume is conserved: a body that swells sideways rises less, which is what
 	// keeps the breath from reading as a zoom.
-	const squash = (breath.swell - 0.5) * 0.018 * damp * awake;
+	const squash = (breath.swell - 0.5) * 0.018 * damp * awake * a.idleMix;
 
-	const glow = Math.min(1, m.glowBase + m.glowDrive * level + swell * damp);
-	const core = Math.min(1, b.coreBase + b.coreDrive * level + breath.swell * 0.08 * damp);
+	const glow = Math.min(1, a.glowBase + a.glowDrive * level + swell * damp);
+	const core = Math.min(1, a.coreBase + a.coreDrive * level + breath.swell * 0.08 * damp * a.idleMix);
+
+	// The act's own sway, where it has one, and the idle drift wherever the act
+	// leaves room for it.
+	const idle = damp * awake * a.idleMix;
+	const actSway =
+		a.swayAmp > 0 && a.swayMs > 0
+			? Math.sin((2 * Math.PI * input.tMs) / a.swayMs) * a.swayAmp * damp * awake
+			: 0;
 
 	return {
 		scaleX: lerp(scale * (1 + squash), scale * REST.scaleX, rest),
 		scaleY: lerp(scale * (1 - squash), scale * REST.scaleY, rest),
-		shiftX: breath.sway * 0.012 * damp * awake + breath.drift * 0.01 * damp * awake,
-		shiftY: lerp(-breath.bob * 0.009 * damp, REST.sink, rest),
-		tiltDeg: lerp(breath.tilt * 1.6 * damp, 0, rest),
+		shiftX: breath.sway * 0.012 * idle + breath.drift * 0.01 * idle + actSway * 0.016,
+		shiftY: lerp(-breath.bob * 0.009 * idle + a.leanY * awake, REST.sink, rest),
+		tiltDeg: lerp(breath.tilt * 1.6 * idle + actSway * 1.8 + a.leanDeg * awake, 0, rest),
 		glow: lerp(glow, REST.glow, rest),
 		core: lerp(core, REST.core, rest),
 		// The pool is the body's own light landing on the desk: it tracks the glow
@@ -346,16 +631,55 @@ export function lumenVisual(input: LumenInput): LumenVisual {
 		poolOpacity: lerp(0.3 + glow * 0.42, 0.14, rest),
 		poolScaleX: lerp(1 + swell * 0.6 * damp + level * 0.05, REST.scaleX, rest),
 		tuftScaleY: lerp(
-			b.tuftBase + b.tuftDrive * level + breath.swell * 0.03 * damp,
+			a.tuftBase + a.tuftDrive * level + breath.swell * 0.03 * idle,
 			REST.tuftScaleY,
 			rest,
 		),
-		tuftLeanDeg: lerp(breath.sway * 3.2 * damp + breath.drift * 1.4 * damp, REST.tuftLeanDeg, rest),
+		tuftLeanDeg: lerp(
+			breath.sway * 3.2 * idle + breath.drift * 1.4 * idle + actSway * 2.6 + a.leanDeg * 0.8 * awake,
+			REST.tuftLeanDeg,
+			rest,
+		),
 		// Shut asleep, and the ramp closes them before the body has finished
 		// settling: eyes that were still open on a body already lying flat looked
 		// like the animation had broken.
 		eyeOpen: input.eyeOpen * Math.max(0, 1 - rest * 2),
+		eyeScale: lerp(a.eyeScale, 1, rest),
 		gaze: rest > 0 ? { x: input.gaze.x * awake, y: input.gaze.y * awake } : input.gaze,
+		browOpacity: a.brow * awake,
+		mouthCurve: a.mouthCurve,
+		mouthMix: a.mouthOpen * awake,
+		mouthOpen: clamp(input.mouthOpen, 0, 1) * awake,
+	};
+}
+
+// One act dissolving into the next. Every field is a number and every number
+// is linear in the mix, so the whole pose crossfades: the eyes travel, the
+// brows fade, the mouth goes from one shape to the other, and nothing cuts.
+export function blendVisual(from: LumenVisual, to: LumenVisual, t: number): LumenVisual {
+	const k = clamp(t, 0, 1);
+	if (k <= 0) return from;
+	if (k >= 1) return to;
+	const mix = (key: keyof LumenVisual) => lerp(from[key] as number, to[key] as number, k);
+	return {
+		scaleX: mix("scaleX"),
+		scaleY: mix("scaleY"),
+		shiftX: mix("shiftX"),
+		shiftY: mix("shiftY"),
+		tiltDeg: mix("tiltDeg"),
+		glow: mix("glow"),
+		core: mix("core"),
+		poolOpacity: mix("poolOpacity"),
+		poolScaleX: mix("poolScaleX"),
+		tuftScaleY: mix("tuftScaleY"),
+		tuftLeanDeg: mix("tuftLeanDeg"),
+		eyeOpen: mix("eyeOpen"),
+		eyeScale: mix("eyeScale"),
+		gaze: { x: lerp(from.gaze.x, to.gaze.x, k), y: lerp(from.gaze.y, to.gaze.y, k) },
+		browOpacity: mix("browOpacity"),
+		mouthCurve: mix("mouthCurve"),
+		mouthMix: mix("mouthMix"),
+		mouthOpen: mix("mouthOpen"),
 	};
 }
 
@@ -372,10 +696,30 @@ export const FACE = {
 	eyeRx: 0.062,
 	eyeRy: 0.084,
 	// How far the iris travels inside its own white, as a fraction of the eye.
-	irisTravelX: 0.3,
-	irisTravelY: 0.22,
+	irisTravelX: 0.5,
+	irisTravelY: 0.42,
+	// How far the whole face slides with the gaze, in the same box fractions.
+	// The iris alone cannot say "looking up" on an eye 12 px tall: the pupil
+	// fills nine tenths of its own white, so a quarter of the remaining travel
+	// is under a pixel. The face moving with it is what reads as a head turn.
+	faceTravelX: 0.016,
+	faceTravelY: 0.014,
 	mouthY: 0.663,
 	mouthWidth: 0.055,
+	// How far the smile's curve drops below its two ends. Zero is the flat
+	// line, and the stroke morphs between the two on one number.
+	smileDepth: 0.028,
+	// The round mouth, fully open: half its width and half its height. Smaller
+	// than the smile is wide — an open mouth as wide as the smile reads as a
+	// shout at 72 px.
+	mouthOpenRx: 0.032,
+	mouthOpenRy: 0.042,
+	// The brows: how far above the eyes they sit, how long they are, and how
+	// far the inner end drops. They are the only line on the face that is not
+	// there all the time.
+	browY: 0.43,
+	browWidth: 0.058,
+	browTiltDeg: 9,
 } as const;
 
 function lerp(a: number, b: number, t: number): number {

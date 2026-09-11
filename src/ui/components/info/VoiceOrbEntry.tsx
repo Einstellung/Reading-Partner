@@ -1,22 +1,23 @@
-// The way into the info voice session (docs/33, docs/45): Lumen resting in the
-// corner of the briefing, tapped to start talking. It grows to the call and
-// shrinks back when the call ends — there is no other screen, no transcript
-// panel and no controls, because the conversation is the interface.
+// The way into the info voice session (docs/33, docs/66): Lumen resting in the
+// corner of the briefing, tapped to start talking. There is no other screen, no
+// transcript panel and no controls, because the conversation is the interface.
 //
 // Rendering and event binding only; the numbers are ui/components/lumen and
 // ui/components/orb.
 //
-// Placement. Bottom right at rest and out of the way of the briefing's own
-// sticky header and its Ask button; centred during a call on a tablet or a
-// desktop, and in the lower third on a phone, where the middle of the screen is
-// the middle of nothing and the bottom is where the hand is. The layer wraps the
-// whole viewport but takes no presses of its own, so the briefing underneath
-// stays scrollable and tappable while a call is up.
+// Placement. Bottom right, out of the way of the briefing's own sticky header
+// and its Ask button, and it stays there: one size for the whole call. The box
+// used to grow to 160 px and re-centre itself when a call opened, which meant
+// every call began by throwing a body across the screen and covering the thing
+// being talked about. The four acts are legible at 72 px (docs/66), so the
+// corner is enough. The layer wraps the whole viewport but takes no presses of
+// its own, so the briefing underneath stays scrollable and tappable.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { hasNativeSpeech } from "../../../platform/app/platform";
 import { Lumen } from "../lumen/Lumen";
+import type { Attention } from "../lumen/lumen-motion";
 import { orbErrorLine, type OrbPhase, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
@@ -47,6 +48,10 @@ export function VoiceOrbEntry({
 
 function VoiceOrbLayer({ dateKey, briefing }: { dateKey: string; briefing: Briefing | null }) {
 	const call = useVoiceCall({ dateKey, briefing });
+	// No attention here yet. The session reports four phases and nothing about
+	// what the soul is doing inside a turn, so a live call never reaches the
+	// check act — thinking always looks up. It arrives with SoulIntent
+	// (docs/66); until then the harness is the only thing that can drive it.
 	return <OrbLayer call={asHandle(call)} />;
 }
 
@@ -54,8 +59,8 @@ function VoiceOrbLayer({ dateKey, briefing }: { dateKey: string; briefing: Brief
 // speech behind it and so never gets past the gate above. Everything below it
 // is the same code the real entry runs.
 export function StubOrbLayer() {
-	const { handle, rest } = useStubCall();
-	return <OrbLayer call={handle} rest={rest} />;
+	const { handle, rest, attention } = useStubCall();
+	return <OrbLayer call={handle} rest={rest} attention={attention} />;
 }
 
 // The orb reads an error as a key into its own lines (interrupted, lost) or as
@@ -70,32 +75,34 @@ function asHandle(call: VoiceCallView): VoiceCallHandle {
 	return { phase: call.phase, start: call.start, stop: call.stop, error, subscribeLevel: call.subscribeLevel };
 }
 
-function OrbLayer({ call, rest = false }: { call: VoiceCallHandle; rest?: boolean }) {
+// One box, in one place, whether or not a call is up. 72 px: at 56 the brows
+// are a smudge and the flat mouth and the closed smile are the same picture,
+// and past about 80 the corner stops being a corner.
+function OrbLayer({
+	call,
+	rest = false,
+	attention = "reader",
+}: {
+	call: VoiceCallHandle;
+	rest?: boolean;
+	attention?: Attention;
+}) {
 	const line = orbErrorLine(call.error);
-	const calling = call.phase !== "idle";
-
-	if (!calling) {
-		return (
-			<div
-				className={cn(
-					"pointer-events-none fixed inset-x-0 bottom-0 flex flex-col items-end gap-2 pb-safe-6 pr-safe-4",
-					OVERLAY_Z.floating,
-				)}
-			>
-				{line && <ErrorLine line={line} />}
-				<Lumen handle={call} rest={rest} className="pointer-events-auto h-14 w-14" />
-			</div>
-		);
-	}
 
 	return (
 		<div
 			className={cn(
-				"pointer-events-none fixed inset-0 flex flex-col items-center justify-end gap-5 pb-[22vh] sm:justify-center sm:pb-0",
+				"pointer-events-none fixed inset-x-0 bottom-0 flex flex-col items-end gap-2 pb-safe-6 pr-safe-4",
 				OVERLAY_Z.floating,
 			)}
 		>
-			<Lumen handle={call} rest={rest} className="pointer-events-auto h-40 w-40" />
+			{line && <ErrorLine line={line} />}
+			<Lumen
+				handle={call}
+				rest={rest}
+				attention={attention}
+				className="pointer-events-auto h-18 w-18"
+			/>
 		</div>
 	);
 }
@@ -118,12 +125,15 @@ function ErrorLine({ line }: { line: string }) {
 // level and the error line — which is the only way to see the four states in the
 // iOS simulator, where the audio stack cannot start at all (docs/pitfall/193).
 // `import.meta.env.DEV` keeps the handle off a production build.
-function useStubCall(): { handle: VoiceCallHandle; rest: boolean } {
+function useStubCall(): { handle: VoiceCallHandle; rest: boolean; attention: Attention } {
 	const [phase, setPhase] = useState<OrbPhase>("idle");
 	const [error, setError] = useState<string | null>(null);
 	// Asleep is not a phase (src/ui/components/lumen/lumen-motion.ts) and nothing in the
 	// app sets it yet, so the harness is the only thing that can show it.
 	const [rest, setRest] = useState(false);
+	// Nothing in a live call sets this yet either, so the check act exists only
+	// where the harness forces it.
+	const [attention, setAttention] = useState<Attention>("reader");
 	const subscribers = useRef(new Set<(value: number) => void>());
 
 	const subscribeLevel = useCallback((cb: (value: number) => void) => {
@@ -140,6 +150,7 @@ function useStubCall(): { handle: VoiceCallHandle; rest: boolean } {
 			error: setError,
 			level: (value: number) => subscribers.current.forEach((cb) => cb(value)),
 			rest: setRest,
+			attention: setAttention,
 		};
 		return () => {
 			delete window.__orbStub;
@@ -158,6 +169,7 @@ function useStubCall(): { handle: VoiceCallHandle; rest: boolean } {
 			subscribeLevel,
 		},
 		rest,
+		attention,
 	};
 }
 
@@ -168,6 +180,7 @@ declare global {
 			error: (message: string | null) => void;
 			level: (value: number) => void;
 			rest: (asleep: boolean) => void;
+			attention: (attention: Attention) => void;
 		};
 	}
 }
