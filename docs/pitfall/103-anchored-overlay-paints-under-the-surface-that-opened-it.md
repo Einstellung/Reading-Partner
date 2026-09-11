@@ -20,6 +20,6 @@
 
 一条命名的 z 阶梯，数字每层只写一次，放 `src/ui/components/ui/overlay.tsx` 的 `OVERLAY_Z`：toast 30、dialog 50、page 70、pageDialog 80、floating 1000、floatingTop 1001、anchored 1100。锚定浮层排在整条阶梯之上——触发它的按钮可以坐在阶梯上任何一层，这是唯一恒成立的位置。调用点不再自己写数字：全屏页的层级归 `DialogFullScreenContent` 自己，`SettingsView` 那个 `z-[70]` 删掉。
 
-`tests/ui/components/overlay-z.test.tsx` 盯着：anchored 高过其余每一层，全屏页渲染出来带的就是 `OVERLAY_Z.page`，`src/` 里除 `overlay.tsx` 外不许再出现 `z-[...]`。
+`tests/ui/components/ui/overlay-z.test.tsx` 盯着：anchored 高过其余每一层，全屏页渲染出来带的就是 `OVERLAY_Z.page`，`src/` 里除 `overlay.tsx` 外不许再出现 `z-[...]`。
 
 留一句给下次：`elementFromPoint` 打得中而屏幕上什么都没有，是画的顺序不对，不是输入不对。

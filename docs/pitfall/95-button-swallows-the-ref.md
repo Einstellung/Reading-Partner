@@ -38,7 +38,7 @@ const Button = React.forwardRef<HTMLButtonElement, Props>(function Button(
 
 ## 护栏
 
-`tests/ui/components/forward-ref-contract.test.ts`。三条：`ui/` 下每个文件都要登记在表里；每个大写开头的导出要么是 `forwardRef` 产物（`$$typeof === Symbol.for("react.forward_ref")`），要么在"不渲染 DOM"的名单里；每个 `React.forwardRef<` 都要有一处 `ref={ref}`。另外直接调用 `Button.render(props, ref)`，断言 ref 落在返回的元素上，`asChild` 下落在 `Slot` 上。
+`tests/ui/components/ui/forward-ref-contract.test.ts`。三条：`ui/` 下每个文件都要登记在表里；每个大写开头的导出要么是 `forwardRef` 产物（`$$typeof === Symbol.for("react.forward_ref")`），要么在"不渲染 DOM"的名单里；每个 `React.forwardRef<` 都要有一处 `ref={ref}`。另外直接调用 `Button.render(props, ref)`，断言 ref 落在返回的元素上，`asChild` 下落在 `Slot` 上。
 
 测试环境只有 `react-dom/server` 静态渲染，跑不到 ref，所以断言的是"让 ref 能落地的那两件事"，节点对不对由产物里量。
 

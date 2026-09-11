@@ -31,4 +31,4 @@
 
 验收判据必须是属性测试，不是样例：同一段文本任意切分喂进流式接口，吐出的句子序列逐字等于
 整段跑的结果。语料要用标点、数字、符号、markdown 分隔符和跨字符的构造随机拼，
-`tests/info/speech-split.test.ts` 里那一份就是拿它找出这三处的。
+`tests/info/briefer/speech-split.test.ts` 里那一份就是拿它找出这三处的。

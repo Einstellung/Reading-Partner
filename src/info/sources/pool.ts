@@ -4,7 +4,7 @@
 // letting a dozen sources put sixty requests on the wire together.
 //
 // Gate is the shared cap across sources; mapSettled is the per-call cap. Both
-// are pure (no fetch, no clock) and unit-tested in tests/info/pool.test.ts.
+// are pure (no fetch, no clock) and unit-tested in tests/info/sources/pool.test.ts.
 //
 // Two properties the engine depends on:
 //   - Order. Fetches finish in whatever order the hosts answer, but the results

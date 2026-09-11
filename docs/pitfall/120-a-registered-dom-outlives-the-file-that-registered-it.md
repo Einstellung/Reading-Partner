@@ -19,7 +19,7 @@ B test,        window= object
 - `platform/app/external-link.ts` 从 `window.location` 读页面 origin
 - `ui/components/ui/overlay.tsx` 在 `useLayoutEffect` 和 `useEffect` 之间二选一
 
-全场有 window 等于把这些全部推到浏览器分支上。而 `tests/platform/settings-flush.test.ts` 和 `tests/ui/components/shell-bootstrap.test.ts` 正是为了不再假造 `globalThis.window` 才重写过的。
+全场有 window 等于把这些全部推到浏览器分支上。而 `tests/platform/settings-flush.test.ts` 和 `tests/ui/components/common/shell-bootstrap.test.ts` 正是为了不再假造 `globalThis.window` 才重写过的。
 
 ## 原因
 

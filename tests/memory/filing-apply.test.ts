@@ -2,7 +2,7 @@
 // the topic where it is new, file this conversation under it, and tell whatever
 // is on the desk that the topic settled. Over ports, so the order and what a
 // failure stops are assertable without React and without a filesystem; what the
-// info article does with the news is tested in tests/info/desk.test.ts.
+// info article does with the news is tested in tests/info/briefer/desk.test.ts.
 // Run: bun test.
 
 import { expect, test } from "bun:test";

@@ -5,7 +5,7 @@
 // shells: what a shell that forgets to provide the table gets is not an error
 // but nothing at all — every card part renders null, silently
 // (chat/cardRegistryContext.ts). One identifier per shell is the smallest thing
-// a test can look for, and tests/ui/components/card-registry-context.test.tsx
+// a test can look for, and tests/ui/components/chat/card-registry-context.test.tsx
 // looks for it in both.
 
 import type { ReactNode } from "react";

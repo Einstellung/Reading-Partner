@@ -2,7 +2,7 @@
 
 ## 现象
 
-`tests/ui/components/chat-pen-strokes.test.tsx` 默认顺序全绿，`--seed` 洗过用例顺序之后会红，红在哪个用例随 seed 换：
+`tests/ui/components/chat/chat-pen-strokes.test.tsx` 默认顺序全绿，`--seed` 洗过用例顺序之后会红，红在哪个用例随 seed 换：
 
 - `--seed=1`：`a stylus dragged across a reply marks it without making a selection first` 里 `expect(document.getSelection()?.isCollapsed).toBe(true)` 收到 `false`。
 - `--seed=4`：`a press on that mark once the finger has gone down again opens it` 里 `expect(opened.map(a => a.id)).toEqual(["c1"])` 收到 `[]`。

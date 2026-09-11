@@ -3,7 +3,7 @@
 ## 现象
 
 2026-09-06 量全套件：4445 个测试 27 秒，其中五个文件占 16 秒。最慢的
-`tests/info/engine.test.ts` 单跑 7.6 秒，31 个用例、117 个断言，注释写着
+`tests/info/sources/engine.test.ts` 单跑 7.6 秒，31 个用例、117 个断言，注释写着
 「Injected fetch + extract keep it DOM-free」——没有网络，没有 DOM，没有文件系统。
 
 `bun test <file>` 不给这个量级的用例打时间：31 个用例一个时间都不打，只在最后打一行
