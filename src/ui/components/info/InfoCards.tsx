@@ -20,7 +20,7 @@ import type {
   LabProposalCardData,
   ProfileUpdateCardData,
 } from "../../../info/boxes/cards";
-import { proposedTopicName, type TopicProposalCardData } from "../../../soul";
+import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";

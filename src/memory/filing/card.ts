@@ -1,5 +1,8 @@
 // The card propose_topic draws (docs/21, docs/61).
 //
+// Filing is memory's, not the soul's: a topic is where data is kept, and the
+// person at the desk belongs under none of them.
+//
 // A separate file from the tool because the renderer imports the type and
 // nothing else: a card is drafted in one place, drawn in another, applied in a
 // third.

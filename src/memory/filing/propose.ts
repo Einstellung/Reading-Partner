@@ -5,9 +5,11 @@
 // the same shape update_profile has, for the same reason: the AI writes the
 // proposal, the reader owns the write (docs/21).
 //
-// It is the soul's and not any one domain's. Whatever lies on the desk, a
-// conversation with no topic is one nothing can be filed under and nothing is
-// distilled from, so the person at the desk carries the offer to give it one.
+// It belongs to memory and to no domain, and to no one's soul: a topic is the
+// key data is filed under — which topic a book is listed in, which topic an
+// observation is written to — and the person at the desk is under none of them.
+// What makes the offer ride a turn is the conversation, not the person: one with
+// no topic is one nothing can be filed under and nothing is distilled from.
 //
 // What is proposed is a topic AND what the material adds to it. A topic alone
 // would be a folder; the point is what it contributes to what the reader is
@@ -18,7 +20,6 @@
 // topic that is already there.
 
 import { Type } from "@earendil-works/pi-ai";
-import { getThread } from "../../platform/app/threads";
 import { listTopics, type Topic } from "../../platform/app/topics";
 import type { AgentTool } from "../../ai/agent";
 import type { TopicProposalCardData } from "./card";
@@ -114,32 +115,6 @@ export function resolveProposedTopic(
 }
 
 /**
- * The topic a conversation is filed under, for the desk it lays.
- *
- * Null until the reader has confirmed one. There is no queue to fall back on: a
- * conversation nothing has been decided about is not a topic, and what follows
- * from that — no observation tools, nothing distilled — is the point (docs/48,
- * docs/61).
- *
- * Read per turn rather than when the conversation opened: filing it is a gesture
- * made mid-conversation, and the turn right after it is the one that has to read
- * the new topic's memory.
- *
- * The thread has to be loaded already, which every caller does before its first
- * turn; an unloaded one reads as untitled rather than waiting on a file.
- */
-export async function threadTopic(
-  fileKey: string,
-  threadId: string,
-): Promise<{ id: string | null; name: string }> {
-  const id = getThread(fileKey, threadId)?.topicId ?? null;
-  if (!id) return { id: null, name: "" };
-  // A shelf that will not read costs the name, not the turn.
-  const topics = await listTopics().catch((): Topic[] => []);
-  return { id, name: topics.find((t) => t.id === id)?.name ?? "" };
-}
-
-/**
  * The propose_topic tool: draft where this belongs and what it adds. It writes
  * nothing — the card's Apply does, in the host.
  */
@@ -184,5 +159,39 @@ export function buildProposeTopicTool(deps: ProposeTopicDeps): AgentTool {
         `yet — they Apply it themselves.`
       );
     },
+  };
+}
+
+/** What the soul hands filing when it mounts it: the conversation, and the card sink. */
+export interface FilingMount extends TopicProposalSurface {
+  // The conversation a proposal would file.
+  threadId: string;
+  // The topic it is already filed under. Non-null means there is nothing to
+  // propose, and filing mounts neither tool nor paragraph.
+  filedTopic: string | null;
+}
+
+/**
+ * What filing contributes to one turn: the tool that proposes a topic, and the
+ * roster paragraph that tells the model which topics there already are.
+ *
+ * Empty on both counts once the conversation is filed. The soul mounts this
+ * beside its own tools and prints the paragraph; it is memory's text and not the
+ * soul's, because what it is about is where the material goes.
+ */
+export async function filingTools(
+  mount: FilingMount,
+): Promise<{ tools: AgentTool[]; prompt: string }> {
+  if (mount.filedTopic !== null) return { tools: [], prompt: "" };
+  const topics = mount.list ?? liveTopicChoices;
+  return {
+    tools: [
+      buildProposeTopicTool({
+        threadId: mount.threadId,
+        topics,
+        onTopicCard: mount.onCard,
+      }),
+    ],
+    prompt: topicGuidance(await topics()),
   };
 }

@@ -16,7 +16,6 @@ import { DEFAULT_SETTINGS } from "../../src/platform/app/settings";
 
 const env: DeskEnv = {
   settings: { ...DEFAULT_SETTINGS },
-  topic: { id: null, name: "Nothing" },
   thread: { key: "book-1", id: "thread-1" },
 };
 
@@ -134,7 +133,7 @@ test("two items offering the same tool name are refused", async () => {
 // The memory paragraph is about the reader, not about the material: two copies
 // of it in one prompt would be two copies of the same claims.
 test("two items anchoring the retrieval are refused", async () => {
-  const memory = { bookId: "b-1", observations: [], snapshot: () => "" };
+  const memory = { bookId: "b-1", topicId: null, observations: [], snapshot: () => "" };
   registerDeskItemKind(kindOf("k-m1", async () => item({ kind: "k-m1", memory })));
   registerDeskItemKind(kindOf("k-m2", async () => item({ kind: "k-m2", memory })));
   await expect(

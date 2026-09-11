@@ -65,7 +65,12 @@ export {
   type ScopedHit,
   type TopicObservations,
 } from "./observations/recall";
-export { buildObservationTools, type ObservationToolOptions, type ObservationWriteAction } from "./observations/tools";
+export {
+  OBSERVATION_WRITE_TOOL,
+  buildObservationTools,
+  type ObservationToolOptions,
+  type ObservationWriteAction,
+} from "./observations/tools";
 export {
   buildDistillAgent,
   buildDistillSystemPrompt,
@@ -235,3 +240,26 @@ export {
   memorySection,
   type MemorySectionInput,
 } from "./live/memory-section";
+
+// Where a conversation belongs (docs/21, docs/61): the tool that proposes a
+// topic, the card it draws and the Apply that files it. Memory's and not the
+// soul's — a topic is the key data is filed under, and the person at the desk is
+// under none of them.
+export { proposedTopicName, type TopicProposalCardData } from "./filing/card";
+export {
+  buildProposeTopicTool,
+  filingTools,
+  liveTopicChoices,
+  resolveProposedTopic,
+  topicGuidance,
+  type FilingMount,
+  type ProposeTopicDeps,
+  type TopicChoice,
+  type TopicProposalSurface,
+} from "./filing/propose";
+export {
+  applyTopicProposal,
+  type TopicApplied,
+  type TopicSettledHook,
+  type TopicSettlePorts,
+} from "./filing/settle";

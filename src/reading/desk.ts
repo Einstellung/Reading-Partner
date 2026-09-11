@@ -283,8 +283,11 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   } = ref;
   const s = env.settings;
   const signal = env.signal;
-  const topicId = env.topic.id;
-  const topicName = env.topic.name;
+  // The topic the book is listed under (App.tsx imports through addFileToTopic,
+  // so there is always one). It comes off the material, not off the turn: a
+  // topic is where data is filed, and this book's file is what is filed.
+  const topicId = context.topicId;
+  const topicName = context.topicName;
   const { fileName, pageLabel, pageIndex, files } = context;
   const materials = await gatherTopicMaterials(files, bookId, currentFulltext, annotations);
   // Which of the three doors this conversation came in by
@@ -854,6 +857,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     prompt: composePrompt,
     memory: {
       bookId,
+      topicId,
       observations: topicObservations,
       snapshot: (tight: boolean) => (tight ? observationSnapshotTight : observationSnapshot),
     },

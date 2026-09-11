@@ -6,9 +6,9 @@
 // bottom is the whole set the chat renders, add-source cards included.
 
 // The topic proposal is the soul's, not info's: every conversation has a topic
-// to be given and only some have an article in them (soul/topic, docs/21). It is
+// to be given and only some have an article in them (memory/filing, docs/21). It is
 // in the union because the info chat is where its card is drawn.
-import type { TopicProposalCardData } from "../../soul";
+import type { TopicProposalCardData } from "../../memory";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { CollectProgress } from "./pipeline";
 

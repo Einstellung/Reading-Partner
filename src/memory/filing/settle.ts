@@ -1,6 +1,9 @@
 // What the topic card's Apply does (docs/21): the one write in the whole
 // gesture, and the only place a proposal becomes a topic.
 //
+// Filing is memory's: the topic is where the material ends up, and nothing
+// about it is the soul's.
+//
 // A sequence over ports rather than over the live stores, so the rules ("a
 // second click does nothing", "a failed write changes nothing") are testable
 // without React and without a filesystem.

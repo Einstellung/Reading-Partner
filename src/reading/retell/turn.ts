@@ -62,7 +62,6 @@ export async function buildRetellTurn(input: RetellTurnInput): Promise<RetellTur
   const { retell } = retellRef;
   const env: DeskEnv = {
     settings,
-    topic: { id: retell.topicId || null, name: input.topicName },
     // A retell has exactly one conversation, and its id is the retell's
     // (retell/store.ts writes it to threads-retell-<id>.json).
     thread: { key: retellThreadKey(retell.id), id: retell.id },

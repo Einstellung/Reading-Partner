@@ -1,27 +1,19 @@
-// propose_topic (src/soul/topic/propose.ts, docs/21): the AI says where this
+// propose_topic (src/memory/filing/propose.ts, docs/21): the AI says where this
 // conversation belongs and what it adds, and writes nothing. What is asserted
 // here is that it only drafts — the card is the whole effect — plus how a
 // proposal is matched to a topic the reader already has, the roster the model
-// proposes out of, and the topic a desk is laid under. Run: bun test.
+// proposes out of, and when filing rides a turn at all. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   buildProposeTopicTool,
+  filingTools,
   proposedTopicName,
   resolveProposedTopic,
-  threadTopic,
   topicGuidance,
   type TopicChoice,
   type TopicProposalCardData,
-} from "../../src/soul";
-import {
-  createThread,
-  loadThreads,
-  rebuildThreadStoreForTests,
-  setThreadTopic,
-} from "../../src/platform/app/threads";
-import { createTopic } from "../../src/platform/app/topics";
-import { installAppData } from "../support/appdata-fake";
+} from "../../src/memory";
 
 const TOPICS: TopicChoice[] = [
   { id: "brief", name: "Brief" },
@@ -95,27 +87,25 @@ test("a proposal reads by name whichever half of the union it is", () => {
   expect(proposedTopicName({ newName: "Robot learning" })).toBe("Robot learning");
 });
 
-// --- the topic the desk is laid under ---------------------------------------
+// --- when filing rides a turn -----------------------------------------------
 
-// A conversation is laid under its own topic once the reader has confirmed one,
-// and under none until then: there is no queue to fall back on, and what follows
-// from having no topic — no observation tools, nothing distilled — is the point.
-test("a conversation lays its desk under its own topic, and under none until it has one", async () => {
-  installAppData();
-  rebuildThreadStoreForTests();
-  const bookId = "info-2026-09-08";
-  await loadThreads(bookId).catch(() => {});
-  createThread(bookId, "info", "briefing-2026-09-08");
+// The offer is made to a conversation that has no topic, and to no other: one
+// already filed has nothing left to propose. Nothing here is the soul's — what
+// decides is the conversation, because a topic is where the material goes.
+test("filing rides a conversation with no topic, and nothing once it has one", async () => {
+  const cards: TopicProposalCardData[] = [];
+  const mount = {
+    threadId: "briefing-2026-09-08",
+    onCard: (c: TopicProposalCardData) => cards.push(c),
+    list: async () => TOPICS,
+  };
 
-  expect(await threadTopic(bookId, "briefing-2026-09-08")).toEqual({ id: null, name: "" });
+  const offered = await filingTools({ ...mount, filedTopic: null });
+  expect(offered.tools.map((t) => t.name)).toEqual(["propose_topic"]);
+  expect(offered.prompt).toContain("WHERE THIS BELONGS");
+  expect(offered.prompt).toContain("AI safety");
 
-  const topic = await createTopic("AI safety");
-  setThreadTopic(bookId, "briefing-2026-09-08", topic.id);
-  expect(await threadTopic(bookId, "briefing-2026-09-08")).toEqual({
-    id: topic.id,
-    name: "AI safety",
-  });
-
-  // A conversation nobody has opened has no topic, which is not an error.
-  expect(await threadTopic(bookId, "2026-09-08:a1")).toEqual({ id: null, name: "" });
+  const filed = await filingTools({ ...mount, filedTopic: "t-9f2" });
+  expect(filed.tools).toEqual([]);
+  expect(filed.prompt).toBe("");
 });

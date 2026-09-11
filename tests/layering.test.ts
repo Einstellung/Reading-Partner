@@ -80,6 +80,10 @@ const LAYER: Record<string, Layer> = {
   // domains register their own kinds at startup, so nothing here reaches up into
   // one. memory/live reads it; it never reads memory/live.
   "memory/distill": "capability",
+  // Where a conversation belongs (docs/21): the tool that proposes a topic, the
+  // card it draws and the Apply that files it. Memory's, because a topic is the
+  // key data is filed under — the soul that sits at the desk is under none.
+  "memory/filing": "capability",
   "memory/dream": "capability",
   "memory/live": "capability",
   "memory/observations": "capability",
@@ -96,10 +100,6 @@ const LAYER: Record<string, Layer> = {
   // holds, plus the assembly. A capability because it reaches for desk, memory,
   // conversations, palace and ai, and for no domain.
   soul: "capability",
-  // Where this conversation belongs (docs/21): the tool that proposes a topic,
-  // the card it draws and the apply that files it. The soul's, not any one
-  // domain's — every desk has a conversation, and only some have a book.
-  "soul/topic": "capability",
 
   info: "domain",
   // The nouns the info side is cut along (docs/63), in the order they may depend

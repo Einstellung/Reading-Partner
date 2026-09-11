@@ -47,7 +47,7 @@ export async function collectSourceArrears(
     for (const unit of units) {
       // Nothing has said what this conversation is about, so nothing distils it:
       // an observation is filed under a topic and there is none. It comes back
-      // the moment the reader confirms one (soul/topic).
+      // the moment the reader confirms one (memory/filing).
       const topicId = unit.topicId;
       if (topicId === null) continue;
       if (opts.isBusy?.(unit.id)) continue;

@@ -14,9 +14,9 @@
 //
 // This is also where info first reads memory: the briefing item anchors the
 // retrieval, so the assembly hands it the statements and the topic's
-// observations (docs/48). The topic is the caller's — the conversation's own
-// once the reader has confirmed one, and null until then, which is the turn the
-// soul offers to give it one (soul/topic, docs/21).
+// observations (docs/48). The topic is the conversation's own, read off the
+// thread record: there once the reader has confirmed one, and null until then,
+// which is the turn filing offers to give it one (memory/filing, docs/21).
 
 import {
   buildObservationSnapshot,
@@ -41,6 +41,7 @@ import {
   type CompanionContext,
 } from "./chat";
 import type { AgentTool } from "../../ai/agent";
+import { getThread } from "../../platform/app/threads";
 import type { AiLanguage } from "../../platform/app/settings";
 import type { Briefing } from "../boxes/types";
 
@@ -161,7 +162,11 @@ export function withCompanionTools(
 async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<DeskItem | null> {
   const tools = ref.tools ? await ref.tools() : [];
   if (env.signal?.aborted) return null;
-  const observations = await topicObservations(env.topic.id, ref.listObservations);
+  // Which topic this conversation was filed under (docs/21). Not the turn's —
+  // the desk carries no topic, because a topic is where data is filed and this
+  // conversation is the data.
+  const topicId = getThread(env.thread.key, env.thread.id)?.topicId ?? null;
+  const observations = await topicObservations(topicId, ref.listObservations);
   if (env.signal?.aborted) return null;
   const base = join(briefingPrompt(ref), labSection(ref));
   return {
@@ -177,6 +182,7 @@ async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<Des
       // Not a book: what "still open" is scoped to has no meaning here, so the
       // memory paragraph is the statements and the topic's observations.
       bookId: "",
+      topicId,
       observations,
       snapshot: (tight: boolean) =>
         buildObservationSnapshot(
@@ -199,8 +205,8 @@ async function openArticle(ref: InfoArticleDeskRef): Promise<DeskItem | null> {
     rungs: [],
     prompt: () => articleContextSection(ref.overview, ref.title, ref.bodyText),
     // The conversation was filed under a topic, so the kept copy of what it is
-    // about goes with it (docs/21). The proposal itself is the soul's and says
-    // nothing about articles (soul/topic); this is the article's own half of it.
+    // about goes with it (docs/21). The proposal itself is memory's and says
+    // nothing about articles (memory/filing); this is the article's own half.
     ...(savedId && fileArticle
       ? { onTopicSettled: async (topicId: string) => void (await fileArticle(savedId, topicId)) }
       : {}),

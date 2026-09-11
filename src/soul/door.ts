@@ -17,8 +17,7 @@ import { openDesk, type DeskEnv, type DeskMessage } from "../desk";
 import { registerDistillSource, type SourceUnit } from "../memory";
 import { resolvePalace } from "../palace";
 import { appData } from "../platform/app/appdata";
-import { peekThreads } from "../platform/app/threads";
-import { listTopics } from "../platform/app/topics";
+import { loadThreads, peekThreads } from "../platform/app/threads";
 import type { Settings } from "../platform/app/settings";
 import type { BudgetPurpose } from "../budget";
 import { assembleTurn, type AssembledTurn } from "./turn";
@@ -59,8 +58,6 @@ export interface DoorTurnInput {
   messages?: readonly DeskMessage[];
   purpose?: BudgetPurpose;
   signal?: AbortSignal;
-  /** Injected for the tests; the store on disk otherwise. */
-  topics?: () => Promise<{ id: string; name: string }[]>;
 }
 
 /**
@@ -70,12 +67,11 @@ export interface DoorTurnInput {
 export async function openDoorTurn(input: DoorTurnInput): Promise<AssembledTurn | null> {
   const date = input.date ?? doorDate();
   const key = doorKey(date);
-  const threads = await peekThreads(key).catch(() => []);
-  const topicId = threads.find((t) => t.id === input.threadId)?.topicId ?? null;
-  const topics = topicId ? await (input.topics ?? listTopics)().catch(() => []) : [];
+  // Load the day's file so the assembly can read this conversation off the store
+  // — its messages, and whatever topic it has been filed under (soul/self.ts).
+  await loadThreads(key).catch(() => ({}));
   const env: DeskEnv = {
     settings: input.settings,
-    topic: { id: topicId, name: topics.find((t) => t.id === topicId)?.name ?? "" },
     thread: { key, id: input.threadId },
     ...(input.signal ? { signal: input.signal } : {}),
   };

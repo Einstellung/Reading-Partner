@@ -12,13 +12,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../ai/agent";
-import {
-  applyTopicProposal,
-  assembleTurn,
-  threadTopic,
-  type AssembledTurn,
-  type TopicProposalCardData,
-} from "../../../soul";
+import { assembleTurn, type AssembledTurn } from "../../../soul";
+import { applyTopicProposal, type TopicProposalCardData } from "../../../memory";
 import { openDesk, type DeskItem } from "../../../desk";
 import { withCompanionTools } from "../../../info/briefer/desk";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
@@ -363,11 +358,11 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // File what the AI proposed when the user clicks a topic card's Apply: mint
   // the topic where it is new, file this conversation under it, let what is on
   // the desk follow the topic (the article files its kept copy), and tell the
-  // AI. The order and what a failure stops are in soul/topic/settle.ts.
+  // AI. The order and what a failure stops are in memory/filing/settle.ts.
   //
   // Filing the thread is what makes the next turn's desk, its distillation and
   // its conversation search all read the topic the reader chose; until they have
-  // chosen one there is none (soul/topic/propose.ts: threadTopic).
+  // chosen one there is none (soul/self.ts reads it off the thread record).
   const handleApplyTopic = useCallback(
     async (cardId: string) => {
       const found = findCardPart(messagesRef.current, cardId);
@@ -538,7 +533,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         ),
         {
           settings,
-          topic: await threadTopic(bookId, anchor.threadId),
           thread: { key: bookId, id: anchor.threadId },
           signal: controller.signal,
         },
@@ -547,7 +541,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       turn = await assembleTurn({
         desk,
         messages: history,
-        // Where a proposal for this conversation's topic is drawn (soul/topic).
+        // Where a proposal for this conversation's topic is drawn (memory/filing).
         topic: { onCard: (payload) => insertCard("topic", payload) },
       });
     } catch (e) {

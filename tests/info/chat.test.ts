@@ -24,7 +24,6 @@ import {
   registerInfoDesk,
 } from "../../src/info/briefer/desk";
 import { DEFAULT_SETTINGS } from "../../src/platform/app/settings";
-import { BRIEF_TOPIC_ID } from "../../src/platform/app/topics";
 import { rebuildThreadStoreForTests } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 import type { SourceDescriptor } from "../../src/info/sources/descriptor";
@@ -85,7 +84,6 @@ function env(): DeskEnv {
       defaultProviderId: "anthropic",
       defaultModelId: "claude-sonnet-4-5",
     },
-    topic: { id: BRIEF_TOPIC_ID, name: "Brief" },
     thread: { key: "info-2026-07-21", id: "briefing-2026-07-21" },
   };
 }

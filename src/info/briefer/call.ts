@@ -13,7 +13,7 @@ import type {
   LabProposalCardData,
   ProfileUpdateCardData,
 } from "../boxes/cards";
-import { proposedTopicName, type TopicProposalCardData } from "../../soul";
+import { proposedTopicName, type TopicProposalCardData } from "../../memory";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { InfoSnapshot, RunStart } from "../boxes/pipeline";
 import type { RequestOutcome } from "./reader";
