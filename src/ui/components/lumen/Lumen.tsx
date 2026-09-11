@@ -47,6 +47,7 @@ import {
 } from "../orb/orb";
 import {
 	ACT_EASE_MS,
+	bounceScaleY,
 	FACE,
 	GAZE_K_ACT,
 	GAZE_RELEASE_MS,
@@ -71,6 +72,14 @@ import {
 	type LumenAct,
 	type MouthState,
 } from "./lumen-motion";
+import {
+	ENVELOPE_EMPTY,
+	clearEnvelope,
+	levelFor,
+	queueEnvelope,
+	readEnvelope,
+	type EnvelopeQueue,
+} from "./envelope";
 import bodyUrl from "./lumen-body.webp";
 import tuftUrl from "./lumen-tuft.webp";
 
@@ -126,6 +135,7 @@ export function Lumen({
 	const gazeRef = useRef<Gaze>(GAZE_ZERO);
 
 	const subscribe = handle.subscribeLevel;
+	const subscribeEnvelope = handle.subscribeEnvelope;
 
 	useEffect(() => {
 		const el = rootRef.current;
@@ -137,6 +147,19 @@ export function Lumen({
 
 		const unsubscribe = subscribe((value) => {
 			targetRef.current = clampLevel(value);
+		});
+
+		// The voice's own shape, one sentence at a time and ahead of being heard
+		// (docs/45). Stamped on arrival, which is where the native clock and this
+		// one meet; `null` is a barge-in or the end of the call, and what was
+		// queued for it will never be spoken.
+		let envelope: EnvelopeQueue = ENVELOPE_EMPTY;
+		let bounceAt = -Infinity;
+		const unsubscribeEnvelope = subscribeEnvelope((event) => {
+			envelope =
+				event === null
+					? clearEnvelope(envelope)
+					: queueEnvelope(envelope, event, performance.now());
 		});
 
 		// Where the pointer last was, in client coordinates, and when. Null until
@@ -188,7 +211,15 @@ export function Lumen({
 			const actMs = now - actAt;
 			const mix = actEase(actMs / ACT_EASE_MS);
 
-			levelRef.current = smoothLevel(levelRef.current, targetRef.current, dt);
+			const voice = readEnvelope(envelope, now);
+			envelope = voice.queue;
+			if (voice.started) bounceAt = now;
+			// Speaking reads the envelope; everything else reads the microphone. The
+			// microphone is open through the whole call, so during an answer it is
+			// the room and not the voice — a mouth on it would open at whoever is
+			// nearest rather than at what Lumen is saying.
+			const source = levelFor(shown, targetRef.current, voice.level);
+			levelRef.current = smoothLevel(levelRef.current, source, dt);
 			mouth = stepMouth(mouth, shown, levelRef.current, now);
 
 			blink = stepBlink(blink, now, Math.random);
@@ -245,7 +276,7 @@ export function Lumen({
 
 			const set = (name: string, value: number) => el.style.setProperty(name, value.toFixed(4));
 			set("--lumen-sx", v.scaleX);
-			set("--lumen-sy", v.scaleY);
+			set("--lumen-sy", v.scaleY * bounceScaleY(now - bounceAt, reduced));
 			set("--lumen-glow", v.glow);
 			set("--lumen-core", v.core);
 			set("--lumen-pool", v.poolOpacity);
@@ -299,12 +330,13 @@ export function Lumen({
 
 		return () => {
 			unsubscribe();
+			unsubscribeEnvelope();
 			window.removeEventListener("pointermove", onPointer);
 			document.removeEventListener("visibilitychange", onVisibility);
 			observer?.disconnect();
 			if (frame !== 0) cancelAnimationFrame(frame);
 		};
-	}, [subscribe]);
+	}, [subscribe, subscribeEnvelope]);
 
 	const idle = handle.phase === "idle";
 

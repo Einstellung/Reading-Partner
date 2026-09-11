@@ -458,9 +458,10 @@ export function actGaze(act: LumenAct, actMs: number): Gaze {
 // envelope at 10 Hz is two samples a syllable (docs/45), and a mouth driven off
 // it is a puppet, not a face.
 //
-// The level is the mic level today. The TTS envelope docs/45 plans does not
-// reach the WebView yet, so during `speak` the mouth follows whatever the
-// handle carries.
+// The level during `speak` is the voice's own envelope, replayed against the
+// local clock (envelope.ts); in every other act it is the microphone. The two
+// are the same 0..1 mapping on the native side (SpeechOut.mapLevel), so one
+// number reaches everything below whichever it came from.
 export const MOUTH_MIN_OPEN = 0.15;
 // Under this the room counts as quiet. Above the noise floor a closed
 // microphone reports, and below the quietest syllable in an answer.
@@ -490,6 +491,26 @@ export function mouthOpenness(state: MouthState, act: LumenAct, level: number, n
 	const held = state.voicedAt !== null && now - state.voicedAt < SILENCE_HOLD_MS;
 	if (!voiced && !held) return 0;
 	return MOUTH_MIN_OPEN + (1 - MOUTH_MIN_OPEN) * value;
+}
+
+// The nod at the start of a sentence (docs/66). A body that begins to speak
+// does something, and the something is small: the whole move is 120 ms, which
+// is under one syllable, so it reads as the start of a phrase and not as a
+// bounce of its own.
+//
+// A dip first and an overshoot after, which is what a body does when it drops
+// its weight to speak. One period of a sine, so it leaves 1 and returns to 1
+// and nothing has to unwind it if the next sentence arrives early.
+export const BOUNCE_MS = 120;
+export const BOUNCE_DIP = 0.055;
+export const BOUNCE_RISE = 0.03;
+
+export function bounceScaleY(sinceMs: number, reduced: boolean = false): number {
+	if (reduced) return 1;
+	if (!Number.isFinite(sinceMs) || sinceMs < 0 || sinceMs >= BOUNCE_MS) return 1;
+	const t = sinceMs / BOUNCE_MS;
+	const swing = Math.sin(2 * Math.PI * t);
+	return 1 - swing * (swing > 0 ? BOUNCE_DIP : BOUNCE_RISE);
 }
 
 // How long one act takes to become the next. Long enough to read as a turn of

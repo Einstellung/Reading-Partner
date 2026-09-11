@@ -284,6 +284,18 @@ contract between the two halves:
 | `queuedMs` | speech now ahead of the listener — the whole queue minus what has been played, not the running total |
 | `startMs` | where this sentence starts on the player's timeline |
 
+The envelope is computed where the PCM already is. `enqueue` converts every
+sample from 16-bit to float anyway, so squaring it on the way past costs one
+multiply-add a frame and the whole sentence leaves as one event — against the
+ten a second a second tap on the player would push, for a signal the webview
+only replays against its own clock. It is the same dB-to-0..1 mapping the output
+bus's meter uses, so the two are one signal at two rates. A delay and not a
+timestamp: `startsInMs` counts from the player's own position with the output
+latency already taken off, which is what lets the webview stamp the event on
+arrival and never reconcile the two clocks. It is emitted only during a call —
+`setConversation` is what installs the callback — and a barge-in makes every
+sentence already sent unhearable, which the webview handles from `speech-stop`.
+
 Queueing, timekeeping and interruption are Swift's. Trimming is not: the
 threshold is a property of the vendor's audio — the lead-out is room tone at
 -45..-65 dBFS, not silence (docs/pitfall/191) — so it belongs beside the vendor,
@@ -381,6 +393,7 @@ turn a `speech-stop` has taken.
 | `{ kind: "speech-end", turn, text, silentMs }` | the user's turn is over: the recogniser's text for it, forced to settle with `finalize(through: nil)` first. `""` is still a turn |
 | `{ kind: "final", turn, text, range }` | a stretch that settled after its turn was already sent, with `{ startMs, endMs }` on the call's audio timeline |
 | `{ kind: "spoken", turn, utterance, reason }` | a turn's playback ended — the `speech` event's `speaking: 0`, carried here so one stream is the whole call |
+| `{ kind: "envelope", turn, utterance, sentence, startsInMs, windowMs, values }` | one sentence was queued, with the shape it will be heard in: `values` is 0..1 an RMS window at a time, `windowMs` is 25, and `startsInMs` is how long after this event its first sample is heard. For the companion's mouth (docs/45); nothing in the call's own state reads it |
 
 The four barge-in kinds are `VoiceTurn.swift`'s verdicts, and that file is a
 line-for-line port of `src/info/briefer/turn-detect.ts`, defaults included.

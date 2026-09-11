@@ -66,9 +66,9 @@ Lumen 不是在四个状态之间切画面，是演四段：看着你、抬头�
 - 听（`listening`）：身体和火苗前倾，眼睛睁大盯住读者，idle 的漂移停掉——不动就是在听。麦克风电平只让火苗抖，身体不随电平胀。
 - 想（`thinking` + attention 在 reader）：眼睛往上偏一侧，嘴变平线，眉毛淡入，火苗立起来（scaleY 1.18，绕根部），核心变亮，三秒周期的慢左右摇。
 - 查（`thinking` + attention 在 work）：眼睛落到桌面上，左右快扫两个来回（每跳 120 ms），然后一个停顿；眉毛还在。attention 回到 reader 就抬眼看回来。这一段可跳过：一轮里 attention 从没去过 work 就不演，桌上没事还低头看是假的。
-- 说（`speaking`）：眼睛看着读者，眉毛没了，嘴变小圆口，开口度跟电平走 0.15–1.0，用 orb.ts 那套快起慢落的平滑，静音后按 `SILENCE_HOLD_MS`（450 ms）保持再闭上，词间的停顿不会让嘴一开一合。火苗跟同一个信号抖。
+- 说（`speaking`）：眼睛看着读者，眉毛没了，嘴变小圆口，开口度跟 TTS 包络走 0.15–1.0，用 orb.ts 那套快起慢落的平滑，静音后按 `SILENCE_HOLD_MS`（450 ms）保持再闭上，词间的停顿不会让嘴一开一合。火苗跟同一个信号抖。每一句开头身体压一下再弹回来（`BOUNCE_MS` 120 ms，reduced motion 下不做）。
 
-今天喂"说"这一段的是麦克风电平，不是 TTS 包络——45 里那条按句发 25 ms 窗 RMS 的包络还没接到 WebView。句首事件也还没有，所以没做起句的小弹跳。`attention` 同理：会话只报四个 phase，SoulIntent 还没接，实机跑不到"查"这一段，只有 harness（`window.__orbStub.attention`）能驱动。
+喂"说"这一段的是那条包络不是麦克风：通话期间麦克风一直开着，它报的是屋里的声音，照它开嘴就是冲着旁边最响的东西开。包络按句从 Swift 过来（33），到 WebView 按本地时钟回放（`src/ui/components/lumen/envelope.ts`），一句的开头就是弹跳的触发；别的段仍然读麦克风电平。`attention` 还是没接：会话只报四个 phase，SoulIntent 还没接，实机跑不到"查"这一段，只有 harness（`window.__orbStub.attention`）能驱动。
 
 ## 意图
 
