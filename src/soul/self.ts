@@ -24,6 +24,7 @@ import {
 import { buildConversationTools } from "../conversations";
 import { buildCatalogueTools, type CatalogueIo } from "./catalogue";
 import { buildPlaceTools } from "./places";
+import { roleOf } from "./roles";
 import type { DeskEnv, DeskMemory } from "../desk";
 import { getThread } from "../platform/app/threads";
 import type { AgentTool } from "../ai/agent";
@@ -51,6 +52,18 @@ export interface Soul {
   // It belongs to no item on the desk either, so the assembly prints it
   // (turn.ts).
   prompt: string;
+  // The role this turn was assembled with (roles.ts), with the tools it brought
+  // already among `tools`. Null where no role was loaded: the door, a book, a
+  // legion errand. It is kept whole so the assembly can print the duty ahead of
+  // the desk, and name the role when one of its tools collides with an item's.
+  role: LoadedRole | null;
+}
+
+/** A role as one turn holds it: what it is, and the tools it built for that turn. */
+export interface LoadedRole {
+  id: string;
+  duty: string;
+  tools: readonly AgentTool[];
 }
 
 /**
@@ -67,12 +80,16 @@ export interface Soul {
  *
  * `filing` is where a proposal for this conversation's topic would be drawn; a
  * caller that has nowhere to draw one is offered no way to propose.
+ *
+ * `role` names what this soul is here to do (roles.ts). A duty and a tool list
+ * is all a role adds; everything above rides whether one is loaded or not.
  */
 export async function openSoul(
   env: DeskEnv,
   anchor: DeskMemory | undefined,
   filing?: TopicProposalSurface,
   catalogueIo?: CatalogueIo,
+  role?: string,
 ): Promise<Soul> {
   const thread = getThread(env.thread.key, env.thread.id);
   const messages = thread?.messages ?? [];
@@ -87,11 +104,25 @@ export async function openSoul(
   // What the reader says about themselves, in their words (docs/48): evidenced
   // by the message they just sent, which the caller appended before assembling
   // this.
-  const tools: AgentTool[] = buildStatementTools({
-    store: statementStore,
-    message: latestReaderMessage(messages),
-    threadId: env.thread.id,
-  });
+  //
+  // What this person is here to do comes first: the role's tools ahead of the
+  // ones the soul carries whatever it is doing. The order means nothing to the
+  // model (turn.ts says why); it is the order a reader of the list expects.
+  const tools: AgentTool[] = [];
+  let loaded: LoadedRole | null = null;
+  if (role) {
+    const found = roleOf(role);
+    const mounted = [...found.tools(env)];
+    tools.push(...mounted);
+    loaded = { id: found.id, duty: found.duty, tools: mounted };
+  }
+  tools.push(
+    ...buildStatementTools({
+      store: statementStore,
+      message: latestReaderMessage(messages),
+      threadId: env.thread.id,
+    }),
+  );
   // Its own past conversations, on every desk and whether or not a topic is
   // settled (src/conversations): what was said is the reader's, the same way
   // the statements are, and the desk it was said over is only where to look
@@ -135,6 +166,7 @@ export async function openSoul(
     tools,
     statements: await assembleStatements(),
     prompt,
+    role: loaded,
     writesObservations: scope !== null,
   };
 }

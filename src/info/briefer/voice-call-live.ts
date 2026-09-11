@@ -33,6 +33,7 @@ import { infoBookId } from "./call";
 import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
 import { nativeConversation } from "./conversation";
 import { withCompanionTools } from "./desk";
+import { SECRETARY_ROLE_ID } from "./role";
 import {
   createVoiceCall,
   type VoiceCall,
@@ -144,7 +145,7 @@ export function askOnThread(opts: {
             thread: { key: opts.bookId, id: opts.anchor.threadId },
             signal,
           });
-          const turn = await assembleTurn({ desk, messages: rows });
+          const turn = await assembleTurn({ desk, messages: rows, role: SECRETARY_ROLE_ID });
           // Abandoned, or too big to leave the model room to answer. Nothing was
           // said and nothing is worth retrying, so the floor goes back to the
           // user the way an empty answer does.

@@ -33,6 +33,7 @@ import {
 } from "../../../platform/app/settings";
 import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai";
 import { registerInfoDesk } from "../../../info/briefer/desk";
+import { registerSecretaryRole } from "../../../info/briefer/role";
 import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
 import { registerReadingDesk } from "../../../reading/desk";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
@@ -177,6 +178,7 @@ export function bootDomains(): void {
   registerRetellDesk();
   registerRehearsalDesk();
   registerInfoDesk();
+  registerSecretaryRole();
 }
 
 export interface ShellBootstrap {

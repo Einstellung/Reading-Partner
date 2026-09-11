@@ -15,6 +15,7 @@ import {
   type SiteSignInDeps,
 } from "../../../src/info/briefer/companion-tools";
 import { signInSites } from "../../../src/info/sources/site-session";
+import { SECRETARY_WRITES } from "../../../src/info/briefer/role";
 import type { ProfileUpdateCardData } from "../../../src/info/boxes/cards";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
 import type { ExtractReadable } from "../../../src/info/extract/readable-select";
@@ -60,6 +61,34 @@ test("buildCompanionTools mounts the source tools plus read_page, update_profile
   expect(names).toContain("read_page");
   expect(names).toContain("update_profile");
   expect(names).toContain("generate_briefing");
+});
+
+// The secretary's roster of side effects (soul/roles.ts) is a declaration, so
+// the one thing that can go stale is a name: a tool renamed here and not there
+// would leave a gate declared for nothing. Every declared write has to be a tool
+// this set really mounts, and the two query tools must not be declared at all.
+test("every write the secretary declares names a tool it really mounts", () => {
+  const names = buildCompanionTools({
+    ...deps([]),
+    labs: {
+      threadId: "briefing-2026-09-09",
+      labs: async () => [],
+      sources: async () => [],
+      onLabCard: () => {},
+    },
+    siteSignIn: {
+      signInSites: async () => [],
+      openSignIn: async () => ({ closed: true, elapsedMs: 1 }),
+      checkSession: async () => ({ status: "ok", signedIn: true, detail: "" }) as SessionStatus,
+    },
+  }).map((t) => t.name);
+  for (const { tool, gate } of SECRETARY_WRITES) {
+    expect(names).toContain(tool);
+    expect(["card", "trial", "instruction"]).toContain(gate);
+  }
+  const declared = SECRETARY_WRITES.map((w) => w.tool);
+  expect(declared).not.toContain("read_page");
+  expect(declared).not.toContain("probe_source");
 });
 
 // The lab tools need the conversation they are proposing in and the roster to

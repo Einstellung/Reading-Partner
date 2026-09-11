@@ -33,6 +33,7 @@ import {
   type DeskRef,
 } from "../../desk";
 import { addSourceSystemPrompt } from "../sources/source-skill";
+import { holdSecretaryTools } from "./role";
 import { labGuidance } from "./lab-tool";
 import {
   articleContextSection,
@@ -162,6 +163,13 @@ export function withCompanionTools(
 async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<DeskItem | null> {
   const tools = ref.tools ? await ref.tools() : [];
   if (env.signal?.aborted) return null;
+  // The companion tools are the secretary's, not the briefing's (role.ts): they
+  // add a source, read a page, open a lab — none of it about what is in today's
+  // boxes. They still arrive here, bound to this turn's card sinks, so the item
+  // hands them to the role and mounts none itself. A turn assembled without the
+  // secretary loaded therefore has none of them, which is what an info surface
+  // that forgot its role deserves.
+  holdSecretaryTools(env, tools);
   // Which topic this conversation was filed under (docs/21). Not the turn's —
   // the desk carries no topic, because a topic is where data is filed and this
   // conversation is the data.
@@ -172,7 +180,7 @@ async function openBriefing(ref: InfoBriefingDeskRef, env: DeskEnv): Promise<Des
   return {
     kind: INFO_BRIEFING_KIND,
     label: ref.onboarding ? "Subscriptions" : "Today's briefing",
-    tools,
+    tools: [],
     // The tool guidance is written into the prompt above, among the profile and
     // the source roster it governs; nothing else on this desk renders a frame.
     toolPrompts: [],

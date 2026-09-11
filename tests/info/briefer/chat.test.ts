@@ -23,6 +23,7 @@ import {
   INFO_BRIEFING_KIND,
   registerInfoDesk,
 } from "../../../src/info/briefer/desk";
+import { SECRETARY_ROLE_ID, registerSecretaryRole } from "../../../src/info/briefer/role";
 import { DEFAULT_SETTINGS } from "../../../src/platform/app/settings";
 import { rebuildThreadStoreForTests } from "../../../src/platform/app/threads";
 import { installAppData } from "../../support/appdata-fake";
@@ -71,6 +72,7 @@ const BRIEFING: Briefing = {
 };
 
 registerInfoDesk();
+registerSecretaryRole();
 
 beforeEach(() => {
   installAppData();
@@ -89,7 +91,9 @@ function env(): DeskEnv {
 }
 
 async function assemble(refs: DeskRef[]): Promise<string> {
-  const turn = await assembleTurn({ desk: await openDesk(refs, env()) });
+  // With the secretary on, the way every info surface assembles (docs/67 角色):
+  // the duty opens the prompt and the briefing's own blocks follow.
+  const turn = await assembleTurn({ desk: await openDesk(refs, env()), role: SECRETARY_ROLE_ID });
   return turn!.systemPrompt;
 }
 

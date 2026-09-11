@@ -16,6 +16,7 @@ import { assembleTurn, type AssembledTurn } from "../../../soul";
 import { applyTopicProposal, type TopicProposalCardData } from "../../../memory";
 import { openDesk, type DeskItem } from "../../../desk";
 import { withCompanionTools } from "../../../info/briefer/desk";
+import { SECRETARY_ROLE_ID } from "../../../info/briefer/role";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
 import { createTopic } from "../../../platform/app/topics";
 import {
@@ -541,6 +542,9 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       turn = await assembleTurn({
         desk,
         messages: history,
+        // Whose desk this is (docs/67 角色): the secretary's duty and the
+        // companion tools ride the turn from the role, not from the briefing.
+        role: SECRETARY_ROLE_ID,
         // Where a proposal for this conversation's topic is drawn (memory/filing).
         topic: { onCard: (payload) => insertCard("topic", payload) },
       });
