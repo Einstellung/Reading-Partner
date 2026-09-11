@@ -15,6 +15,9 @@ import type { BriefingControl } from "../../../info/briefer/companion-live";
 import type { SessionPhase } from "../../../info/briefer/voice-session";
 import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../info/briefer/voice-call";
 import type { Briefing } from "../../../info/boxes/types";
+import type { TurnActivity } from "../../../ai/activity";
+import { useAttention } from "../lumen/use-attention";
+import type { Attention } from "../lumen/lumen-motion";
 
 export interface VoiceCallOptions {
   /** The day whose thread the call is about. */
@@ -27,7 +30,16 @@ export interface VoiceCallOptions {
 
 export type { VoiceCallView };
 
-export function useVoiceCall(opts: VoiceCallOptions): VoiceCallView {
+/**
+ * What the view is plus where the body is looking. `attention` is not on
+ * VoiceCallView because the call is a domain and the word belongs to the
+ * component that draws it (ui/components/lumen).
+ */
+export interface VoiceCallState extends VoiceCallView {
+  attention: Attention;
+}
+
+export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
   const { dateKey, briefing, control } = opts;
   const [phase, setPhase] = useState<SessionPhase>("idle");
   const [error, setError] = useState<VoiceCallError | null>(null);
@@ -37,6 +49,9 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallView {
   // calls onto one microphone.
   const startingRef = useRef(false);
   const levelCbs = useRef(new Set<(level: number) => void>());
+  // Same shape as the level subscription and for the same reason: the body
+  // keeps one subscription across a start and a stop.
+  const activityCbs = useRef(new Set<(event: TurnActivity) => void>());
   // The latest options, read at start time: a call is started from a gesture,
   // not from a render, and rebuilding the callbacks per render would churn the
   // orb's props for no reason.
@@ -49,6 +64,15 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallView {
       levelCbs.current.delete(cb);
     };
   }, []);
+
+  const subscribeActivity = useCallback((cb: (event: TurnActivity) => void) => {
+    activityCbs.current.add(cb);
+    return () => {
+      activityCbs.current.delete(cb);
+    };
+  }, []);
+
+  const attention = useAttention(subscribeActivity);
 
   const drop = useCallback(() => {
     for (const off of unsubsRef.current) off();
@@ -74,6 +98,9 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallView {
           call.subscribeError(setError),
           call.subscribeLevel((v) => {
             for (const cb of levelCbs.current) cb(v);
+          }),
+          call.subscribeActivity((e) => {
+            for (const cb of activityCbs.current) cb(e);
           }),
         ];
         await call.start();
@@ -104,5 +131,5 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallView {
     };
   }, [drop]);
 
-  return { phase, error, start, stop, subscribeLevel };
+  return { phase, error, start, stop, subscribeLevel, attention };
 }

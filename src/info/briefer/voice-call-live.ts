@@ -121,7 +121,7 @@ export function askOnThread(opts: {
   tools: () => Promise<AgentTool[]>;
 }): VoiceCallModel {
   return {
-    ask({ text, onDelta, signal }) {
+    ask({ text, onDelta, onActivity, signal }) {
       return new Promise<void>((resolve, reject) => {
         void (async () => {
           const settings = await loadSettings();
@@ -169,8 +169,14 @@ export function askOnThread(opts: {
             // model restarts its answer after one; a call cannot un-say a
             // sentence that has already gone to the synthesiser, so what it
             // said before the tool stands as part of the reply.
-            onToolStart: () => {},
-            onToolEnd: () => {},
+            //
+            // What the two do carry is where the soul is looking. A tool in
+            // flight is the only observable "it is at the desk, not with you"
+            // this app has, and it is what drives Lumen's glance down (docs/66
+            // "四段"). The names go through untouched: whoever draws them
+            // decides what a name is worth.
+            onToolStart: (info) => onActivity({ kind: "tool", name: info.name, phase: "start" }),
+            onToolEnd: (info) => onActivity({ kind: "tool", name: info.name, phase: "end" }),
             onDone: () => resolve(),
             // The loop declined rather than failing to reach the model. Nothing
             // was said and nothing is worth retrying, so the turn ends the way

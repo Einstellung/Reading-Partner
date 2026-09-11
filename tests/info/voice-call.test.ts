@@ -22,6 +22,7 @@ import {
   type VoiceCallTranscript,
 } from "../../src/info/briefer/voice-call";
 import { INTERRUPTED_MARK, type VoiceTurn } from "../../src/info/briefer/voice-session";
+import type { TurnActivity } from "../../src/ai/activity";
 
 // Three sentences as the splitter cuts them (a fullwidth comma is a boundary),
 // so two go out mid-stream and the last waits for the model to finish.
@@ -43,6 +44,7 @@ class Harness {
   readonly transcript: VoiceTurn[] = [];
   readonly levels: number[] = [];
   readonly epochs: number[] = [];
+  readonly activity: TurnActivity[] = [];
   readonly call: VoiceCall;
 
   private listener: ((e: ConversationEvent) => void) | null = null;
@@ -51,7 +53,12 @@ class Harness {
   private stopAnswer: SpeechStopped = { utterance: 1, sentence: 0, positionMs: 0, durationMs: 0 };
   private runs = new Map<
     number,
-    { onDelta: (c: string) => void; settle: (e?: Error) => void; signal: AbortSignal }
+    {
+      onDelta: (c: string) => void;
+      onActivity: (e: TurnActivity) => void;
+      settle: (e?: Error) => void;
+      signal: AbortSignal;
+    }
   >();
 
   constructor() {
@@ -86,11 +93,12 @@ class Harness {
     };
 
     const model: VoiceCallModel = {
-      ask: ({ turn, text, onDelta, signal }) => {
+      ask: ({ turn, text, onDelta, onActivity, signal }) => {
         this.asked.push({ turn, text });
         return new Promise<void>((resolve, reject) => {
           this.runs.set(turn, {
             onDelta,
+            onActivity,
             signal,
             settle: (e) => (e ? reject(e) : resolve()),
           });
@@ -113,6 +121,7 @@ class Harness {
 
     this.call = createVoiceCall({ bridge, model, transcript });
     this.call.subscribeLevel((v) => this.levels.push(v));
+    this.call.subscribeActivity((e) => this.activity.push(e));
   }
 
   failStart(e: Error): void {
@@ -160,6 +169,14 @@ class Harness {
     const run = this.runs.get(turn);
     if (!run) throw new Error(`no model turn ${turn}`);
     for (let i = 0; i < text.length; i += size) run.onDelta(text.slice(i, i + size));
+    await this.settle();
+  }
+
+  /** The turn calls a tool. `phase` is the tool's, not the session's. */
+  async tool(turn: number, name: string, phase: "start" | "end"): Promise<void> {
+    const run = this.runs.get(turn);
+    if (!run) throw new Error(`no model turn ${turn}`);
+    run.onActivity({ kind: "tool", name, phase });
     await this.settle();
   }
 
@@ -469,4 +486,58 @@ test("a restart is a new call: a fresh machine and a fresh transcript epoch", as
   expect(h.epochs).toEqual([0, 2]);
   expect(h.call.snapshot().session.turn).toBe(0);
   expect(h.asked[h.asked.length - 1]).toEqual({ turn: KICKOFF_TURN, text: VOICE_OPENING_KICKOFF });
+});
+
+// --- what the turn is doing -------------------------------------------------
+
+test("a turn's tool calls are reported as they go out and come back", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.tool(KICKOFF_TURN, "read_source", "start");
+  await h.tool(KICKOFF_TURN, "read_source", "end");
+  await h.stream(KICKOFF_TURN, REPLY);
+  await h.finish(KICKOFF_TURN);
+
+  expect(h.activity).toEqual([
+    { kind: "tool", name: "read_source", phase: "start" },
+    { kind: "tool", name: "read_source", phase: "end" },
+  ]);
+});
+
+test("a turn cut mid-tool still closes what it opened", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.stream(KICKOFF_TURN, REPLY);
+  await h.finish(KICKOFF_TURN);
+  await h.emit({ kind: "spoken", turn: 0, utterance: 7, reason: "done" });
+
+  await h.userSaid(1, "查一下这个");
+  await h.tool(1, "fetch_page", "start");
+  // The reader talks over it. The round is aborted and the tool's `end` never
+  // arrives from the model loop, so the driver has to say it: a start with no
+  // end leaves the body looking at the desk for the rest of the call.
+  await h.emit({ kind: "speech-duck", turn: 2 });
+  await h.emit({
+    kind: "speech-stop",
+    turn: 2,
+    cut: { utterance: 7, sentence: 0, charOffset: 0, playedMs: 0 },
+  });
+
+  expect(h.aborted(1)).toBe(true);
+  expect(h.activity).toEqual([
+    { kind: "tool", name: "fetch_page", phase: "start" },
+    { kind: "tool", name: "fetch_page", phase: "end" },
+  ]);
+});
+
+test("hanging up closes a tool that is still out", async () => {
+  const h = new Harness();
+  await h.open();
+  await h.tool(KICKOFF_TURN, "generate_briefing", "start");
+  await h.call.stop();
+
+  expect(h.activity).toEqual([
+    { kind: "tool", name: "generate_briefing", phase: "start" },
+    { kind: "tool", name: "generate_briefing", phase: "end" },
+  ]);
 });

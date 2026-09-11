@@ -48,11 +48,10 @@ export function VoiceOrbEntry({
 
 function VoiceOrbLayer({ dateKey, briefing }: { dateKey: string; briefing: Briefing | null }) {
 	const call = useVoiceCall({ dateKey, briefing });
-	// No attention here yet. The session reports four phases and nothing about
-	// what the soul is doing inside a turn, so a live call never reaches the
-	// check act — thinking always looks up. It arrives with SoulIntent
-	// (docs/66); until then the harness is the only thing that can drive it.
-	return <OrbLayer call={asHandle(call)} />;
+	// Attention comes from what the turn is doing, not from what the model says
+	// about itself: a tool call in flight is the check act (docs/66 "四段"), and
+	// the model-emitted SoulIntent field is still ahead of us.
+	return <OrbLayer call={asHandle(call)} attention={call.attention} />;
 }
 
 // Exported for the dev harness (orb-spike-harness.tsx), which has no native
@@ -131,8 +130,8 @@ function useStubCall(): { handle: VoiceCallHandle; rest: boolean; attention: Att
 	// Asleep is not a phase (src/ui/components/lumen/lumen-motion.ts) and nothing in the
 	// app sets it yet, so the harness is the only thing that can show it.
 	const [rest, setRest] = useState(false);
-	// Nothing in a live call sets this yet either, so the check act exists only
-	// where the harness forces it.
+	// A live call gets this from its turns' tool calls (use-voice-call.ts); here
+	// it is a knob, so the check act can be seen without a turn behind it.
 	const [attention, setAttention] = useState<Attention>("reader");
 	const subscribers = useRef(new Set<(value: number) => void>());
 
