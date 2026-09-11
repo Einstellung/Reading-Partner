@@ -164,6 +164,8 @@ test("the retell prompt and its own tools, with no book open", async () => {
   expect(turn.systemPrompt).toContain("You are sitting in on a retell");
   expect(turn.systemPrompt).toContain("no through-line yet");
   expect(names(turn.tools)).toEqual([
+    "list_kind",
+    "list_palace",
     "move_talk_segment",
     "observation_read",
     "observation_search",

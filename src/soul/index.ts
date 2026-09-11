@@ -15,6 +15,18 @@ export {
   type DoorTurnInput,
 } from "./door";
 export {
+  LIST_CAP,
+  appCatalogueIo,
+  buildCatalogueTools,
+  forgetCatalogue,
+  readCatalogue,
+  shownRows,
+  type Catalogue,
+  type CatalogueEntry,
+  type CatalogueIo,
+  type CatalogueKind,
+} from "./catalogue";
+export {
   EMPTY_SEQUENCE,
   SEQUENCE_FILE,
   SEQUENCE_VERSION,

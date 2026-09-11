@@ -121,6 +121,12 @@ export interface PalaceRow {
   // package that registers the opener, not here.
   desk?: true;
   deskKind?: string;
+  // One line saying what this kind is, in the reader's own terms. It is what the
+  // soul is shown when it asks what the palace holds (src/soul/catalogue.ts,
+  // docs/67), so a row carries one exactly when the soul is meant to know the
+  // kind exists: a cache, a marker, a sync ledger, a failure stamp carries none
+  // and the soul never sees it.
+  about?: string;
   // The contradiction, the orphan status, or the decision the row settles. One
   // line, and never in the shape of an import statement — the layering test
   // reads comments too (pitfall 144).
@@ -167,6 +173,7 @@ export const PALACE = [
   // -- the shelf ------------------------------------------------------------
   {
     kind: "library",
+    about: "A book on the reader's shelf.",
     domain: "reading",
     match: fixed("library.json"),
     samples: ["library.json"],
@@ -237,6 +244,7 @@ export const PALACE = [
   },
   {
     kind: "topics",
+    about: "A topic: the reader's frame for a set of books and articles.",
     domain: "reading",
     match: fixed("topics.json"),
     samples: ["topics.json"],
@@ -294,6 +302,7 @@ export const PALACE = [
   // -- marks and conversations ---------------------------------------------
   {
     kind: "annotations",
+    about: "The marks the reader made in one book.",
     domain: "reading",
     match: keyed(/^annotations-(.+)\.json$/),
     pathFor: (id: string) => `annotations-${id}.json`,
@@ -311,6 +320,7 @@ export const PALACE = [
   // one refuses their prefixes as well, so the two orders agree.
   {
     kind: "retell-thread",
+    about: "The conversation held over a retelling.",
     domain: "reading",
     match: keyed(/^threads-retell-(.+)\.json$/),
     pathFor: (id: string) => `threads-retell-${id}.json`,
@@ -327,6 +337,7 @@ export const PALACE = [
   },
   {
     kind: "talk-thread",
+    about: "The conversation held over a talk's outline.",
     domain: "reading",
     match: keyed(/^threads-talk-(.+)\.json$/),
     pathFor: (id: string) => `threads-talk-${id}.json`,
@@ -343,6 +354,7 @@ export const PALACE = [
   },
   {
     kind: "info-thread",
+    about: "The conversation held over one day's briefing.",
     domain: "info",
     match: keyed(new RegExp(`^threads-info-(${DATE})\\.json$`)),
     pathFor: (id: string) => `threads-info-${id}.json`,
@@ -359,6 +371,7 @@ export const PALACE = [
   },
   {
     kind: "conversation",
+    about: "The conversation held at the door, with nothing on the desk; one file a day.",
     domain: "platform",
     match: keyed(new RegExp(`^conversation-(${DATE})\\.json$`)),
     pathFor: (id: string) => `conversation-${id}.json`,
@@ -375,6 +388,7 @@ export const PALACE = [
   },
   {
     kind: "reading-thread",
+    about: "The conversation held over a book.",
     domain: "reading",
     match: keyed(/^threads-(?!retell-|talk-|info-)(.+)\.json$/),
     pathFor: (id: string) => `threads-${id}.json`,
@@ -573,6 +587,7 @@ export const PALACE = [
   // -- retells, talks, rehearsals ------------------------------------------
   {
     kind: "retell",
+    about: "A retelling the reader is working out from what they have read.",
     domain: "reading",
     match: keyed(/^retell-(.+)\.json$/),
     pathFor: (id: string) => `retell-${id}.json`,
@@ -591,6 +606,7 @@ export const PALACE = [
   },
   {
     kind: "outline",
+    about: "The outline of a talk, section by section.",
     domain: "reading",
     match: keyed(/^outline-(.+)\.json$/),
     pathFor: (id: string) => `outline-${id}.json`,
@@ -701,6 +717,7 @@ export const PALACE = [
   // -- kept articles --------------------------------------------------------
   {
     kind: "saved-articles",
+    about: "An article the reader kept from a briefing.",
     domain: "reading",
     match: fixed("saved-articles.json"),
     samples: ["saved-articles.json"],
@@ -734,6 +751,7 @@ export const PALACE = [
   // -- memory ---------------------------------------------------------------
   {
     kind: "observation",
+    about: "An observation the memory distilled from a conversation.",
     domain: "memory",
     match: keyed(/^observations\/(m-[0-9a-f]{16})\.md$/),
     pathFor: (id: string) => `observations/${id}.md`,
@@ -804,6 +822,7 @@ export const PALACE = [
   },
   {
     kind: "statements",
+    about: "What the memory holds about the reader: how they read, what they are working on.",
     domain: "memory",
     match: fixed("statements.json"),
     samples: ["statements.json"],

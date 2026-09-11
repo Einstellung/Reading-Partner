@@ -17,6 +17,7 @@ import type { ProviderId } from "../ai/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
 import type { AgentTool } from "../ai/agent";
 import { soulMemorySection, openSoul } from "./self";
+import type { CatalogueIo } from "./catalogue";
 import { appSequenceIo, readSequence, type SequenceIo } from "./sequence";
 import { soulTail, TAIL_RUNG, TAIL_RUNG_ID, TURN_KEEP } from "./tail";
 import { appConversationIo, type ConversationIo } from "../conversations";
@@ -33,6 +34,10 @@ export interface AssembleInput {
   // tests; the ones on disk otherwise.
   sequenceIo?: SequenceIo;
   conversationIo?: ConversationIo;
+  // The store the catalogue tools walk (catalogue.ts). Injected for the tests;
+  // the one on disk otherwise. Nothing is walked while a turn is assembled — the
+  // tools are built here and only read the store if the model calls one.
+  catalogueIo?: CatalogueIo;
   // Where a topic proposal is drawn, for a conversation that has no topic yet
   // (memory/filing). A caller that passes nothing mounts no propose_topic and
   // carries no roster in its prompt: there would be no card to confirm.
@@ -80,7 +85,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   const { items, env } = desk;
   const anchor = items.find((i) => i.memory !== undefined);
   const teller = items.find((i) => i.history !== undefined);
-  const soul = await openSoul(env, anchor?.memory, input.topic);
+  const soul = await openSoul(env, anchor?.memory, input.topic, input.catalogueIo);
   if (env.signal?.aborted) return null;
 
   // The soul's tools first, then each item's in the order it lies on the desk.

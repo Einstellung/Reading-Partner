@@ -22,15 +22,17 @@ import {
   type TopicProposalSurface,
 } from "../memory";
 import { buildConversationTools } from "../conversations";
+import { buildCatalogueTools, type CatalogueIo } from "./catalogue";
 import type { DeskEnv, DeskMemory } from "../desk";
 import { getThread } from "../platform/app/threads";
 import type { AgentTool } from "../ai/agent";
 
 export interface Soul {
-  // statement_write, the conversation tools, the observation tools — all three
-  // where there is a topic to file a new one under, the two that only read where
-  // there is not — and propose_topic wherever the conversation is filed under no
-  // topic and the caller can draw the card the proposal ends in.
+  // statement_write, the conversation tools, the catalogue tools, the
+  // observation tools — all three where there is a topic to file a new one
+  // under, the two that only read where there is not — and propose_topic
+  // wherever the conversation is filed under no topic and the caller can draw
+  // the card the proposal ends in.
   tools: AgentTool[];
   // Every statement there is. Which of them ride the prompt is the ladder's
   // call, one pass at a time, so they are read once and filtered per pass.
@@ -68,6 +70,7 @@ export async function openSoul(
   env: DeskEnv,
   anchor: DeskMemory | undefined,
   filing?: TopicProposalSurface,
+  catalogueIo?: CatalogueIo,
 ): Promise<Soul> {
   const thread = getThread(env.thread.key, env.thread.id);
   const messages = thread?.messages ?? [];
@@ -92,6 +95,10 @@ export async function openSoul(
   // the statements are, and the desk it was said over is only where to look
   // first.
   tools.push(...buildConversationTools({ topicId: scope }));
+  // And what the reader has, kind by kind (catalogue.ts): which books are on the
+  // shelf, which topics they keep, what was kept from a briefing. The palace is
+  // the same wherever the turn is held, so this rides every desk too.
+  tools.push(...buildCatalogueTools(catalogueIo));
   // Nothing has said what this conversation is about, so the offer to say it
   // rides the turn (docs/21, memory/filing). Only where the caller can draw the
   // card, though — the tool writes nothing, the card is its whole effect, and
