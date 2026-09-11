@@ -175,8 +175,47 @@ export function threadKind(
 
 const SAVE_DEBOUNCE = 500;
 
-function fileFor(bookId: string): string {
-  return `threads-${bookId}.json`;
+// What a store key is called on disk, and the way back. One rule, because the
+// two halves are read apart — the store writes the file, the walk over every
+// conversation (src/conversations) reads the name back into a key — and a
+// wrapper spelled in two places is a file one of them cannot open.
+//
+// A key is wrapped in "threads-" unless it begins with a prefix of its own,
+// which is substituted for the wrapper: the door's day is keyed "door-<date>"
+// and filed as "conversation-<date>.json", because the file says what it holds
+// and not which store happens to hold it. The pairs are written here rather
+// than taken off the catalogue (src/palace) because platform/app imports
+// nothing; tests/palace/derived.test.ts holds them against the rows.
+const THREADS_PREFIX = "threads-";
+const OWN_PREFIXES: readonly (readonly [key: string, file: string])[] = [["door-", "conversation-"]];
+const SUFFIX = ".json";
+
+/** The file a store key names. */
+export function threadFileName(key: string): string {
+  for (const [keyPrefix, filePrefix] of OWN_PREFIXES) {
+    if (key.startsWith(keyPrefix)) return `${filePrefix}${key.slice(keyPrefix.length)}${SUFFIX}`;
+  }
+  return `${THREADS_PREFIX}${key}${SUFFIX}`;
+}
+
+/**
+ * The store key a file name holds, or null for a name that is no conversation
+ * file. The exact inverse of threadFileName: a key that has a prefix of its own
+ * is not also readable through the wrapper, so no name resolves to a key that
+ * would be written back to a different file.
+ */
+export function threadFileKey(name: string): string | null {
+  if (!name.endsWith(SUFFIX)) return null;
+  for (const [keyPrefix, filePrefix] of OWN_PREFIXES) {
+    if (name.startsWith(filePrefix)) {
+      const rest = name.slice(filePrefix.length, -SUFFIX.length);
+      return rest === "" ? null : `${keyPrefix}${rest}`;
+    }
+  }
+  if (!name.startsWith(THREADS_PREFIX)) return null;
+  const key = name.slice(THREADS_PREFIX.length, -SUFFIX.length);
+  if (key === "") return null;
+  return OWN_PREFIXES.some(([keyPrefix]) => key.startsWith(keyPrefix)) ? null : key;
 }
 
 export interface ThreadIo {
@@ -312,7 +351,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   // threads" is the truth about what is left, so the session's messages land
   // instead of every write for this book being refused for good.
   async function readForWrite(key: string): Promise<ThreadMap> {
-    const file = fileFor(key);
+    const file = threadFileName(key);
     const text = await io.read(file);
     if (text === null) return {};
     try {
@@ -371,7 +410,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
           delete merged[id];
         }
       }
-      await io.write(fileFor(key), JSON.stringify({ threads: merged }, null, 2));
+      await io.write(threadFileName(key), JSON.stringify({ threads: merged }, null, 2));
       // Applied to the entry as it is now, not as `merged` left it: a thread
       // created while the bytes were in the air belongs to the live entry, and
       // assigning `merged` over it is how the top-bar button ended up holding a
@@ -415,7 +454,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     // resurrects a conversation the reader deleted.
     const out: ThreadMap = { ...entry.threads };
     for (const id of entry.removed) delete out[id];
-    await io.write(fileFor(key), JSON.stringify({ threads: out }, null, 2));
+    await io.write(threadFileName(key), JSON.stringify({ threads: out }, null, 2));
   }
 
   const writer: DebouncedWriter<string> = createDebouncedWriter<string>({
@@ -436,7 +475,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   // it would otherwise be stuck refusing writes forever.
   async function load(bookId: string): Promise<ThreadMap> {
     const before = cache.get(bookId)?.gen;
-    const text = await io.read(fileFor(bookId));
+    const text = await io.read(threadFileName(bookId));
     const onDisk = text === null ? {} : parseThreads(text);
     const entry = entryFor(bookId);
     // The file is this book's whole truth only when nothing happened to the
@@ -461,7 +500,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   // disk here, at most one debounce behind, rather than from the live cache.
   async function peek(bookId: string): Promise<Thread[]> {
     try {
-      const text = await io.read(fileFor(bookId));
+      const text = await io.read(threadFileName(bookId));
       return text === null ? [] : Object.values(parseThreads(text));
     } catch {
       return [];

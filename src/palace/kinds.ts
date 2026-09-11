@@ -360,9 +360,9 @@ export const PALACE = [
   {
     kind: "conversation",
     domain: "platform",
-    match: keyed(new RegExp(`^threads-door-(${DATE})\\.json$`)),
-    pathFor: (id: string) => `threads-door-${id}.json`,
-    samples: ["threads-door-2026-09-10.json"],
+    match: keyed(new RegExp(`^conversation-(${DATE})\\.json$`)),
+    pathFor: (id: string) => `conversation-${id}.json`,
+    samples: ["conversation-2026-09-10.json"],
     id: "date",
     refs: [],
     sync: "data",
@@ -376,7 +376,7 @@ export const PALACE = [
   {
     kind: "reading-thread",
     domain: "reading",
-    match: keyed(/^threads-(?!retell-|talk-|info-|door-)(.+)\.json$/),
+    match: keyed(/^threads-(?!retell-|talk-|info-)(.+)\.json$/),
     pathFor: (id: string) => `threads-${id}.json`,
     samples: ["threads-abc123.json"],
     id: "bookId",

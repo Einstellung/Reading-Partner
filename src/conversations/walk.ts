@@ -13,7 +13,7 @@ import type { Thread } from "../platform/app/threads";
 
 /** One conversation file, as the walk hands it over. */
 export interface ThreadFile {
-  /** The store key: the file name without its "threads-" wrapper. */
+  /** The store key the file name holds (threadFileKey). */
   fileKey: string;
   name: string;
   kind: ThreadKind;

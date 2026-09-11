@@ -17,7 +17,7 @@ import {
   type Sequence,
   type SequenceIo,
 } from "../../src/soul";
-import type { Thread } from "../../src/platform/app/threads";
+import { threadFileName, type Thread } from "../../src/platform/app/threads";
 
 function thread(id: string, stamps: number[], over: Partial<Thread> = {}): Thread {
   return {
@@ -43,7 +43,7 @@ function io(store: FakeStore): SequenceIo & { written: Record<string, string> } 
     conversations: {
       listRoot: async () => Object.keys(store.files),
       readText: async (path) => store.texts?.[path] ?? written[path] ?? null,
-      peekThreads: async (fileKey) => store.files[`threads-${fileKey}.json`] ?? [],
+      peekThreads: async (fileKey) => store.files[threadFileName(fileKey)] ?? [],
     },
     mtime: async (path) => store.mtimes?.[path] ?? 1,
     readText: async (path) => store.texts?.[path] ?? written[path] ?? null,
@@ -131,7 +131,7 @@ test("every conversation file is walked, whatever kind it is", async () => {
     files: {
       "threads-abc123.json": [thread("t1", [10, 20], { book: true })],
       "threads-info-2026-07-21.json": [thread("t2", [30], { topicId: "topic-1" })],
-      "threads-door-2026-09-10.json": [thread("t3", [40])],
+      "conversation-2026-09-10.json": [thread("t3", [40])],
       "library.json": [],
       "topics.json": [],
     },
@@ -140,8 +140,8 @@ test("every conversation file is walked, whatever kind it is", async () => {
   expect(seq.spans.map((s) => `${s.kind}:${s.threadId}`)).toEqual(["book:t1", "info:t2", "door:t3"]);
   expect(seq.spans.map((s) => s.topicId)).toEqual([null, "topic-1", null]);
   expect(Object.keys(seq.stamp).sort()).toEqual([
+    "conversation-2026-09-10.json",
     "threads-abc123.json",
-    "threads-door-2026-09-10.json",
     "threads-info-2026-07-21.json",
   ]);
 });
@@ -159,7 +159,7 @@ test("an index is stale when the files it was read off have moved on", async () 
   expect(isStale(seq, await currentStamp(disk))).toBe(true);
 
   store.mtimes!["threads-abc123.json"] = 100;
-  store.files["threads-door-2026-09-10.json"] = [thread("t2", [20])];
+  store.files["conversation-2026-09-10.json"] = [thread("t2", [20])];
   expect(isStale(seq, await currentStamp(disk))).toBe(true);
 });
 

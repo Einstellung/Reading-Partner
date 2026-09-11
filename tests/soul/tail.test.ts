@@ -13,7 +13,7 @@ import {
 } from "../../src/soul";
 import { HISTORY_KEEP } from "../../src/reading/desk";
 import type { ConversationIo } from "../../src/conversations";
-import type { Thread } from "../../src/platform/app/threads";
+import { threadFileName, type Thread } from "../../src/platform/app/threads";
 
 // The tail and the item's span share one budget, and the number is the one the
 // reading desk has always trimmed to. Held here because the two are declared
@@ -141,7 +141,7 @@ function io(files: Record<string, Thread[]>, texts: Record<string, string> = {})
   return {
     listRoot: async () => Object.keys(files),
     readText: async (path) => texts[path] ?? null,
-    peekThreads: async (fileKey) => files[`threads-${fileKey}.json`] ?? [],
+    peekThreads: async (fileKey) => files[threadFileName(fileKey)] ?? [],
   };
 }
 
@@ -153,7 +153,7 @@ test("the conversation the turn is being held in is never part of its own tail",
     exclude: { fileKey: "door-2026-09-10", threadId: "mine" },
     keep: TURN_KEEP,
     io: io({
-      "threads-door-2026-09-10.json": [thread("mine", ["mine one", "mine two"])],
+      "conversation-2026-09-10.json": [thread("mine", ["mine one", "mine two"])],
       "threads-info-2026-07-21.json": [thread("t1", ["theirs"])],
     }),
   });

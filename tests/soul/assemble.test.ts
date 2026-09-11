@@ -18,6 +18,7 @@ import {
   appendMessage,
   createBookThread,
   rebuildThreadStoreForTests,
+  threadFileName,
   type Thread,
   type ThreadMessage,
 } from "../../src/platform/app/threads";
@@ -417,7 +418,7 @@ function store(files: Record<string, Record<string, ThreadMessage[]>>) {
   const conversationIo: ConversationIo = {
     listRoot: async () => Object.keys(files),
     readText: async () => null,
-    peekThreads: async (fileKey) => threads(`threads-${fileKey}.json`),
+    peekThreads: async (fileKey) => threads(threadFileName(fileKey)),
   };
   const sequenceIo: SequenceIo = {
     conversations: conversationIo,
@@ -493,7 +494,7 @@ test("the conversation being held is never replayed twice", async () => {
     // that file and one other.
     ...store({
       "threads-book-1.json": { "thread-1": [said("user", "here, now", 10)] },
-      "threads-door-2026-09-10.json": { t0: [said("user", "at the door", 20)] },
+      "conversation-2026-09-10.json": { t0: [said("user", "at the door", 20)] },
     }),
   });
   expect(turn!.messages.map((m) => m.text)).toEqual([
