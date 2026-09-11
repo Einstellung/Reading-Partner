@@ -16,7 +16,7 @@ import {
   resolveToolStatus,
   type ToolStatus,
 } from "../ai/tool-status";
-import { holdsNoAnswer, refusalRow } from "../ai/turn-rows";
+import { appendRoundBreak, holdsNoAnswer, refusalRow } from "../ai/turn-rows";
 
 // Picture-in-picture (docs/03): the bubble by the mark, chat taking the whole
 // window with reading shrunk to a corner card, and reading back with chat
@@ -84,8 +84,9 @@ export interface CallState<M extends CallRow> {
 export type RowChange =
   // A chunk of the reply arrived.
   | { kind: "delta"; chunk: string }
-  // A tool started. Any partial text goes with it: it is inter-round preamble,
-  // and only the final answer is shown (M6).
+  // A tool started. What the round wrote before calling it stays where it is,
+  // with a blank line opened under it for the next round (docs/pitfall/291); the
+  // status line is drawn in that gap and comes off when the tool returns.
   | { kind: "tool-start"; name: string; label: string }
   | { kind: "tool-end"; name: string; isError: boolean }
   // A running tool said something new about itself — one line, rewritten in
@@ -110,7 +111,7 @@ export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M 
     case "tool-start":
       return {
         ...row,
-        text: "",
+        text: appendRoundBreak(row.text),
         tools: appendRunningTool(row.tools, change.name, change.label),
       };
     case "tool-end": {

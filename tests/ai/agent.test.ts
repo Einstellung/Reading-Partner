@@ -98,6 +98,7 @@ function collectCallbacks() {
 	const toolStarts: { name: string; args: Record<string, any> }[] = [];
 	const toolEnds: { name: string; resultPreview: string; isError: boolean }[] = [];
 	let done: string | undefined;
+	let turnText: string | undefined;
 	let error: string | undefined;
 	let refusal: string | undefined;
 	let outcome: AssistantMessage | undefined;
@@ -105,8 +106,9 @@ function collectCallbacks() {
 		onDelta: (t) => deltas.push(t),
 		onToolStart: (i) => toolStarts.push(i),
 		onToolEnd: (i) => toolEnds.push(i),
-		onDone: (t, a) => {
+		onDone: (t, a, whole) => {
 			done = t;
+			turnText = whole;
 			outcome = a;
 		},
 		onError: (m, a) => {
@@ -130,6 +132,10 @@ function collectCallbacks() {
 		},
 		get done() {
 			return done;
+		},
+		// Every round's text, joined (ai/turn-rows.ts).
+		get turnText() {
+			return turnText;
 		},
 		get error() {
 			return error;
@@ -174,6 +180,8 @@ test("happy path: one tool round then a final answer", async () => {
 	});
 
 	expect(c.done).toBe("the answer is hi");
+	// The round that answered, and the whole of what the model wrote this turn.
+	expect(c.turnText).toBe("let me check\n\nthe answer is hi");
 	expect(c.error).toBeUndefined();
 	expect(c.toolStarts).toEqual([{ name: "echo", args: { value: "hi" } }]);
 	expect(c.toolEnds).toEqual([{ name: "echo", resultPreview: "echo:hi", isError: false }]);
@@ -204,6 +212,31 @@ test("multi-round: two tool rounds before answering", async () => {
 	expect(script.calls()).toBe(3);
 	// Round 2's context has round 1's result; round 3's has both.
 	expect(toolResultTexts(script.contexts[2].messages)).toEqual(["echo:a", "echo:b"]);
+});
+
+// docs/pitfall/291: what the model wrote before each tool call is on screen in
+// the chat surfaces, so it is part of the reply. A round that wrote nothing adds
+// no gap, and no tool result ever joins the text.
+test("the turn's text is every round's words, and never a tool result", async () => {
+	const script = scriptStream([
+		{ text: "Let me check p. 4.", calls: [{ name: "echo", args: { value: "a" }, id: "t1" }] },
+		{ calls: [{ name: "echo", args: { value: "b" }, id: "t2" }] },
+		{ text: "The page argues otherwise." },
+	]);
+	const c = collectCallbacks();
+
+	await runAgentLoop({
+		stream: script.fn,
+		model: MODEL,
+		messages: [{ role: "user", content: "what does p. 4 say", timestamp: 0 }],
+		tools: [echoTool],
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	expect(c.done).toBe("The page argues otherwise.");
+	expect(c.turnText).toBe("Let me check p. 4.\n\nThe page argues otherwise.");
+	expect(c.turnText).not.toContain("echo:");
 });
 
 test("a throwing execute becomes a tool-result error, not a crash", async () => {

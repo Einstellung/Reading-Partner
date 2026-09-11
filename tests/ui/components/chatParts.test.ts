@@ -32,7 +32,7 @@ const probe = (added?: boolean): ProbeConfirmCardData => ({
 
 // --- messageToParts adapter -------------------------------------------------
 
-test("messageToParts maps legacy tools + text to a trace part then a text part", () => {
+test("messageToParts maps legacy text + tools to a text part then a trace part", () => {
   const m: ThreadMessage = {
     role: "ai",
     ts: 1,
@@ -40,8 +40,8 @@ test("messageToParts maps legacy tools + text to a trace part then a text part",
     tools: [{ name: "probe_source", label: "Probing", state: "running" }],
   };
   expect(messageToParts(m)).toEqual([
-    { type: "tool-trace", tools: [{ name: "probe_source", label: "Probing", state: "running" }] },
     { type: "text", text: "hi" },
+    { type: "tool-trace", tools: [{ name: "probe_source", label: "Probing", state: "running" }] },
   ]);
 });
 

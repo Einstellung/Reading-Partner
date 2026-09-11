@@ -522,7 +522,12 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         onDelta: (chunk) => write({ kind: "delta", chunk }, ts),
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),
-        onDone: (full) => {
+        // Every round's words, not only the answering round's: a round that
+        // called a tool may have written a sentence first, and it has been on
+        // screen since (ai/turn-rows.ts). A single-round turn is the same text
+        // either way.
+        onDone: (finalText, _assistant, turnText) => {
+          const full = turnText || finalText;
           const live = liveTurns.settle(threadId, controller);
           if (controller.signal.aborted) return; // stopTurn already kept the partial
           // The notice rides the displayed row only. Persisting it would replay it

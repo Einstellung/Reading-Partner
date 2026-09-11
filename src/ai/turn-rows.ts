@@ -25,14 +25,12 @@ function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
   return (previous.tools ?? []).filter((t) => t.state === "error");
 }
 
-// `text` is deliberately left as it stands, and as the app is wired today it is
-// always empty when this runs. REFUSE_MIDTURN fires at the top of a round,
-// before that round's stream; REFUSE_ROUNDS fires only after a round that called
-// tools (agent.ts). And a tool start blanks the row's text on all three surfaces
-// (App.tsx, useRetell.ts, InfoCall.tsx). So the notice is the whole row and
-// chat.tsx draws it alone. A refusal that still carries the model's words is
-// unreachable from the loop — the function leaves them alone if one is ever
-// built, but nothing downstream needs to be kept working for that case.
+// `text` is deliberately left as it stands. On the two chat surfaces it can hold
+// what the rounds before the stop wrote (a tool start keeps those words and opens
+// a blank line, appendRoundBreak below), and then the row is those words with the
+// notice under them. It is empty where nothing was written before the stop, and
+// on the rehearsal surfaces, which still blank the row at every tool start; the
+// notice is then the whole row and chat.tsx draws it alone.
 //
 // `failed` is cleared rather than left alone. Every call site spreads this over
 // the row as it stands, so anything the function does not name survives; a row
@@ -53,13 +51,12 @@ export function refusalRow(
 //   - a row the app ended carries the app's sentence, not the assistant's. A
 //     refusal keeps it in `notice`, which is not read here at all; an error
 //     keeps it in `text`, so `failed` is what excludes it.
-//   - which means a refusal row is judged on its `text` alone, and today that
-//     text is always empty (see refusalRow): a refusal drops out here on the
-//     empty-text clause, not on the mark. A refusal that did carry the model's
-//     own words would replay them like any other reply — the reader saw them on
-//     screen as the assistant's, and the model's view has to match — but the loop
-//     cannot produce one. Either way nothing the app said about the turn travels
-//     with them: that sentence is in `notice`.
+//   - which means a refusal row is judged on its `text` alone. A refusal that
+//     carries the model's own words replays them like any other reply: the reader
+//     saw them on screen as the assistant's, and the model's view has to match.
+//     One with nothing written before the stop drops out on the empty-text
+//     clause. Either way nothing the app said about the turn travels with them:
+//     that sentence is in `notice`.
 //   - a card row is persisted with no text of its own (chatParts), and an empty
 //     message is one some providers reject outright.
 export function replayableHistory(
@@ -74,11 +71,9 @@ export function replayableHistory(
 // is not one of these and stays.
 //
 // A refusal reaches this through the notice clause, never through `failed`
-// (refusalRow clears it), and its `text` is always empty as the app is wired
-// today, so every refusal row is replaced. The other branch — a refusal the
-// model got words onto is an answer, however short, so it stays and the next
-// attempt sits under it — is unreachable from the loop; only the unit tests
-// build such a row.
+// (refusalRow clears it), so a refusal that wrote nothing is replaced. One the
+// model got words onto is an answer, however short: it stays, and the next
+// attempt sits under it.
 export function holdsNoAnswer(m: {
   role: "user" | "ai";
   text: string;
@@ -88,4 +83,31 @@ export function holdsNoAnswer(m: {
 }): boolean {
   if (m.role !== "ai") return false;
   return !!m.streaming || !!m.failed || (!m.text.trim() && !!m.notice);
+}
+
+// --- what one turn wrote, across its rounds --------------------------------
+// A tool round interrupts the reply: the model writes a sentence, calls a tool,
+// and writes the rest in the next round. The words already on screen stay where
+// they are and the next round's continue under them (docs/pitfall/291), so both
+// the streaming row and the text that is persisted are every round's words in
+// order, separated by a blank line. The loop (ai/agent.ts) and the surfaces use
+// the same two functions, or what the reader watched and what is saved would
+// differ by a newline.
+
+// Open the gap the next round writes into. Nothing to open on a row with no
+// words yet, and a second tool in the same round finds the gap already there.
+export function appendRoundBreak(text: string): string {
+  const body = text.replace(/\s+$/, "");
+  return body ? `${body}\n\n` : "";
+}
+
+// Every round's text in the order it was written. Rounds that wrote nothing
+// contribute nothing, not a gap.
+export function joinRoundTexts(texts: readonly string[]): string {
+  let out = "";
+  for (const t of texts) {
+    if (!t.trim()) continue;
+    out = out ? appendRoundBreak(out) + t : t;
+  }
+  return out;
 }

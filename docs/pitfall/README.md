@@ -63,7 +63,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 289）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 292）。
 
 ## EmbedPDF 引擎
 
@@ -315,6 +315,7 @@
 - [131-pi-cache-retention-env-never-reaches-the-webview](./131-pi-cache-retention-env-never-reaches-the-webview.md) — `PI_CACHE_RETENTION=long` 在 dev 和打包版都读不到：webview 里没有 `process`，Vite build 又把 `process.env` 换成 `{}`，pi 每次都落回 5 分钟保留期。要换只能在发送路径上传 `cacheRetention`，并把同一个值传给埋点
 - [234-failed-background-pass-records-only-unknown](./234-failed-background-pass-records-only-unknown.md) — 后台蒸馏/画像失败恒记 `reason: "unknown"`：错误对象在 `runAgentTurn` 的 catch 里就丢了，`live.ts` 又只传 outcome，`classifyDistillFailure` 拿到空文本。失败事件改带 `errorName` + `errorMessage`（前 200 字，只在 `outcome: "failed"` 时带）；另附读日志的两条：没有 `prompt-cache` 行等于请求没拿回任何消息，`distill-failed` 的 `from` 是当时的游标而 meta.json 可能已被另一台设备换过
 - [238-opencode-requires-a-session-header-pi-never-sends](./238-opencode-requires-a-session-header-pi-never-sends.md) — OpenCode Go 每次调用回 400 `MissingSessionID`：它要求每个请求带 `x-opencode-session`，pi-ai 整个包里没有这个头，`options.sessionId` 发的是另外四个名字。用 `ProviderRequestOptions.headers`（三个 api 都 merge 在最后），映射表在 `src/ai/call-setup.ts` 一 provider 一行，值取会话 id（工具循环用 `TurnTelemetry.thread`）而不是每次一个随机值，否则路由和缓存白搭；不要放按 host 分发的 fetch 桥。已用真 key 实测：`opencode-go` 不带头 400、带头 200，端到端两轮工具循环跑通在解析到 anthropic-messages 的模型上，所以这个钩子不只对 openai-completions 管用。Zen（`opencode`）那一条仍只有文档支撑，余额不足在 session 检查之前就回 `CreditsError`
+- [291-a-tool-start-wiped-the-round-it-interrupted](./291-a-tool-start-wiped-the-round-it-interrupted.md) — 文字聊天里模型输出一段再调工具，那段话被 `tool-start` 清空（`call-state.ts` / `use-info-call.ts`），工具成功后状态行也 splice 掉，行里空了；`onDone` 只交最后一轮，前面几轮永久丢失。每轮都挂工具之后（d7f90559）成了默认体验。拼法收到 `appendRoundBreak` / `joinRoundTexts` 一处，`onDone` 第三个参数交全文，第一个参数仍是答出来的那一轮给产出物用；工具状态行画在文字下面
 
 ## 开发环境
 

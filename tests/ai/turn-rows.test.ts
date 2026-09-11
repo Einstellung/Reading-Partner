@@ -7,7 +7,13 @@
 
 import { expect, test } from "bun:test";
 import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../src/ai/agent";
-import { holdsNoAnswer, refusalRow, replayableHistory } from "../../src/ai/turn-rows";
+import {
+  appendRoundBreak,
+  holdsNoAnswer,
+  joinRoundTexts,
+  refusalRow,
+  replayableHistory,
+} from "../../src/ai/turn-rows";
 import type { ThreadMessage } from "../../src/ui/components/chat/types";
 
 const WORDS = "The passage argues that the retina is not a camera";
@@ -103,4 +109,35 @@ test("a turn that could not reach the model is still replaced", () => {
   expect(holdsNoAnswer({ role: "ai", text: "Couldn't reach the model.", failed: true })).toBe(
     true,
   );
+});
+
+// --- the gap between a turn's rounds (docs/pitfall/291) ---------------------
+
+test("the break is opened once, and never on a row with nothing written", () => {
+  expect(appendRoundBreak("")).toBe("");
+  expect(appendRoundBreak("   \n")).toBe("");
+  expect(appendRoundBreak("first")).toBe("first\n\n");
+  expect(appendRoundBreak("first\n\n")).toBe("first\n\n");
+  expect(appendRoundBreak("first\n")).toBe("first\n\n");
+});
+
+test("a turn's text is every round that wrote something, a blank line apart", () => {
+  expect(joinRoundTexts(["let me look", "the answer"])).toBe("let me look\n\nthe answer");
+  expect(joinRoundTexts(["", "the answer"])).toBe("the answer");
+  expect(joinRoundTexts(["let me look", "", "the answer"])).toBe("let me look\n\nthe answer");
+  expect(joinRoundTexts([])).toBe("");
+});
+
+// The streamed row and the saved text are built by different code (the reducer
+// appends the break as the tool starts, the loop joins the rounds at the end),
+// so they are checked against each other: a mismatch would redraw the reply the
+// moment the turn landed.
+test("joining the rounds gives what the streamed row already holds", () => {
+  const rounds = ["Let me check p. 4.", "", "The page argues otherwise."];
+  let row = "";
+  for (const text of rounds) {
+    row += text;
+    row = appendRoundBreak(row);
+  }
+  expect(joinRoundTexts(rounds)).toBe(row.replace(/\n+$/, ""));
 });

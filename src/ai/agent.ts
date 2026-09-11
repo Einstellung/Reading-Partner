@@ -50,6 +50,7 @@ import {
 	type ResponseHead,
 	type StreamOutcome,
 } from "./providers";
+import { joinRoundTexts } from "./turn-rows";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
 // the model a cropped figure). `data` is bare base64, `mimeType` the MIME type;
@@ -106,9 +107,16 @@ export interface AgentCallbacks {
 	// The HTTP response head of each round, before its body is read: request id
 	// and rate-limit headers. Fires once per streamed model turn.
 	onResponse?: ResponseHead;
-	// The turn's text, plus pi's AssistantMessage for the round that produced it —
+	// The answering round's text, plus pi's AssistantMessage for that round —
 	// usage, responseId, stopReason. A caller that only wants the text ignores it.
-	onDone(finalText: string, assistant?: StreamOutcome): void;
+	//
+	// `turnText` is every round's text joined with a blank line (ai/turn-rows.ts):
+	// a round that calls a tool may write a sentence before it, and the chat
+	// surfaces keep that sentence on screen, so it is part of the reply they
+	// persist. A caller whose turn produces an artifact — a note, a sub-agent's
+	// result — wants the answer alone and reads `finalText`. Tool results are in
+	// neither: they never go in the reply.
+	onDone(finalText: string, assistant?: StreamOutcome, turnText?: string): void;
 	// `thrown` is what was actually caught, when a throw is what ended the turn.
 	// The message alone loses the error's own type, and a caller that records the
 	// failure (the sub-agent runner, memory/live) can then only say "unknown"
@@ -256,6 +264,9 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 	// array replaces this one, so what was given up does not come back next round.
 	let messages: Message[] = [...params.messages];
 	const purpose = params.purpose ?? "chat";
+	// What the rounds before this one wrote, in order. Assistant text only — a
+	// tool result is fed back to the model and never joins the reply.
+	const written: string[] = [];
 	// Read once, beside the send rather than at the log: if this loop ever passes
 	// cacheRetention to the stream, it has to pass the same value here or the log
 	// describes a setting the request did not carry.
@@ -351,10 +362,12 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 			}
 
 			const calls = toolCalls(final);
+			const text = assistantText(final);
 			if (calls.length === 0) {
-				onDone(assistantText(final), final);
+				onDone(text, final, joinRoundTexts([...written, text]));
 				return;
 			}
+			written.push(text);
 
 			// The assistant turn (carrying the tool_use blocks) must precede its
 			// tool results in the replayed history, or providers reject the batch.

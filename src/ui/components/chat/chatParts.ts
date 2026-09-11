@@ -55,8 +55,8 @@ export type CardSurface = "bubble" | "call";
 export type ChatPart =
   // A prose block; inline refs live in its Markdown (see the boundary rule above).
   | { type: "text"; text: string }
-  // The ephemeral tool-call trace shown above a streaming reply (M6). Never
-  // persisted; recomputed live each turn.
+  // The ephemeral tool-call trace, drawn under the words written so far (M6).
+  // Never persisted; recomputed live each turn.
   | { type: "tool-trace"; tools: ToolStatus[] }
   // A block-level card. `id` is the stable handle for dispatch and for patchPart;
   // `state` is transient view state the host may attach to a card (persisted
@@ -94,15 +94,16 @@ export interface CardComponentProps<P extends CardPayload = CardPayload> {
 }
 
 // Derive the render parts for a message. When `parts` is set it is authoritative;
-// otherwise the legacy { tools, card, text } fields map to parts (the tool trace
-// above the reply, then a standalone card, then the text). role / images /
-// streaming / failed stay message-level flags — they are not parts.
+// otherwise the legacy { text, tools, card } fields map to parts in the order
+// they are drawn: the reply, the tool trace under it, then a standalone card.
+// role / images / streaming / failed stay message-level flags — they are not
+// parts.
 export function messageToParts(m: ThreadMessage): ChatPart[] {
   if (m.parts) return m.parts;
   const parts: ChatPart[] = [];
+  if (m.text) parts.push({ type: "text", text: m.text });
   if (m.tools && m.tools.length) parts.push({ type: "tool-trace", tools: m.tools });
   if (m.card) parts.push({ type: "card", id: String(m.ts), card: m.card });
-  if (m.text) parts.push({ type: "text", text: m.text });
   return parts;
 }
 
