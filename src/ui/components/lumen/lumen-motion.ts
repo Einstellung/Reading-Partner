@@ -715,11 +715,12 @@ export const FACE = {
 	mouthOpenRx: 0.032,
 	mouthOpenRy: 0.042,
 	// The brows: how far above the eyes they sit, how long they are, and how
-	// far the inner end drops. They are the only line on the face that is not
+	// far the inner end drops: a hair, so the face ponders rather than frowns.
+	// They are the only line on the face that is not
 	// there all the time.
-	browY: 0.43,
+	browY: 0.415,
 	browWidth: 0.058,
-	browTiltDeg: 9,
+	browTiltDeg: 2,
 } as const;
 
 function lerp(a: number, b: number, t: number): number {
