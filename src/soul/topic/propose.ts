@@ -31,13 +31,13 @@ export interface TopicChoice {
 
 /**
  * What a caller offers the proposal: somewhere to draw the card, and the roster
- * to propose out of. Both optional — a call has no screen to put a card on and
- * the tool still answers in text, which is what gets spoken
- * (info/briefer/voice-call-live.ts), and a caller that injects no roster gets
- * the reader's own shelf.
+ * to propose out of. The card is required, and a caller that offers none is not
+ * offered the tool at all (self.ts) — a proposal writes nothing, so a card the
+ * reader never sees is a filing that never happens and a model that says it did.
+ * The roster is optional: a caller that injects none gets the reader's own shelf.
  */
 export interface TopicProposalSurface {
-  onCard?(card: TopicProposalCardData): void;
+  onCard(card: TopicProposalCardData): void;
   list?(): Promise<TopicChoice[]>;
 }
 

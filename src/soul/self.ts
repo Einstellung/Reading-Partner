@@ -31,15 +31,16 @@ import {
 
 export interface Soul {
   // statement_write, the conversation tools, the observation tools wherever
-  // there is a topic to scope them to, and propose_topic wherever there is not.
+  // there is a topic to scope them to, and propose_topic wherever there is not
+  // and the caller can draw the card the proposal ends in.
   tools: AgentTool[];
   // Every statement there is. Which of them ride the prompt is the ladder's
   // call, one pass at a time, so they are read once and filtered per pass.
   statements: readonly Statement[];
   // The soul's own paragraph of the system prompt: the topic roster and the
-  // standing instruction to propose one, where the conversation has no topic
-  // yet. Empty otherwise. It belongs to no item on the desk, so the assembly
-  // prints it (turn.ts).
+  // standing instruction to propose one, where the conversation has no topic yet
+  // and the proposal has somewhere to land. Empty otherwise. It belongs to no
+  // item on the desk, so the assembly prints it (turn.ts).
   prompt: string;
 }
 
@@ -47,12 +48,13 @@ export interface Soul {
  * Read what the soul brings to this turn: the tools it mounts and the
  * statements it may print. `anchor` is the memory of the item that anchors the
  * retrieval, which is where the observation tools get the book they are scoped
- * to.
+ * to. `topic` is where a proposal for this conversation's topic would be drawn;
+ * a caller that has nowhere to draw one is offered no way to propose.
  */
 export async function openSoul(
   env: DeskEnv,
   anchor: DeskMemory | undefined,
-  topic: TopicProposalSurface = {},
+  topic?: TopicProposalSurface,
 ): Promise<Soul> {
   const topicId = env.topic.id;
   const messages = getThread(env.thread.key, env.thread.id)?.messages ?? [];
@@ -70,20 +72,17 @@ export async function openSoul(
   // first.
   tools.push(...buildConversationTools({ topicId }));
   // Nothing has said what this conversation is about, so the offer to say it
-  // rides the turn (docs/21): the roster in the prompt, the tool beside it. A
-  // caller with no screen to draw the card on still mounts it — the AI is one
-  // AI, and its answer is text (info/briefer/voice-call-live.ts).
+  // rides the turn (docs/21): the roster in the prompt, the tool beside it. Only
+  // where the caller can draw the card, though — the tool writes nothing, the
+  // card is its whole effect, and mounting it on a surface with nowhere to draw
+  // one leaves the model telling the reader to confirm a card that was never
+  // shown.
   let prompt = "";
-  if (topicId === null) {
-    const list = topic.list ?? liveTopicChoices;
+  const onTopicCard = topic?.onCard;
+  if (topicId === null && onTopicCard) {
+    const list = topic?.list ?? liveTopicChoices;
     prompt = topicGuidance(await list());
-    tools.push(
-      buildProposeTopicTool({
-        threadId: env.thread.id,
-        topics: list,
-        onTopicCard: topic.onCard ?? (() => {}),
-      }),
-    );
+    tools.push(buildProposeTopicTool({ threadId: env.thread.id, topics: list, onTopicCard }));
   }
   if (topicId) {
     tools.push(

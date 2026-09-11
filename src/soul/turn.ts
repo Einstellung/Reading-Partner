@@ -34,8 +34,8 @@ export interface AssembleInput {
   sequenceIo?: SequenceIo;
   conversationIo?: ConversationIo;
   // Where a topic proposal is drawn, for a conversation that has no topic yet
-  // (soul/topic). A caller that passes nothing still gets the tool; what it
-  // loses is the card.
+  // (soul/topic). A caller that passes nothing mounts no propose_topic and
+  // carries no roster in its prompt: there would be no card to confirm.
   topic?: TopicProposalSurface;
 }
 

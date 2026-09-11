@@ -105,7 +105,6 @@ test("the turn mounts the five tools that write a talk, over the live outline", 
     "move_talk_segment",
     // A talk being rehearsed is in no topic yet, so the offer to file the
     // conversation rides it too (soul/topic).
-    "propose_topic",
     "read_conversation",
     "read_talk_outline",
     "remove_talk_segment",

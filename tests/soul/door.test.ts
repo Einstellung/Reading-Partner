@@ -9,7 +9,6 @@ import {
   doorLabel,
   listDoorUnits,
   openDoorTurn,
-  topicGuidance,
 } from "../../src/soul";
 import { resolvePalace } from "../../src/palace";
 import { threadKindOf, topicOfThreadFile, type ConversationIo } from "../../src/conversations";
@@ -67,12 +66,13 @@ test("a conversation at the door is filed under its own topic, or under none", a
   expect(await topicOfThreadFile("door-2026-09-10", io, { topicId: "topic-1" })).toBe("topic-1");
 });
 
-// Nothing on the desk, and no topic yet: the prompt is only what the soul
-// brings on its own — the offer to file the conversation (soul/topic).
+// Nothing on the desk, and no topic yet. The offer to file the conversation
+// waits for the screen that would show its card: nothing draws the door yet, so
+// the door passes no surface and the soul mounts no propose_topic (soul/self.ts).
 test("a turn at the door assembles over an empty desk", async () => {
   const turn = await openDoorTurn({ settings, threadId: "d1", date: "2026-09-10" });
-  expect(turn!.systemPrompt).toBe(topicGuidance([]));
-  expect(turn!.tools.map((t) => t.name)).toContain("propose_topic");
+  expect(turn!.systemPrompt).toBe("");
+  expect(turn!.tools.map((t) => t.name)).not.toContain("propose_topic");
   expect(turn!.messages).toEqual([]);
   expect(turn!.refusal).toBe("");
 });
