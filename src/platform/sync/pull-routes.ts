@@ -14,7 +14,7 @@
 
 import { dropAnnotationCache } from "../app/annotations";
 import { dropViewStateCache, STATE_FILE } from "../app/storage";
-import { dropThreadCache } from "../app/threads";
+import { dropThreadCache, threadFileKey } from "../app/threads";
 
 // A route without its handler: the half that can be stated up front, and the
 // half the coverage test reads.
@@ -57,14 +57,15 @@ export function dispatchPull(paths: readonly string[]): void {
   }
 }
 
-const THREADS_FILE = /^threads-(.+)\.json$/;
 const ANNOTATIONS_FILE = /^annotations-(.+)\.json$/;
 
 // What the route drops, taken as an argument: the stores are module singletons
 // over Tauri, and swapping a module out for a test poisons every other test file
 // sharing the worker (pitfall 119).
 export interface BookCacheDrops {
-  threads: (bookId: string) => void;
+  // By the store's key, not by a book id: the door's day is a conversation file
+  // too and is keyed door-<date> (platform/app/threads.ts names them all).
+  threads: (fileKey: string) => void;
   annotations: (bookId: string) => void;
   // reading-state.json is one map of every book's position rather than a file
   // per book, but it is the same problem: storage.ts keeps the map it last saw
@@ -88,11 +89,11 @@ export function bookCachePullRoute(drop: BookCacheDrops): PullRoute {
   return {
     id: "book-caches",
     matches: (path) =>
-      THREADS_FILE.test(path) || ANNOTATIONS_FILE.test(path) || path === STATE_FILE,
+      threadFileKey(path) !== null || ANNOTATIONS_FILE.test(path) || path === STATE_FILE,
     onPulled: (paths) => {
       for (const path of paths) {
-        const threads = THREADS_FILE.exec(path);
-        if (threads) drop.threads(threads[1]);
+        const threads = threadFileKey(path);
+        if (threads) drop.threads(threads);
         const annotations = ANNOTATIONS_FILE.exec(path);
         if (annotations) drop.annotations(annotations[1]);
         if (path === STATE_FILE) drop.viewStates();

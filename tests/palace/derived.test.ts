@@ -9,6 +9,8 @@
 
 import { expect, test } from "bun:test";
 import { PALACE, resolvePalace, rowsWhere } from "../../src/palace";
+import { THREAD_KINDS } from "../../src/conversations";
+import { threadFileKey, threadFileName } from "../../src/platform/app/threads";
 import { strategyFor } from "../../src/platform/sync/merge/contract";
 import { recordShape } from "../../src/platform/sync/merge/records";
 import { deadPathsFor, isDeadPath } from "../../src/platform/sync/dead-paths";
@@ -109,4 +111,29 @@ test("the paths the domain builds resolve to the row that restates them", () => 
     expect(`${path} -> ${hit?.row.kind ?? "nothing"}`).toBe(`${path} -> ${kind}`);
     expect(`${path} -> ${hit?.id ?? "nothing"}`).toBe(`${path} -> ${BOOK}`);
   }
+});
+
+// The thread store writes its own file names and cannot read the catalogue —
+// platform/app imports nothing — so the wrapper it puts around a store key is
+// written twice over: once as the rule in platform/app/threads.ts and once as
+// the pattern on each conversation row. Here is where the two are held
+// together, in both directions: a row that holds conversations must be a file
+// the store can name, and a row that holds none must be a file it never claims.
+test("a conversation row's sample is the file its store key names, and nothing else is", () => {
+  const conversations: ReadonlySet<string> = new Set(THREAD_KINDS);
+  const wrong: string[] = [];
+  for (const row of PALACE) {
+    for (const path of row.samples) {
+      const key = threadFileKey(path);
+      if (!conversations.has(row.kind)) {
+        if (key !== null) wrong.push(`${path}: ${row.kind} holds no conversation, keyed ${key}`);
+        continue;
+      }
+      if (key === null) wrong.push(`${path}: ${row.kind} holds conversations, and is not named`);
+      else if (threadFileName(key) !== path) {
+        wrong.push(`${path}: keyed ${key}, which the store writes to ${threadFileName(key)}`);
+      }
+    }
+  }
+  expect(wrong).toEqual([]);
 });

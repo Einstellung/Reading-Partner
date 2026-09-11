@@ -13,7 +13,11 @@ import {
 import { resolvePalace } from "../../src/palace";
 import { threadKindOf, topicOfThreadFile, type ConversationIo } from "../../src/conversations";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
-import { rebuildThreadStoreForTests, type Thread } from "../../src/platform/app/threads";
+import {
+  rebuildThreadStoreForTests,
+  threadFileName,
+  type Thread,
+} from "../../src/platform/app/threads";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 
 const settings: Settings = {
@@ -35,18 +39,18 @@ function seed(fileKey: string, threads: Record<string, Partial<Thread>>): void {
   for (const [id, t] of Object.entries(threads)) {
     full[id] = { id, annotationId: "", path: "", createdAt: 0, messages: [], ...t } as Thread;
   }
-  disk.files.set(`threads-${fileKey}.json`, JSON.stringify({ threads: full }, null, 2));
+  disk.files.set(threadFileName(fileKey), JSON.stringify({ threads: full }, null, 2));
 }
 
 test("a day at the door is one file, and the catalogue knows whose it is", () => {
   expect(doorKey("2026-09-10")).toBe("door-2026-09-10");
-  const hit = resolvePalace("threads-door-2026-09-10.json");
+  // The file is named for what it holds, not for the store that holds it: the
+  // key keeps the door's prefix and the store substitutes it on the way to disk.
+  expect(threadFileName(doorKey("2026-09-10"))).toBe("conversation-2026-09-10.json");
+  const hit = resolvePalace("conversation-2026-09-10.json");
   expect(hit?.row.kind).toBe(DOOR_KIND);
   expect(hit?.id).toBe("2026-09-10");
-  // The general reading row would otherwise swallow it, the way it would have
-  // swallowed the retell and info files.
-  expect(hit?.row.kind).not.toBe("reading-thread");
-  expect(threadKindOf("threads-door-2026-09-10.json")).toBe("conversation");
+  expect(threadKindOf("conversation-2026-09-10.json")).toBe("conversation");
 });
 
 test("the day is the reader's own, not UTC", () => {

@@ -2,7 +2,7 @@
 // is on the desk. They are standing at the door, not sitting at it — no book, no
 // briefing, no talk, just the person and whatever they came to say.
 //
-// One file per day (palace kind "conversation", threads-door-<date>.json), the
+// One file per day (palace kind "conversation", conversation-<date>.json), the
 // same ownership rule every other conversation follows: a book's conversation
 // lives in the book's file and dies with the book, a day's briefing lives in the
 // day's file, and a conversation that belongs to no material lives in the day it
@@ -36,9 +36,9 @@ export function doorDate(now: Date = new Date()): string {
 }
 
 /**
- * The thread store's key for a day at the door. The store names its files
- * threads-<key>.json and nothing else may name them, so the day is carried in
- * the key rather than in a file name of its own (see the report in docs/61).
+ * The thread store's key for a day at the door. The store writes it to
+ * conversation-<date>.json: the key keeps the prefix that says whose it is, and
+ * the file is named for what it holds (platform/app/threads.ts).
  */
 export function doorKey(date: string): string {
   return `door-${date}`;

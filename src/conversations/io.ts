@@ -38,20 +38,12 @@ export const appConversationIo: ConversationIo = {
 };
 
 /**
- * The store key of a thread file: "threads-<key>.json" without its wrapper, the
- * argument peekThreads takes. Null for a name that is not a thread file.
+ * The store key of a thread file and the file a store key names, the argument
+ * peekThreads takes and the way back. Taken from the store itself rather than
+ * restated here, because a wrapper spelled twice is a file one side cannot open.
  *
- * Taken off the filename rather than off the palace row's captured id, because
- * the specific rows capture what follows their own prefix — threads-retell-7
- * captures "7" — while the store is keyed by "retell-7".
+ * Read off the filename rather than off the palace row's captured id, which is
+ * what makes one rule enough: the specific rows capture what follows their own
+ * prefix — threads-retell-7 captures "7" — while the store is keyed "retell-7".
  */
-export function threadFileKey(name: string): string | null {
-  if (!name.startsWith("threads-") || !name.endsWith(".json")) return null;
-  const key = name.slice("threads-".length, -".json".length);
-  return key === "" ? null : key;
-}
-
-/** The file a store key names. The inverse of threadFileKey. */
-export function threadFileName(fileKey: string): string {
-  return `threads-${fileKey}.json`;
-}
+export { threadFileKey, threadFileName } from "../platform/app/threads";
