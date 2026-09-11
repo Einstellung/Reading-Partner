@@ -108,6 +108,8 @@ import {
   writeSidebarCollapsed,
 } from "./ui/components/base/shell-sidebar";
 import { activeNavFor, screenForNav } from "./ui/components/base/shell-nav";
+import { shellPlaces } from "./ui/components/base/places";
+import { registerPlaces } from "./desk";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import { clearScrollMemory } from "./ui/components/common/scroll-memory";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
@@ -1109,6 +1111,21 @@ export default function App() {
       : null;
 
   const inReader = !!title;
+
+  // Where the soul may take the reader (docs/67, ui/components/base/places.ts).
+  // The table is registered here because the moves are this shell's state; it
+  // is registered again whenever they change, which replaces the previous set
+  // rather than adding a second one.
+  useEffect(
+    () =>
+      registerPlaces(
+        shellPlaces({
+          goToScreen: setHomeScreen,
+          reader: { isOpen: () => inReader, close: closeReader },
+        }),
+      ),
+    [inReader, closeReader],
+  );
 
   // The one way in: the sidebar's bottom row, the reader's top bar, and the
   // notice that says no provider is configured. Which form Settings takes is
