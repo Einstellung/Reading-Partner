@@ -68,7 +68,7 @@ Lumen 不是在四个状态之间切画面，是演四段：看着你、抬头�
 - 查（`thinking` + attention 在 work）：眼睛落到桌面上，左右快扫两个来回（每跳 120 ms），然后一个停顿；眉毛还在。attention 回到 reader 就抬眼看回来。这一段可跳过：一轮里 attention 从没去过 work 就不演，桌上没事还低头看是假的。
 - 说（`speaking`）：眼睛看着读者，眉毛没了，嘴变小圆口，开口度跟电平走 0.15–1.0，用 orb.ts 那套快起慢落的平滑，静音后按 `SILENCE_HOLD_MS`（450 ms）保持再闭上，词间的停顿不会让嘴一开一合。火苗跟同一个信号抖。
 
-今天喂"说"这一段的是麦克风电平，不是 TTS 包络——45 里那条按句发 25 ms 窗 RMS 的包络还没接到 WebView。句首事件也还没有，所以没做起句的小弹跳。`attention` 同理：会话只报四个 phase，SoulIntent 还没接，实机跑不到"查"这一段，只有 harness（`window.__orbStub.attention`）能驱动。
+今天喂"说"这一段的是麦克风电平，不是 TTS 包络——45 里那条按句发 25 ms 窗 RMS 的包络还没接到 WebView。句首事件也还没有，所以没做起句的小弹跳。`attention` 由这一轮的工具调用驱动：有工具在飞就是 work，全部返回后按 600 ms 最短停留加 250 ms 去抖回 reader（`src/ui/components/lumen/attention.ts`），legion run 还没接。SoulIntent 里模型自报的那个 `attention` 字段仍是将来的事。
 
 ## 意图
 

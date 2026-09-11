@@ -23,6 +23,7 @@
 //    transcript (the note is not something the reader said), and the reply it
 //    produces is recorded and spoken like any other.
 
+import type { TurnActivity } from "../../ai/activity";
 import { VOICE_OPENING_KICKOFF } from "./call";
 import type { ConversationEvent, ConversationReason, ConversationSource } from "./conversation";
 import {
@@ -61,6 +62,12 @@ export interface VoiceCallModel {
     turn: number;
     text: string;
     onDelta: (chunk: string) => void;
+    /**
+     * A tool of this turn went out or came back. Passed in the way `onDelta` is,
+     * so the driver sees only its own turns' activity and a turn it has dropped
+     * stops reporting.
+     */
+    onActivity: (event: TurnActivity) => void;
     signal: AbortSignal;
   }): Promise<void>;
 }
@@ -106,6 +113,12 @@ export interface VoiceCall {
    */
   subscribeLevel(cb: (level: number) => void): () => void;
   subscribeError(cb: (error: VoiceCallError | null) => void): () => void;
+  /**
+   * The tool calls the call's turns make (docs/66 "四段"): the one signal that
+   * says the soul is looking at the desk rather than at the reader. Starts are
+   * balanced by ends even when the turn that opened them is dropped.
+   */
+  subscribeActivity(cb: (event: TurnActivity) => void): () => void;
   snapshot(): VoiceCallSnapshot;
   /** Resolves once every queued effect has been performed. For tests and stop(). */
   settled(): Promise<void>;
@@ -143,6 +156,7 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
   const phaseListeners = new Set<(p: SessionPhase) => void>();
   const levelListeners = new Set<(v: number) => void>();
   const errorListeners = new Set<(e: VoiceCallError | null) => void>();
+  const activityListeners = new Set<(e: TurnActivity) => void>();
 
   // A fresh machine per call. A restart is a new call and not a resumption
   // (docs/33), and the native side numbers its turns from 1 again — a machine
@@ -157,6 +171,10 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
   // settles after being dropped is a stream that was already in the air and is
   // not fed back.
   const asks = new Map<number, AbortController>();
+  // The tools each turn has open. A turn dropped mid-tool would otherwise leave
+  // a start with no end, and the body reading this counts one against the other
+  // — Lumen would go on staring at the desk for the rest of the call.
+  const openTools = new Map<number, string[]>();
 
   let tail: Promise<void> = Promise.resolve();
 
@@ -190,6 +208,32 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
     for (const cb of levelListeners) cb(v);
   }
 
+  function emitActivity(e: TurnActivity): void {
+    for (const cb of activityListeners) cb(e);
+  }
+
+  function noteActivity(turn: number, e: TurnActivity): void {
+    const open = openTools.get(turn) ?? [];
+    if (e.phase === "start") {
+      open.push(e.name);
+      openTools.set(turn, open);
+    } else {
+      const at = open.lastIndexOf(e.name);
+      if (at < 0) return;
+      open.splice(at, 1);
+      if (open.length === 0) openTools.delete(turn);
+    }
+    emitActivity(e);
+  }
+
+  /** Close whatever this turn still has out. A no-op for a turn with nothing open. */
+  function closeTurn(turn: number): void {
+    const open = openTools.get(turn);
+    if (!open) return;
+    openTools.delete(turn);
+    for (const name of open) emitActivity({ kind: "tool", name, phase: "end" });
+  }
+
   function startAsk(turn: number, text: string): void {
     const controller = new AbortController();
     asks.set(turn, controller);
@@ -202,14 +246,19 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
         onDelta: (chunk) => {
           if (live()) feed(() => session.delta(turn, chunk));
         },
+        onActivity: (e) => {
+          if (live()) noteActivity(turn, e);
+        },
       })
       .then(
         () => {
+          closeTurn(turn);
           if (!live()) return;
           asks.delete(turn);
           feed(() => session.done(turn));
         },
         (e) => {
+          closeTurn(turn);
           if (!live()) return;
           asks.delete(turn);
           console.error("voice call model turn failed", e);
@@ -230,6 +279,7 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       case "abort":
         asks.get(e.turn)?.abort();
         asks.delete(e.turn);
+        closeTurn(e.turn);
         break;
       case "speak-begin":
         utterance = await deps.bridge.speakBegin();
@@ -305,7 +355,10 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
     if (!running) return;
     running = false;
     emitLevel(0);
-    for (const c of asks.values()) c.abort();
+    for (const [t, c] of asks) {
+      c.abort();
+      closeTurn(t);
+    }
     asks.clear();
     const said = typeof reason === "string" ? ENDED[reason] : undefined;
     if (said) setError({ reason: reason as ConversationReason, message: said });
@@ -371,7 +424,10 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       const at = session.snapshot().turn;
       feed(() => session.event({ kind: "state", turn: at, running: false, reason: "closed" }));
       await settled();
-      for (const c of asks.values()) c.abort();
+      for (const [t, c] of asks) {
+        c.abort();
+        closeTurn(t);
+      }
       asks.clear();
       emitLevel(0);
       await deps.bridge.stop();
@@ -395,6 +451,13 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       errorListeners.add(cb);
       return () => {
         errorListeners.delete(cb);
+      };
+    },
+
+    subscribeActivity(cb) {
+      activityListeners.add(cb);
+      return () => {
+        activityListeners.delete(cb);
       };
     },
 
