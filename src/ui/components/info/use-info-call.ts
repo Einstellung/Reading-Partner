@@ -62,7 +62,7 @@ import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { navigateAway } from "../chat/call-layout";
-import { refusalRow, replayableHistory } from "../../../ai/turn-rows";
+import { appendRoundBreak, refusalRow, replayableHistory } from "../../../ai/turn-rows";
 import {
   cardRow,
   findCardPart,
@@ -579,10 +579,12 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         full += t;
         patchLast({ text: full, streaming: true });
       },
+      // What this round wrote before calling the tool stays on screen, with a
+      // blank line opened under it for the next round (docs/pitfall/291).
       onToolStart: (info) => {
-        full = "";
+        full = appendRoundBreak(full);
         patchLast((m) => ({
-          text: "",
+          text: full,
           tools: appendRunningTool(m.tools, info.name, companionToolStatusLabel(info.name, info.args)),
         }));
       },
@@ -590,8 +592,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         patchLast((m) => ({
           tools: resolveToolStatus(m.tools, info.name, info.isError) ?? [...(m.tools ?? [])],
         })),
-      onDone: (text) => {
-        const finalText = text || full;
+      onDone: (text, _assistant, turnText) => {
+        const finalText = turnText || text || full;
         patchLast((m) => ({ text: finalText, streaming: false, tools: (m.tools ?? []).filter((t) => t.state === "error") }));
         setStreaming(false);
         abortRef.current = null;

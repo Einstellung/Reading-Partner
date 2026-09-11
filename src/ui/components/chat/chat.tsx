@@ -668,8 +668,10 @@ function TypingDots() {
 	);
 }
 
-// Tool-call trace above a streaming AI reply (M6): a running tool is a subdued
-// line ending in an ellipsis; a failed one takes --destructive, the app's one red.
+// Tool-call trace under what a streaming AI reply has written so far (M6): a
+// running tool is a subdued line ending in an ellipsis; a failed one takes
+// --destructive, the app's one red. The reply resumes under it in the next round
+// (docs/pitfall/291), and a successful call's line is gone by then.
 function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) {
 	// An arbitrary font size brings no line height of its own, where text-sm did.
 	const text = size === 'lg' ? 'text-[calc(0.875rem*var(--chat-scale,1))] leading-[1.43]' : 'text-xs';
@@ -862,7 +864,6 @@ const MessageBubble = memo(function MessageBubble({
 	}
 	return (
 		<div ref={rowRef} className="group flex flex-col gap-2">
-			{trace}
 			{/* data-reply-ts is the marker a pen stroke resolves against — the
 			    predicate (mayMarkReply), written where it can be read back off the
 			    DOM. On the prose element and not on the row: the row also holds the
@@ -885,6 +886,10 @@ const MessageBubble = memo(function MessageBubble({
 					<Markdown text={textPart.text} />
 				</ChatMarkLayer>
 			</div>
+			{/* Under the words, not above them: what the round wrote before calling a
+			    tool stays where the reader read it, and the next round continues
+			    below this line (docs/pitfall/291). */}
+			{trace}
 			{/* After the answer, before the copy affordance: the notice belongs to the
 			    reply, but Copy takes the model's words only. */}
 			{!streaming && notice && <BudgetNotice text={notice} size={size} />}

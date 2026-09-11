@@ -167,7 +167,7 @@ test("what a turn writes to a closed-over thread is dropped", () => {
   expect(next).toBe(open);
 });
 
-test("a tool starting takes the inter-round preamble with it", () => {
+test("a tool starting keeps what the round wrote and opens a line under it", () => {
   const open = call({ messages: [ai(1, "let me look", { streaming: true })] });
   const next = reduce(open, {
     type: "row-changed",
@@ -176,11 +176,73 @@ test("a tool starting takes the inter-round preamble with it", () => {
     change: { kind: "tool-start", name: "read_page", label: "Reading p. 4" },
   });
 
-  expect(next?.messages[0].text).toBe("");
+  expect(next?.messages[0].text).toBe("let me look\n\n");
   expect(next?.messages[0].tools).toEqual([
     { name: "read_page", label: "Reading p. 4", state: "running" },
   ]);
   expect(next?.messages[0].streaming).toBe(true);
+});
+
+// The shape the reader watches across a tool round (docs/pitfall/291): the first
+// paragraph stays put, the status line is drawn under it while the tool runs, and
+// the second paragraph continues below. The row is text plus a trace, in that
+// order (ui/components/chat/chatParts.ts), so where the line is drawn is the
+// trace's own place and not a third field.
+test("a second round continues under the first, one blank line apart", () => {
+  const changes: RowChange[] = [
+    { kind: "delta", chunk: "Let me check p. 4." },
+    { kind: "tool-start", name: "read_page", label: "Reading p. 4" },
+  ];
+  let open = call({ messages: [ai(1, "", { streaming: true })] });
+  for (const change of changes) {
+    open = reduce(open, { type: "row-changed", threadId: "t1", ts: 1, change })!;
+  }
+  // While the tool runs: the words, then the one status line.
+  expect(open.messages[0].text).toBe("Let me check p. 4.\n\n");
+  expect(open.messages[0].tools?.map((t) => t.state)).toEqual(["running"]);
+
+  const rest: RowChange[] = [
+    { kind: "tool-end", name: "read_page", isError: false },
+    { kind: "delta", chunk: "The page argues" },
+    { kind: "delta", chunk: " the retina is not a camera." },
+  ];
+  for (const change of rest) {
+    open = reduce(open, { type: "row-changed", threadId: "t1", ts: 1, change })!;
+  }
+  expect(open.messages[0].text).toBe(
+    "Let me check p. 4.\n\nThe page argues the retina is not a camera.",
+  );
+  expect(open.messages[0].tools).toEqual([]);
+
+  // The answer the loop hands over is the same two paragraphs, so nothing on
+  // screen moves when the turn lands.
+  const landed = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "answer", text: open.messages[0].text },
+  });
+  expect(landed?.messages[0].text).toBe(open.messages[0].text);
+  expect(landed?.messages[0].streaming).toBeUndefined();
+});
+
+// Two tools in one round, and a round that called a tool without writing: one
+// gap, wherever the status lines pile up.
+test("the gap between rounds is opened once", () => {
+  let open = call({ messages: [ai(1, "first", { streaming: true })] });
+  const changes: RowChange[] = [
+    { kind: "tool-start", name: "read_page", label: "Reading p. 4" },
+    { kind: "tool-start", name: "search", label: "Searching" },
+    { kind: "tool-end", name: "read_page", isError: false },
+    { kind: "tool-end", name: "search", isError: false },
+    { kind: "tool-start", name: "read_page", label: "Reading p. 5" },
+    { kind: "tool-end", name: "read_page", isError: false },
+    { kind: "delta", chunk: "second" },
+  ];
+  for (const change of changes) {
+    open = reduce(open, { type: "row-changed", threadId: "t1", ts: 1, change })!;
+  }
+  expect(open.messages[0].text).toBe("first\n\nsecond");
 });
 
 test("a tool that finished comes off the trace, and a failed one stays", () => {
