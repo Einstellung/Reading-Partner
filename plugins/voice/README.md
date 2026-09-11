@@ -347,7 +347,7 @@ What the playback path promises:
 The full-duplex half (`docs/33`, M-voice-3; `ConversationRun.swift`): the
 microphone stays open while the companion speaks, and who is talking is decided
 on the phone. The webview's side of the contract is
-`src/info/briefer/conversation.ts`; what follows is the native side of it.
+`src/soul/voice/conversation.ts`; what follows is the native side of it.
 
 | command | arguments | answer |
 |---|---|---|
@@ -396,7 +396,7 @@ turn a `speech-stop` has taken.
 | `{ kind: "envelope", turn, utterance, sentence, startsInMs, windowMs, values }` | one sentence was queued, with the shape it will be heard in: `values` is 0..1 an RMS window at a time, `windowMs` is 25, and `startsInMs` is how long after this event its first sample is heard. For the companion's mouth (docs/45); nothing in the call's own state reads it |
 
 The four barge-in kinds are `VoiceTurn.swift`'s verdicts, and that file is a
-line-for-line port of `src/info/briefer/turn-detect.ts`, defaults included.
+line-for-line port of `src/soul/voice/turn-detect.ts`, defaults included.
 The machine lives in `SpeechOut`, on the player's own serial queue: the tap
 computes one dB number per buffer on the audio thread and dispatches it with its
 timestamp, and the step, the act on the player (volume down, `stop()` with the

@@ -1,5 +1,5 @@
 // Who is talking, decided from one number per audio buffer: the Swift half of
-// src/info/briefer/turn-detect.ts, transliterated line for line.
+// src/soul/voice/turn-detect.ts, transliterated line for line.
 //
 // The TypeScript file is the specification and tests/info/turn-detect.test.ts is
 // its proof, against fixtures recorded on this phone. Nothing here is allowed to

@@ -13,13 +13,13 @@
 import { beforeEach, expect, test } from "bun:test";
 import { briefingThreadId } from "../../../src/info/briefer/anchors";
 import { infoBookId } from "../../../src/info/briefer/call";
-import type { ConversationEvent, ConversationSource } from "../../../src/info/briefer/conversation";
+import type { ConversationEvent, ConversationSource } from "../../../src/soul/voice/conversation";
 import {
   KICKOFF_TURN,
   createVoiceCall,
   type VoiceCall,
   type VoiceCallModel,
-} from "../../../src/info/briefer/voice-call";
+} from "../../../src/soul/voice/voice-call";
 import { threadTranscript } from "../../../src/info/briefer/voice-call-live";
 import {
   createThread,

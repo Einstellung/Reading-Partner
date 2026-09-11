@@ -1,6 +1,9 @@
 // Reading tables for the speech normalizer (docs/33). Data only: adding a row
 // never touches normalize.ts.
 //
+// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// briefing is one caller, not the owner.
+//
 // Every row here is empirical. No TTS vendor documents how its voice reads a
 // token — the SiliconFlow CosyVoice2 endpoint has neither SSML nor a
 // normalization switch — so a row gets written when a briefing is heard read

@@ -1,10 +1,10 @@
 // The consistency check between the two turn detectors: the one in
-// src/info/briefer/turn-detect.ts, which the 29 tests are written against, and
+// src/soul/voice/turn-detect.ts, which the 29 tests are written against, and
 // the transliteration in plugins/voice/ios/Sources/VoiceTurn.swift, which is
 // what actually decides who is talking on the phone.
 //
 // One command per case. The levels are the ones the earlier probe recorded on
-// this device (src/info/briefer/turn-replay.ts holds them), the device runs
+// this device (src/soul/voice/turn-replay.ts holds them), the device runs
 // them through the ported machine, and the event streams are compared position
 // by position. Nobody has to be in front of the phone, nothing plays, nothing
 // listens: it is arithmetic on both sides, so it can run on every build.
@@ -18,13 +18,13 @@ import { writeTextAtomic } from "../platform/app/atomic-fs";
 import {
   resolveTurnDetectConfig,
   type TurnDetectConfig,
-} from "../info/briefer/turn-detect";
+} from "../soul/voice/turn-detect";
 import {
   diffReplay,
   turnReplayCases,
   type ReplayCase,
   type ReplayEvent,
-} from "../info/briefer/turn-replay";
+} from "../soul/voice/turn-replay";
 
 export const TURN_REPLAY_DIR = "turn";
 export const TURN_REPLAY_FILE = "turn/turn-replay.json";

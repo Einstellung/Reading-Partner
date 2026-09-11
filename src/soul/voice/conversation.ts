@@ -4,6 +4,9 @@
 // transliterated, or iOS 26's own SpeechDetector, whichever the probe settles
 // on — and announces the verdicts here. The webview never sees a frame.
 //
+// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// briefing is one caller, not the owner.
+//
 // Its own event name rather than a fifth `dictation` kind, for the reason the
 // plugin's README states: the dictation reducer has no default branch, its four
 // kinds are the whole vocabulary, and hold-to-talk is already on TestFlight. The

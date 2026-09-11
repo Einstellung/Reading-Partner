@@ -1101,7 +1101,7 @@ final class TurnProbe {
 
 // MARK: - The turn detector replay
 //
-// VoiceTurn.swift is a transliteration of src/info/briefer/turn-detect.ts, and
+// VoiceTurn.swift is a transliteration of src/soul/voice/turn-detect.ts, and
 // this is what makes "transliteration" a checkable claim rather than a promise:
 // the harness sends the level sequences the earlier probe recorded on this
 // phone, the device runs them through the ported machine, and

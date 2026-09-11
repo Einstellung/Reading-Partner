@@ -18,7 +18,7 @@
 
 import { clampLevel } from "../orb/orb";
 import type { LumenAct } from "./lumen-motion";
-import type { SpeechEnvelope } from "../../../info/briefer/conversation";
+import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 
 /**
  * Which of the two signals the body is drawn from this frame. Speaking reads

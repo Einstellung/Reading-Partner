@@ -1,5 +1,5 @@
 // The orb's half of the voice call (docs/45, docs/33 M-voice-3). Everything
-// that decides anything is in info/briefer/voice-call.ts and is tested
+// that decides anything is in soul/voice/voice-call.ts and is tested
 // without React; what is left here is a component's lifetime around it — build
 // the call on the first start, tear it down on unmount, and turn two of its
 // three streams into state.
@@ -12,9 +12,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createLiveVoiceCall, NO_VOICE_CALL } from "../../../info/briefer/voice-call-live";
 import type { BriefingControl } from "../../../info/briefer/companion-live";
-import type { SessionPhase } from "../../../info/briefer/voice-session";
-import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../info/briefer/voice-call";
-import type { SpeechEnvelope } from "../../../info/briefer/conversation";
+import type { SessionPhase } from "../../../soul/voice/voice-session";
+import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../soul/voice/voice-call";
+import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 import type { Briefing } from "../../../info/boxes/types";
 import type { TurnActivity } from "../../../ai/activity";
 import { useAttention } from "../lumen/use-attention";

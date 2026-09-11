@@ -6,15 +6,15 @@
 // held to: the spans must not depend on how the stream was chunked, because the
 // chunk boundaries are the provider's business and change run to run.
 //
-// Run: bun test tests/info/briefer/speech-source.test.ts
+// Run: bun test tests/soul/voice/speech-source.test.ts
 
 import { expect, test } from "bun:test";
-import { normalizeForSpeech } from "../../../src/info/briefer/speech/normalize";
+import { normalizeForSpeech } from "../../../src/soul/voice/speech/normalize";
 import {
   createSourcedSplitter,
   createSpeechSplitter,
   type SourcedSentence,
-} from "../../../src/info/briefer/speech/split";
+} from "../../../src/soul/voice/speech/split";
 
 function stream(chunks: string[]): SourcedSentence[] {
   const splitter = createSourcedSplitter();

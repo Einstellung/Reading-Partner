@@ -12,7 +12,7 @@ TTS 前端的单位识别按 token 走，不按字符间距走：数字 token �
 
 把数字先换成中文数字，`十八 A`。数字不再是数字 token，单位规则就不触发了。两个音色、Qwen 和 SenseVoice 双 ASR 交叉，全部回读成 `18A`，没有一次出现安培。
 
-`normalizeForSpeech` 里不用为此专门加规则：第 17 步本来就把所有数字读成中文，这条只是要求它排在字母数字拆分之后——现在的顺序已经是这样，`tests/info/briefer/speech-normalize.test.ts` 里钉了一条测试防止顺序被改回去。
+`normalizeForSpeech` 里不用为此专门加规则：第 17 步本来就把所有数字读成中文，这条只是要求它排在字母数字拆分之后——现在的顺序已经是这样，`tests/info/briefer/speech-normalize.test.ts`（今天在 `tests/soul/voice/speech-normalize.test.ts`）里钉了一条测试防止顺序被改回去。
 
 ## 对照
 

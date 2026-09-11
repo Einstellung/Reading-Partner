@@ -3,6 +3,9 @@
 // sentences, each sentence is spoken as it is finished, and the user can talk
 // over any of it.
 //
+// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// briefing is one caller, not the owner.
+//
 // A state machine and nothing else. It touches no React, no DOM and no
 // transport: events and model callbacks go in, a list of effects comes out, and
 // the caller performs them. That is what lets the whole call run on a desktop

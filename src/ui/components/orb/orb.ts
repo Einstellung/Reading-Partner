@@ -16,7 +16,7 @@
 
 // The payload of the envelope subscription below, declared where the call
 // declares it. Only the type crosses; nothing here calls the plugin.
-import type { SpeechEnvelope } from "../../../info/briefer/conversation";
+import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 
 export type { SpeechEnvelope };
 

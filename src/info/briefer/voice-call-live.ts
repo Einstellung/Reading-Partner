@@ -31,14 +31,14 @@ import { loadSources } from "../sources/source-store";
 import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
 import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
-import { nativeConversation } from "./conversation";
+import { nativeConversation } from "../../soul/voice/conversation";
 import { withCompanionTools } from "./desk";
 import {
   createVoiceCall,
   type VoiceCall,
   type VoiceCallModel,
   type VoiceCallTranscript,
-} from "./voice-call";
+} from "../../soul/voice/voice-call";
 import type { AgentTool } from "../../ai/agent";
 import type { ProviderId } from "../../ai/providers";
 import type { Briefing } from "../boxes/types";
