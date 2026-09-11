@@ -16,6 +16,18 @@ export {
 } from "./door";
 export { GO_TO_TOOL, buildPlaceTools, placesDescription } from "./places";
 export {
+  LIST_CAP,
+  appCatalogueIo,
+  buildCatalogueTools,
+  forgetCatalogue,
+  readCatalogue,
+  shownRows,
+  type Catalogue,
+  type CatalogueEntry,
+  type CatalogueIo,
+  type CatalogueKind,
+} from "./catalogue";
+export {
   EMPTY_SEQUENCE,
   SEQUENCE_FILE,
   SEQUENCE_VERSION,

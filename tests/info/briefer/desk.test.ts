@@ -150,6 +150,8 @@ test("the tools come from the briefing item alone", async () => {
     "statement_write",
     "search_conversations",
     "read_conversation",
+    "list_palace",
+    "list_kind",
     "observation_search",
     "observation_read",
     "observation_update",

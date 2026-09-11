@@ -96,3 +96,32 @@ test("a descend rule matches the samples of the row that declares it", () => {
   }
   expect(wrong).toEqual([]);
 });
+
+// The sentence a row is shown to the soul by (docs/67). The catalogue walk
+// resolves a path and lists what the row's id names, so a row the soul may see
+// has to be one of two things: a file with one name, whose records inside it are
+// the items, or a name that captures an id. A row matching a subtree with no id
+// would be counted and never nameable.
+test("every kind the soul is shown is one the catalogue can list", () => {
+  const unlistable: string[] = [];
+  for (const row of PALACE) {
+    if (row.about === undefined) continue;
+    const claims = row.samples.map((path) => resolvePalace(path));
+    const named =
+      row.id === "fixed"
+        ? claims.every((hit) => hit?.id === null)
+        : claims.every((hit) => typeof hit?.id === "string" && hit.id !== "");
+    if (!named) unlistable.push(row.kind);
+  }
+  expect(unlistable).toEqual([]);
+});
+
+// What the soul is shown is the reader's own material and never a derived one.
+// A cache, a marker and a device ledger are this device's bookkeeping: telling
+// the soul they exist would invite it to talk about them.
+test("only what travels as the reader's data is shown to the soul", () => {
+  const derived = PALACE.filter((r) => r.about !== undefined && r.sync !== "data").map(
+    (r) => r.kind,
+  );
+  expect(derived).toEqual([]);
+});
