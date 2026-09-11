@@ -67,6 +67,13 @@ struct ConversationEvent: Encodable {
     var utterance: UInt64? = nil
     var cut: SpeechCut? = nil
     var range: SpeechRange? = nil
+    /// The `envelope` kind's own four. `sentence` is the index within the turn,
+    /// `startsInMs` how long after this event the sentence is heard, `windowMs`
+    /// what one value covers and `values` the 0..1 shape itself.
+    var sentence: Int? = nil
+    var startsInMs: Double? = nil
+    var windowMs: Double? = nil
+    var values: [Double]? = nil
 }
 
 /// Where a barge-in cut the companion off, as `SpeechPosition` spells it for
@@ -277,6 +284,10 @@ final class ConversationRun {
             verdict: { [weak self] verdict in self?.verdict(verdict) },
             spoken: { [weak self] utterance, reason in
                 self?.spoken(utterance: utterance, reason: reason)
+            },
+            envelope: { [weak self] utterance, index, startsInMs, values in
+                self?.envelope(
+                    utterance: utterance, index: index, startsInMs: startsInMs, values: values)
             })
         NSLog("RP-CALL listening at %@", Recogniser.describe(front.format))
     }
@@ -322,7 +333,7 @@ final class ConversationRun {
         }
         observers = []
 
-        SpeechOut.shared.setConversation(nil, verdict: nil, spoken: nil)
+        SpeechOut.shared.setConversation(nil, verdict: nil, spoken: nil, envelope: nil)
 
         let wasOpened: Bool
         stopLock.lock()
@@ -581,6 +592,16 @@ final class ConversationRun {
     private func spoken(utterance: UInt64, reason: String) {
         send(ConversationEvent(
             kind: "spoken", turn: currentTurn(), reason: reason, utterance: utterance))
+    }
+
+    /// One sentence's shape, from the player, ahead of it being heard (docs/45).
+    /// Sent on this event rather than on `speech` for the reason `spoken` is:
+    /// one stream is the whole call, and this reducer has a default branch.
+    private func envelope(utterance: UInt64, index: Int, startsInMs: Double, values: [Double]) {
+        send(
+            ConversationEvent(
+                kind: "envelope", turn: currentTurn(), utterance: utterance, sentence: index,
+                startsInMs: startsInMs, windowMs: SpeechOut.envelopeWindowMs, values: values))
     }
 
     /// Settle now rather than in 2.6 s. Bounded, because a turn whose end never

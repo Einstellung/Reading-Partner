@@ -25,7 +25,13 @@
 
 import type { TurnActivity } from "../../ai/activity";
 import { VOICE_OPENING_KICKOFF } from "./call";
-import type { ConversationEvent, ConversationReason, ConversationSource } from "./conversation";
+import { speechEnvelope } from "./conversation";
+import type {
+  ConversationEvent,
+  ConversationReason,
+  ConversationSource,
+  SpeechEnvelope,
+} from "./conversation";
 import {
   createVoiceSession,
   type SessionEffect,
@@ -112,6 +118,14 @@ export interface VoiceCall {
    * an animation frame (docs/45) and a level event arrives many times a second.
    */
   subscribeLevel(cb: (level: number) => void): () => void;
+  /**
+   * The sentence the companion is about to say, as a shape (docs/45). A
+   * callback for the reason the level is one, and `null` for the one thing a
+   * queue of future sentences has to be told: none of them will be heard, so
+   * whatever is still queued is dropped. A barge-in and the end of a call both
+   * send it.
+   */
+  subscribeEnvelope(cb: (envelope: SpeechEnvelope | null) => void): () => void;
   subscribeError(cb: (error: VoiceCallError | null) => void): () => void;
   /**
    * The tool calls the call's turns make (docs/66 "四段"): the one signal that
@@ -134,6 +148,7 @@ export interface VoiceCallView {
   start: () => void;
   stop: () => void;
   subscribeLevel: (cb: (level: number) => void) => () => void;
+  subscribeEnvelope: (cb: (envelope: SpeechEnvelope | null) => void) => () => void;
 }
 
 const ENDED: Partial<Record<ConversationReason, string>> = {
@@ -155,6 +170,7 @@ function finite(v: unknown): number | null {
 export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
   const phaseListeners = new Set<(p: SessionPhase) => void>();
   const levelListeners = new Set<(v: number) => void>();
+  const envelopeListeners = new Set<(e: SpeechEnvelope | null) => void>();
   const errorListeners = new Set<(e: VoiceCallError | null) => void>();
   const activityListeners = new Set<(e: TurnActivity) => void>();
 
@@ -232,6 +248,10 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
     if (!open) return;
     openTools.delete(turn);
     for (const name of open) emitActivity({ kind: "tool", name, phase: "end" });
+  }
+
+  function emitEnvelope(e: SpeechEnvelope | null): void {
+    for (const cb of envelopeListeners) cb(e);
   }
 
   function startAsk(turn: number, text: string): void {
@@ -378,6 +398,17 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       const v = finite(e.value);
       if (v !== null) emitLevel(v);
     }
+    // Off the queue for the same reason, and for one more: an envelope says
+    // when its sentence starts counting from the moment it arrived, so a hop
+    // through the effect queue is a mouth that late.
+    if (e?.kind === "envelope") {
+      const envelope = speechEnvelope(e);
+      if (envelope !== null) emitEnvelope(envelope);
+    }
+    // The player is already stopped on the native side, so every sentence
+    // queued ahead of the cut is a sentence nobody will hear.
+    if (e?.kind === "speech-stop") emitEnvelope(null);
+    if (e?.kind === "state" && e.running === false) emitEnvelope(null);
     enqueue(async () => {
       await perform(session.event(e));
       if (e?.kind !== "state" || typeof e.running !== "boolean") return;
@@ -430,6 +461,7 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       }
       asks.clear();
       emitLevel(0);
+      emitEnvelope(null);
       await deps.bridge.stop();
     },
 
@@ -444,6 +476,13 @@ export function createVoiceCall(deps: VoiceCallDeps): VoiceCall {
       levelListeners.add(cb);
       return () => {
         levelListeners.delete(cb);
+      };
+    },
+
+    subscribeEnvelope(cb) {
+      envelopeListeners.add(cb);
+      return () => {
+        envelopeListeners.delete(cb);
       };
     },
 

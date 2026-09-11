@@ -17,6 +17,9 @@ import {
 	BLINK_TOTAL_MS,
 	ACT,
 	ACT_EASE_MS,
+	BOUNCE_MS,
+	BOUNCE_DIP,
+	bounceScaleY,
 	BREATH_PERIODS_MS,
 	GAZE_REACH,
 	GAZE_K_ACT,
@@ -486,4 +489,19 @@ test("every field a frame writes is a finite number", () => {
 			expect(v.core).toBeLessThanOrEqual(1);
 		}
 	}
+});
+
+test("the sentence bounce leaves 1 and comes back to 1", () => {
+	expect(bounceScaleY(-1)).toBe(1);
+	expect(bounceScaleY(0)).toBeCloseTo(1, 6);
+	expect(bounceScaleY(BOUNCE_MS)).toBe(1);
+	expect(bounceScaleY(BOUNCE_MS + 500)).toBe(1);
+	expect(bounceScaleY(Number.NaN)).toBe(1);
+	// Down first, and by the stated depth at the bottom.
+	expect(bounceScaleY(BOUNCE_MS * 0.25)).toBeCloseTo(1 - BOUNCE_DIP, 6);
+	// Then up, and less far than it went down: a body settling, not a ball.
+	expect(bounceScaleY(BOUNCE_MS * 0.75)).toBeGreaterThan(1);
+	expect(bounceScaleY(BOUNCE_MS * 0.75) - 1).toBeLessThan(BOUNCE_DIP);
+	// Reduced motion has no bounce at all.
+	expect(bounceScaleY(BOUNCE_MS * 0.25, true)).toBe(1);
 });

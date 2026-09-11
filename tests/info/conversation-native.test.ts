@@ -13,6 +13,7 @@ import {
   EMPTY_CONVERSATION,
   applyConversationEvent,
   createNativeConversation,
+  speechEnvelope,
   type ConversationBridge,
   type ConversationEvent,
   type ConversationState,
@@ -258,4 +259,49 @@ test("a stop with no position still ends the duck", () => {
   ]);
   expect(after.ducked).toBe(false);
   expect(after.cut).toBeNull();
+});
+
+test("an envelope is taken apart only when every number is one", () => {
+  const good = {
+    kind: "envelope",
+    turn: 2,
+    utterance: 7,
+    sentence: 3,
+    startsInMs: 240,
+    windowMs: 25,
+    values: [0, 0.5, 1],
+  };
+  expect(speechEnvelope(good)).toEqual({
+    utterance: 7,
+    sentence: 3,
+    startsInMs: 240,
+    windowMs: 25,
+    values: [0, 0.5, 1],
+  });
+
+  // Out of range is clamped; not a number at all is refused, because one NaN
+  // through the mouth's smoother never comes back out.
+  expect(speechEnvelope({ ...good, values: [-1, 2] })?.values).toEqual([0, 1]);
+  expect(speechEnvelope({ ...good, values: [0.5, "loud"] })).toBeNull();
+  expect(speechEnvelope({ ...good, values: [] })).toBeNull();
+  expect(speechEnvelope({ ...good, windowMs: 0 })).toBeNull();
+  expect(speechEnvelope({ ...good, startsInMs: Number.NaN })).toBeNull();
+  expect(speechEnvelope({ ...good, sentence: undefined })).toBeNull();
+  expect(speechEnvelope(null)).toBeNull();
+});
+
+test("an envelope counts its turn and changes nothing else", () => {
+  const before: ConversationState = { ...EMPTY_CONVERSATION, turn: 1, level: 0.4 };
+  const after = applyConversationEvent(before, {
+    kind: "envelope",
+    turn: 2,
+    utterance: 9,
+    sentence: 0,
+    startsInMs: 0,
+    windowMs: 25,
+    values: [1],
+  });
+  expect(after.turn).toBe(2);
+  expect(after.level).toBe(0.4);
+  expect({ ...after, turn: 1 }).toEqual(before);
 });

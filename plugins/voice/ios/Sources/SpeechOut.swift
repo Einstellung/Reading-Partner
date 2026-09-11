@@ -173,6 +173,10 @@ final class SpeechOut {
     /// goes. Both called on `queue`.
     private var onVerdict: ((TurnVerdict) -> Void)?
     private var onSpoken: ((UInt64, String) -> Void)?
+    /// One sentence's envelope, handed over as it is queued: the turn, the
+    /// sentence's index, how long until the listener hears its first sample,
+    /// and the 0..1 values themselves.
+    private var onEnvelope: ((UInt64, Int, Double, [Double]) -> Void)?
     /// The two volumes a call switches between. `set_speech_volume` writes
     /// whichever one the call is in — the webview sends its duck value on the
     /// duck event and its full value on the resume, so the values train
@@ -250,6 +254,31 @@ final class SpeechOut {
     /// 2400 frames at 24 kHz is 100 ms, the smallest the header allows, and the
     /// same 10 Hz the dictation meter already runs at.
     private static let tapFrames: AVAudioFrameCount = 2400
+
+    /// dBFS to the 0..1 the webview draws. One function for the output bus's
+    /// 100 ms meter and for the per-sentence envelope, so the two never drift
+    /// apart: an envelope fitted to a different window would not be the same
+    /// signal the orb was tuned against.
+    static func mapLevel(db: Double) -> Double {
+        max(0, min(1, (db - quietDb) / (loudDb - quietDb)))
+    }
+
+    static func levelDb(rms: Double) -> Double {
+        rms > 0 ? 20 * log10(rms) : -160.0
+    }
+
+    // MARK: - The envelope
+
+    /// The window the sentence's own envelope is measured over (docs/45): 600
+    /// frames at 24 kHz is 25 ms, so a sentence arrives as 40 numbers a second.
+    ///
+    /// Not a second tap on the player. The whole sentence's PCM is in `enqueue`
+    /// already and the conversion loop already reads every sample, so the
+    /// envelope costs one multiply-add per frame and one event per sentence —
+    /// a few dozen crossings for a twenty-minute call, against the ten a second
+    /// a per-frame push would cost.
+    static let envelopeFrames = 600
+    static let envelopeWindowMs: Double = 1000 * Double(envelopeFrames) / sampleRate
 
     // MARK: - Capture
 
@@ -335,13 +364,40 @@ final class SpeechOut {
                 throw DictationError("The player could not take that sentence.")
             }
             buffer.frameLength = AVAudioFrameCount(frames)
+            // The sentence's shape, measured on the way past. The loop below has
+            // to touch every sample anyway; squaring it as it goes is what makes
+            // a second tap unnecessary.
+            var envelope: [Double] = []
+            envelope.reserveCapacity(frames / SpeechOut.envelopeFrames + 1)
             pcm.withUnsafeBytes { raw in
                 guard let base = raw.baseAddress else { return }
                 // Little-endian 16-bit is this architecture's own order, so
                 // the pointer is a view rather than a copy.
                 let samples = base.assumingMemoryBound(to: Int16.self)
+                var windowSum = 0.0
+                var windowFrames = 0
                 for i in 0..<frames {
-                    channel[i] = Float(samples[i]) / 32768.0
+                    let v = Float(samples[i]) / 32768.0
+                    channel[i] = v
+                    windowSum += Double(v) * Double(v)
+                    windowFrames += 1
+                    if windowFrames == SpeechOut.envelopeFrames {
+                        envelope.append(
+                            SpeechOut.mapLevel(
+                                db: SpeechOut.levelDb(
+                                    rms: (windowSum / Double(windowFrames)).squareRoot())))
+                        windowSum = 0
+                        windowFrames = 0
+                    }
+                }
+                // The last window is short. Kept rather than dropped: the tail
+                // of a sentence is the pause that follows it, and a mouth that
+                // closed 24 ms early would be closing on the last syllable.
+                if windowFrames > 0 {
+                    envelope.append(
+                        SpeechOut.mapLevel(
+                            db: SpeechOut.levelDb(
+                                rms: (windowSum / Double(windowFrames)).squareRoot())))
                 }
             }
 
@@ -399,6 +455,18 @@ final class SpeechOut {
                         bytes: bytes_, frames: frames, startFrame: startFrame,
                         enqueuedAtMs: enqueuedAt)
                 }
+            }
+
+            // Ahead of the listener and not ahead of the node: `playedFrameLocked`
+            // already subtracts the output latency, so this is how long until the
+            // first sample of this sentence is actually heard. A relative delay
+            // rather than a timestamp, so nothing has to reconcile the host clock
+            // with `performance.now()` — the webview stamps the event's arrival
+            // and counts from there, and the only error left is the event hop.
+            if let onEnvelope = onEnvelope, !envelope.isEmpty {
+                let startsInMs =
+                    Double(max(0, startFrame - playedFrameLocked())) / SpeechOut.sampleRate * 1000
+                onEnvelope(utterance, index, startsInMs, envelope)
             }
 
             return SpeechAck(
@@ -480,12 +548,14 @@ final class SpeechOut {
     func setConversation(
         _ detector: VoiceTurn?,
         verdict: ((TurnVerdict) -> Void)?,
-        spoken: ((UInt64, String) -> Void)?
+        spoken: ((UInt64, String) -> Void)?,
+        envelope: ((UInt64, Int, Double, [Double]) -> Void)? = nil
     ) {
         queue.sync {
             turn = detector
             onVerdict = verdict
             onSpoken = spoken
+            onEnvelope = envelope
             refusingSince = 0
             clockTimer?.cancel()
             clockTimer = nil
@@ -899,9 +969,8 @@ final class SpeechOut {
             sum += v * v
         }
         let rms = (sum / Float(frames)).squareRoot()
-        let db = rms > 0 ? 20 * log10(Double(rms)) : -160.0
-        let mapped = max(
-            0, min(1, (db - SpeechOut.quietDb) / (SpeechOut.loudDb - SpeechOut.quietDb)))
+        let db = SpeechOut.levelDb(rms: Double(rms))
+        let mapped = SpeechOut.mapLevel(db: db)
         let now = CFAbsoluteTimeGetCurrent()
 
         #if DEBUG

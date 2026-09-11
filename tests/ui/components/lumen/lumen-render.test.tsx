@@ -11,7 +11,11 @@
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
-import { type VoiceCallHandle, type OrbPhase } from "../../../../src/ui/components/orb/orb";
+import {
+	type SpeechEnvelope,
+	type VoiceCallHandle,
+	type OrbPhase,
+} from "../../../../src/ui/components/orb/orb";
 import { ACT, ACT_EASE_MS, SCAN_HOP_MS } from "../../../../src/ui/components/lumen/lumen-motion";
 import { useDom } from "../../../support/dom";
 
@@ -71,7 +75,9 @@ function frame(now: number) {
 // read it.
 function session(phase: OrbPhase) {
 	const emit: ((value: number) => void)[] = [];
+	const envelopes: ((e: SpeechEnvelope | null) => void)[] = [];
 	let unsubscribed = 0;
+	let envelopeOff = 0;
 	let reads = 0;
 	const calls: string[] = [];
 	const handle = {
@@ -82,6 +88,12 @@ function session(phase: OrbPhase) {
 			emit.push(cb);
 			return () => {
 				unsubscribed++;
+			};
+		},
+		subscribeEnvelope: (cb: (e: SpeechEnvelope | null) => void) => {
+			envelopes.push(cb);
+			return () => {
+				envelopeOff++;
 			};
 		},
 	} as unknown as VoiceCallHandle;
@@ -95,11 +107,15 @@ function session(phase: OrbPhase) {
 		handle,
 		calls,
 		level: (value: number) => emit.forEach((cb) => cb(value)),
+		envelope: (e: SpeechEnvelope | null) => envelopes.forEach((cb) => cb(e)),
 		get renders() {
 			return reads;
 		},
 		get unsubscribed() {
 			return unsubscribed;
+		},
+		get envelopeOff() {
+			return envelopeOff;
 		},
 	};
 }
@@ -177,7 +193,10 @@ test("the acts reach the element: brows, mouth and where the eyes are", () => {
 	const d = body(speak.container);
 	expect(num(d, "--lumen-brow")).toBeCloseTo(0, 3);
 	expect(num(d, "--lumen-mouth-mix")).toBeCloseTo(1, 3);
-	expect(num(d, "--lumen-mouth-open")).toBeGreaterThan(0.3);
+	// The round mouth is the act's; how far it opens is the voice's. This call
+	// has handed no sentence over, and a loud room does not open it — see
+	// "speaking draws the mouth from the voice and not from the microphone".
+	expect(num(d, "--lumen-mouth-open")).toBe(0);
 });
 
 test("listening holds one size however loud the room is", () => {
@@ -271,6 +290,7 @@ test("unmounting takes the subscription and the loop with it", () => {
 	frame(0);
 	view.unmount();
 	expect(s.unsubscribed).toBe(1);
+	expect(s.envelopeOff).toBe(1);
 	expect(cancelled.length).toBeGreaterThanOrEqual(1);
 });
 
@@ -284,4 +304,70 @@ test("a tap opens the call, and the next one ends it", () => {
 	const second = render(<Lumen handle={live.handle} />);
 	fireEvent.click(second.container.querySelector("button")!);
 	expect(live.calls).toEqual(["stop"]);
+});
+
+// The mouth's source, which is the whole of what the envelope changed. The
+// frame clock has to be the same clock the subscription stamps arrivals on, so
+// these drive frames from `performance.now()` rather than from zero.
+function speak(values: number[], startsInMs: number) {
+	const s = session("speaking");
+	const view = render(<Lumen handle={s.handle} />);
+	const envelope: SpeechEnvelope = {
+		utterance: 1,
+		sentence: 0,
+		startsInMs,
+		windowMs: 25,
+		values,
+	};
+	const at = performance.now();
+	s.envelope(envelope);
+	return { s, el: body(view.container), startAt: at + startsInMs };
+}
+
+test("speaking draws the mouth from the voice and not from the microphone", () => {
+	// A loud room and a silent sentence: the mouth stays shut. This is the case
+	// the envelope exists for — the microphone is open through the whole call,
+	// so during an answer it is carrying whoever else is in the room.
+	const quiet = speak(new Array(40).fill(0), 400);
+	quiet.s.level(1);
+	for (let i = 0; i <= 30; i++) frame(quiet.startAt + i * 16);
+	expect(num(quiet.el, "--lumen-mouth-open")).toBe(0);
+
+	// And the other way round: a silent room and a loud sentence opens it.
+	const loud = speak(new Array(40).fill(1), 400);
+	loud.s.level(0);
+	for (let i = 0; i <= 30; i++) frame(loud.startAt + i * 16);
+	expect(num(loud.el, "--lumen-mouth-open")).toBeGreaterThan(0.6);
+});
+
+test("the sentence is not read before it is heard", () => {
+	const later = speak(new Array(40).fill(1), 400);
+	// Frames inside the delay: the audio has not started, so neither has the
+	// mouth.
+	for (let i = 0; i <= 10; i++) frame(later.startAt - 400 + i * 16);
+	expect(num(later.el, "--lumen-mouth-open")).toBe(0);
+});
+
+test("the body dips and comes back at the start of a sentence", () => {
+	// A silent sentence, so the only thing moving the body is the bounce. Every
+	// 10 ms across it: the dip and the overshoot are 120 ms end to end, and four
+	// stamps would land between them as easily as on them.
+	const s = speak(new Array(40).fill(0), 400);
+	const sy: number[] = [];
+	for (let i = -5; i <= 40; i++) {
+		frame(s.startAt + i * 10);
+		sy.push(num(s.el, "--lumen-sy"));
+	}
+	const before = sy[0]!;
+	expect(Math.min(...sy)).toBeLessThan(before * 0.99);
+	expect(Math.max(...sy)).toBeGreaterThan(before * 1.005);
+	// And it is over: the body is back where it was.
+	expect(sy[sy.length - 1]!).toBeCloseTo(before, 2);
+});
+
+test("a barge-in takes the queued sentence away", () => {
+	const s = speak(new Array(40).fill(1), 400);
+	s.s.envelope(null);
+	for (let i = 0; i <= 30; i++) frame(s.startAt + i * 16);
+	expect(num(s.el, "--lumen-mouth-open")).toBe(0);
 });

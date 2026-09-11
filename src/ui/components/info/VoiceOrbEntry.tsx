@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { hasNativeSpeech } from "../../../platform/app/platform";
 import { Lumen } from "../lumen/Lumen";
 import type { Attention } from "../lumen/lumen-motion";
-import { orbErrorLine, type OrbPhase, type VoiceCallHandle } from "../orb/orb";
+import { orbErrorLine, type OrbPhase, type SpeechEnvelope, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
 import { useVoiceCall, type VoiceCallView } from "./use-voice-call";
@@ -71,7 +71,14 @@ function asHandle(call: VoiceCallView): VoiceCallHandle {
 			? call.error.reason
 			: call.error.message
 		: null;
-	return { phase: call.phase, start: call.start, stop: call.stop, error, subscribeLevel: call.subscribeLevel };
+	return {
+		phase: call.phase,
+		start: call.start,
+		stop: call.stop,
+		error,
+		subscribeLevel: call.subscribeLevel,
+		subscribeEnvelope: call.subscribeEnvelope,
+	};
 }
 
 // One box, in one place, whether or not a call is up. 72 px: at 56 the brows
@@ -134,11 +141,19 @@ function useStubCall(): { handle: VoiceCallHandle; rest: boolean; attention: Att
 	// it is a knob, so the check act can be seen without a turn behind it.
 	const [attention, setAttention] = useState<Attention>("reader");
 	const subscribers = useRef(new Set<(value: number) => void>());
+	const envelopes = useRef(new Set<(envelope: SpeechEnvelope | null) => void>());
 
 	const subscribeLevel = useCallback((cb: (value: number) => void) => {
 		subscribers.current.add(cb);
 		return () => {
 			subscribers.current.delete(cb);
+		};
+	}, []);
+
+	const subscribeEnvelope = useCallback((cb: (envelope: SpeechEnvelope | null) => void) => {
+		envelopes.current.add(cb);
+		return () => {
+			envelopes.current.delete(cb);
 		};
 	}, []);
 
@@ -148,6 +163,18 @@ function useStubCall(): { handle: VoiceCallHandle; rest: boolean; attention: Att
 			phase: setPhase,
 			error: setError,
 			level: (value: number) => subscribers.current.forEach((cb) => cb(value)),
+			// One synthetic sentence, starting now. What the device sends is the
+			// same shape with a delay on it; a harness has no queue to wait out.
+			envelope: (values: number[], windowMs = 25, startsInMs = 0) => {
+				const event: SpeechEnvelope = {
+					utterance: stubUtterance,
+					sentence: stubSentence++,
+					startsInMs,
+					windowMs,
+					values,
+				};
+				envelopes.current.forEach((cb) => cb(event));
+			},
 			rest: setRest,
 			attention: setAttention,
 		};
@@ -166,11 +193,18 @@ function useStubCall(): { handle: VoiceCallHandle; rest: boolean; attention: Att
 			},
 			error,
 			subscribeLevel,
+			subscribeEnvelope,
 		},
 		rest,
 		attention,
 	};
 }
+
+// The harness's own sentence numbering. One turn for the life of the page: the
+// queue is keyed by turn and sentence, and a second sentence with the same pair
+// would replace the first instead of following it.
+const stubUtterance = 1;
+let stubSentence = 0;
 
 declare global {
 	interface Window {
@@ -178,6 +212,7 @@ declare global {
 			phase: (phase: OrbPhase) => void;
 			error: (message: string | null) => void;
 			level: (value: number) => void;
+			envelope: (values: number[], windowMs?: number, startsInMs?: number) => void;
 			rest: (asleep: boolean) => void;
 			attention: (attention: Attention) => void;
 		};

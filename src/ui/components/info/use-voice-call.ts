@@ -14,6 +14,7 @@ import { createLiveVoiceCall, NO_VOICE_CALL } from "../../../info/briefer/voice-
 import type { BriefingControl } from "../../../info/briefer/companion-live";
 import type { SessionPhase } from "../../../info/briefer/voice-session";
 import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../info/briefer/voice-call";
+import type { SpeechEnvelope } from "../../../info/briefer/conversation";
 import type { Briefing } from "../../../info/boxes/types";
 import type { TurnActivity } from "../../../ai/activity";
 import { useAttention } from "../lumen/use-attention";
@@ -52,6 +53,10 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
   // Same shape as the level subscription and for the same reason: the body
   // keeps one subscription across a start and a stop.
   const activityCbs = useRef(new Set<(event: TurnActivity) => void>());
+  // The envelope is the level's twin: a handful of events per answer rather
+  // than many per second, but read on the same animation frame and for the same
+  // reason kept out of state.
+  const envelopeCbs = useRef(new Set<(envelope: SpeechEnvelope | null) => void>());
   // The latest options, read at start time: a call is started from a gesture,
   // not from a render, and rebuilding the callbacks per render would churn the
   // orb's props for no reason.
@@ -73,6 +78,13 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
   }, []);
 
   const attention = useAttention(subscribeActivity);
+
+  const subscribeEnvelope = useCallback((cb: (envelope: SpeechEnvelope | null) => void) => {
+    envelopeCbs.current.add(cb);
+    return () => {
+      envelopeCbs.current.delete(cb);
+    };
+  }, []);
 
   const drop = useCallback(() => {
     for (const off of unsubsRef.current) off();
@@ -101,6 +113,9 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
           }),
           call.subscribeActivity((e) => {
             for (const cb of activityCbs.current) cb(e);
+          }),
+          call.subscribeEnvelope((e) => {
+            for (const cb of envelopeCbs.current) cb(e);
           }),
         ];
         await call.start();
@@ -131,5 +146,5 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
     };
   }, [drop]);
 
-  return { phase, error, start, stop, subscribeLevel, attention };
+  return { phase, error, start, stop, subscribeLevel, subscribeEnvelope, attention };
 }

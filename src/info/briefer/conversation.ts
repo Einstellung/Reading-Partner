@@ -48,6 +48,30 @@ export interface SpeechCut {
   playedMs: number;
 }
 
+/**
+ * One sentence's loudness over time, handed over as the sentence is queued and
+ * before any of it has been heard (docs/45). The mouth is drawn from this and
+ * not from the microphone: while the companion speaks the microphone carries
+ * the room, and a mouth driven by the room opens at whoever is nearest.
+ *
+ * `startsInMs` is a delay and not a timestamp. The native side counts from the
+ * player's own position, already less the output latency, so the webview stamps
+ * the event as it arrives and counts from there; nothing has to reconcile the
+ * host clock with `performance.now()`, and the only error left is the hop.
+ */
+export interface SpeechEnvelope {
+  /** The speaking turn, as `speak_begin` numbered it. */
+  utterance: number;
+  /** Which sentence of that turn, from 0. */
+  sentence: number;
+  /** How long after this event the sentence's first sample is heard. */
+  startsInMs: number;
+  /** What one value covers: 25 ms, which is 40 values a second. */
+  windowMs: number;
+  /** 0..1, one per window, in order. */
+  values: number[];
+}
+
 /** The span of the call's audio timeline a recognizer result covers. */
 export interface SpeechRange {
   startMs: number;
@@ -105,7 +129,19 @@ export type ConversationEvent =
   // turn that is over as far as the model is concerned. What separates the two
   // is whether the orchestrator has closed the turn, not what this says, and
   // the orchestrator uses that and ignores `reason`.
-  | { kind: "spoken"; turn: number; utterance: number; reason: string };
+  | { kind: "spoken"; turn: number; utterance: number; reason: string }
+  // One sentence's envelope, ahead of the sentence being heard. Display only:
+  // nothing in the call's own state reads it, and a build that drops it on the
+  // floor loses a moving mouth and nothing else.
+  | {
+      kind: "envelope";
+      turn: number;
+      utterance: number;
+      sentence: number;
+      startsInMs: number;
+      windowMs: number;
+      values: number[];
+    };
 
 // --- what a payload has to carry ---------------------------------------------
 
@@ -119,6 +155,30 @@ export type ConversationEvent =
 
 function finite(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/**
+ * The envelope an event claims to carry, or null when it does not carry one.
+ * Every number is checked: one NaN through the mouth's smoother poisons every
+ * frame after it and the mouth never comes back (orb.ts, `clampLevel`).
+ */
+export function speechEnvelope(v: unknown): SpeechEnvelope | null {
+  if (!v || typeof v !== "object") return null;
+  const e = v as Record<string, unknown>;
+  const utterance = finite(e.utterance);
+  const sentence = finite(e.sentence);
+  const startsInMs = finite(e.startsInMs);
+  const windowMs = finite(e.windowMs);
+  if (utterance === null || sentence === null || startsInMs === null) return null;
+  if (windowMs === null || windowMs <= 0) return null;
+  if (!Array.isArray(e.values) || e.values.length === 0) return null;
+  const values: number[] = [];
+  for (const raw of e.values) {
+    const value = finite(raw);
+    if (value === null) return null;
+    values.push(value < 0 ? 0 : value > 1 ? 1 : value);
+  }
+  return { utterance, sentence, startsInMs, windowMs, values };
 }
 
 /** The text an event claims to carry, or null if it carries none. */
@@ -222,6 +282,11 @@ export function applyConversationEvent(
       };
     }
     case "spoken":
+      return { ...s, turn };
+    // The mouth's, not the state's. It goes out to whoever subscribed to it
+    // (voice-call.ts) and nothing here keeps it: a queue of sentences held in
+    // reducer state would be re-rendered forty times a second.
+    case "envelope":
       return { ...s, turn };
     // A kind this build has never heard of. The whole reason the call has an
     // event of its own: the native side can grow one without a webview that

@@ -14,6 +14,12 @@
 // states, and Alexa has spent ten years telling listening from thinking from
 // speaking with movement alone. Nothing here returns a hue.
 
+// The payload of the envelope subscription below, declared where the call
+// declares it. Only the type crosses; nothing here calls the plugin.
+import type { SpeechEnvelope } from "../../../info/briefer/conversation";
+
+export type { SpeechEnvelope };
+
 // The four states the info voice session pushes (docs/33). Nothing else: there
 // is no error state and no connecting state, because a call that broke shows a
 // line of text and an orb back at rest.
@@ -35,6 +41,11 @@ export interface VoiceCallHandle {
 	error: string | null;
 	// 0..1, about 10 Hz. Returns the unsubscribe.
 	subscribeLevel: (cb: (value: number) => void) => () => void;
+	// The shape of the sentence about to be spoken (docs/45), one event per
+	// sentence, and `null` for "nothing queued will be heard". The mouth reads
+	// this while Lumen speaks and the microphone the rest of the time: during
+	// `speaking` the microphone carries the room, not the voice.
+	subscribeEnvelope: (cb: (envelope: SpeechEnvelope | null) => void) => () => void;
 }
 
 // The smoothing, at the frame rate the two constants were chosen for. Rising is
