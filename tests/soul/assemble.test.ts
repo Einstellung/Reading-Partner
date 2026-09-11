@@ -42,6 +42,11 @@ function env(over: Partial<DeskEnv> = {}): DeskEnv {
 // (soul/topic): the roster, empty here, and the standing offer to file it.
 const WHERE_THIS_BELONGS = topicGuidance([]);
 
+// A caller that can draw a proposal card, which is what mounts propose_topic at
+// all (soul/self.ts). Where a case is about the tool list and not about the
+// offer, this is what puts the offer on the desk.
+const CARD_SURFACE = { onCard: () => {} };
+
 // A desk under a topic the reader has settled, with something on it anchoring
 // the retrieval: the reading desk's shape, and the one the provider's cache
 // prefix depends on (docs/09).
@@ -126,7 +131,7 @@ test("with nothing anchoring the retrieval the soul prints the memory paragraph 
 // holds. Once the topic is settled, neither does.
 test("a conversation with no topic carries the offer to give it one", async () => {
   const laid = await desk([item("only", { prompt: () => "ONLY" })]);
-  const turn = await assembleTurn({ desk: laid });
+  const turn = await assembleTurn({ desk: laid, topic: CARD_SURFACE });
   expect(turn!.systemPrompt).toBe(`ONLY\n\n${WHERE_THIS_BELONGS}`);
   expect(turn!.tools.map((t) => t.name)).toContain("propose_topic");
 
@@ -134,9 +139,21 @@ test("a conversation with no topic carries the offer to give it one", async () =
     [item("only", { ...anchoring, prompt: () => "ONLY" })],
     env({ topic: SETTLED }),
   );
-  const scoped = await assembleTurn({ desk: settled });
+  const scoped = await assembleTurn({ desk: settled, topic: CARD_SURFACE });
   expect(scoped!.systemPrompt).toBe("ONLY");
   expect(scoped!.tools.map((t) => t.name)).not.toContain("propose_topic");
+});
+
+// And where the caller has nowhere to draw the card, the offer is not made at
+// all. propose_topic writes nothing — the card is its whole effect — so mounting
+// it on a surface that draws none leaves the model telling the reader to confirm
+// something they were never shown (the reading session, soul/self.ts).
+test("a caller with nowhere to draw the card is offered no way to propose", async () => {
+  const laid = await desk([item("only", { prompt: () => "ONLY" })]);
+  const turn = await assembleTurn({ desk: laid });
+  expect(turn!.systemPrompt).toBe("ONLY");
+  expect(turn!.systemPrompt).not.toContain("WHERE THIS BELONGS");
+  expect(turn!.tools.map((t) => t.name)).not.toContain("propose_topic");
 });
 
 test("the items' prompts come out in desk order, and an empty one leaves no gap", async () => {
@@ -160,7 +177,7 @@ test("the tools are the soul's and then each item's", async () => {
     item("a", { tools: [tool("read_pages")] }),
     item("b", { tools: [tool("list_saved_articles")] }),
   ]);
-  const turn = await assembleTurn({ desk: laid });
+  const turn = await assembleTurn({ desk: laid, topic: CARD_SURFACE });
   expect(turn!.tools.map((t) => t.name)).toEqual([
     "statement_write",
     "search_conversations",
@@ -199,7 +216,7 @@ test("an item is told every tool name on the desk, the soul's included", async (
     }),
     item("guest", { tools: [tool("list_saved_articles")] }),
   ]);
-  await assembleTurn({ desk: laid });
+  await assembleTurn({ desk: laid, topic: CARD_SURFACE });
   expect([...seen]).toEqual([
     "statement_write",
     "search_conversations",
@@ -305,7 +322,11 @@ test("with no item carrying the history, the caller's messages are replayed", as
 // with no book open will stand on.
 test("an empty desk assembles", async () => {
   const laid = await desk([]);
-  const turn = await assembleTurn({ desk: laid, messages: [{ role: "user", text: "hello" }] });
+  const turn = await assembleTurn({
+    desk: laid,
+    messages: [{ role: "user", text: "hello" }],
+    topic: CARD_SURFACE,
+  });
   expect(turn).not.toBeNull();
   // No material, so no prompt but the soul's own: this conversation has no topic
   // and the offer to give it one is what the soul carries (soul/topic).

@@ -269,9 +269,10 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
               // The lab tools ride a call as well: the prompt the call shares
               // tells the companion to propose a lab when the reader says what
               // they want followed, and a described tool that is not mounted is
-              // a call that fails mid-sentence. (propose_topic is the soul's and
-              // is mounted by the assembly, with nowhere here to draw its card:
-              // its answer is text, which is what gets spoken.)
+              // a call that fails mid-sentence. (propose_topic is the soul's, and
+              // it does not ride a call at all: no desk surface is passed for it,
+              // because a proposal only exists as a card and there is no screen
+              // here to draw one on. Filing happens in the text chat.)
               lab: { threadId: anchor.threadId, onLabCard: () => {} },
             },
           ).catch((e) => {
