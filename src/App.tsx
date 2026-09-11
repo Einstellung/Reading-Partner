@@ -93,7 +93,7 @@ import { useCall } from "./reading/session/use-call";
 import { useMarkDoors } from "./reading/session/use-mark-doors";
 import { AI_PEN_COLOR, useMarks } from "./reading/session/use-marks";
 import { openBook } from "./reading/session/open-book";
-import { resolveBookSource } from "./reading/session/open-file";
+import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
 import type { ReaderShell } from "./reading/session/shell";
 import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
 import { keepReadingPosition } from "./reading/reading-position";
@@ -860,10 +860,16 @@ export default function App() {
   // any legacy path-hash-keyed data to the book id, and backfill the id.
   const openFile = useCallback(
     // topicId defaults to the active topic; the vestibule's "Continue reading"
-    // passes it explicitly since it opens a book without entering that topic.
+    // passes it explicitly since it opens a book from outside its topic.
     async (file: FileRef, topicId?: string) => {
-      const tid = topicId ?? activeTopicId;
+      const tid = topicForOpen(topicId, activeTopicId);
       if (!tid) return;
+      // Whichever door was used, the book's topic becomes the active one. The
+      // reading session reads its scope off activeTopic (ctxRef above), so a book
+      // opened by a door that only named the topic used to run with none at all:
+      // no observation tools (soul/self.ts), and no topic for the event log, prep
+      // or memory retrieval.
+      setActiveTopicId(tid);
       try {
         const { bookId, bytes } = await resolveBookSource(file, tid);
         await openInReader(bookId, file.name, bytes);

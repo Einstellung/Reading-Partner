@@ -56,3 +56,16 @@ export async function resolveBookSource(
   if (file.hash !== bookId) await io.setFileHash(topicId, file.path, bookId);
   return { bookId, bytes };
 }
+
+// The topic a book is opened under: the one the door named, or else the one the
+// shell is already in. The vestibule's "Continue reading" names it, because it
+// opens a book from outside its topic; the topic screen names nothing and its
+// own topic answers.
+//
+// Null is not an open. A book always belongs to a topic (Topic.files is the only
+// way one gets in), and the whole reading session is scoped by that topic — the
+// event log, prep, memory retrieval, and whether the soul carries observation
+// tools at all (soul/self.ts).
+export function topicForOpen(named: string | undefined, active: string | null): string | null {
+  return named ?? active;
+}
