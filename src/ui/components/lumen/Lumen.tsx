@@ -3,9 +3,16 @@
 // glossy deep-blue eyes and a closed-mouth smile, resting on the desk in a pool
 // of its own light.
 //
-// Rendering and event binding only. Every number is lumen.ts, and the four
-// pipeline states and their smoothing are still orb.ts — this replaces the
-// drawn disc, not the arithmetic behind it.
+// Rendering and event binding only. Every number is lumen-motion.ts, and the
+// smoothing and the hold are still orb.ts — this replaces the drawn disc, not
+// the arithmetic behind it.
+//
+// It performs four acts rather than animating four states: listen (watch you),
+// think (look up), check (glance down at the desk and scan it) and speak (look
+// back and talk). The act is the phase crossed with where the attention is, the
+// eye direction and the three mouth shapes carry it, and one act dissolves into
+// the next over ACT_EASE_MS. Nothing grows: the body is one size in one corner
+// for the whole call.
 //
 // Four layers, back to front: the pool on the desk, the halo, the body raster
 // with its tuft cut into a second raster, and the face as inline SVG. The face
@@ -39,18 +46,30 @@ import {
 	type VoiceCallHandle,
 } from "../orb/orb";
 import {
+	ACT_EASE_MS,
 	FACE,
+	GAZE_K_ACT,
 	GAZE_RELEASE_MS,
 	GAZE_ZERO,
+	MOUTH_SHUT,
 	REST_EASE_MS,
+	actEase,
+	actFor,
+	actGaze,
+	blendVisual,
 	blinkOpenness,
 	easeGaze,
 	gazeToward,
 	initBlink,
 	lumenVisual,
+	mouthOpenness,
 	stepBlink,
+	stepMouth,
 	wanderGaze,
+	type Attention,
 	type Gaze,
+	type LumenAct,
+	type MouthState,
 } from "./lumen-motion";
 import bodyUrl from "./lumen-body.webp";
 import tuftUrl from "./lumen-tuft.webp";
@@ -65,6 +84,8 @@ const EYE_RX = FACE.eyeRx * BOX;
 const EYE_RY = FACE.eyeRy * BOX;
 const IRIS_TX = FACE.irisTravelX * EYE_RX;
 const IRIS_TY = FACE.irisTravelY * EYE_RY;
+const FACE_TX = FACE.faceTravelX * BOX;
+const FACE_TY = FACE.faceTravelY * BOX;
 
 // How often the pointer's position is re-measured against the body's box. A
 // pointermove can arrive on every frame and getBoundingClientRect on every one
@@ -73,6 +94,10 @@ const RECT_STALE_MS = 500;
 
 export function Lumen({
 	handle,
+	// Where the soul's attention is (docs/66). It splits thinking into two acts:
+	// looking up with the attention on the reader, and glancing down at the
+	// desk with it on the work.
+	attention = "reader",
 	// Asleep. Not an OrbPhase: the voice pipeline never reports it (lumen.ts),
 	// so it comes in as its own input and nothing is wired to it yet.
 	rest = false,
@@ -82,6 +107,7 @@ export function Lumen({
 	className,
 }: {
 	handle: VoiceCallHandle;
+	attention?: Attention;
 	rest?: boolean;
 	className?: string;
 }) {
@@ -90,6 +116,8 @@ export function Lumen({
 	const rootRef = useRef<HTMLSpanElement>(null);
 	const phaseRef = useRef<OrbPhase>(phase);
 	phaseRef.current = phase;
+	const attentionRef = useRef<Attention>(attention);
+	attentionRef.current = attention;
 	const restRef = useRef(rest);
 	restRef.current = rest;
 	const targetRef = useRef(0);
@@ -126,21 +154,42 @@ export function Lumen({
 		let rectAt = -Infinity;
 
 		let blink = initBlink(performance.now(), Math.random);
+		let mouth: MouthState = MOUTH_SHUT;
 		let frame = 0;
 		let last = -1;
-		let shown = phaseRef.current;
-		let phaseAt = -1;
+		// The act on screen, the one it is coming from, and when each began. The
+		// outgoing act goes on running on its own clock for the length of the
+		// crossfade, so a body caught mid-sway does not jump to the sway's zero
+		// on its way out.
+		let shown: LumenAct = actFor(phaseRef.current, attentionRef.current);
+		let leaving: LumenAct = shown;
+		let actAt = -1;
+		let leavingAt = -1;
 
 		const draw = (now: number) => {
 			frame = requestAnimationFrame(draw);
 			const dt = last < 0 ? 0 : now - last;
 			last = now;
-			if (phaseAt < 0 || phaseRef.current !== shown) {
-				shown = phaseRef.current;
-				phaseAt = now;
+			const act = actFor(phaseRef.current, attentionRef.current);
+			if (actAt < 0) {
+				shown = act;
+				leaving = act;
+				actAt = now;
+				leavingAt = now;
+			} else if (act !== shown) {
+				// A second change inside one crossfade leaves from wherever the
+				// blend had got to in the act it was already leaving, which is the
+				// one still on screen for most of it.
+				leaving = shown;
+				leavingAt = actAt;
+				shown = act;
+				actAt = now;
 			}
+			const actMs = now - actAt;
+			const mix = actEase(actMs / ACT_EASE_MS);
 
 			levelRef.current = smoothLevel(levelRef.current, targetRef.current, dt);
+			mouth = stepMouth(mouth, shown, levelRef.current, now);
 
 			blink = stepBlink(blink, now, Math.random);
 
@@ -157,29 +206,42 @@ export function Lumen({
 				rect = el.getBoundingClientRect();
 				rectAt = now;
 			}
-			const following = pointer !== null && now - pointerAt < GAZE_RELEASE_MS;
+			// Only a body with nothing to do follows the pointer. In the four acts
+			// the eye direction is the act — looking at the cursor while it was
+			// meant to be looking up at a thought would be the wrong story told
+			// louder.
+			const following = shown === "rest" && pointer !== null && now - pointerAt < GAZE_RELEASE_MS;
 			const target =
-				following && pointer
-					? gazeToward(
-							pointer,
-							{ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
-							rect.width / 2,
-						)
-					: reduced
-						? GAZE_ZERO
-						: wanderGaze(now);
-			gazeRef.current = easeGaze(gazeRef.current, target, dt);
+				shown !== "rest"
+					? actGaze(shown, actMs)
+					: following && pointer
+						? gazeToward(
+								pointer,
+								{ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+								rect.width / 2,
+							)
+						: reduced
+							? GAZE_ZERO
+							: wanderGaze(now);
+			gazeRef.current = easeGaze(gazeRef.current, target, dt, GAZE_K_ACT[shown]);
 
-			const v = lumenVisual({
-				phase: shown,
+			const common = {
 				level: levelRef.current,
-				elapsedMs: now - phaseAt,
 				tMs: now,
 				rest: restMixRef.current,
 				eyeOpen: blinkOpenness(blink, now),
 				gaze: gazeRef.current,
+				mouthOpen: mouthOpenness(mouth, shown, levelRef.current, now),
 				reduced,
-			});
+			};
+			const v =
+				mix >= 1 || leaving === shown
+					? lumenVisual({ act: shown, elapsedMs: actMs, ...common })
+					: blendVisual(
+							lumenVisual({ act: leaving, elapsedMs: now - leavingAt, ...common }),
+							lumenVisual({ act: shown, elapsedMs: actMs, ...common }),
+							mix,
+						);
 
 			const set = (name: string, value: number) => el.style.setProperty(name, value.toFixed(4));
 			set("--lumen-sx", v.scaleX);
@@ -190,8 +252,13 @@ export function Lumen({
 			set("--lumen-pool-x", v.poolScaleX);
 			set("--lumen-tuft-y", v.tuftScaleY);
 			set("--lumen-eye", v.eyeOpen);
+			set("--lumen-eye-scale", v.eyeScale);
 			set("--lumen-gx", v.gaze.x);
 			set("--lumen-gy", v.gaze.y);
+			set("--lumen-brow", v.browOpacity);
+			set("--lumen-mouth-curve", v.mouthCurve);
+			set("--lumen-mouth-mix", v.mouthMix);
+			set("--lumen-mouth-open", v.mouthOpen);
 			el.style.setProperty("--lumen-x", `${(v.shiftX * 100).toFixed(3)}%`);
 			el.style.setProperty("--lumen-y", `${(v.shiftY * 100).toFixed(3)}%`);
 			el.style.setProperty("--lumen-tilt", `${v.tiltDeg.toFixed(3)}deg`);
@@ -261,7 +328,7 @@ export function Lumen({
 				// Named so the simulator bridge can read the properties back out of
 				// a running app (scripts/ios-sim.sh eval), as data-orb was.
 				data-lumen=""
-				className="pointer-events-none absolute inset-0 block [--lumen-core:0.42] [--lumen-eye:1] [--lumen-glow:0.3] [--lumen-gx:0] [--lumen-gy:0] [--lumen-pool-x:1] [--lumen-pool:0.42] [--lumen-sx:1] [--lumen-sy:1] [--lumen-tilt:0deg] [--lumen-tuft-lean:0deg] [--lumen-tuft-y:1] [--lumen-x:0%] [--lumen-y:0%]"
+				className="pointer-events-none absolute inset-0 block [--lumen-brow:0] [--lumen-core:0.42] [--lumen-eye-scale:1] [--lumen-eye:1] [--lumen-glow:0.3] [--lumen-gx:0] [--lumen-gy:0] [--lumen-mouth-curve:1] [--lumen-mouth-mix:0] [--lumen-mouth-open:0] [--lumen-pool-x:1] [--lumen-pool:0.42] [--lumen-sx:1] [--lumen-sy:1] [--lumen-tilt:0deg] [--lumen-tuft-lean:0deg] [--lumen-tuft-y:1] [--lumen-x:0%] [--lumen-y:0%]"
 			>
 				{/* The pool of light it is standing in. An ellipse under the body,
 				    not a shadow: the light comes from Lumen, so the desk is brighter
@@ -320,20 +387,92 @@ function LumenFace() {
 					<stop offset="100%" stopColor="#dce9ff" />
 				</linearGradient>
 			</defs>
-			<Eye cx={EYE_CX - EYE_DX} />
-			<Eye cx={EYE_CX + EYE_DX} />
-			{/* The smile. A short curve, closed: it does not lip-sync, because a
-			    mouth that opens on a syllable at 10 Hz is a puppet (docs/45). */}
+			{/* The whole face slides a little with the gaze, which is what turns
+			    two irises 2 px off centre into a head looking somewhere. */}
+			<g
+				style={{
+					transform: `translate(calc(var(--lumen-gx) * ${FACE_TX}px), calc(var(--lumen-gy) * ${FACE_TY}px))`,
+				}}
+			>
+				<Brow cx={EYE_CX - EYE_DX} sign={1} />
+				<Brow cx={EYE_CX + EYE_DX} sign={-1} />
+				<Eye cx={EYE_CX - EYE_DX} />
+				<Eye cx={EYE_CX + EYE_DX} />
+				<Mouth />
+			</g>
+		</svg>
+	);
+}
+
+// The mouth, in three shapes and never a fourth: the closed smile, the flat
+// line, and a small round opening. The two strokes crossfade into each other
+// on one number and the round one fades in over both, because an open mouth is
+// a hole and a hole is not a line.
+//
+// Three drawings and not one path squashed about its ends, which is what this
+// was first: a scale of exactly zero is a singular matrix and the browser drops
+// the element, and the non-scaling stroke that would have survived the squash
+// takes its width in screen pixels, so the thinking mouth came out a slab.
+//
+// Not lip-sync. The level moves the height of the round mouth and nothing
+// picks a shape per syllable (docs/66).
+function Mouth() {
+	const y = FACE.mouthY * BOX;
+	const half = FACE.mouthWidth * BOX;
+	const flat = half * 0.82;
+	const open = `translate(0px, ${y}px) scaleY(calc(0.24 + 0.76 * var(--lumen-mouth-open))) translate(0px, ${-y}px)`;
+	return (
+		<>
 			<path
-				d={`M ${EYE_CX - FACE.mouthWidth * BOX} ${FACE.mouthY * BOX}
-				    Q ${EYE_CX} ${(FACE.mouthY + 0.028) * BOX} ${EYE_CX + FACE.mouthWidth * BOX} ${FACE.mouthY * BOX}`}
+				d={`M ${EYE_CX - half} ${y} Q ${EYE_CX} ${y + FACE.smileDepth * BOX} ${EYE_CX + half} ${y}`}
 				fill="none"
 				stroke="#152a86"
 				strokeWidth={9}
 				strokeLinecap="round"
-				opacity={0.82}
+				style={{ opacity: "calc(0.82 * var(--lumen-mouth-curve) * (1 - var(--lumen-mouth-mix)))" }}
 			/>
-		</svg>
+			<path
+				d={`M ${EYE_CX - flat} ${y} L ${EYE_CX + flat} ${y}`}
+				fill="none"
+				stroke="#152a86"
+				strokeWidth={9}
+				strokeLinecap="round"
+				style={{
+					opacity: "calc(0.82 * (1 - var(--lumen-mouth-curve)) * (1 - var(--lumen-mouth-mix)))",
+				}}
+			/>
+			<ellipse
+				cx={EYE_CX}
+				cy={y + FACE.mouthOpenRy * BOX * 0.3}
+				rx={FACE.mouthOpenRx * BOX}
+				ry={FACE.mouthOpenRy * BOX}
+				fill="#152a86"
+				style={{ transform: open, opacity: "calc(0.86 * var(--lumen-mouth-mix))" }}
+			/>
+		</>
+	);
+}
+
+// One brow. Two thin dark strokes that are simply not there except while it is
+// working: a face that wore its brows all the time would have an expression at
+// rest, and the resting face is the one in the painting.
+function Brow({ cx, sign }: { cx: number; sign: 1 | -1 }) {
+	const y = FACE.browY * BOX;
+	const half = FACE.browWidth * BOX;
+	// The inner end drops. `sign` is which side the inner end is on.
+	const tilt = `rotate(${sign * FACE.browTiltDeg}deg)`;
+	return (
+		<path
+			d={`M ${cx - half} ${y} Q ${cx} ${y - 0.008 * BOX} ${cx + half} ${y}`}
+			fill="none"
+			stroke="#152a86"
+			strokeWidth={12}
+			strokeLinecap="round"
+			style={{
+				transform: `translate(${cx}px, ${y}px) ${tilt} translate(${-cx}px, ${-y}px)`,
+				opacity: "calc(0.78 * var(--lumen-brow))",
+			}}
+		/>
 	);
 }
 
@@ -341,7 +480,9 @@ function LumenFace() {
 // curve fades in under it, which is how a 2D rig blinks — the shut eye is a
 // second drawing, not the same drawing at zero height.
 function Eye({ cx }: { cx: number }) {
-	const lid = `translate(0px, ${EYE_CY}px) scaleY(var(--lumen-eye)) translate(0px, ${-EYE_CY}px)`;
+	// The lid and how wide the eye is held, about the eye's own centre: the two
+	// multiply, so a blink during the wide-eyed listening act still shuts.
+	const lid = `translate(${cx}px, ${EYE_CY}px) scale(var(--lumen-eye-scale), calc(var(--lumen-eye) * var(--lumen-eye-scale))) translate(${-cx}px, ${-EYE_CY}px)`;
 	const gaze = `translate(calc(var(--lumen-gx) * ${IRIS_TX}px), calc(var(--lumen-gy) * ${IRIS_TY}px))`;
 	return (
 		<>

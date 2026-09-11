@@ -11,7 +11,8 @@
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
-import { MOTION, type VoiceCallHandle, type OrbPhase } from "../../../../src/ui/components/orb/orb";
+import { type VoiceCallHandle, type OrbPhase } from "../../../../src/ui/components/orb/orb";
+import { ACT, ACT_EASE_MS, SCAN_HOP_MS } from "../../../../src/ui/components/lumen/lumen-motion";
 import { useDom } from "../../../support/dom";
 
 const { cleanup, fireEvent, render } = await useDom();
@@ -130,8 +131,67 @@ test("a frame writes the whole pose onto one element", () => {
 	}
 	expect(el.style.getPropertyValue("--lumen-tilt")).toMatch(/deg$/);
 	expect(el.style.getPropertyValue("--lumen-x")).toMatch(/%$/);
-	expect(num(el, "--lumen-sx")).toBeCloseTo(MOTION.listening.base, 1);
-	expect(num(el, "--lumen-glow")).toBeCloseTo(MOTION.listening.glowBase, 2);
+	expect(num(el, "--lumen-sx")).toBeCloseTo(ACT.listen.base, 1);
+	expect(num(el, "--lumen-glow")).toBeCloseTo(ACT.listen.glowBase, 2);
+});
+
+test("the acts reach the element: brows, mouth and where the eyes are", () => {
+	// Past the crossfade in every case, so what is read back is the act itself
+	// and not a frame on the way into it.
+	const settle = (from: number) => {
+		for (let i = 0; i <= 40; i++) frame(from + i * (ACT_EASE_MS / 20));
+		return from + 40 * (ACT_EASE_MS / 20);
+	};
+
+	const listening = session("listening");
+	const listen = render(<Lumen handle={listening.handle} />);
+	let now = settle(0);
+	const a = body(listen.container);
+	expect(num(a, "--lumen-brow")).toBe(0);
+	expect(num(a, "--lumen-mouth-curve")).toBe(1);
+	expect(num(a, "--lumen-mouth-mix")).toBe(0);
+	expect(num(a, "--lumen-eye-scale")).toBeGreaterThan(1);
+
+	const thinking = session("thinking");
+	const think = render(<Lumen handle={thinking.handle} />);
+	now = settle(now);
+	const b = body(think.container);
+	expect(num(b, "--lumen-brow")).toBeCloseTo(1, 3);
+	expect(num(b, "--lumen-mouth-curve")).toBeCloseTo(0, 3);
+	// Up and to one side.
+	expect(num(b, "--lumen-gy")).toBeLessThan(-0.3);
+
+	const checking = session("thinking");
+	const check = render(<Lumen handle={checking.handle} attention="work" />);
+	// The scan snaps, so a couple of hops is enough to have the eyes down.
+	for (let i = 0; i <= 30; i++) frame(now + i * SCAN_HOP_MS / 4);
+	const c = body(check.container);
+	expect(num(c, "--lumen-brow")).toBeCloseTo(1, 3);
+	expect(num(c, "--lumen-gy")).toBeGreaterThan(0.3);
+
+	const talking = session("speaking");
+	const speak = render(<Lumen handle={talking.handle} />);
+	now = settle(now + 4000);
+	talking.level(0.9);
+	for (let i = 0; i <= 30; i++) frame(now + i * (1000 / 60));
+	const d = body(speak.container);
+	expect(num(d, "--lumen-brow")).toBeCloseTo(0, 3);
+	expect(num(d, "--lumen-mouth-mix")).toBeCloseTo(1, 3);
+	expect(num(d, "--lumen-mouth-open")).toBeGreaterThan(0.3);
+});
+
+test("listening holds one size however loud the room is", () => {
+	const s = session("listening");
+	const { container } = render(<Lumen handle={s.handle} />);
+	const el = body(container);
+	for (let i = 0; i <= 40; i++) frame(i * 20);
+	const still = num(el, "--lumen-sx");
+	s.level(1);
+	for (let i = 41; i <= 160; i++) frame(i * 20);
+	expect(num(el, "--lumen-sx")).toBeCloseTo(still, 4);
+	expect(num(el, "--lumen-sy")).toBeCloseTo(num(el, "--lumen-sx"), 4);
+	// The tuft is where the room goes instead.
+	expect(num(el, "--lumen-tuft-y")).toBeGreaterThan(ACT.listen.tuftBase);
 });
 
 test("the level reaches the body through the frame loop", () => {
