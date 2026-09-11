@@ -144,7 +144,6 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
   const { settings, signal, savedArticles, ...book } = input;
   const env: DeskEnv = {
     settings,
-    topic: { id: input.context.topicId, name: input.context.topicName },
     thread: { key: input.bookId, id: input.threadId },
     ...(signal ? { signal } : {}),
   };

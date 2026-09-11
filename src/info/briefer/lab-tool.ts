@@ -6,7 +6,7 @@
 // there is no page where rooms are managed: correcting a charter is a sentence,
 // which is the whole reason the charter is drafted rather than filled in.
 //
-// So this file follows propose_topic exactly (soul/topic/propose.ts): the tool drafts a
+// So this file follows propose_topic exactly (memory/filing/propose.ts): the tool drafts a
 // card and writes nothing, the card's Apply performs the writes, and a synthetic
 // user turn afterwards tells the model what was filed. Nothing here touches the
 // labs file.

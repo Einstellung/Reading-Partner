@@ -33,11 +33,12 @@ export interface DeskRef<K extends string = string, R = unknown> {
 
 // What is true of the turn rather than of any one item: who is being talked to,
 // with what settings, in which conversation. Every opener gets the same one.
+// A topic is not here on purpose. It is where data is filed — which topic a book
+// is listed under, which topic an observation is written to — and an item that
+// has one knows it off its own material (DeskMemory.topicId). The soul that sits
+// at this desk is under no topic at all (docs/61).
 export interface DeskEnv {
   settings: Settings;
-  // The topic the conversation is scoped to. Null where nothing has been
-  // decided yet, which is what says the observation tools do not ride.
-  topic: { id: string | null; name: string };
   // Where the conversation is stored: the thread file's key
   // (threads-<key>.json) and the thread's own id.
   thread: { key: string; id: string };
@@ -69,6 +70,11 @@ export interface DeskPromptView {
 export interface DeskMemory {
   // What "still open" is scoped to. Empty when the item is not a book.
   bookId: string;
+  // The topic this material is filed under: the topic a book is listed in, the
+  // topic a conversation was filed under. It is what an observation written this
+  // turn is filed under and where recall starts. Null for material under no
+  // topic, and then the turn reads every topic and writes to none.
+  topicId: string | null;
   // The topic's observations, whole — deciding what is still open reads bodies.
   observations: readonly Observation[];
   // The retrieved lines for this turn, tight when the ladder asked for less.
@@ -110,11 +116,11 @@ export interface DeskItem {
   // it planned actually went.
   afterFit?(dropped: ReadonlySet<string>): void;
   // Called when the reader confirms a topic for this conversation (docs/21).
-  // Filing the conversation is the soul's; what else follows from the topic
-  // being settled is the item's own — the info article files its kept copy
-  // under it. Not called on the turn that laid the desk: the proposal is a card
-  // the reader confirms later, and the host hands the hooks to the Apply
-  // (soul/topic/settle.ts).
+  // Filing the conversation is memory's, not the soul's; what else follows from
+  // the topic being settled is the item's own — the info article files its kept
+  // copy under it. Not called on the turn that laid the desk: the proposal is a
+  // card the reader confirms later, and the host hands the hooks to the Apply
+  // (memory/filing/settle.ts).
   onTopicSettled?(topicId: string): Promise<void>;
 }
 

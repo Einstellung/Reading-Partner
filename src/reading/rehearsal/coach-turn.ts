@@ -55,10 +55,6 @@ export async function buildCoachTurn(input: CoachTurnInput): Promise<CoachTurn> 
   const { settings, ...outlineRef } = input;
   const env: DeskEnv = {
     settings,
-    // No topic scope: the coach hears a pass and edits the talk, and nothing
-    // here writes an observation about a book. Naming the outline's topic would
-    // mount the observation tools on a conversation that has no reading in it.
-    topic: { id: null, name: input.topicName ?? "" },
     // A talk has exactly one conversation, and its id is the outline's
     // (reading/talk/store.ts writes it to threads-talk-<id>.json).
     thread: { key: talkThreadKey(input.outline.id), id: input.outline.id },

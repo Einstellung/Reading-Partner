@@ -35,7 +35,6 @@ function talk(): TalkOutline {
 // tools do not ride it.
 const env: DeskEnv = {
   settings,
-  topic: { id: null, name: "Vision" },
   thread: { key: talkThreadKey("o1"), id: "o1" },
 };
 

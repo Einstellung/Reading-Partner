@@ -70,7 +70,6 @@ const retell: Retell = {
 
 const env: DeskEnv = {
   settings,
-  topic: { id: "topic-1", name: "Vision" },
   thread: { key: retellThreadKey(retell.id), id: retell.id },
 };
 

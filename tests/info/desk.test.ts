@@ -20,6 +20,7 @@ import {
   appendMessage,
   createThread,
   rebuildThreadStoreForTests,
+  setThreadTopic,
 } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 import type { AgentTool } from "../../src/ai/agent";
@@ -53,6 +54,11 @@ registerInfoDesk();
 beforeEach(() => {
   installAppData();
   rebuildThreadStoreForTests();
+  // The briefing conversation, filed under the brief topic. The desk reads the
+  // topic off the thread record: a topic is where the material is filed, and
+  // nothing about the turn itself carries one (src/desk/types.ts).
+  createThread("info-2026-07-21", "info", "briefing-2026-07-21");
+  setThreadTopic("info-2026-07-21", "briefing-2026-07-21", BRIEF_TOPIC_ID);
 });
 
 function env(): DeskEnv {
@@ -62,7 +68,6 @@ function env(): DeskEnv {
       defaultProviderId: "anthropic",
       defaultModelId: "claude-sonnet-4-5",
     },
-    topic: { id: BRIEF_TOPIC_ID, name: "Brief" },
     thread: { key: "info-2026-07-21", id: "briefing-2026-07-21" },
   };
 }
@@ -135,7 +140,6 @@ test("an article desk keeps the briefing first and the article after it", async 
 // for one thing (openDesk refuses that outright).
 test("the tools come from the briefing item alone", async () => {
   // The soul's statement tool rides on the reader having just said something.
-  createThread("info-2026-07-21", "info", "briefing-2026-07-21");
   appendMessage("info-2026-07-21", "briefing-2026-07-21", {
     role: "user",
     text: "why is this one worth reading?",
@@ -214,7 +218,7 @@ test("an article desk with no briefing keeps the statements and drops the retrie
 
 // What the reader confirmed a topic for reaches the desk items that asked to
 // hear it (src/desk: onTopicSettled). Filing the conversation is the soul's and
-// says nothing about articles (soul/topic); the kept copy of this article is the
+// says nothing about articles (memory/filing); the kept copy of this article is the
 // article item's own half of the gesture.
 test("the article files its kept copy when the conversation's topic settles", async () => {
   const filed: string[] = [];

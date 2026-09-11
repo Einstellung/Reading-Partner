@@ -97,17 +97,17 @@ test("the conversation the reader is holding is replayed, and its own file is no
   ]);
 });
 
-test("the turn is scoped to whatever topic the conversation settled on", async () => {
-  seed(doorKey("2026-09-10"), { d1: { topicId: "topic-1" } });
-  const turn = await openDoorTurn({
-    settings,
-    threadId: "d1",
-    date: "2026-09-10",
-    topics: async () => [{ id: "topic-1", name: "Attention" }],
-  });
-  // The observation tools only ride where there is a topic to scope them to
-  // (soul/self.ts), so their presence is what says the topic reached the env.
-  expect(turn!.tools.some((t) => t.name.startsWith("observation"))).toBe(true);
+// The soul carries its memory to the door like everywhere else, but a topic is
+// where an observation is filed, and a conversation filed under none has nowhere
+// to put one: recall rides, the write does not (soul/self.ts).
+test("what the conversation is filed under decides whether memory can be written", async () => {
+  seed(doorKey("2026-09-10"), { d1: { topicId: "topic-1" }, d2: {} });
+  const filed = await openDoorTurn({ settings, threadId: "d1", date: "2026-09-10" });
+  expect(filed!.tools.map((t) => t.name)).toContain("observation_update");
+
+  const unfiled = await openDoorTurn({ settings, threadId: "d2", date: "2026-09-10" });
+  expect(unfiled!.tools.map((t) => t.name)).toContain("observation_search");
+  expect(unfiled!.tools.map((t) => t.name)).not.toContain("observation_update");
 });
 
 test("every day's conversations are offered to distillation, oldest first", async () => {

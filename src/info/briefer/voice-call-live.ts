@@ -33,7 +33,6 @@ import { infoBookId } from "./call";
 import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
 import { nativeConversation } from "./conversation";
 import { withCompanionTools } from "./desk";
-import { threadTopic } from "../../soul";
 import {
   createVoiceCall,
   type VoiceCall,
@@ -142,7 +141,6 @@ export function askOnThread(opts: {
           // second AI.
           const desk = await openDesk(withCompanionTools(opts.anchor.desk, opts.tools), {
             settings,
-            topic: await threadTopic(opts.bookId, opts.anchor.threadId),
             thread: { key: opts.bookId, id: opts.anchor.threadId },
             signal,
           });

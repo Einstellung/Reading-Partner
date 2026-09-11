@@ -412,6 +412,7 @@ async function openRetell(ref: RetellDeskRef, env: DeskEnv): Promise<DeskItem | 
       // A retell is several books at once, so nothing here is "this book": what
       // is still open is scoped to one, and there is no one.
       bookId: "",
+      topicId: ref.retell.topicId || null,
       observations: topicObservations,
       snapshot: (tight: boolean) => (tight ? observationSnapshotTight : observationSnapshot),
     },

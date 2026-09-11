@@ -1,4 +1,4 @@
-// The topic card's Apply (src/soul/topic/settle.ts, docs/21): one gesture — mint
+// The topic card's Apply (src/memory/filing/settle.ts, docs/21): one gesture — mint
 // the topic where it is new, file this conversation under it, and tell whatever
 // is on the desk that the topic settled. Over ports, so the order and what a
 // failure stops are assertable without React and without a filesystem; what the
@@ -10,7 +10,7 @@ import {
   applyTopicProposal,
   type TopicProposalCardData,
   type TopicSettlePorts,
-} from "../../src/soul";
+} from "../../src/memory";
 
 function card(over: Partial<TopicProposalCardData> = {}): TopicProposalCardData {
   return {

@@ -20,7 +20,7 @@ import { soulMemorySection, openSoul } from "./self";
 import { appSequenceIo, readSequence, type SequenceIo } from "./sequence";
 import { soulTail, TAIL_RUNG, TAIL_RUNG_ID, TURN_KEEP } from "./tail";
 import { appConversationIo, type ConversationIo } from "../conversations";
-import type { TopicProposalSurface } from "./topic/propose";
+import type { TopicProposalSurface } from "../memory";
 
 export interface AssembleInput {
   desk: OpenedDesk;
@@ -34,7 +34,7 @@ export interface AssembleInput {
   sequenceIo?: SequenceIo;
   conversationIo?: ConversationIo;
   // Where a topic proposal is drawn, for a conversation that has no topic yet
-  // (soul/topic). A caller that passes nothing mounts no propose_topic and
+  // (memory/filing). A caller that passes nothing mounts no propose_topic and
   // carries no roster in its prompt: there would be no card to confirm.
   topic?: TopicProposalSurface;
 }
@@ -103,7 +103,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // A desk with one item on it produces that item's prompt byte for byte, which
   // is what keeps the provider's cache prefix where it was (docs/09).
   function composePrompt(dropped: ReadonlySet<string>): string {
-    const memory = soulMemorySection(soul, env, anchor?.memory, dropped);
+    const memory = soulMemorySection(soul, anchor?.memory, dropped);
     const blocks = items.map((item) =>
       item.prompt({
         dropped,
@@ -115,8 +115,8 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
     // What no item speaks for. The memory paragraph goes to the item that
     // anchors the retrieval, and where no item does — an empty desk, a talk
     // being rehearsed — the soul prints it itself: what is known about the
-    // reader is not about the material (docs/48). The soul's own paragraph goes
-    // last either way.
+    // reader is not about the material (docs/48). What the soul mounted
+    // publishes goes last either way.
     if (!anchor) blocks.push(memory);
     blocks.push(soul.prompt);
     return blocks.filter((p) => p !== "").join("\n\n");

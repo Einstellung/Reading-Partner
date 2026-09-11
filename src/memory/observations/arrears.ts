@@ -183,7 +183,7 @@ export interface SourceUnit {
   // The topic the conversation is filed under, or null where the reader has not
   // said what it is about (docs/21). No topic, no distillation: there is nothing
   // to file what was said under, and the sweep leaves the unit alone until the
-  // soul proposes a topic and the reader nods (soul/topic).
+  // the AI proposes a topic and the reader nods (memory/filing).
   topicId: string | null;
   // What the pass calls this conversation, in place of a book's name.
   label: string;

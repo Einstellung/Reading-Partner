@@ -4,7 +4,8 @@
 // putting together. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { assembleTurn, configuredModel, topicGuidance, type SequenceIo } from "../../src/soul";
+import { assembleTurn, configuredModel, type SequenceIo } from "../../src/soul";
+import { topicGuidance } from "../../src/memory";
 import type { ConversationIo } from "../../src/conversations";
 import {
   openDesk,
@@ -18,6 +19,7 @@ import {
   appendMessage,
   createBookThread,
   rebuildThreadStoreForTests,
+  setThreadTopic,
   type Thread,
   type ThreadMessage,
 } from "../../src/platform/app/threads";
@@ -32,14 +34,13 @@ const settings: Settings = {
 function env(over: Partial<DeskEnv> = {}): DeskEnv {
   return {
     settings,
-    topic: { id: null, name: "Nothing" },
     thread: { key: "book-1", id: "thread-1" },
     ...over,
   };
 }
 
-// The paragraph the soul prints itself where the conversation has no topic yet
-// (soul/topic): the roster, empty here, and the standing offer to file it.
+// The paragraph filing publishes where the conversation has no topic yet
+// (memory/filing): the roster, empty here, and the standing offer to file it.
 const WHERE_THIS_BELONGS = topicGuidance([]);
 
 // A caller that can draw a proposal card, which is what mounts propose_topic at
@@ -47,12 +48,20 @@ const WHERE_THIS_BELONGS = topicGuidance([]);
 // offer, this is what puts the offer on the desk.
 const CARD_SURFACE = { onCard: () => {} };
 
-// A desk under a topic the reader has settled, with something on it anchoring
-// the retrieval: the reading desk's shape, and the one the provider's cache
-// prefix depends on (docs/09).
-const SETTLED = { id: "t-1", name: "Attention" };
+// File this conversation under a topic. It is the conversation that is filed,
+// not the desk and not the soul, so this is the only thing that says a turn with
+// nothing on it has somewhere to write (src/desk/types.ts).
+function fileThread(topicId: string): void {
+  createBookThread("book-1", "thread-1");
+  setThreadTopic("book-1", "thread-1", topicId);
+}
+
+// Something on the desk anchoring the retrieval, filed under a topic the reader
+// has settled: the reading desk's shape, and the one the provider's cache prefix
+// depends on (docs/09). The topic is the material's, not the turn's — nothing
+// about a desk says what its soul is about (src/desk/types.ts).
 const anchoring: Partial<DeskItem> = {
-  memory: { bookId: "book-1", observations: [], snapshot: () => "" },
+  memory: { bookId: "book-1", topicId: "t-1", observations: [], snapshot: () => "" },
 };
 
 function item(kind: string, over: Partial<DeskItem> = {}): DeskItem {
@@ -88,7 +97,6 @@ beforeEach(() => {
 test("one item's prompt is the whole prompt, byte for byte", async () => {
   const laid = await desk(
     [item("only", { ...anchoring, prompt: () => "the only block\n\nand its second line" })],
-    env({ topic: SETTLED }),
   );
   const turn = await assembleTurn({ desk: laid });
   expect(turn!.systemPrompt).toBe("the only block\n\nand its second line");
@@ -109,7 +117,6 @@ test("an anchored desk hands the memory paragraph to the item and prints nothing
         },
       }),
     ],
-    env({ topic: SETTLED }),
   );
   const turn = await assembleTurn({ desk: laid });
   expect(handed).toContain("Observation tools:");
@@ -120,7 +127,8 @@ test("an anchored desk hands the memory paragraph to the item and prints nothing
 // what is known about the reader is about the reader, not about the material
 // (docs/48). The soul prints it after the items.
 test("with nothing anchoring the retrieval the soul prints the memory paragraph itself", async () => {
-  const laid = await desk([item("guest", { prompt: () => "GUEST" })], env({ topic: SETTLED }));
+  fileThread("t-1");
+  const laid = await desk([item("guest", { prompt: () => "GUEST" })]);
   const turn = await assembleTurn({ desk: laid });
   expect(turn!.systemPrompt.startsWith("GUEST\n\n")).toBe(true);
   expect(turn!.systemPrompt).toContain("Observation tools:");
@@ -135,9 +143,11 @@ test("a conversation with no topic carries the offer to give it one", async () =
   expect(turn!.systemPrompt).toBe(`ONLY\n\n${WHERE_THIS_BELONGS}`);
   expect(turn!.tools.map((t) => t.name)).toContain("propose_topic");
 
+  // What settles it is the conversation being filed, not the material carrying a
+  // topic: the card offers this conversation a home, and it now has one.
+  fileThread("t-1");
   const settled = await desk(
     [item("only", { ...anchoring, prompt: () => "ONLY" })],
-    env({ topic: SETTLED }),
   );
   const scoped = await assembleTurn({ desk: settled, topic: CARD_SURFACE });
   expect(scoped!.systemPrompt).toBe("ONLY");
@@ -163,7 +173,6 @@ test("the items' prompts come out in desk order, and an empty one leaves no gap"
       item("silent", { prompt: () => "" }),
       item("last", { prompt: () => "LAST" }),
     ],
-    env({ topic: SETTLED }),
   );
   const turn = await assembleTurn({ desk: laid });
   expect(turn!.systemPrompt).toBe("FIRST\n\nLAST");
@@ -183,6 +192,8 @@ test("the tools are the soul's and then each item's", async () => {
     "search_conversations",
     "read_conversation",
     "propose_topic",
+    "observation_search",
+    "observation_read",
     "read_pages",
     "list_saved_articles",
   ]);
@@ -197,7 +208,7 @@ test("the soul brings the conversation search to every desk", async () => {
   const empty = await assembleTurn({ desk: await desk([]) });
   expect(empty!.tools.map((t) => t.name)).toContain("search_conversations");
   expect(empty!.tools.map((t) => t.name)).toContain("read_conversation");
-  const laid = await desk([item("a")], env({ topic: { id: "t-1", name: "Attention" } }));
+  const laid = await desk([item("a", anchoring)]);
   const scoped = await assembleTurn({ desk: laid });
   expect(scoped!.tools.map((t) => t.name)).toContain("search_conversations");
 });
@@ -222,6 +233,8 @@ test("an item is told every tool name on the desk, the soul's included", async (
     "search_conversations",
     "read_conversation",
     "propose_topic",
+    "observation_search",
+    "observation_read",
     "read_pages",
     "list_saved_articles",
   ]);
@@ -261,6 +274,7 @@ test("the memory paragraph goes to the item that anchors the retrieval and to no
     item("anchor", {
       memory: {
         bookId: "book-1",
+        topicId: "t-1",
         observations: [],
         snapshot: (tight) => (tight ? "- [gap] tight (id m-2)" : "- [gap] full (id m-1)"),
       },
@@ -329,7 +343,7 @@ test("an empty desk assembles", async () => {
   });
   expect(turn).not.toBeNull();
   // No material, so no prompt but the soul's own: this conversation has no topic
-  // and the offer to give it one is what the soul carries (soul/topic).
+  // and the offer to give it one is what filing publishes (memory/filing).
   expect(turn!.systemPrompt).toBe(WHERE_THIS_BELONGS);
   expect(turn!.messages).toEqual([{ role: "user", text: "hello" }]);
   expect(turn!.refusal).toBe("");
@@ -375,7 +389,6 @@ test("the ladder walked is the one on the item carrying the history", async () =
         prompt: (view) => (view.dropped.has("guest-rung") ? "" : "guest"),
       }),
     ],
-    env({ topic: SETTLED }),
   );
   const turn = await assembleTurn({ desk: laid });
   expect(turn!.systemPrompt).toBe("small\n\nguest");
@@ -389,7 +402,7 @@ test("an unknown model assembles the turn at full size", async () => {
   expect(configuredModel(unknown)).toBeNull();
   const laid = await desk(
     [item("only", { ...anchoring, prompt: () => "full size" })],
-    env({ settings: unknown, topic: SETTLED }),
+    env({ settings: unknown }),
   );
   const turn = await assembleTurn({ desk: laid });
   expect(turn!.systemPrompt).toBe("full size");

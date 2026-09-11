@@ -103,8 +103,10 @@ test("the turn mounts the five tools that write a talk, over the live outline", 
   });
   expect(turn.tools.map((t) => t.name).sort()).toEqual([
     "move_talk_segment",
-    // A talk being rehearsed is in no topic yet, so the offer to file the
-    // conversation rides it too (soul/topic).
+    // A talk is in no topic, so nothing written here could be filed: recall
+    // rides, observation_update does not (soul/self.ts).
+    "observation_read",
+    "observation_search",
     "read_conversation",
     "read_talk_outline",
     "remove_talk_segment",

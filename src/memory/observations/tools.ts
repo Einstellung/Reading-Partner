@@ -25,6 +25,10 @@ import {
 
 export type ObservationWriteAction = "create" | "update" | "delete" | "same-as";
 
+// The one tool of the three that writes. Named here so a mount with no topic to
+// file an observation under can leave it off and keep the two that only read.
+export const OBSERVATION_WRITE_TOOL = "observation_update";
+
 // How a created observation stands to what is already held about the reader
 // (docs/48). The judgement is made at write time, in the same call that drafts
 // the observation: it is one hop from evidence the model is already holding,
@@ -404,7 +408,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
       },
     },
     {
-      name: "observation_update",
+      name: OBSERVATION_WRITE_TOOL,
       description:
         (relations
           ? "Write one observation about this reader, add evidence to one that is " +
