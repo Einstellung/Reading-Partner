@@ -42,6 +42,10 @@ export interface AssembleInput {
   // (memory/filing). A caller that passes nothing mounts no propose_topic and
   // carries no roster in its prompt: there would be no card to confirm.
   topic?: TopicProposalSurface;
+  // What the soul is here to do on this surface (soul/roles.ts): "secretary" on
+  // the info path, nothing at the door or on a legion errand. A name nothing
+  // registered throws, the way an unregistered desk kind does.
+  role?: string;
 }
 
 export interface AssembledTurn {
@@ -85,7 +89,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   const { items, env } = desk;
   const anchor = items.find((i) => i.memory !== undefined);
   const teller = items.find((i) => i.history !== undefined);
-  const soul = await openSoul(env, anchor?.memory, input.topic, input.catalogueIo);
+  const soul = await openSoul(env, anchor?.memory, input.topic, input.catalogueIo, input.role);
   if (env.signal?.aborted) return null;
 
   // The soul's tools first, then each item's in the order it lies on the desk.
@@ -95,6 +99,21 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // happens to hold.
   const tools = [...soul.tools, ...items.flatMap((i) => i.tools)];
   const toolNames = tools.map((t) => t.name);
+  // A role's tool and an item's tool answering to one name is the same mistake
+  // openDesk refuses between two items: the model would be handed a name that
+  // means two things and the assembly would pick one behind everybody's back.
+  if (soul.role) {
+    const held = new Set(soul.role.tools.map((t) => t.name));
+    for (const item of items) {
+      for (const tool of item.tools) {
+        if (held.has(tool.name)) {
+          throw new Error(
+            `soul: the "${soul.role.id}" role and the "${item.kind}" desk item both offer the tool "${tool.name}"`,
+          );
+        }
+      }
+    }
+  }
   // What each item is told the rest of the desk brought. Its own paragraphs are
   // left out: it already has them and decides where they sit.
   const othersToolPrompts = new Map<DeskItem, readonly string[]>(
@@ -109,6 +128,11 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // is what keeps the provider's cache prefix where it was (docs/09).
   function composePrompt(dropped: ReadonlySet<string>): string {
     const memory = soulMemorySection(soul, anchor?.memory, dropped);
+    // The duty of whoever is at the desk, ahead of what lies on it (docs/67):
+    // who this is comes before what they are looking at. Nothing prints here on
+    // a desk with no role loaded, which is every reading turn — the anchored
+    // prompt stays byte for byte what it was (docs/09).
+    const duty = soul.role?.duty ?? "";
     const blocks = items.map((item) =>
       item.prompt({
         dropped,
@@ -124,7 +148,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
     // publishes goes last either way.
     if (!anchor) blocks.push(memory);
     blocks.push(soul.prompt);
-    return blocks.filter((p) => p !== "").join("\n\n");
+    return [duty, ...blocks].filter((p) => p !== "").join("\n\n");
   }
 
   function ownMessages(dropped: ReadonlySet<string>): DeskMessage[] {

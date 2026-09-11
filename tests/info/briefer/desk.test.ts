@@ -13,6 +13,11 @@ import {
   registerInfoDesk,
   withCompanionTools,
 } from "../../../src/info/briefer/desk";
+import {
+  SECRETARY_DUTY,
+  SECRETARY_ROLE_ID,
+  registerSecretaryRole,
+} from "../../../src/info/briefer/role";
 import { statementStore, type Observation } from "../../../src/memory";
 import { DEFAULT_SETTINGS } from "../../../src/platform/app/settings";
 import { BRIEF_TOPIC_ID } from "../../../src/platform/app/topics";
@@ -50,6 +55,7 @@ const BRIEFING: Briefing = {
 };
 
 registerInfoDesk();
+registerSecretaryRole();
 
 beforeEach(() => {
   installAppData();
@@ -115,7 +121,9 @@ function withObservations(ref: DeskRef, observations: Observation[]): DeskRef {
 
 async function assemble(refs: DeskRef[], tools: AgentTool[] = []) {
   const desk = await openDesk(withCompanionTools(refs, async () => tools), env());
-  const turn = await assembleTurn({ desk });
+  // Every info turn is the soul with the secretary on (docs/67 角色), which is
+  // where the companion tools and the duty paragraph come from.
+  const turn = await assembleTurn({ desk, role: SECRETARY_ROLE_ID });
   return turn!;
 }
 
@@ -138,7 +146,7 @@ test("an article desk keeps the briefing first and the article after it", async 
 // The article brings a body of text and nothing else: what the companion can do
 // is the briefing's, and a second copy of it on the same desk would be two names
 // for one thing (openDesk refuses that outright).
-test("the tools come from the briefing item alone", async () => {
+test("the companion tools are the secretary's, and come ahead of the soul's own", async () => {
   // The soul's statement tool rides on the reader having just said something.
   appendMessage("info-2026-07-21", "briefing-2026-07-21", {
     role: "user",
@@ -147,6 +155,8 @@ test("the tools come from the briefing item alone", async () => {
   });
   const turn = await assemble([briefingRef, articleRef], [tool("probe_source"), tool("add_source")]);
   expect(turn.tools.map((t) => t.name)).toEqual([
+    "probe_source",
+    "add_source",
     "statement_write",
     "search_conversations",
     "read_conversation",
@@ -155,9 +165,58 @@ test("the tools come from the briefing item alone", async () => {
     "observation_search",
     "observation_read",
     "observation_update",
-    "probe_source",
-    "add_source",
   ]);
+});
+
+// The whole set and nothing but it: what the host bound for this turn is what
+// the model is handed, whether it rode in on the item (as it used to) or on the
+// role (as it does now).
+test("a turn with no secretary loaded mounts none of the companion tools", async () => {
+  const desk = await openDesk(
+    withCompanionTools([briefingRef], async () => [tool("probe_source")]),
+    env(),
+  );
+  const turn = await assembleTurn({ desk });
+  expect(turn!.tools.map((t) => t.name)).not.toContain("probe_source");
+  expect(turn!.systemPrompt).not.toContain(SECRETARY_DUTY);
+});
+
+// A role's tool and an item's tool answering to one name is the mistake openDesk
+// refuses between two items.
+test("a desk item offering one of the secretary's tool names is refused", async () => {
+  const desk = await openDesk(
+    [
+      ...withCompanionTools([briefingRef], async () => [tool("read_page")]),
+      { kind: INFO_ARTICLE_KIND, ref: { ...(articleRef.ref as object) } },
+    ],
+    env(),
+  );
+  // The article item is the one that carries the clashing name here: the
+  // briefing's own tools went to the role, so the collision is role-vs-item.
+  desk.items[1].tools.push(tool("read_page"));
+  await expect(assembleTurn({ desk, role: SECRETARY_ROLE_ID })).rejects.toThrow(
+    /"secretary" role and the "info-article" desk item both offer the tool "read_page"/,
+  );
+});
+
+// The prompt after the duty moved out of the briefing block (docs/67 角色). The
+// sections are the same ones in the same order; what changed is that the first
+// paragraph is now the soul's, printed ahead of the desk, instead of the first
+// line of the item's own text.
+test("the secretary's duty opens the prompt, and the briefing's own sections follow in order", async () => {
+  const turn = await assemble([briefingRef], [tool("probe_source")]);
+  expect(turn.systemPrompt.startsWith(`${SECRETARY_DUTY}\n\n`)).toBe(true);
+  const order = [
+    SECRETARY_DUTY,
+    "You have tools, shared across every info chat:",
+    "Reading profile (what triage keeps or filters for):",
+    "Subscribed sources:",
+    "WHAT IS BEING FOLLOWED",
+    "Rooms that moved today:",
+    "Worth your time:",
+  ].map((section) => turn.systemPrompt.indexOf(section));
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+  expect(order.includes(-1)).toBe(false);
 });
 
 test("an article on its own desk brings no tools but the soul's", async () => {

@@ -21,14 +21,6 @@ import type { Briefing } from "../boxes/types";
 // window; a very long piece still gets a sane cap).
 const ARTICLE_CHARS = 12_000;
 
-const BASE =
-  "You are the reading companion for the user's daily briefing. You do more than answer " +
-  "questions about the material below: through your tools you can refine the reading profile " +
-  "the analysts read, set up and archive labs, add new sources, and regenerate today's briefing — " +
-  "always on the user's " +
-  "request, never on your own. Answer concisely and honestly, in the user's language. If " +
-  "something isn't in the provided text, say so rather than inventing it.";
-
 // The sign-in half of the tool guidance, carried only where a window can really
 // be opened (the same hasWebviewFetch gate that decides whether the tool is
 // mounted at all). Two rules it must not lose: the site comes from the user's
@@ -234,8 +226,11 @@ export interface CompanionContext {
 function preamble(ctx: CompanionContext): string[] {
   const lang = languageInstruction(ctx.aiLanguage ?? "auto");
   return [
-    lang ? `${BASE}\n${lang}` : BASE,
-    "",
+    // Who this is and what it is here to do is the secretary's duty, and it
+    // rides ahead of this block (briefer/role.ts). What is left of the old first
+    // paragraph here is the language instruction, which is the app's setting
+    // rather than the job.
+    ...(lang ? [lang, ""] : []),
     toolGuidance(!!ctx.canSignIn, ctx.collecting !== false),
     "",
     formatProfile(ctx.profile),
