@@ -14,6 +14,7 @@ export {
   registerDoorDistillSource,
   type DoorTurnInput,
 } from "./door";
+export { GO_TO_TOOL, buildPlaceTools, placesDescription } from "./places";
 export {
   EMPTY_SEQUENCE,
   SEQUENCE_FILE,
