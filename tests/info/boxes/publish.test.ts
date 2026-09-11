@@ -1,0 +1,213 @@
+// What the collector publishes for the readers (src/info/boxes/publish.ts):
+// which items get a body, what is taken out of it, and how a reader tells a
+// matched pair from a briefing whose text has not arrived yet (docs/36).
+// Run: bun test.
+
+import { expect, test } from "bun:test";
+import {
+  backfillVerdict,
+  bodiesIntact,
+  bodiesMatch,
+  buildPublishedBodies,
+  tieredItemIds,
+} from "../../../src/info/boxes/publish";
+import type { CachedArticle } from "../../../src/info/collect/store";
+import type { Briefing } from "../../../src/info/boxes/types";
+import type { InfoItem } from "../../../src/info/sources/item";
+
+function meta(id: string) {
+  return {
+    title: `title ${id}`,
+    url: `https://example.test/${id}`,
+    source: "src",
+    sourceName: "Source",
+    publishedAt: "2026-08-12T00:00:00Z",
+  };
+}
+
+function briefing(over: Partial<Briefing> = {}): Briefing {
+  return {
+    date: "2026-08-12",
+    generatedAt: 1_000,
+    version: 2,
+    labs: [{ labId: "lab-a", name: "Room", cover: "a day", judgments: [] }],
+    quiet: [],
+    mustRead: [{ itemId: "a", reason: "because" }],
+    oneLiners: [{ itemId: "b", line: "the point" }],
+    outOfLane: [{ itemId: "c", reason: "widening" }],
+    items: { a: meta("a"), b: meta("b"), c: meta("c"), d: meta("d") },
+    ...over,
+  };
+}
+
+function item(id: string, over: Partial<InfoItem> = {}): InfoItem {
+  return {
+    id,
+    source: "src",
+    sourceName: "Source",
+    title: `title ${id}`,
+    url: `https://example.test/${id}`,
+    publishedAt: "2026-08-12T00:00:00Z",
+    summary: "",
+    ...over,
+  } as InfoItem;
+}
+
+test("only the three tiers are published", () => {
+  expect(tieredItemIds(briefing())).toEqual(["a", "b", "c"]);
+});
+
+test("a published body is the text and the html", () => {
+  const articles: Record<string, CachedArticle> = {
+    a: { textContent: "the text", contentHtml: "<p>hi</p>" },
+  };
+  const out = buildPublishedBodies(briefing(), articles, [item("a")]);
+  expect(out.date).toBe("2026-08-12");
+  expect(out.generatedAt).toBe(1_000);
+  expect(out.bodies.a).toEqual({ text: "the text", html: "<p>hi</p>", summaryOnly: false });
+});
+
+// The inlined images are the weight (a base64 body outweighs its article by two
+// orders of magnitude); a remote image is a URL. Keeping the remote ones is what
+// makes a phone and a desktop show the same article, and what a reader keeps
+// from either device the same snapshot.
+test("a published body drops the inlined images and keeps the remote ones", () => {
+  const articles: Record<string, CachedArticle> = {
+    a: {
+      textContent: "the text",
+      contentHtml:
+        '<p>one</p><img src="data:image/png;base64,AAAA"><p>two</p>' +
+        '<img src="https://cdn.example.test/a.jpg" loading="lazy"><p>three</p>',
+    },
+  };
+  const out = buildPublishedBodies(briefing(), articles, [item("a")]);
+  expect(out.bodies.a.html).toBe(
+    '<p>one</p><p>two</p><img src="https://cdn.example.test/a.jpg" loading="lazy"><p>three</p>',
+  );
+});
+
+// A source with no full text at all still gets an entry: the reader has to be
+// able to say "this source only publishes summaries", and that has to read
+// differently from "the text has not arrived yet".
+test("a tiered item with no body still gets an entry", () => {
+  const out = buildPublishedBodies(briefing(), {}, [item("b", { summaryOnly: true })]);
+  expect(out.bodies.b).toEqual({ text: "", html: "", summaryOnly: true });
+});
+
+// Unknown provenance is evidence-incomplete, so nothing downstream quotes a
+// summary as if it were the article.
+test("an item the snapshot lost counts as summary-only", () => {
+  const out = buildPublishedBodies(briefing(), { c: { textContent: "text" } }, []);
+  expect(out.bodies.c.summaryOnly).toBe(true);
+});
+
+test("the filtered list carries no bodies", () => {
+  const out = buildPublishedBodies(briefing(), { d: { textContent: "text" } }, [item("d")]);
+  expect(out.bodies.d).toBeUndefined();
+});
+
+// The two files reconcile independently, so a reader can hold a new briefing
+// beside the previous bodies for one sync interval. That is what the pairing is
+// for; anything but an exact match means the text is still on its way.
+test("a pair is only a pair when both halves agree", () => {
+  const b = briefing();
+  expect(bodiesMatch(b, { date: "2026-08-12", generatedAt: 1_000 })).toBe(true);
+  expect(bodiesMatch(b, { date: "2026-08-12", generatedAt: 999 })).toBe(false);
+  expect(bodiesMatch(b, { date: "2026-08-11", generatedAt: 1_000 })).toBe(false);
+  expect(bodiesMatch(b, null)).toBe(false);
+  expect(bodiesMatch(null, { date: "2026-08-12", generatedAt: 1_000 })).toBe(false);
+});
+
+// --- the startup backfill ---------------------------------------------------
+
+const stamp = { date: "2026-08-12", generatedAt: 1_000 };
+
+test("a machine with no briefing of its own publishes nothing", () => {
+  expect(backfillVerdict(null, null, null)).toBe("nothing-local");
+  expect(backfillVerdict(null, stamp, stamp)).toBe("nothing-local");
+});
+
+// The case this exists for: a briefing generated by a version that could not
+// publish, so nothing is at the published names at all.
+test("a briefing the readers never got is published", () => {
+  expect(backfillVerdict(stamp, null, null)).toBe("publish");
+});
+
+// The date is not a gate. A machine that has not collected today still has
+// yesterday's, and a reader shows the latest one labelled with the day it is
+// for rather than an empty screen (docs/36).
+test("yesterday's briefing is still worth publishing when nothing newer exists", () => {
+  expect(backfillVerdict({ date: "2026-08-11", generatedAt: 900 }, null, null)).toBe("publish");
+});
+
+test("a briefing older than the published one is never put over it", () => {
+  const older = { date: "2026-08-11", generatedAt: 900 };
+  expect(backfillVerdict(older, stamp, stamp)).toBe("published-newer");
+});
+
+// The other collector's day, published while this machine was off.
+test("a same-day briefing another collector generated later wins", () => {
+  const mine = { date: "2026-08-12", generatedAt: 999 };
+  expect(backfillVerdict(mine, stamp, stamp)).toBe("published-newer");
+});
+
+// A restart has to cost nothing: every write is an upload and a revision on the
+// remote.
+test("the briefing already published, bodies and all, is left alone", () => {
+  expect(backfillVerdict(stamp, stamp, stamp)).toBe("up-to-date");
+});
+
+// A publish that got half way leaves a reader waiting for text that is not
+// coming; the fingerprint is what says so, and the backfill is what repairs it.
+test("a published briefing whose bodies never landed is published again", () => {
+  expect(backfillVerdict(stamp, stamp, null)).toBe("publish");
+  expect(backfillVerdict(stamp, stamp, { date: "2026-08-11", generatedAt: 900 })).toBe("publish");
+});
+
+test("a re-triage that failed to publish is newer than what is out there", () => {
+  const retriaged = { date: "2026-08-12", generatedAt: 2_000 };
+  expect(backfillVerdict(retriaged, stamp, stamp)).toBe("publish");
+});
+
+// Two collectors generating in the same millisecond for different days is not
+// the same briefing, whatever the clock says.
+test("the same generatedAt under a different date is not the published one", () => {
+  expect(backfillVerdict({ date: "2026-08-13", generatedAt: 1_000 }, stamp, stamp)).toBe("publish");
+});
+
+test("bodies rebuilt from the day's files are the briefing's own text", () => {
+  const items = [item("a"), item("b"), item("c")];
+  const articles: Record<string, CachedArticle> = {
+    a: { textContent: "one" },
+    b: { textContent: "two" },
+    c: { textContent: "three" },
+  };
+  const b = briefing();
+  expect(bodiesIntact(b, items, buildPublishedBodies(b, articles, items))).toBe(true);
+});
+
+// A briefing whose day was pruned rebuilds into a full set of empty entries,
+// which a reader renders as "this source only publishes summaries" — a claim
+// about the source made out of a missing file. Neither half goes out.
+test("a briefing that outlived the day's item snapshot is not published", () => {
+  const b = briefing();
+  expect(bodiesIntact(b, [], buildPublishedBodies(b, {}, []))).toBe(false);
+});
+
+test("a briefing that outlived its article cache is not published", () => {
+  const items = [item("a", { summaryOnly: false }), item("b"), item("c")];
+  const b = briefing();
+  expect(bodiesIntact(b, items, buildPublishedBodies(b, {}, items))).toBe(false);
+});
+
+// A day made of discovery-only sources has no text to lose, and its briefing is
+// as publishable as any other.
+test("bodies that were always summaries are intact", () => {
+  const items = [
+    item("a", { summaryOnly: true }),
+    item("b", { summaryOnly: true }),
+    item("c", { summaryOnly: true }),
+  ];
+  const b = briefing();
+  expect(bodiesIntact(b, items, buildPublishedBodies(b, {}, items))).toBe(true);
+});

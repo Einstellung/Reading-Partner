@@ -44,7 +44,7 @@ markPreloaded();
 // the browser branch. `DOMParser` discriminates nothing of the kind. src/ reads
 // it in two places — sanitize.ts and readable.ts — and both are dead without it
 // in every environment, so no test asserts the absent branch by leaving it
-// absent: the one case that covers it (tests/info/sanitize.test.ts) deletes it
+// absent: the one case that covers it (tests/info/extract/sanitize.test.ts) deletes it
 // and puts it back itself.
 //
 // Installed here rather than by an import in each file that needs it, because a

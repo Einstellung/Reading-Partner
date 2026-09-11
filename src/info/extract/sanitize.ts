@@ -99,7 +99,7 @@ const DROP_WITH_CONTENT = new Set([
 //                                   the element already open and creates no
 //                                   node, so neither is ever a child of body
 //
-// tests/info/sanitize.test.ts walks that list and puts the two shapes that
+// tests/info/extract/sanitize.test.ts walks that list and puts the two shapes that
 // catch an unwrapped boundary through the sanitizer twice. AUTO_CLOSES below
 // keeps a boundary that lands in neither set stable anyway, at the price of a
 // second parse; what this list decides is what the reader is left with, which

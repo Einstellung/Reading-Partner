@@ -1,0 +1,297 @@
+// The table the Swift port is checked against (src/info/briefer/turn-replay.ts).
+// Nothing here tests the detector — tests/info/briefer/turn-detect.test.ts does that.
+// What is at stake is the table's provenance: it is a copy of the fixtures, and
+// a copy that quietly stops matching what it was copied from would let the two
+// machines agree on numbers neither of them was calibrated for.
+//
+// Run: scripts/t.sh tests/info/briefer/turn-replay.test.ts
+
+import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { resolveTurnDetectConfig } from "../../../src/info/briefer/turn-detect";
+import {
+  REPLAY_SOURCES,
+  diffReplay,
+  replayFrames,
+  turnReplayCases,
+  turnReplayCasesJson,
+  type ReplayEvent,
+  type ReplaySequence,
+} from "../../../src/info/briefer/turn-replay";
+
+const ASSETS = join(import.meta.dir, "../../../docs/assets");
+
+interface LevelEvent {
+  kind: string;
+  sinceStartMs: number;
+  payload: { inputRms: number; stage?: string };
+}
+
+const toFrame = (e: LevelEvent) => ({
+  atMs: e.sinceStartMs,
+  db:
+    e.payload.inputRms > 0 ? 20 * Math.log10(e.payload.inputRms) : Number.NEGATIVE_INFINITY,
+});
+
+/** The same cut tests/info/briefer/turn-detect.test.ts makes, made again from source. */
+function stageFrames(
+  file: string,
+  stage: string,
+  shape: "probe" | "device-run",
+): { atMs: number; db: number }[] {
+  const json = JSON.parse(readFileSync(join(ASSETS, file), "utf8"));
+  if (shape === "probe") {
+    const span = json.stages.find((s: { stage: string }) => s.stage === stage);
+    if (!span) throw new Error(`no stage ${stage} in ${file}`);
+    return json.events
+      .filter(
+        (e: LevelEvent) =>
+          e.kind === "level" &&
+          e.sinceStartMs >= span.sinceStartMs &&
+          e.sinceStartMs < span.endedSinceStartMs,
+      )
+      .map(toFrame);
+  }
+  // The device run has no stage table: the stages are events among the others,
+  // and one runs until the next one starts.
+  const events: LevelEvent[] = json.passes[0].report.events;
+  const marks = events.filter((e) => e.kind === "stage");
+  const from = marks.find((e) => e.payload.stage === stage);
+  if (!from) throw new Error(`no stage ${stage} in ${file}`);
+  const to = marks.find((e) => e.sinceStartMs > from.sinceStartMs);
+  const until = to ? to.sinceStartMs : Number.POSITIVE_INFINITY;
+  return events
+    .filter(
+      (e) => e.kind === "level" && e.sinceStartMs >= from.sinceStartMs && e.sinceStartMs < until,
+    )
+    .map(toFrame);
+}
+
+/** Where one stage of the device run begins, on the same clock as its levels. */
+function stageStart(file: string, stage: string): number {
+  const json = JSON.parse(readFileSync(join(ASSETS, file), "utf8"));
+  const events: LevelEvent[] = json.passes[0].report.events;
+  const from = events.find((e) => e.kind === "stage" && e.payload.stage === stage);
+  if (!from) throw new Error(`no stage ${stage} in ${file}`);
+  return from.sinceStartMs;
+}
+
+test("every sequence is still bit for bit the stage it was cut from", () => {
+  const names = Object.keys(REPLAY_SOURCES) as ReplaySequence[];
+  expect(names.length).toBe(5);
+  for (const name of names) {
+    const { file, stage, shape } = REPLAY_SOURCES[name];
+    expect(replayFrames(name)).toEqual(stageFrames(file, stage, shape));
+  }
+});
+
+// The window is measured from a moment, and a moment copied wrong is a case
+// that proves nothing: it would go on reporting SAME while the window sat over
+// the wrong stretch of audio.
+test("the played cases open the window where the recording says the playback began", () => {
+  const { file, stage } = REPLAY_SOURCES["device-2026-09-05/played"];
+  const start = stageStart(file, stage);
+  const played = turnReplayCases().filter((c) => c.name.startsWith("played-"));
+  expect(played.length).toBe(3);
+  for (const item of played) {
+    expect(item.frames[0]).toEqual({ atMs: start, db: Number.NEGATIVE_INFINITY, playback: "start" });
+    // And nothing else in the case is anything but a buffer.
+    expect(item.frames.slice(1).every((f) => !f.playback && !f.reset)).toBe(true);
+  }
+});
+
+test("the cases cover every event, both recordings and both stages", () => {
+  const cases = turnReplayCases();
+  const seen = { duck: 0, stop: 0, resume: 0, end: 0 };
+  for (const item of cases) {
+    for (const event of item.expected) seen[event.type] += 1;
+  }
+  expect(seen.duck).toBeGreaterThan(0);
+  expect(seen.stop).toBeGreaterThan(0);
+  expect(seen.resume).toBeGreaterThan(0);
+  expect(seen.end).toBeGreaterThan(0);
+
+  // A case whose right answer is "nothing" proves as much as one with events in
+  // it: a port that announced something on the companion's own voice would pass
+  // every other case here.
+  expect(cases.some((c) => c.expected.length === 0)).toBe(true);
+
+  const frameCounts = new Set(cases.map((c) => c.frames.length));
+  expect([...frameCounts].every((n) => n > 0)).toBe(true);
+  expect(cases.length).toBe(new Set(cases.map((c) => c.name)).size);
+});
+
+// The pins. The first is the recorded barge-in at the shipped config; the second
+// is the same audio at the hangover that config replaced, which is the only
+// recorded case that produces all four events. A table that drifted anywhere
+// shows up in one of them as a changed list.
+test("the recorded barge-in at the defaults is the answer the device has to give", () => {
+  const barge = turnReplayCases().find((c) => c.name === "barge-default")!;
+  expect(barge.expected).toEqual([
+    { atMs: 36278, type: "duck" },
+    { atMs: 36694, type: "stop" },
+    { atMs: 45478, type: "end", silentMs: 1288 },
+  ]);
+});
+
+test("the same barge-in at 800 is the four-event answer", () => {
+  const barge = turnReplayCases().find((c) => c.name === "barge-hangover-800")!;
+  expect(barge.expected).toEqual([
+    { atMs: 36278, type: "duck" },
+    { atMs: 36694, type: "stop" },
+    { atMs: 42074, type: "end", silentMs: 897 },
+    { atMs: 42580, type: "duck" },
+    { atMs: 42993, type: "stop" },
+    { atMs: 43892, type: "end", silentMs: 899 },
+    { atMs: 44076, type: "duck" },
+    { atMs: 44490, type: "resume" },
+  ]);
+});
+
+// The recorded cases cannot fail a comparison that is wrong at the line, because
+// real audio never lands on one: dB is 20*log10(rms) and buffers arrive 113-208
+// ms apart. The synthetic cases exist to land on all four, and they only do that
+// while these arithmetic identities hold — change a default without re-cutting
+// them and they go on passing while pinning nothing.
+test("the synthetic cases sit exactly on the four thresholds", () => {
+  const cfg = resolveTurnDetectConfig({});
+  const named = (name: string) => turnReplayCases().find((c) => c.name === name)!;
+
+  const confirm = named("timer-confirm-and-hangover-exact");
+  const [duck, stop, end] = confirm.expected;
+  expect(confirm.frames.some((f) => f.db === cfg.startDb)).toBe(true);
+  expect(stop.atMs - duck.atMs).toBe(cfg.confirmMs);
+  expect(end.silentMs).toBe(cfg.hangoverMs);
+
+  const guard = named("timer-resume-and-guard-exact");
+  const [firstDuck, resume, secondDuck, secondStop, guardEnd] = guard.expected;
+  expect(resume.atMs - firstDuck.atMs).toBe(cfg.resumeMs);
+  expect(secondDuck.atMs - resume.atMs).toBe(cfg.resumeGuardMs);
+  expect(secondStop.atMs - secondDuck.atMs).toBe(cfg.confirmMs);
+  expect(guardEnd.silentMs).toBe(cfg.hangoverMs);
+
+  // Nothing at all, on frames that are all digital silence.
+  const quiet = named("timer-digital-silence");
+  expect(quiet.expected).toEqual([]);
+  expect(quiet.frames.every((f) => f.db === Number.NEGATIVE_INFINITY)).toBe(true);
+
+  // The reset is what separates this from the guard case: without it the loud
+  // buffer 50 ms after the resume is inside the guard and ducks nothing.
+  const reset = named("reset-clears-the-guard-mid-run");
+  expect(reset.frames.filter((f) => f.reset).length).toBe(1);
+  const afterReset = reset.expected[2];
+  expect(afterReset.type).toBe("duck");
+  expect(afterReset.atMs - reset.expected[1].atMs).toBeLessThan(cfg.resumeGuardMs);
+
+  // The fifth threshold. The playback starts at 0, there is a loud buffer at
+  // 1950 inside the window and one at 2000 exactly on its far edge, and only
+  // the second of them ducks.
+  const immunity = named("timer-immunity-boundary-exact");
+  const opened = immunity.frames[0];
+  expect(opened.playback).toBe("start");
+  expect(immunity.frames.some((f) => f.atMs === cfg.immunityMs - 50 && f.db === cfg.startDb))
+    .toBe(true);
+  expect(immunity.expected[0]).toEqual({ atMs: opened.atMs + cfg.immunityMs, type: "duck" });
+  expect(immunity.expected[1].atMs - immunity.expected[0].atMs).toBe(cfg.confirmMs);
+});
+
+// The three cases cut from the 2026-09-05 device run, which is the recording the
+// window exists because of: the phone's own voice, mic open, VPIO converging.
+test("the immunity window is what the played stage answers nothing", () => {
+  const named = (name: string) => turnReplayCases().find((c) => c.name === name)!;
+
+  // Twenty-two seconds of the companion talking to itself, and the shipped
+  // config announces nothing at all.
+  expect(named("played-immunity-default").expected).toEqual([]);
+
+  // The same buffers with the window shut. Four of them cross the line, and
+  // what the machine did with them before the window existed is two ducks —
+  // the resume guard swallows the other two — each of which would have dropped
+  // the companion's volume mid-sentence.
+  expect(named("played-immunity-0").expected).toEqual([
+    { atMs: 4200.448989868164, type: "duck" },
+    { atMs: 4590.524077415466, type: "resume" },
+    { atMs: 5005.522012710571, type: "duck" },
+    { atMs: 5510.814070701599, type: "resume" },
+  ]);
+
+  // A window 500 ms short of the default, where the last of the four leaks is
+  // outside it: the same frame the default ignores ducks here. That gap is the
+  // margin, and this case is what would fail if it were spent.
+  expect(named("played-immunity-1500").expected).toEqual([
+    { atMs: 5187.829971313477, type: "duck" },
+    { atMs: 5510.814070701599, type: "resume" },
+  ]);
+});
+
+// The window belongs to the playback. Both of the ways it can end early leave
+// the machine hearing the user immediately, and the two cases are identical
+// except for which call did it.
+test("a stopped playback and a reset both hand the turn straight back", () => {
+  const named = (name: string) => turnReplayCases().find((c) => c.name === name)!;
+  const answer: ReplayEvent[] = [
+    { atMs: 500, type: "duck" },
+    { atMs: 800, type: "stop" },
+    { atMs: 2100, type: "end", silentMs: 1250 },
+  ];
+  expect(named("playback-stop-closes-the-window-early").expected).toEqual(answer);
+  expect(named("reset-clears-the-window-mid-run").expected).toEqual(answer);
+  // Both duck 500 ms in, which is well inside the window they opened.
+  expect(500).toBeLessThan(resolveTurnDetectConfig({}).immunityMs);
+});
+
+// The harness sends this over a JSON bridge, so anything the format cannot carry
+// has to be absent rather than discovered on the phone. JSON has no -Infinity:
+// digital silence crosses as null and the device reads it back, which is the one
+// thing here that is not simply preserved.
+test("the table survives the wire", () => {
+  const cases = turnReplayCases();
+  const parsed = JSON.parse(turnReplayCasesJson()) as unknown;
+  const onTheWire = cases.map((item) => ({
+    ...item,
+    frames: item.frames.map((f) => ({ ...f, db: Number.isFinite(f.db) ? f.db : null })),
+  }));
+  expect(parsed).toEqual(onTheWire as unknown);
+
+  for (const item of cases) {
+    for (const frame of item.frames) {
+      expect(Number.isFinite(frame.db) || frame.db === Number.NEGATIVE_INFINITY).toBe(true);
+      expect(Number.isFinite(frame.atMs)).toBe(true);
+    }
+  }
+  // And the null actually occurs, or the device's decode of it is still untested.
+  expect(onTheWire.some((item) => item.frames.some((f) => f.db === null))).toBe(true);
+});
+
+test("the comparator says nothing when the streams agree", () => {
+  for (const item of turnReplayCases()) {
+    expect(diffReplay(item.expected, item.expected)).toEqual([]);
+  }
+});
+
+test("the comparator names the position and both sides when they do not", () => {
+  const expected: ReplayEvent[] = [
+    { atMs: 100, type: "duck" },
+    { atMs: 400, type: "stop" },
+    { atMs: 1200, type: "end", silentMs: 800 },
+  ];
+  expect(diffReplay(expected, expected.slice(0, 2))).toEqual([
+    "length 2, expected 3",
+    "#2 missing end@1200 silentMs=800",
+  ]);
+  expect(
+    diffReplay(expected, [
+      { atMs: 100, type: "duck" },
+      { atMs: 400, type: "resume" },
+      { atMs: 1200, type: "end", silentMs: 801 },
+    ]),
+  ).toEqual([
+    "#1 got resume@400, expected stop@400",
+    "#2 got end@1200 silentMs=801, expected end@1200 silentMs=800",
+  ]);
+  expect(diffReplay([], [{ atMs: 5, type: "duck" }])).toEqual([
+    "length 1, expected 0",
+    "#0 extra duck@5",
+  ]);
+});

@@ -1,0 +1,156 @@
+// What one info conversation is anchored to (src/info/briefer/anchors.ts):
+// which thread it writes to, what the corner position card recalls, and — the
+// part with a rule in it — which of the briefing's tiers the article card's one
+// line comes from. Pure: no React, no filesystem, no provider. Run: bun test.
+
+import { expect, test } from "bun:test";
+import {
+  articleAnchor,
+  articleReason,
+  briefingAnchor,
+  noBriefingAnchor,
+  onboardingAnchor,
+} from "../../../src/info/briefer/anchors";
+import type { CompanionContext } from "../../../src/info/briefer/chat";
+import type { Briefing, BriefingItemMeta } from "../../../src/info/boxes/types";
+
+const CTX: CompanionContext = { profile: "Reads robotics.", sources: [], collecting: true };
+
+function meta(patch: Partial<BriefingItemMeta> = {}): BriefingItemMeta {
+  return {
+    title: "A paper",
+    url: "https://example.com/a",
+    source: "s1",
+    sourceName: "Example",
+    publishedAt: "2026-07-25",
+    ...patch,
+  };
+}
+
+// One item id in every tier, so the tiers can be removed one at a time and the
+// next reason down has to be the one that shows.
+function briefing(patch: Partial<Briefing> = {}): Briefing {
+  return {
+    date: "2026-07-25",
+    generatedAt: 1_700_000_000_000,
+    version: 2,
+    labs: [{ labId: "lab-a", name: "Papers", cover: "Two real papers, the rest is vendor noise.", judgments: [] }],
+    quiet: [],
+    mustRead: [{ itemId: "x", reason: "must-read reason" }],
+    oneLiners: [{ itemId: "x", line: "one-liner line" }],
+    outOfLane: [{ itemId: "x", reason: "out-of-lane reason" }],
+    items: { x: meta({ title: "The paper", sourceName: "Example" }), y: meta({ title: "Dropped" }) },
+    ...patch,
+  };
+}
+
+test("the briefing and the no-briefing anchor are the same conversation", () => {
+  const withOne = briefingAnchor(briefing(), CTX);
+  const without = noBriefingAnchor(CTX, { dateKey: "2026-07-25", error: null, notices: [] });
+  expect(withOne.threadId).toBe("briefing-2026-07-25");
+  expect(without.threadId).toBe(withOne.threadId);
+  expect(withOne.position.line).toBe("Two real papers, the rest is vendor noise.");
+});
+
+// A thread id is a global key — an observation's message anchor is
+// "<threadId>:<ts>" and a distillation cursor is keyed by thread id alone — while
+// info threads live in one file per day. So the two days must not share an id,
+// and the two ways into one day's conversation must.
+test("the briefing thread is one per day, and both anchors spell it the same", () => {
+  const day2 = { ...briefing(), date: "2026-07-26" };
+  expect(briefingAnchor(day2, CTX).threadId).not.toBe(briefingAnchor(briefing(), CTX).threadId);
+  expect(noBriefingAnchor(CTX, { dateKey: "2026-07-26", error: null, notices: [] }).threadId).toBe(
+    briefingAnchor(day2, CTX).threadId,
+  );
+});
+
+test("the same article in two days' briefings gets two threads", () => {
+  const day1 = articleAnchor(briefing(), "x", "body", CTX);
+  const day2 = articleAnchor({ ...briefing(), date: "2026-07-26" }, "x", "body", CTX);
+  expect(day1.threadId).toBe("2026-07-25:x");
+  expect(day2.threadId).toBe("2026-07-26:x");
+});
+
+test("with no briefing the card says what is known, error first, then the notice", () => {
+  const day = { dateKey: "2026-07-25" };
+  expect(
+    noBriefingAnchor(CTX, { ...day, error: "no provider", notices: ["Last seen 2h ago"] }).position.line,
+  ).toBe("no provider");
+  expect(noBriefingAnchor(CTX, { ...day, error: null, notices: ["Last seen 2h ago"] }).position.line).toBe(
+    "Last seen 2h ago",
+  );
+  expect(noBriefingAnchor(CTX, { ...day, error: null, notices: [] }).position.line).toBe("Not collected yet");
+});
+
+// The order is the order the tiers are read in. An item can sit in more than one
+// (a must-read also gets a line in some briefings), and the reason written for
+// the tier the reader will actually see it in is the one worth recalling.
+test("the article card's line is the must-read reason, then the one-liner, then out-of-lane", () => {
+  const b = briefing();
+  expect(articleReason(b, "x")).toBe("must-read reason");
+  expect(articleReason({ ...b, mustRead: [] }, "x")).toBe("one-liner line");
+  expect(articleReason({ ...b, mustRead: [], oneLiners: [] }, "x")).toBe("out-of-lane reason");
+});
+
+// A filtered item, or one from another day, is in no tier. The card shows no
+// line rather than borrowing the briefing's overview.
+test("an item in no tier has no line", () => {
+  expect(articleReason(briefing(), "y")).toBe(null);
+  expect(articleReason(briefing(), "nothing-like-this")).toBe(null);
+});
+
+test("an article's thread is the day's item, and its card carries the item's own words", () => {
+  const anchor = articleAnchor(briefing(), "x", "the full body text", CTX);
+  expect(anchor.threadId).toBe("2026-07-25:x");
+  expect(anchor.emptyTitle).toBe("The paper");
+  expect(anchor.position).toEqual({
+    title: "The paper",
+    sourceName: "Example",
+    line: "must-read reason",
+  });
+});
+
+// An article chat is the day's conversation with one piece pulled to the front,
+// so both go on the desk and the briefing goes first (docs/61).
+test("an article lays the briefing and then the article", () => {
+  const anchor = articleAnchor(briefing(), "x", "the full body text", CTX);
+  expect(anchor.desk.map((d) => d.kind)).toEqual(["info-briefing", "info-article"]);
+  expect(anchor.desk[1].ref).toEqual({
+    dateKey: "2026-07-25",
+    itemId: "x",
+    title: "The paper",
+    overview: "Two real papers, the rest is vendor noise.",
+    bodyText: "the full body text",
+  });
+});
+
+test("the briefing anchors put one briefing on the desk, with and without one", () => {
+  expect(briefingAnchor(briefing(), CTX).desk).toEqual([
+    { kind: "info-briefing", ref: { dateKey: "2026-07-25", briefing: briefing(), ctx: CTX } },
+  ]);
+  expect(
+    noBriefingAnchor(CTX, { dateKey: "2026-07-25", error: "no provider", notices: ["a notice"] }).desk,
+  ).toEqual([
+    {
+      kind: "info-briefing",
+      ref: {
+        dateKey: "2026-07-25",
+        briefing: null,
+        ctx: CTX,
+        error: "no provider",
+        notices: ["a notice"],
+      },
+    },
+  ]);
+});
+
+test("onboarding opens its own thread in add-source mode", () => {
+  const anchor = onboardingAnchor("zh-CN");
+  expect(anchor.threadId).toBe("onboarding");
+  expect(anchor.mode).toBe("add-source");
+  expect(anchor.onboarding).toBe(true);
+  // The same briefing item in its onboarding variant, not a kind of its own.
+  expect(anchor.desk).toEqual([
+    { kind: "info-briefing", ref: { onboarding: true, aiLanguage: "zh-CN" } },
+  ]);
+});

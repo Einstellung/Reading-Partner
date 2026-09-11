@@ -9,7 +9,7 @@
 | 23 | 62 | turn 18、topics-store 13、reading-state 11、atomic-fs 11、settings 4、threads 4、readable-lazy 1 |
 | 2026 | 60 | topics-store 13、reading-state 11、atomic-fs 11、profile 7、turn 6、settings 5、threads 4、chat-scale-store 1、chat-pen-strokes 1、readable-lazy 1 |
 
-`tests/threads.test.ts`、`tests/info/readable-lazy.test.ts`、`tests/reading/turn.test.ts` 里没有一个 spy，挂的却是它们。真正装 spy 的是 `tests/ui/components/chat-scale-store.test.ts` 和 `tests/ui/components/shell-settings-pull.test.ts`，两个文件加起来 4 个，都装在模块顶层。
+`tests/threads.test.ts`、`tests/info/extract/readable-lazy.test.ts`、`tests/reading/turn.test.ts` 里没有一个 spy，挂的却是它们。真正装 spy 的是 `tests/ui/components/base/chat-scale-store.test.ts` 和 `tests/ui/components/common/shell-settings-pull.test.ts`，两个文件加起来 4 个，都装在模块顶层。
 
 ## 原因
 

@@ -22,4 +22,4 @@ iPad 实机 0.12.0。阅读器里对一段划线开的 AI 弹层（标题 "Readi
 
 点外面关不掉那半没动：Radix 覆盖不掉，iOS 系统 alert 也是点外面不关。Cancel 露出来之后这个框就有出口了。
 
-护栏在 `tests/ui/components/overlay-z.test.tsx`：真渲染一次，断言 floating 面里开的确认框 content 和 backdrop 都落在 floatingDialog、面外的还落在 dialog，另加阶梯上下界和 `CallBubble` 确实声明了自己那格。
+护栏在 `tests/ui/components/ui/overlay-z.test.tsx`：真渲染一次，断言 floating 面里开的确认框 content 和 backdrop 都落在 floatingDialog、面外的还落在 dialog，另加阶梯上下界和 `CallBubble` 确实声明了自己那格。

@@ -12,7 +12,7 @@
 // Source text, like tests/ui/components/chat-surface-contract.test.ts. What each
 // handoff then produces is tested where it runs:
 // tests/reading/session/use-call-reopen.test.tsx (the reopened conversation),
-// tests/ui/components/chat-pen-strokes.test.tsx (the stroke a reply reports).
+// tests/ui/components/chat/chat-pen-strokes.test.tsx (the stroke a reply reports).
 //
 // Run: bun test.
 import { expect, test } from "bun:test";

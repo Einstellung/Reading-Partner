@@ -2,7 +2,7 @@
 
 ## 现象
 
-随机文件顺序下 `sanitizeArticleHtml` 对任何输入都返回 `""`，`tests/info/sanitize.test.ts` 和 saved-articles 一起红一片（另一棵树上 seed 2026 的 103 个 fail 里 31 个是这个）。默认顺序绿，单文件单跑也绿——这套代码平时用的两道检查都看不见它。
+随机文件顺序下 `sanitizeArticleHtml` 对任何输入都返回 `""`，`tests/info/extract/sanitize.test.ts` 和 saved-articles 一起红一片（另一棵树上 seed 2026 的 103 个 fail 里 31 个是这个）。默认顺序绿，单文件单跑也绿——这套代码平时用的两道检查都看不见它。
 
 ## 原因
 
@@ -26,4 +26,4 @@ jsdom 模块本身要 0.5s 才加载完，所以 preload 里装的是个 getter�
 
 四个文件，按 leak → 取 sanitizer → `useDom()` → 再取 sanitizer 的顺序跑（顺序拿 `--seed` 摆，bun 不按命令行参数顺序跑文件）：第四个文件拿到 `""`。preload 装上之后同一个 seed 全绿。
 
-顺带量出来的另一面：window 漏着、后面没人卸的那一段里，sanitizer 用的是 happy-dom 的 parser 而不是 jsdom 的，`tests/info/sanitize.test.ts` 38 个用例红 32 个。那是同一个漏窗口的另一张脸，preload 装的这一份盖不住它——真正治它的是别让文件在 `useDom()` 之后死在模块作用域。
+顺带量出来的另一面：window 漏着、后面没人卸的那一段里，sanitizer 用的是 happy-dom 的 parser 而不是 jsdom 的，`tests/info/extract/sanitize.test.ts` 38 个用例红 32 个。那是同一个漏窗口的另一张脸，preload 装的这一份盖不住它——真正治它的是别让文件在 `useDom()` 之后死在模块作用域。

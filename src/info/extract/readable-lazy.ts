@@ -7,7 +7,7 @@
 // import here is what gives rollup a chunk key to hang them on, so they arrive
 // on first extraction instead. Nothing else may import readable.ts statically —
 // one static edge anywhere folds the chunk back into its importer, which is
-// what tests/info/readable-lazy.test.ts watches for.
+// what tests/info/extract/readable-lazy.test.ts watches for.
 //
 // The extractor's own contract is untouched: ExtractReadable stays synchronous,
 // because the engine calls it in the middle of building an item. Only acquiring

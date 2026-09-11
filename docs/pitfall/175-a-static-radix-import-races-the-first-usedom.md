@@ -2,7 +2,7 @@
 
 ## 现象
 
-`tests/ui/components/forward-ref-contract.test.ts` 从来没红过，把它挪到 `tests/` 根目录（`chore/mirror-test-tree` 干的事，因为它的 subject 是整个 `src/ui/components/ui/`）之后，21 个**别的**文件在模块作用域死掉，报的都是 `tests/support/dom.ts` 那句 "react-dom was evaluated before the first useDom()"。实测那棵树：`Ran 3435 tests` 而不是 3584，67 fail 里 21 个是 load 崩，170 个测试根本没跑。挪动本身一个字节的逻辑都没改。
+`tests/ui/components/ui/forward-ref-contract.test.ts` 从来没红过，把它挪到 `tests/` 根目录（`chore/mirror-test-tree` 干的事，因为它的 subject 是整个 `src/ui/components/ui/`）之后，21 个**别的**文件在模块作用域死掉，报的都是 `tests/support/dom.ts` 那句 "react-dom was evaluated before the first useDom()"。实测那棵树：`Ran 3435 tests` 而不是 3584，67 fail 里 21 个是 load 崩，170 个测试根本没跑。挪动本身一个字节的逻辑都没改。
 
 ## 原因
 
