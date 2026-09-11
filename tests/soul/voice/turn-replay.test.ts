@@ -1,15 +1,15 @@
-// The table the Swift port is checked against (src/info/briefer/turn-replay.ts).
-// Nothing here tests the detector — tests/info/briefer/turn-detect.test.ts does that.
+// The table the Swift port is checked against (src/soul/voice/turn-replay.ts).
+// Nothing here tests the detector — tests/soul/voice/turn-detect.test.ts does that.
 // What is at stake is the table's provenance: it is a copy of the fixtures, and
 // a copy that quietly stops matching what it was copied from would let the two
 // machines agree on numbers neither of them was calibrated for.
 //
-// Run: scripts/t.sh tests/info/briefer/turn-replay.test.ts
+// Run: scripts/t.sh tests/soul/voice/turn-replay.test.ts
 
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveTurnDetectConfig } from "../../../src/info/briefer/turn-detect";
+import { resolveTurnDetectConfig } from "../../../src/soul/voice/turn-detect";
 import {
   REPLAY_SOURCES,
   diffReplay,
@@ -18,7 +18,7 @@ import {
   turnReplayCasesJson,
   type ReplayEvent,
   type ReplaySequence,
-} from "../../../src/info/briefer/turn-replay";
+} from "../../../src/soul/voice/turn-replay";
 
 const ASSETS = join(import.meta.dir, "../../../docs/assets");
 
@@ -34,7 +34,7 @@ const toFrame = (e: LevelEvent) => ({
     e.payload.inputRms > 0 ? 20 * Math.log10(e.payload.inputRms) : Number.NEGATIVE_INFINITY,
 });
 
-/** The same cut tests/info/briefer/turn-detect.test.ts makes, made again from source. */
+/** The same cut tests/soul/voice/turn-detect.test.ts makes, made again from source. */
 function stageFrames(
   file: string,
   stage: string,

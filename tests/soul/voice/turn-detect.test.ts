@@ -1,7 +1,7 @@
-// The full-duplex turn detector (src/info/briefer/turn-detect.ts) run against
+// The full-duplex turn detector (src/soul/voice/turn-detect.ts) run against
 // the recorded on-device probe, so the thresholds are answerable from data and
 // not from taste. Pure: no React, no audio, no clock. Run: scripts/t.sh
-// tests/info/briefer/turn-detect.test.ts
+// tests/soul/voice/turn-detect.test.ts
 //
 // The fixtures are one probe session each, VPIO (Apple's voice processing, i.e.
 // echo cancellation) on and off. The phone played a fixed 15 s clip at full
@@ -25,7 +25,7 @@ import {
   stepTurnDetect,
   type TurnDetectConfig,
   type TurnEvent,
-} from "../../../src/info/briefer/turn-detect";
+} from "../../../src/soul/voice/turn-detect";
 
 const PROBE_DIR = join(import.meta.dir, "../../../docs/assets/voice-probe");
 const VPIO_ON = "voice-probe-aec-vpio-on.json";

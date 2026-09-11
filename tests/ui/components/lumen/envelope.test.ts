@@ -15,7 +15,7 @@ import {
 	queueEnvelope,
 	readEnvelope,
 } from "../../../../src/ui/components/lumen/envelope";
-import type { SpeechEnvelope } from "../../../../src/info/briefer/conversation";
+import type { SpeechEnvelope } from "../../../../src/soul/voice/conversation";
 
 const WINDOW = 25;
 

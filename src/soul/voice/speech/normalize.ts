@@ -2,6 +2,9 @@
 // briefing that are written one way and said another — dates, versions,
 // acronyms, URLs, numbers, symbols — into text a TTS voice reads correctly.
 //
+// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// briefing is one caller, not the owner.
+//
 // It exists because no vendor does this for us: the SiliconFlow CosyVoice2
 // endpoint takes plain text with neither SSML nor a normalization switch. The
 // module is a pure function over a string with no imports beyond its own

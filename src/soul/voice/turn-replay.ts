@@ -5,11 +5,11 @@
 // buffers and their event streams compared. This file is the shared input: the
 // level sequences recorded on the phone, cut to a stage, plus what the
 // TypeScript machine answers over each one. The device replays the frames and
-// the harness compares; tests/info/briefer/turn-replay.test.ts checks the same table
+// the harness compares; tests/soul/voice/turn-replay.test.ts checks the same table
 // against the fixtures it was cut from, so neither side can drift alone.
 //
 // Nothing here is invented. Every sequence is one stage of one recorded
-// session, the same cut tests/info/briefer/turn-detect.test.ts makes, and every config
+// session, the same cut tests/soul/voice/turn-detect.test.ts makes, and every config
 // is one the tests over there already argue for. The frames that are not
 // buffers — the reset and the two playback calls — are the machine's other
 // entry points, and they are here because a replay that only ever called `step`
@@ -786,7 +786,7 @@ export function replayExpected(
 
 /**
  * The runs. One line per question the ported machine has to answer the same way
- * as the original, and every config on it is one tests/info/briefer/turn-detect.test.ts
+ * as the original, and every config on it is one tests/soul/voice/turn-detect.test.ts
  * already argues from data.
  */
 const PLAN: {

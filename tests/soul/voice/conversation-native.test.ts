@@ -6,7 +6,7 @@
 // dictation-native.test.ts states: mock.module rewrites the whole worker's
 // registry and does not roll back (docs/pitfall/119).
 //
-// Run: bun test tests/info/briefer/conversation-native.test.ts
+// Run: bun test tests/soul/voice/conversation-native.test.ts
 
 import { expect, test } from "bun:test";
 import {
@@ -17,7 +17,7 @@ import {
   type ConversationBridge,
   type ConversationEvent,
   type ConversationState,
-} from "../../../src/info/briefer/conversation";
+} from "../../../src/soul/voice/conversation";
 
 interface Call {
   command: string;

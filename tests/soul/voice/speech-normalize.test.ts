@@ -4,7 +4,7 @@
 // the five readings docs/33 names by hand.
 
 import { expect, test } from "bun:test";
-import { chineseInteger, normalizeForSpeech } from "../../../src/info/briefer/speech/normalize";
+import { chineseInteger, normalizeForSpeech } from "../../../src/soul/voice/speech/normalize";
 
 // --- the five readings docs/33 names --------------------------------------
 

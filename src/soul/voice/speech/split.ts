@@ -3,6 +3,9 @@
 // request per sentence, one sentence at a time, which is the grain
 // `plugins/voice/src/tts/relay.rs` asks for.
 //
+// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// briefing is one caller, not the owner.
+//
 // Normalization runs first and never splits (see normalize.ts). That ordering is
 // what makes the rules here safe: by the time text reaches the splitter a URL is
 // already "x 链接", a number is already Chinese characters, and an acronym is

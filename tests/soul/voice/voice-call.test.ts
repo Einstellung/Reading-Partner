@@ -5,23 +5,23 @@
 // order, and that the pieces the driver adds on top — the opening turn, the
 // abortable model round, the level callback, the endings — behave.
 //
-// Run: bun test tests/info/briefer/voice-call.test.ts
+// Run: bun test tests/soul/voice/voice-call.test.ts
 
 import { expect, test } from "bun:test";
-import { VOICE_OPENING_KICKOFF } from "../../../src/info/briefer/call";
 import type {
   ConversationEvent,
   ConversationSource,
   SpeechStopped,
-} from "../../../src/info/briefer/conversation";
+} from "../../../src/soul/voice/conversation";
 import {
   KICKOFF_TURN,
+  VOICE_OPENING_KICKOFF,
   createVoiceCall,
   type VoiceCall,
   type VoiceCallModel,
   type VoiceCallTranscript,
-} from "../../../src/info/briefer/voice-call";
-import { INTERRUPTED_MARK, type VoiceTurn } from "../../../src/info/briefer/voice-session";
+} from "../../../src/soul/voice/voice-call";
+import { INTERRUPTED_MARK, type VoiceTurn } from "../../../src/soul/voice/voice-session";
 import type { TurnActivity } from "../../../src/ai/activity";
 
 // Three sentences as the splitter cuts them (a fullwidth comma is a boundary),

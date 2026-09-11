@@ -100,6 +100,12 @@ const LAYER: Record<string, Layer> = {
   // holds, plus the assembly. A capability because it reaches for desk, memory,
   // conversations, palace and ai, and for no domain.
   soul: "capability",
+  // How the soul speaks aloud and listens (docs/67): the full-duplex call, its
+  // state machine, the native bridge, turn detection and the text a TTS voice
+  // is handed. A capability with the soul because the voice is the soul's on
+  // whatever desk it speaks over; info/briefer holds the wiring of one caller.
+  "soul/voice": "capability",
+  "soul/voice/speech": "capability",
 
   info: "domain",
   // The nouns the info side is cut along (docs/63), in the order they may depend
@@ -112,7 +118,6 @@ const LAYER: Record<string, Layer> = {
   "info/analysis": "domain",
   "info/boxes": "domain",
   "info/briefer": "domain",
-  "info/briefer/speech": "domain",
   "info/cable": "domain",
   "info/collect": "domain",
   "info/extract": "domain",

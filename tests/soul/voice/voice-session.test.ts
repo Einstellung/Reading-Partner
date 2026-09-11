@@ -7,7 +7,7 @@
 // a duck costs volume and nothing else, and what a barge-in leaves in the
 // transcript is the model's own text cut at a sentence boundary.
 //
-// Run: bun test tests/info/briefer/voice-session.test.ts
+// Run: bun test tests/soul/voice/voice-session.test.ts
 
 import { expect, test } from "bun:test";
 import {
@@ -15,14 +15,14 @@ import {
   type ConversationBridge,
   type ConversationEvent,
   type ConversationSource,
-} from "../../../src/info/briefer/conversation";
+} from "../../../src/soul/voice/conversation";
 import {
   INTERRUPTED_MARK,
   createVoiceSession,
   type SessionEffect,
   type VoiceSession,
   type VoiceTurn,
-} from "../../../src/info/briefer/voice-session";
+} from "../../../src/soul/voice/voice-session";
 
 // A reply with a boundary in the middle of it. The splitter can only freeze text
 // that has something after the boundary, so a sentence goes out mid-stream only

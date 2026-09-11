@@ -4,6 +4,9 @@
 // performs the effects that come back against three ports — the native bridge,
 // one model turn, and the thread the conversation is kept in.
 //
+// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// briefing is one caller, not the owner.
+//
 // Ports rather than imports, for the reason conversation.ts takes a bridge: the
 // whole call then runs on a machine with no plugin, no microphone and no key,
 // which is where it is developed. The live ones are in voice-call-live.ts.
@@ -24,7 +27,6 @@
 //    produces is recorded and spoken like any other.
 
 import type { TurnActivity } from "../../ai/activity";
-import { VOICE_OPENING_KICKOFF } from "./call";
 import { speechEnvelope } from "./conversation";
 import type {
   ConversationEvent,
@@ -44,6 +46,18 @@ import {
 
 /** The turn the opening line is asked as. Native turns start at 1. */
 export const KICKOFF_TURN = 0;
+
+// The opening line a call is kicked with when the caller names none (docs/33
+// "被召唤的语音会话", docs/45). Synthetic: never rendered, never spoken, it only
+// kicks the greeting. What it asks for is a greeting and a question, not the
+// material read out — the call is a companion that was summoned and not a
+// player with a script (docs/33 "不播稿"). The wording is the info desk's, the
+// only desk with a call today; a second desk passes its own through
+// `deps.kickoff`.
+export const VOICE_OPENING_KICKOFF =
+  "(The user just opened the voice call — you are speaking aloud, so keep it short. " +
+  "Greet them, give ONE sentence on what today's briefing amounts to, and ask what they " +
+  "want to hear about. Do not read the briefing out and do not list the items.)";
 
 /**
  * Why a call is not up. `reason` is the native side's word for it where there
