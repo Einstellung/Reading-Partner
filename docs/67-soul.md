@@ -24,13 +24,13 @@ soul 是一等公民。常驻的那个面对用户，legion 派出去的是同�
 
 角色是 soul 装上去的东西，登记进 soul，做法同能上桌的种类登记进 desk。一个角色只带三样：一段职责、一份工具清单、一道写入闸。没有私有数据，没有私有记忆。
 
-[60](./60-info：白宫与Red Boxes.md) 的秘书长是 soul 装上秘书角色、桌上有盒子。[63](./63-情报局：研究室、专项组与态势.md) 的分析员是 soul 装上分析员角色、桌上有研究室。还没做。
+[60](./60-info：白宫与Red Boxes.md) 的秘书长是 soul 装上秘书角色、桌上有盒子。[63](./63-情报局：研究室、专项组与态势.md) 的分析员是 soul 装上分析员角色、桌上有研究室。登记表在 `soul/roles.ts`；秘书已登记（`info/briefer/role.ts`），职责段和加源、读页、派研究室那些工具从简报桌项上抬到了角色里，写入闸按 card / trial / instruction 三种声明。分析员今天没有独立的职责段和工具，还没登记。
 
 ## places
 
 一张表，外壳登记进 desk，每个 place 一句话说明它是干什么的，外加一个 `go()`。soul 拿到一个 `go_to` 工具，它去哪里，桌上就换成什么。
 
-这取代新手引导浮层：soul 带着读者转一圈，之后任何时候都能再介绍一遍。还没做。
+这取代新手引导浮层：soul 带着读者转一圈，之后任何时候都能再介绍一遍。登记表在 `desk/places.ts`，壳注册 today、briefing、topics、sources、settings（手机壳没有书架），一句话写在 `go_to` 的工具描述里，不进 prompt。
 
 ## topic 不是 soul 的
 
@@ -58,13 +58,11 @@ thread 是旧名字，概念是 conversation 和 span，存储里的标识符还
 
 做完的：palace 登记表加派生（61 第 1 步）、desk 登记表加那一次装配（第 3 步）、info 接记忆（第 2 步）、topic 确认卡（第 4 步，现在归记忆）、门口对话加 sequence 加双段回放（第 5 步）。
 
+2026-09-11 又做完的：登记表的工具（`soul/catalogue.ts`，`list_palace` 和 `list_kind`）、places 和 `go_to`、秘书角色登记进 soul、语音从 `info/briefer` 搬到 `soul/voice`（`voice-call-live.ts` 是 info 桌的接线，留在 info）。
+
 接着：
 
-1. 登记表的工具，soul 知道宫里有什么。
-2. places 和 `go_to`。
-3. 角色登记进 soul。
-4. 球和语音从 `info/briefer` 抬出来。
-5. 第一屏的交互，待议。
-6. 存储标识符从 thread 改名 conversation。
-7. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储（61 第 6 步）。
-8. 记忆与检索重做。
+1. 第一屏的交互，待议。
+2. 存储标识符从 thread 改名 conversation。
+3. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储（61 第 6 步）。
+4. 记忆与检索重做。
