@@ -2,7 +2,11 @@
 // gets written down on the way. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { resolveBookSource, type BookSourceIo } from "../../../src/reading/session/open-file";
+import {
+  resolveBookSource,
+  topicForOpen,
+  type BookSourceIo,
+} from "../../../src/reading/session/open-file";
 import type { FileRef } from "../../../src/platform/app/topics";
 
 const LIBRARY_BYTES = new Uint8Array([9, 9]);
@@ -93,4 +97,16 @@ test("a file that cannot be read stops there", async () => {
 
   await expect(resolveBookSource(file(), "topic-1", io)).rejects.toThrow("ENOENT");
   expect(calls).not.toContain("importBook");
+});
+
+test("the door's topic wins over the one the shell is in", () => {
+  expect(topicForOpen("topic-2", "topic-1")).toBe("topic-2");
+});
+
+test("a door that names no topic opens the book under the active one", () => {
+  expect(topicForOpen(undefined, "topic-1")).toBe("topic-1");
+});
+
+test("no topic from either side is not an open", () => {
+  expect(topicForOpen(undefined, null)).toBe(null);
 });
