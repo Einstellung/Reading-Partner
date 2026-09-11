@@ -44,7 +44,7 @@ topic 是数据侧的归档键：一本书列在哪个 topic 下（一本书总�
 
 ## 对话按归属存
 
-一本书的对话在书的文件里，info 的按天，retell 的在自己那份。在门口说的话（桌上没东西）有自己的 palace kind `conversation`，一天一个文件；线程库只认 `threads-<key>.json` 这一种名字，所以日期落在 key 上，文件叫 `threads-door-<date>.json`。删一本书不该去翻日期文件；就着划线问的那一句属于这本书。
+一本书的对话在书的文件里，info 的按天，retell 的在自己那份。在门口说的话（桌上没东西）有自己的 palace kind `conversation`，一天一个文件，`conversation-<date>.json`；key 到文件名的对应是线程库里的一张表，palace 的守卫测试盯着它和登记行一致。删一本书不该去翻日期文件；就着划线问的那一句属于这本书。
 
 连续性是派生的时间索引 sequence（`src/soul/sequence.ts`）：每个文件的每条线程切成一段 span，按时间排。它是本地缓存，登记在 palace 里，丢了重建，实测 36 个文件 1.3 MB 679 条消息冷建 14 ms。
 
@@ -66,4 +66,5 @@ thread 是旧名字，概念是 conversation 和 span，存储里的标识符还
 4. 球和语音从 `info/briefer` 抬出来。
 5. 第一屏的交互，待议。
 6. 存储标识符从 thread 改名 conversation。
-7. 记忆与检索重做。
+7. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储（61 第 6 步）。
+8. 记忆与检索重做。
