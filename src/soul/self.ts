@@ -22,6 +22,7 @@ import {
   type TopicProposalSurface,
 } from "../memory";
 import { buildConversationTools } from "../conversations";
+import { buildPlaceTools } from "./places";
 import type { DeskEnv, DeskMemory } from "../desk";
 import { getThread } from "../platform/app/threads";
 import type { AgentTool } from "../ai/agent";
@@ -30,7 +31,8 @@ export interface Soul {
   // statement_write, the conversation tools, the observation tools — all three
   // where there is a topic to file a new one under, the two that only read where
   // there is not — and propose_topic wherever the conversation is filed under no
-  // topic and the caller can draw the card the proposal ends in.
+  // topic and the caller can draw the card the proposal ends in. Last of all
+  // go_to, wherever a shell has registered places to take the reader to.
   tools: AgentTool[];
   // Every statement there is. Which of them ride the prompt is the ladder's
   // call, one pass at a time, so they are read once and filtered per pass.
@@ -117,6 +119,11 @@ export async function openSoul(
     ...(scope ? { onWrite: () => notifyObservationChange(scope) } : {}),
   });
   tools.push(...(scope ? observation : observation.filter((t) => t.name !== OBSERVATION_WRITE_TOOL)));
+  // Where the reader can be taken (docs/67). Last, because it is the one tool
+  // that is about the app rather than about the reader or the material, and
+  // absent wherever no shell has registered a place — a legion errand has
+  // nobody to take anywhere.
+  tools.push(...buildPlaceTools());
   return {
     tools,
     statements: await assembleStatements(),

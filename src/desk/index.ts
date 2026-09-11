@@ -9,6 +9,7 @@ export {
   registeredDeskKinds,
   type OpenedDesk,
 } from "./registry";
+export { listPlaces, registerPlaces, type Place } from "./places";
 export type {
   DeskEnv,
   DeskHistory,

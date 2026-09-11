@@ -24,6 +24,8 @@ import {
   splitSavedArticleBodiesOnce,
   type SavedArticle,
 } from "./reading/saved-articles";
+import { registerPlaces } from "./desk";
+import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
@@ -185,6 +187,14 @@ export default function PhoneApp() {
   }, []);
 
   const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
+
+  // Where the soul may take the reader (docs/67). The same places the other
+  // shell registers, minus the shelf, and all of them through the one navigate
+  // above: the stack decides whether arriving somewhere is a push or a back.
+  useEffect(
+    () => registerPlaces(shellPlaces({ goToScreen: onNavigate }, PHONE_PLACES)),
+    [onNavigate],
+  );
 
   return (
     // The backdrop the swipe reveals, and the clip that hides whatever has left
