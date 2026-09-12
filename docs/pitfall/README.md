@@ -18,6 +18,7 @@
 | 读写 AppData | 存储与数据目录 |
 | 加自动跑的后台/夜间任务、写数据迁移 | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
+| 造一个字节要可复现的文件（zip、EPUB） | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
 | 改合并策略、往 settings.json 加字段 | 存储与数据目录 |
 | 全文/图片提取、裁图 | 提取（壳侧 pdf.js） |
@@ -150,6 +151,7 @@
 
 ## 存储与数据目录
 
+- [293-a-fixed-zip-mtime-is-not-fixed-across-time-zones](./293-a-fixed-zip-mtime-is-not-fixed-across-time-zones.md) — 给 zip 条目定死一个 UTC 瞬间做时间戳，字节仍然跨时区变：zip 存 DOS 日期，fflate 用本地时间取值器拆字段，同一瞬间在三个时区写出三种字节，构建出来的 EPUB 于是在另一台设备上哈希成第二本书。时间戳要用本地日历字段构造（`new Date(2001, 0, 1, 12, 0, 0)`），`mtime: 0` 在 DOS 日期里表示不出来
 - [277-a-pdfium-cover-failure-outlives-pdfium](./277-a-pdfium-cover-failure-outlives-pdfium.md) — 上一版 PDFium 写下的 `covers/*.failed.json`（`FPDF_LoadMemDocument failed`）在 24 小时内一律当数，升级后书架上的 EPUB 还是无封面卡片。失败记号写下是哪个 reader 失败的，没写的不算证据
 - [240-an-epub-toc-is-not-in-spine-order](./240-an-epub-toc-is-not-in-spine-order.md) — EPUB 的 nav 目录是目录不是阅读顺序，spine 才是；11 本真书里有一本目录把 contents 排在 dedication 前面而 spine 反过来。大纲页码的不变量只能按 (spine 序号, 文档内偏移) 排完再断言单调，界面照 nav 的顺序显示
 - [241-whitespace-between-head-and-body-shifts-every-anchor](./241-whitespace-between-head-and-body-shifts-every-anchor.md) — `</head>` 和 `<body>` 之间那个排版换行在 XML 解析里是 `<html>` 的文本子节点（HTML 解析器会挪进 body，XML 不会），计入正文偏移后整篇文档每个锚点推后一格，page-list 的第一个印刷页锚点于是看着不在文档开头。抽取正文时处在块边界上的纯空白文本节点整个跳过，块内的空格照留
