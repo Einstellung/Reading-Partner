@@ -25,6 +25,7 @@ import {
   type Topic,
 } from "../../../platform/app/topics";
 import { logEvent } from "../../../platform/app/events";
+import { listLibraryEntries, type LibraryEntry } from "../../../platform/app/library";
 import { deleteBook } from "../../../reading/delete/delete-book";
 import { isLastReferenceToBook } from "../../../reading/delete/pick";
 import {
@@ -52,9 +53,14 @@ import {
   PAGE_HEADER_TEXT,
   PAGE_SUB,
   PAGE_TITLE,
+  ROW,
+  ROW_LIST,
+  ROW_NAME,
 } from "../shelf/cardStyles";
 import DeleteTopicButton from "./DeleteTopicButton";
 import { displayFileTitle, type BookMeta } from "../shelf/file-title";
+import { splitMaterials } from "../shelf/article-row";
+import ArticleRows from "../shelf/ArticleRows";
 import RemoveFileButton from "./RemoveFileButton";
 import SavedArticleView from "./SavedArticleView";
 import TopicCard from "../shelf/TopicCard";
@@ -68,13 +74,6 @@ import { topicHeaderLine } from "./topic/topic-header";
 import { DEFAULT_SECTION, type TopicSection } from "../base/topic-nav";
 
 const GRID = `${LIBRARY_GRID} ${TOPIC_GRID_COLUMNS_CLASS}`;
-// The list rows that are still rows: a saved article has no cover to show.
-const ROW_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
-const ROW = "flex items-center gap-2 border border-border rounded-lg py-1 pl-1 pr-1.5";
-// min-w-0: without it a flex item cannot shrink below its content, and a long
-// title pushes the row past the container into a horizontal scroll.
-const ROW_NAME =
-  "min-w-0 flex-1 flex items-baseline gap-2.5 text-left px-2.5 py-2 border-0 bg-transparent cursor-pointer text-[15px] rounded-md can-hover:hover:bg-muted";
 
 export default function LibraryScreen(props: {
   topics: Topic[];
@@ -119,6 +118,20 @@ export default function LibraryScreen(props: {
   // length and marks, per file, keyed by path. Loaded off the render path; every
   // read is optional (book-meta.ts).
   const [meta, setMeta] = useState<Record<string, BookMeta>>({});
+  // The shelf registry, keyed by book id: one read per topic, because the only
+  // question Materials asks of it is which of the topic's files are articles.
+  const [entries, setEntries] = useState<Record<string, LibraryEntry>>({});
+  useEffect(() => {
+    let cancelled = false;
+    void listLibraryEntries()
+      .catch((): Record<string, LibraryEntry> => ({}))
+      .then((all) => {
+        if (!cancelled) setEntries(all);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTopic?.id]);
   useEffect(() => {
     if (!activeTopic) {
       setMeta({});
@@ -305,6 +318,7 @@ export default function LibraryScreen(props: {
                   topic={activeTopic}
                   topics={props.topics}
                   meta={meta}
+                  entries={entries}
                   savedArticles={savedArticles}
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
@@ -488,6 +502,9 @@ function TopicMaterials(props: {
   // Reading position, length and marks per file, keyed by path; read by the
   // host, which needs the same numbers for the topic's header line.
   meta: Record<string, BookMeta>;
+  // The shelf registry, keyed by book id. Read by the host; the only thing this
+  // section asks of it is which files are articles.
+  entries: Record<string, LibraryEntry>;
   // Already filtered to this topic and newest-first by the host.
   savedArticles: SavedArticle[];
   onAddFile: () => void;
@@ -501,6 +518,9 @@ function TopicMaterials(props: {
   onRemoveSavedArticle: (id: string) => void;
 }) {
   const files = sortedFiles(props.topic);
+  // Books are cards, articles are rows; both keep the shelf's recency order
+  // (article-row.ts says why articles come after).
+  const { books, articles } = splitMaterials(files, props.entries);
   const meta = props.meta;
   const [removing, setRemoving] = useState<FileRef | null>(null);
   // Whether the confirmation is offering to unlink or to delete.
@@ -518,18 +538,31 @@ function TopicMaterials(props: {
           onAction={props.onAddFile}
         />
       ) : (
-        <ul className={GRID}>
-          {files.map((f) => (
-            <BookCard
-              key={f.path}
-              file={f}
-              meta={meta[f.path]}
-              onOpen={() => props.onOpenFile(f)}
-              onRetell={f.hash ? () => props.onRetell(f) : undefined}
-              onRemove={() => setRemoving(f)}
-            />
-          ))}
-        </ul>
+        <>
+          {books.length > 0 && (
+            <ul className={GRID}>
+              {books.map((f) => (
+                <BookCard
+                  key={f.path}
+                  file={f}
+                  meta={meta[f.path]}
+                  onOpen={() => props.onOpenFile(f)}
+                  onRetell={f.hash ? () => props.onRetell(f) : undefined}
+                  onRemove={() => setRemoving(f)}
+                />
+              ))}
+            </ul>
+          )}
+          {/* No heading over these: an article is one of the topic's documents
+              and opens like any other, so the rows continue the same list the
+              cards started rather than announcing a second kind of thing. */}
+          <ArticleRows
+            rows={articles}
+            underCards={books.length > 0}
+            onOpen={(row) => props.onOpenFile(row.file)}
+            onRemove={(row) => setRemoving(row.file)}
+          />
+        </>
       )}
 
       {props.savedArticles.length > 0 && (

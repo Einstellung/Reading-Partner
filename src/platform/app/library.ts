@@ -29,12 +29,73 @@ export function libraryBookPath(bookId: string, format?: BookFormat): string {
   return `${LIBRARY_DIR}/${bookId}.${bookExtension(format)}`;
 }
 
+// What kind of document this is. Absent means a book: every entry written
+// before web articles were ingested is one, and library.json is a synced file
+// that is never migrated in place — the same rule `format` follows above.
+// A book and an article are the same document to the reader (docs/67): the only
+// difference is that an article has no cover and knows where it came from.
+export type LibraryKind = "book" | "article";
+
 export interface LibraryEntry {
   hash: string;
   title: string;
   originalFilename: string;
   addedAt: number;
   format?: BookFormat;
+  kind?: LibraryKind;
+  // Where an article was fetched from, and what the page said about itself.
+  // Only articles have these; a book has no source page.
+  sourceUrl?: string;
+  byline?: string;
+  // ISO 8601, as the page gave it — a bare date or a full timestamp.
+  publishedAt?: string;
+}
+
+// Pure: whether this entry is a web article rather than a book. One place, so
+// nothing has to remember that an absent `kind` means book.
+export function isArticleEntry(entry: LibraryEntry | null | undefined): boolean {
+  return entry?.kind === "article";
+}
+
+// Pure: the host an article came from, for the line under its title — "www." is
+// dropped because it is never the part a reader recognises. Null when there is
+// no source, or when it will not parse as a URL: the row then shows the date
+// alone rather than a broken string.
+export function displaySource(sourceUrl: string | undefined): string | null {
+  if (!sourceUrl) return null;
+  let host: string;
+  try {
+    host = new URL(sourceUrl).hostname;
+  } catch {
+    return null;
+  }
+  const bare = host.replace(/^www\./i, "");
+  return bare === "" ? null : bare;
+}
+
+// What a caller knows about a document that its bytes do not say: that it is an
+// article, and what page it was built from. Passed at import time because the
+// entry is written once and a repeated import is a no-op — a second call could
+// not attach it.
+export interface ImportMeta {
+  kind?: LibraryKind;
+  sourceUrl?: string;
+  byline?: string;
+  publishedAt?: string;
+}
+
+// Pure: the source fields, with the absent ones left out rather than written as
+// undefined. A book import therefore produces the same entry it always did,
+// which matters because library.json is one sync unit and a key that appears
+// with no value is still a revision.
+export function importMetaFields(meta: ImportMeta | undefined): Partial<LibraryEntry> {
+  if (!meta) return {};
+  const fields: Partial<LibraryEntry> = {};
+  if (meta.kind !== undefined) fields.kind = meta.kind;
+  if (meta.sourceUrl !== undefined) fields.sourceUrl = meta.sourceUrl;
+  if (meta.byline !== undefined) fields.byline = meta.byline;
+  if (meta.publishedAt !== undefined) fields.publishedAt = meta.publishedAt;
+  return fields;
 }
 
 export interface LibraryStore {
@@ -175,12 +236,25 @@ export async function getLibraryEntry(bookId: string): Promise<LibraryEntry | nu
   return (await loadStore()).books[bookId] ?? null;
 }
 
+// The whole registry, keyed by book id. One read for a screen that has a list of
+// books and one question to ask of each — the shelf asks which of a topic's
+// files are articles, and reading library.json once per file instead would read
+// the same small file ten times.
+export async function listLibraryEntries(): Promise<Record<string, LibraryEntry>> {
+  return (await loadStore()).books;
+}
+
 // Import a book by its bytes: compute the book id, copy the bytes into the
-// library on first sight, and register title/originalFilename/format. Idempotent
+// library on first sight, and register title/originalFilename/format, plus
+// whatever the caller knows that the bytes do not say (`meta`). Idempotent
 // — re-importing the same content neither re-copies the blob nor overwrites the
 // registry. originalPath is always a stored topic file path, which topics.ts
 // normalized on the way in (path.ts), so the basename here is the real filename.
-export async function importBook(bytes: Uint8Array, originalPath: string): Promise<LibraryEntry> {
+export async function importBook(
+  bytes: Uint8Array,
+  originalPath: string,
+  meta?: ImportMeta,
+): Promise<LibraryEntry> {
   const hash = await contentHash(bytes);
   const format = formatOfBytes(bytes);
   await ensureDir();
@@ -196,6 +270,7 @@ export async function importBook(bytes: Uint8Array, originalPath: string): Promi
     originalFilename: basename(originalPath),
     addedAt: Date.now(),
     format,
+    ...importMetaFields(meta),
   };
   await saveStore(addEntry(store, entry));
   return entry;

@@ -8,9 +8,12 @@ import {
   LIBRARY_FILE,
   addEntry,
   getLibraryEntry,
+  displaySource,
   healLibrary,
   importBook,
+  isArticleEntry,
   libraryBookPath,
+  listLibraryEntries,
   removeEntry,
   removeLibraryEntry,
   type LibraryStore,
@@ -192,4 +195,74 @@ test("no registry at all still registers the first import", async () => {
   expect(Object.keys((JSON.parse(disk.files.get(LIBRARY_FILE)!) as LibraryStore).books)).toEqual([
     entry.hash,
   ]);
+});
+
+// --- articles ---------------------------------------------------------------
+
+test("an entry with no kind is a book, and library.json is not migrated to say so", () => {
+  const book = { hash: "h", title: "t", originalFilename: "t", addedAt: 1 };
+  expect(isArticleEntry(book)).toBe(false);
+  expect(isArticleEntry({ ...book, kind: "book" as const })).toBe(false);
+  expect(isArticleEntry({ ...book, kind: "article" as const })).toBe(true);
+  expect(isArticleEntry(null)).toBe(false);
+});
+
+test("displaySource is the bare host, or null when there is nothing to show", () => {
+  expect(displaySource("https://www.nytimes.com/2026/09/12/a.html")).toBe("nytimes.com");
+  expect(displaySource("http://example.co.uk:8080/a")).toBe("example.co.uk");
+  expect(displaySource(undefined)).toBeNull();
+  expect(displaySource("nytimes.com/a")).toBeNull();
+});
+
+test("importBook writes the source fields a caller hands it", async () => {
+  const entry = await importBook(new Uint8Array([7, 7, 7]), "/topics/t/A piece.epub", {
+    kind: "article",
+    sourceUrl: "https://example.com/a",
+    byline: "A Writer",
+    publishedAt: "2026-09-12",
+  });
+  expect(entry.kind).toBe("article");
+  expect(entry.sourceUrl).toBe("https://example.com/a");
+  expect(entry.byline).toBe("A Writer");
+  expect(entry.publishedAt).toBe("2026-09-12");
+  const store = JSON.parse(disk.files.get(LIBRARY_FILE)!) as LibraryStore;
+  expect(store.books[entry.hash].kind).toBe("article");
+  expect(store.books[entry.hash].byline).toBe("A Writer");
+});
+
+// A book import must produce the entry it always did: library.json is one sync
+// unit, so a key that appears with nothing in it is still a revision.
+test("importBook with no metadata writes no article keys", async () => {
+  const entry = await importBook(new Uint8Array([1, 1, 1]), "/books/plain.pdf");
+  const store = JSON.parse(disk.files.get(LIBRARY_FILE)!) as LibraryStore;
+  expect(Object.keys(store.books[entry.hash]).sort()).toEqual([
+    "addedAt",
+    "format",
+    "hash",
+    "originalFilename",
+    "title",
+  ]);
+});
+
+// The entry is written once, so a second import cannot attach metadata — which is
+// why the caller passes it at import time.
+test("re-importing the same bytes keeps the first entry, metadata and all", async () => {
+  const bytes = new Uint8Array([5, 5, 5]);
+  const first = await importBook(bytes, "/topics/t/A piece.epub", {
+    kind: "article",
+    sourceUrl: "https://example.com/a",
+  });
+  const again = await importBook(bytes, "/topics/t/A piece.epub", { kind: "book" });
+  expect(again).toEqual(first);
+  expect(again.kind).toBe("article");
+});
+
+test("listLibraryEntries hands back the whole registry in one read", async () => {
+  const one = await importBook(new Uint8Array([2, 2, 2]), "/books/one.pdf");
+  const two = await importBook(new Uint8Array([3, 3, 3]), "/topics/t/two.epub", {
+    kind: "article",
+  });
+  const all = await listLibraryEntries();
+  expect(Object.keys(all).sort()).toEqual([one.hash, two.hash].sort());
+  expect(all[two.hash].kind).toBe("article");
 });

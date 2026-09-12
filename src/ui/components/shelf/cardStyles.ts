@@ -75,3 +75,15 @@ export const PAGE_SUB = "mx-0 mt-1.5 mb-0 text-[13px] text-muted-foreground";
 // The header's own button: solid ink, 40px, and never shrinking under a long
 // title beside it.
 export const HEADER_ACTION = "h-10 flex-none";
+
+// The documents that are rows instead of cards: an article has no cover, so a
+// grid of blank tiles would say less than a line of text (docs/67). Both lists in
+// a topic's Materials section wear these — the topic's own articles and the older
+// keeps under them.
+//
+// min-w-0 on the name: without it a flex item cannot shrink below its content,
+// and a long title pushes the row past the container into a horizontal scroll.
+export const ROW_LIST = "list-none m-0 p-0 flex flex-col gap-1.5";
+export const ROW = "flex items-center gap-2 border border-border rounded-lg py-1 pl-1 pr-1.5";
+export const ROW_NAME =
+  "min-w-0 flex-1 flex items-baseline gap-2.5 text-left px-2.5 py-2 border-0 bg-transparent cursor-pointer text-[15px] rounded-md can-hover:hover:bg-muted";

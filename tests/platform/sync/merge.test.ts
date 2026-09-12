@@ -295,6 +295,33 @@ test("a keyed map merges per key and keeps the wrapper", () => {
   expect(out.contested).toBe(false);
 });
 
+// An article's entry carries fields a book's does not (kind, sourceUrl, byline,
+// publishedAt). The records strategy keeps a record whole, so nothing here has to
+// be told they exist — this is the test that says so.
+test("an article's source fields survive a merge whole", () => {
+  const book = { hash: "x", title: "X", originalFilename: "X.pdf", addedAt: 1 };
+  const piece = {
+    hash: "a",
+    title: "A piece.epub",
+    originalFilename: "A piece.epub",
+    addedAt: 2,
+    format: "epub",
+    kind: "article",
+    sourceUrl: "https://example.com/a",
+    byline: "A Writer",
+    publishedAt: "2026-09-12",
+  };
+  const base = json({ books: { x: book } });
+  const local = json({ books: { x: book } });
+  const remote = json({ books: { x: book, a: piece } });
+  const out = merge("library.json", base, local, remote);
+  const books = (JSON.parse(text(out.merged)) as { books: Record<string, unknown> }).books;
+  expect(books.a).toEqual(piece);
+  expect(out.contested).toBe(false);
+  // And the same in the other direction: nothing may depend on which side is local.
+  expect(text(merge("library.json", base, remote, local).merged)).toBe(text(out.merged));
+});
+
 test("threads merge per thread, not per file", () => {
   const thread = (id: string, n: number) => ({
     id,
