@@ -21,6 +21,12 @@ export {
 } from "./cfi";
 export { parseEpub, spineIndexOf, EpubParseError, type EpubBook, type SpineDocument } from "./parse";
 export {
+  buildArticleEpub,
+  MISSING_IMAGE_HEIGHT,
+  type ArticleEpubInput,
+  type ArticleImage,
+} from "./build-article";
+export {
   PAGINATION_VERSION,
   blockNumberAt,
   blockTexts,
