@@ -106,7 +106,8 @@ import {
   type TableChapter,
 } from "./chapters";
 import { buildClassroomTools } from "./prep/papers/tools";
-import { INGEST_URL_PROMPT, buildSourceTools } from "./prep/papers/source-tool";
+import { INGEST_URL_PROMPT, buildSourceTools, type IngestResult } from "./prep/papers/source-tool";
+import { ingestUrlLive } from "./ingest/live";
 import {
   buildSavedArticleTools,
   prepareSavedArticle,
@@ -509,6 +510,28 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
           const paper = await livePipeline.ingestSource(url);
           const ft = await getFulltext(paperFulltextHash(bookId, paper.slug));
           const chars = ft ? ft.pages.reduce((n, pg) => n + pg.length, 0) : 0;
+          // A web page also becomes a document in this book's topic (docs/67):
+          // the AI's material and the reader's are one object, so a citation can
+          // land on a page the reader is looking at. The digest still hangs off
+          // the prep run for now.
+          //
+          // The page is fetched twice, once by each path. The pipeline keeps the
+          // extracted plain text, and an EPUB is built out of HTML, so there is
+          // nothing the two could hand each other short of restructuring the
+          // fetch stage — which is what the digest-on-the-document step is.
+          //
+          // A failure here is not a failed ingest: the prep material is already
+          // fetched and readable, and losing the shelf copy must not cost the
+          // conversation the source it was about to discuss.
+          let document: IngestResult["document"];
+          if (paper.kind === "article" && paper.status !== "failed" && topicId) {
+            try {
+              const ingested = await ingestUrlLive(url, topicId);
+              document = { title: ingested.title, topicName };
+            } catch (e) {
+              console.warn("could not put the ingested page on the shelf", e);
+            }
+          }
           return {
             slug: paper.slug,
             title: paper.title,
@@ -517,6 +540,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
             chars,
             status: paper.status,
             error: paper.error,
+            document,
           };
         },
       }),
