@@ -4,6 +4,8 @@
 
 > 落地状态（2026-08-25）：收下的存储已落地，正文也已拆出记录。`saved-articles.json`（`src/reading/saved-articles.ts`）只剩元数据，在同步范围里（`src/platform/sync/syncFs.ts`），登记在合并契约的 `RECORD_FILES`（`src/platform/sync/merge/contract.ts`）。正文按内容寻址落在 `article-bodies/<hash>.json`，一篇一个文件、写一次不再改，同步范围里单列一条规则，合并策略是 `opaque`。记录里留 `bodyHash` 和 `textChars`。
 
+> 补记（2026-09-12）：「收藏的文章算不算书」在 [67](./67-HTML文档.md) 答完：阅读层同一种文档，摄入时构建成 EPUB 走纸页；topic 里和书并排，没有第二个列表。存量的 `saved-articles.json` 和 `SavedArticleView` 先留着，等新路跑稳再按同一函数重建。
+
 ---
 
 ## 原则

@@ -84,6 +84,8 @@ info 是 reading 的进水口之一。info 帮用户认识世界，reading 帮�
 
 ## 出口：稿
 
+> 补记（2026-09-12）：渲染与引用那几条（react-markdown 渲染壳、没有页、竖滚、按节引用、划线存节号+偏移、图引源站 URL）作废，稿改走 [67](./67-HTML文档.md) 的纸页：markdown 摄入时转 HTML 构建 EPUB，引用一律 `[p.N]`，图落本地。文件不可变、再聚合是新文件、划线按原文片段搬，这三条不变。
+
 稿是给整块时间的产出，进书架。以下已定。
 
 - 模型输出 markdown。app 内一个固定的 HTML 渲染壳（react-markdown 加已装的 gfm / math / katex / CJK 插件），不做模型写 HTML 那条路。

@@ -131,7 +131,7 @@ legion → ai、budget、platform。info、reading、memory → legion。legion 
 
 legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上面每个新子目录都要各自登记一行。
 
-第一个真调用方是 info 管线的一段（discover 或 fetch body）：管线各段变成 run、跑完往盒子里投递，和 Red Box 是同一件事。
+第一个真调用方是 info 管线的一段（discover 或 fetch body）：管线各段变成 run、跑完往盒子里投递，和 Red Box 是同一件事。候选之二：translate（epub-translator 作外部工具，PC 在 presence 里广告能力，执行器包一个子进程），未定。
 
 ## 现状
 
