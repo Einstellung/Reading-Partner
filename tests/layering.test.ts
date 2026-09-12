@@ -147,6 +147,12 @@ const LAYER: Record<string, Layer> = {
   // PDFium geometry all the way down, and the two share the shell's contract.
   "reading/epub": "domain",
   "reading/figures": "domain",
+  // Turning a pasted URL into a document on the shelf (docs/67). A domain of its
+  // own rather than a corner of reading/epub: the building of the file is that
+  // directory's, and this is the fetching, the extraction and the filing around
+  // it — it reaches for info/extract, the library and the topic store, and
+  // reading/epub reaches for none of them.
+  "reading/ingest": "domain",
   "reading/lecture": "domain",
   "reading/papers": "domain",
   "reading/prep": "domain",
