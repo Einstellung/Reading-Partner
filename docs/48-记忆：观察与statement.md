@@ -211,6 +211,8 @@ statement 层的检索用同一套方法在 statement 上重新量，量出不�
 
 ## 作废清单
 
+2026-09-13 执行完毕：删的全删了，换指向的全换了。`user-profile.md`、`info-profile.md`、`profile-guess.json` 一个字节没动，palace 里三行都标成 orphan 留在同步范围内。0.13 那张把旧行勾成 statement 的迁移卡（`ProfileLinesCard`）跟着 `splitProfile` 一起删掉。
+
 删：两个来源标记、`splitProfile` 及其 ok/bad、`GuessRefusal`、重读再拼那套、`ProfileGuess` 与它的行格式与 parse/render、`normalizeGuesses`、五个尺寸常量、四个 build 函数、`runProfileGuessPass`、`GUESS_TOPIC_LINES`、`formatTopicEvidence`、两个事件类型、`PROFILE_SKELETON_GUIDANCE`、`readerProfileSection` 里的免责声明段、`formatProfile`。
 
 留着不动：`feedback.ts` 和注意力日志（消费者变，数据和读取不变）、卡片加 Apply 的交互、采集端选举、扫描骨架、子 agent 运行器。

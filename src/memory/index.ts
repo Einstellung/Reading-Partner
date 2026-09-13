@@ -49,7 +49,7 @@ export {
   type ResolvedReferences,
 } from "./observations/links";
 export {
-  assembleIdentity,
+  assembleReaderSection,
   assembleStatements,
   assembleReadingContext,
   assembleReadingSignal,
@@ -144,43 +144,6 @@ export {
   type UnitThread,
 } from "./observations/arrears";
 export {
-  buildGuessAgent,
-  buildGuessSystemPrompt,
-  buildGuessTool,
-  buildGuessUserMessage,
-  composeProfile,
-  declaredText,
-  formatAttentionTail,
-  formatTopicEvidence,
-  guessPromptBlock,
-  isGuessDue,
-  normalizeGuesses,
-  profileForPrompt,
-  renderGuessLine,
-  renderGuessSection,
-  replaceDeclared,
-  runProfileGuessPass,
-  splitProfile,
-  GUESS_AGENT_NAME,
-  GUESS_BEGIN,
-  GUESS_END,
-  GUESS_MIN_GAP_MS,
-  GUESS_SECTION_CHARS,
-  GUESS_TOOL_NAME,
-  MAX_GUESSES,
-  PROFILE_CHARS,
-  type GuessState,
-  type GuessTopicEvidence,
-  type ProfileGuess,
-  type ProfileGuessDeps,
-  type ProfileGuessInput,
-  type ProfileGuessPassInput,
-  type ProfileGuessResult,
-  type ProfileGuessStore,
-  type ProfileSplit,
-  type RawGuess,
-} from "./profile/guess";
-export {
   buildRetellDistillAgent,
   buildRetellDistillSystemPrompt,
   buildRetellDistillUserMessage,
@@ -216,7 +179,6 @@ export {
   onObservationChange,
   startDistillSweeps,
   sweepDistillation,
-  sweepProfileGuess,
   type DistillInfoThreadOptions,
   type DistillMarksOptions,
   type DistillRetellOptions,
@@ -235,6 +197,7 @@ export {
   type ReaderMessage,
   type StatementToolContext,
 } from "./statements/tools";
+export { readerStatementSection } from "./statements/section";
 export {
   dropCoveredObservations,
   memorySection,

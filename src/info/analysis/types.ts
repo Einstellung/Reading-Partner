@@ -26,10 +26,12 @@ export interface AnalystInput {
   /** Today's cables for this lab, each body already cut to ANALYST_TEXT_CHARS. */
   cables: AnalystCable[];
   /**
-   * What is known about the reader, not about the world. It decides who the
-   * room is writing for; it is never evidence for a judgment.
+   * What is known about the reader, not about the world: their statements
+   * rendered for a prompt (memory/statements/section.ts), and the episodic
+   * observations of the topic this room files under. It decides who the room is
+   * writing for; it is never evidence for a judgment.
    */
-  memory: { profile: string; observations: string };
+  memory: { reader: string; observations: string };
 }
 
 export interface AnalystOutput {

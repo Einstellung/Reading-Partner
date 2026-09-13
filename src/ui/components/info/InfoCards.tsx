@@ -18,7 +18,6 @@ import type {
   InfoCard,
   LabArchiveCardData,
   LabProposalCardData,
-  ProfileUpdateCardData,
 } from "../../../info/boxes/cards";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
@@ -155,51 +154,6 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
       <div className="mt-2 text-[12px] leading-snug text-faint-foreground">{note}</div>
       <div className="mt-2 text-[13px] font-medium text-accent-line">Open →</div>
     </button>
-  );
-}
-
-// The profile-update confirm card: the AI drafts a complete revised profile, the
-// user reads it verbatim and Applies (which saves and, when today's briefing
-// exists, offers a re-run of the day). Presentational — Apply/Re-run only raise intent.
-export function ProfileUpdateCard({ payload, dispatch }: CardComponentProps<ProfileUpdateCardData>) {
-  const applied = payload.phase === "applied";
-  return (
-    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? "Profile updated" : "Update reading profile"}
-      </div>
-      <div className="mt-1 text-[14px] font-medium text-foreground">{payload.summary}</div>
-      <pre className="m-0 mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-card p-3 font-sans text-[12px] leading-relaxed text-muted-foreground">
-        {payload.profile.trim()}
-      </pre>
-      <div className="mt-3 flex items-center justify-end gap-2">
-        {applied ? (
-          payload.canRetriage ? (
-            <Button
-              type="button"
-              variant="cta"
-              size="chip"
-              className="px-3.5 py-1.5"
-              onClick={() => dispatch({ kind: "mutate", op: "retriage" })}
-            >
-              Re-run today's analysis
-            </Button>
-          ) : (
-            <span className="text-[12px] text-faint-foreground">Applies to your next briefing.</span>
-          )
-        ) : (
-          <Button
-            type="button"
-            variant="cta"
-            size="chip"
-            className="px-3.5 py-1.5"
-            onClick={() => dispatch({ kind: "mutate", op: "apply-profile" })}
-          >
-            Apply
-          </Button>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -360,7 +314,6 @@ export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "probe-confirm": ProbeConfirmCard,
   "briefing-progress": BriefingProgressCard,
   "briefing-ready": BriefingReadyCard,
-  "profile-update": ProfileUpdateCard,
   "topic-proposal": TopicProposalCard,
   "lab-proposal": LabProposalCard,
   "lab-archive": LabArchiveCard,

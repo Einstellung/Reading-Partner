@@ -1,6 +1,5 @@
 // When the background passes run and when they refuse to (docs/02 part 2): one
-// pass at a time per subject, one sweep at a time, one guess at a time, and the
-// guess after distillation because it reads what distillation writes.
+// pass at a time per subject, and one sweep at a time.
 //
 // The passes themselves are injected. Two passes over the same topic at once
 // would each write back the meta they read before the other one wrote, and one
@@ -63,9 +62,6 @@ export interface SweepDeps {
   collectArrears(isThreadBusy: (threadId: string) => boolean): Promise<TopicArrears[]>;
   // Run the one job the sweep picked. Never throws.
   distill(job: DistillJob, trigger: DistillTrigger): Promise<void>;
-  // One look at whether the AI's guesses about the reader are worth redoing.
-  // Owns its own far slower clock, and never throws.
-  guess(trigger: DistillTrigger): Promise<void>;
   now(): number;
   // Bind the recurring ticks — the timer and the return to the foreground — and
   // return the undo. The startup tick is not one of these; it has already
@@ -80,7 +76,6 @@ export interface Sweeps {
   // of them only a look, so a reader who has done nothing since the last pass
   // costs nothing but a few file reads.
   sweepDistillation(trigger: DistillTrigger): Promise<void>;
-  sweepProfileGuess(trigger: DistillTrigger): Promise<void>;
   // Bind the sweep for the life of the app: once now, and on every scheduled
   // tick after that. Returns the undo.
   start(isThreadBusy: (threadId: string) => boolean): () => void;
@@ -91,7 +86,6 @@ export function createSweeps(deps: SweepDeps): Sweeps {
   // place that knows.
   let threadBusy: (threadId: string) => boolean = () => false;
   let sweeping = false;
-  let guessing = false;
 
   async function sweepDistillation(trigger: DistillTrigger): Promise<void> {
     // A pass already running is this tick's one pass, whoever started it. Two at
@@ -112,23 +106,10 @@ export function createSweeps(deps: SweepDeps): Sweeps {
     }
   }
 
-  async function sweepProfileGuess(trigger: DistillTrigger): Promise<void> {
-    // A distillation pass in flight is this tick's one background run, and its
-    // writes are exactly the evidence this pass reads — going second, next tick,
-    // is strictly better.
-    if (guessing || deps.gate.busy()) return;
-    guessing = true;
-    try {
-      await deps.guess(trigger);
-    } finally {
-      guessing = false;
-    }
-  }
-
   function start(isThreadBusy: (threadId: string) => boolean): () => void {
     threadBusy = isThreadBusy;
     const tick = (trigger: DistillTrigger): void => {
-      void sweepDistillation(trigger).then(() => sweepProfileGuess(trigger));
+      void sweepDistillation(trigger);
     };
     tick("startup");
     const unschedule = deps.schedule(tick);
@@ -138,5 +119,5 @@ export function createSweeps(deps: SweepDeps): Sweeps {
     };
   }
 
-  return { sweepDistillation, sweepProfileGuess, start };
+  return { sweepDistillation, start };
 }

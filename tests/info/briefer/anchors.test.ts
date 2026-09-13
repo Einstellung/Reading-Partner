@@ -14,7 +14,7 @@ import {
 import type { CompanionContext } from "../../../src/info/briefer/chat";
 import type { Briefing, BriefingItemMeta } from "../../../src/info/boxes/types";
 
-const CTX: CompanionContext = { profile: "Reads robotics.", sources: [], collecting: true };
+const CTX: CompanionContext = { reader: "Reads robotics.", sources: [], collecting: true };
 
 function meta(patch: Partial<BriefingItemMeta> = {}): BriefingItemMeta {
   return {

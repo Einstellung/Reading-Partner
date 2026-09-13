@@ -26,7 +26,7 @@ import {
   patchThreadMessage,
 } from "../../platform/app/threads";
 import { distillInfoThread } from "../../memory";
-import { loadProfile } from "../../memory/profile/profile";
+import { assembleReaderSection } from "../../memory/live/assemble";
 import { loadSources } from "../sources/source-store";
 import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
@@ -217,15 +217,15 @@ const REFUSE_BRIEFING: BriefingControl = {
  */
 export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<VoiceCall | null> {
   const briefing = opts.briefing;
-  const [profile, sources, settings, device] = await Promise.all([
-    loadProfile(),
+  const [reader, sources, settings, device] = await Promise.all([
+    assembleReaderSection(),
     loadSources(),
     loadSettings(),
     loadDeviceSettings(),
   ]);
   const collecting = device.role === "collector";
   const ctx = {
-    profile,
+    reader,
     sources,
     aiLanguage: settings.aiLanguage,
     canSignIn: hasWebviewFetch() && collecting,
@@ -266,7 +266,6 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
           tools = buildLiveCompanionTools(
             // No cards in a call: there is no screen to put one on. The tools
             // still answer the model in text, which is what it speaks.
-            () => {},
             () => {},
             opts.control ?? REFUSE_BRIEFING,
             {

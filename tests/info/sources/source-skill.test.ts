@@ -29,10 +29,10 @@ test("prompt requires multi-round digging before proposing candidates", () => {
   expect(p).toMatch(/at most 2-3 candidates/i);
 });
 
-test("onboarding drafts the first profile via update_profile from the user's own words", () => {
+test("onboarding writes the reader's first statements from their own words", () => {
   const p = addSourceSystemPrompt({ onboarding: true });
   expect(p).toMatch(/first run/i);
-  expect(p).toMatch(/update_profile/);
+  expect(p).toMatch(/statement_write/);
   expect(p).toMatch(/no invented taste/i);
   expect(addSourceSystemPrompt({ onboarding: false })).not.toMatch(/first run/i);
 });

@@ -121,7 +121,10 @@ const PHASE_RANK: Record<InfoRunPhase, number> = {
 
 export interface InfoDeps {
   loadBriefing(date: string): Promise<Briefing | null>;
-  loadProfile(): Promise<string>;
+  // What is known about the reader, as the analysts read it: the statements
+  // memory holds, rendered for a prompt (docs/48). Not a document of its own —
+  // the info side reads the one knowledge store every scenario reads.
+  loadReader(): Promise<string>;
   // The rooms, open and archived alike; the run reads the open ones. A run with
   // none of them refuses rather than collecting a day nothing can be made of.
   loadLabs(): Promise<Lab[]>;
@@ -841,7 +844,7 @@ export class InfoPipeline {
         return text ? { ...c, text } : c;
       }),
       memory: {
-        profile: await this.deps.loadProfile(),
+        reader: await this.deps.loadReader(),
         observations: await this.observations(lab),
       },
     };
@@ -890,7 +893,7 @@ export class InfoPipeline {
 
   // What is remembered about the reader on this room's topic. Guarded: a room
   // with no topic, an absent dep, or a read that failed all mean the analyst
-  // works from the profile alone, which is what it did before memory existed.
+  // works from the reader's statements alone.
   private async observations(lab: Lab): Promise<string> {
     const topicId = lab.charter.topicId;
     if (!topicId || !this.deps.loadObservations) return "";
@@ -932,8 +935,8 @@ export class InfoPipeline {
   }
 
   // Re-run the day's analysis over the cables already on disk — no collection.
-  // Used after the user applies a profile change (docs/16) and whenever the
-  // reader asks for the cheap half of a regenerate: the rooms read the same day
+  // Used whenever the reader asks for the cheap half of a regenerate: the rooms
+  // read the same day
   // again, which is an increment on top of the pictures they wrote the first
   // time, not a replay of them. A second call while running is refused the same
   // way generate is, and says so. It does not touch the run checkpoint: the

@@ -53,7 +53,7 @@ function input(picture: Picture, cables: AnalystCable[]): AnalystInput {
     picture,
     date: "2026-09-09",
     cables,
-    memory: { profile: "Reads robotics papers.", observations: "Skipped two funding items." },
+    memory: { reader: "Reads robotics papers.", observations: "Skipped two funding items." },
   };
 }
 

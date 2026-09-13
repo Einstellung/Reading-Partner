@@ -1,8 +1,9 @@
 // The info companion's system prompt, as the desk assembles it (src/info/
 // briefer/desk.ts over src/info/briefer/chat.ts): the output-language wiring
-// on both threads, and the shared companion context — profile, source roster,
+// on both threads, and the shared companion context — what is known about the
+// reader, the source roster,
 // per-item source, the lab roster with each room's picture, and the
-// update_profile anti-over-trigger rule.
+// statement_write anti-over-trigger rule.
 //
 // Asserted through openDesk + assembleTurn rather than off the prompt functions,
 // because that is now the only way the app builds one: the briefing is a thing on
@@ -13,7 +14,7 @@ import { beforeEach, expect, test } from "bun:test";
 import { assembleTurn } from "../../../src/soul";
 import { openDesk, type DeskEnv, type DeskRef } from "../../../src/desk";
 import {
-  formatProfile,
+  formatReader,
   formatSignInSites,
   formatSources,
   type CompanionContext,
@@ -43,7 +44,7 @@ const SOURCES: SourceDescriptor[] = [
   },
 ];
 
-const CTX: CompanionContext = { profile: "I like hard technical substance.", sources: SOURCES };
+const CTX: CompanionContext = { reader: "I like hard technical substance.", sources: SOURCES };
 
 const LAB: Lab = {
   id: "lab-1234abcd",
@@ -171,12 +172,12 @@ test("the article desk is the briefing and then the article", async () => {
   );
 });
 
-test("both threads carry the profile, source roster, and the full tool set", async () => {
+test("both threads carry what is known about the reader, the source roster, and the full tool set", async () => {
   for (const prompt of [await briefingPrompt(BRIEFING, CTX), await articlePrompt("T", "b", CTX)]) {
     expect(prompt).toContain("I like hard technical substance.");
     expect(prompt).toContain("量子位");
     expect(prompt).toContain("Hacker News");
-    expect(prompt).toContain("update_profile");
+    expect(prompt).toContain("statement_write");
     expect(prompt).toContain("probe_source");
     expect(prompt).toContain("add_source");
     expect(prompt).toContain("generate_briefing");
@@ -189,9 +190,9 @@ test("the base role names the companion's fuller capabilities, not a read-only h
   expect(prompt).toContain("on the user's request, never on your own");
 });
 
-test("the tool guidance holds update_profile back to a stated preference", async () => {
+test("the tool guidance holds statement_write back to a stated preference", async () => {
   const prompt = await briefingPrompt(BRIEFING, CTX);
-  expect(prompt).toContain("Do NOT propose a profile change on your own");
+  expect(prompt).toContain("Do NOT write one on your own");
 });
 
 test("the tool guidance grants descriptor authorship and carries the grammar", async () => {
@@ -209,13 +210,12 @@ test("the tool guidance holds generate_briefing to an explicit request and names
   expect(prompt).toContain("If a run is already in progress, say so");
 });
 
-test("the tool guidance carries the four-section skeleton and size discipline", async () => {
+// The reader's statements come from memory already rendered, and the prompt
+// prints them where the profile document used to go.
+test("the reader block carries what memory holds, not a document to rewrite", async () => {
   const prompt = await briefingPrompt(BRIEFING, CTX);
-  expect(prompt).toContain("Interests");
-  expect(prompt).toContain("Taste");
-  expect(prompt).toContain("Background");
-  expect(prompt).toContain("Now");
-  expect(prompt).toContain("under half a page");
+  expect(prompt).toContain("I like hard technical substance.");
+  expect(prompt).not.toContain("under half a page");
 });
 
 test("the briefing thread names each item's source", async () => {
@@ -307,9 +307,9 @@ test("a device that does not collect describes no add-source tools", async () =>
   expect(prompt).not.toContain("probe_source");
   expect(prompt).not.toContain("trial_source");
   expect(prompt).toContain("cannot add sources on this device");
-  // read_page and the profile tool stay, and so does what they need.
+  // read_page and the statement tool stay, and so does what they need.
   expect(prompt).toContain("read_page");
-  expect(prompt).toContain("update_profile");
+  expect(prompt).toContain("statement_write");
 });
 
 test("the no-briefing thread pins output only when a language is set", async () => {
@@ -325,8 +325,8 @@ test("formatSources marks disabled sources and handles an empty roster", () => {
   expect(formatSources([])).toContain("(none yet)");
 });
 
-test("formatProfile falls back when empty", () => {
-  expect(formatProfile("  ")).toContain("(no profile set)");
+test("formatReader falls back when nothing is written down", () => {
+  expect(formatReader("  ")).toContain("(nothing written down about this reader yet)");
 });
 
 // --- the sign-in window ------------------------------------------------------

@@ -36,7 +36,7 @@ import {
   saveSourceHealth,
   SOURCES_PULL_ROUTE,
 } from "../sources/source-store";
-import { loadProfile } from "../../memory/profile/profile";
+import { assembleReaderSection } from "../../memory/live/assemble";
 import { InfoPipeline, type InfoSourceRef, type SourceResult } from "../boxes/pipeline";
 import {
   parseScreenVerdicts,
@@ -533,7 +533,7 @@ export function getInfoPipeline(): InfoPipeline {
   if (!pipeline) {
     pipeline = new InfoPipeline({
       loadBriefing: loadBriefingForToday,
-      loadProfile,
+      loadReader: assembleReaderSection,
       loadLabs,
       loadPicture,
       savePicture,

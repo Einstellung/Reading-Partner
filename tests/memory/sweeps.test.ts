@@ -1,5 +1,5 @@
 // The background sweeps (src/memory/live/sweeps.ts): the re-entry rules around
-// distillation and the profile guess. Two passes over the same topic at once
+// distillation. Two passes over the same topic at once
 // would each write back the meta they read before the other one wrote, and one
 // of the two cursors would be lost — a failure that leaves no trace and cannot
 // be reproduced by hand, so it is tested here with the passes themselves faked.
@@ -66,7 +66,6 @@ class Harness {
   pendingDistill: { promise: Promise<void>; resolve: () => void } | null = null;
   arrearsError: Error | null = null;
   jobs: { job: DistillJob; trigger: DistillTrigger }[] = [];
-  guesses: DistillTrigger[] = [];
   warns: string[] = [];
   order: string[] = [];
   ticks: ((trigger: DistillTrigger) => void)[] = [];
@@ -90,11 +89,6 @@ class Harness {
         await Promise.resolve();
         this.order.push("distill");
         this.jobs.push({ job, trigger });
-      },
-      guess: async (trigger) => {
-        await Promise.resolve();
-        this.order.push("guess");
-        this.guesses.push(trigger);
       },
       now: () => this.now,
       schedule: (tick) => {
@@ -224,7 +218,7 @@ test("a sweep whose own pass is still running is this tick's one sweep", async (
   expect(h.arrearsCalls).toBe(2);
 });
 
-test("a distillation pass in flight holds the sweep and the guess off", async () => {
+test("a distillation pass in flight holds the sweep off", async () => {
   const h = new Harness();
   const s = h.sweeps();
   const pass = deferred();
@@ -232,42 +226,11 @@ test("a distillation pass in flight holds the sweep and the guess off", async ()
 
   await s.sweepDistillation("timer");
   expect(h.arrearsCalls).toBe(0);
-  await s.sweepProfileGuess("timer");
-  expect(h.guesses.length).toBe(0);
 
   pass.resolve();
   await running;
   await s.sweepDistillation("timer");
   expect(h.arrearsCalls).toBe(1);
-  await s.sweepProfileGuess("timer");
-  expect(h.guesses).toEqual(["timer"]);
-});
-
-test("a guess pass already running is this tick's one guess", async () => {
-  const h = new Harness();
-  let inGuess = deferred();
-  const deps = h.deps();
-  const s = createSweeps({
-    ...deps,
-    guess: async (trigger) => {
-      h.guesses.push(trigger);
-      await inGuess.promise;
-    },
-  });
-
-  const first = s.sweepProfileGuess("timer");
-  await settle();
-  expect(h.guesses.length).toBe(1);
-
-  await s.sweepProfileGuess("foreground");
-  expect(h.guesses.length).toBe(1);
-
-  inGuess.resolve();
-  await first;
-  inGuess = deferred();
-  inGuess.resolve();
-  await s.sweepProfileGuess("foreground");
-  expect(h.guesses.length).toBe(2);
 });
 
 test("nothing owed is no job and no complaint", async () => {
@@ -323,20 +286,18 @@ test("the sweep skips threads whose reply is still being written", async () => {
   expect(h.unschedules).toBe(1);
 });
 
-test("binding sweeps once at startup and on every scheduled tick, guess last", async () => {
+test("binding the sweep once at startup and on every scheduled tick", async () => {
   const h = new Harness();
   const s = h.sweeps();
   s.start(() => false);
   await settle();
 
   expect(h.jobs.map((j) => j.trigger)).toEqual(["startup"]);
-  expect(h.guesses).toEqual(["startup"]);
-  // The guess reads what distillation writes, so it goes second every time.
-  expect(h.order).toEqual(["distill", "guess"]);
+  expect(h.order).toEqual(["distill"]);
 
   expect(h.ticks.length).toBe(1);
   h.ticks[0]("foreground");
   await settle();
   expect(h.jobs.map((j) => j.trigger)).toEqual(["startup", "foreground"]);
-  expect(h.order).toEqual(["distill", "guess", "distill", "guess"]);
+  expect(h.order).toEqual(["distill", "distill"]);
 });
