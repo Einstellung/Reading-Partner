@@ -52,7 +52,7 @@ export default function MigrationGate() {
           <p className="m-0 text-xs text-faint-foreground">{view.incompleteNote}</p>
         )}
         {view.backupNote && <p className="m-0 text-xs text-faint-foreground">{view.backupNote}</p>}
-        {view.error && <p className="m-0 text-xs text-[#b91c1c]">{view.error}</p>}
+        {view.error && <p className="m-0 text-xs text-destructive">{view.error}</p>}
         {view.report && (
           <pre className="m-0 max-h-80 overflow-auto rounded-lg border border-border bg-card p-3 font-mono text-[11px] leading-snug whitespace-pre text-muted-foreground">
             {view.report}

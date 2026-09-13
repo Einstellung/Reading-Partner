@@ -210,7 +210,7 @@ export default function OAuthCard({
           <p className="m-0 text-xs text-faint-foreground">Signing in here signs out other providers.</p>
         </>
       )}
-      {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
+      {error && <p className="m-0 text-xs text-destructive">{error}</p>}
     </div>
   );
 }
@@ -256,7 +256,7 @@ function DeviceCodePanel({
   if (state.status === "error") {
     return (
       <div className="flex flex-col gap-1.5">
-        <p className="m-0 text-xs text-[#b91c1c]">{state.message}</p>
+        <p className="m-0 text-xs text-destructive">{state.message}</p>
         <div className="flex gap-3">
           {state.canPaste && (
             <Button type="button" variant="link" size="link" className={LINK} onClick={onPaste}>
