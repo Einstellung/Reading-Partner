@@ -1,9 +1,11 @@
-// The source-list page (docs/17): the account of what the user subscribes to.
-// One row per source (name, line, on/off toggle) with a health dot (green = last
-// run succeeded, amber = last run failed; click for last-success time + error),
-// a delete, and a paste-an-RSS-URL box at the top that probes + trials + adds in
-// place, without going through the chat. No drag/group/frequency — ranking is
-// triage's job. Presentational; the host owns the store writes and probing.
+// The source-list page (docs/63): the account of what the user subscribes to —
+// which sources there are, which research rooms read each one, and how healthy
+// each is. One row per source (name, line, the rooms that read it, on/off
+// toggle) with a health dot (green = last run succeeded, amber = last run
+// failed; click for last-success time + error) and a delete. Adding is not on
+// this page: a source is added by telling the AI to add it (the `add_source`
+// tool), so there is no URL box here. No drag/group/frequency — ranking is
+// triage's job. Presentational; the host owns the store writes.
 //
 // Above the list, one row per site the reader can sign in to (site-session.ts):
 // Bloomberg gives an anonymous reader a fifth of an article, so signing in is
@@ -13,8 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SourceDescriptor } from "../../../info/sources/descriptor";
 import type { SourceHealth } from "../../../info/sources/engine";
-import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
-import type { ProbeAddOutcome } from "../../../info/sources/source-live";
+import type { Lab } from "../../../info/labs/types";
 import { pipeLabel } from "../../../info/sources/probe";
 import {
   sessionRowLine,
@@ -27,7 +28,7 @@ import {
 import { HIT_44 } from "../base/buttons";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
-import { ProbeConfirmCard } from "./InfoCards";
+import { roomsUsingSource } from "./sources-page";
 
 function timeAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -149,6 +150,10 @@ function SignInRow(props: {
 export interface SourcesPageProps {
   sources: SourceDescriptor[];
   health: Record<string, SourceHealth>;
+  // The reader's research rooms, for the "read by" chips under each row. The
+  // rooms a source is read by is roomsUsingSource's answer, not a field on the
+  // source: a source nobody claimed is read by all of them.
+  labs: Lab[];
   // Last known sign-in state per site, and the three things a reader can do
   // about it. Absent on a platform with no webview — the section then draws
   // nothing, because there is nothing to sign in to.
@@ -161,16 +166,6 @@ export interface SourcesPageProps {
   onSignOut?: (site: SignInSite) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onRemove: (id: string) => void;
-  // Probe + trial in one shot, on a device that can do it. `onSlowTrial` fires
-  // when the trial is about to fetch a body through a browser window, which is
-  // tens of seconds of nothing to look at otherwise.
-  //
-  // Absent on a reader (docs/36): a trial has to really fetch three articles to
-  // prove the source works, and a reader has no webview to fetch them with — the
-  // same Bloomberg source trials to a full story on the collector and to a
-  // standfirst here.
-  onProbeAdd?: (url: string, onSlowTrial?: () => void) => Promise<ProbeAddOutcome>;
-  onConfirmAdd?: (descriptor: SourceDescriptor) => Promise<void>;
   // What the collecting machine's sessions look like, for a device that cannot
   // sign in itself. Absent on the collector, which draws the real rows above.
   collectorSites?: { deviceName: string; sites: Record<string, boolean> } | null;
@@ -178,39 +173,7 @@ export interface SourcesPageProps {
 }
 
 export function SourcesPage(props: SourcesPageProps) {
-  const [url, setUrl] = useState("");
-  const [probing, setProbing] = useState(false);
-  const [slow, setSlow] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<ProbeConfirmCardData | null>(null);
   const sites = signInSites(props.sources);
-
-  async function probe() {
-    const input = url.trim();
-    if (!input || probing || !props.onProbeAdd) return;
-    setProbing(true);
-    setSlow(false);
-    setError(null);
-    setPending(null);
-    try {
-      const r = await props.onProbeAdd(input, () => setSlow(true));
-      if (r.ok) setPending(r.card);
-      else setError(r.error);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setProbing(false);
-      setSlow(false);
-    }
-  }
-
-  async function confirmAdd() {
-    if (!pending || !props.onConfirmAdd) return;
-    await props.onConfirmAdd(pending.descriptor);
-    setPending((p) => (p ? { ...p, added: true } : p));
-    setUrl("");
-    setTimeout(() => setPending(null), 800);
-  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
@@ -221,50 +184,11 @@ export function SourcesPage(props: SourcesPageProps) {
         <span className="text-[15px] font-medium text-foreground">Sources</span>
       </div>
 
-      {/* Add by URL, where a URL can be proved to work. */}
-      {!props.onProbeAdd ? (
-        <p className="mb-6 mt-0 text-[13px] leading-relaxed text-faint-foreground">
-          Sources are added on the computer that collects them — proving one works means fetching
-          three articles from it, which only that machine can do.
-        </p>
-      ) : (
-      <div className="mb-6">
-        <div className="flex items-center gap-2">
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void probe();
-              }
-            }}
-            placeholder="Paste a site or RSS URL…"
-            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-[14px] text-foreground outline-none coarse:min-h-[44px] coarse:text-[16px] placeholder:text-faint-foreground focus:border-accent-line"
-          />
-          <Button type="button" variant="cta" size="lg" onClick={() => void probe()} disabled={!url.trim() || probing}>
-            {probing ? "Checking…" : "Add"}
-          </Button>
-        </div>
-        {slow && (
-          <div className="mt-2 text-[13px] text-muted-foreground">
-            This site is read through a background browser window — fetching one article to test it takes up to a minute.
-          </div>
-        )}
-        {error && <div className="mt-2 text-[13px] text-[#c0392b]">{error}</div>}
-        {pending && (
-          <div className="mt-3">
-            <ProbeConfirmCard
-              payload={pending}
-              surface="call"
-              dispatch={(a) => {
-                if (a.kind === "mutate" && a.op === "add-source") void confirmAdd();
-              }}
-            />
-          </div>
-        )}
-      </div>
-      )}
+      {/* Adding is a thing you say, not a thing you type here (docs/63). */}
+      <p className="mb-6 mt-0 text-[13px] leading-relaxed text-faint-foreground">
+        To add a source, tell the AI about it — say the site or feed you want followed and it
+        checks the source works before it goes on this list.
+      </p>
 
       {/* What the collecting machine's sessions look like, on a device that has
           no webview to sign in with (docs/36). Read-only on purpose: the cookie
@@ -332,42 +256,53 @@ export function SourcesPage(props: SourcesPageProps) {
 
       {/* The list. */}
       {props.sources.length === 0 ? (
-        <p className="my-3.5 text-[14px] text-faint-foreground">
-          {props.onProbeAdd
-            ? "No sources yet. Paste a URL above to add one."
-            : "No sources yet."}
-        </p>
+        <p className="my-3.5 text-[14px] text-faint-foreground">No sources yet.</p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
-          {props.sources.map((s) => (
-            <li
-              key={s.id}
-              className="group flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3"
-            >
-              <HealthDot health={props.health[s.id]} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] font-medium text-foreground">{s.name}</div>
-                <div className="truncate text-[12px] text-faint-foreground">
-                  {[s.line, pipeLabel(s)].filter(Boolean).join(" · ")}
-                </div>
-              </div>
-              <Switch
-                checked={s.enabled}
-                aria-label={`Enable ${s.name}`}
-                onCheckedChange={(v) => props.onToggle(s.id, v)}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Remove source"
-                title="Remove"
-                onClick={() => props.onRemove(s.id)}
-                className="h-7 w-7 flex-none rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:text-[#c0392b] group-hover:opacity-100"
+          {props.sources.map((s) => {
+            const rooms = roomsUsingSource(props.labs, s.id);
+            return (
+              <li
+                key={s.id}
+                className="group flex items-center gap-3 rounded-xl border border-border-soft bg-card px-4 py-3"
               >
-                ✕
-              </Button>
-            </li>
-          ))}
+                <HealthDot health={props.health[s.id]} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-medium text-foreground">{s.name}</div>
+                  <div className="truncate text-[12px] text-faint-foreground">
+                    {[s.line, pipeLabel(s)].filter(Boolean).join(" · ")}
+                  </div>
+                  {rooms.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {rooms.map((name) => (
+                        <span
+                          key={name}
+                          className="rounded-full border border-border-soft px-2 py-0.5 text-[11px] text-muted-foreground"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Switch
+                  checked={s.enabled}
+                  aria-label={`Enable ${s.name}`}
+                  onCheckedChange={(v) => props.onToggle(s.id, v)}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Remove source"
+                  title="Remove"
+                  onClick={() => props.onRemove(s.id)}
+                  className="h-7 w-7 flex-none rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:text-[#c0392b] group-hover:opacity-100"
+                >
+                  ✕
+                </Button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
