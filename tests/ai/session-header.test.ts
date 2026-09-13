@@ -200,6 +200,7 @@ function chat(id: ProviderId, sessionId: string): Promise<string> {
 			modelId: firstModel(id),
 			messages: [{ role: "user", text: "hello" }],
 			sessionId,
+			spend: { caller: "prep" },
 			onDelta: () => {},
 			onDone: (text) => resolve(text),
 			onError: (m) => reject(new Error(m)),

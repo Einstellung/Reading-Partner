@@ -61,6 +61,7 @@ test("the files the app writes are classified by what they hold", () => {
   // Named for the device that writes it, so its row matches a pattern rather
   // than a fixed name.
   expect(strategyFor("memory-usage-device1.jsonl")).toBe("records");
+  expect(strategyFor("model-calls-device1.jsonl")).toBe("records");
   expect(strategyFor("settings.json")).toBe("fields");
   // One device writes each of these and nobody else touches it, so there is
   // nothing to merge; a crossing pair leaves a conflict copy nobody reads.

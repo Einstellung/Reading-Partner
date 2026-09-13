@@ -519,6 +519,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         // comparison with every line logged before today. How much of the book
         // went in is the second axis (docs/09).
         telemetry: { surface: "reading", inline: turn.inline, thread: threadId },
+        about: { bookId },
         onDelta: (chunk) => write({ kind: "delta", chunk }, ts),
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),

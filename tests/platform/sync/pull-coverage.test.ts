@@ -67,6 +67,7 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   // Listed above "observations" so a claim reports this reason rather than the
   // observation store's, which is about a different file entirely.
   "memory-usage-": "append-only, and nothing reads it yet",
+  "model-calls-": "append-only, and nothing reads it yet",
   observations: "the observation store reads its entries per query",
   "article-bodies/":
     "a kept article's body is read when the article is opened, and the file is named " +

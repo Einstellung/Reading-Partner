@@ -44,6 +44,7 @@ function ask(
       messages: [{ role: "user", text: message }],
       signal,
       sessionId,
+      spend: { caller: "translate" },
       onDelta: () => {},
       onDone: (text) => resolve(text),
       onError: (text) => reject(new Error(text)),

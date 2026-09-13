@@ -20,6 +20,8 @@ import {
 	type Usage,
 } from "@earendil-works/pi-ai";
 import { DEFAULT_MAX_RETRIES, streamChatCore, type SimpleStreamFn } from "../../src/ai/providers";
+import { setModelCallSink } from "../../src/ai/model-usage";
+import type { ModelCallInput } from "../../src/memory/usage/model-calls";
 
 const MODEL = {} as Model<Api>;
 
@@ -295,4 +297,88 @@ test("the response head is handed to the provider so request ids are reachable",
 	expect(heads).toEqual([
 		{ status: 200, headers: { "request-id": "req_abc", "anthropic-ratelimit-requests-remaining": "42" } },
 	]);
+});
+
+// --- the model-call log ------------------------------------------------------
+
+const LOGGED_MODEL = { id: "claude-x", provider: "anthropic" } as unknown as Model<Api>;
+
+// Drives the core with the sink swapped out, and hands back the lines it wrote.
+async function logged(events: AssistantMessageEvent[]): Promise<ModelCallInput[]> {
+	const written: ModelCallInput[] = [];
+	const undo = setModelCallSink(async (calls) => {
+		written.push(...calls);
+	});
+	try {
+		const c = collect();
+		await streamChatCore({
+			stream: recordingStream(events).fn,
+			model: LOGGED_MODEL,
+			messages: [],
+			spend: { caller: "reading", bookId: "b-1" },
+			onDelta: c.onDelta,
+			onDone: c.onDone,
+			onError: c.onError,
+		});
+	} finally {
+		undo();
+	}
+	return written;
+}
+
+test("a finished call writes one line: who spent it, on what, and what it cost", async () => {
+	const written = await logged([textDelta("hi"), { type: "done", reason: "stop", message: finished("hi") }]);
+	expect(written).toEqual([
+		{
+			caller: "reading",
+			bookId: "b-1",
+			provider: "anthropic",
+			model: "claude-x",
+			input: 1200,
+			output: 340,
+			cacheRead: 900,
+			ok: true,
+		},
+	]);
+});
+
+// A call that failed still spent the input it sent, so it is one line like any
+// other — and one line only, not one from the error and another from the end of
+// the stream.
+test("a failed call writes one line, marked as failed, with the usage it had", async () => {
+	const error = finished("", { stopReason: "error", errorMessage: "boom" });
+	const written = await logged([textDelta("partial"), { type: "error", reason: "error", error }]);
+	expect(written.length).toBe(1);
+	expect(written[0]?.ok).toBe(false);
+	expect(written[0]?.input).toBe(1200);
+});
+
+test("a call that produced no message at all is still a line, at zero", async () => {
+	const written = await logged([textDelta("hi")]);
+	expect(written).toEqual([
+		{ caller: "reading", bookId: "b-1", provider: "anthropic", model: "claude-x", input: 0, output: 0, ok: true },
+	]);
+});
+
+// The core is driven directly by tests that are not about spend, and those calls
+// spend nothing: no sink call, rather than a line naming nobody.
+test("a core call with no spend context writes nothing", async () => {
+	const written: ModelCallInput[] = [];
+	const undo = setModelCallSink(async (calls) => {
+		written.push(...calls);
+	});
+	try {
+		const c = collect();
+		await streamChatCore({
+			stream: recordingStream([textDelta("hi")]).fn,
+			model: LOGGED_MODEL,
+			messages: [],
+			onDelta: c.onDelta,
+			onDone: c.onDone,
+			onError: c.onError,
+		});
+	} finally {
+		undo();
+	}
+	expect(written).toEqual([]);
 });
