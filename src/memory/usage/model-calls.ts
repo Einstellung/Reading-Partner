@@ -64,6 +64,36 @@ export function modelCallLogFile(deviceId: string): string {
   return `model-calls-${deviceId}.jsonl`;
 }
 
+// How much of it to keep. Nothing collects this file and nothing syncs it, so
+// the only thing that bounds it is this: a line is about 200 bytes, so a
+// megabyte is some five thousand calls, which is months of them on one machine.
+// The oldest go first — what a call cost last spring answers no question this
+// log is kept for.
+export const MODEL_CALL_LOG_MAX_BYTES = 1_000_000;
+
+const UTF8 = new TextEncoder();
+
+// Drop whole lines off the front until what is left fits. Pure, and whole lines
+// only: half a line is a line a reader skips, and a file that starts mid-record
+// is one every reader has to be taught to skip past.
+//
+// A single line longer than the cap is kept — it is the newest, and the file is
+// then over by that line rather than empty.
+export function capToBytes(text: string, maxBytes: number): string {
+  if (UTF8.encode(text).length <= maxBytes) return text;
+  const lines = text.split("\n").filter((l) => l !== "");
+  const sizes = lines.map((l) => UTF8.encode(`${l}\n`).length);
+  let bytes = sizes.reduce((a, b) => a + b, 0);
+  let first = 0;
+  // Never past the last line: the newest call is the one line this file cannot
+  // be without, and a file over the cap by one line beats an empty one.
+  while (first < lines.length - 1 && bytes > maxBytes) {
+    bytes -= sizes[first] ?? 0;
+    first += 1;
+  }
+  return `${lines.slice(first).join("\n")}\n`;
+}
+
 export interface ModelCallLog {
   logModelCall(calls: readonly ModelCallInput[]): Promise<void>;
 }
@@ -79,7 +109,8 @@ export function createModelCallLog(io: UsageIo): ModelCallLog {
       const at = new Date(io.now()).toISOString();
       const path = modelCallLogFile(device);
       const prior = (await io.read(path)) ?? "";
-      await io.write(path, appendLines(prior, calls.map((c) => ({ at, device, ...c }))));
+      const written = appendLines(prior, calls.map((c) => ({ at, device, ...c })));
+      await io.write(path, capToBytes(written, MODEL_CALL_LOG_MAX_BYTES));
     },
   };
 }

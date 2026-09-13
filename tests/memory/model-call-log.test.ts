@@ -4,8 +4,10 @@
 import { expect, test } from "bun:test";
 import { inSyncRange } from "../../src/platform/sync/syncFs";
 import {
+  capToBytes,
   createModelCallLog,
   modelCallLogFile,
+  MODEL_CALL_LOG_MAX_BYTES,
   type ModelCallRecord,
 } from "../../src/memory/usage/model-calls";
 
@@ -99,8 +101,48 @@ test("a device with no identity writes nothing", async () => {
   expect(files.size).toBe(0);
 });
 
-test("the log file is named for the device, and it syncs", () => {
+// What a machine spent is the machine's. Nothing collects these lines, so a
+// synced copy would be one ever-growing file per device and no reader for any
+// of them.
+test("the log file is named for the device, and stays on it", () => {
   expect(modelCallLogFile("device1")).toBe("model-calls-device1.jsonl");
-  expect(inSyncRange(modelCallLogFile("device1"))).toBe(true);
-  expect(inSyncRange(modelCallLogFile(""))).toBe(false);
+  expect(inSyncRange(modelCallLogFile("device1"))).toBe(false);
+});
+
+// --- the cap -----------------------------------------------------------------
+
+const LINES = ["aaaa", "bbbb", "cccc"].map((l) => `${l}\n`).join("");
+
+test("a log under the cap is left exactly as it is", () => {
+  expect(capToBytes(LINES, 100)).toBe(LINES);
+  expect(capToBytes("", 100)).toBe("");
+});
+
+test("over the cap, whole lines go off the front and the newest stay", () => {
+  // Each line is five bytes with its newline.
+  expect(capToBytes(LINES, 12)).toBe("bbbb\ncccc\n");
+  expect(capToBytes(LINES, 5)).toBe("cccc\n");
+});
+
+test("the newest line is kept even when it alone is over the cap", () => {
+  expect(capToBytes(LINES, 1)).toBe("cccc\n");
+});
+
+test("a multi-byte line is measured in bytes, not characters", () => {
+  // Four three-byte characters and a newline: 13 bytes, not 5.
+  const wide = "字字字字\n";
+  expect(capToBytes(`aaaa\n${wide}`, 13)).toBe(wide);
+  expect(capToBytes(`aaaa\n${wide}`, 18)).toBe(`aaaa\n${wide}`);
+});
+
+test("the cap is applied on append, so the file cannot grow without end", async () => {
+  const { log, files } = makeLog();
+  const path = modelCallLogFile("device1");
+  files.set(path, `${"x".repeat(MODEL_CALL_LOG_MAX_BYTES)}\n`);
+
+  await log.logModelCall([{ caller: "prep", provider: "a", model: "m", input: 1, output: 1, ok: true }]);
+
+  const text = files.get(path) ?? "";
+  expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(MODEL_CALL_LOG_MAX_BYTES);
+  expect(lines(text).map((e) => e.caller)).toEqual(["prep"]);
 });
