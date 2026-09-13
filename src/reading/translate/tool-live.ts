@@ -22,7 +22,7 @@ import {
   loadThreads,
 } from "../../platform/app/threads";
 import { parseEpub } from "../epub/parse";
-import { glossaryLive, translateBatchLive, type TranslateModel } from "./live";
+import { translateBatchLive, translateGlossaryLive, type TranslateModel } from "./live";
 import { replaceWithTranslation, summaryLine, type ReplaceResult } from "./replace";
 import { translateRun } from "./run";
 import { hasTranslations, segmentDocument } from "./segment";
@@ -151,7 +151,7 @@ async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): P
         readBook: readLibraryBook,
         translate: (bytes, onProgress) =>
           translateArticleEpub(bytes, {
-            buildGlossary: glossaryLive(ref.model),
+            translateGlossary: translateGlossaryLive(ref.model),
             translateBatch: translateBatchLive(ref.model),
             onProgress,
           }),

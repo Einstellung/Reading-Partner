@@ -49,6 +49,17 @@ export interface ArticleMetadata {
   language?: string;
 }
 
+/**
+ * A cover the app drew for a document it wrote itself — a 稿 or a 合订本
+ * (docs/67 「封面」). Articles and books do not have one: a book declares its
+ * own and an article is a row on the shelf without a card. The SVG comes from
+ * cover-svg.ts and is packed verbatim, so the archive stays a function of its
+ * content.
+ */
+export interface ArticleCover {
+  svg: string;
+}
+
 export interface ArticleEpubInput extends ArticleMetadata {
   /** Body HTML, as extractReadable produced it: an article body, not a page. */
   html: string;
@@ -57,6 +68,8 @@ export interface ArticleEpubInput extends ArticleMetadata {
    * simply absent, and the <img> that pointed at it becomes a placeholder.
    */
   images: readonly ArticleImage[];
+  /** Present only for a document the app composed; see ArticleCover. */
+  cover?: ArticleCover;
 }
 
 /** Archive layout. The spine document's images resolve one level up. */
@@ -64,6 +77,8 @@ export const ARTICLE_ENTRY = "text/article.xhtml";
 const NAV_ENTRY = "nav.xhtml";
 const OPF_ENTRY = "package.opf";
 export const IMAGE_DIR = "images";
+/** The generated cover, when there is one. Named in the manifest, off the spine. */
+export const COVER_ENTRY = "cover.svg";
 
 /**
  * The height a missing image leaves behind. A fixed number of pixels, not a
@@ -338,6 +353,7 @@ function packageDocument(
   identifier: string,
   images: ReadonlyMap<string, Uint8Array>,
   imageTypes: ReadonlyMap<string, string>,
+  hasCover: boolean,
 ): string {
   const meta = [`<dc:identifier id="pub-id">${escapeXml(identifier)}</dc:identifier>`];
   meta.push(`<dc:title>${escapeXml(collapse(input.title) || "Untitled")}</dc:title>`);
@@ -348,8 +364,17 @@ function packageDocument(
   if (published !== "") meta.push(`<dc:date>${escapeXml(published)}</dc:date>`);
   meta.push(`<dc:source>${escapeXml(collapse(input.sourceUrl))}</dc:source>`);
   meta.push(`<meta property="dcterms:modified">${FIXED_MODIFIED}</meta>`);
+  // EPUB 2's way of naming the cover, beside EPUB 3's properties="cover-image"
+  // below. Our own reader finds either (package.ts), and a reader that only
+  // knows the old one still has somewhere to look.
+  if (hasCover) meta.push(`<meta name="cover" content="cover"/>`);
 
   const manifest = [
+    ...(hasCover
+      ? [
+          `<item id="cover" href="${COVER_ENTRY}" media-type="image/svg+xml" properties="cover-image"/>`,
+        ]
+      : []),
     `<item id="nav" href="${NAV_ENTRY}" media-type="application/xhtml+xml" properties="nav"/>`,
     `<item id="article" href="${ARTICLE_ENTRY}" media-type="application/xhtml+xml"/>`,
   ];
@@ -420,6 +445,7 @@ export async function buildArticleEpub(input: ArticleEpubInput): Promise<Uint8Ar
     headings,
     images: packed.entries,
     imageTypes: packed.typeByEntry,
+    cover: input.cover,
   });
 }
 
@@ -434,6 +460,8 @@ export interface ArticlePackInput {
   images: ReadonlyMap<string, Uint8Array>;
   /** Archive entry -> media type, for the manifest. */
   imageTypes: ReadonlyMap<string, string>;
+  /** The cover to pack, for a document the app composed. */
+  cover?: ArticleCover;
 }
 
 /**
@@ -450,7 +478,11 @@ export async function packArticleEpub(input: ArticlePackInput): Promise<Uint8Arr
   // The publication's identity is its content, like everything else on the
   // shelf: the same article built twice is the same publication, and a new
   // snapshot of a page that changed is a new one.
-  const identifier = `urn:rp:article:${await contentHash(strToU8(article))}`;
+  // A cover is part of what the file is, so it is part of what the file is
+  // called. Left out of the digest when there is none, which keeps an article
+  // built today identical to the one built before covers existed.
+  const identity = input.cover ? `${article}\n${input.cover.svg}` : article;
+  const identifier = `urn:rp:article:${await contentHash(strToU8(identity))}`;
 
   const files: Zippable = {};
   // The mimetype entry goes in first and uncompressed, which is what the OCF
@@ -459,10 +491,18 @@ export async function packArticleEpub(input: ArticlePackInput): Promise<Uint8Arr
   const rest: Record<string, Uint8Array> = {
     "META-INF/container.xml": strToU8(CONTAINER),
     [OPF_ENTRY]: strToU8(
-      packageDocument(input.meta, language, identifier, input.images, input.imageTypes),
+      packageDocument(
+        input.meta,
+        language,
+        identifier,
+        input.images,
+        input.imageTypes,
+        input.cover !== undefined,
+      ),
     ),
     [NAV_ENTRY]: strToU8(navDocument(input.headings, language, input.meta.title)),
     [ARTICLE_ENTRY]: strToU8(article),
+    ...(input.cover ? { [COVER_ENTRY]: strToU8(input.cover.svg) } : {}),
     ...Object.fromEntries(input.images),
   };
   // Sorted, so the order of the entries is a property of the article and not of

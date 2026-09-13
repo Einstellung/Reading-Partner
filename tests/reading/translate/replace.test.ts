@@ -94,7 +94,7 @@ async function recorder(marks: MarkRecord[] = []): Promise<Recorded> {
     translate: async (bytes, onProgress) => {
       rec.order.push("translate");
       return await translateArticleEpub(bytes, {
-        buildGlossary: async () => [],
+        translateGlossary: async () => [],
         translateBatch: translator,
         onProgress,
         limiter: { rampMs: 0 },

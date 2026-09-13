@@ -52,7 +52,7 @@ function ask(
 }
 
 /** The glossary pass, bound to one model. */
-export function glossaryLive(model: TranslateModel): GlossaryFn {
+export function translateGlossaryLive(model: TranslateModel): GlossaryFn {
   const sessionId = model.sessionId ?? newRunId();
   return async (request, signal) =>
     parseGlossaryResponse(

@@ -67,7 +67,7 @@ export class TranslateError extends Error {
 
 export interface TranslateDeps {
   /** The pass that settles the vocabulary, before any block is translated. */
-  buildGlossary: GlossaryFn;
+  translateGlossary: GlossaryFn;
   translateBatch: TranslateBatchFn;
   /** Called as each batch finishes, in completion order, not document order. */
   onProgress?: (done: number, total: number) => void;
@@ -212,7 +212,7 @@ export async function translateArticleEpub(
     let glossary: GlossaryEntry[] = [];
     try {
       const request = glossaryRequestFor(meta.title, blocks);
-      glossary = [...(await once(limiter, (signal) => deps.buildGlossary(request, signal), stop.signal))];
+      glossary = [...(await once(limiter, (signal) => deps.translateGlossary(request, signal), stop.signal))];
     } catch (err) {
       if (err instanceof StoppedError) throw err;
       throw new TranslateError(`the glossary could not be settled: ${String(err)}`);

@@ -55,7 +55,7 @@ function markOver(spine: SpineDocument, phrase: string): MarkRecord {
 async function bilingual(): Promise<{ before: SpineDocument; after: SpineDocument }> {
   const original = await buildArticleEpub(INPUT);
   const out = await translateArticleEpub(original, {
-    buildGlossary: async () => [],
+    translateGlossary: async () => [],
     translateBatch: translator,
     limiter: { rampMs: 0 },
     timers: { now: () => 0, sleep: async () => {} },
