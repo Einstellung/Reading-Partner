@@ -289,6 +289,7 @@ export interface ThreadStore {
   create: (bookId: string, annotationId: string, threadId: string) => Thread;
   createBook: (bookId: string, threadId: string) => Thread;
   createAside: (bookId: string, threadId: string, init: AsideInit) => Thread;
+  adopt: (bookId: string, threads: readonly Thread[]) => void;
   remove: (bookId: string, threadId: string) => boolean;
   removeTree: (bookId: string, threadId: string) => string[];
   append: (bookId: string, threadId: string, message: ThreadMessage) => Thread | undefined;
@@ -513,6 +514,30 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   // site and is exactly how `book` gets set on something that is not the lesson.
   type ThreadInit = Pick<Thread, "book" | "parentThreadId" | "asideAnchor">;
 
+  /**
+   * Take a set of conversations under this key, as they are.
+   *
+   * For a document that replaced another (reading/translate/replace.ts): the
+   * file is keyed by book id, so a new file means a new key, and a conversation
+   * that does not move is a conversation the reader loses by having the article
+   * translated. Ids, messages, anchors and timestamps are kept exactly; only
+   * `path` is rewritten, because it names the book the file is for.
+   *
+   * The caller loads the destination first — this merges into whatever is
+   * already under the key rather than replacing it, and an unreconciled entry
+   * would be written without the file having been read.
+   */
+  function adopt(bookId: string, threads: readonly Thread[]): void {
+    if (threads.length === 0) return;
+    const entry = entryFor(bookId);
+    for (const thread of threads) {
+      entry.threads[thread.id] = { ...thread, path: bookId };
+      entry.removed.delete(thread.id);
+    }
+    entry.gen++;
+    schedule(bookId);
+  }
+
   function create(
     bookId: string,
     annotationId: string,
@@ -624,6 +649,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
         (t) => t.parentThreadId !== undefined && !(t.parentThreadId in held.threads),
       );
     },
+    adopt,
     create: (bookId, annotationId, threadId) => create(bookId, annotationId, threadId),
     // Create the book-level thread (docs/03: the top-bar AI button's
     // selection-free entry). No annotation anchor; the `book` marker is how it's
@@ -752,6 +778,8 @@ export const getThread = (bookId: string, threadId: string): Thread | undefined 
   store.get(bookId, threadId);
 export const listThreads = (bookId: string): Thread[] => store.list(bookId);
 export const getBookThread = (bookId: string): Thread | undefined => store.getBook(bookId);
+export const adoptThreads = (bookId: string, threads: readonly Thread[]): void =>
+  store.adopt(bookId, threads);
 export const createThread = (bookId: string, annotationId: string, threadId: string): Thread =>
   store.create(bookId, annotationId, threadId);
 export const createBookThread = (bookId: string, threadId: string): Thread =>

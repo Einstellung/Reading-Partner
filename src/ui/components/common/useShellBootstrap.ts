@@ -36,6 +36,8 @@ import { registerInfoDesk } from "../../../info/briefer/desk";
 import { registerSecretaryRole } from "../../../info/briefer/role";
 import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
 import { registerReadingDesk } from "../../../reading/desk";
+import { deleteBook } from "../../../reading/delete/delete-book";
+import { setBookDeleter } from "../../../reading/translate/tool-live";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
 import { registerRetellDesk } from "../../../reading/retell/desk";
 import type { SyncHealthReport } from "../../../platform/sync";
@@ -175,6 +177,10 @@ export function bootDomains(): void {
   booted = true;
   registerInfoDistillSource();
   registerReadingDesk();
+  // The translation replaces a document by deleting the original, and the path
+  // that does that is reached from here rather than from inside reading/
+  // (tool-live.ts says why).
+  setBookDeleter(deleteBook);
   registerRetellDesk();
   registerRehearsalDesk();
   registerInfoDesk();

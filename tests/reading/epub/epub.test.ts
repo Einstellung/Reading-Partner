@@ -143,6 +143,32 @@ test("a document says which archive entries it points at, and does not rewrite t
   expect(out?.html).toContain('src="images/a.png"');
 });
 
+const MATH = `<html><body><p>Euler said</p>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block" onclick="steal()">
+  <semantics><mrow><msup><mi>e</mi><mrow><mi>i</mi><mi>&#x3C0;</mi></mrow></msup>
+  <mo>+</mo><mn>1</mn><mo>=</mo><mn>0</mn></mrow>
+  <annotation encoding="application/x-tex">e^{i\\pi}+1=0</annotation>
+  <annotation-xml encoding="text/html"><script>steal()</script></annotation-xml>
+  </semantics>
+  <maction><script>steal()</script><mi href="javascript:steal()">x</mi></maction>
+</math></body></html>`;
+
+test("a formula survives sanitizing, and nothing executable inside it does", () => {
+  const out = sanitize(MATH, "OEBPS/c1.xhtml");
+  expect(out).toContain('<math xmlns="http://www.w3.org/1998/Math/MathML"');
+  expect(out).toContain("<msup>");
+  expect(out).toContain('<annotation encoding="application/x-tex">');
+  // The presentation attribute is kept; the handler, the HTML re-entry and the
+  // link out of the formula are not.
+  expect(out).toContain('display="block"');
+  expect(out).not.toContain("onclick");
+  expect(out).not.toContain("annotation-xml");
+  expect(out).not.toContain("script");
+  expect(out).not.toContain("javascript:");
+  // Idempotent, like every other document (pitfall 126).
+  expect(sanitize(out, "OEBPS/c1.xhtml")).toBe(out);
+});
+
 // --- parsing -----------------------------------------------------------------
 
 test("the package, the spine and the navigation come out of the archive", () => {

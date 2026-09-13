@@ -108,6 +108,8 @@ import {
 import { buildClassroomTools } from "./prep/papers/tools";
 import { INGEST_URL_PROMPT, buildSourceTools, type IngestResult } from "./prep/papers/source-tool";
 import { ingestUrlLive } from "./ingest/live";
+import { TRANSLATE_PROMPT, buildTranslateTools } from "./translate/tool";
+import { liveTranslateToolDeps } from "./translate/tool-live";
 import {
   buildSavedArticleTools,
   prepareSavedArticle,
@@ -547,6 +549,26 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     ];
     canIngestUrl = true;
   }
+  // Translation (docs/67): the reader says "translate this" and the article on
+  // the shelf is replaced by a bilingual copy. Mounted on every book thread, not
+  // only on an article's: the tool itself is what says a PDF cannot be done in
+  // the app, and a tool that is only sometimes there is one the model stops
+  // reaching for. It translates with the model this conversation is on.
+  tools = [
+    ...tools,
+    ...buildTranslateTools(
+      liveTranslateToolDeps({
+        bookId,
+        topicId,
+        model: {
+          providerId: s.defaultProviderId as ProviderId,
+          modelId: s.defaultModelId as string,
+          sessionId: threadId,
+        },
+      }),
+    ),
+  ];
+
   // read_paper / read_note over whatever the prep run produced. Mounted wherever
   // there is a prep state to read, which is what "by data" means here: the tools
   // follow the material, not a mode.
@@ -709,6 +731,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       // still remembers.
       toolPrompts: [
         ...(canIngestUrl ? [INGEST_URL_PROMPT] : []),
+        TRANSLATE_PROMPT,
         ...view.toolPrompts,
         FIND_PAPER_PROMPT,
         RESEARCH_PROMPT,

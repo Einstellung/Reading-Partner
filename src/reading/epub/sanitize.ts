@@ -42,6 +42,7 @@ export const SVG_NS = "http://www.w3.org/2000/svg";
 export const XLINK_NS = "http://www.w3.org/1999/xlink";
 export const EPUB_NS = "http://www.idpf.org/2007/ops";
 export const XML_NS = "http://www.w3.org/XML/1998/namespace";
+export const MATHML_NS = "http://www.w3.org/1998/Math/MathML";
 
 // Everything that may appear in the output. An element that is not here loses
 // its tag and keeps its children, so an unknown wrapper costs its tag and not
@@ -62,12 +63,43 @@ const ALLOWED_ELEMENTS = new Set([
 const ALLOWED_SVG = new Set(["svg", "image", "g", "title", "desc", "path", "rect", "circle",
   "ellipse", "line", "polyline", "polygon", "text", "tspan", "defs", "use", "symbol"]);
 
+// The MathML subset kept, so a paper whose formulas are markup rather than
+// pictures keeps them (an arXiv HTML paper is all of these). Presentation
+// MathML only, plus the <semantics>/<annotation> pair that carries the LaTeX
+// beside it: an element outside this set loses its tag and keeps its text,
+// which for a formula is the plain characters rather than nothing.
+//
+// annotation-xml is not here. It is MathML's re-entry into HTML, the same door
+// <foreignObject> is on the SVG side, so it goes with its content below.
+const ALLOWED_MATHML = new Set([
+  "math", "semantics", "annotation", "mrow", "mi", "mo", "mn", "ms", "mtext", "mspace",
+  "msup", "msub", "msubsup", "munder", "mover", "munderover", "mfrac", "msqrt", "mroot",
+  "mfenced", "mpadded", "mphantom", "mstyle", "merror", "menclose", "mmultiscripts",
+  "mprescripts", "none", "mtable", "mtr", "mtd", "mlabeledtr", "maction", "malignmark",
+  "maligngroup",
+]);
+
+// What a MathML element may carry: presentation only. None of these names a
+// resource, so the URL rules below never come into it — and `href`, which
+// MathML does define, is deliberately absent, because a link is the one thing a
+// formula in a book has no business being.
+const MATHML_ATTRS = new Set([
+  "accent", "accentunder", "actiontype", "align", "alttext", "bevelled", "close",
+  "columnalign", "columnlines", "columnspacing", "columnspan", "denomalign", "depth",
+  "display", "displaystyle", "encoding", "fence", "form", "frame", "framespacing",
+  "groupalign", "height", "largeop", "linethickness", "lspace", "mathbackground",
+  "mathcolor", "mathsize", "mathvariant", "maxsize", "minsize", "movablelimits",
+  "notation", "numalign", "open", "rowalign", "rowlines", "rowspacing", "rowspan",
+  "rspace", "scriptlevel", "selection", "separator", "separators", "stretchy",
+  "subscriptshift", "superscriptshift", "symmetric", "voffset", "width",
+]);
+
 // Dropped with everything inside them. The content belongs to another parser, or
 // it is a control, or — button and marquee — it is a tree-builder scope boundary
 // whose children would be rearranged by the next parse if the tag were unwrapped
 // (docs/pitfall/127).
 const DROP_WITH_CONTENT = new Set([
-  "applet", "audio", "base", "button", "canvas", "embed", "foreignobject", "form", "frame",
+  "annotation-xml", "applet", "audio", "base", "button", "canvas", "embed", "foreignobject", "form", "frame",
   "frameset", "iframe", "input", "marquee", "meta", "noembed", "noframes", "noscript",
   "object", "optgroup", "option", "plaintext", "script", "select", "template", "textarea",
   "video", "xmp",
@@ -238,7 +270,7 @@ function isAria(name: string): boolean {
   return name.startsWith("aria-");
 }
 
-function attrsFor(state: WalkState, el: Element, tag: string): string {
+function attrsFor(state: WalkState, el: Element, tag: string, math: boolean): string {
   const kept: Array<[string, string]> = [];
   for (const attr of Array.from(el.attributes)) {
     const name = attrName(attr);
@@ -250,7 +282,9 @@ function attrsFor(state: WalkState, el: Element, tag: string): string {
     }
     const plain = attr.namespaceURI === null;
     const allowed = plain
-      ? GLOBAL_ATTRS.has(name) || isAria(name) || (ATTRS[tag]?.includes(name) ?? false)
+      ? GLOBAL_ATTRS.has(name) ||
+        isAria(name) ||
+        (math ? MATHML_ATTRS.has(name) : (ATTRS[tag]?.includes(name) ?? false))
       : namespacedAllowed(attr);
     if (!allowed) continue;
     const value = attr.value;
@@ -280,9 +314,14 @@ function emit(state: WalkState, node: Node): void {
   const tag = el.localName.toLowerCase();
   if (DROP_WITH_CONTENT.has(tag)) return;
   const svg = el.namespaceURI === SVG_NS;
+  const math = el.namespaceURI === MATHML_NS;
   // A <style> inside an <svg> belongs to the SVG subset, which does not carry it.
   if (svg && tag === "style") return;
-  const allowed = svg ? ALLOWED_SVG.has(tag) : ALLOWED_ELEMENTS.has(tag);
+  const allowed = svg
+    ? ALLOWED_SVG.has(tag)
+    : math
+      ? ALLOWED_MATHML.has(tag)
+      : ALLOWED_ELEMENTS.has(tag);
   if (!allowed) {
     emitChildren(state, el);
     return;
@@ -305,7 +344,8 @@ function emit(state: WalkState, node: Node): void {
   // attribute anywhere below is bound and the output parses back as XML.
   if (tag === "html") open += ` xmlns="${XHTML_NS}" xmlns:epub="${EPUB_NS}" xmlns:xlink="${XLINK_NS}"`;
   if (tag === "svg") open += ` xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}"`;
-  open += attrsFor(state, el, tag);
+  if (math && tag === "math") open += ` xmlns="${MATHML_NS}"`;
+  open += attrsFor(state, el, tag, math);
 
   if (VOID_ELEMENTS.has(tag)) {
     state.out.push(`${open}/>`);
