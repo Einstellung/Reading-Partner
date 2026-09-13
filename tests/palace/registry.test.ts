@@ -10,9 +10,10 @@
 // The distill-source assertion arrives with the package that registers them
 // (P2). Run: bun test.
 
-import { afterAll, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { deskKindRegistered } from "../../src/desk";
 import { registerInfoDistillSource } from "../../src/info/briefer/distill-source";
+import { registerReadingDistillSources } from "../../src/reading/distill/source";
 import { distillSourceOf } from "../../src/memory/distill/sources";
 import { registerInfoDesk } from "../../src/info/briefer/desk";
 import { registerReadingDesk } from "../../src/reading/desk";
@@ -21,11 +22,18 @@ import { registerRetellDesk } from "../../src/reading/retell/desk";
 import { PALACE, resolvePalace, rowOf, rowsWhere, type PalaceKind } from "../../src/palace";
 
 // The shell registers the domains on the way up (useShellBootstrap.bootDomains);
-// a test that asserts what is registered has to boot them itself.
-const booted = [registerInfoDistillSource()];
-afterAll(() => {
-  for (const undo of booted) undo();
-});
+// a test that asserts what is registered has to boot them itself. Inside the
+// test rather than at module scope: the registry is one global map for the whole
+// process, and a file that boots on import leaves every other test file in the
+// run looking at domains it never asked for.
+function booted<T>(body: () => T): T {
+  const undo = [registerInfoDistillSource(), registerReadingDistillSources()];
+  try {
+    return body();
+  } finally {
+    for (const u of undo) u();
+  }
+}
 
 test("a sample path finds one row, and it is the row that named it", () => {
   for (const row of PALACE) {
@@ -50,15 +58,24 @@ test("every distilled kind has an id to key its cursor under", () => {
   expect(keyless).toEqual([]);
 });
 
-// The kinds a distillation source has been written for. The other rows with
-// `distill` are the ones docs/58 leaves for later — a guard against them would
-// be failing against work nobody has claimed.
-const SOURCED = ["info-thread"];
+// The kinds a distillation source has been written for. "conversation" is the
+// door's, registered by the soul rather than at boot, and is the one row with
+// `distill` still waiting for the shell to call it.
+const SOURCED = [
+  "info-thread",
+  "reading-thread",
+  "annotations",
+  "retell-thread",
+  "talk-thread",
+  "rehearsal-run",
+];
 
 test("every kind a source was written for has one registered", () => {
-  const missing = rowsWhere((r) => SOURCED.includes(r.kind) && r.distill !== undefined)
-    .map((r) => r.kind)
-    .filter((kind) => distillSourceOf(kind) === null);
+  const missing = booted(() =>
+    rowsWhere((r) => SOURCED.includes(r.kind) && r.distill !== undefined)
+      .map((r) => r.kind)
+      .filter((kind) => distillSourceOf(kind) === null),
+  );
   expect(missing).toEqual([]);
 });
 
@@ -77,13 +94,23 @@ test("the distilled kinds are the ones the passes already read", () => {
       .map((r) => r.kind)
       .sort();
   expect(under("distilledMessages")).toEqual(
-    ["conversation", "info-thread", "reading-thread", "retell-thread"].sort(),
+    [
+      "conversation",
+      "info-thread",
+      "reading-thread",
+      "rehearsal-run",
+      "retell-thread",
+      "talk-thread",
+    ].sort(),
   );
   expect(under("distilledMarks")).toEqual(["annotations"]);
-  // Whatever keys distilledMessages is a conversation, and its id is a thread
-  // id — not the file's, which is a book, a retell or a day (pitfall 209).
+  // What keys distilledMessages is one unit's worth of what the reader said, and
+  // its id is that unit's own — a thread id, or a rehearsal run's UUID. Never the
+  // file's, which is a book, a retell or a day (pitfall 209).
   for (const row of rowsWhere((r) => r.distill?.cursor === "distilledMessages")) {
-    expect(`${row.kind}: ${row.distill?.unit}`).toBe(`${row.kind}: thread`);
+    expect(`${row.kind}: ${row.distill?.unit}`).toBe(
+      `${row.kind}: ${row.kind === "rehearsal-run" ? "file" : "thread"}`,
+    );
   }
 });
 

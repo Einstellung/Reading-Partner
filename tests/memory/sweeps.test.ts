@@ -22,22 +22,21 @@ function owing(topicId: string, newMessages = 1): TopicArrears {
     topicId,
     topicName: topicId,
     lastDistilledAt: null,
-    books: [
+    units: [
       {
-        bookId: `${topicId}-book`,
-        bookName: "a book",
-        marks: [],
-        newMarks: 0,
-        threads: [
-          {
-            threadId: `${topicId}-thread`,
-            annotationId: "a1",
-            page: 1,
-            markedText: "",
-            messages: [],
-            newMessages,
-          },
-        ],
+        source: "reading-thread",
+        owed: newMessages,
+        unit: {
+          cursor: "distilledMessages",
+          id: `${topicId}-thread`,
+          topicId,
+          label: "a book",
+          bookId: `${topicId}-book`,
+          annotationId: "a1",
+          page: 1,
+          markedText: "",
+          messages: [],
+        },
       },
     ],
   };

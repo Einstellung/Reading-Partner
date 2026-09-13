@@ -1,23 +1,26 @@
-// The arrears model (src/memory/observations/arrears.ts): given what every topic has on
-// disk and the clock, whether anything is owed and which single debt to pay.
-// Pure — no fs, no model, no clock of its own. Run: bun test.
+// The arrears model (src/memory/observations/arrears.ts): given what the
+// registered sources owe every topic and the clock, whether anything is owed and
+// which single debt to pay. Pure — no fs, no model, no clock of its own.
+// Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   countNewMarks,
+  countUnitOwed,
   distillUnitOf,
   distillUnits,
   pagelessMarkIds,
   isTopicDue,
-  maxBookMarks,
+  maxUnitMarks,
   selectDistillJob,
-  threadArrears,
   toDistillAnnotations,
   topicDebt,
+  unitArrears,
   MIN_DISTILL_GAP_MS,
   MIN_NEW_MARKS,
-  type BookArrears,
-  type ThreadArrears,
+  type SourceArrears,
+  type SourceMarksUnit,
+  type SourceMessagesUnit,
   type TopicArrears,
   type UnitThread,
 } from "../../src/memory/observations/arrears";
@@ -42,30 +45,31 @@ function said(n: number): DistillMessage[] {
   }));
 }
 
-function thread(overrides: Partial<ThreadArrears> = {}): ThreadArrears {
+function convo(over: Partial<SourceMessagesUnit> = {}): SourceMessagesUnit {
   return {
-    threadId: "thread-1",
+    cursor: "distilledMessages",
+    id: "thread-1",
+    topicId: "t1",
+    label: "b.pdf",
+    bookId: "book-1",
     annotationId: "ann-1",
     page: 3,
     markedText: "a passage",
     messages: [],
-    newMessages: 0,
-    ...overrides,
+    ...over,
   };
 }
 
-function book(overrides: Partial<BookArrears> = {}): BookArrears {
-  return { bookId: "book-1", bookName: "b.pdf", marks: [], newMarks: 0, threads: [], ...overrides };
+function marked(over: Partial<SourceMarksUnit> = {}): SourceMarksUnit {
+  return { cursor: "distilledMarks", id: "book-1", topicId: "t1", label: "b.pdf", marks: [], ...over };
+}
+
+function owes(unit: SourceMessagesUnit | SourceMarksUnit, owed: number): SourceArrears {
+  return { source: unit.cursor === "distilledMarks" ? "annotations" : "reading-thread", unit, owed };
 }
 
 function topic(overrides: Partial<TopicArrears> = {}): TopicArrears {
-  return {
-    topicId: "t1",
-    topicName: "investing",
-    lastDistilledAt: null,
-    books: [book()],
-    ...overrides,
-  };
+  return { topicId: "t1", topicName: "investing", lastDistilledAt: null, units: [], ...overrides };
 }
 
 // --- measuring ---
@@ -107,17 +111,33 @@ test("countNewMarks counts past the cursor and drops marks with nothing in them"
   expect(countNewMarks(list, 500)).toBe(0);
 });
 
-test("threadArrears measures new reader messages from the stored cursor", () => {
-  const t = threadArrears({ ...thread(), messages: said(6) }, 2);
-  expect(t.newMessages).toBe(2); // rows 2 and 4
-  expect(threadArrears({ ...thread(), messages: said(6) }, 6).newMessages).toBe(0);
+test("countUnitOwed measures new reader messages from the stored cursor", () => {
+  expect(countUnitOwed(convo({ messages: said(6) }), 2)).toBe(2); // rows 2 and 4
+  expect(countUnitOwed(convo({ messages: said(6) }), 6)).toBe(0);
+  // A unit merged from several threads takes a cursor per part.
+  const merged = convo({
+    messages: said(4),
+    parts: [
+      { threadId: "lesson", messages: said(2) },
+      { threadId: "aside", messages: said(2) },
+    ],
+  });
+  expect(countUnitOwed(merged, (threadId) => (threadId === "lesson" ? 2 : 0))).toBe(1);
 });
 
-test("topicDebt adds up marks and messages across every book", () => {
+test("countUnitOwed measures marks made after the stored timestamp", () => {
+  const unit = marked({ marks: marks(5) });
+  expect(countUnitOwed(unit, null)).toBe(5);
+  expect(countUnitOwed(unit, 3)).toBe(2);
+  expect(unitArrears("annotations", unit, 3)).toEqual({ source: "annotations", unit, owed: 2 });
+});
+
+test("topicDebt separates what is owed in marks from what is owed in messages", () => {
   const t = topic({
-    books: [
-      book({ bookId: "b1", newMarks: 3, threads: [thread({ newMessages: 2 })] }),
-      book({ bookId: "b2", newMarks: 4 }),
+    units: [
+      owes(marked({ id: "b1" }), 3),
+      owes(marked({ id: "b2" }), 4),
+      owes(convo({ messages: said(4) }), 2),
     ],
   });
   expect(topicDebt(t)).toEqual({ marks: 7, messages: 2 });
@@ -131,7 +151,7 @@ test("nothing owed, nothing run", () => {
 });
 
 test("a few marks and no conversation is not worth a pass", () => {
-  const t = topic({ books: [book({ marks: marks(4), newMarks: 4 })] });
+  const t = topic({ units: [owes(marked({ marks: marks(4) }), 4)] });
   expect(isTopicDue(t, NOW)).toBe(false);
 });
 
@@ -139,34 +159,29 @@ test("the mark threshold is per book, not per topic", () => {
   // Three here and two there is not five marks' worth of a pass: a pass runs
   // over one book.
   const t = topic({
-    books: [
-      book({ bookId: "b1", marks: marks(3), newMarks: 3 }),
-      book({ bookId: "b2", marks: marks(2, 100), newMarks: 2 }),
-    ],
+    units: [owes(marked({ id: "b1" }), 3), owes(marked({ id: "b2" }), 2)],
   });
-  expect(maxBookMarks(t)).toBe(3);
+  expect(maxUnitMarks(t)).toBe(3);
   expect(topicDebt(t).marks).toBe(5);
   expect(isTopicDue(t, NOW)).toBe(false);
   expect(selectDistillJob([t], NOW)).toBeNull();
 });
 
 test("enough marks alone is worth a pass, even with nothing said", () => {
-  const t = topic({ books: [book({ marks: marks(MIN_NEW_MARKS), newMarks: MIN_NEW_MARKS })] });
+  const t = topic({ units: [owes(marked({ marks: marks(MIN_NEW_MARKS) }), MIN_NEW_MARKS)] });
   expect(isTopicDue(t, NOW)).toBe(true);
-  expect(selectDistillJob([t], NOW)).toMatchObject({ kind: "marks", topicId: "t1" });
+  expect(selectDistillJob([t], NOW)).toMatchObject({ topicId: "t1", source: "annotations" });
 });
 
 test("one thing the reader said is worth a pass on its own", () => {
-  const t = topic({
-    books: [book({ threads: [thread({ messages: said(2), newMessages: 1 })] })],
-  });
-  expect(selectDistillJob([t], NOW)).toMatchObject({ kind: "thread", topicId: "t1" });
+  const t = topic({ units: [owes(convo({ messages: said(2) }), 1)] });
+  expect(selectDistillJob([t], NOW)).toMatchObject({ topicId: "t1", source: "reading-thread" });
 });
 
 test("a topic distilled minutes ago waits, however much it owes", () => {
   const t = topic({
     lastDistilledAt: NOW - MIN_DISTILL_GAP_MS + 60_000,
-    books: [book({ marks: marks(30), newMarks: 30, threads: [thread({ newMessages: 5 })] })],
+    units: [owes(marked({ marks: marks(30) }), 30), owes(convo(), 5)],
   });
   expect(isTopicDue(t, NOW)).toBe(false);
   expect(selectDistillJob([t], NOW)).toBeNull();
@@ -175,80 +190,80 @@ test("a topic distilled minutes ago waits, however much it owes", () => {
 });
 
 test("a topic never distilled has no gap to wait out", () => {
-  const t = topic({ books: [book({ marks: marks(6), newMarks: 6 })] });
-  expect(isTopicDue(t, NOW)).toBe(true);
+  expect(isTopicDue(topic({ units: [owes(marked({ marks: marks(6) }), 6)] }), NOW)).toBe(true);
 });
 
 // --- choosing ---
 
 test("the topic that owes most is the one that runs, and only that one", () => {
-  const small = topic({
-    topicId: "t-small",
-    books: [book({ bookId: "b1", marks: marks(6), newMarks: 6 })],
-  });
-  const large = topic({
+  const small = topic({ topicId: "t-small", units: [owes(marked({ id: "b1" }), 6)] });
+  const large = topic({ topicId: "t-large", units: [owes(marked({ id: "b2" }), 30)] });
+  expect(selectDistillJob([small, large], NOW)).toMatchObject({
     topicId: "t-large",
-    books: [book({ bookId: "b2", marks: marks(30), newMarks: 30 })],
+    source: "annotations",
   });
-  const job = selectDistillJob([small, large], NOW);
-  expect(job).toMatchObject({ kind: "marks", topicId: "t-large" });
 });
 
-test("within a topic a conversation wins over marks, and the fullest thread wins", () => {
+test("within a topic a conversation wins over marks, and the fullest one wins", () => {
   const t = topic({
-    books: [
-      book({
-        bookId: "b1",
-        marks: marks(20),
-        newMarks: 20,
-        threads: [
-          thread({ threadId: "quiet", messages: said(2), newMessages: 1 }),
-          thread({ threadId: "busy", messages: said(8), newMessages: 4 }),
-        ],
-      }),
+    units: [
+      owes(marked({ marks: marks(20) }), 20),
+      owes(convo({ id: "quiet", messages: said(2) }), 1),
+      owes(convo({ id: "busy", messages: said(8) }), 4),
     ],
   });
-  const job = selectDistillJob([t], NOW);
-  expect(job?.kind).toBe("thread");
-  expect(job?.kind === "thread" && job.thread.threadId).toBe("busy");
+  expect(selectDistillJob([t], NOW)?.unit.id).toBe("busy");
 });
 
 test("with nothing said, the book with the most unread marks is the one taken", () => {
   const t = topic({
-    books: [
-      book({ bookId: "b1", marks: marks(3), newMarks: 3 }),
-      book({ bookId: "b2", marks: marks(9, 100), newMarks: 9 }),
-    ],
+    units: [owes(marked({ id: "b1" }), 3), owes(marked({ id: "b2" }), 9)],
   });
   const job = selectDistillJob([t], NOW);
-  expect(job).toMatchObject({ kind: "marks" });
-  expect(job?.kind === "marks" && job.book.bookId).toBe("b2");
+  expect(job?.source).toBe("annotations");
+  expect(job?.unit.id).toBe("b2");
+});
+
+test("every registered source's conversations stand in the same queue", () => {
+  // A briefing and a book's thread are chosen between on what each owes, not on
+  // which domain wrote them.
+  const t = topic({
+    units: [
+      { source: "reading-thread", unit: convo({ id: "book" }), owed: 2 },
+      { source: "info-thread", unit: convo({ id: "brief", bookId: undefined }), owed: 5 },
+    ],
+  });
+  expect(selectDistillJob([t], NOW)).toMatchObject({ source: "info-thread", topicId: "t1" });
 });
 
 test("a failed pass leaves the debt, so the next sweep picks the same job", () => {
   // A failed pass advances nothing (runDistillPass), so the arrears read back
   // unchanged and the gap is measured from the last pass that did finish.
-  const t = topic({
-    lastDistilledAt: NOW - 2 * HOUR,
-    books: [book({ marks: marks(8), newMarks: 8 })],
-  });
-  expect(selectDistillJob([t], NOW)).toMatchObject({ kind: "marks" });
-  expect(selectDistillJob([t], NOW + HOUR)).toMatchObject({ kind: "marks" });
+  const t = topic({ lastDistilledAt: NOW - 2 * HOUR, units: [owes(marked({ marks: marks(8) }), 8)] });
+  expect(selectDistillJob([t], NOW)).toMatchObject({ source: "annotations" });
+  expect(selectDistillJob([t], NOW + HOUR)).toMatchObject({ source: "annotations" });
 });
 
 test("a pass that just finished settles the topic until the gap is out", () => {
   // What a finished pass leaves behind: cursors moved, so no arrears, and a
   // fresh stamp.
-  const settled = topic({ lastDistilledAt: NOW, books: [book({ marks: marks(8), newMarks: 0 })] });
+  const settled = topic({ lastDistilledAt: NOW, units: [owes(marked({ marks: marks(8) }), 0)] });
   expect(selectDistillJob([settled], NOW + 1000)).toBeNull();
   expect(selectDistillJob([settled], NOW + 2 * HOUR)).toBeNull();
 });
 
 test("ties between topics resolve the same way every sweep", () => {
-  const a = topic({ topicId: "aaa", books: [book({ marks: marks(6), newMarks: 6 })] });
-  const b = topic({ topicId: "bbb", books: [book({ marks: marks(6), newMarks: 6 })] });
+  const a = topic({ topicId: "aaa", units: [owes(marked({ marks: marks(6) }), 6)] });
+  const b = topic({ topicId: "bbb", units: [owes(marked({ marks: marks(6) }), 6)] });
   expect(selectDistillJob([a, b], NOW)?.topicId).toBe("aaa");
   expect(selectDistillJob([b, a], NOW)?.topicId).toBe("aaa");
+});
+
+test("ties between units resolve on the earlier id", () => {
+  const t = topic({
+    units: [owes(convo({ id: "zzz" }), 3), owes(convo({ id: "aaa" }), 3)],
+  });
+  expect(selectDistillJob([t], NOW)?.unit.id).toBe("aaa");
 });
 
 // --- what counts as one conversation (docs/03: asides) ---

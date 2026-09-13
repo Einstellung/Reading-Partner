@@ -35,6 +35,7 @@ import { enforceKnownModel, listProviders, type ProviderInfo } from "../../../ai
 import { registerInfoDesk } from "../../../info/briefer/desk";
 import { registerSecretaryRole } from "../../../info/briefer/role";
 import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
+import { registerReadingDistillSources } from "../../../reading/distill/source";
 import { registerReadingDesk } from "../../../reading/desk";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
 import { registerRetellDesk } from "../../../reading/retell/desk";
@@ -174,6 +175,7 @@ export function bootDomains(): void {
   if (booted) return;
   booted = true;
   registerInfoDistillSource();
+  registerReadingDistillSources();
   registerReadingDesk();
   registerRetellDesk();
   registerRehearsalDesk();

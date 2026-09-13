@@ -121,25 +121,27 @@ export {
 } from "./observations/distill";
 export {
   countNewMarks,
+  countUnitOwed,
   distillUnitOf,
   distillUnits,
   isTopicDue,
-  maxBookMarks,
+  maxUnitMarks,
   pagelessMarkIds,
   selectDistillJob,
-  threadArrears,
   toDistillAnnotations,
   topicDebt,
+  unitArrears,
   MIN_DISTILL_GAP_MS,
   MIN_NEW_MARKS,
   MIN_NEW_MESSAGES,
   SWEEP_INTERVAL_MS,
-  type BookArrears,
+  type DistillCursor,
   type DistillJob,
   type DistillUnit,
   type SourceArrears,
+  type SourceMarksUnit,
+  type SourceMessagesUnit,
   type SourceUnit,
-  type ThreadArrears,
   type TopicArrears,
   type UnitThread,
 } from "./observations/arrears";
@@ -202,7 +204,13 @@ export {
   registerDistillSource,
   type DistillSource,
 } from "./distill/sources";
-export { collectSourceArrears, findSourceUnit } from "./distill/info-thread";
+export {
+  collectSourceArrears,
+  findSourceUnit,
+  type CursorReader,
+  type SourceArrearsOptions,
+  type SourceCursors,
+} from "./distill/collect";
 export {
   distillInfoThread,
   distillMarks,

@@ -50,6 +50,7 @@ export async function listInfoUnits(): Promise<SourceUnit[]> {
       if (thread.id === ONBOARDING_THREAD_ID) continue;
       if (thread.messages.length === 0) continue;
       units.push({
+        cursor: "distilledMessages",
         id: thread.id,
         // The thread's own topic once the reader has confirmed one, and null
         // until then: a conversation nobody has said what is about is not
