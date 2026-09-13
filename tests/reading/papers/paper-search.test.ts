@@ -4,7 +4,7 @@
 // network. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { RateLimitError, HttpStatusError } from "../../../src/reading/papers/http";
+import { RateLimitError, HttpStatusError } from "../../../src/scholar/http";
 import {
   clipAbstract,
   describeFailure,

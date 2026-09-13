@@ -99,6 +99,11 @@ const LAYER: Record<string, Layer> = {
   // The person at the desk (docs/61): what rides every turn whatever the desk
   // holds, plus the assembly. A capability because it reaches for desk, memory,
   // conversations, palace and ai, and for no domain.
+  // The literature libraries' clients (arXiv, Semantic Scholar, OpenAlex,
+  // PubMed): query URLs, parsers, the per-host throttle. A capability because
+  // both reading (paper search, citation walks) and info (the index sources of
+  // docs/69) query the same libraries, and a domain may not import a domain.
+  scholar: "capability",
   soul: "capability",
   // How the soul speaks aloud and listens (docs/67): the full-duplex call, its
   // state machine, the native bridge, turn detection and the text a TTS voice
@@ -125,6 +130,10 @@ const LAYER: Record<string, Layer> = {
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",
+  // The index providers (docs/69): one adapter per library behind the `index`
+  // discovery kind. Under sources because an index query is a source; a
+  // directory of its own because each adapter is a file that knows one API.
+  "info/sources/index": "domain",
   // The 0.12 data migration, deleted wholesale at 0.13. A domain rather than a
   // capability because it drives the observation store and the thread files
   // rather than serving them, and because nothing below it may ever grow a

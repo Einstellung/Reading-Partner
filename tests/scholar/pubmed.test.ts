@@ -13,7 +13,7 @@ import {
   pubmedSearchUrl,
   pubmedUrl,
   searchPubmed,
-} from "../../../src/reading/papers/pubmed";
+} from "../../src/scholar/pubmed";
 
 test("esearch URL asks for relevance, not the sort schema E-utilities ignores", () => {
   const u = pubmedSearchUrl("cortical neuron scaling", { limit: 7 });

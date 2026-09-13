@@ -7,6 +7,8 @@
 // pruned with the day; the cable record survives, so a judgment made in March
 // still says what it was made on.
 
+import type { ItemSignals } from "../sources/item";
+
 export interface CableHit {
   labId: string;
   // The observable ids hit. [] is a scope-level hit: the room matched, but it
@@ -30,6 +32,9 @@ export interface Cable {
   summary?: string;
   // Why it was kept even though no room claims it.
   outside?: string;
+  // The index's numbers for the item, copied from InfoItem.signals (docs/69).
+  // Only index sources set it.
+  signals?: ItemSignals;
 }
 
 export const CABLES_VERSION = 1 as const;

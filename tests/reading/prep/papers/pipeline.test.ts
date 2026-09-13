@@ -19,7 +19,7 @@ import {
   type PrepActivity,
 } from "../../../../src/reading/prep/papers/pipeline";
 import { streamChatCore, type SimpleStreamFn } from "../../../../src/ai/providers";
-import { RateLimitError } from "../../../../src/reading/papers/http";
+import { RateLimitError } from "../../../../src/scholar/http";
 import type { PrepPaper, PrepState } from "../../../../src/reading/prep/papers/types";
 
 function paper(slug: string, chapters: number[]): PrepPaper {

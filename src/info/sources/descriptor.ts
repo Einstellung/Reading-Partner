@@ -64,11 +64,28 @@ export interface StreamDiscovery {
   headers?: Record<string, string>;
 }
 
+// A query against a library index (docs/69): arXiv, GitHub, Hugging Face,
+// Semantic Scholar. The index has a fixed identity and an open query, so one
+// descriptor is one query ("arXiv cs.RO, last two days"), and the provider named
+// here is an adapter in sources/index/ that validates the query and runs it. The
+// adapter yields headlines with signals (stars, upvotes, citations) and never a
+// body; fulltext decides that, as for every other source.
+export interface IndexDiscovery {
+  kind: "index";
+  // Adapter id ("arxiv", "github", "huggingface", "s2"). An open string so a
+  // provider added later needs no format change; the engine rejects an id the
+  // registry does not know at run time.
+  provider: string;
+  // Provider-specific. The provider's validateQuery is the schema.
+  query: Record<string, unknown>;
+}
+
 export type Discovery =
   | FeedDiscovery
   | ListpageDiscovery
   | JsonApiDiscovery
-  | StreamDiscovery;
+  | StreamDiscovery
+  | IndexDiscovery;
 
 // --- fulltext: where the body comes from -----------------------------------
 
@@ -245,6 +262,12 @@ function validateDiscovery(d: unknown): string | null {
     }
     case "stream":
       return isStr(o.url) ? null : "stream discovery needs a url";
+    case "index":
+      if (!isStr(o.provider)) return "index discovery needs a provider";
+      if (!o.query || typeof o.query !== "object" || Array.isArray(o.query)) {
+        return "index discovery needs a query object";
+      }
+      return null;
     default:
       return `unknown discovery.kind: ${String(kind)}`;
   }
@@ -314,9 +337,8 @@ export const DESCRIPTOR_GUIDE = [
   "Top level: { id, name, line, discovery, fulltext, enabled, limit?, pollMinutes?, noFetchPage?,",
   "  userAgent? }.",
   `pollMinutes is how often the collecting computer polls this source (default ${DEFAULT_POLL_MINUTES},`,
-  `  held to ${MIN_POLL_MINUTES}-${MAX_POLL_MINUTES}). Set it from how much of the day one response holds: a feed that`,
-  "  keeps only ~20 items and covers a few hours needs 30-60; a feed that returns hundreds of items",
-  "  covering weeks is fine at 720-1440. Omit it when you do not know.",
+  `  held to ${MIN_POLL_MINUTES}-${MAX_POLL_MINUTES}). Set it from how much of the day one response holds: ~20 items covering`,
+  "  a few hours needs 30-60; hundreds of items covering weeks is fine at 720-1440. Omit if unsure.",
   "discovery is one of:",
   '- feed: { kind:"feed", url, format?:"rss"|"atom"|"rdf" } — a native RSS/Atom/RDF feed.',
   '- listpage: { kind:"listpage", url, linkPattern, base? } — fetch a list page, pull article',
@@ -325,6 +347,7 @@ export const DESCRIPTOR_GUIDE = [
   '- json-api: { kind:"json-api", listUrl, itemsPath?, fields:{ id, title, url?, publishedAt?,',
   "  summary?, content? }, urlTemplate?, headers? } — a JSON list; each field is a dot-path.",
   '- stream: { kind:"stream", url, headers? } — live short items (reserved, not yet executed).',
+  '- index: { kind:"index", provider:"arxiv"|"github"|"huggingface"|"s2", query } — one library query (docs/69); headlines + signals, fulltext none or fetch-page.',
   "fulltext is one of:",
   '- feed-field: { mode:"feed-field", field?, truncationMarker? } — body already in the feed/row.',
   '- fetch-page: { mode:"fetch-page" } — fetch each article page and extract the readable body.',

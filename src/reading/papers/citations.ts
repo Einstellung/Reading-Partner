@@ -22,9 +22,9 @@ import {
   fetchOpenAlexWork,
   fetchOpenAlexWorksByIds,
   OA_MAX_OR_IDS,
-} from "./openalex";
-import { type FetchFn } from "./http";
-import { normalizeTitle } from "./match";
+} from "../../scholar/openalex";
+import { type FetchFn } from "../../scholar/http";
+import { normalizeTitle } from "../../scholar/match";
 import {
   candidateBlock,
   describeFailure,
@@ -40,7 +40,7 @@ import {
   type PaperLibrary,
   type PaperSearchFailure,
 } from "./paper-search";
-import { fetchS2Edges, fetchS2Paper, S2_CITATIONS_PAGE, S2_REFERENCES_PAGE } from "./s2";
+import { fetchS2Edges, fetchS2Paper, S2_CITATIONS_PAGE, S2_REFERENCES_PAGE } from "../../scholar/s2";
 
 // --- identifiers ---
 

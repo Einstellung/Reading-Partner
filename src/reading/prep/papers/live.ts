@@ -12,9 +12,9 @@ import { buildFigureCatalog, ensureFigures } from "../../figures";
 import { loadSettings } from "../../../platform/app/settings";
 import { recordParse } from "../../../platform/app/structured-output";
 import { extractArticle, looksLikeHttpUrl, sniffContentType } from "../../sources";
-import { fetchFromArxiv, normalizeArxivId } from "../../papers/arxiv";
-import { fetchFromOpenAlex } from "../../papers/openalex";
-import { fetchWithRetry } from "../../papers/http";
+import { fetchFromArxiv, normalizeArxivId } from "../../../scholar/arxiv";
+import { fetchFromOpenAlex } from "../../../scholar/openalex";
+import { fetchWithRetry } from "../../../scholar/http";
 import { runDigest } from "./digest";
 import { serializeNote } from "./notes";
 import {
@@ -32,7 +32,7 @@ import {
   writePaperPdf,
   writePrepNote,
 } from "./store";
-import { fetchFromS2 } from "../../papers/s2";
+import { fetchFromS2 } from "../../../scholar/s2";
 import {
   capturedFetch,
   PrepPipeline,
