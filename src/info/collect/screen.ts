@@ -20,7 +20,7 @@ import type { CableHit } from "../cable/types";
 import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
 import type { Picture } from "../picture/types";
-import type { InfoItem } from "../sources/item";
+import { formatSignals, type InfoItem } from "../sources/item";
 
 // Items per screening call. Big enough that a few hundred items are a handful
 // of calls, small enough that one bad reply costs little and that the model
@@ -159,6 +159,10 @@ export function screenSystemPrompt(aiLanguage: AiLanguage = "auto"): string {
     "it tells you nothing, treat it as a low-confidence hit on whatever room the source",
     "belongs to rather than dropping it.",
     "",
+    "Some items carry a `signals` line: stars, upvotes, downloads, citations counted by",
+    "the index that yielded them. They are context for what the item is, not a ranking to",
+    "reproduce — a number does not make a hit, and its absence does not unmake one.",
+    "",
     "For every item that hits something return: its exact `id`, `hits`, and `confidence`",
     "0-1 for how sure you are (1 = certain, 0 = a guess). Use the lab ids and observable",
     "ids EXACTLY as they are printed below — never a number, a name, or an id you were",
@@ -183,14 +187,18 @@ function formatTarget(t: ScreenTarget): string {
   return lines.join("\n");
 }
 
-// One item as the screen sees it: no body, ever.
+// One item as the screen sees it: no body, ever. The signals line (docs/69) is
+// only there when an index counted something; a feed item has no such line
+// rather than an empty one.
 function formatItem(item: InfoItem): string {
   const date = item.publishedAt ? ` | ${item.publishedAt}` : "";
   const blurb = (item.summary || "").slice(0, SCREEN_SUMMARY_CHARS).trim();
+  const signals = formatSignals(item.signals);
   return [
     `id: ${item.id} | ${item.sourceName || item.source}${date}`,
     `title: ${item.title}`,
     blurb ? `blurb: ${blurb}` : "blurb: (none)",
+    ...(signals ? [`signals: ${signals}`] : []),
   ].join("\n");
 }
 

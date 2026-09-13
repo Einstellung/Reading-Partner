@@ -16,6 +16,7 @@ import { htmlToText } from "../extract/sanitize";
 import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
 import type { FetchFn } from "../extract/http";
 import type { Fulltext, SourceDescriptor } from "./descriptor";
+import { indexOf } from "./index-provider";
 
 // The feed paths tried in order, most common first. wp-json is last: it is a full
 // JSON API, only reached when the plain feed paths miss.

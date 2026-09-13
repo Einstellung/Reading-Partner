@@ -7,6 +7,7 @@
 import { expect, test } from "bun:test";
 import { BUILTIN_SOURCES, builtinCaveat } from "../../../src/info/sources/builtins";
 import { pollIntervalMs, validateDescriptor } from "../../../src/info/sources/descriptor";
+import { arxivQueryTerms } from "../../../src/scholar/arxiv";
 
 test("builtin ids are unique and every descriptor validates", () => {
   const ids = BUILTIN_SOURCES.map((s) => s.id);
@@ -65,7 +66,6 @@ test("the preset list is the sites that get read, not everything that was resear
     "interconnects",
     "therobotreport",
     "ieee-spectrum-robotics",
-    "arxiv-cs-ro",
     "hacker-news",
     "techcrunch-robotics",
     "bair-blog",
@@ -75,10 +75,91 @@ test("the preset list is the sites that get read, not everything that was resear
     expect(BUILTIN_SOURCES.find((s) => s.id === id)).toBeUndefined();
   }
   // And what is kept: two Chinese sources, Bloomberg, Nature, Science, the
-  // Economist.
+  // Economist — plus the seven index queries (docs/69), which are a different
+  // kind of preset: a query the product runs, not a site somebody must read.
   expect(BUILTIN_SOURCES.find((s) => s.id === "jiqizhixin")).toBeTruthy();
   expect(BUILTIN_SOURCES.find((s) => s.id === "jiemian")).toBeTruthy();
-  expect(BUILTIN_SOURCES.length).toBe(24);
+  expect(BUILTIN_SOURCES.length).toBe(31);
+});
+
+// --- index queries (docs/69) ---------------------------------------------------
+
+const INDEX_TEMPLATES: Record<string, { provider: string; query: Record<string, unknown>; limit: number; poll: number; fulltext: string }> = {
+  "arxiv-cs-ro": { provider: "arxiv", query: { categories: ["cs.RO"], days: 2 }, limit: 100, poll: 1440, fulltext: "none" },
+  "arxiv-embodied": {
+    provider: "arxiv",
+    query: { categories: ["cs.RO", "cs.CV", "cs.LG"], terms: ["vision-language-action"], days: 3 },
+    limit: 50,
+    poll: 1440,
+    fulltext: "none",
+  },
+  "github-trending-python": {
+    provider: "github",
+    query: { mode: "trending", language: "Python", period: "day" },
+    limit: 30,
+    poll: 720,
+    fulltext: "fetch-page",
+  },
+  "github-new-robotics": {
+    provider: "github",
+    query: { mode: "search", topics: ["robotics", "embodied-ai", "vla"], days: 14, minStars: 30 },
+    limit: 30,
+    poll: 720,
+    fulltext: "fetch-page",
+  },
+  "hf-daily-papers": { provider: "huggingface", query: { kind: "papers", days: 1 }, limit: 50, poll: 720, fulltext: "none" },
+  "hf-models-robotics": {
+    provider: "huggingface",
+    query: { kind: "models", pipelineTag: "robotics", sort: "trending" },
+    limit: 30,
+    poll: 720,
+    fulltext: "none",
+  },
+  "hf-datasets-lerobot": {
+    provider: "huggingface",
+    query: { kind: "datasets", tags: ["LeRobot"], sort: "created" },
+    limit: 30,
+    poll: 720,
+    fulltext: "none",
+  },
+};
+
+test("the embodied-AI room's index queries are present, one query each, with the library's rhythm", () => {
+  for (const [id, want] of Object.entries(INDEX_TEMPLATES)) {
+    const d = BUILTIN_SOURCES.find((s) => s.id === id);
+    expect(d?.discovery).toEqual({ kind: "index", provider: want.provider, query: want.query });
+    expect(d?.limit).toBe(want.limit);
+    expect(d?.pollMinutes).toBe(want.poll);
+    expect(d?.fulltext.mode).toBe(want.fulltext);
+  }
+  // Every index preset is one of these; no query slipped in unlisted.
+  const indexIds = BUILTIN_SOURCES.filter((s) => s.discovery.kind === "index").map((s) => s.id);
+  expect(indexIds.sort()).toEqual(Object.keys(INDEX_TEMPLATES).sort());
+});
+
+test("the arXiv term is one the scholar client's cleaning keeps whole", () => {
+  // A hyphenated term split into three words would AND "vision", "language" and
+  // "action" and match half of cs.CV; kept whole it is one all: clause.
+  expect(arxivQueryTerms("vision-language-action")).toEqual(["vision-language-action"]);
+});
+
+test("the index caveats carry the docs/69 pitfalls: fake stars, request-count downloads, the arXiv limiter", () => {
+  for (const id of ["github-trending-python", "github-new-robotics"]) {
+    const c = builtinCaveat(id) ?? "";
+    expect(c).toMatch(/fake stars/);
+    expect(c).toMatch(/OSS Insight/);
+    expect(c).toMatch(/60 requests/);
+  }
+  for (const id of ["hf-daily-papers", "hf-models-robotics", "hf-datasets-lerobot"]) {
+    const c = builtinCaveat(id) ?? "";
+    expect(c).toMatch(/request counts/);
+    expect(c).toMatch(/fine-tunes/);
+  }
+  for (const id of ["arxiv-cs-ro", "arxiv-embodied"]) {
+    const c = builtinCaveat(id) ?? "";
+    expect(c).toMatch(/sortBy=submittedDate/);
+    expect(c).toMatch(/pitfall\/72/);
+  }
 });
 
 test("Bloomberg's caveat carries the 403 wall, the short window, and the terms", () => {
