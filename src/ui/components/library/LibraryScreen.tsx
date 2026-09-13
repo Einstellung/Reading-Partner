@@ -17,7 +17,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   createTopic,
-  deleteTopic,
   removeFileFromTopic,
   renameTopic,
   sortedFiles,
@@ -27,6 +26,7 @@ import {
 import { logEvent } from "../../../platform/app/events";
 import { listLibraryEntries, type LibraryEntry } from "../../../platform/app/library";
 import { deleteBook } from "../../../reading/delete/delete-book";
+import { deleteTopic } from "../../../reading/delete/delete-topic";
 import { isLastReferenceToBook } from "../../../reading/delete/pick";
 import {
   formatPublishedAt,

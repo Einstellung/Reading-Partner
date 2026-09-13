@@ -14,7 +14,7 @@ reading 的 AI 和 info 的 AI 互不认识。
 
 info 的 AI 不读任何 statement 和观察，只读 `user-profile.md` 的 declared 半段，而 reading 已明确停读该文件（48）。info 的对话 `threads-info-<date>.json` 没有任何蒸馏器读，它的线程 id 当初专门做成全局唯一就是为了锚点（`anchors.ts:23-27`），至今无人用。info 侧没有 topic：`grep topicId src/info` 为零，收藏是唯一带 topic 的 info 对象，值写死 `BRIEF_TOPIC_ID = "brief"`。跨域读只有一条边，reading 能列收藏文章；reading 的记忆只以批处理 prompt 的形式进 triage（`briefing/live.ts:565`），info 看不见书、划线、阅读位置。五个 AI 入口五份手拼的工具数组和 prompt，没有注册表，两个同名不同义的 `add_source`（`info/sources/source-tools.ts`、`reading/prep/papers/source-tool.ts`）。对话按书 / 日期 / retell / outline 四种键分开，唯一的跨线程读是同一本书内（`turn.ts:890`）。
 
-数据层同形。一个文件的身份散在五张互不核对的手写表里：`syncFs.inSyncRange`、`NEVER_INFER_DELETE`、`merge/contract.strategyFor` 加 `RECORD_FILES`、`reading/delete` 的 dead-paths、`memory/observations/arrears.ts`。引用全是裸字符串，没有仓库也没有 schema。`deleteTopic` 只摘一行（`topics.ts:232`），retell、rehearsal、观察、收藏的 topicId 永久悬空。书名在 library、retell.types、topics 的 `FileRef` 三处各存一份，靠 `material.ts:85` 的 fallback 链凑。
+数据层同形。一个文件的身份散在五张互不核对的手写表里：`syncFs.inSyncRange`、`NEVER_INFER_DELETE`、`merge/contract.strategyFor` 加 `RECORD_FILES`、`reading/delete` 的 dead-paths、`memory/observations/arrears.ts`。引用全是裸字符串，没有仓库也没有 schema。`deleteTopic` 曾经只摘一行，retell、rehearsal、观察、收藏的 topicId 永久悬空；2026-09-13 改成按登记级联：每条指向 topics 的引用在自己那行写明删除动作（delete / clear / reassign / keep），`cascadeOfTopic` 把表折成清单，`reading/delete/delete-topic.ts` 逐条执行，topics.json 那一行最后删。书名在 library、retell.types、topics 的 `FileRef` 三处各存一份，靠 `material.ts:85` 的 fallback 链凑。
 
 `src/ai` 已经是两边共用的 capability，所以「做成共用能力」不是答案。让 AI 成为一个的是共用的记忆、对话史、世界图和工具集；调用路径共用了，这四样各自私有，就是今天的样子。
 
