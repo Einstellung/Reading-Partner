@@ -812,6 +812,11 @@ export const setThreadTopic = (
   threadId: string,
   topicId: string | null,
 ): void => store.setTopic(bookId, threadId, topicId);
+// Write out whatever edits are still scheduled. The store coalesces writes, so a
+// caller that has to know the file on disk says what it just said — deleting a
+// topic, which unfiles conversations across many files at once — asks for this
+// on the way out.
+export const flushThreads = (): Promise<void> => store.flush();
 
 // Thread images live one directory per thread. Mirrors annotations.ts's base64
 // <-> bytes helpers; here `data` is bare base64 (no data: prefix), matching the

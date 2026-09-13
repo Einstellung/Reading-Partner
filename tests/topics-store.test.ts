@@ -21,7 +21,7 @@ import {
   TOPICS_FILE,
   addFileToTopic,
   createTopic,
-  deleteTopic,
+  removeTopicRecord,
   ensureBriefTopic,
   listTopics,
   markOpened,
@@ -90,7 +90,7 @@ test("a topic created over an unreadable file is refused, and the file is untouc
 
 test("a delete over an unreadable file deletes nothing", async () => {
   disk.readFails = true;
-  await expect(deleteTopic("t1")).rejects.toThrow(/could not be read/);
+  await expect(removeTopicRecord("t1")).rejects.toThrow(/could not be read/);
   expect(disk.files.get(TOPICS_FILE)).toBe(SHELF_JSON);
 
   // The read recovering is all it takes for the shelf to be whole again.

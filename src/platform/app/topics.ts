@@ -323,7 +323,10 @@ export function renameTopic(id: string, name: string): Promise<void> {
   return store.rename(id, name);
 }
 
-export function deleteTopic(id: string): Promise<void> {
+// The row and nothing else. What else named the topic is settled by the domain
+// (reading/delete/delete-topic.ts), which is where the cascade can reach the
+// stores platform/app may not import; this is the last step of it.
+export function removeTopicRecord(id: string): Promise<void> {
   return store.remove(id);
 }
 

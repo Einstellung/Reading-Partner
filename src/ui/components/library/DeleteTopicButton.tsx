@@ -42,7 +42,8 @@ export default function DeleteTopicButton({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{topicName}”?</AlertDialogTitle>
           <AlertDialogDescription>
-            The topic and its reading list go. The files stay on disk.
+            The topic goes, with the retells, talks and rehearsals made in it.
+            The PDFs stay on disk; articles kept here move to Brief.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

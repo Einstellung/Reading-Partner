@@ -45,8 +45,9 @@ test("deleting a topic goes through an AlertDialog", () => {
   // The delete hangs off the dialog's action, not off the trigger.
   expect(source).toContain('<AlertDialogAction variant="destructive" onClick={onDelete}>');
   expect(source).toContain("<AlertDialogCancel>");
-  // The original wording: the topic goes, the files do not.
-  expect(source).toContain("The files stay on disk.");
+  // The promise the wording has always made: the topic goes with the work done
+  // in it (reading/delete/delete-topic.ts), the PDFs do not.
+  expect(source).toContain("The PDFs stay on disk");
 });
 
 test("the citation chip carries a 44px target without moving the line", () => {
