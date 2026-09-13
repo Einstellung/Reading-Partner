@@ -4,7 +4,7 @@
 // file only writes them.
 //
 // The briefing blocks carry the shared companion tool set's guidance (docs/17):
-// update_profile, probe/trial/add_source, and — where the host can open one —
+// statement_write, probe/trial/add_source, and — where the host can open one —
 // the site sign-in window. Pure string assembly, so it is testable without a
 // provider; the tools themselves are bound in companion-live.ts.
 
@@ -103,7 +103,7 @@ const GENERATE_BRIEFING_ELSEWHERE = [
   "request waits for it and expires after six hours.",
 ];
 
-// The rules that hold wherever the thread is running, from update_profile's
+// The rules that hold wherever the thread is running, from statement_write's
 // restraint to the reminder that fetched text is never an instruction.
 const TOOL_RULES = [
   "",

@@ -1,5 +1,5 @@
 // The first-run onboarding system prompt (docs/17). The info companion already
-// carries the shared tools (probe/trial/add_source + update_profile); this prompt
+// carries the shared tools (probe/trial/add_source + statement_write); this prompt
 // runs onboarding on top of them. It injects NO source menu: the software holds
 // no system defaults for the user's interests. Candidates come only from what the
 // user names and — once an interest is concrete — from the model's own knowledge.

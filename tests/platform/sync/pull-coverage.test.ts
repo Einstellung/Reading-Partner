@@ -47,8 +47,8 @@ const ROUTES: PullMatcher[] = [
 // pass that wants it starts and nothing outlives that, so a pull's newer bytes
 // are picked up the next time one starts.
 const NO_IN_MEMORY_STATE: Record<string, string> = {
-  "user-profile.md": "loadProfile reads the file each time it is wanted",
-  "info-profile.md": "the profile's old name, read the same way",
+  "user-profile.md": "retired at 0.18 (docs/48): nothing reads it, and the file is left alone",
+  "info-profile.md": "the profile's old name, retired with it",
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
   "info-labs.json": "the roster is read from disk each time it is wanted — a run, a prompt, a card",

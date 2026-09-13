@@ -1,10 +1,8 @@
 // The shared info-companion tool set (docs/16/17): the three add-source tools
-// plus update_profile, mounted the same way on every info chat entry (briefing
-// Ask, article chat, the add-source flow). update_profile only DRAFTS — it
-// surfaces a confirm card with the complete proposed profile; the host saves it
-// only when the user clicks Apply. Pure: the card sink is injected, so the tool
-// tests without a real save. Composition over the source tools keeps the consent
-// rules in one place.
+// plus the statement tool the reading conversation mounts, on every info chat
+// entry (briefing Ask, article chat, the add-source flow). Pure: the card sink
+// and the statement context are injected, so the tools test without a real save.
+// Composition over the source tools keeps the consent rules in one place.
 //
 // open_site_sign_in joins them where the host has a webview to open one with. It
 // takes a site identifier and never a URL — the reason is at buildSignInTool.

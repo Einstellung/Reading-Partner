@@ -19,9 +19,7 @@
 //     A cursor too, by the same reading.
 //   lastDistilledAt[topicId]     not a cursor but a rate limit: isTopicDue
 //     (arrears.ts) makes that topic wait MIN_DISTILL_GAP_MS after it. Too high
-//     holds the next pass back by up to half an hour and tells the profile
-//     guess that memory moved when it did not (isGuessDue, profile/guess.ts);
-//     too low only lets the half-hourly sweep look at the topic sooner, and the
+//     holds the next pass back by up to half an hour; too low only lets the half-hourly sweep look at the topic sooner, and the
 //     cursors above then end the pass at "no new messages" before it costs a
 //     model call. Lower is the cheap direction here as well, so the file needs
 //     one rule and not two.

@@ -1,9 +1,8 @@
 // Where this conversation belongs (docs/21, docs/61).
 //
 // Filing a conversation is not asking the reader to pick a folder: the AI
-// proposes a topic and they nod. So this tool drafts a card and nothing else —
-// the same shape update_profile has, for the same reason: the AI writes the
-// proposal, the reader owns the write (docs/21).
+// proposes a topic and they nod. So this tool drafts a card and nothing else:
+// the AI writes the proposal, the reader owns the write (docs/21).
 //
 // It belongs to memory and to no domain, and to no one's soul: a topic is the
 // key data is filed under — which topic a book is listed in, which topic an
