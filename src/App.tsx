@@ -43,8 +43,6 @@ import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
-import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
-import EpubReaderPane from "./reading/epub/EpubReaderPane";
 import type { BookFormat } from "./platform/app/library";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -61,6 +59,7 @@ import {
   type Figure,
   type FiguresIndex,
 } from "./reading/figures";
+import BookPane from "./ui/components/reader/BookPane";
 import PrepPanel from "./ui/components/reader/PrepPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
@@ -1283,34 +1282,9 @@ export default function App() {
           onPointerDownCapture={dismissOnPaneTouch}
           onPointerUpCapture={onPanePointerUp}
         >
-          {embedDoc?.format === "epub" && (
-            <EpubReaderPane
-              key={embedDoc.bookId}
-              bookId={embedDoc.bookId}
-              buffer={embedDoc.buffer}
-              annotations={embedDoc.annotations}
-              authorName="Reading-Partner"
-              viewState={embedDoc.viewState}
-              className="block"
-              onView={onEmbedView}
-              onInitialized={onEmbedInitialized}
-              onError={onEmbedError}
-              onChangeViewState={persist}
-              onChangeViewStats={setStats}
-              onSaveAnnotations={onSaveAnnotations}
-              onSelectAnnotations={onEmbedSelect}
-              onSetAnnotationPopup={onSetAnnotationPopup}
-              onQuoteHighlightChange={setQuoteHlActive}
-            />
-          )}
-          {embedDoc && embedDoc.format !== "epub" && (
-            <EmbedReaderPane
-              key={embedDoc.bookId}
-              buffer={embedDoc.buffer}
-              annotations={embedDoc.annotations}
-              authorName="Reading-Partner"
-              viewState={embedDoc.viewState}
-              className="h-full w-full block"
+          {embedDoc && (
+            <BookPane
+              book={embedDoc}
               onView={onEmbedView}
               onInitialized={onEmbedInitialized}
               onError={onEmbedError}
@@ -1318,8 +1292,6 @@ export default function App() {
               onChangeViewStats={setStats}
               onSaveAnnotations={onSaveAnnotations}
               onDeleteAnnotations={onDeleteAnnotations}
-              // Native selection already happened — just reflect it (no echo,
-              // which would loop through the engine's own selection state).
               onSelectAnnotations={onEmbedSelect}
               onSetAnnotationPopup={onSetAnnotationPopup}
               onQuoteHighlightChange={setQuoteHlActive}
