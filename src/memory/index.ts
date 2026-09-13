@@ -238,8 +238,11 @@ export {
 export {
   dropCoveredObservations,
   memorySection,
+  memorySectionWithIds,
   type MemorySectionInput,
+  type MemorySectionResult,
 } from "./live/memory-section";
+export { logUsage } from "./live/usage";
 
 // Where a conversation belongs (docs/21, docs/61): the tool that proposes a
 // topic, the card it draws and the Apply that files it. Memory's and not the
