@@ -130,7 +130,7 @@ export default function ProfileLinesCard() {
       {state.wrote !== null && state.wrote > 0 && (
         <p className="m-0 text-xs text-faint-foreground">{writtenNote(state.wrote)}</p>
       )}
-      {state.error && <p className="m-0 text-xs text-[#b91c1c]">{state.error}</p>}
+      {state.error && <p className="m-0 text-xs text-destructive">{state.error}</p>}
     </div>
   );
 }

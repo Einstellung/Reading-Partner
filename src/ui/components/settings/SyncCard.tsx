@@ -83,7 +83,7 @@ export default function SyncCard() {
         {broken && (
           <span className="text-xs text-faint-foreground">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
         )}
-        {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
+        {error && <p className="m-0 text-xs text-destructive">{error}</p>}
       </div>
     );
   }
@@ -120,12 +120,12 @@ export default function SyncCard() {
       </div>
       {report.message && (
         <p
-          className={`m-0 text-xs ${report.alert === "alert" ? "text-[#b45309]" : "text-[#b91c1c]"}`}
+          className={`m-0 text-xs ${report.alert === "alert" ? "text-[#b45309]" : "text-destructive"}`}
         >
           {report.message}
         </p>
       )}
-      {error && <p className="m-0 text-xs text-[#b91c1c]">{error}</p>}
+      {error && <p className="m-0 text-xs text-destructive">{error}</p>}
     </div>
   );
 }

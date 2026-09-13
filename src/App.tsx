@@ -8,12 +8,6 @@ import {
   type ViewState,
   type ViewStats,
 } from "./platform/app/reader-contract";
-import { appData } from "./platform/app/appdata";
-import { hashPath } from "./platform/app/storage";
-import { importBook, repairLibraryNames } from "./platform/app/library";
-import { migrateBookLive } from "./platform/app/migrate";
-import { splitRehearsalRunPagesOnce } from "./reading/rehearsal";
-import { splitSavedArticleBodiesOnce } from "./reading/saved-articles";
 import { documentShape, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import {
@@ -31,17 +25,12 @@ import {
   listTopics,
   markOpened,
   mostRecentlyOpened,
-  repairTopicPaths,
-  setFileHash,
   type FileRef,
   type Topic,
 } from "./platform/app/topics";
 import { getThread, type ThreadMessage } from "./platform/app/threads";
 import { initSync } from "./platform/sync";
 import { registerPullRoute } from "./platform/sync/pull-routes";
-import { compressImage, compressImageData } from "./ai/image-utils";
-import { readClipboardImage } from "./platform/app/clipboard";
-import { isTauri } from "./platform/app/host";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai";
@@ -54,8 +43,6 @@ import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
-import EmbedReaderPane from "./reading/engine/EmbedReaderPane";
-import EpubReaderPane from "./reading/epub/EpubReaderPane";
 import type { BookFormat } from "./platform/app/library";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -72,6 +59,7 @@ import {
   type Figure,
   type FiguresIndex,
 } from "./reading/figures";
+import BookPane from "./ui/components/reader/BookPane";
 import PrepPanel from "./ui/components/reader/PrepPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
@@ -93,6 +81,8 @@ import { useCall } from "./reading/session/use-call";
 import { useMarkDoors } from "./reading/session/use-mark-doors";
 import { AI_PEN_COLOR, useMarks } from "./reading/session/use-marks";
 import { openBook } from "./reading/session/open-book";
+import { createPasteHandler, systemImageReader } from "./reading/session/paste-images";
+import { runStartupMigrations } from "./reading/session/startup-migrations";
 import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
 import type { ReaderShell } from "./reading/session/shell";
 import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
@@ -396,55 +386,15 @@ export default function App() {
     refreshTopics().catch(() => setTopics([]));
   }, [refreshTopics]);
 
-  // One-time content-hash backfill for existing topic files (docs/13, M-sync-1):
-  // import each into the library, give it a book id, and move its legacy
-  // path-hash-keyed data under that id. Runs once, in the background, and
-  // sequentially — books can be hundreds of MB, so never read several at once.
-  // Idempotent: a file that already has a book id is skipped.
+  // The repairs and backfills that run once on the way up
+  // (reading/session/startup-migrations.ts), in the background. The ref makes it
+  // once: StrictMode runs this effect twice.
   useEffect(() => {
     if (migrationRan.current) return;
     migrationRan.current = true;
-    void (async () => {
-      // A kept article's body moved out of saved-articles.json into a file of
-      // its own (docs/21). Independent of the book backfill below and not
-      // awaited with it: nothing here reads the kept articles, and the shelf
-      // reads either shape.
-      void splitSavedArticleBodiesOnce().catch((e) =>
-        console.warn("saved-article body split skipped", e),
-      );
-      // What the reader said on each pass moved out of the
-      // rehearsal's log into a file per pass (docs/43). Independent of both, and
-      // not awaited: everything that reads a rehearsal reads either shape, so
-      // nothing below is waiting on it. Writes nothing once it has run.
-      void splitRehearsalRunPagesOnce().catch((e) =>
-        console.warn("rehearsal transcript split skipped", e),
-      );
-      // Names an iOS import left percent-encoded (docs/pitfall/106). Runs first
-      // so the backfill below reads the repaired paths, and writes nothing when
-      // there is nothing encoded, so it costs no sync revision.
-      let changed = await Promise.all([repairTopicPaths(), repairLibraryNames()])
-        .then((wrote) => wrote.some(Boolean))
-        .catch((e) => {
-          console.warn("name repair skipped", e);
-          return false;
-        });
-      const all = await listTopics().catch((): Topic[] => []);
-      for (const t of all) {
-        for (const f of t.files) {
-          if (f.hash) continue;
-          try {
-            const bytes = await appData.readPicked(f.path);
-            const entry = await importBook(bytes, f.path);
-            await migrateBookLive(hashPath(f.path), entry.hash);
-            await setFileHash(t.id, f.path, entry.hash);
-            changed = true;
-          } catch (e) {
-            console.warn("library migration skipped a file", f.path, e);
-          }
-        }
-      }
-      if (changed) await refreshTopics().catch(() => {});
-    })();
+    void runStartupMigrations().then((changed) => {
+      if (changed) return refreshTopics().catch(() => {});
+    });
   }, [refreshTopics]);
 
   // Account sync (docs/13): start the engine if the user is signed in with
@@ -916,57 +866,20 @@ export default function App() {
     );
   }, []);
 
-  // One global paste path (single owner, focus-independent). While a call is
-  // open: prefer image items on the DOM clipboard event (Chrome / future iPad);
-  // if the event carries no image and no text, fall back to reading the system
-  // clipboard through Tauri (WebKitGTK drops image data from the paste event,
-  // pitfall 16). Any failure surfaces an inline hint — never a silent drop.
+  // One global paste path, owned here because it belongs to no field: whatever
+  // is pasted belongs to the conversation that was open when it was pasted, even
+  // if the answer arrives after the reader has moved on. What a paste does to it
+  // is reading/session/paste-images.ts.
   useEffect(() => {
     if (!call) return;
-    // Whatever is pasted belongs to the conversation that was open when it was
-    // pasted, even if the answer to it arrives after the user has moved on.
     const threadId = call.threadId;
-    const onPaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      const blobs: Blob[] = [];
-      if (items) {
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          if (item.kind === "file" && item.type.startsWith("image/")) {
-            const f = item.getAsFile();
-            if (f) blobs.push(f);
-          }
-        }
-      }
-      if (blobs.length > 0) {
-        e.preventDefault();
-        if (!modelTakesImages()) {
-          noteImageHint(threadId, "This model can't read images. Switch to a vision model in Settings.");
-          return;
-        }
-        noteImageHint(threadId, "");
-        for (const b of blobs) stageImage(threadId, () => compressImage(b));
-        return;
-      }
-      // No image in the DOM event. Text paste keeps its default behaviour.
-      const text = e.clipboardData?.getData("text") ?? "";
-      if (text.trim() !== "" || !isTauri()) return;
-      // WebKitGTK: the image never reached the event — read it from Rust.
-      e.preventDefault();
-      void (async () => {
-        const img = await readClipboardImage();
-        if (!img) {
-          noteImageHint(threadId, "Couldn't read an image from the clipboard.");
-          return;
-        }
-        if (!modelTakesImages()) {
-          noteImageHint(threadId, "This model can't read images. Switch to a vision model in Settings.");
-          return;
-        }
-        noteImageHint(threadId, "");
-        stageImage(threadId, () => compressImageData(img.rgba, img.width, img.height));
-      })();
-    };
+    const handle = createPasteHandler({
+      takesImages: modelTakesImages,
+      hint: (text) => noteImageHint(threadId, text),
+      stage: (produce) => stageImage(threadId, produce),
+      readSystemImage: systemImageReader(),
+    });
+    const onPaste = (e: ClipboardEvent) => void handle(e);
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
   }, [call, stageImage, noteImageHint, modelTakesImages]);
@@ -1370,34 +1283,9 @@ export default function App() {
           onPointerDownCapture={dismissOnPaneTouch}
           onPointerUpCapture={onPanePointerUp}
         >
-          {embedDoc?.format === "epub" && (
-            <EpubReaderPane
-              key={embedDoc.bookId}
-              bookId={embedDoc.bookId}
-              buffer={embedDoc.buffer}
-              annotations={embedDoc.annotations}
-              authorName="Reading-Partner"
-              viewState={embedDoc.viewState}
-              className="block"
-              onView={onEmbedView}
-              onInitialized={onEmbedInitialized}
-              onError={onEmbedError}
-              onChangeViewState={persist}
-              onChangeViewStats={setStats}
-              onSaveAnnotations={onSaveAnnotations}
-              onSelectAnnotations={onEmbedSelect}
-              onSetAnnotationPopup={onSetAnnotationPopup}
-              onQuoteHighlightChange={setQuoteHlActive}
-            />
-          )}
-          {embedDoc && embedDoc.format !== "epub" && (
-            <EmbedReaderPane
-              key={embedDoc.bookId}
-              buffer={embedDoc.buffer}
-              annotations={embedDoc.annotations}
-              authorName="Reading-Partner"
-              viewState={embedDoc.viewState}
-              className="h-full w-full block"
+          {embedDoc && (
+            <BookPane
+              book={embedDoc}
               onView={onEmbedView}
               onInitialized={onEmbedInitialized}
               onError={onEmbedError}
@@ -1405,8 +1293,6 @@ export default function App() {
               onChangeViewStats={setStats}
               onSaveAnnotations={onSaveAnnotations}
               onDeleteAnnotations={onDeleteAnnotations}
-              // Native selection already happened — just reflect it (no echo,
-              // which would loop through the engine's own selection state).
               onSelectAnnotations={onEmbedSelect}
               onSetAnnotationPopup={onSetAnnotationPopup}
               onQuoteHighlightChange={setQuoteHlActive}
