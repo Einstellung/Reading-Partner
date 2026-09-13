@@ -37,6 +37,22 @@ memory 不 import 领域，领域在启动时登记。方向和今天 retell 把
 | 排练转写 | 一次过一份转写 | 新开 | 降冷层 |
 | 讲稿对话 | 一条讲稿线程 | 新开 | 不回收 |
 
+2026-09-13 落地。游标不新开：排练转写和讲稿对话都按 `distilledMessages` 记，键分别
+是这一过的 run id（UUID）和讲稿线程 id，两者在全盘唯一，够用。一次过的转写按页拼成
+读者自己说的那几条消息，所以它也是一个对话单元。
+
+登记的六种和登记它们的文件：
+
+| kind | 登记处 |
+|---|---|
+| `reading-thread` `annotations` `retell-thread` `talk-thread` `rehearsal-run` | `src/reading/distill/source.ts` |
+| `info-thread` | `src/info/briefer/distill-source.ts` |
+| `conversation`（门口） | `src/soul/door.ts`，还没接进 `bootDomains` |
+
+`DistillSource.cursor` 是 `"distilledMessages" | "distilledMarks"`，单元按它分成对话和
+划线两种形状。扫描一侧不再自己走书架：`memory/live` 的 `collectArrears` 只问登记表，
+job 只剩一种，跑哪个 pass 由单元自己说（划线走标记 pass，带 `retell` 的走复述 pass）。
+
 落点 `memory/distill/`：`arrears.ts`、游标读写和运行器搬过去，`distill.ts` 和 `retell.ts` 留在 `observations/` 作 pass 实现。
 
 ### 水位账本
