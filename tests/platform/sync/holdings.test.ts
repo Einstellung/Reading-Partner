@@ -192,3 +192,33 @@ test("the report names both trees and what was concluded", () => {
   expect(text).toContain("peer d-b cached[at=1000 files=0] now[none]");
   expect(text).toContain("inferred deletions (on): topics.json");
 });
+
+test("an app label rides along when the builder is given one, and is left out when not", () => {
+  expect(holdings({ files: {} }).app).toBeUndefined();
+  expect(holdings({ files: {}, app: "0.15.0 (macos)" }).app).toBe("0.15.0 (macos)");
+  // A caller with nothing to hand (no Tauri, no version read yet) passes
+  // undefined straight through rather than an empty string worth displaying.
+  expect(buildHoldings({ device: "d-a", at: 1000, app: undefined, files: {} }).app).toBeUndefined();
+});
+
+test("the report shows the app label next to the tree it came from", () => {
+  const text = renderHoldingsPass({
+    self: holdings({ files: {}, app: "0.15.0 (macos)" }),
+    published: true,
+    peers: [
+      {
+        device: "d-b",
+        cached: holdings({ device: "d-b", files: {}, app: "0.14.2 (ios)" }),
+        current: holdings({ device: "d-b", files: {}, app: "0.15.0 (ios)" }),
+      },
+    ],
+    fetched: 1,
+    inferred: [],
+    contested: [],
+    enabled: true,
+  });
+  expect(text).toContain("self d-a at=1000 files=0 app=0.15.0 (macos) (published)");
+  expect(text).toContain(
+    "peer d-b cached[at=1000 files=0 app=0.14.2 (ios)] now[at=1000 files=0 app=0.15.0 (ios)]",
+  );
+});

@@ -97,6 +97,19 @@ export function isMobilePlatform(): boolean {
 	}
 }
 
+// The raw platform name, for display rather than for a decision — every other
+// function in this file asks a yes/no question of it, but a sync holdings file
+// (docs/59) wants the name itself, next to the app version, so a report about
+// another device's tree also says what kind of device it is.
+export function currentPlatform(): string {
+	try {
+		return platform();
+	} catch {
+		// Not running under Tauri (unit tests, plain-browser dev).
+		return "unknown";
+	}
+}
+
 export function isIOS(): boolean {
 	try {
 		return platform() === "ios";

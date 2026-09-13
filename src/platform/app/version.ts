@@ -19,6 +19,20 @@ export async function readAppVersion(): Promise<string> {
   }
 }
 
+// A synchronous cache of the above, for callers that cannot await one — the
+// sync engine fills a device's holdings (docs/59) mid-pass and has no room to
+// suspend for an IPC round trip there. Kicked off once at import time rather
+// than on first call: the read is fast and this module loads well before any
+// pass runs, so by the time one asks, the real version is already in.
+let cachedVersion: string = UNPACKAGED_VERSION;
+void readAppVersion().then((v) => {
+  cachedVersion = v;
+});
+
+export function currentAppVersion(): string {
+  return cachedVersion;
+}
+
 // The licence this app ships under, shown beside the version. One string, so the
 // UI and package.json cannot drift into naming two different licences.
 export const LICENSE_NAME = "PolyForm Noncommercial 1.0.0";

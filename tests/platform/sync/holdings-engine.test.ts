@@ -268,6 +268,21 @@ test("both devices publish a holdings and cache the other's", async () => {
   expect(A.cached("d-a")).toBeNull();
 });
 
+test("a device with an appVersion getter publishes it; one without publishes none", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": "topics" });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A, { appVersion: () => "0.15.0 (macos)" });
+  const b = engineFor(remote, B);
+
+  await settle(a.engine, b.engine);
+
+  expect(A.self()!.app).toBe("0.15.0 (macos)");
+  expect(B.self()!.app).toBeUndefined();
+  // The peer sees the label on the tree it fetched, same as any other field.
+  expect(B.cached("d-a")!.app).toBe("0.15.0 (macos)");
+});
+
 test("a holdings never reaches AppData and is never reconciled", async () => {
   const remote = makeRemote();
   const A = makeDevice("d-a", { "topics.json": "topics" });
