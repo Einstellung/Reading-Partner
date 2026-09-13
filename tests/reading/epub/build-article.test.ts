@@ -264,3 +264,20 @@ test("an article with no headings still has a table of contents", async () => {
   expect(book.nav.toc.map((t) => t.title)).toEqual(["Untitled"]);
   expect(book.pkg.title).toBe("Untitled");
 });
+
+test("a formula in the page is a formula in the book", async () => {
+  const bytes = await buildArticleEpub({
+    title: "A paper with formulas",
+    sourceUrl: "https://arxiv.org/abs/0000.00000",
+    html:
+      `<p>${PROSE}</p>` +
+      `<p>It follows that <math xmlns="http://www.w3.org/1998/Math/MathML">` +
+      `<mrow><msup><mi>e</mi><mi>x</mi></msup><mo>=</mo><mn>1</mn></mrow></math>.</p>`,
+    images: [],
+  });
+  const book = parseEpub(bytes);
+  const html = book.docs[0].html;
+  expect(html).toContain("<math");
+  expect(html).toContain("<msup>");
+  expect(html).toContain("<mi>e</mi>");
+});
