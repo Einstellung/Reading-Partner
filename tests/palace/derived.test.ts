@@ -8,7 +8,17 @@
 // another. Every sample in the table is put to all four. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { PALACE, resolvePalace, rowsWhere } from "../../src/palace";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  cascadeOfTopic,
+  PALACE,
+  resolvePalace,
+  rowOf,
+  rowsWhere,
+  type PalaceKind,
+} from "../../src/palace";
 import { THREAD_KINDS } from "../../src/conversations";
 import { threadFileKey, threadFileName } from "../../src/platform/app/threads";
 import { strategyFor } from "../../src/platform/sync/merge/contract";
@@ -136,4 +146,97 @@ test("a conversation row's sample is the file its store key names, and nothing e
     }
   }
   expect(wrong).toEqual([]);
+});
+
+// --- what points at a topic ------------------------------------------------
+//
+// The fifth list. Deleting a topic used to take one row out of topics.json and
+// leave every retell, rehearsal, observation and kept article naming an id
+// nothing could resolve (docs/61 「问题」). What is settled is now a fold over the
+// table, so the way it can go wrong is a kind that keeps a topicId and never
+// says so — which the grep below is against.
+
+// Every file under src/ declaring a topicId field, and the kinds the records it
+// describes are stored as. A file declaring one has to be in this map or in the
+// list under it: deciding whether a new topicId reaches disk, and under which
+// kind, is the point.
+const STORES_A_TOPIC_ID: Record<string, readonly PalaceKind[]> = {
+  "info/labs/types.ts": ["info-labs"],
+  "platform/app/threads.ts": ["info-thread", "conversation"],
+  "reading/rehearsal/types.ts": ["rehearsal"],
+  "reading/retell/types.ts": ["retell"],
+  "reading/saved-articles.ts": ["saved-articles"],
+  "reading/talk/types.ts": ["outline"],
+  "soul/sequence.ts": ["soul-sequence"],
+};
+
+// The rest: a topic id in flight — what is on the desk, what a call is in, what
+// a sweep owes, what a store was asked to start — none of which is a record.
+const CARRIES_ONE_IN_MEMORY: readonly string[] = [
+  "App.tsx",
+  "conversations/search.ts",
+  "conversations/tools.ts",
+  "conversations/topic-of.ts",
+  "desk/types.ts",
+  "memory/filing/settle.ts",
+  "memory/live/live.ts",
+  "memory/observations/arrears.ts",
+  "memory/observations/recall.ts",
+  "reading/desk.ts",
+  "reading/rehearsal/store.ts",
+  "reading/retell/store.ts",
+  "reading/session/hangup.ts",
+  "reading/talk/store.ts",
+  "ui/components/info/saveArticle.ts",
+];
+
+const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../src");
+const DECLARES = /^[ \t]*topicId\??: [^;\n]*;$/m;
+
+function filesDeclaringATopicId(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) filesDeclaringATopicId(path, out);
+    else if (/\.tsx?$/.test(name) && DECLARES.test(readFileSync(path, "utf8"))) {
+      out.push(relative(SRC, path));
+    }
+  }
+  return out;
+}
+
+test("a file that declares a topicId has said whether it reaches disk", () => {
+  const known = new Set([...Object.keys(STORES_A_TOPIC_ID), ...CARRIES_ONE_IN_MEMORY]);
+  expect(filesDeclaringATopicId(SRC).filter((f) => !known.has(f))).toEqual([]);
+});
+
+test("a kind that stores a topicId declares the reference and what becomes of it", () => {
+  const acted = new Set(cascadeOfTopic().map((s) => s.kind));
+  const undeclared: string[] = [];
+  for (const [file, kinds] of Object.entries(STORES_A_TOPIC_ID)) {
+    for (const kind of kinds) {
+      if (!acted.has(kind)) undeclared.push(`${file}: ${kind} does not point at topics`);
+    }
+  }
+  expect(undeclared).toEqual([]);
+});
+
+// A reference to a topic that says nothing about deletion is the state this
+// replaced: the row knew, and the delete did not.
+test("every reference to a topic carries an action", () => {
+  const silent = PALACE.filter((r) =>
+    r.refs.some((ref) => ref.kind === "topics" && ref.onDelete === undefined),
+  ).map((r) => r.kind);
+  expect(silent).toEqual([]);
+});
+
+// The two kinds that outlive the topic they name are decisions (an archival
+// label in docs/48 and docs/50, a cache, a field nothing writes yet), and a
+// decision nobody can read is one nobody can check.
+test("a kind that keeps a deleted topic's id says why", () => {
+  const mute = cascadeOfTopic()
+    .filter((s) => s.action === "keep")
+    .map((s) => rowOf(s.kind))
+    .filter((r) => r.note === undefined)
+    .map((r) => r.kind);
+  expect(mute).toEqual([]);
 });

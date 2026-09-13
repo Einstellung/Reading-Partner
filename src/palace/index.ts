@@ -5,7 +5,7 @@
 // hand-written list somewhere else — the sync range, the never-infer-delete set,
 // the merge strategies, a deleted book's paths — is a fold over these rows.
 
-import { PALACE as ROWS, type PalaceKind, type PalaceRow } from "./kinds";
+import { PALACE as ROWS, type PalaceKind, type PalaceRow, type RefAction } from "./kinds";
 
 // The table, widened to the row interface. kinds.ts keeps the literal types so
 // that PalaceKind is the union of the names written there; every reader wants
@@ -19,6 +19,7 @@ export type {
   GcRule,
   PalaceDomain,
   PalaceId,
+  RefAction,
   SyncChannel,
 } from "./kinds";
 export type { FieldGroups, MergeStrategy, RecordShape } from "./merge-types";
@@ -56,4 +57,34 @@ export function rowOf(kind: PalaceKind): PalaceRow {
   const row = ROWS.find((r) => r.kind === kind);
   if (!row) throw new Error(`palace: no row for kind "${kind}"`);
   return row;
+}
+
+/** One kind's part in a cascade: what to do, and to which reference. */
+export interface CascadeStep {
+  kind: PalaceKind;
+  // The field carrying the reference, as the row writes it.
+  via: string;
+  action: RefAction;
+}
+
+/**
+ * What deleting a topic does, kind by kind, read off the table (docs/61).
+ *
+ * Every row that declares a reference to `topics` is here, in table order,
+ * carrying the action its row chose. The "keep" steps are in the list rather
+ * than filtered out of it: a kind that deliberately outlives the topic it names
+ * is a decision, and one nobody can see is one nobody can check.
+ *
+ * Pure. The cascade itself is reading/delete/delete-topic.ts, which has a
+ * handler for every step that is not a "keep" and no handler for anything else.
+ */
+export function cascadeOfTopic(rows: readonly PalaceRow[] = ROWS): CascadeStep[] {
+  const steps: CascadeStep[] = [];
+  for (const row of rows) {
+    for (const ref of row.refs) {
+      if (ref.kind !== "topics" || ref.onDelete === undefined) continue;
+      steps.push({ kind: row.kind as PalaceKind, via: ref.via, action: ref.onDelete });
+    }
+  }
+  return steps;
 }

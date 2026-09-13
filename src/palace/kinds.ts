@@ -67,6 +67,21 @@ export type PalaceId =
   | "labId"
   | "fixed";
 
+// What a record does when the thing it points at is deleted (docs/61). The
+// action is declared beside the reference rather than written into the code that
+// runs the cascade, so a new kind that points at a topic decides its own fate in
+// the row and the cascade is a fold over the table.
+//
+//   delete   the record is the deleted thing's own work and goes with it, the
+//            way docs/50 deletes: the file, and a remote purge for the ones
+//            sync would otherwise bring back.
+//   clear    the record only tags it. The tag goes, the record stays.
+//   reassign the reference is required, so the record moves to the default
+//            topic rather than losing a field it cannot be without.
+//   keep     nothing to do, and the row says why: an archival label, a cache
+//            that rebuilds, or a field nothing writes yet.
+export type RefAction = "delete" | "clear" | "reassign" | "keep";
+
 export interface PalaceRow {
   kind: string;
   domain: PalaceDomain;
@@ -95,8 +110,10 @@ export interface PalaceRow {
   samples: readonly string[];
   id: PalaceId;
   // What this kind points at, by kind name and by the field carrying the
-  // reference. Descriptive: nothing derives from it yet.
-  refs: ReadonlyArray<{ kind: string; via: string }>;
+  // reference, and what becomes of this record when that thing is deleted.
+  // Descriptive except for the topics references, which cascadeOfTopic folds
+  // into what deleting a topic does (reading/delete/delete-topic.ts).
+  refs: ReadonlyArray<{ kind: string; via: string; onDelete?: RefAction }>;
   sync: SyncChannel;
   // How sync merges two edits of it. Present exactly when sync is "data".
   merge?: MergeStrategy;
@@ -292,7 +309,7 @@ export const PALACE = [
     pathFor: (id: string) => `events-${id}.jsonl`,
     samples: ["events-topic1.jsonl", "events-ai.jsonl"],
     id: "topicId",
-    refs: [{ kind: "topics", via: "topicId" }],
+    refs: [{ kind: "topics", via: "<the file name>", onDelete: "delete" }],
     sync: "local",
     deleteWith: "never",
     gc: "domain-housekeeping",
@@ -360,7 +377,10 @@ export const PALACE = [
     pathFor: (id: string) => `threads-info-${id}.json`,
     samples: ["threads-info-2026-07-21.json"],
     id: "date",
-    refs: [{ kind: "info-briefing-published", via: "date" }],
+    refs: [
+      { kind: "info-briefing-published", via: "date" },
+      { kind: "topics", via: "threads[].topicId", onDelete: "clear" },
+    ],
     sync: "data",
     merge: "records",
     shape: MAP_THREADS,
@@ -377,7 +397,7 @@ export const PALACE = [
     pathFor: (id: string) => `conversation-${id}.json`,
     samples: ["conversation-2026-09-10.json"],
     id: "date",
-    refs: [],
+    refs: [{ kind: "topics", via: "threads[].topicId", onDelete: "clear" }],
     sync: "data",
     merge: "records",
     shape: MAP_THREADS,
@@ -472,11 +492,11 @@ export const PALACE = [
     match: fixed("soul-sequence.json"),
     samples: ["soul-sequence.json"],
     id: "fixed",
-    refs: [],
+    refs: [{ kind: "topics", via: "spans[].topicId", onDelete: "keep" }],
     sync: "local",
     deleteWith: "never",
     gc: "domain-housekeeping",
-    note: "the time index over every conversation file, rebuilt by scanning them; a cache, so it does not travel",
+    note: "the time index over every conversation file, rebuilt by scanning them; a cache, so it does not travel, and a span's topic is whatever the file it was read off says now",
   },
   {
     kind: "fulltext",
@@ -595,7 +615,7 @@ export const PALACE = [
     id: "retellId",
     refs: [
       { kind: "library", via: "materials[].bookId" },
-      { kind: "topics", via: "topicId" },
+      { kind: "topics", via: "topicId", onDelete: "delete" },
     ],
     sync: "data",
     merge: "opaque",
@@ -612,7 +632,10 @@ export const PALACE = [
     pathFor: (id: string) => `outline-${id}.json`,
     samples: ["outline-1754400000000.json"],
     id: "outlineId",
-    refs: [{ kind: "retell", via: "retellId" }],
+    refs: [
+      { kind: "retell", via: "retellId" },
+      { kind: "topics", via: "topicId", onDelete: "delete" },
+    ],
     sync: "data",
     merge: "records",
     shape: { kind: "array", container: "segments", idField: "id" },
@@ -628,7 +651,10 @@ export const PALACE = [
     pathFor: (id: string) => `rehearsal-${id}.json`,
     samples: ["rehearsal-1754400000000.json"],
     id: "rehearsalId",
-    refs: [{ kind: "outline", via: "outlineId" }],
+    refs: [
+      { kind: "outline", via: "outlineId" },
+      { kind: "topics", via: "topicId", onDelete: "delete" },
+    ],
     sync: "data",
     merge: "opaque",
     deleteWith: "outline",
@@ -723,7 +749,7 @@ export const PALACE = [
     samples: ["saved-articles.json"],
     id: "fixed",
     refs: [
-      { kind: "topics", via: "topicId" },
+      { kind: "topics", via: "topicId", onDelete: "reassign" },
       { kind: "article-body", via: "bodyHash" },
     ],
     sync: "data",
@@ -758,12 +784,12 @@ export const PALACE = [
     dir: { prefix: "observations", depth: 1 },
     samples: ["observations/m-ab12cd34ef567890.md"],
     id: "observationId",
-    refs: [{ kind: "topics", via: "topicId" }],
+    refs: [{ kind: "topics", via: "topic", onDelete: "keep" }],
     sync: "data",
     merge: "prose",
     deleteWith: "observation-tombstone",
     gc: "never",
-    note: "the row that owns observations/, so it carries the walk's descend rule for the whole flat directory",
+    note: "the row that owns observations/, so it carries the walk's descend rule for the whole flat directory; its topic is an archival label and not a retrieval key (docs/48), so a deleted topic leaves the observation alone (docs/50)",
   },
   {
     kind: "observation-index",
@@ -784,7 +810,7 @@ export const PALACE = [
     match: fixed("observations/meta.json"),
     samples: ["observations/meta.json"],
     id: "fixed",
-    refs: [],
+    refs: [{ kind: "topics", via: "lastDistilledAt{}", onDelete: "clear" }],
     sync: "data",
     merge: "cursors",
     neverInferDelete: true,
@@ -933,13 +959,16 @@ export const PALACE = [
     match: fixed("info-labs.json"),
     samples: ["info-labs.json"],
     id: "fixed",
-    refs: [{ kind: "info-sources", via: "sourceId" }],
+    refs: [
+      { kind: "info-sources", via: "sourceId" },
+      { kind: "topics", via: "charter.topicId", onDelete: "keep" },
+    ],
     sync: "data",
     merge: "records",
     shape: { kind: "array", container: "labs", idField: "id" },
     deleteWith: "never",
     gc: "never",
-    note: "the reader's research rooms (docs/63): authored in conversation, so records-merged on the room id rather than last-writer-wins over the list",
+    note: "the reader's research rooms (docs/63): authored in conversation, so records-merged on the room id rather than last-writer-wins over the list; the charter's topic is null in everything written this release, so nothing of a deleted topic's is here to clear",
   },
   {
     kind: "info-picture",
