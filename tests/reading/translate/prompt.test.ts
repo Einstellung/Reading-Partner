@@ -4,7 +4,10 @@
 import { expect, test } from "bun:test";
 import {
   BatchShapeError,
+  glossaryMessage,
+  glossarySystemPrompt,
   parseBatchResponse,
+  parseGlossaryResponse,
   translateBatchMessage,
   translateSystemPrompt,
   type TranslateBatchRequest,
@@ -27,15 +30,33 @@ test("the request carries the title, the glossary and the blocks", () => {
   expect(translateSystemPrompt()).toContain("⟦1⟧");
 });
 
-test("a well-formed answer comes back as blocks and terms, fences and all", () => {
-  const raw = '```json\n{"blocks":[{"id":"b1","text":"第一行。"},{"id":"b2","text":"第二行。"}],' +
-    '"terms":[{"source":"line","zh":"行"},{"source":"","zh":"x"}]}\n```';
-  const parsed = parseBatchResponse(raw, REQUEST);
-  expect(parsed.blocks).toEqual([
+test("a well-formed answer comes back as blocks, fences and all", () => {
+  const raw = '```json\n{"blocks":[{"id":"b1","text":"第一行。"},{"id":"b2","text":"第二行。"}]}\n```';
+  expect(parseBatchResponse(raw, REQUEST).blocks).toEqual([
     { id: "b1", text: "第一行。" },
     { id: "b2", text: "第二行。" },
   ]);
-  expect(parsed.terms).toEqual([{ source: "line", zh: "行" }]);
+});
+
+test("the glossary pass sends the sample and reads back a checked term list", () => {
+  const message = glossaryMessage({
+    title: "A Title",
+    headings: ["The first section"],
+    sample: ["A spine is a list."],
+  });
+  expect(message).toContain("A Title");
+  expect(message).toContain("The first section");
+  expect(message).toContain("A spine is a list.");
+  expect(glossarySystemPrompt()).toContain("Simplified Chinese");
+
+  const parsed = parseGlossaryResponse(
+    '{"terms":[{"source":"spine","zh":"书脊"},{"source":"Spine","zh":"脊"},{"source":"x"}]}',
+  );
+  // Mis-typed entries drop out, and a term said twice is settled once.
+  expect(parsed).toEqual([{ source: "spine", zh: "书脊" }]);
+  expect(parseGlossaryResponse('{"terms":[]}')).toEqual([]);
+  expect(() => parseGlossaryResponse('{"nope":1}')).toThrow(BatchShapeError);
+  expect(() => parseGlossaryResponse("sorry")).toThrow(BatchShapeError);
 });
 
 test("a short, a long, a shuffled or a textless answer is refused", () => {

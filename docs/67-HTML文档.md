@@ -56,7 +56,7 @@
 
 划线按原文片段搬（60 的规矩）：逐条拿 verbatim quote 在新文档里重新定位，搬不过去的报给用户，不猜。
 
-一致性靠术语表。按连续块切批，一批 1500–2500 源 token，每批带文档标题和之前批次定下的术语，返回译文加新术语。结构化输出，校验块数和顺序，错一次重发一次，再错整篇失败——不出半本书。
+两趟。第一趟拿标题、全部小标题和每块的首句（约 2000 token）问一次，定下术语表；第二趟按连续块切批，一批 1500–2500 源 token，每批带同一份术语表、互不依赖，因此并发跑（走 `legion/execute/limiter`，并发 4，429 由它统一退避），回来按文档顺序写回。结构化输出，校验块数和顺序，错一次重发一次，再错整篇失败，在飞的批次一并放弃——不出半本书。
 
 只有 PDF 的论文不在 app 内翻，工具直接说做不到。
 
@@ -80,7 +80,7 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 - 摄入：URL → `fetchWithRetry` 取页面 → `extractReadable` 出 HTML → 下图 → `buildArticleEpub` → `importBook` → 补 kind 和来源字段 → 确认卡。PDF 链接照旧走 `sniffContentType` 分流，直接 `importBook`。
 - 书架：topic 内文章行没有封面，一行标题加来源域名加日期。
 - `ingest_url` 改成上面这条摄入路，digest 挂在产出的文档上。
-- 翻译核心：`translateArticleEpub(epubBytes, deps) → { bytes, blocks, glossary }`，分块、切批、术语表、写回、重新打包，模型调用注入；`carryMarks` 按引文把划线搬到译本。单测覆盖：可译块各多一个兄弟块、公式代码表格逐字不变、nav 和图片不变、再翻一次被拒。
+- 翻译核心：`translateArticleEpub(epubBytes, deps) → { bytes, blocks, glossary }`，术语表一趟、切批并发一趟、写回、重新打包，两个模型调用都注入；`carryMarks` 按引文把划线搬到译本。单测覆盖：可译块各多一个兄弟块、公式代码表格逐字不变、nav 和图片不变、再翻一次被拒。
 
 不在 v1，各一句：
 

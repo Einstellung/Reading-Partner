@@ -11,9 +11,12 @@ import {
   translateArticleEpub,
   TranslateError,
 } from "../../../src/reading/translate/translate-article";
-import type {
-  TranslateBatchFn,
-  TranslateBatchRequest,
+import {
+  BatchShapeError,
+  type GlossaryFn,
+  type GlossaryRequest,
+  type TranslateBatchFn,
+  type TranslateBatchRequest,
 } from "../../../src/reading/translate/prompt";
 import { PNG } from "../epub/fixture";
 
@@ -40,15 +43,33 @@ const INPUT = {
   images: [{ src: "https://cdn.example.com/a.png", bytes: PNG, mediaType: "image/png" }],
 };
 
-// A translator that answers every block and settles one term, so the output can
-// be told apart from the original character by character.
+// A translator that answers every block, so the output can be told apart from
+// the original character by character.
 function fakeTranslator(seen: TranslateBatchRequest[] = []): TranslateBatchFn {
   return async (request) => {
     seen.push(request);
-    return {
-      blocks: request.blocks.map((b) => ({ id: b.id, text: `[zh]${b.text}` })),
-      terms: [{ source: "fox", zh: "狐狸" }],
-    };
+    return { blocks: request.blocks.map((b) => ({ id: b.id, text: `[zh]${b.text}` })) };
+  };
+}
+
+// The glossary pass, answering with one term.
+function fakeGlossary(seen: GlossaryRequest[] = []): GlossaryFn {
+  return async (request) => {
+    seen.push(request);
+    return [{ source: "fox", zh: "狐狸" }];
+  };
+}
+
+// No stagger and no real clock: the pacing is the limiter's own test's subject,
+// and a three-second ramp per call would make this file take a minute.
+const PACING = { limiter: { rampMs: 0 }, timers: { now: () => 0, sleep: async () => {} } };
+
+function deps(over: Partial<Parameters<typeof translateArticleEpub>[1]> = {}) {
+  return {
+    buildGlossary: fakeGlossary(),
+    translateBatch: fakeTranslator(),
+    ...PACING,
+    ...over,
   };
 }
 
@@ -66,7 +87,7 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 
 async function translated(): Promise<{ original: Uint8Array; bilingual: Uint8Array }> {
   const original = await buildArticleEpub(INPUT);
-  const out = await translateArticleEpub(original, { translateBatch: fakeTranslator() });
+  const out = await translateArticleEpub(original, deps());
   return { original, bilingual: out.bytes };
 }
 
@@ -83,7 +104,7 @@ test("the result is an EPUB the reader opens and paginates", async () => {
 test("every translatable block gained one sibling, and nothing else did", async () => {
   const original = await buildArticleEpub(INPUT);
   const before = segmentDocument(parseEpub(original).docs[0].doc).length;
-  const out = await translateArticleEpub(original, { translateBatch: fakeTranslator() });
+  const out = await translateArticleEpub(original, deps());
   expect(out.blocks).toBe(before);
 
   const doc = parseEpub(out.bytes).docs[0].doc;
@@ -128,29 +149,65 @@ test("the outline, the pictures and the header are the article's own", async () 
   expect(doc.querySelector(".rp-source + .rp-zh")).toBeNull();
 });
 
-test("the batches share a glossary, and the progress is reported", async () => {
+test("one glossary is settled first and every batch is handed the same one", async () => {
+  const asked: GlossaryRequest[] = [];
   const seen: TranslateBatchRequest[] = [];
   const original = await buildArticleEpub(INPUT);
   const steps: Array<[number, number]> = [];
-  const out = await translateArticleEpub(original, {
-    translateBatch: fakeTranslator(seen),
-    onProgress: (done, total) => steps.push([done, total]),
-    // Small enough that this short article takes several calls.
-    limits: { target: 30, max: 60 },
-  });
+  const out = await translateArticleEpub(
+    original,
+    deps({
+      buildGlossary: fakeGlossary(asked),
+      translateBatch: fakeTranslator(seen),
+      onProgress: (done, total) => steps.push([done, total]),
+      // Small enough that this short article takes several calls.
+      limits: { target: 30, max: 60 },
+    }),
+  );
+  expect(asked).toHaveLength(1);
+  expect(asked[0].title).toBe(INPUT.title);
+  expect(asked[0].headings).toContain("The first section");
+
   expect(seen.length).toBeGreaterThan(1);
-  expect(seen[0].glossary).toEqual([]);
-  expect(seen[1].glossary).toEqual([{ source: "fox", zh: "狐狸" }]);
-  expect(out.glossary).toEqual([{ source: "fox", zh: "狐狸" }]);
-  expect(steps[steps.length - 1][0]).toBe(steps[steps.length - 1][1]);
+  const glossary = [{ source: "fox", zh: "狐狸" }];
   expect(seen.every((r) => r.title === INPUT.title)).toBe(true);
+  for (const request of seen) expect(request.glossary).toEqual(glossary);
+  expect(out.glossary).toEqual(glossary);
+  expect(steps).toHaveLength(seen.length);
+  expect(steps[steps.length - 1][0]).toBe(steps[steps.length - 1][1]);
+});
+
+test("batches run together under the ceiling and land in document order", async () => {
+  const original = await buildArticleEpub(INPUT);
+  let live = 0;
+  let peak = 0;
+  let started = 0;
+  // Later batches answer first, so completion order is the reverse of the
+  // document's and the writing back has to be the one that puts it right.
+  const reversed: TranslateBatchFn = async (request) => {
+    const mine = started++;
+    live++;
+    peak = Math.max(peak, live);
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, 20 - mine * 4)));
+    live--;
+    return { blocks: request.blocks.map((b) => ({ id: b.id, text: `[zh#${b.id}]` })) };
+  };
+  const out = await translateArticleEpub(
+    original,
+    deps({ translateBatch: reversed, limits: { target: 20, max: 40 }, concurrency: 3 }),
+  );
+  expect(started).toBeGreaterThan(3);
+  expect(peak).toBeGreaterThan(1);
+  expect(peak).toBeLessThanOrEqual(3);
+
+  const doc = parseEpub(out.bytes).docs[0].doc;
+  const order = segmentDocument(doc).map((b) => `[zh#${b.id}]`);
+  expect(Array.from(doc.querySelectorAll(".rp-zh")).map((el) => el.textContent)).toEqual(order);
 });
 
 test("translating the translation is refused", async () => {
   const { bilingual } = await translated();
-  await expect(
-    translateArticleEpub(bilingual, { translateBatch: fakeTranslator() }),
-  ).rejects.toThrow(TranslateError);
+  await expect(translateArticleEpub(bilingual, deps())).rejects.toThrow(TranslateError);
 });
 
 test("a batch that comes back mis-shaped is retried once, then fails the run", async () => {
@@ -158,20 +215,56 @@ test("a batch that comes back mis-shaped is retried once, then fails the run", a
   let calls = 0;
   const flaky: TranslateBatchFn = async (request) => {
     calls++;
-    if (calls === 1) throw new (await import("../../../src/reading/translate/prompt")).BatchShapeError("short");
-    return { blocks: request.blocks.map((b) => ({ id: b.id, text: "译" })), terms: [] };
+    if (calls === 1) throw new BatchShapeError("short");
+    return { blocks: request.blocks.map((b) => ({ id: b.id, text: "译" })) };
   };
-  const out = await translateArticleEpub(original, { translateBatch: flaky });
+  const out = await translateArticleEpub(original, deps({ translateBatch: flaky }));
   expect(calls).toBe(2);
   expect(out.blocks).toBeGreaterThan(0);
 
   let always = 0;
   const broken: TranslateBatchFn = async () => {
     always++;
-    throw new (await import("../../../src/reading/translate/prompt")).BatchShapeError("short");
+    throw new BatchShapeError("short");
   };
-  await expect(translateArticleEpub(original, { translateBatch: broken })).rejects.toThrow(
+  await expect(translateArticleEpub(original, deps({ translateBatch: broken }))).rejects.toThrow(
     TranslateError,
   );
   expect(always).toBe(2);
+});
+
+test("one batch failing abandons the rest, and no half-translated book comes back", async () => {
+  const original = await buildArticleEpub(INPUT);
+  let calls = 0;
+  const doomed: TranslateBatchFn = async (request) => {
+    calls++;
+    if (calls === 1) throw new Error("the provider refused");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return { blocks: request.blocks.map((b) => ({ id: b.id, text: "译" })) };
+  };
+  await expect(
+    translateArticleEpub(
+      original,
+      deps({ translateBatch: doomed, limits: { target: 20, max: 40 }, concurrency: 2 }),
+    ),
+  ).rejects.toThrow(TranslateError);
+  // A failure that is not the provider pushing back is not retried, and the
+  // batches still queued behind the ceiling never start.
+  expect(calls).toBeLessThan(4);
+});
+
+test("a glossary that cannot be settled fails the run before a block is sent", async () => {
+  const original = await buildArticleEpub(INPUT);
+  let translated = 0;
+  const counted: TranslateBatchFn = async (request) => {
+    translated++;
+    return { blocks: request.blocks.map((b) => ({ id: b.id, text: "译" })) };
+  };
+  const refused: GlossaryFn = async () => {
+    throw new BatchShapeError("no terms array");
+  };
+  await expect(
+    translateArticleEpub(original, deps({ buildGlossary: refused, translateBatch: counted })),
+  ).rejects.toThrow(TranslateError);
+  expect(translated).toBe(0);
 });

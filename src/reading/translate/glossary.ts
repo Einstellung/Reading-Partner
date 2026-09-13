@@ -1,0 +1,63 @@
+// What the glossary pass is shown. Pure.
+//
+// The batches of one article are translated at the same time and know nothing
+// about each other, so nothing that happens in one can reach another. What they
+// share has to be decided before any of them starts, and that is the glossary:
+// one pass over the title, every heading and the opening sentence of the
+// paragraphs, which is enough of the document for a model to fix how its
+// recurring terms are rendered without reading all of it.
+//
+// Opening sentences rather than whole paragraphs because the terms are what is
+// wanted, not the prose: a first sentence introduces what its paragraph is
+// about, and the same budget buys five times as many paragraphs.
+
+import { estimateTokens } from "./batch";
+import type { GlossaryRequest } from "./prompt";
+import type { TranslatableBlock } from "./segment";
+
+/** How many source tokens of sample the glossary pass is shown. */
+export const GLOSSARY_SAMPLE_TOKENS = 2000;
+
+/** A sentence with no terminator in it is still a sentence; this is where it stops. */
+const RUNAWAY_SENTENCE = 240;
+
+const HEADING = /^h[1-6]$/;
+
+/**
+ * The first sentence of a block. Ends at the first terminator that is followed
+ * by a space or by nothing, so "v1.2" and "Dr. Who" do not end one; a block with
+ * no terminator at all is cut at a length rather than sent whole.
+ */
+export function firstSentence(text: string): string {
+  const at = /[.!?。！？](\s|$)/.exec(text);
+  if (at) return text.slice(0, at.index + 1);
+  return text.length <= RUNAWAY_SENTENCE ? text : `${text.slice(0, RUNAWAY_SENTENCE).trimEnd()}…`;
+}
+
+/**
+ * The glossary pass's request: the title, every heading, and opening sentences
+ * in document order until the budget is spent. The headings come out of the
+ * budget first, because they are the document's own vocabulary and the sample is
+ * what gives way when there is a lot of it.
+ */
+export function glossaryRequestFor(
+  title: string,
+  blocks: readonly TranslatableBlock[],
+  budget = GLOSSARY_SAMPLE_TOKENS,
+): GlossaryRequest {
+  const headings: string[] = [];
+  const rest: TranslatableBlock[] = [];
+  for (const block of blocks) {
+    if (HEADING.test(block.element.localName.toLowerCase())) headings.push(block.text);
+    else rest.push(block);
+  }
+  let left = budget - headings.reduce((n, h) => n + estimateTokens(h), 0);
+  const sample: string[] = [];
+  for (const block of rest) {
+    if (left <= 0) break;
+    const sentence = firstSentence(block.text);
+    sample.push(sentence);
+    left -= estimateTokens(sentence);
+  }
+  return { title, headings, sample };
+}

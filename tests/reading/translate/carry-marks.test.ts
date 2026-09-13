@@ -27,7 +27,6 @@ const INPUT = {
 
 const translator: TranslateBatchFn = async (request) => ({
   blocks: request.blocks.map((b) => ({ id: b.id, text: `[zh]${b.text}` })),
-  terms: [],
 });
 
 function markOver(spine: SpineDocument, phrase: string): MarkRecord {
@@ -55,7 +54,12 @@ function markOver(spine: SpineDocument, phrase: string): MarkRecord {
 
 async function bilingual(): Promise<{ before: SpineDocument; after: SpineDocument }> {
   const original = await buildArticleEpub(INPUT);
-  const out = await translateArticleEpub(original, { translateBatch: translator });
+  const out = await translateArticleEpub(original, {
+    buildGlossary: async () => [],
+    translateBatch: translator,
+    limiter: { rampMs: 0 },
+    timers: { now: () => 0, sleep: async () => {} },
+  });
   return { before: parseEpub(original).docs[0], after: parseEpub(out.bytes).docs[0] };
 }
 

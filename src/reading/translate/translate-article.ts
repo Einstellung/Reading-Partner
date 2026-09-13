@@ -8,14 +8,30 @@
 // on the shelf, and it replaces the original in the topic rather than editing
 // it (docs/60's rule about a new version).
 //
-// The model is injected. Nothing here knows which provider is in use or how a
-// call is made, so the whole path — segmentation, batching, the glossary, the
-// checks, the packing — runs in the test suite against a fake.
+// Two passes. The first reads a sample of the document and settles the
+// vocabulary (glossary.ts); the second translates the blocks in batches that
+// all carry that one list and nothing from each other. That is the whole reason
+// for the split: batches that share nothing can run at the same time, and a
+// reader waiting on an article waits for the longest batch rather than for the
+// sum of them, while the terms still match across the page.
 //
-// The run is all or nothing. A batch that comes back the wrong shape is sent
-// once more and then the run fails: half a translated article is a book whose
-// second half silently stops being bilingual, and nobody would know which half.
+// At the same time, not all at once. The calls go through the shared limiter
+// (src/legion/execute/limiter), which owns the ceiling, the stagger between
+// starts and what the whole group does when a provider answers 429 — the same
+// device the chapter pipeline paces itself with, for the same reason: a rate
+// limit is the group being told to slow down, not one unlucky call.
+//
+// The model is injected. Nothing here knows which provider is in use or how a
+// call is made, so the whole path — the glossary, the batching, the checks, the
+// packing — runs in the test suite against a fake.
+//
+// The run is all or nothing. A call that comes back the wrong shape is sent once
+// more and then the run fails, abandoning whatever is still in flight: half a
+// translated article is a book whose second half silently stops being bilingual,
+// and nobody would know which half.
 
+import { CallLimiter, isRateLimited, type LimiterConfig, type LimiterTimers } from "../../legion/execute/limiter";
+import { StoppedError } from "../../legion/stop";
 import {
   ARTICLE_ENTRY,
   collectHeadings,
@@ -28,14 +44,19 @@ import { parseEpub, type EpubBook } from "../epub/parse";
 import { sanitizeDocument } from "../epub/sanitize";
 import { applyTranslations } from "./apply";
 import { planBatches, type BatchLimits } from "./batch";
+import { glossaryRequestFor } from "./glossary";
 import {
   BatchShapeError,
   type GlossaryEntry,
+  type GlossaryFn,
   type TranslateBatchFn,
   type TranslateBatchRequest,
   type TranslateBatchResponse,
 } from "./prompt";
 import { hasTranslations, segmentDocument, ZH_CLASS } from "./segment";
+
+/** How many batches of one article are in flight at once. */
+export const TRANSLATE_CONCURRENCY = 4;
 
 export class TranslateError extends Error {
   constructor(message: string) {
@@ -45,21 +66,33 @@ export class TranslateError extends Error {
 }
 
 export interface TranslateDeps {
+  /** The pass that settles the vocabulary, before any block is translated. */
+  buildGlossary: GlossaryFn;
   translateBatch: TranslateBatchFn;
-  /** Called after every batch with how many blocks are done out of how many. */
+  /** Called as each batch finishes, in completion order, not document order. */
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
   /** Batch sizing, for the tests; the run uses the defaults. */
   limits?: BatchLimits;
+  /** Batches in flight at once. Defaults to TRANSLATE_CONCURRENCY. */
+  concurrency?: number;
+  /** The rest of the limiter's settings, and its clock. Both for the tests. */
+  limiter?: Partial<LimiterConfig>;
+  timers?: LimiterTimers;
 }
 
 export interface TranslatedArticle {
   bytes: Uint8Array;
   /** How many blocks were given a translation. */
   blocks: number;
-  /** Every term the run settled, in the order they were settled. */
+  /** The vocabulary the run fixed, as every batch was given it. */
   glossary: GlossaryEntry[];
 }
+
+const REAL_TIMERS: LimiterTimers = {
+  now: () => Date.now(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+};
 
 function escapeXml(s: string): string {
   return s
@@ -100,28 +133,28 @@ function metadataOf(book: EpubBook): ArticleMetadata {
 }
 
 /**
- * One batch, sent once and — when the answer does not line up with what was
- * sent — once more. The retry is a fresh call with the same request: the shapes
- * that fail here are a dropped block or a renamed id, and those are a sampling
- * accident rather than something a differently worded request would fix.
+ * One call, sent once and — when the answer does not line up, or the provider
+ * pushed back on volume — once more. Two failures are worth a second attempt
+ * and no more: a mis-shaped answer is a sampling accident that a differently
+ * worded request would not fix, and a 429 is answered by the limiter's pause
+ * rather than by trying harder. Anything else fails on the spot.
  */
-async function runBatch(
-  deps: TranslateDeps,
-  request: TranslateBatchRequest,
-): Promise<TranslateBatchResponse> {
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
+async function once<T>(
+  limiter: CallLimiter,
+  call: (signal?: AbortSignal) => Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  return limiter.run(async () => {
     try {
-      return await deps.translateBatch(request, deps.signal);
+      return await call(signal);
     } catch (err) {
-      lastError = err;
-      // Only a mis-shaped answer is worth a second call. A cancelled run, a
-      // provider that refused, a network that is gone: sending it again is the
-      // same failure twice.
-      if (!(err instanceof BatchShapeError)) break;
+      limiter.noteFailure(err);
+      if (err instanceof StoppedError) throw err;
+      if (!(err instanceof BatchShapeError) && !isRateLimited(err)) throw err;
+      await limiter.hold(signal);
+      return await call(signal);
     }
-  }
-  throw new TranslateError(`a batch could not be translated: ${String(lastError)}`);
+  }, signal);
 }
 
 /** The pictures, the header, the outline and the CSS of the original, translated. */
@@ -159,61 +192,102 @@ export async function translateArticleEpub(
   const blocks = segmentDocument(body);
   if (blocks.length === 0) throw new TranslateError("the article has nothing to translate");
 
-  const batches = planBatches(blocks, deps.limits);
-  const glossary: GlossaryEntry[] = [];
-  const seenTerms = new Set<string>();
-  const translations = new Map<string, string>();
-  let done = 0;
+  const limiter = new CallLimiter(
+    { limit: deps.concurrency ?? TRANSLATE_CONCURRENCY, ...deps.limiter },
+    deps.timers ?? REAL_TIMERS,
+  );
+  // The run's own stop, so the first terminal failure takes the calls that are
+  // still waiting for a slot down with it instead of paying for a book that is
+  // already not going to be written. A user Stop reaches it the same way.
+  const stop = new AbortController();
+  const onOuterAbort = (): void => stop.abort();
+  deps.signal?.addEventListener("abort", onOuterAbort, { once: true });
 
-  // The glossary grows as the batches settle it, and a batch is told what was
-  // decided before it and nothing after: that is what makes the run's output a
-  // function of the order the article is read in rather than of the schedule.
-  const rememberTerms = (terms: readonly GlossaryEntry[]): void => {
-    for (const term of terms) {
-      const key = term.source.toLowerCase();
-      if (seenTerms.has(key)) continue;
-      seenTerms.add(key);
-      glossary.push(term);
-    }
-  };
-
-  for (const batch of batches) {
+  try {
     deps.signal?.throwIfAborted();
-    const response = await runBatch(deps, {
-      title: meta.title,
-      glossary: [...glossary],
-      blocks: batch.map((b) => ({ id: b.id, text: b.text })),
-    });
-    const answers = new Map(response.blocks.map((row) => [row.id, row.text]));
-    for (const block of batch) {
-      const text = answers.get(block.id);
-      if (text !== undefined) translations.set(block.id, text);
+
+    // Pass one. It fails the run rather than being skipped: if the model cannot
+    // answer the smallest call of the run, the dozen larger ones are not going
+    // to go better, and failing here costs one call instead of twelve.
+    let glossary: GlossaryEntry[] = [];
+    try {
+      const request = glossaryRequestFor(meta.title, blocks);
+      glossary = [...(await once(limiter, (signal) => deps.buildGlossary(request, signal), stop.signal))];
+    } catch (err) {
+      if (err instanceof StoppedError) throw err;
+      throw new TranslateError(`the glossary could not be settled: ${String(err)}`);
     }
-    rememberTerms(response.terms);
-    done += batch.length;
-    deps.onProgress?.(done, blocks.length);
-  }
 
-  const written = applyTranslations(body, blocks, translations);
+    // Pass two. Every batch is handed the same list and knows nothing of the
+    // others, so they are started together and answered in whatever order they
+    // are answered in.
+    const batches = planBatches(blocks, deps.limits);
+    const translations = new Map<string, string>();
+    let failure: unknown = null;
+    let done = 0;
 
-  const source = `<?xml version="1.0" encoding="utf-8"?>
+    const runOne = async (batch: typeof blocks): Promise<void> => {
+      const request: TranslateBatchRequest = {
+        title: meta.title,
+        glossary,
+        blocks: batch.map((b) => ({ id: b.id, text: b.text })),
+      };
+      const response: TranslateBatchResponse = await once(
+        limiter,
+        (signal) => deps.translateBatch(request, signal),
+        stop.signal,
+      );
+      const answers = new Map(response.blocks.map((row) => [row.id, row.text]));
+      for (const block of batch) {
+        const text = answers.get(block.id);
+        if (text !== undefined) translations.set(block.id, text);
+      }
+      done += batch.length;
+      deps.onProgress?.(done, blocks.length);
+    };
+
+    await Promise.all(
+      batches.map((batch) =>
+        runOne(batch).catch((err: unknown) => {
+          if (failure === null) {
+            failure = err;
+            // Whatever is still queued gives up now; whatever is in flight is
+            // awaited and its answer discarded.
+            stop.abort();
+          }
+        }),
+      ),
+    );
+    if (failure !== null) {
+      if (deps.signal?.aborted || failure instanceof StoppedError) throw failure;
+      throw new TranslateError(`a batch could not be translated: ${String(failure)}`);
+    }
+
+    // Completion order is not document order, and the document does not care:
+    // the translations are written back by walking the blocks.
+    const written = applyTranslations(body, blocks, translations);
+
+    const source = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" lang="${escapeXml(language)}">
 <head>${head ? head.innerHTML : ""}</head>
 <body>${body.innerHTML}</body>
 </html>`;
-  const sanitized = sanitizeDocument(source, ARTICLE_ENTRY, (entry) => book.zip.has(entry));
-  if (!sanitized) throw new TranslateError("the translated markup could not be sanitized");
+    const sanitized = sanitizeDocument(source, ARTICLE_ENTRY, (entry) => book.zip.has(entry));
+    if (!sanitized) throw new TranslateError("the translated markup could not be sanitized");
 
-  const { images, imageTypes } = readImages(book);
-  const bytes = await packArticleEpub({
-    meta,
-    articleHtml: sanitized.html,
-    headings,
-    images,
-    imageTypes,
-  });
-  return { bytes, blocks: written, glossary };
+    const { images, imageTypes } = readImages(book);
+    const bytes = await packArticleEpub({
+      meta,
+      articleHtml: sanitized.html,
+      headings,
+      images,
+      imageTypes,
+    });
+    return { bytes, blocks: written, glossary };
+  } finally {
+    deps.signal?.removeEventListener("abort", onOuterAbort);
+  }
 }
 
 /** The class a translated block carries, re-exported for the wiring. */
