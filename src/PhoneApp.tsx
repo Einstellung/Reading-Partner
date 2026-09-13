@@ -49,6 +49,7 @@ import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsDialog from "./ui/components/SettingsDialog";
 import MigrationGate from "./ui/components/common/MigrationGate";
 import Toast, { useToasts } from "./ui/components/common/Toast";
+import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 
 // InfoHome's screen for a stack entry, or null on the ones it does not draw.
@@ -256,6 +257,10 @@ export default function PhoneApp() {
         </main>
 
         <Toast toasts={toasts} onDismiss={dismissToast} />
+
+        {/* The count only. The phone shell has no open-a-file door of its own,
+            so the reader goes back to the shelf and finds the translation there. */}
+        <TranslateStatus openBookId={() => null} />
 
         {showSettings && (
           <SettingsDialog

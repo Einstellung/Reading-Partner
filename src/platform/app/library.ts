@@ -49,6 +49,11 @@ export interface LibraryEntry {
   byline?: string;
   // ISO 8601, as the page gave it — a bare date or a full timestamp.
   publishedAt?: string;
+  // The document this one was translated from, by its book id. The original is
+  // deleted the moment the translation is filed, so this names something that is
+  // no longer on the shelf; it is here to say what the file is, not to be
+  // followed (reading/translate/replace.ts).
+  translatedFrom?: string;
 }
 
 // Pure: whether this entry is a web article rather than a book. One place, so
@@ -82,6 +87,7 @@ export interface ImportMeta {
   sourceUrl?: string;
   byline?: string;
   publishedAt?: string;
+  translatedFrom?: string;
 }
 
 // Pure: the source fields, with the absent ones left out rather than written as
@@ -95,6 +101,7 @@ export function importMetaFields(meta: ImportMeta | undefined): Partial<LibraryE
   if (meta.sourceUrl !== undefined) fields.sourceUrl = meta.sourceUrl;
   if (meta.byline !== undefined) fields.byline = meta.byline;
   if (meta.publishedAt !== undefined) fields.publishedAt = meta.publishedAt;
+  if (meta.translatedFrom !== undefined) fields.translatedFrom = meta.translatedFrom;
   return fields;
 }
 

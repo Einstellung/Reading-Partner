@@ -182,6 +182,7 @@ test("companion turn: reading tools only, kickoff as the first message", async (
     "research_literature",
     "search_conversations",
     "search_topic",
+    "translate_document",
   ]);
   expect(turn!.messages).toEqual([{ role: "user", text: EXPLAIN_KICKOFF }]);
   expect(turn!.systemPrompt).toContain("inline caches");
@@ -200,6 +201,7 @@ test("a book with no text layer gets no read_pages tool", async () => {
     "read_conversation",
     "research_literature",
     "search_conversations",
+    "translate_document",
   ]);
 });
 
@@ -220,6 +222,7 @@ test("a topic id mounts the tool that writes an observation", async () => {
     "research_literature",
     "search_conversations",
     "search_topic",
+    "translate_document",
   ]);
 });
 
@@ -238,6 +241,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
     "research_literature",
     "search_conversations",
     "search_topic",
+    "translate_document",
     "view_figure",
   ]);
   expect(turn!.systemPrompt).toContain("[fig:1]");
@@ -263,6 +267,7 @@ test("a live pipeline mounts the source and paper tools, once", async () => {
     "research_literature",
     "search_conversations",
     "search_topic",
+    "translate_document",
   ]);
   expect(turn!.systemPrompt).toContain("ingest_url");
 });
@@ -284,6 +289,7 @@ test("a pipeline with no plan yet mounts no paper tools", async () => {
     "research_literature",
     "search_conversations",
     "search_topic",
+    "translate_document",
   ]);
 });
 
@@ -313,6 +319,7 @@ test("kept articles mount the saved-article tools and their prompt line", async 
     "research_literature",
     "search_conversations",
     "search_topic",
+    "translate_document",
   ]);
   expect(turn!.systemPrompt).toContain("list_saved_articles");
   expect(turn!.systemPrompt).toContain("and only then");
@@ -412,6 +419,7 @@ test("no pipeline means no link ingestion", async () => {
     "research_literature",
     "search_conversations",
     "search_topic",
+    "translate_document",
   ]);
   expect(turn!.systemPrompt).not.toContain("ingest_url");
 });

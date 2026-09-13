@@ -101,6 +101,7 @@ import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
+import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
 import MigrationGate from "./ui/components/common/MigrationGate";
 import {
@@ -1640,6 +1641,18 @@ export default function App() {
       </main>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
+
+      {/* The running translation's count, and the hand-off onto the document it
+          produced: the original is off the shelf by then (reading/translate). */}
+      <TranslateStatus
+        openBookId={() => bookIdRef.current}
+        onReopen={(r) => {
+          void openFile(
+            { path: r.path, name: r.path.split("/").pop() ?? r.path, addedAt: Date.now(), hash: r.hash },
+            r.topicId ?? undefined,
+          );
+        }}
+      />
 
       {/* Covers everything above, or renders nothing (docs/48). */}
       <MigrationGate />
