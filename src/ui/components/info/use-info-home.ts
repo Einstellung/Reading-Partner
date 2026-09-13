@@ -46,7 +46,6 @@ import {
   type InfoCallAnchor,
 } from "../../../info/briefer/anchors";
 import {
-  addSource as addSourceStore,
   hasSources,
   loadSources,
   loadSourceHealth,
@@ -56,6 +55,8 @@ import {
   setSourceEnabled,
 } from "../../../info/sources/source-store";
 import type { SourceDescriptor } from "../../../info/sources/descriptor";
+import { loadLabs } from "../../../info/labs/store";
+import type { Lab } from "../../../info/labs/types";
 import type { SourceHealth } from "../../../info/sources/engine";
 import {
   runSessionCheck,
@@ -139,6 +140,9 @@ export interface InfoHomeController {
   hasSources: boolean | null;
   sources: SourceDescriptor[];
   sourceHealth: Record<string, SourceHealth>;
+  // The research rooms, so the source list can say which of them read each
+  // source (docs/63). Loaded with the sources, by the same refresh.
+  labs: Lab[];
   siteSessions: SiteSessions;
   sessionBusy: SessionBusy | null;
   // The open article and what can be shown for it.
@@ -160,7 +164,6 @@ export interface InfoHomeController {
   openSourcesPage: () => void;
   toggleSource: (id: string, enabled: boolean) => void;
   removeSourceById: (id: string) => void;
-  confirmAddSource: (descriptor: SourceDescriptor) => Promise<void>;
   openArticle: (itemId: string) => Promise<void>;
   keepArticle: (itemId: string) => Promise<void>;
   dismissItem: (itemId: string, meta: BriefingItemMeta, category?: string) => void;
@@ -177,6 +180,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
   const [hasSourcesState, setHasSourcesState] = useState<boolean | null>(null);
   const [sourcesList, setSourcesList] = useState<SourceDescriptor[]>([]);
   const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
+  const [labs, setLabs] = useState<Lab[]>([]);
   // Last known sign-in state per site, and which site is being worked on. Both
   // only mean anything where there is a webview to sign in with.
   const [siteSessions, setSiteSessions] = useState<SiteSessions>({});
@@ -269,14 +273,16 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
 
   // Reload the source list + health (source-list page) and the hasSources flag.
   const refreshSources = useCallback(async () => {
-    const [list, health, sessions] = await Promise.all([
+    const [list, health, sessions, rooms] = await Promise.all([
       loadSources(),
       loadSourceHealth(),
       loadSiteSessions(),
+      loadLabs(),
     ]);
     setSourcesList(list);
     setSourceHealth(health);
     setSiteSessions(sessions);
+    setLabs(rooms);
     setHasSourcesState(list.length > 0);
   }, []);
 
@@ -338,14 +344,6 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
         await removeSource(id);
         await refreshSources();
       })();
-    },
-    [refreshSources],
-  );
-
-  const confirmAddSource = useCallback(
-    async (descriptor: SourceDescriptor) => {
-      await addSourceStore(descriptor);
-      await refreshSources();
     },
     [refreshSources],
   );
@@ -468,6 +466,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     hasSources: hasSourcesState,
     sources: sourcesList,
     sourceHealth,
+    labs,
     siteSessions,
     sessionBusy,
     openArticleId,
@@ -487,7 +486,6 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     openSourcesPage,
     toggleSource,
     removeSourceById,
-    confirmAddSource,
     openArticle,
     keepArticle,
     dismissItem,

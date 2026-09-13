@@ -12,7 +12,6 @@ import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
-import { liveProbeAndTrial } from "../../../info/sources/source-live";
 import type { SignInSite } from "../../../info/sources/site-session";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
@@ -209,6 +208,7 @@ export default function InfoHome(props: {
           <SourcesPage
             sources={info.sources}
             health={info.sourceHealth}
+            labs={info.labs}
             sessions={info.siteSessions}
             sessionBusy={info.sessionBusy}
             {...(info.canSignIn
@@ -217,11 +217,6 @@ export default function InfoHome(props: {
                   onCheckSession: (site: SignInSite) => void info.checkSession(site),
                   onSignOut: (site: SignInSite) => void info.signOutOfSite(site),
                 }
-              : {})}
-            // Adding a source is the collector's (docs/36): a trial has to prove
-            // the full text can be had, and this machine cannot fetch one.
-            {...(info.collecting
-              ? { onProbeAdd: liveProbeAndTrial, onConfirmAdd: info.confirmAddSource }
               : {})}
             collectorSites={info.collectorSites}
             onToggle={info.toggleSource}
