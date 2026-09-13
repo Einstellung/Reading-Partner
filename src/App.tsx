@@ -31,9 +31,6 @@ import {
 import { getThread, type ThreadMessage } from "./platform/app/threads";
 import { initSync } from "./platform/sync";
 import { registerPullRoute } from "./platform/sync/pull-routes";
-import { compressImage, compressImageData } from "./ai/image-utils";
-import { readClipboardImage } from "./platform/app/clipboard";
-import { isTauri } from "./platform/app/host";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai";
@@ -85,6 +82,7 @@ import { useCall } from "./reading/session/use-call";
 import { useMarkDoors } from "./reading/session/use-mark-doors";
 import { AI_PEN_COLOR, useMarks } from "./reading/session/use-marks";
 import { openBook } from "./reading/session/open-book";
+import { createPasteHandler, systemImageReader } from "./reading/session/paste-images";
 import { runStartupMigrations } from "./reading/session/startup-migrations";
 import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
 import type { ReaderShell } from "./reading/session/shell";
@@ -868,57 +866,20 @@ export default function App() {
     );
   }, []);
 
-  // One global paste path (single owner, focus-independent). While a call is
-  // open: prefer image items on the DOM clipboard event (Chrome / future iPad);
-  // if the event carries no image and no text, fall back to reading the system
-  // clipboard through Tauri (WebKitGTK drops image data from the paste event,
-  // pitfall 16). Any failure surfaces an inline hint — never a silent drop.
+  // One global paste path, owned here because it belongs to no field: whatever
+  // is pasted belongs to the conversation that was open when it was pasted, even
+  // if the answer arrives after the reader has moved on. What a paste does to it
+  // is reading/session/paste-images.ts.
   useEffect(() => {
     if (!call) return;
-    // Whatever is pasted belongs to the conversation that was open when it was
-    // pasted, even if the answer to it arrives after the user has moved on.
     const threadId = call.threadId;
-    const onPaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      const blobs: Blob[] = [];
-      if (items) {
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          if (item.kind === "file" && item.type.startsWith("image/")) {
-            const f = item.getAsFile();
-            if (f) blobs.push(f);
-          }
-        }
-      }
-      if (blobs.length > 0) {
-        e.preventDefault();
-        if (!modelTakesImages()) {
-          noteImageHint(threadId, "This model can't read images. Switch to a vision model in Settings.");
-          return;
-        }
-        noteImageHint(threadId, "");
-        for (const b of blobs) stageImage(threadId, () => compressImage(b));
-        return;
-      }
-      // No image in the DOM event. Text paste keeps its default behaviour.
-      const text = e.clipboardData?.getData("text") ?? "";
-      if (text.trim() !== "" || !isTauri()) return;
-      // WebKitGTK: the image never reached the event — read it from Rust.
-      e.preventDefault();
-      void (async () => {
-        const img = await readClipboardImage();
-        if (!img) {
-          noteImageHint(threadId, "Couldn't read an image from the clipboard.");
-          return;
-        }
-        if (!modelTakesImages()) {
-          noteImageHint(threadId, "This model can't read images. Switch to a vision model in Settings.");
-          return;
-        }
-        noteImageHint(threadId, "");
-        stageImage(threadId, () => compressImageData(img.rgba, img.width, img.height));
-      })();
-    };
+    const handle = createPasteHandler({
+      takesImages: modelTakesImages,
+      hint: (text) => noteImageHint(threadId, text),
+      stage: (produce) => stageImage(threadId, produce),
+      readSystemImage: systemImageReader(),
+    });
+    const onPaste = (e: ClipboardEvent) => void handle(e);
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
   }, [call, stageImage, noteImageHint, modelTakesImages]);
