@@ -66,7 +66,7 @@ const PACING = { limiter: { rampMs: 0 }, timers: { now: () => 0, sleep: async ()
 
 function deps(over: Partial<Parameters<typeof translateArticleEpub>[1]> = {}) {
   return {
-    buildGlossary: fakeGlossary(),
+    translateGlossary: fakeGlossary(),
     translateBatch: fakeTranslator(),
     ...PACING,
     ...over,
@@ -157,7 +157,7 @@ test("one glossary is settled first and every batch is handed the same one", asy
   const out = await translateArticleEpub(
     original,
     deps({
-      buildGlossary: fakeGlossary(asked),
+      translateGlossary: fakeGlossary(asked),
       translateBatch: fakeTranslator(seen),
       onProgress: (done, total) => steps.push([done, total]),
       // Small enough that this short article takes several calls.
@@ -264,7 +264,7 @@ test("a glossary that cannot be settled fails the run before a block is sent", a
     throw new BatchShapeError("no terms array");
   };
   await expect(
-    translateArticleEpub(original, deps({ buildGlossary: refused, translateBatch: counted })),
+    translateArticleEpub(original, deps({ translateGlossary: refused, translateBatch: counted })),
   ).rejects.toThrow(TranslateError);
   expect(translated).toBe(0);
 });
