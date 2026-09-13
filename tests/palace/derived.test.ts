@@ -187,6 +187,10 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "reading/retell/store.ts",
   "reading/session/hangup.ts",
   "reading/talk/store.ts",
+  // The translate run carries the topic it will attach the bilingual document to; nothing here reaches disk.
+  "reading/translate/run.ts",
+  "reading/translate/tool-live.ts",
+  "reading/translate/tool.ts",
   "ui/components/info/saveArticle.ts",
 ];
 
