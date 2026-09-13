@@ -884,7 +884,8 @@ export const PALACE = [
     pathFor: (id: string) => `model-calls-${id}.jsonl`,
     samples: ["model-calls-4d9f1b0a.jsonl"],
     id: "deviceId",
-    refs: [],
+    // A spend line names the topic it was spent on; a deleted topic keeps its history.
+    refs: [{ kind: "topics", via: "topicId", onDelete: "keep" }],
     sync: "local",
     deleteWith: "never",
     gc: "never",
