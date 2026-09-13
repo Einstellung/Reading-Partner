@@ -1047,3 +1047,37 @@ test("a message that already carries an id keeps it", async () => {
   store.append("book1", "t1", { id: "t-0123456789abcdef", role: "user", text: "resent", ts: 3 });
   expect(store.get("book1", "t1")!.messages[1].id).toBe("t-0123456789abcdef");
 });
+
+// A document that replaced another (reading/translate): the conversations move
+// to the new book's file whole, and the delete of the old one cannot reach them
+// because it works by the old id — which is the old file.
+test("adopted threads land under the new book, ids and messages intact", async () => {
+  writeFile([thread("t1"), thread("bt", { book: true, annotationId: "" })]);
+  await store.load("book1");
+  const moving = store.list("book1");
+
+  await store.load("book2");
+  store.adopt("book2", moving);
+  fireTimers(500);
+  await settle();
+
+  expect(onDisk("threads-book2.json")).toEqual(["bt", "t1"]);
+  expect(messagesOf("t1", "threads-book2.json")).toEqual(["said in t1"]);
+  // The anchor a thread hangs on is unchanged; only the book it names is.
+  const parsed = JSON.parse(files.get("threads-book2.json")!) as {
+    threads: Record<string, Thread>;
+  };
+  expect(parsed.threads.t1.annotationId).toBe("ann-t1");
+  expect(parsed.threads.t1.path).toBe("book2");
+  expect(parsed.threads.bt.book).toBe(true);
+  // The old file is untouched: deleting the original is what removes it.
+  expect(onDisk()).toEqual(["bt", "t1"]);
+});
+
+test("adopting nothing writes nothing", async () => {
+  await store.load("book2");
+  store.adopt("book2", []);
+  fireTimers(500);
+  await settle();
+  expect(files.has("threads-book2.json")).toBe(false);
+});

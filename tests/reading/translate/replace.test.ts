@@ -4,6 +4,7 @@
 
 import { expect, test } from "bun:test";
 import type { ImportMeta, LibraryEntry } from "../../../src/platform/app/library";
+import type { Thread } from "../../../src/platform/app/threads";
 import { buildArticleEpub } from "../../../src/reading/epub/build-article";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import {
@@ -15,6 +16,7 @@ import { rangeToCfi } from "../../../src/reading/epub/cfi";
 import type { MarkRecord } from "../../../src/reading/translate/carry-marks";
 import {
   documentPathOf,
+  orphanedThreadIds,
   replaceWithTranslation,
   summaryLine,
   translatedFileName,
@@ -72,21 +74,37 @@ function markOver(bytes: Uint8Array, phrase: string): MarkRecord {
   });
 }
 
+function thread(id: string, annotationId: string, over: Partial<Thread> = {}): Thread {
+  return {
+    id,
+    annotationId,
+    ...(annotationId === "" ? { book: true } : {}),
+    path: "old-book-id",
+    createdAt: 10,
+    messages: [{ role: "user", text: `about ${id}`, ts: 11 }],
+    ...over,
+  };
+}
+
 interface Recorded {
   deps: ReplaceDeps;
   order: string[];
   imported: { path: string; meta: ImportMeta } | null;
   attached: { topicId: string; path: string; hash: string } | null;
   saved: Map<string, MarkRecord[]>;
+  threads: Map<string, Thread[]>;
+  deleted: string[];
 }
 
-async function recorder(marks: MarkRecord[] = []): Promise<Recorded> {
+async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promise<Recorded> {
   const original = await buildArticleEpub(INPUT);
   const rec: Recorded = {
     order: [],
     imported: null,
     attached: null,
     saved: new Map(),
+    threads: new Map([["old-book-id", threads]]),
+    deleted: [],
     deps: {} as ReplaceDeps,
   };
   rec.deps = {
@@ -116,12 +134,20 @@ async function recorder(marks: MarkRecord[] = []): Promise<Recorded> {
       rec.order.push("save-marks");
       rec.saved.set(bookId, saved);
     },
+    loadThreads: async (bookId) => rec.threads.get(bookId) ?? [],
+    adoptThreads: async (bookId, moved) => {
+      rec.order.push("adopt-threads");
+      rec.threads.set(bookId, [...moved]);
+    },
     targetOf: (bytes) => {
       const doc = parseEpub(bytes).docs[0];
       return { doc: doc.doc, text: doc.text, spineIndex: doc.index, idref: doc.idref };
     },
-    deleteBook: async () => {
+    deleteBook: async (bookId) => {
       rec.order.push("delete");
+      rec.deleted.push(bookId);
+      // What reading/delete does to a book's own files, by the id it was given.
+      rec.threads.delete(bookId);
     },
   };
   return rec;
@@ -135,6 +161,7 @@ test("the new document is filed and the marks are moved before the old one goes"
   );
 
   expect(rec.order).toEqual(["translate", "import", "attach", "save-marks", "delete"]);
+  expect(result.threads).toBe(0);
   expect(result.blocks).toBeGreaterThan(0);
   expect(result.moved).toBe(1);
   expect(result.unmatched).toBe(0);
@@ -188,7 +215,15 @@ test("a failed translation leaves the shelf alone", async () => {
 });
 
 test("the closing line counts blocks and marks", () => {
-  const base = { entry: ORIGINAL, path: "p", blocks: 30, moved: 4, unmatched: 1 };
+  const base = {
+    entry: ORIGINAL,
+    path: "p",
+    blocks: 30,
+    moved: 4,
+    unmatched: 1,
+    threads: 0,
+    orphanedThreads: 0,
+  };
   expect(summaryLine("A paper", base)).toBe(
     'Translated "A paper": 30 blocks, 4 marks moved, 1 could not be moved.',
   );
@@ -204,4 +239,63 @@ test("the translation is not called the same thing as the original", () => {
   expect(translatedFileName("a-paper.epub")).toBe("a-paper-zh.epub");
   expect(translatedFileName("a.paper.html")).toBe("a.paper-zh.epub");
   expect(translatedFileName("noextension")).toBe("noextension-zh.epub");
+});
+
+// --- the conversations -------------------------------------------------------
+
+test("the conversations move to the translation, ids and messages unchanged", async () => {
+  const mark = markOver(await buildArticleEpub(INPUT), "measured against the tree");
+  const lesson = thread("t-book", "");
+  const onMark = thread("t-mark", String(mark.id));
+  const rec = await recorder([mark], [lesson, onMark]);
+
+  const result = await replaceWithTranslation(ORIGINAL, "t1", rec.deps);
+
+  // Moved after the marks and before the original goes.
+  expect(rec.order).toEqual([
+    "translate",
+    "import",
+    "attach",
+    "save-marks",
+    "adopt-threads",
+    "delete",
+  ]);
+  expect(result.threads).toBe(2);
+  expect(result.orphanedThreads).toBe(0);
+
+  const carried = rec.threads.get("new-book-id") as Thread[];
+  expect(carried.map((t) => t.id)).toEqual(["t-book", "t-mark"]);
+  expect(carried.map((t) => t.annotationId)).toEqual(["", String(mark.id)]);
+  expect(carried[0].messages).toEqual(lesson.messages);
+  // The mark the thread is anchored on kept its id through the carry, which is
+  // the only thing that makes the anchor still mean something.
+  const savedMarks = rec.saved.get("new-book-id") as MarkRecord[];
+  expect(savedMarks.map((m) => m.id)).toEqual([String(mark.id)]);
+
+  // And the delete, which works by the old id, took nothing with it.
+  expect(rec.deleted).toEqual(["old-book-id"]);
+  expect(rec.threads.get("old-book-id")).toBeUndefined();
+});
+
+test("a thread whose mark did not come across is kept and counted", async () => {
+  const stray: MarkRecord = {
+    id: "m-gone",
+    quote: { type: "TextQuoteSelector", exact: "a sentence that was never in this article" },
+    sortIndex: "",
+  };
+  const rec = await recorder([stray], [thread("t-book", ""), thread("t-orphan", "m-gone")]);
+  const result = await replaceWithTranslation(ORIGINAL, "t1", rec.deps);
+
+  expect(result.unmatched).toBe(1);
+  expect(result.threads).toBe(2);
+  expect(result.orphanedThreads).toBe(1);
+  const carried = rec.threads.get("new-book-id") as Thread[];
+  expect(carried.map((t) => t.id)).toEqual(["t-book", "t-orphan"]);
+});
+
+test("an orphaned thread is one anchored on a mark that is not in the new document", () => {
+  const threads = [thread("t-book", ""), thread("t-a", "m1"), thread("t-b", "m2")];
+  expect(orphanedThreadIds(threads, new Set(["m1"]))).toEqual(["t-b"]);
+  expect(orphanedThreadIds(threads, new Set(["m1", "m2"]))).toEqual([]);
+  expect(orphanedThreadIds([], new Set())).toEqual([]);
 });

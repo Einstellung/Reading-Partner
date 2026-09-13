@@ -14,20 +14,22 @@
 //   3. Move the marks (carry-marks.ts), written under the new book id before the
 //      old one is touched. A crash here loses nothing: the originals are still
 //      filed under a book that still exists.
-//   4. Delete the original through the ordinary delete path (reading/delete),
+//   4. Move the conversations. A thread is filed under a book id, so a new file
+//      means a new key and a conversation that is not moved is one the reader
+//      loses by having the article translated (docs/03: a thread outlives the
+//      material it was opened on). Ids, messages and anchors are kept; only the
+//      book the file is for changes.
+//   5. Delete the original through the ordinary delete path (reading/delete),
 //      which is what takes its topic row, its reading position, its pagination
 //      and its prep material with it. Last, because everything that had to be
-//      read off the old book has been read by now.
-//
-// The conversation held on the original goes with it. Threads are filed under a
-// book id and this is a different book, so the chat about the article does not
-// follow the article — v1 accepts that and the tool's closing line is written
-// into the translation's own thread instead (tool-live.ts).
+//      read off the old book has been read by now — and it deletes by the old
+//      id, which is no longer the key the moved conversations are under.
 //
 // Every side effect is injected, so the order above is what the test pins down
 // rather than what a filesystem happens to do.
 
 import type { ImportMeta, LibraryEntry } from "../../platform/app/library";
+import type { Thread } from "../../platform/app/threads";
 import { carryMarks, type CarryTarget, type MarkRecord } from "./carry-marks";
 import type { TranslatedArticle } from "./translate-article";
 
@@ -43,6 +45,10 @@ export interface ReplaceDeps {
   attach(topicId: string, path: string, hash: string): Promise<void>;
   loadMarks(bookId: string): Promise<MarkRecord[]>;
   saveMarks(bookId: string, marks: MarkRecord[]): Promise<void>;
+  /** Every conversation filed under a book, the originals included. */
+  loadThreads(bookId: string): Promise<Thread[]>;
+  /** File those conversations under another book, ids and all. */
+  adoptThreads(bookId: string, threads: readonly Thread[]): Promise<void>;
   /** The new document, opened far enough for a mark to be relocated in it. */
   targetOf(bytes: Uint8Array): CarryTarget;
   deleteBook(bookId: string): Promise<void>;
@@ -55,6 +61,29 @@ export interface ReplaceResult {
   blocks: number;
   moved: number;
   unmatched: number;
+  /** Conversations moved onto the translation. */
+  threads: number;
+  /** Of those, the ones whose mark did not come across. */
+  orphanedThreads: number;
+}
+
+/**
+ * Pure: which of a book's conversations is left pointing at a mark that is not
+ * in the new document.
+ *
+ * The dangling id is not blanked. A mark thread is told from the book-level one
+ * by having an annotation id at all (platform/app/threads.ts: threadKind), so
+ * clearing it would turn a side conversation into a second lesson — and a thread
+ * whose mark is gone is a state the reader can already produce by deleting the
+ * mark, which every reader of these is written for. What is owed is the count.
+ */
+export function orphanedThreadIds(
+  threads: readonly Thread[],
+  movedMarkIds: ReadonlySet<string>,
+): string[] {
+  return threads
+    .filter((t) => t.annotationId !== "" && !movedMarkIds.has(t.annotationId))
+    .map((t) => t.id);
 }
 
 /**
@@ -119,6 +148,13 @@ export async function replaceWithTranslation(
   const carried = carryMarks(marks, deps.targetOf(translated.bytes));
   if (carried.moved.length > 0) await deps.saveMarks(fresh.hash, carried.moved);
 
+  // The conversations, whole. Moved before the delete and under the new key, so
+  // the delete — which works by the old id — cannot reach them.
+  const threads = await deps.loadThreads(entry.hash);
+  const movedMarkIds = new Set(carried.moved.map((mark) => String(mark.id)));
+  const orphaned = orphanedThreadIds(threads, movedMarkIds);
+  if (threads.length > 0) await deps.adoptThreads(fresh.hash, threads);
+
   await deps.deleteBook(entry.hash);
 
   return {
@@ -127,5 +163,7 @@ export async function replaceWithTranslation(
     blocks: translated.blocks,
     moved: carried.moved.length,
     unmatched: carried.unmatched.length,
+    threads: threads.length,
+    orphanedThreads: orphaned.length,
   };
 }

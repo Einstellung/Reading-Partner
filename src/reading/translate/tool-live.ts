@@ -16,9 +16,11 @@ import {
 } from "../../platform/app/library";
 import { addFileToTopic, listTopics, setFileHash } from "../../platform/app/topics";
 import {
+  adoptThreads,
   appendMessage,
   createBookThread,
   getBookThread,
+  listThreads,
   loadThreads,
 } from "../../platform/app/threads";
 import { parseEpub } from "../epub/parse";
@@ -60,12 +62,11 @@ async function topicOfBook(bookId: string): Promise<string | null> {
 }
 
 /**
- * The closing line, written into the translation's own conversation.
+ * The closing line, in the conversation the reader asked in.
  *
- * Not into the one it was asked in: that thread is filed under the original,
- * and the original is gone by the time this runs (replace.ts). So the line is
- * put where the reader will be — the book thread of the document they are about
- * to be looking at — and it is the first thing in it.
+ * That thread is under the new book id by the time this runs, because the
+ * replacement moved it there (replace.ts). Creating one is the fallback for a
+ * document nobody had talked to yet.
  */
 async function tell(bookId: string, text: string): Promise<void> {
   try {
@@ -164,6 +165,14 @@ async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): P
         loadMarks: async (bookId) => (await loadAnnotations(bookId)) as unknown as MarkRecord[],
         saveMarks: async (bookId, marks) => {
           saveAnnotations(bookId, marks as unknown as Annotation[]);
+        },
+        loadThreads: async (bookId) => {
+          await loadThreads(bookId);
+          return listThreads(bookId);
+        },
+        adoptThreads: async (bookId, threads) => {
+          await loadThreads(bookId);
+          adoptThreads(bookId, threads);
         },
         targetOf: (bytes) => {
           const doc = parseEpub(bytes).docs[0];
