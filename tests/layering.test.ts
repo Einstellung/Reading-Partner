@@ -163,6 +163,11 @@ const LAYER: Record<string, Layer> = {
   "reading/session": "domain",
   "reading/sources": "domain",
   "reading/talk": "domain",
+  // Turning an article on the shelf into a bilingual one (docs/67). A domain of
+  // its own rather than a corner of reading/epub: that directory builds and
+  // reads the file, and this one decides what a translated document looks like
+  // and drives the model to fill it in.
+  "reading/translate": "domain",
 
   ui: "ui",
   "ui/components": "ui",
