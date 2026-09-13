@@ -67,7 +67,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 304）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 306）。
 
 ## EmbedPDF 引擎
 
@@ -241,6 +241,7 @@
 
 ## WebKit / webview
 
+- [304-a-detached-shadow-host-lays-out-again-from-scratch](./304-a-detached-shadow-host-lays-out-again-from-scratch.md) — 页卡片是 shadow host，从文档里 `remove()` 再挂回去等于整篇 spine 文档重排一遍；Cordis 那本公式书上一次摘挂 830-870ms，而卡片上的 `show()`、CFI 解析、换栏加起来不到 2ms。滚动时每翻一页就摘挂一次，0.18.1 保留 MathML 把同一棵树从 2344 个元素撑到 40497 个，平均帧 217ms 变 876ms。卡片改挂在 strip 上按页号摆位，离开窗口只 `visibility: hidden`
 - [281-a-multiply-over-a-transparent-backdrop-paints-the-source](./281-a-multiply-over-a-transparent-backdrop-paints-the-source.md) — `isolation: isolate` 的组里，`mix-blend-mode: multiply` 盖在没人画过的地方直接画出乘数色本身（αb 为 0 时 `(1-αb)·Cs + αb·B` 就是 Cs）：纸留在组外，整张纸照样正好乘成 `--page-wash`。组里放什么按「谁该被乘」定，别为了垫底把纸搬进组，也别把「组里空的」当成 no-op
 - [291-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it](./291-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it.md) — `scaleY(0)` 的矩阵不可逆，浏览器整个不画这个元素；加 `vector-effect="non-scaling-stroke"` 保线宽之后线宽按屏幕像素算，1000 见方的 viewBox 里 `strokeWidth={9}` 在 72 px 的元素上从 0.65 px 变成 9 px。形状之间要变就画几张交叉淡入，缩放一律留不为零的下限
 - [219-ios-webkit-clips-a-blur-to-the-elements-box](./219-ios-webkit-clips-a-blur-to-the-elements-box.md) — iOS WebKit 把 `filter: blur()` 的结果裁在元素自己的盒子上，`rounded-full` 也不管，模糊的光晕在真 iPad webview 里是个硬边方块（桌面 Chromium 和 WebKitGTK 都是圆的）；光晕改用径向渐变，不用 filter
