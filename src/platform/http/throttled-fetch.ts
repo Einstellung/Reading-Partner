@@ -7,9 +7,9 @@
 // (plain vite dev) the native fetch is used and CORS failures surface as
 // fetch errors — the pipeline degrades those papers, it doesn't crash.
 
-import { isTauri, type FetchFn } from "../platform/app/host";
-import { cleanTauriFetch } from "../platform/app/tauri-fetch";
-import { MAX_RETRY_WAIT_MS, retryAfterMs } from "../platform/http/retry-after";
+import { isTauri, type FetchFn } from "../app/host";
+import { cleanTauriFetch } from "../app/tauri-fetch";
+import { MAX_RETRY_WAIT_MS, retryAfterMs } from "./retry-after";
 
 export type { FetchFn };
 

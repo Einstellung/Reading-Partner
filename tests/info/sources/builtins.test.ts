@@ -7,7 +7,7 @@
 import { expect, test } from "bun:test";
 import { BUILTIN_SOURCES, builtinCaveat } from "../../../src/info/sources/builtins";
 import { pollIntervalMs, validateDescriptor } from "../../../src/info/sources/descriptor";
-import { arxivQueryTerms } from "../../../src/scholar/arxiv";
+import { arxivQueryTerms } from "../../../src/info/sources/plugins/arxiv-client";
 
 test("builtin ids are unique and every descriptor validates", () => {
   const ids = BUILTIN_SOURCES.map((s) => s.id);
@@ -130,7 +130,7 @@ test("the embodied-AI room's index queries are present, one query each, with the
     expect(d?.discovery).toEqual({ kind: "index", provider: want.provider, query: want.query });
     expect(d?.limit).toBe(want.limit);
     expect(d?.pollMinutes).toBe(want.poll);
-    expect(d?.fulltext.mode).toBe(want.fulltext);
+    expect(String(d?.fulltext.mode)).toBe(want.fulltext);
   }
   // Every index preset is one of these; no query slipped in unlisted.
   const indexIds = BUILTIN_SOURCES.filter((s) => s.discovery.kind === "index").map((s) => s.id);

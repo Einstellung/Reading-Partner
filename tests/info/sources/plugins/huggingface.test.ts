@@ -1,26 +1,26 @@
-// The Hugging Face index provider (src/info/sources/index/huggingface.ts): query
+// The Hugging Face index provider (src/info/sources/plugins/huggingface.ts): query
 // validation and description, the request urls, and discovery for the three
 // kinds against fixtures trimmed from live Hub responses (2026-09-13). Fetch is
 // scripted, so nothing here touches the network. Run: bun test.
 
 import { afterEach, expect, test } from "bun:test";
 import {
-  huggingfaceProvider,
+  huggingfacePlugin,
   isConversion,
   papersUrl,
   reposUrl,
-} from "../../../../src/info/sources/index/huggingface";
+} from "../../../../src/info/sources/plugins/huggingface";
 import {
-  registerIndexProvider,
-  resetIndexProvidersForTests,
-  type IndexDeps,
-} from "../../../../src/info/sources/index-provider";
+  registerSourcePlugin,
+  resetSourcePluginsForTests,
+  type PluginDeps,
+} from "../../../../src/info/sources/plugin";
 import { collectSource } from "../../../../src/info/sources/engine";
 import { itemId } from "../../../../src/info/extract/id";
 import type { SourceDescriptor } from "../../../../src/info/sources/descriptor";
 import { jsonResponse, textResponse } from "../../../support/fetch";
 
-const P = huggingfaceProvider;
+const P = huggingfacePlugin;
 
 function desc(query: Record<string, unknown>, limit?: number): SourceDescriptor {
   return {
@@ -44,7 +44,7 @@ function scripted(answer: (url: string) => Response | Promise<Response>) {
   return { calls, fetchFn };
 }
 
-function deps(fetchFn: IndexDeps["fetchFn"], extra: Partial<IndexDeps> = {}): IndexDeps {
+function deps(fetchFn: PluginDeps["fetchFn"], extra: Partial<PluginDeps> = {}): PluginDeps {
   return {
     fetchFn,
     now: () => Date.UTC(2026, 8, 13, 12),
@@ -414,10 +414,10 @@ test("an aborted signal stops before any request", async () => {
 
 // --- through the engine ------------------------------------------------------
 
-afterEach(() => resetIndexProvidersForTests());
+afterEach(() => resetSourcePluginsForTests());
 
 test("collectSource runs an index descriptor through the registered provider", async () => {
-  registerIndexProvider(huggingfaceProvider);
+  registerSourcePlugin(huggingfacePlugin);
   const { calls, fetchFn } = scripted(() => jsonResponse(MODEL_ROWS));
   const d = desc({ kind: "models", author: "lerobot" }, 10);
   const items = await collectSource(d, { fetchFn, now: () => Date.UTC(2026, 8, 13) });
@@ -431,7 +431,7 @@ test("collectSource runs an index descriptor through the registered provider", a
 });
 
 test("collectSource rejects a query the provider does not accept", async () => {
-  registerIndexProvider(huggingfaceProvider);
+  registerSourcePlugin(huggingfacePlugin);
   const { calls, fetchFn } = scripted(() => jsonResponse([]));
   await expect(collectSource(desc({ kind: "spaces" }), { fetchFn })).rejects.toThrow(/index query rejected/);
   expect(calls.length).toBe(0);

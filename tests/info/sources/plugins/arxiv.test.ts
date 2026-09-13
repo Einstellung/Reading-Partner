@@ -1,4 +1,4 @@
-// The arXiv index provider (src/info/sources/index/arxiv.ts): query schema,
+// The arXiv index provider (src/info/sources/plugins/arxiv.ts): query schema,
 // the one-line description, URL construction (a submittedDate range, never a
 // sortBy — docs/pitfall/72), and discover() against a scripted Atom response,
 // standalone and through the engine's index path. Run: bun test.
@@ -6,15 +6,15 @@
 import { afterEach, expect, test } from "bun:test";
 import { collectSource } from "../../../../src/info/sources/engine";
 import type { SourceDescriptor } from "../../../../src/info/sources/descriptor";
-import { arxivIndexUrl, arxivProvider } from "../../../../src/info/sources/index/arxiv";
+import { arxivIndexUrl, arxivPlugin } from "../../../../src/info/sources/plugins/arxiv";
 import {
-  registerIndexProvider,
-  resetIndexProvidersForTests,
-} from "../../../../src/info/sources/index-provider";
+  registerSourcePlugin,
+  resetSourcePluginsForTests,
+} from "../../../../src/info/sources/plugin";
 import type { FetchFn } from "../../../../src/platform/app/host";
 import { textResponse } from "../../../support/fetch";
 
-afterEach(() => resetIndexProvidersForTests());
+afterEach(() => resetSourcePluginsForTests());
 
 const TODAY = "2026-09-13";
 // 2026-09-13T12:00:00Z, so the engine's UTC `today` is TODAY.
@@ -27,34 +27,34 @@ function searchQuery(url: string): string {
 // --- validateQuery ---
 
 test("validateQuery accepts categories, terms, or both, with an optional day count", () => {
-  expect(arxivProvider.validateQuery({ categories: ["cs.RO", "cs.AI"] })).toBeNull();
-  expect(arxivProvider.validateQuery({ terms: ["manipulation"] })).toBeNull();
-  expect(arxivProvider.validateQuery({ categories: ["q-bio.NC", "math-ph"], terms: ["grasping"], days: 7 })).toBeNull();
+  expect(arxivPlugin.validateQuery({ categories: ["cs.RO", "cs.AI"] })).toBeNull();
+  expect(arxivPlugin.validateQuery({ terms: ["manipulation"] })).toBeNull();
+  expect(arxivPlugin.validateQuery({ categories: ["q-bio.NC", "math-ph"], terms: ["grasping"], days: 7 })).toBeNull();
   // A single string stands for a one-element list.
-  expect(arxivProvider.validateQuery({ categories: "cs.RO" })).toBeNull();
+  expect(arxivPlugin.validateQuery({ categories: "cs.RO" })).toBeNull();
 });
 
 test("validateQuery rejects an empty query, a malformed category and a bad day count", () => {
-  expect(arxivProvider.validateQuery({})).toMatch(/categories or terms/);
-  expect(arxivProvider.validateQuery({ categories: [] })).toMatch(/categories or terms/);
-  expect(arxivProvider.validateQuery({ categories: ["cs.robotics"] })).toMatch(/cs\.robotics/);
-  expect(arxivProvider.validateQuery({ categories: ["CS.RO"] })).toMatch(/CS\.RO/);
-  expect(arxivProvider.validateQuery({ categories: ["cs.RO"], days: 0 })).toMatch(/days/);
-  expect(arxivProvider.validateQuery({ categories: ["cs.RO"], days: "2" })).toMatch(/days/);
-  expect(arxivProvider.validateQuery({ categories: ["cs.RO"], days: 90 })).toMatch(/at most 30/);
+  expect(arxivPlugin.validateQuery({})).toMatch(/categories or terms/);
+  expect(arxivPlugin.validateQuery({ categories: [] })).toMatch(/categories or terms/);
+  expect(arxivPlugin.validateQuery({ categories: ["cs.robotics"] })).toMatch(/cs\.robotics/);
+  expect(arxivPlugin.validateQuery({ categories: ["CS.RO"] })).toMatch(/CS\.RO/);
+  expect(arxivPlugin.validateQuery({ categories: ["cs.RO"], days: 0 })).toMatch(/days/);
+  expect(arxivPlugin.validateQuery({ categories: ["cs.RO"], days: "2" })).toMatch(/days/);
+  expect(arxivPlugin.validateQuery({ categories: ["cs.RO"], days: 90 })).toMatch(/at most 30/);
   // Terms that clean down to nothing (stopwords, two-letter words) leave no
   // all: clause to search on.
-  expect(arxivProvider.validateQuery({ terms: ["the", "of"] })).toMatch(/searchable/);
+  expect(arxivPlugin.validateQuery({ terms: ["the", "of"] })).toMatch(/searchable/);
 });
 
 // --- describeQuery ---
 
 test("describeQuery reads as one line", () => {
-  expect(arxivProvider.describeQuery({ categories: ["cs.RO", "cs.AI"], terms: ["manipulation"] })).toBe(
+  expect(arxivPlugin.describeQuery({ categories: ["cs.RO", "cs.AI"], terms: ["manipulation"] })).toBe(
     "arXiv cs.RO, cs.AI · all:manipulation · last 2 days",
   );
-  expect(arxivProvider.describeQuery({ categories: ["cs.RO"], days: 1 })).toBe("arXiv cs.RO · last 1 day");
-  expect(arxivProvider.describeQuery({ terms: ["Robot Manipulation"], days: 7 })).toBe(
+  expect(arxivPlugin.describeQuery({ categories: ["cs.RO"], days: 1 })).toBe("arXiv cs.RO · last 1 day");
+  expect(arxivPlugin.describeQuery({ terms: ["Robot Manipulation"], days: 7 })).toBe(
     "arXiv · all:robot, all:manipulation · last 7 days",
   );
 });
@@ -137,7 +137,7 @@ function scripted(body = ATOM, status = 200): { fetchFn: FetchFn; urls: string[]
 
 test("discover maps Atom entries to summary-only items with category and author-count tags", async () => {
   const { fetchFn, urls } = scripted();
-  const items = await arxivProvider.discover(desc, desc.discovery.kind === "index" ? desc.discovery.query : {}, {
+  const items = await arxivPlugin.discover(desc, desc.discovery.kind === "index" ? desc.discovery.query : {}, {
     fetchFn,
     now: () => NOW,
     today: () => TODAY,
@@ -173,7 +173,7 @@ test("discover maps Atom entries to summary-only items with category and author-
 test("discover throws on a non-OK status so collectAll can record it", async () => {
   const { fetchFn } = scripted("nope", 404);
   await expect(
-    arxivProvider.discover(desc, { categories: ["cs.RO"] }, { fetchFn, now: () => NOW, today: () => TODAY }),
+    arxivPlugin.discover(desc, { categories: ["cs.RO"] }, { fetchFn, now: () => NOW, today: () => TODAY }),
   ).rejects.toThrow(/404/);
 });
 
@@ -182,7 +182,7 @@ test("discover honours an already-aborted signal before fetching", async () => {
   const ctl = new AbortController();
   ctl.abort();
   await expect(
-    arxivProvider.discover(desc, { categories: ["cs.RO"] }, {
+    arxivPlugin.discover(desc, { categories: ["cs.RO"] }, {
       fetchFn,
       signal: ctl.signal,
       now: () => NOW,
@@ -193,7 +193,7 @@ test("discover honours an already-aborted signal before fetching", async () => {
 });
 
 test("the engine runs an arXiv index descriptor through the registered provider", async () => {
-  registerIndexProvider(arxivProvider);
+  registerSourcePlugin(arxivPlugin);
   const { fetchFn, urls } = scripted();
   const items = await collectSource(desc, { fetchFn, now: () => NOW });
   expect(urls).toHaveLength(1);
@@ -209,7 +209,7 @@ test("the engine runs an arXiv index descriptor through the registered provider"
 });
 
 test("the engine rejects an arXiv descriptor whose query the provider refuses", async () => {
-  registerIndexProvider(arxivProvider);
+  registerSourcePlugin(arxivPlugin);
   const { fetchFn, urls } = scripted();
   const bad: SourceDescriptor = { ...desc, discovery: { kind: "index", provider: "arxiv", query: {} } };
   await expect(collectSource(bad, { fetchFn, now: () => NOW })).rejects.toThrow(/categories or terms/);

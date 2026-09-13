@@ -19,10 +19,10 @@ import {
   queryInt,
   queryString,
   queryStrings,
-  type IndexDeps,
-  type IndexProvider,
+  type PluginDeps,
+  type SourcePlugin,
   type IndexQuery,
-} from "../index-provider";
+} from "../plugin";
 import type { InfoItem, ItemSignals } from "../item";
 
 const HOST = "https://huggingface.co";
@@ -152,7 +152,7 @@ function oneLine(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
-async function fetchRows(url: string, deps: IndexDeps): Promise<Record<string, unknown>[]> {
+async function fetchRows(url: string, deps: PluginDeps): Promise<Record<string, unknown>[]> {
   throwIfAborted(deps.signal);
   const text = await fetchText(url, deps.fetchFn, undefined, { signal: deps.signal });
   let data: unknown;
@@ -244,9 +244,9 @@ export function isConversion(row: { id?: unknown; tags?: unknown }): boolean {
 
 // --- discover ---------------------------------------------------------------
 
-async function discover(desc: SourceDescriptor, query: IndexQuery, deps: IndexDeps): Promise<InfoItem[]> {
+async function discover(desc: SourceDescriptor, query: IndexQuery, deps: PluginDeps): Promise<InfoItem[]> {
   const p = parse(query);
-  const limit = deps.limit ?? huggingfaceProvider.defaultLimit;
+  const limit = deps.limit ?? huggingfacePlugin.defaultLimit;
   if (p.kind === "papers") {
     // Today first, then back one page a day. The Hub has no page for a weekend
     // day and answers [] (pitfall 298); the loop just moves on.
@@ -271,7 +271,7 @@ async function discover(desc: SourceDescriptor, query: IndexQuery, deps: IndexDe
   return items.slice(0, limit);
 }
 
-export const huggingfaceProvider: IndexProvider = {
+export const huggingfacePlugin: SourcePlugin = {
   id: "huggingface",
   name: "Hugging Face",
   hosts: ["huggingface.co"],

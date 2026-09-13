@@ -9,18 +9,18 @@
 // spacing; a terminal failure throws so collectAll records source health.
 
 import { throwIfAborted } from "../../../platform/app/abort";
-import { arxivQueryTerms, parseArxivAtom, type ArxivEntry } from "../../../scholar/arxiv";
-import { fetchWithRetry, HttpStatusError, interactiveRetry } from "../../../scholar/http";
+import { arxivQueryTerms, parseArxivAtom, type ArxivEntry } from "./arxiv-client";
+import { fetchWithRetry, HttpStatusError, interactiveRetry } from "../../../platform/http/throttled-fetch";
 import { itemId } from "../../extract/id";
 import type { SourceDescriptor } from "../descriptor";
 import {
   daysBefore,
   queryInt,
   queryStrings,
-  type IndexDeps,
-  type IndexProvider,
+  type PluginDeps,
+  type SourcePlugin,
   type IndexQuery,
-} from "../index-provider";
+} from "../plugin";
 import type { InfoItem } from "../item";
 
 const HOST = "export.arxiv.org";
@@ -105,7 +105,7 @@ function toItem(desc: SourceDescriptor, e: ArxivEntry): InfoItem {
   return item;
 }
 
-export const arxivProvider: IndexProvider = {
+export const arxivPlugin: SourcePlugin = {
   id: "arxiv",
   name: "arXiv",
   hosts: [HOST],
@@ -127,7 +127,7 @@ export const arxivProvider: IndexProvider = {
     return parts.join(" · ");
   },
 
-  async discover(desc: SourceDescriptor, query: IndexQuery, deps: IndexDeps): Promise<InfoItem[]> {
+  async discover(desc: SourceDescriptor, query: IndexQuery, deps: PluginDeps): Promise<InfoItem[]> {
     throwIfAborted(deps.signal);
     const url = arxivIndexUrl(query, deps.today(), deps.limit ?? DEFAULT_LIMIT);
     const init = deps.signal ? { signal: deps.signal } : undefined;

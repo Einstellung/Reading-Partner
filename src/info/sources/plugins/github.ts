@@ -20,10 +20,10 @@ import {
   daysBefore,
   queryString,
   queryStrings,
-  type IndexDeps,
-  type IndexProvider,
+  type PluginDeps,
+  type SourcePlugin,
   type IndexQuery,
-} from "../index-provider";
+} from "../plugin";
 import type { InfoItem, ItemSignals } from "../item";
 
 const OSSINSIGHT_HOST = "api.ossinsight.io";
@@ -147,7 +147,7 @@ export function openDiggerUrl(fullName: string, metric: "openrank" | "activity")
 
 // --- fetching ----------------------------------------------------------------
 
-async function fetchJson(url: string, deps: IndexDeps, headers?: Record<string, string>): Promise<unknown> {
+async function fetchJson(url: string, deps: PluginDeps, headers?: Record<string, string>): Promise<unknown> {
   throwIfAborted(deps.signal);
   const init: RequestInit = { headers };
   if (deps.signal) init.signal = deps.signal;
@@ -209,7 +209,7 @@ interface TrendingRow {
   collection_names?: unknown;
 }
 
-async function discoverTrending(desc: SourceDescriptor, query: IndexQuery, deps: IndexDeps, limit: number): Promise<InfoItem[]> {
+async function discoverTrending(desc: SourceDescriptor, query: IndexQuery, deps: PluginDeps, limit: number): Promise<InfoItem[]> {
   const body = (await fetchJson(githubTrendingUrl(query), deps)) as {
     data?: { rows?: unknown };
     data_quality?: { status?: unknown; unavailable_since?: unknown; reason?: unknown };
@@ -262,7 +262,7 @@ const GITHUB_HEADERS = {
   "X-GitHub-Api-Version": "2022-11-28",
 };
 
-async function discoverSearch(desc: SourceDescriptor, query: IndexQuery, deps: IndexDeps, limit: number): Promise<InfoItem[]> {
+async function discoverSearch(desc: SourceDescriptor, query: IndexQuery, deps: PluginDeps, limit: number): Promise<InfoItem[]> {
   const byName = new Map<string, { repo: SearchRepo; stars: number }>();
   // Sequential: the anonymous limiter counts per minute, and two topics' worth
   // of results is not worth racing it.
@@ -319,7 +319,7 @@ export function latestMonthValue(metric: unknown): number | undefined {
 
 // Sequential and quiet: a miss (404 for a repo OpenDigger has not indexed, a
 // dead host, junk) leaves the fields unset. Only a cancellation propagates.
-async function enrich(items: InfoItem[], deps: IndexDeps): Promise<void> {
+async function enrich(items: InfoItem[], deps: PluginDeps): Promise<void> {
   for (const item of items.slice(0, ENRICH_TOP)) {
     if (!item.sourceKey) continue;
     for (const metric of ["openrank", "activity"] as const) {
@@ -336,7 +336,7 @@ async function enrich(items: InfoItem[], deps: IndexDeps): Promise<void> {
 
 // --- the provider ------------------------------------------------------------
 
-export const githubProvider: IndexProvider = {
+export const githubPlugin: SourcePlugin = {
   id: "github",
   name: "GitHub",
   hosts: [OSSINSIGHT_HOST, GITHUB_HOST, OPENDIGGER_HOST],
@@ -365,7 +365,7 @@ export const githubProvider: IndexProvider = {
     return parts.join(" · ");
   },
 
-  async discover(desc: SourceDescriptor, query: IndexQuery, deps: IndexDeps): Promise<InfoItem[]> {
+  async discover(desc: SourceDescriptor, query: IndexQuery, deps: PluginDeps): Promise<InfoItem[]> {
     throwIfAborted(deps.signal);
     const read = mustRead(query);
     const limit = deps.limit ?? this.defaultLimit;

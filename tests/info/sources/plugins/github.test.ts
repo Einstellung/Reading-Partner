@@ -1,4 +1,4 @@
-// The GitHub index provider (src/info/sources/index/github.ts): query
+// The GitHub index provider (src/info/sources/plugins/github.ts): query
 // validation and description, the URLs both modes build on a fixed day, the
 // items they map from OSS Insight / GitHub Search fixtures, topic merging, and
 // OpenDigger enrichment that never fails the source. Run: bun test.
@@ -12,16 +12,16 @@ import { afterEach, expect, test } from "bun:test";
 import { collectSource } from "../../../../src/info/sources/engine";
 import type { SourceDescriptor } from "../../../../src/info/sources/descriptor";
 import {
-  githubProvider,
+  githubPlugin,
   githubSearchUrls,
   githubTrendingUrl,
   latestMonthValue,
   openDiggerUrl,
-} from "../../../../src/info/sources/index/github";
-import { registerIndexProvider, resetIndexProvidersForTests, type IndexDeps } from "../../../../src/info/sources/index-provider";
+} from "../../../../src/info/sources/plugins/github";
+import { registerSourcePlugin, resetSourcePluginsForTests, type PluginDeps } from "../../../../src/info/sources/plugin";
 import { jsonResponse, textResponse } from "../../../support/fetch";
 
-afterEach(() => resetIndexProvidersForTests());
+afterEach(() => resetSourcePluginsForTests());
 
 const TODAY = "2026-09-13";
 const NOW = Date.UTC(2026, 8, 13, 12);
@@ -135,45 +135,45 @@ function scripted(primary: (url: string) => Response, digger: Record<string, unk
   return { calls, fetchFn };
 }
 
-function deps(fetchFn: IndexDeps["fetchFn"], limit?: number, signal?: AbortSignal): IndexDeps {
+function deps(fetchFn: PluginDeps["fetchFn"], limit?: number, signal?: AbortSignal): PluginDeps {
   return { fetchFn, now: () => NOW, today: () => TODAY, limit, signal };
 }
 
 // --- validateQuery ------------------------------------------------------------
 
 test("validateQuery accepts both modes with their own fields", () => {
-  expect(githubProvider.validateQuery({ mode: "trending" })).toBeNull();
-  expect(githubProvider.validateQuery({ mode: "trending", language: "Python", period: "week" })).toBeNull();
-  expect(githubProvider.validateQuery({ mode: "search" })).toBeNull();
-  expect(githubProvider.validateQuery({ mode: "search", topics: ["robotics"], days: 7, minStars: 0, language: "C++" })).toBeNull();
-  expect(githubProvider.validateQuery({ mode: "search", topics: "robotics" })).toBeNull();
+  expect(githubPlugin.validateQuery({ mode: "trending" })).toBeNull();
+  expect(githubPlugin.validateQuery({ mode: "trending", language: "Python", period: "week" })).toBeNull();
+  expect(githubPlugin.validateQuery({ mode: "search" })).toBeNull();
+  expect(githubPlugin.validateQuery({ mode: "search", topics: ["robotics"], days: 7, minStars: 0, language: "C++" })).toBeNull();
+  expect(githubPlugin.validateQuery({ mode: "search", topics: "robotics" })).toBeNull();
 });
 
 test("validateQuery rejects a missing mode, a bad enum, and fields from the other mode", () => {
-  expect(githubProvider.validateQuery({})).toMatch(/mode must be/);
-  expect(githubProvider.validateQuery({ mode: "topic" })).toMatch(/mode must be/);
-  expect(githubProvider.validateQuery({ mode: "trending", period: "year" })).toMatch(/period must be/);
-  expect(githubProvider.validateQuery({ mode: "trending", topics: ["x"] })).toMatch(/topics applies to search/);
-  expect(githubProvider.validateQuery({ mode: "trending", minStars: 5 })).toMatch(/minStars applies to search/);
-  expect(githubProvider.validateQuery({ mode: "search", period: "week" })).toMatch(/period applies to trending/);
-  expect(githubProvider.validateQuery({ mode: "search", days: 0 })).toMatch(/days must be a positive/);
-  expect(githubProvider.validateQuery({ mode: "search", days: 2.5 })).toMatch(/days must be a positive/);
-  expect(githubProvider.validateQuery({ mode: "search", minStars: -1 })).toMatch(/minStars must be/);
-  expect(githubProvider.validateQuery({ mode: "search", topics: 3 })).toMatch(/topics must be/);
-  expect(githubProvider.validateQuery({ mode: "search", language: 3 })).toMatch(/language must be/);
+  expect(githubPlugin.validateQuery({})).toMatch(/mode must be/);
+  expect(githubPlugin.validateQuery({ mode: "topic" })).toMatch(/mode must be/);
+  expect(githubPlugin.validateQuery({ mode: "trending", period: "year" })).toMatch(/period must be/);
+  expect(githubPlugin.validateQuery({ mode: "trending", topics: ["x"] })).toMatch(/topics applies to search/);
+  expect(githubPlugin.validateQuery({ mode: "trending", minStars: 5 })).toMatch(/minStars applies to search/);
+  expect(githubPlugin.validateQuery({ mode: "search", period: "week" })).toMatch(/period applies to trending/);
+  expect(githubPlugin.validateQuery({ mode: "search", days: 0 })).toMatch(/days must be a positive/);
+  expect(githubPlugin.validateQuery({ mode: "search", days: 2.5 })).toMatch(/days must be a positive/);
+  expect(githubPlugin.validateQuery({ mode: "search", minStars: -1 })).toMatch(/minStars must be/);
+  expect(githubPlugin.validateQuery({ mode: "search", topics: 3 })).toMatch(/topics must be/);
+  expect(githubPlugin.validateQuery({ mode: "search", language: 3 })).toMatch(/language must be/);
 });
 
 // --- describeQuery ------------------------------------------------------------
 
 test("describeQuery is one line per mode, defaults filled in", () => {
-  expect(githubProvider.describeQuery({ mode: "trending" })).toBe("GitHub trending · past day");
-  expect(githubProvider.describeQuery({ mode: "trending", language: "Python", period: "week" })).toBe("GitHub trending · Python · past week");
-  expect(githubProvider.describeQuery({ mode: "search" })).toBe("GitHub new repos · created in 14 days · ≥ 20 stars");
-  expect(githubProvider.describeQuery({ mode: "search", topics: ["robotics", "Embodied-AI"], days: 14, minStars: 50 })).toBe(
+  expect(githubPlugin.describeQuery({ mode: "trending" })).toBe("GitHub trending · past day");
+  expect(githubPlugin.describeQuery({ mode: "trending", language: "Python", period: "week" })).toBe("GitHub trending · Python · past week");
+  expect(githubPlugin.describeQuery({ mode: "search" })).toBe("GitHub new repos · created in 14 days · ≥ 20 stars");
+  expect(githubPlugin.describeQuery({ mode: "search", topics: ["robotics", "Embodied-AI"], days: 14, minStars: 50 })).toBe(
     "GitHub new repos · topic robotics, embodied-ai · created in 14 days · ≥ 50 stars",
   );
-  expect(githubProvider.describeQuery({ mode: "search", language: "Rust", days: 1 })).toBe("GitHub new repos · Rust · created in 1 day · ≥ 20 stars");
-  expect(githubProvider.describeQuery({ mode: "nope" })).toMatch(/invalid query/);
+  expect(githubPlugin.describeQuery({ mode: "search", language: "Rust", days: 1 })).toBe("GitHub new repos · Rust · created in 1 day · ≥ 20 stars");
+  expect(githubPlugin.describeQuery({ mode: "nope" })).toMatch(/invalid query/);
 });
 
 // --- urls ---------------------------------------------------------------------
@@ -224,7 +224,7 @@ test("openDigger url and the latest-month pick over mixed keys", () => {
 
 test("trending maps OSS Insight rows to items dated today, with period stars and tags", async () => {
   const { calls, fetchFn } = scripted(() => jsonResponse(TRENDING), { "nektos/act": { openrank: OPENRANK, activity: ACTIVITY } });
-  const items = await githubProvider.discover(DESC, { mode: "trending", language: "Python", period: "week" }, deps(fetchFn));
+  const items = await githubPlugin.discover(DESC, { mode: "trending", language: "Python", period: "week" }, deps(fetchFn));
   expect(calls[0]).toBe("https://api.ossinsight.io/v1/trends/repos/?period=past_week&language=Python");
   // The nameless row is dropped.
   expect(items.map((i) => i.sourceKey)).toEqual(["nektos/act", "facebookresearch/llama"]);
@@ -249,26 +249,26 @@ test("trending maps OSS Insight rows to items dated today, with period stars and
 
 test("trending honours the limit before enriching", async () => {
   const { calls, fetchFn } = scripted(() => jsonResponse(TRENDING));
-  const items = await githubProvider.discover(DESC, { mode: "trending" }, deps(fetchFn, 1));
+  const items = await githubPlugin.discover(DESC, { mode: "trending" }, deps(fetchFn, 1));
   expect(items.map((i) => i.sourceKey)).toEqual(["nektos/act"]);
   expect(calls).toHaveLength(3);
 });
 
 test("trending with the data_quality 'unavailable' block is a source failure naming the reason", async () => {
   const { fetchFn } = scripted(() => jsonResponse(TRENDING_UNAVAILABLE));
-  await expect(githubProvider.discover(DESC, { mode: "trending" }, deps(fetchFn))).rejects.toThrow(
+  await expect(githubPlugin.discover(DESC, { mode: "trending" }, deps(fetchFn))).rejects.toThrow(
     /OSS Insight trending unavailable since 2026-03-01: This ranking/,
   );
 });
 
 test("trending with no rows and no quality note is an empty day", async () => {
   const { fetchFn } = scripted(() => jsonResponse({ type: "sql_endpoint", data: { columns: [], rows: [], result: { row_count: 0 } } }));
-  expect(await githubProvider.discover(DESC, { mode: "trending" }, deps(fetchFn))).toEqual([]);
+  expect(await githubPlugin.discover(DESC, { mode: "trending" }, deps(fetchFn))).toEqual([]);
 });
 
 test("a failed primary request throws with the status", async () => {
   const { fetchFn } = scripted(() => textResponse("down", 502));
-  await expect(githubProvider.discover(DESC, { mode: "trending" }, deps(fetchFn))).rejects.toThrow(/HTTP 502 from https:\/\/api\.ossinsight\.io/);
+  await expect(githubPlugin.discover(DESC, { mode: "trending" }, deps(fetchFn))).rejects.toThrow(/HTTP 502 from https:\/\/api\.ossinsight\.io/);
 });
 
 // --- discover: search -----------------------------------------------------------
@@ -282,7 +282,7 @@ test("search maps repos with total stars, forks, createdAt and topic tags, and s
     }
     return textResponse("nope", 404);
   };
-  const items = await githubProvider.discover(DESC, { mode: "search", topics: ["robotics"], minStars: 30 }, deps(fetchFn));
+  const items = await githubPlugin.discover(DESC, { mode: "search", topics: ["robotics"], minStars: 30 }, deps(fetchFn));
   expect(new Headers(init?.headers).get("Accept")).toBe("application/vnd.github+json");
   expect(new Headers(init?.headers).get("X-GitHub-Api-Version")).toBe("2022-11-28");
   expect(items).toHaveLength(2);
@@ -310,7 +310,7 @@ test("search issues one request per topic, merges by full_name, sorts by stars a
     if (q.endsWith("topic:embodied-ai")) return jsonResponse(searchBody([searchRepo("d/embodied", 900), searchRepo("a/shared", 500)]));
     throw new Error(`unexpected ${url}`);
   });
-  const items = await githubProvider.discover(DESC, { mode: "search", topics: ["robotics", "embodied-ai"] }, deps(fetchFn, 3));
+  const items = await githubPlugin.discover(DESC, { mode: "search", topics: ["robotics", "embodied-ai"] }, deps(fetchFn, 3));
   expect(calls.filter((u) => u.startsWith("https://api.github.com/"))).toHaveLength(2);
   expect(items.map((i) => i.sourceKey)).toEqual(["d/embodied", "a/shared", "b/robots"]);
   // Enrichment asks about the kept three only, sequentially, openrank then activity.
@@ -326,7 +326,7 @@ test("search issues one request per topic, merges by full_name, sorts by stars a
 
 test("search: a spent rate limit is named in the failure", async () => {
   const fetchFn = async () => new Response("{}", { status: 403, headers: { "x-ratelimit-remaining": "0" } });
-  await expect(githubProvider.discover(DESC, { mode: "search" }, deps(fetchFn))).rejects.toThrow(/HTTP 403 .*rate limit spent/);
+  await expect(githubPlugin.discover(DESC, { mode: "search" }, deps(fetchFn))).rejects.toThrow(/HTTP 403 .*rate limit spent/);
 });
 
 // --- enrichment tolerance and cancellation ------------------------------------------
@@ -340,7 +340,7 @@ test("OpenDigger junk, 5xx and a thrown fetch leave signals alone and the source
     if (n === 2) return textResponse("boom", 503);
     throw new Error("connection reset");
   };
-  const items = await githubProvider.discover(DESC, { mode: "trending" }, deps(fetchFn));
+  const items = await githubPlugin.discover(DESC, { mode: "trending" }, deps(fetchFn));
   expect(items).toHaveLength(2);
   expect(items[0].signals).toEqual({ starsPeriod: 395, tags: ["Go", "CICD"] });
   expect(items[1].signals).toEqual({ starsPeriod: 209, tags: ["Python", "ChatGPT Alternatives"] });
@@ -349,7 +349,7 @@ test("OpenDigger junk, 5xx and a thrown fetch leave signals alone and the source
 test("enrichment stops at the top five", async () => {
   const rows = Array.from({ length: 8 }, (_, i) => ({ repo_name: `o/r${i}`, stars: String(100 - i) }));
   const { calls, fetchFn } = scripted(() => jsonResponse({ type: "sql_endpoint", data: { rows } }));
-  const items = await githubProvider.discover(DESC, { mode: "trending" }, deps(fetchFn));
+  const items = await githubPlugin.discover(DESC, { mode: "trending" }, deps(fetchFn));
   expect(items).toHaveLength(8);
   expect(calls.filter((u) => u.startsWith("https://oss.open-digger.cn/"))).toHaveLength(10);
 });
@@ -362,21 +362,21 @@ test("an abort during enrichment surfaces instead of passing for a miss", async 
     if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     return jsonResponse(OPENRANK);
   };
-  await expect(githubProvider.discover(DESC, { mode: "trending" }, deps(fetchFn, undefined, controller.signal))).rejects.toThrow(/aborted/);
+  await expect(githubPlugin.discover(DESC, { mode: "trending" }, deps(fetchFn, undefined, controller.signal))).rejects.toThrow(/aborted/);
 });
 
 test("a query already aborted sends nothing", async () => {
   const controller = new AbortController();
   controller.abort();
   const { calls, fetchFn } = scripted(() => jsonResponse(TRENDING));
-  await expect(githubProvider.discover(DESC, { mode: "trending" }, deps(fetchFn, undefined, controller.signal))).rejects.toThrow();
+  await expect(githubPlugin.discover(DESC, { mode: "trending" }, deps(fetchFn, undefined, controller.signal))).rejects.toThrow();
   expect(calls).toEqual([]);
 });
 
 // --- through the engine -------------------------------------------------------------
 
 test("collectSource runs a github index descriptor and stamps the descriptor's identity", async () => {
-  registerIndexProvider(githubProvider);
+  registerSourcePlugin(githubPlugin);
   const desc: SourceDescriptor = {
     ...DESC,
     id: "gh-new",

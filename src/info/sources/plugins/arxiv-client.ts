@@ -4,7 +4,7 @@
 // it runs in bun tests and the webview alike — arXiv's feed shape is stable and
 // we only need five fields per entry.
 
-import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "./http";
+import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
 import { pickByTitle } from "./match";
 
 export interface ArxivEntry {

@@ -3,13 +3,13 @@
 // real timers, no network. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { MAX_RETRY_WAIT_MS } from "../../src/platform/http/retry-after";
+import { MAX_RETRY_WAIT_MS } from "../../../src/platform/http/retry-after";
 import {
   createThrottle,
   fetchWithRetry,
   isRateLimitError,
   RateLimitError,
-} from "../../src/scholar/http";
+} from "../../../src/platform/http/throttled-fetch";
 
 test("createThrottle spaces same-host requests and passes untracked hosts through", async () => {
   let t = 0;

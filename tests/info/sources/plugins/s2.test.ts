@@ -6,16 +6,16 @@
 import { afterEach, expect, test } from "bun:test";
 import { collectSource } from "../../../../src/info/sources/engine";
 import {
-  registerIndexProvider,
-  resetIndexProvidersForTests,
-  type IndexDeps,
-} from "../../../../src/info/sources/index-provider";
-import { s2IndexUrl, s2Provider, s2SearchTerms } from "../../../../src/info/sources/index/s2";
+  registerSourcePlugin,
+  resetSourcePluginsForTests,
+  type PluginDeps,
+} from "../../../../src/info/sources/plugin";
+import { s2IndexUrl, s2Plugin, s2SearchTerms } from "../../../../src/info/sources/plugins/s2";
 import type { SourceDescriptor } from "../../../../src/info/sources/descriptor";
 import { itemId } from "../../../../src/info/extract/id";
 import { jsonResponse } from "../../../support/fetch";
 
-afterEach(() => resetIndexProvidersForTests());
+afterEach(() => resetSourcePluginsForTests());
 
 const TODAY = "2026-09-13";
 const FIXED_NOW = Date.UTC(2026, 8, 13, 12);
@@ -32,7 +32,7 @@ function desc(query: Record<string, unknown>, limit?: number): SourceDescriptor 
   };
 }
 
-function deps(fetchFn: IndexDeps["fetchFn"], limit?: number, signal?: AbortSignal): IndexDeps {
+function deps(fetchFn: PluginDeps["fetchFn"], limit?: number, signal?: AbortSignal): PluginDeps {
   return { fetchFn, now: () => FIXED_NOW, today: () => TODAY, limit, signal };
 }
 
@@ -85,31 +85,31 @@ const BARE_ROW = {
 // --- schema ------------------------------------------------------------------
 
 test("validateQuery: terms is required, as a string or a list", () => {
-  expect(s2Provider.validateQuery({})).toMatch(/terms/);
-  expect(s2Provider.validateQuery({ terms: "" })).toMatch(/terms/);
-  expect(s2Provider.validateQuery({ terms: [" ", ""] })).toMatch(/terms/);
-  expect(s2Provider.validateQuery({ terms: 3 })).toMatch(/terms/);
-  expect(s2Provider.validateQuery({ terms: "robot learning" })).toBeNull();
-  expect(s2Provider.validateQuery({ terms: ["vision-language-action", "robot"] })).toBeNull();
+  expect(s2Plugin.validateQuery({})).toMatch(/terms/);
+  expect(s2Plugin.validateQuery({ terms: "" })).toMatch(/terms/);
+  expect(s2Plugin.validateQuery({ terms: [" ", ""] })).toMatch(/terms/);
+  expect(s2Plugin.validateQuery({ terms: 3 })).toMatch(/terms/);
+  expect(s2Plugin.validateQuery({ terms: "robot learning" })).toBeNull();
+  expect(s2Plugin.validateQuery({ terms: ["vision-language-action", "robot"] })).toBeNull();
 });
 
 test("validateQuery: the optional fields are checked when present", () => {
-  expect(s2Provider.validateQuery({ terms: "x", days: 0 })).toMatch(/days/);
-  expect(s2Provider.validateQuery({ terms: "x", days: "7" })).toMatch(/days/);
-  expect(s2Provider.validateQuery({ terms: "x", days: 7 })).toBeNull();
-  expect(s2Provider.validateQuery({ terms: "x", minCitations: -1 })).toMatch(/minCitations/);
-  expect(s2Provider.validateQuery({ terms: "x", minCitations: 0 })).toBeNull();
-  expect(s2Provider.validateQuery({ terms: "x", minCitations: 5 })).toBeNull();
-  expect(s2Provider.validateQuery({ terms: "x", fieldsOfStudy: [] })).toMatch(/fieldsOfStudy/);
-  expect(s2Provider.validateQuery({ terms: "x", fieldsOfStudy: 1 })).toMatch(/fieldsOfStudy/);
-  expect(s2Provider.validateQuery({ terms: "x", fieldsOfStudy: ["Computer Science"] })).toBeNull();
+  expect(s2Plugin.validateQuery({ terms: "x", days: 0 })).toMatch(/days/);
+  expect(s2Plugin.validateQuery({ terms: "x", days: "7" })).toMatch(/days/);
+  expect(s2Plugin.validateQuery({ terms: "x", days: 7 })).toBeNull();
+  expect(s2Plugin.validateQuery({ terms: "x", minCitations: -1 })).toMatch(/minCitations/);
+  expect(s2Plugin.validateQuery({ terms: "x", minCitations: 0 })).toBeNull();
+  expect(s2Plugin.validateQuery({ terms: "x", minCitations: 5 })).toBeNull();
+  expect(s2Plugin.validateQuery({ terms: "x", fieldsOfStudy: [] })).toMatch(/fieldsOfStudy/);
+  expect(s2Plugin.validateQuery({ terms: "x", fieldsOfStudy: 1 })).toMatch(/fieldsOfStudy/);
+  expect(s2Plugin.validateQuery({ terms: "x", fieldsOfStudy: ["Computer Science"] })).toBeNull();
 });
 
 test("describeQuery is one line with the defaults filled and the zero floor left out", () => {
-  expect(s2Provider.describeQuery({ terms: ["vision-language-action", "robot"], minCitations: 5 })).toBe(
+  expect(s2Plugin.describeQuery({ terms: ["vision-language-action", "robot"], minCitations: 5 })).toBe(
     "Semantic Scholar · vision-language-action robot · last 30 days · ≥ 5 citations",
   );
-  expect(s2Provider.describeQuery({ terms: "robot", days: 7, fieldsOfStudy: ["Computer Science"] })).toBe(
+  expect(s2Plugin.describeQuery({ terms: "robot", days: 7, fieldsOfStudy: ["Computer Science"] })).toBe(
     "Semantic Scholar · robot · last 7 days · Computer Science",
   );
 });
@@ -163,7 +163,7 @@ test("discover maps rows to items with the counts as signals and the arXiv page 
     return jsonResponse({ total: 3, offset: 0, data: [ARXIV_ROW, PDF_ROW, BARE_ROW] });
   };
   const d = desc({ terms: "vision language action" });
-  const items = await s2Provider.discover(d, d.discovery.kind === "index" ? d.discovery.query : {}, deps(fetchFn, 20));
+  const items = await s2Plugin.discover(d, d.discovery.kind === "index" ? d.discovery.query : {}, deps(fetchFn, 20));
   expect(seen).toHaveLength(1);
   expect(decodeURIComponent(seen[0])).toContain("publicationDateOrYear=2026-08-14:");
   expect(items.map((i) => i.title)).toEqual([ARXIV_ROW.title, PDF_ROW.title, BARE_ROW.title]);
@@ -197,14 +197,14 @@ test("discover maps rows to items with the counts as signals and the arXiv page 
 test("discover drops rows under the citation floor and untitled rows", async () => {
   const fetchFn = async () => jsonResponse({ data: [ARXIV_ROW, PDF_ROW, BARE_ROW, { paperId: "x", title: "" }] });
   const d = desc({ terms: "robot", minCitations: 5 });
-  const items = await s2Provider.discover(d, { terms: "robot", minCitations: 5 }, deps(fetchFn));
+  const items = await s2Plugin.discover(d, { terms: "robot", minCitations: 5 }, deps(fetchFn));
   expect(items.map((i) => i.title)).toEqual([ARXIV_ROW.title]);
 });
 
 test("discover reads a null page as nothing, not as a crash", async () => {
   const d = desc({ terms: "robot" });
-  expect(await s2Provider.discover(d, { terms: "robot" }, deps(async () => jsonResponse({ data: null })))).toEqual([]);
-  expect(await s2Provider.discover(d, { terms: "robot" }, deps(async () => jsonResponse({})))).toEqual([]);
+  expect(await s2Plugin.discover(d, { terms: "robot" }, deps(async () => jsonResponse({ data: null })))).toEqual([]);
+  expect(await s2Plugin.discover(d, { terms: "robot" }, deps(async () => jsonResponse({})))).toEqual([]);
 });
 
 test("discover passes the caller's signal to the request and stops before it when already aborted", async () => {
@@ -215,12 +215,12 @@ test("discover passes the caller's signal to the request and stops before it whe
     return jsonResponse({ data: [] });
   };
   const d = desc({ terms: "robot" });
-  await s2Provider.discover(d, { terms: "robot" }, deps(fetchFn, undefined, ac.signal));
-  expect(seen).toBe(ac.signal);
+  await s2Plugin.discover(d, { terms: "robot" }, deps(fetchFn, undefined, ac.signal));
+  expect(seen as AbortSignal | null | undefined).toBe(ac.signal);
   ac.abort();
   let calls = 0;
   await expect(
-    s2Provider.discover(d, { terms: "robot" }, deps(async () => (calls++, jsonResponse({ data: [] })), undefined, ac.signal)),
+    s2Plugin.discover(d, { terms: "robot" }, deps(async () => (calls++, jsonResponse({ data: [] })), undefined, ac.signal)),
   ).rejects.toThrow();
   expect(calls).toBe(0);
 });
@@ -235,21 +235,21 @@ test("a rate limit that holds is a thrown error, after exactly one retry", async
     return jsonResponse({ message: "Too Many Requests", code: "429" }, 429);
   };
   const d = desc({ terms: "robot" });
-  await expect(s2Provider.discover(d, { terms: "robot" }, deps(fetchFn))).rejects.toThrow(/429/);
+  await expect(s2Plugin.discover(d, { terms: "robot" }, deps(fetchFn))).rejects.toThrow(/429/);
   expect(calls).toBe(2);
 });
 
 test("a status the search cannot use throws instead of reading as no results", async () => {
   const d = desc({ terms: "robot" });
   await expect(
-    s2Provider.discover(d, { terms: "robot" }, deps(async () => jsonResponse({ error: "bad" }, 400))),
+    s2Plugin.discover(d, { terms: "robot" }, deps(async () => jsonResponse({ error: "bad" }, 400))),
   ).rejects.toThrow(/400/);
 });
 
 // --- through the engine ------------------------------------------------------
 
 test("collectSource runs an s2 descriptor through the registered provider", async () => {
-  registerIndexProvider(s2Provider);
+  registerSourcePlugin(s2Plugin);
   const seen: string[] = [];
   const fetchFn = async (url: string) => {
     seen.push(url);

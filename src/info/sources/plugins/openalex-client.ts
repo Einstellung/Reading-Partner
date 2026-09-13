@@ -13,8 +13,8 @@
 // change of 2026-02-13: keyless callers get 100 free credits and then 409, so a
 // spent quota is reported as a named failure rather than an empty result.
 
-import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "./http";
-import { normalizeArxivId } from "./arxiv";
+import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
+import { normalizeArxivId } from "./arxiv-client";
 import { pickByTitle } from "./match";
 
 const OPENALEX_BASE = "https://api.openalex.org";

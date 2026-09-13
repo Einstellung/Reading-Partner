@@ -5,7 +5,7 @@
 // hosts pass the http plugin scope, so a blocked host degrades to
 // abstract-only rather than failing the paper.
 
-import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "./http";
+import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
 import { pickByTitle } from "./match";
 
 const S2_BASE = "https://api.semanticscholar.org/graph/v1";

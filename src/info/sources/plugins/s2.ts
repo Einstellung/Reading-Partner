@@ -13,11 +13,11 @@
 // short backoff, and a terminal 429 fails the source rather than waiting it out.
 
 import { throwIfAborted } from "../../../platform/app/abort";
-import { fetchWithRetry, HttpStatusError, interactiveRetry } from "../../../scholar/http";
-import { parseS2Search, s2TopicSearchUrl, S2_INDEX_FIELDS, type S2Hit } from "../../../scholar/s2";
+import { fetchWithRetry, HttpStatusError, interactiveRetry } from "../../../platform/http/throttled-fetch";
+import { parseS2Search, s2TopicSearchUrl, S2_INDEX_FIELDS, type S2Hit } from "./s2-client";
 import { itemId } from "../../extract/id";
 import type { SourceDescriptor } from "../descriptor";
-import { daysBefore, queryInt, queryStrings, type IndexDeps, type IndexProvider, type IndexQuery } from "../index-provider";
+import { daysBefore, queryInt, queryStrings, type PluginDeps, type SourcePlugin, type IndexQuery } from "../plugin";
 import type { InfoItem, ItemSignals } from "../item";
 
 const HOST = "api.semanticscholar.org";
@@ -112,7 +112,7 @@ export function s2Item(desc: SourceDescriptor, h: S2Hit): InfoItem | null {
   return item;
 }
 
-export const s2Provider: IndexProvider = {
+export const s2Plugin: SourcePlugin = {
   id: "s2",
   name: "Semantic Scholar",
   hosts: [HOST],
@@ -136,7 +136,7 @@ export const s2Provider: IndexProvider = {
     return parts.join(" · ");
   },
 
-  async discover(desc: SourceDescriptor, q: IndexQuery, deps: IndexDeps): Promise<InfoItem[]> {
+  async discover(desc: SourceDescriptor, q: IndexQuery, deps: PluginDeps): Promise<InfoItem[]> {
     throwIfAborted(deps.signal);
     const url = s2IndexUrl(q, deps.today(), deps.limit ?? DEFAULT_LIMIT);
     const res = await fetchWithRetry(url, { signal: deps.signal }, interactiveRetry(deps.fetchFn));

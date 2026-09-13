@@ -14,7 +14,7 @@ import {
 } from "../../../legion/execute/watchdog";
 import { ObservableRun, type RunSnapshot } from "../../../legion/execute/observable-run";
 import { cooldownAfter } from "../../../legion/execute/limiter";
-import { isRateLimitError } from "../../../scholar/http";
+import { isRateLimitError } from "../../../platform/http/throttled-fetch";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
 import { createPrepState, type PrepPaper, type PrepState } from "./types";

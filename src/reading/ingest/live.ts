@@ -7,7 +7,7 @@
 import { importBook } from "../../platform/app/library";
 import { addFileToTopic, setFileHash } from "../../platform/app/topics";
 import { loadExtractReadable } from "../../info/extract/readable-lazy";
-import { fetchWithRetry } from "../../scholar/http";
+import { fetchWithRetry } from "../../platform/http/throttled-fetch";
 import { ingestArticleUrl, type ArticleIngestDeps, type IngestedDocument } from "./article";
 
 // The same fetch the prep pipeline's link ingestion uses: the Tauri http plugin

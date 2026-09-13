@@ -121,7 +121,7 @@ import {
   NO_ARTICLE_BODY,
   type SavedArticle,
 } from "./saved-articles";
-import { readingFetch } from "../scholar/http";
+import { readingFetch } from "../platform/http/throttled-fetch";
 import { searchPapers, type PaperSearchFn } from "./papers/paper-search";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
 import {

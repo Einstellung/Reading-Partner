@@ -16,7 +16,7 @@ import { htmlToText } from "../extract/sanitize";
 import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
 import type { FetchFn } from "../extract/http";
 import type { Fulltext, SourceDescriptor } from "./descriptor";
-import { indexOf } from "./index-provider";
+import { pluginOf } from "./plugin";
 
 // The feed paths tried in order, most common first. wp-json is last: it is a full
 // JSON API, only reached when the plain feed paths miss.
@@ -284,7 +284,7 @@ export function pipeLabel(desc: SourceDescriptor): string {
   if (d.kind === "listpage") return "Article list, fetches each page";
   if (d.kind === "stream") return "Live updates";
   if (d.kind === "index") {
-    const found = indexOf(desc);
+    const found = pluginOf(desc);
     return found ? `${found.provider.name}: ${found.provider.describeQuery(found.query)}` : `Index query (${d.provider})`;
   }
   // feed discovery
@@ -315,7 +315,7 @@ function descriptorHosts(d: SourceDescriptor): string[] {
   if (d.fulltext.mode === "detail-endpoint") urls.push(d.fulltext.urlTemplate);
   // An index descriptor has no URL of its own; its provider's hosts stand in.
   if (disc.kind === "index") {
-    const found = indexOf(d);
+    const found = pluginOf(d);
     if (found) return found.provider.hosts.map((h) => h.replace(/^www\./i, "").toLowerCase());
   }
   const hosts = new Set<string>();

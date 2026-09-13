@@ -32,7 +32,7 @@ import {
   type JsonApiDiscovery,
   type SourceDescriptor,
 } from "./descriptor";
-import { indexOf } from "./index-provider";
+import { pluginOf } from "./plugin";
 import type { InfoItem } from "./item";
 
 // Render one article in a hidden webview and hand back what its DOM held
@@ -457,7 +457,7 @@ export async function collectSource(
 // headlines and signals, and whatever fulltext the descriptor names is fetched
 // later by fetchBodies for the survivors.
 async function collectIndex(desc: SourceDescriptor, deps: Filled): Promise<InfoItem[]> {
-  const found = indexOf(desc);
+  const found = pluginOf(desc);
   if (!found) {
     const id = desc.discovery.kind === "index" ? desc.discovery.provider : "?";
     throw new Error(`unknown index provider "${id}" (${desc.id})`);

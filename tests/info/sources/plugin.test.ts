@@ -7,29 +7,29 @@ import { afterEach, expect, test } from "bun:test";
 import { collectAll, collectSource } from "../../../src/info/sources/engine";
 import {
   daysBefore,
-  indexOf,
-  indexProvider,
-  indexProviderIds,
+  pluginOf,
+  sourcePlugin,
+  sourcePluginIds,
   queryInt,
   queryString,
   queryStrings,
-  registerIndexProvider,
-  resetIndexProvidersForTests,
-  type IndexProvider,
-} from "../../../src/info/sources/index-provider";
+  registerSourcePlugin,
+  resetSourcePluginsForTests,
+  type SourcePlugin,
+} from "../../../src/info/sources/plugin";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
 import { formatSignals } from "../../../src/info/sources/item";
 
-afterEach(() => resetIndexProvidersForTests());
+afterEach(() => resetSourcePluginsForTests());
 
-const fake: IndexProvider = {
+const fake: SourcePlugin = {
   id: "fake",
   name: "Fake Library",
   hosts: ["fake.example"],
   defaultLimit: 7,
   validateQuery: (q) => (typeof q.topic === "string" ? null : "needs a topic"),
   describeQuery: (q) => `topic ${String(q.topic)}`,
-  discover: async (desc, q, deps) => [
+  discover: async (_desc, q, deps) => [
     {
       id: "x-1",
       source: "wrong",
@@ -57,18 +57,18 @@ function indexDesc(query: Record<string, unknown>, provider = "fake"): SourceDes
 // bun runs every test file in one process, so the registry may already hold
 // what another file registered at module scope; assert only about "fake".
 test("registry: register, look up, list, reset", () => {
-  expect(indexProvider("fake")).toBeUndefined();
-  registerIndexProvider(fake);
-  expect(indexProvider("fake")).toBe(fake);
-  expect(indexProviderIds()).toContain("fake");
-  expect(indexOf(indexDesc({ topic: "a" }))?.provider.id).toBe("fake");
-  expect(indexOf(indexDesc({ topic: "a" }, "nope"))).toBeUndefined();
-  resetIndexProvidersForTests();
-  expect(indexProvider("fake")).toBeUndefined();
+  expect(sourcePlugin("fake")).toBeUndefined();
+  registerSourcePlugin(fake);
+  expect(sourcePlugin("fake")).toBe(fake);
+  expect(sourcePluginIds()).toContain("fake");
+  expect(pluginOf(indexDesc({ topic: "a" }))?.provider.id).toBe("fake");
+  expect(pluginOf(indexDesc({ topic: "a" }, "nope"))).toBeUndefined();
+  resetSourcePluginsForTests();
+  expect(sourcePlugin("fake")).toBeUndefined();
 });
 
 test("collectSource: items are stamped with the descriptor's identity and the limit reaches the provider", async () => {
-  registerIndexProvider(fake);
+  registerSourcePlugin(fake);
   const fixed = Date.UTC(2026, 8, 13, 12);
   const items = await collectSource(indexDesc({ topic: "robots" }), { now: () => fixed });
   expect(items).toHaveLength(1);
@@ -84,12 +84,12 @@ test("collectSource: items are stamped with the descriptor's identity and the li
 
 test("collectSource: an unregistered provider and a rejected query are source failures with a reason", async () => {
   await expect(collectSource(indexDesc({ topic: "a" }, "nope"))).rejects.toThrow(/unknown index provider "nope"/);
-  registerIndexProvider(fake);
+  registerSourcePlugin(fake);
   await expect(collectSource(indexDesc({}))).rejects.toThrow(/index query rejected.*needs a topic/);
 });
 
 test("collectAll: an index source that fails is recorded in health and sinks nothing else", async () => {
-  registerIndexProvider(fake);
+  registerSourcePlugin(fake);
   const { items, health } = await collectAll([indexDesc({ topic: "a" }), { ...indexDesc({}), id: "src-2" }], {
     now: () => 1000,
   });

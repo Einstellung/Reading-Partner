@@ -25,7 +25,7 @@ import { newTally, reportParse } from "../../platform/app/structured-output";
 import { observeAppExit, observeAppLifecycle } from "../../platform/app/lifecycle";
 import { browserWakeLockTarget, createScreenWakeLock } from "../../platform/app/wake-lock";
 import { collectAll, fetchBodies as fetchArticleBodies } from "../sources/engine";
-import { registerAllIndexProviders } from "../sources/index/all";
+import { registerAllSourcePlugins } from "../sources/plugins/all";
 import { fetchArticleViaWebview } from "../extract/webview-article";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import { setTrayStatus } from "../../platform/app/tray";
@@ -477,7 +477,7 @@ let collector: InfoCollector | null = null;
 
 // The index adapters (docs/69) are looked up by the engine at run time; the
 // program is the one place that registers the whole set.
-registerAllIndexProviders();
+registerAllSourcePlugins();
 
 // One screen wake lock for the app, held while a briefing generates (docs/22).
 let wakeLock = createScreenWakeLock(browserWakeLockTarget());

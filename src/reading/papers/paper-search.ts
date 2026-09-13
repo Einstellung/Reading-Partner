@@ -17,12 +17,12 @@
 //     recently in any field; measured on OpenAlex 2026-07-30, publication_date:desc
 //     put a paper about German managers first.
 
-import { searchArxivTopic, type ArxivEntry } from "../../scholar/arxiv";
-import { isRateLimitError, isHttpStatusError, type FetchFn } from "../../scholar/http";
-import { normalizeTitle } from "../../scholar/match";
-import { searchOpenAlexTopic, type OpenAlexHit } from "../../scholar/openalex";
-import { pubmedUrl, searchPubmed, type PubmedArticle } from "../../scholar/pubmed";
-import { searchS2Topic, type S2Hit } from "../../scholar/s2";
+import { searchArxivTopic, type ArxivEntry } from "../../info/sources/plugins/arxiv-client";
+import { isRateLimitError, isHttpStatusError, type FetchFn } from "../../platform/http/throttled-fetch";
+import { normalizeTitle } from "../../info/sources/plugins/match";
+import { searchOpenAlexTopic, type OpenAlexHit } from "../../info/sources/plugins/openalex-client";
+import { pubmedUrl, searchPubmed, type PubmedArticle } from "../../info/sources/plugins/pubmed-client";
+import { searchS2Topic, type S2Hit } from "../../info/sources/plugins/s2-client";
 
 export type PaperLibrary = "arxiv" | "pubmed" | "openalex" | "semantic-scholar";
 
