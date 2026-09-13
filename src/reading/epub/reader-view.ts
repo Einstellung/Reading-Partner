@@ -52,6 +52,7 @@ import {
 } from "./page-geometry";
 import { showsThroughBody, visibleRects } from "./mark-geometry";
 import { createMarkLayer, type MarkLayer, type SpineText } from "./mark-layer";
+import { createCardPool } from "./card-pool";
 import { createPageCard, type PageCard } from "./page-card";
 import { createPageResources } from "./page-mount";
 import type { Pagination } from "./paginate";
@@ -240,19 +241,26 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   }
 
   // --- mounting ---------------------------------------------------------------
-  const cardPool: PageCard[] = [];
+  // Released sheets keep their document mounted (card-pool.ts). A scroll step
+  // gives one sheet back and takes another for a page of the same spine
+  // document, so the step costs a transform rather than a fresh clone and a
+  // fresh column layout of the whole document.
+  const cardPool = createCardPool<PageCard>();
 
   function mountSlot(i: number): PageCard {
     const slot = slots[i];
     if (slot.card) return slot.card;
-    const card = cardPool.pop() ?? createPageCard(owner, resources);
+    const block = pagination.blocks[i];
+    const card = cardPool.take(block.spine) ?? createPageCard(owner, resources);
+    // The sheet may come back carrying the last page's marks and quote band.
+    // Both layers are rebuilt on demand by whoever paints them.
+    card.overlay?.replaceChildren();
     slot.card = card;
     const m = deskMetrics(layout, scale, viewport());
     card.setScale(scale);
     card.el.style.left = `${m.cardLeft}px`;
     card.el.style.top = `${m.cardTop}px`;
     slot.el.append(card.el);
-    const block = pagination.blocks[i];
     const doc = book.docs[block.spine];
     const ordinal = i - firstPageOfSpine(block.spine);
     slot.shown = card.show(doc, block.cfi, ordinal).then(() => {
@@ -267,8 +275,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     const slot = slots[i];
     if (!slot.card) return;
     slot.card.el.remove();
-    slot.card.clear();
-    cardPool.push(slot.card);
+    cardPool.give(slot.card);
     slot.card = null;
     slot.shown = null;
   }
@@ -734,6 +741,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
       scroller.removeEventListener("pointercancel", countUp, { capture: true });
       if (scrollTimer !== null) clearTimeout(scrollTimer);
       for (let i = 0; i < slots.length; i++) unmountSlot(i);
+      cardPool.drain();
       resources.revoke();
       scroller.remove();
       releaseEpub(bookId);
