@@ -187,6 +187,8 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "reading/retell/store.ts",
   "reading/session/hangup.ts",
   "reading/talk/store.ts",
+  // A source unit names the topic its conversation is filed under; the table is built in memory each sweep.
+  "reading/distill/source.ts",
   // The translate run carries the topic it will attach the bilingual document to; nothing here reaches disk.
   "reading/translate/run.ts",
   "reading/translate/tool-live.ts",
