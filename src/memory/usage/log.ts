@@ -36,7 +36,10 @@ export function usageLogFile(deviceId: string): string {
 // the format: one JSON object per line, a trailing newline, and bad bytes left
 // exactly where they are — a half-written line is one line a reader skips, not
 // a reason to rewrite the file.
-export function appendLines(prior: string, entries: readonly UsageEntry[]): string {
+// Generic over the record: the model-call log beside this one (model-calls.ts)
+// writes a different line into the same shape of file, and the format is the
+// file's, not the record's.
+export function appendLines<T>(prior: string, entries: readonly T[]): string {
   const head = prior && !prior.endsWith("\n") ? `${prior}\n` : prior;
   return head + entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
 }

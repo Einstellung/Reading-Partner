@@ -2,7 +2,11 @@
 // src/memory/live/memory-section.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { dropCoveredObservations, memorySection } from "../../src/memory/live/memory-section";
+import {
+  dropCoveredObservations,
+  memorySection,
+  memorySectionWithIds,
+} from "../../src/memory/live/memory-section";
 import type { Observation } from "../../src/memory/observations/types";
 import type { Statement } from "../../src/memory/statements/types";
 
@@ -172,4 +176,56 @@ test("nothing covered leaves the snapshot byte for byte", () => {
   const snapshot = `${line(READ)}\nbody\n\n${line(STUCK)}`;
   expect(dropCoveredObservations(snapshot, new Set())).toBe(snapshot);
   expect(dropCoveredObservations(snapshot, new Set(["m-9999999999999999"]))).toBe(snapshot);
+});
+
+// --- what the turn showed ----------------------------------------------------
+
+// The usage log's line is a claim about what printed (docs/48), so the ids come
+// out of the same pass as the text: in print order, and only what survived.
+test("the ids are every statement and observation the paragraph printed, in order", () => {
+  const { text, shown } = memorySectionWithIds({
+    statements: [statement({ id: "s-said", text: "no diagrams", author: "reader" })],
+    anchor: {
+      observations: [observation({ id: STUCK })],
+      bookId: BOOK,
+      observationSnapshot: line(READ, "asked about entropy", "belief"),
+    },
+    hasObservationTools: true,
+  });
+  expect(shown).toEqual(["s-said", STUCK, READ]);
+  for (const id of shown) expect(text).toContain(id);
+});
+
+test("a statement the pass gave up shows nothing, and neither does an empty desk", () => {
+  const { shown } = memorySectionWithIds({ statements: [], hasObservationTools: false });
+  expect(shown).toEqual([]);
+});
+
+test("a superseded statement is not shown, and neither is a concern", () => {
+  const { shown } = memorySectionWithIds({
+    statements: [
+      statement({ id: "s-old", text: "used to want pictures", supersededBy: "s-new" }),
+      statement({ id: "s-concern", text: "watching the RL papers", kind: "concern" }),
+      statement({ id: "s-standing" }),
+    ],
+    hasObservationTools: false,
+  });
+  expect(shown).toEqual(["s-standing"]);
+});
+
+// An entry a standing statement already rests on is dropped from the snapshot,
+// so it was not put in front of the reader and is not logged as shown.
+test("an observation dropped as covered is not among the ids", () => {
+  const covered = "m-3333333333333333";
+  const { text, shown } = memorySectionWithIds({
+    statements: [statement({ id: "s-a", evidence: [covered] })],
+    anchor: {
+      observations: [],
+      bookId: BOOK,
+      observationSnapshot: [line(covered, "already read"), line(READ, "asked about entropy")].join("\n"),
+    },
+    hasObservationTools: false,
+  });
+  expect(shown).toEqual(["s-a", READ]);
+  expect(text).not.toContain(covered);
 });

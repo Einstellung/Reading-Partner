@@ -105,10 +105,17 @@ export async function runDreamIfDue(now = Date.now()): Promise<DreamResult | nul
     const result = await runDream(
       { observations, statements, lastInputHash: state.lastInputHash },
       ({ systemPrompt, task }) =>
-        callModel("prep", "plan", systemPrompt, task, {
-          signal: new AbortController().signal,
-          onProgress: () => {},
-        }),
+        callModel(
+          "prep",
+          "plan",
+          systemPrompt,
+          task,
+          { signal: new AbortController().signal, onProgress: () => {} },
+          // Planning like every other pipeline call, and the one whose spend has
+          // to be readable on its own: it is the nightly pass, not a reader
+          // waiting on an answer.
+          { spend: { caller: "distill" } },
+        ),
       { createStatement, addEvidence, supersede, markSuperseded },
     );
     // Marked here rather than after the write below: the day is used up by the

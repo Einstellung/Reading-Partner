@@ -18,6 +18,7 @@ import {
 	type StreamOutcome,
 } from "./providers";
 import type { AiCallOptions } from "./call-options";
+import type { ModelCallContext, ModelCaller } from "./model-usage";
 
 export type ThinkingKind = "chat" | "prep";
 
@@ -82,7 +83,23 @@ export async function resolveModel(thinking: ThinkingKind): Promise<ResolvedMode
 export interface ModelCallObserver {
 	onResponse?: ResponseHead;
 	onFinal?(assistant: StreamOutcome): void;
+	// Who to log the spend as, and what the call is about, when the purpose does
+	// not already say it — the dream pass plans like the rest of the pipelines
+	// and its spend has to be told apart from theirs. Defaults to CALLER_FOR.
+	spend?: ModelCallContext;
 }
+
+// What an unattended call is logged as when it names no caller of its own. The
+// purpose is what every one of these calls already carries and it answers the
+// same question closely enough: a chapter note is the notes pipeline, a paper
+// digest is the digest one, and what is left is the planning passes.
+const CALLER_FOR: Record<BudgetPurpose, ModelCaller> = {
+	chat: "prep",
+	"chapter-note": "notes",
+	digest: "digest",
+	overview: "prep",
+	plan: "prep",
+};
 
 // The resolved model's catalog metadata, for its context window. Null when the
 // settings name a model pi doesn't know (a stale stored id still calls, see
@@ -179,6 +196,7 @@ export function callModel(
 					// one conversation and have the provider route them as one.
 					sessionId: newRunId(),
 					reasoning: model.reasoning,
+					spend: observer?.spend ?? { caller: CALLER_FOR[purpose] },
 					onDelta: bump,
 					onThinking: bump,
 					onResponse: observer?.onResponse,

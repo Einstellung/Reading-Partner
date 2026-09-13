@@ -28,6 +28,8 @@ import {
 	type StreamFn,
 } from "../../src/ai/agent";
 import * as cacheTelemetry from "../../src/platform/app/cache-telemetry";
+import { setModelCallSink } from "../../src/ai/model-usage";
+import type { ModelCallInput } from "../../src/memory/usage/model-calls";
 import { DEFAULT_MAX_RETRIES } from "../../src/ai/providers";
 import { contextBudget, estimateContextTokens, piBudget } from "../../src/budget";
 
@@ -827,5 +829,75 @@ test("a loop driven with no telemetry records nothing", async () => {
 		expect(record).not.toHaveBeenCalled();
 	} finally {
 		record.mockRestore();
+	}
+});
+
+// --- the model-call log ------------------------------------------------------
+
+// A round is a request, and the log counts requests: a turn that called a tool
+// and then answered spent twice and says so twice.
+test("every round of a turn is one line in the model-call log", async () => {
+	const written: ModelCallInput[] = [];
+	const undo = setModelCallSink(async (calls) => {
+		written.push(...calls);
+	});
+	const record = spyOn(cacheTelemetry, "recordCacheTurn").mockImplementation(() => {});
+	try {
+		const script = scriptStream([
+			{ text: "checking", calls: [{ name: "echo", args: { value: "hi" }, id: "t1" }] },
+			{ text: "hi" },
+		]);
+		const c = collectCallbacks();
+
+		await runAgentLoop({
+			stream: script.fn,
+			model: MODEL,
+			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
+			tools: [echoTool],
+			maxRounds: 8,
+			telemetry: { surface: "classroom", thread: "thread-1" },
+			about: { bookId: "b-1" },
+			...c.cb,
+		});
+
+		expect(written.length).toBe(2);
+		expect(written.every((w) => w.caller === "classroom" && w.bookId === "b-1")).toBe(true);
+		expect(written.every((w) => w.ok)).toBe(true);
+		// The scripted stream reports no usage, which is the zero line a real call
+		// with no message would write: the fields are there either way.
+		expect(written[0]?.input).toBe(0);
+		expect(written[0]?.output).toBe(0);
+	} finally {
+		record.mockRestore();
+		undo();
+	}
+});
+
+test("a round that failed is a line too, marked as failed", async () => {
+	const written: ModelCallInput[] = [];
+	const undo = setModelCallSink(async (calls) => {
+		written.push(...calls);
+	});
+	const record = spyOn(cacheTelemetry, "recordCacheTurn").mockImplementation(() => {});
+	try {
+		const script = scriptStream([{ error: "boom" }]);
+		const c = collectCallbacks();
+
+		await runAgentLoop({
+			stream: script.fn,
+			model: MODEL,
+			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
+			tools: [echoTool],
+			maxRounds: 8,
+			telemetry: { surface: "reading", thread: "thread-2" },
+			...c.cb,
+		});
+
+		expect(written.length).toBe(1);
+		expect(written[0]?.caller).toBe("reading");
+		expect(written[0]?.ok).toBe(false);
+	} finally {
+		record.mockRestore();
+		undo();
 	}
 });

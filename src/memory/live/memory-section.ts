@@ -50,19 +50,46 @@ export interface MemorySectionInput {
   hasObservationTools: boolean;
 }
 
-export function memorySection(input: MemorySectionInput): string {
+// The paragraph, and the ids it put in front of the reader. Both from one pass,
+// because the usage log's line is a claim about what was actually printed
+// (docs/48): a second walk to collect the ids could answer for a paragraph that
+// is not this one.
+export interface MemorySectionResult {
+  text: string;
+  // Statement and observation ids, in the order they print. The snapshot's are
+  // the entries that survived the covered-drop, which is what the model sees.
+  shown: readonly string[];
+}
+
+export function memorySectionWithIds(input: MemorySectionInput): MemorySectionResult {
   const covered = coveredObservationIds(input.statements);
   const anchor = input.anchor;
+  const profile = profileBlock(input.statements);
+  const open = anchor ? openBlock(anchor.observations, anchor.bookId) : EMPTY_BLOCK;
+  const snapshot = anchor ? dropCoveredObservations(anchor.observationSnapshot, covered) : "";
   const blocks = [
-    profileBlock(input.statements),
-    anchor ? openBlock(anchor.observations, anchor.bookId) : "",
-    observationPromptSection(
-      anchor ? dropCoveredObservations(anchor.observationSnapshot, covered) : "",
-      input.hasObservationTools,
-    ),
+    profile.text,
+    open.text,
+    observationPromptSection(snapshot, input.hasObservationTools),
   ];
-  return blocks.filter((b) => b !== "").join("\n\n");
+  return {
+    text: blocks.filter((b) => b !== "").join("\n\n"),
+    shown: [...profile.ids, ...open.ids, ...snapshotIds(snapshot)],
+  };
 }
+
+export function memorySection(input: MemorySectionInput): string {
+  return memorySectionWithIds(input).text;
+}
+
+// A block and what it named. Empty both ways: a block that prints nothing shows
+// nothing.
+interface Block {
+  text: string;
+  ids: readonly string[];
+}
+
+const EMPTY_BLOCK: Block = { text: "", ids: [] };
 
 // The reader's own statements before the concluded ones, each keeping the order
 // it was handed in. Not because one is truer: they are not equally revisable —
@@ -72,32 +99,35 @@ export function memorySection(input: MemorySectionInput): string {
 //
 // Every line carries its id so the model can name one when it acts on it, and
 // so the reader can be told which line to argue with.
-function profileBlock(statements: readonly Statement[]): string {
+function profileBlock(statements: readonly Statement[]): Block {
   const standing = statements.filter(
     (s) => s.kind === "profile" && !s.supersededBy && s.text.trim() !== "",
   );
-  if (standing.length === 0) return "";
+  if (standing.length === 0) return EMPTY_BLOCK;
   const ordered = [
     ...standing.filter((s) => s.author === "reader"),
     ...standing.filter((s) => s.author !== "reader"),
   ];
-  return [
-    "What is known about this reader — what they have said about themselves first,",
-    "then what has been concluded from how they read:",
-    ...ordered.map((s) => `- ${s.text.trim()} (id ${s.id})`),
-    "",
-    "Pitch your explanations to these: match the depth to the background they state,",
-    "explain things the way they have asked to have them explained, and connect to an",
-    "interest only where it is actually relevant.",
-  ].join("\n");
+  return {
+    text: [
+      "What is known about this reader — what they have said about themselves first,",
+      "then what has been concluded from how they read:",
+      ...ordered.map((s) => `- ${s.text.trim()} (id ${s.id})`),
+      "",
+      "Pitch your explanations to these: match the depth to the background they state,",
+      "explain things the way they have asked to have them explained, and connect to an",
+      "interest only where it is actually relevant.",
+    ].join("\n"),
+    ids: ordered.map((s) => s.id),
+  };
 }
 
 // What this book has left open. Summaries only — the body is a tool call away,
 // and this block is a list of what to watch for rather than the material.
-function openBlock(observations: readonly Observation[], bookId: string): string {
+function openBlock(observations: readonly Observation[], bookId: string): Block {
   const open = openStuckPoints(observations, bookId);
-  if (open.length === 0) return "";
-  return [
+  if (open.length === 0) return EMPTY_BLOCK;
+  const text = [
     "Still open in this book — stuck points nothing has recorded this reader getting",
     "past yet:",
     ...open.map((o) => `- ${o.summary.trim()} (id ${o.id})`),
@@ -107,6 +137,18 @@ function openBlock(observations: readonly Observation[], bookId: string): string
     "them are stale for that reason, so check where they are before re-explaining one",
     "rather than opening with the same ground twice.",
   ].join("\n");
+  return { text, ids: open.map((o) => o.id) };
+}
+
+// The ids of the entries left in a snapshot. Read off the printed text rather
+// than off the observations behind it: what the log claims is what printed, and
+// the drop above happens on the text.
+function snapshotIds(snapshot: string): string[] {
+  const ids: string[] = [];
+  for (const line of snapshot.split("\n")) {
+    if (ENTRY_HEAD.test(line)) ids.push(...mentionedIds(line));
+  }
+  return ids;
 }
 
 // The head of one snapshot entry (memory/observations/files.ts). Matched rather

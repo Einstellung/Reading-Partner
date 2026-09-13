@@ -51,6 +51,7 @@ import {
 	type StreamOutcome,
 } from "./providers";
 import { joinRoundTexts } from "./turn-rows";
+import { recordModelCall, type ModelCallAbout } from "./model-usage";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
 // the model a cropped figure). `data` is bare base64, `mimeType` the MIME type;
@@ -149,6 +150,10 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
 	// What the answer is for, which sets how much output room each round must
 	// leave (src/budget). "chat" when unset.
 	purpose?: BudgetPurpose;
+	// What the turn is about, for the model-call log (src/memory/usage): the book
+	// being read, the topic being discussed. Absent on a turn that is about
+	// neither; the surface below says who spent it either way.
+	about?: ModelCallAbout;
 	// Which face of the app this turn is, and the conversation it continues, so
 	// each round's cache accounting can be attributed and dated
 	// (platform/app/cache-telemetry.ts). Required: an unlabelled turn is missing
@@ -240,6 +245,9 @@ export interface AgentLoopParams extends AgentCallbacks {
 	// Already resolved to a thread. Unset in tests that drive the loop directly,
 	// which then record nothing.
 	telemetry?: TurnTelemetry;
+	// What the turn is about, for the model-call log: the book being read, the
+	// topic being discussed. Absent on a turn that is about neither.
+	about?: ModelCallAbout;
 }
 
 // Core loop, provider-injected so tests can drive it with a fake stream. Aborts
@@ -281,7 +289,19 @@ export async function runAgentLoop(params: AgentLoopParams): Promise<void> {
 		message: AssistantMessage | undefined,
 		ok: boolean,
 	): void => {
-		if (!telemetry || !message) return;
+		if (!telemetry) return;
+		// A round is a call: the loop sends one request per round, and the log
+		// counts requests. The surface is who spent it, and it is the same value
+		// the cache line below carries, so the two logs read against each other.
+		recordModelCall({
+			caller: telemetry.surface,
+			...params.about,
+			provider: model.provider,
+			model: model.id,
+			usage: message?.usage,
+			ok,
+		});
+		if (!message) return;
 		recordCacheTurn({
 			telemetry,
 			providerId: model.provider,
@@ -449,6 +469,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 		reasoning,
 		maxRounds = DEFAULT_MAX_ROUNDS,
 		purpose,
+		about,
 		onDelta,
 		onThinking,
 		onResponse,
@@ -491,6 +512,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
 			...setup,
 			maxRounds,
 			purpose,
+			about,
 			telemetry,
 			onDelta,
 			onThinking,

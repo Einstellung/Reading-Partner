@@ -183,6 +183,7 @@ export function runDigest(params: {
         // runAgentTurn standing an id in for a telemetry thread it was not given.
         sessionId: newRunId(),
         reasoning: model.reasoning,
+        spend: { caller: "digest" },
         onDelta,
         onThinking,
         onDone,

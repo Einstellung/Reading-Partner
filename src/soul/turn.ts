@@ -11,17 +11,17 @@
 
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { fitToBudget, type BudgetPurpose, type Rung } from "../budget";
-import type { DeskItem, DeskMessage, OpenedDesk } from "../desk";
+import type { DeskItem, DeskMemory, DeskMessage, OpenedDesk } from "../desk";
 import type { Settings } from "../platform/app/settings";
 import type { ProviderId } from "../ai/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
 import type { AgentTool } from "../ai/agent";
-import { soulMemorySection, openSoul } from "./self";
+import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
 import type { CatalogueIo } from "./catalogue";
 import { appSequenceIo, readSequence, type SequenceIo } from "./sequence";
 import { soulTail, TAIL_RUNG, TAIL_RUNG_ID, TURN_KEEP } from "./tail";
 import { appConversationIo, type ConversationIo } from "../conversations";
-import type { TopicProposalSurface } from "../memory";
+import { logUsage, type TopicProposalSurface } from "../memory";
 
 export interface AssembleInput {
   desk: OpenedDesk;
@@ -209,6 +209,12 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
     purpose,
     skip,
   });
+  // What this turn actually put in front of the reader (docs/48): one line per
+  // id, once per turn, for the pass that is really sent — not once per pass the
+  // ladder tried and threw away. A refused turn is sent to nobody and shows
+  // nothing. Fire-and-forget: a log write that fails is a line lost, never a
+  // turn lost.
+  if (fitted.refusal === "") recordShown(soul, anchor?.memory, fitted.dropped);
   afterFit(items, fitted.dropped);
   return {
     systemPrompt: fitted.systemPrompt,
@@ -218,6 +224,16 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
     refusal: fitted.refusal,
     report,
   };
+}
+
+function recordShown(
+  soul: Soul,
+  anchor: DeskMemory | undefined,
+  dropped: ReadonlySet<string>,
+): void {
+  const shown = soulShownIds(soul, anchor, dropped);
+  if (shown.length === 0) return;
+  void logUsage(shown.map((id) => ({ kind: "shown" as const, id }))).catch(() => {});
 }
 
 function afterFit(items: readonly DeskItem[], dropped: ReadonlySet<string>): void {

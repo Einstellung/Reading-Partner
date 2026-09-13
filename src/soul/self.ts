@@ -16,8 +16,10 @@ import {
   listOtherTopicObservations,
   filingTools,
   memorySection,
+  memorySectionWithIds,
   notifyObservationChange,
   statementStore,
+  type MemorySectionInput,
   type Statement,
   type TopicProposalSurface,
 } from "../memory";
@@ -186,7 +188,29 @@ export function soulMemorySection(
   anchor: DeskMemory | undefined,
   dropped: ReadonlySet<string>,
 ): string {
-  return memorySection({
+  return memorySection(sectionInput(soul, anchor, dropped));
+}
+
+/**
+ * The statement and observation ids this pass prints — what the turn put in
+ * front of the reader, for the usage log (docs/48). Composed the same way the
+ * paragraph above is, from the same pass's dropped set: a pass that gave up the
+ * statements shows none of them.
+ */
+export function soulShownIds(
+  soul: Soul,
+  anchor: DeskMemory | undefined,
+  dropped: ReadonlySet<string>,
+): readonly string[] {
+  return memorySectionWithIds(sectionInput(soul, anchor, dropped)).shown;
+}
+
+function sectionInput(
+  soul: Soul,
+  anchor: DeskMemory | undefined,
+  dropped: ReadonlySet<string>,
+): MemorySectionInput {
+  return {
     statements: dropped.has("reader-statements") ? [] : soul.statements,
     ...(anchor
       ? {
@@ -198,5 +222,5 @@ export function soulMemorySection(
         }
       : {}),
     hasObservationTools: soul.writesObservations,
-  });
+  };
 }

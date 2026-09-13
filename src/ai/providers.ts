@@ -67,6 +67,7 @@ import {
 	type AuthKind,
 	type ProviderId,
 } from "./provider-ids";
+import { recordModelCall, type ModelCallContext } from "./model-usage";
 
 export {
 	API_KEY_PROVIDER_IDS,
@@ -130,6 +131,11 @@ export class ModelCallError extends Error {
 export interface StreamChatOptions {
 	providerId: ProviderId;
 	modelId: string;
+	// Who is spending this call and what it is about, for the model-call log
+	// (src/memory/usage/model-calls.ts). Required: an unlabelled call is missing
+	// from the accounting without saying so, the same way an unlabelled turn is
+	// missing from the cache telemetry.
+	spend: ModelCallContext;
 	systemPrompt?: string;
 	messages: ChatMessage[];
 	signal?: AbortSignal;
@@ -434,6 +440,10 @@ export interface StreamChatCoreParams {
 	sessionId?: string;
 	// Client-side retries on the opening request; DEFAULT_MAX_RETRIES when unset.
 	maxRetries?: number;
+	// Who is spending this call (see StreamChatOptions). Optional here and only
+	// here: tests drive this core directly with a fake stream, and those calls
+	// are not spending anything to account for. streamChat always passes it.
+	spend?: ModelCallContext;
 	onDelta(text: string): void;
 	onThinking?(delta: string): void;
 	onResponse?: ResponseHead;
@@ -449,9 +459,21 @@ export interface StreamChatCoreParams {
 // responseId) is available on this path too and not only in the agent loop.
 export async function streamChatCore(params: StreamChatCoreParams): Promise<void> {
 	const { stream, model, apiKey, systemPrompt, messages, signal, reasoning, transport, headers } = params;
-	const { sessionId } = params;
+	const { sessionId, spend } = params;
 	const { onDelta, onThinking, onResponse, onDone, onError } = params;
 	const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
+	// One line per call, whichever way it ends: a call that failed still spent
+	// the input it sent. Called on exactly one of the three exits below.
+	const record = (assistant: StreamOutcome | undefined, ok: boolean): void => {
+		if (!spend) return;
+		recordModelCall({
+			...spend,
+			provider: model.provider,
+			model: model.id,
+			usage: assistant?.usage,
+			ok,
+		});
+	};
 	try {
 		const s = stream(
 			model,
@@ -469,18 +491,21 @@ export async function streamChatCore(params: StreamChatCoreParams): Promise<void
 			} else if (ev.type === "done") {
 				final = ev.message;
 			} else if (ev.type === "error") {
+				record(ev.error, false);
 				onError(ev.error.errorMessage || "stream error", ev.error);
 				return;
 			}
 		}
+		record(final, true);
 		onDone(full, final);
 	} catch (e) {
+		record(undefined, false);
 		onError(e instanceof Error ? e.message : String(e));
 	}
 }
 
 export async function streamChat(options: StreamChatOptions): Promise<void> {
-	const { providerId, modelId, systemPrompt, messages, signal, reasoning, sessionId } = options;
+	const { providerId, modelId, systemPrompt, messages, signal, reasoning, sessionId, spend } = options;
 	const { onDelta, onThinking, onResponse, onDone, onError } = options;
 	try {
 		const call = await resolveCall(providerId, modelId, messages, reasoning);
@@ -493,6 +518,7 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 			signal,
 			reasoning: call.reasoning,
 			transport: call.transport,
+			spend,
 			// Decided here, where the provider id is known, and passed down as data.
 			// Both halves come from the one session value.
 			...providerCallSetup(providerId, sessionId),
@@ -503,6 +529,10 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 			onError,
 		});
 	} catch (e) {
+		// The call never reached a provider — no credentials, an unknown model, a
+		// rejected image. It is still a call that was made, and a line of zeros
+		// says so; the ids are the ones it was going to use.
+		recordModelCall({ ...spend, provider: providerId, model: modelId, ok: false });
 		onError(e instanceof Error ? e.message : String(e));
 	}
 }
