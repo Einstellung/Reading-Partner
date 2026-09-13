@@ -8,12 +8,6 @@ import {
   type ViewState,
   type ViewStats,
 } from "./platform/app/reader-contract";
-import { appData } from "./platform/app/appdata";
-import { hashPath } from "./platform/app/storage";
-import { importBook, repairLibraryNames } from "./platform/app/library";
-import { migrateBookLive } from "./platform/app/migrate";
-import { splitRehearsalRunPagesOnce } from "./reading/rehearsal";
-import { splitSavedArticleBodiesOnce } from "./reading/saved-articles";
 import { documentShape, type Fulltext } from "./fulltext";
 import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
 import {
@@ -31,8 +25,6 @@ import {
   listTopics,
   markOpened,
   mostRecentlyOpened,
-  repairTopicPaths,
-  setFileHash,
   type FileRef,
   type Topic,
 } from "./platform/app/topics";
@@ -93,6 +85,7 @@ import { useCall } from "./reading/session/use-call";
 import { useMarkDoors } from "./reading/session/use-mark-doors";
 import { AI_PEN_COLOR, useMarks } from "./reading/session/use-marks";
 import { openBook } from "./reading/session/open-book";
+import { runStartupMigrations } from "./reading/session/startup-migrations";
 import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
 import type { ReaderShell } from "./reading/session/shell";
 import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
@@ -395,55 +388,15 @@ export default function App() {
     refreshTopics().catch(() => setTopics([]));
   }, [refreshTopics]);
 
-  // One-time content-hash backfill for existing topic files (docs/13, M-sync-1):
-  // import each into the library, give it a book id, and move its legacy
-  // path-hash-keyed data under that id. Runs once, in the background, and
-  // sequentially — books can be hundreds of MB, so never read several at once.
-  // Idempotent: a file that already has a book id is skipped.
+  // The repairs and backfills that run once on the way up
+  // (reading/session/startup-migrations.ts), in the background. The ref makes it
+  // once: StrictMode runs this effect twice.
   useEffect(() => {
     if (migrationRan.current) return;
     migrationRan.current = true;
-    void (async () => {
-      // A kept article's body moved out of saved-articles.json into a file of
-      // its own (docs/21). Independent of the book backfill below and not
-      // awaited with it: nothing here reads the kept articles, and the shelf
-      // reads either shape.
-      void splitSavedArticleBodiesOnce().catch((e) =>
-        console.warn("saved-article body split skipped", e),
-      );
-      // What the reader said on each pass moved out of the
-      // rehearsal's log into a file per pass (docs/43). Independent of both, and
-      // not awaited: everything that reads a rehearsal reads either shape, so
-      // nothing below is waiting on it. Writes nothing once it has run.
-      void splitRehearsalRunPagesOnce().catch((e) =>
-        console.warn("rehearsal transcript split skipped", e),
-      );
-      // Names an iOS import left percent-encoded (docs/pitfall/106). Runs first
-      // so the backfill below reads the repaired paths, and writes nothing when
-      // there is nothing encoded, so it costs no sync revision.
-      let changed = await Promise.all([repairTopicPaths(), repairLibraryNames()])
-        .then((wrote) => wrote.some(Boolean))
-        .catch((e) => {
-          console.warn("name repair skipped", e);
-          return false;
-        });
-      const all = await listTopics().catch((): Topic[] => []);
-      for (const t of all) {
-        for (const f of t.files) {
-          if (f.hash) continue;
-          try {
-            const bytes = await appData.readPicked(f.path);
-            const entry = await importBook(bytes, f.path);
-            await migrateBookLive(hashPath(f.path), entry.hash);
-            await setFileHash(t.id, f.path, entry.hash);
-            changed = true;
-          } catch (e) {
-            console.warn("library migration skipped a file", f.path, e);
-          }
-        }
-      }
-      if (changed) await refreshTopics().catch(() => {});
-    })();
+    void runStartupMigrations().then((changed) => {
+      if (changed) return refreshTopics().catch(() => {});
+    });
   }, [refreshTopics]);
 
   // Account sync (docs/13): start the engine if the user is signed in with
