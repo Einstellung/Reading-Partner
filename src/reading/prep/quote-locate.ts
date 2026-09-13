@@ -45,10 +45,17 @@ export function normalizeForMatch(s: string): string {
 
 // Find `quote` inside `pageText`, tolerant of extraction drift. Returns the
 // exact substring of the ORIGINAL pageText that the quote matched (so it can be
-// fed verbatim to the engine's text search), or null when the quote is not on
-// the page. A quote shorter than two normalized characters is rejected as too
-// weak to anchor.
-export function locateQuote(pageText: string, quote: string): { text: string } | null {
+// fed verbatim to the engine's text search) together with its half-open span in
+// pageText, or null when the quote is not on the page. A quote shorter than two
+// normalized characters is rejected as too weak to anchor.
+//
+// The span is what a caller relocating a mark needs (src/reading/translate):
+// the words are the answer for a search box, the offsets are the answer for an
+// anchor.
+export function locateQuote(
+  pageText: string,
+  quote: string,
+): { text: string; start: number; end: number } | null {
   const q = normalizeForMatch(quote);
   if (q.length < 2) return null;
   const { norm, map } = foldWithMap(pageText);
@@ -56,5 +63,7 @@ export function locateQuote(pageText: string, quote: string): { text: string } |
   if (at === -1) return null;
   // Slice from the first matched char's source to just past the last matched
   // char's source. map[i] is a start index, so the end is map[last] + 1.
-  return { text: pageText.slice(map[at], map[at + q.length - 1] + 1) };
+  const start = map[at];
+  const end = map[at + q.length - 1] + 1;
+  return { text: pageText.slice(start, end), start, end };
 }

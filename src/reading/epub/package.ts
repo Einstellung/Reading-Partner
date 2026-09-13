@@ -34,6 +34,10 @@ export interface EpubPackage {
   /** dc:creator, first of them: the name under the title on a shelf card. */
   creator: string | null;
   language: string | null;
+  /** dc:source. An article built from a web page writes its URL here. */
+  source: string | null;
+  /** dc:date, as the publication declared it. */
+  date: string | null;
   /** Manifest by item id. */
   manifest: Map<string, ManifestItem>;
   spine: SpineItem[];
@@ -140,6 +144,10 @@ export function parsePackage(source: string, opfEntry: string): EpubPackage | nu
     byLocalName(doc, "language").find((el) => el.namespaceURI?.includes("/dc/")),
   );
   const creator = textOf(byLocalName(doc, "creator").find((el) => el.namespaceURI?.includes("/dc/")));
+  // Written by build-article.ts and read back when an article's spine document
+  // is rebuilt rather than extracted (src/reading/translate).
+  const sourceUrl = textOf(byLocalName(doc, "source").find((el) => el.namespaceURI?.includes("/dc/")));
+  const date = textOf(byLocalName(doc, "date").find((el) => el.namespaceURI?.includes("/dc/")));
 
   return {
     opfEntry,
@@ -147,6 +155,8 @@ export function parsePackage(source: string, opfEntry: string): EpubPackage | nu
     title,
     creator,
     language,
+    source: sourceUrl,
+    date,
     manifest,
     spine,
     navEntry,

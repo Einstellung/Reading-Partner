@@ -34,12 +34,22 @@ export interface ArticleImage {
   mediaType: string;
 }
 
-export interface ArticleEpubInput {
+/**
+ * What the package document says about the article. Split out of the input
+ * because the same metadata has to be written again when the spine document is
+ * rebuilt rather than extracted — a translation, for one (src/reading/translate).
+ */
+export interface ArticleMetadata {
   title: string;
   byline?: string;
   sourceUrl: string;
   /** ISO date or datetime, as the page declared it. */
   publishedAt?: string;
+  /** BCP 47 language tag; "en" when the caller has nothing better. */
+  language?: string;
+}
+
+export interface ArticleEpubInput extends ArticleMetadata {
   /** Body HTML, as extractReadable produced it: an article body, not a page. */
   html: string;
   /**
@@ -47,15 +57,13 @@ export interface ArticleEpubInput {
    * simply absent, and the <img> that pointed at it becomes a placeholder.
    */
   images: readonly ArticleImage[];
-  /** BCP 47 language tag; "en" when the caller has nothing better. */
-  language?: string;
 }
 
 /** Archive layout. The spine document's images resolve one level up. */
-const ARTICLE_ENTRY = "text/article.xhtml";
+export const ARTICLE_ENTRY = "text/article.xhtml";
 const NAV_ENTRY = "nav.xhtml";
 const OPF_ENTRY = "package.opf";
-const IMAGE_DIR = "images";
+export const IMAGE_DIR = "images";
 
 /**
  * The height a missing image leaves behind. A fixed number of pixels, not a
@@ -138,7 +146,8 @@ async function packImages(images: readonly ArticleImage[]): Promise<PackedImages
 
 // --- the body ---------------------------------------------------------------
 
-interface Heading {
+/** One nav entry: a heading of the article and where it sits in the outline. */
+export interface Heading {
   id: string;
   title: string;
   /** Nesting depth, 0 for the top level, with no gaps. */
@@ -208,7 +217,7 @@ const NCNAME = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
  * so a link inside the body to a section still lands; anything else is named
  * here.
  */
-function collectHeadings(root: Element): Heading[] {
+export function collectHeadings(root: Element): Heading[] {
   const seen = new Set<string>();
   for (const el of Array.from(root.querySelectorAll("[id]"))) {
     const id = el.getAttribute("id") ?? "";
@@ -324,10 +333,11 @@ function navDocument(headings: readonly Heading[], language: string, title: stri
 }
 
 function packageDocument(
-  input: ArticleEpubInput,
+  input: ArticleMetadata,
   language: string,
   identifier: string,
-  images: PackedImages,
+  images: ReadonlyMap<string, Uint8Array>,
+  imageTypes: ReadonlyMap<string, string>,
 ): string {
   const meta = [`<dc:identifier id="pub-id">${escapeXml(identifier)}</dc:identifier>`];
   meta.push(`<dc:title>${escapeXml(collapse(input.title) || "Untitled")}</dc:title>`);
@@ -343,11 +353,9 @@ function packageDocument(
     `<item id="nav" href="${NAV_ENTRY}" media-type="application/xhtml+xml" properties="nav"/>`,
     `<item id="article" href="${ARTICLE_ENTRY}" media-type="application/xhtml+xml"/>`,
   ];
-  for (const entry of [...images.entries.keys()].sort()) {
+  for (const entry of [...images.keys()].sort()) {
     const id = `img-${entry.slice(IMAGE_DIR.length + 1).replace(/\./g, "-")}`;
-    manifest.push(
-      `<item id="${id}" href="${entry}" media-type="${images.typeByEntry.get(entry)}"/>`,
-    );
+    manifest.push(`<item id="${id}" href="${entry}" media-type="${imageTypes.get(entry)}"/>`);
   }
 
   return `<?xml version="1.0" encoding="utf-8"?>
@@ -405,7 +413,39 @@ export async function buildArticleEpub(input: ArticleEpubInput): Promise<Uint8Ar
   // writes is well-formed XML either way, and that is what goes in the archive.
   const sanitized = sanitizeDocument(source, ARTICLE_ENTRY, (entry) => packed.entries.has(entry));
   if (!sanitized) throw new Error("the article markup could not be sanitized");
-  const article = `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n${sanitized.html}`;
+
+  return packArticleEpub({
+    meta: input,
+    articleHtml: sanitized.html,
+    headings,
+    images: packed.entries,
+    imageTypes: packed.typeByEntry,
+  });
+}
+
+/** A spine document and its pictures, ready to become the archive. */
+export interface ArticlePackInput {
+  meta: ArticleMetadata;
+  /** The sanitized spine document, without the XML declaration and doctype. */
+  articleHtml: string;
+  /** The outline the nav is written from, in document order. */
+  headings: readonly Heading[];
+  /** Archive entry -> bytes, `images/<hash>.<ext>` as the document spells them. */
+  images: ReadonlyMap<string, Uint8Array>;
+  /** Archive entry -> media type, for the manifest. */
+  imageTypes: ReadonlyMap<string, string>;
+}
+
+/**
+ * The archive around an already-built spine document. Everything that makes the
+ * file a function of its content — the entry order, the fixed timestamps, the
+ * content-derived identifier — lives here, so a document written by something
+ * other than the extractor (a translation) is packed by the same rules and
+ * paginates the same way.
+ */
+export async function packArticleEpub(input: ArticlePackInput): Promise<Uint8Array> {
+  const language = collapse(input.meta.language ?? "") || "en";
+  const article = `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n${input.articleHtml}`;
 
   // The publication's identity is its content, like everything else on the
   // shelf: the same article built twice is the same publication, and a new
@@ -418,10 +458,12 @@ export async function buildArticleEpub(input: ArticleEpubInput): Promise<Uint8Ar
   files["mimetype"] = [strToU8("application/epub+zip"), { level: 0, mtime: FIXED_MTIME }];
   const rest: Record<string, Uint8Array> = {
     "META-INF/container.xml": strToU8(CONTAINER),
-    [OPF_ENTRY]: strToU8(packageDocument(input, language, identifier, packed)),
-    [NAV_ENTRY]: strToU8(navDocument(headings, language, input.title)),
+    [OPF_ENTRY]: strToU8(
+      packageDocument(input.meta, language, identifier, input.images, input.imageTypes),
+    ),
+    [NAV_ENTRY]: strToU8(navDocument(input.headings, language, input.meta.title)),
     [ARTICLE_ENTRY]: strToU8(article),
-    ...Object.fromEntries(packed.entries),
+    ...Object.fromEntries(input.images),
   };
   // Sorted, so the order of the entries is a property of the article and not of
   // the order the caller happened to hand the images over in.
