@@ -10,7 +10,7 @@ import {
   listInfoUnits,
   registerInfoDistillSource,
 } from "../../../src/info/briefer/distill-source";
-import { collectSourceArrears } from "../../../src/memory/distill/info-thread";
+import { collectSourceArrears } from "../../../src/memory/distill/collect";
 import { rebuildThreadStoreForTests } from "../../../src/platform/app/threads";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
@@ -61,7 +61,7 @@ test("every day's threads are units, oldest day first", async () => {
   // sweep spends no pass on it until the reader confirms one (docs/21).
   expect(new Set(units.map((u) => u.topicId))).toEqual(new Set([null]));
   expect(units[0].label).toBe("Info briefing 2026-09-06");
-  expect(units[0].messages).toEqual([
+  expect(units[0].cursor === "distilledMessages" && units[0].messages).toEqual([
     { role: "user", text: "what is new", ts: 1000 },
     { role: "ai", text: "about what is new", ts: 1001 },
   ]);
@@ -101,10 +101,11 @@ test("what the day owes is counted against the cursor the pass keeps", async () 
       topicId: "attention",
     },
   });
-  const owed = await collectSourceArrears((_topicId, unitId) =>
-    unitId === "briefing-2026-09-08" ? 2 : 0,
-  );
-  expect(owed.get("attention")?.map((a) => [a.source, a.newMessages])).toEqual([
+  const owed = await collectSourceArrears(() => ({
+    messages: (threadId: string) => (threadId === "briefing-2026-09-08" ? 2 : 0),
+    marks: () => null,
+  }));
+  expect(owed.get("attention")?.map((a) => [a.source, a.owed])).toEqual([
     ["info-thread", 1],
   ]);
 });
@@ -113,5 +114,7 @@ test("what the day owes is counted against the cursor the pass keeps", async () 
 // under until the reader confirms one, and the sweep leaves the unit alone.
 test("a conversation with no topic owes nothing", async () => {
   day("2026-09-08", { "briefing-2026-09-08": thread("briefing-2026-09-08", ["one", "two"]) });
-  expect((await collectSourceArrears(() => 0)).size).toBe(0);
+  expect((await collectSourceArrears(() => ({ messages: () => 0, marks: () => null }))).size).toBe(
+    0,
+  );
 });

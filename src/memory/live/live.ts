@@ -11,27 +11,18 @@ import {
   runSubagentTurnLive,
 } from "../../legion/subagent";
 import { StoppedError } from "../../legion/execute/watchdog";
-import { peekAnnotations } from "../../platform/app/annotations";
 import { logEvent } from "../../platform/app/events";
 import { observeAppLifecycle } from "../../platform/app/lifecycle";
-import { peekThreads } from "../../platform/app/threads";
 import { listTopics } from "../../platform/app/topics";
 import { FileObservationAdapter, type ObservationAdapter } from "../observations/adapter";
 import {
   SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
-  distillUnits,
-  pagelessMarkIds,
-  threadArrears,
-  toDistillAnnotations,
-  countNewMarks,
-  type BookArrears,
   type DistillJob,
   type SourceUnit,
-  type ThreadArrears,
   type TopicArrears,
 } from "../observations/arrears";
-import { collectSourceArrears, findSourceUnit } from "../distill/info-thread";
+import { collectSourceArrears, findSourceUnit } from "../distill/collect";
 import {
   ObservationFileStore,
   topicPassStore,
@@ -402,25 +393,53 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
 
 // --- conversations that hang off no book (memory/distill) ---
 
-// One registered source's unit, distilled as the conversation it is: no book id,
-// so nothing it writes is stamped with a book and no mark cursor moves; the
-// source's label is what the prompt calls it. Everything else — the gate, the
-// cursor under the unit's id, the two log lines — is the transcript pass.
+// One registered source's unit, run as the pass its shape names (docs/58).
+//
+// A book's marks go to the marks pass, a retell to the retell pass, and
+// everything else to the transcript pass — a conversation with no book id, whose
+// label is what the prompt calls it in place of a book's name. Nothing else
+// differs: the gate, the cursor under the unit's id and the two log lines are
+// the same for all of them.
 function distillSourceUnit(
   topicId: string,
   topicName: string,
   unit: SourceUnit,
   trigger: DistillTrigger,
 ): Promise<void> {
+  if (unit.cursor === "distilledMarks") {
+    return distillMarks({
+      topicId,
+      topicName,
+      bookId: unit.id,
+      bookName: unit.label,
+      annotations: unit.marks,
+      minNewMarks: MIN_NEW_MARKS,
+      trigger,
+    });
+  }
+  if (unit.retell) {
+    return distillRetell({
+      topicId,
+      topicName,
+      retellId: unit.retell.retellId,
+      retellName: unit.retell.retellName,
+      materials: unit.retell.materials,
+      threadId: unit.id,
+      messages: unit.messages,
+    });
+  }
   return distillThread({
     topicId,
     topicName,
+    ...(unit.bookId ? { bookId: unit.bookId } : {}),
     bookName: unit.label,
     threadId: unit.id,
-    annotationId: "",
-    page: null,
-    markedText: "",
+    annotationId: unit.annotationId ?? "",
+    page: unit.page ?? null,
+    markedText: unit.markedText ?? "",
     messages: unit.messages,
+    ...(unit.parts ? { parts: unit.parts } : {}),
+    ...(unit.marks ? { annotations: unit.marks } : {}),
     trigger,
   });
 }
@@ -460,18 +479,22 @@ export async function distillInfoThread(opts: DistillInfoThreadOptions): Promise
 
 // --- the arrears sweep ---
 
-// What every topic still owes, read off disk. Books the topic lists but has
-// never opened have no id yet and so have nothing on disk to owe. A thread with
-// a reply still being written is left out: a pass over half a sentence is a pass
-// over the wrong transcript, and the next sweep picks it up.
+// What every topic still owes, read off the registered sources (docs/58). Every
+// shape of raw material arrives the same way — a book's conversations and its
+// marks through the reading domain's source, a briefing through info's — so this
+// walks no domain's files itself and has no special case for any of them.
+//
+// A topic that owes nothing is simply absent, including every topic no source
+// speaks for. A topic a source names that topics.json does not have — one deleted
+// while its material stayed on disk — is swept under its own id rather than
+// dropped: the debt is still the reader's, and the id stands in for the name.
 async function collectArrears(
   threadBusy: (threadId: string) => boolean,
 ): Promise<TopicArrears[]> {
   const topics = await listTopics();
-  // One read of each topic's meta for the whole sweep: the source units are
-  // grouped by a topic id the sweep has not reached yet when their cursor is
-  // asked for, and re-reading meta.json per unit would be a file read per
-  // conversation on disk.
+  // One read of each topic's meta for the whole sweep: the units are grouped by
+  // a topic id nothing has reached yet when their cursor is asked for, and
+  // re-reading meta.json per unit would be a file read per conversation on disk.
   const metas = new Map<string, ObservationMeta>();
   const metaOf = async (topicId: string): Promise<ObservationMeta> => {
     let meta = metas.get(topicId);
@@ -481,83 +504,23 @@ async function collectArrears(
     }
     return meta;
   };
-  // What the registered sources owe, by topic (memory/distill). Collected up
-  // front so a topic that owns no book still gets its conversations looked at —
-  // "brief" is exactly that topic.
   const sourceArrears = await collectSourceArrears(
-    async (topicId, unitId) => messageCursor(await metaOf(topicId), unitId),
+    async (topicId) => {
+      const meta = await metaOf(topicId);
+      return {
+        messages: (threadId: string) => messageCursor(meta, threadId),
+        marks: (bookId: string) => markCursor(meta, bookId),
+      };
+    },
     { isBusy: threadBusy },
   );
+  const names = new Map(topics.map((t) => [t.id, t.name]));
   const out: TopicArrears[] = [];
-  for (const topic of topics) {
-    const meta = await metaOf(topic.id);
-    const books: BookArrears[] = [];
-    const seen = new Set<string>();
-    for (const file of topic.files) {
-      const bookId = file.hash;
-      if (!bookId || seen.has(bookId)) continue;
-      seen.add(bookId);
-      const marks = toDistillAnnotations(await peekAnnotations(bookId));
-      const byId = new Map(marks.map((m) => [m.id, m]));
-      // By unit, not by thread: a chat-span aside's transcript is part of its
-      // parent's (distillUnits), so it is neither offered as a pass of its own
-      // nor left out of what the parent owes.
-      const stored = await peekThreads(bookId);
-      const busy = new Set(stored.filter((t) => threadBusy(t.id)).map((t) => t.id));
-      const threads: ThreadArrears[] = [];
-      for (const unit of distillUnits(stored, pagelessMarkIds(marks))) {
-        // A thread with a reply still being written is left out, and so is the
-        // unit it is part of: a pass over half a sentence is a pass over the
-        // wrong transcript, and the next sweep picks it up. Only threads whose
-        // messages are actually in this transcript — a mark-anchored aside is a
-        // unit of its own and holds up nothing.
-        if (unit.parts.some((p) => busy.has(p.threadId))) continue;
-        const anchor = byId.get(unit.annotationId);
-        threads.push(
-          threadArrears(
-            {
-              threadId: unit.threadId,
-              annotationId: unit.annotationId,
-              // The book-level thread has no mark and so no page of its own; the
-              // sweep has no current page to stand in for it either.
-              page: anchor?.page ?? null,
-              markedText: anchor?.text ?? "",
-              messages: unit.messages,
-              parts: unit.parts,
-            },
-            (threadId) => messageCursor(meta, threadId),
-          ),
-        );
-      }
-      books.push({
-        bookId,
-        bookName: file.name,
-        marks,
-        newMarks: countNewMarks(marks, markCursor(meta, bookId)),
-        threads,
-      });
-    }
-    const units = sourceArrears.get(topic.id) ?? [];
-    if (books.length === 0 && units.length === 0) continue;
-    out.push({
-      topicId: topic.id,
-      topicName: topic.name,
-      lastDistilledAt: meta.lastDistilledAt,
-      books,
-      ...(units.length > 0 ? { units } : {}),
-    });
-  }
-  // A source may name a topic that topics.json does not have — one deleted while
-  // its conversations stayed on disk. Its debt is still the reader's, so it is
-  // swept under its own id rather than dropped; the id stands in for the name.
-  const listed = new Set(topics.map((t) => t.id));
   for (const [topicId, units] of sourceArrears) {
-    if (listed.has(topicId)) continue;
     out.push({
       topicId,
-      topicName: topicId,
+      topicName: names.get(topicId) ?? topicId,
       lastDistilledAt: (await metaOf(topicId)).lastDistilledAt,
-      books: [],
       units,
     });
   }
@@ -566,34 +529,7 @@ async function collectArrears(
 
 // The one job the sweep picked, run as the pass it is.
 function runDistillJob(job: DistillJob, trigger: DistillTrigger): Promise<void> {
-  if (job.kind === "thread") {
-    return distillThread({
-      topicId: job.topicId,
-      topicName: job.topicName,
-      bookId: job.book.bookId,
-      bookName: job.book.bookName,
-      threadId: job.thread.threadId,
-      annotationId: job.thread.annotationId,
-      page: job.thread.page,
-      markedText: job.thread.markedText,
-      messages: job.thread.messages,
-      ...(job.thread.parts ? { parts: job.thread.parts } : {}),
-      annotations: job.book.marks,
-      trigger,
-    });
-  }
-  if (job.kind === "source") {
-    return distillSourceUnit(job.topicId, job.topicName, job.unit, trigger);
-  }
-  return distillMarks({
-    topicId: job.topicId,
-    topicName: job.topicName,
-    bookId: job.book.bookId,
-    bookName: job.book.bookName,
-    annotations: job.book.marks,
-    minNewMarks: MIN_NEW_MARKS,
-    trigger,
-  });
+  return distillSourceUnit(job.topicId, job.topicName, job.unit, trigger);
 }
 
 // The sweeps, bound to the real clock, the real passes and the app's own timer:

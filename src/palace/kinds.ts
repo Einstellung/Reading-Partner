@@ -366,7 +366,7 @@ export const PALACE = [
     shape: MAP_THREADS,
     deleteWith: "outline",
     gc: "never",
-    distill: { unit: "thread", cursor: "new" },
+    distill: { unit: "thread", cursor: "distilledMessages" },
     note: "registered and not yet wired: nothing reads it and nothing deletes it with its outline",
   },
   {
@@ -700,7 +700,7 @@ export const PALACE = [
     merge: "opaque",
     deleteWith: "rehearsal",
     gc: "never",
-    distill: { unit: "file", cursor: "new" },
+    distill: { unit: "file", cursor: "distilledMessages" },
     note: "one immutable transcript per pass; judged by where it sits, because its own name is a run id",
   },
   {

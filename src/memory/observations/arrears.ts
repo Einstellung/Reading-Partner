@@ -144,51 +144,67 @@ export function distillUnitOf(
   return distillUnits(threads, pageless).find((u) => u.threadId === into) ?? null;
 }
 
-export interface ThreadArrears {
-  threadId: string;
-  annotationId: string;
-  page: number | null;
-  markedText: string;
-  // The whole thread, oldest first. A conversation about one passage is the
-  // unit; the cursor only decides whether to run.
-  messages: DistillMessage[];
-  // The threads this unit is made of, when it is made of more than one. Absent
-  // is the ordinary case and means the thread itself (distillUnits).
-  parts?: DistillUnitPart[];
-  newMessages: number;
+// --- what a registered source hands over ------------------------------------
+
+/**
+ * The meta.json map a unit's cursor is kept in. The same two names the palace
+ * row carries (palace/kinds.ts), because a row and the source registered for it
+ * have to agree about where the watermark is written.
+ */
+export type DistillCursor = "distilledMessages" | "distilledMarks";
+
+// What every unit carries, whichever map counts it.
+interface UnitBase {
+  // The key the cursor is kept under: a thread id under distilledMessages, a
+  // book id under distilledMarks. Unique across every file of its kind, not just
+  // inside its own (docs/pitfall/209) — a source that cannot promise that must
+  // leave the repeating unit out.
+  id: string;
+  // The topic the unit is filed under, or null where nothing has said what it is
+  // about (docs/21). No topic, no distillation: there is nothing to file an
+  // observation under, and the sweep leaves the unit alone until the AI proposes
+  // a topic and the reader nods (memory/filing).
+  topicId: string | null;
+  // What the pass calls this material, where a book's name would go.
+  label: string;
 }
 
-export interface BookArrears {
-  bookId: string;
-  bookName: string;
+// A conversation: a book's thread, a retell, a briefing, a talk, a day at the
+// door. Counted in reader messages past the cursor.
+export interface SourceMessagesUnit extends UnitBase {
+  cursor: "distilledMessages";
+  messages: DistillMessage[];
+  // The threads `messages` was merged from, when it was merged from more than
+  // one (distillUnits). Each carries a cursor over its own messages and the pass
+  // moves all of them. Absent is the single-thread unit.
+  parts?: DistillUnitPart[];
+  // The book this conversation is about, when it is about one. Absent for every
+  // conversation that hangs off no book, which is what a briefing, a day at the
+  // door and a rehearsal transcript are.
+  bookId?: string;
+  annotationId?: string;
+  page?: number | null;
+  markedText?: string;
+  // The book's marks, so the transcript pass can fold in the silent ones on the
+  // way past (docs/02 part 2).
+  marks?: DistillAnnotation[];
+  // Run the retell pass over this unit instead of the transcript one, with what
+  // that pass names the material. The retell asks a different question of the
+  // same shape of transcript (docs/31), so the source says which pass, exactly
+  // as docs/58 has it.
+  retell?: { retellId: string; retellName: string; materials: string[] };
+}
+
+// One book's marks. Counted in marks created past the cursor, which is a
+// timestamp rather than a count.
+export interface SourceMarksUnit extends UnitBase {
+  cursor: "distilledMarks";
   // Every mark on the book, unfiltered — the pass filters against the cursor it
   // reads for itself, so a sweep and a pass can never disagree about it.
   marks: DistillAnnotation[];
-  newMarks: number;
-  threads: ThreadArrears[];
 }
 
-// One conversation handed over by a registered distillation source
-// (memory/distill/sources.ts): a briefing conversation, a call about an
-// article — raw material that hangs off no book.
-//
-// The shape lives here, beside the rule that spends a pass on it, so that the
-// registry can import the arrears and never the other way round.
-export interface SourceUnit {
-  // The thread id, which is also the key its cursor is kept under
-  // (distilledMessages). Unique across every thread file, not just inside its
-  // own (docs/pitfall/209) — a source that cannot promise that must leave the
-  // repeating unit out.
-  id: string;
-  // The topic the conversation is filed under, or null where the reader has not
-  // said what it is about (docs/21). No topic, no distillation: there is nothing
-  // to file what was said under, and the sweep leaves the unit alone until the
-  // the AI proposes a topic and the reader nods (memory/filing).
-  topicId: string | null;
-  // What the pass calls this conversation, in place of a book's name.
-  label: string;
-  messages: DistillMessage[];
-}
+export type SourceUnit = SourceMessagesUnit | SourceMarksUnit;
 
 // A source's unit and what it still owes.
 export interface SourceArrears {
@@ -196,24 +212,28 @@ export interface SourceArrears {
   // again when the job is run.
   source: string;
   unit: SourceUnit;
-  newMessages: number;
+  // Reader messages past the cursor for a conversation, marks past it for a
+  // book's marks. One number because the thresholds differ but the arithmetic
+  // does not.
+  owed: number;
 }
 
 export interface TopicArrears {
   topicId: string;
   topicName: string;
   lastDistilledAt: number | null;
-  books: BookArrears[];
-  // What the registered sources owe this topic. Absent is the ordinary case:
-  // every topic before info conversations became material, and every topic no
-  // source speaks for.
-  units?: SourceArrears[];
+  // Everything the registered sources owe this topic, of both shapes.
+  units: SourceArrears[];
 }
 
-export type DistillJob =
-  | { kind: "thread"; topicId: string; topicName: string; book: BookArrears; thread: ThreadArrears }
-  | { kind: "marks"; topicId: string; topicName: string; book: BookArrears }
-  | { kind: "source"; topicId: string; topicName: string; source: string; unit: SourceUnit };
+// The one pass the sweep picked. One shape, because every source goes through
+// the same table: which pass runs is read off the unit, not off the job.
+export interface DistillJob {
+  topicId: string;
+  topicName: string;
+  source: string;
+  unit: SourceUnit;
+}
 
 // Engine annotations reduced to what distillation reads. `now` fills in for a
 // mark whose stored date is missing or unparseable — treating it as new is the
@@ -257,37 +277,52 @@ export function countNewMarks(
   return n;
 }
 
-// The arrears of one unit, given how much of it is already folded in. A number
-// is where this thread's own cursor stands; a unit made of more than one thread
-// needs the lookup, because each of them carries a cursor of its own.
-export function threadArrears(
-  thread: Omit<ThreadArrears, "newMessages">,
-  cursor: number | ((threadId: string) => number),
-): ThreadArrears {
-  const at = typeof cursor === "number" ? () => cursor : cursor;
-  const parts = thread.parts ?? [{ threadId: thread.threadId, messages: thread.messages }];
-  return { ...thread, newMessages: countNewUnitMessages(parts, at) };
+/**
+ * What one unit owes, given where its cursor stands.
+ *
+ * A conversation takes a count per thread, because a unit merged from several
+ * carries one cursor per part; a book's marks take the timestamp their map
+ * holds. Both accept the number directly, which is the single-thread case.
+ */
+export function countUnitOwed(
+  unit: SourceUnit,
+  cursor: number | null | ((threadId: string) => number),
+): number {
+  if (unit.cursor === "distilledMarks") {
+    return countNewMarks(unit.marks, typeof cursor === "function" ? null : cursor);
+  }
+  const at = typeof cursor === "function" ? cursor : () => (cursor ?? 0);
+  const parts = unit.parts ?? [{ threadId: unit.id, messages: unit.messages }];
+  return countNewUnitMessages(parts, at);
+}
+
+/** One unit with its debt worked out. */
+export function unitArrears(
+  source: string,
+  unit: SourceUnit,
+  cursor: number | null | ((threadId: string) => number),
+): SourceArrears {
+  return { source, unit, owed: countUnitOwed(unit, cursor) };
 }
 
 export function topicDebt(topic: TopicArrears): { marks: number; messages: number } {
   let marks = 0;
   let messages = 0;
-  for (const book of topic.books) {
-    marks += book.newMarks;
-    for (const thread of book.threads) messages += thread.newMessages;
+  for (const owed of topic.units) {
+    if (owed.unit.cursor === "distilledMarks") marks += owed.owed;
+    else messages += owed.owed;
   }
-  // A source's conversation is a conversation: it counts towards the same debt
-  // and passes the same threshold, which is the whole point of registering one.
-  for (const unit of topic.units ?? []) messages += unit.newMessages;
   return { marks, messages };
 }
 
 // The most any one book owes in marks. The mark threshold is per book, not per
 // topic: a pass runs over one book, so three unread marks here and two there is
 // not five marks' worth of anything.
-export function maxBookMarks(topic: TopicArrears): number {
+export function maxUnitMarks(topic: TopicArrears): number {
   let most = 0;
-  for (const book of topic.books) most = Math.max(most, book.newMarks);
+  for (const owed of topic.units) {
+    if (owed.unit.cursor === "distilledMarks") most = Math.max(most, owed.owed);
+  }
   return most;
 }
 
@@ -298,7 +333,20 @@ export function isTopicDue(topic: TopicArrears, now: number): boolean {
     return false;
   }
   const { messages } = topicDebt(topic);
-  return messages >= MIN_NEW_MESSAGES || maxBookMarks(topic) >= MIN_NEW_MARKS;
+  return messages >= MIN_NEW_MESSAGES || maxUnitMarks(topic) >= MIN_NEW_MARKS;
+}
+
+// The one owed unit of a kind, most owed first. Ties go to the earlier unit id,
+// so a sweep is reproducible.
+function mostOwed(units: readonly SourceArrears[], cursor: DistillCursor): SourceArrears | null {
+  let best: SourceArrears | null = null;
+  for (const owed of units) {
+    if (owed.unit.cursor !== cursor || owed.owed === 0) continue;
+    if (!best || owed.owed > best.owed || (owed.owed === best.owed && owed.unit.id < best.unit.id)) {
+      best = owed;
+    }
+  }
+  return best;
 }
 
 // The one job to run this tick, or null. One at a time on purpose: a sweep that
@@ -324,53 +372,17 @@ export function selectDistillJob(
   }
   if (!best) return null;
   const { topic } = best;
+  const job = (owed: SourceArrears): DistillJob => ({
+    topicId: topic.topicId,
+    topicName: topic.topicName,
+    source: owed.source,
+    unit: owed.unit,
+  });
 
-  let talked: { book: BookArrears; thread: ThreadArrears } | null = null;
-  for (const book of topic.books) {
-    for (const thread of book.threads) {
-      if (thread.newMessages === 0) continue;
-      if (!talked || thread.newMessages > talked.thread.newMessages) talked = { book, thread };
-    }
-  }
-  // The registered sources' conversations stand beside the books' threads, most
-  // owed first. A tie goes to the book, which is the order that held before any
-  // source existed; among units it goes to the earlier id, so a sweep is
-  // reproducible.
-  let unit: SourceArrears | null = null;
-  for (const owed of topic.units ?? []) {
-    if (owed.newMessages === 0) continue;
-    if (
-      !unit ||
-      owed.newMessages > unit.newMessages ||
-      (owed.newMessages === unit.newMessages && owed.unit.id < unit.unit.id)
-    ) {
-      unit = owed;
-    }
-  }
-  if (talked && (!unit || talked.thread.newMessages >= unit.newMessages)) {
-    return {
-      kind: "thread",
-      topicId: topic.topicId,
-      topicName: topic.topicName,
-      book: talked.book,
-      thread: talked.thread,
-    };
-  }
-  if (unit) {
-    return {
-      kind: "source",
-      topicId: topic.topicId,
-      topicName: topic.topicName,
-      source: unit.source,
-      unit: unit.unit,
-    };
-  }
+  const talked = mostOwed(topic.units, "distilledMessages");
+  if (talked) return job(talked);
 
-  let marked: BookArrears | null = null;
-  for (const book of topic.books) {
-    if (book.newMarks < MIN_NEW_MARKS) continue;
-    if (!marked || book.newMarks > marked.newMarks) marked = book;
-  }
-  if (!marked) return null;
-  return { kind: "marks", topicId: topic.topicId, topicName: topic.topicName, book: marked };
+  const marked = mostOwed(topic.units, "distilledMarks");
+  if (!marked || marked.owed < MIN_NEW_MARKS) return null;
+  return job(marked);
 }

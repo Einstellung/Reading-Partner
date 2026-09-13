@@ -135,6 +135,10 @@ const LAYER: Record<string, Layer> = {
   // Deleting a book, which is one order of operations across the library, the
   // topics, the observation stores and the retell/talk/rehearsal trio. A domain
   // of its own because it belongs to none of them and drives all of them.
+  // Everything reading gives distillation to read (docs/58). Its own directory
+  // because it reads every corner of reading and those corners reach back into
+  // reading/ for the desk, which in reading/ itself would be a cycle.
+  "reading/distill": "domain",
   "reading/delete": "domain",
   "reading/engine": "domain",
   "reading/engine/gesture": "domain",

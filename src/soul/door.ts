@@ -100,6 +100,7 @@ export async function listDoorUnits(): Promise<SourceUnit[]> {
     for (const thread of await peekThreads(doorKey(date)).catch(() => [])) {
       if (thread.messages.length === 0) continue;
       units.push({
+        cursor: "distilledMessages",
         id: thread.id,
         // Whatever the conversation settled on, and null until it settles one:
         // nothing was on the desk to say what this is about. A unit with no

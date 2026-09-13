@@ -8,7 +8,7 @@ import { afterEach, expect, test } from "bun:test";
 import {
   collectSourceArrears,
   findSourceUnit,
-} from "../../src/memory/distill/info-thread";
+} from "../../src/memory/distill/collect";
 import {
   distillSourceOf,
   distillSources,
@@ -46,7 +46,31 @@ function unit(id: string, said: number, topicId = "brief"): SourceUnit {
     messages.push({ role: "user" as const, text: `q${i}`, ts: 100 + i * 2 });
     messages.push({ role: "ai" as const, text: `a${i}`, ts: 101 + i * 2 });
   }
-  return { id, topicId, label: "Info briefing 2026-09-08", messages };
+  return { cursor: "distilledMessages", id, topicId, label: "Info briefing 2026-09-08", messages };
+}
+
+// A book's marks, the other shape a source may register.
+function bookMarks(id: string, n: number, topicId = "brief"): SourceUnit {
+  return {
+    cursor: "distilledMarks",
+    id,
+    topicId,
+    label: "survey.pdf",
+    marks: Array.from({ length: n }, (_, i) => ({
+      id: `m${i}`,
+      page: i,
+      text: `passage ${i}`,
+      createdAt: 100 + i,
+    })),
+  };
+}
+
+// The cursors a topic's meta.json would answer with.
+function cursors(messages: Record<string, number> = {}, marks: Record<string, number> = {}) {
+  return () => ({
+    messages: (threadId: string) => messages[threadId] ?? 0,
+    marks: (bookId: string) => marks[bookId] ?? null,
+  });
 }
 
 function topic(over: Partial<TopicArrears> = {}): TopicArrears {
@@ -54,17 +78,17 @@ function topic(over: Partial<TopicArrears> = {}): TopicArrears {
     topicId: "brief",
     topicName: "Brief",
     lastDistilledAt: null,
-    books: [],
+    units: [],
     ...over,
   };
 }
 
 test("a source is registered by kind, and a second registration replaces it", () => {
   register([unit("briefing-2026-09-07", 1)]);
-  expect(distillSources()).toHaveLength(1);
+  const first = distillSourceOf("info-thread");
   register([unit("briefing-2026-09-08", 1)]);
-  expect(distillSources()).toHaveLength(1);
-  expect(distillSourceOf("info-thread")).not.toBe(null);
+  expect(distillSources().filter((s) => s.kind === "info-thread")).toHaveLength(1);
+  expect(distillSourceOf("info-thread")).not.toBe(first);
 });
 
 test("only a kind the catalogue calls raw material may be registered", () => {
@@ -81,10 +105,8 @@ test("only a kind the catalogue calls raw material may be registered", () => {
 
 test("a unit owes what the reader said past its own cursor", async () => {
   register([unit("briefing-2026-09-08", 3), unit("2026-09-08:item-9", 1)]);
-  const owed = await collectSourceArrears((_topicId, unitId) =>
-    unitId === "briefing-2026-09-08" ? 4 : 0,
-  );
-  expect(owed.get("brief")?.map((a) => [a.unit.id, a.newMessages])).toEqual([
+  const owed = await collectSourceArrears(cursors({ "briefing-2026-09-08": 4 }));
+  expect(owed.get("brief")?.map((a) => [a.unit.id, a.owed])).toEqual([
     // Four messages folded in already, so one of the three questions is left.
     ["briefing-2026-09-08", 1],
     ["2026-09-08:item-9", 1],
@@ -93,7 +115,9 @@ test("a unit owes what the reader said past its own cursor", async () => {
 
 test("a unit whose reply is still being written is left out", async () => {
   register([unit("briefing-2026-09-08", 2)]);
-  const owed = await collectSourceArrears(() => 0, { isBusy: (id) => id === "briefing-2026-09-08" });
+  const owed = await collectSourceArrears(cursors(), {
+    isBusy: (id) => id === "briefing-2026-09-08",
+  });
   expect(owed.size).toBe(0);
 });
 
@@ -101,7 +125,7 @@ test("a source that cannot be listed costs the sweep nothing", async () => {
   register(async () => {
     throw new Error("EIO");
   });
-  expect(await collectSourceArrears(() => 0)).toEqual(new Map());
+  expect(await collectSourceArrears(cursors())).toEqual(new Map());
   expect(await findSourceUnit("briefing-2026-09-08")).toBe(null);
 });
 
@@ -112,19 +136,37 @@ test("a unit is found by its thread id, and an unlisted one is not guessed at", 
   expect(await findSourceUnit("onboarding")).toBe(null);
 });
 
+// --- marks are a source's material too ---
+
+test("a book's marks are owed against the timestamp their own map holds", async () => {
+  undos.push(
+    registerDistillSource({
+      kind: "annotations",
+      listUnits: async () => [bookMarks("book-1", 5)],
+      cursor: "distilledMarks",
+      afterEnd: "keep",
+    }),
+  );
+  const fresh = await collectSourceArrears(cursors());
+  expect(fresh.get("brief")?.map((a) => [a.unit.id, a.owed])).toEqual([["book-1", 5]]);
+  // Two marks folded in already, by the timestamp of the second.
+  const some = await collectSourceArrears(cursors({}, { "book-1": 101 }));
+  expect(some.get("brief")?.map((a) => [a.unit.id, a.owed])).toEqual([["book-1", 3]]);
+});
+
 // --- the sweep's choice ---
 
 test("a topic that owns no book is swept for its conversations", () => {
   const job = selectDistillJob(
-    [topic({ units: [{ source: "info-thread", unit: unit("briefing-2026-09-08", 2), newMessages: 2 }] })],
+    [topic({ units: [{ source: "info-thread", unit: unit("briefing-2026-09-08", 2), owed: 2 }] })],
     NOW,
   );
-  expect(job).toMatchObject({ kind: "source", topicId: "brief", source: "info-thread" });
+  expect(job).toMatchObject({ topicId: "brief", source: "info-thread" });
 });
 
 test("a unit owing nothing is not a job", () => {
   const job = selectDistillJob(
-    [topic({ units: [{ source: "info-thread", unit: unit("briefing-2026-09-08", 2), newMessages: 0 }] })],
+    [topic({ units: [{ source: "info-thread", unit: unit("briefing-2026-09-08", 2), owed: 0 }] })],
     NOW,
   );
   expect(job).toBe(null);
@@ -133,38 +175,26 @@ test("a unit owing nothing is not a job", () => {
 test("the same gap holds a source unit back as holds a book's thread back", () => {
   const arrears = topic({
     lastDistilledAt: NOW - MIN_DISTILL_GAP_MS + 1,
-    units: [{ source: "info-thread", unit: unit("briefing-2026-09-08", 2), newMessages: 2 }],
+    units: [{ source: "info-thread", unit: unit("briefing-2026-09-08", 2), owed: 2 }],
   });
   expect(selectDistillJob([arrears], NOW)).toBe(null);
-  expect(selectDistillJob([{ ...arrears, lastDistilledAt: NOW - MIN_DISTILL_GAP_MS }], NOW)).toMatchObject({
-    kind: "source",
-  });
+  expect(
+    selectDistillJob([{ ...arrears, lastDistilledAt: NOW - MIN_DISTILL_GAP_MS }], NOW),
+  ).toMatchObject({ source: "info-thread" });
 });
 
-test("the most-owed conversation wins, whether it is a book's or a source's", () => {
-  const book = {
-    bookId: "book-1",
-    bookName: "survey.pdf",
-    marks: [],
-    newMarks: 0,
-    threads: [
-      {
-        threadId: "thread-1",
-        annotationId: "",
-        page: null,
-        markedText: "",
-        messages: [{ role: "user" as const, text: "why", ts: 1 }],
-        newMessages: 1,
-      },
-    ],
+test("the most-owed conversation wins, whichever source it came from", () => {
+  const reading = {
+    source: "reading-thread",
+    unit: unit("thread-1", 1, "brief"),
+    owed: 1,
   };
-  const units = [{ source: "info-thread", unit: unit("briefing-2026-09-08", 3), newMessages: 3 }];
-  expect(selectDistillJob([topic({ books: [book], units })], NOW)).toMatchObject({ kind: "source" });
-  // A tie goes to the book, which is the order that held before sources existed.
+  const briefing = { source: "info-thread", unit: unit("briefing-2026-09-08", 3), owed: 3 };
+  expect(selectDistillJob([topic({ units: [reading, briefing] })], NOW)).toMatchObject({
+    source: "info-thread",
+  });
+  // A tie is broken on the unit id, so a sweep is reproducible.
   expect(
-    selectDistillJob(
-      [topic({ books: [book], units: [{ ...units[0], newMessages: 1 }] })],
-      NOW,
-    ),
-  ).toMatchObject({ kind: "thread", thread: { threadId: "thread-1" } });
+    selectDistillJob([topic({ units: [reading, { ...briefing, owed: 1 }] })], NOW),
+  ).toMatchObject({ source: "info-thread", unit: { id: "briefing-2026-09-08" } });
 });

@@ -46,7 +46,7 @@
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
-| 测试里造假的 desk item、注册 desk kind | 开发环境 |
+| 测试里造假的 desk item、注册 desk kind、注册蒸馏源 | 开发环境 |
 | 升依赖、pull 完 app 行为对不上源码 | 开发环境 |
 | 新建源文件、给同目录两个文件起名 | 开发环境 |
 | 用 `useDom()` / RTL 写组件测试 | 开发环境 |
@@ -334,6 +334,7 @@
 - [55-worktree-dev-server-serves-stale-modules](./55-worktree-dev-server-serves-stale-modules.md) — worktree 在 `.claude/` 下，正好被 Vite 的 watch ignore 命中，dev server 看不见自己的改动；每次改完要重启
 - [239-vite-prebundle-freezes-a-dependency](./239-vite-prebundle-freezes-a-dependency.md) — `node_modules/.vite/deps` 把 pi-ai 的模型表整份内联冻在几周前，pull 后没 `bun install` 也没重建缓存，app 看到的表比磁盘旧，`enforceKnownModel` 如实把「不在目录里」的模型换掉并写回盘；`bun install && rm -rf node_modules/.vite` 再重启，判据是拿 `bun -e` 直读 `node_modules` 和 app 里看到的对比
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
+- [303-a-boot-at-module-scope-registers-for-every-test-file](./303-a-boot-at-module-scope-registers-for-every-test-file.md) — 测试文件在模块顶层 boot 领域（注册蒸馏源、desk kind），`afterAll` 要等本文件跑完才 undo，中间每个文件问注册表都看得见那几个源；两个文件单跑都绿。boot 放进用例体 try/finally，断言按 kind 数不按总数
 - [287-a-test-desk-kind-replaces-the-domains-opener](./287-a-test-desk-kind-replaces-the-domains-opener.md) — 测试里的假 item 起名 `"book"`，把领域注册的 opener 顶掉，整场 `openDesk` 都拿到那个空壳：`tests/reading/turn.test.ts` 四十多个用例红，两个文件单跑都绿。假 kind 用领域不会用的名字
 - [119-mock-module-rewrites-the-registry-for-the-whole-worker](./119-mock-module-rewrites-the-registry-for-the-whole-worker.md) — `mock.module` 改的是整个进程的模块表且不回滚，两个测试文件加载顺序一前一后就互相污染（只跑了 33 个用例里的 7 个）；归因是错的：`bun test` 全场一个进程没有 worker，胜负由加载顺序决定（坑 120）。被测模块把依赖当参数收，别换模块表
 - [120-a-registered-dom-outlives-the-file-that-registered-it](./120-a-registered-dom-outlives-the-file-that-registered-it.md) — `bun test` 全场一个进程，注册一次 DOM 之后每个文件都有 `window`，`isTauri()`/settings 退出 flush/debounced-writer/overlay 全被推到浏览器分支；窗口按文件搭按文件拆（`tests/support/dom.ts` 的 `useDom()`），拆在 `afterAll`，要趁 DOM 还在做的事放 `afterEach`；跑过一次真 DOM 全场一次性慢 0.11s，不随文件数涨

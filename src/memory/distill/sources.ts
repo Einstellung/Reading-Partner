@@ -13,9 +13,9 @@
 // threshold it applies to a book's threads, and runs the same pass.
 
 import { rowOf, type PalaceKind } from "../../palace";
-import type { SourceUnit } from "../observations/arrears";
+import type { DistillCursor, SourceUnit } from "../observations/arrears";
 
-export type { SourceUnit };
+export type { DistillCursor, SourceUnit };
 
 export interface DistillSource {
   // The palace row this source reads. It must be a row with `distill`, or the
@@ -25,9 +25,11 @@ export interface DistillSource {
   // for itself (runDistillPass), so a source that filtered would be a second
   // opinion about what is already distilled, and the two would drift.
   listUnits(): Promise<SourceUnit[]>;
-  // The meta map the unit id keys. One value today; written down rather than
-  // assumed so a mark-shaped source can be added without rereading every caller.
-  cursor: "distilledMessages";
+  // The meta.json map this source's unit ids key, and so which shape its units
+  // are: a conversation counted in messages, or a book's marks counted against a
+  // timestamp. It must be the cursor the palace row names for the kind, or a
+  // pass would resume from a number nobody wrote.
+  cursor: DistillCursor;
   // What becomes of a unit once the cursor has passed it (docs/58). Recorded
   // only: nothing here deletes or tails anything yet.
   afterEnd: "keep" | "delete" | "tail" | "cold";
