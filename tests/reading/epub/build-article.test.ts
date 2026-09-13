@@ -9,6 +9,7 @@ import { openZip } from "../../../src/reading/epub/zip";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { fulltextFrom } from "../../../src/reading/epub/fulltext";
+import { typographicCover } from "../../../src/reading/epub/cover-svg";
 import { PNG } from "./fixture";
 
 const GIF = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0x80, 0, 0]);
@@ -263,4 +264,63 @@ test("an article with no headings still has a table of contents", async () => {
   const book = parseEpub(bytes);
   expect(book.nav.toc.map((t) => t.title)).toEqual(["Untitled"]);
   expect(book.pkg.title).toBe("Untitled");
+});
+
+// --- the generated cover -----------------------------------------------------
+
+const COVER = typographicCover({
+  kicker: "能源研究室",
+  date: "2026-09-13",
+  title: "How a web page becomes a book",
+  footer: ["iea.org", "reuters.com"],
+});
+
+test("a cover is packed as an entry and named by the package, both ways", async () => {
+  const bytes = await buildArticleEpub({ ...INPUT, cover: { svg: COVER } });
+  const zip = openZip(bytes);
+  // Read the way epub-cover.ts reads it: a picture, inflated on demand.
+  expect(new TextDecoder().decode(zip.bytes("cover.svg") as Uint8Array)).toBe(COVER);
+  const opf = zip.text("package.opf") as string;
+  expect(opf).toContain('<item id="cover" href="cover.svg" media-type="image/svg+xml" properties="cover-image"/>');
+  // EPUB 2's spelling, for a reader that only knows that one.
+  expect(opf).toContain('<meta name="cover" content="cover"/>');
+  // The cover is not a document to read: it is off the spine and off the nav.
+  expect(opf).not.toContain('idref="cover"');
+  expect(zip.text("nav.xhtml")).not.toContain("cover.svg");
+});
+
+test("the shelf's locator finds the cover in the package it built", async () => {
+  const bytes = await buildArticleEpub({ ...INPUT, cover: { svg: COVER } });
+  const book = parseEpub(bytes);
+  // What renderEpubCover reads before it decodes anything (epub-cover.ts).
+  expect(book.pkg.coverEntry).toBe("cover.svg");
+  expect(book.zip.has(book.pkg.coverEntry as string)).toBe(true);
+  // And the rest of the book is what it was without one.
+  expect(book.docs).toHaveLength(1);
+  expect(book.nav.toc.map((t) => t.title)).toContain("The first section");
+});
+
+test("a package built without a cover is the file it was before covers existed", async () => {
+  const plain = await buildArticleEpub(INPUT);
+  expect(await buildArticleEpub({ ...INPUT, cover: undefined })).toEqual(plain);
+  const zip = openZip(plain);
+  expect(zip.has("cover.svg")).toBe(false);
+  expect(zip.text("package.opf")).not.toContain("cover");
+  expect(parseEpub(plain).pkg.coverEntry).toBeNull();
+  // The identity of a coverless article is still the digest of its spine
+  // document alone, so an article on the shelf does not become a second copy.
+  expect(zip.text("package.opf")).toContain(
+    "<dc:identifier id=\"pub-id\">urn:rp:article:ac07eef8b3d98dd689cfd635dc7c8784</dc:identifier>",
+  );
+});
+
+test("two covers on one article are two files, and the same cover is the same file", async () => {
+  const one = await buildArticleEpub({ ...INPUT, cover: { svg: COVER } });
+  expect(await buildArticleEpub({ ...INPUT, cover: { svg: COVER } })).toEqual(one);
+  const other = await buildArticleEpub({
+    ...INPUT,
+    cover: { svg: typographicCover({ kicker: "别的研究室", date: "", title: "别的", footer: [] }) },
+  });
+  expect(other).not.toEqual(one);
+  expect(await buildArticleEpub(INPUT)).not.toEqual(one);
 });

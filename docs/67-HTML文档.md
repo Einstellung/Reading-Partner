@@ -32,6 +32,18 @@
 
 文件不可变，id 是哈希。往合订本里追加就是新版：出新文件，旧版留着，topic 显示最新版，划线按原文片段搬到新版，搬不过去的标出来。这是 60 对稿定的规则，合订本沿用。
 
+## 封面
+
+PDF 用第一页，EPUB 用它自己声明的封面，文章还是没封面的一行。稿和合订本有封面，由 app 在构建时生成、打进包里当封面图：不联网、不过模型，每台设备同一份字节。
+
+排版是纸色底加衬线字，三行：顶行研究室名 · 日期，中间是文档自己的标题，底行是最强的几个源，取裸主机名，最多三个，按稿末源基评估的强弱排，次要源不上封面。中间那行只能是标题本身，不另外生成一句——封面是标题的再压缩，63 的「标题不强于正文」在封面上同样管用。存疑点和限定语不上封面。
+
+合订本同一套版：中间是卷名，底行 `N 篇 · <日期区间>`，顶行是 topic 或系列名。
+
+不做：拿源站的 og:image（那是那篇报道自己的编辑选择，稿要纠正的报道更是如此），模型生成的图。
+
+字体在 SVG 里写 `"Noto Serif", "Noto Serif CJK SC", Georgia, serif`。书架把 SVG 当图片解码，图片文档不加载 web font，实际画出来的是系统里的回退衬线体。封面只是图，不参与分页，画得不完全一致不影响页码。
+
 ## 入口
 
 两个：书或 topic 根聊天里贴 URL；iOS 分享面板进 app。两个入口落到同一张确认卡，就是 21 那张：归到哪个 topic，加一句它对这个 topic 加了什么。点头才落盘进 topic。书内贴入时默认 topic 是这本书的 topic；分享面板进来没有当前上下文，AI 自己提议。
@@ -80,6 +92,7 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 - 摄入：URL → `fetchWithRetry` 取页面 → `extractReadable` 出 HTML → 下图 → `buildArticleEpub` → `importBook` → 补 kind 和来源字段 → 确认卡。PDF 链接照旧走 `sniffContentType` 分流，直接 `importBook`。
 - 书架：topic 内文章行没有封面，一行标题加来源域名加日期。
 - `ingest_url` 改成上面这条摄入路，digest 挂在产出的文档上。
+- 封面：`src/reading/epub/cover-svg.ts` 的纯函数 `typographicCover` / `volumeCover` 出 SVG，`packArticleEpub` 收一个可选 `cover`，写成 `cover.svg` 并在 manifest 上标 `properties="cover-image"`（另写 EPUB 2 的 `<meta name="cover">`），书架原有的取封面那条路不动。稿和合订本的构建器还没有，先只有这一层。
 - 翻译核心：`translateArticleEpub(epubBytes, deps) → { bytes, blocks, glossary }`，术语表一趟、切批并发一趟、写回、重新打包，两个模型调用都注入；`carryMarks` 按引文把划线搬到译本。单测覆盖：可译块各多一个兄弟块、公式代码表格逐字不变、nav 和图片不变、再翻一次被拒。
 
 不在 v1，各一句：
