@@ -223,13 +223,17 @@ export function renderHoldingsPass(pass: HoldingsPass): string {
   lines.push(
     self
       ? `self ${self.device} at=${self.at} files=${Object.keys(self.files).length}` +
+        `${self.app ? ` app=${self.app}` : ""}` +
         `${self.complete ? "" : " partial"}${pass.published ? " (published)" : ""}`
       : "self: not published (no device id)",
   );
   if (pass.peers.length === 0) lines.push("peers: none");
   for (const p of pass.peers) {
     const shape = (h: Holdings | null): string =>
-      h ? `at=${h.at} files=${Object.keys(h.files).length}${h.complete ? "" : " partial"}` : "none";
+      h
+        ? `at=${h.at} files=${Object.keys(h.files).length}${h.app ? ` app=${h.app}` : ""}` +
+          `${h.complete ? "" : " partial"}`
+        : "none";
     lines.push(`peer ${p.device} cached[${shape(p.cached)}] now[${shape(p.current)}]`);
   }
   lines.push(

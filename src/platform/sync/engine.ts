@@ -205,6 +205,11 @@ export interface EngineDeps {
   // Injected rather than imported so the pass stays headless — and so two
   // engines in one test are two devices.
   deviceId?: () => string;
+  // The version and platform label to publish alongside this device's tree
+  // (docs/59's holdings "app" field), read at pass time for the same reason as
+  // deviceId above. Display only: a caller with nothing to hand simply
+  // publishes no app field, and buildHoldings already treats that as absent.
+  appVersion?: () => string;
   // Where the published and the cached peer trees live (holdings.ts). Left out,
   // the engine neither publishes nor infers.
   holdings?: HoldingsStore;
@@ -749,7 +754,7 @@ export class SyncEngine {
   private selfHoldings(local: LocalFile[]): Holdings {
     const files: HoldingsFiles = {};
     for (const f of local) if (inSyncRange(f.path)) files[f.path] = [f.hash, f.size];
-    return buildHoldings({ device: this.device(), at: this.now(), files });
+    return buildHoldings({ device: this.device(), at: this.now(), app: this.d.appVersion?.(), files });
   }
 
   // Fetch every peer holdings whose rev moved, and work out what they say this

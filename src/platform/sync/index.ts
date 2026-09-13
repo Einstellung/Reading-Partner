@@ -22,6 +22,8 @@ import { tauriSyncFs } from "./syncFs";
 import { tauriBookFs } from "./books";
 import { tauriBaseStore, tauriHoldingsStore, tauriTrashJournal } from "./localStore";
 import { currentDeviceId } from "../app/device";
+import { currentPlatform } from "../app/platform";
+import { currentAppVersion } from "../app/version";
 import { isGoogleConfigured } from "./googleConfig";
 import {
   currentEmail,
@@ -139,6 +141,9 @@ export function engineDeps(forShell: Shell): EngineDeps {
     // loaded, and an id that is not there yet means one pass publishes nothing
     // rather than a device publishing under an empty name.
     deviceId: currentDeviceId,
+    // "0.15.0 (macos)": the version alone would not say whether a peer stuck on
+    // an old build is also the one on the phone.
+    appVersion: () => `${currentAppVersion()} (${currentPlatform()})`,
     holdings: tauriHoldingsStore,
     snapshot: state.snapshot,
     purge: state.purge,
