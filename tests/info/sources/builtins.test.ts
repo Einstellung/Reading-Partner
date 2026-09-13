@@ -93,9 +93,9 @@ const INDEX_TEMPLATES: Record<string, { provider: string; query: Record<string, 
     poll: 1440,
     fulltext: "none",
   },
-  "github-trending-python": {
+  "github-new-python": {
     provider: "github",
-    query: { mode: "trending", language: "Python", period: "day" },
+    query: { mode: "search", language: "Python", days: 7, minStars: 100 },
     limit: 30,
     poll: 720,
     fulltext: "fetch-page",
@@ -144,7 +144,7 @@ test("the arXiv term is one the scholar client's cleaning keeps whole", () => {
 });
 
 test("the index caveats carry the docs/69 pitfalls: fake stars, request-count downloads, the arXiv limiter", () => {
-  for (const id of ["github-trending-python", "github-new-robotics"]) {
+  for (const id of ["github-new-python", "github-new-robotics"]) {
     const c = builtinCaveat(id) ?? "";
     expect(c).toMatch(/fake stars/);
     expect(c).toMatch(/OSS Insight/);

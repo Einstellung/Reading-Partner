@@ -54,11 +54,13 @@ function indexDesc(query: Record<string, unknown>, provider = "fake"): SourceDes
   };
 }
 
+// bun runs every test file in one process, so the registry may already hold
+// what another file registered at module scope; assert only about "fake".
 test("registry: register, look up, list, reset", () => {
-  expect(indexProviderIds()).toEqual([]);
+  expect(indexProvider("fake")).toBeUndefined();
   registerIndexProvider(fake);
   expect(indexProvider("fake")).toBe(fake);
-  expect(indexProviderIds()).toEqual(["fake"]);
+  expect(indexProviderIds()).toContain("fake");
   expect(indexOf(indexDesc({ topic: "a" }))?.provider.id).toBe("fake");
   expect(indexOf(indexDesc({ topic: "a" }, "nope"))).toBeUndefined();
   resetIndexProvidersForTests();
