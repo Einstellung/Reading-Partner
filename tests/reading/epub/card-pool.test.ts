@@ -102,6 +102,20 @@ describe("the card pool", () => {
     expect(made.filter((c) => c.cleared > 0)).toHaveLength(2);
   });
 
+  test("a card dropped from a full pool is handed to the caller to let go of", () => {
+    const gone: string[] = [];
+    const pool = createCardPool<FakeCard>(1, (c) => gone.push(c.id));
+    const a = card("a", 0);
+    const b = card("b", 1);
+    pool.give(a);
+    pool.give(b);
+    expect(gone).toEqual(["a"]);
+    expect(a.cleared).toBe(1);
+    // Draining is not an eviction: those cards are the caller's to take apart.
+    pool.drain();
+    expect(gone).toEqual(["a"]);
+  });
+
   test("draining empties everything held and leaves the pool empty", () => {
     const pool = createCardPool<FakeCard>();
     const a = card("a", 0);

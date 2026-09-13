@@ -40,7 +40,11 @@ export interface CardPool<T extends PooledCard> {
   size(): number;
 }
 
-export function createCardPool<T extends PooledCard>(limit: number = CARD_POOL_LIMIT): CardPool<T> {
+export function createCardPool<T extends PooledCard>(
+  limit: number = CARD_POOL_LIMIT,
+  /** Called on a card dropped from a full pool, after it has been emptied. */
+  onEvict?: (card: T) => void,
+): CardPool<T> {
   // Least recently released first, so the one dropped when the pool is full is
   // the one that has been idle longest.
   const idle: T[] = [];
@@ -53,7 +57,12 @@ export function createCardPool<T extends PooledCard>(limit: number = CARD_POOL_L
     },
     give(card) {
       idle.push(card);
-      while (idle.length > limit) idle.shift()?.clear();
+      while (idle.length > limit) {
+        const gone = idle.shift();
+        if (!gone) break;
+        gone.clear();
+        onEvict?.(gone);
+      }
     },
     drain() {
       for (const card of idle) card.clear();

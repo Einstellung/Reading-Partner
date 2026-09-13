@@ -47,6 +47,7 @@ import {
   zoomScale,
   zoomStepDown,
   zoomStepUp,
+  type DeskMetrics,
   type DeskView,
   type Zoom,
 } from "./page-geometry";
@@ -211,6 +212,15 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     return { w: m.slotWidth, h: m.slotHeight, pitchX: m.pitchX, pitchY: m.pitchY };
   }
 
+  // Where a sheet sits on the strip. The sheet is a child of the strip rather
+  // than of its slot, because it has to be able to stop showing one page and
+  // start showing another without ever leaving the document.
+  function placeCard(card: PageCard, i: number, m: DeskMetrics): void {
+    card.setScale(scale);
+    card.el.style.left = `${i * m.pitchX + m.cardLeft}px`;
+    card.el.style.top = `${(layout === "vertical" ? i * m.pitchY + PAGE_GAP / 2 : 0) + m.cardTop}px`;
+  }
+
   function applyGeometry(): void {
     scale = zoomScale(zoom, layout, viewport());
     const m = deskMetrics(layout, scale, viewport());
@@ -228,11 +238,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
       el.style.left = `${i * m.pitchX}px`;
       el.style.top = `${layout === "vertical" ? i * m.pitchY + PAGE_GAP / 2 : 0}px`;
       const card = slots[i].card;
-      if (card) {
-        card.setScale(scale);
-        card.el.style.left = `${m.cardLeft}px`;
-        card.el.style.top = `${m.cardTop}px`;
-      }
+      if (card) placeCard(card, i, m);
     }
     gestures.paged = layout === "paged";
     // What "zoomed in" means to the paged gesture machine: bigger than one
@@ -245,7 +251,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   // gives one sheet back and takes another for a page of the same spine
   // document, so the step costs a transform rather than a fresh clone and a
   // fresh column layout of the whole document.
-  const cardPool = createCardPool<PageCard>();
+  const cardPool = createCardPool<PageCard>(undefined, (card) => card.el.remove());
 
   function mountSlot(i: number): PageCard {
     const slot = slots[i];
@@ -256,11 +262,9 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     // Both layers are rebuilt on demand by whoever paints them.
     card.overlay?.replaceChildren();
     slot.card = card;
-    const m = deskMetrics(layout, scale, viewport());
-    card.setScale(scale);
-    card.el.style.left = `${m.cardLeft}px`;
-    card.el.style.top = `${m.cardTop}px`;
-    slot.el.append(card.el);
+    if (card.el.parentNode !== strip) strip.append(card.el);
+    card.el.style.visibility = "";
+    placeCard(card, i, deskMetrics(layout, scale, viewport()));
     const doc = book.docs[block.spine];
     const ordinal = i - firstPageOfSpine(block.spine);
     slot.shown = card.show(doc, block.cfi, ordinal).then(() => {
@@ -274,7 +278,11 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   function unmountSlot(i: number): void {
     const slot = slots[i];
     if (!slot.card) return;
-    slot.card.el.remove();
+    // Hidden, not removed. A shadow host taken out of the document loses the
+    // render tree of everything under it, and putting it back lays the whole
+    // spine document out again — the single most expensive thing the reader
+    // does, and on a scroll step it was being done every page (docs/pitfall/304).
+    slot.card.el.style.visibility = "hidden";
     cardPool.give(slot.card);
     slot.card = null;
     slot.shown = null;
