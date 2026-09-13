@@ -1,18 +1,13 @@
 // What a card gesture in the info conversation fans out to
-// (src/info/briefer/card-actions.ts): the confirm card's Add and the profile
-// card's Apply. Over ports — the effects are recorded, nothing is written — so
+// (src/info/briefer/card-actions.ts): the confirm card's Add. Over ports — the effects are recorded, nothing is written — so
 // the guards and the order can be asserted without React and without a
 // filesystem. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   addSourceFromCard,
-  applyProfileUpdate,
-  canRetriage,
   type AddSourcePorts,
-  type ProfileStore,
 } from "../../../src/info/briefer/card-actions";
-import { GUESS_BEGIN, GUESS_END, GUESS_HEADING } from "../../../src/memory/profile/guess";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
 import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
 
@@ -82,85 +77,4 @@ test("an unreadable source list still adds, and skips the first-briefing kick", 
   const p = ports({ hasSourcesThrows: true });
   await addSourceFromCard(card(), p);
   expect(p.calls).toEqual(["hasSources", "addSource", "markAdded", "sourcesChanged", "note"]);
-});
-
-// --- Apply on a profile card ------------------------------------------------
-
-const GUESS_LINE = "- picks books about the era, not the method | basis: three margin notes | since: 2026-07-01";
-
-function profileOnDisk(declared: string): string {
-  return [declared, "", GUESS_BEGIN, GUESS_HEADING, GUESS_LINE, GUESS_END, ""].join("\n");
-}
-
-function fakeStore(text: string): ProfileStore & { written: string[] } {
-  const written: string[] = [];
-  return {
-    written,
-    load: async () => text,
-    save: async (t: string) => {
-      written.push(t);
-    },
-  };
-}
-
-// The card carries the declared half only — that is all the drafting model was
-// shown — so the write must splice it in and leave the AI's guesses alone.
-test("apply writes only the declared half and leaves the guess section standing", async () => {
-  const store = fakeStore(profileOnDisk("# Me\n\nReads robotics papers."));
-  const out = await applyProfileUpdate("# Me\n\nReads robotics AND macro.", { collecting: true, hasBriefing: true }, store);
-
-  expect(out.ok).toBe(true);
-  expect(store.written).toHaveLength(1);
-  const written = store.written[0];
-  expect(written).toContain("Reads robotics AND macro.");
-  expect(written).not.toContain("Reads robotics papers.");
-  expect(written).toContain(GUESS_LINE);
-  expect(written).toContain(GUESS_BEGIN);
-});
-
-// A re-triage runs over the day's item snapshot, which stays on the collector
-// (docs/36), and there has to be a briefing to re-sort in the first place.
-test("the applied card offers a re-triage only where one can be run", async () => {
-  expect(canRetriage({ collecting: true, hasBriefing: true })).toBe(true);
-  expect(canRetriage({ collecting: true, hasBriefing: false })).toBe(false);
-  expect(canRetriage({ collecting: false, hasBriefing: true })).toBe(false);
-  expect(canRetriage({ collecting: false, hasBriefing: false })).toBe(false);
-
-  const onReader = await applyProfileUpdate("declared", { collecting: false, hasBriefing: true }, fakeStore(""));
-  expect(onReader).toEqual({ ok: true, canRetriage: false });
-  const onCollector = await applyProfileUpdate("declared", { collecting: true, hasBriefing: true }, fakeStore(""));
-  expect(onCollector).toEqual({ ok: true, canRetriage: true });
-});
-
-// The other way an Apply can lose the document: the read fails, the store hands
-// back "" instead of saying so, and the splice writes a profile made of nothing
-// but the card's declared half over one that is still on disk.
-test("a profile that could not be read leaves the card drafted and writes nothing", async () => {
-  const written: string[] = [];
-  const store: ProfileStore = {
-    load: async () => {
-      throw new Error("EIO: user-profile.md");
-    },
-    save: async (t: string) => {
-      written.push(t);
-    },
-  };
-  expect(await applyProfileUpdate("# Me\n\nNew.", { collecting: true, hasBriefing: true }, store)).toEqual({
-    ok: false,
-    canRetriage: false,
-  });
-  expect(written).toEqual([]);
-});
-
-test("a profile write that failed leaves the card drafted", async () => {
-  const store: ProfileStore = {
-    load: async () => profileOnDisk("# Me"),
-    save: async () => {
-      throw new Error("read-only volume");
-    },
-  };
-  expect(await applyProfileUpdate("# Me\n\nNew.", { collecting: true, hasBriefing: true }, store)).toEqual({
-    ok: false,
-    canRetriage: false,
-  });
 });

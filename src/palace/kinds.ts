@@ -888,6 +888,7 @@ export const PALACE = [
     merge: "prose",
     deleteWith: "never",
     gc: "never",
+    note: "orphan: retired at 0.18 (docs/48) — nothing reads or writes it, and a file an older install left behind is neither migrated nor deleted, so it stays registered and in range",
   },
   {
     kind: "info-profile-legacy",
@@ -900,7 +901,7 @@ export const PALACE = [
     merge: "prose",
     deleteWith: "never",
     gc: "never",
-    note: "the profile's old name, kept in range so a device on the old build stays in step",
+    note: "orphan: the profile's old name, retired with it at 0.18 — kept in range so a device on the old build stays in step",
   },
   {
     kind: "profile-guess-state",
@@ -912,6 +913,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     gc: "never",
+    note: "orphan: the guess pass's stamp, retired with the pass at 0.18 (docs/48) — nothing writes it and nothing deletes it",
   },
   {
     kind: "dream-state",

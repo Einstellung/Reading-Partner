@@ -213,7 +213,7 @@ export function analystUserMessage(
   const summary = pictureSummary(input.picture, {
     maxChars: opts.summaryChars ?? PICTURE_SUMMARY_CHARS,
   });
-  const profile = input.memory.profile.trim();
+  const reader = input.memory.reader.trim();
   const observations = input.memory.observations.trim();
   return [
     formatCharter(input),
@@ -226,7 +226,7 @@ export function analystUserMessage(
     // 可观测项只说世界).
     "ABOUT THE READER (this is about the person, NOT about the world — it says who",
     "this room is for and what they already know. It is never evidence.)",
-    profile || "(no profile set)",
+    reader || "(nothing written down about this reader yet)",
     ...(observations ? ["", "Recent observations:", observations] : []),
     "",
     ...(isColdStart(input.picture) ? [coldStartBlock(), ""] : []),

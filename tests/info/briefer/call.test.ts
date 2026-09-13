@@ -11,7 +11,6 @@ import {
   briefingJobUpdate,
   briefingProgressCard,
   infoBookId,
-  profileAppliedNote,
   runnableJob,
   sourceAddedNote,
   trackedJob,
@@ -19,7 +18,6 @@ import {
 } from "../../../src/info/briefer/call";
 import type { InfoSnapshot } from "../../../src/info/boxes/pipeline";
 import type { Briefing } from "../../../src/info/boxes/types";
-import type { ProfileUpdateCardData } from "../../../src/info/boxes/cards";
 import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
 
 const IDLE: InfoSnapshot = {
@@ -322,12 +320,4 @@ test("a card gesture reports itself to the AI in the user's voice", () => {
     samples: [],
   } as unknown as ProbeConfirmCardData;
   expect(sourceAddedNote(probe)).toBe('Added "量子位" to my sources.');
-
-  const profile: ProfileUpdateCardData = {
-    kind: "profile-update",
-    summary: "Harsher on vendor PR",
-    profile: "…",
-    phase: "draft",
-  };
-  expect(profileAppliedNote(profile)).toBe("Applied the profile update: Harsher on vendor PR.");
 });

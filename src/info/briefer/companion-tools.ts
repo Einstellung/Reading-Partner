@@ -1,18 +1,15 @@
 // The shared info-companion tool set (docs/16/17): the three add-source tools
-// plus update_profile, mounted the same way on every info chat entry (briefing
-// Ask, article chat, the add-source flow). update_profile only DRAFTS — it
-// surfaces a confirm card with the complete proposed profile; the host saves it
-// only when the user clicks Apply. Pure: the card sink is injected, so the tool
-// tests without a real save. Composition over the source tools keeps the consent
-// rules in one place.
+// plus the statement tool the reading conversation mounts, on every info chat
+// entry (briefing Ask, article chat, the add-source flow). Pure: the card sink
+// and the statement context are injected, so the tools test without a real save.
+// Composition over the source tools keeps the consent rules in one place.
 //
 // open_site_sign_in joins them where the host has a webview to open one with. It
 // takes a site identifier and never a URL — the reason is at buildSignInTool.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../ai/agent";
-import { PROFILE_SKELETON_GUIDANCE } from "../../memory/profile/profile";
-import type { ProfileUpdateCardData } from "../boxes/cards";
+import { buildStatementTools, type StatementToolContext } from "../../memory";
 import type { RequestOutcome } from "./reader";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
 import {
@@ -56,9 +53,12 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // source trials to a standfirst on a phone and to a full story on the desktop.
   // Defaults to true, the shape the app had before there were two roles.
   collecting?: boolean;
-  // Surface the profile-update confirm card in the chat. The host owns the Apply
-  // write; the tool never persists.
-  onProfileCard(card: ProfileUpdateCardData): void;
+  // What the reader says about themselves goes through the one statement tool
+  // the reading conversation already mounts (memory/statements/tools.ts): the
+  // message they just sent is its evidence, so the caller that knows the thread
+  // builds this. Absent where there is no message to anchor a statement to, and
+  // then the tool is not mounted at all.
+  statements?: StatementToolContext;
   // Kick a background briefing job and return at once: "retriage" re-sorts today's
   // cached items with the current profile (no fetch); "full" re-collects every
   // source and re-triages, overwriting today's briefing. The host owns progress,
@@ -79,42 +79,6 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // proposal is made in and the roster to validate against, so it is passed by
   // whoever knows both; without it propose_lab and archive_lab are not mounted.
   labs?: LabToolDeps;
-}
-
-// The update_profile tool: draft a complete revised profile and show it for
-// confirmation. It writes nothing — the card's Apply does, in the host.
-export function buildUpdateProfileTool(deps: Pick<CompanionToolDeps, "onProfileCard">): AgentTool {
-  return {
-    name: "update_profile",
-    description:
-      "Draft a change to the user's profile — the cross-scenario identity that steers both " +
-      "the labs' analysts and the reading companion. Call this ONLY when the user states a " +
-      "standing preference (e.g. 'be harsher on vendor PR', 'keep 量子位's paper explainers'), " +
-      "never on your own initiative and never from a one-off reaction to a single item. Pass " +
-      "the COMPLETE revised profile text (not a fragment) and a one-line summary of what " +
-      "changed. It does not save — it shows the user a confirm card with the new profile; they " +
-      "Apply it.\n\n" +
-      PROFILE_SKELETON_GUIDANCE,
-    parameters: Type.Object({
-      profile: Type.String({
-        description: "The complete revised profile text to save verbatim on Apply. Not a diff or fragment.",
-      }),
-      summary: Type.String({
-        description: "One line naming the change, shown as the card heading (e.g. 'Harsher on vendor PR').",
-      }),
-    }),
-    execute: async (args) => {
-      const profile = String(args.profile ?? "").trim();
-      const summary = String(args.summary ?? "").trim();
-      if (!profile) throw new Error("update_profile needs the full revised profile text.");
-      if (!summary) throw new Error("update_profile needs a one-line summary of the change.");
-      deps.onProfileCard({ kind: "profile-update", summary, profile, phase: "draft" });
-      return (
-        `Drafted a profile update ("${summary}"). A confirm card now shows the user the new ` +
-        `profile. Do not treat it as saved — they Apply it themselves.`
-      );
-    },
-  };
 }
 
 // The generate_briefing tool: regenerate today's briefing on the user's explicit
@@ -368,7 +332,7 @@ export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
   };
 }
 
-// The full companion tool set: source tools + read_page + update_profile +
+// The full companion tool set: source tools + read_page + statement_write +
 // generate_briefing, plus open_site_sign_in where the host can really open one.
 //
 // read_page stays on a reader (docs/36). It is not a subscription fetching
@@ -378,7 +342,7 @@ export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
   return [
     ...(deps.collecting === false ? [] : buildSourceTools(deps)),
     buildReadPageTool(deps),
-    buildUpdateProfileTool(deps),
+    ...(deps.statements ? buildStatementTools(deps.statements) : []),
     buildGenerateBriefingTool(deps),
     ...(deps.labs ? [buildProposeLabTool(deps.labs), buildArchiveLabTool(deps.labs)] : []),
     ...(deps.siteSignIn ? [buildSignInTool(deps.siteSignIn)] : []),
@@ -388,7 +352,7 @@ export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
 // A running/failed status line per companion tool, extending the source labels.
 export function companionToolStatusLabel(name: string, args: Record<string, unknown>): string {
   if (name === "read_page") return `Reading ${String(args.url ?? "the page")}`;
-  if (name === "update_profile") return "Drafting a profile update";
+  if (name === "statement_write") return "Writing down what you said about yourself";
   if (name === "propose_topic") return `Proposing this belongs under ${String(args.topic ?? "a topic")}`;
   if (name === "propose_lab") return `Drafting a lab for ${String(args.name ?? "what you follow")}`;
   if (name === "archive_lab") return `Proposing to close ${String(args.labId ?? "a lab")}`;

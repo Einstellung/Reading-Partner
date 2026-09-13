@@ -164,7 +164,7 @@ interface Fixture {
 function makeDeps(fx: Fixture, over: Partial<InfoDeps> = {}): InfoDeps {
   return {
     loadBriefing: async (date) => fx.disk.briefings.get(date) ?? null,
-    loadProfile: async () => "",
+    loadReader: async () => "",
     loadLabs: async () => fx.labs,
     loadPicture: async (labId) => fx.disk.pictures.get(labId) ?? emptyPicture(labId),
     savePicture: async (picture) => void fx.disk.pictures.set(picture.labId, picture),
@@ -479,7 +479,7 @@ test("the analyst reads the day's bodies, and the picture it hands back is saved
   let seen: AnalystInput | null = null;
   const p = new InfoPipeline(
     makeDeps(fx, {
-      loadProfile: async () => "reads robotics",
+      loadReader: async () => "reads robotics",
       analyze: async (input) => {
         seen = input;
         return { ...moved(input), picture: { ...input.picture, baseline: "arms are cheap" } };
@@ -489,7 +489,7 @@ test("the analyst reads the day's bodies, and the picture it hands back is saved
   await p.generate().done;
 
   expect(seen!.cables[0].text).toBe("body of a1");
-  expect(seen!.memory.profile).toBe("reads robotics");
+  expect(seen!.memory.reader).toBe("reads robotics");
   expect(seen!.date).toBe(TODAY);
   expect(fx.disk.pictures.get("lab-a")!.baseline).toBe("arms are cheap");
 });

@@ -55,7 +55,7 @@ palace 不吞装配。宫是静的，人是动的；palace 只回答「有什么
 ## 顺序
 
 1. palace 登记表落地，五张表改成派生，守卫测试上。纯搬运，不改行为。
-2. info 接记忆：读 statement 和观察，`threads-info-<date>.json` 进蒸馏源（58 已把它列为第一个新源）。
+2. info 接记忆：读 statement 和观察，`threads-info-<date>.json` 进蒸馏源（58 已把它列为第一个新源）。2026-09-13：读这半已落地，五处 `loadProfile()` 全部改读 statement（`assembleReaderSection`），`update_profile` 换成阅读侧那个 `statement_write`；`threads-info-<date>.json` 进蒸馏源未做。
 3. desk 登记表加装配，五个 AI 入口收成上桌的登记。
 4. topic 进 info 侧。
 5. 跨键的对话读法，范围规则见上节。

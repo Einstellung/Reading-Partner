@@ -1,7 +1,7 @@
-// The shared companion tools (src/info/briefer/companion-tools.ts): the update_profile
-// tool drafts a confirm card and writes nothing; the tool set includes the three
-// source tools; the status label extends the source labels. Card sink injected;
-// no save, no fetch. Run: bun test.
+// The shared companion tools (src/info/briefer/companion-tools.ts): the tool set
+// includes the three source tools and, where the caller knows the conversation,
+// the statement tool the reading side mounts; the status label extends the
+// source labels. Card sink injected; no save, no fetch. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -9,14 +9,13 @@ import {
   buildGenerateBriefingTool,
   buildReadPageTool,
   buildSignInTool,
-  buildUpdateProfileTool,
   companionToolStatusLabel,
   type BriefingScope,
   type SiteSignInDeps,
 } from "../../../src/info/briefer/companion-tools";
 import { signInSites } from "../../../src/info/sources/site-session";
+import type { StatementToolContext } from "../../../src/memory";
 import { SECRETARY_WRITES } from "../../../src/info/briefer/role";
-import type { ProfileUpdateCardData } from "../../../src/info/boxes/cards";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
 import type { ExtractReadable } from "../../../src/info/extract/readable-select";
 import type { SessionStatus, SignInOutcome } from "../../../src/info/extract/webview-session";
@@ -24,42 +23,47 @@ import type { RunStart } from "../../../src/info/boxes/pipeline";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 
-function deps(cards: ProfileUpdateCardData[]) {
+// The statement tool's context: the message the reader just sent, which is the
+// evidence a statement written this turn rests on. Nothing behind the store —
+// the tool is only asked whether it mounted.
+const STATEMENTS = {
+  store: {
+    getStatement: async () => null,
+    createStatement: async () => {
+      throw new Error("not used");
+    },
+    supersede: async () => {},
+  },
+  message: { id: "m1", ts: 1757000000000, threadId: "briefing-2026-09-09", role: "user" as const },
+  threadId: "briefing-2026-09-09",
+} as unknown as StatementToolContext;
+
+function deps() {
   return {
     fetchFn: async () => new Response(""),
     extract,
     addSource: async () => {},
     onProbeCard: () => {},
-    onProfileCard: (c: ProfileUpdateCardData) => cards.push(c),
+    statements: STATEMENTS,
     startBriefing: () => "started" as const,
   };
 }
 
-test("update_profile fires a draft card with the full profile and writes nothing", async () => {
-  const cards: ProfileUpdateCardData[] = [];
-  const tool = buildUpdateProfileTool({ onProfileCard: (c) => cards.push(c) });
-  const out = await tool.execute({ profile: "New profile text.", summary: "Harsher on PR" });
-  expect(cards.length).toBe(1);
-  expect(cards[0].kind).toBe("profile-update");
-  expect(cards[0].phase).toBe("draft");
-  expect(cards[0].profile).toBe("New profile text.");
-  expect(cards[0].summary).toBe("Harsher on PR");
-  expect(String(out)).toMatch(/Apply it themselves/i);
+// A statement is dated by the message it rests on, so a caller that does not
+// know the conversation gets no statement tool rather than one that throws.
+test("the statement tool is mounted only where the caller knows the conversation", () => {
+  expect(buildCompanionTools({ ...deps(), statements: undefined }).map((t) => t.name)).not.toContain(
+    "statement_write",
+  );
 });
 
-test("update_profile rejects an empty profile or missing summary", async () => {
-  const tool = buildUpdateProfileTool({ onProfileCard: () => {} });
-  await expect(tool.execute({ profile: "  ", summary: "x" })).rejects.toThrow(/full revised profile/i);
-  await expect(tool.execute({ profile: "text", summary: "" })).rejects.toThrow(/summary/i);
-});
-
-test("buildCompanionTools mounts the source tools plus read_page, update_profile and generate_briefing", () => {
-  const names = buildCompanionTools(deps([])).map((t) => t.name);
+test("buildCompanionTools mounts the source tools plus read_page, statement_write and generate_briefing", () => {
+  const names = buildCompanionTools(deps()).map((t) => t.name);
   expect(names).toContain("probe_source");
   expect(names).toContain("trial_source");
   expect(names).toContain("add_source");
   expect(names).toContain("read_page");
-  expect(names).toContain("update_profile");
+  expect(names).toContain("statement_write");
   expect(names).toContain("generate_briefing");
 });
 
@@ -69,7 +73,7 @@ test("buildCompanionTools mounts the source tools plus read_page, update_profile
 // this set really mounts, and the two query tools must not be declared at all.
 test("every write the secretary declares names a tool it really mounts", () => {
   const names = buildCompanionTools({
-    ...deps([]),
+    ...deps(),
     labs: {
       threadId: "briefing-2026-09-09",
       labs: async () => [],
@@ -95,9 +99,9 @@ test("every write the secretary declares names a tool it really mounts", () => {
 // validate against, so they are mounted only where the host knows both — the
 // same gate propose_topic is behind (docs/63).
 test("the lab tools are mounted only where the host passes the rooms", () => {
-  expect(buildCompanionTools(deps([])).map((t) => t.name)).not.toContain("propose_lab");
+  expect(buildCompanionTools(deps()).map((t) => t.name)).not.toContain("propose_lab");
   const names = buildCompanionTools({
-    ...deps([]),
+    ...deps(),
     labs: {
       threadId: "briefing-2026-09-09",
       labs: async () => [],
@@ -114,12 +118,12 @@ test("the lab tools are mounted only where the host passes the rooms", () => {
 // there and to a full story on the collector (docs/36). read_page stays — that is
 // one link the user pasted, not a subscription fetching itself on a schedule.
 test("a device that does not collect gets no add-source tools", () => {
-  const names = buildCompanionTools({ ...deps([]), collecting: false }).map((t) => t.name);
+  const names = buildCompanionTools({ ...deps(), collecting: false }).map((t) => t.name);
   expect(names).not.toContain("probe_source");
   expect(names).not.toContain("trial_source");
   expect(names).not.toContain("add_source");
   expect(names).toContain("read_page");
-  expect(names).toContain("update_profile");
+  expect(names).toContain("statement_write");
   // Still mounted: on a reader the host turns it into a request for the
   // collector rather than a run.
   expect(names).toContain("generate_briefing");
@@ -166,7 +170,7 @@ test("read_page rejects an empty or invalid URL", async () => {
 
 test("companionToolStatusLabel labels the companion tools and defers to source labels", () => {
   expect(companionToolStatusLabel("read_page", { url: "https://site.com" })).toMatch(/Reading https:\/\/site\.com/);
-  expect(companionToolStatusLabel("update_profile", {})).toMatch(/Drafting a profile update/);
+  expect(companionToolStatusLabel("statement_write", {})).toMatch(/Writing down what you said/);
   expect(companionToolStatusLabel("propose_lab", { name: "Embodied AI" })).toMatch(/Drafting a lab for Embodied AI/);
   expect(companionToolStatusLabel("archive_lab", { labId: "lab-1234abcd" })).toMatch(/close lab-1234abcd/);
   expect(companionToolStatusLabel("generate_briefing", { scope: "full" })).toMatch(/Regenerating the briefing/);
@@ -301,8 +305,8 @@ function signInDeps(
 }
 
 test("open_site_sign_in is mounted only where the host can really open a window", () => {
-  expect(buildCompanionTools(deps([])).map((t) => t.name)).not.toContain("open_site_sign_in");
-  const withWindow = buildCompanionTools({ ...deps([]), siteSignIn: signInDeps().d });
+  expect(buildCompanionTools(deps()).map((t) => t.name)).not.toContain("open_site_sign_in");
+  const withWindow = buildCompanionTools({ ...deps(), siteSignIn: signInDeps().d });
   expect(withWindow.map((t) => t.name)).toContain("open_site_sign_in");
 });
 

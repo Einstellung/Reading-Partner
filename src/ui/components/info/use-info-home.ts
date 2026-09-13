@@ -37,7 +37,7 @@ import {
 } from "../../../reading/saved-articles";
 import { toSavedArticleInput } from "./saveArticle";
 import { appendFeedback } from "../../../memory/profile/feedback";
-import { loadProfile } from "../../../memory/profile/profile";
+import { assembleReaderSection } from "../../../memory/live/assemble";
 import {
   articleAnchor,
   briefingAnchor,
@@ -396,12 +396,12 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
   // What every anchor needs beside the briefing itself: who the reader is, what
   // they subscribe to, and what this device can do about it.
   const companionContext = useCallback(async () => {
-    const [profile, sources, settings] = await Promise.all([
-      loadProfile(),
+    const [reader, sources, settings] = await Promise.all([
+      assembleReaderSection(),
       loadSources(),
       loadSettings(),
     ]);
-    return { profile, sources, aiLanguage: settings.aiLanguage, canSignIn, collecting };
+    return { reader, sources, aiLanguage: settings.aiLanguage, canSignIn, collecting };
   }, [canSignIn, collecting]);
 
   const askBriefing = useCallback(async () => {

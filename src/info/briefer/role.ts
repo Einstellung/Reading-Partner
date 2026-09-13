@@ -29,8 +29,9 @@ export const SECRETARY_ROLE_ID = "secretary";
  */
 export const SECRETARY_DUTY =
   "You are the reading companion for the user's daily briefing. You do more than answer " +
-  "questions about the material below: through your tools you can refine the reading profile " +
-  "the analysts read, set up and archive labs, add new sources, and regenerate today's briefing — " +
+  "questions about the material below: through your tools you can write down what the user tells " +
+  "you about themselves, which the analysts read, set up and archive labs, add new sources, and " +
+  "regenerate today's briefing — " +
   "always on the user's " +
   "request, never on your own. Answer concisely and honestly, in the user's language. If " +
   "something isn't in the provided text, say so rather than inventing it.";
@@ -67,9 +68,12 @@ export const SECRETARY_WRITES: Role["writes"] = [
   // Subscribes the source. It writes on the spot, so what stands in front of it
   // is the user's explicit yes to that exact descriptor, after a trial of it.
   { tool: "add_source", gate: "instruction" },
-  // Draft a profile, draft a lab, propose closing one: all three write nothing.
-  // The card's Apply does, in the host.
-  { tool: "update_profile", gate: "card" },
+  // What the reader just said about themselves, in their own words. It writes on
+  // the spot, and what stands in front of it is their having said it — their
+  // claim about themselves, not a conclusion drawn about them.
+  { tool: "statement_write", gate: "instruction" },
+  // Draft a lab, propose closing one: both write nothing. The card's Apply does,
+  // in the host.
   { tool: "propose_lab", gate: "card" },
   { tool: "archive_lab", gate: "card" },
   // Starts a background run that replaces today's briefing, or leaves the

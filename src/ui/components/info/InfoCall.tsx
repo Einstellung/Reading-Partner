@@ -10,13 +10,11 @@
 // tap it into. call-layout.ts holds that rule.
 //
 // Every info thread runs the same agent loop with the shared companion tool set
-// (docs/16/17): probe/trial/add_source plus update_profile, surfacing inline
+// (docs/16/17): probe/trial/add_source plus statement_write, surfacing inline
 // confirm cards. The anchors differ only in context (info/briefer/anchors.ts):
 // the briefing/article companion, or the onboarding add-source flow (the AI
 // opens, and on the first source added a background first-briefing shows its
-// progress/readiness as a card). update_profile drafts a profile change the user
-// Applies; applying it offers a re-triage of today's cached items through the
-// same progress card.
+// progress/readiness as a card).
 //
 // Rendering and event binding only: the conversation, the briefing job and the
 // card gestures are in use-info-call.ts.

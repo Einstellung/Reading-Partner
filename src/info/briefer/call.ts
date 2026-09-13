@@ -11,7 +11,6 @@ import type {
   BriefingReadyCardData,
   LabArchiveCardData,
   LabProposalCardData,
-  ProfileUpdateCardData,
 } from "../boxes/cards";
 import { proposedTopicName, type TopicProposalCardData } from "../../memory";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
@@ -223,13 +222,9 @@ export function briefingJobUpdate(job: BriefingJob, s: InfoSnapshot): BriefingJo
 }
 
 // The synthetic turns reporting a card gesture the AI did not make itself: the
-// user added a trialed source, or applied a drafted profile change.
+// user added a trialed source, opened a drafted room, closed one.
 export function sourceAddedNote(card: ProbeConfirmCardData): string {
   return `Added "${card.descriptor.name}" to my sources.`;
-}
-
-export function profileAppliedNote(card: ProfileUpdateCardData): string {
-  return `Applied the profile update: ${card.summary}.`;
 }
 
 // Opened the room the companion drafted a charter for (docs/63). The AI is told

@@ -45,7 +45,7 @@ function input(over: Partial<AnalystInput> = {}): AnalystInput {
     picture: picture(),
     date: "2026-09-09",
     cables: [cable("c1"), cable("c2")],
-    memory: { profile: "Reads robotics papers.", observations: "" },
+    memory: { reader: "Reads robotics papers.", observations: "" },
     ...over,
   };
 }

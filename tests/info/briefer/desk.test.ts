@@ -32,7 +32,7 @@ import type { AgentTool } from "../../../src/ai/agent";
 import type { CompanionContext } from "../../../src/info/briefer/chat";
 import type { Briefing } from "../../../src/info/boxes/types";
 
-const CTX: CompanionContext = { profile: "Reads robotics.", sources: [], collecting: true };
+const CTX: CompanionContext = { reader: "Reads robotics.", sources: [], collecting: true };
 
 const BRIEFING: Briefing = {
   date: "2026-07-21",
@@ -209,7 +209,7 @@ test("the secretary's duty opens the prompt, and the briefing's own sections fol
   const order = [
     SECRETARY_DUTY,
     "You have tools, shared across every info chat:",
-    "Reading profile (what triage keeps or filters for):",
+    "What is known about this reader (what triage keeps or filters for):",
     "Subscribed sources:",
     "WHAT IS BEING FOLLOWED",
     "Rooms that moved today:",

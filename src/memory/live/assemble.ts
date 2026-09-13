@@ -1,8 +1,8 @@
 // The observation module's single assembly exit. Two narrow reads over what the
 // system knows about the user:
 //
-//   assembleIdentity()        — the full profile text (the cross-scenario identity
-//                               document), a semantic wrapper over loadProfile.
+//   assembleReaderSection()   — what is known about the reader, rendered for a
+//                               prompt outside the reading conversation.
 //   assembleReadingContext()  — a short plain-text signal of what the user has been
 //                               reading and stuck on lately, distilled from the
 //                               per-topic observation indexes, recent first.
@@ -13,17 +13,18 @@
 
 import { listTopics } from "../../platform/app/topics";
 import { readObservationIndex } from "./live";
-import { loadProfile } from "../profile/profile";
 import { listStatements } from "./statements";
 import type { ObservationIndexEntry, ObservationType } from "../observations/types";
+import { readerStatementSection } from "../statements/section";
 import type { Statement } from "../statements/types";
 
-// The identity document, verbatim (empty string when the user has no profile yet).
-// The reading side no longer reads it — what it knows about the reader comes
-// from the statements below (docs/48). The info side still does, until its own
-// redesign.
-export function assembleIdentity(): Promise<string> {
-  return loadProfile();
+// What is known about the reader, as a prompt block (statements/section.ts).
+// Every scenario reads the one knowledge store: the reading turn renders it
+// itself, through the memory paragraph, and everything else — the research
+// rooms' analysts, the briefing companion, the day's call — comes through here
+// (docs/48, docs/61). Empty string when nothing is known.
+export async function assembleReaderSection(): Promise<string> {
+  return readerStatementSection(await assembleStatements());
 }
 
 // Every statement there is, in file order. Never throws: a prompt is assembled

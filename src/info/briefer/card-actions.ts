@@ -2,9 +2,8 @@
 //
 // One click, several effects, in an order that matters: the confirm card's Add
 // mutates the source list, marks the card, tells the AI and — when it was the
-// first source — kicks the first briefing; the profile card's Apply writes the
-// declared half of the profile and only then decides whether a re-triage can be
-// offered; a lab card's Apply opens the room and hands it its sources. They are
+// first source — kicks the first briefing; a lab card's Apply opens the room and
+// hands it its sources. They are
 // sequences over ports rather than over the live stores, so
 // the rules ("already added is a no-op", "a failed write changes nothing on
 // screen") are testable without React and without a filesystem.
@@ -14,8 +13,6 @@ import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { LabArchiveCardData, LabProposalCardData } from "../boxes/cards";
 import { newLabId } from "../labs/labs";
 import type { Lab } from "../labs/types";
-import { replaceDeclared } from "../../memory/profile/guess";
-import { loadProfileForWrite, saveProfile } from "../../memory/profile/profile";
 
 // --- add a trialed source ---------------------------------------------------
 
@@ -66,37 +63,6 @@ export async function addSourceFromCard(
   ports.sourcesChanged();
   ports.note();
   if (!had) ports.startFirstBriefing();
-}
-
-// --- apply a drafted profile change -----------------------------------------
-
-export interface ProfileStore {
-  // Throws when the profile could not be read, rather than answering "" — Apply
-  // splices the card's declared half into what load returns, so an empty answer
-  // to a failed read would write a document with the guess section, and any
-  // declared text the card did not carry, gone.
-  load(): Promise<string>;
-  save(text: string): Promise<void>;
-}
-
-export const liveProfileStore: ProfileStore = { load: loadProfileForWrite, save: saveProfile };
-
-/**
- * Whether the applied card may offer a re-triage.
- *
- * A re-triage runs over the day's item snapshot — 683 KB that stays on the
- * collector — so the offer only appears where it can be taken up (docs/36): on
- * the machine that collects, and only once there is a briefing to re-sort. On a
- * reader the way to a new sort is asking for one.
- */
-export function canRetriage(ctx: { collecting: boolean; hasBriefing: boolean }): boolean {
-  return ctx.collecting && ctx.hasBriefing;
-}
-
-export interface ProfileApplied {
-  // False when the write failed; the card stays drafted and nothing is said.
-  ok: boolean;
-  canRetriage: boolean;
 }
 
 // --- open and close a research room -----------------------------------------
@@ -203,27 +169,4 @@ export async function applyLabArchive(
   }
   ports.labsChanged();
   return { ok: true, labId: card.labId };
-}
-
-/**
- * The profile card's Apply. The card carries the declared half only — that is
- * all the drafting model was shown — so the write splices it in and leaves the
- * AI's guess section where it is (memory/profile/guess.ts). Apply is the only
- * write; the tool that drafted the card never saves.
- *
- * A read that failed is a failed Apply, not an Apply onto an empty document: the
- * card stays drafted with the text still in it, and pressing it again once the
- * file reads writes the same thing. Nothing is lost by waiting.
- */
-export async function applyProfileUpdate(
-  declared: string,
-  ctx: { collecting: boolean; hasBriefing: boolean },
-  store: ProfileStore = liveProfileStore,
-): Promise<ProfileApplied> {
-  try {
-    await store.save(replaceDeclared(await store.load(), declared));
-  } catch {
-    return { ok: false, canRetriage: false };
-  }
-  return { ok: true, canRetriage: canRetriage(ctx) };
 }

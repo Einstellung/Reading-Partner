@@ -27,6 +27,7 @@ import {
   patchThreadMessage,
   setThreadTopic,
 } from "../../../platform/app/threads";
+import { latestReaderMessage, statementStore } from "../../../memory";
 import { buildLiveCompanionTools } from "../../../info/briefer/companion-live";
 import { companionToolStatusLabel } from "../../../info/briefer/companion-tools";
 import {
@@ -40,7 +41,6 @@ import {
   infoBookId,
   labArchivedNote,
   labFiledNote,
-  profileAppliedNote,
   sourceAddedNote,
   topicFiledNote,
   type BriefingJob,
@@ -49,7 +49,6 @@ import {
   addSourceFromCard,
   applyLabArchive,
   applyLabProposal,
-  applyProfileUpdate,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
@@ -75,7 +74,6 @@ import type { BriefingView, RequestOutcome } from "../../../info/briefer/reader"
 import type {
   LabArchiveCardData,
   LabProposalCardData,
-  ProfileUpdateCardData,
 } from "../../../info/boxes/cards";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../chat/types";
@@ -286,7 +284,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     prefix: string,
     payload:
       | ProbeConfirmCardData
-      | ProfileUpdateCardData
       | TopicProposalCardData
       | LabProposalCardData
       | LabArchiveCardData,
@@ -329,31 +326,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     // runBriefingJob reads only refs, so its per-render identity is harmless.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookId, anchor.threadId, onSourcesChanged, noteTurn],
-  );
-
-  // Apply a drafted profile change when the user clicks a card's Apply: save the
-  // new profile, flip the card to its applied state (in the UI and on disk), and
-  // note the change so the AI knows. The applied card then offers a re-triage
-  // where one can be run. Apply is the only write — the tool never saves.
-  const handleApplyProfile = useCallback(
-    async (cardId: string) => {
-      const found = findCardPart(messagesRef.current, cardId);
-      if (!found || found.payload.kind !== "profile-update") return;
-      const card = found.payload;
-      if (card.phase === "applied") return;
-      const { ok, canRetriage } = await applyProfileUpdate(card.profile, {
-        collecting,
-        hasBriefing: !!view.snapshot().briefing,
-      });
-      if (!ok) return;
-      const applied: ProfileUpdateCardData = { ...card, phase: "applied", canRetriage };
-      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied", canRetriage }));
-      patchThreadMessage(bookId, anchor.threadId, found.ts, {
-        parts: [toPersistedCardPart(cardId, applied)],
-      });
-      noteTurn(profileAppliedNote(card));
-    },
-    [bookId, anchor.threadId, noteTurn, collecting, view],
   );
 
   // File what the AI proposed when the user clicks a topic card's Apply: mint
@@ -442,7 +414,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       switch (action.kind) {
         case "mutate":
           if (action.op === "add-source") void handleAddFromCard(cardId);
-          else if (action.op === "apply-profile") void handleApplyProfile(cardId);
           else if (action.op === "apply-topic") void handleApplyTopic(cardId);
           else if (action.op === "apply-lab") void handleApplyLab(cardId);
           else if (action.op === "apply-lab-archive") void handleArchiveLab(cardId);
@@ -474,7 +445,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       handleAddFromCard,
-      handleApplyProfile,
       handleApplyTopic,
       handleApplyLab,
       handleArchiveLab,
@@ -521,10 +491,18 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         withCompanionTools(anchor.desk, () =>
           buildLiveCompanionTools(
             (payload) => insertCard("probe", payload),
-            (payload) => insertCard("profile", payload),
             { start: (scope) => runBriefingJob(scope) },
             {
               collecting,
+              // What the reader says about themselves is written down through
+              // the same tool the reading conversation mounts (docs/48). The
+              // message they just sent is its evidence, so it is built here,
+              // after that message has been appended to the thread.
+              statements: {
+                store: statementStore,
+                message: latestReaderMessage(getThread(bookId, anchor.threadId)?.messages ?? []),
+                threadId: anchor.threadId,
+              },
               lab: {
                 threadId: anchor.threadId,
                 onLabCard: (payload) => insertCard("lab", payload),
