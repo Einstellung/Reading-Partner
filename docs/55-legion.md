@@ -1,6 +1,6 @@
 # legion
 
-> 2026-09-07 定案。同步引擎与删除模型在 [13](./13-账户同步.md) 和 [50](./50-删除.md)，记忆的两个仓在 [48](./48-记忆：观察与statement.md)。回收（gc）归 memory，不在本文。info 管线重做在 [60](./60-info：白宫与Red Boxes.md)；[17](./17-信息源系统.md) 的源配置、站点登录、正文抽取仍有效，只废「提名→主题」层。
+> 2026-09-07 定案。同步引擎与删除模型在 [13](./13-账户同步.md) 和 [50](./50-删除.md)，记忆的两个仓在 [48](./48-记忆：观察与statement.md)。回收（gc）归 memory，不在本文。info 管线重做在 [60](./60-info：白宫与Red Boxes.md)；[17](./17-信息源系统.md) 的源配置、站点登录、正文抽取仍有效，只废「提名→主题」层。2026-09-14 改：认领由租约改为按能力指派，见「指派、接手与取消」。
 
 ---
 
@@ -45,7 +45,7 @@ legion 是 agent 调度中心：跑被委托出去的活，盯着它跑到底，
 | `delegator` | 用户动作 / 一条 schedule 的名字 / 父 run 的 id |
 | `brief` | 任务书，按引用 |
 | `state` | `pending` < `running` < `done` \| `failed` \| `cancelled` |
-| `claimant` | 认领设备 + 租约到期时刻 |
+| `claimant` | 执行设备 deviceId + 开始时刻 |
 | `attempts` | 尝试次数 |
 | `output` | 产出引用 |
 | `deliverTo` | 投递目标 |
@@ -55,13 +55,19 @@ legion 是 agent 调度中心：跑被委托出去的活，盯着它跑到底，
 
 产出放领域自己的目录，run 只存引用：文件小，合并简单。
 
-两台设备写同一个 run 时，状态取格上更高的那个：`running` 盖 `pending`，终态盖 `running`。两个终态相撞（租约过期后原认领者仍跑完了）和其余字段一样，按 `revision` 的 compare-and-set 定，先落的赢。
+两台设备写同一个 run 时，状态取格上更高的那个：`running` 盖 `pending`，终态盖 `running`。两个终态相撞（弃权后被接手、原设备又回来跑完了）和其余字段一样，按 `revision` 的 compare-and-set 定，先落的赢。
 
-## 认领、租约与取消
+## 指派、接手与取消
 
-设备按 presence 广告的能力挑 `pending` 的 run 认领，写进 `claimant` 并带一个租约到期时刻。租约要续，过期的 run 回到 `pending` 让别人捡——认领者关机了就是这个样子，`attempts` 加一。
+重活只在 PC 跑，移动端只划线、聊天和派活。run 的执行方由 `kind` 决定：presence 里广告能跑这个 kind 的设备。一个 kind 通常只有一台设备能跑，没有竞争认领，也就没有租约——租约是在没有原子取走的介质上模拟取走，执行方唯一时它没有东西可模拟。
 
-取消写进 run 文件，不是喊一声。认领设备下次续租时读到，调执行器的 `cancel()`；没有认领者的 run 直接进 `cancelled`。
+同一 kind 有两台设备都能跑时，沿用 presence 的选举（连续在线最久者，`claimedAt` 相同按 deviceId 破平，24 小时没心跳算弃权），按 kind 算，设备级不是 run 级。输的那台站着不动。
+
+接手只有两条：执行设备自己重启后，名下 `running` 的 run 退回 `pending`、`attempts` 加一，本机自己判断，不依赖别人的时钟；执行设备弃权后，同 kind 新当选的设备把它名下 `running` 的 run 退回 `pending` 接手。正确性兜底是重跑无害：一个 run 跑两遍、两份结果合并后与跑一遍相同。
+
+移动端派活就是写一个 `pending` run，PC 下次 pull 捡起来跑，产出经 mailbox 回移动端；移动端要看的只有 PC 上次在线时刻，来自 presence 心跳。
+
+取消写进 run 文件，不是喊一声。执行设备下次 pull 读到就调执行器的 `cancel()`；本机委托、本机执行的 run 直接调 `cancel()`，不经过文件；没有执行者的 `pending` run 直接进 `cancelled`。
 
 `attempts` 到上限的 run 停在 `failed` 并进死信队列，不再自动重试。重放沿用同一份任务书，是一个指回原 run 的新 run。
 
@@ -89,11 +95,11 @@ Red Box 消费侧的 item 状态集合待定：三个问题（主讲被打断算
 
 ## presence
 
-`legion/presence`，每设备一个心跳文件，广告自己的能力。租约算法从 `info/program/presence.ts` 和 `info/briefer/handoff.ts` 泛化。
+`legion/presence`，每设备一个心跳文件，广告自己的能力。选举算法从 `info/program/presence.ts` 和 `info/briefer/handoff.ts` 泛化。
 
 今天那套是这样跑的：每台设备只写以自己命名的那个文件，一写者无合并，两台同时写产生两个文件而不是一次冲突。选举是「所有 claim 文件 + 时钟」的纯函数，每台设备各自算出同一个答案，输的那台站着不动。`claimedAt` 每次进程启动重置，所以赢的是连续在线最久的那台；`claimedAt` 相同按 deviceId 破平。心跳一小时一次，超过 24 小时没动静算弃权，下一台顶上；`claimedAt` 为 null 表示这台不参选（用户关了后台采集），立刻退出选举而不等弃权阈值。开着同步的设备在本次会话第一次 pull 落地之前不写 claim——对一个还没读过的文件夹宣称所有权，正是两台机器同时认为自己是采集端的成因；等不到就在 30 分钟后不再等。重启的设备排到队尾，不把活从接手的那台手里抢回来。
 
-泛化之后 claim 不再只说「我是采集端」，而是说这台设备能跑哪些 kind（有没有 webview fetch、有没有 GPU、是不是常开）；run 的 `claimant` 和租约到期就是这份心跳的下游。
+泛化之后 claim 不再只说「我是采集端」，而是说这台设备能跑哪些 kind（有没有 webview fetch、有没有 GPU、是不是常开）；哪台设备跑哪个 kind 的 run 就是这份心跳的下游。
 
 ## schedule
 
@@ -119,7 +125,7 @@ agent-turn 两个未定点，接第一个真调用方时定：看门狗重试从
 
 ```
 legion/
-  run/        run 文件的读写、状态格、租约、折叠
+  run/        run 文件的读写、状态格、指派、折叠
   mailbox/    post / read / told / ack
   presence/   每设备心跳与选举
   schedule/   FIFO、每资源串行、三种触发
@@ -143,4 +149,4 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 ## 为什么不用现成的
 
-DeepSeek Harness 的 jobs / workflow / schedule / agent-team 全部以「一机一进程一份 session 日志」为前提，Node 运行时，iPad 的 WKWebView 里跑不了；市面的任务队列（BullMQ、Temporal、pg-boss、Inngest）都要数据库或服务端。我们的 run 跨两台设备、靠一个同步文件夹、没有服务端。所以 run 的文件格式和租约规则自己写，只借三处设计：jobs 的 `run() → { cancel, done, readOutput? }` 作执行器签名，agent-team 任务快照的 `revision` + compare-and-set 作 run 文件的合并依据，mailbox 的「先存完整消息、投递到才确认、queued 减 delivered 即待恢复」作投递语义。
+DeepSeek Harness 的 jobs / workflow / schedule / agent-team 全部以「一机一进程一份 session 日志」为前提，Node 运行时，iPad 的 WKWebView 里跑不了；市面的任务队列（BullMQ、Temporal、pg-boss、Inngest）都要数据库或服务端。我们的 run 跨两台设备、靠一个同步文件夹、没有服务端。所以 run 的文件格式和指派规则自己写，只借三处设计：jobs 的 `run() → { cancel, done, readOutput? }` 作执行器签名，agent-team 任务快照的 `revision` + compare-and-set 作 run 文件的合并依据，mailbox 的「先存完整消息、投递到才确认、queued 减 delivered 即待恢复」作投递语义。

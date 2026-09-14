@@ -71,7 +71,7 @@ job 只剩一种，跑哪个 pass 由单元自己说（划线走标记 pass，�
 
 算欠账、过门槛、跑 pass、成了推水位、不成留在原地。门槛沿用 `arrears.ts` 的常数：`SWEEP_INTERVAL_MS` 和 `MIN_DISTILL_GAP_MS` 各 30 分钟，`MIN_NEW_MARKS` 5、`MIN_NEW_MESSAGES` 1。
 
-运行器是一种 legion run kind：脱手，靠租约保证同一时刻只有一台设备在跑（租约是 48 里那个采集端选举的泛化），失败落进 legion 的 ledger（失败事件已带 `errorName` / `errorMessage`）。今天那个 30 分钟扫描器变成 legion/schedule 上的一条。
+运行器是一种 legion run kind：脱手，靠 presence 选举保证同一时刻只有一台设备在跑（选举从 info 采集端那套泛化，见 55），失败落进 legion 的 ledger（失败事件已带 `errorName` / `errorMessage`）。今天那个 30 分钟扫描器变成 legion/schedule 上的一条。
 
 失败不打扰读者这条纪律不变：一条 warn、一条 `distill-failed` 事件、水位留在原地等下次重做，不弹任何 UI。
 
