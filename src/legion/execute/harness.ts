@@ -1,10 +1,10 @@
 // One durable agent harness, wired to this app's storage and this app's
-// credentials. Nothing calls it yet.
+// credentials. Every tool-calling turn in the app runs on one (turn.ts).
 //
-// What the harness adds over the Agent in agent-turn.ts is durability: every
-// message, tool call and tool result is appended to a session file as it
-// happens, so a run that dies mid-tool is still on disk. The second process
-// learns about it from AgentHarness.create, which hands back the list of
+// What the harness adds over a plain agent loop is durability: every message,
+// tool call and tool result is appended to a session file as it happens, so a
+// run that dies mid-tool is still on disk. The second process learns about it
+// from AgentHarness.create, which hands back the list of
 // operations that were still open, and lane.resume() finishes each one —
 // writing a synthetic tool result that says the execution was interrupted,
 // rather than running the tool again (only a tool that declares replay: "safe"
@@ -149,7 +149,7 @@ function modelsFor(model: Model<Api>, streamFn: StreamFn): Models {
 
 /**
  * The production stream: this app's credentials, transport and per-provider
- * call setup, resolved once and closed over. The same call agent-turn.ts makes,
+ * call setup, resolved once and closed over. The same call runAgentTurn makes,
  * plus the setup headers streamChat sends — a harness session is a conversation
  * and the providers that route by one need to be told which.
  */

@@ -314,9 +314,8 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   // Every round grows the history by an assistant turn and its tool results,
   // so a turn that started comfortably can reach the window mid-way; the one
   // reduction available mid-flight is to stub the tool results already
-  // collected. Both the sizing and that reduction are src/budget's, so this
-  // turn and the pi-Agent one in agent-turn.ts cannot drift on what "does not
-  // fit" means.
+  // collected. Both the sizing and that reduction are src/budget's, so no
+  // caller can drift on what "does not fit" means.
   //
   // What the reduction costs when it is not enough: a usage figure describes
   // the request that was already sent, so it does not fall when the history

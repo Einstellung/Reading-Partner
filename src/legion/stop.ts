@@ -5,9 +5,9 @@
 // must never report a hangup as a broken call.
 //
 // At the root of src/legion rather than in the watchdog that raises it most,
-// because both halves of the directory need it and legion/execute has to be
-// free to import legion/subagent (agent-turn.ts composes a brief). With the
-// class in the watchdog, that import would close a cycle.
+// because both halves of the directory need it: legion/subagent imports the
+// turn out of legion/execute, so anything legion/execute would have to import
+// back closes a cycle.
 export class StoppedError extends Error {
   constructor() {
     super("stopped");
