@@ -109,4 +109,4 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 
 ## 与 legion 的关系
 
-摄入是一次 fetch，在用户等待之内完成，不是 run。将来 epub-translator 接进来（translate 作为 run kind，PC 广告能力，子进程执行器）是另一件事，见 55。
+摄入是一次 fetch，在用户等待之内完成，不是 run。将来 epub-translator 接进来（translate 作为 run kind，PC 声明能力，子进程 worker）是另一件事，见 55。
