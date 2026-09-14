@@ -11,7 +11,7 @@
 // stream of text, an ending, and an abort, and that is what askOnThread is.
 
 import { runAgentTurn } from "../../legion/execute/turn";
-import { assembleTurn } from "../../soul";
+import { assembleTurn, soulHarness } from "../../soul";
 import { replayableHistory } from "../../ai/turn-rows";
 import { glossaryTerms } from "../../ai/voice/cleanup";
 import { openDesk } from "../../desk";
@@ -163,6 +163,7 @@ export function askOnThread(opts: {
             reasoning: toReasoning(settings.chatThinking),
             signal,
             telemetry: { surface: "info", thread: opts.anchor.threadId },
+            harness: soulHarness(),
             onDelta,
             // No tool trace: there is no row to draw one in, and the silence a
             // tool call leaves is what the orb's `thinking` is for (docs/33

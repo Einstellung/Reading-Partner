@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderId } from "../../../ai";
 import { runAgentTurn } from "../../../legion/execute/turn";
+import { soulHarness } from "../../../soul";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { holdsNoAnswer, refusalRow } from "../../../ai/turn-rows";
 import { appendMessage, type ThreadMessage as StoredMessage } from "../../../platform/app/threads";
@@ -175,6 +176,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
         signal: controller.signal,
         reasoning: toReasoning(s.chatThinking),
         telemetry: { surface: "talk", thread: threadId },
+        harness: soulHarness(),
         onDelta: (chunk) => {
           const p = partialRef.current;
           if (p) p.text += chunk;

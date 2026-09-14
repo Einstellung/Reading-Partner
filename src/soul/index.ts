@@ -3,6 +3,7 @@
 // person and a laid desk together into one call is turn.ts.
 
 export { assembleTurn, configuredModel, type AssembleInput, type AssembledTurn } from "./turn";
+export { SOUL_LANE, soulHarness } from "./harness";
 export { soulMemorySection, openSoul, type LoadedRole, type Soul } from "./self";
 export {
   listRoles,

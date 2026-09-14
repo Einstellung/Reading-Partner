@@ -19,6 +19,7 @@ import {
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
 import type { ProviderId } from "../../../ai";
 import { runAgentTurn } from "../../../legion/execute/turn";
+import { soulHarness } from "../../../soul";
 import { toolStatusLabel } from "../../../reading/context";
 import type { RetellDecisionCardData, TalkArrangementCardData } from "../../../reading/retell";
 import {
@@ -326,6 +327,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
         signal: controller.signal,
         reasoning: toReasoning(s.chatThinking),
         telemetry: { surface: "talk", thread: threadId },
+        harness: soulHarness(),
         onDelta: (chunk) => {
           const p = partialRef.current;
           if (p) p.text += chunk;

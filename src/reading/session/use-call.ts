@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ProviderId } from "../../ai";
 import { runAgentTurn } from "../../legion/execute/turn";
+import { soulHarness } from "../../soul";
 import type { CompressedImage } from "../../ai/image-utils";
 import type { SubagentProgress } from "../../legion/subagent";
 import { logEvent } from "../../platform/app/events";
@@ -521,6 +522,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         // went in is the second axis (docs/09).
         telemetry: { surface: "reading", inline: turn.inline, thread: threadId },
         about: { bookId },
+        harness: soulHarness(),
         onDelta: (chunk) => write({ kind: "delta", chunk }, ts),
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),

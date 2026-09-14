@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../legion/execute/turn";
-import { assembleTurn, type AssembledTurn } from "../../../soul";
+import { assembleTurn, soulHarness, type AssembledTurn } from "../../../soul";
 import { applyTopicProposal, type TopicProposalCardData } from "../../../memory";
 import { openDesk, type DeskItem } from "../../../desk";
 import { withCompanionTools } from "../../../info/briefer/desk";
@@ -551,6 +551,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       reasoning: toReasoning(settings.chatThinking),
       signal: controller.signal,
       telemetry: { surface: "info", thread: anchor.threadId },
+      harness: soulHarness(),
       onDelta: (t) => {
         full += t;
         patchLast({ text: full, streaming: true });
