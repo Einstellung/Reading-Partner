@@ -69,7 +69,7 @@ run 分两档，`kind` 声明自己是哪档，delegate 的接口一样：本地
 
 状态格是一条链，两台设备写同一个 run 时取格上更高的那个，对任意设备数都收敛。`revision` 只在两个同级终态相撞（弃权后被接手、原设备又回来跑完了）时用，同值按 deviceId 破平。
 
-有 `idempotencyKey` 时文件名取 `hash(kind + key)`：两台设备写同一个路径，同步的合并直接把它们收敛成一份，不需要额外的去重协议。没有 key 就用随机 id。重放用新 key（`replay:<原 runId>:<n>`），否则和原 run 撞名。
+有 `idempotencyKey` 时文件名取 `hash(kind + key)`：两台设备写同一个路径，同步的合并直接把它们收敛成一份，不需要额外的去重协议。没有 key 就用随机 id。重放用新 key（`replay:<原 runId>:<n>`），否则和原 run 撞名。 第一版留字段不实现：今天只有 soul 一个委托方、一次派一个，撞 key 不会发生。
 
 批次先写一份清单 `legion/batches/<batchId>.json`（成员 id、创建时刻、期望成员数）再写各成员，join 以清单为准；清单写完而成员缺、过了宽限期，整批判 failed。第一版留字段不实现。
 
@@ -149,7 +149,7 @@ schedule 的产物是叫醒 soul 的一个回合，不是直接起 run；派什�
 
 已经在的：
 
-- `agent-turn.ts` 的 `startAgentTurn(request) → { result, steer, followUp }`，一次 agent 运行，轮次上限、预算裁剪、工具计数、看门狗都留在外面。
+- `turn.ts` 的 `runAgentTurn`：一次工具循环回合，跑在 harness 的一条 lane 上，契约在 `contract.ts`；轮数上限走 `before_request`，预算裁剪走 `toProviderMessages` 每轮重算不写回，遥测挂 `message_end`。
 - `watchdog.ts`：流式调用静默超时就 abort 重试，provider 说是确定性失败的不重试，用户 Stop 抛 `StoppedError`。
 - `observable-run.ts`：长管线共用的 subscribe/snapshot 外壳和活跃度计数。
 - `limiter.ts`：整组的并发与起跑间隔，429 是让整组慢下来，不是这一次调用倒霉。
@@ -157,7 +157,7 @@ schedule 的产物是叫醒 soul 的一个回合，不是直接起 run；派什�
 
 进程内那半搬到 pi-agent-core 0.85.1 的 `AgentHarness`：soul 一条 lane，本地快车道的 worker 各一条（`lane(name, { createAt: tip })` 继承上下文，可换模型和工具集）；收件箱是 `appendCustomEntry` 加 `nextRun`；跨进程重启靠 `create` 返回的 open 列表和 `resume()`，默认不重跑工具，写一条合成 toolResult 说中断了，要重执行的工具自己声明 `replay: "safe"`；worker lane 的分支摘要不会自己回来，由 app 调 `generateBranchSummary` 再写进 soul 的 lane。跨设备那半仍是 run 文件。两边的接缝只有一处：run 完成后由谁把 brief 追加进 soul 的 lane。
 
-落位：`legion/execute/harness.ts` 是工厂，建 `AgentHarness` 和 `JsonlSessionRepo`；`legion/execute/turn.ts` 用它提供今天 `runAgentTurn` 的同一份契约。`src/ai/agent.ts` 里手写的 `runAgentLoop` / `runAgentTurn` 退役，调用方改从 `legion/execute` import，`src/ai` 只剩 provider、鉴权、streamFn、消息转换这类接线。`legion/subagent` 退成 lane 上的薄壳：fork 出一条 worker lane，分支摘要就是 brief。`legion/execute/agent-turn.ts` 零调用方，删除。
+落位：`legion/execute/harness.ts` 是工厂，建 `AgentHarness` 和 `JsonlSessionRepo`；`legion/execute/turn.ts` 用它提供今天 `runAgentTurn` 的同一份契约。`src/ai/agent.ts` 里手写的 `runAgentLoop` / `runAgentTurn` 退役，调用方改从 `legion/execute` import，`src/ai` 只剩 provider、鉴权、streamFn、消息转换这类接线。`legion/subagent` 退成 lane 上的薄壳：fork 出一条 worker lane，分支摘要就是 brief。`legion/subagent/agent-turn.ts`（从 execute 搬来，避免 subagent 与 execute 互相 import）零调用方，删除。
 
 两个未定点跟着第一个真调用方定：看门狗重试从原始消息重建 Agent，但轮次跨重试累加；`transformContext` 的截断不写回 Agent 的消息记录，每轮重算。
 
