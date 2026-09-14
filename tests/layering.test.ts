@@ -68,6 +68,7 @@ const LAYER: Record<string, Layer> = {
   // isolated sub-agent runner. A capability like ai itself, and one layer out
   // from it: legion calls ai to send a turn, ai never calls legion.
   legion: "capability",
+  "legion/bell": "capability",
   "legion/execute": "capability",
   "legion/subagent": "capability",
   memory: "capability",

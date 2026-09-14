@@ -1202,6 +1202,18 @@ export const PALACE = [
     gc: "never",
   },
   {
+    kind: "bell",
+    domain: "memory",
+    match: subtree("legion/bell/"),
+    samples: ["legion/bell/run-done-r-4f2a91.json"],
+    id: "fixed",
+    refs: [],
+    sync: "local",
+    deleteWith: "never",
+    gc: "domain-housekeeping",
+    note: "one bell per file, the soul's inbox on this device (src/legion/bell). Machine-local runtime, like the session beside it: a bell is addressed to the soul running here, and the words it produces travel as a conversation (docs/55)",
+  },
+  {
     kind: "session",
     domain: "memory",
     match: subtree("session/"),
