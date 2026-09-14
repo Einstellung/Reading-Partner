@@ -239,6 +239,9 @@ test("the product opens as a book: one spine document, the outline, the pages", 
 
   const pagination = await paginate(book, characterRuler(700));
   expect(pagination.blocks.length).toBeGreaterThanOrEqual(1);
+  // A built article has no page-list, so no block carries a printed page and
+  // the reader's top bar shows the block number alone.
+  for (const block of pagination.blocks) expect(block.label ?? null).toBeNull();
   const ft = fulltextFrom(book, pagination);
   expect(ft.kind).toBe("epub");
   expect(ft.status).toBe("ok");

@@ -97,6 +97,7 @@ export function statsOf(args: {
   return {
     pageIndex: args.pageIndex,
     pageLabel: labelForBlock(args.pagination, args.pageIndex) ?? String(args.pageIndex + 1),
+    printedLabel: labelForBlock(args.pagination, args.pageIndex),
     pagesCount: args.pagination.blocks.length,
     canZoomIn: canZoomIn(args.scale),
     canZoomOut: canZoomOut(args.scale),

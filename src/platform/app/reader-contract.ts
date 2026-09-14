@@ -44,6 +44,12 @@ export interface ViewState {
 export interface ViewStats {
   pageIndex: number;
   pageLabel: string | null;
+  // The printed page the book itself prints on this page, from its page-list
+  // (docs/64). Null when there is none to show: every PDF, and an EPUB without
+  // a page-list — including the ones this app builds out of web articles.
+  // pageLabel falls back to the block number; this one never does, so the top
+  // bar can tell "the book says 52" from "this is block 37".
+  printedLabel: string | null;
   pagesCount: number;
   canZoomIn: boolean;
   canZoomOut: boolean;

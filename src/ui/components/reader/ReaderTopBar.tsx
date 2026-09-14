@@ -18,6 +18,7 @@ import {
   IconZoomOut,
 } from "../base/icons";
 import MoreMenu, { type MoreItem } from "./MoreMenu";
+import { readerPageText } from "./reader-page-text";
 import { zoomResetLabel } from "./reader-zoom-keys";
 import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";
@@ -49,7 +50,7 @@ export default function ReaderTopBar(props: {
 }) {
   const { view, stats, sidebarOpen, gate } = props;
 
-  const pageText = stats ? `${stats.pageIndex + 1} / ${stats.pagesCount}` : "— / —";
+  const pageText = readerPageText(stats);
   const paged = stats?.layout === "paged";
 
   // The "More" overflow: low-frequency view controls collapsed out of the main
@@ -149,7 +150,10 @@ export default function ReaderTopBar(props: {
         />
         <Separator orientation="vertical" className="flex-none data-[orientation=vertical]:h-5" />
         <span className="flex-none [font-variant-numeric:tabular-nums] text-[13px] text-muted-foreground whitespace-nowrap px-0.5">
-          {pageText}
+          {pageText.blocks}
+          {pageText.printed && (
+            <span className="ml-1.5 text-faint-foreground">{pageText.printed}</span>
+          )}
         </span>
       </div>
 

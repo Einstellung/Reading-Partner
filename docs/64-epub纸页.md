@@ -31,6 +31,8 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 doc
 
 一页一条：所在 spine、抽取文本里的起止偏移、起点 CFI、印刷页码（有 page-list 的书按该页起点落在哪个印刷页取）。每个 spine 文档从新的一页开始，一页不跨文档。`blockTexts`/`blockNumberAt` 不变，`Fulltext.pages[]` 仍是每页正文。
 
+2026-09-14 顶栏显示印刷页码：`ViewStats.printedLabel` 只在这一页有 `label` 时有值（`pageLabel` 会退回块号，它不退），顶栏在块号后面跟一个淡色的 `printed 52`。块号仍是引用、标注和笔记用的那个坐标。PDF 和自己构建的文章 EPUB 没有 page-list，什么都不显示。
+
 排版在 webview 里做（`page-ruler.ts`）：把消毒后的 spine 文档挂进一张离屏页卡片，CSS multi-column（列宽 720、列高 944、gap 0），第 k 列就是第 k 页；逐文本节点看 client rects 跨了哪些列，列边界上对字符偏移二分找第一个字；图/svg/hr 单独算一个原子。量尺接口 `PageRuler = (doc) => Promise<PagePoint[]>`，`paginate(book, ruler)` 只管把点变成表；测试用 `characterRuler(n)`。量尺返回的节点是克隆树的，必须经 CFI 解析回摄入树再取偏移（坑 267）。
 
 一本书算一次：`ensurePagination` 单飞，摄入和阅读面板谁先到谁算，另一个等同一个 promise；`open-book.ts` 在读标注之前先算（`preparePages`）。同步来的表直接用；卡片按表里的起点 CFI 在自己的排版里找列，排版差一行也落在表说的那一行上。

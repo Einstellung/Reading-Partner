@@ -227,6 +227,8 @@ function EmbedReaderPaneImpl(props: EmbedReaderPaneProps) {
           props.onChangeViewStats({
             pageIndex: s.pageIndex,
             pageLabel: String(s.pageIndex + 1),
+            // A PDF page carries no printed number of its own here.
+            printedLabel: null,
             pagesCount: s.pagesCount,
             canZoomIn: s.canZoomIn,
             canZoomOut: s.canZoomOut,

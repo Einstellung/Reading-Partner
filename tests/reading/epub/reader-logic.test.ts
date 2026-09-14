@@ -100,6 +100,10 @@ describe("where the reader is", () => {
     const zoom = { kind: "lock" as const, lock: "fit-page" as const };
     expect(statsOf({ pageIndex: 2, pagination, layout: "paged", zoom, scale: 1 }).pageLabel).toBe("3");
     expect(statsOf({ pageIndex: 0, pagination, layout: "paged", zoom, scale: 1 }).pageLabel).toBe("1");
+    // printedLabel never falls back, so the top bar can stay silent on a book
+    // that prints no page numbers.
+    expect(statsOf({ pageIndex: 0, pagination, layout: "paged", zoom, scale: 1 }).printedLabel).toBe("1");
+    expect(statsOf({ pageIndex: 2, pagination, layout: "paged", zoom, scale: 1 }).printedLabel).toBeNull();
   });
 
   test("the stats say how many blocks the book has and which layout it is in", () => {
