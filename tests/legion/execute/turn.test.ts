@@ -946,3 +946,49 @@ test("two turns on one store do not see each other's messages", async () => {
 	expect(b.done).toBe("two");
 	expect(second.contexts[0].messages).toEqual([{ role: "user", content: "second", timestamp: 0 }]);
 });
+
+// A sub-agent is a worker on a lane of its own (src/legion/subagent): same loop,
+// named differently, and its session filed apart from the reader's turns.
+test("a named lane runs on that lane, in the session group it names", async () => {
+	const disk = memoryAppData();
+	const script = scriptStream([{ text: "found it" }]);
+	const c = collectCallbacks();
+
+	await runHarnessTurn({
+		stream: script.fn,
+		model: MODEL,
+		messages: [{ role: "user", content: "look it up", timestamp: 0 }],
+		tools: [],
+		maxRounds: 4,
+		lane: { name: "worker:find_papers", sessions: "worker" },
+		fileSystem: createSessionFileSystem(disk),
+		...c.cb,
+	});
+
+	expect(c.done).toBe("found it");
+	// The repo slugs the group into one directory name under the sessions root.
+	const paths = [...disk.files.keys()].join("\n");
+	expect(paths).toContain("--session-worker--/");
+	expect(paths).not.toContain("--session-turn--/");
+	const written = [...disk.files.values()].map((bytes) => new TextDecoder().decode(bytes)).join("\n");
+	expect(written).toContain("worker:find_papers");
+});
+
+test("an unnamed lane is the reader's turn", async () => {
+	const disk = memoryAppData();
+	const script = scriptStream([{ text: "hi" }]);
+	const c = collectCallbacks();
+
+	await runHarnessTurn({
+		stream: script.fn,
+		model: MODEL,
+		messages: [{ role: "user", content: "say hi", timestamp: 0 }],
+		tools: [],
+		maxRounds: 4,
+		fileSystem: createSessionFileSystem(disk),
+		...c.cb,
+	});
+
+	expect(c.done).toBe("hi");
+	expect([...disk.files.keys()].join("\n")).toContain("--session-turn--/");
+});

@@ -20,8 +20,29 @@
 // a scripted stream, with no settings read and no credentials.
 
 import { StoppedError } from "../stop";
-import type { AgentCallbacks } from "../execute/contract";
+import type { AgentCallbacks, TurnLane } from "../execute/contract";
 import type { SubagentTurnOutcome } from "./types";
+
+// Where a sub-agent run lives on the harness: a worker lane of its own, in a
+// session group of its own.
+//
+// A lane rather than the reader's: the run is a fork of the work, not a turn of
+// the conversation, and naming it after the definition is what makes a session
+// file on disk say which worker wrote it. Its own group because these sessions
+// are not the reader's turns and nothing that looks for an interrupted turn
+// should find one of these instead.
+//
+// The lane is opened on a session this run owns, not on the caller's. Nothing
+// in the app holds a harness across calls yet, and pi scopes the system prompt
+// and the tool registry to the harness rather than the lane — a worker hung off
+// a caller's harness would inherit the caller's role and have to have its tools
+// added to the caller's registry, which is the opposite of the isolation this
+// capability is for. When a caller does hold one, it hands the run its own.
+const WORKER_SESSIONS = "worker";
+
+export function workerLane(name: string): TurnLane {
+  return { name: `worker:${name}`, sessions: WORKER_SESSIONS };
+}
 
 export interface TurnSettler {
   callbacks: AgentCallbacks;

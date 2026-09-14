@@ -100,6 +100,19 @@ export interface AgentCallbacks {
   onRefusal?(message: string): void;
 }
 
+// Which lane of which session group a turn runs on.
+//
+// Unset is the reader's turn: lane "turn" in the "turn" group, one fresh
+// session per turn. A sub-agent names both (legion/subagent), because a worker
+// is not a turn of the conversation: its lane says which worker it is, and its
+// session belongs beside the other workers' rather than among the reader's.
+export interface TurnLane {
+  // The lane inside the session. Non-empty; anything but a NUL is allowed.
+  name: string;
+  // The session group the session file is filed under (the repo's `cwd`).
+  sessions: string;
+}
+
 export interface RunAgentTurnOptions extends AgentCallbacks {
   providerId: ProviderId;
   modelId: string;
@@ -127,6 +140,8 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
   // that has no conversation of its own — a fresh id stands in, which is what a
   // one-off run is.
   telemetry: { surface: AiSurface; thread?: string; inline?: TurnTelemetry["inline"] };
+  // The lane and session group this turn runs on; the reader's turn when unset.
+  lane?: TurnLane;
 }
 
 // The two things the turn says when it gives up. Both are refusals rather than

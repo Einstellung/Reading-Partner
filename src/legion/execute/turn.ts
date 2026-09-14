@@ -6,8 +6,10 @@
 // tool call and tool result is appended to a session file as it happens.
 //
 // Each turn opens one lane on a fresh session and closes it when the turn ends.
-// The session file stays on disk and nothing reads it back: a turn is a turn.
-// The soul holding a lane across turns is the next slice.
+// Which lane, and which group the session is filed under, is the caller's to
+// name (`lane`): the reader's turn runs on "turn", a sub-agent runs on a worker
+// lane of its own. The session file stays on disk and nothing reads it back: a
+// turn is a turn. The soul holding a lane across turns is the next slice.
 //
 // Where each of the old loop's decisions landed on the harness:
 //
@@ -74,6 +76,7 @@ import {
   type AgentTool,
   type RunAgentTurnOptions,
   type StreamFn,
+  type TurnLane,
 } from "./contract";
 import { createHarness, createSessionRepo } from "./harness";
 
@@ -88,6 +91,7 @@ export {
   type StreamFn,
   type ToolResult,
   type ToolResultImage,
+  type TurnLane,
 } from "./contract";
 
 const DEFAULT_MAX_ROUNDS = 8;
@@ -96,10 +100,10 @@ const PREVIEW_LIMIT = 200;
 // The package exports the harness type but not its lane's.
 type AgentLane = Awaited<ReturnType<AgentHarness<undefined>["lane"]>>;
 
-// The session group every turn's session is filed under: one directory of
-// one-file-per-turn sessions beside whatever the soul will keep.
-const TURN_SESSIONS = "turn";
-const LANE = "turn";
+// Where a turn runs when the caller does not say: one directory of
+// one-file-per-turn sessions beside whatever the soul will keep, and one lane
+// in each. A worker names its own (legion/subagent).
+const READER_TURN: TurnLane = { name: "turn", sessions: "turn" };
 
 function preview(text: string): string {
   return text.length <= PREVIEW_LIMIT ? text : `${text.slice(0, PREVIEW_LIMIT)}…`;
@@ -161,6 +165,11 @@ export interface HarnessTurnParams extends AgentCallbacks {
   // Where the turn's session is written. AppData's session store when unset; a
   // test hands in a disk that is a Map.
   fileSystem?: FileSystem;
+  // Which lane of which session group this turn runs on; the reader's when
+  // unset. Nothing else about the turn changes with it: a worker lane is the
+  // same loop under a different name, which is the whole point of the harness
+  // owning the loop.
+  lane?: TurnLane;
 }
 
 // The two ways this turn ends a run on its own: neither is a failure, and the
@@ -341,6 +350,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   };
 
   const fileSystem = params.fileSystem ?? createSessionFileSystem();
+  const laneId = params.lane ?? READER_TURN;
   const onAbort = (): void => {
     void abortRun();
   };
@@ -348,7 +358,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   let handle: Awaited<ReturnType<typeof createHarness>> | undefined;
   try {
     const repo = createSessionRepo({ fileSystem });
-    const session = await repo.create({ cwd: TURN_SESSIONS }, ctx);
+    const session = await repo.create({ cwd: laneId.sessions }, ctx);
     handle = await createHarness(
       {
         fileSystem,
@@ -424,7 +434,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       handlerError ??= new Error(error);
     });
 
-    lane = await harness.lane(LANE, ctx);
+    lane = await harness.lane(laneId.name, ctx);
     signal?.addEventListener("abort", onAbort, { once: true });
 
     const admitted = await lane.accept({ kind: "prompt", prompt: params.messages as AgentMessage[] }, ctx);
@@ -497,6 +507,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
     maxRounds = DEFAULT_MAX_ROUNDS,
     purpose,
     about,
+    lane,
     onDelta,
     onThinking,
     onResponse,
@@ -541,6 +552,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       purpose,
       about,
       telemetry,
+      ...(lane ? { lane } : {}),
       onDelta,
       onThinking,
       onResponse,

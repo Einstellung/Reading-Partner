@@ -5,7 +5,7 @@
 
 import { runAgentTurn } from "../execute/turn";
 import { resolveModel } from "../../ai/model-call";
-import { createTurnSettler } from "./turn";
+import { createTurnSettler, workerLane } from "./turn";
 import type { SubagentTurnFn } from "./types";
 
 // A sub-agent resolves the background-pipeline thinking setting rather than the
@@ -29,6 +29,8 @@ export const runSubagentTurnLive: SubagentTurnFn = async (request) => {
       reasoning: model.reasoning,
       maxRounds: request.maxRounds,
       purpose: request.purpose,
+      // A worker lane of its own, named after the definition.
+      lane: workerLane(request.name),
       // No thread: a run replays no history, so nothing before it shares its
       // prefix and runAgentTurn stands a fresh id in.
       telemetry: { surface: "subagent" },

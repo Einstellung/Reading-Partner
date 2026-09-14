@@ -20,7 +20,7 @@ import { StoppedError } from "../../../src/legion/execute/watchdog";
 import { runSubagent } from "../../../src/legion/subagent/run";
 import { subagentTool } from "../../../src/legion/subagent/tool";
 import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
-import { createTurnSettler } from "../../../src/legion/subagent/turn";
+import { createTurnSettler, workerLane } from "../../../src/legion/subagent/turn";
 import type {
   SubagentDefinition,
   SubagentProgress,
@@ -70,6 +70,7 @@ function loopRunner(turns: Turn[], model: Model<Api> = MODEL) {
       signal: request.signal,
       maxRounds: request.maxRounds,
       purpose: request.purpose,
+      lane: workerLane(request.name),
       ...settler.callbacks,
     });
     return settler.outcome.finally(() => settler.dispose());
@@ -465,4 +466,23 @@ test("a sub-agent name that could be rewritten by the provider is refused", () =
   expect(() => subagentTool(definition({ name: "WebSearch" }), { run: loopRunner([]).run })).toThrow(
     "not a safe tool name",
   );
+});
+
+// A sub-agent is a worker lane on the harness (docs/55). The name is the one
+// thing the runner has to hand the turn for that: everything else about the
+// lane follows from it.
+test("the run is a worker lane named after its definition", async () => {
+  const runner = loopRunner([
+    { calls: [{ name: "search_papers", args: { query: "q" }, id: "t1" }] },
+    { text: "One paper." },
+  ]);
+
+  const result = await runSubagent({ definition: definition(), task: "find work" }, { run: runner.run });
+
+  expect(result.outcome).toBe("answered");
+  expect(runner.requests[0]?.name).toBe("research_literature");
+  expect(workerLane("research_literature")).toEqual({
+    name: "worker:research_literature",
+    sessions: "worker",
+  });
 });

@@ -7,11 +7,14 @@
 // network. live.ts supplies the real turn. This is the same dependency-injection
 // shape src/memory/observations/distill.ts uses, for the same reason.
 //
-// The turn underneath is the harness one (src/legion/execute/turn.ts).
-// agent-turn.ts beside it does this same job on pi-agent-core's Agent,
-// with all of the above kept outside it, and adds the two things the
-// hand-written loop cannot do: steering a run that is already working, and
-// queueing follow-up work. Moving this runner onto it is a separate change.
+// The turn underneath is the harness one (src/legion/execute/turn.ts), on a
+// worker lane of the run's own (turn.ts). The brief is composed here rather
+// than taken from pi's generateBranchSummary: that one is a compaction summary
+// of a branch, written by an extra model call with its own prompt, and it says
+// nothing about the distinctions a caller has to state — a run that answered
+// with nothing behind it, a run that spent its turn cap and a run whose call
+// never completed all summarize alike, and none of them are held to
+// briefTokenCap.
 
 import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../execute/contract";
 import { StoppedError } from "../stop";
@@ -175,6 +178,7 @@ export async function runSubagent(
 
   try {
     const outcome = await deps.run({
+      name: definition.name,
       systemPrompt: subagentSystemPrompt(definition, tokenCap),
       // The whole message list: one user turn. Nothing of the caller's
       // conversation is replayed, and nothing of this run's rounds can leak back
