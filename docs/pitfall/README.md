@@ -68,7 +68,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 306）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 308）。
 
 ## EmbedPDF 引擎
 
@@ -328,6 +328,7 @@
 - [238-opencode-requires-a-session-header-pi-never-sends](./238-opencode-requires-a-session-header-pi-never-sends.md) — OpenCode Go 每次调用回 400 `MissingSessionID`：它要求每个请求带 `x-opencode-session`，pi-ai 整个包里没有这个头，`options.sessionId` 发的是另外四个名字。用 `ProviderRequestOptions.headers`（三个 api 都 merge 在最后），映射表在 `src/ai/call-setup.ts` 一 provider 一行，值取会话 id（工具循环用 `TurnTelemetry.thread`）而不是每次一个随机值，否则路由和缓存白搭；不要放按 host 分发的 fetch 桥。已用真 key 实测：`opencode-go` 不带头 400、带头 200，端到端两轮工具循环跑通在解析到 anthropic-messages 的模型上，所以这个钩子不只对 openai-completions 管用。Zen（`opencode`）那一条仍只有文档支撑，余额不足在 session 检查之前就回 `CreditsError`
 - [291-a-tool-start-wiped-the-round-it-interrupted](./291-a-tool-start-wiped-the-round-it-interrupted.md) — 文字聊天里模型输出一段再调工具，那段话被 `tool-start` 清空（`call-state.ts` / `use-info-call.ts`），工具成功后状态行也 splice 掉，行里空了；`onDone` 只交最后一轮，前面几轮永久丢失。每轮都挂工具之后（d7f90559）成了默认体验。拼法收到 `appendRoundBreak` / `joinRoundTexts` 一处，`onDone` 第三个参数交全文，第一个参数仍是答出来的那一轮给产出物用；工具状态行画在文字下面
 - [306-the-harness-holds-a-stream-to-the-provider-grammar](./306-the-harness-holds-a-stream-to-the-provider-grammar.md) — 换到 pi-agent-core 的 `AgentHarness` 后，只推 `text_delta` + `done` 的脚本化假流在第一个 delta 就把 harness 封死（`HarnessFault`，原因在 `.cause`："text block 0 has not started"）：帧编码器按真 provider 的语法收事件，`start` → 每块 `*_start` / `*_delta` / `*_end` → `done`/`error`。假流一律从 `tests/support/scripted-turn.ts` 出
+- [307-a-pi-lane-carries-no-prompt-of-its-own](./307-a-pi-lane-carries-no-prompt-of-its-own.md) — pi 的 lane 只带模型、思考档和活跃工具名（`LaneConfiguration` 三个字段），systemPrompt 和工具注册表是 harness 级的，`OperationRequest` 也没有单次覆盖口子：要自己 prompt 或自己工具集的 worker（隔离上下文的子 agent）得自己开 harness，身份写在 lane 名和 session 组上
 
 ## 开发环境
 
