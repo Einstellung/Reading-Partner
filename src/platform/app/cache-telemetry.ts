@@ -38,7 +38,9 @@ export type AiSurface =
   // One book-note chapter.
   | "notes"
   // A lesson-prep paper digest, in its tool-loop form.
-  | "digest";
+  | "digest"
+  // A turn no reader opened: the soul answering a bell (src/soul/bell.ts).
+  | "bell";
 
 // Which conversation a turn belongs to. `thread` is the id whose previous turn
 // the gap is measured against; a run with no conversation of its own (a chapter

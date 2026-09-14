@@ -4,6 +4,15 @@
 
 export { assembleTurn, configuredModel, type AssembleInput, type AssembledTurn } from "./turn";
 export { SOUL_LANE, soulHarness } from "./harness";
+export {
+  answerBell,
+  renderBell,
+  startBellWatch,
+  type AnswerBellDeps,
+  type BellTurn,
+  type BellWatchDeps,
+  type SendBellTurn,
+} from "./bell";
 export { soulMemorySection, openSoul, type LoadedRole, type Soul } from "./self";
 export {
   listRoles,
