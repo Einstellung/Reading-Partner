@@ -106,6 +106,15 @@ export function aiLanguageName(aiLanguage: AiLanguage): string | null {
 export interface Settings {
   defaultProviderId: string | null;
   defaultModelId: string | null;
+  // What the nightly briefing runs on. A model id only, under defaultProviderId:
+  // the credential layer keeps one provider signed in at a time (credentials.ts
+  // is single-active), so a second provider named here would have no key to call
+  // with. null follows defaultModelId.
+  //
+  // It exists because the briefing is the one thing in the app that spends money
+  // while nobody is watching — every source, every night — and the model the
+  // reader wants to talk to is not the model that stage is worth.
+  briefingModelId: string | null;
   // Optional Semantic Scholar API key. When set, prep fetches use it instead of
   // the shared free rate-limit pool.
   semanticScholarApiKey: string | null;
@@ -113,6 +122,13 @@ export interface Settings {
   // silently on models that don't support reasoning.
   chatThinking: ThinkingSetting;
   prepThinking: ThinkingSetting;
+  // The briefing's two stages, which used to borrow chatThinking and
+  // prepThinking respectively. Screening runs over the whole day's headlines and
+  // answers a coarse question, so it is the cheap one; analysis reads the bodies
+  // that got through. The defaults are the two values they borrowed, so a
+  // briefing does the same work it did before anyone opens this setting.
+  briefingScreenThinking: ThinkingSetting;
+  briefingThinking: ThinkingSetting;
   // Voice-input STT endpoint (docs/15). base/model sync freely; the key lives in
   // credentials.json (not synced). null falls back to the built-in SiliconFlow
   // SenseVoice defaults (see src/ai/voice/config.ts).
@@ -154,9 +170,12 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   defaultProviderId: null,
   defaultModelId: null,
+  briefingModelId: null,
   semanticScholarApiKey: null,
   chatThinking: "low",
   prepThinking: "medium",
+  briefingScreenThinking: "low",
+  briefingThinking: "medium",
   sttApiBase: null,
   sttModel: null,
   dictationLocale: "zh-CN",

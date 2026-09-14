@@ -237,10 +237,10 @@ export const PALACE = [
     refs: [],
     sync: "data",
     merge: "fields",
-    fieldGroups: [["defaultProviderId", "defaultModelId"]],
+    fieldGroups: [["defaultProviderId", "defaultModelId", "briefingModelId"]],
     deleteWith: "never",
     gc: "never",
-    note: "provider and model only mean anything as a pair, so the fields strategy settles them together (pitfall 237)",
+    note: "a model id only means anything under its own provider, so the fields strategy settles the provider and both model ids together (pitfall 237)",
   },
   {
     kind: "topics",

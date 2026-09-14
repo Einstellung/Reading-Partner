@@ -99,15 +99,16 @@ import type { InfoItem } from "../sources/item";
 
 // One room's day (docs/63 加工): the analyst call and the synthesis call, with
 // the two prompts, the parse and the one in-band retry in analysis/run.ts. Both
-// want some deliberation but not a marathon, so they reuse the prep effort
-// setting, and both are budgeted as a plan: the reply covers every cable the
-// room was handed, so it grows with the input and needs the wider output floor.
+// want some deliberation but not a marathon, so they take the briefing's
+// analysis effort setting, and both are budgeted as a plan: the reply covers
+// every cable the room was handed, so it grows with the input and needs the
+// wider output floor.
 //
 // The parse tallies are reported per call from here rather than from run.ts,
 // which does not know which model it is talking to. run.ts hands the text back
 // through the same parse it used, so what is counted is what was kept.
 async function analyze(input: AnalystInput, opts: AiCallOptions): Promise<LabRunResult> {
-  const model = await resolveModel("prep");
+  const model = await resolveModel("briefing");
   const startedAt = Date.now();
   const done = (ok: boolean) =>
     logEvent(INFO_EVENT_TOPIC, "info-analyze", {
@@ -118,7 +119,7 @@ async function analyze(input: AnalystInput, opts: AiCallOptions): Promise<LabRun
   try {
     const result = await runLabAnalysis(
       {
-        callModel: (system, user, o) => callModel("prep", "plan", () => system, user, o),
+        callModel: (system, user, o) => callModel("briefing", "plan", () => system, user, o),
         now: Date.now,
         onParse: (report) => reportParse({ ...report, model }),
       },
@@ -164,7 +165,7 @@ async function attemptScreen(
   extra?: string,
 ): Promise<ScreenParseOutcome> {
   const text = await callModel(
-    "chat",
+    "briefing-screen",
     "plan",
     (m) => screenSystemPrompt(m.aiLanguage) + (extra ?? ""),
     userText,
@@ -183,10 +184,10 @@ async function attemptScreen(
 }
 
 // The screening dep: one batch of headlines in, one verdict per item out. The
-// cheap model, on purpose — this is the stage that runs over the whole day, and
-// the question it answers ("is the body worth fetching") is a coarse one. A
-// parse failure gets one corrective retry, then throws so the watchdog treats it
-// as transient.
+// cheap effort setting, on purpose — this is the stage that runs over the whole
+// day, and the question it answers ("is the body worth fetching") is a coarse
+// one. A parse failure gets one corrective retry, then throws so the watchdog
+// treats it as transient.
 async function screen(
   input: { targets: ScreenTarget[]; items: InfoItem[] },
   opts: AiCallOptions,
@@ -194,7 +195,7 @@ async function screen(
   const targets = input.targets;
   const userText = screenUserMessage(targets, input.items);
   const validIds = new Set(input.items.map((it) => it.id));
-  const model = await resolveModel("chat");
+  const model = await resolveModel("briefing-screen");
   const parsed = await attemptScreen(model, userText, targets, validIds, opts);
   if (parsed.ok) return parsed.verdicts;
   const reparsed = await attemptScreen(

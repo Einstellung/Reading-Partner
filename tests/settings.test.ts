@@ -84,9 +84,12 @@ test("loadSettings round-trips a fully persisted object", async () => {
   const saved: Settings = {
     defaultProviderId: "anthropic",
     defaultModelId: "claude",
+    briefingModelId: "haiku",
     semanticScholarApiKey: "k",
     chatThinking: "high",
     prepThinking: "off",
+    briefingScreenThinking: "off",
+    briefingThinking: "low",
     sttApiBase: "https://stt.test",
     sttModel: "sense",
     dictationLocale: "en-US",
@@ -107,6 +110,22 @@ test("loadSettings fills the thinking defaults for an old file missing them", as
   expect(s.chatThinking).toBe("low");
   expect(s.prepThinking).toBe("medium");
   expect(s.defaultProviderId).toBe("openai");
+});
+
+// The briefing's own keys were added after files existed without them. Their
+// defaults are the two the briefing used to borrow (chatThinking for screening,
+// prepThinking for analysis), so an old file loads into the work it was already
+// doing rather than into a quietly cheaper or dearer night.
+test("an old file without the briefing keys loads into the briefing it already had", async () => {
+  expect(DEFAULT_SETTINGS.briefingModelId).toBeNull();
+  expect(DEFAULT_SETTINGS.briefingScreenThinking).toBe(DEFAULT_SETTINGS.chatThinking);
+  expect(DEFAULT_SETTINGS.briefingThinking).toBe(DEFAULT_SETTINGS.prepThinking);
+
+  persist({ defaultProviderId: "openai", defaultModelId: "gpt" });
+  const s = await loadSettings();
+  expect(s.briefingModelId).toBeNull();
+  expect(s.briefingScreenThinking).toBe("low");
+  expect(s.briefingThinking).toBe("medium");
 });
 
 test("aiLanguage defaults to auto and an old file without it loads as auto", async () => {

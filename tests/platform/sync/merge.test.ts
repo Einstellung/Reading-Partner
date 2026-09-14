@@ -671,7 +671,9 @@ test("a settled pair merged against itself again changes nothing", () => {
 // keys of the same name declares no group and is settled key by key, exactly as
 // every fields file was before.
 test("a file that declares no group is merged key by key as before", () => {
-  expect(fieldGroupsFor("settings.json")).toEqual([["defaultProviderId", "defaultModelId"]]);
+  expect(fieldGroupsFor("settings.json")).toEqual([
+    ["defaultProviderId", "defaultModelId", "briefingModelId"],
+  ]);
   expect(fieldGroupsFor("prep-abc/state.json")).toEqual([]);
 
   const base = json({ defaultProviderId: "anthropic", defaultModelId: "claude-opus-4" });
