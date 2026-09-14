@@ -11,7 +11,7 @@
 // here is wiring and the effects it drives.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { runAgentTurn } from "../../../ai/agent";
+import { runAgentTurn } from "../../../legion/execute/turn";
 import { assembleTurn, type AssembledTurn } from "../../../soul";
 import { applyTopicProposal, type TopicProposalCardData } from "../../../memory";
 import { openDesk, type DeskItem } from "../../../desk";

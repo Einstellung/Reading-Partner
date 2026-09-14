@@ -1,5 +1,6 @@
-// Unit tests for the agent loop core (src/ai/agent.ts). The loop is driven by a
-// scripted fake stream so no provider, auth, or network is involved. Run: bun test.
+// Unit tests for the turn core (src/legion/execute/turn.ts). The turn is driven
+// by a scripted fake stream so no provider, auth, or network is involved, and
+// its session is written to an in-memory AppData. Run: bun test.
 //
 // Kept out of src/ so the shell's `tsc --noEmit` (include: ["src"]) doesn't try to
 // typecheck the bun:test import, which has no ambient types in this project.
@@ -12,7 +13,6 @@ import {
 	fauxText,
 	fauxToolCall,
 	type AssistantMessage,
-	type AssistantMessageEvent,
 	type Context,
 	type Message,
 	type Model,
@@ -20,51 +20,23 @@ import {
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import {
-	runAgentLoop,
+	runHarnessTurn,
 	REFUSE_MIDTURN,
 	REFUSE_ROUNDS,
 	type AgentCallbacks,
 	type AgentTool,
+	type HarnessTurnParams,
 	type StreamFn,
-} from "../../src/ai/agent";
-import * as cacheTelemetry from "../../src/platform/app/cache-telemetry";
-import { setModelCallSink } from "../../src/ai/model-usage";
-import type { ModelCallInput } from "../../src/memory/usage/model-calls";
-import { DEFAULT_MAX_RETRIES } from "../../src/ai/providers";
-import { contextBudget, estimateContextTokens, piBudget } from "../../src/budget";
+} from "../../../src/legion/execute/turn";
+import * as cacheTelemetry from "../../../src/platform/app/cache-telemetry";
+import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
+import { setModelCallSink } from "../../../src/ai/model-usage";
+import type { ModelCallInput } from "../../../src/memory/usage/model-calls";
+import { DEFAULT_MAX_RETRIES, toPiMessages, type ChatMessage } from "../../../src/ai/providers";
+import { contextBudget, estimateContextTokens, piBudget } from "../../../src/budget";
+import { memoryAppData } from "../../support/memory-appdata";
+import { messageEvents, turnEvents, type Turn } from "../../support/scripted-turn";
 
-// A scripted model turn: either a `done` (optional text + optional tool calls)
-// or an `error` event. Text is emitted as a single text_delta before `done`.
-// `usage` sets the finished message's reported total, which is what makes pi's
-// estimator switch to its usage shortcut on the next round.
-type ToolReq = { name: string; args: Record<string, any>; id?: string };
-type Turn =
-	| { text?: string; calls?: ToolReq[]; usage?: number }
-	| { error: string; reason?: "error" | "aborted"; text?: string };
-
-function turnEvents(turn: Turn): AssistantMessageEvent[] {
-	const events: AssistantMessageEvent[] = [];
-	if (turn.text) {
-		const partial = fauxAssistantMessage(turn.text);
-		events.push({ type: "text_delta", contentIndex: 0, delta: turn.text, partial });
-	}
-	if ("error" in turn) {
-		const errMsg = fauxAssistantMessage(turn.text ?? "", { stopReason: "error", errorMessage: turn.error });
-		events.push({ type: "error", reason: turn.reason ?? "error", error: errMsg });
-		return events;
-	}
-	const blocks = [
-		...(turn.text ? [fauxText(turn.text)] : []),
-		...(turn.calls ?? []).map((c) => fauxToolCall(c.name, c.args, { id: c.id })),
-	];
-	const hasCalls = (turn.calls ?? []).length > 0;
-	const message: AssistantMessage = fauxAssistantMessage(blocks.length ? blocks : "", {
-		stopReason: hasCalls ? "toolUse" : "stop",
-	});
-	if (turn.usage) message.usage = { ...message.usage, input: turn.usage, totalTokens: turn.usage };
-	events.push({ type: "done", reason: hasCalls ? "toolUse" : "stop", message });
-	return events;
-}
 
 // Builds a StreamFn that replays `turns` one per call, recording the Context it
 // was handed each round (so tests can assert tool results were fed back). Events
@@ -93,7 +65,15 @@ function scriptStream(
 	return { fn, calls: () => round, contexts };
 }
 
-const MODEL = {} as Model<Api>;
+// The harness looks a model up by provider and id, so even the unmeasured one
+// has both. No contextWindow: every round on it is unmeasured by construction.
+const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
+
+// The turn on a session store that is a Map. `fileSystem` is the only thing a
+// test does not name itself.
+function run(params: Omit<HarnessTurnParams, "fileSystem">): Promise<void> {
+	return runHarnessTurn({ ...params, fileSystem: createSessionFileSystem(memoryAppData()) });
+}
 
 function collectCallbacks() {
 	const deltas: string[] = [];
@@ -172,7 +152,7 @@ test("happy path: one tool round then a final answer", async () => {
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "say hi", timestamp: 0 }],
@@ -200,7 +180,7 @@ test("multi-round: two tool rounds before answering", async () => {
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -227,7 +207,7 @@ test("the turn's text is every round's words, and never a tool result", async ()
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "what does p. 4 say", timestamp: 0 }],
@@ -256,7 +236,7 @@ test("a throwing execute becomes a tool-result error, not a crash", async () => 
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -283,7 +263,7 @@ test("aborted stream event stops the loop with no onDone/onError", async () => {
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -316,7 +296,7 @@ test("abort during a tool stops before the next round", async () => {
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -344,7 +324,7 @@ test("the round cap leaves through the refusal exit", async () => {
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "loop forever", timestamp: 0 }],
@@ -368,7 +348,7 @@ test("a caller with no refusal exit still hears about it, through onError", asyn
 	let error: string | undefined;
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "loop forever", timestamp: 0 }],
@@ -397,7 +377,7 @@ test("a tool result with images is fed back as image content (M9)", async () => 
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "what is figure 3", timestamp: 0 }],
@@ -435,7 +415,7 @@ test("reasoning is forwarded to the stream options each round", async () => {
 	};
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -453,14 +433,14 @@ test("reasoning is forwarded to the stream options each round", async () => {
 test("thinking deltas go to onThinking, never onDelta or the final answer", async () => {
 	const stream: StreamFn = (_model, _context, _options) => {
 		const s = createAssistantMessageEventStream();
-		const msg = fauxAssistantMessage("visible", { stopReason: "stop" });
+		const msg = fauxAssistantMessage([{ type: "thinking", thinking: "pondering" }, fauxText("visible")], {
+			stopReason: "stop",
+		});
 		(async () => {
-			await Promise.resolve();
-			s.push({ type: "thinking_delta", contentIndex: 0, delta: "pondering", partial: fauxAssistantMessage("") });
-			await Promise.resolve();
-			s.push({ type: "text_delta", contentIndex: 0, delta: "visible", partial: msg });
-			await Promise.resolve();
-			s.push({ type: "done", reason: "stop", message: msg });
+			for (const ev of messageEvents(msg)) {
+				await Promise.resolve();
+				s.push(ev);
+			}
 			s.end();
 		})();
 		return s;
@@ -468,7 +448,7 @@ test("thinking deltas go to onThinking, never onDelta or the final answer", asyn
 	const thinking: string[] = [];
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -487,7 +467,7 @@ test("plain answer with no tools calls onDone directly", async () => {
 	const script = scriptStream([{ text: "hello world" }]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "hi", timestamp: 0 }],
@@ -507,15 +487,17 @@ test("the final round's AssistantMessage reaches onDone with its usage", async (
 	const stream: StreamFn = () => {
 		const s = createAssistantMessageEventStream();
 		(async () => {
-			await Promise.resolve();
-			s.push({ type: "done", reason: "stop", message });
+			for (const ev of messageEvents(message)) {
+				await Promise.resolve();
+				s.push(ev);
+			}
 			s.end();
 		})();
 		return s;
 	};
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -534,7 +516,7 @@ test("a stream error hands its AssistantMessage to onError alongside the text", 
 	const script = scriptStream([{ error: "overloaded_error: server is overloaded" }]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -561,7 +543,7 @@ test("the response head is forwarded to every round's stream options", async () 
 	const c = collectCallbacks();
 	const heads: number[] = [];
 
-	await runAgentLoop({
+	await run({
 		stream,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -591,7 +573,7 @@ test("every round opens its request with a retry budget", async () => {
 	};
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream,
 		model: MODEL,
 		messages: [{ role: "user", content: "go", timestamp: 0 }],
@@ -611,7 +593,7 @@ test("every round opens its request with a retry budget", async () => {
 const WINDOW = 200_000;
 
 function sizedModel(contextWindow: number): Model<Api> {
-	return { id: "m", name: "m", contextWindow, maxTokens: 64_000 } as unknown as Model<Api>;
+	return { id: "m", name: "m", provider: "faux", contextWindow, maxTokens: 64_000 } as unknown as Model<Api>;
 }
 
 // A tool that hands back as much Chinese text as it is asked for: the shape that
@@ -675,7 +657,7 @@ test("a round pi would clamp to one token is refused instead of sent", async () 
 	]);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: sizedModel(WINDOW),
 		systemPrompt: "张".repeat(60_000),
@@ -712,7 +694,7 @@ test("a round over the line on the script-aware count is rescued by stubbing old
 	);
 	const c = collectCallbacks();
 
-	await runAgentLoop({
+	await run({
 		stream: script.fn,
 		model: sizedModel(WINDOW),
 		messages: [{ role: "user", content: "explain this", timestamp: 1 }],
@@ -760,7 +742,7 @@ test("each round of a turn is recorded once, in order, under the caller's face",
 		]);
 		const c = collectCallbacks();
 
-		await runAgentLoop({
+		await run({
 			stream: script.fn,
 			model: MODEL,
 			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
@@ -792,7 +774,7 @@ test("a round that failed is still recorded: it spent its input tokens", async (
 		const script = scriptStream([{ error: "boom" }]);
 		const c = collectCallbacks();
 
-		await runAgentLoop({
+		await run({
 			stream: script.fn,
 			model: MODEL,
 			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
@@ -816,7 +798,7 @@ test("a loop driven with no telemetry records nothing", async () => {
 		const script = scriptStream([{ text: "hi" }]);
 		const c = collectCallbacks();
 
-		await runAgentLoop({
+		await run({
 			stream: script.fn,
 			model: MODEL,
 			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
@@ -849,7 +831,7 @@ test("every round of a turn is one line in the model-call log", async () => {
 		]);
 		const c = collectCallbacks();
 
-		await runAgentLoop({
+		await run({
 			stream: script.fn,
 			model: MODEL,
 			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
@@ -883,7 +865,7 @@ test("a round that failed is a line too, marked as failed", async () => {
 		const script = scriptStream([{ error: "boom" }]);
 		const c = collectCallbacks();
 
-		await runAgentLoop({
+		await run({
 			stream: script.fn,
 			model: MODEL,
 			messages: [{ role: "user", content: "say hi", timestamp: 0 }],
@@ -900,4 +882,67 @@ test("a round that failed is a line too, marked as failed", async () => {
 		record.mockRestore();
 		undo();
 	}
+});
+
+// --- what the harness sends ---------------------------------------------------
+//
+// The caller still hands the whole conversation over as ChatMessages; the turn
+// appends them to a lane and the provider is sent what toPiMessages made of
+// them, in that order, with nothing of the harness's own in between.
+
+test("the provider is sent the caller's messages exactly as toPiMessages shapes them", async () => {
+	const chat: ChatMessage[] = [
+		{ role: "user", text: "what is on p. 4" },
+		{ role: "ai", text: "A table." },
+		{ role: "user", text: "and this?", images: [{ data: "QUJD", mediaType: "image/png" }] },
+	];
+	const messages = toPiMessages(chat);
+	const script = scriptStream([{ text: "a figure" }]);
+	const c = collectCallbacks();
+
+	await run({
+		stream: script.fn,
+		model: MODEL,
+		systemPrompt: "be brief",
+		messages,
+		tools: [echoTool],
+		maxRounds: 8,
+		...c.cb,
+	});
+
+	expect(c.done).toBe("a figure");
+	expect(script.contexts[0].messages).toEqual(messages);
+	expect(script.contexts[0].systemPrompt).toBe("be brief");
+	expect(script.contexts[0].tools?.map((t) => t.name)).toEqual(["echo"]);
+});
+
+test("two turns on one store do not see each other's messages", async () => {
+	const fileSystem = createSessionFileSystem(memoryAppData());
+	const first = scriptStream([{ text: "one" }]);
+	const second = scriptStream([{ text: "two" }]);
+	const a = collectCallbacks();
+	const b = collectCallbacks();
+
+	await runHarnessTurn({
+		stream: first.fn,
+		model: MODEL,
+		messages: [{ role: "user", content: "first", timestamp: 0 }],
+		tools: [],
+		maxRounds: 8,
+		fileSystem,
+		...a.cb,
+	});
+	await runHarnessTurn({
+		stream: second.fn,
+		model: MODEL,
+		messages: [{ role: "user", content: "second", timestamp: 0 }],
+		tools: [],
+		maxRounds: 8,
+		fileSystem,
+		...b.cb,
+	});
+
+	expect(a.done).toBe("one");
+	expect(b.done).toBe("two");
+	expect(second.contexts[0].messages).toEqual([{ role: "user", content: "second", timestamp: 0 }]);
 });

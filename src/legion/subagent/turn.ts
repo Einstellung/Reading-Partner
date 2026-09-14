@@ -16,11 +16,11 @@
 //     AbortController the caller already owns fires, and the in-flight
 //     sub-agent dies with it.
 //
-// Kept apart from live.ts so it can be tested against the real runAgentLoop with
+// Kept apart from live.ts so it can be tested against the real turn with
 // a scripted stream, with no settings read and no credentials.
 
 import { StoppedError } from "../stop";
-import type { AgentCallbacks } from "../../ai/agent";
+import type { AgentCallbacks } from "../execute/contract";
 import type { SubagentTurnOutcome } from "./types";
 
 export interface TurnSettler {

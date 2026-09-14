@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { localDate } from "../../src/memory/observations/files";
 import { createStatementStore, STATEMENTS_FILE } from "../../src/memory/statements/store";
 import { buildStatementTools, latestReaderMessage } from "../../src/memory/statements/tools";
-import type { AgentTool } from "../../src/ai/agent";
+import type { AgentTool } from "../../src/legion/execute/turn";
 
 const THREAD = "11111111-2222-3333-4444-555555555555";
 const TS = new Date("2026-09-05T02:30:00Z").getTime();

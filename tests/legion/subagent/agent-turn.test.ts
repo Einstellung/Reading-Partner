@@ -1,4 +1,4 @@
-// The pi-Agent entry (src/legion/execute/agent-turn.ts), driven by a scripted
+// The pi-Agent entry (src/legion/subagent/agent-turn.ts), driven by a scripted
 // stream so no provider, no credentials and no network are involved. What is
 // checked here is everything the Agent is NOT trusted with: the evidence rule,
 // the brief cap, the turn gate, the mid-run budget reduction, and the two
@@ -17,10 +17,10 @@ import {
   type Context,
   type Model,
 } from "@earendil-works/pi-ai";
-import type { AgentTool, StreamFn } from "../../../src/ai/agent";
+import type { AgentTool, StreamFn } from "../../../src/legion/execute/turn";
 import type { ProviderId } from "../../../src/ai/providers";
 import { estimateTextTokens, OUTPUT_FLOOR, PI_CONTEXT_SAFETY_TOKENS } from "../../../src/budget";
-import { startAgentTurn, type AgentTurn, type AgentTurnRequest } from "../../../src/legion/execute/agent-turn";
+import { startAgentTurn, type AgentTurn, type AgentTurnRequest } from "../../../src/legion/subagent/agent-turn";
 import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
 
 type ToolReq = { name: string; args: Record<string, any>; id?: string };

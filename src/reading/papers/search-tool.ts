@@ -16,7 +16,7 @@
 // The search itself is injected, so this file is testable with no network.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import {
   formatPaperSearch,
   LIBRARIES,

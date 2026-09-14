@@ -13,7 +13,7 @@
 // a model.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../legion/execute/turn";
 import type { ConversationIo } from "./io";
 import {
   readConversation,

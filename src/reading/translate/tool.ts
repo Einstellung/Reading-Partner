@@ -11,7 +11,7 @@
 // five cases is pinned by a test with no library, no topic and no provider.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 
 /** A document the tool could act on, as the shelf knows it. */
 export interface TranslateTarget {

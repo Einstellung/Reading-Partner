@@ -13,7 +13,7 @@
 // message anchors on one real store resolved against no message at all.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import { messageAnchor, type AnchoredMessage } from "../observations/anchors";
 import { anchorSpan } from "./dates";
 import type { StatementStore } from "./store";

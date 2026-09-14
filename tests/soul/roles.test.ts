@@ -9,7 +9,7 @@ import { openDesk, registerDeskItemKind, type DeskEnv, type DeskItem } from "../
 import { DEFAULT_SETTINGS } from "../../src/platform/app/settings";
 import { rebuildThreadStoreForTests } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
-import type { AgentTool } from "../../src/ai/agent";
+import type { AgentTool } from "../../src/legion/execute/turn";
 
 // A kind no domain would ever ask for (pitfall 287: a test kind named like a
 // real one replaces the domain's opener for the whole run).

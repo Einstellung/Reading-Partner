@@ -25,7 +25,7 @@ import {
   fauxToolCall,
   type FauxProviderHandle,
 } from "@earendil-works/pi-ai/providers/faux";
-import type { StreamFn } from "../../../src/ai/agent";
+import type { StreamFn } from "../../../src/legion/execute/turn";
 import { createHarness, type HarnessDeps } from "../../../src/legion/execute/harness";
 import { createSessionFileSystem, SESSIONS_ROOT } from "../../../src/platform/app/session-fs";
 import { memoryAppData } from "../../support/memory-appdata";

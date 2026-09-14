@@ -90,7 +90,7 @@ export function holdsNoAnswer(m: {
 // and writes the rest in the next round. The words already on screen stay where
 // they are and the next round's continue under them (docs/pitfall/291), so both
 // the streaming row and the text that is persisted are every round's words in
-// order, separated by a blank line. The loop (ai/agent.ts) and the surfaces use
+// order, separated by a blank line. The turn (legion/execute/turn.ts) and the surfaces use
 // the same two functions, or what the reader watched and what is saved would
 // differ by a newline.
 

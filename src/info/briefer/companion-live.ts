@@ -26,7 +26,7 @@ import { loadPicture } from "../picture/store";
 import { pictureSummary } from "../picture/picture";
 import type { Picture } from "../picture/types";
 import { buildCompanionTools, type BriefingScope, type SiteSignInDeps } from "./companion-tools";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import type { RequestOutcome } from "./reader";
 
 // The briefing controller the host hands in so generate_briefing can kick a

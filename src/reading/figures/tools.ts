@@ -6,7 +6,7 @@
 // see the picture, so the model doesn't promise the user something it can't do.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool, ToolResult } from "../../ai/agent";
+import type { AgentTool, ToolResult } from "../../legion/execute/turn";
 import { findFigureById } from "./lookup";
 import type { Figure } from "./types";
 

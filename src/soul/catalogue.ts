@@ -17,7 +17,7 @@
 // naming them.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../legion/execute/turn";
 import { appConversationIo, type ConversationIo } from "../conversations";
 import { PALACE, resolvePalace } from "../palace";
 import { appData } from "../platform/app/appdata";

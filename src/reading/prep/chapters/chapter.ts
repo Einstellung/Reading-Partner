@@ -14,8 +14,8 @@
 // for tests; the AI call is wired in live.ts.
 
 import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../ai/agent";
-import { runAgentTurn } from "../../../ai/agent";
+import type { AgentTool } from "../../../legion/execute/turn";
+import { runAgentTurn } from "../../../legion/execute/turn";
 import { formatPages, formatSearch } from "../../../fulltext/format";
 import { buildFigureTools, type FigureImage } from "../../figures/tools";
 import type { Figure } from "../../figures/types";

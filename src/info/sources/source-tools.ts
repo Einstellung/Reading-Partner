@@ -13,7 +13,7 @@
 // caller has to expect a slow call and tell the user before it starts.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import type { FetchFn } from "../extract/http";
 import type { ExtractReadable } from "../extract/readable-select";
 import type { SourceDescriptor } from "./descriptor";

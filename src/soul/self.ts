@@ -29,7 +29,7 @@ import { buildPlaceTools } from "./places";
 import { roleOf } from "./roles";
 import type { DeskEnv, DeskMemory } from "../desk";
 import { getThread } from "../platform/app/threads";
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../legion/execute/turn";
 
 export interface Soul {
   // statement_write, the conversation tools, the catalogue tools, the

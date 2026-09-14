@@ -5,8 +5,8 @@
 // (prompts, tool building, thin-note body) are exported for tests.
 
 import { Type, type ThinkingLevel } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../ai/agent";
-import { runAgentTurn } from "../../../ai/agent";
+import type { AgentTool } from "../../../legion/execute/turn";
+import { runAgentTurn } from "../../../legion/execute/turn";
 import { streamChat, type ProviderId } from "../../../ai/providers";
 import { newRunId } from "../../../platform/app/cache-telemetry";
 import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings";

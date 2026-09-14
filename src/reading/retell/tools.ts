@@ -10,7 +10,7 @@
 // exactly what landed in the card it raises.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import type { RetellDecisionCardData } from "./cards";
 import { formatOutline } from "./plan";
 import type { RetellChapter, PlanDecision, RetellPlan } from "./types";

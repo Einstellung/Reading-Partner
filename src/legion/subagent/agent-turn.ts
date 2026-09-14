@@ -18,8 +18,9 @@
 // so an honest failure reads identically whichever loop produced it, which is
 // what makes switching a caller over a swap rather than a rewrite.
 //
-// Nothing calls this yet. src/legion/subagent/run.ts still drives the
-// hand-written loop; this entry exists to be held against it in tests first.
+// Nothing calls this yet. run.ts still drives the harness turn
+// (src/legion/execute/turn.ts); this entry exists to be held against it in
+// tests first.
 
 import {
   Agent,
@@ -40,7 +41,7 @@ import type {
   Tool,
 } from "@earendil-works/pi-ai";
 import { fitRoundToBudget, type BudgetPurpose } from "../../budget";
-import type { AgentTool, StreamFn } from "../../ai/agent";
+import type { AgentTool, StreamFn } from "../execute/contract";
 import {
   DEFAULT_MAX_RETRIES,
   ModelCallError,
@@ -50,18 +51,18 @@ import {
   type ProviderId,
   type ResponseHead,
 } from "../../ai/providers";
-import { composeBrief, withBriefContract, EMPTY_ANSWER, type BriefFacts } from "../subagent/brief";
-import type { SubagentLedger } from "../subagent/ledger";
+import { composeBrief, withBriefContract, EMPTY_ANSWER, type BriefFacts } from "./brief";
+import type { SubagentLedger } from "./ledger";
 import {
   DEFAULT_BRIEF_TOKEN_CAP,
   DEFAULT_SUBAGENT_ROUNDS,
   type SubagentBrief,
   type SubagentOutcome,
   type SubagentToolFailure,
-} from "../subagent/types";
+} from "./types";
 import { StoppedError } from "../stop";
-import { realTimers, type RunTimers } from "./observable-run";
-import { resolveWatchdogConfig, runWithWatchdog, type WatchdogConfig } from "./watchdog";
+import { realTimers, type RunTimers } from "../execute/observable-run";
+import { resolveWatchdogConfig, runWithWatchdog, type WatchdogConfig } from "../execute/watchdog";
 
 // The model and effort one run is sent with. Resolved through the same
 // resolveCall the conversational path uses, so OAuth credentials, the transport

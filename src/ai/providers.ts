@@ -145,7 +145,7 @@ export interface StreamChatOptions {
 	// one conversation and a different one for a call that is not part of any — which is what every caller of this
 	// function is today, and each of them says so at its call site. A caller with
 	// a real conversation passes that conversation's id; the tool-loop path takes
-	// it from its telemetry thread (src/ai/agent.ts).
+	// it from its telemetry thread (src/legion/execute/turn.ts).
 	sessionId: string;
 	// Extended-thinking effort. undefined = off. Passed to pi-ai's streamSimple,
 	// which maps it per provider and ignores it on models without reasoning. We
@@ -161,7 +161,7 @@ export interface StreamChatOptions {
 	onError(message: string, assistant?: StreamOutcome): void;
 }
 
-// Exported so the agent loop (src/ai/agent.ts) reuses the exact same provider
+// Exported so the agent turn (src/legion/execute/turn.ts) reuses the exact same provider
 // instances, model lookup, and OAuth/api-key resolution as streamChat. The keys
 // are this app's ids, not pi's: our "openai" is pi's openai-codex.
 export const providers: Record<ProviderId, Provider> = {

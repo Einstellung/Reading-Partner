@@ -12,7 +12,7 @@
 // labs file.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
 import type { SourceDescriptor } from "../sources/descriptor";

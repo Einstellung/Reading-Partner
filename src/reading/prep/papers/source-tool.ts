@@ -6,7 +6,7 @@
 // testable with no network/AI.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../ai/agent";
+import type { AgentTool } from "../../../legion/execute/turn";
 import { isHttpsUrl } from "../../sources";
 import type { PaperStatus } from "./types";
 

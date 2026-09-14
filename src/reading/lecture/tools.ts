@@ -15,7 +15,7 @@
 // a lecture reading ten pages at a time.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import { BOOK_PAGE_LABEL, formatPages } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
 import { MAX_CHAPTER_PAGES } from "./inline";

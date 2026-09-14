@@ -17,7 +17,7 @@
 // itself, and that is the prompt's job, not a gate here.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import { moveSegment, putSegment, removeSegment, setSpine, type SegmentEdit } from "./edit";
 import type { TalkArrangementCardData } from "./cards";
 import { segmentLabel, type TalkOutline, type TalkSegment, type TalkSpine } from "./types";

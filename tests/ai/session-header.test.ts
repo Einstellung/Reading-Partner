@@ -20,13 +20,16 @@ import {
 	type AssistantMessage,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { runAgentTurn } from "../../src/ai/agent";
+import { runAgentTurn } from "../../src/legion/execute/turn";
 import { callModel } from "../../src/ai/model-call";
 import { getModels, providers, streamChat, PROVIDER_IDS, type ProviderId } from "../../src/ai/providers";
 import { providerCallSetup } from "../../src/ai/call-setup";
 import * as credentials from "../../src/ai/credentials";
 import { chatCleanupRunner } from "../../src/ai/voice";
 import * as cacheTelemetry from "../../src/platform/app/cache-telemetry";
+import * as sessionFs from "../../src/platform/app/session-fs";
+import { memoryAppData } from "../support/memory-appdata";
+import { messageEvents } from "../support/scripted-turn";
 import * as settings from "../../src/platform/app/settings";
 import { runDigest } from "../../src/reading/prep/papers/digest";
 import type { Fulltext } from "../../src/fulltext/types";
@@ -47,6 +50,10 @@ function firstModel(id: ProviderId): string {
 function harness(id: ProviderId, rounds: AssistantMessage[]): { seen: () => SimpleStreamOptions[] } {
 	spyOn(credentials, "loadCredentials").mockResolvedValue({ [id]: { type: "apiKey", key: "k" } } as any);
 	spyOn(cacheTelemetry, "recordCacheTurn").mockImplementation(() => {});
+	// The turn writes its session through the real session filesystem, onto a
+	// disk that is a Map.
+	const sessionFileSystem = sessionFs.createSessionFileSystem;
+	spyOn(sessionFs, "createSessionFileSystem").mockImplementation(() => sessionFileSystem(memoryAppData()));
 	const seen: SimpleStreamOptions[] = [];
 	let round = 0;
 	spyOn(providers[id], "streamSimple").mockImplementation(((_m: unknown, _c: unknown, opts: SimpleStreamOptions) => {
@@ -57,21 +64,12 @@ function harness(id: ProviderId, rounds: AssistantMessage[]): { seen: () => Simp
 			await Promise.resolve();
 			// The visible reply is assembled from deltas, not from the final
 			// message, so a round that answers has to stream its text first.
-			const text = messageText(message);
-			if (text) stream.push({ type: "text_delta", contentIndex: 0, delta: text, partial: message });
-			stream.push({ type: "done", reason: message.stopReason === "toolUse" ? "toolUse" : "stop", message });
+			for (const ev of messageEvents(message)) stream.push(ev);
 			stream.end();
 		})();
 		return stream;
 	}) as any);
 	return { seen: () => seen };
-}
-
-function messageText(message: AssistantMessage): string {
-	return message.content
-		.filter((c): c is Extract<typeof c, { type: "text" }> => c.type === "text")
-		.map((c) => c.text)
-		.join("");
 }
 
 function answer(text: string): AssistantMessage {

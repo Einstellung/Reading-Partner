@@ -20,7 +20,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import { listTopics, type Topic } from "../../platform/app/topics";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import type { TopicProposalCardData } from "./card";
 
 /** A topic as this tool needs it: enough to name one and to match one. */
