@@ -423,7 +423,7 @@ function loadConf(): unknown {
   return JSON.parse(readFileSync(join(ROOT, "src-tauri/tauri.conf.json"), "utf8"));
 }
 
-function fail(message: string): never {
+export function fail(message: string): never {
   console.error(`::error::${message}`);
   process.exit(1);
 }
@@ -469,7 +469,8 @@ function plistFromIpa(ipa: string): Uint8Array {
   return run(["unzip", "-p", ipa, entries[0]]);
 }
 
-function plistAt(target: string): Uint8Array {
+/** The Info.plist inside an .ipa or .app, or the file itself. */
+export function plistAt(target: string): Uint8Array {
   if (target.endsWith(".ipa")) return plistFromIpa(target);
   const path = target.endsWith(".app") ? join(target, "Info.plist") : target;
   return new Uint8Array(readFileSync(path));

@@ -166,12 +166,17 @@ jobs:
       # Xcode's; assert on the artifact itself, not on what we wrote. Without
       # the schemes here, Google's callback lands on a scheme no app claims and
       # sign-in is dead in a build nothing else would flag.
-      - name: Assert the deep-link schemes are in the ipa
+      - name: Assert the deep-link schemes and document types are in the ipa
         run: |
           set -euo pipefail
           IPA=$(find src-tauri/gen/apple/build -name '*.ipa' -print -quit)
           [ -n "$IPA" ] || { echo "::error::no ipa produced"; exit 1; }
           bun scripts/ios-deep-link-plist.ts verify "$IPA"
+          # The formats the app claims come from src-tauri/Info.ios.plist and are
+          # merged in at build time, so only the artifact can show they arrived.
+          # Without them the app is absent from the share sheet, with nothing in
+          # the build log to say so.
+          bun scripts/ios-document-types.ts verify "$IPA"
 
       # altool is still the supported CLI for App Store uploads (it was
       # deprecated for notarization only). A successful run here means the
