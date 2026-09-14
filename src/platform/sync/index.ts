@@ -42,6 +42,10 @@ import {
 } from "./state";
 
 export { isGoogleConfigured } from "./googleConfig";
+// The app's heartbeat. Exported so that what else runs on this beat — the
+// soul's bell pass (src/soul/bell.ts) — runs on the same one rather than on a
+// second timer nobody would think to keep in step with it.
+export { TICK_MS } from "./engine";
 export {
   syncHealth,
   SYNC_GRACE_MS,

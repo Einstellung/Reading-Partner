@@ -14,10 +14,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID } from "./platform/app/topics";
-import { initSync } from "./platform/sync";
+import { initSync, TICK_MS } from "./platform/sync";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { registerPullRoute } from "./platform/sync/pull-routes";
 import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
+import { startBellWatch } from "./soul";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
@@ -162,6 +163,16 @@ export default function PhoneApp() {
       onPulled: () => void refreshSavedArticles(),
     });
   }, [refreshSavedArticles]);
+
+  // The soul's inbox, on the same beat as the pull (docs/55). The phone runs no
+  // heavy work of its own, but a run it delegated to the desktop rings its bell
+  // here too, through the conversation the two devices share.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  useEffect(
+    () => startBellWatch({ settings: () => settingsRef.current, intervalMs: TICK_MS }),
+    [],
+  );
 
   // The Android button, bound only while back has somewhere to go: with nothing
   // to close and nothing to pop it belongs to the system, which leaves the app

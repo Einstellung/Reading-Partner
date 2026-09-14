@@ -233,9 +233,9 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 ## 现状与顺序
 
-已落地（2026-09-14）：第 1、2 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。
+已落地（2026-09-14）：第 1、2 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
 
-未开始：run、bell、claim、schedule、worker 契约与 runner、ledger 折叠、soul 持有 lane 与 session 到对话文件的投影。
+未开始：run、claim、schedule、worker 契约与 runner、ledger 折叠、session 到对话文件的投影。今天没有任何东西会 ring，开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。

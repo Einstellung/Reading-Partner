@@ -29,8 +29,9 @@ import {
   type Topic,
 } from "./platform/app/topics";
 import { getThread, type ThreadMessage } from "./platform/app/threads";
-import { initSync } from "./platform/sync";
+import { initSync, TICK_MS } from "./platform/sync";
 import { registerPullRoute } from "./platform/sync/pull-routes";
+import { startBellWatch } from "./soul";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai";
@@ -418,6 +419,16 @@ export default function App() {
       },
     });
   }, [refreshTopics]);
+
+  // The soul's inbox (docs/55). Whatever legion has to tell it arrives on the
+  // same beat as the pull: a look on the way up and one every tick after, which
+  // costs a directory listing when there is nothing in it. A bell that is there
+  // starts a turn the reader did not start, and the soul decides what, if
+  // anything, to say about it.
+  useEffect(
+    () => startBellWatch({ settings: () => settingsRef.current, intervalMs: TICK_MS }),
+    [],
+  );
 
   // Whether a finger may mark the page. Applied alongside the tool, and again
   // whenever the setting changes, so the reader never routes a finger by a stale
