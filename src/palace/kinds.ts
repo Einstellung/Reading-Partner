@@ -1202,6 +1202,18 @@ export const PALACE = [
     gc: "never",
   },
   {
+    kind: "session",
+    domain: "memory",
+    match: subtree("session/"),
+    samples: ["session/--session--/2026-09-14T03-13-13-451Z_01a09de7.jsonl"],
+    id: "fixed",
+    refs: [],
+    sync: "local",
+    deleteWith: "never",
+    gc: "domain-housekeeping",
+    note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/67)",
+  },
+  {
     kind: "sync-state",
     domain: "sync",
     match: fixed("sync-state.json"),
