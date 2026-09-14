@@ -168,7 +168,9 @@ export default function PhoneApp() {
   // heavy work of its own, but a run it delegated to the desktop rings its bell
   // here too, through the conversation the two devices share.
   const settingsRef = useRef(settings);
-  settingsRef.current = settings;
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
   useEffect(
     () => startBellWatch({ settings: () => settingsRef.current, intervalMs: TICK_MS }),
     [],
