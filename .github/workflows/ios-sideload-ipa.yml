@@ -207,6 +207,11 @@ jobs:
           # trusting the injection step above.
           bun scripts/ios-deep-link-plist.ts verify "$PLIST"
 
+          # The formats the app claims (src-tauri/Info.ios.plist) are merged in
+          # at build time, so nothing before this point can show they arrived.
+          # Without them the app is simply absent from the share sheet.
+          bun scripts/ios-document-types.ts verify "$PLIST"
+
           BIN="$APP/$EXE"
           [ -f "$BIN" ] || { echo "::error::executable $EXE not found in app bundle"; ls -la "$APP"; exit 1; }
           echo "=== file ==="; file "$BIN"

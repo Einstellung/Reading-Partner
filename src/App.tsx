@@ -84,6 +84,7 @@ import { openBook } from "./reading/session/open-book";
 import { createPasteHandler, systemImageReader } from "./reading/session/paste-images";
 import { runStartupMigrations } from "./reading/session/startup-migrations";
 import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
+import { fileSharedBook, watchSharedBooks } from "./reading/session/shared-file";
 import type { ReaderShell } from "./reading/session/shell";
 import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
 import { keepReadingPosition } from "./reading/reading-position";
@@ -834,6 +835,23 @@ export default function App() {
       }
     },
     [activeTopicId, openInReader, refreshTopics, pushToast],
+  );
+
+  // Books handed over from outside the app: the iOS share sheet, "Open in" from
+  // Files, a download in Safari (reading/session/shared-file.ts). Bound in this
+  // shell and not in main.tsx on purpose — the phone shell has no reader and its
+  // books channel is off (docs/22), so an iPhone that imported a shared book
+  // would strand it in a local library nothing ever carries off the phone.
+  useEffect(
+    () =>
+      watchSharedBooks((url) => {
+        // openFile refreshes the shelf and says so itself when the bytes cannot
+        // be read; what is left here is the topic write ahead of it.
+        void fileSharedBook(url)
+          .then((filed) => filed && openFile(filed.file, filed.topicId))
+          .catch((e) => console.error("failed to file a shared book", e));
+      }),
+    [openFile],
   );
 
   const addFile = useCallback(async () => {
