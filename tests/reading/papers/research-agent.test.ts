@@ -10,15 +10,12 @@
 import { expect, test } from "bun:test";
 import {
   createAssistantMessageEventStream,
-  fauxAssistantMessage,
-  fauxText,
-  fauxToolCall,
   type Api,
-  type AssistantMessage,
-  type AssistantMessageEvent,
   type Model,
 } from "@earendil-works/pi-ai";
-import { runAgentLoop, type StreamFn } from "../../../src/ai/agent";
+import { runHarnessTurn, type StreamFn } from "../../../src/legion/execute/turn";
+import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
+import { memoryAppData } from "../../support/memory-appdata";
 import { StoppedError } from "../../../src/legion/execute/watchdog";
 import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
 import { subagentTool } from "../../../src/legion/subagent/tool";
@@ -34,28 +31,10 @@ import {
   RESEARCH_TURN_ROUNDS,
 } from "../../../src/reading/papers/research-agent";
 import type { PaperCandidate, PaperSearchResult } from "../../../src/reading/papers/paper-search";
+import { turnEvents, type Turn } from "../../support/scripted-turn";
 
 // --- a scripted model, one entry per streamed turn ---
 
-type ToolReq = { name: string; args: Record<string, any>; id?: string };
-type Turn = { text?: string; calls?: ToolReq[] };
-
-function turnEvents(turn: Turn): AssistantMessageEvent[] {
-  const blocks = [
-    ...(turn.text ? [fauxText(turn.text)] : []),
-    ...(turn.calls ?? []).map((c) => fauxToolCall(c.name, c.args, { id: c.id })),
-  ];
-  const hasCalls = (turn.calls ?? []).length > 0;
-  const message: AssistantMessage = fauxAssistantMessage(blocks.length ? blocks : "", {
-    stopReason: hasCalls ? "toolUse" : "stop",
-  });
-  const events: AssistantMessageEvent[] = [];
-  if (turn.text) {
-    events.push({ type: "text_delta", contentIndex: 0, delta: turn.text, partial: message });
-  }
-  events.push({ type: "done", reason: hasCalls ? "toolUse" : "stop", message });
-  return events;
-}
 
 // A SubagentTurnFn backed by the real loop, recording what it was asked for.
 function loopRunner(turns: Turn[]) {
@@ -77,9 +56,10 @@ function loopRunner(turns: Turn[]) {
   const run: SubagentTurnFn = (request) => {
     requests.push(request);
     const settler = createTurnSettler(request.signal, request.onRound);
-    void runAgentLoop({
+    void runHarnessTurn({
       stream,
-      model: {} as Model<Api>,
+      fileSystem: createSessionFileSystem(memoryAppData()),
+      model: { id: "m", provider: "faux" } as unknown as Model<Api>,
       systemPrompt: request.systemPrompt,
       messages: [{ role: "user", content: request.task, timestamp: 0 }],
       tools: request.tools,

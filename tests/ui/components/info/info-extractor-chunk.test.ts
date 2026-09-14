@@ -21,7 +21,7 @@ const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
 
 import { useInfoCall, type InfoCallOptions } from "../../../../src/ui/components/info/use-info-call";
-import * as agent from "../../../../src/ai/agent";
+import * as agent from "../../../../src/legion/execute/turn";
 import * as readableLazy from "../../../../src/info/extract/readable-lazy";
 import * as settings from "../../../../src/platform/app/settings";
 import * as threads from "../../../../src/platform/app/threads";

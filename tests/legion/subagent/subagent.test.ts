@@ -9,16 +9,13 @@ import { expect, test } from "bun:test";
 import {
   Type,
   createAssistantMessageEventStream,
-  fauxAssistantMessage,
-  fauxText,
-  fauxToolCall,
   type Api,
-  type AssistantMessage,
-  type AssistantMessageEvent,
   type Context,
   type Model,
 } from "@earendil-works/pi-ai";
-import { runAgentLoop, type AgentTool, type StreamFn } from "../../../src/ai/agent";
+import { runHarnessTurn, type AgentTool, type StreamFn } from "../../../src/legion/execute/turn";
+import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
+import { memoryAppData } from "../../support/memory-appdata";
 import { StoppedError } from "../../../src/legion/execute/watchdog";
 import { runSubagent } from "../../../src/legion/subagent/run";
 import { subagentTool } from "../../../src/legion/subagent/tool";
@@ -30,38 +27,15 @@ import type {
   SubagentTurnFn,
   SubagentTurnRequest,
 } from "../../../src/legion/subagent/types";
+import { turnEvents, type Turn } from "../../support/scripted-turn";
 
 // --- a scripted model, one entry per streamed turn ---
 
-type ToolReq = { name: string; args: Record<string, any>; id?: string };
-type Turn = { text?: string; calls?: ToolReq[]; usage?: number } | { error: string };
 
-function turnEvents(turn: Turn): AssistantMessageEvent[] {
-  if ("error" in turn) {
-    const errMsg = fauxAssistantMessage("", { stopReason: "error", errorMessage: turn.error });
-    return [{ type: "error", reason: "error", error: errMsg }];
-  }
-  const blocks = [
-    ...(turn.text ? [fauxText(turn.text)] : []),
-    ...(turn.calls ?? []).map((c) => fauxToolCall(c.name, c.args, { id: c.id })),
-  ];
-  const hasCalls = (turn.calls ?? []).length > 0;
-  const message: AssistantMessage = fauxAssistantMessage(blocks.length ? blocks : "", {
-    stopReason: hasCalls ? "toolUse" : "stop",
-  });
-  if (turn.usage) message.usage = { ...message.usage, input: turn.usage, totalTokens: turn.usage };
-  const events: AssistantMessageEvent[] = [];
-  if (turn.text) {
-    events.push({ type: "text_delta", contentIndex: 0, delta: turn.text, partial: message });
-  }
-  events.push({ type: "done", reason: hasCalls ? "toolUse" : "stop", message });
-  return events;
-}
-
-const MODEL = {} as Model<Api>;
+const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
 
 function sizedModel(contextWindow: number): Model<Api> {
-  return { id: "m", name: "m", contextWindow, maxTokens: 64_000 } as unknown as Model<Api>;
+  return { id: "m", name: "m", provider: "faux", contextWindow, maxTokens: 64_000 } as unknown as Model<Api>;
 }
 
 // A SubagentTurnFn backed by the real loop, recording what it was asked for.
@@ -86,8 +60,9 @@ function loopRunner(turns: Turn[], model: Model<Api> = MODEL) {
   const run: SubagentTurnFn = (request) => {
     requests.push(request);
     const settler = createTurnSettler(request.signal, request.onRound);
-    void runAgentLoop({
+    void runHarnessTurn({
       stream,
+      fileSystem: createSessionFileSystem(memoryAppData()),
       model,
       systemPrompt: request.systemPrompt,
       messages: [{ role: "user", content: request.task, timestamp: 0 }],
@@ -294,8 +269,9 @@ test("a call that never reached the provider keeps the thrown error's own type",
   };
   const run: SubagentTurnFn = (request) => {
     const settler = createTurnSettler(request.signal, request.onRound);
-    void runAgentLoop({
+    void runHarnessTurn({
       stream,
+      fileSystem: createSessionFileSystem(memoryAppData()),
       model: MODEL,
       systemPrompt: request.systemPrompt,
       messages: [{ role: "user", content: request.task, timestamp: 0 }],

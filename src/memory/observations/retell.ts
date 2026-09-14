@@ -13,7 +13,7 @@
 // It never imports the retell domain: everything about the retell arrives as input
 // (the trigger point is on the retell's side, in ui/components/retell/useRetell.ts).
 
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import { runSubagent, type SubagentDefinition, type SubagentModel } from "../../legion/subagent";
 import type { ObservationAdapter } from "./adapter";
 import {

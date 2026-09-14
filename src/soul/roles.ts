@@ -15,7 +15,7 @@
 // own passes; the conversation side of a lab is still the secretary's), so
 // nothing is registered for it rather than a shape being invented.
 
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../legion/execute/turn";
 import type { DeskEnv } from "../desk";
 
 /** One of the three gates a side effect lands through (docs "AI harness"). */

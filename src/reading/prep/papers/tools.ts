@@ -4,7 +4,7 @@
 // survey/topic side.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../../ai/agent";
+import type { AgentTool } from "../../../legion/execute/turn";
 import { formatPages } from "../../../fulltext/format";
 import { getFulltext } from "../../../fulltext/store";
 import { requalifyNoteAnchors } from "../anchors";

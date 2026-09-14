@@ -25,7 +25,7 @@
 // Code's canonical set on the OAuth channel (docs/24).
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import {
   formatResolved,
   formatWalk,

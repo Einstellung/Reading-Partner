@@ -8,7 +8,7 @@
 // takes a site identifier and never a URL — the reason is at buildSignInTool.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import { buildStatementTools, type StatementToolContext } from "../../memory";
 import type { RequestOutcome } from "./reader";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";

@@ -4,7 +4,7 @@
 // refresh the observations panel.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import type { ObservationAdapter } from "./adapter";
 import { anchorSiblings, buildAnchorIndex, mentionedIds, resolveReferences } from "./links";
 import {

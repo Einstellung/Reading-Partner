@@ -12,7 +12,8 @@
 // reply — a pass just handed in, or a line the reader typed.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { runAgentTurn, type ProviderId } from "../../../ai";
+import type { ProviderId } from "../../../ai";
+import { runAgentTurn } from "../../../legion/execute/turn";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { holdsNoAnswer, refusalRow } from "../../../ai/turn-rows";
 import { appendMessage, type ThreadMessage as StoredMessage } from "../../../platform/app/threads";

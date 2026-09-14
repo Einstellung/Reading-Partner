@@ -10,15 +10,15 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   createAssistantMessageEventStream,
-  fauxAssistantMessage,
-  fauxToolCall,
   Type,
-  type AssistantMessageEvent,
   type Context,
   type Model,
   type Api,
 } from "@earendil-works/pi-ai";
-import { runAgentLoop, REFUSE_ROUNDS, type AgentTool, type StreamFn } from "../../../../src/ai/agent";
+import { runHarnessTurn, REFUSE_ROUNDS, type AgentTool, type StreamFn } from "../../../../src/legion/execute/turn";
+import { createSessionFileSystem } from "../../../../src/platform/app/session-fs";
+import { memoryAppData } from "../../../support/memory-appdata";
+import { turnEvents } from "../../../support/scripted-turn";
 import {
   holdsNoAnswer,
   refusalRow,
@@ -26,7 +26,7 @@ import {
 } from "../../../../src/ai/turn-rows";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
-const MODEL = {} as Model<Api>;
+const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
 
 const echoTool: AgentTool = {
   name: "echo",
@@ -39,10 +39,7 @@ const echoTool: AgentTool = {
 // — the refusal the companion is most likely to meet.
 const alwaysCallsTool: StreamFn = (_model: Model<Api>, _context: Context) => {
   const stream = createAssistantMessageEventStream();
-  const message = fauxAssistantMessage([fauxToolCall("echo", { value: "again" })], {
-    stopReason: "toolUse",
-  });
-  const events: AssistantMessageEvent[] = [{ type: "done", reason: "toolUse", message }];
+  const events = turnEvents({ calls: [{ name: "echo", args: { value: "again" } }] });
   void (async () => {
     for (const ev of events) {
       await Promise.resolve();
@@ -58,8 +55,9 @@ const alwaysCallsTool: StreamFn = (_model: Model<Api>, _context: Context) => {
 // under it.
 async function rowAfterRefusal(start: ThreadMessage): Promise<ThreadMessage> {
   let row = start;
-  await runAgentLoop({
+  await runHarnessTurn({
     stream: alwaysCallsTool,
+    fileSystem: createSessionFileSystem(memoryAppData()),
     model: MODEL,
     messages: [{ role: "user", content: "go", timestamp: 0 }],
     tools: [echoTool],

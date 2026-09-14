@@ -20,7 +20,7 @@ import {
   type SubagentDefinition,
   type SubagentProgress,
 } from "../../legion/subagent";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import { buildCitationTools } from "./citation-tool";
 import type { CitationDeps } from "./citations";
 import type { PaperSearchFn } from "./paper-search";

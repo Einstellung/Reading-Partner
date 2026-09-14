@@ -12,7 +12,7 @@
 // for the soul to show a first-time reader around, which is what this replaces.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../legion/execute/turn";
 import { listPlaces, type Place } from "../desk";
 
 export const GO_TO_TOOL = "go_to";

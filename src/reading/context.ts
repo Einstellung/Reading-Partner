@@ -4,7 +4,7 @@
 // this module stays headless and unit-testable. Full-text helpers are 1-based.
 
 import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../legion/execute/turn";
 import { textAround } from "../fulltext/query";
 import { formatPages, formatSearch, MAX_PAGES, type TopicMaterial } from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";

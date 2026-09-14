@@ -237,7 +237,7 @@ export function stubEarlyToolResults(messages: Message[], keep = TOOL_RESULTS_KE
 // because a rung's saving can only be counted script-aware and pi's estimator
 // prices the prefix at the provider's own count (docs/pitfall/66).
 //
-// Pure and shared: src/ai/agent.ts's loop and src/legion/execute/agent-turn.ts
+// Pure and shared: src/legion/execute/turn.ts and src/legion/subagent/agent-turn.ts
 // both size their rounds with this, so the two cannot drift on what "does not
 // fit" means.
 export interface RoundFitInput {

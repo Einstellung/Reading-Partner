@@ -12,7 +12,7 @@
 // The turn is still injected (SubagentTurnFn), so every test here runs with no
 // provider, no credentials and no network.
 
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import {
   runSubagent,
   type SubagentDefinition,

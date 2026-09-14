@@ -10,7 +10,7 @@
 // tool trace, none of which a call has. What a call needs of a turn is a
 // stream of text, an ending, and an abort, and that is what askOnThread is.
 
-import { runAgentTurn } from "../../ai/agent";
+import { runAgentTurn } from "../../legion/execute/turn";
 import { assembleTurn } from "../../soul";
 import { replayableHistory } from "../../ai/turn-rows";
 import { glossaryTerms } from "../../ai/voice/cleanup";
@@ -40,7 +40,7 @@ import {
   type VoiceCallModel,
   type VoiceCallTranscript,
 } from "../../soul/voice/voice-call";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../../legion/execute/turn";
 import type { ProviderId } from "../../ai/providers";
 import type { Briefing } from "../boxes/types";
 import type { InfoCallAnchor } from "./anchors";

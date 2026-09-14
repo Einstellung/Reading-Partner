@@ -32,6 +32,7 @@ import {
   type AgentHarnessTool,
   type AgentMessage,
   type AgentHarness as Harness,
+  type CompactionSettings,
   type Context,
   type FileSystem,
   type OpenOperation,
@@ -44,10 +45,11 @@ import {
   type Message,
   type Model,
   type Models,
+  type RetryPolicy,
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
 import { createSessionFileSystem, SESSIONS_ROOT } from "../../platform/app/session-fs";
-import type { StreamFn } from "../../ai/agent";
+import type { StreamFn } from "./contract";
 import { providerCallSetup } from "../../ai/call-setup";
 import {
   DEFAULT_MAX_RETRIES,
@@ -95,6 +97,12 @@ export interface HarnessDeps {
     messages: AgentMessage[],
     context: Context,
   ) => Message[] | Promise<Message[]>;
+  /** The harness's own retries on a failed request; its default (three) when unset. */
+  retry?: RetryPolicy;
+  /** Automatic compaction; the harness's default (on) when unset. */
+  compaction?: CompactionSettings;
+  /** How one round's tool calls run; the harness's default (parallel) when unset. */
+  toolExecution?: "sequential" | "parallel";
 }
 
 export interface HarnessHandle {
@@ -203,6 +211,9 @@ export async function createHarness(deps: HarnessDeps, context: Context): Promis
       ...(deps.toProviderMessages === undefined
         ? {}
         : { toProviderMessages: deps.toProviderMessages }),
+      ...(deps.retry === undefined ? {} : { retry: deps.retry }),
+      ...(deps.compaction === undefined ? {} : { compaction: deps.compaction }),
+      ...(deps.toolExecution === undefined ? {} : { toolExecution: deps.toolExecution }),
     },
     context,
   );

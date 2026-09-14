@@ -11,7 +11,7 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import type { BudgetPurpose } from "../../budget";
-import type { AgentTool } from "../../ai/agent";
+import type { AgentTool } from "../execute/contract";
 import type { ProviderId } from "../../ai/providers";
 
 // A cheaper (or just different) model for one sub-agent. A run that only looks

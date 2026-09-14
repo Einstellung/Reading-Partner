@@ -12,7 +12,7 @@
 // Pure assembly plus reads — it never touches React state and never starts the
 // stream; the caller owns runAgentTurn.
 
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../legion/execute/turn";
 import { assembleTurn } from "../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../desk";
 import { EXPLAIN_KICKOFF } from "./intents";

@@ -18,7 +18,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
 import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
-import * as agent from "../../../src/ai/agent";
+import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
 import * as threads from "../../../src/platform/app/threads";

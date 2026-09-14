@@ -15,7 +15,7 @@ import type { DeskItem, DeskMemory, DeskMessage, OpenedDesk } from "../desk";
 import type { Settings } from "../platform/app/settings";
 import type { ProviderId } from "../ai/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
-import type { AgentTool } from "../ai/agent";
+import type { AgentTool } from "../legion/execute/turn";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
 import type { CatalogueIo } from "./catalogue";
 import { appSequenceIo, readSequence, type SequenceIo } from "./sequence";
