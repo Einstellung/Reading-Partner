@@ -21,6 +21,7 @@
 // proposes moving it into a real one from there.
 
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { isTauri } from "../../platform/app/host";
 import { basename, normalizeFilePath } from "../../platform/app/path";
 import {
   addFileToTopic,
@@ -78,10 +79,14 @@ export interface OpenUrlStream {
   getCurrent(): Promise<string[] | null>;
 }
 
+// Inert off a Tauri host. The plugin reaches straight into __TAURI_INTERNALS__,
+// which the page has only under the runtime; this stream is bound as the app
+// tree mounts, so in tests and under a plain vite server that call throws where
+// auth.ts's never did (it binds inside signIn, which those never reach).
 export const deepLinkStream: OpenUrlStream = {
-  onOpenUrl,
+  onOpenUrl: (handler) => (isTauri() ? onOpenUrl(handler) : Promise.resolve(() => {})),
   // Absent on a host with no deep links wired; auth.ts reads it the same way.
-  getCurrent: () => getCurrent().catch(() => null),
+  getCurrent: () => (isTauri() ? getCurrent().catch(() => null) : Promise.resolve(null)),
 };
 
 /**
