@@ -193,7 +193,7 @@ runner 是 `kind` → worker 的注册表加一圈外壳：取走 → 写 `runni
 
 进程内那半搬到 pi-agent-core 0.85.1 的 `AgentHarness`：soul 一条 lane，本地快车道的 worker 各一条（`lane(name, { createAt: tip })` 继承上下文，可换模型和工具集）；一条铃进 soul 的 lane 是 `appendCustomEntry` 加 `nextRun`；跨进程重启靠 `create` 返回的 open 列表和 `resume()`，默认不重跑工具，写一条合成 toolResult 说中断了，要重执行的工具自己声明 `replay: "safe"`；worker lane 的分支摘要不会自己回来，由 app 调 `generateBranchSummary` 再写进 soul 的 lane。跨设备那半仍是 run 文件。两边的接缝只有一处：run 完成后由谁把 brief 追加进 soul 的 lane。
 
-落位：`legion/execute/harness.ts` 是工厂，建 `AgentHarness` 和 `JsonlSessionRepo`；`legion/execute/turn.ts` 用它提供今天 `runAgentTurn` 的同一份契约。`src/ai/agent.ts` 里手写的 `runAgentLoop` / `runAgentTurn` 退役，调用方改从 `legion/execute` import，`src/ai` 只剩 provider、鉴权、streamFn、消息转换这类接线。`legion/subagent` 退成 lane 上的薄壳：fork 出一条 worker lane，分支摘要就是 brief。`legion/subagent/agent-turn.ts`（从 execute 搬来，避免 subagent 与 execute 互相 import）零调用方，删除。
+落位：`legion/execute/harness.ts` 是工厂，建 `AgentHarness` 和 `JsonlSessionRepo`；`legion/execute/turn.ts` 用它提供今天 `runAgentTurn` 的同一份契约。`src/ai/agent.ts` 里手写的 `runAgentLoop` / `runAgentTurn` 退役，调用方改从 `legion/execute` import，`src/ai` 只剩 provider、鉴权、streamFn、消息转换这类接线。`legion/subagent` 是 lane 上的薄壳：子 agent 起自己的 harness 和 session，lane 名 `worker:<定义名>`、session 组 `worker`，工具集是调用方给的最小集；不挂在调用方的 harness 上，因为 pi 的 lane 只能换模型、思考档和工具名，系统提示和工具注册表是 harness 级的（坑 307）。brief 仍由 `subagent/brief.ts` 出，pi 的分支摘要是压缩摘要，说不出「没证据」「轮数用尽」这些区别。手写循环 `agent-turn.ts` 已删。
 
 两个未定点跟着第一个真调用方定：看门狗重试从原始消息重建 Agent，但轮次跨重试累加；`transformContext` 的截断不写回 Agent 的消息记录，每轮重算。
 
@@ -231,9 +231,9 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 ## 现状与顺序
 
-0.14.6 已落地的全是搬家和地基：`ai/subagent` → `legion/subagent`，watchdog / observable-run / limiter → `legion/execute`（纯移动，十处调用方改指，行为零变化）；pi-ai 与 pi-agent-core 升到 0.85.1；`startAgentTurn` 有测试、无调用方；LAYER 表补了 legion 三行。
+已落地（2026-09-14）：第 1、2 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。
 
-未开始：session 与 harness、run、bell、claim、schedule、worker 契约与 runner、ledger 折叠。
+未开始：run、bell、claim、schedule、worker 契约与 runner、ledger 折叠、soul 持有 lane 与 session 到对话文件的投影。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。
