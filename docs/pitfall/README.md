@@ -158,6 +158,7 @@
 - [240-an-epub-toc-is-not-in-spine-order](./240-an-epub-toc-is-not-in-spine-order.md) — EPUB 的 nav 目录是目录不是阅读顺序，spine 才是；11 本真书里有一本目录把 contents 排在 dedication 前面而 spine 反过来。大纲页码的不变量只能按 (spine 序号, 文档内偏移) 排完再断言单调，界面照 nav 的顺序显示
 - [241-whitespace-between-head-and-body-shifts-every-anchor](./241-whitespace-between-head-and-body-shifts-every-anchor.md) — `</head>` 和 `<body>` 之间那个排版换行在 XML 解析里是 `<html>` 的文本子节点（HTML 解析器会挪进 body，XML 不会），计入正文偏移后整篇文档每个锚点推后一格，page-list 的第一个印刷页锚点于是看着不在文档开头。抽取正文时处在块边界上的纯空白文本节点整个跳过，块内的空格照留
 
+- [305-jsonlsessionrepo-resolves-an-undefined-cwd](./305-jsonlsessionrepo-resolves-an-undefined-cwd.md) — pi 的 `JsonlSessionRepo` 把 `undefined` 交给声明为 `string` 的 `FileSystem.absolutePath`（`create` 不带 cwd 时），自家的 NodeExecutionEnv 一样炸；空 path 当 cwd 处理。附带：`joinPath` 要照 node 的 `join` 拼接不是 `resolve`，以及一致性测试里那条 fork/create 抢 id 的用例文件系统实现过不了
 - [09-appdata-glob-capability](./09-appdata-glob-capability.md) — Tauri 权限 glob 不匹配目录本身；且持久化失败绝不静默吞
 - [36-appdata-root-not-created-first-write](./36-appdata-root-not-created-first-write.md) — iOS 首装首跑第一个写入者报 os error 2，数据根目录由 Rust setup 的 create_dir_all 保障，前端不再各自兜底
 - [51-sync-stopped-looks-healthy](./51-sync-stopped-looks-healthy.md) — 凭据文件不在，引擎从不启动，`autoSync:true` + `lastError:null` 读起来完全健康，四天没人发现；启动的三选一和「该说什么」都收进 `platform/sync/health.ts`

@@ -125,6 +125,10 @@ test("caches, logs, sync internals, and book blobs are out of range", () => {
     // Per-device settings (docs/36). One machine starting with the computer says
     // nothing about another, and there is no merge that could resolve the two.
     "device.json",
+    // The harness's own session store (src/platform/app/session-fs.ts). Machine
+    // -local runtime: the conversation the reader sees travels as its own file,
+    // and a run half-finished on one device means nothing on another.
+    "session/--session--/2026-09-14T03-13-13-451Z_01a09de7.jsonl",
     // Every device's tree snapshot (docs/59). They live in the same Drive
     // folder so one listing enumerates them, and listRemote takes them out by
     // name before reconcile ever sees one; being out of range is the second
