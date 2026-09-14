@@ -5,11 +5,14 @@
 // hit — except that the loop itself is now pi-agent-core's, and every message,
 // tool call and tool result is appended to a session file as it happens.
 //
-// Each turn opens one lane on a fresh session and closes it when the turn ends.
-// Which lane, and which group the session is filed under, is the caller's to
-// name (`lane`): the reader's turn runs on "turn", a sub-agent runs on a worker
-// lane of its own. The session file stays on disk and nothing reads it back: a
-// turn is a turn. The soul holding a lane across turns is the next slice.
+// Where a turn runs is the caller's to say. With nothing said, it opens one
+// lane on a fresh session and closes it when the turn ends; which lane, and
+// which group the session is filed under, is `lane` (the reader's turn runs on
+// "turn", a sub-agent on a worker lane of its own), and the session file stays
+// on disk with nothing reading it back. With `held`, the turn borrows the lane
+// of a harness that outlives it (held.ts): the soul's turns all run on one
+// lane of one session, each from the session root, so the session records
+// them without any of them becoming the next one's context.
 //
 // Where each of the old loop's decisions landed on the harness:
 //
@@ -79,6 +82,7 @@ import {
   type TurnLane,
 } from "./contract";
 import { createHarness, createSessionRepo } from "./harness";
+import type { AgentLane, HeldHarness, HeldLane } from "./held";
 
 export {
   REFUSE_MIDTURN,
@@ -96,9 +100,6 @@ export {
 
 const DEFAULT_MAX_ROUNDS = 8;
 const PREVIEW_LIMIT = 200;
-
-// The package exports the harness type but not its lane's.
-type AgentLane = Awaited<ReturnType<AgentHarness<undefined>["lane"]>>;
 
 // Where a turn runs when the caller does not say: one directory of
 // one-file-per-turn sessions beside whatever the soul will keep, and one lane
@@ -170,6 +171,10 @@ export interface HarnessTurnParams extends AgentCallbacks {
   // same loop under a different name, which is the whole point of the harness
   // owning the loop.
   lane?: TurnLane;
+  // Run on this harness's lane instead of a fresh session: the soul's turns
+  // (src/soul/harness.ts). `lane` and `fileSystem` are then the harness's own
+  // and ignored here.
+  held?: HeldHarness;
 }
 
 // The two ways this turn ends a run on its own: neither is a failure, and the
@@ -349,35 +354,61 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     return fit.messages;
   };
 
-  const fileSystem = params.fileSystem ?? createSessionFileSystem();
-  const laneId = params.lane ?? READER_TURN;
   const onAbort = (): void => {
     void abortRun();
   };
 
+  // One of the two is set: a session of this turn's own, or a borrowed lane.
   let handle: Awaited<ReturnType<typeof createHarness>> | undefined;
+  let borrowed: HeldLane | undefined;
+  // The hooks and listeners below are this turn's; on a held harness they
+  // would otherwise hear every turn after it.
+  const subscriptions: (() => void)[] = [];
   try {
-    const repo = createSessionRepo({ fileSystem });
-    const session = await repo.create({ cwd: laneId.sessions }, ctx);
-    handle = await createHarness(
-      {
-        fileSystem,
-        session,
-        model,
-        streamFn,
-        tools: harnessTools,
-        systemPrompt,
-        thinkingLevel: reasoning,
-        toProviderMessages,
-        retry: { enabled: false, maxRetries: 0, baseDelayMs: 0 },
-        compaction: { enabled: false, reserveTokens: 0, keepRecentTokens: 0 },
-        toolExecution: "sequential",
-      },
-      ctx,
-    );
-    const { harness } = handle;
+    let harness: AgentHarness<undefined>;
+    if (params.held) {
+      borrowed = await params.held.acquire(
+        { model, streamFn, tools: harnessTools, systemPrompt, toProviderMessages },
+        ctx,
+      );
+      harness = borrowed.harness;
+      lane = borrowed.lane;
+    } else {
+      const fileSystem = params.fileSystem ?? createSessionFileSystem();
+      const laneId = params.lane ?? READER_TURN;
+      const repo = createSessionRepo({ fileSystem });
+      const session = await repo.create({ cwd: laneId.sessions }, ctx);
+      handle = await createHarness(
+        {
+          fileSystem,
+          session,
+          model,
+          streamFn,
+          tools: harnessTools,
+          systemPrompt,
+          thinkingLevel: reasoning,
+          toProviderMessages,
+          retry: { enabled: false, maxRetries: 0, baseDelayMs: 0 },
+          compaction: { enabled: false, reserveTokens: 0, keepRecentTokens: 0 },
+          toolExecution: "sequential",
+        },
+        ctx,
+      );
+      harness = handle.harness;
+      lane = await harness.lane(laneId.name, ctx);
+    }
+    const on: typeof harness.hooks.on = (name, handler) => {
+      const off = harness.hooks.on(name, handler);
+      subscriptions.push(off);
+      return off;
+    };
+    const listen: typeof harness.events.on = (type, listener) => {
+      const off = harness.events.on(type, listener);
+      subscriptions.push(off);
+      return off;
+    };
 
-    harness.hooks.on("before_request", async ({ step }) => {
+    on("before_request", async ({ step }) => {
       if (step !== "assistant") return undefined;
       round += 1;
       // Same exit as the budget refusal, for the same reason: every round of
@@ -391,7 +422,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       }
       return undefined;
     });
-    harness.hooks.on("after_response", async ({ message }) => {
+    on("after_response", async ({ message }) => {
       // pi reports an aborted signal as an aborted message; treat it as a
       // silent stop rather than a surfaced failure, whoever raised it.
       if (message.stopReason === "aborted") {
@@ -410,9 +441,9 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
         return { message: { ...message, stopReason: calls.length > 0 ? "toolUse" : "stop" } };
       }
     });
-    harness.hooks.on("before_compaction", () => ({ decline: true }));
+    on("before_compaction", () => ({ decline: true }));
 
-    harness.events.on("message_update", ({ event }) => {
+    listen("message_update", ({ event }) => {
       if (event.type === "text_delta") onDelta(event.delta);
       else if (event.type === "thinking_delta") onThinking?.(event.delta);
     });
@@ -420,21 +451,20 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     // leave the tokens the request already cost, and pi fills the usage it had
     // at message_start. A recovery message is the harness's own stand-in for
     // a request that never went out, and is not a round.
-    harness.events.on("message_end", ({ message, recovery }) => {
+    listen("message_end", ({ message, recovery }) => {
       if (recovery || message.role !== "assistant") return;
       recordRound(message, message.stopReason !== "error" && message.stopReason !== "aborted");
     });
-    harness.events.on("tool_start", ({ toolName, args }) => {
+    listen("tool_start", ({ toolName, args }) => {
       onToolStart({ name: toolName, args: args as Record<string, any> });
     });
-    harness.events.on("tool_end", ({ toolName, result, isError }) => {
+    listen("tool_end", ({ toolName, result, isError }) => {
       onToolEnd({ name: toolName, resultPreview: preview(contentText(result.content)), isError });
     });
-    harness.events.on("handler_error", ({ error }) => {
+    listen("handler_error", ({ error }) => {
       handlerError ??= new Error(error);
     });
 
-    lane = await harness.lane(laneId.name, ctx);
     signal?.addEventListener("abort", onAbort, { once: true });
 
     const admitted = await lane.accept({ kind: "prompt", prompt: params.messages as AgentMessage[] }, ctx);
@@ -482,6 +512,8 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     onError(e instanceof Error ? e.message : String(e), undefined, e);
   } finally {
     signal?.removeEventListener("abort", onAbort);
+    for (const off of subscriptions) off();
+    borrowed?.release();
     if (handle) {
       try {
         await handle.close(ctx);
@@ -508,6 +540,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
     purpose,
     about,
     lane,
+    harness,
     onDelta,
     onThinking,
     onResponse,
@@ -553,6 +586,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       about,
       telemetry,
       ...(lane ? { lane } : {}),
+      ...(harness ? { held: harness } : {}),
       onDelta,
       onThinking,
       onResponse,

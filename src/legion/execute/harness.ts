@@ -85,8 +85,15 @@ export interface HarnessDeps {
   session?: Session;
   model: Model<Api>;
   streamFn: StreamFn;
+  /**
+   * The registry the harness resolves a lane's model from. Built over `model`
+   * and `streamFn` when absent; a caller whose turns change model (held.ts)
+   * keeps one of its own and adds to it.
+   */
+  models?: Models;
   tools?: AgentHarnessTool<undefined>[];
-  systemPrompt?: string;
+  /** A function is read on every request, so it may change between turns. */
+  systemPrompt?: string | (() => string | Promise<string>);
   thinkingLevel?: ThinkingLevel;
   /**
    * The last reduction before a request goes out. The harness hands over the
@@ -201,7 +208,7 @@ export async function createHarness(deps: HarnessDeps, context: Context): Promis
   const { harness, open } = await AgentHarness.create<undefined>(
     {
       session,
-      models: modelsFor(deps.model, deps.streamFn),
+      models: deps.models ?? modelsFor(deps.model, deps.streamFn),
       model: deps.model,
       tools,
       activeToolNames: tools.map((tool) => tool.name),

@@ -18,6 +18,7 @@ import type { BudgetPurpose } from "../../budget";
 import type { AiSurface, TurnTelemetry } from "../../platform/app/cache-telemetry";
 import type { ModelCallAbout } from "../../ai/model-usage";
 import type { ChatMessage, ProviderId, ResponseHead, StreamOutcome } from "../../ai/providers";
+import type { HeldHarness } from "./held";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
 // the model a cropped figure). `data` is bare base64, `mimeType` the MIME type;
@@ -142,6 +143,11 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
   telemetry: { surface: AiSurface; thread?: string; inline?: TurnTelemetry["inline"] };
   // The lane and session group this turn runs on; the reader's turn when unset.
   lane?: TurnLane;
+  // A harness that outlives the turn, whose lane the turn runs on instead of a
+  // session of its own (legion/execute/held.ts). The soul's turns all name the
+  // soul's (src/soul/harness.ts); a worker or a background pass leaves it
+  // unset and gets a harness to itself. `lane` is ignored when this is set.
+  harness?: HeldHarness;
 }
 
 // The two things the turn says when it gives up. Both are refusals rather than
