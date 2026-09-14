@@ -53,7 +53,7 @@ run 分两档，`kind` 声明自己是哪档，delegate 的接口一样：本地
 | `idempotencyKey` | 创建时去重，同一个 key 只有一个 run |
 | `kind` | 领域登记的类型，legion 只认这个 |
 | `tier` | `local` 或 `synced`，由 `kind` 定 |
-| `delegator` | 用户动作 / 一条 schedule 的名字 / 父 run 的 id |
+| `delegator` | soul（用户开口或被叫醒的回合）/ 父 run 的 id |
 | `brief` | 任务书，按引用 |
 | `state` | `pending` < `running` < `cancelled` < `failed` < `done` |
 | `claimant` | 执行设备 deviceId + 开始时刻 |
