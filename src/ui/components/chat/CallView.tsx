@@ -29,6 +29,11 @@ interface CallViewProps {
 	onDelete?(): void;
 	pendingImages?: PendingImage[];
 	onRemoveImage?(id: string): void;
+	// The element the composer sits in, for whatever has to keep out of its way
+	// on the bottom edge — Lumen's corner (ui/components/lumen/corner-placement).
+	// Both states report it: the empty conversation's composer is in the middle
+	// of the screen, and the rule reads that off the box it measures.
+	composerRef?: (el: HTMLElement | null) => void;
 	hint?: string;
 	streaming?: boolean;
 	onStop?(): void;
@@ -79,6 +84,7 @@ export default function CallView({
 	onDelete,
 	pendingImages,
 	onRemoveImage,
+	composerRef,
 	hint,
 	streaming,
 	onStop,
@@ -160,7 +166,7 @@ export default function CallView({
 					<h1 className="mb-8 max-w-[calc(48rem*var(--chat-scale,1))] text-center text-[calc(1.5rem*var(--chat-scale,1))] font-medium text-neutral-700">
 						{emptyTitle}
 					</h1>
-					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]">
+					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]" ref={composerRef}>
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
 						{intents && intents.length > 0 && (
 							<IntentChips intents={intents} onPick={onSend} className="mt-3 justify-center" />
@@ -185,7 +191,7 @@ export default function CallView({
 							stickKey={stickKey}
 						/>
 					</div>
-					<div className="px-4 pb-6">
+					<div className="px-4 pb-6" ref={composerRef}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />
 						</div>

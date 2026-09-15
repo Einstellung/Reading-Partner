@@ -58,6 +58,7 @@ export {
   type DictationSource,
   type Transcript,
 } from "./dictation";
+export { isHolding, setHolding, subscribeHolding } from "./hold-signal";
 export {
   FINISH_TIMEOUT_MS,
   START_TIMEOUT_HINT,
