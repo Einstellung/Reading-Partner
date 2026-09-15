@@ -9,7 +9,8 @@
 // arrived out of nowhere — which is what it was.
 //
 // The order at the end of a bell is the mailbox order the run ledger rests on:
-// the reply is on disk, then `delivered`, then `ack`. A turn that refused or
+// the reply is on disk, then `delivered`, then `ack`, then the run file's own
+// `deliveredAt`. A turn that refused or
 // failed acks nothing, and the bell is still queued for the next pass.
 //
 // One at a time. The soul's harness serialises turns anyway (legion/execute/
@@ -17,6 +18,7 @@
 // turns behind a reader who is in the middle of one.
 
 import { appBells, type Bell, type BellStore } from "../legion/bell";
+import { appRuns, type RunStore } from "../legion/run";
 import { runAgentTurn, type AgentTool } from "../legion/execute/turn";
 import type { HeldHarness } from "../legion/execute/held";
 import type { DeskMessage } from "../desk";
@@ -44,6 +46,8 @@ export interface AnswerBellDeps {
   settings: Settings;
   /** The inbox. The device's own unless a test hands one in. */
   bells?: BellStore;
+  /** The hot layer, where an ack is stamped on the run the bell was about. */
+  runs?: RunStore;
   /** The lane every soul turn runs on. */
   harness?: HeldHarness;
   send?: SendBellTurn;
@@ -129,6 +133,7 @@ export function answerBell(deps: AnswerBellDeps): Promise<number> {
 
 async function runPass(deps: AnswerBellDeps): Promise<number> {
   const bells = deps.bells ?? appBells();
+  const runs = deps.runs ?? appRuns();
   const queued = await bells.read();
   if (queued.length === 0) return 0;
 
@@ -193,6 +198,13 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     }
     await bells.delivered(bell.id);
     await bells.ack(bell.id);
+    // The ack is what the fold waits on (docs/55), and the run file is where
+    // the other device reads it: the bell itself is machine-local. Stamped
+    // after the ack, so a stamp can never be ahead of the acknowledgement it
+    // stands for. A wake bell is about a schedule and there is no run to stamp.
+    if (bell.type !== "wake") {
+      await runs.markDelivered(bell.payload.runId, now());
+    }
     answered += 1;
   }
   return answered;

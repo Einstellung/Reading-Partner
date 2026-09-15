@@ -72,6 +72,9 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
     "a kept article's body is read when the article is opened, and the file is named " +
     "after its own bytes, so a pull can add one but never change the one on screen",
   "prep-": "a document's prep material is read when the document it belongs to opens",
+  "legion/ledger/":
+    "a day's ledger is read when the fold pass runs and when somebody opens the dead letters, " +
+    "and the file is append-only, so a pull can add a line but never change one (docs/55)",
   "legion/runs/":
     "a run is read from its file whenever somebody asks how it is getting on, and nothing " +
     "holds one between passes (docs/55)",

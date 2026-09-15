@@ -77,6 +77,10 @@ const LAYER: Record<string, Layer> = {
   // the runs and the claims, and one side effect: the wake bell.
   "legion/schedule": "capability",
   "legion/execute": "capability",
+  // The cold layer a finished run folds into, and the tombstone that lets the
+  // hot file be deleted on both devices (docs/55). Pure rules plus a store, the
+  // same shape as legion/run beside it.
+  "legion/ledger": "capability",
   // The run file two devices keep one handed-off piece of work in, its state
   // lattice and the store around it (docs/55). A capability: it knows nothing
   // about what any run does, and the merge it registers with sync goes that way

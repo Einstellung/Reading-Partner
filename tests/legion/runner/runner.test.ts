@@ -36,6 +36,9 @@ function disk(): Disk {
       this.writes += 1;
       files.set(name, contents);
     },
+    async remove(name) {
+      files.delete(name);
+    },
   };
 }
 

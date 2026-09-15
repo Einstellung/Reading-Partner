@@ -1,6 +1,6 @@
-// The run store: one run per file under legion/runs/, and the five things
-// anybody does to one — create, read, list, move along the chain, cancel,
-// report progress.
+// The run store: one run per file under legion/runs/, and the things anybody
+// does to one — create, read, list, move along the chain, cancel, report
+// progress, stamp delivery, and take away what the ledger has folded.
 //
 // Two devices write this directory and neither of them can lock it, so the
 // store is deliberately thin: it reads a file, decides, and writes the file
@@ -37,6 +37,13 @@ export interface RunIo {
   read(name: string): Promise<string | null>;
   /** Written whole, and atomically: a half-written run is a run nobody can merge. */
   write(name: string, contents: string): Promise<void>;
+  /**
+   * Take a file away. Local only: sync propagates no file deletion of its own
+   * (pitfall 208), so whoever calls this owes the remote half as well — the
+   * ledger's housekeeping asks for the remote purge before it asks for this
+   * (legion/ledger/housekeeping.ts).
+   */
+  remove(name: string): Promise<void>;
 }
 
 // A run id has to be a file name, and it is also what the palace row matches on
@@ -159,6 +166,19 @@ export interface RunStore {
    * state change must go to disk regardless.
    */
   report(id: string, progress: string, at?: number): Promise<Run | null>;
+  /**
+   * The bell about this run was acked, so the result has been read and the run
+   * may be folded once its grace is up (legion/ledger). Stamped once: the field
+   * only ever moves earlier in a merge, and a second ack says nothing new.
+   */
+  markDelivered(id: string, at?: number): Promise<Run | null>;
+  /**
+   * Take the hot file away, having written the ledger line that replaces it.
+   * Only the ledger's housekeeping calls this, and only for a run the ledger
+   * accounts for (docs/55): a run file deleted without a line is one the other
+   * device pushes straight back.
+   */
+  remove(id: string): Promise<void>;
 }
 
 function matches(run: Run, filter: RunFilter): boolean {
@@ -316,6 +336,18 @@ export function createRunStore(io: RunIo): RunStore {
       return put({ ...run, cancelRequested: true, revision: run.revision + 1 });
     },
 
+    async markDelivered(id, at) {
+      const run = await get(id);
+      if (!run) return null;
+      if (run.deliveredAt !== undefined) return run;
+      return put({ ...run, deliveredAt: at ?? Date.now(), revision: run.revision + 1 });
+    },
+
+    async remove(id) {
+      if (!ID.test(id)) return;
+      await io.remove(fileName(id));
+    },
+
     async report(id, progress, at) {
       const run = await get(id);
       if (!run) return null;
@@ -343,6 +375,9 @@ export const appRunIo: RunIo = {
   async write(name, contents) {
     await appData.mkdirp(RUNS_DIR);
     await appData.writeAtomic(`${RUNS_DIR}/${name}`, contents);
+  },
+  async remove(name) {
+    await appData.remove(`${RUNS_DIR}/${name}`).catch(() => {});
   },
 };
 

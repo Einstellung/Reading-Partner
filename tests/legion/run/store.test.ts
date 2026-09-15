@@ -28,6 +28,9 @@ function disk(files = new Map<string, string>()): Disk {
     async write(name, contents) {
       files.set(name, contents);
     },
+    async remove(name) {
+      files.delete(name);
+    },
   };
 }
 
