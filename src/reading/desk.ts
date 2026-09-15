@@ -124,20 +124,9 @@ import {
   type SavedArticle,
 } from "./saved-articles";
 import { readingFetch } from "./papers/http";
-import { searchPapers, type PaperSearchFn } from "./papers/paper-search";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
-import {
-  buildResearchAgent,
-  RESEARCH_PROMPT,
-  RESEARCH_TURN_ROUNDS,
-} from "./papers/research-agent";
-import {
-  createSubagentQuota,
-  runSubagentTurnLive,
-  subagentTool,
-  type SubagentProgress,
-  type SubagentTurnFn,
-} from "../legion/subagent";
+import { RESEARCH_PROMPT } from "./papers/research-agent";
+import type { BoxOrigin } from "../box";
 import type { PrepPipeline } from "./prep/papers/pipeline";
 
 // The two kinds of thing a reading turn puts on the desk. Named here because
@@ -217,13 +206,10 @@ export interface BookDeskRef {
   // pipeline the reader is on now, matching the pre-extraction behaviour.
   getPipeline: () => PrepPipeline | null;
   distillAnnotations: () => DistillAnnotation[];
-  // One line for the reader while the research sub-agent runs. Never its tool
-  // calls: what arrives here is a phase, the label this turn wrote, and a round
-  // count (src/legion/subagent/types.ts).
-  onSubagentProgress?: (progress: SubagentProgress) => void;
-  // The sub-agent turn behind research_literature. Injected so the assembly and
-  // its research tool can be exercised with no provider, no key and no network.
-  runSubagentTurn?: SubagentTurnFn;
+  // A message that is not in the thread and never will be: the bell a delegated
+  // run rang, put on the end of the conversation for this one turn (docs/68,
+  // reading/deliver.ts). A reader's own turn passes nothing.
+  trailing?: ReadingTurnMessage;
   // Rasterize one whole page of the open book (the visual window around the
   // reader's highlight, figures/page-window.ts). Injected for the same reason
   // the figure renderer is: it needs a canvas and a loaded pdf.js, and the
@@ -276,8 +262,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     context,
     getPipeline,
     distillAnnotations,
-    onSubagentProgress,
-    runSubagentTurn = runSubagentTurnLive,
+    trailing,
     renderPage = async (pageNo, widthPx) => {
       if (!buffer) return null;
       const r = await renderPageImage(bookId, buffer, pageNo, widthPx);
@@ -632,34 +617,13 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     fetchFn: readingFetch,
     s2ApiKey: s.semanticScholarApiKey ?? undefined,
   };
-  // A pot for the whole turn. Without one, runSubagent grants every request in
-  // full and a model that calls the research tool nine times spends nine times
-  // the turns, each call perfectly legal on its own.
-  const researchQuota = createSubagentQuota(RESEARCH_TURN_ROUNDS);
-  tools = [
-    ...tools,
-    // Topic search and the citation walk live inside this run, not out here: their
-    // candidate lists and abstract extracts are what the reader's context cannot
-    // afford. Only the brief comes back.
-    subagentTool(
-      buildResearchAgent({
-        ...literatureDeps,
-        search: ((query, opts) =>
-          searchPapers(query, opts, literatureDeps)) satisfies PaperSearchFn,
-      }),
-      {
-        run: runSubagentTurn,
-        quota: researchQuota,
-        signal,
-        onProgress: onSubagentProgress,
-      },
-    ),
-    // find_paper stays on the reader's turn. Pointing at one endnote is a different
-    // job from a topic search: the answer is a single record, the companion wants
-    // that record rather than prose about it, and delegating it would spend model
-    // turns to come back with less.
-    buildFindPaperTool(literatureDeps),
-  ];
+  // find_paper stays on the reader's turn. Pointing at one endnote is a different
+  // job from a topic search: the answer is a single record, the companion wants
+  // that record rather than prose about it, and delegating it would spend model
+  // turns to come back with less. The topic search itself is no longer a tool of
+  // this turn at all — it is a run now (docs/68), handed over with the soul's
+  // delegate and answered back into this thread when it is finished.
+  tools = [...tools, buildFindPaperTool(literatureDeps)];
   // The whole-book outline from the reader's notes (docs/14), when they exist.
   const spineOverview = spineOverviewSection(await readSpineOverview(bookId));
   // A booklist entry with no text layer and no marks is a title the model can do
@@ -848,7 +812,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     // The parent's stretch first, this conversation's own after. Trimmed from
     // the front, so the borrowed context is what the tight rung gives up before
     // it starts cutting into what the reader said here.
-    const history = [...parentTail, ...prior];
+    const history = [...parentTail, ...prior, ...(trailing ? [trailing] : [])];
     const tail = history.length > keep ? history.slice(history.length - keep) : history;
     // Every provider wants the exchange to open on a user message. A thread the
     // reader started from a chip already does, and is replayed as it stands so
@@ -909,6 +873,16 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       snapshot: (tight: boolean) => (tight ? observationSnapshotTight : observationSnapshot),
     },
     history: { compose: composeMessages },
+    // Where the reader is, for a run delegated from this turn to be delivered
+    // back to (docs/68). The page is the one the turn is about, which is the
+    // marked passage's page on a mark thread and the reader's position otherwise.
+    origin: {
+      place: "book",
+      bookId,
+      threadId,
+      ...(annotationId ? { annotationId } : {}),
+      ...(page ?? currentPage ? { page: (page ?? currentPage) as number } : {}),
+    } satisfies BoxOrigin,
     report: { inline },
     afterFit: (dropped) =>
       reportPageWindow(threadId, pageWindow, pageImages, !dropped.has("page-window")),

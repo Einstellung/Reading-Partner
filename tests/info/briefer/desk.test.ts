@@ -162,6 +162,7 @@ test("the companion tools are the secretary's, and come ahead of the soul's own"
     "read_conversation",
     "list_palace",
     "list_kind",
+    "delegate",
     "observation_search",
     "observation_read",
     "observation_update",

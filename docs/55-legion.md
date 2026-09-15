@@ -260,7 +260,11 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 第 9 步（2026-09-15）：`src/legion/ledger`。`foldRun` 是纯函数，宽限期在 `fold.ts` 顶上一处常量；`ledgerLineText` 定键序和取整；`tombstonedRunIds` 是另一个纯函数；`store.ts` 是 `legion/ledger/<日期>.jsonl` 的读写，`deadLetters(day)` 就是死信视图；`housekeeping.ts` 的 `foldPass` 一趟里先折后删，挂在 info 那条日 tick 上，每设备一天一次。palace 加 `ledger` 行（data 通道、`records` + `lines`、`neverInferDelete`、`gc: never`）。run store 加 `markDelivered` 和 `remove`，`RunIo` 加 `remove`；`src/soul/bell.ts` 答完铃 ack 之后把 `deliveredAt` 写进 run 文件——这个字段此前没有任何人写，折叠在生产里永远不会触发。远端那半在 `foldPass` 里按 docs/50 的顺序走 `requestRemotePurge`，先远端后本地。顺带把 `legion/subagent/ledger.ts` 改名 `quota.ts`（它数的是一个回合里子 agent 的轮数，和这个 ledger 无关）。
 
-未开始：session 到对话文件的投影、research 接入、translate 接入。今天没有任何 kind 登记 worker，会响的只有 schedule 的 `wake` 铃（info 的 daily round 到点在当选设备上摇一条，soul 答铃时没有活可派）；开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
+第 10 步（2026-09-15）：research 接入，第一个调用方（docs/68）。reading 在 `src/reading/papers/research-worker.ts` 登记 kind `research-literature`（agent worker、`local` 档），身体是原来的研究子 agent，一个 run 一个 `createSubagentQuota(RESEARCH_TURN_ROUNDS)`；子 agent 的工具事件接 `ctx.reportTool`，`cancel` 走 AbortSignal，拿不到证据就抛，让 runner 记这一次 attempt。soul 的 `delegate` 工具（`src/soul/delegate.ts`）挂在每个回合上，模型只给 `kind` 和 `task`，`deliverTo` 由 soul 按所在的地方填——书是 `DeskItem.origin`，门口和简报由调用方传 `assembleTurn({ origin })`。brief 写进 `legion/briefs/<uuid>.md`、产出写进 `legion/outputs/<runId>.md`，两行都是 local 通道的 palace 行。阅读回合不再挂 `research_literature`，`find_paper` 留着，`RESEARCH_PROMPT` 改成叫它派 run 并当场告诉读者答案稍后回来。
+
+答铃按 `deliverTo` 装配：`src/soul/delivery.ts` 是地方 → 装配器的注册表（soul 不许 import reading），reading 在 `src/reading/deliver.ts` 登记 `book`，回合就是那本书那条线程的阅读回合，铃作为一条不落盘的尾消息挂在会话末尾。回复落盘之后、ack 之前，程序层往 `src/box/` 放一项（`boxId` 取 runId，封面是回复的第一句，`run-failed` 标 `needsDecision`）。`local` 档的 run 不落盘，runner 因此把 `deliverTo` 抄在 `run-done` / `run-failed` 的 payload 上。
+
+未开始：session 到对话文件的投影、translate 接入。开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。
@@ -271,7 +275,7 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 7. （已落地）worker 契约与 runner：kind → worker 的注册表，取走 → 写 `running` → 跑 → 写终态 → 投铃；`ctx.report` 更新 `progress` 与 `lastProgressAt`，三十秒节流，状态变化不节流；深度检查、batch 续跑查询、按 `batchId` 级联取消。验收：假 worker 走完全程并投出 `run-done`；一秒内十次 `report` 只写一次盘、终态立刻写；`delegator` 已是子 run 的创建请求被拒；同 batchId 同 step 已 `done` 时不新建、直接拿 `output`；取消父 run 后子 run 也进 `cancelled`。
 8. bell：ring / read / ack，`run-done` / `run-failed` / `wake` 三种。验收：投递后 ack 到达；未 ack 的出现在待恢复集合里；重复 ring 同一条不产生两份；三种铃各起一个没有用户输入的 soul 回合；取消和进度不产生铃。
 9. （已落地）ledger 折叠：`foldRun` 纯函数、三条判据、墓碑含时刻比较。验收：两台折出逐字节相同的一行；创建时刻更晚的同名新 run 不被误删；未 ack 的终态 run 不折。
-10. research 接入（第一个调用方）：reading 登记 kind `research-literature`，agent worker、`local` 档，身体是 `src/reading/papers/research-agent.ts`；soul 换成通用 `delegate` 工具加 kind 目录，阅读回合不再挂 `research_literature` 子 agent 工具；run 带 `deliverTo`，答铃按它装配并把回复写回那条线程。验收：阅读回合里派一个文献研究，回合立刻结束；结果回来追加进那条划线线程，同时盒里多一项。
+10. （已落地）research 接入（第一个调用方）：reading 登记 kind `research-literature`，agent worker、`local` 档，身体是 `src/reading/papers/research-agent.ts`；soul 换成通用 `delegate` 工具加 kind 目录，阅读回合不再挂 `research_literature` 子 agent 工具；run 带 `deliverTo`，答铃按它装配并把回复写回那条线程。验收：阅读回合里派一个文献研究，回合立刻结束；结果回来追加进那条划线线程，同时盒里多一项。
 11. translate 接入：kind `translate-book` 注册，`TranslateRun` 单例的工作体抽成一个程序 worker 并补 cancel 通道和 `report`，状态 UI 改成订阅 run 文件的 `progress`。验收：无头双设备测试跑完 A 写 pending、B 当选执行、产出与 `run-done` 的 ack 回到 A 的整条链；取消在跑到一半时生效；真机确认一次，iPad 派、PC 跑。
 
 ## 为什么不用现成的

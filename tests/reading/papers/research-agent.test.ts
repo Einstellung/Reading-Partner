@@ -20,14 +20,12 @@ import { StoppedError } from "../../../src/legion/execute/watchdog";
 import { createSubagentQuota } from "../../../src/legion/subagent/quota";
 import { subagentTool } from "../../../src/legion/subagent/tool";
 import { createTurnSettler } from "../../../src/legion/subagent/turn";
-import type { SubagentProgress, SubagentTurnFn, SubagentTurnRequest } from "../../../src/legion/subagent/types";
+import type { SubagentTurnFn, SubagentTurnRequest } from "../../../src/legion/subagent/types";
 import {
   buildResearchAgent,
-  researchStatusLabel,
-  RESEARCH_LABEL,
+  RESEARCH_KIND,
   RESEARCH_PROMPT,
   RESEARCH_SYSTEM_PROMPT,
-  RESEARCH_TOOL_NAME,
   RESEARCH_TURN_ROUNDS,
 } from "../../../src/reading/papers/research-agent";
 import type { PaperCandidate, PaperSearchResult } from "../../../src/reading/papers/paper-search";
@@ -176,9 +174,13 @@ test("the sub-agent's prompt asks for a handful of checkable papers, not a surve
   expect(p).toContain("reference material, not");
 });
 
-test("the companion is told to reach for it instead of answering from memory", () => {
-  expect(RESEARCH_PROMPT).toContain(RESEARCH_TOOL_NAME);
-  expect(RESEARCH_PROMPT).toContain("rather than answering from memory");
+test("the companion is told to hand it over rather than answer from memory", () => {
+  // The literature is a run now (docs/68): the turn delegates and ends, and the
+  // prompt has to say both halves or the model answers from memory while it waits.
+  expect(RESEARCH_PROMPT).toContain("delegate");
+  expect(RESEARCH_PROMPT).toContain(RESEARCH_KIND);
+  expect(RESEARCH_PROMPT).toContain("do not answer from memory");
+  expect(RESEARCH_PROMPT).toContain("come back here later");
   expect(RESEARCH_PROMPT).toContain("older than itself");
   // The division of labour with the one literature tool left on the reader's turn.
   expect(RESEARCH_PROMPT).toContain("find_paper");
@@ -313,28 +315,4 @@ test("a signal already aborted never reaches the model", async () => {
 
   await expect(tool.execute({ task: "anything" })).rejects.toBeInstanceOf(StoppedError);
   expect(runner.requests.length).toBe(0);
-});
-
-// --- the one line the reader sees ---
-
-test("the status line is the label, gaining a round count once the run is under way", () => {
-  const at = (over: Partial<SubagentProgress>): SubagentProgress => ({
-    phase: "round",
-    label: RESEARCH_LABEL,
-    round: 1,
-    roundsAllowed: 6,
-    ...over,
-  });
-
-  expect(researchStatusLabel(at({ phase: "started", round: 0 }))).toBe("Searching the literature");
-  expect(researchStatusLabel(at({ round: 1 }))).toBe("Searching the literature");
-  expect(researchStatusLabel(at({ round: 2 }))).toBe("Searching the literature (2/6)");
-  // No flicker back to the bare label when a tool starts inside round 2.
-  expect(researchStatusLabel(at({ phase: "tool", round: 2, tool: "search_papers" }))).toBe(
-    "Searching the literature (2/6)",
-  );
-  // A tool name the run reached for is never shown, and neither is a query.
-  expect(researchStatusLabel(at({ phase: "tool", round: 4, tool: "walk_citations" }))).not.toContain(
-    "walk_citations",
-  );
 });

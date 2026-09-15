@@ -5,8 +5,6 @@
 
 import { beforeEach, expect, test } from "bun:test";
 import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../src/legion/execute/turn";
-import type { SubagentTurnFn } from "../../src/legion/subagent";
-import { StoppedError } from "../../src/legion/execute/watchdog";
 import { estimateTextTokens } from "../../src/budget";
 import { getFulltext } from "../../src/fulltext/store";
 import type { Fulltext } from "../../src/fulltext/types";
@@ -22,7 +20,6 @@ import {
   setThreadFocusChapter,
 } from "../../src/platform/app/threads";
 import type { Figure } from "../../src/reading/figures/types";
-import { RESEARCH_TOOL_NAME, RESEARCH_TURN_ROUNDS } from "../../src/reading/papers/research-agent";
 import { CLASSROOM_NOTE_BUDGET } from "../../src/reading/prep/papers/classroom";
 import { paperFulltextHash, writePrepNote } from "../../src/reading/prep/papers/store";
 import type { PrepPaper, PrepState } from "../../src/reading/prep/papers/types";
@@ -35,6 +32,8 @@ import {
   turnFailureView,
 } from "../../src/reading/turn";
 import { installAppData } from "../support/appdata-fake";
+import { registerWorker } from "../../src/legion/execute/worker";
+import type { Run } from "../../src/legion/run";
 
 // An empty in-memory AppData, so every optional read misses (the overview note,
 // the observation index) and the turn treats them as "not there yet" — and so
@@ -171,6 +170,7 @@ test("companion turn: reading tools only, kickoff as the first message", async (
   const turn = await buildReadingTurn(input());
   expect(turn).not.toBeNull();
   expect(names(turn!.tools)).toEqual([
+    "delegate",
     "find_paper",
     "list_kind",
     "list_palace",
@@ -179,7 +179,6 @@ test("companion turn: reading tools only, kickoff as the first message", async (
     "read_chapter",
     "read_conversation",
     "read_pages",
-    "research_literature",
     "search_conversations",
     "search_topic",
     "translate_document",
@@ -193,13 +192,13 @@ test("companion turn: reading tools only, kickoff as the first message", async (
 test("a book with no text layer gets no read_pages tool", async () => {
   const turn = await buildReadingTurn(input({ fulltext: fulltext("no-text-layer") }));
   expect(names(turn!.tools)).toEqual([
+    "delegate",
     "find_paper",
     "list_kind",
     "list_palace",
     "observation_read",
     "observation_search",
     "read_conversation",
-    "research_literature",
     "search_conversations",
     "translate_document",
   ]);
@@ -210,6 +209,7 @@ test("a topic id mounts the tool that writes an observation", async () => {
     input({ context: { ...input().context, topicId: "topic-1" } }),
   );
   expect(names(turn!.tools)).toEqual([
+    "delegate",
     "find_paper",
     "list_kind",
     "list_palace",
@@ -219,7 +219,6 @@ test("a topic id mounts the tool that writes an observation", async () => {
     "read_chapter",
     "read_conversation",
     "read_pages",
-    "research_literature",
     "search_conversations",
     "search_topic",
     "translate_document",
@@ -230,6 +229,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
   const figures: Figure[] = [{ id: "1", page: 2, caption: "Inline cache layout", source: { kind: "pdf" as const, bbox: null } }];
   const turn = await buildReadingTurn(input({ figures }));
   expect(names(turn!.tools)).toEqual([
+    "delegate",
     "find_paper",
     "list_kind",
     "list_palace",
@@ -238,7 +238,6 @@ test("a figure index mounts view_figure and the catalog", async () => {
     "read_chapter",
     "read_conversation",
     "read_pages",
-    "research_literature",
     "search_conversations",
     "search_topic",
     "translate_document",
@@ -253,6 +252,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
 test("a live pipeline mounts the source and paper tools, once", async () => {
   const turn = await buildReadingTurn(input({ getPipeline: () => pipeline(prepState()) }));
   expect(names(turn!.tools)).toEqual([
+    "delegate",
     "find_paper",
     "ingest_url",
     "list_kind",
@@ -264,7 +264,6 @@ test("a live pipeline mounts the source and paper tools, once", async () => {
     "read_note",
     "read_pages",
     "read_paper",
-    "research_literature",
     "search_conversations",
     "search_topic",
     "translate_document",
@@ -277,6 +276,7 @@ test("a pipeline with no plan yet mounts no paper tools", async () => {
     input({ getPipeline: () => pipeline(null) }),
   );
   expect(names(turn!.tools)).toEqual([
+    "delegate",
     "find_paper",
     "ingest_url",
     "list_kind",
@@ -286,7 +286,6 @@ test("a pipeline with no plan yet mounts no paper tools", async () => {
     "read_chapter",
     "read_conversation",
     "read_pages",
-    "research_literature",
     "search_conversations",
     "search_topic",
     "translate_document",
@@ -304,6 +303,7 @@ test("kept articles mount the saved-article tools and their prompt line", async 
   );
   expect(names(turn!.tools)).toEqual([
     "add_saved_article",
+    "delegate",
     "find_paper",
     "ingest_url",
     "list_kind",
@@ -316,7 +316,6 @@ test("kept articles mount the saved-article tools and their prompt line", async 
     "read_note",
     "read_pages",
     "read_paper",
-    "research_literature",
     "search_conversations",
     "search_topic",
     "translate_document",
@@ -408,6 +407,7 @@ test("add_saved_article queues the kept text and caches it under the slug it got
 test("no pipeline means no link ingestion", async () => {
   const turn = await buildReadingTurn(input());
   expect(names(turn!.tools)).toEqual([
+    "delegate",
     "find_paper",
     "list_kind",
     "list_palace",
@@ -416,7 +416,6 @@ test("no pipeline means no link ingestion", async () => {
     "read_chapter",
     "read_conversation",
     "read_pages",
-    "research_literature",
     "search_conversations",
     "search_topic",
     "translate_document",
@@ -437,7 +436,7 @@ test("the literature tools are mounted on every reading turn, with their prompt 
   ];
   for (const c of cases) {
     const turn = await buildReadingTurn(c);
-    for (const tool of ["research_literature", "find_paper"]) {
+    for (const tool of ["find_paper"]) {
       expect(names(turn!.tools)).toContain(tool);
       expect(turn!.systemPrompt).toContain(tool);
     }
@@ -917,86 +916,7 @@ test("a pre-send refusal and a mid-turn refusal are presented identically", asyn
 
 // --- the research sub-agent on the reader's turn (docs/25) ---
 
-// The sub-agent turn is injected, so nothing here touches a provider or the network.
-// The fake reports the rounds it spent, so the turn's shared pot actually moves.
-function subagentRun(text: string) {
-  const asked: number[] = [];
-  const run: SubagentTurnFn = async (request) => {
-    asked.push(request.maxRounds);
-    for (let r = 1; r <= request.maxRounds; r++) {
-      request.onRound({ round: r, rounds: request.maxRounds });
-    }
-    return { kind: "answer", text };
-  };
-  return { run, asked };
-}
 
-function researchTool(turn: NonNullable<Awaited<ReturnType<typeof buildReadingTurn>>>) {
-  return turn.tools.find((t) => t.name === RESEARCH_TOOL_NAME)!;
-}
-
-// The one correctness requirement of the whole wiring: a run that established nothing
-// arrives at the companion as a failed tool call, in the words the brief chose, and
-// never as "nothing was found".
-test("an unusable research run arrives as a failed tool call, not as an answer", async () => {
-  const { run } = subagentRun("There is no recent research on inline caches.");
-  const turn = await buildReadingTurn(input({ runSubagentTurn: run }));
-
-  const attempt = researchTool(turn!).execute({ task: "recent work on inline caches" });
-  // Evidence is required the moment tools are mounted: this run answered without a
-  // single library call, so its words are dropped rather than relayed.
-  await expect(attempt).rejects.toThrow("without calling any of its 3 tools");
-  await expect(attempt).rejects.toThrow("not a finding");
-  await expect(attempt).rejects.not.toThrow("no recent research");
-});
-
-test("one reader turn has one pot, and the call after it is spent is never sent", async () => {
-  const { run, asked } = subagentRun("answered");
-  const turn = await buildReadingTurn(input({ runSubagentTurn: run }));
-  const research = researchTool(turn!);
-
-  // Each run spends every turn it was granted, so the pot empties in two.
-  await research.execute({ task: "first" }).catch(() => {});
-  await research.execute({ task: "second" }).catch(() => {});
-  await expect(research.execute({ task: "third" })).rejects.toThrow("did not run at all");
-  await expect(research.execute({ task: "third" })).rejects.toThrow("Nothing was looked up");
-
-  expect(asked).toEqual([6, RESEARCH_TURN_ROUNDS - 6]);
-});
-
-test("a fresh reader turn gets a fresh pot", async () => {
-  const { run, asked } = subagentRun("answered");
-  for (const _ of [1, 2]) {
-    const turn = await buildReadingTurn(input({ runSubagentTurn: run }));
-    await researchTool(turn!)
-      .execute({ task: "first" })
-      .catch(() => {});
-  }
-  expect(asked).toEqual([6, 6]);
-});
-
-// Cancellation, end to end: the AbortController App raises for a hangup is the turn's
-// signal, and the turn's signal is the sub-agent's.
-test("the reader's abort signal is the one the sub-agent runs under", async () => {
-  const controller = new AbortController();
-  let seen: AbortSignal | undefined;
-  const run: SubagentTurnFn = async (request) => {
-    seen = request.signal;
-    // What the live runner does on abort: the agent loop returns silently and the
-    // settler turns that into a rejection.
-    controller.abort();
-    throw new StoppedError();
-  };
-  const turn = await buildReadingTurn(input({ signal: controller.signal, runSubagentTurn: run }));
-  const research = researchTool(turn!);
-
-  await expect(research.execute({ task: "recent work" })).rejects.toBeInstanceOf(StoppedError);
-  expect(seen).toBe(controller.signal);
-  // And once the reader has hung up, a further call stops before anything is sent.
-  seen = undefined;
-  await expect(research.execute({ task: "recent work" })).rejects.toBeInstanceOf(StoppedError);
-  expect(seen).toBeUndefined();
-});
 
 // --- the visual window around a highlight (figures/page-window.ts) ---
 
@@ -1437,4 +1357,46 @@ test("read_chapter on an aside parks nothing, on either end", async () => {
   expect(out).toContain("=== Page 31 === [p.31]");
   expect(getThread(BOOK, aside)?.focusChapter).toBeUndefined();
   expect(getThread(BOOK, lesson)?.focusChapter).toBe(3);
+});
+
+// --- handing the literature over (docs/68) ---------------------------------
+
+// The reading turn no longer looks anything up itself: it delegates, and the
+// place the reader was standing goes with the run so the answer comes back into
+// this thread. A worker that never settles is the point — the tool answers
+// while the work is still going.
+test("delegating from a book names the book, the thread and the page", async () => {
+  let started: Run | undefined;
+  let briefPath = "";
+  registerWorker({
+    kind: "fake-literature",
+    tier: "local",
+    agent: true,
+    run: (brief, ctx) => {
+      briefPath = brief;
+      started = ctx.run;
+      return { cancel: () => {}, done: new Promise(() => {}) };
+    },
+  });
+
+  const turn = await buildReadingTurn(input());
+  const delegate = turn!.tools.find((t) => t.name === "delegate")!;
+  const said = await delegate.execute({
+    kind: "fake-literature",
+    task: "what has been published on inline caches since 2020",
+  });
+
+  // It came back with the run still going.
+  expect(said).toContain("later");
+  expect(started).toBeTruthy();
+  expect(JSON.parse(started!.deliverTo!)).toEqual({
+    place: "book",
+    bookId: BOOK,
+    threadId: "thread-1",
+    annotationId: "ann-1",
+    page: 2,
+  });
+  // The brief is a path, and what the model wrote is at the end of it.
+  expect(briefPath).toStartWith("legion/briefs/");
+  expect(started!.brief).toBe(briefPath);
 });

@@ -15,11 +15,7 @@
 // case-insensitively) on the OAuth channel, so a tool whose name collides goes out
 // impersonating a different tool with different semantics (docs/24).
 
-import {
-  DEFAULT_SUBAGENT_ROUNDS,
-  type SubagentDefinition,
-  type SubagentProgress,
-} from "../../legion/subagent";
+import { DEFAULT_SUBAGENT_ROUNDS, type SubagentDefinition } from "../../legion/subagent";
 import type { AgentTool } from "../../legion/execute/turn";
 import { buildCitationTools } from "./citation-tool";
 import type { CitationDeps } from "./citations";
@@ -27,6 +23,10 @@ import type { PaperSearchFn } from "./paper-search";
 import { buildPaperSearchTools } from "./search-tool";
 
 export const RESEARCH_TOOL_NAME = "research_literature";
+
+// The legion kind the reading domain registers for this work (research-worker.ts).
+// Named here, beside the sub-agent it runs, because the prompt below has to say it.
+export const RESEARCH_KIND = "research-literature";
 
 // The one line the reader sees while a run is going. Shared with
 // src/reading/context.ts's toolStatusLabel so the row does not change its wording
@@ -52,16 +52,18 @@ export const RESEARCH_BRIEF_TOKENS = 700;
 // nothing in the reply says no library was consulted.
 export const RESEARCH_PROMPT =
   `When the reader asks what the research says — the latest work on a topic, whether a ` +
-  `claim in the book still holds, who has studied something since — call ` +
-  `${RESEARCH_TOOL_NAME} rather than answering from memory, and pass on the papers it ` +
-  `names with their links so the reader can check them. What comes back is a short brief, ` +
-  `not a result set: relay what it says, and when it says it could not finish, say that ` +
-  `rather than that nothing was found. ` +
+  `claim in the book still holds, who has studied something since — do not answer from ` +
+  `memory and do not look it up in this turn. Hand it over: call delegate with kind ` +
+  `${RESEARCH_KIND}, and put in the task everything that makes the question answerable ` +
+  `for someone who cannot see this conversation and has not read the book. Then tell the ` +
+  `reader plainly that you have sent it off and the answer will come back here later, ` +
+  `and go on with whatever else they asked. The search takes minutes and this turn does ` +
+  `not wait for it. ` +
   `A book can only cite work older than itself, so its own notes are a way into the ` +
   `current literature: when the question grows out of a citation, name that paper (with ` +
   `its DOI or id if find_paper gave you one) in the task you hand over. Use find_paper ` +
-  `alone when the question is only what a citation is; ${RESEARCH_TOOL_NAME} when it is ` +
-  `what has happened since.`;
+  `alone when the question is only what a citation is; delegate when it is what has ` +
+  `happened since.`;
 
 // The sub-agent's own role and instructions. The brief contract (its work is
 // discarded, only the last message survives) is appended by the capability.
@@ -175,17 +177,3 @@ export function buildResearchAgent(deps: ResearchAgentDeps): SubagentDefinition 
   };
 }
 
-// The one line shown in the chat while a run is going.
-//
-// The round count joins from the second turn on: the first is over quickly and a
-// "(1/6)" on it is noise, while a run that has been going four turns is a run the
-// reader is entitled to see is still alive. The tool name a "tool" event carries is
-// deliberately unused — a phrase per tool would be the sub-agent's tool calls in the
-// reader's clothing, and there is nothing the reader can do with it. The count is kept
-// on the tool events too, so the line does not flicker between rounds.
-export function researchStatusLabel(progress: SubagentProgress): string {
-  if (progress.round >= 2) {
-    return `${progress.label} (${progress.round}/${progress.roundsAllowed})`;
-  }
-  return progress.label;
-}

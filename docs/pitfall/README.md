@@ -330,6 +330,7 @@
 - [306-the-harness-holds-a-stream-to-the-provider-grammar](./306-the-harness-holds-a-stream-to-the-provider-grammar.md) — 换到 pi-agent-core 的 `AgentHarness` 后，只推 `text_delta` + `done` 的脚本化假流在第一个 delta 就把 harness 封死（`HarnessFault`，原因在 `.cause`："text block 0 has not started"）：帧编码器按真 provider 的语法收事件，`start` → 每块 `*_start` / `*_delta` / `*_end` → `done`/`error`。假流一律从 `tests/support/scripted-turn.ts` 出
 - [307-a-pi-lane-carries-no-prompt-of-its-own](./307-a-pi-lane-carries-no-prompt-of-its-own.md) — pi 的 lane 只带模型、思考档和活跃工具名（`LaneConfiguration` 三个字段），systemPrompt 和工具注册表是 harness 级的，`OperationRequest` 也没有单次覆盖口子：要自己 prompt 或自己工具集的 worker（隔离上下文的子 agent）得自己开 harness，身份写在 lane 名和 session 组上
 - [308-an-open-operation-blocks-its-lane-until-settled](./308-an-open-operation-blocks-its-lane-until-settled.md) — 重开 session 后上个进程留下的 open operation 让同一条 lane 的新 `accept` 报 `LaneBusy`；`resume()` 写完合成的中断 toolResult 会接着调模型跑完那条没人听的 run，`abort()` 同样写中断结果但以 aborted 结算、不发请求。常驻 lane（soul）重开时逐条 abort，不 resume
+- [313-a-tool-mounted-on-a-global-registry-comes-and-goes](./313-a-tool-mounted-on-a-global-registry-comes-and-goes.md) — `delegate` 按「这台设备登记过 worker 才挂」建，工具清单就跟着一个没有注销口子的模块级 Map 走：单跑绿、整套跑红，哪些文件红取决于文件顺序（坑 303 同一个病根）。工具无条件挂，能跑哪些 kind 写进参数描述，调用时按 kind 拒
 
 ## 开发环境
 

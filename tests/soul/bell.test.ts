@@ -20,7 +20,13 @@ import { toPiMessages } from "../../src/ai/providers";
 import { createSessionFileSystem } from "../../src/platform/app/session-fs";
 import { doorKey, doorDate } from "../../src/soul";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
-import { rebuildThreadStoreForTests, threadFileName } from "../../src/platform/app/threads";
+import {
+  createBookThread,
+  rebuildThreadStoreForTests,
+  threadFileName,
+} from "../../src/platform/app/threads";
+import { registerDelivery, type Delivery } from "../../src/soul";
+import { createBoxStore, type BoxIo, type BoxStore } from "../../src/box";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 import { memoryAppData } from "../support/memory-appdata";
 import { turnEvents, type Turn } from "../support/scripted-turn";
@@ -238,4 +244,185 @@ test("the ack stamps the run as delivered, which is what the fold waits on", asy
     newThreadId: () => "door-thread-4",
   });
   expect((await runs.get(run.id))?.deliveredAt).toBe(NOW);
+});
+
+// --- answering where the question was asked (docs/68) -----------------------
+
+const BOOK = "book-hash";
+
+function boxStore(): { box: BoxStore; files: Map<string, string> } {
+  const files = new Map<string, string>();
+  const io: BoxIo = {
+    list: async () => [...files.keys()],
+    read: async (name) => files.get(name) ?? null,
+    write: async (name, contents) => {
+      files.set(name, contents);
+    },
+  };
+  return { box: createBoxStore(io), files };
+}
+
+// A domain's delivery opener, as reading registers one: it says where the reply
+// goes and hands back a turn. The bell knows nothing else about a book.
+function bookDelivery(): () => void {
+  return registerDelivery("book", async (input) => {
+    if (input.origin.place !== "book") return null;
+    return {
+      key: input.origin.bookId,
+      threadId: input.origin.threadId,
+      turn: {
+        systemPrompt: "the book is on the desk",
+        tools: [],
+        messages: [{ role: "user", text: input.bell }],
+        refusal: "",
+      },
+    } satisfies Delivery;
+  });
+}
+
+function bookThreadFile(): { messages: { role: string; text: string }[] } | null {
+  const text = disk.files.get(threadFileName(BOOK));
+  if (!text) return null;
+  const parsed = JSON.parse(text) as {
+    threads: Record<string, { messages: { role: string; text: string }[] }>;
+  };
+  const thread = parsed.threads["thread-1"];
+  return thread ? { messages: thread.messages } : null;
+}
+
+const bookOrigin = JSON.stringify({
+  place: "book",
+  bookId: BOOK,
+  threadId: "thread-1",
+  annotationId: "ann-1",
+  page: 37,
+});
+
+test("a run delegated from a book is answered in that book's thread, not at the door", async () => {
+  const off = bookDelivery();
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box, files } = boxStore();
+    await bells.ring(
+      "run-done",
+      {
+        runId: "r-1",
+        kind: "research-literature",
+        brief: "the literature is in",
+        output: "legion/outputs/r-1.md",
+        deliverTo: bookOrigin,
+      },
+      { at: NOW - 1000 },
+    );
+    const { send, rounds } = sender([{ text: "Four papers came back. The first settles it." }]);
+
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+
+    // The book's own file holds the reply; the door was never opened.
+    expect(bookThreadFile()!.messages).toEqual([
+      expect.objectContaining({ role: "ai", text: "Four papers came back. The first settles it." }),
+    ]);
+    expect(doorFile()).toBeNull();
+    expect(rounds.length).toBe(1);
+    expect(String(rounds[0]![0]!.content)).toContain("not said by the reader");
+
+    // One card, pointing back at what was just written.
+    const item = JSON.parse([...files.values()][0]!) as Record<string, unknown>;
+    expect(item.boxId).toBe("r-1");
+    expect(item.runId).toBe("r-1");
+    expect(item.source).toBe("run");
+    expect(item.state).toBe("in-box");
+    expect(item.needsDecision).toBe(false);
+    expect(item.body).toBe("legion/outputs/r-1.md");
+    expect(item.cover).toBe("Four papers came back.");
+    expect(item.origin).toEqual(JSON.parse(bookOrigin));
+  } finally {
+    off();
+  }
+});
+
+test("the card is written before the bell is acked", async () => {
+  const off = bookDelivery();
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box } = boxStore();
+    let queuedWhenWritten = -1;
+    const watched: BoxStore = {
+      ...box,
+      put: async (input) => {
+        queuedWhenWritten = (await bells.read()).length;
+        return box.put(input);
+      },
+    };
+    await bells.ring(
+      "run-done",
+      { runId: "r-1", kind: "research-literature", brief: "in", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    const { send } = sender([{ text: "Back." }]);
+    await answerBell({ settings, bells, box: watched, send, now: () => NOW });
+    // Still queued: the item is on disk before anything says the bell was answered.
+    expect(queuedWhenWritten).toBe(1);
+    expect(await bells.read()).toEqual([]);
+  } finally {
+    off();
+  }
+});
+
+test("a failed run is a card the reader has to decide about", async () => {
+  const off = bookDelivery();
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box, files } = boxStore();
+    await bells.ring(
+      "run-failed",
+      {
+        runId: "r-2",
+        kind: "research-literature",
+        reason: "every attempt failed",
+        deliverTo: bookOrigin,
+      },
+      { at: NOW - 1000 },
+    );
+    const { send } = sender([{ text: "The search could not finish." }]);
+    await answerBell({ settings, bells, box, send, now: () => NOW });
+
+    const item = JSON.parse([...files.values()][0]!) as Record<string, unknown>;
+    expect(item.needsDecision).toBe(true);
+    expect(item.body).toBeUndefined();
+  } finally {
+    off();
+  }
+});
+
+test("a run that named no place is answered at the door, and the card says so", async () => {
+  const off = bookDelivery();
+  try {
+    const { bells } = bellStore();
+    const { box, files } = boxStore();
+    await bells.ring(
+      "run-done",
+      { runId: "r-3", kind: "translate-book", brief: "done", deliverTo: "not json at all" },
+      { at: NOW - 1000 },
+    );
+    const { send } = sender([{ text: "Your translation is ready." }]);
+    await answerBell({
+      settings,
+      bells,
+      box,
+      send,
+      now: () => NOW,
+      newThreadId: () => "door-thread-1",
+    });
+
+    expect(doorFile()!.messages.length).toBe(1);
+    expect(bookThreadFile()).toBeNull();
+    const item = JSON.parse([...files.values()][0]!) as { origin: { place: string } };
+    expect(item.origin.place).toBe("door");
+  } finally {
+    off();
+  }
 });

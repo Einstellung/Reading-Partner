@@ -8,7 +8,6 @@ import type { AgentTool } from "../legion/execute/turn";
 import { textAround } from "../fulltext/query";
 import { formatPages, formatSearch, MAX_PAGES, type TopicMaterial } from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";
-import { RESEARCH_LABEL, RESEARCH_TOOL_NAME } from "./papers/research-agent";
 
 const SURROUND_RADIUS = 200;
 const SURROUND_MAX = 700;
@@ -71,11 +70,6 @@ export function toolStatusLabel(name: string, args: Record<string, any>): string
       return `Reading your notes on ${args.material}`;
     case "find_paper":
       return `Looking up “${args.paper}”`;
-    // The research sub-agent. Its own task is not shown: the companion writes it,
-    // it is long, and it is a restatement of what the reader just said. The line
-    // gains a round count from researchStatusLabel once the run is under way.
-    case RESEARCH_TOOL_NAME:
-      return RESEARCH_LABEL;
     case "observation_search":
       return `Searching its observations for “${args.query}”`;
     case "observation_read":

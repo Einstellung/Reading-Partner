@@ -30,6 +30,9 @@ import { roleOf } from "./roles";
 import type { DeskEnv, DeskMemory } from "../desk";
 import { getThread } from "../platform/app/threads";
 import type { AgentTool } from "../legion/execute/turn";
+import { appBox, isOpen, type BoxOrigin, type BoxStore } from "../box";
+import { buildDelegateTools } from "./delegate";
+import { originLabel } from "./delivery";
 
 export interface Soul {
   // statement_write, the conversation tools, the catalogue tools, the
@@ -59,6 +62,18 @@ export interface Soul {
   // legion errand. It is kept whole so the assembly can print the duty ahead of
   // the desk, and name the role when one of its tools collides with an item's.
   role: LoadedRole | null;
+}
+
+/** How many unopened items the soul is told about. Beyond ten it is a list, not a reminder. */
+export const BOX_COVER_CAP = 10;
+
+/** What the soul is told about the box it has not been through (docs/68). */
+export interface SoulExtras {
+  // Where this turn is being held. It fills a delegated run's deliverTo, so the
+  // answer comes back to the place the question was asked.
+  origin?: BoxOrigin;
+  // The Red Box. The device's own unless a test hands one in.
+  box?: BoxStore;
 }
 
 /** A role as one turn holds it: what it is, and the tools it built for that turn. */
@@ -92,6 +107,7 @@ export async function openSoul(
   filing?: TopicProposalSurface,
   catalogueIo?: CatalogueIo,
   role?: string,
+  extra: SoulExtras = {},
 ): Promise<Soul> {
   const thread = getThread(env.thread.key, env.thread.id);
   const messages = thread?.messages ?? [];
@@ -134,6 +150,11 @@ export async function openSoul(
   // shelf, which topics they keep, what was kept from a briefing. The palace is
   // the same wherever the turn is held, so this rides every desk too.
   tools.push(...buildCatalogueTools(catalogueIo));
+  // The one way work is handed off (docs/68). Beside the catalogue because the
+  // judgement it exists for is the soul's wherever it is sitting: this is more
+  // than a moment's work, so somebody else does it and the answer comes back to
+  // where it was asked. The origin is filled in here and never by the model.
+  tools.push(...buildDelegateTools(extra.origin === undefined ? {} : { origin: extra.origin }));
   // Nothing has said what this conversation is about, so the offer to say it
   // rides the turn (docs/21, memory/filing). Only where the caller can draw the
   // card, though — the tool writes nothing, the card is its whole effect, and
@@ -164,6 +185,13 @@ export async function openSoul(
   // absent wherever no shell has registered a place — a legion errand has
   // nobody to take anywhere.
   tools.push(...buildPlaceTools());
+  // What is waiting in the box, one line each (docs/68). Covers only: a line
+  // says something came back and where it came from, and reading it is the
+  // reader opening the item, not the soul quoting it into every turn. A box
+  // nobody has put anything in adds nothing at all, so a fresh install's call
+  // is byte for byte what it was (docs/09).
+  const covers = await openCovers(extra.box ?? appBox());
+  if (covers) prompt = prompt === "" ? covers : `${prompt}\n\n${covers}`;
   return {
     tools,
     statements: await assembleStatements(),
@@ -223,4 +251,21 @@ function sectionInput(
       : {}),
     hasObservationTools: soul.writesObservations,
   };
+}
+
+// The unopened items as the soul reads them. A store that will not answer is a
+// soul with an empty box: a turn the reader is waiting on is not the place to
+// raise a disk problem.
+async function openCovers(box: BoxStore): Promise<string> {
+  const items = await box.open().catch(() => []);
+  const lines = items
+    .filter((item) => isOpen(item.state))
+    .slice(0, BOX_COVER_CAP)
+    .map((item) => `[box] ${item.cover} — ${originLabel(item.origin)}`);
+  if (lines.length === 0) return "";
+  return [
+    "Waiting in the box, not yet opened by the reader. Mention one only where it bears on",
+    "what is being said; they are not a list to read out.",
+    ...lines,
+  ].join("\n");
 }
