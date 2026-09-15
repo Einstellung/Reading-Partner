@@ -73,6 +73,9 @@ const LAYER: Record<string, Layer> = {
   // (docs/55). Pure functions of the claim files and the clock, so every device
   // reaches the same answer without anything being said between them.
   "legion/claim": "capability",
+  // When something is owed and which machine owes it (docs/55). Pure rules over
+  // the runs and the claims, and one side effect: the wake bell.
+  "legion/schedule": "capability",
   "legion/execute": "capability",
   "legion/subagent": "capability",
   memory: "capability",

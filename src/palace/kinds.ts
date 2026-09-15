@@ -1228,6 +1228,18 @@ export const PALACE = [
     note: "one bell per file, the soul's inbox on this device (src/legion/bell). Machine-local runtime, like the session beside it: a bell is addressed to the soul running here, and the words it produces travel as a conversation (docs/55)",
   },
   {
+    kind: "schedule-state",
+    domain: "memory",
+    match: subtree("legion/schedule/"),
+    samples: ["legion/schedule/fired.json"],
+    id: "fixed",
+    refs: [],
+    sync: "local",
+    deleteWith: "never",
+    gc: "never",
+    note: "which anchor this device last rang a wake bell for (src/legion/schedule, docs/55). Machine-local: two devices agreeing on who fires is the election's job, and this is only how one device does not fire twice for the same hour",
+  },
+  {
     kind: "session",
     domain: "memory",
     match: subtree("session/"),
