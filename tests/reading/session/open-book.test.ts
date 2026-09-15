@@ -111,7 +111,7 @@ function argsOf(log: Call[], name: string): unknown[] {
 
 test("the book being left is settled before anything of the next one is read", async () => {
   const log: Call[] = [];
-  await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, fakeIo(log));
+  await openBook(fakeShell(log, { currentDocId: () => "book-1" }), book, fakeIo(log));
 
   const order = names(log);
   expect(order.slice(0, 7)).toEqual([
@@ -125,7 +125,7 @@ test("the book being left is settled before anything of the next one is read", a
   ]);
   // The hangup reads the refs of the book being left, so nothing may point at
   // the new one before it has run.
-  before(log, "captureHangup", "takeBook");
+  before(log, "captureHangup", "takeDoc");
 });
 
 test("a book opens with no tool held and nothing selected", async () => {
@@ -224,7 +224,7 @@ test("the position the reader will move from is seeded before the pane is mounte
 test("a book opens with its prep detached, legacy classroom flag or not", async () => {
   const log: Call[] = [];
   const state = { pageIndex: 0, scale: "auto", scrollMode: 0, classroom: true } as ViewState;
-  const shell = fakeShell(log, { currentBookId: () => "book-1" });
+  const shell = fakeShell(log, { currentDocId: () => "book-1" });
   await openBook(shell, book, fakeIo(log, { getViewState: async () => state }));
   await settle();
 
@@ -238,7 +238,7 @@ test("a book opens with its prep detached, legacy classroom flag or not", async 
 // two calls is the whole of it — without it, both would be in flight together.
 test("the chapter pass is resumed only after the prep panel has finished", async () => {
   const log: Call[] = [];
-  await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, fakeIo(log));
+  await openBook(fakeShell(log, { currentDocId: () => "book-1" }), book, fakeIo(log));
   await settle();
 
   expect(names(log).filter((n) => n.startsWith("resume"))).toEqual([
@@ -251,7 +251,7 @@ test("the chapter pass is resumed only after the prep panel has finished", async
 
 test("the full text and the figures land on the panels once they are extracted", async () => {
   const log: Call[] = [];
-  await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, fakeIo(log));
+  await openBook(fakeShell(log, { currentDocId: () => "book-1" }), book, fakeIo(log));
   await settle();
 
   // Opening blanks both, and each is filled in when its own extraction lands.
@@ -265,7 +265,7 @@ test("the full text and the figures land on the panels once they are extracted",
 test("a book with no text layer resumes neither panel", async () => {
   const log: Call[] = [];
   const io = fakeIo(log, { ensureFulltext: async () => NO_TEXT });
-  await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, io);
+  await openBook(fakeShell(log, { currentDocId: () => "book-1" }), book, io);
   await settle();
 
   expect(argsOf(log, "showFulltext")).toEqual([null, true]);
@@ -277,7 +277,7 @@ test("a book with no text layer resumes neither panel", async () => {
 test("an extraction that lands after the reader moved on is thrown away", async () => {
   const log: Call[] = [];
   // The reader is on another book by the time either extraction resolves.
-  await openBook(fakeShell(log, { currentBookId: () => "book-2" }), book, fakeIo(log));
+  await openBook(fakeShell(log, { currentDocId: () => "book-2" }), book, fakeIo(log));
   await settle();
 
   expect(log.filter((c) => c.name === "showFigures").map((c) => c.args)).toEqual([[[]]]);
@@ -291,7 +291,7 @@ test("a failed extraction leaves the panel empty instead of throwing", async () 
     ensureFigures: () => Promise.reject(new Error("no pdfium")),
     ensureFulltext: () => Promise.reject(new Error("no pdfium")),
   });
-  await openBook(fakeShell(log, { currentBookId: () => "book-1" }), book, io);
+  await openBook(fakeShell(log, { currentDocId: () => "book-1" }), book, io);
   await settle();
 
   expect(last(log, "showFigures")?.args).toEqual([[]]);
@@ -302,7 +302,7 @@ test("everything that reads the book reads the one copy of it", async () => {
   const log: Call[] = [];
   await openBook(fakeShell(log), book, fakeIo(log));
 
-  const taken = argsOf(log, "takeBook");
+  const taken = argsOf(log, "takeDoc");
   const mounted = argsOf(log, "mountReader")[0] as { buffer: ArrayBuffer };
   const extracted = argsOf(log, "ensureFigures");
   expect(taken[0]).toBe("book-1");

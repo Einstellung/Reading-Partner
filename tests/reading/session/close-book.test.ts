@@ -39,7 +39,7 @@ function before(log: Call[], first: string, second: string): void {
 test("what the book still owes is collected before its refs are let go", () => {
   const log: Call[] = [];
   const sweeps: string[] = [];
-  closeBook(fakeShell(log), "book-1", (t) => sweeps.push(t));
+  closeBook(fakeShell(log), "book-1", "book-1", (t) => sweeps.push(t));
 
   const order = names(log);
   expect(order).toEqual([
@@ -60,7 +60,7 @@ test("what the book still owes is collected before its refs are let go", () => {
 
 test("the turns are stopped before the hangup, so the distillation reads what they wrote", () => {
   const log: Call[] = [];
-  closeBook(fakeShell(log), "book-1", () => {});
+  closeBook(fakeShell(log), "book-1", "book-1", () => {});
 
   expect(log[0]).toEqual({ name: "endBookTurns", args: ["book-1"] });
   before(log, "endBookTurns", "captureHangup");
@@ -68,14 +68,14 @@ test("the turns are stopped before the hangup, so the distillation reads what th
 
 test("the last chapter's notes pass fires before the book is released", () => {
   const log: Call[] = [];
-  closeBook(fakeShell(log), "book-1", () => {});
+  closeBook(fakeShell(log), "book-1", "book-1", () => {});
 
   before(log, "finalPassPrep", "releaseBook");
 });
 
 test("closing with no book open stops no turns and still tears the reader down", () => {
   const log: Call[] = [];
-  closeBook(fakeShell(log), null, () => {});
+  closeBook(fakeShell(log), null, null, () => {});
 
   expect(names(log)).not.toContain("endBookTurns");
   expect(names(log)).toContain("unmountReader");
@@ -84,7 +84,7 @@ test("closing with no book open stops no turns and still tears the reader down",
 
 test("nothing is left of the book on the screen", () => {
   const log: Call[] = [];
-  closeBook(fakeShell(log), "book-1", () => {});
+  closeBook(fakeShell(log), "book-1", "book-1", () => {});
 
   expect(log.find((c) => c.name === "showTitle")?.args).toEqual([null]);
   expect(log.find((c) => c.name === "showFulltext")?.args).toEqual([null, false]);

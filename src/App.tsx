@@ -45,7 +45,8 @@ import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
-import type { BookFormat } from "./platform/app/library";
+import { displaySource, readLibraryBook, type BookFormat } from "./platform/app/library";
+import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
   CitationContext,
@@ -82,7 +83,8 @@ import { closeBook } from "./reading/session/close-book";
 import { useCall } from "./reading/session/use-call";
 import { useMarkDoors } from "./reading/session/use-mark-doors";
 import { AI_PEN_COLOR, useMarks } from "./reading/session/use-marks";
-import { openBook } from "./reading/session/open-book";
+import { openBook, switchDocument } from "./reading/session/open-book";
+import { supplementForSlug, supplementTitles } from "./reading/session/supplement-citation";
 import { createPasteHandler, systemImageReader } from "./reading/session/paste-images";
 import { runStartupMigrations } from "./reading/session/startup-migrations";
 import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
@@ -157,12 +159,25 @@ export default function App() {
   // Whether a transient AI-cited-quote overlay is showing, so Escape can dismiss
   // it before it falls through to closing the call.
   const [quoteHlActive, setQuoteHlActive] = useState(false);
-  // The open book's id: the content hash its annotations, threads, reading
-  // position, prep notes and figure crops are all keyed by. Null in the library.
+  // The reading session's two identities (docs/67, reading/session/documents.ts).
+  // `bookId` is the book the session belongs to: its conversation, its prep, its
+  // event log, its outline. `docId` is the bytes on screen, which is the book or
+  // one of its supplements. Both null in the library.
   const bookIdRef = useRef<string | null>(null);
-  // Its file name, for the handlers that have to name it in a sentence and must
-  // stay stable across renders (the reader pane is memoized on prop identity).
-  const bookNameRef = useRef("");
+  const docIdRef = useRef<string | null>(null);
+  // The name of the document on screen, for the handlers that have to name it in
+  // a sentence and must stay stable across renders (the reader pane is memoized
+  // on prop identity), and the book's own name, which the Outline's book row and
+  // the way back from a supplement both need.
+  const docNameRef = useRef("");
+  const [bookTitle, setBookTitle] = useState("");
+  // The book's supplements, and the same list as a ref for the turn assembly.
+  const [supplements, setSupplements] = useState<SupplementRef[]>([]);
+  const supplementsRef = useRef<readonly SupplementRef[]>([]);
+  supplementsRef.current = supplements;
+  // Which document is on screen, as something that renders: the Outline lights
+  // the row the reader is in. A ref cannot do that.
+  const [docId, setDocId] = useState<string | null>(null);
 
   // The current book's full text, extracted fire-and-forget on open. A call's
   // context assembly awaits this so the AI can see the page even if extraction
@@ -215,7 +230,7 @@ export default function App() {
 
   // The open book: bytes + saved state for EmbedReaderPane; null in the library.
   const [embedDoc, setEmbedDoc] = useState<{
-    bookId: string;
+    docId: string;
     name: string;
     format: BookFormat;
     buffer: ArrayBuffer;
@@ -288,6 +303,11 @@ export default function App() {
   // Set from openInReader once ensureFulltext resolves; see the comment there.
   const [fulltext, setFulltext] = useState<Fulltext | null>(null);
   const [fulltextPending, setFulltextPending] = useState(false);
+  // The book's own text, which is where its outline is. Kept past a document
+  // switch: the Outline sidebar draws the book's chapters while a supplement is
+  // on screen, and that is how the reader gets back to the book (docs/67).
+  const [bookFulltext, setBookFulltext] = useState<Fulltext | null>(null);
+  const [bookFulltextPending, setBookFulltextPending] = useState(false);
   // Resolved figure list for the current book (M9), feeding the inline [fig:N]
   // card host and empty until extraction finishes.
   const [figures, setFigures] = useState<Figure[]>([]);
@@ -465,16 +485,16 @@ export default function App() {
   // The reader moved. The debounce, the flush on the way out and the failure
   // that must not be silent (pitfall 09) are all reading-position.ts's.
   const persist = useCallback((state: ViewState) => {
-    const bookId = bookIdRef.current;
-    if (!bookId) return;
-    keepReadingPosition(bookId, state);
+    const docId = docIdRef.current;
+    if (!docId) return;
+    keepReadingPosition(docId, state);
   }, []);
 
   // The marks on the book (docs/02): the map every callback reads, the drawer's
   // list, the annotation editor, and the writes that keep the three in
   // agreement. Called before the conversation, which reads the map; what a mark
   // is a door into is the other half, below the call (use-mark-doors.ts).
-  const marks = useMarks({ viewRef, bookIdRef });
+  const marks = useMarks({ viewRef, docIdRef });
   const {
     annsRef,
     asideFramingFor,
@@ -501,6 +521,9 @@ export default function App() {
   // written above the callback it reaches, so reading it late keeps its identity
   // stable and its declaration where it belongs.
   const openAsideThreadRef = useRef<(threadId: string) => void>(() => {});
+  // Same reason, for the switch between the book and a supplement: a clicked
+  // citation may name one, and onCitation is written above the door.
+  const openDocumentRef = useRef<(id: string, name: string) => Promise<void>>(async () => {});
   const {
     call,
     captureHangup,
@@ -532,6 +555,9 @@ export default function App() {
   } = useCall<CallMessage, PendingImage>({
     annsRef,
     bookIdRef,
+    docIdRef,
+    supplementsRef,
+    onSupplement: () => void refreshSupplements(),
     bufferRef,
     ctxRef,
     currentFiguresRef,
@@ -677,6 +703,22 @@ export default function App() {
       }
       viewRef.current?.navigate({ pageIndex: fig.page - 1 });
     } else {
+      // A supplement is cited by its title (docs/67). Open it if it is not the
+      // document on screen, then go to the page — the jump has to wait for the
+      // engine to have the new bytes, which is what the await is.
+      const supplement = supplementForSlug(c.slug, supplementsRef.current);
+      if (supplement) {
+        void (async () => {
+          if (docIdRef.current !== supplement.hash) {
+            await openDocumentRef.current(supplement.hash, supplement.title);
+          }
+          const pageIndex = c.page - 1;
+          if (c.quote) await jumpToQuote(pageIndex, c.quote);
+          else viewRef.current?.navigate({ pageIndex });
+        })();
+        swapToReading();
+        return;
+      }
       // The model can cite a paper that isn't prepped — an abbreviated slug, or
       // one it remembers from another book. Selecting it opened the prep panel
       // on nothing, which reads as the panel being broken. Say so instead.
@@ -757,6 +799,7 @@ export default function App() {
   } = useMarkDoors({
     marks,
     viewRef,
+    docIdRef,
     bookIdRef,
     readerPaneRef,
     aiPen: toolType === "ai",
@@ -786,17 +829,25 @@ export default function App() {
       resetTool: () => setPickedTool("none"),
       showMarks,
       readerNotReady: () => setViewReady(false),
-      takeBook: (bookId, name, buffer) => {
+      takeSession: (bookId) => {
         bookIdRef.current = bookId;
-        bookNameRef.current = name;
+      },
+      takeDoc: (id, name, buffer) => {
+        docIdRef.current = id;
+        setDocId(id);
+        docNameRef.current = name;
         bufferRef.current = buffer;
       },
-      currentBookId: () => bookIdRef.current,
+      currentDocId: () => docIdRef.current,
       restartDwell: () => {
         pageDwellRef.current = null;
       },
       releaseBook: () => {
         bookIdRef.current = null;
+        docIdRef.current = null;
+        setDocId(null);
+        setSupplements([]);
+        setBookTitle("");
         viewRef.current = null;
         pageDwellRef.current = null;
       },
@@ -819,6 +870,10 @@ export default function App() {
         figuresRef.current = list;
         setFigures(list);
       },
+      keepBookFulltext: (ft, pending) => {
+        setBookFulltext(ft);
+        setBookFulltextPending(pending);
+      },
       mountReader: setEmbedDoc,
       unmountReader: () => setEmbedDoc(null),
       showTitle: setTitle,
@@ -838,10 +893,67 @@ export default function App() {
     ],
   );
 
+  // The book's supplements (docs/67). Read once when the book opens, and again
+  // whenever a link the model ingested becomes one — the desk says so through
+  // the call host, so nothing here has to watch a directory.
+  const refreshSupplements = useCallback(async () => {
+    const bookId = bookIdRef.current;
+    if (!bookId) {
+      setSupplements([]);
+      return;
+    }
+    try {
+      const list = await listSupplements(bookId);
+      if (bookIdRef.current === bookId) setSupplements(list);
+    } catch (e) {
+      console.error("failed to read the book's supplements", e);
+    }
+  }, []);
+
   const openInReader = useCallback(
-    (bookId: string, name: string, bytes: Uint8Array) => openBook(readerShell, { bookId, name, bytes }),
-    [readerShell],
+    async (bookId: string, name: string, bytes: Uint8Array) => {
+      setBookTitle(name);
+      setSupplements([]);
+      await openBook(readerShell, { bookId, name, bytes });
+      await refreshSupplements();
+    },
+    [readerShell, refreshSupplements],
   );
+
+  // Step to another document inside the session (docs/67): a supplement opened
+  // from the Outline, or the book itself when the reader goes back to it. The
+  // conversation, the prep run and the chapter spine are the book's and are left
+  // exactly as they are — see reading/session/open-book.ts.
+  const openDocument = useCallback(
+    async (id: string, name: string) => {
+      const bookId = bookIdRef.current;
+      if (!bookId || docIdRef.current === id) return;
+      try {
+        const bytes = await readLibraryBook(id);
+        if (!bytes) throw new Error("the document is not in the library");
+        await switchDocument(readerShell, { bookId, docId: id, name, bytes });
+      } catch (e) {
+        console.error("failed to open the document", e);
+        pushToast("error", "Can't open this — it may not have finished downloading.");
+      }
+    },
+    [readerShell, pushToast],
+  );
+
+  openDocumentRef.current = openDocument;
+
+  const openSupplement = useCallback(
+    (hash: string) => {
+      const found = supplementsRef.current.find((one) => one.hash === hash);
+      if (found) void openDocument(hash, found.title);
+    },
+    [openDocument],
+  );
+
+  const backToBook = useCallback(() => {
+    const bookId = bookIdRef.current;
+    return bookId ? openDocument(bookId, bookTitle) : null;
+  }, [openDocument, bookTitle]);
 
   // Open a topic file. If its book id is known and the library holds the
   // authoritative copy, open straight from the library (the original path may be
@@ -987,7 +1099,7 @@ export default function App() {
   }, [reopenThreadCall, pushToast, onEntryPrepTrigger]);
 
   const closeReader = useCallback(() => {
-    closeBook(readerShell, bookIdRef.current);
+    closeBook(readerShell, bookIdRef.current, docIdRef.current);
   }, [readerShell]);
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
@@ -1007,7 +1119,7 @@ export default function App() {
   // saying so beside the title, and the engine's own text goes to the console.
   const onEmbedError = useCallback(
     (e: Error) => {
-      const text = openFailureText(bookNameRef.current, e);
+      const text = openFailureText(docNameRef.current, e);
       console.error(text.detail, e);
       setStatus(text.status);
       pushToast("error", text.toast);
@@ -1212,9 +1324,9 @@ export default function App() {
       getFigure: (id) => findFigureById(figures, id),
       renderCard: async (figure) => {
         const buf = bufferRef.current;
-        const bookId = bookIdRef.current;
-        if (!buf || !bookId) return null;
-        const r = await renderFigure(bookId, buf, figure, "card");
+        const docId = docIdRef.current;
+        if (!buf || !docId) return null;
+        const r = await renderFigure(docId, buf, figure, "card");
         return r ? { src: r.dataUrl, width: r.width, height: r.height } : null;
       },
       onJump: (figure) => onCitation({ kind: "figure", id: figure.id }),
@@ -1228,9 +1340,16 @@ export default function App() {
   // its identity across the status changes that fire while prep runs, which is
   // what keeps every rendered reply from re-linkifying each time.
   const prepSlugKey = prepSnap?.state?.papers.map((p) => p.slug).join("\n") ?? null;
-  const prepSlugs = useMemo(
-    () => (prepSlugKey === null ? null : new Set(prepSlugKey.split("\n").filter(Boolean))),
-    [prepSlugKey],
+  // Plus the supplements' titles, which are the other thing a [name p.N]
+  // citation may be (docs/67). Unlike the prep list these are always known —
+  // the file is read when the book opens — so an empty set is really "none".
+  const supplementKey = supplements.map((one) => one.title).join("\n");
+  const citationSources = useMemo(
+    () => ({
+      slugs: prepSlugKey === null ? null : new Set(prepSlugKey.split("\n").filter(Boolean)),
+      titles: supplementTitles(supplementKey ? supplementKey.split("\n").map((title) => ({ title, hash: "", addedAt: 0 })) : []),
+    }),
+    [prepSlugKey, supplementKey],
   );
 
   // Whether a citation's quote is really on the page it names — what decides
@@ -1264,7 +1383,7 @@ export default function App() {
   return (
     <CardRegistryProvider>
     <CitationContext.Provider value={onCitation}>
-    <PrepSlugContext.Provider value={prepSlugs}>
+    <PrepSlugContext.Provider value={citationSources}>
     <FigureContext.Provider value={figureHost}>
     <QuoteCheckContext.Provider value={verifyQuote}>
     {/* p-safe: the insets (iPad, viewport-fit=cover). box-sizing:border-box
@@ -1336,14 +1455,33 @@ export default function App() {
               if (t === "prep" && activeTopic) logEvent(activeTopic.id, "prep-tab-open");
               setSidebarTab(t);
             }}
-            fulltext={fulltext}
-            fulltextPending={fulltextPending}
+            fulltext={bookFulltext}
+            fulltextPending={bookFulltextPending}
+            bookTitle={bookTitle}
+            supplements={supplements}
+            docId={docId}
+            bookId={bookIdRef.current}
+            displaySource={(url) => displaySource(url) ?? ""}
+            onOpenBook={() => {
+              if (closesOnNavigate(sidebarColumn)) setSidebarOpen(false);
+              void backToBook();
+            }}
+            onOpenSupplement={(hash) => {
+              if (closesOnNavigate(sidebarColumn)) setSidebarOpen(false);
+              openSupplement(hash);
+            }}
             onNavigatePage={(page) => {
               // The drawer closes on the way out: its backdrop covers the reader
               // and only answers a tap, so a jump that left it open would land on
               // a page the finger cannot scroll. The column stays, so the reader
               // keeps their place in the list they are working down.
               if (closesOnNavigate(sidebarColumn)) setSidebarOpen(false);
+              // The chapters are the book's, so a chapter picked while a
+              // supplement is on screen is also the way back to the book.
+              if (docIdRef.current !== bookIdRef.current) {
+                void backToBook()?.then(() => viewRef.current?.navigate({ pageIndex: page - 1 }));
+                return;
+              }
               viewRef.current?.navigate({ pageIndex: page - 1 });
             }}
             annotations={traceAnns as unknown as PopupAnnotation[]}

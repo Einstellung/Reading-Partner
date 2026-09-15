@@ -79,6 +79,8 @@ export interface ReadingContext {
   spineOverview?: string;
   // Paragraphs belonging to individual tools, each written where its tool is.
   toolPrompts?: readonly string[];
+  // The book's supplements and how to cite them (docs/67 「辅助资料」).
+  supplements?: string;
 
   // --- the volatile half ---
 
@@ -359,6 +361,7 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
     );
   }
 
+  push(ctx.supplements);
   push(ctx.figureCatalog);
   push(ctx.observations);
   push(ctx.prepStatus);

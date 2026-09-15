@@ -10,6 +10,7 @@
 import { loadAnnotations } from "../platform/app/annotations";
 import { getLibraryEntry } from "../platform/app/library";
 import { loadThreads } from "../platform/app/threads";
+import { listSupplements } from "../platform/app/supplements";
 import { listTopics } from "../platform/app/topics";
 import { getFulltext } from "../fulltext/store";
 import { registerDelivery, type Delivery, type DeliveryInput } from "../soul";
@@ -36,6 +37,10 @@ export async function openBookDelivery(input: DeliveryInput): Promise<Delivery |
   const turn = await buildReadingTurn({
     settings: input.settings,
     bookId,
+    // Nobody is looking at a supplement on this path: there is no reader.
+    docId: bookId,
+    viewing: null,
+    supplements: await listSupplements(bookId).catch(() => []),
     threadId,
     annotationId: origin.annotationId ?? "",
     annotation: annotations.find((a) => a.id === origin.annotationId),

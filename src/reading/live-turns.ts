@@ -16,7 +16,11 @@ export interface LiveMessage {
 
 export interface LiveTurn<M extends LiveMessage> {
   threadId: string;
+  // The session's book: what stopBook ends when the reader leaves it.
   bookId: string;
+  // The document whose thread file this conversation is written to — the
+  // book's, or a supplement's for a mark drawn on one (docs/67).
+  home: string;
   controller: AbortController;
   // The row as last patched. `message.text` is also the partial the stop button
   // keeps, which is why it is tracked here and not only in React state: a closed

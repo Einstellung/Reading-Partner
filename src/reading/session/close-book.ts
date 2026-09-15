@@ -9,6 +9,7 @@ import type { ReaderShell } from "./shell";
 export function closeBook(
   shell: ReaderShell,
   bookId: string | null,
+  docId: string | null,
   sweep: (trigger: "book-switch") => void = (trigger) => void sweepDistillation(trigger),
 ): void {
   // Leaving the book ends every turn it has running, each keeping what it wrote.
@@ -34,4 +35,6 @@ export function closeBook(
   // as it unmounts; this is for the book whose pane never came up, whose bytes
   // the ingestion is still holding open (book-cache.ts).
   if (bookId) releaseEpub(bookId);
+  // And the supplement, if one was the thing on screen (docs/67).
+  if (docId && docId !== bookId) releaseEpub(docId);
 }

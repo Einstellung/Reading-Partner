@@ -40,13 +40,18 @@ export interface ReaderShell {
 
   // The engine is between documents: nothing may be told to draw yet.
   readerNotReady(): void;
-  // The open book's id, name and bytes, as the stable callbacks read them.
-  takeBook(bookId: string, name: string, buffer: ArrayBuffer): void;
-  // Re-read after every await: a book switch mid-extraction abandons the run.
-  currentBookId(): string | null;
+  // The book this reading session belongs to (docs/67). Set once when the
+  // session opens; a supplement opened inside it does not move it.
+  takeSession(bookId: string): void;
+  // The document on screen — the book itself or one of its supplements — with
+  // its name and bytes, as the stable callbacks read them.
+  takeDoc(docId: string, name: string, buffer: ArrayBuffer): void;
+  // Re-read after every await: a document switch mid-extraction abandons the run.
+  currentDocId(): string | null;
   // Dwell tracking is per book, so there is never a cross-book page-nav event.
   restartDwell(): void;
-  // The refs the reader hung on, once nothing is open.
+  // The refs the reader hung on, once nothing is open. Both ids: closing the
+  // reader closes the whole session, not just the document showing.
   releaseBook(): void;
 
   // The two panels attached to the open book (docs/09, docs/14).
@@ -65,10 +70,14 @@ export interface ReaderShell {
   trackFigures(extraction: Promise<FiguresIndex | null>): void;
   showFulltext(fulltext: Fulltext | null, pending: boolean): void;
   showFigures(figures: Figure[]): void;
+  // The book's own full text, kept aside for the Outline sidebar: the sidebar
+  // draws the book's table of contents while a supplement is on screen, so the
+  // book's copy has to outlive the document switch (docs/67).
+  keepBookFulltext(fulltext: Fulltext | null, pending: boolean): void;
 
   // The reader pane itself.
   mountReader(doc: {
-    bookId: string;
+    docId: string;
     name: string;
     // Which reading area to put up. PDFium is handed a PDF and nothing else —
     // an EPUB is a zip, and giving it one is an engine error, not a book that

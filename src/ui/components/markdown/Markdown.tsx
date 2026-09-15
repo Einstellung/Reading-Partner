@@ -14,7 +14,7 @@
 // so MessageBubble's memoization is undisturbed.
 
 import { createContext, lazy, memo, Suspense } from 'react';
-import type { Citation, KnownSlugs } from '../../../reading/prep/anchors';
+import type { AnchorSources, Citation, KnownSlugs } from '../../../reading/prep/anchors';
 import type { Figure } from '../../../reading/figures/types';
 
 export type CitationHandler = (citation: Citation) => void;
@@ -28,7 +28,7 @@ export const CitationContext = createContext<CitationHandler | null>(null);
 // event. Null = not known here, and citations link on their shape alone (see
 // KnownSlugs) — which is what the panel's own note rendering gets, and what the
 // shell has for the moment before prep state loads.
-export const PrepSlugContext = createContext<KnownSlugs>(null);
+export const PrepSlugContext = createContext<KnownSlugs | AnchorSources>(null);
 
 // Whether a page citation's quote is really the text on that page. A citation
 // that stands alone as a paragraph is drawn as a block printing its quote (see

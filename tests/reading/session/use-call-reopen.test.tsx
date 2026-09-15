@@ -93,6 +93,8 @@ const pageMark: Annotation = {
 function host(): Parameters<typeof useCall<CallRow, StagedImage>>[0] {
   return {
     bookIdRef: { current: BOOK },
+    docIdRef: { current: BOOK },
+    supplementsRef: { current: [] },
     ctxRef: {
       current: {
         topicId: "topic-1",

@@ -29,6 +29,7 @@ import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
 import type { Annotation } from "./types";
 import type { Fulltext } from "../../../fulltext/types";
+import type { SupplementRef } from "../../../platform/app/supplements";
 
 export type SidebarTab = "outline" | "traces" | "prep";
 
@@ -60,9 +61,18 @@ interface SidebarProps {
 	onSelectTab(tab: SidebarTab): void;
 	// Dismiss the drawer (backdrop tap). The toggle button and Esc live in App.
 	onClose(): void;
+	// The book's own text — the Outline draws the book's chapters even while a
+	// supplement is on screen (docs/67).
 	fulltext: Fulltext | null;
 	fulltextPending: boolean;
+	bookTitle: string;
+	supplements: readonly SupplementRef[];
+	docId: string | null;
+	bookId: string | null;
+	displaySource(sourceUrl: string | undefined): string;
 	onNavigatePage(page: number): void;
+	onOpenBook(): void;
+	onOpenSupplement(hash: string): void;
 	annotations: Annotation[];
 	selectedId?: string | null;
 	// Passed to the trace list, which asks it per row whether the mark's
@@ -82,7 +92,14 @@ export default function Sidebar({
 	onClose,
 	fulltext,
 	fulltextPending,
+	bookTitle,
+	supplements,
+	docId,
+	bookId,
+	displaySource,
 	onNavigatePage,
+	onOpenBook,
+	onOpenSupplement,
 	annotations,
 	selectedId,
 	hasThread,
@@ -141,7 +158,18 @@ export default function Sidebar({
 
 				<div className="min-h-0 flex-1">
 					{tab === "outline" ? (
-						<OutlineView fulltext={fulltext} pending={fulltextPending} onNavigatePage={onNavigatePage} />
+						<OutlineView
+							fulltext={fulltext}
+							pending={fulltextPending}
+							bookTitle={bookTitle}
+							supplements={supplements}
+							docId={docId}
+							bookId={bookId}
+							displaySource={displaySource}
+							onNavigatePage={onNavigatePage}
+							onOpenBook={onOpenBook}
+							onOpenSupplement={onOpenSupplement}
+						/>
 					) : tab === "traces" ? (
 						<TraceList
 							annotations={annotations}
