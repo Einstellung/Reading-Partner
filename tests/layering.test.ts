@@ -53,6 +53,13 @@ const LAYER: Record<string, Layer> = {
 
   ai: "capability",
   "ai/voice": "capability",
+  // The Red Box (docs/60): what a delivery put in front of the reader, one item
+  // per file, and the join two devices reconcile one with. A capability, and a
+  // deliberately incurious one — it knows nothing of what a run does or what a
+  // cable says, only that something arrived and whether the reader is done with
+  // it. It imports platform and palace and nothing else, so legion delivers
+  // into it and the soul reads out of it without either being reached back for.
+  box: "capability",
   budget: "capability",
   // Every conversation the app holds, searchable across the desks it happened
   // on (docs/61). A capability: it reads the catalogue and the thread store, and
