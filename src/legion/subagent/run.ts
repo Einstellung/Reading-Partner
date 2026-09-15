@@ -2,7 +2,7 @@
 // brief back (docs/25).
 //
 // The turn itself is injected (SubagentTurnFn), so everything here — isolation,
-// the honest-failure mapping, tool-failure accounting, the round ledger, the cap
+// the honest-failure mapping, tool-failure accounting, the round quota, the cap
 // on what crosses back — runs in a test with no provider, no credentials and no
 // network. live.ts supplies the real turn. This is the same dependency-injection
 // shape src/memory/observations/distill.ts uses, for the same reason.
@@ -19,7 +19,7 @@
 import { REFUSE_MIDTURN, REFUSE_ROUNDS, type AgentTool } from "../execute/contract";
 import { StoppedError } from "../stop";
 import { composeBrief, subagentSystemPrompt, EMPTY_ANSWER, type BriefFacts } from "./brief";
-import type { SubagentLedger } from "./ledger";
+import type { SubagentQuota } from "./quota";
 import {
   DEFAULT_BRIEF_TOKEN_CAP,
   DEFAULT_SUBAGENT_ROUNDS,
@@ -37,7 +37,7 @@ export interface SubagentDeps {
   // A shared round budget for the caller's whole turn. Absent means the run gets
   // its definition's cap outright, which is right for a background pipeline
   // calling one sub-agent and wrong for a chat turn that mounts one as a tool.
-  ledger?: SubagentLedger;
+  quota?: SubagentQuota;
 }
 
 export interface SubagentRequest {
@@ -123,7 +123,7 @@ export async function runSubagent(
 
   if (signal?.aborted) throw new StoppedError();
 
-  const reserved = deps.ledger ? deps.ledger.grant(want) : want;
+  const reserved = deps.quota ? deps.quota.grant(want) : want;
   const tally = new ToolTally();
   let rounds = 0;
 
@@ -230,6 +230,6 @@ export async function runSubagent(
       { name: e instanceof Error ? e.constructor.name : typeof e, message },
     );
   } finally {
-    deps.ledger?.settle(reserved, rounds);
+    deps.quota?.settle(reserved, rounds);
   }
 }

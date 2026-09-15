@@ -11,7 +11,7 @@
 // needs to supply its own turn.
 export { runSubagent, type SubagentDeps, type SubagentRequest } from "./run";
 export { subagentTool, type SubagentToolDeps } from "./tool";
-export { createSubagentLedger, type SubagentLedger } from "./ledger";
+export { createSubagentQuota, type SubagentQuota } from "./quota";
 export { runSubagentTurnLive } from "./live";
 export {
   DEFAULT_BRIEF_TOKEN_CAP,

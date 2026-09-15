@@ -115,7 +115,7 @@ export interface SubagentBrief {
   outcome: SubagentOutcome;
   usable: boolean;
   // Model turns actually streamed, and the allowance this run was granted (which
-  // may be below its definition's cap, when a shared ledger had less left).
+  // may be below its definition's cap, when a shared quota had less left).
   rounds: number;
   roundsAllowed: number;
   toolCalls: number;

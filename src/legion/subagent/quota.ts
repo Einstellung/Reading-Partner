@@ -11,10 +11,10 @@
 //
 // What it stops: a parent model that calls the same sub-agent nine times, each
 // one legal on its own, and spends the reader's whole turn on lookups the reader
-// never asked for. Without a shared ledger every call is another six turns and
+// never asked for. Without a shared quota every call is another six turns and
 // nothing says no.
 
-export interface SubagentLedger {
+export interface SubagentQuota {
   // Reserve up to `want` turns and return what was actually granted, which may
   // be 0. A run granted 0 must not be sent.
   grant(want: number): number;
@@ -23,9 +23,9 @@ export interface SubagentLedger {
   remaining(): number;
 }
 
-// A ledger for one caller turn. Sequential by construction: the agent loop
+// A quota for one caller turn. Sequential by construction: the agent loop
 // awaits each tool call before the next, so grant/settle never interleave.
-export function createSubagentLedger(totalRounds: number): SubagentLedger {
+export function createSubagentQuota(totalRounds: number): SubagentQuota {
   let left = Math.max(0, Math.floor(totalRounds));
   return {
     grant(want) {

@@ -37,7 +37,7 @@ export const RESEARCH_LABEL = "Searching the literature";
 // research_literature call in it together. One full investigation plus a real
 // follow-up when the first brief leaves an obvious gap; the third call is refused
 // with a sentence that says nothing was looked up, instead of quietly spending the
-// rest of the reader's turn on lookups nobody asked for. Without a ledger every call
+// rest of the reader’s turn on lookups nobody asked for. Without a quota every call
 // is another six model turns and nothing says no.
 export const RESEARCH_TURN_ROUNDS = DEFAULT_SUBAGENT_ROUNDS + 4;
 
