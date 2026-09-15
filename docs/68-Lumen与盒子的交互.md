@@ -18,7 +18,7 @@ run 完成不打断用户，不弹窗、不红点、不进任何系统通知。6
 
 ## 盒
 
-盒泛化，不再是 info 私有。一个盒是一个 batch，一项是一条 cable 或一个 run 的产出。研究 run 就是一盒一项。
+盒泛化，不再是 info 私有。一个盒是一个 batch，一项是一条 cable 或一个 run 的产出。研究 run 就是一盒一项；`local` 档的 run 不带 `batchId`，`boxId` 取 run 的 id。
 
 文件形态沿用 60：一项一个文件，生在 palace 里，随账户同步；封面写一次不改；状态在项自己那份文件上，没有第二个可变文件。状态表也沿用 60 那张：`in box` / `told` / `asked` / `dismissed` / `saved` / `promoted` / `folded` / `aggregated`。跳转到原地就是 `told`，摁掉就是 `dismissed`。
 
@@ -36,7 +36,7 @@ run 完成不打断用户，不弹窗、不红点、不进任何系统通知。6
 | `origin` | 书 + 线程 + 划线，或门口某天，或简报某天 |
 | `kind` | run 的 kind，或 cable 的类别 |
 | `runId` | 来自 run 时有 |
-| `needsYou` | 要你定 |
+| `needsDecision` | 要你定 |
 | `createdAt` | |
 | `state` | 上面那张表 |
 | `stateAt` | |
