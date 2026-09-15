@@ -70,6 +70,11 @@ const LAYER: Record<string, Layer> = {
   legion: "capability",
   "legion/bell": "capability",
   "legion/execute": "capability",
+  // The run file two devices keep one handed-off piece of work in, its state
+  // lattice and the store around it (docs/55). A capability: it knows nothing
+  // about what any run does, and the merge it registers with sync goes that way
+  // round because platform may not import legion.
+  "legion/run": "capability",
   "legion/subagent": "capability",
   memory: "capability",
   // The nightly pass that turns observations into statements. A capability like

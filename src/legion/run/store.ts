@@ -1,0 +1,319 @@
+// The run store: one run per file under legion/runs/, and the five things
+// anybody does to one — create, read, list, move along the chain, cancel,
+// report progress.
+//
+// Two devices write this directory and neither of them can lock it, so the
+// store is deliberately thin: it reads a file, decides, and writes the file
+// back whole. What happens when the two of them wrote the same file is not here
+// at all — that is merge.ts, and sync runs it. Everything this file writes is
+// therefore written to be mergeable: `revision` goes up on every write, a state
+// only ever moves up the chain, and a cancellation is a field that is set and
+// never cleared.
+//
+// The file system is injected, the way the bell store beside it takes one. The
+// default reads and writes AppData; the tests hand in a Map.
+
+import { appData } from "../../platform/app/appdata";
+import { contentHash } from "../../platform/app/content-hash";
+import {
+  idempotencyKey,
+  isTerminal,
+  runRank,
+  type Delegator,
+  type Run,
+  type RunClaimant,
+  type RunState,
+  type RunTier,
+} from "./types";
+import { asRun } from "./merge";
+
+export const RUNS_DIR = "legion/runs";
+
+/** What the store needs of a disk. */
+export interface RunIo {
+  /** The file names in the runs directory. Empty when there is no directory. */
+  list(): Promise<string[]>;
+  /** A file's text, or null when it is not there. */
+  read(name: string): Promise<string | null>;
+  /** Written whole, and atomically: a half-written run is a run nobody can merge. */
+  write(name: string, contents: string): Promise<void>;
+}
+
+// A run id has to be a file name, and it is also what the palace row matches on
+// (palace/kinds.ts). Both ways of making one — the hash of kind and key, and
+// the random one — land inside this shape.
+const ID = /^r-[0-9a-f]{32}$/;
+
+function fileName(id: string): string {
+  return `${id}.json`;
+}
+
+function idOf(name: string): string | null {
+  if (!name.endsWith(".json")) return null;
+  const id = name.slice(0, -".json".length);
+  return ID.test(id) ? id : null;
+}
+
+/**
+ * The id two devices derive independently for the same step of the same batch.
+ * They then write the same path, and sync's merge converges the two copies —
+ * which is the whole of the de-duplication protocol (docs/55).
+ */
+export async function deriveRunId(kind: string, key: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`${kind}\u0000${key}`);
+  return `r-${await contentHash(bytes)}`;
+}
+
+/** A run with no key of its own: nothing to derive from, so it is random. */
+export function randomRunId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return `r-${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+
+export interface CreateRunInput {
+  kind: string;
+  delegator: Delegator;
+  /** A reference to the brief. The run file never holds its content. */
+  brief: string;
+  tier?: RunTier;
+  deliverTo?: string;
+  /** The parent run, on a sub-run a program worker fanned out. */
+  batchId?: string;
+  /** The parent's own stable name for this step. */
+  step?: string;
+  /** Defaults to now. */
+  at?: number;
+  /** An id the caller has already derived. Otherwise one is made here. */
+  id?: string;
+}
+
+export interface CreateRunResult {
+  run: Run;
+  /**
+   * There was already a run under this id and this call did not touch it. The
+   * caller reads `run.state` to know what that means: `done` and it takes
+   * `run.output` and skips the step, `running` or `pending` and it waits on the
+   * run it already has, `failed` with `attempts` spent and it is that step's
+   * failure (docs/55).
+   */
+  existing: boolean;
+}
+
+export interface RunFilter {
+  state?: RunState | readonly RunState[];
+  kind?: string;
+  batchId?: string;
+  /** The device executing it, as `claimant.deviceId`. */
+  deviceId?: string;
+}
+
+/** What a transition may carry with it. */
+export interface TransitionPatch {
+  /** Required on the way into `running`: somebody has to be doing the work. */
+  claimant?: RunClaimant;
+  output?: string;
+  progress?: string;
+  deliverTo?: string;
+  attempts?: number;
+  /** The moment to stamp. Defaults to now. */
+  at?: number;
+}
+
+export type TransitionResult = { ok: true; run: Run } | { ok: false; reason: string };
+
+export interface RunStore {
+  /**
+   * Write a pending run. With `batchId` and `step` the id is derived from them,
+   * so two devices fanning out the same batch write one file; a run reached
+   * under an id that is already taken is handed back untouched.
+   */
+  create(input: CreateRunInput): Promise<CreateRunResult>;
+  get(id: string): Promise<Run | null>;
+  list(filter?: RunFilter): Promise<Run[]>;
+  /** Move a run along the chain. A move that is not forward is refused. */
+  transition(id: string, next: RunState, patch?: TransitionPatch): Promise<TransitionResult>;
+  /**
+   * Ask for a run to stop. A pending run has nobody doing anything, so it goes
+   * straight to `cancelled`; a running one gets `cancelRequested` written on it
+   * and the device executing it calls the worker's cancel() when it next reads
+   * the file. A run that has already stopped is returned as it is.
+   */
+  cancel(id: string, at?: number): Promise<Run | null>;
+  /**
+   * One line saying how it is getting on. Every call writes: the thirty-second
+   * throttle is the runner's (docs/55), because it is the runner that knows a
+   * state change must go to disk regardless.
+   */
+  report(id: string, progress: string, at?: number): Promise<Run | null>;
+}
+
+function matches(run: Run, filter: RunFilter): boolean {
+  if (filter.kind !== undefined && run.kind !== filter.kind) return false;
+  if (filter.batchId !== undefined && run.batchId !== filter.batchId) return false;
+  if (filter.deviceId !== undefined && run.claimant?.deviceId !== filter.deviceId) return false;
+  if (filter.state !== undefined) {
+    const want = typeof filter.state === "string" ? [filter.state] : filter.state;
+    if (!want.includes(run.state)) return false;
+  }
+  return true;
+}
+
+export function createRunStore(io: RunIo): RunStore {
+  // Read back from disk rather than from what this process remembers writing:
+  // a pull may have landed the other device's copy since.
+  async function get(id: string): Promise<Run | null> {
+    if (!ID.test(id)) return null;
+    const text = await io.read(fileName(id));
+    if (text === null) return null;
+    try {
+      const run = asRun(JSON.parse(text));
+      return run && run.id === id ? run : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function put(run: Run): Promise<Run> {
+    await io.write(fileName(run.id), JSON.stringify(run, null, 2));
+    return run;
+  }
+
+  return {
+    async create(input) {
+      const at = input.at ?? Date.now();
+      const { batchId, step } = input;
+      const key =
+        batchId !== undefined && step !== undefined ? idempotencyKey(batchId, step) : undefined;
+      const id =
+        input.id ?? (key === undefined ? randomRunId() : await deriveRunId(input.kind, key));
+      if (!ID.test(id)) throw new Error(`run: "${id}" is not a usable run id`);
+
+      const already = await get(id);
+      if (already) return { run: already, existing: true };
+
+      const run: Run = {
+        id,
+        kind: input.kind,
+        tier: input.tier ?? "synced",
+        delegator: input.delegator,
+        brief: input.brief,
+        state: "pending",
+        attempts: 0,
+        createdAt: at,
+        revision: 1,
+      };
+      if (key !== undefined) run.idempotencyKey = key;
+      if (input.batchId !== undefined) run.batchId = input.batchId;
+      if (input.step !== undefined) run.step = input.step;
+      if (input.deliverTo !== undefined) run.deliverTo = input.deliverTo;
+      return { run: await put(run), existing: false };
+    },
+
+    get,
+
+    async list(filter = {}) {
+      const runs: Run[] = [];
+      for (const name of await io.list()) {
+        const id = idOf(name);
+        if (!id) continue;
+        const run = await get(id);
+        // A file that will not parse is not a run anybody can act on. It is
+        // left where it is: deleting it would take the only evidence of what
+        // went wrong with it.
+        if (run && matches(run, filter)) runs.push(run);
+      }
+      runs.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+      return runs;
+    },
+
+    async transition(id, next, patch = {}) {
+      const run = await get(id);
+      if (!run) return { ok: false, reason: `no run ${id}` };
+      if (runRank(next) <= runRank(run.state)) {
+        return {
+          ok: false,
+          reason: `a run only moves up the chain, and ${run.state} is not below ${next}`,
+        };
+      }
+      if (next === "running" && patch.claimant === undefined && run.claimant === undefined) {
+        return { ok: false, reason: "a running run needs a claimant" };
+      }
+
+      const at = patch.at ?? Date.now();
+      const moved: Run = { ...run, state: next, revision: run.revision + 1 };
+      if (patch.claimant !== undefined) moved.claimant = patch.claimant;
+      if (patch.output !== undefined) moved.output = patch.output;
+      if (patch.deliverTo !== undefined) moved.deliverTo = patch.deliverTo;
+      if (patch.progress !== undefined) {
+        moved.progress = patch.progress;
+        moved.lastProgressAt = at;
+      }
+      if (next === "running") {
+        moved.startedAt = moved.claimant?.startedAt ?? at;
+        // A try begins here, and attempts is what tells a spent run from one
+        // that may be picked up again.
+        moved.attempts = patch.attempts ?? run.attempts + 1;
+      } else if (patch.attempts !== undefined) {
+        moved.attempts = patch.attempts;
+      }
+      if (isTerminal(next)) moved.endedAt = at;
+      return { ok: true, run: await put(moved) };
+    },
+
+    async cancel(id, at) {
+      const run = await get(id);
+      if (!run) return null;
+      if (isTerminal(run.state)) return run;
+      const when = at ?? Date.now();
+      if (run.state === "pending") {
+        return put({
+          ...run,
+          state: "cancelled",
+          endedAt: when,
+          cancelRequested: true,
+          revision: run.revision + 1,
+        });
+      }
+      // Running somewhere, possibly on the other machine. The request is
+      // written and the executing device acts on it when it reads the file.
+      if (run.cancelRequested) return run;
+      return put({ ...run, cancelRequested: true, revision: run.revision + 1 });
+    },
+
+    async report(id, progress, at) {
+      const run = await get(id);
+      if (!run) return null;
+      return put({
+        ...run,
+        progress,
+        lastProgressAt: at ?? Date.now(),
+        revision: run.revision + 1,
+      });
+    },
+  };
+}
+
+/** The runs directory on this device. */
+export const appRunIo: RunIo = {
+  async list() {
+    const entries = await appData.readDir(RUNS_DIR).catch(() => []);
+    return entries.filter((e) => e.isFile).map((e) => e.name);
+  },
+  async read(name) {
+    const path = `${RUNS_DIR}/${name}`;
+    if (!(await appData.exists(path))) return null;
+    return appData.readText(path).catch(() => null);
+  },
+  async write(name, contents) {
+    await appData.mkdirp(RUNS_DIR);
+    await appData.writeAtomic(`${RUNS_DIR}/${name}`, contents);
+  },
+};
+
+let live: RunStore | undefined;
+
+/** The store the app delegates into and the runner works out of. */
+export function appRuns(): RunStore {
+  live ??= createRunStore(appRunIo);
+  return live;
+}

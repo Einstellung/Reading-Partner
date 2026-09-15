@@ -66,10 +66,17 @@ export const ROOT_FILES = new Set(
 // losing a tombstone log makes a deletion that already travelled come back. A
 // deletion of one of these is only ever accepted from an explicit tombstone.
 //
-// Every one of them is a fixed name, so the row's first sample is the path.
+// The samples of those rows, which is what a coverage test can walk. Not what
+// the engine asks: legion/runs/ is a whole directory of them and a list of
+// names could only ever protect the one name written down here.
 export const NEVER_INFER_DELETE = new Set(
-  rowsWhere((r) => r.neverInferDelete === true).map((r) => r.samples[0] as string),
+  rowsWhere((r) => r.neverInferDelete === true).flatMap((r) => r.samples as string[]),
 );
+
+/** Whether a tree comparison is forbidden from concluding this path was deleted. */
+export function neverInferDelete(path: string): boolean {
+  return resolvePalace(path)?.row.neverInferDelete === true;
+}
 
 // Whether an AppData-relative path (forward-slash separators) is synced. The
 // palace says which channel carries a path; the data channel is the sync range,

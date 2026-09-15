@@ -23,7 +23,7 @@
 // Pure: no IO. Unit-tested directly (tests/platform/sync/holdings.test.ts).
 
 import type { Holdings } from "./holdings";
-import { NEVER_INFER_DELETE } from "./syncFs";
+import { neverInferDelete } from "./syncFs";
 
 // Tier 2 of docs/59 §7, wired but not armed. Deleting on inference needs both
 // devices to have been publishing holdings for a while — the base a difference
@@ -90,7 +90,7 @@ export function inferDeletions(input: InferInput): InferResult {
     // deleted. The peer says so explicitly; this device stops syncing it and
     // keeps its copy.
     if (retired.has(path)) continue;
-    if (NEVER_INFER_DELETE.has(path)) continue;
+    if (neverInferDelete(path)) continue;
 
     const mine = local.get(path);
     // Gone here too. The snapshot and the merge base are dropped by reconcile's
