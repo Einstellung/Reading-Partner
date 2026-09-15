@@ -95,7 +95,7 @@ function claim(over: Partial<CollectorClaim> = {}): CollectorClaim {
     deviceId: "desk",
     deviceName: "kestrel",
     platform: "linux",
-    hasWebviewFetch: true,
+    capabilities: [],
     claimedAt: NOW - 60_000,
     heartbeatAt: NOW,
     lastRunAt: NOW - 60_000,

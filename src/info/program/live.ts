@@ -74,13 +74,8 @@ import { dailyAction, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { collectorStatusLine, InfoCollector } from "../collect/collector";
 import { createCollectorSession, type CollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "../boxes/publish";
-import {
-  ASK_PULL_ROUTE,
-  readAsks,
-  readCollectorClaims,
-  readOwnClaim,
-  writeCollectorClaim,
-} from "../briefer/handoff";
+import { ASK_PULL_ROUTE, readAsks, type CollectorClaim } from "../briefer/handoff";
+import { appClaims, WEBVIEW_FETCH } from "../../legion/claim";
 import { subscribeSyncStatus } from "../../platform/sync";
 import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
@@ -741,11 +736,15 @@ function liveSession(): CollectorSession {
     describeDevice: async () => ({
       deviceName: await machineName(),
       platform: platformName(),
-      hasWebviewFetch: hasWebviewFetch(),
+      // What this machine can do, as capability tags (legion/claim). Rendering
+      // an article in a hidden webview is the only one it has to say anything
+      // about today: collecting itself asks for nothing, and a reader is told
+      // why four of its sources only have headlines (docs/17).
+      capabilities: hasWebviewFetch() ? [WEBVIEW_FETCH] : [],
     }),
-    readOwnClaim,
-    readClaims: readCollectorClaims,
-    writeClaim: writeCollectorClaim,
+    readOwnClaim: (id) => appClaims().readOwn<CollectorClaim>(id),
+    readClaims: () => appClaims().readAll<CollectorClaim>(),
+    writeClaim: (claim) => appClaims().write(claim),
     readAsks,
     loadDeviceSettings,
     loadSourceHealth,

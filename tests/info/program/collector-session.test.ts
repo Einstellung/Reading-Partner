@@ -12,13 +12,8 @@ import {
   type CollectorSessionDeps,
   type SessionSyncStatus,
 } from "../../../src/info/program/presence";
-import {
-  ASK_PULL_ROUTE,
-  CLAIM_SYNC_GRACE_MS,
-  HEARTBEAT_MS,
-  type AskRecord,
-  type CollectorClaim,
-} from "../../../src/info/briefer/handoff";
+import { ASK_PULL_ROUTE, type AskRecord, type CollectorClaim } from "../../../src/info/briefer/handoff";
+import { CLAIM_SYNC_GRACE_MS, HEARTBEAT_MS } from "../../../src/legion/claim";
 import { SOURCES_FILE, SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
 const MIN = 60_000;
 
@@ -79,7 +74,7 @@ class Harness {
       describeDevice: async () => ({
         deviceName: "kestrel",
         platform: "linux",
-        hasWebviewFetch: true,
+        capabilities: [],
       }),
       readOwnClaim: async (id) => this.claims.get(id) ?? null,
       readClaims: async () => {
@@ -175,7 +170,7 @@ class Harness {
       deviceId,
       deviceName: deviceId,
       platform: "linux",
-      hasWebviewFetch: true,
+      capabilities: [],
       claimedAt: since,
       heartbeatAt: this.now,
       lastRunAt: null,
@@ -596,7 +591,7 @@ test("a restart keeps what the last session already ran and drops its standing",
     deviceId: h.deviceId,
     deviceName: "kestrel",
     platform: "linux",
-    hasWebviewFetch: true,
+    capabilities: [],
     claimedAt: h.now - 1000 * MIN,
     heartbeatAt: h.now - MIN,
     lastRunAt: h.now - 2 * MIN,

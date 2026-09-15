@@ -26,9 +26,9 @@ import {
 } from "../boxes/publish";
 import { removeCollectedPoolFiles } from "../collect/pool-store";
 import { pruneStaleDailyFiles, todayLocal } from "../collect/store";
+import { appClaims } from "../../legion/claim";
 import {
   collectorReport,
-  readCollectorClaims,
   writeAsk,
   type AskScope,
   type CollectorClaim,
@@ -171,7 +171,9 @@ export function isReaderFile(path: string): boolean {
   return (
     path === PUBLISHED_BRIEFING_FILE ||
     path === PUBLISHED_BODIES_FILE ||
-    /^info-collector-.+\.json$/.test(path)
+    // A device's claim: what this screen says about the machine that collects
+    // comes off it (legion/claim).
+    /^legion\/claim\/.+\.json$/.test(path)
   );
 }
 
@@ -309,7 +311,9 @@ export class InfoReader implements BriefingView {
     const [briefing, bodies, claims] = await Promise.all([
       loadPublishedBriefing().catch(() => null),
       loadPublishedBodies().catch(() => null),
-      readCollectorClaims().catch(() => [] as CollectorClaim[]),
+      appClaims()
+        .readAll<CollectorClaim>()
+        .catch(() => [] as CollectorClaim[]),
     ]);
     this.bodies = bodies;
     this.claims = claims;

@@ -69,6 +69,10 @@ const LAYER: Record<string, Layer> = {
   // from it: legion calls ai to send a turn, ai never calls legion.
   legion: "capability",
   "legion/bell": "capability",
+  // Which devices are here, what each can do, and which one runs a kind
+  // (docs/55). Pure functions of the claim files and the clock, so every device
+  // reaches the same answer without anything being said between them.
+  "legion/claim": "capability",
   "legion/execute": "capability",
   "legion/subagent": "capability",
   memory: "capability",

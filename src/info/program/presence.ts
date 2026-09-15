@@ -1,8 +1,13 @@
-// The claim, the heartbeat, and the readers' asks (docs/36) — the part of the
-// live wiring that decides which machine spends the money.
+// The collector session: info's half of the claim, and the readers' asks
+// (docs/36).
 //
 // Only a collector runs any of this. A reader never starts a session, so it
 // writes no claim, takes part in no election, and constructs neither singleton.
+//
+// What is left here is the info wiring. Who claims, when the claim may be
+// written, the hourly heartbeat and the election all moved to legion/claim: the
+// claim is no longer "I am the collector" but "this is what this machine can
+// do", and collecting is one kind that runs on the machine that wins it.
 //
 // Everything real is injected: the claim files, the device settings, the clock,
 // the interval, the sync subscriptions and pull routes, and the two singletons
@@ -10,19 +15,8 @@
 // places the upper half of that file needs are handed in as callbacks, because
 // an import in that direction would be a cycle between the two files.
 
-import {
-  chooseAsk,
-  HEARTBEAT_MS,
-  isElectedCollector,
-  mayClaim,
-  type AskRecord,
-  type CollectorClaim,
-} from "../briefer/handoff";
-
-// The election result, held briefly. Every poll cycle asks, and the answer
-// changes on the scale of hours; re-reading every claim file for each of them
-// would be a directory listing per minute to learn the same thing.
-export const ELECTION_TTL_MS = 60_000;
+import { createClaimWriter, type ClaimWriter, type DeviceClaim } from "../../legion/claim";
+import { chooseAsk, COLLECT_KIND, type AskRecord, type CollectorClaim } from "../briefer/handoff";
 
 // What sync tells the session: whether an account is attached at all, and when
 // the last pass landed.
@@ -52,12 +46,12 @@ export interface SessionCollector {
 
 export interface CollectorSessionDeps<Handle = unknown> {
   deviceId(): string;
-  // This machine's name and platform, asked once per session. The name is for a
-  // sentence a reader can act on ("the briefing is built on kestrel").
+  // This machine's name and what it can do, asked once per session. The name is
+  // for a sentence a reader can act on ("the briefing is built on kestrel").
   describeDevice(): Promise<{
     deviceName: string;
     platform: string;
-    hasWebviewFetch: boolean;
+    capabilities: string[];
   }>;
   readOwnClaim(deviceId: string): Promise<CollectorClaim | null>;
   readClaims(): Promise<CollectorClaim[]>;
@@ -86,7 +80,7 @@ export interface CollectorSessionDeps<Handle = unknown> {
 }
 
 export interface CollectorSession {
-  // Become the collector: claim, say so every hour, and act on what the readers
+  // Become a candidate: claim, say so every hour, and act on what the readers
   // asked for. Idempotent, so a settings change can call it without checking.
   start(): Promise<void>;
   // Give the claim up now rather than letting it expire, so whoever is next
@@ -103,27 +97,11 @@ export interface CollectorSession {
 export function createCollectorSession<Handle>(
   deps: CollectorSessionDeps<Handle>,
 ): CollectorSession {
-  let claim: CollectorClaim | null = null;
-  let collecting = false;
-  let sessionStartedAt = 0;
-  let heartbeat: Handle | null = null;
-  let unsubSync: (() => void) | null = null;
   let unsubPulled: (() => void) | null = null;
-  let syncing = false;
-  let lastSyncAt: number | null = null;
-  let electionAt = 0;
-  let electionValue = false;
+  let watching = false;
 
-  // Whether this machine is the one collecting, from the files or from the
-  // answer it got a moment ago.
-  async function amICollecting(): Promise<boolean> {
-    if (!collecting) return false;
-    const now = deps.now();
-    if (now - electionAt < ELECTION_TTL_MS) return electionValue;
-    const claims = await deps.readClaims().catch(() => [] as CollectorClaim[]);
-    electionValue = isElectedCollector(claims, deps.deviceId(), now);
-    electionAt = now;
-    return electionValue;
+  function amICollecting(): Promise<boolean> {
+    return writer.electedFor(COLLECT_KIND);
   }
 
   // The briefing this machine had before it could publish one (docs/36). Same
@@ -141,48 +119,42 @@ export function createCollectorSession<Handle>(
     }
   }
 
-  // Write this machine's claim: a heartbeat every time, and the claim itself only
-  // while this machine is both willing (the setting) and allowed (its first pull
-  // has landed, or it has waited long enough to stop waiting).
-  //
-  // claimedAt is kept once taken, so a machine's standing is its uptime and not
-  // the time of its last write. Losing eligibility clears it, and taking it up
-  // again puts the machine at the back of the queue rather than back at its old
-  // place — which is the point: whoever picked the work up keeps it.
-  async function publishClaim(): Promise<void> {
-    if (!claim) return;
-    const now = deps.now();
-    let willing = false;
-    try {
-      willing = (await deps.loadDeviceSettings()).backgroundCollect;
-    } catch {
-      // Unreadable device settings: do not claim work on a guess.
-    }
-    const allowed =
-      willing &&
-      mayClaim({
-        syncing,
-        pulledAt: lastSyncAt !== null && lastSyncAt >= sessionStartedAt ? lastSyncAt : null,
-        startedAt: sessionStartedAt,
-        now,
-      });
-    const wasClaiming = claim.claimedAt !== null;
-    claim = {
-      ...claim,
-      claimedAt: allowed ? (claim.claimedAt ?? now) : null,
-      heartbeatAt: now,
+  const writer: ClaimWriter = createClaimWriter<Handle>({
+    deviceId: deps.deviceId,
+    describe: deps.describeDevice,
+    willing: async () => (await deps.loadDeviceSettings()).backgroundCollect,
+    // Asked on every write: what the sources did last and which sites this
+    // machine is signed in to are what a reader on another device reads off the
+    // claim.
+    extras: async () => ({
       sources: await deps.loadSourceHealth().catch(() => ({})),
       sites: await deps.siteStates(),
-    };
-    const took = !wasClaiming && claim.claimedAt !== null;
-    try {
-      await deps.writeClaim(claim);
-    } catch (e) {
-      console.warn("failed to write the collector claim", e);
-    }
-    // The file that decides the election just changed; do not answer from a copy
-    // taken before it.
-    electionAt = 0;
+    }),
+    // What survives a restart: how the last run went, and a request this machine
+    // already ran, which must not run again because the app was restarted.
+    restore: (prior: DeviceClaim | null) => {
+      const was = prior as CollectorClaim | null;
+      return {
+        lastRunAt: was?.lastRunAt ?? null,
+        lastBriefingDate: was?.lastBriefingDate ?? null,
+        halt: was?.halt ?? null,
+        sources: {},
+        sites: {},
+        lastAskAt: was?.lastAskAt ?? null,
+      };
+    },
+    readOwn: deps.readOwnClaim,
+    readAll: deps.readClaims,
+    write: (claim) => deps.writeClaim(claim as CollectorClaim),
+    now: deps.now,
+    setInterval: deps.setInterval,
+    clearInterval: deps.clearInterval,
+    subscribeSyncStatus: deps.subscribeSyncStatus,
+    // The heartbeat hangs off the way out of the page and nothing else: a
+    // desktop whose window is minimised or unfocused while its owner reads on a
+    // phone is exactly the machine that has to go on saying it is alive
+    // (docs/36).
+    onExit: deps.onExit,
     // A machine that has just started claiming was, until a moment ago, one that
     // declined to poll and declined to generate. Both asked the claim and both got
     // no for an answer, and neither will ask again on its own — polling waits for
@@ -193,12 +165,12 @@ export function createCollectorSession<Handle>(
     // never published, and that goes first: it settles in three file reads, and
     // running it after the run below had started would race the run's own publish
     // for the same two names.
-    if (took) {
+    onTake: async () => {
       await backfillPublishedBriefing();
       await deps.collector().refresh();
       void deps.pipeline().init();
-    }
-  }
+    },
+  });
 
   // A reader asked for a briefing. Run at most one, whatever arrived: the newest
   // request at the widest scope anyone asked for, and never one already run.
@@ -207,14 +179,14 @@ export function createCollectorSession<Handle>(
   // uploaded during the last session was pulled during the last session, so its
   // file is already on disk and no event will ever mention it again.
   async function runPendingAsk(): Promise<void> {
+    const claim = writer.current<CollectorClaim>();
     if (!claim || !(await amICollecting())) return;
     const asks = await deps.readAsks().catch(() => [] as AskRecord[]);
     const chosen = chooseAsk(asks, claim.lastAskAt, deps.now());
     if (!chosen) return;
     // Recorded before the run, not after: a run that dies halfway is not a reason
     // to run the same request again on the next pull.
-    claim = { ...claim, lastAskAt: chosen.askedAt };
-    await deps.writeClaim(claim).catch(() => {});
+    await writer.patch({ lastAskAt: chosen.askedAt }).catch(() => {});
     const p = deps.pipeline();
     if (chosen.scope === "retriage") void p.retriage();
     else void p.generate();
@@ -224,64 +196,25 @@ export function createCollectorSession<Handle>(
   // a machine nobody is sitting at. `error` is the halt reason the pipeline parked
   // the run with; null means it finished.
   function watchRuns(p: SessionPipeline): void {
+    if (watching) return;
+    watching = true;
     let wasRunning = p.snapshot().running;
     p.subscribe(() => {
       const snap = p.snapshot();
       const ended = wasRunning && !snap.running;
       wasRunning = snap.running;
-      if (!ended || !claim) return;
-      claim = {
-        ...claim,
+      if (!ended || !writer.current()) return;
+      void writer.patch({
         lastRunAt: deps.now(),
         lastBriefingDate: snap.briefing?.date ?? null,
         halt: snap.error,
-      };
-      void publishClaim();
+      });
     });
   }
 
   async function start(): Promise<void> {
-    if (collecting) return;
-    collecting = true;
-    sessionStartedAt = deps.now();
-    unsubSync ??= deps.subscribeSyncStatus((s) => {
-      syncing = s.engineStarted;
-      const advanced = s.lastSyncAt !== null && s.lastSyncAt !== lastSyncAt;
-      lastSyncAt = s.lastSyncAt;
-      // A pass landing is the thing a held-back claim was waiting for. Without
-      // this it would wait for the next hourly heartbeat instead — an hour of a
-      // machine that is willing, allowed, and doing nothing.
-      if (advanced && claim && claim.claimedAt === null) void publishClaim();
-    });
-    const prior = await deps.readOwnClaim(deps.deviceId());
-    const device = await deps.describeDevice();
-    claim = {
-      deviceId: deps.deviceId(),
-      deviceName: device.deviceName,
-      platform: device.platform,
-      hasWebviewFetch: device.hasWebviewFetch,
-      // Deliberately not restored from the file: the claim is this process's
-      // uptime, so a restart goes to the back of the queue.
-      claimedAt: null,
-      heartbeatAt: deps.now(),
-      lastRunAt: prior?.lastRunAt ?? null,
-      lastBriefingDate: prior?.lastBriefingDate ?? null,
-      halt: prior?.halt ?? null,
-      sources: {},
-      sites: {},
-      // This does survive: a request this machine already ran must not run again
-      // because the app was restarted.
-      lastAskAt: prior?.lastAskAt ?? null,
-    };
-    await publishClaim();
-    // The heartbeat hangs off the way out of the page and nothing else: a desktop
-    // whose window is minimised or unfocused while its owner reads on a phone is
-    // exactly the machine that has to go on saying it is alive (docs/36).
-    heartbeat ??= deps.setInterval(() => void publishClaim(), HEARTBEAT_MS);
-    deps.onExit(() => {
-      if (heartbeat !== null) deps.clearInterval(heartbeat);
-      heartbeat = null;
-    });
+    if (writer.running()) return;
+    await writer.start();
     watchRuns(deps.pipeline());
     if (unsubPulled === null) {
       // A source the reader subscribed to or turned on elsewhere: collect on it
@@ -305,26 +238,18 @@ export function createCollectorSession<Handle>(
   }
 
   async function stop(): Promise<void> {
-    if (!collecting) return;
-    collecting = false;
-    if (heartbeat !== null) deps.clearInterval(heartbeat);
-    heartbeat = null;
+    if (!writer.running()) return;
     unsubPulled?.();
     unsubPulled = null;
-    if (claim) {
-      claim = { ...claim, claimedAt: null, heartbeatAt: deps.now() };
-      await deps.writeClaim(claim).catch(() => {});
-    }
-    electionAt = 0;
-    electionValue = false;
+    await writer.stop();
     void deps.collector().refresh();
   }
 
   return {
     start,
     stop,
-    publishClaim,
+    publishClaim: () => writer.publish(),
     amICollecting,
-    isCollecting: () => collecting,
+    isCollecting: () => writer.running(),
   };
 }
