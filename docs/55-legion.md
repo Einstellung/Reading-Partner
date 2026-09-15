@@ -234,11 +234,15 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 ## 现状与顺序
 
-已落地（2026-09-15）：第 1、2、3、4 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
+已落地（2026-09-15）：第 1 到 6 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
 
 第 3 步：`src/legion/run/types.ts` 的字段表与状态链、`merge.ts` 的 `mergeRun`，palace 的 `lattice` 策略（`platform/sync/merge/lattice.ts` 是注册表，领域交 `merge(a, b)`，base 不参与）和 `run` 行（`legion/runs/`，data 通道，进 `NEVER_INFER_DELETE`）。合并的裁决顺序是状态链 → `revision` → claimant 的 deviceId 小者 → 规范序列化的内容序；`attempts`、`createdAt`、`startedAt`、`deliveredAt`、`cancelRequested` 单独折叠，不跟赢的那一侧。第 4 步：`src/legion/run/store.ts` 的 `createRunStore(io)`，文件名 `r-<hash(kind + \0 + idempotencyKey)>`，撞已有文件一律原样交回由调用方看 `state`。
 
-未开始：claim、schedule、worker 契约与 runner、ledger 折叠、session 到对话文件的投影。run 的合并由 import `legion/run` 注册进 sync，今天还没有调用方 import 它——第 7 步的 runner 是第一个。今天没有任何东西会 ring，开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
+第 5 步（2026-09-15）：claim 落在 `src/legion/claim`，文件从 `info-collector-<id>.json` 搬到 `legion/claim/<deviceId>.json`（palace 行改名 `claim`，sync 仍是 data；旧路径留作 legacy 并下了同步通道）。capability 的表示法是能力标签而不是 kind 名单：kind 注册时声明需要哪些标签（`registerKindCapabilities`），设备声明自己有哪些（今天只有 `webview-fetch`），`electFor(kind, claims, now)` 在覆盖需求的候选里按连续在线最久选。info 的 `collect` 登记为不需要任何标签，和泛化之前的候选集一样。
+
+第 6 步（2026-09-15）：`src/legion/schedule`。`dueRuns` 和 `reclaimAfterRestart` 是纯函数，阈值作参数，不起 worker 也不碰盘；它读的 run 形状是本地的最小接口，等 `legion/run` 的正式类型。schedule 是内存注册表加 `dueSchedules`，到点在当选设备上摇一条 `wake` 铃，去重靠 `legion/schedule/fired.json`（本地、每设备一份）记的上次 anchor。info 的 daily round 登记成一条 schedule，挂在原来的 tick 上；干活那半和它自己的日期记录原样保留，到第 7 步变成 run 时一起去掉。
+
+未开始：worker 契约与 runner、ledger 折叠、session 到对话文件的投影。run 的合并由 import `legion/run` 注册进 sync，今天还没有调用方 import 它——第 7 步的 runner 是第一个；`dueRuns` 同样还没有轮询它的调用方，它读的 run 形状要换成 `legion/run` 的正式类型。今天会响的只有 schedule 的 `wake` 铃（info 的 daily round 到点在当选设备上摇一条，soul 答铃时没有活可派）；开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。

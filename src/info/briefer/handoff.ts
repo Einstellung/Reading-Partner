@@ -1,9 +1,12 @@
-// The two files devices leave for each other (docs/36).
+// What info keeps on a device's claim, and the file readers leave for the
+// collector (docs/36).
 //
-// info-collector-<deviceId>.json  a collector saying who it is, when it was last
-//                                 alive, and how its last run went.
-// info-ask-<deviceId>.json        a reader asking for a briefing it cannot build
-//                                 itself.
+// legion/claim/<deviceId>.json  a device saying who it is and what it can do,
+//                               with info's own fields on this device's copy:
+//                               how its last run went and what it has already
+//                               been asked for.
+// info-ask-<deviceId>.json      a reader asking for a briefing it cannot build
+//                               itself.
 //
 // One writer each and no merge: a device only ever writes the file named after
 // itself, so two devices writing at the same moment produce two files, not a
@@ -12,40 +15,34 @@
 //
 // Two collectors is the thing to prevent: the same day's briefing generated
 // twice, paid for twice, and published twice with different contents. The
-// election below is how they agree without talking. It is a pure function of the
-// files on disk and the clock, so every device computes the same answer for
-// itself, and a device that loses simply stands by.
-//
-// claimedAt is reset on every process start, so the winner is the machine that
-// has been up longest without interruption — the one a 24-hour collector is
-// meant to be. A machine that lost and comes back joins the queue at the end
-// rather than taking the work back off whoever picked it up.
+// election that stops it is legion's (src/legion/claim), a pure function of the
+// claims on disk and the clock; what is left here is the collector's kind, the
+// fields info hangs off the claim, and what a reader is told about them.
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { electFor, registerKindCapabilities, type DeviceClaim } from "../../legion/claim";
 import type { PullMatcher } from "../../platform/sync/pull-routes";
 import type { SourceHealth } from "../sources/engine";
 
+// The run kind collecting is: one machine gathers the day's sources and builds
+// the briefing, the others stand by.
+//
+// It needs nothing of the machine. Every device that the reader left background
+// collection turned on for is a candidate, which is exactly who was eligible
+// before capabilities existed — a phone that cannot render a page in a hidden
+// webview collects fewer bodies, it does not decline to collect. Registered
+// here rather than at the app's assembly so that anything reading a collector's
+// claim has the kind registered by importing this file.
+export const COLLECT_KIND = "collect";
+
+registerKindCapabilities(COLLECT_KIND, []);
+
 // A heartbeat older than this means the collector is not running. Said to the
 // reader ("your collector was last online at…") rather than acted on: two hours
-// of silence is a closed laptop, not a machine that has given up its claim.
+// of silence is a closed laptop, not a machine that has given up its claim. The
+// threshold it has given up at is legion's FORFEIT_MS.
 export const COLLECTOR_OFFLINE_MS = 2 * 60 * 60_000;
-
-// And older than this means it has: the next machine in line takes over. Long
-// enough that a weekend away with the lid shut does not hand the work to a
-// laptop, short enough that a dead desktop does not hold the claim for a week.
-// Neither number has been measured — docs/36 says so and says to revisit them.
-export const COLLECTOR_FORFEIT_MS = 24 * 60 * 60_000;
-
-// How often a collector says it is alive.
-export const HEARTBEAT_MS = 60 * 60_000;
-
-// A device that syncs does not claim until its first pull of the session has
-// landed: claiming on a folder it has not read yet is how two machines both
-// decide they are the collector. If no pull has landed by then, sync is broken
-// or the account is offline, and a machine that never collects because it is
-// waiting for a file it will never get is worse than two machines collecting.
-export const CLAIM_SYNC_GRACE_MS = 30 * 60_000;
 
 // An ask older than this is not executed. A regenerate the reader asked for
 // before lunch is not one they still want in the evening.
@@ -53,13 +50,8 @@ export const ASK_EXPIRY_MS = 6 * 60 * 60_000;
 
 export type AskScope = "retriage" | "full";
 
-const COLLECTOR_PREFIX = "info-collector-";
 const ASK_PREFIX = "info-ask-";
 const JSON_SUFFIX = ".json";
-
-export function collectorFile(deviceId: string): string {
-  return `${COLLECTOR_PREFIX}${deviceId}${JSON_SUFFIX}`;
-}
 
 export function askFile(deviceId: string): string {
   return `${ASK_PREFIX}${deviceId}${JSON_SUFFIX}`;
@@ -72,23 +64,10 @@ export const ASK_PULL_ROUTE: PullMatcher = {
   matches: (path) => path.startsWith(ASK_PREFIX) && path.endsWith(JSON_SUFFIX),
 };
 
-// What a collector says about itself. Everything here is display or election
-// input; nothing a reader needs to act on lives only here.
-export interface CollectorClaim {
-  deviceId: string;
-  // The machine's own name, for a sentence a reader can act on ("the briefing
-  // is built on kestrel, and kestrel has been off since Tuesday").
-  deviceName: string;
-  platform: string;
-  // Whether this collector can render an article in a hidden webview. A reader
-  // told its collector cannot is told why four of its sources only have
-  // headlines (docs/17).
-  hasWebviewFetch: boolean;
-  // When this process started collecting, or null when this machine is not a
-  // candidate at all — collection turned off. Null leaves the election at once
-  // rather than waiting out the forfeit threshold.
-  claimedAt: number | null;
-  heartbeatAt: number;
+// What a collector says about itself, on top of what every device says
+// (legion/claim). Everything here is display or info's own bookkeeping; the
+// election reads none of it.
+export interface CollectorClaim extends DeviceClaim {
   lastRunAt: number | null;
   lastBriefingDate: string | null;
   // Why the last run stopped short, in the collector's own words. Nobody is
@@ -122,41 +101,7 @@ export interface AskRecord {
   note?: string;
 }
 
-// --- election ---------------------------------------------------------------
-
-// Whether a claim is still in the running. A machine that turned collection off
-// wrote claimedAt: null and is out; one whose heartbeat has stopped for a day
-// has forfeited.
-function isCandidate(claim: CollectorClaim, now: number): boolean {
-  if (claim.claimedAt === null) return false;
-  return now - claim.heartbeatAt <= COLLECTOR_FORFEIT_MS;
-}
-
-// Who collects. The candidate that has been claiming longest; the device id
-// breaks a tie, because two machines started in the same millisecond must still
-// pick the same winner as each other.
-export function electCollector(claims: CollectorClaim[], now: number): CollectorClaim | null {
-  let best: CollectorClaim | null = null;
-  for (const claim of claims) {
-    if (!isCandidate(claim, now)) continue;
-    if (
-      best === null ||
-      claim.claimedAt! < best.claimedAt! ||
-      (claim.claimedAt! === best.claimedAt! && claim.deviceId < best.deviceId)
-    ) {
-      best = claim;
-    }
-  }
-  return best;
-}
-
-export function isElectedCollector(
-  claims: CollectorClaim[],
-  deviceId: string,
-  now: number,
-): boolean {
-  return electCollector(claims, now)?.deviceId === deviceId;
-}
+// --- what a reader is told ---------------------------------------------------
 
 // What a reader should say about the collectors it can see. The elected one when
 // it is alive; otherwise whichever machine reported most recently, so the
@@ -168,7 +113,8 @@ export interface CollectorReport {
 }
 
 export function collectorReport(claims: CollectorClaim[], now: number): CollectorReport {
-  const elected = electCollector(claims, now);
+  const winner = electFor(COLLECT_KIND, claims, now);
+  const elected = claims.find((c) => c.deviceId === winner) ?? null;
   if (elected && now - elected.heartbeatAt <= COLLECTOR_OFFLINE_MS) {
     return { collector: elected, online: true };
   }
@@ -177,22 +123,6 @@ export function collectorReport(claims: CollectorClaim[], now: number): Collecto
     if (!latest || claim.heartbeatAt > latest.heartbeatAt) latest = claim;
   }
   return { collector: latest, online: false };
-}
-
-// Whether this device may write a claim yet. A machine with no account attached
-// is alone in the world and claims immediately; one that syncs waits for its
-// first pull, and gives up waiting after the grace period.
-export function mayClaim(state: {
-  // Signed in with sync running. False means single-machine: nothing to wait for.
-  syncing: boolean;
-  // When the first pull of this session landed, or null if none has.
-  pulledAt: number | null;
-  startedAt: number;
-  now: number;
-}): boolean {
-  if (!state.syncing) return true;
-  if (state.pulledAt !== null) return true;
-  return state.now - state.startedAt >= CLAIM_SYNC_GRACE_MS;
 }
 
 // --- asks -------------------------------------------------------------------
@@ -226,12 +156,6 @@ export function chooseAsk(
 
 // --- files ------------------------------------------------------------------
 
-function isClaim(value: unknown): value is CollectorClaim {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Partial<CollectorClaim>;
-  return typeof v.deviceId === "string" && typeof v.heartbeatAt === "number";
-}
-
 function isAsk(value: unknown): value is AskRecord {
   if (!value || typeof value !== "object") return false;
   const v = value as Partial<AskRecord>;
@@ -242,61 +166,29 @@ function isAsk(value: unknown): value is AskRecord {
   );
 }
 
-async function readMatching<T>(
-  prefix: string,
-  keep: (value: unknown) => value is T,
-): Promise<T[]> {
+export async function readAsks(): Promise<AskRecord[]> {
   let names: string[];
   try {
     const entries = await appData.readDir("");
     names = entries
-      .filter((e) => e.isFile && e.name.startsWith(prefix) && e.name.endsWith(JSON_SUFFIX))
+      .filter((e) => e.isFile && e.name.startsWith(ASK_PREFIX) && e.name.endsWith(JSON_SUFFIX))
       .map((e) => e.name);
   } catch {
     return [];
   }
-  const out: T[] = [];
+  const out: AskRecord[] = [];
   for (const name of names) {
     try {
       const parsed: unknown = JSON.parse(await appData.readText(name));
-      if (keep(parsed)) out.push(parsed);
+      if (isAsk(parsed)) out.push(parsed);
     } catch {
-      // A half-written or hand-edited file is one device's opinion missing, not
+      // A half-written or hand-edited file is one reader's request missing, not
       // a reason to stop reading the others.
     }
   }
   return out;
 }
 
-// Every collector's claim, this device's own included. A device that has never
-// seen another one gets a list of one, or an empty list before it has written
-// its own.
-export function readCollectorClaims(): Promise<CollectorClaim[]> {
-  return readMatching(COLLECTOR_PREFIX, isClaim);
-}
-
-export function writeCollectorClaim(claim: CollectorClaim): Promise<void> {
-  return writeTextAtomic(collectorFile(claim.deviceId), JSON.stringify(claim, null, 2));
-}
-
-export function readAsks(): Promise<AskRecord[]> {
-  return readMatching(ASK_PREFIX, isAsk);
-}
-
 export function writeAsk(ask: AskRecord): Promise<void> {
   return writeTextAtomic(askFile(ask.deviceId), JSON.stringify(ask, null, 2));
-}
-
-// This device's own claim, for a collector picking up where the last session
-// left off: lastAskAt and the last run's outcome survive a restart, claimedAt
-// deliberately does not.
-export async function readOwnClaim(deviceId: string): Promise<CollectorClaim | null> {
-  const file = collectorFile(deviceId);
-  try {
-    if (!(await appData.exists(file))) return null;
-    const parsed: unknown = JSON.parse(await appData.readText(file));
-    return isClaim(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
 }

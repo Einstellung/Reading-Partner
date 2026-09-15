@@ -56,7 +56,7 @@ test("core user-data files are in range", () => {
     "info-briefing.json",
     "info-bodies.json",
     "info-pool-marks.json",
-    "info-collector-4d9f1b0a.json",
+    "legion/claim/4d9f1b0a.json",
     "info-ask-4d9f1b0a.json",
   ]) {
     expect(inSyncRange(p)).toBe(true);

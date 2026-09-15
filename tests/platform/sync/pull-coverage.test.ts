@@ -162,7 +162,7 @@ test("the routes claim the files their subscribers used to", () => {
   expect(claim("threads-retell-t1.json")).toBe("book-caches");
   expect(claim("info-briefing.json")).toBe("reader");
   expect(claim("info-bodies.json")).toBe("reader");
-  expect(claim("info-collector-device1.json")).toBe("reader");
+  expect(claim("legion/claim/device1.json")).toBe("reader");
   expect(claim("info-sources.json")).toBe("sources");
   expect(claim("info-ask-device1.json")).toBe("ask");
 });
