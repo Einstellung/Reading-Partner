@@ -39,7 +39,7 @@ function run(over: Partial<ScheduledRun> = {}): ScheduledRun {
 test("the elected device takes a pending run", () => {
   const due = dueRuns([run()], [claim("desk")], NOW, "desk", STALL);
   expect(due).toEqual([
-    { run: run(), action: "take", reason: "elected", bumpAttempts: false },
+    { run: run(), action: "take", reason: "elected" },
   ]);
 });
 
@@ -49,15 +49,15 @@ test("a device that did not win the kind takes nothing", () => {
   expect(dueRuns([run()], claims, NOW, "desk", STALL)).toHaveLength(1);
 });
 
-test("a run of this device's own that has stopped reporting goes back to pending", () => {
+test("a run of this device's own that has stopped reporting is taken over again", () => {
   const stuck = run({
     state: "running",
-    claimant: { deviceId: "desk", at: NOW - 60 * MIN },
+    claimant: { deviceId: "desk", startedAt: NOW - 60 * MIN },
     lastProgressAt: NOW - 20 * MIN,
     attempts: 1,
   });
   const due = dueRuns([stuck], [claim("desk")], NOW, "desk", STALL);
-  expect(due).toEqual([{ run: stuck, action: "back", reason: "stalled", bumpAttempts: true }]);
+  expect(due).toEqual([{ run: stuck, action: "retake", reason: "stalled" }]);
 });
 
 // Slow is not stuck: the judgement is the last report, and a worker that
@@ -65,7 +65,7 @@ test("a run of this device's own that has stopped reporting goes back to pending
 test("a run that is still reporting is left alone", () => {
   const busy = run({
     state: "running",
-    claimant: { deviceId: "desk", at: NOW - 60 * MIN },
+    claimant: { deviceId: "desk", startedAt: NOW - 60 * MIN },
     lastProgressAt: NOW - MIN,
   });
   expect(dueRuns([busy], [claim("desk")], NOW, "desk", STALL)).toEqual([]);
@@ -74,7 +74,7 @@ test("a run that is still reporting is left alone", () => {
 test("a run held by a device that forfeited is taken over by the one that won the kind", () => {
   const theirs = run({
     state: "running",
-    claimant: { deviceId: "laptop", at: NOW - 2 * 86_400_000 },
+    claimant: { deviceId: "laptop", startedAt: NOW - 2 * 86_400_000 },
     lastProgressAt: NOW - 2 * 86_400_000,
   });
   const claims = [
@@ -82,16 +82,15 @@ test("a run held by a device that forfeited is taken over by the one that won th
     claim("laptop", { heartbeatAt: NOW - 2 * 86_400_000 }),
   ];
   const due = dueRuns([theirs], claims, NOW, "desk", STALL);
-  // Handed back, not taken: the next pass over the files picks it up as pending
-  // like any other. Nobody failed at anything this device can see, so the
-  // attempt count does not move.
-  expect(due).toEqual([{ run: theirs, action: "back", reason: "forfeited", bumpAttempts: false }]);
+  // Taken over rather than handed back: the run stays `running` and gets a new
+  // claimant, because a state never descends.
+  expect(due).toEqual([{ run: theirs, action: "retake", reason: "forfeited" }]);
 });
 
 test("a run held by a device that is still alive is left where it is", () => {
   const theirs = run({
     state: "running",
-    claimant: { deviceId: "laptop", at: NOW - MIN },
+    claimant: { deviceId: "laptop", startedAt: NOW - MIN },
     lastProgressAt: NOW - MIN,
   });
   const claims = [claim("desk", { claimedAt: NOW - MIN }), claim("laptop")];
@@ -108,11 +107,11 @@ test("terminal runs are nobody's business", () => {
   expect(dueRuns(runs, [claim("desk")], NOW, "desk", STALL)).toEqual([]);
 });
 
-test("a restart hands this device's own running runs back, and nobody else's", () => {
-  const mine = run({ id: "a", state: "running", claimant: { deviceId: "desk", at: NOW - MIN } });
-  const theirs = run({ id: "b", state: "running", claimant: { deviceId: "laptop", at: NOW - MIN } });
+test("a restart takes this device's own running runs over again, and nobody else's", () => {
+  const mine = run({ id: "a", state: "running", claimant: { deviceId: "desk", startedAt: NOW - MIN } });
+  const theirs = run({ id: "b", state: "running", claimant: { deviceId: "laptop", startedAt: NOW - MIN } });
   const pending = run({ id: "c" });
   expect(reclaimAfterRestart([mine, theirs, pending], "desk")).toEqual([
-    { run: mine, action: "back", reason: "restarted", bumpAttempts: true },
+    { run: mine, action: "retake", reason: "restarted" },
   ]);
 });
