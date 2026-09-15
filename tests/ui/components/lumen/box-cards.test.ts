@@ -1,5 +1,5 @@
-// The column Lumen opens: its order, its size, the line under each cover, and
-// the pose the count puts the body in (docs/68).
+// The column the case opens: its order, its size, the line under each cover,
+// and what the count decides about the corner (docs/68).
 //
 // Run: bun test.
 
@@ -11,7 +11,8 @@ import {
   badgeCount,
   bookIdsIn,
   columnMaxPx,
-  holdsBox,
+  caseLabel,
+  showsCase,
   isDismissSwipe,
   originLabel,
   sortBoxCards,
@@ -62,10 +63,16 @@ test("five cards are on screen and the sixth is a scroll", () => {
   expect(columnMaxPx()).toBe(5 * CARD_PX + 4 * CARD_GAP_PX);
 });
 
-test("the body holds the box whenever anything is open, and only then", () => {
-  expect(holdsBox(0)).toBe(false);
-  expect(holdsBox(1)).toBe(true);
-  expect(holdsBox(7)).toBe(true);
+test("the case stands there whenever anything is open, and only then", () => {
+  expect(showsCase(0)).toBe(false);
+  expect(showsCase(1)).toBe(true);
+  expect(showsCase(7)).toBe(true);
+});
+
+test("the case says how many are waiting", () => {
+  expect(caseLabel(0)).toBe("The box");
+  expect(caseLabel(1)).toBe("The box, 1 waiting");
+  expect(caseLabel(12)).toBe("The box, 12 waiting");
 });
 
 test("the badge is nothing at zero", () => {

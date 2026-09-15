@@ -11,9 +11,14 @@
 // a body that threw itself across an open book would be worse.
 //
 // Beside a book it is still: `still` stops the loop dead, and the resting pose
-// the custom-property defaults paint is what stands there. The only thing that
-// changes in the reader is the arrival pose — the parcel in its hands, on for as
-// long as anything in the box is open.
+// the custom-property defaults paint is what stands there. The one thing that
+// moves in the reader is a glance: when the count goes up the eyes drop to the
+// case and come back, once (case-glance.ts).
+//
+// The case is the only control in the corner. It is the trigger the column
+// rises from, and the body beside it is a picture — pressing it does nothing and
+// it is not announced as a control (docs/68: a press on Lumen is kept for the
+// voice entry that becomes the bottom of this column).
 //
 // The count. `appBox()` caches nothing, so the number is read twice over: the
 // store's own subscribe covers a write made in this process, and the sync tick
@@ -28,19 +33,21 @@ import { TICK_MS } from "../../../platform/sync";
 import { displayFileTitle } from "../shelf/file-title";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { VoiceCallHandle } from "../orb/orb";
-import { Lumen } from "./Lumen";
+import { Lumen, LumenCase, caseTriggerStyle } from "./Lumen";
 import {
 	bookIdsIn,
 	badgeCount,
+	caseLabel,
 	columnMaxPx,
 	EMPTY_LINE,
-	holdsBox,
 	isDismissSwipe,
 	originLabel,
+	showsCase,
 	sortBoxCards,
 } from "./box-cards";
+import { NO_GLANCE, stepGlance } from "./case-glance";
 import { planJump, type Place, type Shell } from "./box-jump";
 
 // The corner is not a call. Lumen still wants a handle — it is the same body the
@@ -83,6 +90,7 @@ export function LumenCorner({
 }) {
 	const [open, setOpen] = useState(false);
 	const [count, setCount] = useState(0);
+	const [glance, setGlance] = useState(NO_GLANCE);
 	const [items, setItems] = useState<BoxItem[] | null>(null);
 	const [titles, setTitles] = useState<Record<string, string>>({});
 	const [note, setNote] = useState<string | null>(null);
@@ -95,7 +103,9 @@ export function LumenCorner({
 			void appBox()
 				.openCount()
 				.then((n) => {
-					if (alive) setCount(n);
+					if (!alive) return;
+					setCount(n);
+					setGlance((seen) => stepGlance(seen, n));
 				})
 				.catch(() => {});
 		};
@@ -199,20 +209,52 @@ export function LumenCorner({
 			)}
 		>
 			<Popover open={open} onOpenChange={setOpen}>
-				<PopoverTrigger asChild>
-					<Lumen
-						handle={SILENT}
-						// Beside an open book nothing moves but the pose (docs/68).
-						still={inReader}
-						holding={holdsBox(count)}
-						label="Lumen"
-						// The press belongs to the trigger: Radix hands its own
-						// onClick down through asChild, and it is spread onto the
-						// button after this component's own handler.
-						className="pointer-events-auto h-18 w-18"
-						overlay={<CountBadge count={count} />}
-					/>
-				</PopoverTrigger>
+				{/* The body's own box, with the case hanging off its left edge.
+				    Nothing here clips: the corner's footprint is wider than the
+				    body now, and the layer it sits in is the screen.
+
+				    It is also what the column is measured from. The case is the
+				    button, but the column rises from the corner (docs/68), and
+				    anchoring it to the case alone would set it in from the margin
+				    the corner keeps by the width of the body. */}
+				<PopoverAnchor asChild>
+					<div className="relative">
+						<Lumen
+							handle={SILENT}
+							// Beside an open book nothing moves but the glance (docs/68).
+							still={inReader}
+							glance={glance.nonce}
+							label="Lumen"
+							// Not a control: no pointer events, off the tab order and
+							// out of the accessibility tree. The element is still a
+							// button because that is the root Lumen draws, and the
+							// voice entry it is kept for is a press.
+							aria-hidden="true"
+							tabIndex={-1}
+							role="presentation"
+							onActivate={NOTHING}
+							className="h-18 w-18"
+						/>
+						{showsCase(count) && (
+							<PopoverTrigger asChild>
+								<button
+									type="button"
+									aria-label={caseLabel(count)}
+									// `box-content`: the style's padding is the 44px
+									// touch target and it grows outwards, so the case
+									// draws at its own size (case-box.ts).
+									className="pointer-events-auto absolute box-content block"
+									style={caseTriggerStyle()}
+								>
+									<span className="relative block h-full w-full">
+										<LumenCase />
+										<CountBadge count={count} />
+									</span>
+								</button>
+							</PopoverTrigger>
+						)}
+					</div>
+				</PopoverAnchor>
 				<PopoverContent side="top" className="pointer-events-auto w-[19rem]">
 					<Column
 						items={items}
@@ -227,14 +269,23 @@ export function LumenCorner({
 	);
 }
 
-// The count, at the top right of the body. Outside the body group on purpose:
-// it is not part of the character, and the pose that holds the box does not
-// carry the number (docs/68).
+// Nothing, named so the corner says out loud that the body's press is wired to
+// nothing rather than looking like an oversight.
+const NOTHING = () => {};
+
+// The count, straddling the case's outer top corner (docs/68). On the case and
+// not on the body: the number is how many are in the box, and the box is the
+// thing standing there. Centred on the corner, so it never reaches the latch.
+//
+// The outer corner and not the inner one. The case leans in over the body's
+// lower left and its top edge comes up to the eyes, so a badge on the inside
+// corner sits on Lumen's face; on the outside it has the corner of the screen
+// to itself.
 function CountBadge({ count }: { count: number }) {
 	const shown = badgeCount(count);
 	if (shown === null) return null;
 	return (
-		<span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-line px-1 text-[11px] font-semibold leading-none text-background ring-2 ring-background">
+		<span className="pointer-events-none absolute -left-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-line px-1 text-[10px] font-semibold leading-none text-background ring-2 ring-background">
 			{shown}
 		</span>
 	);

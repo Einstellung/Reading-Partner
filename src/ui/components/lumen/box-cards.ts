@@ -36,8 +36,13 @@ export function sortBoxCards(items: readonly BoxItem[]): BoxItem[] {
   return [...items].sort((a, b) => Number(b.needsDecision) - Number(a.needsDecision));
 }
 
-/** Whether the figure is holding a box: anything open at all, and it is. */
-export function holdsBox(openCount: number): boolean {
+/**
+ * Whether the case stands in the corner. Anything open at all and it does;
+ * empty and it is gone, leaving Lumen alone there (docs/68). Not a pose of the
+ * body: the case is its own layer beside it, and this is the whole of what the
+ * count decides about the picture.
+ */
+export function showsCase(openCount: number): boolean {
   return openCount > 0;
 }
 
@@ -72,6 +77,12 @@ export function bookIdsIn(items: readonly BoxItem[]): string[] {
     if (item.origin.place === "book") ids.add(item.origin.bookId);
   }
   return [...ids];
+}
+
+/** What a reader hears on the case, which is the only control in the corner. */
+export function caseLabel(openCount: number): string {
+  const n = badgeCount(openCount);
+  return n === null ? "The box" : `The box, ${n} waiting`;
 }
 
 /** The one line an empty column says. */
