@@ -12,6 +12,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
+import type { TranslationHome } from "./replace";
 
 /** A document the tool could act on, as the shelf knows it. */
 export interface TranslateTarget {
@@ -20,8 +21,9 @@ export interface TranslateTarget {
   title: string;
   /** A web article; everything else cannot be translated in the app. */
   article: boolean;
-  /** The topic the translation should be listed in, or null. */
-  topicId: string | null;
+  /** Where the translation takes its place: a topic's shelf, or a book's
+   * supplements (docs/67). */
+  home: TranslationHome;
 }
 
 export interface TranslateToolDeps {

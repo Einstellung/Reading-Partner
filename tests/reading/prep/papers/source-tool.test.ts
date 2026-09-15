@@ -45,9 +45,10 @@ test("article success: readable-now confirmation, slug, and a page-1 citation", 
   expect(out).toContain("4200 characters");
   expect(out).toContain('read_paper("src"');
   expect(out).toContain("reference material");
-  // Never a bare [src]: that is not a citation shape the renderer knows, so
-  // every one the model wrote rendered as plain text.
-  expect(out).toContain("[src p.1]");
+  // The citation names the document the reader can open, never a bare [src]:
+  // that is not a citation shape the renderer knows, so every one the model
+  // wrote rendered as plain text.
+  expect(out).toContain("[The Source p.N]");
   expect(out).not.toContain("[src]");
 });
 
@@ -55,7 +56,7 @@ test("pdf success: reports pages and a page citation", async () => {
   const t = tool(fake({ kind: "pdf", pages: 12 }));
   const out = (await t.execute({ url: "https://a.test/x.pdf" })) as string;
   expect(out).toContain("12 pages");
-  expect(out).toContain("[src p.N]");
+  expect(out).toContain("[The Source p.N]");
 });
 
 test("takes an http URL and rejects any other scheme before touching the ingestor", async () => {

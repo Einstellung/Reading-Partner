@@ -132,7 +132,11 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
       // sourceUrl instead would fail on the paywall that made the kept copy
       // valuable in the first place, or overwrite it with today's page.
       if (paper.captured) {
-        return capturedFetch(paper, await getFulltext(paperFulltextHash(surveyHash, paper.slug)));
+        // A supplement's text is filed under the document itself, which is the
+        // copy the reader opens (docs/67 「和 ingest_url 合并」); everything else
+        // captured has its own key under this prep run.
+        const key = paper.documentId ?? paperFulltextHash(surveyHash, paper.slug);
+        return capturedFetch(paper, await getFulltext(key));
       }
       // A user-pasted URL bypasses the arXiv/OpenAlex/S2 lookup: fetch the link
       // directly (link ingestion, docs/09). A cached PDF still short-circuits.

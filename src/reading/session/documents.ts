@@ -39,3 +39,29 @@ export function threadHome(call: ThreadOwner | null | undefined, docs: SessionDo
   if (call && (call.isBook === true || call.aside)) return docs.bookId;
   return docs.docId;
 }
+
+/**
+ * Pure: the marks written to the file of the document on screen.
+ *
+ * A mark drawn on a reply belongs to the conversation, not to the page, and a
+ * conversation has one file (threadHome). So while a supplement is on screen,
+ * a mark drawn on the book-level lesson is held in the same map as the
+ * supplement's own marks — the reply it is on is on screen — and written to the
+ * book's file instead of this one. `elsewhere` is what says which those are.
+ */
+export function marksOfDocument<T extends { id: string }>(
+  marks: readonly T[],
+  elsewhere: ReadonlyMap<string, string>,
+): T[] {
+  return elsewhere.size === 0 ? [...marks] : marks.filter((m) => !elsewhere.has(m.id));
+}
+
+/**
+ * Pure: another document's marks with this one added, replacing the copy that
+ * is already there. The whole set is what the annotation store writes, so a mark
+ * going into a file this session is not holding has to be merged into what that
+ * file already has.
+ */
+export function withMark<T extends { id: string }>(existing: readonly T[], mark: T): T[] {
+  return [...existing.filter((m) => m.id !== mark.id), mark];
+}

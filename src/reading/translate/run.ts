@@ -27,6 +27,14 @@ export interface Replacement {
   path: string;
   hash: string;
   topicId: string | null;
+  /**
+   * The book this document is a supplement of, when it is one (docs/67). The
+   * reader stays in that book's session and only the bytes on screen change;
+   * null for a document that stands on the shelf in its own right.
+   */
+  bookId?: string | null;
+  /** What the new document is called, for the title bar. */
+  title?: string;
 }
 
 export interface TranslateState {
@@ -43,16 +51,20 @@ export interface TranslateState {
 }
 
 /**
- * Pure: the document to reopen, given what the reader has open. Null unless a
- * finished run took that very document away — a translation of something else
- * on the shelf must not move the reader off the page they are on.
+ * Pure: the document to reopen, given what the reader has on screen. Null unless
+ * a finished run took that very document away — a translation of something else
+ * on the shelf, or of a supplement the reader is not looking at, must not move
+ * them off the page they are on.
+ *
+ * It is the document on screen that is compared, not the session's book: a
+ * supplement is a document of the session the reader is already in (docs/67).
  */
 export function fileToReopen(
   state: TranslateState,
-  openBookId: string | null,
+  openDocId: string | null,
 ): Replacement | null {
   if (state.phase !== "done" || !state.replaced) return null;
-  return state.replaced.oldBookId === openBookId ? state.replaced : null;
+  return state.replaced.oldBookId === openDocId ? state.replaced : null;
 }
 
 const IDLE: TranslateState = {

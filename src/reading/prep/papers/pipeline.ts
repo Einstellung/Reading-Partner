@@ -156,6 +156,19 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
     void this.persist();
   }
 
+  // The document a captured paper *is* was replaced — a supplement translated
+  // into its bilingual copy (docs/67). The paper is the same reading of the same
+  // piece; what moved is where its text is. The note is not written again: a second
+  // digest costs a call to say what was already said, and the price is that the
+  // page numbers in it were counted on the original and may land a page or two
+  // off in the bilingual copy.
+  retarget(documentId: string, next: string): void {
+    const p = this.state?.papers.find((x) => x.documentId === documentId);
+    if (!p) return;
+    p.documentId = next;
+    void this.persist();
+  }
+
   requeue(slug: string): void {
     const p = this.state?.papers.find((x) => x.slug === slug);
     if (!p || (p.status !== "skipped" && p.status !== "failed" && p.status !== "cooldown")) return;

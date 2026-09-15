@@ -17,23 +17,24 @@ const snapshot = (): ReturnType<typeof translateRun.snapshot>["state"] =>
   translateRun.snapshot().state;
 
 export default function TranslateStatus({
-  openBookId,
+  openDocId,
   onReopen,
 }: {
-  // Read at the moment the run finishes, not at render: the reader may have
-  // turned a dozen pages since this mounted.
-  openBookId: () => string | null;
+  // The document on screen, read at the moment the run finishes rather than at
+  // render: the reader may have turned a dozen pages since this mounted. The
+  // document rather than the book, because a supplement is one too (docs/67).
+  openDocId: () => string | null;
   onReopen?: (replacement: Replacement) => void;
 }) {
   const state = useSyncExternalStore(subscribe, snapshot, snapshot);
   const reopened = useRef<string | null>(null);
 
   useEffect(() => {
-    const replacement = fileToReopen(state, openBookId());
+    const replacement = fileToReopen(state, openDocId());
     if (!replacement || reopened.current === replacement.hash) return;
     reopened.current = replacement.hash;
     onReopen?.(replacement);
-  }, [state, openBookId, onReopen]);
+  }, [state, openDocId, onReopen]);
 
   if (state.phase === "idle") return null;
   const text =

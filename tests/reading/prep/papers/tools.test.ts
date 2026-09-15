@@ -98,3 +98,61 @@ test("a slug in two prep runs is answered from the first of them", async () => {
     "from the second run.",
   );
 });
+
+// A supplement (docs/67 「和 ingest_url 合并」): the paper is the document the
+// reader can open, so its text is filed under the document's own id and every
+// anchor names it by the title the Outline shows.
+const DOC = "supplement-hash";
+
+function supplement(over: Partial<PrepPaper> = {}): PrepState {
+  return state({
+    papers: [
+      paper({
+        slug: "how-a-web-page-becomes-a-book",
+        title: "How a web page becomes a book",
+        documentId: DOC,
+        kind: "article",
+        captured: true,
+        ...over,
+      }),
+    ],
+  });
+}
+
+test("read_paper reads a supplement out of the document, not the prep run's copy", async () => {
+  await saveFulltext(DOC, {
+    version: FULLTEXT_VERSION,
+    status: "ok",
+    pages: ["the document the reader opens", "page two of it"],
+    outline: [],
+  } satisfies Fulltext);
+  // What the prep run would have written under its own key, which must not be
+  // the copy that answers: the pages the model cites are the reader's pages.
+  await saveFulltext(paperFulltextHash(SURVEY, "how-a-web-page-becomes-a-book"), {
+    version: FULLTEXT_VERSION,
+    status: "ok",
+    pages: ["a stale second copy"],
+    outline: [],
+  } satisfies Fulltext);
+  const out = (await tool("read_paper", [supplement()]).execute({
+    slug: "how-a-web-page-becomes-a-book",
+    from: 1,
+    to: 2,
+  })) as string;
+  expect(out).toContain("the document the reader opens");
+  expect(out).not.toContain("a stale second copy");
+  expect(out).toContain("=== Page 1 === [How a web page becomes a book p.1]");
+  expect(out).toContain("=== Page 2 === [How a web page becomes a book p.2]");
+});
+
+test("read_note names a supplement's pages by its title", async () => {
+  await writePrepNote(
+    SURVEY,
+    "how-a-web-page-becomes-a-book",
+    "---\ntitle: How a web page becomes a book\n---\n\nIt is built as an EPUB [p.2].\n",
+  );
+  const out = (await tool("read_note", [supplement()]).execute({
+    slug: "how-a-web-page-becomes-a-book",
+  })) as string;
+  expect(out).toBe("It is built as an EPUB [How a web page becomes a book p.2].");
+});

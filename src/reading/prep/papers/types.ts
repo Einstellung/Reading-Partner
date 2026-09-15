@@ -65,6 +65,12 @@ export interface PrepPaper {
   // that exists, and the page may be paywalled or gone. A run resumed in a later
   // session reads the text back out of the fulltext cache (prep/papers/live.ts).
   captured?: boolean;
+  // The document this paper *is* (docs/67 「和 ingest_url 合并」): a link the reader
+  // pasted while reading became a supplement of the book, and this is that
+  // document's id. Its full text is filed under it rather than under the prep
+  // run's own key, because it is the same text the reader opens — so read_paper
+  // reads it there and cites it by title, and nothing is stored twice.
+  documentId?: string;
   abstract?: string;
   // Page count of the fetched PDF, set after extraction.
   pages?: number | null;

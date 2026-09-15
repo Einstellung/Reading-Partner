@@ -33,6 +33,16 @@ import type { Thread } from "../../platform/app/threads";
 import { carryMarks, type CarryTarget, type MarkRecord } from "./carry-marks";
 import type { TranslatedArticle } from "./translate-article";
 
+/**
+ * Where the document being translated is filed, and therefore where the
+ * translation goes in its place (docs/67). The same shape the ingest files a new
+ * document by (reading/ingest/article.ts: IngestTarget), because it is the same
+ * question: a topic's shelf, or one book's supplements.
+ */
+export type TranslationHome =
+  | { kind: "topic"; topicId: string | null }
+  | { kind: "book"; bookId: string };
+
 export interface ReplaceDeps {
   readBook(bookId: string): Promise<Uint8Array>;
   translate(
@@ -43,6 +53,15 @@ export interface ReplaceDeps {
   importBook(bytes: Uint8Array, path: string, meta: ImportMeta): Promise<LibraryEntry>;
   /** List the new document in the topic the original was filed under. */
   attach(topicId: string, path: string, hash: string): Promise<void>;
+  /**
+   * Put the new document in the original's place among a book's supplements:
+   * the row is one row before and after, under the new document's id.
+   */
+  replaceSupplement(
+    bookId: string,
+    oldHash: string,
+    ref: { hash: string; title: string; sourceUrl?: string },
+  ): Promise<void>;
   loadMarks(bookId: string): Promise<MarkRecord[]>;
   saveMarks(bookId: string, marks: MarkRecord[]): Promise<void>;
   /** Every conversation filed under a book, the originals included. */
@@ -97,6 +116,15 @@ export function translatedFileName(originalFilename: string): string {
   return `${base}-zh.epub`;
 }
 
+/**
+ * Pure: what the translation is listed as among a book's supplements — the file
+ * name without its extension, which is how the ingest names a row
+ * (reading/ingest/article.ts) and therefore what a [Title p.N] citation says.
+ */
+export function translatedTitle(originalFilename: string): string {
+  return translatedFileName(originalFilename).replace(/\.[^.]+$/, "");
+}
+
 /** Pure: the reference a document is listed under, matching ingest/article.ts. */
 export function documentPathOf(hash: string, fileName: string): string {
   return `library/${hash}/${fileName}`;
@@ -122,7 +150,7 @@ export function summaryLine(title: string, result: ReplaceResult): string {
  */
 export async function replaceWithTranslation(
   entry: LibraryEntry,
-  topicId: string | null,
+  home: TranslationHome,
   deps: ReplaceDeps,
   onProgress: (done: number, total: number) => void = () => {},
 ): Promise<ReplaceResult> {
@@ -139,7 +167,15 @@ export async function replaceWithTranslation(
     translatedFrom: entry.hash,
   };
   const fresh = await deps.importBook(translated.bytes, path, meta);
-  if (topicId) await deps.attach(topicId, path, fresh.hash);
+  if (home.kind === "book") {
+    await deps.replaceSupplement(home.bookId, entry.hash, {
+      hash: fresh.hash,
+      title: translatedTitle(entry.originalFilename),
+      ...(entry.sourceUrl ? { sourceUrl: entry.sourceUrl } : {}),
+    });
+  } else if (home.topicId) {
+    await deps.attach(home.topicId, path, fresh.hash);
+  }
 
   // The marks, by their words. A mark that cannot be found is left where it is
   // and counted: it dies with the original, and the count is what the reader is

@@ -298,7 +298,7 @@ export default function PhoneApp() {
 
         {/* The count only. The phone shell has no open-a-file door of its own,
             so the reader goes back to the shelf and finds the translation there. */}
-        <TranslateStatus openBookId={() => null} />
+        <TranslateStatus openDocId={() => null} />
 
         {showSettings && (
           <SettingsDialog

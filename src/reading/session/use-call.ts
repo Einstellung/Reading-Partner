@@ -121,6 +121,9 @@ export interface CallHost<M extends CallRow, I extends StagedImage> extends Call
   // A link the model ingested became a supplement of the book: the Outline's
   // list is stale until the shell reads it again (docs/67).
   onSupplement?(): void;
+  // A supplement is about to be deleted (remove_supplement). The reader may be
+  // looking at it; the shell puts them back in the book.
+  onSupplementGone?(hash: string): void;
   // The book's supplements, read live: the model is told what it may cite and
   // which of them the reader is looking at.
   supplementsRef: HostRef<readonly { hash: string; title: string }[]>;
@@ -506,6 +509,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         getPipeline: () => pipelineRef.current,
         distillAnnotations,
         onSupplement: () => shapes.current.onSupplement?.(),
+        onSupplementGone: (hash) => shapes.current.onSupplementGone?.(hash),
         signal: controller.signal,
       });
       if (!turn) {

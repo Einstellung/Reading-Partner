@@ -204,7 +204,12 @@ function sourcesOf(known: KnownSlugs | AnchorSources): AnchorSources {
     : (known as AnchorSources);
 }
 
-function titleKey(s: string): string {
+/**
+ * The key a title is matched by, on both sides of the comparison: whitespace
+ * collapsed and case folded, because the model copies a supplement's title out
+ * of the prompt and may re-wrap it.
+ */
+export function citationKey(s: string): string {
   return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
@@ -275,7 +280,7 @@ function titleAnchor(s: string, titles?: ReadonlySet<string>): Anchor | null {
   TITLE_SPLIT.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = TITLE_SPLIT.exec(s))) {
-    const key = titleKey(s.slice(0, m.index));
+    const key = citationKey(s.slice(0, m.index));
     if (!key || !titles.has(key)) continue;
     const after = PAGE_HEAD.exec(s.slice(m.index).trimStart());
     if (!after) continue;
@@ -414,14 +419,18 @@ export function linkifyFigureCitations(text: string): string {
 // Anchors that already name a paper, and figure anchors, are left alone. So is
 // any page anchor the qualified form would not parse back — prefixing a slug
 // must not turn a live anchor into a dead one.
-export function requalifyNoteAnchors(body: string, slug: string): string {
-  if (!slug) return body;
+export function requalifyNoteAnchors(body: string, name: string): string {
+  if (!name) return body;
   // The one paper this body may name is its own, so the round-trip check knows
-  // the slug exists whatever script it is in.
-  const own: ReadonlySet<string> = new Set([slug.toLowerCase()]);
+  // the name exists whatever script it is in. A supplement's name is its title,
+  // which is a phrase (docs/67): it is a citation by being a title that is
+  // really there, so it goes in as a title and not as a slug.
+  const own: AnchorSources = / /.test(name)
+    ? { titles: new Set([citationKey(name)]) }
+    : { slugs: new Set([name.toLowerCase()]) };
   return scanAnchors(body, (a, raw) => {
     if (a.kind !== "page") return null;
-    const qualified = `[${slug} ${raw.slice(1, -1).trim()}]`;
+    const qualified = `[${name} ${raw.slice(1, -1).trim()}]`;
     return parseAnchor(qualified.slice(1, -1), own)?.kind === "paper" ? qualified : null;
   });
 }

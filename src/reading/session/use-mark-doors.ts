@@ -28,6 +28,7 @@ import {
   type ChatMarkDraw,
 } from "../chat-marks";
 import type { ChatAsideMark, OpeningCall, ReopenAt } from "./use-call";
+import { threadHome } from "./documents";
 import { AI_PEN_COLOR, type MarkStore } from "./use-marks";
 
 // A ref the shell owns and this hook only reads.
@@ -99,6 +100,7 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
     penUpRef,
     asideFramingFor,
     persistAnnotations,
+    persistChatMark,
     removeAnnotation,
     setPopup,
     setSelectedAnnId,
@@ -289,8 +291,14 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
         ...(aiThreadId ? { aiThreadId } : {}),
       });
       if (!mark) return;
-      annsRef.current.set(mark.id, mark);
-      persistAnnotations();
+      // Into the file of the conversation it was drawn in, which is the book's
+      // for the lesson and everything off it — a mark on a reply is not a mark
+      // on the page underneath, and the page underneath may be a supplement
+      // (docs/67 「辅助资料」).
+      persistChatMark(
+        mark,
+        threadHome(lesson, { bookId: bookIdRef.current, docId: docIdRef.current }),
+      );
       syncTraceList();
       // No prep trigger: that frontier is measured in pages and this mark is on
       // none (reading/prep/use-prep-trigger.ts skips a mark with no page).
@@ -301,7 +309,16 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
       // side conversation opens nothing and the mark still stands.
       openChatAside(asideAnchor, { annotationId: mark.id, threadId: aiThreadId });
     },
-    [penColor, persistAnnotations, syncTraceList, currentCall, openChatAside, annsRef, docIdRef, setPopup],
+    [
+      penColor,
+      persistChatMark,
+      syncTraceList,
+      currentCall,
+      openChatAside,
+      bookIdRef,
+      docIdRef,
+      setPopup,
+    ],
   );
 
   // A press on a mark drawn on a reply. An AI-pen one is the door into the

@@ -14,7 +14,7 @@ const ARTICLE: TranslateTarget = {
   bookId: "b1",
   title: "How a web page becomes a book",
   article: true,
-  topicId: "t1",
+  home: { kind: "topic", topicId: "t1" },
 };
 
 function tool(over: Partial<TranslateToolDeps> = {}): {

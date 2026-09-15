@@ -108,8 +108,13 @@ import {
 import { buildClassroomTools } from "./prep/papers/tools";
 import { INGEST_URL_PROMPT, buildSourceTools, type IngestResult } from "./prep/papers/source-tool";
 import { ingestUrlLive } from "./ingest/live";
+import { REMOVE_SUPPLEMENT_PROMPT, buildSupplementTools } from "./ingest/remove-tool";
+import { ensureDocumentFulltext } from "./ingest/fulltext";
+import { formatOfBytes, readLibraryBook } from "../platform/app/library";
+import { listSupplements, removeSupplement } from "../platform/app/supplements";
+import { prepareCapturedDocument } from "./prep/papers/captured-source";
 import { TRANSLATE_PROMPT, buildTranslateTools } from "./translate/tool";
-import { liveTranslateToolDeps } from "./translate/tool-live";
+import { bookDeleter, liveTranslateToolDeps } from "./translate/tool-live";
 import {
   buildSavedArticleTools,
   prepareSavedArticle,
@@ -193,12 +198,16 @@ export interface BookDeskRef {
   // page citations are written with. Null while the book itself is showing.
   viewing?: { title: string } | null;
   // Every supplement this book has picked up, so the model knows what it may
-  // send the reader to and how to cite it.
-  supplements?: readonly { title: string }[];
+  // send the reader to, how to cite it, and which one to take away.
+  supplements?: readonly { hash: string; title: string }[];
   // A link the model ingested became a supplement: the Outline's list is
   // stale until the shell reads it again. Injected rather than announced,
   // so nothing here has to know there is a sidebar.
   onSupplement?: () => void;
+  // A supplement is about to be deleted. The reader may be looking at it, and
+  // this is what puts them back in the book before its bytes go; the shell
+  // knows the reader, this file does not.
+  onSupplementGone?: (hash: string) => void;
   threadId: string;
   // The AI-pen mark hosting this thread; empty string for the book-level thread
   // and for an aside pulled out of a chat message. Which of the three this is
@@ -270,6 +279,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     viewing = null,
     supplements = [],
     onSupplement,
+    onSupplementGone,
     threadId,
     annotationId,
     annotation: ann,
@@ -513,6 +523,22 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     mediaType,
   }));
 
+  // The text of a document that is not on screen, cut into the pages the reader
+  // will see when they open it (reading/ingest/fulltext.ts). Cached under the
+  // document own id, so opening it later reads this copy back rather than
+  // cutting the pages a second time under different numbers. Null when the text
+  // could not be extracted, which costs the prep half and nothing else.
+  const documentFulltext = async (hash: string): Promise<Fulltext | null> => {
+    try {
+      const bytes = await readLibraryBook(hash);
+      const buffer = bytes.slice().buffer as ArrayBuffer;
+      return await ensureDocumentFulltext(hash, buffer, formatOfBytes(bytes));
+    } catch (e) {
+      console.warn("could not read the ingested document text", e);
+      return null;
+    }
+  };
+
   // Link ingestion (docs/09, docs/67 「辅助资料」): the model can ingest a
   // user-pasted URL with ingest_url on any thread of this book — "compare this
   // link with ch.3" is a question a marked passage can raise as easily as the
@@ -529,52 +555,79 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   tools = [
     ...tools,
     ...buildSourceTools({
-      ingest: async (url) => {
-        // The page is fetched twice, once by each half. The pipeline keeps the
-        // extracted plain text, and an EPUB is built out of HTML, so there is
-        // nothing the two could hand each other short of restructuring the fetch
-        // stage — which is what the digest-on-the-document step is (docs/67, the
-        // third slice, not built yet).
+      ingest: async (url, note) => {
+        // One URL, one object (docs/67 「和 ingest_url 合并」). The document is
+        // made first, because it is the thing: the reader opens it from the
+        // Outline, its bytes are in the library, and its text — cut into the
+        // pages they will see — is what the prep run digests. The page is
+        // fetched once and every [Title p.N] the model writes lands on the page
+        // in front of them.
+        const ingested = await ingestUrlLive(url, { kind: "book", bookId });
+        onSupplement?.();
+        const kind = ingested.kind === "article" ? ("article" as const) : ("pdf" as const);
         let prep: IngestResult["prep"];
-        let title = "";
         if (livePipeline && canReadIngested) {
-          const paper = await livePipeline.ingestSource(url);
-          const ft = await getFulltext(paperFulltextHash(bookId, paper.slug));
-          title = paper.title;
-          prep = {
-            slug: paper.slug,
-            kind: paper.kind ?? "pdf",
-            pages: ft?.pages.length ?? paper.pages ?? 0,
-            chars: ft ? ft.pages.reduce((n, pg) => n + pg.length, 0) : 0,
-            status: paper.status,
-            ...(paper.error === undefined ? {} : { error: paper.error }),
-          };
-        }
-        // The supplement, which is every book's half. A failure here is not a
-        // failed ingest when there is prep material: it is already fetched and
-        // readable, and losing the reader's copy must not cost the conversation
-        // the source it was about to discuss. With no prep behind it, it is the
-        // whole of the ingest and the failure is the tool's.
-        let document: IngestResult["document"];
-        if (prep?.status !== "failed") {
-          try {
-            const ingested = await ingestUrlLive(url, { kind: "book", bookId });
-            document = { title: ingested.title };
-            if (!title) title = ingested.title;
-            onSupplement?.();
-          } catch (e) {
-            if (!prep) throw e;
-            console.warn("could not take the ingested page in as a supplement", e);
+          const ft = await documentFulltext(ingested.entry.hash);
+          if (ft && ft.status === "ok") {
+            const prepared = prepareCapturedDocument(
+              {
+                documentId: ingested.entry.hash,
+                title: ingested.title,
+                kind,
+                ...(ingested.entry.sourceUrl ? { sourceUrl: ingested.entry.sourceUrl } : {}),
+              },
+              ft,
+              note ?? "",
+            );
+            const paper = await livePipeline.ingestCaptured(prepared.mint, prepared.fetched);
+            prep = {
+              slug: paper.slug,
+              kind: paper.kind ?? kind,
+              pages: ft.pages.length,
+              chars: ft.pages.reduce((n, pg) => n + pg.length, 0),
+              status: paper.status,
+              ...(paper.error === undefined ? {} : { error: paper.error }),
+            };
           }
         }
         return {
-          title,
+          title: ingested.title,
           ...(prep ? { prep } : {}),
-          ...(document ? { document } : {}),
+          document: { title: ingested.title },
         };
       },
     }),
   ];
+
+  // Taking one away again (docs/67 「辅助资料」). The reader corrects what was
+  // taken in by saying so, which is where every correction of this kind goes;
+  // the Outline has no delete button. Mounted beside the ingest on every book
+  // thread, because a supplement can be discussed from any of them.
+  tools = [
+    ...tools,
+    ...buildSupplementTools({
+      // Read now rather than off the turn's copy: a link ingested earlier in
+      // this same turn is a supplement the reader can already be asking about.
+      list: () => listSupplements(bookId),
+      remove: async (one) => {
+        const removeBook = bookDeleter();
+        if (!removeBook) throw new Error("the app is not ready to delete a document yet");
+        // The reader first: the bytes on screen are about to stop existing.
+        onSupplementGone?.(one.hash);
+        await removeSupplement(bookId, one.hash);
+        // The prep list keeps its row — the note is a record of a reading that
+        // happened — but the source is off: skipped is the status a paper the
+        // run must not touch again already has.
+        const paper = livePipeline
+          ?.snapshot()
+          .state?.papers.find((p) => p.documentId === one.hash);
+        if (paper) livePipeline?.skip(paper.slug);
+        await removeBook(one.hash);
+        onSupplement?.();
+      },
+    }),
+  ];
+
   // Translation (docs/67): the reader says "translate this" and the article on
   // the shelf is replaced by a bilingual copy. Mounted on every book thread, not
   // only on an article's: the tool itself is what says a PDF cannot be done in
@@ -585,6 +638,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     ...buildTranslateTools(
       liveTranslateToolDeps({
         bookId,
+        docId,
         topicId,
         model: {
           providerId: s.defaultProviderId as ProviderId,
@@ -736,6 +790,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       // still remembers.
       toolPrompts: [
         INGEST_URL_PROMPT,
+        REMOVE_SUPPLEMENT_PROMPT,
         TRANSLATE_PROMPT,
         ...view.toolPrompts,
         FIND_PAPER_PROMPT,
@@ -812,7 +867,12 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     // aside has no mark, so it is no unit of its own and this stretch belongs to
     // the conversation it was pulled out of.
     const marks = distillAnnotations();
-    const unit = distillUnitOf(listThreads(bookId), threadId, pagelessMarkIds(marks));
+    // Both files: the lesson and its asides are the book's, and a mark drawn on
+    // a supplement has its conversation in that document's file (docs/67). A
+    // stretch of either can be the unit this pass belongs to.
+    const threads =
+      docId === bookId ? listThreads(bookId) : [...listThreads(bookId), ...listThreads(docId)];
+    const unit = distillUnitOf(threads, threadId, pagelessMarkIds(marks));
     // Where the pass says it happened follows the unit. Folded into the lesson,
     // the position is the reader's own page — the same answer the lesson gives
     // for itself — and there is no marked passage, because the lesson has none.

@@ -12,15 +12,10 @@ import { loadAnnotations } from "../../platform/app/annotations";
 import { loadThreads } from "../../platform/app/threads";
 import { pageMarks, type Annotation, type ViewState } from "../../platform/app/reader-contract";
 import { formatOfBytes, type BookFormat } from "../../platform/app/library";
-import { ensureFulltext, type Fulltext } from "../../fulltext";
+import type { Fulltext } from "../../fulltext";
+import { ensureDocumentFulltext } from "../ingest/fulltext";
 import { sweepDistillation } from "../../memory";
-import {
-  PAGINATION_VERSION,
-  acquireEpub,
-  ensurePagination,
-  extractEpubFulltext,
-  preparePagination,
-} from "../epub";
+import { PAGINATION_VERSION, acquireEpub, ensurePagination, preparePagination } from "../epub";
 import { epubFigures } from "../figures/epub";
 import { clearFigureCache, ensureFigures, type FiguresIndex } from "../figures";
 import { seedReadingPosition } from "../reading-position";
@@ -52,18 +47,11 @@ export const bookOpenIo: BookOpenIo = {
   getViewState,
   loadAnnotations,
   loadThreads,
-  // The two extractions are one dispatch on the format and nothing else: an
-  // EPUB produces the same Fulltext and the same figure index a PDF does, so
-  // everything downstream of these two calls is shared (docs/39 §1).
-  ensureFulltext: (bookId, buffer, format, stale) =>
-    format === "epub"
-      ? ensureFulltext(
-          bookId,
-          buffer,
-          (b) => extractEpubFulltext(bookId, b),
-          (ft) => !stale && ft.paginationVersion === PAGINATION_VERSION,
-        )
-      : ensureFulltext(bookId, buffer),
+  // The full text is the ingest's function (reading/ingest/fulltext.ts): a link
+  // pasted into the conversation is read by the AI through the same call, so a
+  // supplement's pages are numbered here once and cited as they are read. The
+  // figure index is still this file's — nothing outside the reader wants one.
+  ensureFulltext: ensureDocumentFulltext,
   ensureFigures: (bookId, buffer, format, stale) =>
     format === "epub"
       ? ensureFigures(

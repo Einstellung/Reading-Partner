@@ -20,6 +20,7 @@ import {
   replaceWithTranslation,
   summaryLine,
   translatedFileName,
+  translatedTitle,
   type ReplaceDeps,
 } from "../../../src/reading/translate/replace";
 import { translateArticleEpub } from "../../../src/reading/translate/translate-article";
@@ -91,6 +92,7 @@ interface Recorded {
   order: string[];
   imported: { path: string; meta: ImportMeta } | null;
   attached: { topicId: string; path: string; hash: string } | null;
+  supplement: { bookId: string; oldHash: string; ref: { hash: string; title: string; sourceUrl?: string } } | null;
   saved: Map<string, MarkRecord[]>;
   threads: Map<string, Thread[]>;
   deleted: string[];
@@ -102,6 +104,7 @@ async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promi
     order: [],
     imported: null,
     attached: null,
+    supplement: null,
     saved: new Map(),
     threads: new Map([["old-book-id", threads]]),
     deleted: [],
@@ -128,6 +131,10 @@ async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promi
     attach: async (topicId, path, hash) => {
       rec.order.push("attach");
       rec.attached = { topicId, path, hash };
+    },
+    replaceSupplement: async (bookId, oldHash, ref) => {
+      rec.order.push("supplement");
+      rec.supplement = { bookId, oldHash, ref };
     },
     loadMarks: async () => marks,
     saveMarks: async (bookId, saved) => {
@@ -156,7 +163,7 @@ async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promi
 test("the new document is filed and the marks are moved before the old one goes", async () => {
   const rec = await recorder([markOver(await buildArticleEpub(INPUT), "measured against the tree")]);
   const progress: number[] = [];
-  const result = await replaceWithTranslation(ORIGINAL, "t1", rec.deps, (done) =>
+  const result = await replaceWithTranslation(ORIGINAL, { kind: "topic", topicId: "t1" }, rec.deps, (done) =>
     progress.push(done),
   );
 
@@ -172,7 +179,7 @@ test("the new document is filed and the marks are moved before the old one goes"
 
 test("the translation carries the original's source fields and says what it came from", async () => {
   const rec = await recorder();
-  await replaceWithTranslation(ORIGINAL, "t1", rec.deps);
+  await replaceWithTranslation(ORIGINAL, { kind: "topic", topicId: "t1" }, rec.deps);
   expect(rec.imported?.meta).toEqual({
     kind: "article",
     sourceUrl: INPUT.sourceUrl,
@@ -197,7 +204,7 @@ test("a mark whose words are gone is counted, not guessed at", async () => {
     sortIndex: "",
   };
   const rec = await recorder([stray]);
-  const result = await replaceWithTranslation(ORIGINAL, null, rec.deps);
+  const result = await replaceWithTranslation(ORIGINAL, { kind: "topic", topicId: null }, rec.deps);
   expect(result.moved).toBe(0);
   expect(result.unmatched).toBe(1);
   // Nothing was written, and with no topic named nothing was filed either.
@@ -210,7 +217,7 @@ test("a failed translation leaves the shelf alone", async () => {
   rec.deps.translate = async () => {
     throw new Error("the glossary could not be settled");
   };
-  await expect(replaceWithTranslation(ORIGINAL, "t1", rec.deps)).rejects.toThrow("glossary");
+  await expect(replaceWithTranslation(ORIGINAL, { kind: "topic", topicId: "t1" }, rec.deps)).rejects.toThrow("glossary");
   expect(rec.order).toEqual([]);
 });
 
@@ -249,7 +256,7 @@ test("the conversations move to the translation, ids and messages unchanged", as
   const onMark = thread("t-mark", String(mark.id));
   const rec = await recorder([mark], [lesson, onMark]);
 
-  const result = await replaceWithTranslation(ORIGINAL, "t1", rec.deps);
+  const result = await replaceWithTranslation(ORIGINAL, { kind: "topic", topicId: "t1" }, rec.deps);
 
   // Moved after the marks and before the original goes.
   expect(rec.order).toEqual([
@@ -284,7 +291,7 @@ test("a thread whose mark did not come across is kept and counted", async () => 
     sortIndex: "",
   };
   const rec = await recorder([stray], [thread("t-book", ""), thread("t-orphan", "m-gone")]);
-  const result = await replaceWithTranslation(ORIGINAL, "t1", rec.deps);
+  const result = await replaceWithTranslation(ORIGINAL, { kind: "topic", topicId: "t1" }, rec.deps);
 
   expect(result.unmatched).toBe(1);
   expect(result.threads).toBe(2);
@@ -298,4 +305,33 @@ test("an orphaned thread is one anchored on a mark that is not in the new docume
   expect(orphanedThreadIds(threads, new Set(["m1"]))).toEqual(["t-b"]);
   expect(orphanedThreadIds(threads, new Set(["m1", "m2"]))).toEqual([]);
   expect(orphanedThreadIds([], new Set())).toEqual([]);
+});
+
+// A supplement's translation is filed where the supplement was: under the book,
+// not in a topic (docs/67 「辅助资料」). One row before and after, and the row is
+// under the new document's id.
+test("a supplement is replaced in the book's list, not in a topic", async () => {
+  const rec = await recorder();
+  const result = await replaceWithTranslation(
+    ORIGINAL,
+    { kind: "book", bookId: "the-book" },
+    rec.deps,
+  );
+
+  expect(rec.order).toEqual(["translate", "import", "supplement", "delete"]);
+  expect(rec.attached).toBeNull();
+  expect(rec.supplement).toEqual({
+    bookId: "the-book",
+    oldHash: "old-book-id",
+    ref: {
+      hash: "new-book-id",
+      title: translatedTitle(ORIGINAL.originalFilename),
+      sourceUrl: INPUT.sourceUrl,
+    },
+  });
+  // The title is what a [Title p.N] citation says, so it is the file name
+  // without its extension — the same shape the ingest gives a row.
+  expect(translatedTitle(ORIGINAL.originalFilename)).toBe("how-a-web-page-becomes-a-book-zh");
+  expect(result.entry.hash).toBe("new-book-id");
+  expect(rec.deleted).toEqual(["old-book-id"]);
 });

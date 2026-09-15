@@ -558,6 +558,11 @@ export default function App() {
     docIdRef,
     supplementsRef,
     onSupplement: () => void refreshSupplements(),
+    onSupplementGone: (hash) => {
+      // The document is about to be deleted: if it is the one on screen, the
+      // reader goes back to the book before its bytes go (docs/67).
+      if (docIdRef.current === hash) void backToBook();
+    },
     bufferRef,
     ctxRef,
     currentFiguresRef,
@@ -1753,8 +1758,15 @@ export default function App() {
       {/* The running translation's count, and the hand-off onto the document it
           produced: the original is off the shelf by then (reading/translate). */}
       <TranslateStatus
-        openBookId={() => bookIdRef.current}
+        openDocId={() => docIdRef.current}
         onReopen={(r) => {
+          // A translated supplement is a document of the session the reader is
+          // already in: they step onto it without leaving the book (docs/67).
+          if (r.bookId) {
+            void refreshSupplements();
+            void openDocument(r.hash, r.title ?? r.path.split("/").pop() ?? r.hash);
+            return;
+          }
           void openFile(
             { path: r.path, name: r.path.split("/").pop() ?? r.path, addedAt: Date.now(), hash: r.hash },
             r.topicId ?? undefined,

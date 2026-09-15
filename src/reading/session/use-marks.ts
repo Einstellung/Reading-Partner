@@ -13,7 +13,11 @@
 // is called before, because the call reads the map.
 
 import { useCallback, useRef, useState } from "react";
-import { deleteAnnotations, saveAnnotations } from "../../platform/app/annotations";
+import {
+  deleteAnnotations,
+  peekAnnotations,
+  saveAnnotations,
+} from "../../platform/app/annotations";
 import { isPageMark, type Annotation, type ViewInstance } from "../../platform/app/reader-contract";
 import type { Thread } from "../../platform/app/threads";
 import { toDistillAnnotations, type DistillAnnotation } from "../../memory";
@@ -21,6 +25,7 @@ import { asideFraming } from "../aside";
 import type { CallRow, CallState, CallView } from "../call-state";
 import { orderTraceMarks } from "../chat-marks";
 import { markExcerpt } from "../reopen";
+import { marksOfDocument, withMark } from "./documents";
 
 // A ref the shell owns and this hook only reads.
 type HostRef<T> = { readonly current: T };
@@ -75,6 +80,9 @@ export interface MarkStore {
     parentView?: CallView,
   ): Pick<CallState<CallRow>, "aside">;
   patchAnnotation(id: string, patch: Partial<Annotation>): void;
+  // Write a mark drawn on a reply into the file of the conversation it is on,
+  // which is not this document's when a supplement is on screen (docs/67).
+  persistChatMark(mark: Annotation, home: string | null): void;
   onPanePointerUp(e: React.PointerEvent): void;
   onDeleteAnnotations(ids: string[]): void;
   // Every mark of the book that was just opened (session/open-book.ts).
@@ -83,6 +91,11 @@ export interface MarkStore {
 
 export function useMarks({ viewRef, docIdRef }: MarksHost): MarkStore {
   const annsRef = useRef<Map<string, Annotation>>(new Map());
+  // Marks in the map above that belong in another document's file: a mark drawn
+  // on a reply of the book's lesson while a supplement is on screen. Id to the
+  // file it was written to, so a delete reaches the same one. Emptied whenever a
+  // document is opened, which is when the map itself is replaced.
+  const elsewhereRef = useRef<Map<string, string>>(new Map());
   const aiPenRef = useRef(false);
   const penUpRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -97,14 +110,39 @@ export function useMarks({ viewRef, docIdRef }: MarksHost): MarkStore {
 
   const persistAnnotations = useCallback(() => {
     const docId = docIdRef.current;
-    if (docId) saveAnnotations(docId, [...annsRef.current.values()]);
+    if (docId) {
+      saveAnnotations(docId, marksOfDocument([...annsRef.current.values()], elsewhereRef.current));
+    }
   }, [docIdRef]);
+
+  // A mark on a reply goes to the file of the conversation it was drawn in, not
+  // to the file of the page underneath it: come back to the book and the marks
+  // on its lesson are still there, whichever document was on screen when they
+  // were drawn. The file being written to is one this session does not hold, so
+  // what it already has is read back and the mark merged into it.
+  const persistChatMark = useCallback(
+    (mark: Annotation, home: string | null) => {
+      const docId = docIdRef.current;
+      annsRef.current.set(mark.id, mark);
+      if (!home || home === docId) {
+        persistAnnotations();
+        return;
+      }
+      elsewhereRef.current.set(mark.id, home);
+      persistAnnotations();
+      void peekAnnotations(home)
+        .then((existing) => saveAnnotations(home, withMark(existing, mark)))
+        .catch((e) => console.error("failed to save a mark on a reply", e));
+    },
+    [docIdRef, persistAnnotations],
+  );
 
   const removeAnnotation = useCallback(
     (id: string) => {
       viewRef.current?.unsetAnnotations([id]);
       annsRef.current.delete(id);
-      const docId = docIdRef.current;
+      const docId = elsewhereRef.current.get(id) ?? docIdRef.current;
+      elsewhereRef.current.delete(id);
       if (docId) deleteAnnotations(docId, [id]);
       syncTraceList();
       setPopup(null);
@@ -163,8 +201,19 @@ export function useMarks({ viewRef, docIdRef }: MarksHost): MarkStore {
   const onDeleteAnnotations = useCallback(
     (ids: string[]) => {
       for (const id of ids) annsRef.current.delete(id);
+      // Each one from the file it was written to: a mark on a reply of the
+      // book's lesson is in the book's, whatever is on screen (docs/67).
+      const here: string[] = [];
+      for (const id of ids) {
+        const home = elsewhereRef.current.get(id);
+        if (home === undefined) here.push(id);
+        else {
+          elsewhereRef.current.delete(id);
+          deleteAnnotations(home, [id]);
+        }
+      }
       const docId = docIdRef.current;
-      if (docId) deleteAnnotations(docId, ids);
+      if (docId && here.length > 0) deleteAnnotations(docId, here);
       syncTraceList();
     },
     [syncTraceList, docIdRef],
@@ -175,6 +224,7 @@ export function useMarks({ viewRef, docIdRef }: MarksHost): MarkStore {
     // and what the trace list is built from. Only the engine's copy is
     // filtered, and that happens where the reader is mounted (open-book.ts).
     annsRef.current = new Map(marks.map((a) => [a.id, a]));
+    elsewhereRef.current = new Map();
     setTraceAnns(orderTraceMarks(marks));
   }, []);
 
@@ -189,6 +239,7 @@ export function useMarks({ viewRef, docIdRef }: MarksHost): MarkStore {
     setPopup,
     syncTraceList,
     persistAnnotations,
+    persistChatMark,
     removeAnnotation,
     distillAnnotations,
     asideFramingFor,

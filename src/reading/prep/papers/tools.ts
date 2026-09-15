@@ -32,6 +32,15 @@ function findPaper(
   return null;
 }
 
+// How this paper is cited: a prepped paper by its slug, a supplement by the
+// title it carries on the Outline — which is the form the reader's own document
+// answers to, and the one the click check knows
+// (reading/session/supplement-citation.ts). Whitespace is collapsed for the same
+// reason it is collapsed there.
+function citationName(paper: PrepPaper): string {
+  return paper.documentId ? paper.title.replace(/\s+/g, " ").trim() || paper.slug : paper.slug;
+}
+
 // Fetched web content framing, prepended to a read of an ingested article's text
 // so the model never mistakes the page for instructions (link ingestion).
 const ARTICLE_PREFIX =
@@ -62,10 +71,14 @@ export function buildClassroomTools(getStates: () => readonly PrepState[]): Agen
           return `No prepped paper with slug "${slug}". Available: ${slugList(states)}.`;
         }
         const { state, paper } = found;
-        const ft = await getFulltext(paperFulltextHash(state.surveyHash, slug));
+        // A supplement is read out of the document itself: the reader has it
+        // open in the same reader, and the pages the model quotes are the pages
+        // they see (docs/67 「和 ingest_url 合并」).
+        const ft = await getFulltext(paper.documentId ?? paperFulltextHash(state.surveyHash, slug));
         if (!ft) {
           return `The full text of "${slug}" isn't cached (its prep may be abstract-only). Try read_note instead.`;
         }
+        const cited = citationName(paper);
         // Each page header carries the citation the model should write for it.
         // Told only the slug, it abbreviated: a paper filed as
         // dream-to-control-learning-behaviors-by-latent-imag came back cited as
@@ -74,7 +87,7 @@ export function buildClassroomTools(getStates: () => readonly PrepState[]): Agen
           ft,
           Math.round(Number(args.from)),
           Math.round(Number(args.to)),
-          (p) => `=== Page ${p} === [${slug} p.${p}]`,
+          (p) => `=== Page ${p} === [${cited} p.${p}]`,
         );
         return paper.kind === "article" ? ARTICLE_PREFIX + pages : pages;
       },
@@ -98,7 +111,7 @@ export function buildClassroomTools(getStates: () => readonly PrepState[]): Agen
         // The note is cleaned on the way out, not on disk: its own writer's
         // asides dropped, and its bare [p.N] anchors — which mean pages of this
         // paper, not the survey — named so they stay right once quoted.
-        return requalifyNoteAnchors(stripModelAsides(parseNote(raw).body), slug);
+        return requalifyNoteAnchors(stripModelAsides(parseNote(raw).body), citationName(paper));
       },
     },
   ];

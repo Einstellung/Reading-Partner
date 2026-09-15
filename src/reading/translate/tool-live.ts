@@ -7,6 +7,7 @@ import { contentHash } from "../../platform/app/content-hash";
 import { loadAnnotations, saveAnnotations } from "../../platform/app/annotations";
 import type { Annotation } from "../../platform/app/reader-contract";
 import {
+  formatOfBytes,
   getLibraryEntry,
   importBook,
   isArticleEntry,
@@ -14,6 +15,10 @@ import {
   readLibraryBook,
   type LibraryEntry,
 } from "../../platform/app/library";
+import { addSupplement, listSupplements, removeSupplement } from "../../platform/app/supplements";
+import { ensureDocumentFulltext } from "../ingest/fulltext";
+import { matchSupplement } from "../ingest/remove-tool";
+import { peekPrepPipeline } from "../prep/papers/live";
 import { addFileToTopic, listTopics, setFileHash } from "../../platform/app/topics";
 import {
   adoptThreads,
@@ -25,7 +30,13 @@ import {
 } from "../../platform/app/threads";
 import { parseEpub } from "../epub/parse";
 import { translateBatchLive, translateGlossaryLive, type TranslateModel } from "./live";
-import { replaceWithTranslation, summaryLine, type ReplaceResult } from "./replace";
+import {
+  replaceWithTranslation,
+  summaryLine,
+  translatedTitle,
+  type ReplaceResult,
+  type TranslationHome,
+} from "./replace";
 import { translateRun } from "./run";
 import { hasTranslations, segmentDocument } from "./segment";
 import { translateArticleEpub } from "./translate-article";
@@ -94,9 +105,21 @@ export function setBookDeleter(fn: BookDeleter): void {
   deleteBook = fn;
 }
 
+/**
+ * The same function for everything else that takes a document off the shelf —
+ * remove_supplement (reading/ingest/remove-tool.ts) deletes exactly what a
+ * replaced original does. Registered once, read wherever it is needed; null
+ * until the shell has handed it down.
+ */
+export function bookDeleter(): BookDeleter | null {
+  return deleteBook;
+}
+
 export interface TranslateDeskRef {
-  /** The document the reader has open. */
+  /** The book the session belongs to: its topic, its prep, its supplements. */
   bookId: string;
+  /** The document on screen — the book itself, or one of its supplements. */
+  docId: string;
   topicId: string | null;
   /** The conversation's model: the translation is made by whoever is talking. */
   model: TranslateModel;
@@ -104,22 +127,32 @@ export interface TranslateDeskRef {
 
 export function liveTranslateToolDeps(ref: TranslateDeskRef): TranslateToolDeps {
   return {
-    // A book's supplement is in no topic, so topicOfBook answers null for one and
-    // the replacement lands nowhere the reader can see it. Translating a
-    // supplement waits for docs/67 「辅助资料」, where what it is filed under is
-    // the book rather than a topic.
+    // What "this one" means is the document on screen, which is a supplement
+    // whenever the reader opened one (docs/67 「辅助资料」). A title is looked for
+    // among this book's supplements first and on the shelf after: the reader is
+    // talking about what is in front of them, and a supplement is filed under
+    // the book rather than under a topic, which is where its translation goes
+    // too.
     find: async (query) => {
-      const entry = query
-        ? matchByTitle(await listLibraryEntries(), query)
-        : await getLibraryEntry(ref.bookId);
+      const supplements = await listSupplements(ref.bookId).catch(() => []);
+      const named = query ? matchSupplement(query, supplements) : null;
+      const hash = named ? named.hash : query ? null : ref.docId;
+      const entry = hash
+        ? await getLibraryEntry(hash)
+        : matchByTitle(await listLibraryEntries(), query ?? "");
       if (!entry) return null;
-      const topicId =
-        entry.hash === ref.bookId ? ref.topicId : await topicOfBook(entry.hash);
+      const supplement = supplements.find((one) => one.hash === entry.hash) ?? null;
+      const home: TranslationHome = supplement
+        ? { kind: "book", bookId: ref.bookId }
+        : {
+            kind: "topic",
+            topicId: entry.hash === ref.bookId ? ref.topicId : await topicOfBook(entry.hash),
+          };
       return {
         bookId: entry.hash,
-        title: entry.title,
+        title: supplement?.title ?? entry.title,
         article: isArticleEntry(entry),
-        topicId,
+        home,
       };
     },
     inspect: async (target) => {
@@ -151,7 +184,7 @@ async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): P
   try {
     result = await replaceWithTranslation(
       entry,
-      target.topicId,
+      target.home,
       {
         readBook: readLibraryBook,
         translate: (bytes, onProgress) =>
@@ -165,6 +198,12 @@ async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): P
         attach: async (topicId, path, hash) => {
           await addFileToTopic(topicId, path);
           await setFileHash(topicId, path, hash);
+        },
+        // Listed before the original is taken off, so the book is never a book
+        // with one supplement fewer than the reader put there.
+        replaceSupplement: async (bookId, oldHash, supplement) => {
+          await addSupplement(bookId, { ...supplement, addedAt: Date.now() });
+          await removeSupplement(bookId, oldHash);
         },
         loadMarks: async (bookId) => (await loadAnnotations(bookId)) as unknown as MarkRecord[],
         saveMarks: async (bookId, marks) => {
@@ -194,10 +233,32 @@ async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): P
   }
   const line = summaryLine(target.title, result);
   await tell(result.entry.hash, line);
+  if (target.home.kind === "book") {
+    // The supplement is the same source read in another language: the prep list
+    // keeps its paper and its note, and only the document it points at moves.
+    // The new document's text is cut once, here, so the pages read_paper hands
+    // over are the pages the reader gets (reading/ingest/fulltext.ts).
+    await retargetSupplement(target.home.bookId, target.bookId, result.entry.hash);
+  }
   translateRun.finish(line, {
     oldBookId: target.bookId,
     path: result.path,
     hash: result.entry.hash,
-    topicId: target.topicId,
+    topicId: target.home.kind === "topic" ? target.home.topicId : null,
+    bookId: target.home.kind === "book" ? target.home.bookId : null,
+    title: translatedTitle(entry.originalFilename),
   });
+}
+
+// The prep run's side of a replaced supplement, and the new document's text. A
+// failure here costs the model its read of the piece, not the reader's copy: the
+// translation is on the shelf either way.
+async function retargetSupplement(bookId: string, oldHash: string, hash: string): Promise<void> {
+  try {
+    const bytes = await readLibraryBook(hash);
+    await ensureDocumentFulltext(hash, bytes.slice().buffer as ArrayBuffer, formatOfBytes(bytes));
+    peekPrepPipeline(bookId)?.retarget(oldHash, hash);
+  } catch (e) {
+    console.warn("could not hand the translation to this book's prep run", e);
+  }
 }
