@@ -1,0 +1,27 @@
+name: ShareDriver
+options:
+  bundleIdPrefix: com.xinyuan.sharedriver
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  ShareDriverUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xinyuan.sharedriver.uitests
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: "YES"
+        TARGETED_DEVICE_FAMILY: "1,2"
+schemes:
+  ShareDriverUITests:
+    build:
+      targets:
+        ShareDriverUITests: [test]
+    test:
+      targets:
+        - ShareDriverUITests
