@@ -52,7 +52,8 @@ import { annotationPage, toolStatusLabel } from "../context";
 import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
-import { createLiveTurns, type LiveTurn } from "../live-turns";
+import { readingTurns, type LiveTurn } from "../live-turns";
+import { boxUnseenTurn, watching, type TurnOutcome } from "../turn-box";
 import { deferHangup } from "./hangup";
 import { threadHome, type ThreadOwner } from "./documents";
 import { createPendingImages, type StagedImage } from "../pending-images";
@@ -203,11 +204,12 @@ export interface CallController<M extends CallRow, I extends StagedImage> {
   // status row. read_chapter is what writes one (docs/09).
   setFocusChapter(chapter: number | null): void;
 
-  // What opening and closing a book need (session/open-book.ts).
+  // What opening and closing a book need (session/open-book.ts). Closing the
+  // book ends the conversation, not the turn: an answer already asked for goes
+  // on being written and lands in the thread file (docs/03, docs/68).
   captureHangup(): void;
   close(): void;
   discardStagedImages(): void;
-  endBookTurns(bookId: string): void;
 
   // The composer's staging, for the conversation on screen.
   pendingImages: I[];
@@ -265,9 +267,11 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   const callRef = useRef<CallState<M> | null>(null);
   const callViewRef = useRef<CallView | "none">("none");
 
-  // Turns still streaming, one per thread. Closing a bubble leaves its turn
-  // running; only a deleted thread or a closed book cuts one off.
-  const liveTurnsRef = useRef(createLiveTurns<M>());
+  // Turns still streaming, one per thread. The registry is a module and not a
+  // ref of this hook: once a turn has been sent, only Stop and a deleted thread
+  // cut it off, so it has to outlive the session that started it — the reader
+  // closes, this tree goes, and the answer still lands (docs/03, docs/68).
+  const liveTurnsRef = useRef(readingTurns<M>());
   // Images pasted into the composer, awaiting send, keyed by thread so an unsent
   // image stays on its own conversation. The two states below are only what the
   // open thread renders.
@@ -449,6 +453,24 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
       write({ kind: "tool-end", name: info.name, isError: info.isError }, ts);
 
+    // The mark this conversation hangs off, and where a card pointing back at it
+    // would land. Both read now rather than when the turn settles: the marks and
+    // the reading position belong to the open book, and by the time an answer
+    // arrives the reader may have closed it.
+    const ann = annsRef.current.get(annotationId);
+    const pageIndex = ctxRef.current.pageIndex;
+    const page =
+      annotationPage(ann as { position?: { pageIndex?: number } } | undefined) ??
+      (typeof pageIndex === "number" ? pageIndex + 1 : null);
+
+    // A turn that landed with nobody looking at it becomes a card in the box,
+    // pointing back at the thread it was written into (docs/68). A watched one
+    // needs none — the reader read it as it arrived.
+    const reportUnseen = (outcome: TurnOutcome, ts: number) => {
+      if (watching(callRef.current, bookIdRef.current, { threadId, bookId })) return;
+      void boxUnseenTurn({ threadId, ts, bookId, annotationId, page, outcome });
+    };
+
     // A turn that ends without a reply. The row it leaves behind, whether a
     // toast goes up and whether Retry is offered all follow from which kind it
     // was (reading/turn.ts), so the refusal paths cannot pick up the error
@@ -475,10 +497,14 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         const marked = annsRef.current.get(annotationId)?.text;
         pushToast("error", backgroundFailureToast(kind, typeof marked === "string" ? marked : ""));
       }
+      // A turn that failed unseen leaves nothing behind in the thread, so the
+      // card is its only trace — and one the reader has to decide about. A
+      // refusal is the turn declining to be taken, not a delivery gone missing;
+      // it gets no card.
+      if (kind === "error") reportUnseen({ kind: "error", message }, ts);
       live?.onSettled?.();
     };
 
-    const ann = annsRef.current.get(annotationId);
     const ts = Date.now();
     const streamingRow = shapes.current.newRow({ role: "ai", text: "", ts, streaming: true });
     liveTurns.start({ threadId, bookId, home, controller, message: streamingRow });
@@ -562,6 +588,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           // read_chapter may have parked the conversation on a chapter while the
           // turn ran (docs/09); the status row is how the reader finds out.
           syncFocusChapter();
+          // Nobody was looking: the answer is in the thread file and the card in
+          // the corner is how the reader finds out it is there (docs/68).
+          reportUnseen({ kind: "answer", text: full }, ts);
           // A hangup that happened mid-answer waited for this (see captureHangup):
           // distillation reads the thread file, which only now holds the reply.
           live?.onSettled?.();
@@ -887,13 +916,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     );
   }, [keepPartial]);
 
-  const endBookTurns = useCallback(
-    (bookId: string) => {
-      for (const live of liveTurnsRef.current.stopBook(bookId)) keepPartial(live);
-    },
-    [keepPartial],
-  );
-
   // Hangup bookkeeping (docs/02, docs/03): log the end of the conversation and
   // kick the silent observation distillation over its persisted transcript. Reads
   // refs so it is stable; no-ops when nothing is open. Distillation runs in the
@@ -1142,7 +1164,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     captureHangup,
     close,
     discardStagedImages,
-    endBookTurns,
     pendingImages,
     imageHint,
     stageImage,

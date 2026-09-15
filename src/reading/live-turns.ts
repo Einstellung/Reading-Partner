@@ -1,9 +1,14 @@
 // The assistant turns that are still running, keyed by thread (docs/03).
-// Closing a bubble does not stop the reply any more: the turn runs on and lands
-// in its thread file, so it outlives the view that started it and two threads
-// can be in flight at once. This registry owns the half-written row until then —
-// patched as the stream arrives, spliced back in when the thread is reopened,
-// kept for the stop button to persist.
+// Once a turn has been sent nothing but the reader's Stop, and the thread being
+// deleted, cuts it off: leaving the view, the page, the book or the reader all
+// leave it running, and it lands in its thread file whoever is looking at what.
+// This registry owns the half-written row until then — patched as the stream
+// arrives, spliced back in when the thread is reopened, kept for the stop button
+// to persist.
+//
+// It is a module, not a hook's ref, for that reason: the reading session is
+// mounted with the reader, and a turn that outlives the reader has to outlive
+// the React tree that started it (readingTurns below).
 //
 // Pure bookkeeping: it aborts controllers and holds messages, and never touches
 // React state, storage or the network.
@@ -38,7 +43,6 @@ export interface LiveTurns<M extends LiveMessage> {
   patch(threadId: string, ts: number, fn: (message: M) => M): void;
   settle(threadId: string, controller: AbortController): LiveTurn<M> | undefined;
   stop(threadId: string): LiveTurn<M> | undefined;
-  stopBook(bookId: string): LiveTurn<M>[];
   whenSettled(threadId: string, fn: () => void): boolean;
   withLive(threadId: string, messages: M[]): M[];
 }
@@ -88,18 +92,6 @@ export function createLiveTurns<M extends LiveMessage>(): LiveTurns<M> {
       return turn;
     },
 
-    // Every turn belonging to one book, cut short. Turns on other books keep
-    // running — they write to their own thread files and closing this book says
-    // nothing about them.
-    stopBook(bookId) {
-      const stopped = [...turns.values()].filter((t) => t.bookId === bookId);
-      for (const turn of stopped) {
-        turns.delete(turn.threadId);
-        turn.controller.abort();
-      }
-      return stopped;
-    },
-
     // Hand work to the moment the turn lands. False when nothing is running, so
     // the caller can do it right away instead.
     whenSettled(threadId, fn) {
@@ -118,4 +110,25 @@ export function createLiveTurns<M extends LiveMessage>(): LiveTurns<M> {
       return [...messages, turn.message];
     },
   };
+}
+
+// The one registry every reading turn runs on. Module-level so a turn outlives
+// the session hook that started it: the reader closes, its tree goes, and the
+// answer still lands in the thread file (docs/03, docs/68).
+//
+// One registry for every book at once. `bookId` on an entry says which book a
+// turn was asked in, for anything that wants to know; nothing ends a turn for
+// being on a book that is no longer open.
+let shared: LiveTurns<LiveMessage> | null = null;
+
+export function readingTurns<M extends LiveMessage>(): LiveTurns<M> {
+  shared ??= createLiveTurns<LiveMessage>();
+  // The row type is the shell's and this module never inspects it; one process
+  // has one shell, so the cast is the whole of the generic's cost here.
+  return shared as unknown as LiveTurns<M>;
+}
+
+/** Throw the registry away. For tests, which are not one process per case. */
+export function resetReadingTurns(): void {
+  shared = null;
 }

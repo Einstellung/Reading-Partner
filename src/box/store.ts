@@ -19,7 +19,14 @@
 
 import { appData } from "../platform/app/appdata";
 import { asBoxItem } from "./merge";
-import { isExit, isOpen, type BoxItem, type BoxItemState, type BoxOrigin } from "./types";
+import {
+  isExit,
+  isOpen,
+  type BoxItem,
+  type BoxItemSource,
+  type BoxItemState,
+  type BoxOrigin,
+} from "./types";
 
 export const BOX_DIR = "box";
 
@@ -56,7 +63,7 @@ export function randomBoxItemId(): string {
 /** Everything about an item that is settled before it is in the box. */
 export interface PutBoxItemInput {
   boxId: string;
-  source: "run" | "cable";
+  source: BoxItemSource;
   /** One line. Written now and never rewritten. */
   cover: string;
   /** A reference to the full body. Never the text. */
@@ -75,7 +82,7 @@ export interface PutBoxItemInput {
 export interface BoxFilter {
   boxId?: string;
   state?: BoxItemState | readonly BoxItemState[];
-  source?: "run" | "cable";
+  source?: BoxItemSource;
 }
 
 /** A write made in this process, so the screen that made it can redraw. */

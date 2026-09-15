@@ -43,7 +43,6 @@ test("what the book still owes is collected before its refs are let go", () => {
 
   const order = names(log);
   expect(order).toEqual([
-    "endBookTurns",
     "captureHangup",
     "finalPassPrep",
     "closeCall",
@@ -58,12 +57,16 @@ test("what the book still owes is collected before its refs are let go", () => {
   expect(sweeps).toEqual(["book-switch"]);
 });
 
-test("the turns are stopped before the hangup, so the distillation reads what they wrote", () => {
+// A reply the reader asked for outlives the book it was asked in (docs/68):
+// closing the book ends the conversation, never the turn.
+test("no turn is ended on the way out", () => {
   const log: Call[] = [];
   closeBook(fakeShell(log), "book-1", "book-1", () => {});
 
-  expect(log[0]).toEqual({ name: "endBookTurns", args: ["book-1"] });
-  before(log, "endBookTurns", "captureHangup");
+  expect(log[0]).toEqual({ name: "captureHangup", args: [] });
+  for (const ending of ["endBookTurns", "stopTurns", "stopBook"]) {
+    expect(names(log)).not.toContain(ending);
+  }
 });
 
 test("the last chapter's notes pass fires before the book is released", () => {
@@ -73,11 +76,10 @@ test("the last chapter's notes pass fires before the book is released", () => {
   before(log, "finalPassPrep", "releaseBook");
 });
 
-test("closing with no book open stops no turns and still tears the reader down", () => {
+test("closing with no book open still tears the reader down", () => {
   const log: Call[] = [];
   closeBook(fakeShell(log), null, null, () => {});
 
-  expect(names(log)).not.toContain("endBookTurns");
   expect(names(log)).toContain("unmountReader");
   expect(names(log).slice(-1)).toEqual(["releaseBook"]);
 });

@@ -12,12 +12,13 @@ export function closeBook(
   docId: string | null,
   sweep: (trigger: "book-switch") => void = (trigger) => void sweepDistillation(trigger),
 ): void {
-  // Leaving the book ends every turn it has running, each keeping what it wrote.
-  // A background reply is tied to the book being read, not to the app; this is
-  // where it stops. Turns on other books are left alone. Before the hangup, so
-  // the distillation reads the partials too.
-  if (bookId) shell.endBookTurns(bookId);
-  // Closing the book with a call open ends that conversation too.
+  // Nothing here ends a turn. An answer the reader asked for outlives the book
+  // it was asked in: it goes on writing on the held soul harness, lands in its
+  // thread file, and puts a card in the box if nobody was looking (docs/68).
+  // Tools that wanted the open document may fail from here on; the turn settles
+  // either way.
+  //
+  // Closing the book with a call open ends that conversation.
   shell.captureHangup();
   sweep("book-switch");
   // Fire before the refs are torn down below.

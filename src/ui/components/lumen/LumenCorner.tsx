@@ -77,6 +77,7 @@ export interface LumenJumpTargets {
 export function LumenCorner({
 	shell,
 	shown,
+	liftPx = 0,
 	inReader = false,
 	openBookId = null,
 	targets,
@@ -84,6 +85,12 @@ export function LumenCorner({
 	shell: Shell;
 	/** The logo's switch, per device (corner-pref.ts). Hidden draws nothing. */
 	shown: boolean;
+	/**
+	 * How far above the bottom edge to stand, for a screen whose own controls
+	 * are on that edge — the full-window chat's composer (corner-placement.ts).
+	 * The column rises from the corner, so lifting the corner lifts it too.
+	 */
+	liftPx?: number;
 	inReader?: boolean;
 	openBookId?: string | null;
 	targets: LumenJumpTargets;
@@ -207,6 +214,10 @@ export function LumenCorner({
 				"pointer-events-none fixed inset-x-0 bottom-0 flex flex-col items-end pb-safe-6 pr-safe-4",
 				OVERLAY_Z.floating,
 			)}
+			// Margin and not padding: the padding above is the corner's own margin
+			// from the edge, and a screen that wants it higher is saying where the
+			// edge is for it, not how much air the body keeps.
+			style={liftPx ? { marginBottom: `${liftPx}px` } : undefined}
 		>
 			<Popover open={open} onOpenChange={setOpen}>
 				{/* The body's own box, with the case hanging off its left edge.

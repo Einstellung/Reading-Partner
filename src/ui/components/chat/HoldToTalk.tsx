@@ -28,6 +28,7 @@ import {
 	holdReducer,
 	nativeDictation,
 	releaseDictationMicrophone,
+	setHolding,
 	type DictationSource,
 	type HoldEffect,
 	type HoldEvent,
@@ -198,6 +199,14 @@ export function HoldToTalk({
 		}
 		cancelRef.current = cancelEl.current?.getBoundingClientRect() ?? null;
 		editRef.current = editEl.current?.getBoundingClientRect() ?? null;
+	}, [holding]);
+
+	// Said out loud, for the corner that has to stand down while the overlay is
+	// up (ui/components/lumen/corner-placement.ts). The release is in the cleanup
+	// as well, so a composer unmounted mid-press does not leave the flag set.
+	useEffect(() => {
+		setHolding(holding);
+		return () => setHolding(false);
 	}, [holding]);
 
 	function onPointerDown(e: React.PointerEvent) {

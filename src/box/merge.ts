@@ -27,7 +27,7 @@
 // a merge never compares a record neither device ever held.
 
 import { canonical, type Json } from "../platform/sync/merge/text";
-import { isBoxItemState, isExit, type BoxItem } from "./types";
+import { isBoxItemState, isBoxSource, isExit, type BoxItem } from "./types";
 
 const FOLDED = new Set(["createdAt"]);
 
@@ -91,7 +91,7 @@ export function asBoxItem(value: unknown): BoxItem | null {
     typeof item.revision === "number" &&
     typeof item.origin === "object" &&
     item.origin !== null &&
-    (item.source === "run" || item.source === "cable") &&
+    isBoxSource(item.source) &&
     isBoxItemState(item.state);
   return shaped ? (value as unknown as BoxItem) : null;
 }

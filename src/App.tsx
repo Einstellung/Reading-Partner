@@ -99,6 +99,7 @@ import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
+import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
 import {
   readLumenCornerShown,
   writeLumenCornerShown,
@@ -533,7 +534,6 @@ export default function App() {
     discardStagedImages,
     dismissOnPaneTouch,
     dropThread,
-    endBookTurns,
     hangUp: endCall,
     imageHint,
     isAnswering,
@@ -829,7 +829,6 @@ export default function App() {
       captureHangup,
       closeCall,
       discardStagedImages,
-      endBookTurns,
       clearSelectedMark: () => setSelectedAnnId(null),
       resetTool: () => setPickedTool("none"),
       showMarks,
@@ -887,7 +886,6 @@ export default function App() {
       captureHangup,
       closeCall,
       discardStagedImages,
-      endBookTurns,
       finalPassPrep,
       pushToast,
       resetChapterSpine,
@@ -1106,6 +1104,14 @@ export default function App() {
   const closeReader = useCallback(() => {
     closeBook(readerShell, bookIdRef.current, docIdRef.current);
   }, [readerShell]);
+
+  // Where Lumen stands, and whether at all. Everywhere but the full-window chat
+  // the bottom-right corner is hers; there the composer is on that edge and she
+  // stands above it, off the composer's measured box (lumen/corner-placement.ts).
+  const { composerRef: lumenComposerRef, placement: lumenPlacement } = useCornerLift(
+    lumenShown,
+    call?.view === "chat-main",
+  );
 
   // Stable handlers for the EmbedPDF pane so its React.memo actually holds: any
   // new prop identity here would re-render the whole engine subtree on every
@@ -1660,6 +1666,7 @@ export default function App() {
                 onDelete={deleteOpenThread}
                 pendingImages={pendingImages}
                 onRemoveImage={removePendingImage}
+                composerRef={lumenComposerRef}
                 hint={imageHint}
                 streaming={streaming}
                 onStop={stopTurn}
@@ -1775,14 +1782,16 @@ export default function App() {
       />
 
       {/* Lumen, bottom right, on every screen this shell draws — the shelf, the
-          briefing and the open book alike (docs/68). Nothing else lives in that
-          corner here: the reader's controls are all in the top bar, the
-          translation's count is centred, and the call's corner card is top
-          right. The one surface it stands down for is the full-window chat,
-          whose composer runs the whole width of the bottom edge. */}
+          briefing, the open book and the full-window chat alike (docs/68).
+          Nothing else lives in that corner here: the reader's controls are all
+          in the top bar, the translation's count is centred, and the call's
+          corner card is top right. The chat's composer does own the bottom
+          edge, so there the corner stands above it, measured
+          (lumen/corner-placement.ts). */}
       <LumenCorner
         shell="desktop"
-        shown={lumenShown && call?.view !== "chat-main"}
+        shown={lumenPlacement.shown}
+        liftPx={lumenPlacement.liftPx}
         inReader={inReader}
         openBookId={bookIdRef.current}
         targets={lumenTargets}
