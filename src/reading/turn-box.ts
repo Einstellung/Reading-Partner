@@ -45,6 +45,32 @@ export function watching(
   return open?.threadId === turn.threadId && openBookId === turn.bookId;
 }
 
+/** How the rule reads what is on screen: the open call and the open book. */
+export type OpenCallPeek = () => {
+  open: { threadId: string } | null;
+  bookId: string | null;
+};
+
+// What the reader has on screen lives in the session hook's refs, and a delivery
+// that settles outside React has no way to reach them. The hook leaves this
+// behind instead — one function, registered on mount, read whenever an answer
+// lands. Null with no reader mounted, which is itself an answer: nobody saw it.
+let peek: OpenCallPeek | null = null;
+
+/** The session says how to read what is on screen. Returns the undo. */
+export function setOpenCallPeek(read: OpenCallPeek): () => void {
+  peek = read;
+  return () => {
+    if (peek === read) peek = null;
+  };
+}
+
+/** The rule above, against what is on screen now. False when no reader is up. */
+export function watchingNow(turn: { threadId: string; bookId: string }): boolean {
+  const open = peek?.();
+  return open ? watching(open.open, open.bookId, turn) : false;
+}
+
 /**
  * What names this delivery. A reading turn has no run behind it, so the box id
  * is the thread and the moment: asking twice on one thread is two deliveries,

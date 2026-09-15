@@ -53,7 +53,7 @@ import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { readingTurns, type LiveTurn } from "../live-turns";
-import { boxUnseenTurn, watching, type TurnOutcome } from "../turn-box";
+import { boxUnseenTurn, setOpenCallPeek, watching, type TurnOutcome } from "../turn-box";
 import { deferHangup } from "./hangup";
 import { threadHome, type ThreadOwner } from "./documents";
 import { createPendingImages, type StagedImage } from "../pending-images";
@@ -294,6 +294,15 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     setPendingImages(call ? pendingRef.current.images(call.threadId) : NO_IMAGES);
     setImageHint(call ? pendingRef.current.hint(call.threadId) : "");
   }, [call]);
+
+  // What is on screen, for the answers that land outside React: a delegated run
+  // delivered back into a thread asks the same question this hook asks itself
+  // (reading/deliver.ts). The refs are read when it is asked, so this registers
+  // once and never goes stale.
+  useEffect(
+    () => setOpenCallPeek(() => ({ open: callRef.current, bookId: bookIdRef.current })),
+    [bookIdRef],
+  );
 
   // Push a thread's staging into what the composer renders. Every write goes
   // through here, and a write to a thread that is not the one on screen (a

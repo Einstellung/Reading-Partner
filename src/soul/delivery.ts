@@ -36,6 +36,14 @@ export interface Delivery {
   key: string;
   threadId: string;
   turn: DeliveredTurn;
+  /**
+   * Whether the reader is looking at this conversation as the reply lands. The
+   * same question a plain reading turn asks itself (reading/turn-box.ts), asked
+   * here so a delegated answer follows the same rule: seen means no card. Absent
+   * where the place has no notion of being watched — the door, a briefing — and
+   * then the card is always put.
+   */
+  watching?: () => boolean;
 }
 
 /**

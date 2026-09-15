@@ -15,6 +15,7 @@ import { listTopics } from "../platform/app/topics";
 import { getFulltext } from "../fulltext/store";
 import { registerDelivery, type Delivery, type DeliveryInput } from "../soul";
 import { buildReadingTurn } from "./turn";
+import { watchingNow } from "./turn-box";
 
 /**
  * Assemble the turn that answers a bell inside a book. Null when there is no
@@ -73,6 +74,10 @@ export async function openBookDelivery(input: DeliveryInput): Promise<Delivery |
       messages: turn.messages,
       refusal: turn.refusal,
     },
+    // Asked when the reply lands, not now: the reader may open this very thread
+    // while the turn is running, and then they read the answer as it arrives and
+    // there is nothing to put in the box.
+    watching: () => watchingNow({ threadId, bookId }),
   };
 }
 

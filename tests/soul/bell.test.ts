@@ -264,7 +264,9 @@ function boxStore(): { box: BoxStore; files: Map<string, string> } {
 
 // A domain's delivery opener, as reading registers one: it says where the reply
 // goes and hands back a turn. The bell knows nothing else about a book.
-function bookDelivery(): () => void {
+// `seen` is what reading answers off what is on screen (reading/turn-box.ts);
+// left out, the place has no notion of it, the way the door has none.
+function bookDelivery(seen?: boolean): () => void {
   return registerDelivery("book", async (input) => {
     if (input.origin.place !== "book") return null;
     return {
@@ -276,6 +278,7 @@ function bookDelivery(): () => void {
         messages: [{ role: "user", text: input.bell }],
         refusal: "",
       },
+      ...(seen === undefined ? {} : { watching: () => seen }),
     } satisfies Delivery;
   });
 }
@@ -422,6 +425,81 @@ test("a run that named no place is answered at the door, and the card says so", 
     expect(bookThreadFile()).toBeNull();
     const item = JSON.parse([...files.values()][0]!) as { origin: { place: string } };
     expect(item.origin.place).toBe("door");
+  } finally {
+    off();
+  }
+});
+
+// The rule a plain reading turn follows, followed by a delivered run too
+// (docs/68): the card is for an answer nobody saw land.
+test("a reply the reader is watching land leaves no card, and is acked all the same", async () => {
+  const off = bookDelivery(true);
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box, files } = boxStore();
+    await bells.ring(
+      "run-done",
+      {
+        runId: "r-1",
+        kind: "research-literature",
+        brief: "the literature is in",
+        output: "legion/outputs/r-1.md",
+        deliverTo: bookOrigin,
+      },
+      { at: NOW - 1000 },
+    );
+    const { send } = sender([{ text: "Four papers came back." }]);
+
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+
+    // The answer is in the thread the reader has open; the box stays empty.
+    expect(bookThreadFile()!.messages.length).toBe(1);
+    expect([...files.keys()]).toEqual([]);
+    expect(await bells.read()).toEqual([]);
+  } finally {
+    off();
+  }
+});
+
+test("a failure the reader is watching land leaves no card either", async () => {
+  const off = bookDelivery(true);
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box, files } = boxStore();
+    await bells.ring(
+      "run-failed",
+      { runId: "r-2", kind: "collect", reason: "every attempt failed", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    const { send } = sender([{ text: "The search could not finish." }]);
+    await answerBell({ settings, bells, box, send, now: () => NOW });
+
+    expect(bookThreadFile()!.messages.length).toBe(1);
+    expect([...files.keys()]).toEqual([]);
+  } finally {
+    off();
+  }
+});
+
+test("a reply that landed with the thread off screen is a card", async () => {
+  const off = bookDelivery(false);
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box, files } = boxStore();
+    await bells.ring(
+      "run-done",
+      { runId: "r-3", kind: "research-literature", brief: "in", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    const { send } = sender([{ text: "Four papers came back." }]);
+    await answerBell({ settings, bells, box, send, now: () => NOW });
+
+    const item = JSON.parse([...files.values()][0]!) as Record<string, unknown>;
+    expect(item.boxId).toBe("r-3");
+    expect(item.origin).toEqual(JSON.parse(bookOrigin));
   } finally {
     off();
   }
