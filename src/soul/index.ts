@@ -13,7 +13,25 @@ export {
   type BellWatchDeps,
   type SendBellTurn,
 } from "./bell";
-export { soulMemorySection, openSoul, type LoadedRole, type Soul } from "./self";
+export { BOX_COVER_CAP, soulMemorySection, openSoul, type LoadedRole, type Soul, type SoulExtras } from "./self";
+export {
+  BRIEFS_DIR,
+  DELEGATE_DESCRIPTION,
+  DELEGATE_TOOL,
+  buildDelegateTools,
+  writeBriefFile,
+  type DelegateDeps,
+} from "./delegate";
+export {
+  deliveryOpener,
+  originLabel,
+  parseOrigin,
+  registerDelivery,
+  type Delivery,
+  type DeliveredTurn,
+  type DeliveryInput,
+  type DeliveryOpener,
+} from "./delivery";
 export {
   listRoles,
   registerRole,

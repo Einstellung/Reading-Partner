@@ -25,7 +25,9 @@ import type { DeskMessage } from "../desk";
 import type { ProviderId } from "../ai";
 import { appendMessage, createBookThread, flushThreads, getBookThread, loadThreads } from "../platform/app/threads";
 import { toReasoning, type Settings } from "../platform/app/settings";
+import { appBox, type BoxOrigin, type BoxStore } from "../box";
 import { doorDate, doorKey, openDoorTurn } from "./door";
+import { deliveryOpener, parseOrigin, type DeliveredTurn } from "./delivery";
 import { soulHarness } from "./harness";
 
 /** What one bell turn is sent. The default sender is the app's; tests pass one. */
@@ -48,6 +50,8 @@ export interface AnswerBellDeps {
   bells?: BellStore;
   /** The hot layer, where an ack is stamped on the run the bell was about. */
   runs?: RunStore;
+  /** The Red Box a delivered run leaves an item in. The device's own unless injected. */
+  box?: BoxStore;
   /** The lane every soul turn runs on. */
   harness?: HeldHarness;
   send?: SendBellTurn;
@@ -116,6 +120,22 @@ const appSend: SendBellTurn = (turn) =>
     });
   });
 
+/** How long a cover may be. One line on a card, and it is never rewritten (docs/60). */
+export const COVER_MAX = 120;
+
+/**
+ * The first sentence of what the soul said, for the card in the box. Program
+ * work, no model call: a second call to summarise one paragraph would cost a
+ * turn to say what its first sentence already says.
+ */
+export function coverOf(reply: string): string {
+  const text = reply.trim().replace(/\s+/g, " ");
+  if (text === "") return "";
+  const end = text.search(/[.!?。！？](\s|$)/u);
+  const first = end === -1 ? text : text.slice(0, end + 1);
+  return first.length > COVER_MAX ? `${first.slice(0, COVER_MAX - 1).trimEnd()}…` : first;
+}
+
 // Only one pass at a time in this process, whatever calls it — the tick, the
 // way up, and a developer ringing a bell by hand all land here.
 let pass: Promise<number> | null = null;
@@ -142,28 +162,53 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
   const now = deps.now ?? Date.now;
   const newThreadId = deps.newThreadId ?? (() => crypto.randomUUID());
 
+  const box = deps.box ?? appBox();
+
   let answered = 0;
   for (const bell of queued) {
     if (deps.signal?.aborted) break;
     const at = now();
     const date = doorDate(new Date(at));
-    const key = doorKey(date);
-    // The day's file, and the one conversation held at the door that day. A bell
-    // that arrives before the reader has said anything opens it.
-    await loadThreads(key).catch(() => ({}));
-    const thread = getBookThread(key) ?? createBookThread(key, newThreadId());
+    const rendered = renderBell(bell);
+    // Where the question was asked (docs/68). A `local` run never reaches a file,
+    // so the runner copies its deliverTo onto the bell; a synced run is read off
+    // its own record, which is where another device's copy would be.
+    let origin: BoxOrigin | null = null;
+    if (bell.type !== "wake") {
+      origin =
+        parseOrigin(bell.payload.deliverTo) ??
+        parseOrigin((await runs.get(bell.payload.runId).catch(() => null))?.deliverTo);
+    }
+    const placed = origin ? await openDelivery(origin, rendered, deps) : null;
 
-    const history: DeskMessage[] = thread.messages.map((m) => ({ role: m.role, text: m.text }));
-    const turn = await openDoorTurn({
-      settings: deps.settings,
-      threadId: thread.id,
-      date,
-      messages: [...history, { role: "user", text: renderBell(bell) }],
-      ...(deps.signal ? { signal: deps.signal } : {}),
-    });
-    // Aborted while the soul was being read: nothing was sent, so nothing is
-    // owed, and the bell is where it was.
-    if (!turn) break;
+    let key: string;
+    let threadId: string;
+    let turn: DeliveredTurn;
+    if (placed) {
+      ({ key, threadId } = placed);
+      turn = placed.turn;
+    } else {
+      // The door: a bell about a run that named no place, or one whose place
+      // could not be laid any more. It is also where a wake bell always lands.
+      key = doorKey(date);
+      // The day's file, and the one conversation held at the door that day. A bell
+      // that arrives before the reader has said anything opens it.
+      await loadThreads(key).catch(() => ({}));
+      const thread = getBookThread(key) ?? createBookThread(key, newThreadId());
+      threadId = thread.id;
+      const history: DeskMessage[] = thread.messages.map((m) => ({ role: m.role, text: m.text }));
+      const opened = await openDoorTurn({
+        settings: deps.settings,
+        threadId: thread.id,
+        date,
+        messages: [...history, { role: "user", text: rendered }],
+        ...(deps.signal ? { signal: deps.signal } : {}),
+      });
+      // Aborted while the soul was being read: nothing was sent, so nothing is
+      // owed, and the bell is where it was.
+      if (!opened) break;
+      turn = opened;
+    }
     if (turn.refusal) {
       deps.onTrouble?.(bell, turn.refusal);
       break;
@@ -177,7 +222,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
         messages: turn.messages,
         tools: turn.tools,
         harness,
-        threadId: thread.id,
+        threadId,
         ...(deps.signal ? { signal: deps.signal } : {}),
       });
     } catch (e) {
@@ -191,10 +236,33 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     // A bell the soul decided to say nothing about is answered all the same: the
     // decision was the turn, and the ledger is waiting on the ack.
     if (reply.trim() !== "") {
-      appendMessage(key, thread.id, { role: "ai", text: reply, ts: now() });
+      appendMessage(key, threadId, { role: "ai", text: reply, ts: now() });
       // On disk before the bell is confirmed. The store coalesces its writes,
       // so without this the ack could outlive the reply it is confirming.
       await flushThreads();
+    }
+    // The card that points back at the reply just written (docs/68). Program
+    // work: the cover is the reply's first sentence, and the body is a reference
+    // to what the run produced rather than the text of it. After the reply is on
+    // disk and before the ack, so an item can never point at a conversation that
+    // is not there.
+    if (bell.type !== "wake") {
+      const { runId, kind } = bell.payload;
+      await box
+        .put({
+          boxId: runId,
+          source: "run",
+          cover: coverOf(reply),
+          ...(bell.type === "run-done" && bell.payload.output
+            ? { body: bell.payload.output }
+            : {}),
+          origin: origin ?? { place: "door", date },
+          kind,
+          runId,
+          needsDecision: bell.type === "run-failed",
+          at,
+        })
+        .catch((e) => console.warn(`run ${runId} was answered but its box item would not write`, e));
     }
     await bells.delivered(bell.id);
     await bells.ack(bell.id);
@@ -202,8 +270,11 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     // the other device reads it: the bell itself is machine-local. Stamped
     // after the ack, so a stamp can never be ahead of the acknowledgement it
     // stands for. A wake bell is about a schedule and there is no run to stamp.
+    // A `local` run is in the runner's own store and not on disk, so there is
+    // nothing here to stamp; the stamp is what a second device reads, and a
+    // local run has no second device.
     if (bell.type !== "wake") {
-      await runs.markDelivered(bell.payload.runId, now());
+      await runs.markDelivered(bell.payload.runId, now()).catch(() => null);
     }
     answered += 1;
   }
@@ -264,4 +335,26 @@ function installBellBridge(look: () => void): () => void {
   return () => {
     delete (window as unknown as Record<string, unknown>).__bell;
   };
+}
+
+// The turn for the place a run was delegated from, where a domain has said how
+// that place is laid (delivery.ts). Null when nothing registered the place, or
+// when the material is gone — and then the bell is answered at the door, which
+// is where a conversation with nowhere else to go goes.
+async function openDelivery(
+  origin: BoxOrigin,
+  bell: string,
+  deps: AnswerBellDeps,
+): Promise<{ key: string; threadId: string; turn: DeliveredTurn } | null> {
+  const open = deliveryOpener(origin.place);
+  if (!open) return null;
+  return await open({
+    origin,
+    settings: deps.settings,
+    bell,
+    ...(deps.signal ? { signal: deps.signal } : {}),
+  }).catch((e) => {
+    console.warn(`a bell could not be answered where it was asked (${origin.place})`, e);
+    return null;
+  });
 }

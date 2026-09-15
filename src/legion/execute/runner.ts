@@ -250,6 +250,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
             kind: final.kind,
             brief: final.brief,
             ...(final.output === undefined ? {} : { output: final.output }),
+            ...(final.deliverTo === undefined ? {} : { deliverTo: final.deliverTo }),
           })
           .catch((e) => console.warn(`run ${id} finished but its bell would not ring`, e));
         return;
@@ -261,7 +262,12 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
       if (current.attempts >= MAX_ATTEMPTS) {
         await store.transition(id, "failed", { at, ...carry });
         await bells
-          .ring("run-failed", { runId: id, kind: current.kind, reason: why(failure) })
+          .ring("run-failed", {
+            runId: id,
+            kind: current.kind,
+            reason: why(failure),
+            ...(current.deliverTo === undefined ? {} : { deliverTo: current.deliverTo }),
+          })
           .catch((e) => console.warn(`run ${id} failed and its bell would not ring`, e));
         return;
       }

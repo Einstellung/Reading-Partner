@@ -102,6 +102,7 @@ test("the turn mounts the five tools that write a talk, over the live outline", 
     now: () => 42,
   });
   expect(turn.tools.map((t) => t.name).sort()).toEqual([
+    "delegate",
     "list_kind",
     "list_palace",
     "move_talk_segment",

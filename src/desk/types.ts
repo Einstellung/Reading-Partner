@@ -11,6 +11,7 @@
 // something to put on the desk registers an opener for it at startup.
 
 import type { AgentTool } from "../legion/execute/turn";
+import type { BoxOrigin } from "../box";
 import type { Rung } from "../budget";
 import type { Observation } from "../memory";
 import type { Settings } from "../platform/app/settings";
@@ -108,6 +109,12 @@ export interface DeskItem {
   prompt(view: DeskPromptView): string;
   memory?: DeskMemory;
   history?: DeskHistory;
+  // Where the reader is while this item is on the desk (docs/68): what a run
+  // delegated from this turn is delivered back to, and what a box item made of
+  // it points at. At most one item on a desk carries it; the assembly takes the
+  // first (soul/turn.ts). An item that is not a place — the kept articles beside
+  // a book — carries none.
+  origin?: BoxOrigin;
   // Handed back to the caller untouched: what the domain wants to know about
   // its own item after the turn was assembled.
   report?: Record<string, unknown>;

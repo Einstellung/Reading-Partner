@@ -38,6 +38,12 @@ export interface RunDonePayload {
   truncated?: boolean;
   /** Where the whole of what the run produced was put, if it put it anywhere. */
   output?: string;
+  /**
+   * The run's own `deliverTo`, copied onto the bell. Carried rather than looked
+   * up because a `local` run never reaches a file: it lives in the runner's own
+   * store and there is nothing on disk for the soul to read it back off.
+   */
+  deliverTo?: string;
 }
 
 /** A run gave up: a premise did not hold, or its attempts ran out. */
@@ -45,6 +51,8 @@ export interface RunFailedPayload {
   runId: string;
   kind: string;
   reason: string;
+  /** The run's own `deliverTo`, for the same reason RunDonePayload carries it. */
+  deliverTo?: string;
 }
 
 /** A schedule came due. What to do about it is the soul's to decide. */

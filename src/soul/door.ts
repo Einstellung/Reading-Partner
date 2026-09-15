@@ -79,6 +79,9 @@ export async function openDoorTurn(input: DoorTurnInput): Promise<AssembledTurn 
   return assembleTurn({
     desk,
     messages: input.messages ?? [],
+    // Nothing is on the desk, so the place is the day itself: a run delegated
+    // standing at the door is answered at the door (docs/68).
+    origin: { place: "door", date },
     ...(input.purpose ? { purpose: input.purpose } : {}),
   });
 }

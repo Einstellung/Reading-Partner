@@ -25,6 +25,9 @@ import {
   type ThreadMessage,
 } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
+import { BOX_COVER_CAP } from "../../src/soul";
+import { createBoxStore, type BoxIo, type BoxStore } from "../../src/box";
+import type { BoxOrigin } from "../../src/box";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
@@ -194,6 +197,7 @@ test("the tools are the soul's and then each item's", async () => {
     "read_conversation",
     "list_palace",
     "list_kind",
+    "delegate",
     "propose_topic",
     "observation_search",
     "observation_read",
@@ -237,6 +241,7 @@ test("an item is told every tool name on the desk, the soul's included", async (
     "read_conversation",
     "list_palace",
     "list_kind",
+    "delegate",
     "propose_topic",
     "observation_search",
     "observation_read",
@@ -538,4 +543,68 @@ test("the tail is what a call over its window gives up first", async () => {
   expect(turn!.messages).toEqual([{ role: "user", text: "here, now" }]);
   // And it goes silently: the reader has no stake in it.
   expect(turn!.notice).toBe("Note: the big block was left out.");
+});
+
+// --- what is waiting in the box (docs/68) ----------------------------------
+
+function boxWith(covers: readonly string[], origin?: BoxOrigin): BoxStore {
+  const files = new Map<string, string>();
+  const io: BoxIo = {
+    list: async () => [...files.keys()],
+    read: async (name) => files.get(name) ?? null,
+    write: async (name, contents) => {
+      files.set(name, contents);
+    },
+  };
+  const box = createBoxStore(io);
+  return {
+    ...box,
+    async open() {
+      const items = [];
+      for (const [i, cover] of covers.entries()) {
+        items.push(
+          await box.put({
+            boxId: `r-${i}`,
+            source: "run",
+            cover,
+            origin: origin ?? { place: "book", bookId: "book-1", threadId: "thread-1", page: 37 },
+          }),
+        );
+      }
+      return items;
+    },
+  };
+}
+
+test("the soul is told what came back and where from, one line each", async () => {
+  const laid = await desk([item("a", {})]);
+  const turn = await assembleTurn({
+    desk: laid,
+    box: boxWith(["The literature on inline caches is in."]),
+  });
+  expect(turn!.systemPrompt).toContain("[box] The literature on inline caches is in. — a book you were reading, p. 37");
+});
+
+test("a box nobody has put anything in says nothing at all", async () => {
+  const laid = await desk([item("a", {})]);
+  const withBox = await assembleTurn({ desk: laid, box: boxWith([]) });
+  const withNone = await assembleTurn({ desk: laid, box: boxWith([]) });
+  expect(withBox!.systemPrompt).not.toContain("[box]");
+  expect(withBox!.systemPrompt).toBe(withNone!.systemPrompt);
+});
+
+test("more than ten unopened items is a list, so only ten ride", async () => {
+  const covers = Array.from({ length: BOX_COVER_CAP + 5 }, (_, i) => `Item ${i}.`);
+  const laid = await desk([item("a", {})]);
+  const turn = await assembleTurn({ desk: laid, box: boxWith(covers) });
+  expect(turn!.systemPrompt.split("[box]").length - 1).toBe(BOX_COVER_CAP);
+});
+
+test("a run answered at the door is labelled by the day it came back on", async () => {
+  const laid = await desk([item("a", {})]);
+  const turn = await assembleTurn({
+    desk: laid,
+    box: boxWith(["The translation is done."], { place: "door", date: "2026-09-15" }),
+  });
+  expect(turn!.systemPrompt).toContain("[box] The translation is done. — at the door, 2026-09-15");
 });

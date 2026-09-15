@@ -17,6 +17,7 @@ import type { ProviderId } from "../ai/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
 import type { AgentTool } from "../legion/execute/turn";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
+import type { BoxOrigin, BoxStore } from "../box";
 import type { CatalogueIo } from "./catalogue";
 import { appSequenceIo, readSequence, type SequenceIo } from "./sequence";
 import { soulTail, TAIL_RUNG, TAIL_RUNG_ID, TURN_KEEP } from "./tail";
@@ -46,6 +47,14 @@ export interface AssembleInput {
   // the info path, nothing at the door or on a legion errand. A name nothing
   // registered throws, the way an unregistered desk kind does.
   role?: string;
+  // Where this turn is being held (docs/68). A desk whose material is a place
+  // carries its own (DeskItem.origin) and the first such item wins; the door and
+  // the briefing have no material and say so here. It fills the deliverTo of a
+  // run delegated this turn, and nothing else reads it.
+  origin?: BoxOrigin;
+  // The Red Box the soul's covers are read from. The device's own unless a test
+  // hands one in.
+  box?: BoxStore;
 }
 
 export interface AssembledTurn {
@@ -89,7 +98,13 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   const { items, env } = desk;
   const anchor = items.find((i) => i.memory !== undefined);
   const teller = items.find((i) => i.history !== undefined);
-  const soul = await openSoul(env, anchor?.memory, input.topic, input.catalogueIo, input.role);
+  // Where the reader is: what the caller said, or failing that the first item
+  // on the desk that is a place at all.
+  const origin = input.origin ?? items.find((i) => i.origin !== undefined)?.origin;
+  const soul = await openSoul(env, anchor?.memory, input.topic, input.catalogueIo, input.role, {
+    ...(origin === undefined ? {} : { origin }),
+    ...(input.box === undefined ? {} : { box: input.box }),
+  });
   if (env.signal?.aborted) return null;
 
   // The soul's tools first, then each item's in the order it lies on the desk.
