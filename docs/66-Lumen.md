@@ -2,7 +2,7 @@
 
 > 2026-09-10 定案。上游：[45](./45-陪伴的形态.md) 是形态的证据与法律边界，[61](./61-palace与desk.md) 是 palace 与 desk，[48](./48-记忆：观察与statement.md) 是观察与 statement，[55](./55-legion.md) 是 run 与调度，[north-star/companion.md](./north-star/companion.md) 是形象那一层的愿景。
 >
-> 取代关系：[45](./45-陪伴的形态.md) 的「第一版做什么」（一个球就是全部陪伴）作废，45 的各节证据、「法律边界」和「将来升到形象时已知的」不动；2026-08-26 那张「电电」概念图定的八种情绪、五套日常动作、token 喂养的能量条全部作废。第三轮调研的结论吸收进本文（[round3-01](./assets/companion-research/round3-01-motion-controllers.md)、[round3-02](./assets/companion-research/round3-02-rig-and-motion-data.md)、[round3-03](./assets/companion-research/round3-03-ipad-runtime.md)、[round3-04](./assets/companion-research/round3-04-behavior-layer.md)）。
+> 取代关系：[45](./45-陪伴的形态.md) 的「第一版做什么」（一个球就是全部陪伴）作废，45 的各节证据、「法律边界」和「将来升到形象时已知的」不动；2026-08-26 那张「电电」概念图定的八种情绪、五套日常动作、token 喂养的能量条全部作废。2026-09-15 由 [68](./68-Lumen与盒子的交互.md) 修订「位置与尺寸」：全局常驻、logo 开关、看书时静止、抱着盒子的姿势；「reading 侧的聊天入口要不要也露 Lumen 的脸」由 68 定掉，露。第三轮调研的结论吸收进本文（[round3-01](./assets/companion-research/round3-01-motion-controllers.md)、[round3-02](./assets/companion-research/round3-02-rig-and-motion-data.md)、[round3-03](./assets/companion-research/round3-03-ipad-runtime.md)、[round3-04](./assets/companion-research/round3-04-behavior-layer.md)）。
 
 ---
 
@@ -56,6 +56,7 @@ Lumen 是 soul（[61](./61-palace与desk.md)）在空桌前的样子，不是另
 | 睡 | 夜里的 dream 与蒸馏在跑（[48](./48-记忆：观察与statement.md)、[58](./58-蒸馏器与dream.md)） |
 | 找到了 | 刚蒸出一条观察 |
 | 卡住了 | 模型在意图里自己说的 |
+| 抱着盒子 | 盒里有没开的项（[68](./68-Lumen与盒子的交互.md)）。一个静止姿势，不是一段动画 |
 
 ## 四段
 
@@ -101,11 +102,15 @@ export interface SoulIntent {
 
 ## 位置与尺寸
 
-两处。门那一层放大的，桌上什么都没有。info 简报里现在球占的那个角上放小的，72 px。
+全局常驻：每个外壳每个地方的右下角都有，72 px，就是今天 info 简报里球占的那个角。门那一层放大的不变，桌上什么都没有。
 
 角上那个盒子通话期间不再变大也不再居中。原来它会长到 160 px 挪到屏幕中间，等于每次通话开场都把一个身体甩到正在讲的东西上面。四段在 72 px 上都读得出来（56 px 上眉毛糊成一团、平嘴和笑嘴分不开），所以就待在角上。
 
-它永远不出现在打开的书的正文旁边。45 里「动画放在叙事文字旁边把注意力拉走」的证据仍然有效，空桌这个形态绕开它，不推翻它。
+点左上角的 Reading Partner logo 切换它出现或消失，按设备记住。消失时盒子照样攒，只是不显示（[68](./68-Lumen与盒子的交互.md)）。
+
+看书时它静止：不呼吸不摇。唯一会变的是盒子到了那一下换成「抱着盒子」的姿势，换完继续静止。
+
+2026-09-15 修订：原来那句「它永远不出现在打开的书的正文旁边」作废。45 里「动画放在叙事文字旁边把注意力拉走」的证据（45 的「为什么不是角色」一节，Wang et al. 2024-12-06）针对的是持续动画，一次性的状态变化不在其内；而且读者可以用 logo 把它整个关掉。
 
 ## 声音
 
@@ -114,7 +119,6 @@ TTS 的音色挑轻一点、更合成一点的。一个可爱的非人身体配�
 ## 待定
 
 - 轨道环的含义。想清楚了才画回去。
-- reading 侧的聊天入口要不要也露 Lumen 的脸。
 - 声音的音色。
 - iPad 上的帧时间和功耗，第三轮标为未实测的那两项。
 - Rive 什么时候接替切层的位图。

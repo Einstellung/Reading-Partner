@@ -66,7 +66,7 @@ session 不同步。它是本机的运行时——soul 和它派出的 worker �
 
 1. 第一屏的交互，待议。
 2. 存储标识符从 thread 改名 conversation。
-3. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储（61 第 6 步）。
+3. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储（61 第 6 步）。盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方，见 [68](./68-Lumen与盒子的交互.md)。
 4. 记忆与检索重做。
 
 这四条之外，下一步是 soul 搬上 pi harness：soul 一条 lane，本地 worker 各一条，见 [55](./55-legion.md)。

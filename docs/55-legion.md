@@ -1,6 +1,6 @@
 # legion
 
-> 2026-09-07 定案。同步引擎与删除模型在 [13](./13-账户同步.md) 和 [50](./50-删除.md)，记忆的两个仓在 [48](./48-记忆：观察与statement.md)。回收（gc）归 memory，不在本文。info 管线重做在 [60](./60-info：白宫与Red Boxes.md)；[17](./17-信息源系统.md) 的源配置、站点登录、正文抽取仍有效，只废「提名→主题」层。2026-09-14 改：架构定为 orchestrator-worker，soul 是唯一的 orchestrator，legion 是 worker 底座；认领由租约改为按能力指派；session 不同步；第一个调用方改为 translate。2026-09-14 再改：presence 改名 claim、mailbox 改名 bell（三种铃）、run 加 progress、batch 续跑、子 run 深度限两层。
+> 2026-09-07 定案。同步引擎与删除模型在 [13](./13-账户同步.md) 和 [50](./50-删除.md)，记忆的两个仓在 [48](./48-记忆：观察与statement.md)。回收（gc）归 memory，不在本文。info 管线重做在 [60](./60-info：白宫与Red Boxes.md)；[17](./17-信息源系统.md) 的源配置、站点登录、正文抽取仍有效，只废「提名→主题」层。2026-09-14 改：架构定为 orchestrator-worker，soul 是唯一的 orchestrator，legion 是 worker 底座；认领由租约改为按能力指派；session 不同步；第一个调用方改为 translate。2026-09-14 再改：presence 改名 claim、mailbox 改名 bell（三种铃）、run 加 progress、batch 续跑、子 run 深度限两层。2026-09-15 改：答铃回合按 run 的 `deliverTo` 装配、回复写回提问的地方，铃之后由程序层装盒，第一个调用方改为 reading 的文献研究，交互层在 [68](./68-Lumen与盒子的交互.md)。
 
 ---
 
@@ -162,13 +162,15 @@ ledger 目录自己也进 `NEVER_INFER_DELETE`：丢一行就等于把它删掉�
 
 凡是不由用户开口而起的 soul 回合都从 bell 进来，soul 只有这一个收件口。取消和进度不起回合，都在 run 文件里，不是铃。
 
+答铃回合的落点由 run 的 `deliverTo` 决定，不再一律开在门口。`deliverTo` 记的是这个 run 从哪儿派出来的：某本书的某条线程（划线线程带 annotationId，也可能是书的总线程），或门口。soul 按那个地方装配——是书就按阅读桌装配，桌上有那本书；是门口就按门口——然后把回复追加进那条对话（[68](./68-Lumen与盒子的交互.md)）。
+
 跨设备的 run 完成时，铃投给执行设备上的 soul，它说出来的话经对话文件同步到另一台。iPad 想知道 PC 跑到哪，读 run 文件的 `progress`——随同步到达，最多晚一个 pull 间隔——不等 bell。
 
 先把完整消息存下来，目标端持久记下之后才确认投递；queued 减 delivered 就是待恢复集合。run 的折叠判据依赖 ack，所以这条顺序不能倒。
 
 词表只有 queued / delivered / acked。cable 的处置状态归 info（[63](./63-情报局：研究室、专项组与态势.md)），和投递语义不是一回事。
 
-bell 不是 Red Box。Red Box（[60](./60-info：白宫与Red Boxes.md)）是给用户的交付物，bell 是「活干完了」的通知。采集经理跑完，程序层把 cable 装进 Red Box，同时一条 `run-done` 进 bell。
+bell 不是 Red Box。Red Box（[60](./60-info：白宫与Red Boxes.md)、[68](./68-Lumen与盒子的交互.md)）是给用户的交付物，bell 是「活干完了」的通知。采集经理跑完，程序层把 cable 装进 Red Box，同时一条 `run-done` 进 bell。答铃之后也是程序层往盒里放一项，指回 soul 刚写进去的那条回复；失败或拿不准的标「要你定」。
 
 ## claim
 
@@ -242,7 +244,7 @@ legion → ai、budget、platform；ai 不 import legion。info、reading、memo
 
 legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上面每个新子目录都要各自登记一行。
 
-第一个跨设备调用方是 translate（翻整本书）：iPad 上 soul 派一个 `pending` run，PC 按能力当选执行，产出回领域目录，brief 经 bell 回 PC 的 soul。info 的 kind 清单在 [63](./63-情报局：研究室、专项组与态势.md) 已列好，等 Red Boxes 落地时登记。
+第一个调用方是 reading 的文献研究（kind `research-literature`，`local` 档，见 [68](./68-Lumen与盒子的交互.md)）。第一个跨设备调用方是 translate（翻整本书）：iPad 上 soul 派一个 `pending` run，PC 按能力当选执行，产出回领域目录，brief 经 bell 回 PC 的 soul。info 的 kind 清单在 [63](./63-情报局：研究室、专项组与态势.md) 已列好，等 Red Boxes 落地时登记。
 
 ## 现状与顺序
 
@@ -258,7 +260,7 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 第 9 步（2026-09-15）：`src/legion/ledger`。`foldRun` 是纯函数，宽限期在 `fold.ts` 顶上一处常量；`ledgerLineText` 定键序和取整；`tombstonedRunIds` 是另一个纯函数；`store.ts` 是 `legion/ledger/<日期>.jsonl` 的读写，`deadLetters(day)` 就是死信视图；`housekeeping.ts` 的 `foldPass` 一趟里先折后删，挂在 info 那条日 tick 上，每设备一天一次。palace 加 `ledger` 行（data 通道、`records` + `lines`、`neverInferDelete`、`gc: never`）。run store 加 `markDelivered` 和 `remove`，`RunIo` 加 `remove`；`src/soul/bell.ts` 答完铃 ack 之后把 `deliveredAt` 写进 run 文件——这个字段此前没有任何人写，折叠在生产里永远不会触发。远端那半在 `foldPass` 里按 docs/50 的顺序走 `requestRemotePurge`，先远端后本地。顺带把 `legion/subagent/ledger.ts` 改名 `quota.ts`（它数的是一个回合里子 agent 的轮数，和这个 ledger 无关）。
 
-未开始：session 到对话文件的投影、translate 接入。今天没有任何 kind 登记 worker，会响的只有 schedule 的 `wake` 铃（info 的 daily round 到点在当选设备上摇一条，soul 答铃时没有活可派）；开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
+未开始：session 到对话文件的投影、research 接入、translate 接入。今天没有任何 kind 登记 worker，会响的只有 schedule 的 `wake` 铃（info 的 daily round 到点在当选设备上摇一条，soul 答铃时没有活可派）；开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。
@@ -269,7 +271,8 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 7. （已落地）worker 契约与 runner：kind → worker 的注册表，取走 → 写 `running` → 跑 → 写终态 → 投铃；`ctx.report` 更新 `progress` 与 `lastProgressAt`，三十秒节流，状态变化不节流；深度检查、batch 续跑查询、按 `batchId` 级联取消。验收：假 worker 走完全程并投出 `run-done`；一秒内十次 `report` 只写一次盘、终态立刻写；`delegator` 已是子 run 的创建请求被拒；同 batchId 同 step 已 `done` 时不新建、直接拿 `output`；取消父 run 后子 run 也进 `cancelled`。
 8. bell：ring / read / ack，`run-done` / `run-failed` / `wake` 三种。验收：投递后 ack 到达；未 ack 的出现在待恢复集合里；重复 ring 同一条不产生两份；三种铃各起一个没有用户输入的 soul 回合；取消和进度不产生铃。
 9. （已落地）ledger 折叠：`foldRun` 纯函数、三条判据、墓碑含时刻比较。验收：两台折出逐字节相同的一行；创建时刻更晚的同名新 run 不被误删；未 ack 的终态 run 不折。
-10. translate 接入：kind `translate-book` 注册，`TranslateRun` 单例的工作体抽成一个程序 worker 并补 cancel 通道和 `report`，状态 UI 改成订阅 run 文件的 `progress`。验收：无头双设备测试跑完 A 写 pending、B 当选执行、产出与 `run-done` 的 ack 回到 A 的整条链；取消在跑到一半时生效；真机确认一次，iPad 派、PC 跑。
+10. research 接入（第一个调用方）：reading 登记 kind `research-literature`，agent worker、`local` 档，身体是 `src/reading/papers/research-agent.ts`；soul 换成通用 `delegate` 工具加 kind 目录，阅读回合不再挂 `research_literature` 子 agent 工具；run 带 `deliverTo`，答铃按它装配并把回复写回那条线程。验收：阅读回合里派一个文献研究，回合立刻结束；结果回来追加进那条划线线程，同时盒里多一项。
+11. translate 接入：kind `translate-book` 注册，`TranslateRun` 单例的工作体抽成一个程序 worker 并补 cancel 通道和 `report`，状态 UI 改成订阅 run 文件的 `progress`。验收：无头双设备测试跑完 A 写 pending、B 当选执行、产出与 `run-done` 的 ack 回到 A 的整条链；取消在跑到一半时生效；真机确认一次，iPad 派、PC 跑。
 
 ## 为什么不用现成的
 
