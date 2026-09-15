@@ -24,6 +24,43 @@
 # scripts/ios-sim/baseline.md — diff a run against that, not against a memory
 # of what the reader is supposed to do.
 #
+# Sharing a book into the app is checked by a fourth piece, and it needs none of
+# the three above — no idb, no dev server. `simctl openurl` with a file:// URL
+# does not reach this app: it asks LaunchServices for a handler, and PDF and
+# EPUB belong to the built-in Preview on a simulator (docs/pitfall/294). The
+# real share sheet is the only way to reach application:openURL:, and
+# scripts/ios-sim/ShareDriver drives it — a UI-test bundle with no app of its
+# own, attaching to the host by bundle id the way GestureDriver does.
+#
+#   bun scripts/ios-sim/sample-book.ts /tmp/share/book.epub   # or any pdf
+#   (cd /tmp/share && python3 -m http.server 8899 &)          # note the pid
+#   xcrun simctl openurl "$UDID" http://localhost:8899/book.pdf
+#   (cd scripts/ios-sim/ShareDriver && xcodegen generate &&
+#     xcodebuild build-for-testing -project ShareDriver.xcodeproj \
+#       -scheme ShareDriverUITests -destination "id=$UDID" -derivedDataPath dd &&
+#     xcodebuild test-without-building -project ShareDriver.xcodeproj \
+#       -scheme ShareDriverUITests -destination "id=$UDID" -derivedDataPath dd)
+#
+# The simulator shares this machine's localhost, so the server needs no address.
+# Safari renders a PDF inline and its share button sits at the normalized window
+# offset the bundle taps by default; the sheet's app cells carry
+# identifier 'shareCell' and the app's own name as their label, and they live in
+# Safari's accessibility tree on some iOS versions and in SpringBoard's on
+# others, so ShareDriver searches both. A miss prints the host tree.
+#
+# From there it is the real thing: iOS copies the document into the app's
+# Documents/Inbox (a second copy of the same name becomes x-1.pdf) and calls
+# application:openURL:. To check the cold start, confirm the app is not running
+# first — `simctl terminate` answering "found nothing to terminate" is the
+# proof — and read the result off the app's own container rather than the
+# screen: topics.json gains the Brief topic and the book.
+#
+# Safari downloads an EPUB rather than rendering it, so there is no sheet to
+# drive. Deliver an EPUB with `simctl openurl` on a file:// URL under the app's
+# own container instead: that has reached the app, cold start included, but it
+# is still LaunchServices choosing and it has also landed in Preview, so read
+# back where it went rather than assuming.
+#
 # Setup this expects (see docs/pitfall/117):
 #   brew trust facebook/fb && brew install idb-companion
 #   python3 -m venv /tmp/idbvenv && /tmp/idbvenv/bin/pip install fb-idb

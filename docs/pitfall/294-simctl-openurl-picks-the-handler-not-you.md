@@ -10,7 +10,7 @@
 
 `simctl openurl` 不是「投给某个 app」，是「交给 LaunchServices 按 UTI 挑一个 app」。`com.adobe.pdf` 和 `org.idpf.epub-container` 在 iOS 26 的模拟器上归「预览」，第三方 app 抢不过它。真机上用户是在分享面板里自己点的，那一步 LaunchServices 不参与——所以 `openurl` 复现的根本不是同一条路。
 
-（`file://` 指向 app 自己容器内、且 app 正在前台时，EPUB 有时会落到自己 app 上，但这个行为不稳定，不能当判据。）
+（`file://` 指向 app 自己容器内时，EPUB 落到自己 app 上过，冷启动也成过——app 没在跑，投一个容器内的 `.epub`，Brief 建出来、书进去、阅读器渲染出来。但同一条命令也落到过「预览」，挑谁仍然是 LaunchServices 说了算。用它投 EPUB 可以，但要回读 `topics.json` 确认书真的进了自己 app，不能看命令返回 0 就算数。）
 
 ## 解法
 
