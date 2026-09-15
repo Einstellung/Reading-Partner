@@ -13,6 +13,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { answerBell, renderBell, type SendBellTurn } from "../../src/soul";
 import { createBellStore, type BellIo, type BellStore } from "../../src/legion/bell";
+import { createRunStore } from "../../src/legion/run/store";
 import { holdHarness } from "../../src/legion/execute/held";
 import { runHarnessTurn, type StreamFn } from "../../src/legion/execute/turn";
 import { toPiMessages } from "../../src/ai/providers";
@@ -185,4 +186,56 @@ test("a turn that fails leaves the bell queued and writes nothing", async () => 
   expect((await bells.get("run-failed-r2"))?.state).toBe("queued");
   expect((await bells.read()).map((b) => b.id)).toEqual(["run-failed-r2"]);
   expect(doorFile()?.messages ?? []).toEqual([]);
+});
+
+test("the ack stamps the run as delivered, which is what the fold waits on", async () => {
+  const { bells } = bellStore();
+  const files = new Map<string, string>();
+  const runs = createRunStore({
+    list: async () => [...files.keys()],
+    read: async (name) => files.get(name) ?? null,
+    write: async (name, contents) => {
+      files.set(name, contents);
+    },
+    remove: async (name) => {
+      files.delete(name);
+    },
+  });
+  const { run } = await runs.create({
+    kind: "translate-book",
+    delegator: { kind: "soul" },
+    brief: "briefs/translate-book.json",
+    at: NOW - 10_000,
+  });
+  await bells.ring("run-done", { runId: run.id, kind: run.kind, brief: "done" }, { at: NOW - 1000 });
+
+  const first = sender([{ text: "Your translation is ready." }]);
+  const answered = await answerBell({
+    settings,
+    bells,
+    runs,
+    send: first.send,
+    now: () => NOW,
+    newThreadId: () => "door-thread-3",
+  });
+  expect(answered).toBe(1);
+  expect((await runs.get(run.id))?.deliveredAt).toBe(NOW);
+
+  // Stamped once: the field only ever moves earlier in a merge, so a second
+  // bell about the same run says nothing new.
+  await bells.ring(
+    "run-done",
+    { runId: run.id, kind: run.kind, brief: "again" },
+    { at: NOW, id: "run-done-again" },
+  );
+  const second = sender([{ text: "Still ready." }]);
+  await answerBell({
+    settings,
+    bells,
+    runs,
+    send: second.send,
+    now: () => NOW + 5_000,
+    newThreadId: () => "door-thread-4",
+  });
+  expect((await runs.get(run.id))?.deliveredAt).toBe(NOW);
 });

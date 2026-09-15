@@ -19,7 +19,7 @@ import { memoryAppData } from "../../support/memory-appdata";
 import { StoppedError } from "../../../src/legion/execute/watchdog";
 import { runSubagent } from "../../../src/legion/subagent/run";
 import { subagentTool } from "../../../src/legion/subagent/tool";
-import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
+import { createSubagentQuota } from "../../../src/legion/subagent/quota";
 import { createTurnSettler, workerLane } from "../../../src/legion/subagent/turn";
 import type {
   SubagentDefinition,
@@ -392,19 +392,19 @@ test("a signal already aborted never reaches the model", async () => {
 // --- the shared round budget ---
 
 test("a spent round budget stops the next run before it is sent", async () => {
-  const ledger = createSubagentLedger(1);
+  const quota = createSubagentQuota(1);
   const runner = loopRunner([
     { calls: [{ name: "search_papers", args: { query: "a" }, id: "t1" }] },
     { calls: [{ name: "search_papers", args: { query: "b" }, id: "t2" }] },
   ]);
 
-  const first = await runSubagent({ definition: definition(), task: "find work" }, { run: runner.run, ledger });
+  const first = await runSubagent({ definition: definition(), task: "find work" }, { run: runner.run, quota });
   // Granted one turn of its requested six, and it spent it.
   expect(first.roundsAllowed).toBe(1);
   expect(first.outcome).toBe("out-of-turns");
-  expect(ledger.remaining()).toBe(0);
+  expect(quota.remaining()).toBe(0);
 
-  const second = await runSubagent({ definition: definition(), task: "find more" }, { run: runner.run, ledger });
+  const second = await runSubagent({ definition: definition(), task: "find more" }, { run: runner.run, quota });
   expect(second.outcome).toBe("out-of-budget");
   expect(second.brief).toContain("did not run at all");
   expect(second.brief).toContain("not a finding");
@@ -413,16 +413,16 @@ test("a spent round budget stops the next run before it is sent", async () => {
 });
 
 test("a cheap run returns its unspent turns to the caller's pot", async () => {
-  const ledger = createSubagentLedger(8);
+  const quota = createSubagentQuota(8);
   const runner = loopRunner([
     { calls: [{ name: "search_papers", args: { query: "a" }, id: "t1" }] },
     { text: "One paper: Liu 2025." },
   ]);
 
-  const result = await runSubagent({ definition: definition(), task: "find work" }, { run: runner.run, ledger });
+  const result = await runSubagent({ definition: definition(), task: "find work" }, { run: runner.run, quota });
 
   expect(result.rounds).toBe(2);
-  expect(ledger.remaining()).toBe(6);
+  expect(quota.remaining()).toBe(6);
 });
 
 // --- the parent-side tool ---

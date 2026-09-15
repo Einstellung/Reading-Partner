@@ -17,7 +17,7 @@ import { runHarnessTurn, type StreamFn } from "../../../src/legion/execute/turn"
 import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
 import { memoryAppData } from "../../support/memory-appdata";
 import { StoppedError } from "../../../src/legion/execute/watchdog";
-import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
+import { createSubagentQuota } from "../../../src/legion/subagent/quota";
 import { subagentTool } from "../../../src/legion/subagent/tool";
 import { createTurnSettler } from "../../../src/legion/subagent/turn";
 import type { SubagentProgress, SubagentTurnFn, SubagentTurnRequest } from "../../../src/legion/subagent/types";
@@ -255,11 +255,11 @@ test("an answer written without consulting a library is not returned", async () 
 // --- the shared pot ---
 
 test("the turn's pot is shared, and a third call is refused before it is sent", async () => {
-  const ledger = createSubagentLedger(RESEARCH_TURN_ROUNDS);
+  const quota = createSubagentQuota(RESEARCH_TURN_ROUNDS);
   // Each run answers with no tool ever succeeding, so each spends one turn and is
   // unusable — which is beside the point here: what is under test is the pot.
   const runner = loopRunner([{ text: "one" }, { text: "two" }, { text: "three" }]);
-  const tool = subagentTool(agent(), { run: runner.run, ledger });
+  const tool = subagentTool(agent(), { run: runner.run, quota });
 
   await expect(tool.execute({ task: "first question" })).rejects.toThrow("without calling any");
   await expect(tool.execute({ task: "second question" })).rejects.toThrow("without calling any");
@@ -269,9 +269,9 @@ test("the turn's pot is shared, and a third call is refused before it is sent", 
 });
 
 test("a pot already spent stops the next call at the door", async () => {
-  const ledger = createSubagentLedger(1);
+  const quota = createSubagentQuota(1);
   const runner = loopRunner([{ text: "one" }]);
-  const tool = subagentTool(agent(), { run: runner.run, ledger });
+  const tool = subagentTool(agent(), { run: runner.run, quota });
 
   await expect(tool.execute({ task: "first" })).rejects.toThrow();
   await expect(tool.execute({ task: "second" })).rejects.toThrow("did not run at all");

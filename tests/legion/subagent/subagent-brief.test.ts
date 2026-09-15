@@ -1,5 +1,5 @@
-// What a sub-agent is allowed to say, and the round ledger behind it
-// (src/legion/subagent/brief.ts, ledger.ts). Pure: no model, no tools, no network.
+// What a sub-agent is allowed to say, and the round quota behind it
+// (src/legion/subagent/brief.ts, quota.ts). Pure: no model, no tools, no network.
 // Run: bun test.
 //
 // These tests are the specification of the honest-failure rule. Each one asserts
@@ -14,7 +14,7 @@ import {
   subagentSystemPrompt,
   type BriefFacts,
 } from "../../../src/legion/subagent/brief";
-import { createSubagentLedger } from "../../../src/legion/subagent/ledger";
+import { createSubagentQuota } from "../../../src/legion/subagent/quota";
 import { estimateTextTokens } from "../../../src/budget";
 import type { SubagentDefinition } from "../../../src/legion/subagent/types";
 
@@ -185,24 +185,24 @@ test("the definition's own prompt comes first, the contract after it", () => {
 
 // --- the shared round budget ---
 
-test("the ledger hands out turns until the caller's turn has none left", () => {
-  const ledger = createSubagentLedger(8);
-  expect(ledger.grant(6)).toBe(6);
-  expect(ledger.remaining()).toBe(2);
-  expect(ledger.grant(6)).toBe(2);
-  expect(ledger.grant(6)).toBe(0);
+test("the quota hands out turns until the caller's turn has none left", () => {
+  const quota = createSubagentQuota(8);
+  expect(quota.grant(6)).toBe(6);
+  expect(quota.remaining()).toBe(2);
+  expect(quota.grant(6)).toBe(2);
+  expect(quota.grant(6)).toBe(0);
 });
 
 test("unspent turns come back, so a cheap run does not cost the whole pot", () => {
-  const ledger = createSubagentLedger(8);
-  const reserved = ledger.grant(6);
-  ledger.settle(reserved, 2);
-  expect(ledger.remaining()).toBe(6);
+  const quota = createSubagentQuota(8);
+  const reserved = quota.grant(6);
+  quota.settle(reserved, 2);
+  expect(quota.remaining()).toBe(6);
 });
 
 test("a run cannot settle for more than it reserved", () => {
-  const ledger = createSubagentLedger(8);
-  const reserved = ledger.grant(6);
-  ledger.settle(reserved, 99);
-  expect(ledger.remaining()).toBe(2);
+  const quota = createSubagentQuota(8);
+  const reserved = quota.grant(6);
+  quota.settle(reserved, 99);
+  expect(quota.remaining()).toBe(2);
 });

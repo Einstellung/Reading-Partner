@@ -98,6 +98,9 @@ function memoryIo(): RunIo {
     write: async (name, contents) => {
       files.set(name, contents);
     },
+    remove: async (name) => {
+      files.delete(name);
+    },
   };
 }
 

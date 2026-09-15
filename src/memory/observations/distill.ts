@@ -837,7 +837,7 @@ export async function runDistillation(
       task: buildDistillUserMessage(input),
       signal: deps.signal,
     },
-    // No ledger. A ledger stops a parent model from calling the same sub-agent
+    // No quota. A quota stops a parent model from calling the same sub-agent
     // nine times in one reader turn; nothing here is called by a model. The app
     // starts a pass on hangup or on a trim, one at a time per thread (live.ts),
     // so the run gets its own cap outright.

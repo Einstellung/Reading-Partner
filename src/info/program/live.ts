@@ -76,6 +76,7 @@ import { createCollectorSession, type CollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "../boxes/publish";
 import { ASK_PULL_ROUTE, COLLECT_KIND, readAsks, type CollectorClaim } from "../briefer/handoff";
 import { appClaims, WEBVIEW_FETCH } from "../../legion/claim";
+import { runLedgerHousekeeping } from "../../legion/ledger";
 import { registerSchedule, runScheduleTick } from "../../legion/schedule";
 import { subscribeSyncStatus } from "../../platform/sync";
 import { registerPullRoute } from "../../platform/sync/pull-routes";
@@ -434,6 +435,10 @@ async function checkDailyRound(): Promise<void> {
   } catch (e) {
     console.warn("the nightly memory pass check failed", e);
   }
+  // Every device folds its own hot layer, collector or not: a run file this
+  // machine holds is deleted by this machine, and the ledger line is what tells
+  // it which ones (docs/55). Once a day, and it never throws.
+  await runLedgerHousekeeping();
 }
 
 // The wake is a hint and nothing more — the answer comes from the clock and the

@@ -132,7 +132,7 @@ import {
   RESEARCH_TURN_ROUNDS,
 } from "./papers/research-agent";
 import {
-  createSubagentLedger,
+  createSubagentQuota,
   runSubagentTurnLive,
   subagentTool,
   type SubagentProgress,
@@ -635,7 +635,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // A pot for the whole turn. Without one, runSubagent grants every request in
   // full and a model that calls the research tool nine times spends nine times
   // the turns, each call perfectly legal on its own.
-  const researchLedger = createSubagentLedger(RESEARCH_TURN_ROUNDS);
+  const researchQuota = createSubagentQuota(RESEARCH_TURN_ROUNDS);
   tools = [
     ...tools,
     // Topic search and the citation walk live inside this run, not out here: their
@@ -649,7 +649,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       }),
       {
         run: runSubagentTurn,
-        ledger: researchLedger,
+        quota: researchQuota,
         signal,
         onProgress: onSubagentProgress,
       },

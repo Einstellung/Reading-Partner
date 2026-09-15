@@ -134,11 +134,17 @@ soul 随时能读 run 文件的 `progress` 回答「跑到哪了」，不必等�
 
 热层 `legion/runs/<runId>.json`，一个 run 一个文件。冷层 `legion/ledger/<日期>.jsonl`，一天一个追加文件，一个折叠过的 run 一行。ledger 行存任务书的引用加内容哈希，不存正文；重放前校验哈希，取不到就拒绝重放并说明原因。
 
-三条同时成立才折：终态、已投递（bell 的 ack 到了）、过了宽限期（约 24 小时，failed 更长）。
+三条同时成立才折：终态、已投递（bell 的 ack 到了）、过了宽限期（24 小时，failed 是 7 天）。日期取 `endedAt` 的 UTC 日，两台设备算出同一个文件名。
+
+`cancelled` 没有铃，投递时刻取 `endedAt`：取消的人当时就知道了。
+
+行里的字段全是合并会收敛的那些：id、kind、终态、委托方、任务书引用与哈希、产出引用、`batchId`/`step`、`attempts`、创建/终态/投递三个时刻。claimant、revision、progress 不进——它们各设备不同，进去就折不出同一行。键序固定、毫秒取整。
 
 死信就是 ledger 里的 failed 行，不另开目录，UI 从 ledger 读。
 
-ledger 兼做墓碑。同步不传播文件级删除（坑 208），所以热层删掉的 run 会被另一台设备推回来；判据是「热层有这个 id、ledger 里也有，且热层这份的创建时刻不晚于 ledger 行的」——时刻这一半防的是 key 回收后的同名新 run 被当成旧 run 删掉。两边各自据此删掉自己的热层文件，删远端走 `requestRemotePurge`。ledger 行按 id 取并集合并，任何设备都能折，规则是纯函数，两台设备折出同一行。
+ledger 兼做墓碑。同步不传播文件级删除（坑 208），所以热层删掉的 run 会被另一台设备推回来；判据是「热层有这个 id、ledger 里也有，且热层这份的创建时刻不晚于 ledger 行的」——时刻这一半防的是 key 回收后的同名新 run 被当成旧 run 删掉。两边各自据此删掉自己的热层文件，删远端走 `requestRemotePurge`。ledger 行按行取并集合并（palace 的 `records` + `lines`），任何设备都能折，规则是纯函数，两台设备折出逐字节相同的一行。同一 id 出现两行就是前后两个 run 共用了派生 id，墓碑按创建时刻最晚的那行判。
+
+ledger 目录自己也进 `NEVER_INFER_DELETE`：丢一行就等于把它删掉的那个 run 放回来。
 
 `legion/runs` 进 `NEVER_INFER_DELETE`：删除只认 ledger 墓碑，不认按持有清单的删除推断，否则一台折了一台没折时，推断会把对端的未折读成一次撤销。
 
@@ -240,7 +246,7 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 ## 现状与顺序
 
-已落地（2026-09-15）：第 1 到 8 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
+已落地（2026-09-15）：第 1 到 9 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
 
 第 3 步：`src/legion/run/types.ts` 的字段表与状态链、`merge.ts` 的 `mergeRun`，palace 的 `lattice` 策略（`platform/sync/merge/lattice.ts` 是注册表，领域交 `merge(a, b)`，base 不参与）和 `run` 行（`legion/runs/`，data 通道，进 `NEVER_INFER_DELETE`）。合并的裁决顺序是状态链 → `revision` → claimant 的 deviceId 小者 → 规范序列化的内容序；`attempts`、`createdAt`、`startedAt`、`deliveredAt`、`cancelRequested` 单独折叠，不跟赢的那一侧。第 4 步：`src/legion/run/store.ts` 的 `createRunStore(io)`，文件名 `r-<hash(kind + \0 + idempotencyKey)>`，撞已有文件一律原样交回由调用方看 `state`。
 
@@ -250,7 +256,9 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 第 7 步（2026-09-15）：worker 契约与 runner 落在 `src/legion/execute/worker.ts` 和 `runner.ts`。`registerWorker` 一次调用登记 worker 和这个 kind 的能力标签；runner 的 `delegate` 管三件闸，`tick` 走 `dueRuns`，`cancel` 按 `batchId` 级联一层。`report` 三十秒一写、终态立刻写并带上最后一行。store 加了 `retake`（接手：同状态换 claimant、attempts 和 revision 各加一），`dueRuns` 的 `back` 动作改成 `retake`、`ScheduledRun` 换成 `Run` 的 `Pick`、`bumpAttempts` 去掉。`App.tsx` 和 `PhoneApp.tsx` 在 `startBellWatch` 旁边起 `startRunner`，这是 `legion/run` 的第一个 import，run 的合并从此注册进 sync；注册表在生产里是空的，空表时轮询先看表再看盘，不花 IO。
 
-未开始：ledger 折叠、session 到对话文件的投影、translate 接入。今天没有任何 kind 登记 worker，会响的只有 schedule 的 `wake` 铃（info 的 daily round 到点在当选设备上摇一条，soul 答铃时没有活可派）；开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
+第 9 步（2026-09-15）：`src/legion/ledger`。`foldRun` 是纯函数，宽限期在 `fold.ts` 顶上一处常量；`ledgerLineText` 定键序和取整；`tombstonedRunIds` 是另一个纯函数；`store.ts` 是 `legion/ledger/<日期>.jsonl` 的读写，`deadLetters(day)` 就是死信视图；`housekeeping.ts` 的 `foldPass` 一趟里先折后删，挂在 info 那条日 tick 上，每设备一天一次。palace 加 `ledger` 行（data 通道、`records` + `lines`、`neverInferDelete`、`gc: never`）。run store 加 `markDelivered` 和 `remove`，`RunIo` 加 `remove`；`src/soul/bell.ts` 答完铃 ack 之后把 `deliveredAt` 写进 run 文件——这个字段此前没有任何人写，折叠在生产里永远不会触发。远端那半在 `foldPass` 里按 docs/50 的顺序走 `requestRemotePurge`，先远端后本地。顺带把 `legion/subagent/ledger.ts` 改名 `quota.ts`（它数的是一个回合里子 agent 的轮数，和这个 ledger 无关）。
+
+未开始：session 到对话文件的投影、translate 接入。今天没有任何 kind 登记 worker，会响的只有 schedule 的 `wake` 铃（info 的 daily round 到点在当选设备上摇一条，soul 答铃时没有活可派）；开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。
@@ -260,7 +268,7 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 6. 指派与 schedule：`dueRuns(runs, claims, now, deviceId)`，时点窗口，夜间时点按 kind 归一台，到点写一条 `wake` 铃。验收：这个函数的单测不许起 worker；本机重启退回、对端弃权接手、`lastProgressAt` 超阈值退回各一例；两台都到点只出一条 `wake`。
 7. （已落地）worker 契约与 runner：kind → worker 的注册表，取走 → 写 `running` → 跑 → 写终态 → 投铃；`ctx.report` 更新 `progress` 与 `lastProgressAt`，三十秒节流，状态变化不节流；深度检查、batch 续跑查询、按 `batchId` 级联取消。验收：假 worker 走完全程并投出 `run-done`；一秒内十次 `report` 只写一次盘、终态立刻写；`delegator` 已是子 run 的创建请求被拒；同 batchId 同 step 已 `done` 时不新建、直接拿 `output`；取消父 run 后子 run 也进 `cancelled`。
 8. bell：ring / read / ack，`run-done` / `run-failed` / `wake` 三种。验收：投递后 ack 到达；未 ack 的出现在待恢复集合里；重复 ring 同一条不产生两份；三种铃各起一个没有用户输入的 soul 回合；取消和进度不产生铃。
-9. ledger 折叠：`foldRun` 纯函数、三条判据、墓碑含时刻比较。验收：两台折出逐字节相同的一行；创建时刻更晚的同名新 run 不被误删；未 ack 的终态 run 不折。
+9. （已落地）ledger 折叠：`foldRun` 纯函数、三条判据、墓碑含时刻比较。验收：两台折出逐字节相同的一行；创建时刻更晚的同名新 run 不被误删；未 ack 的终态 run 不折。
 10. translate 接入：kind `translate-book` 注册，`TranslateRun` 单例的工作体抽成一个程序 worker 并补 cancel 通道和 `report`，状态 UI 改成订阅 run 文件的 `progress`。验收：无头双设备测试跑完 A 写 pending、B 当选执行、产出与 `run-done` 的 ack 回到 A 的整条链；取消在跑到一半时生效；真机确认一次，iPad 派、PC 跑。
 
 ## 为什么不用现成的
