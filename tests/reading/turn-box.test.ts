@@ -3,7 +3,14 @@
 
 import { expect, test } from "bun:test";
 import { createBoxStore } from "../../src/box/store";
-import { boxUnseenTurn, turnBoxId, unseenTurnItem, watching } from "../../src/reading/turn-box";
+import {
+  boxUnseenTurn,
+  setOpenCallPeek,
+  turnBoxId,
+  unseenTurnItem,
+  watching,
+  watchingNow,
+} from "../../src/reading/turn-box";
 
 function memoryBox() {
   const files = new Map<string, string>();
@@ -36,6 +43,29 @@ test("a closed call view, another thread and a closed reader are all unseen", ()
   expect(watching({ threadId: "t-2" }, "b-hash", TURN)).toBe(false);
   expect(watching({ threadId: "t-1" }, null, TURN)).toBe(false);
   expect(watching({ threadId: "t-1" }, "another-book", TURN)).toBe(false);
+});
+
+// The same rule asked from outside React, which is how a delivered run asks it
+// (src/reading/deliver.ts hands the bell a `watching` closure over this).
+test("what is on screen answers the same rule a settling turn asks", () => {
+  const off = setOpenCallPeek(() => ({ open: { threadId: "t-1" }, bookId: "b-hash" }));
+  try {
+    expect(watchingNow(TURN)).toBe(true);
+    expect(watchingNow({ threadId: "t-2", bookId: "b-hash" })).toBe(false);
+    expect(watchingNow({ threadId: "t-1", bookId: "another-book" })).toBe(false);
+  } finally {
+    off();
+  }
+  const away = setOpenCallPeek(() => ({ open: null, bookId: "b-hash" }));
+  try {
+    expect(watchingNow(TURN)).toBe(false);
+  } finally {
+    away();
+  }
+});
+
+test("no reader mounted is nobody watching", () => {
+  expect(watchingNow(TURN)).toBe(false);
 });
 
 test("an unseen answer becomes a card pointing back at its thread", () => {

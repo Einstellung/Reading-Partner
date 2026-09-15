@@ -27,7 +27,7 @@ import { appendMessage, createBookThread, flushThreads, getBookThread, loadThrea
 import { toReasoning, type Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
 import { doorDate, doorKey, openDoorTurn } from "./door";
-import { deliveryOpener, parseOrigin, type DeliveredTurn } from "./delivery";
+import { deliveryOpener, parseOrigin, type DeliveredTurn, type Delivery } from "./delivery";
 import { soulHarness } from "./harness";
 
 /** What one bell turn is sent. The default sender is the app's; tests pass one. */
@@ -246,7 +246,13 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     // to what the run produced rather than the text of it. After the reply is on
     // disk and before the ack, so an item can never point at a conversation that
     // is not there.
-    if (bell.type !== "wake") {
+    //
+    // None of it when the reader is looking at that conversation as the reply
+    // lands — the same rule a plain reading turn follows (reading/turn-box.ts).
+    // A failure is no exception: what the reader has to decide about, they are
+    // already reading. Asked now and not when the turn was assembled, because
+    // the run took a while and they may have walked over to it in the meantime.
+    if (bell.type !== "wake" && !placed?.watching?.()) {
       const { runId, kind } = bell.payload;
       await box
         .put({
@@ -345,7 +351,7 @@ async function openDelivery(
   origin: BoxOrigin,
   bell: string,
   deps: AnswerBellDeps,
-): Promise<{ key: string; threadId: string; turn: DeliveredTurn } | null> {
+): Promise<Delivery | null> {
   const open = deliveryOpener(origin.place);
   if (!open) return null;
   return await open({
