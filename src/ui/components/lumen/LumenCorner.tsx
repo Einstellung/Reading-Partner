@@ -266,14 +266,19 @@ export function LumenCorner({
 // nothing rather than looking like an oversight.
 const NOTHING = () => {};
 
-// The count, straddling the case's top right corner (docs/68). On the case and
+// The count, straddling the case's outer top corner (docs/68). On the case and
 // not on the body: the number is how many are in the box, and the box is the
 // thing standing there. Centred on the corner, so it never reaches the latch.
+//
+// The outer corner and not the inner one. The case leans in over the body's
+// lower left and its top edge comes up to the eyes, so a badge on the inside
+// corner sits on Lumen's face; on the outside it has the corner of the screen
+// to itself.
 function CountBadge({ count }: { count: number }) {
 	const shown = badgeCount(count);
 	if (shown === null) return null;
 	return (
-		<span className="pointer-events-none absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-line px-1 text-[10px] font-semibold leading-none text-background ring-2 ring-background">
+		<span className="pointer-events-none absolute -left-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-line px-1 text-[10px] font-semibold leading-none text-background ring-2 ring-background">
 			{shown}
 		</span>
 	);

@@ -58,6 +58,7 @@
 | 在 worktree 里起 dev server 做实验 | 开发环境 |
 | 杀掉自己起的 dev server 再起一份 | 开发环境 |
 | 无头截图核对界面配色 | 开发环境 |
+| 并行会话里起本地静态服务器截图 | 开发环境 |
 | vite dev server 端口占用起不来、写 Tauri 插件命令的参数 | 开发环境 |
 | 查滚动卡顿、主线程占用 | WebKit / webview + EmbedPDF 引擎 |
 | 查首屏耗时、字体加载开销 | WebKit / webview |
@@ -386,6 +387,7 @@
 - [273-an-evaled-probe-gets-no-bare-specifiers](./273-an-evaled-probe-gets-no-bare-specifiers.md) — sim bridge 探针里 `import("react")` 抛错、`import("/src/**")` 没事：裸模块名靠 vite 的 import-analysis 改写，eval 进去的字符串没经过 transform。从 `/src/main.tsx` 的 transform 结果里抠出 `deps/react.js?v=` 的 URL 再 import；`react-dom_client.js` 是 CJS 预打包，`createRoot` 在 `default` 上
 - [270-xwd-on-xvfb-run-needs-the-runs-own-xauthority](./270-xwd-on-xvfb-run-needs-the-runs-own-xauthority.md) — `xvfb-run` 的显示带自己的临时 Xauthority，另一个 shell 里 `xwd -root` 直接退 1；`XAUTHORITY=/tmp/xvfb-run.*/Xauthority`，xwd 原始输出用 PIL 解成 PNG
 
+- [311-another-sessions-server-answers-on-the-port](./311-another-sessions-server-answers-on-the-port.md) — 端口被同会话另一个 agent 的 harness 服务器占着，自己那条 `nohup http.server` 当场 `Address already in use` 退掉（只进日志），`curl` 的 200 是旧服务器答的，连截三轮都是改动前的界面。起完 grep 页面里的 bundle 文件名和 build 输出比对，端口按会话取
 - [299-negated-class-spans-lines-in-a-grep-guard](./299-negated-class-spans-lines-in-a-grep-guard.md) — 扫源码的守卫正则里 `[^;]*` 会跨行，命中比 grep 多；否定类要排掉 `\n`
 
 ## 历史（zotero/reader 引擎时代）
