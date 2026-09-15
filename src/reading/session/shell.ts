@@ -29,7 +29,6 @@ export interface ReaderShell {
   // about to be out of reach.
   discardStagedImages(): void;
   // Turns still running on the book being closed, each keeping what it wrote.
-  endBookTurns(bookId: string): void;
 
   clearSelectedMark(): void;
   // Every book opens with no tool held: the previous book's annotation tool

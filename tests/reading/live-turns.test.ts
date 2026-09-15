@@ -2,7 +2,12 @@
 // lets a closed bubble keep its reply. Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { createLiveTurns, type LiveTurn } from "../../src/reading/live-turns";
+import {
+  createLiveTurns,
+  readingTurns,
+  resetReadingTurns,
+  type LiveTurn,
+} from "../../src/reading/live-turns";
 
 interface Msg {
   ts: number;
@@ -92,16 +97,21 @@ test("stopping aborts and hands the turn back so the partial can be kept", () =>
   expect(turns.stop("a")).toBeUndefined();
 });
 
-test("closing a book stops its turns and leaves another book's running", () => {
-  const turns = createLiveTurns<Msg>();
-  const mine = new AbortController();
-  const other = new AbortController();
-  turns.start({ threadId: "a", bookId: "book", home: "book", controller: mine, message: { ts: 1, text: "" } });
-  turns.start({ threadId: "b", bookId: "elsewhere", home: "elsewhere", controller: other, message: { ts: 1, text: "" } });
-  expect(turns.stopBook("book").map((t) => t.threadId)).toEqual(["a"]);
-  expect(mine.signal.aborted).toBe(true);
-  expect(other.signal.aborted).toBe(false);
-  expect(turns.has("b")).toBe(true);
+// The registry is a module, not a hook's ref: a turn outlives the reading
+// session that started it (docs/68).
+test("every session reaches the same registry", () => {
+  resetReadingTurns();
+  const controller = new AbortController();
+  readingTurns<Msg>().start({
+    threadId: "a",
+    bookId: "book",
+    home: "book",
+    controller,
+    message: { ts: 1, text: "" },
+  });
+  expect(readingTurns<Msg>().has("a")).toBe(true);
+  resetReadingTurns();
+  expect(readingTurns<Msg>().has("a")).toBe(false);
 });
 
 // Hanging up mid-answer defers the observation distillation to the moment the reply

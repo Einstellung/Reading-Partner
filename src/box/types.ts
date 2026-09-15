@@ -55,6 +55,20 @@ export function isBoxItemState(value: unknown): value is BoxItemState {
   return typeof value === "string" && (EXITS.has(value) || OPEN.has(value));
 }
 
+/**
+ * What put the item in the box. A `run` is a delegated piece of work coming
+ * back and a `cable` is the pipeline's; a `turn` is the reader's own question,
+ * answered while they were looking at something else (docs/68).
+ */
+export type BoxItemSource = "run" | "cable" | "turn";
+
+export const BOX_SOURCES = ["run", "cable", "turn"] as const satisfies readonly BoxItemSource[];
+
+/** Whether a string off a file is one of the three. */
+export function isBoxSource(value: unknown): value is BoxItemSource {
+  return value === "run" || value === "cable" || value === "turn";
+}
+
 /** Where the item came from, in the reader's terms: what they were doing. */
 export type BoxOrigin =
   | { place: "book"; bookId: string; threadId: string; annotationId?: string; page?: number }
@@ -65,7 +79,7 @@ export interface BoxItem {
   id: string;
   /** The delivery this item arrived in: a legion batchId, or a lone runId. */
   boxId: string;
-  source: "run" | "cable";
+  source: BoxItemSource;
   /** One line, written once. */
   cover: string;
   /** A reference to the full body (a run's output path). Never the text. */
