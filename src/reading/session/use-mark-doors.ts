@@ -38,6 +38,10 @@ export interface MarkDoorsHost {
   // writes that keep them in agreement.
   marks: MarkStore;
   viewRef: HostRef<ViewInstance | null>;
+  // The document on screen, whose marks and mark threads these are, and the
+  // book the session belongs to, whose file holds every side conversation
+  // (reading/session/documents.ts).
+  docIdRef: HostRef<string | null>;
   bookIdRef: HostRef<string | null>;
   // The reader pane's DOM container, for the fallback bubble anchor when a pen
   // stroke gave no pen-lift.
@@ -76,6 +80,7 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
   const {
     marks,
     viewRef,
+    docIdRef,
     bookIdRef,
     readerPaneRef,
     aiPen,
@@ -137,6 +142,7 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
         // Persist the aiThreadId into the engine model, open the thread + bubble.
         // A chat mark has no page anchor and is never the engine's to draw.
         if (isPageMark(aiCreated.annotation)) viewRef.current?.setAnnotations([aiCreated.annotation]);
+        const docId = docIdRef.current;
         const bookId = bookIdRef.current;
         // Drawn while the lesson is live: this is a side conversation off it
         // (docs/09), not an independent one. Everything else about the mark is
@@ -146,13 +152,15 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
         // of this reader's marked conversations happen hours or days from one.
         const lesson = currentCall();
         const parentThreadId = lesson?.isBook ? lesson.threadId : null;
+        // An aside lives in the file its parent does — the book-level thread's,
+        // wherever the reader is standing (reading/session/documents.ts).
         if (bookId && parentThreadId) {
           createAsideThread(bookId, aiCreated.threadId, {
             parentThreadId,
             annotationId: aiCreated.annotation.id,
           });
-        } else if (bookId) {
-          createThread(bookId, aiCreated.annotation.id, aiCreated.threadId);
+        } else if (docId) {
+          createThread(docId, aiCreated.annotation.id, aiCreated.threadId);
         }
         const up = penUpRef.current;
         const rect = readerPaneRef.current?.getBoundingClientRect();
@@ -189,6 +197,7 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
       aiPenRef,
       penUpRef,
       asideFramingFor,
+      docIdRef,
       bookIdRef,
       readerPaneRef,
       setPopup,
@@ -208,20 +217,20 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
   // conversation the reader cannot get out of.
   const hasThread = useCallback(
     (threadId: string) => {
-      const bookId = bookIdRef.current;
-      return !!bookId && getThread(bookId, threadId) !== undefined;
+      const docId = docIdRef.current;
+      return !!docId && getThread(docId, threadId) !== undefined;
     },
-    [bookIdRef],
+    [docIdRef],
   );
 
   const markDoor = useCallback(
     (ann: { id: string; aiThreadId?: unknown } | null | undefined) => {
-      const bookId = bookIdRef.current;
+      const docId = docIdRef.current;
       const threadId = markDoorThread(ann, hasThread);
-      const thread = bookId && threadId ? getThread(bookId, threadId) : undefined;
+      const thread = docId && threadId ? getThread(docId, threadId) : undefined;
       return threadId && thread ? { threadId, thread } : null;
     },
-    [hasThread, bookIdRef],
+    [hasThread, docIdRef],
   );
 
   // Clicking a mark. The engine shares the shell's document, so the rect is
@@ -259,7 +268,7 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
   const drawChatMark = useCallback(
     (draw: ChatMarkDraw) => {
       const lesson = currentCall();
-      if (!bookIdRef.current || !lesson) return;
+      if (!docIdRef.current || !lesson) return;
       // What the aside would be about. Null when the AI pen was not the one
       // drawing, and when what it caught is too short to be a question — that
       // stroke is then an underline and nothing more, rather than a mark
@@ -292,7 +301,7 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
       // side conversation opens nothing and the mark still stands.
       openChatAside(asideAnchor, { annotationId: mark.id, threadId: aiThreadId });
     },
-    [penColor, persistAnnotations, syncTraceList, currentCall, openChatAside, annsRef, bookIdRef, setPopup],
+    [penColor, persistAnnotations, syncTraceList, currentCall, openChatAside, annsRef, docIdRef, setPopup],
   );
 
   // A press on a mark drawn on a reply. An AI-pen one is the door into the
@@ -334,15 +343,15 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
         viewRef.current?.navigate({ annotationID: id });
         return;
       }
-      const bookId = bookIdRef.current;
-      const thread = bookId ? getThread(bookId, action.threadId) : undefined;
+      const docId = docIdRef.current;
+      const thread = docId ? getThread(docId, action.threadId) : undefined;
       // The row is a door into the conversation the mark opened, or failing that
       // into the lesson it was drawn in — which is the book's own, and reopening
       // it as anything else takes the AI pen, the chips and the empty-state line
       // away from it (reading/reopen.ts).
       if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     },
-    [reopenThreadCall, hasThread, annsRef, bookIdRef, setSelectedAnnId, setSidebarOpen, viewRef],
+    [reopenThreadCall, hasThread, annsRef, docIdRef, setSelectedAnnId, setSidebarOpen, viewRef],
   );
 
   // Delete a mark from the trace list. This is the only way to get rid of an
@@ -378,11 +387,11 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
       // The conversation is gone: the row still shows the words that were
       // marked, and there is nothing to open beside them.
       if (!threadId) return;
-      const bookId = bookIdRef.current;
-      const thread = bookId ? getThread(bookId, threadId) : undefined;
+      const docId = docIdRef.current;
+      const thread = docId ? getThread(docId, threadId) : undefined;
       if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     },
-    [reopenThreadCall, hasThread, annsRef, bookIdRef, setSelectedAnnId, viewRef],
+    [reopenThreadCall, hasThread, annsRef, docIdRef, setSelectedAnnId, viewRef],
   );
 
   // Jump the reading back to the thread's mark (from the reading corner card).

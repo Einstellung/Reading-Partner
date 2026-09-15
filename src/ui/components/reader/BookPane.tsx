@@ -20,7 +20,7 @@ import EpubReaderPane from "../../../reading/epub/EpubReaderPane";
 const AUTHOR_NAME = "Reading-Partner";
 
 export interface OpenBook {
-  bookId: string;
+  docId: string;
   format: BookFormat;
   buffer: ArrayBuffer;
   annotations: Annotation[];
@@ -54,10 +54,10 @@ export default function BookPane({ book, ...on }: BookPaneProps) {
     onQuoteHighlightChange: on.onQuoteHighlightChange,
   };
   return book.format === "epub" ? (
-    <EpubReaderPane key={book.bookId} {...shared} bookId={book.bookId} className="block" />
+    <EpubReaderPane key={book.docId} {...shared} bookId={book.docId} className="block" />
   ) : (
     <EmbedReaderPane
-      key={book.bookId}
+      key={book.docId}
       {...shared}
       className="h-full w-full block"
       onDeleteAnnotations={on.onDeleteAnnotations}

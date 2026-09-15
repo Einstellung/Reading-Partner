@@ -185,6 +185,20 @@ export type PageRenderFn = (page: number, widthPx: number) => Promise<RenderedPa
 export interface BookDeskRef {
   // The open book's content hash: keys its threads, prep notes and figure crops.
   bookId: string;
+  // The document on screen — the book itself, or one of its supplements the
+  // reader opened from the Outline (docs/67 「辅助资料」). Equal to bookId
+  // for all of a session spent in the book.
+  docId?: string;
+  // The supplement on screen, when one is: its title, which is also what its
+  // page citations are written with. Null while the book itself is showing.
+  viewing?: { title: string } | null;
+  // Every supplement this book has picked up, so the model knows what it may
+  // send the reader to and how to cite it.
+  supplements?: readonly { title: string }[];
+  // A link the model ingested became a supplement: the Outline's list is
+  // stale until the shell reads it again. Injected rather than announced,
+  // so nothing here has to know there is a sidebar.
+  onSupplement?: () => void;
   threadId: string;
   // The AI-pen mark hosting this thread; empty string for the book-level thread
   // and for an aside pulled out of a chat message. Which of the three this is
@@ -252,6 +266,10 @@ export function registerReadingDesk(): () => void {
 async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null> {
   const {
     bookId,
+    docId = bookId,
+    viewing = null,
+    supplements = [],
+    onSupplement,
     threadId,
     annotationId,
     annotation: ann,
@@ -265,7 +283,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     trailing,
     renderPage = async (pageNo, widthPx) => {
       if (!buffer) return null;
-      const r = await renderPageImage(bookId, buffer, pageNo, widthPx);
+      const r = await renderPageImage(docId, buffer, pageNo, widthPx);
       return r ? { data: r.base64, mediaType: r.mimeType, width: r.width, height: r.height } : null;
     },
   } = ref;
@@ -284,7 +302,15 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // only on the record, so the two are read together through the one derivation.
   // A thread the store has not got yet answers exactly as it did before asides
   // existed.
-  const thread = getThread(bookId, threadId);
+  // A conversation is in the file of the document it belongs to: the book's
+  // for the lesson and everything pulled out of it, the document on screen for
+  // a mark drawn on it (reading/session/documents.ts). Which of the two this
+  // one is is read off the record, so the record has to be found before the
+  // question can be answered — hence both files, which is one file whenever
+  // the book itself is showing.
+  const readThread = (id: string) =>
+    getThread(docId, id) ?? (docId === bookId ? undefined : getThread(bookId, id));
+  const thread = readThread(threadId);
   const kind: ThreadKind = threadKind({ ...thread, annotationId });
   const isBook = kind === "book";
   // The classroom and everything opened off it: the reader has read none of this
@@ -296,7 +322,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // open, and none of it is copied onto the aside.
   const parent =
     kind === "aside" && thread?.parentThreadId
-      ? getThread(bookId, thread.parentThreadId)
+      ? readThread(thread.parentThreadId)
       : undefined;
   // Anchored on a page: a mark thread, and an aside drawn on the page. The
   // book-level thread's position is wherever the reader currently is, and so is
@@ -335,7 +361,11 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     aside?.from === "chat" ? thread?.asideAnchor?.text ?? markText : markText;
   const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
 
-  let tools = buildReadingTools({ currentFulltext, materials });
+  // What one page of the document on screen is cited as: [p.12] in the book,
+  // [Some Article p.4] in a supplement (docs/67).
+  const pageAnchor = (page: number) =>
+    viewing ? `[${viewing.title} p.${page}]` : `[p.${page}]`;
+  let tools = buildReadingTools({ currentFulltext, materials, pageAnchor });
 
   // The lecture load (docs/09). The chapter table decides what read_chapter can
   // be asked for and which chapter the thread can be parked on; the thread's own
@@ -531,6 +561,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
             const ingested = await ingestUrlLive(url, { kind: "book", bookId });
             document = { title: ingested.title };
             if (!title) title = ingested.title;
+            onSupplement?.();
           } catch (e) {
             if (!prep) throw e;
             console.warn("could not take the ingested page in as a supplement", e);
@@ -710,6 +741,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
         FIND_PAPER_PROMPT,
         RESEARCH_PROMPT,
       ],
+      supplements: supplementsSection(supplements, viewing),
       ...(focusChapter ? { focusLabel: chapterFocusLabel(focusChapter) } : {}),
       // Memory, as one paragraph of three blocks in a fixed order (docs/48),
       // built by the assembly out of what this item anchors. The ladder's two
@@ -740,7 +772,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     });
   }
 
-  const threadMsgs = getThread(bookId, threadId)?.messages ?? [];
+  const threadMsgs = readThread(threadId)?.messages ?? [];
   // A reply the reader drew on comes back with what they marked named after it
   // (reading/chat-marks.ts). It rides the message, so it falls out of context
   // when the message does, and it sits in the replayed history rather than in
@@ -1027,4 +1059,31 @@ export async function gatherTopicMaterials(
     out.push({ path: f.hash ?? f.path, label: f.name, fulltext, annotations });
   }
   return out;
+}
+
+/**
+ * What the reader has put beside this book, and how to cite it (docs/67
+ * 「辅助资料」). Nothing at all when the book has none, which is most books.
+ *
+ * No tool is named here: a supplement is opened by the reader from the Outline,
+ * not fetched by the model, and the prompt must not mention a tool that is not
+ * mounted (tests/reading/turn.test.ts).
+ */
+export function supplementsSection(
+  supplements: readonly { title: string }[],
+  viewing: { title: string } | null,
+): string {
+  if (supplements.length === 0) return "";
+  const lines = [
+    "Beside this book the reader keeps these supplements — pages and papers they",
+    "brought in while reading. Each is open to them from the Outline sidebar:",
+    ...supplements.map((s) => `- ${s.title}`),
+    "",
+    viewing
+      ? `The reader is looking at the supplement "${viewing.title}", not at the book.`
+      : "The reader is looking at the book itself.",
+    'Cite a page of the book as [p.12] and a page of a supplement as ' +
+      '[Title p.4], with the supplement\'s title exactly as listed above.',
+  ];
+  return lines.join("\n");
 }

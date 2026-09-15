@@ -115,27 +115,41 @@ export function openingViewState(saved: ViewState | null): ViewState {
     : ({ pageIndex: 0, scale: "auto", scrollMode: 0, layout: DEFAULT_LAYOUT } as ViewState);
 }
 
-export async function openBook(
+/**
+ * Open a document in the reader.
+ *
+ * Two modes, one sequence (docs/67 「辅助资料」). A session open is the reader
+ * arriving at a book: the book being left is settled first, and the panels and
+ * the conversation are re-pointed at the new one. A document switch is the
+ * reader stepping between the book and one of its supplements *inside* the
+ * session they are already in: the conversation, the prep run and the chapter
+ * spine all belong to the book and go on as they are, and what changes is only
+ * the bytes on screen and everything sliced off them.
+ */
+async function openDocument(
   shell: ReaderShell,
-  book: { bookId: string; name: string; bytes: Uint8Array },
-  io: BookOpenIo = bookOpenIo,
+  doc: { bookId: string; docId: string; name: string; bytes: Uint8Array },
+  io: BookOpenIo,
+  newSession: boolean,
 ): Promise<void> {
-  const { bookId, name, bytes } = book;
-  // The bytes say what the book is; nothing has to carry the format down here
-  // alongside them, and a copy that arrived over sync before its registry entry
-  // did is read the same way as one this device imported.
+  const { bookId, docId, name, bytes } = doc;
+  // The bytes say what the document is; nothing has to carry the format down
+  // here alongside them, and a copy that arrived over sync before its registry
+  // entry did is read the same way as one this device imported.
   const format = formatOfBytes(bytes);
   shell.showStatus("Rendering…");
   shell.closeAnnotationPopup();
-  // Leaving a book with a call open ends that conversation, same as closing the
-  // reader. First thing in, while the refs the hangup reads still point at the
-  // book being left.
-  shell.captureHangup();
-  // And a look at what the book being left still owes: a stretch of reading with
-  // nothing said in it never reaches the hangup path at all.
-  io.sweepDistillation("book-switch");
-  shell.closeCall();
-  shell.discardStagedImages();
+  if (newSession) {
+    // Leaving a book with a call open ends that conversation, same as closing
+    // the reader. First thing in, while the refs the hangup reads still point at
+    // the book being left.
+    shell.captureHangup();
+    // And a look at what the book being left still owes: a stretch of reading
+    // with nothing said in it never reaches the hangup path at all.
+    io.sweepDistillation("book-switch");
+    shell.closeCall();
+    shell.discardStagedImages();
+  }
   shell.clearSelectedMark();
   shell.resetTool();
   // The reader is on screen before the book is, and says so. A PDF is mounted
@@ -144,12 +158,15 @@ export async function openBook(
   // there with nothing happening on it (docs/64). The book being left is
   // settled by now, so this is the first moment the new name may go up.
   shell.showTitle(name);
+  // The session's book, before anything that reads it. A document switch leaves
+  // it exactly where it was — that is the whole of what "same session" means.
+  if (newSession) shell.takeSession(bookId);
 
   // Every read here is optional: the book opens either way, and being told which
   // part of it could not be loaded beats being told the book could not be.
   let state: ViewState | null = null;
   try {
-    state = await io.getViewState(bookId);
+    state = await io.getViewState(docId);
   } catch (e) {
     console.error("failed to load the reading position", e);
     shell.pushToast("warn", "Saved reading position could not be loaded");
@@ -163,7 +180,7 @@ export async function openBook(
   let recut = false;
   try {
     const prepared = await io.preparePages?.(
-      bookId,
+      docId,
       bytes.slice().buffer as ArrayBuffer,
       format,
       (done, total) => shell.showStatus(cuttingStatus(done, total)),
@@ -174,13 +191,16 @@ export async function openBook(
   }
   let saved: Annotation[] = [];
   try {
-    saved = await io.loadAnnotations(bookId);
+    saved = await io.loadAnnotations(docId);
   } catch (e) {
     console.error("failed to load annotations", e);
     shell.pushToast("warn", "Saved annotations could not be loaded");
   }
   try {
-    await io.loadThreads(bookId);
+    // A mark's conversation lives under the document it is drawn on, so a
+    // supplement's threads are its own file (docs/67). The book-level thread is
+    // read from the book's, by the top-bar button, wherever the reader stands.
+    await io.loadThreads(docId);
   } catch (e) {
     console.error("failed to load threads", e);
     shell.pushToast("warn", "Saved AI conversations could not be loaded");
@@ -194,45 +214,53 @@ export async function openBook(
   // figures/render.ts, EmbedPdfView's wireEngine), so a copy per consumer was
   // five 26 MB allocations at book-open where one does.
   const buffer = bytes.slice().buffer as ArrayBuffer;
-  shell.takeBook(bookId, name, buffer);
-  // Seed the persist base with the loaded state so the first write for this book
-  // lands on the position it opened at.
-  io.seedReadingPosition(bookId, state);
+  shell.takeDoc(docId, name, buffer);
+  // Seed the persist base with the loaded state so the first write for this
+  // document lands on the position it opened at.
+  io.seedReadingPosition(docId, state);
   shell.restartDwell();
 
-  // Detach the previous book's prep panel (the pipeline itself keeps running in
-  // the background as a module singleton). The spine is per book too. Prep for this
-  // book re-attaches below only if it has been prepped before; starting a fresh
-  // run is the trigger's (reading/session/use-prep-trigger.ts), not the open's.
-  shell.resetPrep();
-  shell.resetChapterSpine();
+  if (newSession) {
+    // Detach the previous book's prep panel (the pipeline itself keeps running in
+    // the background as a module singleton). The spine is per book too. Prep for this
+    // book re-attaches below only if it has been prepped before; starting a fresh
+    // run is the trigger's (reading/session/use-prep-trigger.ts), not the open's.
+    shell.resetPrep();
+    shell.resetChapterSpine();
+  }
 
   // Extract the full text and the figure index in the background so the AI can
   // see the book (M6, M9). Fire-and-forget: neither blocks rendering, and a book
   // switch while one is running throws its result away.
   shell.showFulltext(null, true);
+  if (newSession) shell.keepBookFulltext(null, true);
   shell.showFigures([]);
   io.clearFigureCache();
 
-  const figures = io.ensureFigures(bookId, buffer, format, recut).catch((e) => {
+  const figures = io.ensureFigures(docId, buffer, format, recut).catch((e) => {
     console.warn("failed to extract figures", e);
     return null;
   });
   shell.trackFigures(figures);
   void figures.then((idx) => {
-    if (shell.currentBookId() !== bookId) return; // stale: the user switched books
+    if (shell.currentDocId() !== docId) return; // stale: the user switched documents
     shell.showFigures(idx?.figures ?? []);
   });
 
-  const fulltext = io.ensureFulltext(bookId, buffer, format, recut).catch((e) => {
+  const fulltext = io.ensureFulltext(docId, buffer, format, recut).catch((e) => {
     console.warn("failed to extract fulltext", e);
     return null;
   });
   shell.trackFulltext(fulltext);
   void fulltext.then(async (ft) => {
-    if (shell.currentBookId() !== bookId) return; // stale: the user switched books
+    if (shell.currentDocId() !== docId) return; // stale: the user switched documents
     shell.showFulltext(ft, false);
-    if (ft && ft.status === "ok") {
+    // The book's own text is kept past the next document switch: it is what the
+    // Outline sidebar draws while a supplement is on screen.
+    if (docId === bookId) shell.keepBookFulltext(ft, false);
+    // Preparation is the book's, and a supplement is not it: what a supplement
+    // has to say to the model is the third slice's (docs/67).
+    if (ft && ft.status === "ok" && newSession) {
       await shell.resumePrep(bookId, name, ft);
       await shell.resumeChapterSpine(bookId, name, ft);
     }
@@ -245,7 +273,7 @@ export async function openBook(
   // the classroom's replies and has no page for EmbedPDF to put it on; the shell
   // keeps the whole set (showMarks above), which is what is written back.
   shell.mountReader({
-    bookId,
+    docId,
     name,
     format,
     buffer,
@@ -253,4 +281,27 @@ export async function openBook(
     viewState: openingViewState(state),
   });
   shell.showTitle(name);
+}
+
+/** Open a book: a new reading session, with the book itself on screen. */
+export function openBook(
+  shell: ReaderShell,
+  book: { bookId: string; name: string; bytes: Uint8Array },
+  io: BookOpenIo = bookOpenIo,
+): Promise<void> {
+  return openDocument(shell, { ...book, docId: book.bookId }, io, true);
+}
+
+/**
+ * Step between the book and one of its supplements without leaving the session
+ * (docs/67). The conversation stays open, the prep run and the chapter spine
+ * stay attached to the book, and nothing is distilled — the reader has not
+ * stopped reading.
+ */
+export function switchDocument(
+  shell: ReaderShell,
+  doc: { bookId: string; docId: string; name: string; bytes: Uint8Array },
+  io: BookOpenIo = bookOpenIo,
+): Promise<void> {
+  return openDocument(shell, doc, io, false);
 }

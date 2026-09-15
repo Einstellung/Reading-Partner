@@ -129,8 +129,12 @@ export function formatAnnotations(materials: TopicMaterial[], label: string): st
 export function buildReadingTools(ctx: {
   currentFulltext: Fulltext | null;
   materials: TopicMaterial[];
+  // The citation shorthand for one page of the document on screen. The
+  // book's pages are cited bare; a supplement's carry its title, so the
+  // header the model copies has to say which (docs/67).
+  pageAnchor?: (page: number) => string;
 }): AgentTool[] {
-  const { currentFulltext, materials } = ctx;
+  const { currentFulltext, materials, pageAnchor } = ctx;
   const tools: AgentTool[] = [];
 
   if (currentFulltext?.status === "ok") {
@@ -150,7 +154,7 @@ export function buildReadingTools(ctx: {
           currentFulltext,
           Math.round(Number(args.from)),
           Math.round(Number(args.to)),
-          (p) => `=== Page ${p} === [p.${p}]`,
+          (p) => `=== Page ${p} === ${pageAnchor ? pageAnchor(p) : `[p.${p}]`}`,
         ),
     });
   }

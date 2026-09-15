@@ -11,7 +11,7 @@ interface Msg {
 
 function start(turns: ReturnType<typeof createLiveTurns<Msg>>, threadId: string, ts = 1) {
   const controller = new AbortController();
-  turns.start({ threadId, bookId: "book", controller, message: { ts, text: "" } });
+  turns.start({ threadId, bookId: "book", home: "book", controller, message: { ts, text: "" } });
   return controller;
 }
 
@@ -96,8 +96,8 @@ test("closing a book stops its turns and leaves another book's running", () => {
   const turns = createLiveTurns<Msg>();
   const mine = new AbortController();
   const other = new AbortController();
-  turns.start({ threadId: "a", bookId: "book", controller: mine, message: { ts: 1, text: "" } });
-  turns.start({ threadId: "b", bookId: "elsewhere", controller: other, message: { ts: 1, text: "" } });
+  turns.start({ threadId: "a", bookId: "book", home: "book", controller: mine, message: { ts: 1, text: "" } });
+  turns.start({ threadId: "b", bookId: "elsewhere", home: "elsewhere", controller: other, message: { ts: 1, text: "" } });
   expect(turns.stopBook("book").map((t) => t.threadId)).toEqual(["a"]);
   expect(mine.signal.aborted).toBe(true);
   expect(other.signal.aborted).toBe(false);

@@ -45,7 +45,7 @@ export interface MarksHost {
   // The engine, once it is up: what draws a mark and jumps to one.
   viewRef: HostRef<ViewInstance | null>;
   // The open book's id, null in the library. Every write is keyed by it.
-  bookIdRef: HostRef<string | null>;
+  docIdRef: HostRef<string | null>;
 }
 
 export interface MarkStore {
@@ -81,7 +81,7 @@ export interface MarkStore {
   showMarks(marks: Annotation[]): void;
 }
 
-export function useMarks({ viewRef, bookIdRef }: MarksHost): MarkStore {
+export function useMarks({ viewRef, docIdRef }: MarksHost): MarkStore {
   const annsRef = useRef<Map<string, Annotation>>(new Map());
   const aiPenRef = useRef(false);
   const penUpRef = useRef<{ x: number; y: number } | null>(null);
@@ -96,20 +96,20 @@ export function useMarks({ viewRef, bookIdRef }: MarksHost): MarkStore {
   }, []);
 
   const persistAnnotations = useCallback(() => {
-    const bookId = bookIdRef.current;
-    if (bookId) saveAnnotations(bookId, [...annsRef.current.values()]);
-  }, [bookIdRef]);
+    const docId = docIdRef.current;
+    if (docId) saveAnnotations(docId, [...annsRef.current.values()]);
+  }, [docIdRef]);
 
   const removeAnnotation = useCallback(
     (id: string) => {
       viewRef.current?.unsetAnnotations([id]);
       annsRef.current.delete(id);
-      const bookId = bookIdRef.current;
-      if (bookId) deleteAnnotations(bookId, [id]);
+      const docId = docIdRef.current;
+      if (docId) deleteAnnotations(docId, [id]);
       syncTraceList();
       setPopup(null);
     },
-    [syncTraceList, viewRef, bookIdRef],
+    [syncTraceList, viewRef, docIdRef],
   );
 
   // The open book's marks for distillation's silent-marks input (docs/02 part 2):
@@ -163,11 +163,11 @@ export function useMarks({ viewRef, bookIdRef }: MarksHost): MarkStore {
   const onDeleteAnnotations = useCallback(
     (ids: string[]) => {
       for (const id of ids) annsRef.current.delete(id);
-      const bookId = bookIdRef.current;
-      if (bookId) deleteAnnotations(bookId, ids);
+      const docId = docIdRef.current;
+      if (docId) deleteAnnotations(docId, ids);
       syncTraceList();
     },
-    [syncTraceList, bookIdRef],
+    [syncTraceList, docIdRef],
   );
 
   const showMarks = useCallback((marks: Annotation[]) => {

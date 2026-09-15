@@ -54,6 +54,7 @@ import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { createLiveTurns, type LiveTurn } from "../live-turns";
 import { deferHangup } from "./hangup";
+import { threadHome, type ThreadOwner } from "./documents";
 import { createPendingImages, type StagedImage } from "../pending-images";
 import type { PrepPipeline } from "../prep/papers/pipeline";
 import {
@@ -100,8 +101,11 @@ export interface CallShapes<M extends CallRow, I extends StagedImage> {
 }
 
 export interface CallHost<M extends CallRow, I extends StagedImage> extends CallShapes<M, I> {
-  // The open book's id, null in the library. Re-read after every await.
+  // The session's book, and the document on screen inside it — the book
+  // itself or one of its supplements (reading/session/documents.ts). Null
+  // in the library. Re-read after every await.
   bookIdRef: HostRef<string | null>;
+  docIdRef: HostRef<string | null>;
   ctxRef: HostRef<ReadingTurnContext>;
   settingsRef: HostRef<Settings>;
   annsRef: HostRef<Map<string, Annotation>>;
@@ -114,6 +118,12 @@ export interface CallHost<M extends CallRow, I extends StagedImage> extends Call
   pushToast(kind: "warn" | "error", message: string): void;
   // The open book's marks as distillation's silent-marks input (docs/02).
   distillAnnotations(): DistillAnnotation[];
+  // A link the model ingested became a supplement of the book: the Outline's
+  // list is stale until the shell reads it again (docs/67).
+  onSupplement?(): void;
+  // The book's supplements, read live: the model is told what it may cite and
+  // which of them the reader is looking at.
+  supplementsRef: HostRef<readonly { hash: string; title: string }[]>;
   // Deleting a conversation takes its anchoring AI-pen mark with it, through the
   // shell's one deletion path so the file, the map and sync stay in agreement.
   removeMark(annotationId: string): void;
@@ -218,6 +228,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   const {
     annsRef,
     bookIdRef,
+    docIdRef,
+    supplementsRef,
     bufferRef,
     ctxRef,
     currentFiguresRef,
@@ -234,6 +246,15 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // every render would re-render the memoized reader pane on every keystroke.
   const shapes = useRef(host);
   shapes.current = host;
+
+  // Which document's thread file a conversation is written to. The book's
+  // for the lesson and everything pulled out of it, the document on screen
+  // for a mark drawn on it (reading/session/documents.ts).
+  const homeOf = useCallback(
+    (call: ThreadOwner | null | undefined) =>
+      threadHome(call, { bookId: bookIdRef.current, docId: docIdRef.current }),
+    [bookIdRef, docIdRef],
+  );
 
   // Which of the ways the call can change are allowed, and what each leaves
   // behind, are the reducer's (reading/call-state.ts).
@@ -404,10 +425,11 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // The turn belongs to its thread, not to the view: closing the bubble leaves it
   // running (docs/03) and every callback below writes through liveTurns, so the
   // row survives a bubble that stopped re-rendering.
-  const runTurn = useCallback((threadId: string, annotationId: string) => {
+  const runTurn = useCallback((threadId: string, annotationId: string, home: string) => {
     const bookId = bookIdRef.current;
+    const docId = docIdRef.current;
     const s = settingsRef.current;
-    if (!bookId || !s.defaultProviderId || !s.defaultModelId) return;
+    if (!bookId || !docId || !s.defaultProviderId || !s.defaultModelId) return;
     const liveTurns = liveTurnsRef.current;
     const controller = new AbortController();
 
@@ -456,7 +478,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const ann = annsRef.current.get(annotationId);
     const ts = Date.now();
     const streamingRow = shapes.current.newRow({ role: "ai", text: "", ts, streaming: true });
-    liveTurns.start({ threadId, bookId, controller, message: streamingRow });
+    liveTurns.start({ threadId, bookId, home, controller, message: streamingRow });
     dispatch({ type: "turn-started", threadId, row: streamingRow });
 
     void (async () => {
@@ -465,8 +487,13 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       // see the page. Thread images (stored as filenames) are read back too.
       const currentFulltext = (await currentFulltextRef.current) ?? null;
       const figures = (await currentFiguresRef.current)?.figures ?? [];
+      const supplements = supplementsRef.current;
+      const viewing = supplements.find((one) => one.hash === docId) ?? null;
       const turn = await buildReadingTurn({
         bookId,
+        docId,
+        viewing: viewing ? { title: viewing.title } : null,
+        supplements,
         threadId,
         annotationId,
         annotation: ann,
@@ -478,6 +505,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         settings: s,
         getPipeline: () => pipelineRef.current,
         distillAnnotations,
+        onSupplement: () => shapes.current.onSupplement?.(),
         signal: controller.signal,
       });
       if (!turn) {
@@ -526,7 +554,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           // next turn as if the model had written it, and it would then describe a
           // turn whose assembly no longer applies.
           write({ kind: "answer", text: full, ...(turn.notice ? { notice: turn.notice } : {}) }, ts);
-          appendMessage(bookId, threadId, { role: "ai", text: full, ts });
+          appendMessage(home, threadId, { role: "ai", text: full, ts });
           // read_chapter may have parked the conversation on a chapter while the
           // turn ran (docs/09); the status row is how the reader finds out.
           syncFocusChapter();
@@ -547,6 +575,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   }, [
     annsRef,
     bookIdRef,
+    docIdRef,
+    supplementsRef,
     bufferRef,
     ctxRef,
     currentFiguresRef,
@@ -763,8 +793,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   const send = useCallback(
     (text: string) => {
       const c = callRef.current;
-      const bookId = bookIdRef.current;
-      if (!c || !bookId) return;
+      const home = homeOf(c);
+      if (!c || !home) return;
       const pending = pendingRef.current;
       const staged = pending.images(c.threadId);
       const trimmed = text.trim();
@@ -804,7 +834,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           ts,
           ...(imageNames.length ? { images: imageNames } : {}),
         };
-        appendMessage(bookId, c.threadId, persistMsg);
+        appendMessage(home, c.threadId, persistMsg);
         const row = shapes.current.newRow({
           role: "user",
           text: trimmed,
@@ -812,16 +842,17 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           ...(images.length ? { images } : {}),
         });
         dispatch({ type: "row-appended", threadId: c.threadId, row });
-        runTurn(c.threadId, c.annotationId);
+        runTurn(c.threadId, c.annotationId, home);
       })();
     },
-    [bookIdRef, ensureAsideRecord, pushToast, runTurn, showPending],
+    [homeOf, ensureAsideRecord, pushToast, runTurn, showPending],
   );
 
   const retry = useCallback(() => {
     const c = callRef.current;
-    if (c) runTurn(c.threadId, c.annotationId);
-  }, [runTurn]);
+    const home = homeOf(c);
+    if (c && home) runTurn(c.threadId, c.annotationId, home);
+  }, [homeOf, runTurn]);
 
   // Keep what a cut-short turn wrote: the abort silences the agent (no
   // onDone/onError follows), so persisting the partial here is the only way it
@@ -829,7 +860,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   const keepPartial = useCallback((live: LiveTurn<M>) => {
     const partial = live.message.text.trim();
     if (partial) {
-      appendMessage(live.bookId, live.threadId, { role: "ai", text: partial, ts: live.message.ts });
+      appendMessage(live.home, live.threadId, { role: "ai", text: partial, ts: live.message.ts });
     }
     live.onSettled?.();
     return partial;
@@ -874,8 +905,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   const captureHangup = useCallback(() => {
     const c = callRef.current;
     const bookId = bookIdRef.current;
+    const home = homeOf(c);
     const { topicId, topicName, fileName, pageIndex } = ctxRef.current;
-    if (!c || !bookId) return;
+    if (!c || !bookId || !home) return;
     // A side conversation ended rather than stepped out of still leaves its line
     // on the one it came off — the ✕, Escape, touching the book, closing the
     // reader, opening another book. Every one of those is this, and stepping out
@@ -893,11 +925,11 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       context: { topicId, topicName, bookId, bookName: fileName, pageIndex },
       annotation: annsRef.current.get(c.annotationId),
       annotations: distillAnnotations(),
-      readStored: () => getThread(bookId, c.threadId)?.messages ?? [],
+      readStored: () => getThread(home, c.threadId)?.messages ?? [],
       whenSettled: (threadId, run) => liveTurnsRef.current.whenSettled(threadId, run),
       distill: (pass) => void distillThread(pass),
     });
-  }, [annsRef, bookIdRef, ctxRef, distillAnnotations, writeAsideReceipt]);
+  }, [annsRef, bookIdRef, homeOf, ctxRef, distillAnnotations, writeAsideReceipt]);
 
   const close = useCallback(() => dispatch({ type: "closed" }), []);
 
@@ -1044,11 +1076,11 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // away — and anything already distilled from it stays.
   const deleteOpenThread = useCallback(() => {
     const c = callRef.current;
-    const bookId = bookIdRef.current;
-    if (!c || !bookId) return;
-    for (const mark of marksOf(releaseThreads(bookId, c.threadId))) removeMark(mark);
+    const home = homeOf(c);
+    if (!c || !home) return;
+    for (const mark of marksOf(releaseThreads(home, c.threadId))) removeMark(mark);
     closeAfterDelete(c);
-  }, [bookIdRef, closeAfterDelete, marksOf, releaseThreads, removeMark]);
+  }, [homeOf, closeAfterDelete, marksOf, releaseThreads, removeMark]);
 
   // The other end of the same pairing: the mark is being deleted from the trace
   // list, so its conversation goes with it, and so do the asides off that
@@ -1062,8 +1094,10 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // it goes from here.
   const dropThread = useCallback(
     (annotationId: string, threadId: string | undefined) => {
-      const bookId = bookIdRef.current;
-      const gone = bookId && threadId ? releaseThreads(bookId, threadId) : [];
+      // A mark and its conversation are the document's, and the trace list
+      // this came from is the document's list.
+      const docId = docIdRef.current;
+      const gone = docId && threadId ? releaseThreads(docId, threadId) : [];
       const open = callRef.current;
       // Matched by id, not only by mark: a side conversation pulled out of a
       // reply carries no mark of its own and the mark test would not reach it.
@@ -1071,7 +1105,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       else dispatch({ type: "closed-with-mark", annotationId });
       for (const mark of marksOf(gone)) if (mark !== annotationId) removeMark(mark);
     },
-    [bookIdRef, closeAfterDelete, marksOf, releaseThreads, removeMark],
+    [docIdRef, closeAfterDelete, marksOf, releaseThreads, removeMark],
   );
 
   const discardStagedImages = useCallback(() => pendingRef.current.clearAll(), []);

@@ -90,16 +90,17 @@ function mount(initial: { aiPen: boolean }) {
     currentCall: mock(() => null),
   };
   const viewRef = { current: view as unknown as ViewInstance };
-  const bookIdRef = { current: BOOK as string | null };
+  const docIdRef = { current: BOOK as string | null };
   const readerPaneRef = { current: null as HTMLDivElement | null };
 
   const rendered = renderHook(
     (props: { aiPen: boolean }) => {
-      const marks = useMarks({ viewRef, bookIdRef });
+      const marks = useMarks({ viewRef, docIdRef });
       const opened = useMarkDoors({
         marks,
         viewRef,
-        bookIdRef,
+        docIdRef,
+        bookIdRef: docIdRef,
         readerPaneRef,
         aiPen: props.aiPen,
         penColor: "#ffd400",

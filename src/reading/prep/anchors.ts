@@ -43,8 +43,18 @@ export function pageCitationHref(page: number, quote?: string): string {
   return withQuote(`${PAGE_HREF}${page}`, quote);
 }
 
+// A supplement's "slug" is its title, which has spaces in it, and a raw space in
+// an href does not survive the markdown renderer. Slugs that slugify emitted are
+// letters, digits and hyphens in any script, and those go in as written — the
+// fragment is read back by parseCitationHref, not by a URL parser.
+const NEEDS_ENCODING = /[\s()#%"'<>\\]/;
+
+function encodeSlug(slug: string): string {
+  return NEEDS_ENCODING.test(slug) ? encodeURIComponent(slug) : slug;
+}
+
 export function paperCitationHref(slug: string, page: number, quote?: string): string {
-  return withQuote(`${PAPER_HREF}${slug}--${page}`, quote);
+  return withQuote(`${PAPER_HREF}${encodeSlug(slug)}--${page}`, quote);
 }
 
 export function figureCitationHref(id: string): string {
@@ -71,7 +81,12 @@ export function parseCitationHref(href: string | undefined): Citation | null {
     const rest = href.slice(PAPER_HREF.length);
     const sep = rest.lastIndexOf("--");
     if (sep <= 0) return null;
-    const slug = rest.slice(0, sep);
+    let slug = rest.slice(0, sep);
+    try {
+      slug = decodeURIComponent(slug);
+    } catch {
+      // Not encoded, or not decodable: read it as written.
+    }
     const page = Number(rest.slice(sep + 2));
     return slug && Number.isFinite(page) && page > 0
       ? { kind: "paper", slug, page, ...(quote ? { quote } : {}) }
@@ -169,9 +184,41 @@ function labelOf(inner: string, quoteAt: [number, number] | null): string {
 // linking one that turns out to be wrong, which the click check catches.
 export type KnownSlugs = ReadonlySet<string> | null | undefined;
 
+// A supplement is cited by its title, which is a phrase and not a slug (docs/67
+// 「辅助资料」). The single-token head above cannot see one, and widening the
+// head to any run of words would swallow prose — "[see p.9 above]" is the shape.
+// So a multi-word head is a citation only when it names a title that is really
+// there: this set, never a charset rule, and never on its own shape.
+//
+// Titles are matched whitespace-collapsed and case-folded
+// (reading/session/supplement-citation.ts: citationKey), because the model
+// copies the title out of the prompt and may re-wrap it.
+export interface AnchorSources {
+  slugs?: KnownSlugs;
+  titles?: ReadonlySet<string>;
+}
+
+function sourcesOf(known: KnownSlugs | AnchorSources): AnchorSources {
+  return known instanceof Set || known === null || known === undefined
+    ? { slugs: known as KnownSlugs }
+    : (known as AnchorSources);
+}
+
+function titleKey(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+// Every place a page number could start, longest title first: a title that ends
+// in a number is a title, not a page.
+const TITLE_SPLIT = /\s+pp?\.\s*\d+/gi;
+
 // Parse the text between one pair of brackets. Returns null — leave the text
 // exactly as written — for anything that is not plainly a citation.
-export function parseAnchor(inner: string, knownSlugs?: KnownSlugs): Anchor | null {
+export function parseAnchor(
+  inner: string,
+  known?: KnownSlugs | AnchorSources,
+): Anchor | null {
+  const { slugs: knownSlugs, titles } = sourcesOf(known);
   const s = inner.trim();
   if (!s) return null;
 
@@ -195,19 +242,22 @@ export function parseAnchor(inner: string, knownSlugs?: KnownSlugs): Anchor | nu
   }
 
   const head = SLUG_HEAD.exec(s);
-  if (!head) return null;
+  if (!head) return titleAnchor(s, titles);
   // slugify only ever emits lowercase, so case in the citation carries no
   // meaning and would only miss the paper. The label keeps what was written.
   const slug = head[1].toLowerCase();
-  if (knownSlugs && !knownSlugs.has(slug)) return null;
+  if (knownSlugs && !knownSlugs.has(slug)) return titleAnchor(s, titles);
   const after = PAGE_HEAD.exec(s.slice(head[0].length));
-  if (!after) return null;
+  // The one-word head is the first reading, not the only one: a supplement's
+  // title starts with a word too, and "Scaling Laws for … p.4" has four more
+  // before the page number (titleAnchor).
+  if (!after) return titleAnchor(s, titles);
   const n = Number(after[1]);
-  if (n <= 0) return null;
+  if (n <= 0) return titleAnchor(s, titles);
   const tail = parseTail(s, head[0].length + after[0].length);
   // Unlike the page form, the head here is an arbitrary word, so a tail the
   // grammar cannot account for means this was prose: "[see p.9 above]".
-  if (!tail.understood) return null;
+  if (!tail.understood) return titleAnchor(s, titles);
   return {
     kind: "paper",
     slug,
@@ -215,6 +265,33 @@ export function parseAnchor(inner: string, knownSlugs?: KnownSlugs): Anchor | nu
     label: labelOf(s, tail.quoteAt),
     ...(tail.quote ? { quote: tail.quote } : {}),
   };
+}
+
+// A bracket whose head is a supplement's title: [Some Long Title p.4]. Split at
+// every page number in it and keep the split whose left half is a title that
+// exists, so a title ending in a digit is not cut in half.
+function titleAnchor(s: string, titles?: ReadonlySet<string>): Anchor | null {
+  if (!titles || titles.size === 0) return null;
+  TITLE_SPLIT.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TITLE_SPLIT.exec(s))) {
+    const key = titleKey(s.slice(0, m.index));
+    if (!key || !titles.has(key)) continue;
+    const after = PAGE_HEAD.exec(s.slice(m.index).trimStart());
+    if (!after) continue;
+    const n = Number(after[1]);
+    if (n <= 0) continue;
+    const tail = parseTail(s, s.length - s.slice(m.index).trimStart().length + after[0].length);
+    if (!tail.understood) return null;
+    return {
+      kind: "paper",
+      slug: key,
+      page: n,
+      label: labelOf(s, tail.quoteAt),
+      ...(tail.quote ? { quote: tail.quote } : {}),
+    };
+  }
+  return null;
 }
 
 // --- scanning --------------------------------------------------------------
@@ -271,7 +348,7 @@ function inRanges(ranges: Array<[number, number]>, i: number): boolean {
 function scanAnchors(
   text: string,
   rewrite: (a: Anchor, raw: string) => string | null,
-  knownSlugs?: KnownSlugs,
+  known?: KnownSlugs | AnchorSources,
 ): string {
   if (!text.includes("[")) return text;
   const skip = codeRanges(text);
@@ -285,7 +362,7 @@ function scanAnchors(
     // show literally.
     if (text[end] === "(" || text[m.index - 1] === "\\") continue;
     if (inRanges(skip, m.index)) continue;
-    const anchor = parseAnchor(m[1], knownSlugs);
+    const anchor = parseAnchor(m[1], known);
     if (!anchor) continue;
     const replacement = rewrite(anchor, m[0]);
     if (replacement === null) continue;
@@ -308,8 +385,11 @@ function renderAnchor(a: Anchor): string {
 // well-shaped candidate links. A citation the list does not know stays plain
 // text on purpose — a chip that leads nowhere is worse than no chip, because it
 // looks exactly like one that leads somewhere.
-export function linkifyCitations(text: string, knownSlugs?: KnownSlugs): string {
-  return scanAnchors(text, renderAnchor, knownSlugs);
+export function linkifyCitations(
+  text: string,
+  known?: KnownSlugs | AnchorSources,
+): string {
+  return scanAnchors(text, renderAnchor, known);
 }
 
 // Rewrite only the [fig:N] shorthands, leaving every other bracket byte for byte
