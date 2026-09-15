@@ -59,6 +59,12 @@ jobs:
           workspaces: src-tauri
 
       - uses: android-actions/setup-android@v4
+        # The action's default package list is `tools platform-tools`; Google's
+        # repository stopped serving the legacy `tools` package on 2026-09-15 and
+        # sdkmanager exits 1 on it (pitfall 314). Everything else is installed
+        # by the step below.
+        with:
+          packages: platform-tools
 
       - name: Install Android NDK
         run: |

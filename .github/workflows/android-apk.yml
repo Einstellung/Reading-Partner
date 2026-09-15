@@ -36,6 +36,11 @@ on:
         type: string
         default: ""
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag of an existing GitHub release to attach the APK to. Empty means artifact only."
+        type: string
+        default: ""
   push:
     branches: [android-spike]
 
@@ -89,6 +94,12 @@ jobs:
 
       # Put the SDK command-line tools (sdkmanager) on PATH.
       - uses: android-actions/setup-android@v4
+        # The action's default package list is `tools platform-tools`; Google's
+        # repository stopped serving the legacy `tools` package on 2026-09-15 and
+        # sdkmanager exits 1 on it (pitfall 314). Everything else is installed
+        # by the step below.
+        with:
+          packages: platform-tools
 
       # Add the pinned NDK and build-tools (apksigner/zipalign live in build-tools).
       - name: Install Android NDK and build-tools

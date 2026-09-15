@@ -212,6 +212,7 @@
 
 ## Android 构建与签名
 
+- [314-setup-android-installs-a-package-google-no-longer-serves](./314-setup-android-installs-a-package-google-no-longer-serves.md) — `android-actions/setup-android@v4` 默认 `packages` 含废弃的 `tools`，2026-09-15 起 Google 仓库不再提供，sdkmanager 退出 1 整个 job 挂在第一步；`with: packages: platform-tools`，其余包由下一步自己装；`android-apk.yml` 的 dispatch 加了 `release_tag` 好补发 APK
 - [104-zipalign-page-size-flag-needs-build-tools-35](./104-zipalign-page-size-flag-needs-build-tools-35.md) — `zipalign -P 16`（16 KB 页对齐）是 build-tools 35 才加的参数，34.0.0 上直接退 2；对齐真正来自 NDK r28+，产物上用 readelf 逐段断言
 
 ## 原生音频与语音
