@@ -31,7 +31,15 @@
 // stops when the tab is hidden or the body has scrolled out of view, because a
 // companion nobody can see is a companion nobody should be paying for.
 
-import { forwardRef, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import {
+	forwardRef,
+	useEffect,
+	useRef,
+	useState,
+	type ComponentProps,
+	type CSSProperties,
+	type ReactNode,
+} from "react";
 
 import { Button } from "../ui/button";
 import { cn } from "../lib/utils";
@@ -80,7 +88,14 @@ import {
 	readEnvelope,
 	type EnvelopeQueue,
 } from "./envelope";
+import {
+	GLANCE_K,
+	glanceGaze,
+	glanceOver,
+} from "./case-glance";
+import { CASE_HIT_PAD_PX, caseRect } from "./case-box";
 import bodyUrl from "./lumen-body.webp";
+import caseUrl from "./lumen-case.webp";
 import tuftUrl from "./lumen-tuft.webp";
 
 // The face, in the SVG's own 1000-unit box. Kept here rather than in the markup
@@ -107,7 +122,7 @@ export interface LumenProps extends Omit<ComponentProps<"button">, "children"> {
 	rest?: boolean;
 	className?: string;
 	still?: boolean;
-	holding?: boolean;
+	glance?: number;
 	onActivate?: () => void;
 	label?: string;
 	overlay?: ReactNode;
@@ -131,10 +146,14 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	// beside an open book (docs/68) — a body breathing next to the text is a
 	// second thing to read.
 	still = false,
-	// Holding a box: the arrival pose, drawn as its own layer over the lower
-	// body. A pose and not an animation; held until the box is empty again.
-	holding = false,
-	// What a press does, where that is not starting and stopping a call.
+	// One glance at the case and back (docs/68). A number that goes up once per
+	// glance owed rather than a flag, so two arrivals are two glances; zero is
+	// nothing having arrived yet. `still` does not stop it: the loop is the
+	// breath, and this is a one-shot.
+	glance = 0,
+	// What a press does, where that is not starting and stopping a call. Kept
+	// for the voice entry the column will grow one day (docs/68); the corner
+	// wires nothing to it.
 	onActivate,
 	// The button's accessible name, where the call's four phases are not what
 	// the press means.
@@ -156,6 +175,8 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	const levelRef = useRef(0);
 	const restMixRef = useRef(rest ? 1 : 0);
 	const gazeRef = useRef<Gaze>(GAZE_ZERO);
+	// When the last glance began, for the loop to read. Null between glances.
+	const glanceRef = useRef<{ at: number } | null>(null);
 
 	const subscribe = handle.subscribeLevel;
 	const subscribeEnvelope = handle.subscribeEnvelope;
@@ -268,8 +289,14 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 			// meant to be looking up at a thought would be the wrong story told
 			// louder.
 			const following = shown === "rest" && pointer !== null && now - pointerAt < GAZE_RELEASE_MS;
-			const target =
-				shown !== "rest"
+			// A glance at the case outranks all of it for the half second it
+			// lasts: something arrived, and that is what the eyes are on.
+			const glancing = glanceRef.current;
+			const glanceMs = glancing === null ? Infinity : now - glancing.at;
+			const looking = !glanceOver(glanceMs);
+			const target = looking
+				? glanceGaze(glanceMs)
+				: shown !== "rest"
 					? actGaze(shown, actMs)
 					: following && pointer
 						? gazeToward(
@@ -280,7 +307,12 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 						: reduced
 							? GAZE_ZERO
 							: wanderGaze(now);
-			gazeRef.current = easeGaze(gazeRef.current, target, dt, GAZE_K_ACT[shown]);
+			gazeRef.current = easeGaze(
+				gazeRef.current,
+				target,
+				dt,
+				looking ? GLANCE_K : GAZE_K_ACT[shown],
+			);
 
 			const common = {
 				level: levelRef.current,
@@ -364,6 +396,46 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 		};
 	}, [still, subscribe, subscribeEnvelope]);
 
+	// The glance. A still body has no loop to paint it, so the glance brings its
+	// own rAF and hands the two properties back at zero when it is done; a body
+	// that is running one only leaves a mark for the loop to read.
+	useEffect(() => {
+		if (glance <= 0) return;
+		const el = rootRef.current;
+		if (!el) return;
+		const at = performance.now();
+		glanceRef.current = { at };
+		if (!still) {
+			return () => {
+				glanceRef.current = null;
+			};
+		}
+		let gaze = GAZE_ZERO;
+		let last = at;
+		let frame = 0;
+		const step = (now: number) => {
+			const elapsed = now - at;
+			gaze = easeGaze(gaze, glanceGaze(elapsed), now - last, GLANCE_K);
+			last = now;
+			if (glanceOver(elapsed)) {
+				el.style.setProperty("--lumen-gx", "0");
+				el.style.setProperty("--lumen-gy", "0");
+				frame = 0;
+				return;
+			}
+			el.style.setProperty("--lumen-gx", gaze.x.toFixed(4));
+			el.style.setProperty("--lumen-gy", gaze.y.toFixed(4));
+			frame = requestAnimationFrame(step);
+		};
+		frame = requestAnimationFrame(step);
+		return () => {
+			glanceRef.current = null;
+			if (frame !== 0) cancelAnimationFrame(frame);
+			el.style.setProperty("--lumen-gx", "0");
+			el.style.setProperty("--lumen-gy", "0");
+		};
+	}, [glance, still]);
+
 	const idle = handle.phase === "idle";
 
 	return (
@@ -419,7 +491,6 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 					    covering it. */}
 					<span className="absolute left-1/2 top-[54%] h-[46%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,#f6faff,transparent)] opacity-(--lumen-core) mix-blend-screen" />
 					<LumenFace />
-					{holding && <HeldBox />}
 				</span>
 			</span>
 			{overlay}
@@ -427,25 +498,44 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	);
 });
 
-// The box it is holding (docs/68): a small parcel in front of the lower body,
-// tied with a ribbon. Drawn rather than painted, because there is no second
-// master — the body raster has empty hands, and a pose it never had cannot be
-// generated into it now.
+// The case (docs/68). A red dispatch box standing beside Lumen in the same pool
+// of light, not a thing in its hands: it is the box, and Lumen is who tells you
+// what is in it.
 //
-// Percentages of the body's own box, so the same three elements read at the 72px
-// corner and at whatever size the door draws. Card and border rather than a hard
-// white: this is paper in a paper app, and the palette contract keeps flat white
-// out of the UI (tests/ui/components/paper-tint-contract.test.ts).
-function HeldBox() {
+// The raster is cut out of the one generation where the two were drawn
+// together, and its box is read off that same picture (case-box.ts) rather than
+// written down here, so the corner reproduces the composition at any size: a
+// little over half the body's height, leaning in over the body's lower left,
+// feet on the same line. The rim light down its right side is the body's — it
+// is why the two read as standing in one place, and why the cut keeps it.
+
+/**
+ * The trigger's own box: the case, grown by the touch target on every side.
+ * `box-content` on the element is what makes the padding grow outwards rather
+ * than eat the drawing, so the case draws at about 24px in the corner and the
+ * finger still gets 44.
+ */
+export function caseTriggerStyle(): CSSProperties {
+	const rect = caseRect();
+	const pct = (n: number) => `${(n * 100).toFixed(3)}%`;
+	return {
+		left: `calc(${pct(rect.left)} - ${CASE_HIT_PAD_PX}px)`,
+		bottom: `calc(${pct(rect.bottom)} - ${CASE_HIT_PAD_PX}px)`,
+		width: pct(rect.width),
+		height: pct(rect.height),
+		padding: `${CASE_HIT_PAD_PX}px`,
+	};
+}
+
+/** The case itself, filling whatever box it is given. */
+export function LumenCase() {
 	return (
-		<span className="absolute bottom-[10%] left-1/2 block h-[22%] w-[38%] -translate-x-1/2 rounded-[3px] border border-border bg-card shadow-[0_1px_3px_rgba(16,24,64,0.28)]">
-			{/* The lid: a band across the top, so the parcel has a top rather than
-			    being a rectangle at 72px. */}
-			<span className="absolute inset-x-0 top-0 block h-[34%] rounded-t-[2px] border-b border-border bg-muted-faint" />
-			{/* The ribbon down the middle, the one line that makes it a parcel and
-			    not a card held up. */}
-			<span className="absolute inset-y-0 left-1/2 block w-[10%] -translate-x-1/2 bg-accent-line opacity-70" />
-		</span>
+		<img
+			src={caseUrl}
+			alt=""
+			draggable={false}
+			className="absolute inset-0 h-full w-full select-none"
+		/>
 	);
 }
 
