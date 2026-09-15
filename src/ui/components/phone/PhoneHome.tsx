@@ -3,6 +3,7 @@
 // open books at all, so an entry point to them would only lead to a dead end.
 
 import SettingsButton from "../common/SettingsButton";
+import { lumenToggleTitle } from "../lumen/corner-pref";
 import { BriefingCardBody, Card, CardBodyPlaceholder, CardLabel } from "../info/HomeCard";
 import type { LaunchProps } from "../info/InfoHome";
 
@@ -11,18 +12,35 @@ export default function PhoneHome({
   savedCount,
   onOpenSaved,
   settingsAlert,
+  lumenShown,
+  onToggleLumen,
 }: {
   launch: LaunchProps;
   // How many articles are kept, or null while saved-articles.json is being read.
   savedCount: number | null;
   onOpenSaved: () => void;
   settingsAlert: boolean;
+  // The corner companion's switch (docs/68). The phone has no sidebar, so the
+  // app's own name on the home screen is what carries it.
+  lumenShown: boolean;
+  onToggleLumen: () => void;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col px-4 py-6">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="m-0 font-display text-[24px] font-semibold text-foreground">Reading Partner</h1>
+          <h1 className="m-0 font-display text-[24px] font-semibold text-foreground">
+            <button
+              type="button"
+              className="bg-transparent p-0 text-left font-display text-[24px] font-semibold text-foreground"
+              title={lumenToggleTitle(lumenShown)}
+              aria-label={lumenToggleTitle(lumenShown)}
+              aria-pressed={lumenShown}
+              onClick={onToggleLumen}
+            >
+              Reading Partner
+            </button>
+          </h1>
           <p className="m-0 mt-1 text-[14px] text-faint-foreground">Today</p>
         </div>
         <SettingsButton alert={settingsAlert} onClick={launch.onOpenSettings} />
