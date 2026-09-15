@@ -112,7 +112,11 @@ soul 随时能读 run 文件的 `progress` 回答「跑到哪了」，不必等�
 
 同一 kind 有两台设备都能跑时，沿用 claim 的选举（连续在线最久者，`claimedAt` 相同按 deviceId 破平，24 小时没心跳算弃权），按 kind 算，设备级不是 run 级。输的那台站着不动。
 
-接手三条：执行设备自己重启后，名下 `running` 的 run 退回 `pending`、`attempts` 加一，本机自己判断，不依赖别人的时钟；执行设备弃权后，同 kind 新当选的设备把它名下 `running` 的 run 退回 `pending` 接手；本机名下 `running` 但 `lastProgressAt` 超过阈值的，本机自己退回 `pending`、`attempts` 加一。正确性兜底是重跑无害：一个 run 跑两遍、两份结果合并后与跑一遍相同。
+接手不退回 `pending`：状态只升不降，接手是就地再写一份 `running`——换 `claimant`（deviceId + 开始时刻）、`attempts` 加一、`revision` 加一。两份都是 `running`，状态格打平，`revision` 裁决，新接手的那份赢。
+
+三条：执行设备自己重启后接手名下的 `running`，本机自己判断，不依赖别人的时钟；执行设备弃权后，同 kind 新当选的设备接手它名下的 `running`；本机名下 `running` 而 `lastProgressAt` 与本次 claimant 开始时刻里较晚的那个超过阈值的，本机自己接手。三条都算一次尝试——接手就是开工，不记数的话一个在两台设备间弹来弹去的 run 永远到不了上限。worker 失败但没到上限时也是这个写法，原设备就地重试；到上限 runner 写 `failed`。创建之后没有人再写 `pending`。
+
+正确性兜底是重跑无害：一个 run 跑两遍、两份结果合并后与跑一遍相同。
 
 移动端派活就是写一个 `pending` run，PC 下次 pull 捡起来跑；移动端要看的只有 PC 上次在线时刻，来自 claim 心跳。
 
@@ -182,7 +186,9 @@ schedule 的产物是一条 `wake` 铃，不是直接起 run；派什么由 soul
 
 `legion/execute`，worker 的签名是 `run(brief, ctx) → { cancel, done }`。
 
-runner 是 `kind` → worker 的注册表加一圈外壳：取走 → 写 `running` → 跑 → 写终态 → 投一条铃。`ctx` 里有 `report(text)`，agent worker 的那份由 runner 在每次工具调用结束时自动调。runner 还管三件闸：`delegator` 深度超两层的创建请求拒绝，带 `batchId` + `step` 的创建先查已有的那一份，取消按 `batchId` 级联一层。
+runner 是 `kind` → worker 的注册表加一圈外壳：取走 → 写 `running` → 跑 → 写终态 → 投一条铃。注册一个 worker 的同一次调用里声明这个 kind 要哪些能力标签——有 worker 的设备才可能跑它，能不能跑由标签选举答，两件事从不分开成立。`ctx` 里有 `report(text)`，和给 agent worker 的 `reportTool(工具名, 轮数)`：回合是 worker 自己跑的，措辞是 runner 的。子 run 只从 `ctx.delegate` 出，agent worker 调它直接被拒。runner 还管三件闸：`delegator` 深度超两层的创建请求拒绝，带 `batchId` + `step` 的创建先查已有的那一份，取消按 `batchId` 级联一层。
+
+轮询挂在 sync 的 15 秒 tick 上，每拍问 `dueRuns` 要本机该动的 run。同一 kind 本机同时只跑一个：贵的都是重活，一台设备同时跑两个就是别的 kind 排不上队；不同 kind 并排跑不拦。`local` 档不落同步文件夹——runner 内部给它一份 Map 上的 run store，delegate 当场起、当场把 `done` 交回去，别处不再分档。
 
 已经在的：
 
@@ -234,15 +240,17 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 ## 现状与顺序
 
-已落地（2026-09-15）：第 1 到 6 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
+已落地（2026-09-15）：第 1 到 8 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
 
 第 3 步：`src/legion/run/types.ts` 的字段表与状态链、`merge.ts` 的 `mergeRun`，palace 的 `lattice` 策略（`platform/sync/merge/lattice.ts` 是注册表，领域交 `merge(a, b)`，base 不参与）和 `run` 行（`legion/runs/`，data 通道，进 `NEVER_INFER_DELETE`）。合并的裁决顺序是状态链 → `revision` → claimant 的 deviceId 小者 → 规范序列化的内容序；`attempts`、`createdAt`、`startedAt`、`deliveredAt`、`cancelRequested` 单独折叠，不跟赢的那一侧。第 4 步：`src/legion/run/store.ts` 的 `createRunStore(io)`，文件名 `r-<hash(kind + \0 + idempotencyKey)>`，撞已有文件一律原样交回由调用方看 `state`。
 
 第 5 步（2026-09-15）：claim 落在 `src/legion/claim`，文件从 `info-collector-<id>.json` 搬到 `legion/claim/<deviceId>.json`（palace 行改名 `claim`，sync 仍是 data；旧路径留作 legacy 并下了同步通道）。capability 的表示法是能力标签而不是 kind 名单：kind 注册时声明需要哪些标签（`registerKindCapabilities`），设备声明自己有哪些（今天只有 `webview-fetch`），`electFor(kind, claims, now)` 在覆盖需求的候选里按连续在线最久选。info 的 `collect` 登记为不需要任何标签，和泛化之前的候选集一样。
 
-第 6 步（2026-09-15）：`src/legion/schedule`。`dueRuns` 和 `reclaimAfterRestart` 是纯函数，阈值作参数，不起 worker 也不碰盘；它读的 run 形状是本地的最小接口，等 `legion/run` 的正式类型。schedule 是内存注册表加 `dueSchedules`，到点在当选设备上摇一条 `wake` 铃，去重靠 `legion/schedule/fired.json`（本地、每设备一份）记的上次 anchor。info 的 daily round 登记成一条 schedule，挂在原来的 tick 上；干活那半和它自己的日期记录原样保留，到第 7 步变成 run 时一起去掉。
+第 6 步（2026-09-15）：`src/legion/schedule`。`dueRuns` 和 `reclaimAfterRestart` 是纯函数，阈值作参数，不起 worker 也不碰盘；它读的 run 形状是 `Run` 的一个 `Pick`（只用 type import，这个目录仍不在运行时 import `legion/run`）。schedule 是内存注册表加 `dueSchedules`，到点在当选设备上摇一条 `wake` 铃，去重靠 `legion/schedule/fired.json`（本地、每设备一份）记的上次 anchor。info 的 daily round 登记成一条 schedule，挂在原来的 tick 上；干活那半和它自己的日期记录原样保留，等 `collect` 登记成 kind、由 runner 起 run 时一起去掉。
 
-未开始：worker 契约与 runner、ledger 折叠、session 到对话文件的投影。run 的合并由 import `legion/run` 注册进 sync，今天还没有调用方 import 它——第 7 步的 runner 是第一个；`dueRuns` 同样还没有轮询它的调用方，它读的 run 形状要换成 `legion/run` 的正式类型。今天会响的只有 schedule 的 `wake` 铃（info 的 daily round 到点在当选设备上摇一条，soul 答铃时没有活可派）；开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
+第 7 步（2026-09-15）：worker 契约与 runner 落在 `src/legion/execute/worker.ts` 和 `runner.ts`。`registerWorker` 一次调用登记 worker 和这个 kind 的能力标签；runner 的 `delegate` 管三件闸，`tick` 走 `dueRuns`，`cancel` 按 `batchId` 级联一层。`report` 三十秒一写、终态立刻写并带上最后一行。store 加了 `retake`（接手：同状态换 claimant、attempts 和 revision 各加一），`dueRuns` 的 `back` 动作改成 `retake`、`ScheduledRun` 换成 `Run` 的 `Pick`、`bumpAttempts` 去掉。`App.tsx` 和 `PhoneApp.tsx` 在 `startBellWatch` 旁边起 `startRunner`，这是 `legion/run` 的第一个 import，run 的合并从此注册进 sync；注册表在生产里是空的，空表时轮询先看表再看盘，不花 IO。
+
+未开始：ledger 折叠、session 到对话文件的投影、translate 接入。今天没有任何 kind 登记 worker，会响的只有 schedule 的 `wake` 铃（info 的 daily round 到点在当选设备上摇一条，soul 答铃时没有活可派）；开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。
@@ -250,7 +258,7 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 4. （已落地）run store：创建（带 `batchId` + `step` 走派生文件名）、读、列、状态迁移、取消。验收：内存文件系统下模拟两台设备，同 batchId 同 step 两次创建只得一个文件；撞 `running` 返回同一 runId，撞 `done` 返回原产出引用。
 5. claim 泛化：claim 带 `capabilities`，`electFor(kind, claims, now)`，info 的采集端改成调它，目录从 `info/program/presence.ts` 挪进 `legion/claim`。验收：现有 handoff 测试搬过来仍绿；两台都能跑取连续在线最久，都不能跑返回 null。
 6. 指派与 schedule：`dueRuns(runs, claims, now, deviceId)`，时点窗口，夜间时点按 kind 归一台，到点写一条 `wake` 铃。验收：这个函数的单测不许起 worker；本机重启退回、对端弃权接手、`lastProgressAt` 超阈值退回各一例；两台都到点只出一条 `wake`。
-7. worker 契约与 runner：kind → worker 的注册表，取走 → 写 `running` → 跑 → 写终态 → 投铃；`ctx.report` 更新 `progress` 与 `lastProgressAt`，三十秒节流，状态变化不节流；深度检查、batch 续跑查询、按 `batchId` 级联取消。验收：假 worker 走完全程并投出 `run-done`；一秒内十次 `report` 只写一次盘、终态立刻写；`delegator` 已是子 run 的创建请求被拒；同 batchId 同 step 已 `done` 时不新建、直接拿 `output`；取消父 run 后子 run 也进 `cancelled`。
+7. （已落地）worker 契约与 runner：kind → worker 的注册表，取走 → 写 `running` → 跑 → 写终态 → 投铃；`ctx.report` 更新 `progress` 与 `lastProgressAt`，三十秒节流，状态变化不节流；深度检查、batch 续跑查询、按 `batchId` 级联取消。验收：假 worker 走完全程并投出 `run-done`；一秒内十次 `report` 只写一次盘、终态立刻写；`delegator` 已是子 run 的创建请求被拒；同 batchId 同 step 已 `done` 时不新建、直接拿 `output`；取消父 run 后子 run 也进 `cancelled`。
 8. bell：ring / read / ack，`run-done` / `run-failed` / `wake` 三种。验收：投递后 ack 到达；未 ack 的出现在待恢复集合里；重复 ring 同一条不产生两份；三种铃各起一个没有用户输入的 soul 回合；取消和进度不产生铃。
 9. ledger 折叠：`foldRun` 纯函数、三条判据、墓碑含时刻比较。验收：两台折出逐字节相同的一行；创建时刻更晚的同名新 run 不被误删；未 ack 的终态 run 不折。
 10. translate 接入：kind `translate-book` 注册，`TranslateRun` 单例的工作体抽成一个程序 worker 并补 cancel 通道和 `report`，状态 UI 改成订阅 run 文件的 `progress`。验收：无头双设备测试跑完 A 写 pending、B 当选执行、产出与 `run-done` 的 ack 回到 A 的整条链；取消在跑到一半时生效；真机确认一次，iPad 派、PC 跑。
