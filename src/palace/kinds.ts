@@ -28,7 +28,14 @@ export type { FieldGroups, MergeStrategy, RecordShape };
 // this device publishes for the others and never pulls back as data.
 export type SyncChannel = "data" | "books" | "local" | "remote-only";
 
-export type PalaceDomain = "platform" | "reading" | "info" | "memory" | "sync" | "legacy";
+export type PalaceDomain =
+  | "platform"
+  | "reading"
+  | "info"
+  | "memory"
+  | "sync"
+  | "legacy"
+  | "box";
 
 // What the file's own deletion rides on. "never" means nothing deletes it in
 // bulk — either it is a record inside a file that travels, or it is an orphan
@@ -65,6 +72,7 @@ export type PalaceId =
   | "observationId"
   | "threadId"
   | "labId"
+  | "boxItemId"
   | "fixed";
 
 // What a record does when the thing it points at is deleted (docs/61). The
@@ -1285,6 +1293,26 @@ export const PALACE = [
     gc: "domain-housekeeping",
     note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/67)",
   },
+
+  // -- the red box ----------------------------------------------------------
+  {
+    kind: "box-item",
+    about: "Something a delivery put in front of the reader, and whether they have got to it.",
+    domain: "box",
+    match: keyed(/^box\/(b-[0-9a-f]{32})\.json$/),
+    pathFor: (id: string) => `box/${id}.json`,
+    dir: { prefix: "box", depth: 1 },
+    samples: ["box/b-0123456789abcdef0123456789abcdef.json"],
+    id: "boxItemId",
+    refs: [{ kind: "run", via: "runId" }],
+    sync: "data",
+    merge: "lattice",
+    neverInferDelete: true,
+    deleteWith: "never",
+    gc: "never",
+    note: "one item per file, born on whichever device made the delivery and moved along by whichever one the reader was holding, so the merge is a join and not a three-way (src/box/merge.ts). The cover is written once and the state is the only thing that changes, which is what keeps the box off a second shared mutable file (docs/60). Never-infer-delete because nothing deletes an item today, so an absence on one device is a partial tree and not a deletion; the fold into memory is later and, like the ledger's, will have to carry its own tombstone (pitfall 208). gc never for the same reason: there is nothing yet that an item has been folded into",
+  },
+
   {
     kind: "sync-state",
     domain: "sync",

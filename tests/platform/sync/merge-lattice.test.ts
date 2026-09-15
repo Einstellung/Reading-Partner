@@ -7,6 +7,7 @@
 // itself in.
 
 import { expect, test } from "bun:test";
+import "../../../src/box";
 import "../../../src/legion/run";
 import { PALACE, rowOf } from "../../../src/palace";
 import { mergeFile } from "../../../src/platform/sync/merge";
@@ -46,7 +47,7 @@ function merged(local: Uint8Array, remote: Uint8Array, base: Uint8Array | null =
 
 test("every kind the table merges as a lattice has a join registered", () => {
   const lattices = PALACE.filter((row) => row.merge === "lattice").map((row) => row.kind);
-  expect(lattices).toEqual(["run"]);
+  expect(lattices).toEqual(["run", "box-item"]);
   for (const kind of lattices) expect(`${kind}: ${isLatticeRegistered(kind)}`).toBe(`${kind}: true`);
   expect(strategyFor(PATH)).toBe("lattice");
   expect(latticeFor(PATH)).not.toBeNull();
