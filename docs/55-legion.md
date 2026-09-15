@@ -75,15 +75,16 @@ run 分两档，`kind` 声明自己是哪档，delegate 的接口一样：本地
 | `output` | 产出引用 |
 | `deliverTo` | 投递目标 |
 | 时间戳 | 创建、开始、终态、投递 |
-| `revision` | 两个同级终态相撞时的裁决位 |
+| `revision` | 每次写加一；两个同级终态相撞时的裁决位 |
+| `cancelRequested` | 取消请求。只置不清，执行方下次读到就调 worker 的 `cancel()` |
 | `batchId` | 可选，父 run 的 id |
 | `step` | 可选，父程序自己起的稳定名，同 `batchId` 下唯一 |
 
 产出放领域自己的目录，run 只存引用：文件小，合并简单。
 
-状态格是一条链，两台设备写同一个 run 时取格上更高的那个，对任意设备数都收敛。`revision` 只在两个同级终态相撞（弃权后被接手、原设备又回来跑完了）时用，同值按 deviceId 破平。
+状态格是一条链，两台设备写同一个 run 时取格上更高的那个，对任意设备数都收敛。同一状态上两份相撞（弃权后被接手、原设备又回来跑完了）比 `revision`，高者赢；`revision` 相同按 claimant 的 deviceId 字典序小者赢，两侧都没有 claimant 时按规范序列化的内容序破平（不用 id，两侧的 id 是同一个）。赢的那一侧整份拿走，只有 `attempts`（取 max）、`createdAt`、`startedAt`、`deliveredAt`（取非空且较早的）和 `cancelRequested`（只置不清）单独折叠——这五个各自单调，跟着赢的那侧会倒退。它们也不进内容序的比较，否则合并出来的那份会是两台设备都没持有过的记录，合并就不再可结合。
 
-有 `idempotencyKey` 时文件名取 `hash(kind + key)`：两台设备写同一个路径，同步的合并直接把它们收敛成一份，不需要额外的去重协议。没有 key 就用随机 id。通用的 `idempotencyKey` 不做，它只有 batch 续跑这一个用法。
+有 `idempotencyKey` 时文件名取 `r-<hash(kind + NUL + key)>`（sha256 截 16 字节）：两台设备写同一个路径，同步的合并直接把它们收敛成一份，不需要额外的去重协议。没有 key 就用随机 id。通用的 `idempotencyKey` 不做，它只有 batch 续跑这一个用法。
 
 `progress` 是一行字，给人看跑到哪了。runner 给 worker 的 ctx 里有 `report(text)`：程序 worker 每步自己调（「抓取 12/40」），agent worker 由 runner 在每次工具调用结束时自动填工具名和轮数。runner 收到 report 就更新 `progress` 和 `lastProgressAt`、`revision` 加一、写回 run 文件；同一个 run 最多每三十秒写一次盘，状态变化不受节流。完整流水在本机 session 里，不同步。卡住判定只看 `lastProgressAt` 超时，不看墙上时钟。
 
@@ -115,7 +116,7 @@ soul 随时能读 run 文件的 `progress` 回答「跑到哪了」，不必等�
 
 移动端派活就是写一个 `pending` run，PC 下次 pull 捡起来跑；移动端要看的只有 PC 上次在线时刻，来自 claim 心跳。
 
-取消写进 run 文件，不是喊一声。执行设备下次 pull 读到就调 worker 的 `cancel()`；本机委托、本机执行的 run 直接调 `cancel()`，不经过文件；没有执行者的 `pending` run 直接进 `cancelled`。
+取消写进 run 文件的 `cancelRequested`，不是喊一声。执行设备下次 pull 读到就调 worker 的 `cancel()`；本机委托、本机执行的 run 直接调 `cancel()`，不经过文件；没有执行者的 `pending` run 直接进 `cancelled`。
 
 取消只级联一层：取消一个父 run 时，runner 按 `batchId` 把它的子 run 一并取消。再往下没有，run 图只有两层。
 
@@ -233,14 +234,16 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 ## 现状与顺序
 
-已落地（2026-09-14）：第 1、2 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
+已落地（2026-09-15）：第 1、2、3、4 步。session-fs 与 palace 的 `session` 行、harness 工厂、`legion/execute/turn.ts` 顶掉手写循环、`legion/subagent` 成为 worker lane 薄壳、旧循环全部删除；pi-ai 与 pi-agent-core 0.85.1；LAYER 表有 legion 三行。第 8 步：`legion/bell` 三个动作加 `delivered`、palace 的 `bell` 行、`src/soul/bell.ts` 的 `answerBell` 把一条铃变成门口的一个回合，外壳按 sync 的 15 秒 tick 调它。
 
-未开始：run、claim、schedule、worker 契约与 runner、ledger 折叠、session 到对话文件的投影。今天没有任何东西会 ring，开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
+第 3 步：`src/legion/run/types.ts` 的字段表与状态链、`merge.ts` 的 `mergeRun`，palace 的 `lattice` 策略（`platform/sync/merge/lattice.ts` 是注册表，领域交 `merge(a, b)`，base 不参与）和 `run` 行（`legion/runs/`，data 通道，进 `NEVER_INFER_DELETE`）。合并的裁决顺序是状态链 → `revision` → claimant 的 deviceId 小者 → 规范序列化的内容序；`attempts`、`createdAt`、`startedAt`、`deliveredAt`、`cancelRequested` 单独折叠，不跟赢的那一侧。第 4 步：`src/legion/run/store.ts` 的 `createRunStore(io)`，文件名 `r-<hash(kind + \0 + idempotencyKey)>`，撞已有文件一律原样交回由调用方看 `state`。
+
+未开始：claim、schedule、worker 契约与 runner、ledger 折叠、session 到对话文件的投影。run 的合并由 import `legion/run` 注册进 sync，今天还没有调用方 import 它——第 7 步的 runner 是第一个。今天没有任何东西会 ring，开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。
-3. run 类型与合并：字段含 `progress`、`batchId`、`step`，`mergeRun` 纯函数，`palace/merge-types.ts` 加 `lattice` 并在 `platform/sync/merge/` 实现，`legion/runs` 登记进 palace 和 `NEVER_INFER_DELETE`。验收：可交换、可结合、幂等各一组用例；终态两两组合；同 `revision` 按 deviceId 破平；`progress` 按 `revision` 取高的那份。
-4. run store：创建（带 `batchId` + `step` 走派生文件名）、读、列、状态迁移、取消。验收：内存文件系统下模拟两台设备，同 batchId 同 step 两次创建只得一个文件；撞 `running` 返回同一 runId，撞 `done` 返回原产出引用。
+3. （已落地）run 类型与合并：字段含 `progress`、`batchId`、`step`，`mergeRun` 纯函数，`palace/merge-types.ts` 加 `lattice` 并在 `platform/sync/merge/` 实现，`legion/runs` 登记进 palace 和 `NEVER_INFER_DELETE`。验收：可交换、可结合、幂等各一组用例；终态两两组合；同 `revision` 按 deviceId 破平；`progress` 按 `revision` 取高的那份。
+4. （已落地）run store：创建（带 `batchId` + `step` 走派生文件名）、读、列、状态迁移、取消。验收：内存文件系统下模拟两台设备，同 batchId 同 step 两次创建只得一个文件；撞 `running` 返回同一 runId，撞 `done` 返回原产出引用。
 5. claim 泛化：claim 带 `capabilities`，`electFor(kind, claims, now)`，info 的采集端改成调它，目录从 `info/program/presence.ts` 挪进 `legion/claim`。验收：现有 handoff 测试搬过来仍绿；两台都能跑取连续在线最久，都不能跑返回 null。
 6. 指派与 schedule：`dueRuns(runs, claims, now, deviceId)`，时点窗口，夜间时点按 kind 归一台，到点写一条 `wake` 铃。验收：这个函数的单测不许起 worker；本机重启退回、对端弃权接手、`lastProgressAt` 超阈值退回各一例；两台都到点只出一条 `wake`。
 7. worker 契约与 runner：kind → worker 的注册表，取走 → 写 `running` → 跑 → 写终态 → 投铃；`ctx.report` 更新 `progress` 与 `lastProgressAt`，三十秒节流，状态变化不节流；深度检查、batch 续跑查询、按 `batchId` 级联取消。验收：假 worker 走完全程并投出 `run-done`；一秒内十次 `report` 只写一次盘、终态立刻写；`delegator` 已是子 run 的创建请求被拒；同 batchId 同 step 已 `done` 时不新建、直接拿 `output`；取消父 run 后子 run 也进 `cancelled`。

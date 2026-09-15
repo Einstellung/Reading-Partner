@@ -24,3 +24,18 @@ export {
   type RunTier,
 } from "./types";
 export { asRun, collided, compareRun, joinRunFiles, mergeRun } from "./merge";
+export {
+  RUNS_DIR,
+  appRunIo,
+  appRuns,
+  createRunStore,
+  deriveRunId,
+  randomRunId,
+  type CreateRunInput,
+  type CreateRunResult,
+  type RunFilter,
+  type RunIo,
+  type RunStore,
+  type TransitionPatch,
+  type TransitionResult,
+} from "./store";
