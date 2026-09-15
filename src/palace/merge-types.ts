@@ -17,6 +17,15 @@ export type MergeStrategy =
   | "cursors"
   // Markdown the user writes: three-way per line, conflict copy on overlap.
   | "prose"
+  // The whole file is one record, and the domain owns the rule. Not a field
+  // strategy: the fields are not independent of each other, so there is nothing
+  // to settle one at a time. The set of states the record can hold is a
+  // join-semilattice and the domain's merge(a, b) is its join — the least state
+  // at or above both, which makes it commutative, associative and idempotent
+  // and so safe to run on two devices in either order. The base does not
+  // participate; three-way degenerates to two-way (platform/sync/merge/
+  // lattice.ts). legion's run file is the one of these (docs/55).
+  | "lattice"
   // Anything else: keep ours, park theirs beside it.
   | "opaque";
 

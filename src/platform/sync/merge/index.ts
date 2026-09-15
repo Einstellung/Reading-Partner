@@ -9,6 +9,7 @@
 // content, and the copy the loser goes into is named from its own bytes, so
 // both devices write the same file under the same name.
 
+import { resolvePalace } from "../../../palace";
 import {
   fieldGroupsFor,
   strategyFor,
@@ -18,6 +19,7 @@ import {
 } from "./contract";
 import { lowerCursorWins } from "./cursors";
 import { mergeObject, type ResolveConflict } from "./fields";
+import { latticeFor } from "./lattice";
 import { mergeProse } from "./prose";
 import {
   lineCollection,
@@ -97,7 +99,9 @@ export function mergeFile(input: MergeInput): MergeOutput {
           ? mergeFieldFile(input, lowerCursorWins)
           : strategy === "prose"
             ? mergeProseFile(input)
-            : null;
+            : strategy === "lattice"
+              ? mergeLatticeFile(input)
+              : null;
   // A strategy returns null when the file is not the shape it merges —
   // unparseable JSON, a record with no identity, bytes that are not UTF-8. The
   // file then keeps its content whole instead of being half-understood.
@@ -194,6 +198,29 @@ function mergeFieldFile(input: MergeInput, resolve?: ResolveConflict): MergeOutp
     copies: [],
     dropped: merged.dropped,
     contested: merged.contested,
+  };
+}
+
+// One record, joined by the rule its domain registered (lattice.ts). The base
+// is not read: a join is the least record at or above both sides, and it has no
+// use for what they were before. A kind with no join registered returns null and
+// the file is kept whole, which is the same answer as before the kind existed.
+function mergeLatticeFile(input: MergeInput): MergeOutput | null {
+  const join = latticeFor(input.path);
+  const t = texts(input);
+  if (join === null || t === null) return null;
+  const local = parseJson(t.local);
+  const remote = parseJson(t.remote);
+  if (local === undefined || remote === undefined) return null;
+
+  const result = join(local, remote);
+  if (result === null) return null;
+  const id = resolvePalace(input.path)?.id ?? input.path;
+  return {
+    merged: write(result.merged, t.base, t.local, t.remote),
+    copies: [],
+    dropped: result.loser === null ? [] : [{ id, record: result.loser }],
+    contested: result.loser !== null,
   };
 }
 
