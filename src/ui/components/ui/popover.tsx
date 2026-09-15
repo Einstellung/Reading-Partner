@@ -11,8 +11,11 @@
 //   never reaches the Radix part underneath and nothing says so
 //   (docs/pitfall/95). Root and Portal stay plain: they render no DOM of their
 //   own.
-// - Anchor is dropped: the one caller anchors to its own trigger. Add it back
-//   from the registry the day something needs a popover away from its button.
+// - Anchor is kept. The one caller's trigger is not the thing the overlay
+//   belongs to: the case is the button, and the column rises from the corner
+//   the case and the body stand in together (docs/68). Without it the column
+//   hangs off the case's own right edge, 40-odd pixels in from the margin the
+//   corner keeps.
 // - `align` defaults to "end" rather than "center". The one caller is the
 //   corner companion (lumen/LumenCorner), whose column rises from the corner it
 //   stands in.
@@ -37,6 +40,13 @@ const PopoverTrigger = React.forwardRef<
   React.ComponentProps<typeof PopoverPrimitive.Trigger>
 >(function PopoverTrigger({ ...props }, ref) {
   return <PopoverPrimitive.Trigger ref={ref} data-slot="popover-trigger" {...props} />
+})
+
+const PopoverAnchor = React.forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Anchor>,
+  React.ComponentProps<typeof PopoverPrimitive.Anchor>
+>(function PopoverAnchor({ ...props }, ref) {
+  return <PopoverPrimitive.Anchor ref={ref} data-slot="popover-anchor" {...props} />
 })
 
 const PopoverContent = React.forwardRef<
@@ -70,4 +80,4 @@ const PopoverContent = React.forwardRef<
   )
 })
 
-export { Popover, PopoverContent, PopoverTrigger }
+export { Popover, PopoverAnchor, PopoverContent, PopoverTrigger }

@@ -33,7 +33,7 @@ import { TICK_MS } from "../../../platform/sync";
 import { displayFileTitle } from "../shelf/file-title";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { VoiceCallHandle } from "../orb/orb";
 import { Lumen, LumenCase, caseTriggerStyle } from "./Lumen";
 import {
@@ -211,43 +211,50 @@ export function LumenCorner({
 			<Popover open={open} onOpenChange={setOpen}>
 				{/* The body's own box, with the case hanging off its left edge.
 				    Nothing here clips: the corner's footprint is wider than the
-				    body now, and the layer it sits in is the screen. */}
-				<div className="relative">
-					<Lumen
-						handle={SILENT}
-						// Beside an open book nothing moves but the glance (docs/68).
-						still={inReader}
-						glance={glance.nonce}
-						label="Lumen"
-						// Not a control: no pointer events, off the tab order and
-						// out of the accessibility tree. The element is still a
-						// button because that is the root Lumen draws, and the voice
-						// entry it is kept for is a press.
-						aria-hidden="true"
-						tabIndex={-1}
-						role="presentation"
-						onActivate={NOTHING}
-						className="h-18 w-18"
-					/>
-					{showsCase(count) && (
-						<PopoverTrigger asChild>
-							<button
-								type="button"
-								aria-label={caseLabel(count)}
-								// `box-content`: the style's padding is the 44px
-								// touch target and it grows outwards, so the case
-								// draws at its own size (case-box.ts).
-								className="pointer-events-auto absolute box-content block"
-								style={caseTriggerStyle()}
-							>
-								<span className="relative block h-full w-full">
-									<LumenCase />
-									<CountBadge count={count} />
-								</span>
-							</button>
-						</PopoverTrigger>
-					)}
-				</div>
+				    body now, and the layer it sits in is the screen.
+
+				    It is also what the column is measured from. The case is the
+				    button, but the column rises from the corner (docs/68), and
+				    anchoring it to the case alone would set it in from the margin
+				    the corner keeps by the width of the body. */}
+				<PopoverAnchor asChild>
+					<div className="relative">
+						<Lumen
+							handle={SILENT}
+							// Beside an open book nothing moves but the glance (docs/68).
+							still={inReader}
+							glance={glance.nonce}
+							label="Lumen"
+							// Not a control: no pointer events, off the tab order and
+							// out of the accessibility tree. The element is still a
+							// button because that is the root Lumen draws, and the
+							// voice entry it is kept for is a press.
+							aria-hidden="true"
+							tabIndex={-1}
+							role="presentation"
+							onActivate={NOTHING}
+							className="h-18 w-18"
+						/>
+						{showsCase(count) && (
+							<PopoverTrigger asChild>
+								<button
+									type="button"
+									aria-label={caseLabel(count)}
+									// `box-content`: the style's padding is the 44px
+									// touch target and it grows outwards, so the case
+									// draws at its own size (case-box.ts).
+									className="pointer-events-auto absolute box-content block"
+									style={caseTriggerStyle()}
+								>
+									<span className="relative block h-full w-full">
+										<LumenCase />
+										<CountBadge count={count} />
+									</span>
+								</button>
+							</PopoverTrigger>
+						)}
+					</div>
+				</PopoverAnchor>
 				<PopoverContent side="top" className="pointer-events-auto w-[19rem]">
 					<Column
 						items={items}
