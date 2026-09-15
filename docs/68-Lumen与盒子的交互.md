@@ -74,3 +74,12 @@ info 的盒（60、63）等 Red Boxes 落地时用同一个 `src/box/`，简报�
 1. 盒生在 palace：`src/box/` 的项与盒、palace 登记行、状态迁移。验收：两台设备各写一项，合并后两项都在，状态按项自己那份文件收敛。
 2. Lumen 全局化：每个外壳右下角常驻，logo 开关按设备记住，看书时静止，徽标数没开的项，点开是那一列卡片，点一张跳回原地。验收：在书里派一个 run，回来后角上出现抱盒子的姿势和徽标 1，点进去点那张卡回到原页原线程，项变 `told`。
 3. research run：kind `research-literature` 登记、`deliverTo` 投回线程、soul 的 `delegate` 工具加 kind 目录。验收：阅读回合里派一个文献研究，回合立刻结束，结果回来追加进那条划线线程，同时盒里多一项。
+
+三片 2026-09-15 都已进 main。实现时定的几条：
+
+- `delegate` 每个 soul 回合都挂，不看本机有没有登记 kind；kind 清单写在参数说明里，错的 kind 调用时拒绝（坑 313）。
+- `local` 档的 run 在 runner 之外读不到，所以 `run-done` / `run-failed` 铃的 payload 自带 `deliverTo`，答铃先读 payload，再退到 run 文件。
+- 任务书写在 `legion/briefs/<uuid>.md`，产出写在 `legion/outputs/<runId>.md`，都是本地文件，palace 行 `run-brief` / `run-output`。
+- 答铃按地方装配走 `soul/delivery.ts` 的登记表（place → opener），reading 在 `reading/deliver.ts` 登记 `book`；简报页还没传 origin，从简报派的 run 暂时在门口答。
+- 阅读聊天里不再显示子 agent 的进度行，进度走 run 的 `progress`。
+- 门口和简报的卡片带日期但页面只画当天，跳转只选页面不选日子。鼠标设备用悬停出现的叉代替横划。
