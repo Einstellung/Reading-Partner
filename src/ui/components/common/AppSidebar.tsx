@@ -12,6 +12,7 @@
 // This file renders them and binds the events.
 
 import appIcon from "../../assets/app-icon.png";
+import { lumenToggleTitle } from "../lumen/corner-pref";
 import { IconBriefing, IconBooks, IconGear, IconSidebar, IconToday } from "../base/icons";
 import { SHELL_NAV_ITEMS, type ShellNavId } from "../base/shell-nav";
 import {
@@ -82,6 +83,11 @@ export default function AppSidebar(props: {
   // either way.
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  // The corner companion's switch (docs/68). The app icon and its name are the
+  // one thing on every shell that is not a destination, which is why the toggle
+  // hangs off them rather than off a control of its own.
+  lumenShown: boolean;
+  onToggleLumen: () => void;
 }) {
   const collapsed = props.collapsed;
   const toggle = (
@@ -102,14 +108,23 @@ export default function AppSidebar(props: {
   return (
     <nav aria-label="Sections" className={sidebarNavClass(collapsed)}>
       <div className={sidebarWordmarkClass(collapsed)}>
-        <img
-          src={appIcon}
-          alt=""
-          width={28}
-          height={28}
-          className="h-7 w-7 flex-none rounded-[7px]"
-        />
-        <span className={sidebarNameClass(collapsed)}>Reading Partner</span>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-transparent p-0 text-left"
+          title={lumenToggleTitle(props.lumenShown)}
+          aria-label={lumenToggleTitle(props.lumenShown)}
+          aria-pressed={props.lumenShown}
+          onClick={props.onToggleLumen}
+        >
+          <img
+            src={appIcon}
+            alt=""
+            width={28}
+            height={28}
+            className="h-7 w-7 flex-none rounded-[7px]"
+          />
+          <span className={sidebarNameClass(collapsed)}>Reading Partner</span>
+        </button>
         {/* Labelled, the toggle ends the wordmark row. Collapsed, the row has
             room for nothing but the icon, so the toggle drops to the top of the
             rail, under the icon and above the three destinations. */}

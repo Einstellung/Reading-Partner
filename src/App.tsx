@@ -96,6 +96,11 @@ import LibraryScreen from "./ui/components/library/LibraryScreen";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
+import { LumenCorner } from "./ui/components/lumen/LumenCorner";
+import {
+  readLumenCornerShown,
+  writeLumenCornerShown,
+} from "./ui/components/lumen/corner-pref";
 import MigrationGate from "./ui/components/common/MigrationGate";
 import {
   readSidebarCollapsed,
@@ -247,6 +252,19 @@ export default function App() {
   const [shellSidebarCollapsed, setShellSidebarCollapsed] = useState(() =>
     readSidebarCollapsed(browserPrefStore(window)),
   );
+  // The corner companion, per device (docs/68). Read synchronously for the
+  // same reason the sidebar's width is: the first frame should already be the
+  // screen the reader left.
+  const [lumenShown, setLumenShown] = useState(() =>
+    readLumenCornerShown(browserPrefStore(window)),
+  );
+  const toggleLumen = useCallback(() => {
+    setLumenShown((shown) => {
+      writeLumenCornerShown(browserPrefStore(window), !shown);
+      return !shown;
+    });
+  }, []);
+
   const toggleShellSidebar = useCallback(() => {
     setShellSidebarCollapsed((collapsed) => {
       writeSidebarCollapsed(browserPrefStore(window), !collapsed);
@@ -1061,6 +1079,33 @@ export default function App() {
 
   const inReader = !!title;
 
+  // What a card in Lumen's column can reach in this shell (lumen/box-jump.ts
+  // decides which of these a given card needs, and in what order).
+  const lumenTargets = useMemo(
+    () => ({
+      openBook: async (bookId: string) => {
+        for (const topic of topics ?? []) {
+          const file = topic.files.find((one) => one.hash === bookId);
+          if (file) {
+            await openFile(file, topic.id);
+            return;
+          }
+        }
+      },
+      goToPage: (page: number) => viewRef.current?.navigate({ pageIndex: page - 1 }),
+      openThread: (bookId: string, threadId: string) => {
+        const thread = getThread(bookId, threadId);
+        if (thread) reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
+      },
+      openAnnotation: openThreadForAnnotation,
+      // The info pages draw the current day; the date on the card is what the
+      // item is about, not a day the shell can navigate to.
+      goToDoor: () => setHomeScreen("vestibule"),
+      goToBriefing: () => setHomeScreen("briefing"),
+    }),
+    [topics, openFile, reopenThreadCall, openThreadForAnnotation],
+  );
+
   // Where the soul may take the reader (docs/67, ui/components/base/places.ts).
   // The table is registered here because the moves are this shell's state; it
   // is registered again whenever they change, which replaces the previous set
@@ -1253,6 +1298,8 @@ export default function App() {
               setPenColor(t.color);
             }}
             gate={gate}
+            lumenShown={lumenShown}
+            onToggleLumen={toggleLumen}
             onOpenBookThread={openBookThread}
             onOpenSettings={openSettings}
             settingsAlert={syncReport.alert !== "none"}
@@ -1274,6 +1321,8 @@ export default function App() {
             settingsAlert={syncReport.alert !== "none"}
             collapsed={shellSidebarCollapsed}
             onToggleCollapsed={toggleShellSidebar}
+            lumenShown={lumenShown}
+            onToggleLumen={toggleLumen}
           />
         )}
         {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the
@@ -1573,6 +1622,20 @@ export default function App() {
             r.topicId ?? undefined,
           );
         }}
+      />
+
+      {/* Lumen, bottom right, on every screen this shell draws — the shelf, the
+          briefing and the open book alike (docs/68). Nothing else lives in that
+          corner here: the reader's controls are all in the top bar, the
+          translation's count is centred, and the call's corner card is top
+          right. The one surface it stands down for is the full-window chat,
+          whose composer runs the whole width of the bottom edge. */}
+      <LumenCorner
+        shell="desktop"
+        shown={lumenShown && call?.view !== "chat-main"}
+        inReader={inReader}
+        openBookId={bookIdRef.current}
+        targets={lumenTargets}
       />
 
       {/* Covers everything above, or renders nothing (docs/48). */}

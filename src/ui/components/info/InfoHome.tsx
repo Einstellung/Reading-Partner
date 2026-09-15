@@ -18,7 +18,6 @@ import { BriefingPage } from "./BriefingPage";
 import { SourcesPage } from "./SourcesPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
-import { VoiceOrbEntry } from "./VoiceOrbEntry";
 import { useInfoHome } from "./use-info-home";
 
 // The screen union lives in base/shell-nav.ts, which is what maps it to the
@@ -193,12 +192,11 @@ export default function InfoHome(props: {
         return (
           <>
             {wrapped}
-            {!info.infoCall && (
-              <VoiceOrbEntry
-                dateKey={info.snap?.briefing?.date ?? todayLocal()}
-                briefing={info.snap?.briefing ?? null}
-              />
-            )}
+            {/* The corner entry is Lumen's now, in every shell and on every
+                screen (ui/components/lumen/LumenCorner, docs/68). The voice call
+                itself is not gone — use-voice-call and the iOS plugin stand —
+                but nothing reaches it until it comes back as the bottom item of
+                Lumen's column. */}
           </>
         );
       })()}

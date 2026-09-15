@@ -44,6 +44,7 @@ const dropdownMenu = await import("../../../../src/ui/components/ui/dropdown-men
 const input = await import("../../../../src/ui/components/ui/input");
 const label = await import("../../../../src/ui/components/ui/label");
 const overlay = await import("../../../../src/ui/components/ui/overlay");
+const popover = await import("../../../../src/ui/components/ui/popover");
 const select = await import("../../../../src/ui/components/ui/select");
 const separator = await import("../../../../src/ui/components/ui/separator");
 const switchModule = await import("../../../../src/ui/components/ui/switch");
@@ -65,6 +66,7 @@ const MODULES: Record<string, Record<string, unknown>> = {
   "input.tsx": input,
   "label.tsx": label,
   "overlay.tsx": overlay,
+  "popover.tsx": popover,
   "select.tsx": select,
   "separator.tsx": separator,
   "switch.tsx": switchModule,
@@ -85,6 +87,7 @@ const NO_DOM = new Set([
   "DropdownMenu",
   "DropdownMenuPortal",
   "OverlayLayer",
+  "Popover",
   "OverlaySurface",
   "Select",
   "ToastProvider",

@@ -22,6 +22,8 @@ import { readerPageText } from "./reader-page-text";
 import { zoomResetLabel } from "./reader-zoom-keys";
 import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";
+import { lumenToggleTitle } from "../lumen/corner-pref";
+import appIcon from "../../assets/app-icon.png";
 import { Separator } from "../ui/separator";
 
 // The blackboard's label. What it opens, and the half of the dim button's line
@@ -47,6 +49,10 @@ export default function ReaderTopBar(props: {
   onOpenSettings: () => void;
   // Something in Settings needs attention (today: sync is not running).
   settingsAlert: boolean;
+  // The corner companion's switch (docs/68), on the app icon the way the
+  // sidebar's wordmark carries it everywhere else.
+  lumenShown: boolean;
+  onToggleLumen: () => void;
 }) {
   const { view, stats, sidebarOpen, gate } = props;
 
@@ -99,6 +105,19 @@ export default function ReaderTopBar(props: {
     <>
       {/* LEFT: navigation */}
       <div className="flex shrink-0 items-center gap-1">
+        {/* The app icon, and the one thing the reader's bar carries that is not
+            about this book: Lumen's switch. 28px, the size the sidebar's
+            wordmark draws it at. */}
+        <button
+          type="button"
+          className="flex h-8 w-8 flex-none items-center justify-center rounded-md bg-transparent p-0"
+          title={lumenToggleTitle(props.lumenShown)}
+          aria-label={lumenToggleTitle(props.lumenShown)}
+          aria-pressed={props.lumenShown}
+          onClick={props.onToggleLumen}
+        >
+          <img src={appIcon} alt="" width={28} height={28} className="h-7 w-7 rounded-[7px]" />
+        </button>
         <Button
           variant="ghost"
           size="icon"

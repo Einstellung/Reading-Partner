@@ -23,6 +23,8 @@ function render(
       settingsAlert={over.alert ?? false}
       collapsed={over.collapsed ?? false}
       onToggleCollapsed={() => {}}
+      lumenShown={true}
+      onToggleLumen={() => {}}
     />,
   );
 }

@@ -31,7 +31,7 @@
 // stops when the tab is hidden or the body has scrolled out of view, because a
 // companion nobody can see is a companion nobody should be paying for.
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 
 import { Button } from "../ui/button";
 import { cn } from "../lib/utils";
@@ -101,7 +101,19 @@ const FACE_TY = FACE.faceTravelY * BOX;
 // of them is a layout per frame for a glance.
 const RECT_STALE_MS = 500;
 
-export function Lumen({
+export interface LumenProps extends Omit<ComponentProps<"button">, "children"> {
+	handle: VoiceCallHandle;
+	attention?: Attention;
+	rest?: boolean;
+	className?: string;
+	still?: boolean;
+	holding?: boolean;
+	onActivate?: () => void;
+	label?: string;
+	overlay?: ReactNode;
+}
+
+export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	handle,
 	// Where the soul's attention is (docs/66). It splits thinking into two acts:
 	// looking up with the attention on the reader, and glancing down at the
@@ -114,12 +126,23 @@ export function Lumen({
 	// percentage of it — the same component is the small one in the corner of
 	// the briefing and the big one in the middle of a call.
 	className,
-}: {
-	handle: VoiceCallHandle;
-	attention?: Attention;
-	rest?: boolean;
-	className?: string;
-}) {
+	// No loop at all: the resting pose the custom-property defaults already
+	// paint, and nothing moving on top of it. This is what the corner wears
+	// beside an open book (docs/68) — a body breathing next to the text is a
+	// second thing to read.
+	still = false,
+	// Holding a box: the arrival pose, drawn as its own layer over the lower
+	// body. A pose and not an animation; held until the box is empty again.
+	holding = false,
+	// What a press does, where that is not starting and stopping a call.
+	onActivate,
+	// The button's accessible name, where the call's four phases are not what
+	// the press means.
+	label,
+	// Drawn inside the button, over the body: the corner's count badge.
+	overlay,
+	...trigger
+}, ref) {
 	const phase = useHeldPhase(handle.phase);
 
 	const rootRef = useRef<HTMLSpanElement>(null);
@@ -140,6 +163,9 @@ export function Lumen({
 	useEffect(() => {
 		const el = rootRef.current;
 		if (!el) return;
+		// A still body never starts the loop. The custom-property defaults on the
+		// root are the resting pose, so leaving them alone is the pose.
+		if (still) return;
 
 		const reduced =
 			typeof window.matchMedia === "function" &&
@@ -336,7 +362,7 @@ export function Lumen({
 			observer?.disconnect();
 			if (frame !== 0) cancelAnimationFrame(frame);
 		};
-	}, [subscribe, subscribeEnvelope]);
+	}, [still, subscribe, subscribeEnvelope]);
 
 	const idle = handle.phase === "idle";
 
@@ -345,11 +371,13 @@ export function Lumen({
 			type="button"
 			variant="link"
 			size={null}
-			aria-label={ORB_LABEL[phase]}
-			onClick={() => (idle ? handle.start() : handle.stop())}
+			aria-label={label ?? ORB_LABEL[phase]}
+			onClick={onActivate ?? (() => (idle ? handle.start() : handle.stop()))}
 			// No touch-target modifier: every size this is drawn at is over 44px,
 			// and the body is the target.
 			className={cn("relative block shrink-0", className)}
+			ref={ref}
+			{...trigger}
 		>
 			{/* Every custom property lives here and is inherited by all four
 			    layers, so one element's style is the whole frame. The defaults are
@@ -391,9 +419,33 @@ export function Lumen({
 					    covering it. */}
 					<span className="absolute left-1/2 top-[54%] h-[46%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,#f6faff,transparent)] opacity-(--lumen-core) mix-blend-screen" />
 					<LumenFace />
+					{holding && <HeldBox />}
 				</span>
 			</span>
+			{overlay}
 		</Button>
+	);
+});
+
+// The box it is holding (docs/68): a small parcel in front of the lower body,
+// tied with a ribbon. Drawn rather than painted, because there is no second
+// master — the body raster has empty hands, and a pose it never had cannot be
+// generated into it now.
+//
+// Percentages of the body's own box, so the same three elements read at the 72px
+// corner and at whatever size the door draws. Card and border rather than a hard
+// white: this is paper in a paper app, and the palette contract keeps flat white
+// out of the UI (tests/ui/components/paper-tint-contract.test.ts).
+function HeldBox() {
+	return (
+		<span className="absolute bottom-[10%] left-1/2 block h-[22%] w-[38%] -translate-x-1/2 rounded-[3px] border border-border bg-card shadow-[0_1px_3px_rgba(16,24,64,0.28)]">
+			{/* The lid: a band across the top, so the parcel has a top rather than
+			    being a rectangle at 72px. */}
+			<span className="absolute inset-x-0 top-0 block h-[34%] rounded-t-[2px] border-b border-border bg-muted-faint" />
+			{/* The ribbon down the middle, the one line that makes it a parcel and
+			    not a card held up. */}
+			<span className="absolute inset-y-0 left-1/2 block w-[10%] -translate-x-1/2 bg-accent-line opacity-70" />
+		</span>
 	);
 }
 

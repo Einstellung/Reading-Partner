@@ -31,6 +31,12 @@ import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
+import { LumenCorner } from "./ui/components/lumen/LumenCorner";
+import {
+  readLumenCornerShown,
+  writeLumenCornerShown,
+} from "./ui/components/lumen/corner-pref";
+import { browserPrefStore } from "./ui/components/base/pref-store";
 import { PullToAsk } from "./ui/components/phone/PullToAsk";
 import SavedList from "./ui/components/phone/SavedList";
 import {
@@ -74,6 +80,17 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
 
 export default function PhoneApp() {
   const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
+  // The corner companion, per device (docs/68). The phone keeps its own answer:
+  // a reader who put Lumen away here has not put it away on the desk.
+  const [lumenShown, setLumenShown] = useState(() =>
+    readLumenCornerShown(browserPrefStore(window)),
+  );
+  const toggleLumen = useCallback(() => {
+    setLumenShown((shown) => {
+      writeLumenCornerShown(browserPrefStore(window), !shown);
+      return !shown;
+    });
+  }, []);
   // The kept articles (docs/21). Fixed to the Brief topic: the phone has no
   // other place to file one from. The one being read is a stack entry.
   // Null until saved-articles.json has been read: "Nothing kept yet" is a claim
@@ -257,6 +274,8 @@ export default function PhoneApp() {
                 savedCount={savedArticles?.length ?? null}
                 onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
                 settingsAlert={syncReport.alert !== "none"}
+                lumenShown={lumenShown}
+                onToggleLumen={toggleLumen}
               />
             )}
           />
@@ -291,6 +310,19 @@ export default function PhoneApp() {
           />
         )}
       </div>
+
+      {/* Lumen, bottom right, on every screen this shell draws (docs/68). A card
+          born over a book still shows here and can still be pressed away; what
+          it cannot do is jump, because this shell has no reader to jump into
+          (lumen/box-jump.ts). */}
+      <LumenCorner
+        shell="phone"
+        shown={lumenShown}
+        targets={{
+          goToDoor: () => onNavigate("vestibule"),
+          goToBriefing: () => onNavigate("briefing"),
+        }}
+      />
 
       {/* Covers everything above, or renders nothing (docs/48). Outside the
           sliding surface: what it means is that the app is out of play, and a
