@@ -16,7 +16,8 @@
 //      leaves a deletion that finishes itself rather than half a book.
 //   2..4 The records: the shelf entry, the reading position, the topic links,
 //      the observations. Record-level deletes travel on their own.
-//   5..6 The retells and the files. Best-effort, one at a time: by the time the
+//   5..7 The retells, the supplements (each deleted the same way, recursively)
+//      and the files. Best-effort, one at a time: by the time the
 //      book is off the shelf and tombstoned it is deleted as far as the reader
 //      and the other devices are concerned, and a transcript that would not
 //      unlink must not put it back on the shelf. Anything left behind is an
@@ -30,6 +31,7 @@ import { appData } from "../../platform/app/appdata";
 import { appendDeletedBook } from "../../platform/app/deleted-books";
 import { removeLibraryEntry } from "../../platform/app/library";
 import { removeViewState } from "../../platform/app/storage";
+import { listSupplements, type SupplementRef } from "../../platform/app/supplements";
 import { listTopics, removeFileFromTopic, type Topic } from "../../platform/app/topics";
 import { ObservationFileStore } from "../../memory/observations/store";
 import type { Observation } from "../../memory/observations/types";
@@ -52,6 +54,7 @@ export interface DeleteBookDeps {
   listObservations: () => Promise<Observation[]>;
   deleteObservation: (id: string) => Promise<void>;
   listStatements: () => Promise<Statement[]>;
+  listSupplements: (bookId: string) => Promise<SupplementRef[]>;
   listRetells: () => Promise<Retell[]>;
   deleteRetell: (retellId: string) => Promise<void>;
   outlineIdOfRetell: (retellId: string) => Promise<string | null>;
@@ -77,6 +80,7 @@ export const liveDeleteBookDeps: DeleteBookDeps = {
     await new ObservationFileStore(observationFs).delete(id);
   },
   listStatements: () => listStatements(),
+  listSupplements,
   listRetells: listAllRetells,
   deleteRetell,
   outlineIdOfRetell: async (retellId) => (await talkOutlineOfRetell(retellId))?.id ?? null,
@@ -96,6 +100,18 @@ export async function deleteBook(
   bookId: string,
   deps: DeleteBookDeps = liveDeleteBookDeps,
 ): Promise<void> {
+  await deleteOne(bookId, deps, new Set());
+}
+
+// `seen` is what keeps the recursion finite. A supplement is a document like any
+// other, so nothing in the data stops two books from listing each other, and a
+// book already being deleted must not be deleted again half way through.
+async function deleteOne(
+  bookId: string,
+  deps: DeleteBookDeps,
+  seen: Set<string>,
+): Promise<void> {
+  seen.add(bookId);
   await deps.tombstone(bookId);
 
   await deps.removeLibraryEntry(bookId);
@@ -119,7 +135,38 @@ export async function deleteBook(
   }
 
   await deleteRetells(bookId, deps);
+  await deleteSupplements(bookId, deps, seen);
   await deleteLocalFiles(bookId, deps);
+}
+
+// The documents this book took in from its own conversation (docs/67). Each is a
+// document of this book's alone — it is in no topic and on no shelf — so it goes
+// the same way the book does, marks, threads, pagination and all. Before the
+// files, because supplements-<bookId>.json is one of them.
+//
+// Best-effort, like the retells: by the time the book is tombstoned it is
+// deleted as far as the reader and the other devices are concerned, and a
+// supplement that would not go is an orphan rather than a half-deleted book.
+async function deleteSupplements(
+  bookId: string,
+  deps: DeleteBookDeps,
+  seen: Set<string>,
+): Promise<void> {
+  let refs: SupplementRef[];
+  try {
+    refs = await deps.listSupplements(bookId);
+  } catch (e) {
+    console.warn("failed to list the supplements of a deleted book", bookId, e);
+    return;
+  }
+  for (const ref of refs) {
+    if (seen.has(ref.hash)) continue;
+    try {
+      await deleteOne(ref.hash, deps, seen);
+    } catch (e) {
+      console.warn("failed to delete a supplement of a deleted book", ref.hash, e);
+    }
+  }
 }
 
 // A retell of this book alone, with the talk it produced and the rehearsals of

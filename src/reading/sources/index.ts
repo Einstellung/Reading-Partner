@@ -4,7 +4,6 @@
 // belongs to the domain that owns the source list.
 
 export {
-  isHttpsUrl,
   looksLikeHttpUrl,
   provisionalTitleFromUrl,
   resolveUrlSource,

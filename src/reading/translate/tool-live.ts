@@ -104,6 +104,10 @@ export interface TranslateDeskRef {
 
 export function liveTranslateToolDeps(ref: TranslateDeskRef): TranslateToolDeps {
   return {
+    // A book's supplement is in no topic, so topicOfBook answers null for one and
+    // the replacement lands nowhere the reader can see it. Translating a
+    // supplement waits for docs/67 「辅助资料」, where what it is filed under is
+    // the book rather than a topic.
     find: async (query) => {
       const entry = query
         ? matchByTitle(await listLibraryEntries(), query)

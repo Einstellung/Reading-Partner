@@ -341,6 +341,25 @@ export const PALACE = [
     gc: "never",
     distill: { unit: "book-marks", cursor: "distilledMarks" },
   },
+  {
+    kind: "supplements",
+    about: "The documents one book picked up from its own conversation.",
+    domain: "reading",
+    match: keyed(/^supplements-(.+)\.json$/),
+    pathFor: (id: string) => `supplements-${id}.json`,
+    samples: ["supplements-abc123.json"],
+    id: "bookId",
+    refs: [
+      { kind: "library", via: "bookId" },
+      { kind: "library", via: "items[].hash" },
+    ],
+    sync: "data",
+    merge: "records",
+    shape: { kind: "array", container: "items", idField: "hash" },
+    deleteWith: "book",
+    gc: "never",
+    note: "references only; each supplement is a library document of its own, and deleting the book deletes them too (docs/67)",
+  },
   // The three specific thread keys sit above the general one, and the general
   // one refuses their prefixes as well, so the two orders agree.
   {

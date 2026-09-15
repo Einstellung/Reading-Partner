@@ -102,6 +102,9 @@ test("the local paths cover the synced ones, the caches and the blob", () => {
   const { files, dirs } = deadLocalPathsFor(BOOK);
   expect(files).toEqual([
     `annotations-${BOOK}.json`,
+    // The list of what this book took in from its own conversation. The
+    // supplements themselves are books and are deleted as books (delete-book.ts).
+    `supplements-${BOOK}.json`,
     `threads-${BOOK}.json`,
     `fulltext-${BOOK}.json`,
     `figures-${BOOK}.json`,

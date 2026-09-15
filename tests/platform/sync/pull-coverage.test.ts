@@ -82,6 +82,9 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
     "an item is read from its file whenever the box is drawn and nothing holds one between " +
     "draws, so the list redraws on the sync tick; the store's subscribe is for writes made " +
     "in this process only (docs/60)",
+  "supplements-":
+    "a book's supplements are read from disk each time they are wanted — the store holds " +
+    "nothing between calls (docs/67)",
   "pagination-":
     "a book's position blocks are read when the book is opened, and the file is written " +
     "once and never rewritten, so a pull can add one but never change the one on screen",

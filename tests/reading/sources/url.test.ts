@@ -3,7 +3,6 @@
 
 import { expect, test } from "bun:test";
 import {
-  isHttpsUrl,
   looksLikeHttpUrl,
   provisionalTitleFromUrl,
   resolveUrlSource,
@@ -11,12 +10,12 @@ import {
   sniffContentType,
 } from "../../../src/reading/sources/url";
 
-test("looksLikeHttpUrl / isHttpsUrl", () => {
+test("looksLikeHttpUrl takes http as well as https, and nothing else", () => {
   expect(looksLikeHttpUrl("https://a.test/x")).toBe(true);
   expect(looksLikeHttpUrl("http://a.test/x")).toBe(true);
   expect(looksLikeHttpUrl("Attention Is All You Need")).toBe(false);
-  expect(isHttpsUrl("https://a.test")).toBe(true);
-  expect(isHttpsUrl("http://a.test")).toBe(false);
+  expect(looksLikeHttpUrl("file:///etc/passwd")).toBe(false);
+  expect(looksLikeHttpUrl("data:text/html,<p>hi</p>")).toBe(false);
 });
 
 test("slugBaseFromUrl uses the filename, else the hostname", () => {
@@ -41,8 +40,10 @@ test("resolveUrlSource reads the URL, a provisional title and a slug stem", () =
   expect(s.slugBase).toBe("2303.12345");
 });
 
-test("resolveUrlSource rejects a non-https URL", () => {
-  expect(() => resolveUrlSource("http://insecure.test/x")).toThrow(/https/);
+test("resolveUrlSource takes an http URL and rejects any other scheme", () => {
+  expect(resolveUrlSource("http://plain.test/x").url).toBe("http://plain.test/x");
+  expect(() => resolveUrlSource("file:///etc/passwd")).toThrow(/http/);
+  expect(() => resolveUrlSource("Attention Is All You Need")).toThrow(/http/);
 });
 
 test("sniffContentType: PDF magic bytes win over any header", () => {

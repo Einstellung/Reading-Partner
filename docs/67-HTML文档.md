@@ -48,13 +48,27 @@ PDF 用第一页，EPUB 用它自己声明的封面，文章还是没封面的�
 
 ## 入口
 
-两个：书或 topic 根聊天里贴 URL；iOS 分享面板进 app。两个入口落到同一张确认卡，就是 21 那张：归到哪个 topic，加一句它对这个 topic 加了什么。点头才落盘进 topic。书内贴入时默认 topic 是这本书的 topic；分享面板进来没有当前上下文，AI 自己提议。
+两个：书或 topic 根聊天里贴 URL；iOS 分享面板进 app。书内贴入落成这本书的辅助资料，不问 topic，见下一节。topic 根聊天和分享面板落到 21 那张确认卡：归到哪个 topic，加一句它对这个 topic 加了什么，点头才落盘进 topic；分享面板没有当前上下文，AI 自己提议 topic。后两条都还没做。
+
+## 辅助资料
+
+书内对话里贴的 URL 落成这本书的辅助资料（supplement），归这本书，不进 topic 列表，书架上不多一行。任意 http/https URL 都收，PDF 和 EPUB 链接直接入库也是 supplement。
+
+存 `supplements-<bookId>.json`，一书一文件，每条记 supplement 的文档 id（内容哈希）、标题、来源 URL、加入时间。同一个 URL 收两次是同一份字节、同一个 id，一条。文件本身还是 library 里的 EPUB/PDF，构建路径和文章相同。
+
+Outline 侧栏：书的目录下面一条横线，横线下每行一个 supplement，标题后跟来源域名。点开在同一个阅读器里读，顶栏标题换成资料标题，书自己的页码不变；点书的章节回到书。没有 supplement 就没有横线。
+
+对话归书。读 supplement 时顶栏 AI 按钮打开的仍是这本书的书级线程；在 supplement 上划线的旁支线程按 supplement 的文档 id 存。引用 `[p.N]` 指书，supplement 的引用带标题 `[标题 p.N]`。
+
+删书时它的 supplement 一起删：每个 supplement 递归走一遍删书那条路（墓碑、library 条目、划线、线程、分页、全文缓存），`supplements-<bookId>.json` 随书的文件一起删。
+
+topic 根聊天贴 URL 落成 topic 文档那条路保留为将来的入口，代码里留着 topic 目标的纯函数分支。
 
 ## 和 ingest_url 合并
 
-`ingest_url`（`src/reading/prep/papers/source-tool.ts`）今天把 URL 取回、抽成纯文本、存成 `prep-<hash>/` 里的备课料，只有 AI 用 `read_paper` 读得到，用户打不开。
+`ingest_url`（`src/reading/prep/papers/source-tool.ts`）今天在每个书线程都挂。有 prep 管线时，URL 同时进管线（`read_paper` 读的是 `prep-<hash>/` 里的备课料）和落成 supplement，页面取两次；没有管线时只落 supplement，AI 读不到正文，工具只说读者可以在 Outline 下打开。
 
-合并后一个 URL 只产生一个对象：取回的正文构建成 topic 里的文档，prep 的 digest 挂在那个文档上。AI 读的和用户读的是同一份，AI 的引用能落到用户眼前的那一页。`ingest_url` 工具名不变，多的是它落盘的形态。
+prep 那半还没做：digest 挂到文档上、`read_paper` 直接读 supplement 文档、页面只取一次。做完之后一个 URL 只产生一个对象，AI 读的和用户读的是同一份，引用能落到用户眼前的那一页。
 
 ## 稿
 
@@ -93,7 +107,7 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 - 纯函数 `buildArticleEpub({ title, byline, sourceUrl, publishedAt, html, images }) → Uint8Array`：消毒沿用 `sanitize.ts`，h1–h3 生成 nav，图片嵌入，标题页写来源 URL 和日期。单测覆盖：产物能被 `parse.ts` 打开、nav 条数、图片引用全部指向包内、失败的图有占位。
 - 摄入：URL → `fetchWithRetry` 取页面 → `extractReadable` 出 HTML → 下图 → `buildArticleEpub` → `importBook` → 补 kind 和来源字段 → 确认卡。PDF 链接照旧走 `sniffContentType` 分流，直接 `importBook`。
 - 书架：topic 内文章行没有封面，一行标题加来源域名加日期。
-- `ingest_url` 改成上面这条摄入路，digest 挂在产出的文档上。
+- `ingest_url` 改成上面这条摄入路；落成书的 supplement 已做，digest 挂在产出的文档上还没做。
 - 封面：`src/reading/epub/cover-svg.ts` 的纯函数 `typographicCover` / `volumeCover` 出 SVG，`packArticleEpub` 收一个可选 `cover`，写成 `cover.svg` 并在 manifest 上标 `properties="cover-image"`（另写 EPUB 2 的 `<meta name="cover">`），书架原有的取封面那条路不动。稿和合订本的构建器还没有，先只有这一层。
 - 翻译核心：`translateArticleEpub(epubBytes, deps) → { bytes, blocks, glossary }`，术语表一趟、切批并发一趟、写回、重新打包，两个模型调用都注入；`carryMarks` 按引文把划线搬到译本。单测覆盖：可译块各多一个兄弟块、公式代码表格逐字不变、nav 和图片不变、再翻一次被拒。
 

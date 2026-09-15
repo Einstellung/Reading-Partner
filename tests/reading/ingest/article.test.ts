@@ -1,4 +1,5 @@
-// Ingesting a pasted URL into a topic's documents (src/reading/ingest/article.ts).
+// Ingesting a pasted URL — into a book's supplements, or into a topic's
+// documents (src/reading/ingest/article.ts).
 // The fetch and the extractor are injected, so the whole path runs here with a
 // fixture page: what is pinned is the metadata that lands on the entry, the
 // document that comes out, and the filing.
@@ -7,7 +8,12 @@
 import { beforeEach, expect, test } from "bun:test";
 import { LIBRARY_FILE, libraryBookPath, type LibraryStore } from "../../../src/platform/app/library";
 import { importBook } from "../../../src/platform/app/library";
-import { ingestArticleUrl, type ArticleIngestDeps, type FetchedBytes } from "../../../src/reading/ingest/article";
+import {
+  ingestArticleUrl,
+  type ArticleIngestDeps,
+  type FetchedBytes,
+  type SupplementAttachment,
+} from "../../../src/reading/ingest/article";
 import { isEpub } from "../../../src/reading/epub/sniff";
 import { openZip } from "../../../src/reading/epub/zip";
 import { parseEpub } from "../../../src/reading/epub/parse";
@@ -64,14 +70,17 @@ function fakeExtract(html: string): Extraction | null {
 interface Recorder {
   deps: ArticleIngestDeps;
   attached: { topicId: string; path: string; hash: string }[];
+  supplements: { bookId: string; ref: SupplementAttachment }[];
   fetched: string[];
 }
 
 function recorder(responses: Record<string, FetchedBytes>): Recorder {
   const attached: Recorder["attached"] = [];
+  const supplements: Recorder["supplements"] = [];
   const fetched: string[] = [];
   return {
     attached,
+    supplements,
     fetched,
     deps: {
       fetch: async (url) => {
@@ -80,12 +89,21 @@ function recorder(responses: Record<string, FetchedBytes>): Recorder {
       },
       extractReadable: (html) => fakeExtract(html),
       importBook,
-      attach: async (topicId, path, hash) => {
+      attachToTopic: async (topicId, path, hash) => {
         attached.push({ topicId, path, hash });
+      },
+      // The live store is idempotent by hash; here the calls are recorded as
+      // made, so a second ingest of the same URL is visible as a second call
+      // carrying the same hash.
+      attachToBook: async (bookId, ref) => {
+        supplements.push({ bookId, ref });
       },
     },
   };
 }
+
+const topic = (topicId: string | null) => ({ kind: "topic", topicId }) as const;
+const book = (bookId: string) => ({ kind: "book", bookId }) as const;
 
 const HTML_PAGE = {
   [PAGE_URL]: ok(PAGE, "text/html; charset=utf-8"),
@@ -100,7 +118,7 @@ beforeEach(() => {
 
 test("a web page becomes an article in the library, filed under the topic", async () => {
   const r = recorder(HTML_PAGE);
-  const got = await ingestArticleUrl(PAGE_URL, "t1", r.deps);
+  const got = await ingestArticleUrl(PAGE_URL, topic("t1"), r.deps);
 
   expect(got.kind).toBe("article");
   expect(got.entry.kind).toBe("article");
@@ -122,7 +140,7 @@ test("a web page becomes an article in the library, filed under the topic", asyn
 
 test("the image that answered is embedded; the one that 404ed is a placeholder", async () => {
   const r = recorder(HTML_PAGE);
-  const got = await ingestArticleUrl(PAGE_URL, "t1", r.deps);
+  const got = await ingestArticleUrl(PAGE_URL, topic("t1"), r.deps);
   expect(got.imagesEmbedded).toBe(1);
   expect(got.imagePlaceholders).toBe(1);
 
@@ -141,9 +159,9 @@ test("the image that answered is embedded; the one that 404ed is a placeholder",
 });
 
 test("the same URL twice is one entry, and is filed again", async () => {
-  const first = await ingestArticleUrl(PAGE_URL, "t1", recorder(HTML_PAGE).deps);
+  const first = await ingestArticleUrl(PAGE_URL, topic("t1"), recorder(HTML_PAGE).deps);
   const again = recorder(HTML_PAGE);
-  const second = await ingestArticleUrl(PAGE_URL, "t2", again.deps);
+  const second = await ingestArticleUrl(PAGE_URL, topic("t2"), again.deps);
 
   expect(second.entry.hash).toBe(first.entry.hash);
   expect(second.entry.addedAt).toBe(first.entry.addedAt);
@@ -154,7 +172,7 @@ test("the same URL twice is one entry, and is filed again", async () => {
 
 test("no topic named means the document is imported and filed nowhere", async () => {
   const r = recorder(HTML_PAGE);
-  const got = await ingestArticleUrl(PAGE_URL, null, r.deps);
+  const got = await ingestArticleUrl(PAGE_URL, topic(null), r.deps);
   expect(got.attachedTo).toBeNull();
   expect(r.attached).toEqual([]);
 });
@@ -163,7 +181,7 @@ test("a link that is a PDF is imported as a book, not an article", async () => {
   const r = recorder({
     "https://example.com/papers/attention.pdf": ok(PDF_BYTES, "application/pdf"),
   });
-  const got = await ingestArticleUrl("https://example.com/papers/attention.pdf", "t1", r.deps);
+  const got = await ingestArticleUrl("https://example.com/papers/attention.pdf", topic("t1"), r.deps);
 
   expect(got.kind).toBe("book");
   expect(got.entry.kind).toBeUndefined();
@@ -177,18 +195,65 @@ test("a link that is a PDF is imported as a book, not an article", async () => {
 
 test("a link that cannot be fetched or read leaves nothing behind", async () => {
   const dead = recorder({});
-  await expect(ingestArticleUrl(PAGE_URL, "t1", dead.deps)).rejects.toThrow(/HTTP 404/);
+  await expect(ingestArticleUrl(PAGE_URL, topic("t1"), dead.deps)).rejects.toThrow(/HTTP 404/);
 
   const empty = recorder({ [PAGE_URL]: ok("<html><head></head></html>", "text/html") });
-  await expect(ingestArticleUrl(PAGE_URL, "t1", empty.deps)).rejects.toThrow(/no readable article/);
+  await expect(ingestArticleUrl(PAGE_URL, topic("t1"), empty.deps)).rejects.toThrow(/no readable article/);
 
   expect(disk.files.has(LIBRARY_FILE)).toBe(false);
   expect(dead.attached).toEqual([]);
   expect(empty.attached).toEqual([]);
 });
 
-test("only https is ingested", async () => {
-  await expect(ingestArticleUrl("http://example.com/x", "t1", recorder({}).deps)).rejects.toThrow(
-    /https/,
-  );
+test("a link that is not http(s) is refused before anything is fetched", async () => {
+  const r = recorder({});
+  await expect(ingestArticleUrl("file:///etc/passwd", topic("t1"), r.deps)).rejects.toThrow(/http/);
+  expect(r.fetched).toEqual([]);
+});
+
+// --- a book's supplements ---------------------------------------------------
+
+test("a page ingested for a book becomes its supplement and no topic row", async () => {
+  const r = recorder(HTML_PAGE);
+  const got = await ingestArticleUrl(PAGE_URL, book("bk1"), r.deps);
+
+  expect(got.attachedTo).toEqual({ kind: "book", bookId: "bk1" });
+  expect(r.attached).toEqual([]);
+  expect(r.supplements).toEqual([
+    {
+      bookId: "bk1",
+      ref: {
+        hash: got.entry.hash,
+        title: "How a web page becomes a book",
+        sourceUrl: PAGE_URL,
+      },
+    },
+  ]);
+  // The document itself is a library book like any other.
+  expect(disk.blobs.has(libraryBookPath(got.entry.hash, "epub"))).toBe(true);
+});
+
+test("the same URL twice is one supplement", async () => {
+  const first = await ingestArticleUrl(PAGE_URL, book("bk1"), recorder(HTML_PAGE).deps);
+  const again = recorder(HTML_PAGE);
+  const second = await ingestArticleUrl(PAGE_URL, book("bk1"), again.deps);
+
+  // Same bytes, same hash: the store's list is keyed by it, so the second
+  // ingest re-files the document it already holds rather than adding a row.
+  expect(second.entry.hash).toBe(first.entry.hash);
+  expect(again.supplements.map((s) => s.ref.hash)).toEqual([first.entry.hash]);
+  const store = JSON.parse(disk.files.get(LIBRARY_FILE)!) as LibraryStore;
+  expect(Object.keys(store.books)).toHaveLength(1);
+});
+
+test("a PDF link is a supplement too", async () => {
+  const url = "https://example.com/papers/attention.pdf";
+  const r = recorder({ [url]: ok(PDF_BYTES, "application/pdf") });
+  const got = await ingestArticleUrl(url, book("bk1"), r.deps);
+
+  expect(got.kind).toBe("book");
+  expect(got.entry.format).toBe("pdf");
+  expect(r.supplements).toEqual([
+    { bookId: "bk1", ref: { hash: got.entry.hash, title: "attention", sourceUrl: url } },
+  ]);
 });

@@ -172,6 +172,7 @@ test("companion turn: reading tools only, kickoff as the first message", async (
   expect(names(turn!.tools)).toEqual([
     "delegate",
     "find_paper",
+    "ingest_url",
     "list_kind",
     "list_palace",
     "observation_read",
@@ -194,6 +195,7 @@ test("a book with no text layer gets no read_pages tool", async () => {
   expect(names(turn!.tools)).toEqual([
     "delegate",
     "find_paper",
+    "ingest_url",
     "list_kind",
     "list_palace",
     "observation_read",
@@ -211,6 +213,7 @@ test("a topic id mounts the tool that writes an observation", async () => {
   expect(names(turn!.tools)).toEqual([
     "delegate",
     "find_paper",
+    "ingest_url",
     "list_kind",
     "list_palace",
     "observation_read",
@@ -231,6 +234,7 @@ test("a figure index mounts view_figure and the catalog", async () => {
   expect(names(turn!.tools)).toEqual([
     "delegate",
     "find_paper",
+    "ingest_url",
     "list_kind",
     "list_palace",
     "observation_read",
@@ -404,23 +408,14 @@ test("add_saved_article queues the kept text and caches it under the slug it got
   expect(cached?.pages[0]).toContain("Saved by the reader from The Feed");
 });
 
-test("no pipeline means no link ingestion", async () => {
+// docs/67: a pasted link becomes a supplement of this book whether or not there
+// is a prep run behind it, so the tool is on every book thread. What the prep run
+// adds is read_paper over the same source, which the tool's answer says.
+test("link ingestion is mounted with no pipeline, and says nothing about read_paper", async () => {
   const turn = await buildReadingTurn(input());
-  expect(names(turn!.tools)).toEqual([
-    "delegate",
-    "find_paper",
-    "list_kind",
-    "list_palace",
-    "observation_read",
-    "observation_search",
-    "read_chapter",
-    "read_conversation",
-    "read_pages",
-    "search_conversations",
-    "search_topic",
-    "translate_document",
-  ]);
-  expect(turn!.systemPrompt).not.toContain("ingest_url");
+  expect(names(turn!.tools)).toContain("ingest_url");
+  expect(turn!.systemPrompt).toContain("ingest_url");
+  expect(turn!.systemPrompt).not.toContain("read_paper");
 });
 
 // docs/24: the literature question can arrive on any page of any book, so the two

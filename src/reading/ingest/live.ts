@@ -5,10 +5,16 @@
 // the host, and none of it can run in bun.
 
 import { importBook } from "../../platform/app/library";
+import { addSupplement } from "../../platform/app/supplements";
 import { addFileToTopic, setFileHash } from "../../platform/app/topics";
 import { loadExtractReadable } from "../../info/extract/readable-lazy";
 import { fetchWithRetry } from "../papers/http";
-import { ingestArticleUrl, type ArticleIngestDeps, type IngestedDocument } from "./article";
+import {
+  ingestArticleUrl,
+  type ArticleIngestDeps,
+  type IngestedDocument,
+  type IngestTarget,
+} from "./article";
 
 // The same fetch the prep pipeline's link ingestion uses: the Tauri http plugin
 // with the per-host spacing and the retry on 429/5xx.
@@ -32,17 +38,23 @@ export async function liveIngestDeps(): Promise<ArticleIngestDeps> {
     // once and the ingest itself never awaits a chunk mid-way.
     extractReadable: await loadExtractReadable(),
     importBook,
-    attach: async (topicId, path, hash) => {
+    attachToTopic: async (topicId, path, hash) => {
       await addFileToTopic(topicId, path);
       await setFileHash(topicId, path, hash);
+    },
+    // The clock is here rather than in the ingest: when it was taken in is a
+    // fact about this device's run, and article.ts stays a function of its
+    // inputs.
+    attachToBook: async (bookId, ref) => {
+      await addSupplement(bookId, { ...ref, addedAt: Date.now() });
     },
   };
 }
 
-/** Ingest a URL into a topic with the real host behind it. */
+/** Ingest a URL with the real host behind it. */
 export async function ingestUrlLive(
   url: string,
-  topicId: string | null,
+  target: IngestTarget,
 ): Promise<IngestedDocument> {
-  return ingestArticleUrl(url, topicId, await liveIngestDeps());
+  return ingestArticleUrl(url, target, await liveIngestDeps());
 }

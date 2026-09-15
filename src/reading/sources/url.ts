@@ -5,12 +5,12 @@
 // that pipeline's job (prep/papers/plan.ts's resolveUrlAddition). No IO either —
 // prep/papers/live.ts wires these to the http plugin; tests drive them directly.
 
+// The one test for "is this a link we take in". http as well as https: the
+// reader pastes what their browser gave them, and a page served over http is
+// still the page they are asking about (docs/67). Anything else — file:, data:,
+// a bare title — is not a link and is refused.
 export function looksLikeHttpUrl(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());
-}
-
-export function isHttpsUrl(s: string): boolean {
-  return /^https:\/\//i.test(s.trim());
 }
 
 // A short slug stem from the URL: the filename (last path segment, extension
@@ -57,12 +57,12 @@ export interface UrlSource {
   slugBase: string;
 }
 
-// Read a pasted link. Throws on a non-https URL so the caller (ingest_url tool /
-// PrepPanel) can surface a clear rejection.
+// Read a pasted link. Throws on anything that is not an http(s) URL so the
+// caller (ingest_url tool / PrepPanel) can surface a clear rejection.
 export function resolveUrlSource(url: string): UrlSource {
   const trimmed = url.trim();
-  if (!isHttpsUrl(trimmed)) {
-    throw new Error("Only https URLs can be ingested.");
+  if (!looksLikeHttpUrl(trimmed)) {
+    throw new Error("Only http and https URLs can be ingested.");
   }
   return {
     url: trimmed,

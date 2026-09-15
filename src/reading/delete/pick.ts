@@ -92,6 +92,7 @@ export function isLastReferenceToBook(
 // missing from this list fails the guard in tests/palace/derived.test.ts.
 const OWNED_BY_A_BOOK: readonly PalaceKind[] = [
   "annotations",
+  "supplements",
   "reading-thread",
   "prep-state",
   "prep-note",

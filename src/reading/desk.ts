@@ -483,57 +483,67 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     mediaType,
   }));
 
-  // Link ingestion (docs/09): when a prep pipeline exists for this book, the
-  // model can ingest a user-pasted URL with ingest_url and read it with the
-  // paper tools, on any thread — "compare this link with ch.3" is a question a
-  // marked passage can raise as easily as the book-level thread can.
+  // Link ingestion (docs/09, docs/67 「辅助资料」): the model can ingest a
+  // user-pasted URL with ingest_url on any thread of this book — "compare this
+  // link with ch.3" is a question a marked passage can raise as easily as the
+  // book-level thread can.
+  //
+  // Mounted on every book thread, with a prep pipeline or without one. What a
+  // pasted link always produces is a supplement of this book, which the reader
+  // can open in the same reader; the prep half — full text the model reads with
+  // read_paper — rides along wherever there is a pipeline to carry it. A tool
+  // that is only sometimes there is one the model stops reaching for, which is
+  // the same judgement translate makes below.
   const livePipeline = getPipeline();
-  let canIngestUrl = false;
-  if (livePipeline && currentFulltext?.status === "ok") {
-    tools = [
-      ...tools,
-      ...buildSourceTools({
-        ingest: async (url) => {
+  const canReadIngested = livePipeline !== null && currentFulltext?.status === "ok";
+  tools = [
+    ...tools,
+    ...buildSourceTools({
+      ingest: async (url) => {
+        // The page is fetched twice, once by each half. The pipeline keeps the
+        // extracted plain text, and an EPUB is built out of HTML, so there is
+        // nothing the two could hand each other short of restructuring the fetch
+        // stage — which is what the digest-on-the-document step is (docs/67, the
+        // third slice, not built yet).
+        let prep: IngestResult["prep"];
+        let title = "";
+        if (livePipeline && canReadIngested) {
           const paper = await livePipeline.ingestSource(url);
           const ft = await getFulltext(paperFulltextHash(bookId, paper.slug));
-          const chars = ft ? ft.pages.reduce((n, pg) => n + pg.length, 0) : 0;
-          // A web page also becomes a document in this book's topic (docs/67):
-          // the AI's material and the reader's are one object, so a citation can
-          // land on a page the reader is looking at. The digest still hangs off
-          // the prep run for now.
-          //
-          // The page is fetched twice, once by each path. The pipeline keeps the
-          // extracted plain text, and an EPUB is built out of HTML, so there is
-          // nothing the two could hand each other short of restructuring the
-          // fetch stage — which is what the digest-on-the-document step is.
-          //
-          // A failure here is not a failed ingest: the prep material is already
-          // fetched and readable, and losing the shelf copy must not cost the
-          // conversation the source it was about to discuss.
-          let document: IngestResult["document"];
-          if (paper.kind === "article" && paper.status !== "failed" && topicId) {
-            try {
-              const ingested = await ingestUrlLive(url, topicId);
-              document = { title: ingested.title, topicName };
-            } catch (e) {
-              console.warn("could not put the ingested page on the shelf", e);
-            }
-          }
-          return {
+          title = paper.title;
+          prep = {
             slug: paper.slug,
-            title: paper.title,
             kind: paper.kind ?? "pdf",
             pages: ft?.pages.length ?? paper.pages ?? 0,
-            chars,
+            chars: ft ? ft.pages.reduce((n, pg) => n + pg.length, 0) : 0,
             status: paper.status,
-            error: paper.error,
-            document,
+            ...(paper.error === undefined ? {} : { error: paper.error }),
           };
-        },
-      }),
-    ];
-    canIngestUrl = true;
-  }
+        }
+        // The supplement, which is every book's half. A failure here is not a
+        // failed ingest when there is prep material: it is already fetched and
+        // readable, and losing the reader's copy must not cost the conversation
+        // the source it was about to discuss. With no prep behind it, it is the
+        // whole of the ingest and the failure is the tool's.
+        let document: IngestResult["document"];
+        if (prep?.status !== "failed") {
+          try {
+            const ingested = await ingestUrlLive(url, { kind: "book", bookId });
+            document = { title: ingested.title };
+            if (!title) title = ingested.title;
+          } catch (e) {
+            if (!prep) throw e;
+            console.warn("could not take the ingested page in as a supplement", e);
+          }
+        }
+        return {
+          title,
+          ...(prep ? { prep } : {}),
+          ...(document ? { document } : {}),
+        };
+      },
+    }),
+  ];
   // Translation (docs/67): the reader says "translate this" and the article on
   // the shelf is replaced by a bilingual copy. Mounted on every book thread, not
   // only on an article's: the tool itself is what says a PDF cannot be done in
@@ -694,7 +704,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       // came out in before the desk existed is the order the provider's cache
       // still remembers.
       toolPrompts: [
-        ...(canIngestUrl ? [INGEST_URL_PROMPT] : []),
+        INGEST_URL_PROMPT,
         TRANSLATE_PROMPT,
         ...view.toolPrompts,
         FIND_PAPER_PROMPT,

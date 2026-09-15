@@ -13,21 +13,26 @@ function tool(ingestor: SourceIngestor) {
   return t;
 }
 
-function fake(result: Partial<IngestResult>, spy?: (url: string) => void): SourceIngestor {
+// A book with a prep pipeline behind it: both halves come back.
+function fake(
+  prep: Partial<IngestResult["prep"]> = {},
+  spy?: (url: string) => void,
+): SourceIngestor {
   return {
     ingest: async (url) => {
       spy?.(url);
       return {
-        slug: "src",
         title: "The Source",
-        kind: "article",
-        pages: 0,
-        chars: 0,
-        status: "done",
-        ...result,
+        prep: { slug: "src", kind: "article", pages: 0, chars: 0, status: "done", ...prep },
+        document: { title: "The Source" },
       };
     },
   };
+}
+
+// A book with none: the supplement is the whole of the ingest.
+function supplementOnly(title = "The Source"): SourceIngestor {
+  return { ingest: async () => ({ title, document: { title } }) };
 }
 
 test("article success: readable-now confirmation, slug, and a page-1 citation", async () => {
@@ -53,16 +58,43 @@ test("pdf success: reports pages and a page citation", async () => {
   expect(out).toContain("[src p.N]");
 });
 
-test("rejects a non-https URL before touching the ingestor", async () => {
+test("takes an http URL and rejects any other scheme before touching the ingestor", async () => {
   let called = false;
-  const t = tool({
+  const refuses = tool({
     ingest: async () => {
       called = true;
       throw new Error("should not run");
     },
   });
-  await expect(t.execute({ url: "http://a.test/x" })).rejects.toThrow(/https/);
+  await expect(refuses.execute({ url: "file:///etc/passwd" })).rejects.toThrow(/http/);
   expect(called).toBe(false);
+
+  let seen = "";
+  const t = tool(fake({}, (u) => (seen = u)));
+  await t.execute({ url: "http://a.test/post" });
+  expect(seen).toBe("http://a.test/post");
+});
+
+test("with no prep behind the book, the answer is the supplement and no read_paper", async () => {
+  const t = tool(supplementOnly("A Plain Page"));
+  const out = (await t.execute({ url: "https://a.test/post" })) as string;
+  expect(out).toContain("A Plain Page");
+  expect(out).toContain("supplement");
+  expect(out).toContain("Outline");
+  expect(out).toContain("reference material");
+  expect(out).not.toContain("read_paper");
+});
+
+test("with no prep and no document, the ingest is a tool error", async () => {
+  const t = tool({ ingest: async () => ({ title: "" }) });
+  await expect(t.execute({ url: "https://a.test/post" })).rejects.toThrow(/could not ingest/);
+});
+
+test("the prep answer says the reader can open the supplement too", async () => {
+  const t = tool(fake({ chars: 4200 }));
+  const out = (await t.execute({ url: "https://a.test/post" })) as string;
+  expect(out).toContain('read_paper("src"');
+  expect(out).toContain("supplement of this book");
 });
 
 test("a failed ingest surfaces as a tool error", async () => {
@@ -71,7 +103,12 @@ test("a failed ingest surfaces as a tool error", async () => {
 });
 
 test("an abstract-only outcome reports limited info without claiming readable full text", async () => {
-  const t = tool(fake({ status: "abstract-only", title: "Thin One" }));
+  const t = tool({
+    ingest: async () => ({
+      title: "Thin One",
+      prep: { slug: "src", kind: "article", pages: 0, chars: 0, status: "abstract-only" },
+    }),
+  });
   const out = (await t.execute({ url: "https://a.test/thin" })) as string;
   expect(out).toContain("Thin One");
   expect(out).toContain("limited");

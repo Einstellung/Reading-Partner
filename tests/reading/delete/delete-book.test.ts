@@ -74,6 +74,7 @@ function deps(log: Log, over: Partial<DeleteBookDeps> = {}): DeleteBookDeps {
       log.calls.push(`observation ${id}`);
     },
     listStatements: async () => STATEMENTS,
+    listSupplements: async () => [],
     listRetells: async () => RETELLS,
     deleteRetell: note("retell"),
     outlineIdOfRetell: async (retellId) => (retellId === "r-1" ? "o-1" : null),
@@ -100,6 +101,7 @@ test("the whole order, once, from the tombstone down to the files", async () => 
     "outline o-1",
     "retell r-1",
     `file annotations-${BOOK}.json`,
+    `file supplements-${BOOK}.json`,
     `file threads-${BOOK}.json`,
     `file fulltext-${BOOK}.json`,
     `file figures-${BOOK}.json`,
@@ -111,6 +113,69 @@ test("the whole order, once, from the tombstone down to the files", async () => 
     `file covers/${BOOK}.failed.json`,
     `dir prep-${BOOK}`,
   ]);
+});
+
+// --- the supplements (docs/67) ----------------------------------------------
+
+const SUPPLEMENT = "cccc3333";
+
+function supplementsOf(map: Record<string, string[]>) {
+  return async (bookId: string) =>
+    (map[bookId] ?? []).map((hash) => ({ hash, title: hash, addedAt: 1 }));
+}
+
+test("a supplement is deleted the same way the book is, and it is in no topic", async () => {
+  const log: Log = { calls: [] };
+  await deleteBook(
+    BOOK,
+    deps(log, { listSupplements: supplementsOf({ [BOOK]: [SUPPLEMENT] }) }),
+  );
+  // The book's own steps come first, down to its retells.
+  expect(log.calls.indexOf("tombstone " + BOOK)).toBe(0);
+  expect(log.calls.indexOf("tombstone " + SUPPLEMENT)).toBeGreaterThan(
+    log.calls.indexOf("retell r-1"),
+  );
+  // The supplement gets the whole order of its own — tombstone, shelf, files —
+  // even though no topic ever listed it.
+  expect(log.calls).toContain("library " + SUPPLEMENT);
+  expect(log.calls).toContain("position " + SUPPLEMENT);
+  expect(log.calls).toContain(`file annotations-${SUPPLEMENT}.json`);
+  expect(log.calls).toContain(`file threads-${SUPPLEMENT}.json`);
+  expect(log.calls).toContain(`dir prep-${SUPPLEMENT}`);
+  expect(log.calls.filter((c) => c.startsWith("unlink"))).toEqual([
+    "unlink t1 /books/a.pdf",
+    "unlink t2 /shared/a.pdf",
+  ]);
+  // And the list naming it goes last, with the book's own files.
+  expect(log.calls.indexOf(`file supplements-${BOOK}.json`)).toBeGreaterThan(
+    log.calls.indexOf("tombstone " + SUPPLEMENT),
+  );
+});
+
+test("a supplement of a supplement goes too, and a cycle stops", async () => {
+  const log: Log = { calls: [] };
+  await deleteBook(
+    BOOK,
+    deps(log, {
+      listSupplements: supplementsOf({ [BOOK]: [SUPPLEMENT], [SUPPLEMENT]: [OTHER, BOOK] }),
+    }),
+  );
+  expect(log.calls).toContain("tombstone " + OTHER);
+  // The book names itself back through its supplement, and is tombstoned once.
+  expect(log.calls.filter((c) => c === "tombstone " + BOOK)).toHaveLength(1);
+});
+
+test("a supplement list that cannot be read leaves the rest of the delete standing", async () => {
+  const log: Log = { calls: [] };
+  await deleteBook(
+    BOOK,
+    deps(log, {
+      listSupplements: async () => {
+        throw new Error("supplements-*.json could not be read");
+      },
+    }),
+  );
+  expect(log.calls).toContain(`file library/${BOOK}.pdf`);
 });
 
 test("a retell that will not delete leaves the record deletions standing", async () => {

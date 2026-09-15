@@ -125,8 +125,11 @@ test("resolveUrlAddition dedups slugs against taken", () => {
   expect(p.slug).toBe("2303-12345-2");
 });
 
-test("resolveUrlAddition rejects a non-https URL", () => {
-  expect(() => resolveUrlAddition("http://insecure.test/x", new Set())).toThrow(/https/);
+test("resolveUrlAddition takes an http URL and rejects any other scheme", () => {
+  expect(resolveUrlAddition("http://plain.test/x", new Set()).sourceUrl).toBe(
+    "http://plain.test/x",
+  );
+  expect(() => resolveUrlAddition("file:///etc/passwd", new Set())).toThrow(/http/);
 });
 
 test("planUserMessage carries page markers", () => {

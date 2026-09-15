@@ -26,7 +26,7 @@ import type { AgentTool } from "../legion/execute/turn";
 import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
 import type { FetchOutcome } from "./prep/papers/pipeline";
 import { uniqueSlug } from "./prep/papers/plan";
-import type { IngestResult } from "./prep/papers/source-tool";
+import type { IngestedPaper } from "./prep/papers/source-tool";
 import type { PrepPaper } from "./prep/papers/types";
 import { savedArticleTextChars, type SavedArticle, type SavedArticleBody } from "./saved-articles";
 
@@ -56,7 +56,7 @@ export interface SavedArticlePorts {
   // body is not in the record any more (saved-articles.ts), so reading it is
   // part of this call rather than something the tool does first: only the one
   // article the reader named is ever read off disk.
-  add(article: SavedArticle): Promise<IngestResult>;
+  add(article: SavedArticle): Promise<IngestedPaper & { title: string }>;
 }
 
 // What the turn assembly needs of the store: whether to mount the tools at all,

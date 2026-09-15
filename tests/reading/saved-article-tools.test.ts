@@ -16,7 +16,7 @@ import {
   savedArticleProvenance,
   type SavedArticlePorts,
 } from "../../src/reading/saved-article-tools";
-import type { IngestResult } from "../../src/reading/prep/papers/source-tool";
+import type { IngestedPaper } from "../../src/reading/prep/papers/source-tool";
 import type { SavedArticle } from "../../src/reading/saved-articles";
 
 // The body prepareSavedArticle is handed. It lives in its own file now
@@ -44,7 +44,7 @@ function article(over: Partial<SavedArticle> = {}): SavedArticle {
 // answers the way the pipeline wiring in turn.ts does.
 function ports(
   list: SavedArticle[],
-  over: Partial<IngestResult> = {},
+  over: Partial<IngestedPaper> = {},
   spy?: (a: SavedArticle) => void,
 ): SavedArticlePorts {
   return {
