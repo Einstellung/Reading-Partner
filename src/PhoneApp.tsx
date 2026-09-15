@@ -19,6 +19,7 @@ import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { registerPullRoute } from "./platform/sync/pull-routes";
 import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
 import { startBellWatch } from "./soul";
+import { startRunner } from "./legion/execute/runner";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
@@ -175,6 +176,11 @@ export default function PhoneApp() {
     () => startBellWatch({ settings: () => settingsRef.current, intervalMs: TICK_MS }),
     [],
   );
+
+  // The same poll as the desktop's (docs/55). The phone wins the election for
+  // nothing heavy, so this is how a run it delegated is seen to finish, and how
+  // a local run of its own is picked up at all.
+  useEffect(() => startRunner({ intervalMs: TICK_MS }), []);
 
   // The Android button, bound only while back has somewhere to go: with nothing
   // to close and nothing to pop it belongs to the system, which leaves the app

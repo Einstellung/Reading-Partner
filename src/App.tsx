@@ -32,6 +32,7 @@ import { getThread, type ThreadMessage } from "./platform/app/threads";
 import { initSync, TICK_MS } from "./platform/sync";
 import { registerPullRoute } from "./platform/sync/pull-routes";
 import { startBellWatch } from "./soul";
+import { startRunner } from "./legion/execute/runner";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai";
@@ -429,6 +430,11 @@ export default function App() {
     () => startBellWatch({ settings: () => settingsRef.current, intervalMs: TICK_MS }),
     [],
   );
+
+  // What legion owes, on the same beat (docs/55). No kind has a worker
+  // registered yet, and then the poll costs nothing: it looks at the table
+  // before it looks at the disk.
+  useEffect(() => startRunner({ intervalMs: TICK_MS }), []);
 
   // Whether a finger may mark the page. Applied alongside the tool, and again
   // whenever the setting changes, so the reader never routes a finger by a stale

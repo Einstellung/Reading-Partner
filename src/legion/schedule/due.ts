@@ -9,13 +9,16 @@
 //
 //   take       a `pending` run of a kind this device won the election for.
 //   stalled    a `running` run of this device's own whose last progress is
-//              older than the threshold. Back to `pending`, one more attempt.
+//              older than the threshold. Taken over here, one more attempt.
 //              The judgement is `lastProgressAt` and never the wall clock: a
 //              worker that is slow is not a worker that is stuck.
 //   forfeited  a `running` run held by a device whose claim has expired, when
-//              this device is the one that has since won its kind. Back to
-//              `pending` so this device can take it. Not a failed attempt by
-//              anyone, so the count does not move.
+//              this device is the one that has since won its kind. Taken over
+//              here, one more attempt.
+//
+// Nothing goes back to `pending`: a run's state only ever climbs the chain
+// (run/types.ts), so a take-over writes `running` again under a new claimant
+// with one more revision, and the merge keeps the fresher of the two.
 //
 // A device's own restart is not in here. That one needs no clock and no other
 // device's opinion, and the moment to act on it is startup, not a poll:
@@ -25,36 +28,31 @@
 // its two results merged comes out where one run would have left it.
 
 import { electFor, isCandidate, type DeviceClaim } from "../claim";
+import type { Run } from "../run/types";
 
 /**
- * The part of a run this module reads. src/legion/run owns the whole of it;
- * what is written here is only what the assignment rules touch.
+ * The part of a run this module reads. A type-only import, so reading the rules
+ * costs nothing at runtime and this directory still does not import legion/run.
  */
-export interface ScheduledRun {
-  id: string;
-  kind: string;
-  state: "pending" | "running" | "cancelled" | "failed" | "done";
-  /** The device executing it, and when it started. Absent on a `pending` run. */
-  claimant?: { deviceId: string; at?: number } | null;
-  /** When the worker last reported real progress. */
-  lastProgressAt?: number | null;
-  attempts?: number;
-}
+export type ScheduledRun = Pick<
+  Run,
+  "id" | "kind" | "state" | "claimant" | "lastProgressAt" | "attempts"
+>;
 
-/** Why a run is being handed back or picked up. */
+/** Why a run is being picked up. */
 export type DueReason = "elected" | "stalled" | "forfeited" | "restarted";
 
 export interface DueRun {
   run: ScheduledRun;
-  /** `take` it and start working, or hand it `back` to `pending` first. */
-  action: "take" | "back";
+  /** `take` a run nobody is executing, or `retake` one from its claimant. */
+  action: "take" | "retake";
   reason: DueReason;
-  /**
-   * Whether this counts as an attempt that was spent. A stall and a restart do;
-   * a device that forfeited did not fail at anything this device can see.
-   */
-  bumpAttempts: boolean;
 }
+// Both actions spend an attempt, so there is no field saying whether this one
+// does. Under the older model a stuck run went back to `pending` and the count
+// moved when somebody later took it; now the take-over is the taking, and a run
+// that bounced between devices without the count moving would never reach the
+// limit it is supposed to stop at.
 
 /** How long a `running` run may go without progress before it is stuck. */
 export interface DueOptions {
@@ -95,33 +93,34 @@ export function dueRuns(
   for (const run of runs) {
     const mine = winner(run.kind) === deviceId;
     if (run.state === "pending") {
-      if (mine) out.push({ run, action: "take", reason: "elected", bumpAttempts: false });
+      if (mine) out.push({ run, action: "take", reason: "elected" });
       continue;
     }
     if (run.state !== "running") continue;
     const holder = heldBy(run);
     if (holder === deviceId) {
-      // A run with no progress recorded at all is judged from when it started,
-      // which is what the claimant wrote down.
-      const since = run.lastProgressAt ?? run.claimant?.at ?? null;
-      if (since !== null && now - since > opts.stallMs) {
-        out.push({ run, action: "back", reason: "stalled", bumpAttempts: true });
+      // The later of the last report and the moment this claimant picked the
+      // run up: a run taken over a moment ago carries the previous claimant's
+      // progress time, and reading that alone would call it stuck immediately.
+      const since = Math.max(run.lastProgressAt ?? 0, run.claimant?.startedAt ?? 0);
+      if (since > 0 && now - since > opts.stallMs) {
+        out.push({ run, action: "retake", reason: "stalled" });
       }
       continue;
     }
     // Somebody else's. Only the device that has since won the kind takes it
     // over, and only once the holder has actually forfeited.
     if (mine && holder !== null && hasForfeited(holder, claims, now)) {
-      out.push({ run, action: "back", reason: "forfeited", bumpAttempts: false });
+      out.push({ run, action: "retake", reason: "forfeited" });
     }
   }
   return out;
 }
 
 /**
- * What this device owes after a restart: everything it left `running` is back
- * to `pending` with one more attempt spent, because nothing of its own can be
- * running in a process that has only just started.
+ * What this device owes after a restart: everything it left `running` is taken
+ * over here again with one more attempt spent, because nothing of its own can
+ * be running in a process that has only just started.
  *
  * This device's own judgement, made without a clock and without reading anybody
  * else's claim — a machine whose clock is wrong still knows it restarted.
@@ -132,5 +131,5 @@ export function reclaimAfterRestart(
 ): DueRun[] {
   return runs
     .filter((run) => run.state === "running" && heldBy(run) === deviceId)
-    .map((run) => ({ run, action: "back" as const, reason: "restarted" as const, bumpAttempts: true }));
+    .map((run) => ({ run, action: "retake" as const, reason: "restarted" as const }));
 }

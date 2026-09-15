@@ -121,6 +121,7 @@ export interface TransitionPatch {
 
 export type TransitionResult = { ok: true; run: Run } | { ok: false; reason: string };
 
+
 export interface RunStore {
   /**
    * Write a pending run. With `batchId` and `step` the id is derived from them,
@@ -132,6 +133,19 @@ export interface RunStore {
   list(filter?: RunFilter): Promise<Run[]>;
   /** Move a run along the chain. A move that is not forward is refused. */
   transition(id: string, next: RunState, patch?: TransitionPatch): Promise<TransitionResult>;
+  /**
+   * Take a `running` run over: the same state, a new claimant, one more
+   * revision. Nothing ever goes back to `pending` (docs/55) — a device that
+   * restarted, a device that forfeited its claim and a worker that stalled all
+   * leave a run that is running somewhere, and this is how it becomes running
+   * here. Both copies are then `running`, the chain ties, and `revision`
+   * decides, so the fresher claimant wins the merge.
+   *
+   * Separate from `transition` because transition's refusal to move sideways is
+   * the whole of its contract, and one operation that may is easier to reason
+   * about than a flag that sometimes lets it.
+   */
+  retake(id: string, claimant: RunClaimant): Promise<TransitionResult>;
   /**
    * Ask for a run to stop. A pending run has nobody doing anything, so it goes
    * straight to `cancelled`; a running one gets `cancelRequested` written on it
@@ -258,6 +272,28 @@ export function createRunStore(io: RunIo): RunStore {
       }
       if (isTerminal(next)) moved.endedAt = at;
       return { ok: true, run: await put(moved) };
+    },
+
+    async retake(id, claimant) {
+      const run = await get(id);
+      if (!run) return { ok: false, reason: `no run ${id}` };
+      if (run.state !== "running") {
+        return { ok: false, reason: `only a running run is taken over, and ${id} is ${run.state}` };
+      }
+      // A take-over is the beginning of a try, the same as the move out of
+      // `pending` is, so it spends one. A run that bounced between devices
+      // without the count moving would never reach the limit it stops at.
+      //
+      // `lastProgressAt` is left where it is: nothing has been reported. The
+      // stall test reads it against the claimant's own start (schedule/due.ts),
+      // so a run taken over a moment ago is not stuck a moment later.
+      const taken: Run = {
+        ...run,
+        claimant,
+        attempts: run.attempts + 1,
+        revision: run.revision + 1,
+      };
+      return { ok: true, run: await put(taken) };
     },
 
     async cancel(id, at) {
