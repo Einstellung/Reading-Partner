@@ -70,12 +70,13 @@ import type { AnalystInput, LabRunResult } from "../analysis/types";
 import { getObservationAdapter } from "../../memory/live/live";
 import { buildObservationSnapshot, trimObservations } from "../../memory/observations/select";
 import { runDreamIfDue } from "../../memory/dream/live";
-import { dailyAction, DAILY_TICK_MS, lastAnchorDate } from "./daily";
+import { dailyAction, DAILY_ANCHOR_HOUR, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { collectorStatusLine, InfoCollector } from "../collect/collector";
 import { createCollectorSession, type CollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "../boxes/publish";
-import { ASK_PULL_ROUTE, readAsks, type CollectorClaim } from "../briefer/handoff";
+import { ASK_PULL_ROUTE, COLLECT_KIND, readAsks, type CollectorClaim } from "../briefer/handoff";
 import { appClaims, WEBVIEW_FETCH } from "../../legion/claim";
+import { registerSchedule, runScheduleTick } from "../../legion/schedule";
 import { subscribeSyncStatus } from "../../platform/sync";
 import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
@@ -334,6 +335,23 @@ async function canAutoGenerate(): Promise<boolean> {
 // bound to: the recorded date, the real clock, a repeating wake, and the two
 // gates a generate nobody asked for has to pass.
 
+// The round as a schedule (docs/55): the hour is declared once, here, and which
+// machine acts on it is the election for `collect` — the same election
+// canAutoGenerate asks below, now asked by legion rather than by this file.
+// What legion does about the hour is ring a wake bell; the work stays here
+// until the round is a run of its own (docs/55, step 7), which is also why the
+// round keeps its own record of the anchor it has run for: a round the pipeline
+// was too busy to take is still owed, and a bell that has been rung is not.
+export const DAILY_ROUND_SCHEDULE = "info-daily-round";
+
+registerSchedule({
+  id: DAILY_ROUND_SCHEDULE,
+  kind: COLLECT_KIND,
+  at: { daily: { hour: DAILY_ANCHOR_HOUR } },
+  brief:
+    "The morning briefing round is due. The collector on this device refreshes the day's briefing on its own; say something to the reader only if there is something worth saying.",
+});
+
 // `undefined` until the file has been read once, which is not the same as the
 // `null` a machine that has never run a round has.
 let dailyRunDate: string | null | undefined;
@@ -398,6 +416,14 @@ async function dailyTick(): Promise<void> {
 // runDreamIfDue owns its own 3 a.m. day gate and never throws; the guard here is
 // for the election read.
 async function checkDailyRound(): Promise<void> {
+  try {
+    // Every schedule registered, not just this domain's: this tick is the one
+    // place in the app that already asks the clock on a timer. On the device
+    // the election picked, an hour that has gone by leaves a wake bell.
+    await runScheduleTick({ deviceId: currentDeviceId() });
+  } catch (e) {
+    console.warn("the schedule check failed", e);
+  }
   try {
     await dailyTick();
   } catch (e) {
