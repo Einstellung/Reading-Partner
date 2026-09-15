@@ -18,7 +18,6 @@ import type { ProviderId } from "../../ai";
 import { runAgentTurn } from "../../legion/execute/turn";
 import { soulHarness } from "../../soul";
 import type { CompressedImage } from "../../ai/image-utils";
-import type { SubagentProgress } from "../../legion/subagent";
 import { logEvent } from "../../platform/app/events";
 import type { Annotation } from "../../platform/app/reader-contract";
 import { toReasoning, type Settings } from "../../platform/app/settings";
@@ -54,7 +53,6 @@ import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { createLiveTurns, type LiveTurn } from "../live-turns";
-import { RESEARCH_TOOL_NAME, researchStatusLabel } from "../papers/research-agent";
 import { deferHangup } from "./hangup";
 import { createPendingImages, type StagedImage } from "../pending-images";
 import type { PrepPipeline } from "../prep/papers/pipeline";
@@ -426,15 +424,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
       write({ kind: "tool-end", name: info.name, isError: info.isError }, ts);
 
-    // A research sub-agent run, in the row the reader already has for the tool call
-    // that started it (docs/25). One line, rewritten in place: not the sub-agent's
-    // own tool calls, not its queries, not what it read.
-    const onSubagentProgress = (progress: SubagentProgress, ts: number) =>
-      write(
-        { kind: "tool-label", name: RESEARCH_TOOL_NAME, label: researchStatusLabel(progress) },
-        ts,
-      );
-
     // A turn that ends without a reply. The row it leaves behind, whether a
     // toast goes up and whether Retry is offered all follow from which kind it
     // was (reading/turn.ts), so the refusal paths cannot pick up the error
@@ -490,7 +479,6 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         getPipeline: () => pipelineRef.current,
         distillAnnotations,
         signal: controller.signal,
-        onSubagentProgress: (progress) => onSubagentProgress(progress, ts),
       });
       if (!turn) {
         liveTurns.settle(threadId, controller); // aborted while reading history
