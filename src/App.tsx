@@ -1222,11 +1222,20 @@ export default function App() {
       },
       openAnnotation: openThreadForAnnotation,
       // The info pages draw the current day; the date on the card is what the
-      // item is about, not a day the shell can navigate to.
-      goToDoor: () => setHomeScreen("vestibule"),
-      goToBriefing: () => setHomeScreen("briefing"),
+      // item is about, not a day the shell can navigate to. The book is closed
+      // first when one is open: the reader covers the home screen, so setting it
+      // underneath would be a card that does nothing visible and still counts
+      // itself told.
+      goToDoor: () => {
+        if (inReader) closeReader();
+        setHomeScreen("vestibule");
+      },
+      goToBriefing: () => {
+        if (inReader) closeReader();
+        setHomeScreen("briefing");
+      },
     }),
-    [topics, openFile, reopenThreadCall, openThreadForAnnotation],
+    [topics, openFile, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
   );
 
   // Where the soul may take the reader (docs/67, ui/components/base/places.ts).

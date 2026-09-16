@@ -73,6 +73,10 @@ reading 的文献研究。reading 域登记 kind `research-literature`，agent w
 
 info 的盒（60、63）等 Red Boxes 落地时用同一个 `src/box/`，简报页现状不动。
 
+2026-09-16：info 的日更盒已进 `src/box/`，简报页没动。日更跑完，每个有命中的研究室出一项：`source` 是 `cable`，`boxId` 是 `briefing-<date>-<generatedAt>`（同一天再生成一次是另一盒），`kind` 是 `lab:<labId>`，封面是「研究室名: 那句变化」，`body` 是 `briefing-<date>.json#<labId>`，`origin` 是 `{ place: "briefing", date }`，`needsDecision` 为假。项的 id 由 `boxId` 加研究室 id 哈希出来，`createdAt` 取 `generatedAt`，所以同一份简报落地两次不会多出第二批卡片。放盒在 `info/program/live.ts` 的 `saveAndPublishBriefing`，即生成简报那台设备；读端设备从 published file 拿简报，不放，项随 `src/box/` 同步过去。取代按研究室：新一天某室的项放进去时，该室上一盒里仍 `in-box` 的项记 `dismissed`，`told` 和已出口的不动，今天安静的室保留原项。代码 `src/info/boxes/red-box.ts`。
+
+简报页没有按研究室定位的机制，卡片只到页面，没有为此新造锚点。桌面上点这张卡先关书再切屏，否则阅读器盖着首页、卡片看着什么也没做却已经记了 `told`。
+
 ## 顺序
 
 1. 盒生在 palace：`src/box/` 的项与盒、palace 登记行、状态迁移。验收：两台设备各写一项，合并后两项都在，状态按项自己那份文件收敛。

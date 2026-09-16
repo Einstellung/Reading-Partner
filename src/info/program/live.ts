@@ -62,6 +62,8 @@ import {
   todayLocal,
 } from "../collect/store";
 import { loadBriefing, saveBriefing } from "../boxes/store";
+import { deliverBriefing } from "../boxes/red-box";
+import { appBox } from "../../box";
 import { loadCableDay, saveCableDay } from "../cable/store";
 import { activeLabs, loadLabs } from "../labs/store";
 import { loadPicture, savePicture } from "../picture/store";
@@ -298,12 +300,27 @@ async function loadBriefingForToday(date: string): Promise<Briefing | null> {
 // A publish that fails is logged and swallowed. The briefing is on disk and this
 // machine can show it; the readers get the next one, and the alternative is a
 // briefing that counts as failed because another device could not be told.
+// The Red Box delivery hangs off the same edge (docs/68): the corner's badge and
+// the secretary's list are fed from box/ and nothing else, so a briefing that
+// only lands in its own file is one they cannot see. Here rather than in the
+// pipeline for the reason above, and on the save path rather than the publish
+// path because it is the generating device that delivers — a reader pulls the
+// published file and puts nothing; the items reach it as box files, through
+// sync. A second save of the same briefing adds nothing (boxes/red-box.ts).
+//
+// Swallowed the same way a failed publish is, and for the same reason: the
+// briefing is on disk and this machine can show it.
 async function saveAndPublishBriefing(briefing: Briefing): Promise<void> {
   await saveBriefing(briefing);
   try {
     await publishBriefing(briefing);
   } catch (e) {
     console.warn("failed to publish the briefing", e);
+  }
+  try {
+    await deliverBriefing(briefing, appBox());
+  } catch (e) {
+    console.warn("failed to put the briefing in the box", e);
   }
 }
 
