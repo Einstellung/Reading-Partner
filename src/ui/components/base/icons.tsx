@@ -487,35 +487,34 @@ export function IconBooks({ size = 20 }: IconProps) {
 	);
 }
 
-// The reader's book-level AI entry (docs/09): an open book with a sparkle over
-// its top-right corner — the book itself, and the AI that reads it with you.
-// That is what the button opens, and it is the one thing in the tray that is
-// not a tool.
+// The reader's book-level AI entry (docs/09): an open book with a sparkle set
+// into a gap in its top-right edge — the book itself, and the AI that reads it
+// with you. That is what the button opens, and it is the one thing in the tray
+// that is not a tool.
 //
 // The book is drawn in the house system (currentColor, 1.5 stroke, round caps)
 // so it sits with IconSidebar and IconGear in the same bar. Only the sparkle
 // takes a colour, and it takes the one token allowed to carry the green:
-// --accent-line, through the `fill-accent-line` utility rather than a hex, so
+// --accent-line, through the `stroke-accent-line` utility rather than a hex, so
 // it follows the palette (docs/42 — the green draws marks and lines, never an
-// area of fill).
+// area of fill), which is also why the sparkle is stroked hollow.
+//
+// The two pages are not mirrored. The left one is closed on all four sides; the
+// right one is open at the top, where its top edge stops short and its outer
+// edge starts below where that edge would have landed. The sparkle sits in that
+// gap, so it reads as part of the drawing rather than a badge parked beside it.
 //
 // Judge it at 20px, the size it is drawn at in the bar. Blown up, an open book
-// is two arches over a V and reads a little like a lowercase m — every open-book
-// glyph does, and that is not a defect to draw out. What 20px needs is that the
-// two pages stay open: a white cavity in each, with the spine a dark line down
-// the middle. An earlier cut chased the large size instead, gave each page a
-// bowl bottom, and closed into a single cup at 20px.
+// reads a little like a lowercase m — every open-book glyph does, and that is
+// not a defect to draw out. What 20px needs is that the two pages stay open: a
+// white cavity in each, with the spine a dark line down the middle. An earlier
+// cut chased the large size instead, gave each page a bowl bottom, and closed
+// into a single cup at 20px.
 //
-// So both edges of a page run the same way, outer high and inner low: the top
-// edge climbs from the V at the spine and flattens into its outer corner, and
-// the bottom edge falls from that outer corner back to the spine, which is the
-// book's lowest point. Each page is a band of near-constant width rather than a
-// bowl — about 9 units against a 1.5 stroke, a touch narrower at the outer edge
-// than at the spine, which is what leaves the cavity legible small.
-//
-// The book is scaled down into the lower left to clear the sparkle; the two
-// together fill 78% of the box's height, centred in it, which is what
-// IconSparkle and IconHighlight do in theirs.
+// The sparkle is stroked at 1.2, not the book's 1.5: at 1.5 its cavity closes
+// at 20px and it reads as a green blob rather than a star. It is centred at
+// (19.4, 4.8), the lowest it sits in the gap while no ink touches the two loose
+// ends around it.
 export function IconBookSparkle({ size = 20 }: IconProps) {
 	return (
 		<svg
@@ -529,12 +528,13 @@ export function IconBookSparkle({ size = 20 }: IconProps) {
 			strokeLinejoin="round"
 			xmlns="http://www.w3.org/2000/svg"
 		>
-			<path d="M9.5 11.8C7.2 10.5 4.2 7.6 1.6 7.6V16.6C4.2 16.6 7.2 19.9 9.5 21.2C11.8 19.9 14.8 16.6 17.4 16.6V7.6C14.8 7.6 11.8 10.5 9.5 11.8Z" />
-			<path d="M9.5 11.8V21.2" />
+			<path d="M11.5 9.2Q7 7.45 2.7 7.3V18.7Q7 18.85 11.5 20.8Z" />
+			<path d="M11.5 9.2Q14.2 7.6 17.1 7" />
+			<path d="M21.5 7.9V18.7Q16.5 19 11.5 20.8" />
 			<path
-				d="M19.6 2.6C19.6 4.4 20.6 5.4 22.4 5.4C20.6 5.4 19.6 6.4 19.6 8.2C19.6 6.4 18.6 5.4 16.8 5.4C18.6 5.4 19.6 4.4 19.6 2.6Z"
-				stroke="none"
-				className="fill-accent-line"
+				d="M19.4 2.1Q19.75 4.45 22.1 4.8Q19.75 5.15 19.4 7.5Q19.05 5.15 16.7 4.8Q19.05 4.45 19.4 2.1Z"
+				strokeWidth="1.2"
+				className="stroke-accent-line"
 			/>
 		</svg>
 	);
