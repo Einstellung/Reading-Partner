@@ -9,6 +9,8 @@
 // soul saying it is done with it. The folding of a run into the ledger waits on
 // `acked`, so the order may not be reversed.
 
+import type { Delegator } from "../run/types";
+
 export type BellType = "run-done" | "run-failed" | "wake";
 
 export type BellState = "queued" | "delivered" | "acked";
@@ -44,6 +46,12 @@ export interface RunDonePayload {
    * store and there is nothing on disk for the soul to read it back off.
    */
   deliverTo?: string;
+  /**
+   * Who asked for the run, copied on for the same reason `deliverTo` is. The
+   * soul answers a program's bell without a turn (src/soul/bell.ts), so it has
+   * to know that much before it decides to open one.
+   */
+  delegator?: Delegator;
 }
 
 /** A run gave up: a premise did not hold, or its attempts ran out. */
@@ -53,6 +61,8 @@ export interface RunFailedPayload {
   reason: string;
   /** The run's own `deliverTo`, for the same reason RunDonePayload carries it. */
   deliverTo?: string;
+  /** The run's own `delegator`, for the same reason RunDonePayload carries it. */
+  delegator?: Delegator;
 }
 
 /** A schedule came due. What to do about it is the soul's to decide. */

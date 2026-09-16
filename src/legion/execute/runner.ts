@@ -251,6 +251,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
             brief: final.brief,
             ...(final.output === undefined ? {} : { output: final.output }),
             ...(final.deliverTo === undefined ? {} : { deliverTo: final.deliverTo }),
+            delegator: final.delegator,
           })
           .catch((e) => console.warn(`run ${id} finished but its bell would not ring`, e));
         return;
@@ -267,6 +268,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
             kind: current.kind,
             reason: why(failure),
             ...(current.deliverTo === undefined ? {} : { deliverTo: current.deliverTo }),
+            delegator: current.delegator,
           })
           .catch((e) => console.warn(`run ${id} failed and its bell would not ring`, e));
         return;

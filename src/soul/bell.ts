@@ -13,6 +13,10 @@
 // `deliveredAt`. A turn that refused or
 // failed acks nothing, and the bell is still queued for the next pass.
 //
+// Not every bell is a turn. A run a program delegated is answered by the ledger
+// alone: acked, stamped, and nothing said (docs/55 step 12). Only its failure
+// reaches the reader, as one card to decide about.
+//
 // One at a time. The soul's harness serialises turns anyway (legion/execute/
 // held.ts), but a pass that fired every bell at once would queue a stack of
 // turns behind a reader who is in the middle of one.
@@ -169,16 +173,47 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     if (deps.signal?.aborted) break;
     const at = now();
     const date = doorDate(new Date(at));
-    const rendered = renderBell(bell);
     // Where the question was asked (docs/68). A `local` run never reaches a file,
     // so the runner copies its deliverTo onto the bell; a synced run is read off
-    // its own record, which is where another device's copy would be.
+    // its own record, which is where another device's copy would be. The
+    // delegator rides along for the same reason.
     let origin: BoxOrigin | null = null;
     if (bell.type !== "wake") {
-      origin =
-        parseOrigin(bell.payload.deliverTo) ??
-        parseOrigin((await runs.get(bell.payload.runId).catch(() => null))?.deliverTo);
+      const run = await runs.get(bell.payload.runId).catch(() => null);
+      const delegator = bell.payload.delegator ?? run?.delegator;
+      // A run a program delegated was nobody's question: the domain that asked
+      // for it has already put what came back where it belongs (the day's
+      // collect round leaves its own card in the box), and there is no
+      // conversation waiting on an answer. So no turn, no line in a thread, and
+      // nothing in the box — the bell is only acknowledged.
+      if (delegator?.kind === "program") {
+        // Except when it failed. Then the work left nothing behind and nobody
+        // would ever know, so it goes in the box as something to decide about,
+        // with the error itself as the cover (docs/68).
+        if (bell.type === "run-failed") {
+          const { runId, kind, reason } = bell.payload;
+          await box
+            .put({
+              boxId: runId,
+              source: "run",
+              cover: coverOf(reason) || `${kind} failed`,
+              origin: { place: "door", date },
+              kind,
+              runId,
+              needsDecision: true,
+              at,
+            })
+            .catch((e) => console.warn(`run ${runId} failed and its box item would not write`, e));
+        }
+        await bells.delivered(bell.id);
+        await bells.ack(bell.id);
+        await runs.markDelivered(bell.payload.runId, now()).catch(() => null);
+        answered += 1;
+        continue;
+      }
+      origin = parseOrigin(bell.payload.deliverTo) ?? parseOrigin(run?.deliverTo);
     }
+    const rendered = renderBell(bell);
     const placed = origin ? await openDelivery(origin, rendered, deps) : null;
 
     let key: string;
