@@ -62,10 +62,10 @@ run 分两档，`kind` 声明自己是哪档，delegate 的接口一样：本地
 | 字段 | 含义 |
 |---|---|
 | `id` | 全局唯一，即文件名 |
-| `idempotencyKey` | `batchId` + `step`，只有这一个用法 |
+| `idempotencyKey` | 派生文件名的键：子 run 是 `batchId` + `step`，其余由委托方自己起（collect 用锚点日期） |
 | `kind` | 领域登记的类型，legion 只认这个 |
 | `tier` | `local` 或 `synced`，由 `kind` 定 |
-| `delegator` | soul（用户开口或一条铃起的回合），或派它的那个程序 worker 的 run id |
+| `delegator` | soul（用户开口或一条铃起的回合），派它的那个程序 worker 的 run id，或 `program`（到点的 schedule、落盘的一个 ask 这类没人开口的领域接线，带一个名字） |
 | `brief` | 任务书，按引用 |
 | `state` | `pending` < `running` < `cancelled` < `failed` < `done` |
 | `claimant` | 执行设备 deviceId + 开始时刻 |
@@ -84,7 +84,7 @@ run 分两档，`kind` 声明自己是哪档，delegate 的接口一样：本地
 
 状态格是一条链，两台设备写同一个 run 时取格上更高的那个，对任意设备数都收敛。同一状态上两份相撞（弃权后被接手、原设备又回来跑完了）比 `revision`，高者赢；`revision` 相同按 claimant 的 deviceId 字典序小者赢，两侧都没有 claimant 时按规范序列化的内容序破平（不用 id，两侧的 id 是同一个）。赢的那一侧整份拿走，只有 `attempts`（取 max）、`createdAt`、`startedAt`、`deliveredAt`（取非空且较早的）和 `cancelRequested`（只置不清）单独折叠——这五个各自单调，跟着赢的那侧会倒退。它们也不进内容序的比较，否则合并出来的那份会是两台设备都没持有过的记录，合并就不再可结合。
 
-有 `idempotencyKey` 时文件名取 `r-<hash(kind + NUL + key)>`（sha256 截 16 字节）：两台设备写同一个路径，同步的合并直接把它们收敛成一份，不需要额外的去重协议。没有 key 就用随机 id。通用的 `idempotencyKey` 不做，它只有 batch 续跑这一个用法。
+有 `idempotencyKey` 时文件名取 `r-<hash(kind + NUL + key)>`（sha256 截 16 字节）：两台设备写同一个路径，同步的合并直接把它们收敛成一份，不需要额外的去重协议。没有 key 就用随机 id。子 run 的 key 是 `batchId` + `step`；别的调用方自己起 key，起了就是在说「这个 run 同一时候只该有一个」，第二次派拿回第一次那份。
 
 `progress` 是一行字，给人看跑到哪了。runner 给 worker 的 ctx 里有 `report(text)`：程序 worker 每步自己调（「抓取 12/40」），agent worker 由 runner 在每次工具调用结束时自动填工具名和轮数。runner 收到 report 就更新 `progress` 和 `lastProgressAt`、`revision` 加一、写回 run 文件；同一个 run 最多每三十秒写一次盘，状态变化不受节流。完整流水在本机 session 里，不同步。卡住判定只看 `lastProgressAt` 超时，不看墙上时钟。
 
@@ -254,7 +254,7 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 第 5 步（2026-09-15）：claim 落在 `src/legion/claim`，文件从 `info-collector-<id>.json` 搬到 `legion/claim/<deviceId>.json`（palace 行改名 `claim`，sync 仍是 data；旧路径留作 legacy 并下了同步通道）。capability 的表示法是能力标签而不是 kind 名单：kind 注册时声明需要哪些标签（`registerKindCapabilities`），设备声明自己有哪些（今天只有 `webview-fetch`），`electFor(kind, claims, now)` 在覆盖需求的候选里按连续在线最久选。info 的 `collect` 登记为不需要任何标签，和泛化之前的候选集一样。
 
-第 6 步（2026-09-15）：`src/legion/schedule`。`dueRuns` 和 `reclaimAfterRestart` 是纯函数，阈值作参数，不起 worker 也不碰盘；它读的 run 形状是 `Run` 的一个 `Pick`（只用 type import，这个目录仍不在运行时 import `legion/run`）。schedule 是内存注册表加 `dueSchedules`，到点在当选设备上摇一条 `wake` 铃，去重靠 `legion/schedule/fired.json`（本地、每设备一份）记的上次 anchor。info 的 daily round 登记成一条 schedule，挂在原来的 tick 上；干活那半和它自己的日期记录原样保留，等 `collect` 登记成 kind、由 runner 起 run 时一起去掉。
+第 6 步（2026-09-15）：`src/legion/schedule`。`dueRuns` 和 `reclaimAfterRestart` 是纯函数，阈值作参数，不起 worker 也不碰盘；它读的 run 形状是 `Run` 的一个 `Pick`（只用 type import，这个目录仍不在运行时 import `legion/run`）。schedule 是内存注册表加 `dueSchedules`，到点在当选设备上摇一条 `wake` 铃，去重靠 `legion/schedule/fired.json`（本地、每设备一份）记的上次 anchor。info 的 daily round 登记成一条 schedule，挂在原来的 tick 上；干活那半和它自己的日期记录在第 12 步换成了一个 run，日期记录也在那时去掉了。
 
 第 7 步（2026-09-15）：worker 契约与 runner 落在 `src/legion/execute/worker.ts` 和 `runner.ts`。`registerWorker` 一次调用登记 worker 和这个 kind 的能力标签；runner 的 `delegate` 管三件闸，`tick` 走 `dueRuns`，`cancel` 按 `batchId` 级联一层。`report` 三十秒一写、终态立刻写并带上最后一行。store 加了 `retake`（接手：同状态换 claimant、attempts 和 revision 各加一），`dueRuns` 的 `back` 动作改成 `retake`、`ScheduledRun` 换成 `Run` 的 `Pick`、`bumpAttempts` 去掉。`App.tsx` 和 `PhoneApp.tsx` 在 `startBellWatch` 旁边起 `startRunner`，这是 `legion/run` 的第一个 import，run 的合并从此注册进 sync；注册表在生产里是空的，空表时轮询先看表再看盘，不花 IO。
 
@@ -267,6 +267,14 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 第 10 步之二：tasking 接入（2026-09-16）。info 在 `src/info/tasking/` 登记 kind `tasking`（agent worker、`local` 档、不要能力标签），身体是一个子 agent，工具是「先查已有 cable 和稿」那一套：`search_cables` 扫本机三十天的电报，`read_cable` 取正文（先当天的文章缓存，再随简报发布的 `info-bodies.json`），`read_picture` 读研究室态势或列出开着的室，外加 `read_page` 抓一个电报指到的 URL。仓库里没有 web search，也没加；查不到就在第一行说查不出来，后面列查过哪些本地来源。`read_page` 从 `info/briefer/companion-tools.ts` 搬到 `info/extract/read-page-tool.ts`：秘书和 tasking 两个 agent 都挂它，而秘书的 duty 要写出 kind 名，briefer 因此 import tasking，反向再 import 就是环。
 
 答铃的落点补齐：`src/info/briefer/deliver.ts` 登记 `briefing`，按那天的简报桌装配（role `secretary`，桌上是那天的简报，没有就是「今天还没有简报」那个同 id 的会话），回复追加进 `info-<日期>` 的 `briefing-<日期>` 线程。简报页和语音通话的回合都传 `origin: { place: "briefing", date }`，从简报派的 run 不再在门口答。简报没有「正看着」这回事，盒里那一项照放。产出落盘那段收到 `legion/execute/outputs.ts` 的 `writeRunOutput`，research 和 tasking 共用。`delegate` 的描述文本不再提文献搜索，改成通用措辞，kind 清单仍在参数说明里。docs/63 的三态判定（答上了 / 没答上 / 未判定，idempotencyKey 不释放）没做，项走 told / dismissed；同一问题当天去重也没做。
+
+第 12 步：collect 接入（2026-09-16）。info 在 `src/info/program/collect-worker.ts` 登记 kind `collect`（程序 worker、`synced` 档、不要能力标签），身体是 `InfoPipeline` 的一层壳：读任务书里的 scope（`full` / `retriage`）、调对应的方法、把管线的四个相位翻成一行 `ctx.report`、产出是当天的 `briefing-<date>.json`。`registerKindCapabilities(COLLECT_KIND, [])` 并进 `registerWorker`，`handoff.ts` 只留 kind 名。三个口都改成派 run：日 tick、`generate_briefing`（经 `collectorView().request`）、读端 ask（`presence.ts` 加一条 `requestCollect` 依赖，不自己 import runner）。
+
+`idempotencyKey` 三种：日更 `collect:<锚点日期>`，重跑 `collect:<日期>:<scope>:<时刻>`，读端 ask `collect:ask:<askedAt>:<scope>`。日更那条就是「今天跑过了」的全部记号，本机的 `info-daily-round.json` 和 `dailyAction` 一起删了；`daily.ts` 只剩锚点。`delegator` 用新加的 `{ kind: "program", name }`。
+
+单飞查过两处：runner 的 `start` 有每设备每 kind 一条（`DEFAULT_PER_KIND`），排不上的 run 留在 `pending`，下一拍再看，不丢；`dueRuns` 只让当选设备取 `pending`，读端设备不抢。管线还有一个不经 run 的入口——`init()` 在 app 回前台时续跑断点——所以 worker 层再兜一层：`generate()` 说 `busy` 就等它给回的那条 `done`，完了再要一次，不放弃这个 run。
+
+偏离：wake 铃照旧摇，soul 照旧在门口答，采集经理不是 soul 用模型回合派的（docs/63 的设计），铃的文案改成「run 已由日 tick 派出」。`BriefingView` 的 snapshot 仍订阅 pipeline，没改成订阅 run 文件。`collectorView().request` 不再有 `busy` 这个回答：两次 `generate_briefing` 是两个 run，第二个排队而不是被拒。任务书写在 `legion/briefs/`，那一行 palace 是 local——三个口都只在 `amICollecting()` 为真的机器上派，选举把 run 发回同一台，所以今天够用；选举中途换机器时那个 run 在新机器上读不到任务书而失败。分析员和综合拆成子 run 留待下一步。
 
 未开始：session 到对话文件的投影、translate 接入。开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
