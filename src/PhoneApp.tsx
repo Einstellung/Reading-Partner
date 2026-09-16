@@ -11,9 +11,11 @@
 // Back has one definition, `goBack`, and three things reach it: the top bar
 // button on every screen, the left-edge swipe, and the Android system button.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { bindSystemBack } from "./platform/app/back-button";
-import { BRIEF_TOPIC_ID } from "./platform/app/topics";
+import { BRIEF_TOPIC_ID, listTopics, type Topic } from "./platform/app/topics";
+import { listLibraryEntries, type LibraryEntry } from "./platform/app/library";
+import type { FlowReaderPaneProps } from "./reading/epub/flow-contract";
 import { initSync, TICK_MS } from "./platform/sync";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { registerPullRoute } from "./platform/sync/pull-routes";
@@ -38,6 +40,9 @@ import {
 } from "./ui/components/lumen/corner-pref";
 import { browserPrefStore } from "./ui/components/base/pref-store";
 import { PullToAsk } from "./ui/components/phone/PullToAsk";
+import PhoneReader from "./ui/components/phone/PhoneReader";
+import PhoneShelf, { type PhoneBookOpen } from "./ui/components/phone/PhoneShelf";
+import { continueReading } from "./ui/components/phone/shelf-list";
 import SavedList from "./ui/components/phone/SavedList";
 import {
   back,
@@ -78,7 +83,22 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
   }
 }
 
-export default function PhoneApp() {
+// The reflow reading area (docs/69). Written against the same contract as the
+// screen that mounts it and landing separately, so until it does this shell has
+// no pane and the reader screen is not reachable.
+//
+// TODO(docs/69): import FlowReaderPane from "./reading/epub/FlowReaderPane" and
+// assign it here.
+const FLOW_PANE: ComponentType<FlowReaderPaneProps> | null = null;
+
+export default function PhoneApp({
+  // The pane, injectable so a smoke test can mount the reader screen against a
+  // fake one. Nothing in the app passes it; the line above is where it comes
+  // from.
+  Pane = FLOW_PANE,
+}: {
+  Pane?: ComponentType<FlowReaderPaneProps> | null;
+} = {}) {
   const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
   // The corner companion, per device (docs/68). The phone keeps its own answer:
   // a reader who put Lumen away here has not put it away on the desk.
@@ -97,6 +117,22 @@ export default function PhoneApp() {
   // about a file nobody has opened.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[] | null>(null);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
+  // The shelf (docs/69): the topics and the book registry. Null until they have
+  // been read — the home card says nothing about a library nobody has listed.
+  const [topics, setTopics] = useState<Topic[] | null>(null);
+  const [entries, setEntries] = useState<Record<string, LibraryEntry>>({});
+  // Which book the reader screen is on, and where it was opened from. The stack
+  // entry carries what back and the title need; the topic and the path are what
+  // leaving the book writes to, and only the shelf knew them.
+  const [openedBook, setOpenedBook] = useState<PhoneBookOpen | null>(null);
+  const refreshShelf = useCallback(async () => {
+    const [list, registry] = await Promise.all([
+      listTopics().catch((): Topic[] => []),
+      listLibraryEntries().catch((): Record<string, LibraryEntry> => ({})),
+    ]);
+    setTopics(list);
+    setEntries(registry);
+  }, []);
 
   // The info call InfoHome draws over its screens. It is not a stack entry, so
   // back closes it instead of navigating underneath it; the ref keeps goBack
@@ -202,6 +238,14 @@ export default function PhoneApp() {
   // The Android button, bound only while back has somewhere to go: with nothing
   // to close and nothing to pop it belongs to the system, which leaves the app
   // (see platform/app/back-button.ts).
+  // The shelf, whenever the reader is not in a book: what a reading session
+  // changes on disk is the position and which file was opened last, and both of
+  // them are what the shelf and the home card draw.
+  const inReader = base.kind === "reader";
+  useEffect(() => {
+    if (!inReader) void refreshShelf();
+  }, [inReader, refreshShelf]);
+
   const backable = backIsAvailable(stack, overlayOpen);
   useEffect(() => {
     if (!backable) return;
@@ -219,8 +263,15 @@ export default function PhoneApp() {
   // already on the stack, so those stay backs instead of stacking a second copy.
   // "library" cannot arrive: the phone home screen has no way there.
   const onNavigate = useCallback((next: HomeScreen) => {
-    const kind = next === "vestibule" || next === "library" ? "home" : next;
+    const kind = next === "vestibule" ? "home" : next;
     setStack((s) => goTo(s, screen(kind)));
+  }, []);
+
+  // Into a book. The entry carries the book; the rest of what leaving it needs
+  // is held beside the stack.
+  const openReader = useCallback((book: PhoneBookOpen) => {
+    setOpenedBook(book);
+    setStack((s) => push(s, { kind: "reader", bookId: book.bookId, name: book.name }));
   }, []);
 
   const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
@@ -273,6 +324,9 @@ export default function PhoneApp() {
                 launch={launch}
                 savedCount={savedArticles?.length ?? null}
                 onOpenSaved={() => setStack((s) => push(s, screen("saved")))}
+                continueBook={topics === null ? undefined : continueReading(topics, entries)}
+                onContinue={(book) => openReader({ ...book, name: book.title })}
+                onOpenLibrary={() => setStack((s) => push(s, screen("library")))}
                 settingsAlert={syncReport.alert !== "none"}
                 lumenShown={lumenShown}
                 onToggleLumen={toggleLumen}
@@ -290,6 +344,32 @@ export default function PhoneApp() {
 
           {base.kind === "savedArticle" && (
             <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
+          )}
+
+          {(base.kind === "library" || base.kind === "topic") && (
+            <PhoneShelf
+              topics={topics}
+              topic={
+                base.kind === "topic"
+                  ? (topics?.find((t) => t.id === base.topicId) ?? null)
+                  : null
+              }
+              onOpenTopic={(topicId) => setStack((s) => push(s, { kind: "topic", topicId }))}
+              onOpenBook={openReader}
+              onBack={goBack}
+              onSay={(line) => pushToast("warn", line)}
+            />
+          )}
+
+          {base.kind === "reader" && openedBook && Pane && (
+            <PhoneReader
+              Pane={Pane}
+              bookId={openedBook.bookId}
+              name={openedBook.name}
+              topicId={openedBook.topicId}
+              path={openedBook.path}
+              onBack={goBack}
+            />
           )}
           </CardRegistryProvider>
         </main>

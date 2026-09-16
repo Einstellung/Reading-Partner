@@ -195,6 +195,11 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "reading/translate/tool-live.ts",
   "reading/translate/tool.ts",
   "ui/components/info/saveArticle.ts",
+  // The phone's shelf and reader carry the topic a book was opened from, so
+  // leaving it can mark that file as read (docs/69). Nothing here is a record.
+  "ui/components/phone/PhoneReader.tsx",
+  "ui/components/phone/PhoneShelf.tsx",
+  "ui/components/phone/shelf-list.ts",
 ];
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../src");

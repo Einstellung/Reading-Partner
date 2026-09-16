@@ -20,10 +20,15 @@ export type ScreenKind =
   | "sources"
   | "saved"
   | "savedArticle"
+  | "library"
+  | "topic"
+  | "reader"
   | "settings";
 
-// Only the opened saved article carries anything: the record itself, the way the
-// shell used to keep it beside `screen`.
+// Only the screens that stand for one thing carry anything: the opened saved
+// article (the record itself, the way the shell used to keep it beside
+// `screen`), the open topic, and the book being read. The reader is an entry
+// like any other — back leaves the book the same way it leaves a list (docs/69).
 export type PhoneScreen =
   | { kind: "home" }
   | { kind: "briefing" }
@@ -31,9 +36,12 @@ export type PhoneScreen =
   | { kind: "sources" }
   | { kind: "saved" }
   | { kind: "savedArticle"; article: SavedArticle }
+  | { kind: "library" }
+  | { kind: "topic"; topicId: string }
+  | { kind: "reader"; bookId: string; name: string }
   | { kind: "settings" };
 
-export type PayloadFreeKind = Exclude<ScreenKind, "savedArticle">;
+export type PayloadFreeKind = Exclude<ScreenKind, "savedArticle" | "topic" | "reader">;
 
 export type NavStack = readonly PhoneScreen[];
 
