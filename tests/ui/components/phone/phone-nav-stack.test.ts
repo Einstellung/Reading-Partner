@@ -100,6 +100,40 @@ test("back closes an open overlay before it touches the stack", () => {
   expect(resolveBack(deep, true)).toBe("dismissOverlay");
 });
 
+test("the library, a topic and a book are entries like any other (docs/69)", () => {
+  const stack: NavStack = push(
+    push(push(INITIAL_STACK, screen("library")), { kind: "topic", topicId: "t1" }),
+    { kind: "reader", bookId: "b1", name: "A book" },
+  );
+  expect(kinds(stack)).toEqual(["home", "library", "topic", "reader"]);
+  // Leaving the book is a pop, not a mode being left.
+  expect(resolveBack(stack, false)).toBe("pop");
+  expect(kinds(back(stack))).toEqual(["home", "library", "topic"]);
+  expect(kinds(back(back(back(stack))))).toEqual(["home"]);
+});
+
+test("a second topic stacks rather than unwinding onto the first", () => {
+  // goTo unwinds to a screen already on the stack, which is right for the info
+  // screens and wrong for one that carries which topic it is: the shelf pushes.
+  const one: NavStack = push(push(INITIAL_STACK, screen("library")), {
+    kind: "topic",
+    topicId: "t1",
+  });
+  const two = push(one, { kind: "topic", topicId: "t2" });
+  expect(kinds(two)).toEqual(["home", "library", "topic", "topic"]);
+  expect((top(two) as { topicId: string }).topicId).toBe("t2");
+  expect((top(back(two)) as { topicId: string }).topicId).toBe("t1");
+});
+
+test("settings over the reader keeps the book on screen", () => {
+  const reading: NavStack = push(INITIAL_STACK, {
+    kind: "reader",
+    bookId: "b1",
+    name: "A book",
+  });
+  expect(baseScreen(push(reading, screen("settings"))).kind).toBe("reader");
+});
+
 test("an overlay on the floor is still something to go back from", () => {
   // The onboarding call opens from the home screen, where the stack has
   // nothing to pop: back has to close it rather than fall through to Android.

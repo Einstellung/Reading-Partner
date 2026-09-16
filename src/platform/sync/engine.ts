@@ -337,6 +337,13 @@ export class SyncEngine {
   private readonly now: () => number;
   private snapshot: Snapshot;
   private running = false;
+  // On-demand book fetches in flight or waiting (fetchBook). A pass stands down
+  // while there are any: the books channel carries one blob at a time.
+  private fetching = 0;
+  // Resolves when whatever this engine has on the remote right now is finished;
+  // already resolved when it has nothing. A fetch queues on it.
+  private remoteWork: Promise<void> = Promise.resolve();
+  private passDone: (() => void) | null = null;
   private lastSyncAt: number | null;
   private lastError: string | null = null;
   private lastPullAt = 0;
@@ -912,8 +919,16 @@ export class SyncEngine {
   }
 
   private async runPass(): Promise<void> {
-    if (this.running) return;
+    if (this.running || this.fetching > 0) return;
     this.running = true;
+    // What an on-demand fetch queues behind (fetchBook). Published here rather
+    // than kept by the caller: a pass is started from four places and every one
+    // of them has to be waited for.
+    let passDone!: () => void;
+    this.remoteWork = new Promise<void>((resolve) => {
+      passDone = resolve;
+    });
+    this.passDone = passDone;
     this.lastPassAt = this.now();
     this.emitStatus();
     // Take what is dirty now and start a fresh set in the same breath. Every
@@ -1124,7 +1139,45 @@ export class SyncEngine {
       // no plan ever moves and which would otherwise stay dirty forever.
       if (!clean) for (const path of claimed) this.dirty.add(path);
       this.running = false;
+      this.passDone?.();
+      this.passDone = null;
       this.emitStatus();
+    }
+  }
+
+  /**
+   * Download one book blob, now, whatever the books policy says (docs/69).
+   *
+   * The phone mirrors no books, so nothing brings one in on its own; this is
+   * the shelf asking for the one the reader tapped. It goes through the engine
+   * rather than straight to the backend so it keeps the rule the mirror is
+   * built around: one book blob on the wire at a time (syncBooks above,
+   * docs/pitfall/54). It queues behind a pass that is already running, and a
+   * pass that would start while it runs stands down instead.
+   *
+   * A book this device already has is not fetched again.
+   */
+  async fetchBook(hash: string): Promise<void> {
+    this.fetching++;
+    const mine = this.remoteWork.then(() => this.downloadOneBook(hash));
+    this.remoteWork = mine.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      await mine;
+    } finally {
+      this.fetching--;
+    }
+  }
+
+  private async downloadOneBook(hash: string): Promise<void> {
+    if (await this.d.books.has(hash)) return;
+    try {
+      await this.d.books.write(hash, await this.d.backend.downloadBook(hash));
+    } catch (e) {
+      if (isAuthFailure(e)) this.d.onSignedOut?.();
+      throw e;
     }
   }
 

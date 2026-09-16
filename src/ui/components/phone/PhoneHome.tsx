@@ -1,8 +1,10 @@
-// The phone home screen (docs/22): today's briefing on top, the articles kept
-// out of it below. No Continue reading and no library link — the phone does not
-// open books at all, so an entry point to them would only lead to a dead end.
+// The phone home screen (docs/22, docs/69): today's briefing on top, the
+// articles kept out of it, and the library. The library card carries the book
+// last opened on any device, so the way back into a book is one tap from the
+// screen the app opens on.
 
 import SettingsButton from "../common/SettingsButton";
+import type { ContinueBook } from "./shelf-list";
 import { lumenToggleTitle } from "../lumen/corner-pref";
 import { BriefingCardBody, Card, CardBodyPlaceholder, CardLabel } from "../info/HomeCard";
 import type { LaunchProps } from "../info/InfoHome";
@@ -11,6 +13,9 @@ export default function PhoneHome({
   launch,
   savedCount,
   onOpenSaved,
+  continueBook,
+  onContinue,
+  onOpenLibrary,
   settingsAlert,
   lumenShown,
   onToggleLumen,
@@ -19,6 +24,11 @@ export default function PhoneHome({
   // How many articles are kept, or null while saved-articles.json is being read.
   savedCount: number | null;
   onOpenSaved: () => void;
+  // The book to continue, null when no EPUB has been opened yet, and undefined
+  // while topics.json is being read.
+  continueBook: ContinueBook | null | undefined;
+  onContinue: (book: ContinueBook) => void;
+  onOpenLibrary: () => void;
   settingsAlert: boolean;
   // The corner companion's switch (docs/68). The phone has no sidebar, so the
   // app's own name on the home screen is what carries it.
@@ -88,6 +98,40 @@ export default function PhoneHome({
             <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
               Nothing kept yet. Keep an article from the briefing and it waits here.
             </p>
+          )}
+        </Card>
+
+        <Card>
+          <CardLabel>Library</CardLabel>
+          {continueBook === undefined ? (
+            <CardBodyPlaceholder />
+          ) : (
+            <div className="flex flex-1 flex-col justify-between">
+              {continueBook ? (
+                <button
+                  className="text-left coarse:min-h-[44px]"
+                  onClick={() => onContinue(continueBook)}
+                >
+                  <p className="m-0 truncate text-[15px] leading-relaxed text-foreground">
+                    {continueBook.title}
+                  </p>
+                  <p className="m-0 mt-0.5 text-[13px] text-faint-foreground">
+                    Continue reading · {continueBook.topicName}
+                  </p>
+                </button>
+              ) : (
+                <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
+                  Your topics and the books filed under them.
+                </p>
+              )}
+              <button
+                className="mt-4 flex items-center justify-between coarse:min-h-[44px]"
+                onClick={onOpenLibrary}
+              >
+                <span className="text-[13px] text-faint-foreground">All topics</span>
+                <span className="text-[13px] font-medium text-accent-line">Open →</span>
+              </button>
+            </div>
           )}
         </Card>
       </div>

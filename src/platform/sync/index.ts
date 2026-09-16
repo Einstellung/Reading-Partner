@@ -340,6 +340,23 @@ export function syncHoldingsReport(): string {
   return engine?.holdingsReport() ?? "sync: no engine";
 }
 
+// Asking for one book, said the way the shelf has to say it when the answer is
+// no. The shelf asks before it offers the tap, so this is the second line of
+// defence rather than the first (ui/components/phone/shelf-list.ts).
+export const NO_ACCOUNT_FOR_BOOK = "Sign in to your account to download this book";
+
+/**
+ * Download one book's blob out of the account (docs/13 「书按需下载」, docs/69).
+ *
+ * The phone's books channel is off, so nothing mirrors a book onto it; this is
+ * how the one book the reader tapped gets here. Through the engine, which
+ * serialises it against a pass: the channel carries one blob at a time.
+ */
+export async function fetchBook(hash: string): Promise<void> {
+  if (!signedIn || !isGoogleConfigured()) throw new Error(NO_ACCOUNT_FOR_BOOK);
+  await ensureEngine().fetchBook(hash);
+}
+
 export async function syncNow(): Promise<void> {
   if (!signedIn || !isGoogleConfigured()) throw new Error("Sign in to Google to sync");
   await ensureEngine().syncNow();
