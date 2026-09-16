@@ -26,7 +26,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { appBox } from "../../../box";
+import { UNSEEN, appBox } from "../../../box";
 import type { BoxItem } from "../../../box/types";
 import { getLibraryEntry } from "../../../platform/app/library";
 import { TICK_MS } from "../../../platform/sync";
@@ -108,7 +108,7 @@ export function LumenCorner({
 		let alive = true;
 		const read = () => {
 			void appBox()
-				.openCount()
+				.openCount(UNSEEN)
 				.then((n) => {
 					if (!alive) return;
 					setCount(n);
@@ -130,7 +130,7 @@ export function LumenCorner({
 	// other device moved on is one nobody wants to see a stale copy of.
 	const load = useCallback(() => {
 		void appBox()
-			.open()
+			.open(UNSEEN)
 			.then(async (open) => {
 				setItems(sortBoxCards(open));
 				const names: Record<string, string> = {};

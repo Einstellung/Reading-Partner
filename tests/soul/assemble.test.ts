@@ -608,3 +608,24 @@ test("a run answered at the door is labelled by the day it came back on", async 
   });
   expect(turn!.systemPrompt).toContain("[box] The translation is done. — at the door, 2026-09-15");
 });
+
+test("an item the reader has already jumped to is not announced again", async () => {
+  const files = new Map<string, string>();
+  const io: BoxIo = {
+    list: async () => [...files.keys()],
+    read: async (name) => files.get(name) ?? null,
+    write: async (name, contents) => {
+      files.set(name, contents);
+    },
+  };
+  const box = createBoxStore(io);
+  const origin: BoxOrigin = { place: "book", bookId: "book-1", threadId: "thread-1", page: 37 };
+  const jumped = await box.put({ boxId: "r-1", source: "run", cover: "The old one is read.", origin });
+  await box.put({ boxId: "r-2", source: "run", cover: "The new one is in.", origin });
+  await box.setState(jumped.id, "told");
+
+  const laid = await desk([item("a", {})]);
+  const turn = await assembleTurn({ desk: laid, box });
+  expect(turn!.systemPrompt).toContain("[box] The new one is in.");
+  expect(turn!.systemPrompt).not.toContain("The old one is read.");
+});

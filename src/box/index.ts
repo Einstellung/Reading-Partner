@@ -31,6 +31,7 @@ export {
 } from "./merge";
 export {
   BOX_DIR,
+  UNSEEN,
   appBox,
   appBoxIo,
   createBoxStore,

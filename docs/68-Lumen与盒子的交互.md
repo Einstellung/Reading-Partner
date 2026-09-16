@@ -22,7 +22,7 @@ run 完成不打断用户，不弹窗、不红点、不进任何系统通知。6
 
 盒泛化，不再是 info 私有。一个盒是一个 batch，一项是一条 cable 或一个 run 的产出。研究 run 就是一盒一项；`local` 档的 run 不带 `batchId`，`boxId` 取 run 的 id。
 
-文件形态沿用 60：一项一个文件，生在 palace 里，随账户同步；封面写一次不改；状态在项自己那份文件上，没有第二个可变文件。状态表也沿用 60 那张：`in box` / `told` / `asked` / `dismissed` / `saved` / `promoted` / `folded` / `aggregated`。跳转到原地就是 `told`，摁掉就是 `dismissed`。
+文件形态沿用 60：一项一个文件，生在 palace 里，随账户同步；封面写一次不改；状态在项自己那份文件上，没有第二个可变文件。状态表也沿用 60 那张：`in box` / `told` / `asked` / `dismissed` / `saved` / `promoted` / `folded` / `aggregated`。跳转到原地就是 `told`，摁掉就是 `dismissed`。徽标和那一列只数 `in box` 的项：`told` 之后就从角上消失，对秘书仍算 open。
 
 代码在 capability `src/box/`。
 

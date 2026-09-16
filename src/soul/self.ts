@@ -30,7 +30,7 @@ import { roleOf } from "./roles";
 import type { DeskEnv, DeskMemory } from "../desk";
 import { getThread } from "../platform/app/threads";
 import type { AgentTool } from "../legion/execute/turn";
-import { appBox, isOpen, type BoxOrigin, type BoxStore } from "../box";
+import { UNSEEN, appBox, type BoxOrigin, type BoxStore } from "../box";
 import { buildDelegateTools } from "./delegate";
 import { originLabel } from "./delivery";
 
@@ -253,13 +253,13 @@ function sectionInput(
   };
 }
 
-// The unopened items as the soul reads them. A store that will not answer is a
-// soul with an empty box: a turn the reader is waiting on is not the place to
-// raise a disk problem.
+// The items the reader has not got to, as the soul reads them: one they have
+// already jumped to is `told` and wants no announcing. A store that will not
+// answer is a soul with an empty box — a turn the reader is waiting on is not
+// the place to raise a disk problem.
 async function openCovers(box: BoxStore): Promise<string> {
-  const items = await box.open().catch(() => []);
+  const items = await box.open(UNSEEN).catch(() => []);
   const lines = items
-    .filter((item) => isOpen(item.state))
     .slice(0, BOX_COVER_CAP)
     .map((item) => `[box] ${item.cover} — ${originLabel(item.origin)}`);
   if (lines.length === 0) return "";

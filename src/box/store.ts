@@ -85,6 +85,13 @@ export interface BoxFilter {
   source?: BoxItemSource;
 }
 
+/**
+ * What the badge counts and the corner's column lists: what the reader has not
+ * got to. A `told` or `asked` item is still open to the secretary, who has more
+ * to say about it, but it is gone from the corner — the reader has been there.
+ */
+export const UNSEEN: BoxFilter = { state: "in-box" };
+
 /** A write made in this process, so the screen that made it can redraw. */
 export type BoxListener = (item: BoxItem) => void;
 
