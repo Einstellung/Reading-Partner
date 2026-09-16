@@ -54,6 +54,7 @@ export default function PhoneHome({
             ready={launch.ready}
             configured={launch.configured}
             hasSources={launch.hasSources}
+            noLabs={launch.noLabs}
             collecting={launch.collecting}
             notices={launch.notices}
             onAsk={launch.onAsk}

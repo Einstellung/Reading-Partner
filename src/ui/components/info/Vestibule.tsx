@@ -53,6 +53,7 @@ export function Vestibule({
   ready,
   configured,
   hasSources,
+  noLabs,
   collecting,
   notices,
   onContinue,
@@ -75,6 +76,7 @@ export function Vestibule({
   ready: boolean;
   configured: boolean;
   hasSources: boolean | null;
+  noLabs: boolean | null;
   collecting: boolean;
   notices: string[];
   onContinue: () => void;
@@ -103,6 +105,7 @@ export function Vestibule({
           ready={ready}
           configured={configured}
           hasSources={hasSources}
+          noLabs={noLabs}
           collecting={collecting}
           notices={notices}
           onAsk={onAsk}
@@ -244,6 +247,7 @@ function BriefingCard(props: {
   ready: boolean;
   configured: boolean;
   hasSources: boolean | null;
+  noLabs: boolean | null;
   collecting: boolean;
   notices: string[];
   onAsk: () => void;
@@ -265,6 +269,7 @@ function BriefingCard(props: {
             ready={props.ready}
             configured={props.configured}
             hasSources={props.hasSources}
+            noLabs={props.noLabs}
             collecting={props.collecting}
             notices={props.notices}
             onAsk={props.onAsk}

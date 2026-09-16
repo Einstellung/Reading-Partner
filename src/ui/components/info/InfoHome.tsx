@@ -19,6 +19,7 @@ import { SourcesPage } from "./SourcesPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
 import { useInfoHome } from "./use-info-home";
+import { noLabsOpen } from "./no-labs";
 
 // The screen union lives in base/shell-nav.ts, which is what maps it to the
 // shell's sidebar; re-exported here so its importers are unchanged.
@@ -45,6 +46,10 @@ export interface LaunchProps {
   ready: boolean;
   configured: boolean;
   hasSources: boolean | null;
+  // Whether every research room is closed, null while the labs file is being
+  // read (no-labs.ts). With none open the collection gate declines and nothing
+  // is briefed, and the launch card is the only place that says so.
+  noLabs: boolean | null;
   // Whether this device is the one collecting (docs/36). A reader has no button
   // that starts a briefing and nothing to say about a run it is not doing.
   collecting: boolean;
@@ -134,6 +139,7 @@ export default function InfoHome(props: {
               ready: props.launchReady,
               configured: props.configured,
               hasSources: info.hasSources,
+              noLabs: noLabsOpen(info.labs),
               collecting: info.collecting,
               notices: info.notices,
               onAsk: () => void info.askLaunch(),
@@ -152,6 +158,7 @@ export default function InfoHome(props: {
               ready={props.launchReady}
               configured={props.configured}
               hasSources={info.hasSources}
+              noLabs={noLabsOpen(info.labs)}
               collecting={info.collecting}
               notices={info.notices}
               onContinue={props.onContinue ?? (() => {})}
@@ -206,7 +213,7 @@ export default function InfoHome(props: {
           <SourcesPage
             sources={info.sources}
             health={info.sourceHealth}
-            labs={info.labs}
+            labs={info.labs ?? []}
             sessions={info.siteSessions}
             sessionBusy={info.sessionBusy}
             {...(info.canSignIn

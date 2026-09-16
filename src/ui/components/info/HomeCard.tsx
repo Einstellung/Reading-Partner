@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { Button } from "../ui/button";
 import { briefingCardBody, briefingFooterLine, builtAt } from "./today";
+import { NO_LAB_NOTICE, briefingErrorText } from "./no-labs";
 
 // Live elapsed seconds since a generation started, for the running state.
 function useElapsed(running: boolean): number {
@@ -68,6 +69,7 @@ export function BriefingCardBody({
   ready,
   configured,
   hasSources,
+  noLabs,
   collecting,
   notices,
   onAsk,
@@ -84,6 +86,10 @@ export function BriefingCardBody({
   configured: boolean;
   // Whether the user has any source configured; null while loading.
   hasSources: boolean | null;
+  // Whether every research room is closed, null while the labs file is being
+  // read (no-labs.ts). With none open nothing collects and nothing is briefed,
+  // and the card has to say so — the gate is silent everywhere else.
+  noLabs: boolean | null;
   // Whether this device is the one collecting (docs/36). A reader's briefing is
   // built somewhere else, so the card neither offers to start one nor promises
   // that today's is on its way.
@@ -191,7 +197,7 @@ export function BriefingCardBody({
   // the source list, and until those have been read the values standing in for
   // them are defaults. A briefing already in hand is drawn above regardless —
   // that one is a fact, not a default.
-  if (!ready || (configured && hasSources === null)) {
+  if (!ready || (configured && (hasSources === null || noLabs === null))) {
     return <CardBodyPlaceholder />;
   }
 
@@ -216,6 +222,22 @@ export function BriefingCardBody({
     );
   }
 
+  // Sources, but no open room to read them for (docs/63). Nothing collects and
+  // nothing is briefed until there is one, and every other surface is silent
+  // about it — the collection gate simply declines and the source polling goes
+  // on. Said on a reader too: the labs file is in sync range, so its answer is
+  // the bureau's and not this machine's.
+  if (configured && noLabs) {
+    return (
+      <div className="flex flex-1 flex-col justify-between">
+        <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">{NO_LAB_NOTICE}</p>
+        <Button variant="cta" size="lg" className="mt-4 w-fit" onClick={onAsk}>
+          Tell the companion
+        </Button>
+      </div>
+    );
+  }
+
   // Sources configured but no briefing yet. Nothing to press: today's is
   // collected when the app opens. The way in is the companion — which is also
   // the way back from a run that failed, since it holds generate_briefing.
@@ -231,7 +253,9 @@ export function BriefingCardBody({
         <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
           {snap?.error ? "Today's briefing could not be built." : waiting}
         </p>
-        {snap?.error && <p className="mt-2 text-[13px] text-[#c0392b]">{snap.error}</p>}
+        {snap?.error && (
+          <p className="mt-2 text-[13px] text-[#c0392b]">{briefingErrorText(snap.error)}</p>
+        )}
         <Notices lines={notices} />
       </div>
       {configured ? (
