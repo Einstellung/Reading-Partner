@@ -39,6 +39,8 @@ import { registerReadingDistillSources } from "../../../reading/distill/source";
 import { registerReadingDesk } from "../../../reading/desk";
 import { registerBookDelivery } from "../../../reading/deliver";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
+import { registerTaskingWorker } from "../../../info/tasking/worker";
+import { registerBriefingDelivery } from "../../../info/briefer/deliver";
 import { deleteBook } from "../../../reading/delete/delete-book";
 import { setBookDeleter } from "../../../reading/translate/tool-live";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
@@ -184,6 +186,10 @@ export function bootDomains(): void {
   // The literature research kind, and where its answer is given back (docs/68).
   registerResearchWorker();
   registerBookDelivery();
+  // The same pair on the info side: a question the briefing did not answer, and
+  // the day's briefing thread it is answered back into (docs/63, docs/68).
+  registerTaskingWorker();
+  registerBriefingDelivery();
   // The translation replaces a document by deleting the original, and the path
   // that does that is reached from here rather than from inside reading/
   // (tool-live.ts says why).

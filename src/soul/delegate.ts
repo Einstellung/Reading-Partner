@@ -26,14 +26,15 @@ export const BRIEFS_DIR = "legion/briefs";
 /** The whole of what the model is told about delegating. */
 export const DELEGATE_DESCRIPTION =
   "Hand a piece of work to a worker that runs out of sight and comes back later. " +
-  "Use it when the work takes more than a moment — a literature search, anything " +
-  "that would be several rounds of tool calls — and say so to the reader in the " +
-  "same turn, because this returns immediately and the answer arrives in this " +
-  "conversation afterwards, not in this reply. Do not use it for anything you can " +
-  "answer now, and not for a single citation: find_paper identifies one named " +
-  "paper in the turn you are already in. You cannot steer a run once it starts and " +
-  "you will not see what it did, so put the whole job in the task, written for " +
-  "someone who cannot see this conversation and has not read the book.";
+  "Use it when the work takes more than a moment — anything that would be several " +
+  "rounds of tool calls — and say so to the reader in the same turn, because this " +
+  "returns immediately and the answer arrives in this conversation afterwards, not " +
+  "in this reply. Do not use it for anything you can answer now, or for anything a " +
+  "tool you already hold answers in this turn. Which kinds of work there are is in " +
+  "the kind parameter, and each kind's own guidance says when it is the right one. " +
+  "You cannot steer a run once it starts and you will not see what it did, so put " +
+  "the whole job in the task, written for someone who cannot see this conversation " +
+  "and has not read the material in front of you.";
 
 export interface DelegateDeps {
   /** The place this turn is being held. The run is delivered back to it. */

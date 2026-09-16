@@ -118,6 +118,9 @@ export function threadTranscript(bookId: string, threadId: string): VoiceCallTra
 // machine knows where that was; it comes back as a `record` effect.
 export function askOnThread(opts: {
   bookId: string;
+  // The day this call is about. A run delegated here is delivered back to it
+  // (docs/68), which is this same conversation.
+  dateKey: string;
   anchor: InfoCallAnchor;
   tools: () => Promise<AgentTool[]>;
 }): VoiceCallModel {
@@ -145,7 +148,14 @@ export function askOnThread(opts: {
             thread: { key: opts.bookId, id: opts.anchor.threadId },
             signal,
           });
-          const turn = await assembleTurn({ desk, messages: rows, role: SECRETARY_ROLE_ID });
+          const turn = await assembleTurn({
+            desk,
+            messages: rows,
+            role: SECRETARY_ROLE_ID,
+            // Where this turn is being held: a run delegated here comes back
+            // into the day's briefing thread, not to the door (docs/68).
+            origin: { place: "briefing", date: opts.dateKey },
+          });
           // Abandoned, or too big to leave the model room to answer. Nothing was
           // said and nothing is worth retrying, so the floor goes back to the
           // user the way an empty answer does.
@@ -261,6 +271,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     bridge,
     model: askOnThread({
       bookId,
+      dateKey: opts.dateKey,
       anchor,
       tools: () => {
         if (!tools) {

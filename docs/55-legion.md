@@ -264,6 +264,10 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 答铃按 `deliverTo` 装配：`src/soul/delivery.ts` 是地方 → 装配器的注册表（soul 不许 import reading），reading 在 `src/reading/deliver.ts` 登记 `book`，回合就是那本书那条线程的阅读回合，铃作为一条不落盘的尾消息挂在会话末尾。回复落盘之后、ack 之前，程序层往 `src/box/` 放一项（`boxId` 取 runId，封面是回复的第一句，`run-failed` 标 `needsDecision`）。`local` 档的 run 不落盘，runner 因此把 `deliverTo` 抄在 `run-done` / `run-failed` 的 payload 上。
 
+第 10 步之二：tasking 接入（2026-09-16）。info 在 `src/info/tasking/` 登记 kind `tasking`（agent worker、`local` 档、不要能力标签），身体是一个子 agent，工具是「先查已有 cable 和稿」那一套：`search_cables` 扫本机三十天的电报，`read_cable` 取正文（先当天的文章缓存，再随简报发布的 `info-bodies.json`），`read_picture` 读研究室态势或列出开着的室，外加 `read_page` 抓一个电报指到的 URL。仓库里没有 web search，也没加；查不到就在第一行说查不出来，后面列查过哪些本地来源。`read_page` 从 `info/briefer/companion-tools.ts` 搬到 `info/extract/read-page-tool.ts`：秘书和 tasking 两个 agent 都挂它，而秘书的 duty 要写出 kind 名，briefer 因此 import tasking，反向再 import 就是环。
+
+答铃的落点补齐：`src/info/briefer/deliver.ts` 登记 `briefing`，按那天的简报桌装配（role `secretary`，桌上是那天的简报，没有就是「今天还没有简报」那个同 id 的会话），回复追加进 `info-<日期>` 的 `briefing-<日期>` 线程。简报页和语音通话的回合都传 `origin: { place: "briefing", date }`，从简报派的 run 不再在门口答。简报没有「正看着」这回事，盒里那一项照放。产出落盘那段收到 `legion/execute/outputs.ts` 的 `writeRunOutput`，research 和 tasking 共用。`delegate` 的描述文本不再提文献搜索，改成通用措辞，kind 清单仍在参数说明里。docs/63 的三态判定（答上了 / 没答上 / 未判定，idempotencyKey 不释放）没做，项走 told / dismissed；同一问题当天去重也没做。
+
 未开始：session 到对话文件的投影、translate 接入。开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。

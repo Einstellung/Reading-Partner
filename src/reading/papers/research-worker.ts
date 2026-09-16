@@ -11,6 +11,7 @@
 // device that can talk to the model at all can do this.
 
 import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/execute/worker";
+import { OUTPUTS_DIR, writeRunOutput } from "../../legion/execute/outputs";
 import {
   createSubagentQuota,
   runSubagent,
@@ -25,10 +26,7 @@ import { buildResearchAgent, RESEARCH_KIND, RESEARCH_TURN_ROUNDS } from "./resea
 import { readingFetch } from "./http";
 import { searchPapers, type PaperSearchFn } from "./paper-search";
 
-export { RESEARCH_KIND };
-
-/** Where a run's output is kept. Registered in palace/kinds.ts. */
-export const OUTPUTS_DIR = "legion/outputs";
+export { RESEARCH_KIND, OUTPUTS_DIR };
 
 export interface ResearchWorkerDeps {
   /** The sub-agent turn. The live one unless a test hands one in. */
@@ -39,13 +37,6 @@ export interface ResearchWorkerDeps {
   writeOutput?: (runId: string, text: string) => Promise<string>;
   /** The brief the soul wrote, read back off its path. */
   readBrief?: (path: string) => Promise<string>;
-}
-
-async function writeOutputFile(runId: string, text: string): Promise<string> {
-  const path = `${OUTPUTS_DIR}/${runId}.md`;
-  await appData.mkdirp(OUTPUTS_DIR);
-  await appData.writeAtomic(path, text);
-  return path;
 }
 
 // The literature sub-agent as this device would build it: the reader's own
@@ -73,7 +64,7 @@ async function liveAgent(): Promise<SubagentDefinition> {
  */
 export function researchWorker(deps: ResearchWorkerDeps = {}) {
   const readBrief = deps.readBrief ?? ((path: string) => appData.readText(path));
-  const writeOutput = deps.writeOutput ?? writeOutputFile;
+  const writeOutput = deps.writeOutput ?? writeRunOutput;
   const buildAgent = deps.agent ?? liveAgent;
   const turn = deps.turn ?? runSubagentTurnLive;
   return (brief: string, ctx: WorkerContext): WorkerHandle => {
