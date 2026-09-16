@@ -51,12 +51,10 @@ import {
   clearRun,
   loadArticle,
   loadArticles,
-  loadDailyRunDate,
   loadItems,
   loadRun,
   pruneStaleDailyFiles,
   saveArticles,
-  saveDailyRunDate,
   saveItems,
   saveRun,
   todayLocal,
@@ -72,7 +70,9 @@ import type { AnalystInput, LabRunResult } from "../analysis/types";
 import { getObservationAdapter } from "../../memory/live/live";
 import { buildObservationSnapshot, trimObservations } from "../../memory/observations/select";
 import { runDreamIfDue } from "../../memory/dream/live";
-import { dailyAction, DAILY_ANCHOR_HOUR, DAILY_TICK_MS, lastAnchorDate } from "./daily";
+import { DAILY_ANCHOR_HOUR, DAILY_TICK_MS, lastAnchorDate } from "./daily";
+import { registerCollectWorker, writeCollectBrief, type CollectScope } from "./collect-worker";
+import { appRunner } from "../../legion/execute/runner";
 import { collectorStatusLine, InfoCollector } from "../collect/collector";
 import { createCollectorSession, type CollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "../boxes/publish";
@@ -355,11 +355,9 @@ async function canAutoGenerate(): Promise<boolean> {
 
 // The round as a schedule (docs/55): the hour is declared once, here, and which
 // machine acts on it is the election for `collect` — the same election
-// canAutoGenerate asks below, now asked by legion rather than by this file.
-// What legion does about the hour is ring a wake bell; the work stays here
-// until the round is a run of its own (docs/55, step 7), which is also why the
-// round keeps its own record of the anchor it has run for: a round the pipeline
-// was too busy to take is still owed, and a bell that has been rung is not.
+// canAutoGenerate asks below. What legion does about the hour is ring a wake
+// bell, so that the soul knows the night is being worked; the round itself is a
+// run the tick below delegates.
 export const DAILY_ROUND_SCHEDULE = "info-daily-round";
 
 registerSchedule({
@@ -367,41 +365,55 @@ registerSchedule({
   kind: COLLECT_KIND,
   at: { daily: { hour: DAILY_ANCHOR_HOUR } },
   brief:
-    "The morning briefing round is due. The collector on this device refreshes the day's briefing on its own; say something to the reader only if there is something worth saying.",
+    "The morning briefing round is due. The collect run for it has been delegated by the daily tick on this device and will report when it settles; say something to the reader only if there is something worth saying.",
 });
 
-// `undefined` until the file has been read once, which is not the same as the
-// `null` a machine that has never run a round has.
-let dailyRunDate: string | null | undefined;
+// The last anchor this process delegated for. Only a saving of file reads: the
+// record that matters is the run itself, which is on disk under a name derived
+// from the anchor, so a process that forgot this asks the runner and is handed
+// the run that is already there.
+let delegatedAnchor: string | null = null;
 let cancelDailyTimer: (() => void) | null = null;
 let dailyStopped = false;
 
-// Record the anchor as dealt with. Held in memory before the write lands, so a
-// file that will not write costs the day's rounds and not one round per tick.
-async function noteDailyRound(now: number): Promise<void> {
-  const date = lastAnchorDate(now);
-  dailyRunDate = date;
-  try {
-    await saveDailyRunDate(date);
-  } catch (e) {
-    console.warn("failed to record the morning briefing round", e);
-  }
+/** What a collect run is delegated under, so that two asks meet in one file. */
+export function collectRunKey(what: string): string {
+  return `collect:${what}`;
+}
+
+// Delegate one collect run and answer whether there is now a run for this key —
+// which includes the run that was already there. Everything the three callers
+// share is here: the task book is written first and frozen, the run points at
+// it, and the runner decides whether this is a new run or the one that exists.
+async function delegateCollect(
+  key: string,
+  scope: CollectScope,
+  why: string,
+): Promise<boolean> {
+  const brief = await writeCollectBrief(key, { scope, why });
+  const result = await appRunner().delegate({
+    kind: COLLECT_KIND,
+    idempotencyKey: key,
+    delegator: { kind: "program", name: why },
+    brief,
+  });
+  // `ok: false` with a run is a run under this key that failed or was cancelled
+  // — still a run for this key, and not one to ask for again on the next tick.
+  return result.ok || result.run !== undefined;
 }
 
 // One check. Cheap when there is nothing to do — a date comparison — and it has
 // to be, because it runs on a timer for the life of the app.
+//
+// The record of "today's round has been run" is the run file itself, named from
+// the anchor (legion/run/store.ts): a second ask for the same anchor, on this
+// device or the next one to win the election, reaches the same file and is
+// handed it back rather than starting a second collection. The date file this
+// used to keep is gone with it.
 async function dailyTick(): Promise<void> {
-  const now = realTimers.now();
-  if (dailyRunDate === undefined) dailyRunDate = await loadDailyRunDate();
-  const action = dailyAction(now, dailyRunDate);
-  if (action === "none") return;
-  if (action === "arm") {
-    await noteDailyRound(now);
-    return;
-  }
-  // generate() is the reader asking by hand and carries no guard of its own, so
-  // the automatic path puts back the one init() has in front of its own generate
-  // branch. The timer hangs off the pipeline's assembly, which a reader never
+  const anchor = lastAnchorDate(realTimers.now());
+  if (delegatedAnchor === anchor) return;
+  // The timer hangs off the pipeline's assembly, which a reader never
   // constructs (docs/36), so this is not what keeps a phone from collecting —
   // but it does not ask what role it is on either, and a machine that stops
   // being the collector between two ticks stops here on the next one.
@@ -411,16 +423,12 @@ async function dailyTick(): Promise<void> {
   // generated at two in the morning gains the hours between rather than being
   // left to stand for the day.
   //
-  // A run already going is left alone, and — this is why the answer is read —
-  // the day's round stays owed. Recording it here would let one collision, a
-  // reader's ask landing at five or a regenerate still finishing, swallow the
-  // round the morning is waiting for; the next tick finds the pipeline free and
-  // runs it.
-  if (getInfoPipeline().generate().start === "busy") return;
-  // Before the run rather than after it, for the reason a reader's ask is
-  // recorded before it runs (presence.ts): a round that dies halfway has still
-  // been the day's round, and a failure is not a reason to pay for it twice.
-  await noteDailyRound(now);
+  // Nothing is skipped for a pipeline that is busy any more. The round is a
+  // pending run on disk the moment it is owed, and the worker takes the pipeline
+  // when whatever has it lets go.
+  if (await delegateCollect(collectRunKey(anchor), "full", DAILY_ROUND_SCHEDULE)) {
+    delegatedAnchor = anchor;
+  }
 }
 
 // Never rejects. A check that throws — settings that would not read, a claim
@@ -658,6 +666,20 @@ export function getInfoPipeline(): InfoPipeline {
 
 let reader: InfoReader | null = null;
 
+/**
+ * Hand legion the collect kind, bound to this device's pipeline (docs/55 step
+ * 12). Called once on the way up, from the shell, before the runner's first
+ * poll: a kind with no worker here is a kind this device cannot run, and the
+ * election would send the day's round to a machine that declines it.
+ *
+ * Both shells register it, reader and collector alike. Which of them actually
+ * runs a collect run is the election's answer, not the registration's — the
+ * registration is what makes a device eligible to win.
+ */
+export function registerInfoCollectWorker(): void {
+  registerCollectWorker({ pipeline: getInfoPipeline });
+}
+
 export function getInfoReader(): InfoReader {
   if (!reader) reader = new InfoReader();
   return reader;
@@ -680,13 +702,20 @@ function collectorView(): BriefingView {
     subscribe: (fn) => p.subscribe(fn),
     init: () => p.init(),
     stop: () => p.stop(),
-    // The pipeline's own answer, passed through: it runs one run at a time and
-    // says whether this call started one or found one already going. Losing
-    // that distinction here is exactly what the caller must not be made to
-    // guess at — a refused start drawn as a start is a card nothing updates.
+    // A regenerate is a run of its own, always. The reader asked for it after
+    // seeing what is on the screen now, so the key carries the moment as well as
+    // the day and the scope: two asks are two runs, and the second waits its
+    // turn behind the first rather than being refused (docs/55 step 12).
+    //
+    // "busy" is therefore gone from this view. Nothing is dropped any more, so
+    // there is no longer a refusal to report, and the progress card follows the
+    // pipeline exactly as it did — whatever it is working on is what a
+    // collection on this device is doing.
     request(scope) {
-      const handle = scope === "retriage" ? p.retriage() : p.generate();
-      return { outcome: handle.start, done: handle.done };
+      const at = realTimers.now();
+      const key = collectRunKey(`${todayLocal()}:${scope}:${at}`);
+      const done = delegateCollect(key, scope, "generate_briefing").then(() => {});
+      return { outcome: "started", done };
     },
     // This machine is the one collecting; whatever went wrong is already in the
     // snapshot's error, on the screen of the person who can act on it, and the
@@ -811,6 +840,9 @@ function liveSession(): CollectorSession {
     backfillPublish,
     pipeline: getInfoPipeline,
     collector: getInfoCollector,
+    requestCollect: async (scope, askedAt) => {
+      await delegateCollect(collectRunKey(`ask:${askedAt}:${scope}`), scope, "reader ask");
+    },
   });
 }
 
@@ -842,7 +874,7 @@ export function resetInfoLiveForTests(): void {
   pipeline = null;
   collector = null;
   reader = null;
-  dailyRunDate = undefined;
+  delegatedAnchor = null;
   dailyStopped = false;
   deviceName = null;
 }

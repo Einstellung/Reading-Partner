@@ -129,17 +129,15 @@ class Harness {
         this.backfills += 1;
         this.order.push("backfill");
       },
+      requestCollect: async (scope) => {
+        if (scope === "retriage") this.retriages += 1;
+        else this.generates += 1;
+      },
       pipeline: () => ({
         init: async () => {
           await aRoundTrip();
           this.inits += 1;
           this.order.push("init");
-        },
-        generate: () => {
-          this.generates += 1;
-        },
-        retriage: () => {
-          this.retriages += 1;
         },
         subscribe: (fn) => {
           this.pipelineSubs.push(fn);

@@ -3,6 +3,11 @@
 // since yesterday still has one waiting when its owner wakes up and opens a
 // phone (docs/36).
 //
+// What is left in this file is the anchor: which day's five o'clock has most
+// recently gone by. Whether that one has been collected for is no longer a
+// judgement anybody makes — the round is a run named after its anchor, and the
+// run store hands back the run that is already there (docs/55 step 12).
+//
 // Opening the app was the only trigger there was, which works for a device
 // somebody picks up and does nothing at all for the device that actually
 // collects: a PC left running crosses midnight with no foreground event, no
@@ -17,7 +22,7 @@
 // single round on the way out, and a clock that jumps cannot produce two.
 //
 // Pure: the clock arrives as a number and the local timezone does the rest. The
-// timer, the settings, the claim and the pipeline are the assembly's business
+// timer, the settings, the claim and the run are the assembly's business
 // (live.ts).
 
 import { localDateString } from "../collect/store";
@@ -48,29 +53,4 @@ export function lastAnchorDate(now: number): string {
   const at = new Date(now);
   if (at.getHours() < DAILY_ANCHOR_HOUR) at.setDate(at.getDate() - 1);
   return localDateString(at);
-}
-
-// What the tick should do about the morning round.
-//
-//   run  — the anchor that has gone by has not been run for. Refresh the day.
-//   arm  — nothing has ever been recorded: this machine has just met the anchor
-//          for the first time (a fresh install, or the upgrade to the build that
-//          has one). It records the anchor without spending anything, because it
-//          owes no round for a morning that went by before it could know there
-//          was one.
-//   none — this machine has already run for the anchor that has gone by, or the
-//          next one has not arrived.
-export type DailyAction = "run" | "arm" | "none";
-
-export function dailyAction(now: number, lastRunDate: string | null): DailyAction {
-  // Adopting the *last* anchor rather than today's date is what keeps a machine
-  // first started at 03:00 from marking a five o'clock that is still two hours
-  // away as done.
-  if (lastRunDate === null) return "arm";
-  // Any date but this one means the round is owed, a date ahead of it included:
-  // a clock corrected backwards past a recorded round leaves a stamp from a day
-  // that has not happened, and the honest reading of that is one round now at
-  // the time the machine currently believes in, not a machine that refuses to
-  // brief until the calendar catches up.
-  return lastRunDate === lastAnchorDate(now) ? "none" : "run";
 }
