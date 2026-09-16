@@ -371,7 +371,10 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         claimSources: (labId, sourceIds) => claimSources(labId, sourceIds),
         listSources: () => loadSources(),
         now: () => Date.now(),
-        labsChanged: () => {},
+        // The same reload the source list gets: it reads the rooms too, and the
+        // home card is watching them — the notice that nothing is being
+        // collected has to go the moment the room behind it exists.
+        labsChanged: () => onSourcesChanged?.(),
       });
       if (!ok) return;
       const applied: LabProposalCardData = { ...card, phase: "applied" };
@@ -381,7 +384,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       });
       noteTurn(labFiledNote(card));
     },
-    [bookId, anchor.threadId, noteTurn],
+    [bookId, anchor.threadId, noteTurn, onSourcesChanged],
   );
 
   // Close a room. The record and its picture stay on disk; only the status flips.
@@ -393,7 +396,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       const { ok } = await applyLabArchive(card, {
         archiveLab: (labId, now) => archiveLab(labId, now),
         now: () => Date.now(),
-        labsChanged: () => {},
+        labsChanged: () => onSourcesChanged?.(),
       });
       if (!ok) return;
       const applied: LabArchiveCardData = { ...card, phase: "applied" };
@@ -403,7 +406,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       });
       noteTurn(labArchivedNote(card));
     },
-    [bookId, anchor.threadId, noteTurn],
+    [bookId, anchor.threadId, noteTurn, onSourcesChanged],
   );
 
   // The card action dispatcher wired into the message list. Stable across

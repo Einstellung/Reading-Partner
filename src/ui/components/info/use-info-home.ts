@@ -141,8 +141,10 @@ export interface InfoHomeController {
   sources: SourceDescriptor[];
   sourceHealth: Record<string, SourceHealth>;
   // The research rooms, so the source list can say which of them read each
-  // source (docs/63). Loaded with the sources, by the same refresh.
-  labs: Lab[];
+  // source (docs/63) and the launch card can say when there are none open.
+  // Null until the file has been read: an empty list is the answer "no room is
+  // open", and the card acts on it.
+  labs: Lab[] | null;
   siteSessions: SiteSessions;
   sessionBusy: SessionBusy | null;
   // The open article and what can be shown for it.
@@ -180,7 +182,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
   const [hasSourcesState, setHasSourcesState] = useState<boolean | null>(null);
   const [sourcesList, setSourcesList] = useState<SourceDescriptor[]>([]);
   const [sourceHealth, setSourceHealth] = useState<Record<string, SourceHealth>>({});
-  const [labs, setLabs] = useState<Lab[]>([]);
+  const [labs, setLabs] = useState<Lab[] | null>(null);
   // Last known sign-in state per site, and which site is being worked on. Both
   // only mean anything where there is a webview to sign in with.
   const [siteSessions, setSiteSessions] = useState<SiteSessions>({});
@@ -213,6 +215,10 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
 
   useEffect(() => {
     hasSources().then(setHasSourcesState).catch(() => {});
+    // The rooms are read here and not only when the source list is opened: with
+    // none of them open nothing collects at all (docs/63), and the launch card
+    // is where that is said.
+    loadLabs().then(setLabs).catch(() => {});
     loadSavedArticles()
       .then((list) => setKeptIds(new Set(list.map((a) => a.id))))
       .catch(() => {});

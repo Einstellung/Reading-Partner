@@ -23,6 +23,7 @@ import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";
+import { briefingErrorText } from "./no-labs";
 
 // Live seconds since a start timestamp, for the analysis activity readout. Ticks
 // on its own so the card keeps moving even while the user scrolls or chats.
@@ -289,7 +290,9 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
   return (
     <div className="w-full max-w-md rounded-xl border border-[#e6c3bd] bg-[#fdf5f3] p-4">
       <div className="text-[11px] font-medium uppercase tracking-wider text-[#c0392b]">Briefing failed</div>
-      <div className="mt-1 text-[13px] leading-relaxed text-[#8a4b40]">{payload.message}</div>
+      <div className="mt-1 text-[13px] leading-relaxed text-[#8a4b40]">
+        {briefingErrorText(payload.message)}
+      </div>
       <div className="mt-3 flex justify-end">
         {/* Its own red, not --destructive: this card is a warm-red surface of its
             own and docs/30 converges the purples, not the reds. */}
