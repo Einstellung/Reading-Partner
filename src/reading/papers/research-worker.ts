@@ -23,7 +23,7 @@ import { StoppedError } from "../../legion/stop";
 import { appData } from "../../platform/app/appdata";
 import { loadSettings } from "../../platform/app/settings";
 import { buildResearchAgent, RESEARCH_KIND, RESEARCH_TURN_ROUNDS } from "./research-agent";
-import { readingFetch } from "./http";
+import { readingFetch } from "../../platform/http/throttled-fetch";
 import { searchPapers, type PaperSearchFn } from "./paper-search";
 
 export { RESEARCH_KIND, OUTPUTS_DIR };
