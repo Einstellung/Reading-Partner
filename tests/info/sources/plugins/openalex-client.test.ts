@@ -19,7 +19,7 @@ import {
   parseOpenAlexPage,
   parseOpenAlexWork,
   OA_MAX_OR_IDS,
-} from "../../../src/reading/papers/openalex";
+} from "../../../../src/info/sources/plugins/openalex-client";
 
 test("reconstructAbstract rebuilds word order from the inverted index", () => {
   const index = { The: [0], quick: [1], brown: [2], fox: [3] };

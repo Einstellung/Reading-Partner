@@ -128,7 +128,7 @@ import {
   NO_ARTICLE_BODY,
   type SavedArticle,
 } from "./saved-articles";
-import { readingFetch } from "./papers/http";
+import { readingFetch } from "../platform/http/throttled-fetch";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
 import { RESEARCH_PROMPT } from "./papers/research-agent";
 import type { BoxOrigin } from "../box";

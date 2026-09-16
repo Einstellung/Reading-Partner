@@ -11,6 +11,11 @@
 // Technology Review, Hacker News, xinzhiyuan), which nobody kept subscribed.
 // Their research is not lost — it is in the ingestion memory — but a preset
 // nobody enables is a preset that has to be maintained for nothing.
+//
+// The index templates at the end (docs/69) are a different thing from that
+// tier: each is one query against a library the product ships an adapter for,
+// not a site somebody has to keep reading. arXiv cs.RO is back as a query, not
+// as the RSS feed that went.
 
 import type { SourceDescriptor } from "./descriptor";
 
@@ -399,6 +404,116 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
     discovery: { kind: "feed", url: "https://www.economist.com/international/rss.xml", format: "rss" },
     fulltext: { mode: "none" },
   },
+
+  // --- index queries (docs/69) ---------------------------------------------
+  // The first batch, for an embodied-AI research room. One descriptor is one
+  // query; the provider in sources/index/ runs it and reports the library's
+  // numbers as signals. Headlines and abstracts only unless the item's page is
+  // a repo README, which Readability reads fine (fetch-page on the GitHub ones).
+  // pollMinutes follows the library's rhythm: arXiv announces once a day; the
+  // GitHub and HF lists move within a day but not within an hour.
+  {
+    id: "arxiv-cs-ro",
+    name: "arXiv cs.RO",
+    line: "robotics",
+    builtin: true,
+    enabled: false,
+    limit: 100,
+    pollMinutes: 1440,
+    discovery: { kind: "index", provider: "arxiv", query: { categories: ["cs.RO"], days: 2 } },
+    fulltext: { mode: "none" },
+  },
+  {
+    id: "arxiv-embodied",
+    name: "arXiv embodied / VLA",
+    line: "robotics",
+    builtin: true,
+    enabled: false,
+    limit: 50,
+    pollMinutes: 1440,
+    // The hyphenated term survives arxivQueryTerms whole (hyphens are kept, the
+    // split is on whitespace), so it is one all: clause.
+    discovery: {
+      kind: "index",
+      provider: "arxiv",
+      query: { categories: ["cs.RO", "cs.CV", "cs.LG"], terms: ["vision-language-action"], days: 3 },
+    },
+    fulltext: { mode: "none" },
+  },
+  {
+    // Search, not trending: OSS Insight's trending endpoint has answered empty
+    // since 2026-03 (pitfall 296). New Python repos past 100 stars in a week is
+    // the same question asked of an API that still answers.
+    id: "github-new-python",
+    name: "GitHub new repos · Python",
+    line: "AI",
+    builtin: true,
+    enabled: false,
+    limit: 30,
+    pollMinutes: 720,
+    discovery: {
+      kind: "index",
+      provider: "github",
+      query: { mode: "search", language: "Python", days: 7, minStars: 100 },
+    },
+    fulltext: { mode: "fetch-page" },
+  },
+  {
+    id: "github-new-robotics",
+    name: "GitHub new repos · robotics",
+    line: "robotics",
+    builtin: true,
+    enabled: false,
+    limit: 30,
+    pollMinutes: 720,
+    discovery: {
+      kind: "index",
+      provider: "github",
+      query: { mode: "search", topics: ["robotics", "embodied-ai", "vla"], days: 14, minStars: 30 },
+    },
+    fulltext: { mode: "fetch-page" },
+  },
+  {
+    id: "hf-daily-papers",
+    name: "HF Daily Papers",
+    line: "AI",
+    builtin: true,
+    enabled: false,
+    limit: 50,
+    pollMinutes: 720,
+    discovery: { kind: "index", provider: "huggingface", query: { kind: "papers", days: 1 } },
+    fulltext: { mode: "none" },
+  },
+  {
+    id: "hf-models-robotics",
+    name: "HF models · robotics",
+    line: "robotics",
+    builtin: true,
+    enabled: false,
+    limit: 30,
+    pollMinutes: 720,
+    discovery: {
+      kind: "index",
+      provider: "huggingface",
+      query: { kind: "models", pipelineTag: "robotics", sort: "trending" },
+    },
+    fulltext: { mode: "none" },
+  },
+  {
+    id: "hf-datasets-lerobot",
+    name: "HF datasets · LeRobot",
+    line: "robotics",
+    builtin: true,
+    enabled: false,
+    limit: 30,
+    pollMinutes: 720,
+    discovery: {
+      kind: "index",
+      provider: "huggingface",
+      query: { kind: "datasets", tags: ["LeRobot"], sort: "created" },
+    },
+    fulltext: { mode: "none" },
+  },
 ];
 
 // Per-source engineering pitfalls from the ingestion research: facts a fresh
@@ -448,6 +563,20 @@ const BUILTIN_CAVEATS: Record<string, string> = {
     "Discovery-only. Every article is paywalled and the page answers 403 with a Cloudflare challenge, so items are summary-only (headline plus the standfirst, ~70 chars) until the logged-in webview pipe exists. " +
       "The discovery layer is generous: one section feed returns ~300 items covering about three weeks, so a once-a-day poll never misses anything and a first run can backfill weeks of history. " +
       "Recorded fact, not a verdict: the Economist's robots.txt has a section headed \"USER-FACING LLM BOTS / Allowed to fetch on behalf of a user\" that confines those agents (Claude-User, ChatGPT-User and peers) to /pro, and blocks training crawlers site-wide; feed and article paths are not disallowed for ordinary agents. The terms page is 403 and could not be read.",
+  ),
+  // The index libraries (docs/69 坑): what their numbers do and do not mean.
+  ...everySection(
+    "arxiv",
+    "One export-API query per run, abstracts only (fulltext none). The export API does not answer sortBy=submittedDate, so recency is a submittedDate range in the query, and its rate limiter is strict: one request every few seconds per host, a burst gets 429/503 (docs/pitfall/72). Daily is the right poll: arXiv announces once a day.",
+  ),
+  ...everySection(
+    "github",
+    "GitHub has no trending API; trending comes from OSS Insight and new repos from the Search API, never from the trending page's HTML. Stars are faked at scale (ICSE 2026: ~6 million suspected fake stars 2019-2024; AI/LLM repos most affected), so a star count is a lead, not a verdict: check stars against forks and contributors, the gap between creation and surfacing, and whether a paper or an institution stands behind it; OpenDigger activity that does not move with stars is a bought count. " +
+      "Anonymous REST allows 60 requests an hour, so per-repo fields are filled for the first few dozen only. fetch-page reads the repo page's README through Readability. OSS Insight's trending endpoint has returned empty rows with a data_quality notice since 2026-03 (docs/pitfall/296); until it recovers, search mode is the one that yields items.",
+  ),
+  ...everySection(
+    "hf",
+    "Download counts are HTTP request counts: CI and mirrors inflate them, so read the direction, not the number. Trending has been gamed (May 2026: a malicious repo hit #1 on 240k downloads in 18 hours, 98.5% from bot accounts). Nine in ten models listed are fine-tunes and quantized conversions: restrict by author to an institution and drop the conversion tags when the list is noise. Daily Papers carries upvotes and comment counts; those are attention on the day, not quality.",
   ),
 };
 

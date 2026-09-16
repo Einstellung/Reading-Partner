@@ -100,6 +100,19 @@ describe("analyst prompt", () => {
     expect(isColdStart(warm())).toBe(false);
   });
 
+  test("a cable's signals print between the hit line and the summary; a cable without them prints no line", () => {
+    const msg = analystUserMessage(
+      input(warm(), [
+        cable("c1", { signals: { citations: 12, influentialCitations: 2, upvotes: 87 } }),
+        cable("c2", { summary: "plain" }),
+      ]),
+    );
+    expect(msg).toContain(
+      "screened as hitting: (the room's scope, no observable named)\nsignals: ↑ 87 · cites 12 (2 influential)\nsummary: (none)",
+    );
+    expect(msg.match(/^signals:/gm)?.length).toBe(1);
+  });
+
   test("the cable body is cut to the cap", () => {
     const long = cable("c1", { text: "x".repeat(4000) });
     const msg = analystUserMessage(input(warm(), [long]), { textChars: 20 });

@@ -149,6 +149,12 @@ const LAYER: Record<string, Layer> = {
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",
+  // The source plugins (docs/69): one file per library (arXiv, GitHub, Hugging
+  // Face, Semantic Scholar, OpenAlex, PubMed) plus each library's client. Under
+  // sources because a source is the bureau's (docs/63); a directory of its own
+  // because each plugin knows one API. reading/papers queries the libraries
+  // through here too — info is reading's inlet, and the import runs that way.
+  "info/sources/plugins": "domain",
   // A question the briefing did not answer, handed to a legion run (docs/63).
   // It reads what the rest of info already filed — the cables, the article
   // bodies, a room's picture — and the briefer only names its kind, so the edge

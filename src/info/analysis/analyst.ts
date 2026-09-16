@@ -17,6 +17,7 @@ import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
 import { pictureSummary } from "../picture/picture";
 import type { Confidence, Likelihood, Picture, PictureDelta } from "../picture/types";
+import { formatSignals } from "../sources/item";
 import { asArray, asText, isObject, readObject } from "./json";
 import type { AnalystCable, AnalystInput, AnalystOutput, ParseOutcome } from "./types";
 
@@ -191,10 +192,14 @@ function formatCable(cable: AnalystCable, textChars: number): string {
   const hit = cable.hits
     .flatMap((h) => h.observables)
     .filter((id, i, all) => all.indexOf(id) === i);
+  // What the index counted for it (docs/69), when one did. Plain numbers; how
+  // much they mean is the analyst's call.
+  const signals = formatSignals(cable.signals);
   return [
     `id: ${cable.id} | ${cable.sourceName || cable.source}${published}`,
     `title: ${cable.title}`,
     `screened as hitting: ${hit.length > 0 ? hit.join(", ") : "(the room's scope, no observable named)"}`,
+    ...(signals ? [`signals: ${signals}`] : []),
     summary ? `summary: ${summary}` : "summary: (none)",
     body ? `text: ${body}` : "text: (no body retrieved)",
   ].join("\n");

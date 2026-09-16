@@ -57,6 +57,7 @@ export function cablesFromRun(input: CablesFromRunInput): CableDay {
       hits: verdict.hits.map((h) => ({ labId: h.labId, observables: [...h.observables] })),
       ...(summary ? { summary } : {}),
       ...(outside ? { outside } : {}),
+      ...(item.signals ? { signals: item.signals } : {}),
     });
   }
   return { version: CABLES_VERSION, date: input.date, cables };

@@ -172,6 +172,24 @@ test("the user message carries headline, source, date and blurb — never a body
   expect(msg).not.toContain("THE WHOLE ARTICLE");
 });
 
+test("an index item's signals print as one line; a feed item has no such line", () => {
+  const msg = screenUserMessage(
+    [target("lab-a")],
+    [
+      item("1", { signals: { stars: 1240, starsPeriod: 310, tags: ["code", "weights"] } }),
+      item("2"),
+      // A signals bag with nothing in it is the same as none.
+      item("3", { signals: {} }),
+    ],
+  );
+  expect(msg).toContain("title: Title 1\nblurb: (none)\nsignals: ★ 1240 (+310) · code, weights");
+  expect(msg.match(/^signals:/gm)?.length).toBe(1);
+  // The system prompt says what the line is and that it is not a ranking.
+  const p = screenSystemPrompt();
+  expect(p).toContain("`signals` line");
+  expect(p).toContain("not a ranking to");
+});
+
 test("a long blurb is trimmed, and a missing one is stated rather than faked", () => {
   const msg = screenUserMessage(
     [target("lab-a")],

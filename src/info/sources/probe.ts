@@ -16,6 +16,7 @@ import { htmlToText } from "../extract/sanitize";
 import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
 import type { FetchFn } from "../extract/http";
 import type { Fulltext, SourceDescriptor } from "./descriptor";
+import { pluginOf } from "./plugin";
 
 // The feed paths tried in order, most common first. wp-json is last: it is a full
 // JSON API, only reached when the plain feed paths miss.
@@ -282,6 +283,10 @@ export function pipeLabel(desc: SourceDescriptor): string {
   }
   if (d.kind === "listpage") return "Article list, fetches each page";
   if (d.kind === "stream") return "Live updates";
+  if (d.kind === "index") {
+    const found = pluginOf(desc);
+    return found ? `${found.provider.name}: ${found.provider.describeQuery(found.query)}` : `Index query (${d.provider})`;
+  }
   // feed discovery
   if (f.mode === "feed-field") return f.truncationMarker ? "Full text in feed (some paywalled)" : "Full text in feed";
   if (f.mode === "fetch-page") return "Feed headlines, fetches each page";
@@ -308,6 +313,11 @@ function descriptorHosts(d: SourceDescriptor): string[] {
   }
   if (disc.kind === "listpage" && disc.base) urls.push(disc.base);
   if (d.fulltext.mode === "detail-endpoint") urls.push(d.fulltext.urlTemplate);
+  // An index descriptor has no URL of its own; its provider's hosts stand in.
+  if (disc.kind === "index") {
+    const found = pluginOf(d);
+    if (found) return found.provider.hosts.map((h) => h.replace(/^www\./i, "").toLowerCase());
+  }
   const hosts = new Set<string>();
   for (const u of urls) {
     try {
@@ -354,6 +364,7 @@ export function matchBuiltinSource(
 // url, or the json-api listUrl). Undefined only for a malformed descriptor.
 function discoveryUrl(d: SourceDescriptor): string | undefined {
   const disc = d.discovery;
+  if (disc.kind === "index") return undefined;
   return disc.kind === "json-api" ? disc.listUrl : disc.url;
 }
 

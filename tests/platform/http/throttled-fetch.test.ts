@@ -9,7 +9,7 @@ import {
   fetchWithRetry,
   isRateLimitError,
   RateLimitError,
-} from "../../../src/reading/papers/http";
+} from "../../../src/platform/http/throttled-fetch";
 
 test("createThrottle spaces same-host requests and passes untracked hosts through", async () => {
   let t = 0;

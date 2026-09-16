@@ -8,7 +8,7 @@ import { importBook } from "../../platform/app/library";
 import { addSupplement } from "../../platform/app/supplements";
 import { addFileToTopic, setFileHash } from "../../platform/app/topics";
 import { loadExtractReadable } from "../../info/extract/readable-lazy";
-import { fetchWithRetry } from "../papers/http";
+import { fetchWithRetry } from "../../platform/http/throttled-fetch";
 import {
   ingestArticleUrl,
   type ArticleIngestDeps,

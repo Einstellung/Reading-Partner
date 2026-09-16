@@ -32,6 +32,7 @@ import {
   type JsonApiDiscovery,
   type SourceDescriptor,
 } from "./descriptor";
+import { pluginOf } from "./plugin";
 import type { InfoItem } from "./item";
 
 // Render one article in a hidden webview and hand back what its DOM held
@@ -109,10 +110,12 @@ interface Filled {
   gate?: Gate;
   discoveryOnly?: boolean;
   sleep?: (ms: number) => Promise<void>;
+  now: () => number;
 }
 
 function fill(deps: CollectDeps): Filled {
   return {
+    now: deps.now ?? (() => Date.now()),
     fetchFn: deps.fetchFn ?? infoFetch,
     fetchViaWebview: deps.fetchViaWebview,
     textMaxChars: deps.textMaxChars ?? 20_000,
@@ -440,9 +443,37 @@ export async function collectSource(
       return collectJsonApi(desc, filled);
     case "stream":
       throw new Error(`stream sources are not supported yet (${desc.id})`);
+    case "index":
+      return collectIndex(desc, filled);
     default:
       return [];
   }
+}
+
+// An index source (docs/69) is one query run by its provider. The provider is
+// looked up at run time so a descriptor naming one this build does not have is
+// a source failure (recorded in health, never a crash), the same as a feed that
+// stopped answering. Discovery-only by construction: the provider yields
+// headlines and signals, and whatever fulltext the descriptor names is fetched
+// later by fetchBodies for the survivors.
+async function collectIndex(desc: SourceDescriptor, deps: Filled): Promise<InfoItem[]> {
+  const found = pluginOf(desc);
+  if (!found) {
+    const id = desc.discovery.kind === "index" ? desc.discovery.provider : "?";
+    throw new Error(`unknown index provider "${id}" (${desc.id})`);
+  }
+  const bad = found.provider.validateQuery(found.query);
+  if (bad) throw new Error(`index query rejected (${desc.id}): ${bad}`);
+  const items = await found.provider.discover(desc, found.query, {
+    fetchFn: deps.fetchFn,
+    signal: deps.signal,
+    now: deps.now,
+    // UTC date: the libraries stamp in UTC (arXiv announces on a UTC clock), so
+    // "the last two days" is asked in their calendar, not the reader's.
+    today: () => new Date(deps.now()).toISOString().slice(0, 10),
+    limit: desc.limit ?? found.provider.defaultLimit,
+  });
+  return items.map((it) => ({ ...it, source: desc.id, sourceName: desc.name }));
 }
 
 // --- material: bodies for a chosen few -------------------------------------

@@ -14,7 +14,7 @@
 // gives: DOMParser does not exist in bun, and the record shape is stable enough
 // that six fields per article need no real parser.
 
-import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "./http";
+import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
 
 const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 // NCBI asks every unauthenticated caller to identify itself with tool= and

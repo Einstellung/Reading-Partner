@@ -23,6 +23,7 @@ AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WA
 
 - src 下一个文件夹到十几个文件就去看一眼要不要切子域，不是硬阈值：`platform/app` 是宿主接口面，一个文件一件宿主能力，不切。搬家 commit 纯移动（`git mv` 保历史）加改 import，零逻辑改动。
 - 分层：platform（`platform/app` 不 import 任何别的目录）→ capability（headless，只被领域调用，绝不反向 import 领域；`budget` 不 import `ai`，因为发送路径要能 import 它）→ 领域（互相可用但目录级依赖图必须无环）→ `ui/components` → 外壳 → 入口。哪个目录归哪层，看 `tests/layering.test.ts` 的 LAYER 表，只有那一份清单；规则也由那个测试强制，任何一层新增的目录都必须登记进去。领域的编排代码放自己的领域目录，不要塞进 capability。两个目录互相 import 就是环，不许往更深一层藏——按"谁不认识谁"重新切，把被依赖的那半提到同级并登记。
+- 源是 info 的一等公民：每个库（arXiv、GitHub、Hugging Face、S2、OpenAlex、PubMed）一个插件文件在 `info/sources/plugins/`，接口在 `info/sources/plugin.ts`，注册表一份；reading 要查文献库也从这里调，不另开目录。见 docs/69。
 - `.tsx` 只放渲染和事件绑定。不依赖 React 的逻辑放 `.ts` 并配单测——`.ts` 能测，`.tsx` 基本测不了。形态可移植是附带收益，不是理由。
 - 适配触摸和小屏用 utility 变体（`coarse:` / `can-hover:` / 断点），不按操作系统分叉组件。需要分形态时分的是外壳（phone / tablet+desktop），判据是宽度和指针类型，叶子组件共用一套。
 

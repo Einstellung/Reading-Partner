@@ -1,12 +1,20 @@
 // The default-model lookup and the one plain streaming call every unattended
 // feature makes (lesson prep, book notes, slides, news triage, observation
-// distillation). `thinking` picks which effort setting applies: "chat" for the
-// conversational path, "prep" for the background pipelines.
+// distillation). `thinking` picks which effort setting applies, and — for the
+// two briefing stages — which model: "chat" for the conversational path, "prep"
+// for the background pipelines, "briefing" and "briefing-screen" for the two
+// stages of the nightly briefing, which have their own model setting.
 
 import type { Api, Context, Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import { contextBudget, fitsBudget, OUTPUT_FLOOR, REFUSE_FLOOR_OVER, type BudgetPurpose } from "../budget";
 import { newRunId } from "../platform/app/cache-telemetry";
-import { loadSettings, toReasoning, type AiLanguage, type Settings } from "../platform/app/settings";
+import {
+	loadSettings,
+	toReasoning,
+	type AiLanguage,
+	type Settings,
+	type ThinkingSetting,
+} from "../platform/app/settings";
 import {
 	defaultModelFor,
 	isSelectableModel,
@@ -20,7 +28,23 @@ import {
 import type { AiCallOptions } from "./call-options";
 import type { ModelCallContext, ModelCaller } from "./model-usage";
 
-export type ThinkingKind = "chat" | "prep";
+export type ThinkingKind = "chat" | "prep" | "briefing" | "briefing-screen";
+
+// Which effort setting a kind reads.
+function thinkingFor(s: Settings, kind: ThinkingKind): ThinkingSetting {
+	if (kind === "chat") return s.chatThinking;
+	if (kind === "prep") return s.prepThinking;
+	return kind === "briefing" ? s.briefingThinking : s.briefingScreenThinking;
+}
+
+// Which model a kind runs on, given the default conversation's. Only the
+// briefing has one of its own, and only a model id: the provider is always the
+// default one, because credentials are single-active (settings.ts). Unset falls
+// back, so the briefing keeps working for everyone who never opens the setting.
+function modelIdFor(s: Settings, kind: ThinkingKind, fallback: string): string {
+	const briefing = kind === "briefing" || kind === "briefing-screen";
+	return (briefing ? s.briefingModelId : null) ?? fallback;
+}
 
 // Settings read off disk with a default model the provider's catalog no longer
 // carries swapped for one it does. A settings file names a model that has since
@@ -35,21 +59,34 @@ export type ThinkingKind = "chat" | "prep";
 // than failing at the first call.
 export function enforceKnownModel(settings: Settings): { settings: Settings; notice: string | null } {
 	const providerId = settings.defaultProviderId;
-	if (!providerId || !(providerId in providers) || !settings.defaultModelId) {
-		return { settings, notice: null };
-	}
+	if (!providerId || !(providerId in providers)) return { settings, notice: null };
 	const id = providerId as ProviderId;
-	if (isSelectableModel(id, settings.defaultModelId)) return { settings, notice: null };
-
-	const stale = settings.defaultModelId;
-	const replacement = defaultModelFor(id);
 	const name = providers[id].name;
-	return {
-		settings: { ...settings, defaultModelId: replacement },
-		notice: replacement
-			? `${name} no longer offers ${stale}; switched to ${replacement}.`
-			: `${name} no longer offers ${stale}, and lists no model to switch to. Pick another provider in Settings.`,
-	};
+	const notices: string[] = [];
+	let next = settings;
+
+	if (next.defaultModelId && !isSelectableModel(id, next.defaultModelId)) {
+		const stale = next.defaultModelId;
+		const replacement = defaultModelFor(id);
+		next = { ...next, defaultModelId: replacement };
+		notices.push(
+			replacement
+				? `${name} no longer offers ${stale}; switched to ${replacement}.`
+				: `${name} no longer offers ${stale}, and lists no model to switch to. Pick another provider in Settings.`,
+		);
+	}
+
+	// The briefing's model is repaired by clearing it, not by picking a
+	// replacement: unset means it follows the default conversation, which the
+	// branch above has just made sure is callable. Picking the widest window here
+	// would be the opposite of what this setting is for.
+	if (next.briefingModelId && !isSelectableModel(id, next.briefingModelId)) {
+		const stale = next.briefingModelId;
+		next = { ...next, briefingModelId: null };
+		notices.push(`${name} no longer offers ${stale}; the briefing follows your chat model again.`);
+	}
+
+	return { settings: next, notice: notices.length > 0 ? notices.join(" ") : null };
 }
 
 export interface ResolvedModel {
@@ -69,8 +106,8 @@ export async function resolveModel(thinking: ThinkingKind): Promise<ResolvedMode
 	}
 	return {
 		providerId: s.defaultProviderId as ProviderId,
-		modelId: s.defaultModelId,
-		reasoning: toReasoning(thinking === "chat" ? s.chatThinking : s.prepThinking),
+		modelId: modelIdFor(s, thinking, s.defaultModelId),
+		reasoning: toReasoning(thinkingFor(s, thinking)),
 		aiLanguage: s.aiLanguage,
 	};
 }

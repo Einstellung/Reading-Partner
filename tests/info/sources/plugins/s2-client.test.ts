@@ -13,7 +13,7 @@ import {
   searchS2Topic,
   S2_CITATIONS_PAGE,
   S2_REFERENCES_PAGE,
-} from "../../../src/reading/papers/s2";
+} from "../../../../src/info/sources/plugins/s2-client";
 
 test("fetchFromS2 sends the api key as x-api-key and keeps it out of the url", async () => {
   const seen: { url: string; key: string | null }[] = [];

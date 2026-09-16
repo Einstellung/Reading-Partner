@@ -5,7 +5,7 @@
 // hosts pass the http plugin scope, so a blocked host degrades to
 // abstract-only rather than failing the paper.
 
-import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "./http";
+import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
 import { pickByTitle } from "./match";
 
 const S2_BASE = "https://api.semanticscholar.org/graph/v1";
@@ -13,6 +13,10 @@ const FIELDS = "title,abstract,year,openAccessPdf,externalIds";
 // The candidate list also needs who wrote it, where it appeared, and how often it
 // has been cited (the ranking signal for a citation walk).
 const SEARCH_FIELDS = `${FIELDS},authors,venue,citationCount`;
+// What an index query (docs/69) wants on top: the day, not just the year, so a
+// "last 30 days" window can be checked; the influential count as a second
+// signal; S2's landing page as the last-resort link.
+export const S2_INDEX_FIELDS = `${SEARCH_FIELDS},publicationDate,influentialCitationCount,url`;
 
 export function s2SearchUrl(title: string): string {
   return `${S2_BASE}/paper/search?query=${encodeURIComponent(title)}&limit=5&fields=${FIELDS}`;
@@ -32,6 +36,9 @@ interface S2Paper {
   openAccessPdf?: { url?: string } | null;
   externalIds?: { ArXiv?: string; DOI?: string; PubMed?: string } | null;
   citationCount?: number | null;
+  publicationDate?: string | null;
+  influentialCitationCount?: number | null;
+  url?: string | null;
 }
 
 export interface S2Result {
@@ -49,6 +56,17 @@ export function pickS2Match(papers: S2Paper[], title: string): S2Paper | null {
 export interface S2TopicOptions {
   limit?: number;
   sinceYear?: number | null;
+  // The index query's filters (docs/69), all optional and all server-side.
+  // Published on or after this day (YYYY-MM-DD): S2's `publicationDateOrYear`
+  // open-ended range, `<date>:`. Papers with no known day count as January 1st of
+  // their year, so the window is loose at that edge, never tight.
+  publishedSince?: string | null;
+  // `minCitationCount`; 0 sends nothing.
+  minCitationCount?: number | null;
+  // `fieldsOfStudy`, S2's own spelling ("Computer Science").
+  fieldsOfStudy?: string[] | null;
+  // Fields to request; the topic-search set when absent.
+  fields?: string;
 }
 
 export interface S2Hit {
@@ -64,6 +82,9 @@ export interface S2Hit {
   url: string | null;
   abstract: string;
   citationCount: number | null;
+  // Only when the request asked for them (S2_INDEX_FIELDS); null otherwise.
+  publicationDate?: string | null;
+  influentialCitationCount?: number | null;
 }
 
 // Relevance search across every discipline. `year=2024-` is S2's open-ended range
@@ -73,9 +94,12 @@ export function s2TopicSearchUrl(query: string, opts: S2TopicOptions = {}): stri
   const params = [
     `query=${encodeURIComponent(query.trim())}`,
     `limit=${opts.limit ?? 5}`,
-    `fields=${SEARCH_FIELDS}`,
+    `fields=${opts.fields ?? SEARCH_FIELDS}`,
   ];
   if (opts.sinceYear) params.push(`year=${opts.sinceYear}-`);
+  if (opts.publishedSince) params.push(`publicationDateOrYear=${encodeURIComponent(`${opts.publishedSince}:`)}`);
+  if (opts.minCitationCount) params.push(`minCitationCount=${opts.minCitationCount}`);
+  if (opts.fieldsOfStudy?.length) params.push(`fieldsOfStudy=${encodeURIComponent(opts.fieldsOfStudy.join(","))}`);
   return `${S2_BASE}/paper/search?${params.join("&")}`;
 }
 
@@ -91,9 +115,11 @@ function s2Hit(p: S2Paper): S2Hit {
     venue: p.venue?.trim() || null,
     // The open-access PDF when S2 knows one; otherwise its own landing page,
     // which at least gives the reader somewhere to click.
-    url: p.openAccessPdf?.url ?? (p.paperId ? `https://www.semanticscholar.org/paper/${p.paperId}` : null),
+    url: p.openAccessPdf?.url ?? p.url ?? (p.paperId ? `https://www.semanticscholar.org/paper/${p.paperId}` : null),
     abstract: p.abstract ?? "",
     citationCount: p.citationCount ?? null,
+    publicationDate: p.publicationDate ?? null,
+    influentialCitationCount: p.influentialCitationCount ?? null,
   };
 }
 

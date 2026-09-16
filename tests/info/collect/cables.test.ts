@@ -58,6 +58,18 @@ test("one cable per selected item, carrying the item's identity and its hits", (
   expect(day.cables[1].hits).toEqual([{ labId: "lab-b", observables: [] }]);
 });
 
+test("an index item's signals ride onto the cable; a feed item's cable has no key for them", () => {
+  const signals = { upvotes: 87, comments: 4, tags: ["code"] };
+  const day = cablesFromRun({
+    date: "2026-08-11",
+    items: [item("a", { signals }), item("b")],
+    verdicts: verdicts(verdict("a"), verdict("b")),
+    selected: ["a", "b"],
+  });
+  expect(day.cables[0].signals).toEqual(signals);
+  expect("signals" in day.cables[1]).toBe(false);
+});
+
 test("no blurb means the head of the body, trimmed", () => {
   const day = cablesFromRun({
     date: "2026-08-11",

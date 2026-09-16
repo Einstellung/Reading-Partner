@@ -4,7 +4,7 @@
 // it runs in bun tests and the webview alike — arXiv's feed shape is stable and
 // we only need five fields per entry.
 
-import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "./http";
+import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
 import { pickByTitle } from "./match";
 
 export interface ArxivEntry {
@@ -16,6 +16,9 @@ export interface ArxivEntry {
   // Submission date as the feed gives it (ISO 8601), or "" when absent. Only the
   // topic search reads it (to show the year); the title lookup ignores it.
   published: string;
+  // <arxiv:primary_category term="cs.RO"/>, when the entry carries one. The
+  // index provider (info/sources/index/arxiv) tags items with it.
+  primaryCategory?: string;
 }
 
 // "arXiv:2303.12345v2" / a full abs URL / bare id -> "2303.12345". Old-style
@@ -73,6 +76,7 @@ export function parseArxivAtom(xml: string): ArxivEntry[] {
     const authorRe = /<author>[\s\S]*?<name>([\s\S]*?)<\/name>[\s\S]*?<\/author>/g;
     let a: RegExpExecArray | null;
     while ((a = authorRe.exec(entry))) authors.push(decodeEntities(a[1]).trim());
+    const primary = /<arxiv:primary_category\b[^>]*\bterm="([^"]+)"/.exec(entry);
     out.push({
       id,
       title: tagText(entry, "title"),
@@ -80,6 +84,7 @@ export function parseArxivAtom(xml: string): ArxivEntry[] {
       authors,
       pdfUrl: `https://arxiv.org/pdf/${id}`,
       published: tagText(entry, "published"),
+      ...(primary ? { primaryCategory: primary[1] } : {}),
     });
   }
   return out;
