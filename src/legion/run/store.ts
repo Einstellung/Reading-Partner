@@ -88,6 +88,13 @@ export interface CreateRunInput {
   batchId?: string;
   /** The parent's own stable name for this step. */
   step?: string;
+  /**
+   * A key of the caller's own to derive the file name from, for a run that is
+   * not a step of a batch: two devices — or the same device twice — asking for
+   * the same thing under the same key reach the one file. `batchId` + `step`
+   * win when both are given, since a step's identity is the batch's to decide.
+   */
+  idempotencyKey?: string;
   /** Defaults to now. */
   at?: number;
   /** An id the caller has already derived. Otherwise one is made here. */
@@ -131,9 +138,10 @@ export type TransitionResult = { ok: true; run: Run } | { ok: false; reason: str
 
 export interface RunStore {
   /**
-   * Write a pending run. With `batchId` and `step` the id is derived from them,
-   * so two devices fanning out the same batch write one file; a run reached
-   * under an id that is already taken is handed back untouched.
+   * Write a pending run. With `batchId` and `step` — or an `idempotencyKey` of
+   * the caller's own — the id is derived from it, so two devices meaning the
+   * same run write one file; a run reached under an id that is already taken is
+   * handed back untouched.
    */
   create(input: CreateRunInput): Promise<CreateRunResult>;
   get(id: string): Promise<Run | null>;
@@ -217,7 +225,9 @@ export function createRunStore(io: RunIo): RunStore {
       const at = input.at ?? Date.now();
       const { batchId, step } = input;
       const key =
-        batchId !== undefined && step !== undefined ? idempotencyKey(batchId, step) : undefined;
+        batchId !== undefined && step !== undefined
+          ? idempotencyKey(batchId, step)
+          : input.idempotencyKey;
       const id =
         input.id ?? (key === undefined ? randomRunId() : await deriveRunId(input.kind, key));
       if (!ID.test(id)) throw new Error(`run: "${id}" is not a usable run id`);

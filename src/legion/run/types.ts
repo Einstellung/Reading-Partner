@@ -38,10 +38,15 @@ export function isTerminal(state: RunState): boolean {
 // the one this directory is about.
 export type RunTier = "local" | "synced";
 
-// Who asked for the work. The soul is the only orchestrator, so everything else
-// that delegates is a program worker naming its own run. The run graph is two
-// levels deep at most and the runner enforces that (docs/55).
-export type Delegator = { kind: "soul" } | { kind: "run"; id: string };
+// Who asked for the work. The soul is the only orchestrator of the model's own
+// turns; a program worker fanning a step out names its own run; and a piece of
+// domain plumbing nobody spoke to — a schedule that came due, an ask a reader
+// left in a file — names itself. The run graph is two levels deep at most and
+// the runner enforces that (docs/55).
+export type Delegator =
+  | { kind: "soul" }
+  | { kind: "run"; id: string }
+  | { kind: "program"; name: string };
 
 /** The device executing the run, and when it picked the run up. */
 export interface RunClaimant {
@@ -52,9 +57,11 @@ export interface RunClaimant {
 export interface Run {
   /** Globally unique, and the file's name. */
   id: string;
-  // `batchId` + ":" + `step`, and nothing else ever (docs/55). Present only on
-  // a sub-run a program worker fanned out, which is the one place a re-run has
-  // to recognise a step it already finished.
+  // What two devices derive the same file name from, so the run they both mean
+  // converges into one file rather than two. `batchId` + ":" + `step` on a
+  // sub-run a program worker fanned out; otherwise whatever the delegator
+  // named, which is how the day's collect round is one run per anchor however
+  // many devices and processes ask for it (docs/55).
   idempotencyKey?: string;
   /** The type the domain registered. legion knows nothing else about the work. */
   kind: string;

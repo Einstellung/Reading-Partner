@@ -21,7 +21,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
-import { electFor, registerKindCapabilities, type DeviceClaim } from "../../legion/claim";
+import { electFor, type DeviceClaim } from "../../legion/claim";
 import type { PullMatcher } from "../../platform/sync/pull-routes";
 import type { SourceHealth } from "../sources/engine";
 
@@ -31,12 +31,13 @@ import type { SourceHealth } from "../sources/engine";
 // It needs nothing of the machine. Every device that the reader left background
 // collection turned on for is a candidate, which is exactly who was eligible
 // before capabilities existed — a phone that cannot render a page in a hidden
-// webview collects fewer bodies, it does not decline to collect. Registered
-// here rather than at the app's assembly so that anything reading a collector's
-// claim has the kind registered by importing this file.
+// webview collects fewer bodies, it does not decline to collect.
+//
+// What the kind needs of a machine is declared where its worker is
+// (info/program/collect-worker.ts), in the same call: a device that can run the
+// kind and a device that may are never separately true (docs/55). Only the name
+// is here, because this is where a collector's claim is read.
 export const COLLECT_KIND = "collect";
-
-registerKindCapabilities(COLLECT_KIND, []);
 
 // A heartbeat older than this means the collector is not running. Said to the
 // reader ("your collector was last online at…") rather than acted on: two hours

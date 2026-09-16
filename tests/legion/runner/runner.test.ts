@@ -240,7 +240,9 @@ test("a create request whose delegator is already a child run is refused", async
   expect(refused).toContain("two levels deep");
   const runs = await w.runs.list();
   expect(runs.map((r) => r.kind).sort()).toEqual([child, parent].sort());
-  expect(runs.every((r) => r.delegator.kind === "soul" || r.delegator.id === parentId)).toBe(true);
+  expect(
+    runs.every((r) => r.delegator.kind === "soul" || (r.delegator.kind === "run" && r.delegator.id === parentId)),
+  ).toBe(true);
 });
 
 test("a step of this batch that is already done comes back without a new run", async () => {

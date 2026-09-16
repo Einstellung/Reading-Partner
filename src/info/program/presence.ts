@@ -16,7 +16,13 @@
 // an import in that direction would be a cycle between the two files.
 
 import { createClaimWriter, type ClaimWriter, type DeviceClaim } from "../../legion/claim";
-import { chooseAsk, COLLECT_KIND, type AskRecord, type CollectorClaim } from "../briefer/handoff";
+import {
+  chooseAsk,
+  COLLECT_KIND,
+  type AskRecord,
+  type AskScope,
+  type CollectorClaim,
+} from "../briefer/handoff";
 
 // What sync tells the session: whether an account is attached at all, and when
 // the last pass landed.
@@ -29,8 +35,6 @@ export interface SessionSyncStatus {
 // constructs either, and only uses what is listed here.
 export interface SessionPipeline {
   init(): Promise<void>;
-  generate(): unknown;
-  retriage(): unknown;
   subscribe(fn: () => void): () => void;
   snapshot(): {
     running: boolean;
@@ -77,6 +81,12 @@ export interface CollectorSessionDeps<Handle = unknown> {
   backfillPublish(): Promise<unknown>;
   pipeline(): SessionPipeline;
   collector(): SessionCollector;
+  /**
+   * Delegate the collect run a reader asked for. The session decides which ask
+   * to act on and when; what a collect run is, and that there is one at a time,
+   * is legion's (info/program/collect-worker.ts).
+   */
+  requestCollect(scope: AskScope, askedAt: number): Promise<void>;
 }
 
 export interface CollectorSession {
@@ -187,9 +197,10 @@ export function createCollectorSession<Handle>(
     // Recorded before the run, not after: a run that dies halfway is not a reason
     // to run the same request again on the next pull.
     await writer.patch({ lastAskAt: chosen.askedAt }).catch(() => {});
-    const p = deps.pipeline();
-    if (chosen.scope === "retriage") void p.retriage();
-    else void p.generate();
+    // A run rather than a call into the pipeline (docs/55 step 12). The ask's own
+    // moment names it, so the same ask pulled twice — or pulled again after a
+    // restart — reaches the run that is already there.
+    await deps.requestCollect(chosen.scope, chosen.askedAt);
   }
 
   // Report how the run that just ended went, so a reader can say what happened on
