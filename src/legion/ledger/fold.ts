@@ -90,7 +90,9 @@ export type FoldableRun = Pick<
 >;
 
 function delegatorText(delegator: Delegator): string {
-  return delegator.kind === "soul" ? "soul" : `run:${delegator.id}`;
+  if (delegator.kind === "soul") return "soul";
+  if (delegator.kind === "program") return `program:${delegator.name}`;
+  return `run:${delegator.id}`;
 }
 
 /**

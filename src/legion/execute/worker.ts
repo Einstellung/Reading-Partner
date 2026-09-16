@@ -99,6 +99,14 @@ export interface DelegateInput {
   /** Set by the runner on a child; a caller outside a worker leaves both alone. */
   batchId?: string;
   step?: string;
+  /**
+   * A name for the run this is a request for, when two devices or two processes
+   * may ask for the same one: the file name is derived from it, so the second
+   * ask reaches the first ask's run and gets it back with `existing: true`. The
+   * day's collect round is keyed by its anchor date this way, which is the whole
+   * of "today's round has been run" across devices (docs/55).
+   */
+  idempotencyKey?: string;
   /** Overrides the kind's own tier. Tests use it; nothing else should. */
   tier?: RunTier;
 }

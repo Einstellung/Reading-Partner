@@ -354,6 +354,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
       ...(input.deliverTo === undefined ? {} : { deliverTo: input.deliverTo }),
       ...(input.batchId === undefined ? {} : { batchId: input.batchId }),
       ...(input.step === undefined ? {} : { step: input.step }),
+      ...(input.idempotencyKey === undefined ? {} : { idempotencyKey: input.idempotencyKey }),
     });
 
     if (existing) {
