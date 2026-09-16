@@ -15,6 +15,7 @@ import { buildEpub, prose } from "../../tests/reading/epub/fixture";
 import type { Annotation, ViewState } from "../platform/app/reader-contract";
 import type { FlowReaderView, FlowTool } from "../reading/epub/flow-contract";
 import FlowReaderPane from "../reading/epub/FlowReaderPane";
+import { parseEpubRangeCfi, resolveRange } from "../reading/epub/cfi";
 import { initPaperTint } from "../ui/components/base/paper-tint";
 
 interface FlowLog {
@@ -27,6 +28,8 @@ interface FlowLog {
   selected: string[][];
   popups: unknown[];
   setTool: (tool: FlowTool) => void;
+  /** The words a range CFI resolves to in a mounted document, for a driver to check a mark by. */
+  wordsOf: (cfi: string) => string | null;
 }
 
 function syntheticBook(): ArrayBuffer {
@@ -121,6 +124,12 @@ export async function runFlowReaderSmoke(): Promise<void> {
     selected: [],
     popups: [],
     setTool: () => {},
+    wordsOf: (cfi) => {
+      const parsed = parseEpubRangeCfi(cfi);
+      const root = document.querySelectorAll(".rp-flow-doc")[parsed?.spineIndex ?? -1]?.shadowRoot?.querySelector("html");
+      if (!parsed || !root) return null;
+      return resolveRange(root, parsed)?.toString() ?? null;
+    },
   };
   (window as unknown as { __flow: FlowLog }).__flow = log;
   const src = params.get("epub");

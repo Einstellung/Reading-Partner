@@ -159,6 +159,10 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   let cfi: string | null = null;
   let tool: FlowTool = opts.tool;
   let scrollTimer: number | null = null;
+  // Where the column was sent, while it is still there: a page whose first
+  // character sits mid-line is reported as that page, not as the page the
+  // line began on.
+  let pinned: { cfi: string; pageIndex: number; scrollTop: number } | null = null;
 
   // --- the marks ------------------------------------------------------------
   // One index of a spine item's text per book. It is the ingestion tree's,
@@ -258,6 +262,12 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   }
 
   function readPosition(): void {
+    if (pinned && Math.abs(scroller.scrollTop - pinned.scrollTop) <= 1) {
+      cfi = pinned.cfi;
+      pageIndex = pinned.pageIndex;
+      return;
+    }
+    pinned = null;
     const doc = docAtTop();
     if (!doc) return;
     const start = firstPageOfSpine(doc.spine);
@@ -340,6 +350,8 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
       if (destroyed) return;
       const again = rangeOfCfi(target);
       if (again) scrollTo(again.doc, again.range.getBoundingClientRect());
+      const page = pageIndexOfCfi(pagination, target);
+      if (page !== null) pinned = { cfi: target, pageIndex: page, scrollTop: scroller.scrollTop };
       readPosition();
       paintShown();
       emit();
