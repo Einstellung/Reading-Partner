@@ -100,7 +100,7 @@ test("back closes an open overlay before it touches the stack", () => {
   expect(resolveBack(deep, true)).toBe("dismissOverlay");
 });
 
-test("the library, a topic and a book are entries like any other (docs/69)", () => {
+test("the library, a topic and a book are entries like any other (docs/70)", () => {
   const stack: NavStack = push(
     push(push(INITIAL_STACK, screen("library")), { kind: "topic", topicId: "t1" }),
     { kind: "reader", bookId: "b1", name: "A book" },

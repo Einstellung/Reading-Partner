@@ -1,4 +1,4 @@
-// Putting one spine document in the reflow column (docs/69): the shadow root a
+// Putting one spine document in the reflow column (docs/70): the shadow root a
 // flow host is filled with. The same sanitized <html> element as the sheet's
 // (page-mount.ts), cloned whole with nothing added inside it, so a CFI computed
 // on the ingestion tree is true on this one too. Around it: a baseline for a

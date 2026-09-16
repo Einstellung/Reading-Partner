@@ -1,4 +1,4 @@
-// The marks in the reflow column (docs/69): what is painted over every mounted
+// The marks in the reflow column (docs/70): what is painted over every mounted
 // document, what a finger leaves behind, and what a tap on one opens. The
 // column (flow-view.ts) owns the documents and the pointer; this layer is
 // handed the documents and told when a drag begins, moves and ends.

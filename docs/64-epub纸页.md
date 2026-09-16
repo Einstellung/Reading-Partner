@@ -2,6 +2,8 @@
 
 EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 docs/62 的 iframe 重排路线，docs/39 的「位置块」概念改为「排出来的页」。
 
+这份只管 iPad 和 PC。手机不排纸页，用自己的重排列，见 [docs/70](70-手机读EPUB.md)；坐标系（分页表、CFI、标注形状）两边同一份。
+
 ## 纸的尺寸
 
 一页 816×1056 CSS 像素（US Letter，8.5×11 英寸 @96dpi），版心 720×944（左右 48、上下 56），基础字号 16px、行高 1.55。常量在 `src/reading/epub/page-geometry.ts`，写进分页表的 `geometry` 字段。

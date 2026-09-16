@@ -1,4 +1,4 @@
-// The phone's reading screen (docs/69). Its own top bar over the reflow pane,
+// The phone's reading screen (docs/70). Its own top bar over the reflow pane,
 // and nothing else: no sidebar, no call, no prep panel.
 //
 // The pane is a prop rather than an import. It is written against the contract

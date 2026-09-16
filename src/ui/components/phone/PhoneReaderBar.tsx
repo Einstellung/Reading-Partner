@@ -1,4 +1,4 @@
-// The phone reader's top bar (docs/69). The desk's ReaderTopBar is built for a
+// The phone reader's top bar (docs/70). The desk's ReaderTopBar is built for a
 // window with a sidebar, a zoom group and an overflow menu; this is the same
 // controls a phone has room for, in one line: the way back, the book, where the
 // reader is in it, the outline, the pen rack, and the AI entry that is dim.

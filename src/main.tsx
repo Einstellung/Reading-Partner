@@ -102,7 +102,7 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void import("./smoke/dictation-guided").then(({ runGuidedDictation }) => runGuidedDictation());
 } else if (import.meta.env.VITE_SMOKE === "flow-reader") {
   // The phone's reflow reader on its own, in a phone-wide column: driven
-  // through the sim bridge on a synthetic book or a real one (docs/69).
+  // through the sim bridge on a synthetic book or a real one (docs/70).
   void import("./smoke/flow-reader").then(({ runFlowReaderSmoke }) => runFlowReaderSmoke());
 } else {
   // The palette, before anything is drawn in it. Synchronous and first: both

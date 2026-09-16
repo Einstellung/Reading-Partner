@@ -9,6 +9,7 @@
 //   ?cfi=<cfi>       open at this CFI; ?page=<n> at the start of this page
 //   ?width=<px>      the column's width (default 393)
 
+import { ANNOTATION_COLORS } from "../platform/app/annotations";
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { buildEpub, prose } from "../../tests/reading/epub/fixture";
@@ -67,13 +68,13 @@ function loadMarks(bookId: string): Annotation[] {
 }
 
 function Harness(props: { bookId: string; buffer: ArrayBuffer; viewState: ViewState | null; width: number; log: FlowLog }) {
-  const [tool, setTool] = useState<FlowTool>({ type: "none", color: "#ffd400" });
+  const [tool, setTool] = useState<FlowTool>({ type: "none", color: ANNOTATION_COLORS[0].color });
   const { log } = props;
   useEffect(() => {
     log.setTool = setTool;
   }, [log]);
   return (
-    <div style={{ width: props.width, height: "100vh", margin: "0 auto", border: "1px solid #ccc" }}>
+    <div style={{ width: props.width, height: "100vh", margin: "0 auto", border: "1px solid var(--border)" }}>
       <FlowReaderPane
         bookId={props.bookId}
         buffer={props.buffer}

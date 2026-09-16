@@ -1,4 +1,4 @@
-// The order a book opens in on the phone (docs/69): the pages before the marks,
+// The order a book opens in on the phone (docs/70): the pages before the marks,
 // the position seeded before the pane is handed anything, and what leaving the
 // book still owes. A fake io, so none of it needs a webview. Run: bun test.
 

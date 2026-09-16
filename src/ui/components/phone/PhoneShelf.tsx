@@ -1,4 +1,4 @@
-// The phone's shelf (docs/69): the topics, and one level in, what is filed under
+// The phone's shelf (docs/70): the topics, and one level in, what is filed under
 // one of them. The same cards the desk draws — the cover band, the label strip,
 // the grid's own class names — with everything the phone does not have taken
 // off: no adding, no renaming, no deleting, no retell, no rehearsal, no

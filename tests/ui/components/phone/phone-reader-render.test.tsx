@@ -1,4 +1,4 @@
-// The phone's reading screen on a real DOM (docs/69), against a stub pane: the
+// The phone's reading screen on a real DOM (docs/70), against a stub pane: the
 // page text the desk prints, the outline sheet, and the two AI controls drawn
 // and unpressable. The pane itself is another file's; what is pinned here is
 // the shell it is handed to. Run: bun test.

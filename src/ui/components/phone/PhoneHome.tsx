@@ -1,4 +1,4 @@
-// The phone home screen (docs/22, docs/69): today's briefing on top, the
+// The phone home screen (docs/22, docs/70): today's briefing on top, the
 // articles kept out of it, and the library. The library card carries the book
 // last opened on any device, so the way back into a book is one tap from the
 // screen the app opens on.

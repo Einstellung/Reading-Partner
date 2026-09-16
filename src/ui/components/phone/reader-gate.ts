@@ -1,5 +1,5 @@
 // What the phone's reader will not do yet, and the one sentence each control
-// says about it (docs/69).
+// says about it (docs/70).
 //
 // The AI is not on this shell: there is no book thread, no classroom and no
 // pen that opens one. Both controls are still drawn — the phone is one of the

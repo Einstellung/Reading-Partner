@@ -1,4 +1,4 @@
-// The phone's reading area for an EPUB (docs/69): one element for the column,
+// The phone's reading area for an EPUB (docs/70): one element for the column,
 // and the pen in hand. The events are read by the column itself (flow-view.ts);
 // what is here is only its lifetime.
 

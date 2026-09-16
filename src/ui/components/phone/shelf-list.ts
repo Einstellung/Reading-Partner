@@ -1,4 +1,4 @@
-// The phone's shelf, minus React (docs/69): what each of a topic's files is,
+// The phone's shelf, minus React (docs/70): what each of a topic's files is,
 // whether this device has it, and what tapping it does.
 //
 // The phone opens EPUBs and nothing else, and its books channel is off, so a
@@ -60,7 +60,7 @@ export function shelfMaterials(
 }
 
 /**
- * The book the home screen offers to continue (docs/69). The most recently
+ * The book the home screen offers to continue (docs/70). The most recently
  * opened one across every topic, as the vestibule picks it — with the files
  * that are not EPUBs taken out first, because the phone cannot open those and
  * an entry point that leads nowhere is worse than none.

@@ -346,7 +346,7 @@ export function syncHoldingsReport(): string {
 export const NO_ACCOUNT_FOR_BOOK = "Sign in to your account to download this book";
 
 /**
- * Download one book's blob out of the account (docs/13 「书按需下载」, docs/69).
+ * Download one book's blob out of the account (docs/13 「书按需下载」, docs/70).
  *
  * The phone's books channel is off, so nothing mirrors a book onto it; this is
  * how the one book the reader tapped gets here. Through the engine, which

@@ -1,4 +1,4 @@
-// The phone's reflow reading area (docs/69): the props the shell hands it and
+// The phone's reflow reading area (docs/70): the props the shell hands it and
 // the handle it hands back. Declared apart from the pane so the shell can be
 // written against it before the pane exists.
 

@@ -1146,7 +1146,7 @@ export class SyncEngine {
   }
 
   /**
-   * Download one book blob, now, whatever the books policy says (docs/69).
+   * Download one book blob, now, whatever the books policy says (docs/70).
    *
    * The phone mirrors no books, so nothing brings one in on its own; this is
    * the shelf asking for the one the reader tapped. It goes through the engine

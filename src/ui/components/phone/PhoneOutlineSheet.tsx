@@ -1,4 +1,4 @@
-// The phone's one sidebar, as a sheet off the bottom edge (docs/69): the book's
+// The phone's one sidebar, as a sheet off the bottom edge (docs/70): the book's
 // table of contents and nothing else. No marks list, no prep panel, no trace —
 // none of them exist on this shell.
 //

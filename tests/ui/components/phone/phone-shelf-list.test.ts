@@ -1,4 +1,4 @@
-// The phone's shelf, minus React (docs/69): which of a topic's files this shell
+// The phone's shelf, minus React (docs/70): which of a topic's files this shell
 // can open, what a tap on each one does, and which book the home card offers to
 // continue. Run: bun test.
 

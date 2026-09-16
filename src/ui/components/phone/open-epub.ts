@@ -1,4 +1,4 @@
-// Opening a book on the phone, in order (docs/69). The desk's sequence
+// Opening a book on the phone, in order (docs/70). The desk's sequence
 // (reading/session/open-book.ts) with everything the phone does not have taken
 // out: no full text, no figures, no threads, no prep, no distillation — there
 // is no AI on this shell to read any of it.

@@ -28,7 +28,7 @@ export type ScreenKind =
 // Only the screens that stand for one thing carry anything: the opened saved
 // article (the record itself, the way the shell used to keep it beside
 // `screen`), the open topic, and the book being read. The reader is an entry
-// like any other — back leaves the book the same way it leaves a list (docs/69).
+// like any other — back leaves the book the same way it leaves a list (docs/70).
 export type PhoneScreen =
   | { kind: "home" }
   | { kind: "briefing" }

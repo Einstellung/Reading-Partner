@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType }
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID, listTopics, type Topic } from "./platform/app/topics";
 import { listLibraryEntries, type LibraryEntry } from "./platform/app/library";
+import FlowReaderPane from "./reading/epub/FlowReaderPane";
 import type { FlowReaderPaneProps } from "./reading/epub/flow-contract";
 import { initSync, TICK_MS } from "./platform/sync";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
@@ -83,13 +84,9 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
   }
 }
 
-// The reflow reading area (docs/69). Written against the same contract as the
-// screen that mounts it and landing separately, so until it does this shell has
-// no pane and the reader screen is not reachable.
-//
-// TODO(docs/69): import FlowReaderPane from "./reading/epub/FlowReaderPane" and
-// assign it here.
-const FLOW_PANE: ComponentType<FlowReaderPaneProps> | null = null;
+// The reflow reading area (docs/70). Written against the same contract as the
+// screen that mounts it, so the two were built apart and meet here.
+const FLOW_PANE: ComponentType<FlowReaderPaneProps> | null = FlowReaderPane;
 
 export default function PhoneApp({
   // The pane, injectable so a smoke test can mount the reader screen against a
@@ -117,7 +114,7 @@ export default function PhoneApp({
   // about a file nobody has opened.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[] | null>(null);
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
-  // The shelf (docs/69): the topics and the book registry. Null until they have
+  // The shelf (docs/70): the topics and the book registry. Null until they have
   // been read — the home card says nothing about a library nobody has listed.
   const [topics, setTopics] = useState<Topic[] | null>(null);
   const [entries, setEntries] = useState<Record<string, LibraryEntry>>({});

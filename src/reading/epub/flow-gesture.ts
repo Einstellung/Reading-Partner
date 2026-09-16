@@ -1,4 +1,4 @@
-// What a finger on the reflow view means, with no DOM in it (docs/69). The
+// What a finger on the reflow view means, with no DOM in it (docs/70). The
 // scroll is the browser's: the view never moves the page itself, so the only
 // question a pointer sequence has to answer is whether it is a tap, a mark, or
 // nothing of the view's. A press held still for LONG_PRESS_MS on the words

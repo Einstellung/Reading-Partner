@@ -1,5 +1,5 @@
 // The column: the imperative half of the phone's reflow reading area, and the
-// place the shell's FlowReaderView is implemented (flow-contract.ts, docs/69).
+// place the shell's FlowReaderView is implemented (flow-contract.ts, docs/70).
 // One native scroll container, every spine document in it in order, each in
 // its own shadow host (flow-mount.ts). Nothing here scrolls the page on the
 // reader's behalf: the browser does, and the column only reads where it ended
