@@ -17,6 +17,7 @@
 import { registerRole, roleRegistered, type Role } from "../../soul";
 import type { DeskEnv } from "../../desk";
 import type { AgentTool } from "../../legion/execute/turn";
+import { TASKING_KIND } from "../tasking/tasking-agent";
 
 export const SECRETARY_ROLE_ID = "secretary";
 
@@ -34,7 +35,19 @@ export const SECRETARY_DUTY =
   "regenerate today's briefing — " +
   "always on the user's " +
   "request, never on your own. Answer concisely and honestly, in the user's language. If " +
-  "something isn't in the provided text, say so rather than inventing it.";
+  "something isn't in the provided text, say so rather than inventing it. " +
+  // The one thing the secretary does with a question the material does not
+  // answer (docs/60 管线与秘书, docs/63 tasking). Named here rather than left to
+  // the reader to ask for: a follow-up that goes past the briefing is the normal
+  // case, and answering it from memory is what the whole bureau exists against.
+  `When a follow-up goes past what is written below — what happened before this, what the ` +
+  `figures were earlier, what a research room has made of it — do not answer from memory ` +
+  `and do not look it up in this turn. Call delegate with kind ${TASKING_KIND} and put in ` +
+  `the task everything that makes the question answerable for someone who cannot see this ` +
+  `conversation: what to find out, which article or figure it came off (give its title and ` +
+  `source), and what would count as an answer. Then tell the user plainly that you have ` +
+  `sent it off and the answer will come back to this briefing later, and go on with ` +
+  `whatever else they asked. It takes minutes and this turn does not wait for it.`;
 
 // The tools this turn's secretary is holding. Keyed by the DeskEnv the turn is
 // being assembled against: the desk is laid with it and the soul is opened with
