@@ -6,7 +6,7 @@
 // Fixtures: the OSS Insight envelope and the OpenDigger objects are trimmed
 // live responses (2026-09-13); the trending rows are the API's own OpenAPI
 // example, since the live endpoint has served no rows since 2026-03-01
-// (pitfall 296); the search body follows GitHub's REST docs.
+// (pitfall 322); the search body follows GitHub's REST docs.
 
 import { afterEach, expect, test } from "bun:test";
 import { collectSource } from "../../../../src/info/sources/engine";

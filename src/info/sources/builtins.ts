@@ -442,7 +442,7 @@ export const BUILTIN_SOURCES: SourceDescriptor[] = [
   },
   {
     // Search, not trending: OSS Insight's trending endpoint has answered empty
-    // since 2026-03 (pitfall 296). New Python repos past 100 stars in a week is
+    // since 2026-03 (pitfall 322). New Python repos past 100 stars in a week is
     // the same question asked of an API that still answers.
     id: "github-new-python",
     name: "GitHub new repos · Python",
@@ -572,7 +572,7 @@ const BUILTIN_CAVEATS: Record<string, string> = {
   ...everySection(
     "github",
     "GitHub has no trending API; trending comes from OSS Insight and new repos from the Search API, never from the trending page's HTML. Stars are faked at scale (ICSE 2026: ~6 million suspected fake stars 2019-2024; AI/LLM repos most affected), so a star count is a lead, not a verdict: check stars against forks and contributors, the gap between creation and surfacing, and whether a paper or an institution stands behind it; OpenDigger activity that does not move with stars is a bought count. " +
-      "Anonymous REST allows 60 requests an hour, so per-repo fields are filled for the first few dozen only. fetch-page reads the repo page's README through Readability. OSS Insight's trending endpoint has returned empty rows with a data_quality notice since 2026-03 (docs/pitfall/296); until it recovers, search mode is the one that yields items.",
+      "Anonymous REST allows 60 requests an hour, so per-repo fields are filled for the first few dozen only. fetch-page reads the repo page's README through Readability. OSS Insight's trending endpoint has returned empty rows with a data_quality notice since 2026-03 (docs/pitfall/322); until it recovers, search mode is the one that yields items.",
   ),
   ...everySection(
     "hf",

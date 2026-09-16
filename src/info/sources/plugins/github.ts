@@ -199,7 +199,7 @@ function repoItem(desc: SourceDescriptor, fullName: string, description: string 
 // OpenAPI document (api.ossinsight.io/docs/json): every value is a string,
 // `stars` / `forks` / `pull_requests` / `pushes` count the period, not totals,
 // so there is no total-stars signal here. Since 2026-03-01 the live endpoint
-// has answered zero rows with data_quality.status "unavailable" (pitfall 296);
+// has answered zero rows with data_quality.status "unavailable" (pitfall 322);
 // that is a source failure with the API's own reason, not an empty day.
 interface TrendingRow {
   repo_name?: unknown;

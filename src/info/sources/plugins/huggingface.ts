@@ -249,7 +249,7 @@ async function discover(desc: SourceDescriptor, query: IndexQuery, deps: PluginD
   const limit = deps.limit ?? huggingfacePlugin.defaultLimit;
   if (p.kind === "papers") {
     // Today first, then back one page a day. The Hub has no page for a weekend
-    // day and answers [] (pitfall 298); the loop just moves on.
+    // day and answers [] (pitfall 323); the loop just moves on.
     const items: InfoItem[] = [];
     const today = deps.today();
     for (let back = 0; back < p.days && items.length < limit; back++) {
