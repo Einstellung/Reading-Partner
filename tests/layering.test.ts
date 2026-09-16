@@ -149,6 +149,11 @@ const LAYER: Record<string, Layer> = {
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",
+  // A question the briefing did not answer, handed to a legion run (docs/63).
+  // It reads what the rest of info already filed — the cables, the article
+  // bodies, a room's picture — and the briefer only names its kind, so the edge
+  // runs briefer -> tasking and never back.
+  "info/tasking": "domain",
   // The 0.12 data migration, deleted wholesale at 0.13. A domain rather than a
   // capability because it drives the observation store and the thread files
   // rather than serving them, and because nothing below it may ever grow a
