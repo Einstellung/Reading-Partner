@@ -504,3 +504,132 @@ test("a reply that landed with the thread off screen is a card", async () => {
     off();
   }
 });
+
+// --- runs a program delegated (docs/55 step 12) -----------------------------
+
+// The run store a bell is read back against, kept here so each of these tests
+// can put a run of its own on disk.
+function runFiles() {
+  const files = new Map<string, string>();
+  const runs = createRunStore({
+    list: async () => [...files.keys()],
+    read: async (name) => files.get(name) ?? null,
+    write: async (name, contents) => {
+      files.set(name, contents);
+    },
+    remove: async (name) => {
+      files.delete(name);
+    },
+  });
+  return { runs, files };
+}
+
+test("a run a program delegated is acked without a turn, a line, or a card", async () => {
+  const { bells } = bellStore();
+  const { box, files: cards } = boxStore();
+  const { runs } = runFiles();
+  const { run } = await runs.create({
+    kind: "collect",
+    delegator: { kind: "program", name: "daily-round" },
+    brief: "briefs/collect.json",
+    at: NOW - 10_000,
+  });
+  await bells.ring(
+    "run-done",
+    { runId: run.id, kind: run.kind, brief: "the round is in", output: "info/briefing-2026-09-14.json" },
+    { at: NOW - 1000 },
+  );
+  const { send, rounds } = sender([]);
+
+  expect(await answerBell({ settings, bells, runs, box, send, now: () => NOW })).toBe(1);
+
+  // No model call, nothing said at the door, and no card: the day's briefing
+  // puts its own there (info/boxes/red-box.ts).
+  expect(rounds).toEqual([]);
+  expect(doorFile()).toBeNull();
+  expect([...cards.values()]).toEqual([]);
+  // The ledger still gets everything it waits on.
+  expect((await bells.get(`run-done-${run.id}`))?.state).toBe("acked");
+  expect(await bells.read()).toEqual([]);
+  expect((await runs.get(run.id))?.deliveredAt).toBe(NOW);
+});
+
+test("the delegator on the bell is enough, with no run file to read", async () => {
+  const { bells } = bellStore();
+  const { box, files: cards } = boxStore();
+  await bells.ring(
+    "run-done",
+    {
+      runId: "r-local",
+      kind: "collect",
+      brief: "the round is in",
+      delegator: { kind: "program", name: "daily-round" },
+    },
+    { at: NOW - 1000 },
+  );
+  const { send, rounds } = sender([]);
+
+  expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+  expect(rounds).toEqual([]);
+  expect(doorFile()).toBeNull();
+  expect([...cards.values()]).toEqual([]);
+  expect((await bells.get("run-done-r-local"))?.state).toBe("acked");
+});
+
+test("a program's run that failed is one card to decide about, and no turn", async () => {
+  const { bells } = bellStore();
+  const { box, files: cards } = boxStore();
+  const { runs } = runFiles();
+  const { run } = await runs.create({
+    kind: "collect",
+    delegator: { kind: "program", name: "daily-round" },
+    brief: "briefs/collect.json",
+    at: NOW - 10_000,
+  });
+  await bells.ring(
+    "run-failed",
+    { runId: run.id, kind: run.kind, reason: "every source timed out" },
+    { at: NOW - 1000 },
+  );
+  const { send, rounds } = sender([]);
+
+  expect(await answerBell({ settings, bells, runs, box, send, now: () => NOW })).toBe(1);
+
+  expect(rounds).toEqual([]);
+  expect(doorFile()).toBeNull();
+  // The failure left nothing else behind, so the card is its only trace and the
+  // cover is the error itself.
+  const item = JSON.parse([...cards.values()][0]!) as Record<string, unknown>;
+  expect(item.boxId).toBe(run.id);
+  expect(item.runId).toBe(run.id);
+  expect(item.source).toBe("run");
+  expect(item.kind).toBe("collect");
+  expect(item.needsDecision).toBe(true);
+  expect(item.cover).toContain("every source timed out");
+  expect(item.origin).toEqual({ place: "door", date: doorDate(new Date(NOW)) });
+  expect((await bells.get(`run-failed-${run.id}`))?.state).toBe("acked");
+  expect((await runs.get(run.id))?.deliveredAt).toBe(NOW);
+});
+
+test("a run the soul delegated is still answered in a turn", async () => {
+  const { bells } = bellStore();
+  const { box, files: cards } = boxStore();
+  const { runs } = runFiles();
+  const { run } = await runs.create({
+    kind: "research-literature",
+    delegator: { kind: "soul" },
+    brief: "briefs/research.json",
+    at: NOW - 10_000,
+  });
+  await bells.ring("run-done", { runId: run.id, kind: run.kind, brief: "four papers" }, { at: NOW - 1000 });
+  const { send, rounds } = sender([{ text: "Four papers came back." }]);
+
+  expect(
+    await answerBell({ settings, bells, runs, box, send, now: () => NOW, newThreadId: () => "door-thread-9" }),
+  ).toBe(1);
+  expect(rounds.length).toBe(1);
+  expect(doorFile()).toEqual({
+    messages: [expect.objectContaining({ role: "ai", text: "Four papers came back." })],
+  });
+  expect([...cards.values()].length).toBe(1);
+});

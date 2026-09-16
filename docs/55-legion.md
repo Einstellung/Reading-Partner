@@ -164,6 +164,8 @@ ledger 目录自己也进 `NEVER_INFER_DELETE`：丢一行就等于把它删掉�
 
 答铃回合的落点由 run 的 `deliverTo` 决定，不再一律开在门口。`deliverTo` 记的是这个 run 从哪儿派出来的：某本书的某条线程（划线线程带 annotationId，也可能是书的总线程），或门口。soul 按那个地方装配——是书就按阅读桌装配，桌上有那本书；是门口就按门口——然后把回复追加进那条对话（[68](./68-Lumen与盒子的交互.md)）。
 
+程序派的 run（`delegator` 是 `{ kind: "program", name }`）不起回合。`run-done` 只 `delivered`、`ack`、`markDelivered`，产出由派它的领域自己处置——日更那张卡是 `src/info/boxes/red-box.ts` 放的。`run-failed` 也不起回合，程序层往盒里放一项标「要你定」，origin 是门口当天，封面是失败原因本身。runner 把 `delegator` 抄在铃的 payload 上，和 `deliverTo` 同一个理由：`local` 档的 run 不落盘。
+
 跨设备的 run 完成时，铃投给执行设备上的 soul，它说出来的话经对话文件同步到另一台。iPad 想知道 PC 跑到哪，读 run 文件的 `progress`——随同步到达，最多晚一个 pull 间隔——不等 bell。
 
 先把完整消息存下来，目标端持久记下之后才确认投递；queued 减 delivered 就是待恢复集合。run 的折叠判据依赖 ack，所以这条顺序不能倒。
@@ -274,7 +276,7 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 单飞查过两处：runner 的 `start` 有每设备每 kind 一条（`DEFAULT_PER_KIND`），排不上的 run 留在 `pending`，下一拍再看，不丢；`dueRuns` 只让当选设备取 `pending`，读端设备不抢。管线还有一个不经 run 的入口——`init()` 在 app 回前台时续跑断点——所以 worker 层再兜一层：`generate()` 说 `busy` 就等它给回的那条 `done`，完了再要一次，不放弃这个 run。
 
-偏离：wake 铃照旧摇，soul 照旧在门口答，采集经理不是 soul 用模型回合派的（docs/63 的设计），铃的文案改成「run 已由日 tick 派出」。`BriefingView` 的 snapshot 仍订阅 pipeline，没改成订阅 run 文件。`collectorView().request` 不再有 `busy` 这个回答：两次 `generate_briefing` 是两个 run，第二个排队而不是被拒。任务书写在 `legion/briefs/`，那一行 palace 是 local——三个口都只在 `amICollecting()` 为真的机器上派，选举把 run 发回同一台，所以今天够用；选举中途换机器时那个 run 在新机器上读不到任务书而失败。分析员和综合拆成子 run 留待下一步。
+偏离：wake 铃照旧摇，soul 照旧在门口答一次，采集经理不是 soul 用模型回合派的（docs/63 的设计），铃的文案改成「run 已由日 tick 派出」。跑完那条 `run-done` 不再起第二个回合：程序派的 run 按「bell」一节答铃（2026-09-16 改，此前日更每天早上两个回合、门口多一句「采集跑完了」、盒里多一张指回门口的卡）。`BriefingView` 的 snapshot 仍订阅 pipeline，没改成订阅 run 文件。`collectorView().request` 不再有 `busy` 这个回答：两次 `generate_briefing` 是两个 run，第二个排队而不是被拒。任务书写在 `legion/briefs/`，那一行 palace 是 local——三个口都只在 `amICollecting()` 为真的机器上派，选举把 run 发回同一台，所以今天够用；选举中途换机器时那个 run 在新机器上读不到任务书而失败。分析员和综合拆成子 run 留待下一步。
 
 未开始：session 到对话文件的投影、translate 接入。开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
