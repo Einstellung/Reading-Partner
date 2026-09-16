@@ -340,6 +340,7 @@
 ## 开发环境
 
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
+- [324-a-second-page-on-the-dev-server-shares-the-sim-bridge](./324-a-second-page-on-the-dev-server-shares-the-sim-bridge.md) — 模拟器的 Safari 里留着一个 `localhost:1420` 标签，它也连着 sim bridge，`eval` 在 app 和它之间轮流执行：触摸落在 app 上，读数一半来自那个标签，于是"截图有高亮、`saved` 是 0"。先连问 `!!window.__TAURI_INTERNALS__`，答 false 的页面送去 `about:blank`
 - [286-vite-started-outside-the-worktree-root-kills-the-sim-bridge](./286-vite-started-outside-the-worktree-root-kills-the-sim-bridge.md) — 验证脚本把 vite 起在 scratchpad 而不是 worktree 根，vite 报 ready 但 `/` 是 404，webview 白屏；sim bridge 是 vite 插件、eval 要页面自己连上来，没加载就没人接，`drive.py` 一律 `page never answered`，连 reload 都送不进去。起完先 curl 断言 200，白屏了只能按 PID 重启 app
 - [289-playwright-from-bunx-brings-no-browser](./289-playwright-from-bunx-brings-no-browser.md) — `bunx playwright` 每次拉当天最新包，它只认自己那版钉死的 chromium revision，`~/.cache/ms-playwright/` 里已有的别的 revision 一律不用，`chromium.launch()` 直接报 executable 不存在。别去 `playwright install`，launch 时用 `executablePath` 指到 cache 里现成的 headless shell
 - [290-networkidle-never-comes-on-an-animated-page](./290-networkidle-never-comes-on-an-animated-page.md) — vite 的 HMR websocket 加页面自己的 rAF 循环把连接数顶住，`waitUntil: "networkidle"` 必超时；改 `domcontentloaded` 加 `waitForSelector`
