@@ -9,7 +9,7 @@ import type { LevelGate } from "../../../reading/call-state";
 import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import type { ToolType } from "./types";
 import {
-  IconLessonPath,
+  IconBookSparkle,
   IconFitWidth,
   IconGear,
   IconPagedLayout,
@@ -22,13 +22,28 @@ import { readerPageText } from "./reader-page-text";
 import { zoomResetLabel } from "./reader-zoom-keys";
 import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";
-import { lumenToggleTitle } from "../lumen/corner-pref";
 import appIcon from "../../assets/app-icon.png";
 import { Separator } from "../ui/separator";
 
 // The blackboard's label. What it opens, and the half of the dim button's line
 // that names the control.
 const BOOK_THREAD = "Learn this book with AI";
+
+// Lumen's row in the overflow menu wears Lumen's own face. Every other row
+// there carries a drawn glyph; the companion has a picture instead, and a
+// line-art stand-in would be a second Lumen to keep in step with the first.
+function IconLumen({ size = 20 }: { size?: number }) {
+  return (
+    <img
+      src={appIcon}
+      alt=""
+      width={size}
+      height={size}
+      className="rounded-[5px]"
+      style={{ width: size, height: size }}
+    />
+  );
+}
 
 export default function ReaderTopBar(props: {
   view: RefObject<ViewInstance | null>;
@@ -49,8 +64,9 @@ export default function ReaderTopBar(props: {
   onOpenSettings: () => void;
   // Something in Settings needs attention (today: sync is not running).
   settingsAlert: boolean;
-  // The corner companion's switch (docs/68), on the app icon the way the
-  // sidebar's wordmark carries it everywhere else.
+  // The corner companion's switch (docs/68). In the reader it is a row in the
+  // "More" menu, not a control in the bar: it is the one thing here that is not
+  // about the open book.
   lumenShown: boolean;
   onToggleLumen: () => void;
 }) {
@@ -60,7 +76,7 @@ export default function ReaderTopBar(props: {
   const paged = stats?.layout === "paged";
 
   // The "More" overflow: low-frequency view controls collapsed out of the main
-  // bar (zoom, fit, the paged-flip opt-in).
+  // bar (zoom, fit, the paged-flip opt-in, Lumen's switch).
   const moreItems: MoreItem[] = [
     {
       kind: "action",
@@ -92,6 +108,15 @@ export default function ReaderTopBar(props: {
       disabled: !props.viewReady,
       onClick: () => view.current?.setLayout(paged ? "vertical" : "paged"),
     },
+    {
+      // "Lumen", not lumenToggleTitle's "Hide Lumen": the row names the thing
+      // and the On/Off on its right says which way it stands.
+      kind: "toggle",
+      label: "Lumen",
+      icon: IconLumen,
+      on: props.lumenShown,
+      onClick: props.onToggleLumen,
+    },
     { kind: "divider" },
     {
       kind: "action",
@@ -105,19 +130,6 @@ export default function ReaderTopBar(props: {
     <>
       {/* LEFT: navigation */}
       <div className="flex shrink-0 items-center gap-1">
-        {/* The app icon, and the one thing the reader's bar carries that is not
-            about this book: Lumen's switch. 28px, the size the sidebar's
-            wordmark draws it at. */}
-        <button
-          type="button"
-          className="flex h-8 w-8 flex-none items-center justify-center rounded-md bg-transparent p-0"
-          title={lumenToggleTitle(props.lumenShown)}
-          aria-label={lumenToggleTitle(props.lumenShown)}
-          aria-pressed={props.lumenShown}
-          onClick={props.onToggleLumen}
-        >
-          <img src={appIcon} alt="" width={28} height={28} className="h-7 w-7 rounded-[7px]" />
-        </button>
         <Button
           variant="ghost"
           size="icon"
@@ -187,7 +199,7 @@ export default function ReaderTopBar(props: {
           aria-label={gate.bookThread === null ? BOOK_THREAD : `${BOOK_THREAD}: ${gate.bookThread}`}
           onClick={props.onOpenBookThread}
         >
-          <IconLessonPath size={20} />
+          <IconBookSparkle size={20} />
         </Button>
         <MoreMenu items={moreItems} alert={props.settingsAlert} />
       </div>
