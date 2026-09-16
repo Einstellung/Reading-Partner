@@ -32,8 +32,9 @@ export function writeLumenCornerShown(store: PrefStore | null, shown: boolean): 
   }
 }
 
-// What the logo does next, not what it is looking at. The wordmark, the phone's
-// title and the reader's app icon all say the same thing.
+// What the logo does next, not what it is looking at. The wordmark and the
+// phone's title both say the same thing. Not the reader, where the switch is a
+// row in the "More" menu and the On/Off beside it carries the state instead.
 export function lumenToggleTitle(shown: boolean): string {
   return shown ? "Hide Lumen" : "Show Lumen";
 }

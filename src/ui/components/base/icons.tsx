@@ -487,39 +487,55 @@ export function IconBooks({ size = 20 }: IconProps) {
 	);
 }
 
-// The reader's book-level AI entry (docs/09): a start point on the left page, a
-// line that crosses the spine, and a filled arrowhead landing on the right page
-// — the lesson path the AI carries you through, start to finish, in the order
-// it picked. That is what the button opens, and it is the one thing in the tray
-// that is not a tool.
+// The reader's book-level AI entry (docs/09): an open book with a sparkle over
+// its top-right corner — the book itself, and the AI that reads it with you.
+// That is what the button opens, and it is the one thing in the tray that is
+// not a tool.
 //
-// It is also the only icon here that is not currentColor, and deliberately so —
-// three glyphs were drawn in the house system first and all three failed for the
-// same reason. A board on an easel read as a television; a mortarboard read as
-// graduation; the app's own two mascots over a book turned to mush at 18px,
-// because a scene cannot survive at the size a stroke glyph has to work at.
-// Colour does the work strokes could not: the pale page reads as paper and the
-// deep-green line reads as a single path, legible with no interior detail to
-// lose. The palette is the app's own (src-tauri/icons).
+// The book is drawn in the house system (currentColor, 1.5 stroke, round caps)
+// so it sits with IconSidebar and IconGear in the same bar. Only the sparkle
+// takes a colour, and it takes the one token allowed to carry the green:
+// --accent-line, through the `fill-accent-line` utility rather than a hex, so
+// it follows the palette (docs/42 — the green draws marks and lines, never an
+// area of fill).
 //
-// Sized against its neighbours rather than against its own viewBox: the drawn
-// mark fills 73% of the box's height, which is what IconSparkle and
-// IconHighlight do in theirs. An earlier cut filled 65% and read a size small
-// next to them at the same rendered size.
-const MARK = {
-	deep: '#2F4F39',
-	mid: '#7FA971',
-	pale: '#E7F0D8',
-} as const;
-
-export function IconLessonPath({ size = 20 }: IconProps) {
+// Judge it at 20px, the size it is drawn at in the bar. Blown up, an open book
+// is two arches over a V and reads a little like a lowercase m — every open-book
+// glyph does, and that is not a defect to draw out. What 20px needs is that the
+// two pages stay open: a white cavity in each, with the spine a dark line down
+// the middle. An earlier cut chased the large size instead, gave each page a
+// bowl bottom, and closed into a single cup at 20px.
+//
+// So both edges of a page run the same way, outer high and inner low: the top
+// edge climbs from the V at the spine and flattens into its outer corner, and
+// the bottom edge falls from that outer corner back to the spine, which is the
+// book's lowest point. Each page is a band of near-constant width rather than a
+// bowl — about 9 units against a 1.5 stroke, a touch narrower at the outer edge
+// than at the spine, which is what leaves the cavity legible small.
+//
+// The book is scaled down into the lower left to clear the sparkle; the two
+// together fill 78% of the box's height, centred in it, which is what
+// IconSparkle and IconHighlight do in theirs.
+export function IconBookSparkle({ size = 20 }: IconProps) {
 	return (
-		<svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-			<rect x="3" y="3.2" width="18" height="17.6" rx="3.2" fill={MARK.pale} stroke={MARK.mid} strokeWidth="1.6" />
-			<path d="M12 3.9V20.1" stroke={MARK.mid} strokeWidth="1.3" strokeLinecap="round" />
-			<path d="M7.2 8C7.2 12.2 16.6 11.4 16.6 15.4" stroke={MARK.deep} strokeWidth="1.7" strokeLinecap="round" />
-			<circle cx="7.2" cy="8" r="1.7" fill={MARK.deep} />
-			<path d="M14.75 15.5L16.6 19L18.45 15.5Z" fill={MARK.deep} />
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M9.5 11.8C7.2 10.5 4.2 7.6 1.6 7.6V16.6C4.2 16.6 7.2 19.9 9.5 21.2C11.8 19.9 14.8 16.6 17.4 16.6V7.6C14.8 7.6 11.8 10.5 9.5 11.8Z" />
+			<path d="M9.5 11.8V21.2" />
+			<path
+				d="M19.6 2.6C19.6 4.4 20.6 5.4 22.4 5.4C20.6 5.4 19.6 6.4 19.6 8.2C19.6 6.4 18.6 5.4 16.8 5.4C18.6 5.4 19.6 4.4 19.6 2.6Z"
+				stroke="none"
+				className="fill-accent-line"
+			/>
 		</svg>
 	);
 }
