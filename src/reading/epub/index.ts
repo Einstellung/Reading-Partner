@@ -50,3 +50,6 @@ export { acquireEpub, ensurePagination, heldEpub, preparePagination, releaseEpub
 export { remapEpubAnnotations } from "./migrate";
 export { renderEpubCover } from "./epub-cover";
 export { default as EpubReaderPane } from "./EpubReaderPane";
+export type { FlowReaderPaneProps, FlowReaderView, FlowTool } from "./flow-contract";
+export { createFlowReader } from "./flow-view";
+export { default as FlowReaderPane } from "./FlowReaderPane";
