@@ -163,7 +163,7 @@ function inlineStylesheet(res: PageResources, cssEntry: string): string {
   return rewriteCssUrls(clean, (raw) => res.url(resolveZipPath(cssEntry, raw)));
 }
 
-function rewriteResources(html: Element, doc: SpineDocument, res: PageResources): void {
+export function rewriteResources(html: Element, doc: SpineDocument, res: PageResources): void {
   const from = doc.entry;
   for (const img of Array.from(html.getElementsByTagName("img"))) {
     const src = img.getAttribute("src");
@@ -214,7 +214,7 @@ export interface MountedDocument {
 // blobs are local; a second is an image that will not decode.
 const IMAGE_WAIT_MS = 1500;
 
-function imagesSettled(root: Element): Promise<void> {
+export function imagesSettled(root: Element): Promise<void> {
   const imgs = Array.from(root.getElementsByTagName("img")).filter((i) => !i.complete);
   if (imgs.length === 0) return Promise.resolve();
   return new Promise((resolve) => {

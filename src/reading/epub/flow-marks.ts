@@ -1,0 +1,431 @@
+// The marks in the reflow column (docs/69): what is painted over every mounted
+// document, what a finger leaves behind, and what a tap on one opens. The
+// column (flow-view.ts) owns the documents and the pointer; this layer is
+// handed the documents and told when a drag begins, moves and ends.
+//
+// A text mark is the same mark the sheets draw (mark-layer.ts, docs/64): a
+// range CFI as the anchor, the quote as the repair, and the pagination table's
+// page number beside them. The column has no page under a mark, so ink — a
+// stroke on no words — is not painted here at all.
+//
+// Every rect inside this file is in a document host's own coordinates: the
+// overlay is laid out over the host, so a rect measured against the host's box
+// is a rect the overlay draws unchanged. Only the popup's rect leaves as a
+// viewport rect.
+
+import type { Annotation, AnnotationPopupParams } from "../../platform/app/reader-contract";
+import { MARKUP_OPACITY } from "../engine/convert";
+import {
+  DEFAULT_MARK_COLOR,
+  epubPositionOf,
+  epubSortOffset,
+  findQuoteSpan,
+  markKind,
+  newEpubMark,
+  quoteSelectorAt,
+  quoteSelectorOf,
+  sameWords,
+} from "./annotation";
+import { caretAtPoint, rangeBetween, type CaretPoint } from "./caret";
+import { epubRangeCfi, parseCfiStart, parseEpubRangeCfi, rangeToCfi, resolveRange, resolveSteps, textSteps } from "./cfi";
+import type { FlowTool } from "./flow-contract";
+import { wordBoundsAt } from "./flow-gesture";
+import { popupRect, rectsHit, underlineBand, unionRect, type PageRect } from "./mark-geometry";
+import type { SpineText } from "./mark-layer";
+import { offsetOfPoint, runAt } from "./text";
+
+/** One spine document as it stands in the column. */
+export interface FlowDoc {
+  spine: number;
+  idref: string;
+  /** The archive entry, for resolving the book's own links. */
+  entry: string;
+  host: HTMLElement;
+  shadow: ShadowRoot;
+  /** The cloned <html>: the content root every CFI is resolved against. */
+  root: Element;
+  overlay: HTMLElement;
+}
+
+export interface FlowMarkHost {
+  owner: Document;
+  authorName: string;
+  /** The document under a viewport point. */
+  docAt(clientX: number, clientY: number): FlowDoc | null;
+  docOf(spine: number): FlowDoc | null;
+  /** Whether a document is laid out where the reader can see it now. */
+  isShown(doc: FlowDoc): boolean;
+  blockAt(pageIndex: number): { spine: number; charOffset: number; label: string | null } | undefined;
+  pageOfPoint(spine: number, charOffset: number): number;
+  spineOf(index: number): SpineText | null;
+  /** Every mark of the book, after one was added. */
+  onSave(annotations: Annotation[]): void;
+  onSelect(ids: string[]): void;
+  onPopup(params?: AnnotationPopupParams): void;
+}
+
+/** Where a press landed: the document and the caret under the finger. */
+export interface PressPoint {
+  doc: FlowDoc;
+  caret: CaretPoint;
+}
+
+interface PaintedMark {
+  id: string;
+  rects: PageRect[];
+}
+
+interface Drag {
+  doc: FlowDoc;
+  color: string;
+  start: CaretPoint;
+  range: Range | null;
+}
+
+export interface FlowMarks {
+  reset(annotations: readonly Annotation[]): void;
+  setAnnotations(annotations: readonly Annotation[]): void;
+  unsetAnnotations(ids: readonly string[]): void;
+  selectAnnotations(ids: readonly string[]): void;
+  setTool(tool: FlowTool): void;
+  all(): Annotation[];
+  /** Whether a document's overlay is stale: never painted, or painted before its marks changed. */
+  needsPaint(spine: number): boolean;
+  paint(doc: FlowDoc): void;
+  /** The document's layout moved under its marks: paint again when it is shown. */
+  invalidate(spine: number): void;
+  /** The caret under a viewport point, or null off the words. */
+  caretAt(clientX: number, clientY: number): PressPoint | null;
+  beginDrag(at: PressPoint): void;
+  extendDrag(clientX: number, clientY: number): void;
+  /** Write the mark. False when the drag covered no words. */
+  commitDrag(): boolean;
+  cancelDrag(): void;
+  isDragging(): boolean;
+  /** A press that was not a drag: open the mark under it, if there is one. */
+  tapAt(clientX: number, clientY: number): boolean;
+}
+
+export function createFlowMarks(host: FlowMarkHost): FlowMarks {
+  const marks = new Map<string, Annotation>();
+  const painted = new Map<number, PaintedMark[]>();
+  const dirty = new Set<number>();
+  const selected = new Set<string>();
+  let toolColor = DEFAULT_MARK_COLOR;
+  let drag: Drag | null = null;
+  const owner = host.owner;
+
+  // --- the overlay's own layers ------------------------------------------
+
+  function sublayer(doc: FlowDoc, name: string): HTMLElement {
+    const existing = doc.overlay.querySelector<HTMLElement>(`.${name}`);
+    if (existing) return existing;
+    const el = owner.createElement("div");
+    el.className = name;
+    el.style.cssText = "position:absolute;inset:0;pointer-events:none";
+    doc.overlay.append(el);
+    return el;
+  }
+
+  // --- reading a mark -----------------------------------------------------
+
+  function spineOfMark(ann: Annotation): number | null {
+    const position = epubPositionOf(ann);
+    if (!position) return null;
+    return parseCfiStart(position.value)?.spineIndex ?? null;
+  }
+
+  function colorOf(ann: Annotation): string {
+    const color = ann.color;
+    return typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color) ? color : DEFAULT_MARK_COLOR;
+  }
+
+  function rangeOfSpan(doc: FlowDoc, spine: SpineText, span: { start: number; end: number }): Range | null {
+    const from = runAt(spine.text.runs, span.start);
+    const to = runAt(spine.text.runs, span.end);
+    if (!from || !to) return null;
+    const startLocal = textSteps(from.node, from.offset);
+    const endLocal = textSteps(to.node, to.offset);
+    if (startLocal === null || endLocal === null) return null;
+    const parsed = parseEpubRangeCfi(epubRangeCfi(spine.index, spine.idref, startLocal, endLocal));
+    return parsed ? resolveRange(doc.root, parsed) : null;
+  }
+
+  /**
+   * Where a text mark is in this document. The CFI first; the quote when the
+   * CFI resolves to nothing, or to words that are not the ones that were marked.
+   */
+  function rangeForMark(doc: FlowDoc, ann: Annotation): Range | null {
+    const position = epubPositionOf(ann);
+    if (!position) return null;
+    const parsed = parseEpubRangeCfi(position.value);
+    const quote = quoteSelectorOf(ann);
+    const byCfi = parsed ? resolveRange(doc.root, parsed) : null;
+    if (byCfi && !byCfi.collapsed && (!quote || sameWords(byCfi.toString(), quote.exact))) return byCfi;
+    if (!quote) return byCfi && !byCfi.collapsed ? byCfi : null;
+    const spine = host.spineOf(doc.spine);
+    if (!spine) return null;
+    const near = epubSortOffset(ann.sortIndex) ?? undefined;
+    const span = findQuoteSpan(spine.text.text, quote, near);
+    if (!span) return null;
+    return rangeOfSpan(doc, spine, span);
+  }
+
+  // --- painting -----------------------------------------------------------
+
+  /** A range's boxes in the host's coordinates. */
+  function rectsIn(doc: FlowDoc, range: Range): PageRect[] {
+    const box = doc.host.getBoundingClientRect();
+    const out: PageRect[] = [];
+    for (const r of Array.from(range.getClientRects())) {
+      if (r.width < 0.5 || r.height < 0.5) continue;
+      out.push({ left: r.left - box.left, top: r.top - box.top, width: r.width, height: r.height });
+    }
+    return out;
+  }
+
+  function rectDiv(r: PageRect, css: string): HTMLElement {
+    const el = owner.createElement("div");
+    el.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;${css}`;
+    return el;
+  }
+
+  function drawStroke(into: HTMLElement, kind: "highlight" | "underline", rects: PageRect[], color: string): void {
+    for (const r of rects) {
+      const box = kind === "underline" ? underlineBand(r) : r;
+      into.append(rectDiv(box, `background:${color};opacity:${MARKUP_OPACITY};border-radius:1px`));
+    }
+  }
+
+  function drawSelection(into: HTMLElement, rects: PageRect[], color: string): void {
+    const box = unionRect(rects);
+    if (!box) return;
+    const grown = { left: box.left - 3, top: box.top - 3, width: box.width + 6, height: box.height + 6 };
+    into.append(rectDiv(grown, `border:1.5px solid ${color};border-radius:3px;box-sizing:border-box;opacity:0.9`));
+  }
+
+  function paint(doc: FlowDoc): void {
+    const layer = sublayer(doc, "rp-marks");
+    layer.replaceChildren();
+    const drawn: PaintedMark[] = [];
+    for (const ann of marks.values()) {
+      if (spineOfMark(ann) !== doc.spine) continue;
+      const kind = markKind(ann);
+      if (!kind || kind === "ink") continue;
+      const range = rangeForMark(doc, ann);
+      if (!range) continue;
+      const rects = rectsIn(doc, range);
+      if (rects.length === 0) continue;
+      const color = colorOf(ann);
+      drawStroke(layer, kind, rects, color);
+      drawn.push({ id: ann.id, rects });
+      if (selected.has(ann.id)) drawSelection(layer, rects, color);
+    }
+    painted.set(doc.spine, drawn);
+    dirty.delete(doc.spine);
+  }
+
+  function invalidate(spine: number): void {
+    dirty.add(spine);
+    const doc = host.docOf(spine);
+    if (doc && host.isShown(doc)) paint(doc);
+  }
+
+  function invalidateMarks(annotations: Iterable<Annotation>): void {
+    const spines = new Set<number>();
+    for (const ann of annotations) {
+      const spine = spineOfMark(ann);
+      if (spine !== null) spines.add(spine);
+    }
+    for (const spine of spines) invalidate(spine);
+  }
+
+  // --- the draft ----------------------------------------------------------
+
+  function paintDraft(): void {
+    if (!drag) return;
+    const layer = sublayer(drag.doc, "rp-draft");
+    layer.replaceChildren();
+    if (!drag.range) return;
+    drawStroke(layer, "highlight", rectsIn(drag.doc, drag.range), drag.color);
+  }
+
+  function clearDraft(doc: FlowDoc): void {
+    doc.overlay.querySelector<HTMLElement>(".rp-draft")?.replaceChildren();
+  }
+
+  // --- writing a mark -----------------------------------------------------
+
+  function commit(d: Drag): boolean {
+    if (!d.range || d.range.collapsed) return false;
+    const cfi = rangeToCfi(d.range, d.doc.spine, d.doc.idref);
+    if (!cfi) return false;
+    const spine = host.spineOf(d.doc.spine);
+    const parsed = parseEpubRangeCfi(cfi);
+    if (!spine || !parsed) return false;
+    // Back to the ingestion tree before any offset is read off it: the column's
+    // nodes are a clone's, and the offsets the pagination was cut on are the
+    // ingestion tree's (docs/pitfall/267).
+    const from = resolveSteps(spine.root, parsed.start.steps, parsed.start.offset);
+    const to = resolveSteps(spine.root, parsed.end.steps, parsed.end.offset);
+    if (!from || !to) return false;
+    const start = offsetOfPoint(spine.text, spine.runs, from.node, from.offset);
+    const end = offsetOfPoint(spine.text, spine.runs, to.node, to.offset);
+    const span = { start: Math.min(start, end), end: Math.max(start, end) };
+    const quote = quoteSelectorAt(spine.text.text, span);
+    if (quote.exact.trim() === "") return false;
+    const pageIndex = host.pageOfPoint(spine.index, span.start);
+    const block = host.blockAt(pageIndex);
+    const mark = newEpubMark({
+      id: crypto.randomUUID(),
+      stroke: "highlight",
+      color: d.color,
+      cfi,
+      spineIndex: spine.index,
+      span,
+      pageIndex,
+      pageLabel: block?.label ?? String(pageIndex + 1),
+      quote,
+      authorName: host.authorName,
+      now: new Date().toISOString(),
+    }) as Annotation;
+    marks.set(mark.id, mark);
+    invalidate(d.doc.spine);
+    host.onSave(Array.from(marks.values()));
+    return true;
+  }
+
+  // --- pressing a mark ----------------------------------------------------
+
+  function markAt(clientX: number, clientY: number): { doc: FlowDoc; mark: PaintedMark } | null {
+    const doc = host.docAt(clientX, clientY);
+    if (!doc) return null;
+    const drawn = painted.get(doc.spine);
+    if (!drawn) return null;
+    const box = doc.host.getBoundingClientRect();
+    const at = { x: clientX - box.left, y: clientY - box.top };
+    // Last painted first: the newest mark is the one on top.
+    for (let i = drawn.length - 1; i >= 0; i--) {
+      if (rectsHit(drawn[i].rects, at)) return { doc, mark: drawn[i] };
+    }
+    return null;
+  }
+
+  function tapAt(clientX: number, clientY: number): boolean {
+    const hit = markAt(clientX, clientY);
+    if (!hit) return false;
+    const ann = marks.get(hit.mark.id);
+    if (!ann) return false;
+    const box = unionRect(hit.mark.rects);
+    if (!box) return false;
+    const origin = hit.doc.host.getBoundingClientRect();
+    host.onSelect([ann.id]);
+    host.onPopup({
+      rect: popupRect(box, (p) => ({ x: origin.left + p.x, y: origin.top + p.y })),
+      annotation: ann,
+    });
+    return true;
+  }
+
+  // --- the drag -----------------------------------------------------------
+
+  function caretAt(clientX: number, clientY: number): PressPoint | null {
+    const doc = host.docAt(clientX, clientY);
+    if (!doc) return null;
+    const caret = caretAtPoint(doc.shadow, doc.root, clientX, clientY);
+    return caret ? { doc, caret } : null;
+  }
+
+  // The word under the finger is the first thing highlighted, so a hold shows
+  // what it began before the finger has moved.
+  function beginDrag(at: PressPoint): void {
+    const word = wordBoundsAt(at.caret.node.data, at.caret.offset);
+    const start: CaretPoint = { node: at.caret.node, offset: word.start };
+    const end: CaretPoint = { node: at.caret.node, offset: word.end };
+    drag = { doc: at.doc, color: toolColor, start, range: rangeBetween(owner, start, end) };
+    paintDraft();
+  }
+
+  function extendDrag(clientX: number, clientY: number): void {
+    if (!drag) return;
+    const end = caretAtPoint(drag.doc.shadow, drag.doc.root, clientX, clientY);
+    if (!end) return;
+    drag.range = rangeBetween(owner, drag.start, end);
+    paintDraft();
+  }
+
+  function commitDrag(): boolean {
+    const d = drag;
+    if (!d) return false;
+    drag = null;
+    clearDraft(d.doc);
+    return commit(d);
+  }
+
+  function cancelDrag(): void {
+    if (!drag) return;
+    clearDraft(drag.doc);
+    drag = null;
+  }
+
+  return {
+    reset(annotations) {
+      marks.clear();
+      for (const ann of annotations) marks.set(ann.id, ann);
+      selected.clear();
+      painted.clear();
+      dirty.clear();
+    },
+
+    setAnnotations(annotations) {
+      const touched: Annotation[] = [];
+      for (const ann of annotations) {
+        const previous = marks.get(ann.id);
+        if (previous) touched.push(previous);
+        marks.set(ann.id, ann);
+        touched.push(ann);
+      }
+      invalidateMarks(touched);
+    },
+
+    unsetAnnotations(ids) {
+      const gone: Annotation[] = [];
+      for (const id of ids) {
+        const ann = marks.get(id);
+        if (!ann) continue;
+        gone.push(ann);
+        marks.delete(id);
+        selected.delete(id);
+      }
+      invalidateMarks(gone);
+    },
+
+    selectAnnotations(ids) {
+      const touched = new Set<string>([...selected, ...ids]);
+      selected.clear();
+      for (const id of ids) selected.add(id);
+      const anns: Annotation[] = [];
+      for (const id of touched) {
+        const ann = marks.get(id);
+        if (ann) anns.push(ann);
+      }
+      invalidateMarks(anns);
+    },
+
+    setTool(tool) {
+      if (tool.color) toolColor = tool.color;
+    },
+
+    all: () => Array.from(marks.values()),
+    needsPaint: (spine) => dirty.has(spine) || !painted.has(spine),
+    paint,
+    invalidate,
+    caretAt,
+    beginDrag,
+    extendDrag,
+    commitDrag,
+    cancelDrag,
+    isDragging: () => drag !== null,
+    tapAt,
+  };
+}
