@@ -501,10 +501,11 @@ export function IconBooks({ size = 20 }: IconProps) {
 //
 // Every coordinate is traced from the reference drawing rather than estimated:
 // its strokes were binarised, reduced to centrelines, and mapped into this
-// 24-unit box at 0.0179 units per reference pixel, placed so the rendered ink
-// keeps IconSidebar's margins. That is where the page edges come from — each one
-// runs nearly level out of its outer corner and only falls in the half nearest
-// the spine, where the two pages close into a point the spine runs down into.
+// 24-unit box at 0.01965 units per reference pixel, centred on its own ink so
+// the mark stands as tall as the tool icons it sits beside. That is where the
+// page edges come from — each one runs nearly level out of its outer corner and
+// only falls in the half nearest the spine, where the two pages close into a
+// point the spine runs down into.
 //
 // The two pages are not mirrored. The left one is closed on all four sides; the
 // right one is open at the top, where its top edge stops short and its outer
@@ -513,8 +514,8 @@ export function IconBooks({ size = 20 }: IconProps) {
 //
 // The reference draws at half our stroke weight, so tracing it exactly puts the
 // sparkle's ink against the book's. The two loose ends around it give way, not
-// the sparkle: the broken top edge is pulled back 0.52 along its own curve and
-// the outer edge's top end 1.37 down, which leaves 0.42 units of clear ground
+// the sparkle: the broken top edge is pulled back 0.34 along its own curve and
+// the outer edge's top end 1.2 down, which leaves 0.4 units of clear ground
 // between the two drawings.
 //
 // Judge it at 20px, the size it is drawn at in the bar. Blown up, an open book
@@ -537,11 +538,11 @@ export function IconBookSparkle({ size = 20 }: IconProps) {
 			strokeLinejoin="round"
 			xmlns="http://www.w3.org/2000/svg"
 		>
-			<path d="M11.56 9.71C9.53 7.12 5.24 7.08 4.13 7.34C3.83 7.41 2.93 7.45 2.93 8.4V17.34C2.93 17.67 2.86 18.45 3.8 18.32C7.74 17.79 9.12 18.84 11.56 19.84Z" />
-			<path d="M11.56 9.71C12.44 8.97 13.39 7.95 15.73 7.47" />
-			<path d="M20.46 9.68V17.32C20.46 17.65 20.47 18.37 19.59 18.28C16.72 18.01 15.04 18.12 11.56 19.84" />
+			<path d="M11.51 9.5C9.28 6.66 4.57 6.61 3.35 6.9C3.1 6.96 2.03 7.02 2.03 8.03V17.96C2.03 18.62 2.2 19.07 2.99 18.96C7.24 18.37 8.84 19.51 11.51 20.62Z" />
+			<path d="M11.51 9.5C12.44 8.72 13.62 7.48 16.31 7" />
+			<path d="M21.28 9.17V17.91C21.28 18.64 21.01 18.97 20.33 18.91C17.07 18.62 15.35 18.74 11.51 20.62" />
 			<path
-				d="M19.11 3.99Q19.44 6.02 21.22 6.27Q19.44 6.52 19.11 8.55Q18.78 6.52 17 6.27Q18.78 6.02 19.11 3.99Z"
+				d="M19.8 3.23Q20.16 5.45 22.12 5.73Q20.16 6 19.8 8.23Q19.44 6 17.48 5.73Q19.44 5.45 19.8 3.23Z"
 				strokeWidth="1.2"
 				className="stroke-accent-line"
 			/>
