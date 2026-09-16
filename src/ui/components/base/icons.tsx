@@ -499,22 +499,31 @@ export function IconBooks({ size = 20 }: IconProps) {
 // it follows the palette (docs/42 — the green draws marks and lines, never an
 // area of fill), which is also why the sparkle is stroked hollow.
 //
+// Every coordinate is traced from the reference drawing rather than estimated:
+// its strokes were binarised, reduced to centrelines, and mapped into this
+// 24-unit box at 0.0179 units per reference pixel, placed so the rendered ink
+// keeps IconSidebar's margins. That is where the page edges come from — each one
+// runs nearly level out of its outer corner and only falls in the half nearest
+// the spine, where the two pages close into a point the spine runs down into.
+//
 // The two pages are not mirrored. The left one is closed on all four sides; the
 // right one is open at the top, where its top edge stops short and its outer
 // edge starts below where that edge would have landed. The sparkle sits in that
 // gap, so it reads as part of the drawing rather than a badge parked beside it.
 //
+// The reference draws at half our stroke weight, so tracing it exactly puts the
+// sparkle's ink against the book's. The two loose ends around it give way, not
+// the sparkle: the broken top edge is pulled back 0.52 along its own curve and
+// the outer edge's top end 1.37 down, which leaves 0.42 units of clear ground
+// between the two drawings.
+//
 // Judge it at 20px, the size it is drawn at in the bar. Blown up, an open book
 // reads a little like a lowercase m — every open-book glyph does, and that is
 // not a defect to draw out. What 20px needs is that the two pages stay open: a
-// white cavity in each, with the spine a dark line down the middle. An earlier
-// cut chased the large size instead, gave each page a bowl bottom, and closed
-// into a single cup at 20px.
+// white cavity in each, with the spine a dark line down the middle.
 //
 // The sparkle is stroked at 1.2, not the book's 1.5: at 1.5 its cavity closes
-// at 20px and it reads as a green blob rather than a star. It is centred at
-// (19.4, 4.8), the lowest it sits in the gap while no ink touches the two loose
-// ends around it.
+// at 20px and it reads as a green blob rather than a star.
 export function IconBookSparkle({ size = 20 }: IconProps) {
 	return (
 		<svg
@@ -528,11 +537,11 @@ export function IconBookSparkle({ size = 20 }: IconProps) {
 			strokeLinejoin="round"
 			xmlns="http://www.w3.org/2000/svg"
 		>
-			<path d="M11.5 9.2Q7 7.45 2.7 7.3V18.7Q7 18.85 11.5 20.8Z" />
-			<path d="M11.5 9.2Q14.2 7.6 17.1 7" />
-			<path d="M21.5 7.9V18.7Q16.5 19 11.5 20.8" />
+			<path d="M11.56 9.71C9.53 7.12 5.24 7.08 4.13 7.34C3.83 7.41 2.93 7.45 2.93 8.4V17.34C2.93 17.67 2.86 18.45 3.8 18.32C7.74 17.79 9.12 18.84 11.56 19.84Z" />
+			<path d="M11.56 9.71C12.44 8.97 13.39 7.95 15.73 7.47" />
+			<path d="M20.46 9.68V17.32C20.46 17.65 20.47 18.37 19.59 18.28C16.72 18.01 15.04 18.12 11.56 19.84" />
 			<path
-				d="M19.4 2.1Q19.75 4.45 22.1 4.8Q19.75 5.15 19.4 7.5Q19.05 5.15 16.7 4.8Q19.05 4.45 19.4 2.1Z"
+				d="M19.11 3.99Q19.44 6.02 21.22 6.27Q19.44 6.52 19.11 8.55Q18.78 6.52 17 6.27Q18.78 6.02 19.11 3.99Z"
 				strokeWidth="1.2"
 				className="stroke-accent-line"
 			/>
