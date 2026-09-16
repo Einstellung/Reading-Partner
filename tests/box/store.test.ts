@@ -5,6 +5,7 @@
 import { expect, test } from "bun:test";
 import { mergeBoxItem } from "../../src/box/merge";
 import {
+  UNSEEN,
   createBoxStore,
   randomBoxItemId,
   type BoxIo,
@@ -88,6 +89,23 @@ test("list is newest first; open and openCount leave the exits out", async () =>
   // The box a delivery made is the unit the reader is shown.
   expect(await store.openCount({ boxId: "batch-2" })).toBe(1);
   expect((await store.list({ boxId: "batch-1" })).length).toBe(2);
+});
+
+test("an item the reader jumped to is still open, but no longer unseen", async () => {
+  const store = createBoxStore(disk());
+  const seen = await store.put(input({ at: 1_000, cover: "one" }));
+  const waiting = await store.put(input({ at: 2_000, cover: "two" }));
+
+  await store.setState(seen.id, "told", 3_000);
+
+  expect((await store.open()).map((i) => i.id)).toEqual([waiting.id, seen.id]);
+  expect((await store.open(UNSEEN)).map((i) => i.id)).toEqual([waiting.id]);
+  expect(await store.openCount(UNSEEN)).toBe(1);
+
+  // Asked is the same: the reader has been there, the secretary has not finished.
+  await store.setState(waiting.id, "asked", 4_000);
+  expect(await store.openCount()).toBe(2);
+  expect(await store.openCount(UNSEEN)).toBe(0);
 });
 
 test("a state moves once per write and the revision goes up with it", async () => {
