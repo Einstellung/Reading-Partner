@@ -3,6 +3,13 @@
 // InfoPipeline. One pipeline instance for the app's lifetime so a generation
 // keeps running across view switches. AI calls happen here (streamChat under the
 // watchdog); the pure logic (adapters, triage prompt/validation) stays testable.
+//
+// Nothing starts a collection by calling the pipeline any more (docs/55 step
+// 12). The morning tick, the companion's generate_briefing and a reader's ask
+// all delegate a `collect` run, and the worker beside this file
+// (collect-worker.ts) is what holds the pipeline. The run file is also the
+// record of what has been collected for: the day's round is keyed by its
+// anchor, so a second ask reaches the run that is already there.
 
 import { callModel, resolveModel, type ResolvedModel } from "../../ai/model-call";
 import { realTimers } from "../../legion/execute/observable-run";
