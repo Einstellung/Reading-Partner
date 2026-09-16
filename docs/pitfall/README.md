@@ -44,6 +44,7 @@
 | 清洗第三方 HTML、往 innerHTML 里塞正文 | WebKit / webview |
 | 确认框、删除之类的破坏性操作 | WebKit / webview + 浮层与 shadcn 原语 |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
+| 给 soul、角色或 desk item 挂工具 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
@@ -69,7 +70,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 324）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 325）。
 
 ## EmbedPDF 引擎
 
@@ -336,6 +337,7 @@
 - [307-a-pi-lane-carries-no-prompt-of-its-own](./307-a-pi-lane-carries-no-prompt-of-its-own.md) — pi 的 lane 只带模型、思考档和活跃工具名（`LaneConfiguration` 三个字段），systemPrompt 和工具注册表是 harness 级的，`OperationRequest` 也没有单次覆盖口子：要自己 prompt 或自己工具集的 worker（隔离上下文的子 agent）得自己开 harness，身份写在 lane 名和 session 组上
 - [308-an-open-operation-blocks-its-lane-until-settled](./308-an-open-operation-blocks-its-lane-until-settled.md) — 重开 session 后上个进程留下的 open operation 让同一条 lane 的新 `accept` 报 `LaneBusy`；`resume()` 写完合成的中断 toolResult 会接着调模型跑完那条没人听的 run，`abort()` 同样写中断结果但以 aborted 结算、不发请求。常驻 lane（soul）重开时逐条 abort，不 resume
 - [313-a-tool-mounted-on-a-global-registry-comes-and-goes](./313-a-tool-mounted-on-a-global-registry-comes-and-goes.md) — `delegate` 按「这台设备登记过 worker 才挂」建，工具清单就跟着一个没有注销口子的模块级 Map 走：单跑绿、整套跑红，哪些文件红取决于文件顺序（坑 303 同一个病根）。工具无条件挂，能跑哪些 kind 写进参数描述，调用时按 kind 拒
+- [324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness](./324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness.md) — soul 每个回合挂一份 `statement_write`，简报的 desk item 又挂一份，回合组装照过、harness 的 `validateToolNames` 才抛 `Duplicate tool name`，而且说不出两边是谁；`assembleTurn` 的重名检查当时只比角色和 item，漏了 soul 自己那套基础工具。工具只挂在一处，检查改成走一遍最终清单、按 name 记 owner
 
 ## 开发环境
 

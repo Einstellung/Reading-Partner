@@ -3,10 +3,11 @@
 // them go into a turn and in what order is the desk's (companion/desk.ts); this
 // file only writes them.
 //
-// The briefing blocks carry the shared companion tool set's guidance (docs/17):
-// statement_write, probe/trial/add_source, and — where the host can open one —
-// the site sign-in window. Pure string assembly, so it is testable without a
-// provider; the tools themselves are bound in companion-live.ts.
+// The briefing blocks carry the guidance for every tool an info turn holds
+// (docs/17): probe/trial/add_source and — where the host can open one — the site
+// sign-in window, which the companion set mounts (companion-live.ts), and
+// statement_write, which the soul mounts on any turn (src/soul/self.ts). Pure
+// string assembly, so it is testable without a provider.
 
 import { languageInstruction, type AiLanguage } from "../../platform/app/settings";
 import { DESCRIPTOR_GUIDE, type SourceDescriptor } from "../sources/descriptor";

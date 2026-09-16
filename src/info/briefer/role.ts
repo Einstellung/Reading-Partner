@@ -71,7 +71,8 @@ export function holdSecretaryTools(env: DeskEnv, tools: readonly AgentTool[]): v
  * read off.
  *
  * probe_source and read_page are not here — they only fetch and report, and
- * queries flow (docs/17).
+ * queries flow (docs/17). statement_write is not here either: it writes, but it
+ * is the soul's tool on every turn and not the secretary's (src/soul/self.ts).
  */
 export const SECRETARY_WRITES: Role["writes"] = [
   // Really fetches three articles so the reader can see the source works. The
@@ -81,10 +82,6 @@ export const SECRETARY_WRITES: Role["writes"] = [
   // Subscribes the source. It writes on the spot, so what stands in front of it
   // is the user's explicit yes to that exact descriptor, after a trial of it.
   { tool: "add_source", gate: "instruction" },
-  // What the reader just said about themselves, in their own words. It writes on
-  // the spot, and what stands in front of it is their having said it — their
-  // claim about themselves, not a conclusion drawn about them.
-  { tool: "statement_write", gate: "instruction" },
   // Draft a lab, propose closing one: both write nothing. The card's Apply does,
   // in the host.
   { tool: "propose_lab", gate: "card" },

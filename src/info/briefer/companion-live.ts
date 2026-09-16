@@ -17,7 +17,6 @@ import {
 } from "../sources/source-store";
 import { applySessionCheck, signInSites } from "../sources/site-session";
 import { liveWebviewFetch } from "../sources/source-live";
-import type { StatementToolContext } from "../../memory";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { LabArchiveCardData, LabProposalCardData } from "../boxes/cards";
 import { activeLabs, loadLabs } from "../labs/store";
@@ -40,10 +39,6 @@ export interface BriefingControl {
 
 export interface LiveCompanionOptions {
   collecting?: boolean;
-  // The statement tool's context, built by whoever holds the thread
-  // (ui/components/info/use-info-call.ts). Without it statement_write is not
-  // mounted: a statement is dated by the message it rests on and there is none.
-  statements?: StatementToolContext;
   // The conversation a lab proposal is made in, and where its card goes. Without
   // it propose_lab and archive_lab are not mounted.
   lab?: {
@@ -111,9 +106,10 @@ function liveSiteSignIn(): SiteSignInDeps {
   };
 }
 
-// The shared companion tool set bound live: the source tools, statement_write,
-// and generate_briefing. The card sink surfaces the trial confirm card, and the
-// briefing controller drives the regenerate tool.
+// The shared companion tool set bound live: the source tools, read_page and
+// generate_briefing. The card sink surfaces the trial confirm card, and the
+// briefing controller drives the regenerate tool. statement_write is not among
+// them — the soul mounts it on every turn (docs/pitfall/324).
 //
 // open_site_sign_in is mounted only where the webview commands exist (Linux
 // desktop today). Elsewhere the tool is absent rather than present-and-failing,
@@ -142,10 +138,6 @@ export async function buildLiveCompanionTools(
     fetchViaWebview: liveWebviewFetch(),
     addSource: (d) => addSource(d).then(() => {}),
     onProbeCard,
-    // What the reader says about themselves lands in the same statement store
-    // the reading side writes to (docs/48). Mounted only where the caller knows
-    // the conversation, because the message they just sent is the evidence.
-    statements: opts.statements,
     startBriefing: briefing.start,
     // Both halves of the sign-in gate. The webview is the first: without one
     // there is no window to open. Collecting is the second — a machine that does

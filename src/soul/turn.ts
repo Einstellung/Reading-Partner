@@ -114,20 +114,31 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // happens to hold.
   const tools = [...soul.tools, ...items.flatMap((i) => i.tools)];
   const toolNames = tools.map((t) => t.name);
-  // A role's tool and an item's tool answering to one name is the same mistake
-  // openDesk refuses between two items: the model would be handed a name that
-  // means two things and the assembly would pick one behind everybody's back.
-  if (soul.role) {
-    const held = new Set(soul.role.tools.map((t) => t.name));
-    for (const item of items) {
-      for (const tool of item.tools) {
-        if (held.has(tool.name)) {
-          throw new Error(
-            `soul: the "${soul.role.id}" role and the "${item.kind}" desk item both offer the tool "${tool.name}"`,
-          );
-        }
-      }
+  // Two tools answering to one name is the mistake openDesk refuses between two
+  // items, and the assembly can make it in more ways than that: the soul's own
+  // set rides every turn beside whatever the role put on and whatever the desk
+  // holds. So the whole final list is walked once rather than the role against
+  // the items — a name that means two things is one the model is handed twice,
+  // and the harness that validates the list rejects it without being able to say
+  // who the two owners were (docs/pitfall/324).
+  const roleLabel = soul.role ? `the "${soul.role.id}" role` : "";
+  const roleTools = new Set<AgentTool>(soul.role?.tools ?? []);
+  const owned: { tool: AgentTool; by: string }[] = [
+    ...soul.tools.map((tool) => ({
+      tool,
+      by: roleLabel !== "" && roleTools.has(tool) ? roleLabel : "the soul's own set",
+    })),
+    ...items.flatMap((item) =>
+      item.tools.map((tool) => ({ tool, by: `the "${item.kind}" desk item` })),
+    ),
+  ];
+  const owner = new Map<string, string>();
+  for (const { tool, by } of owned) {
+    const held = owner.get(tool.name);
+    if (held !== undefined) {
+      throw new Error(`soul: ${held} and ${by} both offer the tool "${tool.name}"`);
     }
+    owner.set(tool.name, by);
   }
   // What each item is told the rest of the desk brought. Its own paragraphs are
   // left out: it already has them and decides where they sit.

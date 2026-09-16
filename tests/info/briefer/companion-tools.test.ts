@@ -1,7 +1,8 @@
 // The shared companion tools (src/info/briefer/companion-tools.ts): the tool set
-// includes the three source tools and, where the caller knows the conversation,
-// the statement tool the reading side mounts; the status label extends the
-// source labels. Card sink injected; no save, no fetch. Run: bun test.
+// is the three source tools, read_page and generate_briefing, and the status
+// label extends the source labels. statement_write is not one of them — the soul
+// mounts that on every turn (docs/pitfall/324). Card sink injected; no save, no
+// fetch. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
@@ -14,7 +15,6 @@ import {
   type SiteSignInDeps,
 } from "../../../src/info/briefer/companion-tools";
 import { signInSites } from "../../../src/info/sources/site-session";
-import type { StatementToolContext } from "../../../src/memory";
 import { SECRETARY_WRITES } from "../../../src/info/briefer/role";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
 import type { ExtractReadable } from "../../../src/info/extract/readable-select";
@@ -23,48 +23,30 @@ import type { RunStart } from "../../../src/info/boxes/pipeline";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 
-// The statement tool's context: the message the reader just sent, which is the
-// evidence a statement written this turn rests on. Nothing behind the store —
-// the tool is only asked whether it mounted.
-const STATEMENTS = {
-  store: {
-    getStatement: async () => null,
-    createStatement: async () => {
-      throw new Error("not used");
-    },
-    supersede: async () => {},
-  },
-  message: { id: "m1", ts: 1757000000000, threadId: "briefing-2026-09-09", role: "user" as const },
-  threadId: "briefing-2026-09-09",
-} as unknown as StatementToolContext;
-
 function deps() {
   return {
     fetchFn: async () => new Response(""),
     extract,
     addSource: async () => {},
     onProbeCard: () => {},
-    statements: STATEMENTS,
     startBriefing: () => "started" as const,
   };
 }
 
-// A statement is dated by the message it rests on, so a caller that does not
-// know the conversation gets no statement tool rather than one that throws.
-test("the statement tool is mounted only where the caller knows the conversation", () => {
-  expect(buildCompanionTools({ ...deps(), statements: undefined }).map((t) => t.name)).not.toContain(
-    "statement_write",
-  );
-});
-
-test("buildCompanionTools mounts the source tools plus read_page, statement_write and generate_briefing", () => {
+test("buildCompanionTools mounts the source tools plus read_page and generate_briefing", () => {
   const names = buildCompanionTools(deps()).map((t) => t.name);
   expect(names).toContain("probe_source");
   expect(names).toContain("trial_source");
   expect(names).toContain("add_source");
   expect(names).toContain("read_page");
-  expect(names).toContain("statement_write");
   expect(names).toContain("generate_briefing");
+});
+
+// The one place statement_write is mounted is the soul, on every turn wherever it
+// is held (src/soul/self.ts). A second copy from the desk is one name meaning two
+// things, and the harness refuses the call outright (docs/pitfall/324).
+test("the companion set leaves statement_write to the soul", () => {
+  expect(buildCompanionTools(deps()).map((t) => t.name)).not.toContain("statement_write");
 });
 
 // The secretary's roster of side effects (soul/roles.ts) is a declaration, so
@@ -123,7 +105,6 @@ test("a device that does not collect gets no add-source tools", () => {
   expect(names).not.toContain("trial_source");
   expect(names).not.toContain("add_source");
   expect(names).toContain("read_page");
-  expect(names).toContain("statement_write");
   // Still mounted: on a reader the host turns it into a request for the
   // collector rather than a run.
   expect(names).toContain("generate_briefing");

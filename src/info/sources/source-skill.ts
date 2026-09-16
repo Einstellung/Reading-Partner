@@ -1,6 +1,6 @@
-// The first-run onboarding system prompt (docs/17). The info companion already
-// carries the shared tools (probe/trial/add_source + statement_write); this prompt
-// runs onboarding on top of them. It injects NO source menu: the software holds
+// The first-run onboarding system prompt (docs/17). The turn already carries the
+// tools — probe/trial/add_source from the companion set, statement_write from the
+// soul — and this prompt runs onboarding on top of them. It injects NO source menu: the software holds
 // no system defaults for the user's interests. Candidates come only from what the
 // user names and — once an interest is concrete — from the model's own knowledge.
 // Pure string assembly, like chat.ts / triage.ts.
@@ -37,7 +37,7 @@ const ONBOARDING = [
 export function addSourceSystemPrompt(opts: { aiLanguage?: AiLanguage; onboarding?: boolean } = {}): string {
   const lang = languageInstruction(opts.aiLanguage ?? "auto");
   const parts = [
-    "You help the user subscribe to information sources for their daily briefing, using the shared companion tools: probe_source, trial_source, add_source, and statement_write.",
+    "You help the user subscribe to information sources for their daily briefing, using the tools you have: probe_source, trial_source, add_source, and statement_write.",
     lang,
     RULES,
     "",

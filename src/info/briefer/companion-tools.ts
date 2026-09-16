@@ -1,15 +1,16 @@
 // The shared info-companion tool set (docs/16/17): the three add-source tools
-// plus the statement tool the reading conversation mounts, on every info chat
-// entry (briefing Ask, article chat, the add-source flow). Pure: the card sink
-// and the statement context are injected, so the tools test without a real save.
-// Composition over the source tools keeps the consent rules in one place.
+// and what rides with them, on every info chat entry (briefing Ask, article
+// chat, the add-source flow). statement_write is not one of them — the soul
+// mounts that on every turn wherever it is held (src/soul/self.ts), and a second
+// copy from the desk is one name meaning two things (docs/pitfall/324). Pure:
+// the card sink is injected, so the tools test without a real save. Composition
+// over the source tools keeps the consent rules in one place.
 //
 // open_site_sign_in joins them where the host has a webview to open one with. It
 // takes a site identifier and never a URL — the reason is at buildSignInTool.
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
-import { buildStatementTools, type StatementToolContext } from "../../memory";
 import type { RequestOutcome } from "./reader";
 import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
 import {
@@ -52,12 +53,6 @@ export interface CompanionToolDeps extends SourceToolDeps {
   // source trials to a standfirst on a phone and to a full story on the desktop.
   // Defaults to true, the shape the app had before there were two roles.
   collecting?: boolean;
-  // What the reader says about themselves goes through the one statement tool
-  // the reading conversation already mounts (memory/statements/tools.ts): the
-  // message they just sent is its evidence, so the caller that knows the thread
-  // builds this. Absent where there is no message to anchor a statement to, and
-  // then the tool is not mounted at all.
-  statements?: StatementToolContext;
   // Kick a background briefing job and return at once: "retriage" re-sorts today's
   // cached items with the current profile (no fetch); "full" re-collects every
   // source and re-triages, overwriting today's briefing. The host owns progress,
@@ -273,8 +268,8 @@ export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
   };
 }
 
-// The full companion tool set: source tools + read_page + statement_write +
-// generate_briefing, plus open_site_sign_in where the host can really open one.
+// The full companion tool set: source tools + read_page + generate_briefing,
+// plus open_site_sign_in where the host can really open one.
 //
 // read_page stays on a reader (docs/36). It is not a subscription fetching
 // itself on a schedule — it is one link the user pasted, read once because they
@@ -283,14 +278,15 @@ export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
   return [
     ...(deps.collecting === false ? [] : buildSourceTools(deps)),
     buildReadPageTool(deps),
-    ...(deps.statements ? buildStatementTools(deps.statements) : []),
     buildGenerateBriefingTool(deps),
     ...(deps.labs ? [buildProposeLabTool(deps.labs), buildArchiveLabTool(deps.labs)] : []),
     ...(deps.siteSignIn ? [buildSignInTool(deps.siteSignIn)] : []),
   ];
 }
 
-// A running/failed status line per companion tool, extending the source labels.
+// A running/failed status line for every tool an info turn can call, extending
+// the source labels. The companion's own, plus the ones the soul mounts on any
+// turn (statement_write, propose_topic) and the chat still has to label.
 export function companionToolStatusLabel(name: string, args: Record<string, unknown>): string {
   if (name === "read_page") return `Reading ${String(args.url ?? "the page")}`;
   if (name === "statement_write") return "Writing down what you said about yourself";

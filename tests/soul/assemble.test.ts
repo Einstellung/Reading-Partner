@@ -3,8 +3,8 @@
 // book contributes is tested in tests/reading, and what is tested here is the
 // putting together. Run: bun test.
 
-import { beforeEach, expect, test } from "bun:test";
-import { assembleTurn, configuredModel, type SequenceIo } from "../../src/soul";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { assembleTurn, configuredModel, registerRole, type SequenceIo } from "../../src/soul";
 import { topicGuidance } from "../../src/memory";
 import type { ConversationIo } from "../../src/conversations";
 import {
@@ -84,6 +84,19 @@ function tool(name: string) {
   return { name, description: "", parameters: {}, execute: async () => "" } as never;
 }
 
+// The live companion set by name (info/briefer/companion-tools.ts).
+// statement_write is not in it: the soul mounts that one, on every turn.
+const COMPANION = [
+  "probe_source",
+  "trial_source",
+  "add_source",
+  "read_page",
+  "generate_briefing",
+  "propose_lab",
+  "archive_lab",
+  "open_site_sign_in",
+].map(tool);
+
 // Lay a desk out of items already built, without going through a domain.
 async function desk(items: DeskItem[], e: DeskEnv = env()) {
   for (const it of items) registerDeskItemKind({ kind: it.kind, open: async () => it });
@@ -93,9 +106,17 @@ async function desk(items: DeskItem[], e: DeskEnv = env()) {
   );
 }
 
+// Roles a case here registers, taken off again after it: a second role answering
+// to one name is a conflict the registry throws on (soul/roles.ts).
+const undo: (() => void)[] = [];
+
 beforeEach(() => {
   installAppData();
   rebuildThreadStoreForTests();
+});
+
+afterEach(() => {
+  while (undo.length) undo.pop()!();
 });
 
 test("one item's prompt is the whole prompt, byte for byte", async () => {
@@ -204,6 +225,46 @@ test("the tools are the soul's and then each item's", async () => {
     "read_pages",
     "list_saved_articles",
   ]);
+});
+
+// The check is over the whole final list and not the role against the desk:
+// statement_write rides every turn from the soul (self.ts), so a desk item
+// offering one is the same name meaning two things. It used to pass the assembly
+// and die in the harness's own validation, which cannot say whose the two names
+// were (docs/pitfall/324).
+test("a desk item offering one of the soul's own tool names is refused", async () => {
+  createBookThread("book-1", "thread-1");
+  appendMessage("book-1", "thread-1", { role: "user", text: "I skip the diagrams", ts: 1000 });
+  const laid = await desk([item("guest", { tools: [tool("statement_write")] })]);
+  await expect(assembleTurn({ desk: laid })).rejects.toThrow(
+    /the soul's own set and the "guest" desk item both offer the tool "statement_write"/,
+  );
+});
+
+// And the shape the info briefing really assembles: a secretary carrying the live
+// companion set over a desk that anchors the retrieval. Every name in the list is
+// its own, which is what the harness is going to check anyway.
+test("a secretary turn with the companion tools repeats no tool name", async () => {
+  createBookThread("book-1", "thread-1");
+  appendMessage("book-1", "thread-1", { role: "user", text: "worth reading?", ts: 1000 });
+  undo.push(
+    registerRole({
+      id: "assemble-test-secretary",
+      duty: "You keep the briefing.",
+      tools: () => COMPANION,
+      writes: [],
+    }),
+  );
+  const laid = await desk([item("assemble-briefing", anchoring)]);
+  const turn = await assembleTurn({
+    desk: laid,
+    role: "assemble-test-secretary",
+    topic: CARD_SURFACE,
+  });
+  const names = turn!.tools.map((t) => t.name);
+  expect(new Set(names).size).toBe(names.length);
+  expect(names.filter((n) => n === "statement_write")).toHaveLength(1);
+  expect(names).toContain("generate_briefing");
 });
 
 // The AI can reach for what it and the reader already said, wherever they said

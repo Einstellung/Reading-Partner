@@ -27,7 +27,6 @@ import {
   patchThreadMessage,
   setThreadTopic,
 } from "../../../platform/app/threads";
-import { latestReaderMessage, statementStore } from "../../../memory";
 import { buildLiveCompanionTools } from "../../../info/briefer/companion-live";
 import { companionToolStatusLabel } from "../../../info/briefer/companion-tools";
 import {
@@ -497,15 +496,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
             { start: (scope) => runBriefingJob(scope) },
             {
               collecting,
-              // What the reader says about themselves is written down through
-              // the same tool the reading conversation mounts (docs/48). The
-              // message they just sent is its evidence, so it is built here,
-              // after that message has been appended to the thread.
-              statements: {
-                store: statementStore,
-                message: latestReaderMessage(getThread(bookId, anchor.threadId)?.messages ?? []),
-                threadId: anchor.threadId,
-              },
               lab: {
                 threadId: anchor.threadId,
                 onLabCard: (payload) => insertCard("lab", payload),
