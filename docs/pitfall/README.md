@@ -70,7 +70,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 325）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 335）。
 
 ## EmbedPDF 引擎
 
@@ -138,6 +138,7 @@
 - [129-wheel-delta-comes-in-three-units](./129-wheel-delta-comes-in-three-units.md) — `deltaY` 的单位由 `deltaMode` 说了算（像素/行/页），行模式一格约 3，只按像素累计的手势在那种引擎上要拨十几下才动一格；累加前先归一到像素
 - [137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch](./137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch.md) — 缩放插件的 `enableWheel` 只是 ctrl/meta+滚轮的开关（裸滚轮在 handler 第一行就返回，从来不归它管），关掉它等于白白没有桌面缩放；步长是 `1 - deltaY*0.01` 且没有灵敏度选项，Chromium 一格 100px 就翻倍，只能自己接管，用 `exp(-px/800)` 一条指数曲线同时喂鼠标和触控板
 - [143-ios-puts-its-selection-callout-below-the-selection](./143-ios-puts-its-selection-callout-below-the-selection.md) — iPad 上系统的 `Copy | Look Up | Translate` 条不是固定在选区上方：选区中心在安全区竖向中点以上时它在下方，以下时在上方，两边都是离选区 15px、高 44px，横向对着选区中心夹进屏幕。它是浮在 WKWebView 上的 UIKit 视图，DOM 里没有、`elementFromPoint` 看不见、落在它上面的触摸网页收不到；贴着选区放的浮动控件被盖掉 37px 只剩 7px 可点。那个控件已删（作废 2026-08-20），再往选区旁边放东西要按这条带子两边都让并重新量
+- [333-idb-cannot-hold-a-contact-and-then-move-it](./333-idb-cannot-hold-a-contact-and-then-move-it.md) — idb 的 HID 通道按住不动或按轨迹移动，没有「按住再拖」这一笔，长按延长划线验不了；走 GestureDriver 的 `press(forDuration:thenDragTo:)`，命令是 `ios-sim.sh press-drag`
 
 ## 网络与 CSP
 
@@ -177,6 +178,7 @@
 - [236-a-destination-sync-already-delivered-locks-the-gate](./236-a-destination-sync-already-delivered-locks-the-gate.md) — 桌面先跑完迁移，`observations/` 同步到 iPad；iPad 再跑第 8 步时每个目标都已存在，全被 `refuse`，源文件原地不动，而全屏蒙层的判据看的正是源，于是 Try again 永远是同一句「old files are still there」，只能重装。目标已存在改成：字节相同就删源，不同就把源的版本按内容 digest 停成 `m-<id>.conflict-<hex>.md` 再删源；闸门读的那份数据不许有「跳过」这条出路
 - [237-per-field-merge-splits-a-pair](./237-per-field-merge-splits-a-pair.md) — `settings.json` 走 `fields` 策略，每个键独立按内容 hash 定胜负，等于一个键掷一次硬币；`defaultProviderId` 和 `defaultModelId` 因此被拆成双方都没有过的组合（22 组实测 10 组不存在），此后每次调用都 `unknown model 'X' for DeepSeek`。`fieldGroupsFor` 按路径声明字段组，`fields` 把一组键当一个复合值整组定胜负；`enforceKnownModel` 留在两条读盘的路上兜合并层看不见的原因（下架的模型、更老的构建），`resolveModel` 从磁盘读，所以必须写回盘
 - [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
+- [331-a-seeded-library-json-of-the-wrong-shape-is-renamed-away](./331-a-seeded-library-json-of-the-wrong-shape-is-renamed-away.md) — `library.json` 是 `{"books":{…}}` 不是扁平表；形状不对的守卫会把它改名成 `library.json.corrupt-<时间戳>` 再当空库跑，界面上只看到一个每张卡都当 PDF、没有续读的书架。喂完种子先查容器里有没有 `*.corrupt-*`
 
 ## 提取（壳侧 pdf.js）
 
@@ -342,7 +344,7 @@
 ## 开发环境
 
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
-- [324-a-second-page-on-the-dev-server-shares-the-sim-bridge](./324-a-second-page-on-the-dev-server-shares-the-sim-bridge.md) — 模拟器的 Safari 里留着一个 `localhost:1420` 标签，它也连着 sim bridge，`eval` 在 app 和它之间轮流执行：触摸落在 app 上，读数一半来自那个标签，于是"截图有高亮、`saved` 是 0"。先连问 `!!window.__TAURI_INTERNALS__`，答 false 的页面送去 `about:blank`
+- [334-a-second-page-on-the-dev-server-shares-the-sim-bridge](./334-a-second-page-on-the-dev-server-shares-the-sim-bridge.md) — 模拟器的 Safari 里留着一个 `localhost:1420` 标签，它也连着 sim bridge，`eval` 在 app 和它之间轮流执行：触摸落在 app 上，读数一半来自那个标签，于是"截图有高亮、`saved` 是 0"。先连问 `!!window.__TAURI_INTERNALS__`，答 false 的页面送去 `about:blank`
 - [286-vite-started-outside-the-worktree-root-kills-the-sim-bridge](./286-vite-started-outside-the-worktree-root-kills-the-sim-bridge.md) — 验证脚本把 vite 起在 scratchpad 而不是 worktree 根，vite 报 ready 但 `/` 是 404，webview 白屏；sim bridge 是 vite 插件、eval 要页面自己连上来，没加载就没人接，`drive.py` 一律 `page never answered`，连 reload 都送不进去。起完先 curl 断言 200，白屏了只能按 PID 重启 app
 - [289-playwright-from-bunx-brings-no-browser](./289-playwright-from-bunx-brings-no-browser.md) — `bunx playwright` 每次拉当天最新包，它只认自己那版钉死的 chromium revision，`~/.cache/ms-playwright/` 里已有的别的 revision 一律不用，`chromium.launch()` 直接报 executable 不存在。别去 `playwright install`，launch 时用 `executablePath` 指到 cache 里现成的 headless shell
 - [290-networkidle-never-comes-on-an-animated-page](./290-networkidle-never-comes-on-an-animated-page.md) — vite 的 HMR websocket 加页面自己的 rAF 循环把连接数顶住，`waitUntil: "networkidle"` 必超时；改 `domcontentloaded` 加 `waitForSelector`
@@ -396,6 +398,7 @@
 
 - [311-another-sessions-server-answers-on-the-port](./311-another-sessions-server-answers-on-the-port.md) — 端口被同会话另一个 agent 的 harness 服务器占着，自己那条 `nohup http.server` 当场 `Address already in use` 退掉（只进日志），`curl` 的 200 是旧服务器答的，连截三轮都是改动前的界面。起完 grep 页面里的 bundle 文件名和 build 输出比对，端口按会话取
 - [299-negated-class-spans-lines-in-a-grep-guard](./299-negated-class-spans-lines-in-a-grep-guard.md) — 扫源码的守卫正则里 `[^;]*` 会跨行，命中比 grep 多；否定类要排掉 `\n`
+- [332-copying-any-file-into-the-mac-checkout-resets-the-nav-stack](./332-copying-any-file-into-the-mac-checkout-resets-the-nav-stack.md) — vite 监听整个项目根，`scp` 一个驱动脚本进去也整页 reload，手机壳的导航栈回到首页，接着按记下的坐标点下去点的全是别的屏。驱动界面的过程中不往 Mac 的 checkout 里写文件
 
 ## 历史（zotero/reader 引擎时代）
 

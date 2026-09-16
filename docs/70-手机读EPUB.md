@@ -34,6 +34,26 @@
 
 `PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/PhoneReader.tsx`：自己的顶栏（返回、书名、页码、Outline、笔架、Learn 按钮），笔架复用 `PenToolbar` 的 `disabled`，阅读区挂 `FlowReaderPane`。打开顺序复用 `open-book.ts` 里能用的头几步（读位置、`preparePagination`、读标注），不抽全文、不抽图、不读线程、不蒸馏：桌上没有 AI。
 
+## 验过的
+
+2026-09-16 在 iPhone 17 模拟器（iOS 26.5）上从首页跑到书里，用真触摸驱动，读数来自 app 容器里的文件。
+手机壳按宽度和指针选中，iPhone 模拟器自动进的就是它（402×874，`pointer: coarse`）。
+
+书架用种子数据摆了四样：一本真书（10 MB 的中英对照 EPUB，222 页）、一本合成 EPUB、一个 PDF、
+一条只有 library.json 记录没有字节的 EPUB。首页 Library 卡上是那本真书加「Continue reading」；
+点 PDF 出「PDFs open on iPad and desktop」；没字节的那本标「In the cloud」。
+
+书里：Rendering… 之后是一列正文，顶栏是块号加 `printed`（14 / 222 printed 3）；原生滚动改块号；
+长按落一条单词高亮；笔架选 Highlight 再拖落一条跨词高亮；按住再拖（长按延长）也落一条；
+点已有标注弹删除，删掉就没了；Outline 跳章，块号和 `printed` 跟着变；AI pen 和 Learn 画着但按不动，
+各带一句原因；退回书架再从续读进来落在同一块。盘上 `reading-state.json` 写的是 `cfi` + `pageIndex` +
+`scale: "auto"` + `layout: "vertical"`，`annotations-<bookId>.json` 写的是 range CFI 加 `quote`、
+`pageIndex`、`pageLabel`、`sortIndex`——和 docs/64 同一份形状。
+
 ## 待验
 
-真机一次没跑。71 MB 那本在 iPhone 上的内存没量。外壳这半只在 happy-dom 上按 stub pane 验过（`tests/ui/components/phone/`），`?shell=phone` 的真实浏览器没跑过：书架和续读卡要 Tauri 的 appdata 才有数据，而 dev 构建用的是用户自己那份。
+- 真机一次没跑，只跑了模拟器。71 MB 那本在 iPhone 上的内存没量。
+- 从 Drive 按需拉一本没跑：这台模拟器没登过 Google 账号，点「In the cloud」出的是
+  「This build has no Google account set up」。要验得先在模拟器里登一次。
+- iPad 打开手机留下的位置没对过：iPad 模拟器要另装一次 app、另喂一份容器，不是一次就能跑完的事。
+- 71 MB 那本、以及图很多的书，重排列的滚动顺滑度没量。

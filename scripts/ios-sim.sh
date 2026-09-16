@@ -82,6 +82,7 @@
 #   scripts/ios-sim.sh swipe <x1> <y1> <x2> <y2> [seconds] [px-per-step]
 #   scripts/ios-sim.sh native [name-filter]  the UIKit accessibility tree, with frames
 #   scripts/ios-sim.sh pinch out|in [scale]  two real contacts, via XCUITest
+#   scripts/ios-sim.sh press-drag <x1> <y1> <x2> <y2> [hold]  hold, then drag
 #   scripts/ios-sim.sh gesture <name> [args...]   a recorded scenario (below)
 #   scripts/ios-sim.sh scenarios            list them
 #
@@ -282,8 +283,10 @@ for e in items:
 # second finger goes through a UI-test bundle instead (scripts/ios-sim/
 # GestureDriver), which drives the app by bundle id and needs no host app of its
 # own. Built once into DerivedData and re-run per gesture.
-cmd_pinch() {
-  local dir="${1:-out}" scale="${2:-2.0}"
+# One run of the bundle. The caller exports whatever TEST_RUNNER_* the case it
+# wants reads; the build happens once and every later run reuses it.
+run_gesture_driver() {
+  local what="$1"
   local proj="$JS/GestureDriver"
   command -v xcodegen >/dev/null || die "xcodegen not found (brew install xcodegen)"
   [ -d "$proj/GestureDriver.xcodeproj" ] || (cd "$proj" && xcodegen generate >/dev/null)
@@ -294,13 +297,32 @@ cmd_pinch() {
       || { tail -20 "$OUT/xcuitest-build.log" >&2; die "could not build the gesture driver"; }
     mkdir -p "$OUT/xcuitest-built"
   fi
-  (cd "$proj" && TEST_RUNNER_GESTURE="pinch-$dir" TEST_RUNNER_SCALE="$scale" \
-    TEST_RUNNER_TARGET_BUNDLE_ID="$BUNDLE_ID" \
+  (cd "$proj" && TEST_RUNNER_TARGET_BUNDLE_ID="$BUNDLE_ID" \
     xcodebuild test-without-building -project GestureDriver.xcodeproj \
     -scheme GestureDriverUITests -destination "$dest" >"$OUT/xcuitest.log" 2>&1) \
-    || { grep -E "error:|XCTAssert|failed" "$OUT/xcuitest.log" | head -10 >&2; die "the pinch did not run"; }
-  grep -qE "passed \(" "$OUT/xcuitest.log" || { tail -20 "$OUT/xcuitest.log" >&2; die "the pinch did not run"; }
-  echo "pinch-$dir scale=$scale"
+    || { grep -E "error:|XCTAssert|failed" "$OUT/xcuitest.log" | head -10 >&2; die "$what did not run"; }
+  grep -qE "passed \(" "$OUT/xcuitest.log" || { tail -20 "$OUT/xcuitest.log" >&2; die "$what did not run"; }
+  echo "$what"
+}
+
+cmd_pinch() {
+  local dir="${1:-out}" scale="${2:-2.0}"
+  export TEST_RUNNER_GESTURE="pinch-$dir" TEST_RUNNER_SCALE="$scale"
+  run_gesture_driver "pinch-$dir scale=$scale"
+}
+
+# A contact that goes down, stays down, and then moves — the long press that
+# extends into a drag, which is how the phone's reflow view stretches a
+# highlight (docs/70). idb cannot do it: its HID channel holds a contact still
+# or moves it, never one and then the other, so this goes through the same
+# UI-test bundle the pinch uses. Coordinates are points from the top left like
+# every other command here, and `hold` is how long the finger waits before it
+# moves.
+cmd_press_drag() {
+  local x1="$1" y1="$2" x2="$3" y2="$4" hold="${5:-0.9}"
+  export TEST_RUNNER_GESTURE="press-drag" TEST_RUNNER_FROM_X="$x1" TEST_RUNNER_FROM_Y="$y1" \
+    TEST_RUNNER_TO_X="$x2" TEST_RUNNER_TO_Y="$y2" TEST_RUNNER_HOLD="$hold"
+  run_gesture_driver "press-drag $x1,$y1 -> $x2,$y2 hold=$hold"
 }
 
 # A drag. The two optional arguments are what make it a measurement rather than
@@ -502,6 +524,7 @@ case "${1:-}" in
   native) shift; cmd_native "$@" ;;
   swipe) shift; cmd_swipe "$@" ;;
   pinch) shift; cmd_pinch "$@" ;;
+  press-drag) shift; cmd_press_drag "$@" ;;
   gesture) shift; cmd_gesture "$@" ;;
   scenarios) cmd_scenarios ;;
   *) sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//' ;;

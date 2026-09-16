@@ -1,4 +1,4 @@
-# 324 模拟器里另一个开着 dev server 页面的标签会分走 sim bridge 的 eval
+# 334 模拟器里另一个开着 dev server 页面的标签会分走 sim bridge 的 eval
 
 ## 现象
 
