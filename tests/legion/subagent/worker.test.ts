@@ -1,31 +1,34 @@
-// The literature research worker (src/reading/papers/research-worker.ts,
-// docs/68): the brief comes off a file, the sub-agent runs on its own harness,
-// its progress is reported in the runner's wording, and what it wrote goes to an
-// output file the run points at. A run that established nothing throws, so the
-// runner counts the attempt.
-// Run: scripts/t.sh tests/reading/papers/research-worker.test.ts
+// The skeleton every agent worker is built from (src/legion/subagent/worker.ts,
+// docs/55): the brief comes off a file, a sub-agent runs it, its progress is
+// reported in the runner's wording, and what it wrote goes to an output file the
+// run points at. A run that established nothing throws, so the runner counts the
+// attempt instead of delivering what the model already believed as a finding.
+// The kinds built on it have their own tests for their own sub-agent and cap.
+// Run: scripts/t.sh tests/legion/subagent/worker.test.ts
 
 import { expect, test } from "bun:test";
-import { researchWorker, RESEARCH_KIND } from "../../../src/reading/papers/research-worker";
+import { agentWorker } from "../../../src/legion/subagent/worker";
 import type { WorkerContext } from "../../../src/legion/execute/worker";
 import type { SubagentDefinition, SubagentTurnFn } from "../../../src/legion/subagent";
 import type { Run } from "../../../src/legion/run";
 
 const BRIEF = "legion/briefs/one.md";
+// Under the definition's own default, so the spec's cap is the binding one.
+const ROUNDS = 3;
 
 function definition(): SubagentDefinition {
   return {
-    name: "research_literature",
+    name: "looker",
     description: "d",
-    label: "Searching the literature",
+    label: "Looking into it",
     systemPrompt: "s",
-    // One tool, so evidence is required the way the real definition's is.
+    // One tool, so evidence is required the way a real definition's is.
     tools: [
       {
-        name: "search_papers",
+        name: "search",
         description: "search",
         parameters: { type: "object", properties: {} } as never,
-        execute: async () => "one paper",
+        execute: async () => "one record",
       },
     ],
   };
@@ -34,7 +37,7 @@ function definition(): SubagentDefinition {
 function context(): { ctx: WorkerContext; reported: string[] } {
   const reported: string[] = [];
   const ctx: WorkerContext = {
-    run: { id: "r-abc", kind: RESEARCH_KIND } as unknown as Run,
+    run: { id: "r-abc", kind: "looking" } as unknown as Run,
     report: async (text) => {
       reported.push(text);
     },
@@ -50,7 +53,7 @@ function context(): { ctx: WorkerContext; reported: string[] } {
 // sub-agent runner wraps the tools, so calling one is what makes the evidence
 // rule pass.
 const answering: SubagentTurnFn = async (request) => {
-  const search = request.tools.find((t) => t.name === "search_papers")!;
+  const search = request.tools.find((t) => t.name === "search")!;
   await search.execute({});
   request.onRound({ round: 1, rounds: request.maxRounds });
   return { kind: "answer", text: "Smith 2023 — https://doi.org/10.1/x\nIt settles the question." };
@@ -58,19 +61,21 @@ const answering: SubagentTurnFn = async (request) => {
 
 function worker(turn: SubagentTurnFn, briefText = "what has been published since 2020") {
   const outputs = new Map<string, string>();
-  const run = researchWorker({
-    turn,
-    agent: async () => definition(),
-    readBrief: async (path) => {
-      if (path !== BRIEF) throw new Error(`no brief at ${path}`);
-      return briefText;
+  const run = agentWorker(
+    { agent: async () => definition(), rounds: ROUNDS },
+    {
+      turn,
+      readBrief: async (path) => {
+        if (path !== BRIEF) throw new Error(`no brief at ${path}`);
+        return briefText;
+      },
+      writeOutput: async (runId, text) => {
+        const path = `legion/outputs/${runId}.md`;
+        outputs.set(path, text);
+        return path;
+      },
     },
-    writeOutput: async (runId, text) => {
-      const path = `legion/outputs/${runId}.md`;
-      outputs.set(path, text);
-      return path;
-    },
-  });
+  );
   return { run, outputs };
 }
 
@@ -78,19 +83,27 @@ test("the brief the soul wrote becomes the sub-agent's whole task", async () => 
   let task = "";
   const { run } = worker(async (request) => {
     task = request.task;
-    const search = request.tools.find((t) => t.name === "search_papers")!;
-    await search.execute({});
+    await request.tools.find((t) => t.name === "search")!.execute({});
     return { kind: "answer", text: "one entry" };
   });
-  const { ctx } = context();
-  await run(BRIEF, ctx).done;
+  await run(BRIEF, context().ctx).done;
   expect(task).toBe("what has been published since 2020");
+});
+
+test("the spec's round cap is what the run is granted", async () => {
+  let cap = 0;
+  const { run } = worker(async (request) => {
+    cap = request.maxRounds;
+    await request.tools.find((t) => t.name === "search")!.execute({});
+    return { kind: "answer", text: "one entry" };
+  });
+  await run(BRIEF, context().ctx).done;
+  expect(cap).toBe(ROUNDS);
 });
 
 test("what came back is written to an output file and the run points at it", async () => {
   const { run, outputs } = worker(answering);
-  const { ctx } = context();
-  const outcome = await run(BRIEF, ctx).done;
+  const outcome = await run(BRIEF, context().ctx).done;
 
   expect(outcome).toBeTruthy();
   expect(outcome!.output).toBe("legion/outputs/r-abc.md");
@@ -104,7 +117,7 @@ test("the sub-agent's tools are reported in the runner's wording, and nothing el
   const { ctx, reported } = context();
   await run(BRIEF, ctx).done;
   // Round 0: the tool ran before the turn announced the round it was in.
-  expect(reported).toEqual(["search_papers (round 0)"]);
+  expect(reported).toEqual(["search (round 0)"]);
 });
 
 test("a run that established nothing throws, so the attempt is counted", async () => {
@@ -114,8 +127,7 @@ test("a run that established nothing throws, so the attempt is counted", async (
     kind: "answer",
     text: "There is no recent research on this.",
   }));
-  const { ctx } = context();
-  const attempt = run(BRIEF, ctx).done;
+  const attempt = run(BRIEF, context().ctx).done;
   await expect(attempt).rejects.toThrow("not a finding");
   await expect(attempt).rejects.not.toThrow("no recent research");
   expect(outputs.size).toBe(0);
@@ -123,8 +135,7 @@ test("a run that established nothing throws, so the attempt is counted", async (
 
 test("a brief with nothing in it is a run that cannot start", async () => {
   const { run } = worker(answering, "   ");
-  const { ctx } = context();
-  await expect(run(BRIEF, ctx).done).rejects.toThrow("empty");
+  await expect(run(BRIEF, context().ctx).done).rejects.toThrow("empty");
 });
 
 test("cancel reaches the turn through its signal", async () => {
@@ -136,8 +147,7 @@ test("cancel reaches the turn through its signal", async () => {
     });
     throw new Error("stopped");
   });
-  const { ctx } = context();
-  const handle = run(BRIEF, ctx);
+  const handle = run(BRIEF, context().ctx);
   // Let the turn start before asking it to stop.
   await Promise.resolve();
   await Promise.resolve();

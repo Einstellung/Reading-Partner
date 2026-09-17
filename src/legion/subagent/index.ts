@@ -10,6 +10,7 @@
 // are internals with their own tests, reachable by path when a caller genuinely
 // needs to supply its own turn.
 export { runSubagent, type SubagentDeps, type SubagentRequest } from "./run";
+export { agentWorker, type AgentWorkerDeps, type AgentWorkerSpec } from "./worker";
 export { subagentTool, type SubagentToolDeps } from "./tool";
 export { createSubagentQuota, type SubagentQuota } from "./quota";
 export { runSubagentTurnLive } from "./live";
