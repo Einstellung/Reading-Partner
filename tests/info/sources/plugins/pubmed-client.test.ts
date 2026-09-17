@@ -141,3 +141,18 @@ test("a status PubMed cannot answer with throws instead of reading as no results
     searchPubmed("x", {}, async () => new Response("nope", { status: 400 })),
   ).rejects.toThrow(/400/);
 });
+
+// Entity decoding is shared with info/extract/sanitize. The local copy here
+// knew every entity but &nbsp;, which PubMed titles do carry.
+test("titles and abstracts decode &nbsp;", () => {
+  const xml = `<PubmedArticleSet><PubmedArticle><MedlineCitation>
+    <PMID>12345</PMID>
+    <Article>
+      <ArticleTitle>Neurons&nbsp;at&nbsp;scale</ArticleTitle>
+      <Abstract><AbstractText>Counted&nbsp;10&#x00B3; cells.</AbstractText></Abstract>
+    </Article>
+  </MedlineCitation></PubmedArticle></PubmedArticleSet>`;
+  const [a] = parsePubmedArticles(xml);
+  expect(a.title).toBe("Neurons at scale");
+  expect(a.abstract).toBe("Counted 10³ cells.");
+});

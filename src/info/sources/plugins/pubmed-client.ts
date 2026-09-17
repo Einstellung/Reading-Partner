@@ -15,6 +15,7 @@
 // that six fields per article need no real parser.
 
 import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
+import { decodeEntities } from "../../extract/sanitize";
 
 const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 // NCBI asks every unauthenticated caller to identify itself with tool= and
@@ -66,17 +67,6 @@ export interface PubmedArticle {
   year: number | null;
   journal: string | null;
   doi: string | null;
-}
-
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&amp;/g, "&");
 }
 
 // Inner text of an XML element, tags dropped. Titles and abstracts carry inline

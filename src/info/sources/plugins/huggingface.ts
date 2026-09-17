@@ -11,6 +11,7 @@
 // job.
 
 import { throwIfAborted } from "../../../platform/app/abort";
+import { asString } from "../../../platform/std/json";
 import { fetchText } from "../../extract/http";
 import { itemId } from "../../extract/id";
 import type { SourceDescriptor } from "../descriptor";
@@ -136,10 +137,6 @@ export function reposUrl(q: IndexQuery, limit: number): string {
 
 // --- rows -------------------------------------------------------------------
 
-function str(v: unknown): string {
-  return typeof v === "string" ? v : "";
-}
-
 function num(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
@@ -169,9 +166,9 @@ async function fetchRows(url: string, deps: PluginDeps): Promise<Record<string, 
 // numComments, publishedAt, ... }`. Null when the row has no arXiv id.
 function paperItem(desc: SourceDescriptor, row: Record<string, unknown>): InfoItem | null {
   const paper = (row.paper && typeof row.paper === "object" ? row.paper : {}) as Record<string, unknown>;
-  const id = str(paper.id);
+  const id = asString(paper.id);
   if (!id) return null;
-  const summary = str(paper.summary).trim();
+  const summary = asString(paper.summary).trim();
   const signals: ItemSignals = { tags: ["paper"] };
   const upvotes = num(paper.upvotes) ?? num(row.upvotes);
   if (upvotes !== undefined) signals.upvotes = upvotes;
@@ -182,9 +179,9 @@ function paperItem(desc: SourceDescriptor, row: Record<string, unknown>): InfoIt
     source: desc.id,
     sourceName: desc.name,
     sourceKey: id,
-    title: str(paper.title) || str(row.title) || id,
+    title: asString(paper.title) || asString(row.title) || id,
     url: `${HOST}/papers/${id}`,
-    publishedAt: str(row.publishedAt) || str(paper.publishedAt),
+    publishedAt: asString(row.publishedAt) || asString(paper.publishedAt),
     summaryOnly: true,
     signals,
   };
@@ -199,12 +196,12 @@ function paperItem(desc: SourceDescriptor, row: Record<string, unknown>): InfoIt
 // datasets carry the same facts as `task_categories:` and `library:` tags and
 // a truncated `description`.
 function repoItem(desc: SourceDescriptor, kind: Kind, row: Record<string, unknown>): InfoItem | null {
-  const id = str(row.id);
+  const id = asString(row.id);
   if (!id) return null;
   const tags = strs(row.tags);
   const prefixed = (prefix: string) => tags.find((t) => t.startsWith(prefix))?.slice(prefix.length);
-  const pipeline = str(row.pipeline_tag) || prefixed("task_categories:");
-  const library = str(row.library_name) || prefixed("library:");
+  const pipeline = asString(row.pipeline_tag) || prefixed("task_categories:");
+  const library = asString(row.library_name) || prefixed("library:");
   const plainTags = tags.filter((t) => !t.includes(":")).slice(0, 8);
   const signals: ItemSignals = {
     tags: [pipeline, library, kind === "datasets" ? "dataset" : "weights"].filter((t): t is string => !!t),
@@ -213,12 +210,12 @@ function repoItem(desc: SourceDescriptor, kind: Kind, row: Record<string, unknow
   if (likes !== undefined) signals.likes = likes;
   const downloads = num(row.downloads);
   if (downloads !== undefined) signals.downloads = downloads;
-  const createdAt = str(row.createdAt);
+  const createdAt = asString(row.createdAt);
   if (createdAt) signals.createdAt = createdAt;
   const line = [pipeline ? `pipeline: ${pipeline}` : "", plainTags.length ? `tags: ${plainTags.join(", ")}` : ""]
     .filter(Boolean)
     .join(" · ");
-  const description = oneLine(str(row.description));
+  const description = oneLine(asString(row.description));
   return {
     id: itemId(desc.id, id),
     source: desc.id,
@@ -238,7 +235,7 @@ function repoItem(desc: SourceDescriptor, kind: Kind, row: Record<string, unknow
 export function isConversion(row: { id?: unknown; tags?: unknown }): boolean {
   const tags = strs(row.tags).map((t) => t.toLowerCase());
   if (tags.some((t) => CONVERSION_MARKERS.includes(t) || t.startsWith("base_model:quantized:"))) return true;
-  const name = str(row.id).split("/").pop() ?? "";
+  const name = asString(row.id).split("/").pop() ?? "";
   return CONVERSION_ID.test(name);
 }
 

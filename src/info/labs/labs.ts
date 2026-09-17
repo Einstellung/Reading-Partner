@@ -1,6 +1,7 @@
 // Reading a labs file and answering the one question the screen asks of it.
 // Pure, unit-tested; the filesystem is store.ts next door.
 
+import { isObject } from "../../platform/std/json";
 import { LABS_VERSION, type Charter, type Lab, type LabKind, type LabStatus } from "./types";
 
 // One file's worth of rooms: the labs this build understands, and the entries it
@@ -81,10 +82,6 @@ function validateCharter(raw: unknown): Charter | null {
   if (!Array.isArray(questions) || questions.some((q) => typeof q !== "string")) return null;
   if (raw.topicId !== null && typeof raw.topicId !== "string") return null;
   return raw as unknown as Charter;
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
 /** The rooms still open. Archived ones stay in the file; nothing reads them. */

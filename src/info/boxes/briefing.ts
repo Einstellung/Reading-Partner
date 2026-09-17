@@ -8,6 +8,7 @@
 // filtered pile and the screen tally go — is what keeps that out of every page
 // and every prompt: past this function there is one shape.
 
+import { asString, isObject } from "../../platform/std/json";
 import type { CableDay } from "../cable/types";
 import type { LabOutcome } from "../collect/run-state";
 import type { InfoItem } from "../sources/item";
@@ -183,11 +184,11 @@ function readItems(raw: unknown): Record<string, BriefingItemMeta> {
   for (const [id, entry] of Object.entries(raw)) {
     if (!isObject(entry)) continue;
     out[id] = {
-      title: str(entry.title),
-      url: str(entry.url),
-      source: str(entry.source),
-      sourceName: str(entry.sourceName),
-      publishedAt: str(entry.publishedAt),
+      title: asString(entry.title),
+      url: asString(entry.url),
+      source: asString(entry.source),
+      sourceName: asString(entry.sourceName),
+      publishedAt: asString(entry.publishedAt),
     };
   }
   return out;
@@ -195,14 +196,6 @@ function readItems(raw: unknown): Record<string, BriefingItemMeta> {
 
 function readStrings(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.filter((s): s is string => typeof s === "string") : [];
-}
-
-function str(v: unknown): string {
-  return typeof v === "string" ? v : "";
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
 /**

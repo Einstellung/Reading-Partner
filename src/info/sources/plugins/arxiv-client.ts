@@ -5,6 +5,7 @@
 // we only need five fields per entry.
 
 import { fetchWithRetry, HttpStatusError, interactiveRetry, type FetchFn } from "../../../platform/http/throttled-fetch";
+import { decodeEntities } from "../../extract/sanitize";
 import { pickByTitle } from "./match";
 
 export interface ArxivEntry {
@@ -44,16 +45,6 @@ export function arxivTitleSearchUrl(title: string, maxResults = 5): string {
   const phrase = title.replace(/"/g, " ").replace(/\s+/g, " ").trim();
   const q = encodeURIComponent(`ti:"${phrase}"`);
   return `https://export.arxiv.org/api/query?search_query=${q}&max_results=${maxResults}`;
-}
-
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&amp;/g, "&");
 }
 
 function tagText(xml: string, tag: string): string {

@@ -21,6 +21,7 @@ import type { AgentTool } from "../legion/execute/turn";
 import { appConversationIo, type ConversationIo } from "../conversations";
 import { PALACE, resolvePalace } from "../palace";
 import { appData } from "../platform/app/appdata";
+import { asString } from "../platform/std/json";
 
 // --- what the soul is shown ------------------------------------------------
 
@@ -166,10 +167,6 @@ function parsed(text: string | null): unknown {
   }
 }
 
-function str(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
 function num(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
@@ -188,7 +185,7 @@ async function readBooks(io: CatalogueIo): Promise<Map<string, Book>> {
   const rows = raw?.books;
   if (!rows || typeof rows !== "object") return books;
   for (const [id, entry] of Object.entries(rows)) {
-    books.set(id, { title: str(entry?.title), addedAt: num(entry?.addedAt) });
+    books.set(id, { title: asString(entry?.title), addedAt: num(entry?.addedAt) });
   }
   return books;
 }
@@ -213,13 +210,13 @@ async function readTopics(io: CatalogueIo): Promise<Topics> {
     }>;
   } | null;
   for (const topic of raw?.topics ?? []) {
-    const id = str(topic?.id);
+    const id = asString(topic?.id);
     if (id === "") continue;
-    const name = str(topic?.name);
+    const name = asString(topic?.name);
     out.names.set(id, name);
     out.made.set(id, num(topic?.createdAt));
     for (const file of topic?.files ?? []) {
-      const hash = str(file?.hash);
+      const hash = asString(file?.hash);
       if (hash !== "" && name !== "") out.under.set(hash, name);
     }
   }
@@ -241,11 +238,11 @@ async function readArticles(io: CatalogueIo): Promise<Article[]> {
       : [];
   const articles: Article[] = [];
   for (const row of rows) {
-    const id = str(row?.id);
+    const id = asString(row?.id);
     if (id === "") continue;
     articles.push({
       id,
-      title: str(row?.title),
+      title: asString(row?.title),
       savedAt: num(row?.savedAt) || num(row?.addedAt),
     });
   }
@@ -263,7 +260,7 @@ async function countStatements(io: CatalogueIo): Promise<number> {
   } | null;
   const rows = raw?.statements;
   if (!Array.isArray(rows)) return 0;
-  return rows.filter((s) => str(s?.supersededBy) === "").length;
+  return rows.filter((s) => asString(s?.supersededBy) === "").length;
 }
 
 /** The `name` a retell or an outline file carries, by id. */
@@ -272,7 +269,7 @@ async function readNames(io: CatalogueIo, paths: readonly string[]): Promise<Map
   for (const { path, id } of paths.map((path) => ({ path, id: resolvePalace(path)?.id ?? null }))) {
     if (id === null) continue;
     const raw = parsed(await io.conversations.readText(path)) as { name?: unknown } | null;
-    names.set(id, str(raw?.name));
+    names.set(id, asString(raw?.name));
   }
   return names;
 }

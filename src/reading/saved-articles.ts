@@ -47,6 +47,7 @@ import { readJson } from "../platform/app/atomic-fs";
 import { appData } from "../platform/app/appdata";
 import { contentHash } from "../platform/app/content-hash";
 import { reportStoreError } from "../platform/app/store-errors";
+import { asString } from "../platform/std/json";
 import { sanitizeArticleHtml, stripDataImages } from "../info/extract/sanitize";
 
 export const SAVED_ARTICLES_FILE = "saved-articles.json";
@@ -211,7 +212,7 @@ export function buildSavedArticle(
 // denormalized count, and falls back to a body still inlined in the record.
 export function savedArticleTextChars(article: SavedArticle): number {
   if (typeof article.textChars === "number") return article.textChars;
-  return asText(article.text).length;
+  return asString(article.text).length;
 }
 
 // The body file this record points at, or "" for none. The records file is
@@ -219,14 +220,14 @@ export function savedArticleTextChars(article: SavedArticle): number {
 // anything that is not a hash this build would have written never becomes a
 // path.
 export function articleBodyHashOf(article: SavedArticle): string {
-  const hash = asText(article.bodyHash);
+  const hash = asString(article.bodyHash);
   return BODY_HASH.test(hash) ? hash : "";
 }
 
 // The body a record still carries inline, made safe to render. What a device on
 // the older build wrote, and what the split lifts out.
 function inlinedBody(article: SavedArticle): SavedArticleBody {
-  return { text: asText(article.text), html: sanitizeStoredHtml(article.html) };
+  return { text: asString(article.text), html: sanitizeStoredHtml(article.html) };
 }
 
 // Whether the body is still sitting in the record. Judged by shape rather than
@@ -246,7 +247,7 @@ export function hasInlinedBody(article: SavedArticle): boolean {
 export function parseArticleBody(raw: unknown): SavedArticleBody {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return NO_ARTICLE_BODY;
   const body = raw as Partial<SavedArticleBody>;
-  return { text: asText(body.text), html: sanitizeStoredHtml(body.html) };
+  return { text: asString(body.text), html: sanitizeStoredHtml(body.html) };
 }
 
 // Add one article, or refresh the one already there. Saving the same article
@@ -330,7 +331,7 @@ export function parseSavedArticles(raw: unknown): ParsedSavedArticles | null {
     if (id === "") {
       // Healed, not dropped: nothing is left behind, so this alone does not
       // make the file worth setting aside.
-      id = savedArticleId(asText(record.url), asText(record.title));
+      id = savedArticleId(asString(record.url), asString(record.title));
       if (id === "") {
         repaired = true;
         continue;
@@ -346,11 +347,6 @@ export function parseSavedArticles(raw: unknown): ParsedSavedArticles | null {
     articles.push(carried);
   }
   return { articles, repaired };
-}
-
-// A field that should have been a string, from a file that may hold anything.
-function asText(value: unknown): string {
-  return typeof value === "string" ? value : "";
 }
 
 // One stored body, made safe to render. Not a string at all when the file was

@@ -72,12 +72,12 @@ export {
   type HoldStatus,
   type Zone,
 } from "./hold-machine";
+export { errMsg } from "../../platform/std/errors";
 export {
   INITIAL_PRESS_STATE,
   NEEDS_KEY_HINT,
   NO_SPEECH_HINT,
   beginPress,
-  errMsg,
   pressReducer,
   type BeginOutcome,
   type PressEffect,
