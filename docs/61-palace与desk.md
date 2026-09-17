@@ -26,7 +26,7 @@ info 的 AI 不读任何 statement 和观察，只读 `user-profile.md` 的 decl
 
 **desk** 回答「AI 此刻面对什么」，登记的是「什么能上桌」：书、cable、收藏的文章、讲稿大纲、排练转写，将来任何东西。每种上桌的东西带两样：摊开后能看见什么（上下文），能对它做什么（工具）。桌上可以同时摆几样——今天 reading 的 AI 能列收藏文章，就是书旁边放了一篇文章。空桌也是一种状态，就是桌宠。desk 小是对的，它的上限是一个上下文窗口；扩展性在于能上桌的种类无限制。阅读器底色 token 在 `styles.css` 里已经叫 `--desk`。落点 `src/desk/`，capability 层——palace 在它下面一层，装配要读领域登记上来的上下文和工具，进不了 platform。
 
-**AI** 是坐在桌前的人，只有一个，装配留在 `src/ai/`。每次开口是一次装配：脑子里的东西（48 消费侧那三块）+ 桌上的东西 + 桌上东西带来的工具。它不认识书也不认识盒子，只认「上桌的东西」这个抽象。reading 是桌上有书，info 是桌上有盒子，桌宠是空桌，第三种形态是再登记一种能上桌的东西。60 的秘书长是桌上有盒子时这个人的样子，不是另一个 agent：它的三种模式、游标、tasking 工具全部来自桌上那个盒子的登记，记忆、对话史、世界图和别的情境完全一样。照 60 的字面在 `info/` 里再起一份 prompt 加工具数组加线程键，就是第三个 AI，禁止。
+坐在桌前的那个人叫 soul，不叫 AI，装配留在 `src/soul/`，见 [71](./71-soul.md)。
 
 **memory** 是这个人的脑子，48 和 58 一条不改。观察和 statement 作为数据登记在 palace 里，语义上归这个人，去哪张桌都带着。它消费 palace 两件事：蒸馏源（哪些登记过的数据是原料，即 58 的源登记表成为 palace 登记的一节），和锚点解析（一个 id 指的东西还在不在、内容是什么）。
 
@@ -51,15 +51,6 @@ palace 不吞装配。宫是静的，人是动的；palace 只回答「有什么
 视野就是 topic，一个实体，不是 statement 的一种也不是 info 自己的配置。cable 在 `saved` / `promoted` / `folded` 三个出口带 topic，由 AI 提议、用户点头，形状是 21 已定的那张确认卡。`BRIEF_TOPIC_ID = "brief"` 是应急版。
 
 顺序上先 desk 后 topic 进 info。
-
-## 顺序
-
-1. palace 登记表落地，五张表改成派生，守卫测试上。纯搬运，不改行为。
-2. info 接记忆：读 statement 和观察，`threads-info-<date>.json` 进蒸馏源（58 已把它列为第一个新源）。2026-09-13：读这半已落地，五处 `loadProfile()` 全部改读 statement（`assembleReaderSection`），`update_profile` 换成阅读侧那个 `statement_write`；`threads-info-<date>.json` 进蒸馏源未做。
-3. desk 登记表加装配，五个 AI 入口收成上桌的登记。
-4. topic 进 info 侧。
-5. 跨键的对话读法，范围规则见上节。
-6. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储。
 
 ## 待定
 

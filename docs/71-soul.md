@@ -2,7 +2,7 @@
 
 > 2026-09-11 定案。上游：[61](./61-palace与desk.md) 是 palace 与 desk，[48](./48-记忆：观察与statement.md) 是观察与 statement，[58](./58-蒸馏器与dream.md) 是蒸馏与回收，[21](./21-info收藏与reading打通.md) 是确认卡的形状，[45](./45-陪伴的形态.md) 是形态的证据与法律边界，[66](./66-Lumen.md) 是空桌前的那个样子，[63](./63-情报局：研究室、专项组与态势.md) 是研究室与分析员，[55](./55-legion.md) 是 run 与调度。
 >
-> 取代关系：[61](./61-palace与desk.md) 的「五个名词」一节由本文重写——AI 这个名字作废，改叫 soul，palace、desk、memory、legion 四条不变，措辞跟着改；61 的「顺序」一节作废，按本文末节。61 的「登记」「定下的」「待定」三节照旧。
+> 取代关系：[61](./61-palace与desk.md) 的「五个名词」一节由本文重写——AI 这个名字作废，改叫 soul，palace、desk、memory、legion 四条不变，措辞跟着改；61 的「顺序」一节内容并入本文末节（61 第 2 步 2026-09-13 的落地状态也在本文末节）。61 的「登记」「定下的」「待定」三节照旧。
 
 ---
 
@@ -58,7 +58,7 @@ session 不同步。它是本机的运行时——soul 和它派出的 worker �
 
 ## 顺序
 
-做完的：palace 登记表加派生（61 第 1 步）、desk 登记表加那一次装配（第 3 步）、info 接记忆（第 2 步）、topic 确认卡（第 4 步，现在归记忆）、门口对话加 sequence 加双段回放（第 5 步）。
+做完的：palace 登记表落地，五张表改成派生，守卫测试上（纯搬运，不改行为）；info 接记忆——读 statement 和观察，五处 `loadProfile()` 全部改读 statement（`assembleReaderSection`），`update_profile` 换成阅读侧那个 `statement_write`（2026-09-13；`threads-info-<date>.json` 进蒸馏源未做）；desk 登记表加那一次装配，五个 AI 入口收成上桌的登记；topic 确认卡（现在归记忆）；门口对话加 sequence 加双段回放。
 
 2026-09-11 又做完的：登记表的工具（`soul/catalogue.ts`，`list_palace` 和 `list_kind`）、places 和 `go_to`、秘书角色登记进 soul、语音从 `info/briefer` 搬到 `soul/voice`（`voice-call-live.ts` 是 info 桌的接线，留在 info）。
 
@@ -66,7 +66,7 @@ session 不同步。它是本机的运行时——soul 和它派出的 worker �
 
 1. 第一屏的交互，待议。
 2. 存储标识符从 thread 改名 conversation。
-3. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储（61 第 6 步）。盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方，见 [68](./68-Lumen与盒子的交互.md)。
+3. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储。盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方，见 [68](./68-Lumen与盒子的交互.md)。
 4. 记忆与检索重做。
 
 这四条之外，下一步是 soul 搬上 pi harness：soul 一条 lane，本地 worker 各一条，见 [55](./55-legion.md)。
