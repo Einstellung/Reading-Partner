@@ -25,6 +25,7 @@
 // The damped follow lives with the rest of the band physics (vertical mode uses
 // the same curve). Re-exported here because it is part of this machine's
 // vocabulary and its callers/tests have always read it from here.
+import { velocityStep } from "./physics";
 import { rubberBand } from "./rubber-band";
 export { rubberBand };
 
@@ -221,9 +222,7 @@ function bandCommand(dx: number, dy: number, axis: "x" | "y", limit: number): Ge
 }
 
 function updateVelocity(s: GestureState, x: number, t: number): void {
-  const dt = Math.max(t - s.vLastT, 1);
-  const inst = (x - s.vLastX) / dt;
-  s.vx = s.vx * 0.3 + inst * 0.7;
+  s.vx = velocityStep(s.vx, x, t, s.vLastX, s.vLastT);
   s.vLastX = x;
   s.vLastT = t;
 }
