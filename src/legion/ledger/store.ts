@@ -11,21 +11,19 @@
 //
 // The file system is injected, like the run store and the bell store beside it.
 
-import { appData } from "../../platform/app/appdata";
+import { appRecordDirIo, type RecordDirIo } from "../../platform/app/record-dir";
 import { ledgerLineText, parseLedgerLine, type LedgerLine } from "./fold";
 
 export const LEDGER_DIR = "legion/ledger";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** What the store needs of a disk. */
-export interface LedgerIo {
-  /** The file names in the ledger directory. Empty when there is no directory. */
-  list(): Promise<string[]>;
-  /** A file's text, or null when it is not there. */
-  read(name: string): Promise<string | null>;
-  write(name: string, contents: string): Promise<void>;
-}
+/**
+ * What the store needs of a disk — the same one the runs and the bells sit on.
+ * The names on it are not those, though: a file here is a day of lines rather
+ * than one record, so it is `<day>.jsonl` and not `<id>.json`.
+ */
+export type LedgerIo = RecordDirIo;
 
 /** The day a run folds into: its `endedAt`, in UTC. */
 export function ledgerDay(endedAt: number): string {
@@ -122,21 +120,7 @@ export function createLedgerStore(io: LedgerIo): LedgerStore {
 }
 
 /** The ledger directory on this device. */
-export const appLedgerIo: LedgerIo = {
-  async list() {
-    const entries = await appData.readDir(LEDGER_DIR).catch(() => []);
-    return entries.filter((e) => e.isFile).map((e) => e.name);
-  },
-  async read(name) {
-    const path = `${LEDGER_DIR}/${name}`;
-    if (!(await appData.exists(path))) return null;
-    return appData.readText(path).catch(() => null);
-  },
-  async write(name, contents) {
-    await appData.mkdirp(LEDGER_DIR);
-    await appData.writeAtomic(`${LEDGER_DIR}/${name}`, contents);
-  },
-};
+export const appLedgerIo: LedgerIo = appRecordDirIo(LEDGER_DIR);
 
 let live: LedgerStore | undefined;
 
