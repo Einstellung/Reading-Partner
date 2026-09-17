@@ -10,7 +10,6 @@
 // (pitfall 121).
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
-import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
@@ -19,20 +18,20 @@ import * as turn from "../../../src/reading/turn";
 import type { CallRow } from "../../../src/reading/call-state";
 import type { StagedImage } from "../../../src/reading/pending-images";
 import type { Annotation } from "../../../src/platform/app/reader-contract";
-import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
+import type { Thread } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
+import {
+  CALL_BOOK as BOOK,
+  callHost,
+  callThread as thread,
+  emptyReadingTurn,
+  type CallHost,
+} from "../../support/use-call";
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
 
-const BOOK = "book-1";
 const LESSON = "lesson-1";
-
-const settings: Settings = {
-  ...DEFAULT_SETTINGS,
-  defaultProviderId: "anthropic",
-  defaultModelId: "some-model",
-};
 
 // The book's threads file, as the store holds it, plus the two ends of a turn
 // held open so a send is only ever a send.
@@ -85,14 +84,7 @@ function fakeWorld(seed: Record<string, Thread>) {
     }),
     spyOn(events, "logEvent").mockImplementation(() => {}),
     spyOn(observation, "distillThread").mockImplementation(async () => {}),
-    spyOn(turn, "buildReadingTurn").mockResolvedValue({
-      systemPrompt: "",
-      inline: "none" as const,
-      tools: [],
-      messages: [],
-      notice: "",
-      refusal: "",
-    }),
+    spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn()),
     // Answering forever: what matters here is that a turn is running on the
     // thread, never what it writes.
     spyOn(agent, "runAgentTurn").mockImplementation(() => new Promise<void>(() => {})),
@@ -100,48 +92,14 @@ function fakeWorld(seed: Record<string, Thread>) {
   return { held, restore: () => spies.forEach((s) => s.mockRestore()) };
 }
 
-function thread(id: string, extra: Partial<Thread> = {}): Thread {
-  return { id, annotationId: "", path: BOOK, createdAt: 0, messages: [], ...extra };
-}
-
-function host(
-  marks: Annotation[] = [],
-  removed: string[] = [],
-): Parameters<typeof useCall<CallRow, StagedImage>>[0] {
-  return {
-    bookIdRef: { current: BOOK },
-    docIdRef: { current: BOOK },
-    supplementsRef: { current: [] },
-    ctxRef: {
-      current: {
-        topicId: "topic-1",
-        topicName: "A Topic",
-        fileName: "A Book.pdf",
-        pageLabel: null,
-        pageIndex: 4,
-        files: [],
-      },
-    },
-    settingsRef: { current: settings },
+function host(marks: Annotation[] = [], removed: string[] = []): CallHost {
+  return callHost({
     annsRef: { current: new Map(marks.map((a) => [a.id, a])) },
-    currentFulltextRef: { current: null },
-    currentFiguresRef: { current: null },
-    bufferRef: { current: null },
-    pipelineRef: { current: null },
-    pushToast: () => {},
-    distillAnnotations: () => [],
     removeMark: (id: string) => void removed.push(id),
-    toDisplay: (stored: ThreadMessage[]) => stored as CallRow[],
-    newRow: (row: CallRow) => row,
     // The card channel the shell owns (the receipt's chip is a card part, and
     // the render layer's protocol is not this layer's to import).
     cards: { id: (prefix: string) => `${prefix}-1` },
-    maxImages: 3,
-    imageLimitHint: "",
-    loadingImage: (id: string) => ({ id }),
-    readyImage: (id: string) => ({ id }),
-    sendableImages: () => [],
-  };
+  });
 }
 
 const lessonCall = {

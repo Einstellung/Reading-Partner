@@ -13,7 +13,6 @@
 // none of these have any business deciding that here.
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
-import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
@@ -24,56 +23,13 @@ import type { StagedImage } from "../../../src/reading/pending-images";
 import type { HangupPass } from "../../../src/reading/session/hangup";
 import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
+import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn } from "../../support/use-call";
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
 
-const BOOK = "book-1";
 const THREAD = "t1";
 const MARK = "mark-1";
-
-const settings: Settings = {
-  ...DEFAULT_SETTINGS,
-  defaultProviderId: "anthropic",
-  defaultModelId: "some-model",
-};
-
-// The shell's side of the session: refs it owns and the two shapes it builds.
-// Nothing here is under test — the hook only needs somewhere to read the open
-// book from.
-function host(): Parameters<typeof useCall<CallRow, StagedImage>>[0] {
-  return {
-    bookIdRef: { current: BOOK },
-    docIdRef: { current: BOOK },
-    supplementsRef: { current: [] },
-    ctxRef: {
-      current: {
-        topicId: "topic-1",
-        topicName: "A Topic",
-        fileName: "A Book.pdf",
-        pageLabel: null,
-        pageIndex: 4,
-        files: [],
-      },
-    },
-    settingsRef: { current: settings },
-    annsRef: { current: new Map() },
-    currentFulltextRef: { current: null },
-    currentFiguresRef: { current: null },
-    bufferRef: { current: null },
-    pipelineRef: { current: null },
-    pushToast: () => {},
-    distillAnnotations: () => [],
-    removeMark: () => {},
-    toDisplay: (stored: ThreadMessage[]) => stored as CallRow[],
-    newRow: (row: CallRow) => row,
-    maxImages: 3,
-    imageLimitHint: "",
-    loadingImage: (id: string) => ({ id }),
-    readyImage: (id: string) => ({ id }),
-    sendableImages: () => [],
-  };
-}
 
 test("the thread the hangup distils is read when the turn lands, not when the ✕ was pressed", async () => {
   // The thread file, as the store holds it. getThread hands back a copy of it,
@@ -101,14 +57,7 @@ test("the thread the hangup distils is read when the turn lands, not when the �
   );
   // The turn's assembly and the model call, which this test has nothing to say
   // about: the turn is only here to be in flight.
-  const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue({
-    systemPrompt: "",
-    inline: "none" as const,
-    tools: [],
-    messages: [],
-    notice: "",
-    refusal: "",
-  });
+  const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn());
   let onDone: ((full: string) => void) | undefined;
   const runAgentTurn = spyOn(agent, "runAgentTurn").mockImplementation((options) => {
     onDone = options.onDone;
