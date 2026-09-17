@@ -8,29 +8,10 @@ import {
   UNSEEN,
   createBoxStore,
   randomBoxItemId,
-  type BoxIo,
   type PutBoxItemInput,
 } from "../../src/box/store";
 import type { BoxItem, BoxItemState } from "../../src/box/types";
-
-interface Disk extends BoxIo {
-  files: Map<string, string>;
-}
-
-function disk(files = new Map<string, string>()): Disk {
-  return {
-    files,
-    async list() {
-      return [...files.keys()];
-    },
-    async read(name) {
-      return files.get(name) ?? null;
-    },
-    async write(name, contents) {
-      files.set(name, contents);
-    },
-  };
-}
+import { mapDisk as disk, type MapDisk } from "../support/map-disk";
 
 const RUN_ORIGIN = { place: "book", bookId: "abc123", threadId: "t1" } as const;
 
@@ -168,7 +149,7 @@ test("a file that will not parse is skipped and left where it is", async () => {
 
 // Two devices, two disks, one item. Sync merges the pair; both then hold what
 // the merge produced, and the box says the same thing on each.
-async function sync(a: Disk, b: Disk, id: string): Promise<BoxItem> {
+async function sync(a: MapDisk, b: MapDisk, id: string): Promise<BoxItem> {
   const name = `${id}.json`;
   const left = JSON.parse(a.files.get(name)!) as BoxItem;
   const right = JSON.parse(b.files.get(name)!) as BoxItem;

@@ -9,38 +9,13 @@
 import { expect, test } from "bun:test";
 import { createRunner } from "../../../src/legion/execute/runner";
 import { registerWorker, type WorkerHandle } from "../../../src/legion/execute/worker";
-import { createBellStore, type Bell, type BellIo } from "../../../src/legion/bell";
-import { createRunStore, mergeRun, type Run, type RunIo } from "../../../src/legion/run";
+import { createBellStore, type Bell } from "../../../src/legion/bell";
+import { createRunStore, mergeRun, type Run } from "../../../src/legion/run";
 import type { DeviceClaim } from "../../../src/legion/claim";
+import { mapDisk as disk } from "../../support/map-disk";
 
 const NOW = 1_800_000_000_000;
 const ME = "desk";
-
-interface Disk extends RunIo, BellIo {
-  files: Map<string, string>;
-  writes: number;
-}
-
-function disk(): Disk {
-  const files = new Map<string, string>();
-  return {
-    files,
-    writes: 0,
-    async list() {
-      return [...files.keys()];
-    },
-    async read(name) {
-      return files.get(name) ?? null;
-    },
-    async write(name, contents) {
-      this.writes += 1;
-      files.set(name, contents);
-    },
-    async remove(name) {
-      files.delete(name);
-    },
-  };
-}
 
 function claim(deviceId: string, over: Partial<DeviceClaim> = {}): DeviceClaim {
   return {
@@ -173,7 +148,7 @@ test("ten reports in a second are one write, and the terminal state carries the 
   await w.runner.tick();
   await reported.promise;
 
-  const before = w.runDisk.writes;
+  const before = w.runDisk.writes.length;
   const written = await w.runs.get(id);
   expect(written?.progress).toBe("page 1/10");
 
@@ -182,7 +157,7 @@ test("ten reports in a second are one write, and the terminal state carries the 
   w.tick(31_000);
   const now = w.at();
   await w.runs.report(id, "page 11/11", now);
-  expect(w.runDisk.writes).toBe(before + 1);
+  expect(w.runDisk.writes.length).toBe(before + 1);
 
   done.resolve();
   const run = await w.finished(id);

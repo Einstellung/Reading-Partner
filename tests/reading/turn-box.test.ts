@@ -3,6 +3,7 @@
 
 import { expect, test } from "bun:test";
 import { createBoxStore } from "../../src/box/store";
+import { mapDisk } from "../support/map-disk";
 import {
   boxUnseenTurn,
   setOpenCallPeek,
@@ -13,12 +14,7 @@ import {
 } from "../../src/reading/turn-box";
 
 function memoryBox() {
-  const files = new Map<string, string>();
-  return createBoxStore({
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => void files.set(name, contents),
-  });
+  return createBoxStore(mapDisk());
 }
 
 const ANSWER = {

@@ -4,27 +4,12 @@
 // Run: scripts/t.sh tests/legion/bell.test.ts
 
 import { expect, test } from "bun:test";
-import { BRIEF_MAX, createBellStore, type BellIo, type BellStore } from "../../src/legion/bell";
-
-// A disk of one Map, plus the order of the writes: what went to a file before
-// what is the property half these tests are about.
-function disk(): { io: BellIo; files: Map<string, string>; writes: string[] } {
-  const files = new Map<string, string>();
-  const writes: string[] = [];
-  const io: BellIo = {
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-      writes.push(name);
-    },
-  };
-  return { io, files, writes };
-}
+import { BRIEF_MAX, createBellStore, type BellStore } from "../../src/legion/bell";
+import { mapDisk as disk } from "../support/map-disk";
 
 function store(): { bells: BellStore; files: Map<string, string>; writes: string[] } {
   const d = disk();
-  return { bells: createBellStore(d.io), files: d.files, writes: d.writes };
+  return { bells: createBellStore(d), files: d.files, writes: d.writes };
 }
 
 test("a run-done bell is written whole, queued, under the run it is about", async () => {
@@ -140,7 +125,7 @@ test("an id that is not a file name is refused rather than escaped", async () =>
 
 test("a file that will not parse is skipped, not answered and not deleted", async () => {
   const d = disk();
-  const bells = createBellStore(d.io);
+  const bells = createBellStore(d);
   d.files.set("run-done-broken.json", "{ not json");
   await bells.ring("run-done", { runId: "r1", kind: "collect", brief: "done" }, { at: 10 });
 

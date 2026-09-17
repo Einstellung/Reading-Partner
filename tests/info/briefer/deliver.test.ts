@@ -11,8 +11,9 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { answerBell, doorDate, doorKey, type SendBellTurn } from "../../../src/soul";
-import { createBellStore, type BellIo, type BellStore } from "../../../src/legion/bell";
-import { createBoxStore, type BoxIo, type BoxStore } from "../../../src/box";
+import { createBellStore, type BellStore } from "../../../src/legion/bell";
+import { createBoxStore, type BoxStore } from "../../../src/box";
+import { mapDisk } from "../../support/map-disk";
 import { holdHarness } from "../../../src/legion/execute/held";
 import { runHarnessTurn, type StreamFn } from "../../../src/legion/execute/turn";
 import { toPiMessages } from "../../../src/ai/providers";
@@ -54,27 +55,12 @@ beforeEach(() => {
 });
 
 function bellStore(): BellStore {
-  const files = new Map<string, string>();
-  const io: BellIo = {
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-    },
-  };
-  return createBellStore(io);
+  return createBellStore(mapDisk());
 }
 
 function boxStore(): { box: BoxStore; files: Map<string, string> } {
-  const files = new Map<string, string>();
-  const io: BoxIo = {
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-    },
-  };
-  return { box: createBoxStore(io), files };
+  const io = mapDisk();
+  return { box: createBoxStore(io), files: io.files };
 }
 
 // The real turn machinery with the provider scripted: what is under test is the

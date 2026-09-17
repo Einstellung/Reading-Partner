@@ -12,7 +12,7 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { answerBell, renderBell, type SendBellTurn } from "../../src/soul";
-import { createBellStore, type BellIo, type BellStore } from "../../src/legion/bell";
+import { createBellStore, type BellStore } from "../../src/legion/bell";
 import { createRunStore } from "../../src/legion/run/store";
 import { holdHarness } from "../../src/legion/execute/held";
 import { runHarnessTurn, type StreamFn } from "../../src/legion/execute/turn";
@@ -26,8 +26,9 @@ import {
   threadFileName,
 } from "../../src/platform/app/threads";
 import { registerDelivery, type Delivery } from "../../src/soul";
-import { createBoxStore, type BoxIo, type BoxStore } from "../../src/box";
+import { createBoxStore, type BoxStore } from "../../src/box";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
+import { mapDisk } from "../support/map-disk";
 import { memoryAppData } from "../support/memory-appdata";
 import { turnEvents, type Turn } from "../support/scripted-turn";
 
@@ -46,15 +47,8 @@ beforeEach(() => {
 });
 
 function bellStore(): { bells: BellStore; files: Map<string, string> } {
-  const files = new Map<string, string>();
-  const io: BellIo = {
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-    },
-  };
-  return { bells: createBellStore(io), files };
+  const io = mapDisk();
+  return { bells: createBellStore(io), files: io.files };
 }
 
 // The real turn machinery on the real held harness, with the provider scripted:
@@ -196,17 +190,7 @@ test("a turn that fails leaves the bell queued and writes nothing", async () => 
 
 test("the ack stamps the run as delivered, which is what the fold waits on", async () => {
   const { bells } = bellStore();
-  const files = new Map<string, string>();
-  const runs = createRunStore({
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-    },
-    remove: async (name) => {
-      files.delete(name);
-    },
-  });
+  const runs = createRunStore(mapDisk());
   const { run } = await runs.create({
     kind: "translate-book",
     delegator: { kind: "soul" },
@@ -251,15 +235,8 @@ test("the ack stamps the run as delivered, which is what the fold waits on", asy
 const BOOK = "book-hash";
 
 function boxStore(): { box: BoxStore; files: Map<string, string> } {
-  const files = new Map<string, string>();
-  const io: BoxIo = {
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-    },
-  };
-  return { box: createBoxStore(io), files };
+  const io = mapDisk();
+  return { box: createBoxStore(io), files: io.files };
 }
 
 // A domain's delivery opener, as reading registers one: it says where the reply
@@ -510,18 +487,8 @@ test("a reply that landed with the thread off screen is a card", async () => {
 // The run store a bell is read back against, kept here so each of these tests
 // can put a run of its own on disk.
 function runFiles() {
-  const files = new Map<string, string>();
-  const runs = createRunStore({
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-    },
-    remove: async (name) => {
-      files.delete(name);
-    },
-  });
-  return { runs, files };
+  const io = mapDisk();
+  return { runs: createRunStore(io), files: io.files };
 }
 
 test("a run a program delegated is acked without a turn, a line, or a card", async () => {

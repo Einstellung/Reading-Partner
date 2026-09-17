@@ -7,32 +7,10 @@ import {
   createRunStore,
   deriveRunId,
   randomRunId,
-  type RunIo,
   type RunStore,
 } from "../../../src/legion/run/store";
 import { MAX_ATTEMPTS, type Delegator, type Run } from "../../../src/legion/run/types";
-
-interface Disk extends RunIo {
-  files: Map<string, string>;
-}
-
-function disk(files = new Map<string, string>()): Disk {
-  return {
-    files,
-    async list() {
-      return [...files.keys()];
-    },
-    async read(name) {
-      return files.get(name) ?? null;
-    },
-    async write(name, contents) {
-      files.set(name, contents);
-    },
-    async remove(name) {
-      files.delete(name);
-    },
-  };
-}
+import { mapDisk as disk } from "../../support/map-disk";
 
 const SOUL: Delegator = { kind: "soul" };
 const PARENT: Delegator = { kind: "run", id: randomRunId() };
