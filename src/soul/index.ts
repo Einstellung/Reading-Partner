@@ -48,7 +48,6 @@ export {
   doorLabel,
   listDoorUnits,
   openDoorTurn,
-  registerDoorDistillSource,
   type DoorTurnInput,
 } from "./door";
 export { GO_TO_TOOL, buildPlaceTools, placesDescription } from "./places";
@@ -65,7 +64,6 @@ export {
   type CatalogueKind,
 } from "./catalogue";
 export {
-  EMPTY_SEQUENCE,
   SEQUENCE_FILE,
   SEQUENCE_VERSION,
   appSequenceIo,

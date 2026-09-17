@@ -87,14 +87,7 @@ function livePositions(): ReadingPositions {
 
 let positions = livePositions();
 
-// The positions as this module was first imported with: no book seeded and
-// nothing waiting to be written.
-export function rebuildReadingPositionsForTests(): void {
-  positions = livePositions();
-}
-
 export const seedReadingPosition = (bookId: string, state: ViewState | null): void =>
   positions.seed(bookId, state);
 export const keepReadingPosition = (bookId: string, state: ViewState): void =>
   positions.keep(bookId, state);
-export const lastReadingPosition = (bookId: string): ViewState | null => positions.last(bookId);

@@ -559,21 +559,6 @@ function liveSweeps(): Sweeps {
 
 let sweeps = liveSweeps();
 
-// The gate and the sweeps as this module was first imported with. One function
-// for both: the sweeps hold the gate they were built with, so a gate replaced on
-// its own would leave them checking the one nothing else uses. A pass abandoned
-// mid-flight — the case ended, its promise never settled — leaves its subject in
-// the gate for good, and every later pass over that subject is then skipped
-// silently.
-//
-// Only for a process that never started the sweeps. `startObservationSweeps`
-// hands its timer back to the caller as the undo, and rebuilding out from under
-// a running one leaves that timer ticking on a Sweeps nothing can stop.
-export function rebuildObservationSweepsForTests(): void {
-  gate = createDistillGate();
-  sweeps = liveSweeps();
-}
-
 export function sweepDistillation(trigger: DistillTrigger): Promise<void> {
   return sweeps.sweepDistillation(trigger);
 }

@@ -16,10 +16,6 @@ export const CLAIM_DIR = "legion/claim";
 
 const JSON_SUFFIX = ".json";
 
-export function claimFile(deviceId: string): string {
-  return `${CLAIM_DIR}/${deviceId}${JSON_SUFFIX}`;
-}
-
 /** What the store needs of a disk. */
 export interface ClaimIo {
   /** The file names in the claim directory. Empty when there is no directory. */

@@ -62,8 +62,6 @@ export function isBoxItemState(value: unknown): value is BoxItemState {
  */
 export type BoxItemSource = "run" | "cable" | "turn";
 
-export const BOX_SOURCES = ["run", "cable", "turn"] as const satisfies readonly BoxItemSource[];
-
 /** Whether a string off a file is one of the three. */
 export function isBoxSource(value: unknown): value is BoxItemSource {
   return value === "run" || value === "cable" || value === "turn";

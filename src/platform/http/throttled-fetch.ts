@@ -133,14 +133,6 @@ export function createThrottle(
 let hostThrottle = createThrottle(HOST_MIN_INTERVAL_MS, realClock, DEFAULT_HOST_INTERVAL_MS);
 const noopThrottle: Throttle = () => Promise.resolve();
 
-// The gate as this module was first imported with. It holds, per host, when the
-// last request went out and the chain the next one queues behind, both on the
-// real clock — so a request made through it makes every later one in the process
-// wait for a gap that has nothing to do with the caller.
-export function rebuildHostThrottleForTests(): void {
-  hostThrottle = createThrottle(HOST_MIN_INTERVAL_MS, realClock, DEFAULT_HOST_INTERVAL_MS);
-}
-
 // Exponential backoff with deterministic jitter, exported for tests.
 export function backoffMs(attempt: number, baseMs = 1000): number {
   return baseMs * 2 ** attempt + (attempt * 137) % 400;

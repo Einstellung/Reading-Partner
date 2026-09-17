@@ -88,9 +88,3 @@ function readNav(zip: EpubZip, pkg: EpubPackage): NavLists {
   }
   return lists;
 }
-
-/** Spine index of an archive entry, or null when it is not a spine document. */
-export function spineIndexOf(book: EpubBook, entry: string): number | null {
-  const hit = book.docs.find((d) => d.entry === entry);
-  return hit ? hit.index : null;
-}

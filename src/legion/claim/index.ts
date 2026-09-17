@@ -4,7 +4,6 @@ export {
   WEBVIEW_FETCH,
   capabilitiesFor,
   registerKindCapabilities,
-  registeredKinds,
 } from "./capabilities";
 export {
   electAmong,
@@ -18,7 +17,6 @@ export {
   CLAIM_DIR,
   appClaimIo,
   appClaims,
-  claimFile,
   createClaimStore,
   type ClaimIo,
   type ClaimStore,

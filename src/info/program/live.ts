@@ -866,28 +866,3 @@ let session = liveSession();
 export function amICollecting(): Promise<boolean> {
   return session.amICollecting();
 }
-
-// Everything this module keeps for the life of the process, put back to how the
-// first import left it: the three lazily built objects, the collector session,
-// the wake lock, the morning round's recorded date and timer, and this machine's
-// name. One function rather than seven, because they refer to each other — the
-// session is built holding the two getters, and the morning round runs through
-// the pipeline.
-//
-// Whatever was started is stopped first. A session left running keeps a
-// heartbeat, two pull routes and a sync subscription; a morning timer left
-// running keeps waking a pipeline nothing can reach any more.
-export function resetInfoLiveForTests(): void {
-  void session.stop().catch(() => {});
-  cancelDailyTimer?.();
-  cancelDailyTimer = null;
-  wakeLock.set(false);
-  session = liveSession();
-  wakeLock = createScreenWakeLock(browserWakeLockTarget());
-  pipeline = null;
-  collector = null;
-  reader = null;
-  delegatedAnchor = null;
-  dailyStopped = false;
-  deviceName = null;
-}

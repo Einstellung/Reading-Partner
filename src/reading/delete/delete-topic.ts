@@ -19,7 +19,6 @@
 import {
   cascadeOfTopic,
   rowOf,
-  type CascadeStep,
   type PalaceKind,
 } from "../../palace";
 import { appData } from "../../platform/app/appdata";
@@ -200,11 +199,6 @@ const HANDLERS: Partial<Record<PalaceKind, Handler>> = {
 /** The kinds a handler was written for, so the guard can hold the two together. */
 export function handledKinds(): PalaceKind[] {
   return Object.keys(HANDLERS) as PalaceKind[];
-}
-
-/** The step a kind takes, or undefined where the table gives it none. */
-export function handlerFor(step: CascadeStep): Handler | undefined {
-  return HANDLERS[step.kind];
 }
 
 /**

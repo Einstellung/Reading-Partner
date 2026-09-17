@@ -67,8 +67,6 @@ export interface Sequence {
   spans: ConversationSpan[];
 }
 
-export const EMPTY_SEQUENCE: Sequence = { version: SEQUENCE_VERSION, stamp: {}, spans: [] };
-
 // --- deriving --------------------------------------------------------------
 
 function after(key: string, prefix: string): string {

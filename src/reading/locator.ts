@@ -15,15 +15,6 @@ export type Locator =
   | { kind: "pdf"; pageIndex: number; pageX?: number; pageY?: number }
   | { kind: "epub"; cfi: string };
 
-/** Whether a value is a locator this app wrote. */
-export function isLocator(value: unknown): value is Locator {
-  if (!value || typeof value !== "object") return false;
-  const v = value as { kind?: unknown; pageIndex?: unknown; cfi?: unknown };
-  if (v.kind === "pdf") return typeof v.pageIndex === "number";
-  if (v.kind === "epub") return typeof v.cfi === "string";
-  return false;
-}
-
 /**
  * An EPUB locator's string form: the CFI itself. Kept as a named codec rather
  * than as a field read directly, because the string that goes on disk is the
