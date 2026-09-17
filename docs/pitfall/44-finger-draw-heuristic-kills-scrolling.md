@@ -2,7 +2,7 @@
 
 现象：iPad 上单指怎么滑页面都不动；同一时刻开翻页模式，从屏幕边缘起手却能正常翻页，关掉翻页又不动了。Touch debug 显示 `fingers 1 · single`，触点正常，事件层和手指计数都对。
 
-原因：不是布局也不是几何。实测数据（Chromium 真触摸，820×1180）：vertical 下 `scrollHeight 15041 / clientHeight 1200`、`scrollWidth = clientWidth 840`、strategy `vertical`、zoom `fit-width`，开翻页再关回来数值一模一样——重排没问题，容器有的是可滚高度（坑 42 说的 fit-page 和 fit-width 数值相同确实成立，两者都是 1.339，但 setLayout 下一帧的重新断言把重排补上了）。
+原因：不是布局也不是几何。实测数据（Chromium 真触摸，820×1180）：vertical 下 `scrollHeight 15041 / clientHeight 1200`、`scrollWidth = clientWidth 840`、strategy `vertical`、zoom `fit-width`，开翻页再关回来数值一模一样——重排没问题，容器有的是可滚高度（坑 56 说的 fit-page 和 fit-width 数值相同确实成立，两者都是 1.339，但 setLayout 下一帧的重新断言把重排补上了）。
 
 真正的原因是路由判定。旧的 `routePointer` 有一条启发式：选了标注工具、而且本次会话还没见过 `pointerType === "pen"` 的事件时，手指判为 draw。iPad 上用户点了笔工具、Pencil 还没落过屏，这条就成立。两条布局对 draw 的处理不对称，于是症状看着像"只有 vertical 坏"：
 

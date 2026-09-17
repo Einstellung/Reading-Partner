@@ -5,7 +5,7 @@
 原因：webview 从两个方向拦外链图片，缺一不可绕。
 
 1. `tauri.conf.json` 的 CSP `img-src 'self' data: blob:`——没有 `https:`，跨源图片直接被 CSP 拦。
-2. 同处的响应头 `Cross-Origin-Embedder-Policy: require-corp`——PDFium WASM 引擎要跨源隔离才能跑（见坑 18），它会拦掉所有没带 CORP 头的跨源子资源，新闻 CDN 的图基本都不带。
+2. 同处的响应头 `Cross-Origin-Embedder-Policy: require-corp`——PDFium WASM 引擎当初以为要跨源隔离才能跑（见坑 21），它会拦掉所有没带 CORP 头的跨源子资源，新闻 CDN 的图基本都不带。
 
 这两条都不能松：CSP 放开 `img-src https:` 是安全倒退；COEP 一去掉 PDFium 就加载不了。所以外链图永远进不来。
 

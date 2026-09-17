@@ -2,13 +2,13 @@
 
 ## 现象
 
-在 `.claude/worktrees/<name>/` 里用项目自己的 `vite.config.ts` 起一台 dev server 做实验，用户正在跑的 `tauri dev` 跟着重载。同一台 server 还一直吐旧代码，A/B 全是假阴性（坑 55）。
+在 `.claude/worktrees/<name>/` 里用项目自己的 `vite.config.ts` 起一台 dev server 做实验，用户正在跑的 `tauri dev` 跟着重载。同一台 server 还一直吐旧代码：改完源码刷新浏览器行为纹丝不动，改动明明在磁盘上、`bun test` 也吃到了，会一路量出「修好的代码仍然复现 bug」这种假结论，A/B 全是假阴性。改完要重启 dev server，别指望刷新页面就能拿到新代码；要连着量多轮，就把「重启 → 导航 → 装探针」写成一个脚本一次跑完。
 
 ## 原因
 
 两条都来自"worktree 不是一个独立的项目"：
 
-- worktree 的 `node_modules` 是指向主 checkout 的软链，而 vite 的 `cacheDir` 默认是 `node_modules/.vite`。这台 server 的 dep optimizer 于是重写主 checkout 的 `node_modules/.vite/deps`，用户那台 server 盯着同一个目录。坑 55 顺手提的 `--force` 更狠：直接把它清掉重建。
+- worktree 的 `node_modules` 是指向主 checkout 的软链，而 vite 的 `cacheDir` 默认是 `node_modules/.vite`。这台 server 的 dep optimizer 于是重写主 checkout 的 `node_modules/.vite/deps`，用户那台 server 盯着同一个目录。`--force` 更狠：直接把它清掉重建，千万别用。
 - `server.watch.ignored` 含 `**/.claude/**`，worktree 正在那底下，模块图不失效。
 
 ## 解法

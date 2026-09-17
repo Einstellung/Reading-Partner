@@ -9,7 +9,7 @@
 //
 //   - the scroll plugin recomputes its virtual items inside setScrollStrategy,
 //     or silently does nothing when the document is not "loaded" at that
-//     instant, and never retries (pitfall 42);
+//     instant, and never retries (pitfall 56);
 //   - the DOM is a React commit behind that, so the element the browser
 //     actually scrolls still has the old layout's scrollable extent;
 //   - the viewport plugin defers every scroll it is asked for by one more

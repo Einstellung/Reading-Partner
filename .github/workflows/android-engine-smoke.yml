@@ -3,7 +3,7 @@
 # machine verdict src/smoke writes. It answers the one real Android unknown: can
 # EmbedPDF's PDFium WASM load and rasterize a page in the Android System WebView
 # (Chromium) served over Tauri's http://tauri.localhost, the way it already can in
-# iOS WKWebView (docs/pitfall/33)? The Android WebView is a different engine, so it
+# iOS WKWebView (docs/pitfall/21)? The Android WebView is a different engine, so it
 # needs its own gate.
 #
 # The APK is a UNIVERSAL debug build (x86_64 + arm64): the emulator runs the

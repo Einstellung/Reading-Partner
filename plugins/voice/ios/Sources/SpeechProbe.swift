@@ -171,7 +171,7 @@ enum SpeechProbe {
                         failure = (failure.map { $0 + "; " } ?? "") + DictationError.describe(error)
                     }
                     // The order that does not abort: the tap first, then the
-                    // engine, and no detaching of anything (docs/pitfall/198).
+                    // engine, and no detaching of anything (docs/pitfall/199).
                     input.removeTap(onBus: 0)
                     engine.stop()
                 }

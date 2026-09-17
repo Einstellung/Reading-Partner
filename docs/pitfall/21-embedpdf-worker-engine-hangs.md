@@ -24,3 +24,13 @@ new URL("/pdfium/pdfium.wasm", location.href).href
 - Chromium 和真 WebKit（Playwright webkit-2336，Linux 上就是 WebKitGTK）都验过：跨源隔离关掉、`SharedArrayBuffer` 不存在时 worker 引擎照样开 14 页。
 - Tauri 打包（`tauri build --debug --no-bundle`）后在 macOS WKWebView 上跑 `VITE_SMOKE=1` 的冒烟：`location.origin` 是 `tauri://localhost`（不是 `"null"`），拼出的 `tauri://localhost/pdfium/pdfium.wasm` 被 blob worker 里的 fetch 取到了，`engineMode: "worker"`，`crossOriginIsolated: false`，渲染出 18240 非白像素。自定义协议下 worker 的 fetch 能到 WKURLSchemeHandler、CSP 的 `connect-src 'self'` 也匹配，这两条在 macOS 上是实测结论。
 - iOS 真机/模拟器没验。iOS 和 macOS 共用 WKWebView 和同一份 Tauri 协议实现，但内存压力下 worker 被回收之类的差异只有真机能答；`.github/workflows/ios-simulator-smoke.yml` 的冒烟结果里有 `engineMode`，看那一栏。
+
+## 同一个坑的另一张脸：doc-manager 停在 loading / progress 0
+
+装上插件系统（core + PdfiumEngine + 插件）之后，这个坑不是"task 不 resolve"，是 `openDocumentBuffer` 的 task 照常 resolve，但 doc-manager 的 `documentState` 停在 `status: "loading"`, `loadingProgress: 0`, `document: null`，页面永不渲染，控制台不报错——根因和上面一样（wasmUrl 用了根相对路径）。要分清是插件系统的问题还是 wasm 本身的问题，绕过整个插件系统直接调用底层 `createPdfiumDirectEngine('/pdfium/pdfium.wasm').openDocumentBuffer({id, content})`，能出 `pageCount` 就说明不是 wasm 的问题。
+
+跨源隔离头（`vite.config.ts`、`tauri.conf.json` 里的 COOP/COEP）留着无害，是早期误诊时加的，将来真要用 SharedArrayBuffer 还用得上；但不要再拿"需要 SAB"解释新现象。
+
+## iOS WKWebView 没有跨源隔离，直连引擎仍渲染
+
+iOS WKWebView 对自定义 scheme 的响应不授予 `crossOriginIsolated`，`SharedArrayBuffer` 不存在；但 PDFium 本来就是单线程（上面已证伪 pthread 构建），直连引擎照常 openDocumentBuffer + renderPage 成功，渲染正确（实测 200×200、18240 非白像素）。闸门因此可以在模拟器上无签名验证，不需要等第一个 TestFlight 包。COEP=require-corp 仍会拦跨源子资源，外链图的 http 路由内联（见坑 30）在 iOS 上同样需要。

@@ -163,7 +163,7 @@ A2DP——只要 category 是 `.playAndRecord`，iOS 就不把 A2DP 端拿出来
 （raw 腿多是因为它保留了供应商的静音）。`levelIntervalMs` 在 ~92 和 ~115 ms 之间交替，中位数约 100 ms；
 `firstTapFrames=2400`，正好是判据里写的那个数。
 
-## 崩溃又来了：坑 198 的解法不够
+## 崩溃又来了：第一次的解法不够
 
 `Reading Partner-2026-08-28-152247.ips`（本目录 `crash-152247.ips`），SIGABRT，栈的上半截和第一轮一模一样：
 
@@ -176,7 +176,7 @@ Reading Partner  AudioFront.close()
 Reading Partner  static SpeechProbe.setVoiceProcessing(_:)
 ```
 
-这次 engine 已经停了，tap 和 player 也都停了——坑 198 那条「先停 engine 再 detach」的顺序照做了，还是抛。触发点也
+这次 engine 已经停了，tap 和 player 也都停了——那条「先停 engine 再 detach」的顺序照做了，还是抛。触发点也
 换成了主动 `close()`（探针切 VPIO），不是路由变化。
 
 解法改成**根本不 detach**：摘 tap、停 player、停 engine，然后 `self.engine = nil` 让整张图跟着释放。记进坑 199。

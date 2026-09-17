@@ -924,7 +924,7 @@ final class AudioFront {
             // `AVAudioEngineGraph::RemoveNode` raises an Objective-C exception,
             // and an ObjC exception in Swift is an abort rather than an error,
             // which is how a teardown took the whole process with it twice
-            // (docs/pitfall/198 and 199).
+            // (docs/pitfall/199).
             player?.removeTap(onBus: 0)
             player?.stop()
             if engine.isRunning {

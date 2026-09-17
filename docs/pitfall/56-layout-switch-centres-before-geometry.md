@@ -10,7 +10,7 @@ Chromium 里量到的失败态：`scrollLeft=4904`，应该是 `5324`；可见�
 
 一次切布局是三件独立异步的事，而居中只等了其中零件之一：
 
-1. `setScrollStrategy` 同步重算 virtualItems——或者一声不响什么都不做（文档那一刻不是 `loaded`，坑 42）。
+1. `setScrollStrategy` 同步重算 virtualItems——或者一声不响什么都不做（文档那一刻不是 `loaded`，不报错、不重排、之后也没有别的事件补做）。
 2. React 提交要等到下一次 commit，滚动容器的 `scrollWidth` 才从竖排的宽度长成横向页带的宽度。
 3. `plugin-viewport` 的 React 钩子把每一次 `scrollTo` 都推迟一帧：`onScrollRequest(... => requestAnimationFrame(() => container.scrollTo(...)))`。
 
@@ -18,8 +18,8 @@ Chromium 里量到的失败态：`scrollLeft=4904`，应该是 `5324`；可见�
 
 两条本以为兜底的路，实测都不兜底：
 
-- **重复 `setScrollStrategy(同一个)` 是空操作**。`setScrollStrategyForDocument` 开头就是 `if (!docState || docState.strategy === newStrategy) return;`。第一次调用已经把 `docState.strategy` 写成新值，所以坑 42 里「下一帧再断言一次 strategy」这行代码从来没起过作用。要真正逼出一次 `refreshDocumentLayout`，只能先切到另一个 strategy 再切回来（两次都同步，中间那个布局不会上屏）。
-- **同尺度的 `requestZoom` 会发 zoom change 事件，但不会重排**（2.14.4 实测；坑 42 说的「没有 change 事件」不准）。`handleRequest` 无条件 `dispatch(setZoomLevel)` 并 `zoom$.emit`，但 `dispatchCoreAction(setScale(同一个数))` 在 core 里不产生变更，`onScaleChanged` 不触发，virtualItems 也就没人碰。竖屏 iPad 上 fit-page 和 fit-width 恒等（612×792 的页、834×1194 视口都是 1.33；1024×1366 都是 1.6405），所以切布局时缩放值本来就不变。
+- **重复 `setScrollStrategy(同一个)` 是空操作**。`setScrollStrategyForDocument` 开头就是 `if (!docState || docState.strategy === newStrategy) return;`。第一次调用已经把 `docState.strategy` 写成新值，「下一帧再断言一次 strategy」这条路从来没起过作用。要真正逼出一次 `refreshDocumentLayout`，只能先切到另一个 strategy 再切回来（两次都同步，中间那个布局不会上屏）。
+- **同尺度的 `requestZoom` 会发 zoom change 事件，但不会重排**（2.14.4 实测）。`handleRequest` 无条件 `dispatch(setZoomLevel)` 并 `zoom$.emit`，但 `dispatchCoreAction(setScale(同一个数))` 在 core 里不产生变更，`onScaleChanged` 不触发，virtualItems 也就没人碰。竖屏 iPad 上 fit-page 和 fit-width 恒等（612×792 的页、834×1194 视口都是 1.33；1024×1366 都是 1.6405），所以切布局时缩放值本来就不变。
 
 顺带，`plugin-viewport` 缓存的 `viewportMetrics.scrollWidth/scrollHeight` 来自容器上的 `ResizeObserver`，只有容器自己的盒子变了才更新。内容从竖排变成页带时它一动不动，所以判断「重排到没到 DOM」只能读元素本身的 `scrollWidth`。
 
@@ -34,3 +34,11 @@ Chromium 里量到的失败态：`scrollLeft=4904`，应该是 `5324`；可见�
 宿主侧（`src/reading/engine/wire-engine.ts` 的 `setLayout` / `turnToPage`）：几何合格才居中，居中后继续复核落点，没到就重发（最多 3 次），整个过程有 24 帧的上限，到点就按现有几何居中一次收工（等于旧行为）。更新的一次切布局或翻页会让旧的 settle 直接让位。
 
 实测：834×1194 和 1024×1366（两个 fit 相等）、900×1000（两个 fit 不等）三种视口，正反切、连切、首页末页、退出临时放大后翻页全部落在整页上；人为吞掉一到两次横向 `scrollTo` 也能自愈，旧代码则永久停在半页。
+
+## 同一个坑的另一张脸：切回 vertical 也可能卡着不重排
+
+方向反过来一样中招：从 paged（横向页带）切回 vertical 后，页面可能仍然是横排的——纵向滑动没有可滚的高度（`scrollHeight ≈ clientHeight`），横向一动就滑出下一页，插件状态说 vertical，DOM 还是 strip。根因和上面一样：`setScrollStrategyForDocument` 在文档那一刻不是 `loaded` 时静默跳过，紧跟着的 `requestZoom` 又可能因为新旧布局的 fit 数值相同（竖屏 iPad 上 fit-page 和 fit-width 恒等）而不触发重排，两条兜底一起哑掉。
+
+解法不只是等对时机，还要把切布局当成全量命令：`setLayout` 把该模式的每一项（scroll axis / zoom / touch-action / 手势机状态 / fit-page 基准）无条件全量应用，不做 `mode === layout` 的提前返回；这条连同"进出必须对称"的证明放在 `src/reading/engine/layout-modes.ts` 的纯函数里，单测覆盖来回切换回到初始状态。
+
+顺带：布局切换必须把触摸路由器在飞的东西一起丢掉（惯性、长按计时器、paged 状态机相位、橡皮筋 transform、pointer capture、`interaction.pause()`）。实测切换发生在手指没抬起时，引擎的 pause 会一直挂到下一次手势才被解开，中间选字和标注全是死的。

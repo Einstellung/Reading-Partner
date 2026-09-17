@@ -10,7 +10,7 @@
 
 - `Viewport` 组件把它当 `padding` 写在滚动容器上（这才是看得见的留白）；
 - zoom 插件解每一个 fit 都是 `clientWidth - 2 * viewportGap`（`computeZoomForMode`），所以有 gap 的页面永远填不满屏幕；
-- scroll 插件的 `getScrollPositionForPage` 在每个页面的滚动位置上加一次 `viewportGap`（坑 22）。
+- scroll 插件的 `getScrollPositionForPage` 在每个页面的滚动位置上加一次 `viewportGap`：`x/y` 各是 `scaledBasePosition + rotatedSize + this.viewportGap`。存页内阅读位置时用的 `pageVisibilityMetrics[].original.pageX/pageY` 量的是实际可视偏移，不含这个 gap；存取两头对不上，用 `scrollToPage({ pageCoordinates })` 还原就会带着一份 gap 往下漂（zoom 1.5 时多漂 6.67 页坐标单位，zoom 1 时多 10，正好是 `viewportGap / zoom`）。gap 非 0 时，还原前要把它换算回未缩放页坐标减掉（负值截为 0）。阅读区把 `viewportGap` 收成 0 之后这个具体漂移不会再发生，但公式本身留着，gap 一旦非 0 就要记得这道减法。
 
 也就是说留白不是白留的：它同时把"整页适配"的定义改小了 2×gap。翻页模式下邻页从缝里露出来（坑 61、62 的那条边）有一半是这个数直接给的。
 

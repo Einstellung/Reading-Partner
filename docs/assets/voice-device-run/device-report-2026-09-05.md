@@ -158,7 +158,7 @@ VPIO 开着，识别器把手机自己放的那段写下来了：`played` 段两
 
 1. Mac 上的 `linux` remote 指着 `ssh://xinyuan@172.20.10.10/...`（坑 202 那个热点网段），Linux 现在是
    192.168.0.107。症状是 `Connection closed by 172.20.10.10 port 22`——那个地址上有别的东西在应答，
-   不是超时。改了 Mac 上的 remote URL。这是这一轮在 Mac 上做的唯一配置改动。记进坑 216。
+   不是超时。改了 Mac 上的 remote URL。这是这一轮在 Mac 上做的唯一配置改动。记进坑 202。
 2. WiFi 下的 `idevicesyslog` 是个空转：不报错、不退出，只打一行
    `Waiting for device with UDID … to become available...` 然后挂着。后果是 `.app.log` / `.sys.log`
    永远停在那一行，脚本里那个 `last line Ns ago` 计数从文件创建时刻起单调增长，读起来像 app 早就死了

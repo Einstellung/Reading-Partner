@@ -14,7 +14,7 @@
 
 锚点按布局分。规则和逐布局设置表放一起，在 `src/reading/engine/layout-modes.ts`（`LayoutSettings.anchor` + 纯函数 `readingPosition`，有单测）：
 
-- 竖排 `viewport-top`：最顶上的可见页 + 页内偏移，和坑 23、坑 22 一样，一个字没改。
+- 竖排 `viewport-top`：最顶上的可见页 + 页内偏移，和坑 23、坑 100 一样，一个字没改。
 - 翻页 `centered-page`：插件自己的 `getCurrentPage()`（可见占比最大的页，在 fit-page 下就是居中那页），不存页内偏移——还原时本来也只用页码。
 
 翻页别自己按几何再算一遍居中页：`getCurrentPage()` 已经是切布局搬运位置、页码显示、`turnToPage` 的起点和 `dragStartPage` 用的那个答案，宿主再算一个就是多一个能对不上的意见。它和 `pageVisibilityMetrics` 出自 `commitMetrics` 同一次 dispatch，读出来一定自洽。
