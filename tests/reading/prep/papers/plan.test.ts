@@ -3,13 +3,13 @@
 
 import { expect, test } from "bun:test";
 import {
-  extractJson,
   parsePlan,
   planUserMessage,
   resolveUrlAddition,
   slugify,
   uniqueSlug,
 } from "../../../../src/reading/prep/papers/plan";
+import { extractJson } from "../../../../src/reading/prep/model-output";
 import type { Fulltext } from "../../../../src/fulltext/types";
 
 const PLAN = {
