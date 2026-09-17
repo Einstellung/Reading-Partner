@@ -814,6 +814,50 @@ test("a loop driven with no telemetry records nothing", async () => {
 	}
 });
 
+// The prompt a turn accepts is the whole conversation, and the harness
+// announces every message it writes down — so a turn on a ten-message history
+// hears nine message_end events before its first request goes out. None of
+// them is a call: a line for one would carry round 0, no usage at all, and a
+// duration measured from the epoch (docs/pitfall/325).
+test("a replayed assistant message is not a round on either log", async () => {
+	const written: ModelCallInput[] = [];
+	const undo = setModelCallSink(async (calls) => {
+		written.push(...calls);
+	});
+	const record = spyOn(cacheTelemetry, "recordCacheTurn").mockImplementation(() => {});
+	try {
+		const history: ChatMessage[] = [
+			{ role: "user", text: "what is chapter 3 about" },
+			{ role: "ai", text: "it is about evaluation" },
+			{ role: "user", text: "and the code in it" },
+			{ role: "ai", text: "the code is a scorer" },
+			{ role: "user", text: "go on" },
+		];
+		const script = scriptStream([{ text: "on it" }]);
+		const c = collectCallbacks();
+
+		await run({
+			stream: script.fn,
+			model: MODEL,
+			messages: toPiMessages(history),
+			tools: [],
+			maxRounds: 8,
+			telemetry: { surface: "reading", thread: "thread-3" },
+			...c.cb,
+		});
+
+		expect(c.done).toBe("on it");
+		expect(record).toHaveBeenCalledTimes(1);
+		const only = record.mock.calls[0][0];
+		expect(only.round).toBe(1);
+		expect(only.startedAt).toBeGreaterThan(0);
+		expect(written.length).toBe(1);
+	} finally {
+		record.mockRestore();
+		undo();
+	}
+});
+
 // --- the model-call log ------------------------------------------------------
 
 // A round is a request, and the log counts requests: a turn that called a tool
