@@ -1,16 +1,14 @@
-// `Retry-After` read once, for every caller that sends HTTP requests. The retry
-// loops stay apart — info's briefing fetch and the paper clients differ in
-// backoff, per-host spacing and what a terminal 429 means — but the header is
-// defined by the RFC and not by the caller, so parsing it is one function.
-// Reading it privately is how reading/papers came to Number() the value, which
-// is NaN for the date form and unbounded for "999999".
+// `Retry-After` read once, for every caller that sends HTTP requests. The header
+// is defined by the RFC and not by the caller, so parsing it is one function,
+// apart from the loop that acts on it (throttled-fetch.ts). Reading it privately
+// is how reading/papers came to Number() the value, which is NaN for the date
+// form and unbounded for "999999".
 
 // The longest a retry will wait, however long the server asks for. A source that
 // answers 429 with "come back in an hour" is asking for more than the run
 // waiting on it has: past the cap the attempt is given up and the caller
 // degrades that one item, which is what any other non-OK status does anyway.
-// The caller applies it rather than the parser, because each loop decides on its
-// own whether its own backoff is capped too.
+// The loop applies it rather than the parser, which only reads the header.
 export const MAX_RETRY_WAIT_MS = 30_000;
 
 // `Retry-After` in either form the RFC allows: a delay in seconds, or an HTTP
