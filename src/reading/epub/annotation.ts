@@ -16,6 +16,7 @@
 // survive, the words are still in the book. The quote carries its neighbours so
 // a passage the book repeats is found at the copy that was marked.
 
+import { padInt } from "../../platform/std/text";
 import { runAt, type DocumentText } from "./text";
 
 /** What a FragmentSelector holding an EPUB CFI declares itself to conform to. */
@@ -49,10 +50,6 @@ export interface TextSpan {
 
 // ------------------------------------------------------------- sort index ---
 
-function pad(n: number, width: number): string {
-  return String(Math.max(0, Math.round(n))).padStart(width, "0");
-}
-
 /**
  * The document-order key the trace list sorts on, for an EPUB: the spine item
  * and the character offset inside it, both zero-padded so the string orders the
@@ -63,7 +60,7 @@ function pad(n: number, width: number): string {
  * (reading/engine/convert.ts: makeSortIndex).
  */
 export function makeEpubSortIndex(spineIndex: number, charOffset: number): string {
-  return `${pad(spineIndex, 5)}|${pad(charOffset, 7)}`;
+  return `${padInt(spineIndex, 5)}|${padInt(charOffset, 7)}`;
 }
 
 // ----------------------------------------------------------------- quotes ---
