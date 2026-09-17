@@ -54,6 +54,7 @@
 | 新建源文件、给同目录两个文件起名 | 开发环境 |
 | 用 `useDom()` / RTL 写组件测试 | 开发环境 |
 | 跑测试确认一个改动、拿别人报的全绿当结论 | 开发环境 |
+| 在测试里跑一段真的宿主实现（settings、appData） | 开发环境 + 存储与数据目录 |
 | 搬目录、切子域、动分层表 | 开发环境 |
 | 拿 grep 判断"这东西没人用"、按结论删代码 | 开发环境 |
 | 写扫源码的守卫测试、拿正则找字段声明 | 开发环境 |
@@ -334,6 +335,7 @@
 - [292-killing-vite-by-its-wrapper-pid-leaves-the-server-up](./292-killing-vite-by-its-wrapper-pid-leaves-the-server-up.md) — `bun run vite` 是外壳，监听端口的是它的子进程；kill 外壳不带走它，新起的那份撞 `strictPort` 当场退出（只写进日志），`curl` 的 200 是旧服务器答的，于是三轮改动截图一模一样。按 `lsof -ti:<port>` 杀，起完 grep 一句刚加的标识符确认服务器是新的
 - [239-vite-prebundle-freezes-a-dependency](./239-vite-prebundle-freezes-a-dependency.md) — `node_modules/.vite/deps` 把 pi-ai 的模型表整份内联冻在几周前，pull 后没 `bun install` 也没重建缓存，app 看到的表比磁盘旧，`enforceKnownModel` 如实把「不在目录里」的模型换掉并写回盘；`bun install && rm -rf node_modules/.vite` 再重启，判据是拿 `bun -e` 直读 `node_modules` 和 app 里看到的对比
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
+- [352-loadsettings-throws-before-it-returns-a-promise](./352-loadsettings-throws-before-it-returns-a-promise.md) — `loadSettings` 不是 `async`，宿主之外 `readGuardedJson` 同步抛在返回 promise 之前，调用点的 `.catch(() => null)` 接不住；测试里要跑它就先 `installAppData()`
 - [303-a-boot-at-module-scope-registers-for-every-test-file](./303-a-boot-at-module-scope-registers-for-every-test-file.md) — 测试文件在模块顶层 boot 领域（注册蒸馏源、desk kind），`afterAll` 要等本文件跑完才 undo，中间每个文件问注册表都看得见那几个源；两个文件单跑都绿。boot 放进用例体 try/finally，断言按 kind 数不按总数
 - [320-tests-tsconfig-no-array-at](./320-tests-tsconfig-no-array-at.md) — 测试里写 `Array.prototype.at`，`bun test` 照跑，`tsc -p tsconfig.test.json` 报 lib 里没有；测试那份 tsconfig 的 lib 停在 ES2022 以前。取最后一个写 `all[all.length - 1]`
 - [287-a-test-desk-kind-replaces-the-domains-opener](./287-a-test-desk-kind-replaces-the-domains-opener.md) — 测试里的假 item 起名 `"book"`，把领域注册的 opener 顶掉，整场 `openDesk` 都拿到那个空壳：`tests/reading/turn.test.ts` 四十多个用例红，两个文件单跑都绿。假 kind 用领域不会用的名字
