@@ -3,6 +3,7 @@
 
 import { expect, test } from "bun:test";
 import { inSyncRange } from "../../src/platform/sync/syncFs";
+import type { UsageIo } from "../../src/memory/usage/log";
 import {
   capToBytes,
   createModelCallLog,
@@ -145,4 +146,43 @@ test("the cap is applied on append, so the file cannot grow without end", async 
   const text = files.get(path) ?? "";
   expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(MODEL_CALL_LOG_MAX_BYTES);
   expect(lines(text).map((e) => e.caller)).toEqual(["prep"]);
+});
+
+// Reads and writes that take a turn of the event loop, the way the real ones do.
+function slowIo(files: Map<string, string>, deviceId: string): UsageIo {
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  return {
+    async read(path) {
+      await tick();
+      return files.get(path) ?? null;
+    },
+    async write(path, content) {
+      await tick();
+      files.set(path, content);
+    },
+    deviceId: () => deviceId,
+    now: () => JULY_17,
+  };
+}
+
+// The send path reports fire-and-forget (src/ai/model-usage.ts), so all of a
+// turn's calls report in the same tick, and two turns at once report into each
+// other. Appending is read-modify-write over the whole file, so without one
+// writer at a time every one of them reads the same prior content and the last
+// write back is the only one that survives (pitfall 338).
+test("calls reported at the same moment all land, in the order they were reported", async () => {
+  const files = new Map<string, string>();
+  const log = createModelCallLog(slowIo(files, "device1"));
+
+  const models = Array.from({ length: 19 }, (_, i) => `m-${i}`);
+  await Promise.all(
+    models.map((model) =>
+      log.logModelCall([
+        { caller: "reading", provider: "anthropic", model, input: 1, output: 1, ok: true },
+      ]),
+    ),
+  );
+
+  const entries = lines(files.get(modelCallLogFile("device1")) ?? "");
+  expect(entries.map((e) => e.model)).toEqual(models);
 });

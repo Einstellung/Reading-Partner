@@ -2,10 +2,14 @@
 // event, one file per device.
 //
 // Per device because two devices appending to one file would be two devices
-// rewriting one file — plugin-fs has no append mode, so every append is a
-// read-modify-write, and the losing side of that is a stretch of history
-// nothing can reconstruct. Named for the device, the file has one writer and
-// the merge is the union of the lines (platform/sync/merge/records.ts).
+// rewriting one file: every append here is a read-modify-write, and the losing
+// side of that is a stretch of history nothing can reconstruct. Not
+// appData.appendText, which events.ts uses — this log is written through the
+// atomic writer because that is what tells sync the file changed
+// (platform/app/atomic-fs.ts), and the model-call log beside it has to read the
+// whole file anyway to hold it under its cap. Named for the device, the file
+// has one writer and the merge is the union of the lines
+// (platform/sync/merge/records.ts).
 //
 // Write-only for now. Nothing reads this log, and nothing should be built to
 // read it before there is a question to ask of it: the point of writing it now
@@ -56,6 +60,37 @@ export interface UsageIo {
   now(): number;
 }
 
+// One writer per file at a time. Every append here is a read-modify-write over
+// the whole file, and the callers log without awaiting: a turn's model calls all
+// report in the same tick, two turns run at once, and each of them reads the
+// same prior content and writes back over what the others put down — nineteen
+// calls once left one line (pitfall 338).
+//
+// Keyed by path rather than held per log object: what two writers collide over
+// is the file. The chain a writer waits on never rejects, so one write that
+// failed does not take the writes queued behind it with it.
+const writing = new Map<string, Promise<void>>();
+
+/**
+ * Run a file's read-modify-write after every earlier one for that path has
+ * landed. Both logs in this directory go through it; a caller elsewhere writing
+ * one of these files behind its back is the case it cannot cover.
+ */
+export function writeInTurn(path: string, run: () => Promise<void>): Promise<void> {
+  const result = (writing.get(path) ?? Promise.resolve()).then(run);
+  const settled = result.then(
+    () => {},
+    () => {},
+  );
+  writing.set(path, settled);
+  void settled.then(() => {
+    // Last writer out drops the key, so this does not grow by one entry per
+    // file for the life of the process.
+    if (writing.get(path) === settled) writing.delete(path);
+  });
+  return result;
+}
+
 export interface UsageLog {
   logUsage(entries: readonly UsageEntryInput[]): Promise<void>;
 }
@@ -71,10 +106,15 @@ export function createUsageLog(io: UsageIo): UsageLog {
       // startup, so this is a call that ran too early, and dropping the lines
       // is better than writing them somewhere nothing will look.
       if (!device) return;
+      // Stamped now, before the wait for the writer ahead: the line says when
+      // the event happened, not when its turn at the file came.
       const at = new Date(io.now()).toISOString();
       const path = usageLogFile(device);
-      const prior = (await io.read(path)) ?? "";
-      await io.write(path, appendLines(prior, entries.map((e) => ({ at, device, ...e }))));
+      const lines = entries.map((e) => ({ at, device, ...e }));
+      await writeInTurn(path, async () => {
+        const prior = (await io.read(path)) ?? "";
+        await io.write(path, appendLines(prior, lines));
+      });
     },
   };
 }
