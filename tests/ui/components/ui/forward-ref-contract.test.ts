@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { useDom } from "../../../support/dom";
 
 // The primitives come in dynamically, after the window is up. Eleven of the
-// sixteen wrap a Radix package that reaches for a portal, and that pulls in
+// fifteen wrap a Radix package that reaches for a portal, and that pulls in
 // react-dom's client bundle, which decides at module evaluation whether it is
 // in a browser and never reconsiders (docs/pitfall/121). Static imports are
 // evaluated before any top-level await in the file, so importing them the
@@ -38,7 +38,6 @@ const alertDialog = await import("../../../../src/ui/components/ui/alert-dialog"
 const badge = await import("../../../../src/ui/components/ui/badge");
 const button = await import("../../../../src/ui/components/ui/button");
 const checkbox = await import("../../../../src/ui/components/ui/checkbox");
-const collapsible = await import("../../../../src/ui/components/ui/collapsible");
 const dialog = await import("../../../../src/ui/components/ui/dialog");
 const dropdownMenu = await import("../../../../src/ui/components/ui/dropdown-menu");
 const input = await import("../../../../src/ui/components/ui/input");
@@ -49,7 +48,6 @@ const select = await import("../../../../src/ui/components/ui/select");
 const separator = await import("../../../../src/ui/components/ui/separator");
 const switchModule = await import("../../../../src/ui/components/ui/switch");
 const tabs = await import("../../../../src/ui/components/ui/tabs");
-const textarea = await import("../../../../src/ui/components/ui/textarea");
 const toast = await import("../../../../src/ui/components/ui/toast");
 
 const UI = join(dirname(fileURLToPath(import.meta.url)), "../../../../src/ui/components/ui");
@@ -60,7 +58,6 @@ const MODULES: Record<string, Record<string, unknown>> = {
   "badge.tsx": badge,
   "button.tsx": button,
   "checkbox.tsx": checkbox,
-  "collapsible.tsx": collapsible,
   "dialog.tsx": dialog,
   "dropdown-menu.tsx": dropdownMenu,
   "input.tsx": input,
@@ -71,7 +68,6 @@ const MODULES: Record<string, Record<string, unknown>> = {
   "separator.tsx": separator,
   "switch.tsx": switchModule,
   "tabs.tsx": tabs,
-  "textarea.tsx": textarea,
   "toast.tsx": toast,
 };
 

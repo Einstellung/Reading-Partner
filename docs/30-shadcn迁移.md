@@ -14,7 +14,7 @@
 >
 > 五：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期的常量清干净。Tabs / Tooltip 没引，理由见「没引的」。
 >
-> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「各版改了什么」）。
+> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「各版改了什么」）。2026-09-17 删掉 collapsible 和 textarea，两个都没有调用点。
 
 ---
 
@@ -266,7 +266,7 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 - 侧栏标签行、`Sidebar` 的抽屉和背板、`LibraryScreen` / `BriefingPage` / `PrepPanel` 的列表行：`<button>` 就是它们该有的样子，包一层组件不会少写一行。
 - `HomeCard` / `InfoCards` 的卡片外壳、`settings/cardStyles.ts` 的 `CARD`：shadcn 的 Card 是 header/content/footer 三段式，这里的卡片没有那个结构。
 
-`src/` 里现在没有 `<select>`。原生复选框回来了一处：`NewTalkDialog`（后加的，晚于五版）的多选列表用裸 `<input type="checkbox">`，没走 `ui/checkbox.tsx`（现在只有 `FeaturesPanel`、`SyncCard`、`AutostartCard` 三处调用它）。`<input>` 因此是三处：`ui/input.tsx`、`SourcesPage` 的 URL 输入框、`NewTalkDialog` 那个复选框；`<textarea>` 仍是三处：`ui/textarea.tsx`、`AnnotationPopup`、聊天输入区。
+`src/` 里现在没有 `<select>`。原生复选框回来了一处：`NewTalkDialog`（后加的，晚于五版）的多选列表用裸 `<input type="checkbox">`，没走 `ui/checkbox.tsx`（现在只有 `FeaturesPanel`、`SyncCard`、`AutostartCard` 三处调用它）。`<input>` 因此是三处：`ui/input.tsx`、`SourcesPage` 的 URL 输入框、`NewTalkDialog` 那个复选框；`<textarea>` 是两处：`AnnotationPopup`、聊天输入区。
 
 这份清单说的是组件：这几个组件仍然自己写，不套 Radix。它们内部的按钮在「阅读区的收敛」里换成了 `<Button variant="ghost">`（同一个原生 `<button>`，样式来自变体表），侧栏标签行同理。裸 `<button>` 从 37 处降到 27 处：列表行、聊天输入区的三个键、`ReadingPipCard`、`FigureCard` 的卡片本体。
 
