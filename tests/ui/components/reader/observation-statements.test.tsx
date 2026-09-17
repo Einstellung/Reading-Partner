@@ -7,18 +7,18 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import ObservationPanel from "../../../../src/ui/components/reader/ObservationPanel";
 import type { Statement } from "../../../../src/memory";
+import { statement as statementRecord } from "../../../support/memory-fixtures";
 
+// The text, the dates and how much the statement rests on are all rendered, so
+// this file pins them rather than taking the fixture's.
 function statement(over: Partial<Statement> & { id: string }): Statement {
-  return {
-    kind: "profile",
+  return statementRecord({
     text: "Wants the full derivation, not a diagram of it.",
-    author: "dream",
     evidence: ["m-1111111111111111", "m-2222222222222222"],
-    contradictedBy: [],
     established: "2026-08-01",
     lastSupported: "2026-09-01",
     ...over,
-  };
+  });
 }
 
 const panel = (statements: Statement[]) =>

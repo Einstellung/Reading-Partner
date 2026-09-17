@@ -39,7 +39,9 @@ import {
   runDistillPass,
   runMarksDistillPass,
   type DistillAnnotation,
+  type DistillCoverage,
   type DistillMessage,
+  type DistillResult,
   type DistillStatement,
   type DistillUnitPart,
 } from "../observations/distill";
@@ -205,6 +207,48 @@ const statementEdges = {
 // second pass over what a hangup is already distilling (sweeps.ts).
 let gate = createDistillGate();
 
+// What a pass that ran is reported as: one log line either way, the panel told
+// whenever anything reached disk, and a warn carrying the sub-agent's own
+// sentence when the pass did not finish. The transcript pass and the marks pass
+// differ only in which field names the subject — a thread id or a book id — and
+// in what the warn line calls the pass.
+function reportDistillOutcome(
+  topicId: string,
+  subject: Record<string, string>,
+  label: string,
+  result: { coverage: DistillCoverage } & DistillResult,
+): void {
+  if (!result.ok) {
+    // The pass did not finish, so no cursor moved (runDistillPass) and the next
+    // trigger will redo this stretch. Whatever writes it managed are already on
+    // disk, so the panel is still told about those.
+    console.warn(`${label} did not finish:`, result.failure);
+    logEvent(topicId, "distill-failed", {
+      ...subject,
+      ...distillFailurePayload({
+        stage: "run",
+        outcome: result.outcome,
+        ...(result.cause ? { cause: result.cause } : {}),
+        coverage: result.coverage,
+        counts: result,
+      }),
+      ...distillWritePayload(result),
+    });
+    if (result.created + result.updated + result.deleted > 0) {
+      notifyObservationChange(topicId);
+    }
+    return;
+  }
+  logEvent(topicId, "distill-run", {
+    ...subject,
+    created: result.created,
+    updated: result.updated,
+    deleted: result.deleted,
+    ...distillWritePayload(result),
+  });
+  notifyObservationChange(topicId);
+}
+
 // One silent distillation pass for a finished (or long-running) thread.
 //
 // Never throws and never surfaces UI: observations are derived, and there is no
@@ -262,37 +306,12 @@ export function distillThread(
       // Nothing new since the last pass over this thread. The ordinary case once a
       // sweep looks every half hour, and not worth a log line.
       if (!result.ran) return;
-      if (!result.ok) {
-        // The pass did not finish, so no cursor moved (runDistillPass) and the next
-        // trigger will redo this transcript. Whatever writes it managed are already
-        // on disk, so the panel is still told about those.
-        console.warn("observation distillation did not finish:", result.failure);
-        logEvent(opts.topicId, "distill-failed", {
-          threadId,
-          trigger: opts.trigger,
-          ...distillFailurePayload({
-            stage: "run",
-            outcome: result.outcome,
-            ...(result.cause ? { cause: result.cause } : {}),
-            coverage: result.coverage,
-            counts: result,
-          }),
-          ...distillWritePayload(result),
-        });
-        if (result.created + result.updated + result.deleted > 0) {
-          notifyObservationChange(opts.topicId);
-        }
-        return;
-      }
-      logEvent(opts.topicId, "distill-run", {
-        threadId,
-        trigger: opts.trigger,
-        created: result.created,
-        updated: result.updated,
-        deleted: result.deleted,
-        ...distillWritePayload(result),
-      });
-      notifyObservationChange(opts.topicId);
+      reportDistillOutcome(
+        opts.topicId,
+        { threadId, trigger: opts.trigger },
+        "observation distillation",
+        result,
+      );
     } catch (e) {
       // Cancellation is not a failure and is not logged as one: whoever raised the
       // signal already knows, and the stamps stay put so the next trigger redoes it.
@@ -351,34 +370,12 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
         },
       );
       if (!result.ran) return;
-      if (!result.ok) {
-        console.warn("mark distillation did not finish:", result.failure);
-        logEvent(opts.topicId, "distill-failed", {
-          bookId: opts.bookId,
-          trigger: opts.trigger,
-          ...distillFailurePayload({
-            stage: "run",
-            outcome: result.outcome,
-            ...(result.cause ? { cause: result.cause } : {}),
-            coverage: result.coverage,
-            counts: result,
-          }),
-          ...distillWritePayload(result),
-        });
-        if (result.created + result.updated + result.deleted > 0) {
-          notifyObservationChange(opts.topicId);
-        }
-        return;
-      }
-      logEvent(opts.topicId, "distill-run", {
-        bookId: opts.bookId,
-        trigger: opts.trigger,
-        created: result.created,
-        updated: result.updated,
-        deleted: result.deleted,
-        ...distillWritePayload(result),
-      });
-      notifyObservationChange(opts.topicId);
+      reportDistillOutcome(
+        opts.topicId,
+        { bookId: opts.bookId, trigger: opts.trigger },
+        "mark distillation",
+        result,
+      );
     } catch (e) {
       if (e instanceof StoppedError) return;
       console.warn("mark distillation could not start", e);

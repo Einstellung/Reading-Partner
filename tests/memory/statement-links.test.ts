@@ -9,20 +9,7 @@ import {
   statementsContradictedBy,
   statementsFrom,
 } from "../../src/memory/statements/links";
-import type { Statement } from "../../src/memory/statements/types";
-
-function statement(over: Partial<Statement> & { id: string }): Statement {
-  return {
-    kind: "profile",
-    text: "about the reader",
-    author: "dream",
-    evidence: [],
-    contradictedBy: [],
-    established: "2026-07-02",
-    lastSupported: "2026-08-01",
-    ...over,
-  };
-}
+import { statement } from "../support/memory-fixtures";
 
 const A = "m-1111111111111111";
 const B = "m-2222222222222222";

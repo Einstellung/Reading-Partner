@@ -34,7 +34,7 @@ import {
   type WriteRejection,
   type WriteRelationOutcome,
 } from "./tools";
-import { buildTranscript, renderTranscript } from "./transcript";
+import { buildTranscript, renderTranscript, type TranscriptLine } from "./transcript";
 import type { EvidenceDates } from "./types";
 
 export interface DistillMessage {
@@ -795,46 +795,52 @@ export function buildDistillUserMessage(input: DistillInput): string {
   return lines.join("\n");
 }
 
-// One distillation pass. Rejects only for cancellation (StoppedError, raised by
-// the capability); every other way of not finishing comes back in `ok`.
-export async function runDistillation(
-  input: DistillInput,
+// What one pass brings of its own to the shape below: the prompt it runs, and
+// what it printed — hence what it is allowed to cite.
+interface ObservationPassSpec {
+  bookId?: string;
+  indexText: string;
+  statements?: readonly DistillStatement[];
+  // The transcript this pass rendered, when it has one. Absent on the
+  // silent-marks pass, which then gets no message anchors offered at all.
+  messageLines?: readonly TranscriptLine[];
+  annotationDates: ReadonlyMap<string, string>;
+  verify: AnchorVerifier;
+  // Takes the tools because they are the ones the tally is wired into, and the
+  // agent definition carries them.
+  agent(tools: AgentTool[]): SubagentDefinition;
+  task: string;
+}
+
+// The body both distillation passes share: mount the write tools around a fresh
+// tally, run the sub-agent once, and report what it wrote. Rejects only for
+// cancellation (StoppedError, raised by the capability); every other way of not
+// finishing comes back in `ok`.
+async function runObservationPass(
+  spec: ObservationPassSpec,
   adapter: ObservationAdapter,
   deps: DistillDeps,
 ): Promise<DistillResult> {
   const tally = newTally();
-  // The same lines the user message prints, so [n] there and messageIndices
-  // here are one numbering. Built twice rather than threaded through, because
-  // both are pure functions of the input and a numbering that can drift between
-  // the prompt and the tool is the bug this whole change is about. The two row
-  // tables below are built the same way, for the same reason.
-  const transcript = buildTranscript(input.messages, input.threadId);
   const tools = buildObservationTools(adapter, {
-    bookId: input.bookId,
-    messageLines: transcript,
-    annotationDates: markDates(input.silentMarks ?? []),
+    bookId: spec.bookId,
+    ...(spec.messageLines ? { messageLines: spec.messageLines } : {}),
+    annotationDates: spec.annotationDates,
     requireAnchor: true,
     ...(deps.otherTopics ? { otherTopics: deps.otherTopics } : {}),
     relations: {
-      observations: numberIndex(input.indexText).ids,
-      statements: formatStatements(input.statements ?? []).ids,
+      observations: numberIndex(spec.indexText).ids,
+      statements: formatStatements(spec.statements ?? []).ids,
       ...statementEdgesOf(deps),
     },
-    // The marks this pass printed — the thread's own, and the silent ones
-    // listed under the transcript — and the lines it printed. Nothing else was
-    // shown, so nothing else can be cited.
-    verify: anchorVerifier(
-      [input.annotationId, ...(input.silentMarks ?? []).map((m) => m.id)],
-      input.messages,
-      input.threadId,
-    ),
+    verify: spec.verify,
     onWrite: tally.write,
     onReject: tally.reject,
   });
   const brief = await runSubagent(
     {
-      definition: buildDistillAgent(input, tools, deps.model),
-      task: buildDistillUserMessage(input),
+      definition: spec.agent(tools),
+      task: spec.task,
       signal: deps.signal,
     },
     // No quota. A quota stops a parent model from calling the same sub-agent
@@ -854,6 +860,41 @@ export async function runDistillation(
     failure: ok ? undefined : brief.brief,
     ...(brief.failure ? { cause: brief.failure } : {}),
   };
+}
+
+// One distillation pass over a transcript.
+export async function runDistillation(
+  input: DistillInput,
+  adapter: ObservationAdapter,
+  deps: DistillDeps,
+): Promise<DistillResult> {
+  // The same lines the user message prints, so [n] there and messageIndices
+  // here are one numbering. Built twice rather than threaded through, because
+  // both are pure functions of the input and a numbering that can drift between
+  // the prompt and the tool is the bug this whole change is about. The two row
+  // tables below are built the same way, for the same reason.
+  const transcript = buildTranscript(input.messages, input.threadId);
+  return runObservationPass(
+    {
+      bookId: input.bookId,
+      indexText: input.indexText,
+      statements: input.statements,
+      messageLines: transcript,
+      annotationDates: markDates(input.silentMarks ?? []),
+      // The marks this pass printed — the thread's own, and the silent ones
+      // listed under the transcript — and the lines it printed. Nothing else was
+      // shown, so nothing else can be cited.
+      verify: anchorVerifier(
+        [input.annotationId, ...(input.silentMarks ?? []).map((m) => m.id)],
+        input.messages,
+        input.threadId,
+      ),
+      agent: (tools) => buildDistillAgent(input, tools, deps.model),
+      task: buildDistillUserMessage(input),
+    },
+    adapter,
+    deps,
+  );
 }
 
 // --- one pass over a thread, with the timestamp discipline ---
@@ -1177,42 +1218,24 @@ export async function runMarksDistillation(
   adapter: ObservationAdapter,
   deps: DistillDeps,
 ): Promise<DistillResult> {
-  const tally = newTally();
   // No transcript, so no message indices are mounted at all; the anchor this
   // pass must cite is an annotation id, which it has in full in its prompt.
-  const tools = buildObservationTools(adapter, {
-    bookId: input.bookId,
-    annotationDates: markDates(input.marks),
-    requireAnchor: true,
-    ...(deps.otherTopics ? { otherTopics: deps.otherTopics } : {}),
-    relations: {
-      observations: numberIndex(input.indexText).ids,
-      statements: formatStatements(input.statements ?? []).ids,
-      ...statementEdgesOf(deps),
-    },
-    verify: anchorVerifier(
-      input.marks.map((m) => m.id),
-      [],
-    ),
-    onWrite: tally.write,
-    onReject: tally.reject,
-  });
-  const brief = await runSubagent(
+  return runObservationPass(
     {
-      definition: buildMarksDistillAgent(input, tools, deps.model),
+      bookId: input.bookId,
+      indexText: input.indexText,
+      statements: input.statements,
+      annotationDates: markDates(input.marks),
+      verify: anchorVerifier(
+        input.marks.map((m) => m.id),
+        [],
+      ),
+      agent: (tools) => buildMarksDistillAgent(input, tools, deps.model),
       task: buildMarksDistillUserMessage(input),
-      signal: deps.signal,
     },
-    { run: deps.run },
+    adapter,
+    deps,
   );
-  const ok = brief.outcome === "answered";
-  return {
-    ...tally.counts,
-    ok,
-    outcome: brief.outcome,
-    failure: ok ? undefined : brief.brief,
-    ...(brief.failure ? { cause: brief.failure } : {}),
-  };
 }
 
 export interface MarksPassInput {
