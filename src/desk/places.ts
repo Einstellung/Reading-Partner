@@ -1,4 +1,4 @@
-// Where the reader can be taken (docs/67). The shell knows how to navigate; this
+// Where the reader can be taken (docs/71). The shell knows how to navigate; this
 // is the table it hands over — one sentence per place saying what it is for, and
 // a `go()` that takes the reader there. Where the soul goes, the desk changes,
 // so the places belong beside the registry of what can lie on a desk rather

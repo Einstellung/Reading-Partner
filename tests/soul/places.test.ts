@@ -1,4 +1,4 @@
-// go_to (src/soul/places.ts, docs/67): the map the model is handed is the
+// go_to (src/soul/places.ts, docs/71): the map the model is handed is the
 // registered places themselves, and going somewhere is the shell's own
 // callback. Run: bun test.
 

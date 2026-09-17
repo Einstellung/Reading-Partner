@@ -1,4 +1,4 @@
-// What is in the palace, as the soul can see it (docs/67, docs/61).
+// What is in the palace, as the soul can see it (docs/71, docs/61).
 //
 // The catalogue table says what every kind of data is; nothing until now let the
 // soul ask what there is of it. So a turn could sit at the door and not know
@@ -447,7 +447,7 @@ function listing(kind: CatalogueKind): string {
 }
 
 /**
- * The two tools that let the soul see what the reader has (docs/67). They ride
+ * The two tools that let the soul see what the reader has (docs/71). They ride
  * every turn, whatever the desk holds, because "which books do I have" is a
  * question asked at the door as often as over a book.
  *

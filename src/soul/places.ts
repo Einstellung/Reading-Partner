@@ -1,4 +1,4 @@
-// The one tool that moves the reader (docs/67): the soul takes them to a place,
+// The one tool that moves the reader (docs/71): the soul takes them to a place,
 // and the desk becomes whatever is there.
 //
 // The map is not written anywhere in the system prompt. It is the tool's own

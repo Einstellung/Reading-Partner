@@ -1238,7 +1238,7 @@ export default function App() {
     [topics, openFile, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
   );
 
-  // Where the soul may take the reader (docs/67, ui/components/base/places.ts).
+  // Where the soul may take the reader (docs/71, ui/components/base/places.ts).
   // The table is registered here because the moves are this shell's state; it
   // is registered again whenever they change, which replaces the previous set
   // rather than adding a second one.

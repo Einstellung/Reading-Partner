@@ -92,7 +92,7 @@ function env(): DeskEnv {
 }
 
 async function assemble(refs: DeskRef[]): Promise<string> {
-  // With the secretary on, the way every info surface assembles (docs/67 角色):
+  // With the secretary on, the way every info surface assembles (docs/71 角色):
   // the duty opens the prompt and the briefing's own blocks follow.
   const turn = await assembleTurn({ desk: await openDesk(refs, env()), role: SECRETARY_ROLE_ID });
   return turn!.systemPrompt;

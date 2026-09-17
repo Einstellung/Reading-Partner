@@ -1,4 +1,4 @@
-// The shells' places (src/ui/components/base/places.ts, docs/67): which places
+// The shells' places (src/ui/components/base/places.ts, docs/71): which places
 // there are, which screen each one opens, and what going anywhere does to an
 // open book. Run: bun test.
 

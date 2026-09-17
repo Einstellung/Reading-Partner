@@ -7,7 +7,7 @@
 //
 // The session is a record of this device's turns, not the soul's memory. The
 // context each turn sends is assembled from the conversation files (turn.ts,
-// docs/67), because a conversation another device wrote is only there; the
+// docs/71), because a conversation another device wrote is only there; the
 // lane stands on the session root before every prompt, so nothing recorded in
 // an earlier turn reaches the model again.
 

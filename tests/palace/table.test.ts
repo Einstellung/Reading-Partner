@@ -97,7 +97,7 @@ test("a descend rule matches the samples of the row that declares it", () => {
   expect(wrong).toEqual([]);
 });
 
-// The sentence a row is shown to the soul by (docs/67). The catalogue walk
+// The sentence a row is shown to the soul by (docs/71). The catalogue walk
 // resolves a path and lists what the row's id names, so a row the soul may see
 // has to be one of two things: a file with one name, whose records inside it are
 // the items, or a name that captures an id. A row matching a subtree with no id

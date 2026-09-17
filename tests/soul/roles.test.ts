@@ -1,4 +1,4 @@
-// Roles put on the soul (src/soul/roles.ts, docs/67 角色): the registry itself,
+// Roles put on the soul (src/soul/roles.ts, docs/71 角色): the registry itself,
 // and what a loaded role does to a turn — its duty opens the prompt, its tools
 // join the soul's, and a tool name it shares with something on the desk is
 // refused. Run: bun test.

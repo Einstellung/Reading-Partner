@@ -4,7 +4,7 @@
 // performs the effects that come back against three ports — the native bridge,
 // one model turn, and the thread the conversation is kept in.
 //
-// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// The voice is the soul's (docs/71), on whatever desk it speaks over; the info
 // briefing is one caller, not the owner.
 //
 // Ports rather than imports, for the reason conversation.ts takes a bridge: the

@@ -154,7 +154,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // is what keeps the provider's cache prefix where it was (docs/09).
   function composePrompt(dropped: ReadonlySet<string>): string {
     const memory = soulMemorySection(soul, anchor?.memory, dropped);
-    // The duty of whoever is at the desk, ahead of what lies on it (docs/67):
+    // The duty of whoever is at the desk, ahead of what lies on it (docs/71):
     // who this is comes before what they are looking at. Nothing prints here on
     // a desk with no role loaded, which is every reading turn — the anchored
     // prompt stays byte for byte what it was (docs/09).

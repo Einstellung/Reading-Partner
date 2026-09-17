@@ -1,7 +1,7 @@
 // Reading tables for the speech normalizer (docs/33). Data only: adding a row
 // never touches normalize.ts.
 //
-// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// The voice is the soul's (docs/71), on whatever desk it speaks over; the info
 // briefing is one caller, not the owner.
 //
 // Every row here is empirical. No TTS vendor documents how its voice reads a

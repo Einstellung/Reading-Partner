@@ -273,7 +273,7 @@ export default function PhoneApp({
 
   const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
 
-  // Where the soul may take the reader (docs/67). The same places the other
+  // Where the soul may take the reader (docs/71). The same places the other
   // shell registers, minus the shelf, and all of them through the one navigate
   // above: the stack decides whether arriving somewhere is a push or a back.
   useEffect(

@@ -8,7 +8,7 @@
 
 架构是 orchestrator-worker，三个角色。
 
-soul 是唯一的 orchestrator：一个用户一个，带记忆，和用户说话。一个回合里它只做听、判断、派，不干活（[67](./67-soul.md)）。
+soul 是唯一的 orchestrator：一个用户一个，带记忆，和用户说话。一个回合里它只做听、判断、派，不干活（[71](./71-soul.md)）。
 
 worker 执行一个 run：里面有模型的是 agent worker，没有的是程序 worker。
 
@@ -212,7 +212,7 @@ runner 是 `kind` → worker 的注册表加一圈外壳：取走 → 写 `runni
 
 落位：`legion/execute/harness.ts` 是工厂，建 `AgentHarness` 和 `JsonlSessionRepo`；`legion/execute/turn.ts` 用它提供今天 `runAgentTurn` 的同一份契约。`src/ai/agent.ts` 里手写的 `runAgentLoop` / `runAgentTurn` 退役，调用方改从 `legion/execute` import，`src/ai` 只剩 provider、鉴权、streamFn、消息转换这类接线。`legion/subagent` 是 lane 上的薄壳：子 agent 起自己的 harness 和 session，lane 名 `worker:<定义名>`、session 组 `worker`，工具集是调用方给的最小集；不挂在调用方的 harness 上，因为 pi 的 lane 只能换模型、思考档和工具名，系统提示和工具注册表是 harness 级的（坑 307）。brief 仍由 `subagent/brief.ts` 出，pi 的分支摘要是压缩摘要，说不出「没证据」「轮数用尽」这些区别。手写循环 `agent-turn.ts` 已删。
 
-soul 的那条 lane 已经常驻：`legion/execute/held.ts` 把一个 harness 跨回合持有（session 组 `soul`、lane 名 `soul`，`src/soul/harness.ts` 进程内懒建一份），`runAgentTurn` 的 `harness` 参数让 soul 的五个回合面（阅读聊天、info 聊天与语音、排练教练、复述）跑在它上面，subagent 和后台 pass 仍各自开 harness。每回合先把 lane 导航回 session 根再 accept，模型收到的只有本回合装配的消息加自己的工具轮次，session 文件按回合各存一条根分支、不回灌上下文（[67](./67-soul.md)）。工具、系统提示和模型注册表是 harness 级的（坑 307），所以 harness 建一次，按回合换入。重启后重开该组最新 session，上个进程留下的 open operation 逐条 abort 而不是 resume（坑 308）。
+soul 的那条 lane 已经常驻：`legion/execute/held.ts` 把一个 harness 跨回合持有（session 组 `soul`、lane 名 `soul`，`src/soul/harness.ts` 进程内懒建一份），`runAgentTurn` 的 `harness` 参数让 soul 的五个回合面（阅读聊天、info 聊天与语音、排练教练、复述）跑在它上面，subagent 和后台 pass 仍各自开 harness。每回合先把 lane 导航回 session 根再 accept，模型收到的只有本回合装配的消息加自己的工具轮次，session 文件按回合各存一条根分支、不回灌上下文（[71](./71-soul.md)）。工具、系统提示和模型注册表是 harness 级的（坑 307），所以 harness 建一次，按回合换入。重启后重开该组最新 session，上个进程留下的 open operation 逐条 abort 而不是 resume（坑 308）。
 
 两个未定点跟着第一个真调用方定：看门狗重试从原始消息重建 Agent，但轮次跨重试累加；`transformContext` 的截断不写回 Agent 的消息记录，每轮重算。
 
@@ -220,7 +220,7 @@ soul 的那条 lane 已经常驻：`legion/execute/held.ts` 把一个 harness �
 
 session 是 agent 派活过程的运行时数据，对用户不重要，不同步。palace 登记一行 `session`，sync 为 `local`，目录 `session/`。
 
-对话文件是数据，照旧按归属存、照旧同步（[67](./67-soul.md)）。两者之间是单向投影：soul 说的每一句落地时写进归属文件；反向不投影——另一台设备写的对话到了本机，soul 下回合装配上下文时从数据层读，走 sequence。
+对话文件是数据，照旧按归属存、照旧同步（[71](./71-soul.md)）。两者之间是单向投影：soul 说的每一句落地时写进归属文件；反向不投影——另一台设备写的对话到了本机，soul 下回合装配上下文时从数据层读，走 sequence。
 
 压缩摘要不跨设备，值得留的写成 observation 进 memory。本地 worker 的过程不进对话文件，对话里只有 soul 对用户说的话。
 
