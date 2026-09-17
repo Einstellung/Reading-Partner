@@ -729,7 +729,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // this turn at all — it is a run now (docs/68), handed over with the soul's
   // delegate and answered back into this thread when it is finished.
   tools = [...tools, buildFindPaperTool(literatureDeps)];
-  // The whole-book outline from the reader's notes (docs/09 书的备课：章脉络), when they exist.
+  // The whole-book outline from the reader's notes (docs/09), when they exist.
   const spineOverview = spineOverviewSection(await readSpineOverview(bookId));
   // A booklist entry with no text layer and no marks is a title the model can do
   // nothing with; the first thing to go when the window is tight.

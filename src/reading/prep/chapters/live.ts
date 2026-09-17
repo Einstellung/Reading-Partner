@@ -43,7 +43,7 @@ export interface ChapterSpineInputs {
   getEmphasisSignals(): EmphasisSignal[]; // highlights / underlines / discussed spots
   // The book's AI-pen chat threads that carry a page anchor, resolved fresh at
   // generation time so a regenerate picks up conversations added since. Threads
-  // with no page anchor (the book-level thread) are left out (docs/09 书的备课：章脉络).
+  // with no page anchor (the book-level thread) are left out (docs/09).
   getChatThreads(): Promise<ChatThread[]>;
 }
 

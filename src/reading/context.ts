@@ -30,7 +30,7 @@ export function clip(text: string, max: number): string {
   return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + "…";
 }
 
-// The whole-book outline from the reader's notes (docs/09 书的备课：章脉络), as a labeled block
+// The whole-book outline from the reader's notes (docs/09), as a labeled block
 // for the opening context, or "" when there is no overview. Truncated to ~max
 // chars at a paragraph boundary so a long framework can't crowd out the prompt.
 export function spineOverviewSection(overview: string | null | undefined, max = 1500): string {

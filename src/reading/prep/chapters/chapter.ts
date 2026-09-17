@@ -28,7 +28,7 @@ const CHAPTER_MAX_ROUNDS = 16;
 
 // A detail signal: a place the user highlighted/underlined/annotated, and whether
 // it was discussed with the AI (an AI-pen thread). Fed to the prompt only to
-// gauge emphasis — never quoted into the note (docs/09 书的备课：章脉络).
+// gauge emphasis — never quoted into the note (docs/09).
 export interface EmphasisSignal {
   page: number; // 1-based
   text: string;
@@ -52,7 +52,7 @@ export interface ChatThread {
 }
 
 // Per-message, per-thread, and whole-block caps so a long chat history can't
-// crowd out the rest of the prompt (docs/09 书的备课：章脉络).
+// crowd out the rest of the prompt (docs/09).
 const CHAT_MSG_MAX = 600;
 const CHAT_THREAD_MAX_MSGS = 6;
 const CHAT_BLOCK_MAX = 8000;
