@@ -9,8 +9,9 @@
 // library, and a failure is reproducible from the seed printed beside it.
 
 import { expect, test } from "bun:test";
-import { compareRun, mergeRun } from "../../../src/legion/run/merge";
+import { asRun, collided, compareRun, joinRunFiles, mergeRun } from "../../../src/legion/run/merge";
 import { RUN_STATES, type Run, type RunState } from "../../../src/legion/run/types";
+import type { Json } from "../../../src/platform/sync/merge/text";
 
 const ID = "r-0123456789abcdef0123456789abcdef";
 
@@ -262,4 +263,73 @@ test("attempts, the two early stamps and a cancellation survive whichever side l
 
 test("two copies of different runs are a programming error, not a merge", () => {
   expect(() => mergeRun(run({}), run({ id: "r-ffffffffffffffffffffffffffffffff" }))).toThrow();
+});
+
+test("a stamp only one side ever wrote is not a collision, and is not lost", () => {
+  const bare = run({ state: "running", revision: 2 });
+  const stamped = run({
+    state: "running",
+    revision: 2,
+    attempts: 2,
+    startedAt: 2_000,
+    deliveredAt: 5_000,
+    cancelRequested: true,
+  });
+  // The folded fields are left out of the content comparison, so a side that
+  // only carries more of them is not a second write of the same generation.
+  expect(collided(bare, stamped)).toBe(false);
+  for (const merged of [mergeRun(bare, stamped), mergeRun(stamped, bare)]) {
+    expect(merged.attempts).toBe(2);
+    expect(merged.startedAt).toBe(2_000);
+    expect(merged.deliveredAt).toBe(5_000);
+    expect(merged.cancelRequested).toBe(true);
+  }
+});
+
+test("a run that is only further along did not collide; two writes of one generation did", () => {
+  const stale = run({ state: "running", revision: 2, progress: "fetched 1/9" });
+  const fresh = run({ state: "running", revision: 6, progress: "fetched 7/9" });
+  expect(collided(stale, fresh)).toBe(false);
+
+  const desk = run({ state: "done", revision: 3, output: "out/desk.json" });
+  const pad = run({ state: "done", revision: 3, output: "out/pad.json" });
+  expect(collided(desk, pad)).toBe(true);
+  expect(collided(desk, desk)).toBe(false);
+
+  // Two states at one revision are two generations and not one: one device is
+  // further along the chain, and nothing of the other's was written over.
+  expect(collided(run({ state: "failed", revision: 3 }), run({ state: "done", revision: 3 }))).toBe(
+    false,
+  );
+});
+
+// --- the shape sync hands in ----------------------------------------------
+
+test("a file that is not a run is left to the opaque strategy", () => {
+  expect(asRun(null)).toBeNull();
+  expect(asRun([run({})])).toBeNull();
+  expect(asRun({ ...run({}), state: "paused" })).toBeNull();
+  expect(asRun({ ...run({}), revision: "2" })).toBeNull();
+  expect(asRun({ ...run({}), attempts: undefined })).toBeNull();
+  expect(asRun(run({}))).not.toBeNull();
+});
+
+test("the join reports a loser only when the two sides collided", () => {
+  const ahead = joinRunFiles(
+    run({ state: "running", revision: 2 }) as unknown as Json,
+    run({ state: "done", revision: 3, output: "out/done.json" }) as unknown as Json,
+  );
+  expect(ahead?.loser).toBeNull();
+  expect((ahead?.merged as unknown as Run).state).toBe("done");
+
+  const left = run({ state: "done", revision: 3, output: "out/desk.json" }) as unknown as Json;
+  const right = run({ state: "done", revision: 3, output: "out/pad.json" }) as unknown as Json;
+  const clash = joinRunFiles(left, right);
+  expect((clash?.merged as unknown as Run).output).toBe("out/desk.json");
+  expect(clash?.loser).toEqual(right);
+
+  expect(joinRunFiles(left, { hello: "world" } as unknown as Json)).toBeNull();
+  expect(
+    joinRunFiles(left, run({ id: "r-ffffffffffffffffffffffffffffffff" }) as unknown as Json),
+  ).toBeNull();
 });

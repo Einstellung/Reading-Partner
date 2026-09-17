@@ -5,7 +5,9 @@
 // That buys the three properties the sync engine needs and nothing else here
 // provides — the two devices merge the same pair in either order, in any
 // grouping, any number of times, and land on the same bytes. The tests are
-// named after them: commutative, associative, idempotent.
+// named after them: commutative, associative, idempotent. What is below is only
+// the run's own rules; the machinery they are handed to is the shared factory
+// in platform/sync/merge/join.ts, which a box item fills in the same way.
 //
 // Nothing here reads a clock. "Whose copy is newer" is unanswerable across two
 // devices, and every rule below is written to avoid ever asking it. The order
@@ -36,37 +38,16 @@
 //                    the iPad must not be lost to a progress report the desktop
 //                    wrote at the same revision.
 //
-// Those five are also left out of the content comparison in rule 4, and that is
-// load-bearing rather than tidiness: it makes the merged record identical to the
-// winner everywhere rule 4 looks, so the comparison key of a merged run is the
-// larger of its two inputs' keys. Without it a merge of a merge could compare a
-// record neither device ever held, and the join would stop being associative.
+// Those five are also left out of the content comparison in rule 4, which is
+// what keeps the join associative — see join.ts for why.
 
-import { canonical, type Json } from "../../platform/sync/merge/text";
+import { recordJoin } from "../../platform/sync/merge/join";
 import { runRank, type Run, type RunState } from "./types";
 
-const FOLDED = new Set(["attempts", "createdAt", "startedAt", "deliveredAt", "cancelRequested"]);
+const FOLDED = ["attempts", "createdAt", "startedAt", "deliveredAt", "cancelRequested"];
 
-// The half of a run the winner is taken from whole: everything but the five
-// folded fields. Keys holding undefined are dropped so a record built in memory
-// compares equal to the same record read back from its file.
-function decided(run: Run): Json {
-  const out: Record<string, Json> = {};
-  for (const [key, value] of Object.entries(run)) {
-    if (value === undefined || FOLDED.has(key)) continue;
-    out[key] = value as Json;
-  }
-  return out;
-}
-
-/**
- * Which of two copies of one run is kept, as a comparator: negative when `a` is
- * kept, positive when `b` is, zero when the two are indistinguishable — in which
- * case the merge is the same either way.
- *
- * A total order, which is what makes the join associative.
- */
-export function compareRun(a: Run, b: Run): number {
+// Rules 1 to 3. Zero when they all tie and content order has the last word.
+function order(a: Run, b: Run): number {
   const byState = runRank(b.state) - runRank(a.state);
   if (byState !== 0) return byState;
   if (a.revision !== b.revision) return b.revision - a.revision;
@@ -76,11 +57,7 @@ export function compareRun(a: Run, b: Run): number {
   const da = a.claimant?.deviceId ?? "";
   const db = b.claimant?.deviceId ?? "";
   if (da !== db) return da < db ? -1 : 1;
-
-  const ca = canonical(decided(a));
-  const cb = canonical(decided(b));
-  if (ca === cb) return 0;
-  return ca < cb ? -1 : 1;
+  return 0;
 }
 
 function earliest(a: number | undefined, b: number | undefined): number | undefined {
@@ -89,12 +66,7 @@ function earliest(a: number | undefined, b: number | undefined): number | undefi
   return Math.min(a, b);
 }
 
-/** One run out of two copies of it. Commutative, associative and idempotent. */
-export function mergeRun(a: Run, b: Run): Run {
-  if (a.id !== b.id) {
-    throw new Error(`mergeRun: "${a.id}" and "${b.id}" are not the same run`);
-  }
-  const winner = compareRun(a, b) <= 0 ? a : b;
+function fold(winner: Run, a: Run, b: Run): Run {
   const merged: Run = {
     ...winner,
     attempts: Math.max(a.attempts, b.attempts),
@@ -106,17 +78,6 @@ export function mergeRun(a: Run, b: Run): Run {
   if (deliveredAt !== undefined) merged.deliveredAt = deliveredAt;
   if (a.cancelRequested || b.cancelRequested) merged.cancelRequested = true;
   return merged;
-}
-
-/**
- * Whether the two sides were two independent writes of the same generation —
- * the same state at the same revision — rather than one side simply being
- * further along than the other. The only case a person might want to know
- * about, and what the merge reports as contested.
- */
-export function collided(a: Run, b: Run): boolean {
-  if (a.state !== b.state || a.revision !== b.revision) return false;
-  return canonical(decided(a)) !== canonical(decided(b));
 }
 
 // Whether a parsed file is a run. A file that is not is left to the opaque
@@ -136,6 +97,37 @@ export function asRun(value: unknown): Run | null {
   return shaped ? (value as unknown as Run) : null;
 }
 
+const lattice = recordJoin<Run>({
+  folded: FOLDED,
+  order,
+  // The same state at the same revision: two independent writes of one
+  // generation, rather than one side simply being further along.
+  sameGeneration: (a, b) => a.state === b.state && a.revision === b.revision,
+  fold,
+  as: asRun,
+  mismatch: (a, b) => `mergeRun: "${a.id}" and "${b.id}" are not the same run`,
+});
+
+/**
+ * Which of two copies of one run is kept, as a comparator: negative when `a` is
+ * kept, positive when `b` is, zero when the two are indistinguishable — in which
+ * case the merge is the same either way.
+ *
+ * A total order, which is what makes the join associative.
+ */
+export const compareRun = lattice.compare;
+
+/** One run out of two copies of it. Commutative, associative and idempotent. */
+export const mergeRun = lattice.merge;
+
+/**
+ * Whether the two sides were two independent writes of the same generation —
+ * the same state at the same revision — rather than one side simply being
+ * further along than the other. The only case a person might want to know
+ * about, and what the merge reports as contested.
+ */
+export const collided = lattice.collided;
+
 /**
  * The join as the sync engine takes it: two parsed files in, one out, null when
  * either side is not a run file or the two are not the same run. Registered
@@ -146,11 +138,4 @@ export function asRun(value: unknown): Run | null {
  * only ever set when the two sides collided: everywhere else the join subsumes
  * both and there is nothing a person could want back.
  */
-export function joinRunFiles(a: Json, b: Json): { merged: Json; loser: Json | null } | null {
-  const left = asRun(a);
-  const right = asRun(b);
-  if (!left || !right || left.id !== right.id) return null;
-  const merged = mergeRun(left, right) as unknown as Json;
-  if (!collided(left, right)) return { merged, loser: null };
-  return { merged, loser: compareRun(left, right) <= 0 ? b : a };
-}
+export const joinRunFiles = lattice.join;
