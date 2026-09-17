@@ -65,3 +65,48 @@ export function recordIdOf(name: string, shape: RegExp): string | null {
   const id = name.slice(0, -".json".length);
   return shape.test(id) ? id : null;
 }
+
+/**
+ * Read one record back off the disk rather than out of what this process
+ * remembers writing: a pull may have landed the other device's copy since.
+ * Null for an id of the wrong shape, a file that is not there, one that will
+ * not parse, and one whose contents answer to a different id.
+ */
+export function createRecordReader<T extends { id: string }>(
+  io: RecordDirIo,
+  shape: RegExp,
+  parse: (raw: unknown) => T | null,
+): (id: string) => Promise<T | null> {
+  return async (id) => {
+    if (!shape.test(id)) return null;
+    const text = await io.read(recordFileName(id));
+    if (text === null) return null;
+    try {
+      const record = parse(JSON.parse(text) as unknown);
+      return record && record.id === id ? record : null;
+    } catch {
+      return null;
+    }
+  };
+}
+
+/**
+ * Every record in the directory this build can read, in whatever order the disk
+ * listed them. A file that will not parse is not a record anybody can act on,
+ * and it is left where it is: deleting it would take the only evidence of what
+ * went wrong with it.
+ */
+export async function readRecords<T>(
+  io: RecordDirIo,
+  shape: RegExp,
+  read: (id: string) => Promise<T | null>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (const name of await io.list()) {
+    const id = recordIdOf(name, shape);
+    if (!id) continue;
+    const record = await read(id);
+    if (record) out.push(record);
+  }
+  return out;
+}

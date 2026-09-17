@@ -19,8 +19,9 @@
 
 import {
   appRecordDirIo,
+  createRecordReader,
+  readRecords,
   recordFileName,
-  recordIdOf,
   type RecordDirIo,
 } from "../platform/app/record-dir";
 import { asBoxItem } from "./merge";
@@ -130,19 +131,7 @@ export function createBoxStore(io: BoxIo): BoxStore {
     for (const listener of [...listeners]) listener(item);
   }
 
-  // Read back from disk rather than from what this process remembers writing: a
-  // pull may have landed the other device's copy since.
-  async function get(id: string): Promise<BoxItem | null> {
-    if (!ID.test(id)) return null;
-    const text = await io.read(recordFileName(id));
-    if (text === null) return null;
-    try {
-      const item = asBoxItem(JSON.parse(text));
-      return item && item.id === id ? item : null;
-    } catch {
-      return null;
-    }
-  }
+  const get = createRecordReader(io, ID, asBoxItem);
 
   async function put(item: BoxItem): Promise<BoxItem> {
     await io.write(recordFileName(item.id), JSON.stringify(item, null, 2));
@@ -151,16 +140,7 @@ export function createBoxStore(io: BoxIo): BoxStore {
   }
 
   async function all(filter: BoxFilter): Promise<BoxItem[]> {
-    const items: BoxItem[] = [];
-    for (const name of await io.list()) {
-      const id = recordIdOf(name, ID);
-      if (!id) continue;
-      const item = await get(id);
-      // A file that will not parse is not an item anybody can act on. It is
-      // left where it is: deleting it would take the only evidence of what went
-      // wrong with it.
-      if (item && matches(item, filter)) items.push(item);
-    }
+    const items = (await readRecords(io, ID, get)).filter((item) => matches(item, filter));
     // Newest first, and the id breaks the tie so two devices draw one order.
     items.sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id));
     return items;

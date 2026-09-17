@@ -16,8 +16,9 @@
 import { contentHash } from "../../platform/app/content-hash";
 import {
   appRecordDirIo,
+  createRecordReader,
+  readRecords,
   recordFileName,
-  recordIdOf,
   type RemovableRecordDirIo,
 } from "../../platform/app/record-dir";
 import {
@@ -187,19 +188,7 @@ function matches(run: Run, filter: RunFilter): boolean {
 }
 
 export function createRunStore(io: RunIo): RunStore {
-  // Read back from disk rather than from what this process remembers writing:
-  // a pull may have landed the other device's copy since.
-  async function get(id: string): Promise<Run | null> {
-    if (!ID.test(id)) return null;
-    const text = await io.read(recordFileName(id));
-    if (text === null) return null;
-    try {
-      const run = asRun(JSON.parse(text));
-      return run && run.id === id ? run : null;
-    } catch {
-      return null;
-    }
-  }
+  const get = createRecordReader(io, ID, asRun);
 
   async function put(run: Run): Promise<Run> {
     await io.write(recordFileName(run.id), JSON.stringify(run, null, 2));
@@ -242,16 +231,7 @@ export function createRunStore(io: RunIo): RunStore {
     get,
 
     async list(filter = {}) {
-      const runs: Run[] = [];
-      for (const name of await io.list()) {
-        const id = recordIdOf(name, ID);
-        if (!id) continue;
-        const run = await get(id);
-        // A file that will not parse is not a run anybody can act on. It is
-        // left where it is: deleting it would take the only evidence of what
-        // went wrong with it.
-        if (run && matches(run, filter)) runs.push(run);
-      }
+      const runs = (await readRecords(io, ID, get)).filter((run) => matches(run, filter));
       runs.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
       return runs;
     },

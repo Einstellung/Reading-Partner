@@ -15,8 +15,8 @@
 
 import {
   appRecordDirIo,
+  readRecords,
   recordFileName,
-  recordIdOf,
   type RecordDirIo,
 } from "../../platform/app/record-dir";
 import {
@@ -127,17 +127,7 @@ export function createBellStore(io: BellIo): BellStore {
     },
 
     async read() {
-      const bells: Bell[] = [];
-      for (const name of await io.list()) {
-        const id = recordIdOf(name, ID);
-        if (!id) continue;
-        const bell = await get(id);
-        // A file that will not parse is not a bell anybody can answer. It is
-        // left where it is: deleting it would take the only evidence of what
-        // went wrong with it.
-        if (!bell || bell.state === "acked") continue;
-        bells.push(bell);
-      }
+      const bells = (await readRecords(io, ID, get)).filter((bell) => bell.state !== "acked");
       bells.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
       return bells;
     },
