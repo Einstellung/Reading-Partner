@@ -6,12 +6,10 @@
 
 读书场景。一个主题里 PDF 和 EPUB 混挂,论文和书一起读。这是 00/01 文档的既定设想。
 
-## 状态:进行中
+## 状态:已随 v0.16 发出
 
-方案见 [39](../39-epub支持调研.md),渲染侧的实测结论见 [epub渲染spike](../research/epub渲染spike.md)。摄入(阶段 2)和接引擎(阶段 3)已落地,EPUB 能读;标注(阶段 4)桌上和手机都能划。手机形态按 [70](../70-手机读EPUB.md) 落地,在 iPhone 模拟器上跑通。还剩图的视觉描述(阶段 5)。
+方案见 [39](../39-epub支持调研.md),渲染侧的实测结论见 [epub渲染spike](../research/epub渲染spike.md)。摄入(阶段 2)、接引擎(阶段 3)、标注(阶段 4)都已发出,桌上和手机都能读能划;手机形态按 [70](../70-手机读EPUB.md) 落地。只剩图的视觉描述(阶段 5)没做。
 
 ## 已定的事实
 
 引擎 foliate-js,vendor 在 `vendor/foliate-js/`。页码没废:EPUB 3 自带 `page-list`,没有的按 1800 字符切,分页表写一次不再重算(`pagination-<bookId>.json`)。精确位置是 CFI,只有阅读位置和标注用它。摄入和渲染共用同一份消毒后的树,CFI 因此两边指同一个节点。
-
-> 下面四条记于 zotero/reader 时代,已被 39 取代("引擎原生支持 epub"这个前提随 EmbedPDF 换引擎没了,vendor/reader 和 docs/04 的接法也不适用),只当历史读:引擎原生支持 `type: 'epub'`(docs/04);跨 realm ArrayBuffer 的修法(`vendor/reader/src/index.web.js`,pitfall 10);annotations 的 EPUB 更新分支未实测(docs/04);EPUB 样式内联在 view.js 不在 view.css(docs/04)。

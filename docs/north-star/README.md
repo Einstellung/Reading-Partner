@@ -6,8 +6,8 @@
 
 - [epub](./epub.md) — EPUB 支持,方案见 [39](../39-epub支持调研.md)
 - [observations](./observations.md) — 仍留在北极星的只有主动联想,其余四项已随 M8 转正
-- [companion](./companion.md) — 形象与养成:第一版是语音会话的可视化([45](../45-陪伴的形态.md)),画出来的形象、逗弄、养成推后;主动说话不推后
-- [podcast-video](./podcast-video.md) — 播客与视频:info 线和读书线的交集,蒸馏两小时访谈,手动喂链接先行
+- [companion](./companion.md) — 形象与养成:形象是 Lumen([66](../66-Lumen.md)),已落地;逗弄、养成推后;主动说话不推后
+- [podcast-video](./podcast-video.md) — 访谈视频:只接 YouTube,播客不做,接法定在 [56](../56-YouTube访谈接入.md)
 - [diet](./diet.md) — 饮食规划:省事和健康都是硬约束、不腻是区别所在,主件是周计划加购物清单,计划就是记录;已排上,第一步是自己验做一次吃两顿
 
 webview 渲染管子（隐藏 WebviewWindow 当渲染引擎）已经落地并随彭博社源发货，不再是北极星方向；现状和剩下的缺口（SPA 站发现层）记在 [17](../17-信息源系统.md)。
