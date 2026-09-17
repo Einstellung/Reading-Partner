@@ -2,7 +2,8 @@
 // whose disk is a Map. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { createBoxStore, UNSEEN, type BoxIo } from "../../../src/box/store";
+import { createBoxStore, UNSEEN } from "../../../src/box/store";
+import { mapDisk as disk } from "../../support/map-disk";
 import { originLabel } from "../../../src/soul/delivery";
 import {
   briefingBoxId,
@@ -11,21 +12,6 @@ import {
   labItemKind,
 } from "../../../src/info/boxes/red-box";
 import { BRIEFING_VERSION, type Briefing } from "../../../src/info/boxes/types";
-
-function disk(): BoxIo {
-  const files = new Map<string, string>();
-  return {
-    async list() {
-      return [...files.keys()];
-    },
-    async read(name) {
-      return files.get(name) ?? null;
-    },
-    async write(name, contents) {
-      files.set(name, contents);
-    },
-  };
-}
 
 function briefing(over: Partial<Briefing> = {}): Briefing {
   return {

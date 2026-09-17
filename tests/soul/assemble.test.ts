@@ -26,7 +26,8 @@ import {
 } from "../../src/platform/app/threads";
 import { installAppData } from "../support/appdata-fake";
 import { BOX_COVER_CAP } from "../../src/soul";
-import { createBoxStore, type BoxIo, type BoxStore } from "../../src/box";
+import { createBoxStore, type BoxStore } from "../../src/box";
+import { mapDisk } from "../support/map-disk";
 import type { BoxOrigin } from "../../src/box";
 
 const settings: Settings = {
@@ -609,15 +610,7 @@ test("the tail is what a call over its window gives up first", async () => {
 // --- what is waiting in the box (docs/68) ----------------------------------
 
 function boxWith(covers: readonly string[], origin?: BoxOrigin): BoxStore {
-  const files = new Map<string, string>();
-  const io: BoxIo = {
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-    },
-  };
-  const box = createBoxStore(io);
+  const box = createBoxStore(mapDisk());
   return {
     ...box,
     async open() {
@@ -671,15 +664,7 @@ test("a run answered at the door is labelled by the day it came back on", async 
 });
 
 test("an item the reader has already jumped to is not announced again", async () => {
-  const files = new Map<string, string>();
-  const io: BoxIo = {
-    list: async () => [...files.keys()],
-    read: async (name) => files.get(name) ?? null,
-    write: async (name, contents) => {
-      files.set(name, contents);
-    },
-  };
-  const box = createBoxStore(io);
+  const box = createBoxStore(mapDisk());
   const origin: BoxOrigin = { place: "book", bookId: "book-1", threadId: "thread-1", page: 37 };
   const jumped = await box.put({ boxId: "r-1", source: "run", cover: "The old one is read.", origin });
   await box.put({ boxId: "r-2", source: "run", cover: "The new one is in.", origin });

@@ -5,16 +5,6 @@
 // no provider, network, or token spend. Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  createAssistantMessageEventStream,
-  type Api,
-  type Model,
-} from "@earendil-works/pi-ai";
-import { runHarnessTurn, type StreamFn } from "../../src/legion/execute/turn";
-import { createSessionFileSystem } from "../../src/platform/app/session-fs";
-import { memoryAppData } from "../support/memory-appdata";
-import { createTurnSettler } from "../../src/legion/subagent/turn";
-import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/legion/subagent/types";
 import { StoppedError } from "../../src/legion/execute/watchdog";
 import { FileObservationAdapter } from "../../src/memory/observations/adapter";
 import {
@@ -45,50 +35,19 @@ import {
   type DistillPassInput,
 } from "../../src/memory/observations/distill";
 import { ObservationFileStore, topicPassStore } from "../../src/memory/observations/store";
-import { turnEvents, type Turn } from "../support/scripted-turn";
+import type { SubagentTurnFn } from "../../src/legion/subagent/types";
+import type { Turn } from "../support/scripted-turn";
+import { scriptedSubagentRunner } from "../support/scripted-runner";
 
 // The topic every store in this file is mounted on.
 const TOPIC = "t";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 
-// A SubagentTurnFn backed by the real loop over a scripted model, recording what
-// each run was asked for. `beforeRound` fires as each round is asked for
-// (0-based), which is where a test cancelling an in-flight pass raises its signal.
+// Rounds past the end of the script answer "done" here rather than failing: the
+// passes under test are counted by how many rounds they asked for.
 function loopRunner(turns: Turn[], beforeRound?: (round: number) => void) {
-  const requests: SubagentTurnRequest[] = [];
-  let round = 0;
-  const stream: StreamFn = () => {
-    beforeRound?.(round);
-    const events = turnEvents(turns[round++] ?? { text: "done" });
-    const s = createAssistantMessageEventStream();
-    void (async () => {
-      for (const ev of events) {
-        await Promise.resolve();
-        s.push(ev);
-      }
-      s.end();
-    })();
-    return s;
-  };
-  const run: SubagentTurnFn = (request) => {
-    requests.push(request);
-    const settler = createTurnSettler(request.signal, request.onRound);
-    void runHarnessTurn({
-      stream,
-      fileSystem: createSessionFileSystem(memoryAppData()),
-      model: { id: "m", provider: "faux" } as unknown as Model<Api>,
-      systemPrompt: request.systemPrompt,
-      messages: [{ role: "user", content: request.task, timestamp: 0 }],
-      tools: request.tools,
-      signal: request.signal,
-      maxRounds: request.maxRounds,
-      purpose: request.purpose,
-      ...settler.callbacks,
-    });
-    return settler.outcome.finally(() => settler.dispose());
-  };
-  return { run, requests, streamed: () => round };
+  return scriptedSubagentRunner(turns, { exhausted: { text: "done" }, beforeRound });
 }
 
 function scriptedRunner(turns: Turn[]): { run: SubagentTurnFn } {

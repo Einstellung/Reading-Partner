@@ -15,8 +15,9 @@ import {
 } from "../../../src/info/program/collect-worker";
 import { createRunner } from "../../../src/legion/execute/runner";
 import { registerWorker } from "../../../src/legion/execute/worker";
-import { createBellStore, type Bell, type BellIo } from "../../../src/legion/bell";
-import { createRunStore, type RunIo } from "../../../src/legion/run";
+import { createBellStore, type Bell } from "../../../src/legion/bell";
+import { createRunStore } from "../../../src/legion/run";
+import { mapDisk as disk } from "../../support/map-disk";
 import { registerKindCapabilities, type DeviceClaim } from "../../../src/legion/claim";
 import { dueRuns } from "../../../src/legion/schedule";
 import type { InfoPhase, InfoSnapshot, RunHandle } from "../../../src/info/boxes/pipeline";
@@ -25,25 +26,6 @@ import { emptyProgress } from "../../../src/info/collect/run-state";
 const NOW = 1_800_000_000_000;
 const COLLECTOR = "desk";
 const READER = "slate";
-
-function disk(): RunIo & BellIo & { files: Map<string, string> } {
-  const files = new Map<string, string>();
-  return {
-    files,
-    async list() {
-      return [...files.keys()];
-    },
-    async read(name) {
-      return files.get(name) ?? null;
-    },
-    async write(name, contents) {
-      files.set(name, contents);
-    },
-    async remove(name) {
-      files.delete(name);
-    },
-  };
-}
 
 function claim(deviceId: string, over: Partial<DeviceClaim> = {}): DeviceClaim {
   return {

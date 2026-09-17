@@ -17,7 +17,6 @@
 // (pitfall 121).
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
-import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
@@ -26,43 +25,30 @@ import * as turn from "../../../src/reading/turn";
 import type { CallRow } from "../../../src/reading/call-state";
 import type { StagedImage } from "../../../src/reading/pending-images";
 import type { Annotation } from "../../../src/platform/app/reader-contract";
-import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
+import {
+  callHost,
+  callThread as thread,
+  emptyReadingTurn,
+  type CallHost,
+} from "../../support/use-call";
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
 
-const BOOK = "book-1";
 const LESSON = "lesson-1";
 const CHAT_MARK = "chat-mark-1";
 const PAGE_MARK = "page-mark-1";
-
-const settings: Settings = {
-  ...DEFAULT_SETTINGS,
-  defaultProviderId: "anthropic",
-  defaultModelId: "some-model",
-};
 
 function fakeWorld() {
   const spies = [
     spyOn(events, "logEvent").mockImplementation(() => {}),
     spyOn(observation, "distillThread").mockImplementation(async () => {}),
     spyOn(threads, "getThread").mockImplementation(() => undefined),
-    spyOn(turn, "buildReadingTurn").mockResolvedValue({
-      systemPrompt: "",
-      inline: "none" as const,
-      tools: [],
-      messages: [],
-      notice: "",
-      refusal: "",
-    }),
+    spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn()),
     spyOn(agent, "runAgentTurn").mockImplementation(() => new Promise<void>(() => {})),
   ];
   return { restore: () => spies.forEach((s) => s.mockRestore()) };
-}
-
-function thread(id: string, extra: Partial<Thread> = {}): Thread {
-  return { id, annotationId: "", path: BOOK, createdAt: 0, messages: [], ...extra };
 }
 
 // A mark drawn on one of the lesson's replies: no page, and its words are the
@@ -90,38 +76,10 @@ const pageMark: Annotation = {
   pageIndex: 3,
 };
 
-function host(): Parameters<typeof useCall<CallRow, StagedImage>>[0] {
-  return {
-    bookIdRef: { current: BOOK },
-    docIdRef: { current: BOOK },
-    supplementsRef: { current: [] },
-    ctxRef: {
-      current: {
-        topicId: "topic-1",
-        topicName: "A Topic",
-        fileName: "A Book.pdf",
-        pageLabel: null,
-        pageIndex: 4,
-        files: [],
-      },
-    },
-    settingsRef: { current: settings },
-    annsRef: { current: new Map([chatMark, pageMark].map((a) => [a.id, a])) },
-    currentFulltextRef: { current: null },
-    currentFiguresRef: { current: null },
-    bufferRef: { current: null },
-    pipelineRef: { current: null },
-    pushToast: () => {},
-    distillAnnotations: () => [],
-    removeMark: () => {},
-    toDisplay: (stored: ThreadMessage[]) => stored as CallRow[],
-    newRow: (row: CallRow) => row,
-    maxImages: 3,
-    imageLimitHint: "",
-    loadingImage: (id: string) => ({ id }),
-    readyImage: (id: string) => ({ id }),
-    sendableImages: () => [],
-  };
+// Both marks are on the page's side of the hook: which one a reopen resolves to
+// is the whole question here.
+function host(): CallHost {
+  return callHost({ annsRef: { current: new Map([chatMark, pageMark].map((a) => [a.id, a])) } });
 }
 
 const AT = { view: "chat-main" as const, anchor: { x: 0, y: 0 } };

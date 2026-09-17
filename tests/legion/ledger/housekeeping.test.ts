@@ -7,29 +7,10 @@ import {
   createLedgerStore,
   foldPass,
   ledgerDay,
-  type LedgerIo,
 } from "../../../src/legion/ledger";
-import { createRunStore, type RunIo, type RunStore } from "../../../src/legion/run/store";
+import { createRunStore, type RunStore } from "../../../src/legion/run/store";
+import { mapDisk as disk } from "../../support/map-disk";
 import type { Run } from "../../../src/legion/run/types";
-
-function disk(files = new Map<string, string>()) {
-  const io = {
-    files,
-    async list() {
-      return [...files.keys()];
-    },
-    async read(name: string) {
-      return files.get(name) ?? null;
-    },
-    async write(name: string, contents: string) {
-      files.set(name, contents);
-    },
-    async remove(name: string) {
-      files.delete(name);
-    },
-  };
-  return io satisfies RunIo & LedgerIo & { files: Map<string, string> };
-}
 
 const BRIEF = "briefs/translate-book.json";
 

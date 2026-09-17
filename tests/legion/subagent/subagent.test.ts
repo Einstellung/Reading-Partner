@@ -6,13 +6,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  Type,
-  createAssistantMessageEventStream,
-  type Api,
-  type Context,
-  type Model,
-} from "@earendil-works/pi-ai";
+import { Type, type Api, type Model } from "@earendil-works/pi-ai";
 import { runHarnessTurn, type AgentTool, type StreamFn } from "../../../src/legion/execute/turn";
 import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
 import { memoryAppData } from "../../support/memory-appdata";
@@ -25,9 +19,9 @@ import type {
   SubagentDefinition,
   SubagentProgress,
   SubagentTurnFn,
-  SubagentTurnRequest,
 } from "../../../src/legion/subagent/types";
-import { turnEvents, type Turn } from "../../support/scripted-turn";
+import type { Turn } from "../../support/scripted-turn";
+import { scriptedSubagentRunner } from "../../support/scripted-runner";
 
 // --- a scripted model, one entry per streamed turn ---
 
@@ -38,44 +32,9 @@ function sizedModel(contextWindow: number): Model<Api> {
   return { id: "m", name: "m", provider: "faux", contextWindow, maxTokens: 64_000 } as unknown as Model<Api>;
 }
 
-// A SubagentTurnFn backed by the real loop, recording what it was asked for.
+// A SubagentTurnFn backed by the real loop, in the worker's own lane.
 function loopRunner(turns: Turn[], model: Model<Api> = MODEL) {
-  const requests: SubagentTurnRequest[] = [];
-  const contexts: Context[] = [];
-  let round = 0;
-  const stream: StreamFn = (_model, context) => {
-    const i = round++;
-    contexts.push(context);
-    const s = createAssistantMessageEventStream();
-    const events = turnEvents(turns[i] ?? { error: "no scripted turn" });
-    (async () => {
-      for (const ev of events) {
-        await Promise.resolve();
-        s.push(ev);
-      }
-      s.end();
-    })();
-    return s;
-  };
-  const run: SubagentTurnFn = (request) => {
-    requests.push(request);
-    const settler = createTurnSettler(request.signal, request.onRound);
-    void runHarnessTurn({
-      stream,
-      fileSystem: createSessionFileSystem(memoryAppData()),
-      model,
-      systemPrompt: request.systemPrompt,
-      messages: [{ role: "user", content: request.task, timestamp: 0 }],
-      tools: request.tools,
-      signal: request.signal,
-      maxRounds: request.maxRounds,
-      purpose: request.purpose,
-      lane: workerLane(request.name),
-      ...settler.callbacks,
-    });
-    return settler.outcome.finally(() => settler.dispose());
-  };
-  return { run, requests, contexts, streamed: () => round };
+  return scriptedSubagentRunner(turns, { model, lane: (request) => workerLane(request.name) });
 }
 
 // The tool result a real lookup would produce: the pile of text that must never

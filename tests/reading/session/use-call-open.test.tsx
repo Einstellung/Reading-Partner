@@ -10,7 +10,6 @@
 // (pitfall 121).
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
-import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import * as agent from "../../../src/legion/execute/turn";
 import * as threads from "../../../src/platform/app/threads";
 import * as turn from "../../../src/reading/turn";
@@ -18,53 +17,13 @@ import type { CallRow } from "../../../src/reading/call-state";
 import type { StagedImage } from "../../../src/reading/pending-images";
 import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
+import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn } from "../../support/use-call";
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
 
-const BOOK = "book-1";
 const THREAD = "t1";
 const MARK = "mark-1";
-
-const settings: Settings = {
-  ...DEFAULT_SETTINGS,
-  defaultProviderId: "anthropic",
-  defaultModelId: "some-model",
-};
-
-function host(): Parameters<typeof useCall<CallRow, StagedImage>>[0] {
-  return {
-    bookIdRef: { current: BOOK },
-    docIdRef: { current: BOOK },
-    supplementsRef: { current: [] },
-    ctxRef: {
-      current: {
-        topicId: "topic-1",
-        topicName: "A Topic",
-        fileName: "A Book.pdf",
-        pageLabel: null,
-        pageIndex: 4,
-        files: [],
-      },
-    },
-    settingsRef: { current: settings },
-    annsRef: { current: new Map() },
-    currentFulltextRef: { current: null },
-    currentFiguresRef: { current: null },
-    bufferRef: { current: null },
-    pipelineRef: { current: null },
-    pushToast: () => {},
-    distillAnnotations: () => [],
-    removeMark: () => {},
-    toDisplay: (stored: ThreadMessage[]) => stored as CallRow[],
-    newRow: (row: CallRow) => row,
-    maxImages: 3,
-    imageLimitHint: "",
-    loadingImage: (id: string) => ({ id }),
-    readyImage: (id: string) => ({ id }),
-    sendableImages: () => [],
-  };
-}
 
 // A provider is configured and the thread is empty — the exact case that used to
 // fire the explain kickoff on its own.
@@ -129,14 +88,7 @@ test("picking an intent sends it like anything else the reader types", async () 
   const appendMessage = spyOn(threads, "appendMessage").mockImplementation(
     (_bookId, _threadId, message) => void stored.push(message),
   );
-  const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue({
-    systemPrompt: "",
-    inline: "none" as const,
-    tools: [],
-    messages: [],
-    notice: "",
-    refusal: "",
-  });
+  const buildReadingTurn = spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn());
   const runAgentTurn = spyOn(agent, "runAgentTurn").mockImplementation(
     () => new Promise<void>(() => {}),
   );

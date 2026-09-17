@@ -8,19 +8,9 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  createAssistantMessageEventStream,
-  type Api,
-  type Model,
-} from "@earendil-works/pi-ai";
-import { runHarnessTurn, type StreamFn } from "../../../src/legion/execute/turn";
-import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
-import { memoryAppData } from "../../support/memory-appdata";
 import { StoppedError } from "../../../src/legion/execute/watchdog";
 import { createSubagentQuota } from "../../../src/legion/subagent/quota";
 import { subagentTool } from "../../../src/legion/subagent/tool";
-import { createTurnSettler } from "../../../src/legion/subagent/turn";
-import type { SubagentTurnFn, SubagentTurnRequest } from "../../../src/legion/subagent/types";
 import {
   buildResearchAgent,
   RESEARCH_KIND,
@@ -29,46 +19,17 @@ import {
   RESEARCH_TURN_ROUNDS,
 } from "../../../src/reading/papers/research-agent";
 import type { PaperCandidate, PaperSearchResult } from "../../../src/reading/papers/paper-search";
-import { turnEvents, type Turn } from "../../support/scripted-turn";
+import type { Turn } from "../../support/scripted-turn";
+import { scriptedSubagentRunner } from "../../support/scripted-runner";
 
 // --- a scripted model, one entry per streamed turn ---
 
 
 // A SubagentTurnFn backed by the real loop, recording what it was asked for.
+// A round past the end of the script says so in the reply rather than failing
+// the turn: these tests read what came back, not how it ended.
 function loopRunner(turns: Turn[]) {
-  const requests: SubagentTurnRequest[] = [];
-  let round = 0;
-  const stream: StreamFn = () => {
-    const i = round++;
-    const s = createAssistantMessageEventStream();
-    const events = turnEvents(turns[i] ?? { text: "no scripted turn" });
-    (async () => {
-      for (const ev of events) {
-        await Promise.resolve();
-        s.push(ev);
-      }
-      s.end();
-    })();
-    return s;
-  };
-  const run: SubagentTurnFn = (request) => {
-    requests.push(request);
-    const settler = createTurnSettler(request.signal, request.onRound);
-    void runHarnessTurn({
-      stream,
-      fileSystem: createSessionFileSystem(memoryAppData()),
-      model: { id: "m", provider: "faux" } as unknown as Model<Api>,
-      systemPrompt: request.systemPrompt,
-      messages: [{ role: "user", content: request.task, timestamp: 0 }],
-      tools: request.tools,
-      signal: request.signal,
-      maxRounds: request.maxRounds,
-      purpose: request.purpose,
-      ...settler.callbacks,
-    });
-    return settler.outcome.finally(() => settler.dispose());
-  };
-  return { run, requests, streamed: () => round };
+  return scriptedSubagentRunner(turns, { exhausted: { text: "no scripted turn" } });
 }
 
 // --- the literature the fakes return ---
