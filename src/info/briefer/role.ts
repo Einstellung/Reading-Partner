@@ -1,4 +1,4 @@
-// The secretary (docs/60, docs/67 角色): the soul with the boxes on the desk.
+// The secretary (docs/60, docs/71 角色): the soul with the boxes on the desk.
 //
 // The duty is who this person is and what they are here to do for the reader.
 // What lies in the boxes — today's briefing, the source roster, the reading

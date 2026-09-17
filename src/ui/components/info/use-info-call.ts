@@ -513,7 +513,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       turn = await assembleTurn({
         desk,
         messages: history,
-        // Whose desk this is (docs/67 角色): the secretary's duty and the
+        // Whose desk this is (docs/71 角色): the secretary's duty and the
         // companion tools ride the turn from the role, not from the briefing.
         role: SECRETARY_ROLE_ID,
         // Where this turn is being held (docs/68). A run delegated out of the

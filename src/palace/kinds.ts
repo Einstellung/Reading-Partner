@@ -148,7 +148,7 @@ export interface PalaceRow {
   deskKind?: string;
   // One line saying what this kind is, in the reader's own terms. It is what the
   // soul is shown when it asks what the palace holds (src/soul/catalogue.ts,
-  // docs/67), so a row carries one exactly when the soul is meant to know the
+  // docs/71), so a row carries one exactly when the soul is meant to know the
   // kind exists: a cache, a marker, a sync ledger, a failure stamp carries none
   // and the soul never sees it.
   about?: string;
@@ -1334,7 +1334,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     gc: "domain-housekeeping",
-    note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/67)",
+    note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/71)",
   },
 
   // -- the red box ----------------------------------------------------------

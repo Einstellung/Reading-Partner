@@ -1,4 +1,4 @@
-// The places a shell registers (src/desk/places.ts, docs/67): one set at a time,
+// The places a shell registers (src/desk/places.ts, docs/71): one set at a time,
 // what a second registration does to the first, and what a duplicate id does.
 // Run: bun test.
 

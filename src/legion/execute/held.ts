@@ -15,7 +15,7 @@
 // toProviderMessages is this turn's prompt and its own tool rounds, and
 // nothing from the turns before it. The session file keeps every turn as its
 // own branch off the root; none of them is read back as context, because the
-// context is assembled from the conversation files each turn (docs/67).
+// context is assembled from the conversation files each turn (docs/71).
 //
 // The first acquire in a process is the expensive one: it lists the group's
 // sessions, reopens the newest (reading the whole file back) or creates one,

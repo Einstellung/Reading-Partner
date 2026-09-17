@@ -121,7 +121,7 @@ function withObservations(ref: DeskRef, observations: Observation[]): DeskRef {
 
 async function assemble(refs: DeskRef[], tools: AgentTool[] = []) {
   const desk = await openDesk(withCompanionTools(refs, async () => tools), env());
-  // Every info turn is the soul with the secretary on (docs/67 角色), which is
+  // Every info turn is the soul with the secretary on (docs/71 角色), which is
   // where the companion tools and the duty paragraph come from.
   const turn = await assembleTurn({ desk, role: SECRETARY_ROLE_ID });
   return turn!;
@@ -200,7 +200,7 @@ test("a desk item offering one of the secretary's tool names is refused", async 
   );
 });
 
-// The prompt after the duty moved out of the briefing block (docs/67 角色). The
+// The prompt after the duty moved out of the briefing block (docs/71 角色). The
 // sections are the same ones in the same order; what changed is that the first
 // paragraph is now the soul's, printed ahead of the desk, instead of the first
 // line of the item's own text.

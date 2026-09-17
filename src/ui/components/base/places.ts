@@ -1,4 +1,4 @@
-// The places the soul can take the reader to (docs/67), minus React: which
+// The places the soul can take the reader to (docs/71), minus React: which
 // places there are, what each one is for, and which screen each one opens.
 // Beside shell-nav.ts because it is the same kind of table — the sidebar's
 // version of it is what a finger reaches, this is what a sentence reaches — and

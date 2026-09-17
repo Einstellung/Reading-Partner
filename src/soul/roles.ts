@@ -1,4 +1,4 @@
-// What the soul is here to do (docs/67 角色). A role is put on the soul the way
+// What the soul is here to do (docs/71 角色). A role is put on the soul the way
 // a kind is put on the desk: registered at startup by the domain that owns the
 // work, loaded by name when a turn is assembled.
 //

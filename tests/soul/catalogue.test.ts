@@ -1,4 +1,4 @@
-// What the soul can see of the palace (src/soul/catalogue.ts, docs/67). The
+// What the soul can see of the palace (src/soul/catalogue.ts, docs/71). The
 // walk is run against a literal store rather than a disk, the same way the
 // sequence index is. Run: bun test.
 

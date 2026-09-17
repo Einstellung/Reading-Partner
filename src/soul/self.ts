@@ -180,7 +180,7 @@ export async function openSoul(
     ...(scope ? { onWrite: () => notifyObservationChange(scope) } : {}),
   });
   tools.push(...(scope ? observation : observation.filter((t) => t.name !== OBSERVATION_WRITE_TOOL)));
-  // Where the reader can be taken (docs/67). Last, because it is the one tool
+  // Where the reader can be taken (docs/71). Last, because it is the one tool
   // that is about the app rather than about the reader or the material, and
   // absent wherever no shell has registered a place — a legion errand has
   // nobody to take anywhere.

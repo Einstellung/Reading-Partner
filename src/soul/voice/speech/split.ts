@@ -3,7 +3,7 @@
 // request per sentence, one sentence at a time, which is the grain
 // `plugins/voice/src/tts/relay.rs` asks for.
 //
-// The voice is the soul's (docs/67), on whatever desk it speaks over; the info
+// The voice is the soul's (docs/71), on whatever desk it speaks over; the info
 // briefing is one caller, not the owner.
 //
 // Normalization runs first and never splits (see normalize.ts). That ordering is
