@@ -18,8 +18,7 @@
 // the real store against an in-memory file on a fake clock instead of rewriting
 // the module registry for every other test sharing the worker (pitfall 119).
 
-import { appData } from "./appdata";
-import { writeTextAtomic } from "./atomic-fs";
+import { readTextOrNull, writeTextAtomic } from "./atomic-fs";
 import {
   createDebouncedWriter,
   type DebouncedWriter,
@@ -236,7 +235,7 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
 
 function liveStore(): AnnotationStore {
   return createAnnotationStore({
-    read: async (file) => ((await appData.exists(file)) ? appData.readText(file) : null),
+    read: readTextOrNull,
     write: writeTextAtomic,
     onError: (e) => reportStoreError("annotations", e),
   });

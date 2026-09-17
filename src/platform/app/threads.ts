@@ -28,7 +28,12 @@
 // every other test sharing the worker (pitfall 119).
 
 import { appData } from "./appdata";
-import { quarantineFile, writeTextAtomic, type CorruptFileReport } from "./atomic-fs";
+import {
+  quarantineFile,
+  readTextOrNull,
+  writeTextAtomic,
+  type CorruptFileReport,
+} from "./atomic-fs";
 import {
   createDebouncedWriter,
   type DebouncedWriter,
@@ -752,7 +757,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
 
 function liveStore(): ThreadStore {
   return createThreadStore({
-    read: async (file) => ((await appData.exists(file)) ? appData.readText(file) : null),
+    read: readTextOrNull,
     write: writeTextAtomic,
     quarantine: quarantineFile,
     onError: (e) => reportStoreError("threads", e),

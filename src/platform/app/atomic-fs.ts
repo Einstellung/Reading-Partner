@@ -213,3 +213,14 @@ export async function readJsonOr<T>(
   const value = await readJson<T>(file, validate);
   return value ?? structuredClone(fallback);
 }
+
+/**
+ * A file's text, or null when there is no such file. What the per-book stores
+ * (threads, annotations) hand their factory as `read`: a book nobody has written
+ * a file for yet is the ordinary case and reads as null, while a read that fails
+ * for any other reason still throws, so the store's own onError decides what to
+ * say about it.
+ */
+export async function readTextOrNull(file: string): Promise<string | null> {
+  return (await appData.exists(file)) ? appData.readText(file) : null;
+}
