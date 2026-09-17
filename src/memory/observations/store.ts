@@ -20,8 +20,10 @@
 
 import {
   appendTombstone,
+  appendUnique,
   buildIndex,
   isoDate,
+  laterDay,
   oneLine,
   parseIndex,
   parseObservation,
@@ -156,26 +158,6 @@ export interface ObservationConflict {
 // narrow ones.
 function newId(): string {
   return `m-${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-}
-
-// `updated` never moves backwards. It is the last day this observation's
-// evidence covers, and that evidence is everything ever anchored to it rather
-// than only what the newest pass cited — the sweep works through its backlog
-// oldest-first, so a pass folding in an older conversation must not make an
-// observation look older than what it already carries.
-function laterDay(a: string, b: string): string {
-  return a > b ? a : b;
-}
-
-function appendUnique(existing: readonly string[], added: readonly string[]): string[] {
-  const out = [...existing];
-  const seen = new Set(existing);
-  for (const item of added) {
-    if (!item || seen.has(item)) continue;
-    seen.add(item);
-    out.push(item);
-  }
-  return out;
 }
 
 function normalizeAnchors(a?: Partial<EvidenceAnchors>): EvidenceAnchors {

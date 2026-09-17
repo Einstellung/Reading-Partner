@@ -35,6 +35,33 @@ export function localDate(now: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// The later of two "YYYY-MM-DD" days, for both memory stores: an observation's
+// `updated` and a statement's `lastSupported` are each the last day the evidence
+// behind them covers, and neither may move backwards. Evidence is folded in
+// oldest-first as often as newest-first — a dream pass works through a backlog —
+// so a pass reading an older conversation must not make either look staler than
+// what it already carries.
+export function laterDay(a: string, b: string): string {
+  return a > b ? a : b;
+}
+
+// Append to a list of ids, keeping it unique and in order. Whitespace around an
+// entry is not part of the id: a statement given " m-abc" after "m-abc" would
+// otherwise cite the same observation twice. Only what is being appended is
+// normalized — entries already on disk are passed through untouched, so no read
+// of an old file rewrites it.
+export function appendUnique(existing: readonly string[], added: readonly string[]): string[] {
+  const out = [...existing];
+  const seen = new Set(existing);
+  for (const item of added) {
+    const value = item.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
 // Summaries are one line by contract: collapse whitespace so neither the
 // frontmatter nor the index format can be broken by a newline.
 export function oneLine(text: string): string {

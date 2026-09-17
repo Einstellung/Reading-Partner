@@ -18,6 +18,7 @@
 // `confirmedOn`, and it is a supplied day rather than a read of the clock:
 // see confirmedSpan.
 
+import { appendUnique } from "../observations/files";
 import {
   anchorSpan,
   isObservationId,
@@ -77,18 +78,6 @@ export interface StatementStore {
   // pointer is where its evidence went, and overwriting it would lose the only
   // record of that.
   markSuperseded(id: string, byId: string): Promise<Statement | null>;
-}
-
-function appendUnique(existing: readonly string[], added: readonly string[]): string[] {
-  const out = [...existing];
-  const seen = new Set(existing);
-  for (const item of added) {
-    const value = item.trim();
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
 }
 
 // The one date a caller is allowed to supply, and the narrowest opening that
