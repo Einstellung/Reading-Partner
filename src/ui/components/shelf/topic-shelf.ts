@@ -8,6 +8,7 @@
 // book, and the numbers come from here either way.
 
 import { sortedFiles, type FileRef, type Topic } from "../../../platform/app/topics";
+import { plural } from "../../../platform/std/text";
 
 // The grid's one source of truth. The class names are literal because Tailwind
 // finds classes by scanning source text: a name built at runtime is a name that
@@ -150,8 +151,4 @@ export function shelfHeaderLine(topics: Topic[]): string {
     for (const file of topic.files) books.add(file.hash ?? file.path);
   }
   return `${plural(topics.length, "topic")} · ${plural(books.size, "book")}`;
-}
-
-function plural(n: number, unit: string): string {
-  return `${n} ${unit}${n === 1 ? "" : "s"}`;
 }

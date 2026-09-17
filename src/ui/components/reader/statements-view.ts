@@ -7,6 +7,7 @@
 // and a superseded statement drops out of this list on its own.
 
 import { isObservationId, type Statement, type StatementKind } from "../../../memory";
+import { plural } from "../../../platform/std/text";
 
 export interface StatementRow {
   id: string;
@@ -20,10 +21,6 @@ export interface StatementRow {
   // What it rests on, counted ("3 observations"). Empty when it rests on
   // nothing, which no statement the store minted can be.
   evidence: string;
-}
-
-function plural(n: number, one: string): string {
-  return `${n} ${n === 1 ? one : `${one}s`}`;
 }
 
 // Observations and conversation turns are counted apart because they are not

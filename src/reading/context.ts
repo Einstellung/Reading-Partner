@@ -7,6 +7,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/execute/turn";
 import { clipToTokens } from "../legion/subagent/brief";
 import { estimateTextTokens } from "../budget";
+import { clipWords } from "../platform/std/text";
 import {
   formatPages,
   formatSearch,
@@ -21,15 +22,6 @@ import { PAGE_WINDOW_RADIUS } from "./figures/page-window";
 // full-text helpers. Defined with the annotation shape it reads so the units
 // under reading/ can use it without importing this group root.
 export { annotationPage } from "../platform/app/reader-contract";
-
-// Trim to `max` characters on a word boundary, adding an ellipsis when cut.
-export function clip(text: string, max: number): string {
-  const t = text.trim();
-  if (t.length <= max) return t;
-  const cut = t.slice(0, max);
-  const sp = cut.lastIndexOf(" ");
-  return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + "…";
-}
 
 // The whole-book outline from the reader's notes (docs/09), as a labeled block
 // for the opening context, or "" when there is no overview. Truncated to ~max
@@ -201,8 +193,8 @@ export function formatAnnotations(materials: TopicMaterial[], label: string): st
   const shown = m.annotations.slice(0, MAX_ANNOTATIONS);
   const lines = shown.map((a) => {
     const head = a.page !== null ? `p${a.page}` : "—";
-    const quote = a.text ? `"${clip(a.text, ANNOTATION_CHARS)}"` : "(no selected text)";
-    const note = a.comment ? ` — note: ${clip(a.comment, ANNOTATION_CHARS)}` : "";
+    const quote = a.text ? `"${clipWords(a.text, ANNOTATION_CHARS)}"` : "(no selected text)";
+    const note = a.comment ? ` — note: ${clipWords(a.comment, ANNOTATION_CHARS)}` : "";
     return `${head}: ${quote}${note}`;
   });
   const hidden = m.annotations.length - shown.length;

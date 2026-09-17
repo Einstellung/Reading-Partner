@@ -16,6 +16,8 @@ export interface PageMeta {
   publishedAt?: string;
 }
 
+import { oneLine } from "../../platform/std/text";
+
 // How far into the page to look. Everything here lives in <head>, and a page
 // whose head is longer than this has other problems.
 const HEAD_CHARS = 200_000;
@@ -65,7 +67,7 @@ function decodeBasicEntities(s: string): string {
 }
 
 function collapse(s: string): string {
-  return decodeBasicEntities(s).replace(/\s+/g, " ").trim();
+  return oneLine(decodeBasicEntities(s));
 }
 
 const META_TAG = /<meta\b[^>]*>/gi;

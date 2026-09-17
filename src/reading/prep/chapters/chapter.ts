@@ -21,6 +21,7 @@ import { buildFigureTools, type FigureImage } from "../../figures/tools";
 import type { Figure } from "../../figures/types";
 import type { Fulltext } from "../../../fulltext/types";
 import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings";
+import { clipLine } from "../../../platform/std/text";
 import type { BookChapter } from "../../chapters";
 import type { SpineChapter } from "./types";
 
@@ -38,8 +39,7 @@ export interface EmphasisSignal {
 
 // Trim a snippet so a long highlight or chat message doesn't blow up the prompt.
 function clip(text: string, max = 160): string {
-  const t = text.trim().replace(/\s+/g, " ");
-  return t.length <= max ? t : t.slice(0, max).trimEnd() + "…";
+  return clipLine(text, max);
 }
 
 // One thread of the reader's conversation with the AI, anchored on a mark that

@@ -32,6 +32,7 @@
 
 import { CallLimiter, isRateLimited, type LimiterConfig, type LimiterTimers } from "../../legion/execute/limiter";
 import { StoppedError } from "../../legion/stop";
+import { escapeXml } from "../../platform/std/text";
 import {
   ARTICLE_ENTRY,
   collectHeadings,
@@ -93,14 +94,6 @@ const REAL_TIMERS: LimiterTimers = {
   now: () => Date.now(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
-
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /** The article's pictures, by the entry name the document points at. */
 function readImages(book: EpubBook): {

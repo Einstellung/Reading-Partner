@@ -4,6 +4,8 @@
 // file can always be traced back to the thing it came from. Only the display
 // goes through here.
 
+import { plural } from "../../../platform/std/text";
+
 // Per-book reading state. `page`/`pages` are absent until the book has been
 // opened at least once (no reading position, no full-text cache).
 export interface BookMeta {
@@ -53,10 +55,6 @@ export function displayFileTitle(fileName: string): string {
     .join(" ");
   const cleaned = withoutSourceWords.replace(EDGE_JUNK, "").replace(/\s{2,}/g, " ");
   return cleaned || fileName;
-}
-
-function plural(n: number, unit: string): string {
-  return `${n} ${unit}${n === 1 ? "" : "s"}`;
 }
 
 // The line under a book's title. How far in and what has been marked; no

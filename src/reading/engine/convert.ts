@@ -19,6 +19,7 @@ import type {
   PdfUnderlineAnnoObject,
   Rect,
 } from "@embedpdf/models";
+import { padInt } from "../../platform/std/text";
 
 // The shell's annotation is intentionally loose: the engine round-trips unknown
 // fields untouched, so we only name what we read/write here.
@@ -96,18 +97,13 @@ export function markupColorOf(
   return obj.strokeColor ?? obj.color ?? fallback;
 }
 
-function pad(n: number, width: number): string {
-  const v = Math.max(0, Math.round(n));
-  return String(v).padStart(width, "0");
-}
-
 // Document-order key that sorts lexicographically into (page, top-to-bottom,
 // left-to-right). EmbedPDF has no sortIndex; TraceList still sorts on this
 // string, so we synthesize an equivalent from the top-left page coordinates.
 // `topY` is the distance from the top of the page (EmbedPDF origin.y), so a
 // smaller value is higher on the page and therefore earlier.
 export function makeSortIndex(pageIndex: number, topY: number, x: number): string {
-  return `${pad(pageIndex, 5)}|${pad(topY, 6)}|${pad(x, 5)}`;
+  return `${padInt(pageIndex, 5)}|${padInt(topY, 6)}|${padInt(x, 5)}`;
 }
 
 // --- geometry -------------------------------------------------------------

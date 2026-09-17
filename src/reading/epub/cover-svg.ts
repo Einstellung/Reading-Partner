@@ -18,6 +18,8 @@
 // acceptable because the cover is a picture and not a page: nothing paginates
 // against it, so it costs no page number when it renders a little differently.
 
+import { escapeXml, oneLine } from "../../platform/std/text";
+
 /** The sheet. Portrait, in the proportion of a trade paperback. */
 export const COVER_WIDTH = 600;
 export const COVER_HEIGHT = 800;
@@ -66,17 +68,10 @@ export interface CoverInput {
 /** At most this many entries of the footer are drawn. */
 export const FOOTER_MAX = 3;
 
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-function collapse(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
+// The apostrophe goes too, which the shared XML escaper leaves bare: the
+// attributes written beside this text are in single quotes.
+function escapeSvg(s: string): string {
+  return escapeXml(s).replace(/'/g, "&apos;");
 }
 
 // A character that is written full width: Han, kana, Hangul, and the CJK
@@ -160,7 +155,7 @@ function ellipsize(text: string, limit: number): string {
  * long title, and it is not allowed to grow a fifth line into the footer.
  */
 export function wrapCoverText(text: string, limit: number, maxLines: number): string[] {
-  const source = collapse(text);
+  const source = oneLine(text);
   if (source === "") return [];
   const tokens: string[] = [];
   for (const token of tokenize(source)) {
@@ -190,13 +185,13 @@ export function wrapCoverText(text: string, limit: number, maxLines: number): st
 }
 
 function topLine(input: CoverInput): string {
-  const parts = [collapse(input.kicker), collapse(input.date)].filter((s) => s !== "");
+  const parts = [oneLine(input.kicker), oneLine(input.date)].filter((s) => s !== "");
   return parts.join(" · ");
 }
 
 function bottomLine(input: CoverInput): string {
   return input.footer
-    .map((s) => collapse(s))
+    .map((s) => oneLine(s))
     .filter((s) => s !== "")
     .slice(0, FOOTER_MAX)
     .join(" · ");
@@ -205,7 +200,7 @@ function bottomLine(input: CoverInput): string {
 function text(x: number, y: number, size: number, fill: string, content: string, extra = ""): string {
   return (
     `<text x="${x}" y="${y}" font-family='${FONT_STACK}' font-size="${size}" fill="${fill}"` +
-    `${extra}>${escapeXml(content)}</text>`
+    `${extra}>${escapeSvg(content)}</text>`
   );
 }
 
@@ -270,7 +265,7 @@ export interface VolumeCoverInput {
  * came from, because a volume's sources are the pieces it collected.
  */
 export function volumeCover(input: VolumeCoverInput): string {
-  const range = collapse(input.dateRange);
+  const range = oneLine(input.dateRange);
   const count = `${input.count} 篇`;
   return typographicCover({
     kicker: input.series,

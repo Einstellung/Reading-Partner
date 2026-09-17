@@ -41,6 +41,7 @@ import type { RunSeed } from "./run-state";
 import type { CachedArticle } from "./store";
 import type { SourceDescriptor } from "../sources/descriptor";
 import type { InfoItem } from "../sources/item";
+import { pad2 } from "../../platform/std/text";
 
 // The band a scheduled wake is held to. The floor keeps a source whose interval
 // is somehow zero from spinning; the ceiling bounds how stale the schedule can
@@ -58,10 +59,6 @@ export interface CollectorStatus {
   lastPollAt: number | null;
 }
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
 // One sentence, for a tray tooltip and the menu line beside it. Local time,
 // because the person reading it is sitting at the machine; the date comes along
 // only when it is not today's, which is the case that would otherwise read as a
@@ -70,14 +67,14 @@ export function collectorStatusLine(status: CollectorStatus, now: number): strin
   if (!status.collecting) return "Collection is off";
   if (status.lastPollAt === null) return "Nothing collected yet";
   const at = new Date(status.lastPollAt);
-  const time = `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  const time = `${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
   const today = new Date(now);
   const sameDay =
     at.getFullYear() === today.getFullYear() &&
     at.getMonth() === today.getMonth() &&
     at.getDate() === today.getDate();
   if (sameDay) return `Last collected ${time}`;
-  return `Last collected ${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${time}`;
+  return `Last collected ${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())} ${time}`;
 }
 
 export interface CollectorDeps {

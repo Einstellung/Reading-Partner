@@ -22,6 +22,7 @@ import {
   type SubagentTurnFn,
 } from "../../legion/subagent";
 import type { EventPayload } from "../../platform/app/events";
+import { clipLine } from "../../platform/std/text";
 import type { ObservationAdapter } from "./adapter";
 import { resolveMessageAnchor } from "./anchors";
 import { localDate, parseIndexLine } from "./files";
@@ -162,8 +163,7 @@ export interface DistillInput {
 
 // Trim a mark snippet so a long highlight doesn't blow up the prompt.
 function clip(text: string, max = 160): string {
-  const t = text.trim().replace(/\s+/g, " ");
-  return t.length <= max ? t : t.slice(0, max).trimEnd() + "…";
+  return clipLine(text, max);
 }
 
 // The reader's marks created strictly after `since` (null = all), keeping only
