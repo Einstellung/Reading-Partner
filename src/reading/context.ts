@@ -5,6 +5,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/execute/turn";
+import { clipToTokens } from "../legion/subagent/brief";
 import { estimateTextTokens } from "../budget";
 import {
   formatPages,
@@ -66,21 +67,6 @@ function pageLabel(pageAnchor?: (page: number) => string): PageLabel {
   return (p) => `=== Page ${p} === ${pageAnchor ? pageAnchor(p) : `[p.${p}]`}`;
 }
 
-// Cut `text` down to `maxTokens` on the same estimate. Proportional, then
-// corrected, because the estimate is charged per character class and a straight
-// ratio overshoots on mixed scripts.
-function clipToTokens(text: string, maxTokens: number): string {
-  let out = text;
-  for (let i = 0; i < 12; i++) {
-    const tokens = estimateTextTokens(out);
-    if (tokens <= maxTokens || out.length === 0) break;
-    const next = Math.max(1, Math.floor((out.length * maxTokens) / tokens) - 1);
-    if (next >= out.length) break;
-    out = out.slice(0, next);
-  }
-  return out;
-}
-
 // The pages the block below covers, clamped to the document, or null when there
 // is nothing to inline. The turn's load statement names the same range, so it is
 // answered once and read twice.
@@ -139,7 +125,7 @@ export function markedPagesSection(
   if (estimateTextTokens(body) > MARK_PAGES_MAX_TOKENS) {
     const head = label(page);
     const room = Math.max(1, MARK_PAGES_MAX_TOKENS - estimateTextTokens(head));
-    body = `${head}\n${clipToTokens(ft.pages[page - 1] ?? "", room)}`;
+    body = `${head}\n${clipToTokens(ft.pages[page - 1] ?? "", room).text}`;
     notes.push(`[Page ${page} is cut off here; read_pages returns it in full.]`);
   }
 
