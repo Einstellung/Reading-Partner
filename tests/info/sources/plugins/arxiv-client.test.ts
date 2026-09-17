@@ -182,3 +182,18 @@ test("fetchWithRetry does not retry a 404 and throws after exhausting retries", 
     }),
   ).rejects.toThrow("network down");
 });
+
+// Entity decoding is shared with info/extract/sanitize. Before that, the local
+// copy here knew neither &nbsp; nor the hex form, so an em dash written
+// &#x2014; — which arXiv abstracts do — reached the reader as its own source.
+test("abstracts decode hex entities and &nbsp;", () => {
+  const xml = `<feed><entry>
+    <id>http://arxiv.org/abs/2401.00001v1</id>
+    <title>Scaling&#x2014;revisited</title>
+    <summary>A&nbsp;model&#x2014;trained on &#x201C;data&#x201D;.</summary>
+    <published>2024-01-01T00:00:00Z</published>
+  </entry></feed>`;
+  const [e] = parseArxivAtom(xml);
+  expect(e.title).toBe("Scaling—revisited");
+  expect(e.summary).toBe("A model—trained on “data”.");
+});
