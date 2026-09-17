@@ -337,8 +337,8 @@ export class SyncEngine {
   private readonly now: () => number;
   private snapshot: Snapshot;
   private running = false;
-  // On-demand book fetches in flight or waiting (fetchBook). A pass stands down
-  // while there are any: the books channel carries one blob at a time.
+  // On-demand book transfers in flight or waiting (fetchBook, pushBook). A pass
+  // stands down while there are any: the books channel carries one blob at a time.
   private fetching = 0;
   // Resolves when whatever this engine has on the remote right now is finished;
   // already resolved when it has nothing. A fetch queues on it.
@@ -1158,8 +1158,25 @@ export class SyncEngine {
    * A book this device already has is not fetched again.
    */
   async fetchBook(hash: string): Promise<void> {
+    await this.onBooksChannel(() => this.downloadOneBook(hash));
+  }
+
+  /**
+   * Upload one book blob, now, whatever the books policy says (docs/70).
+   *
+   * The other half of fetchBook: a book imported on the phone is in no mirror,
+   * so this is how the iPad gets its bytes. Same queue, same one-blob rule. A
+   * blob the remote already holds is left alone and its bytes are not read.
+   */
+  async pushBook(hash: string): Promise<void> {
+    await this.onBooksChannel(() => this.uploadOneBook(hash));
+  }
+
+  // One on-demand transfer, queued behind whatever this engine already has on
+  // the remote, with passes held off until it is done.
+  private async onBooksChannel(work: () => Promise<void>): Promise<void> {
     this.fetching++;
-    const mine = this.remoteWork.then(() => this.downloadOneBook(hash));
+    const mine = this.remoteWork.then(work);
     this.remoteWork = mine.then(
       () => undefined,
       () => undefined,
@@ -1168,6 +1185,16 @@ export class SyncEngine {
       await mine;
     } finally {
       this.fetching--;
+    }
+  }
+
+  private async uploadOneBook(hash: string): Promise<void> {
+    try {
+      if (await this.d.backend.hasBook(hash)) return;
+      await this.d.backend.uploadBook(hash, await this.d.books.read(hash));
+    } catch (e) {
+      if (isAuthFailure(e)) this.d.onSignedOut?.();
+      throw e;
     }
   }
 
