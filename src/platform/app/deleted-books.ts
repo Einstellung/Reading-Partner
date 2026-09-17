@@ -19,35 +19,14 @@
 
 import { appData } from "./appdata";
 import { writeTextAtomic } from "./atomic-fs";
+import { localDate } from "./day";
+import { parseRecordIds } from "./record-lines";
 
 export const DELETED_BOOKS_FILE = "deleted-books.jsonl";
 
-// The day on the device's own clock, not UTC: the reader deleting a book at
-// half past midnight in UTC+8 did it today, and the date is only ever read by a
-// person.
-function localDate(now: number): string {
-  const d = new Date(now);
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-// Tolerant on purpose: a line that does not parse, or carries no bookId, is not
-// a tombstone and is skipped rather than failing the read. Every caller of this
-// is deciding what to delete, and a file it could not read must not be read as
-// "nothing was deleted" halfway through.
+/** Every book id the lines name. Tolerant: see record-lines.ts. */
 export function parseDeletedBooks(text: string): Set<string> {
-  const ids = new Set<string>();
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (line === "") continue;
-    try {
-      const value = JSON.parse(line) as { bookId?: unknown };
-      if (typeof value?.bookId === "string" && value.bookId !== "") ids.add(value.bookId);
-    } catch {
-      continue;
-    }
-  }
-  return ids;
+  return parseRecordIds(text, "bookId");
 }
 
 /**

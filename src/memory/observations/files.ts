@@ -13,6 +13,7 @@
 // is the gate on every field this format may still grow, so the passthrough
 // ships before any of them.
 
+import { parseRecordIds } from "../../platform/app/record-lines";
 import {
   isObservationType,
   type Observation,
@@ -25,15 +26,10 @@ export function isoDate(now: number): string {
 
 // The same YYYY-MM-DD on the device's own clock. Two date formatters rather than
 // one because they date different things: isoDate stamps a file write, where any
-// consistent clock will do, while this one dates something the reader remembers
-// happening. At UTC+8 an hour of late-night reading falls on the previous UTC
-// day, so a conversation held after midnight would be written up as the day
-// before — a small version of exactly the lie this is here to stop.
-export function localDate(now: number): string {
-  const d = new Date(now);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+// consistent clock will do, while localDate dates something the reader remembers
+// happening. Re-exported from platform because the deleted-books file dates its
+// own records the same way.
+export { localDate } from "../../platform/app/day";
 
 // The later of two "YYYY-MM-DD" days, for both memory stores: an observation's
 // `updated` and a statement's `lastSupported` are each the last day the evidence
@@ -249,16 +245,5 @@ export function appendTombstone(text: string, id: string, at: string): string {
 // Tolerant like the rest of this file: a line that does not parse, or carries no
 // id, is not a tombstone and is skipped rather than failing the read.
 export function parseTombstones(text: string): Set<string> {
-  const ids = new Set<string>();
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (line === "") continue;
-    try {
-      const value = JSON.parse(line) as { id?: unknown };
-      if (typeof value?.id === "string" && value.id !== "") ids.add(value.id);
-    } catch {
-      continue;
-    }
-  }
-  return ids;
+  return parseRecordIds(text, "id");
 }
