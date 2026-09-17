@@ -23,6 +23,8 @@
 // means. That is enough to decide what to keep, and it is what keeps the test
 // for "does this rule escape" a string test rather than a grammar.
 
+import { oneLine } from "../../platform/std/text";
+
 /** How a url() reference is answered: the entry it resolves to, or null to drop it. */
 export type CssUrlResolver = (raw: string) => string | null;
 
@@ -217,16 +219,12 @@ function splitOutside(text: string, sep: string): string[] {
 const URL_TOKEN = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^'")\s]*))\s*\)/gi;
 const SCRIPT_VALUE = /expression\s*\(|javascript\s*:|vbscript\s*:|data\s*:|-moz-binding|behavior\s*:/i;
 
-function collapse(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
-}
-
 /** One declaration, sanitized: the canonical "prop: value" or null to drop it. */
 function sanitizeDeclaration(raw: string, opts: CssSanitizeOptions): string | null {
   const colon = raw.indexOf(":");
   if (colon < 0) return null;
   const prop = raw.slice(0, colon).trim().toLowerCase();
-  let value = collapse(raw.slice(colon + 1));
+  let value = oneLine(raw.slice(colon + 1));
   if (prop === "" || value === "") return null;
   if (!/^-?[a-z][a-z0-9-]*$/.test(prop)) return null;
   if (DROP_PROPERTIES.has(prop)) return null;
@@ -284,13 +282,13 @@ function sanitizeBlock(css: string, opts: CssSanitizeOptions): string[] {
     const open = css.indexOf("{", i);
     const semi = css.indexOf(";", i);
     // A statement at-rule (no block) ends at ";" — @import, @charset, @namespace.
-    if (open < 0 || (semi >= 0 && semi < open && collapse(css.slice(i, semi)).startsWith("@"))) {
+    if (open < 0 || (semi >= 0 && semi < open && oneLine(css.slice(i, semi)).startsWith("@"))) {
       const end = semi >= 0 ? semi : css.length;
       i = end + 1;
       if (open < 0) break;
       continue;
     }
-    const prelude = collapse(css.slice(i, open));
+    const prelude = oneLine(css.slice(i, open));
     const close = matchBrace(css, open);
     const body = css.slice(open + 1, close);
     i = close + 1;

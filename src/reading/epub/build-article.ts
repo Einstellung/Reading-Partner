@@ -24,6 +24,7 @@
 
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { contentHash } from "../../platform/app/content-hash";
+import { oneLine } from "../../platform/std/text";
 import { sanitizeDocument } from "./sanitize";
 
 export interface ArticleImage {
@@ -119,10 +120,6 @@ function escapeXml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function collapse(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
-}
-
 // --- images -----------------------------------------------------------------
 
 interface PackedImages {
@@ -198,7 +195,7 @@ function placeholderFor(doc: Document, img: Element): Element {
   const div = doc.createElement("div");
   div.setAttribute("class", "rp-missing-image");
   div.setAttribute("style", `height: ${MISSING_IMAGE_HEIGHT}px`);
-  const alt = collapse(img.getAttribute("alt") ?? "");
+  const alt = oneLine(img.getAttribute("alt") ?? "");
   if (alt !== "") div.textContent = alt;
   return div;
 }
@@ -244,7 +241,7 @@ export function collectHeadings(root: Element): Heading[] {
   const claimed = new Set<string>();
   const elements = Array.from(root.querySelectorAll("h1, h2, h3"));
   elements.forEach((el, index) => {
-    const title = collapse(el.textContent ?? "");
+    const title = oneLine(el.textContent ?? "");
     if (title === "") return;
     let id = el.getAttribute("id") ?? "";
     if (!NCNAME.test(id) || claimed.has(id)) {
@@ -284,10 +281,10 @@ function prependHeader(doc: Document, body: Element, input: ArticleEpubInput): v
     return el;
   };
   // The title is an h1, so the outline's first entry is the article itself.
-  line("h1", "rp-title", collapse(input.title) || "Untitled");
-  const byline = collapse(input.byline ?? "");
+  line("h1", "rp-title", oneLine(input.title) || "Untitled");
+  const byline = oneLine(input.byline ?? "");
   if (byline !== "") line("p", "rp-byline", byline);
-  const published = collapse(input.publishedAt ?? "");
+  const published = oneLine(input.publishedAt ?? "");
   if (published !== "") {
     const p = line("p", "rp-published", "");
     const time = doc.createElement("time");
@@ -295,7 +292,7 @@ function prependHeader(doc: Document, body: Element, input: ArticleEpubInput): v
     time.textContent = /^\d{4}-\d{2}-\d{2}T/.test(published) ? published.slice(0, 10) : published;
     p.appendChild(time);
   }
-  line("p", "rp-source", collapse(input.sourceUrl));
+  line("p", "rp-source", oneLine(input.sourceUrl));
   body.insertBefore(header, body.firstChild);
 }
 
@@ -338,7 +335,7 @@ function navDocument(headings: readonly Heading[], language: string, title: stri
   const list =
     headings.length > 0
       ? navBranch(headings, 0, headings[0].depth).html
-      : `<ol><li><a href="${ARTICLE_ENTRY}">${escapeXml(collapse(title) || "Untitled")}</a></li></ol>`;
+      : `<ol><li><a href="${ARTICLE_ENTRY}">${escapeXml(oneLine(title) || "Untitled")}</a></li></ol>`;
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${escapeXml(language)}">
@@ -356,13 +353,13 @@ function packageDocument(
   hasCover: boolean,
 ): string {
   const meta = [`<dc:identifier id="pub-id">${escapeXml(identifier)}</dc:identifier>`];
-  meta.push(`<dc:title>${escapeXml(collapse(input.title) || "Untitled")}</dc:title>`);
+  meta.push(`<dc:title>${escapeXml(oneLine(input.title) || "Untitled")}</dc:title>`);
   meta.push(`<dc:language>${escapeXml(language)}</dc:language>`);
-  const byline = collapse(input.byline ?? "");
+  const byline = oneLine(input.byline ?? "");
   if (byline !== "") meta.push(`<dc:creator>${escapeXml(byline)}</dc:creator>`);
-  const published = collapse(input.publishedAt ?? "");
+  const published = oneLine(input.publishedAt ?? "");
   if (published !== "") meta.push(`<dc:date>${escapeXml(published)}</dc:date>`);
-  meta.push(`<dc:source>${escapeXml(collapse(input.sourceUrl))}</dc:source>`);
+  meta.push(`<dc:source>${escapeXml(oneLine(input.sourceUrl))}</dc:source>`);
   meta.push(`<meta property="dcterms:modified">${FIXED_MODIFIED}</meta>`);
   // EPUB 2's way of naming the cover, beside EPUB 3's properties="cover-image"
   // below. Our own reader finds either (package.ts), and a reader that only
@@ -409,7 +406,7 @@ export async function buildArticleEpub(input: ArticleEpubInput): Promise<Uint8Ar
   if (typeof DOMParser === "undefined") {
     throw new Error("no DOMParser: an article cannot be built unsanitized");
   }
-  const language = collapse(input.language ?? "") || "en";
+  const language = oneLine(input.language ?? "") || "en";
   const packed = await packImages(input.images);
 
   // The body comes in as a fragment. Parsing it as a document is what the
@@ -429,7 +426,7 @@ export async function buildArticleEpub(input: ArticleEpubInput): Promise<Uint8Ar
   const source = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" lang="${escapeXml(language)}">
-<head><title>${escapeXml(collapse(input.title) || "Untitled")}</title>
+<head><title>${escapeXml(oneLine(input.title) || "Untitled")}</title>
 <style>${ARTICLE_CSS}</style></head>
 <body>${body.innerHTML}</body>
 </html>`;
@@ -472,7 +469,7 @@ export interface ArticlePackInput {
  * paginates the same way.
  */
 export async function packArticleEpub(input: ArticlePackInput): Promise<Uint8Array> {
-  const language = collapse(input.meta.language ?? "") || "en";
+  const language = oneLine(input.meta.language ?? "") || "en";
   const article = `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n${input.articleHtml}`;
 
   // The publication's identity is its content, like everything else on the

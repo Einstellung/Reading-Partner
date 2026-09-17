@@ -11,6 +11,7 @@
 // job.
 
 import { throwIfAborted } from "../../../platform/app/abort";
+import { oneLine } from "../../../platform/std/text";
 import { fetchText } from "../../extract/http";
 import { itemId } from "../../extract/id";
 import type { SourceDescriptor } from "../descriptor";
@@ -146,10 +147,6 @@ function num(v: unknown): number | undefined {
 
 function strs(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-}
-
-function oneLine(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
 }
 
 async function fetchRows(url: string, deps: PluginDeps): Promise<Record<string, unknown>[]> {

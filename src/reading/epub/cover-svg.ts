@@ -18,6 +18,8 @@
 // acceptable because the cover is a picture and not a page: nothing paginates
 // against it, so it costs no page number when it renders a little differently.
 
+import { oneLine } from "../../platform/std/text";
+
 /** The sheet. Portrait, in the proportion of a trade paperback. */
 export const COVER_WIDTH = 600;
 export const COVER_HEIGHT = 800;
@@ -73,10 +75,6 @@ function escapeXml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-function collapse(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
 }
 
 // A character that is written full width: Han, kana, Hangul, and the CJK
@@ -160,7 +158,7 @@ function ellipsize(text: string, limit: number): string {
  * long title, and it is not allowed to grow a fifth line into the footer.
  */
 export function wrapCoverText(text: string, limit: number, maxLines: number): string[] {
-  const source = collapse(text);
+  const source = oneLine(text);
   if (source === "") return [];
   const tokens: string[] = [];
   for (const token of tokenize(source)) {
@@ -190,13 +188,13 @@ export function wrapCoverText(text: string, limit: number, maxLines: number): st
 }
 
 function topLine(input: CoverInput): string {
-  const parts = [collapse(input.kicker), collapse(input.date)].filter((s) => s !== "");
+  const parts = [oneLine(input.kicker), oneLine(input.date)].filter((s) => s !== "");
   return parts.join(" · ");
 }
 
 function bottomLine(input: CoverInput): string {
   return input.footer
-    .map((s) => collapse(s))
+    .map((s) => oneLine(s))
     .filter((s) => s !== "")
     .slice(0, FOOTER_MAX)
     .join(" · ");
@@ -270,7 +268,7 @@ export interface VolumeCoverInput {
  * came from, because a volume's sources are the pieces it collected.
  */
 export function volumeCover(input: VolumeCoverInput): string {
-  const range = collapse(input.dateRange);
+  const range = oneLine(input.dateRange);
   const count = `${input.count} 篇`;
   return typographicCover({
     kicker: input.series,

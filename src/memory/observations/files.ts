@@ -13,6 +13,7 @@
 // is the gate on every field this format may still grow, so the passthrough
 // ships before any of them.
 
+import { oneLine } from "../../platform/std/text";
 import {
   isObservationType,
   type Observation,
@@ -36,10 +37,9 @@ export function localDate(now: number): string {
 }
 
 // Summaries are one line by contract: collapse whitespace so neither the
-// frontmatter nor the index format can be broken by a newline.
-export function oneLine(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
+// frontmatter nor the index format can be broken by a newline. Re-exported
+// because the store states the same contract when it writes one.
+export { oneLine };
 
 function line(key: string, value: string): string | null {
   return value === "" ? null : `${key}: ${value}`;
