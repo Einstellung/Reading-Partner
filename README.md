@@ -77,7 +77,7 @@ The other half is what the AI guesses, and it writes that one itself. Not a read
 
 ## PDF and EPUB
 
-A topic holds both, and on the desk they are the same thing: sheets of paper. An EPUB is laid out once into fixed 6×9-inch pages with fonts the app ships (Noto Serif and Noto Serif CJK), so a page is the same page on every device and the top bar counts real pages. Zoom, fit-page and the paged flip are the same controls a PDF has. The book's own stylesheets are kept — title pages, chapter heads, code blocks and tables look the way the publisher set them — after a pass that removes scripts, inline handlers, and anything that reaches outside the page. A book from a printed edition also carries its printed page numbers, shown beside the marks.
+A topic holds both, and on the desk they are the same thing: sheets of paper. An EPUB is laid out once into fixed US Letter pages (816×1056 px) with fonts the app ships (Noto Serif and Noto Serif CJK), so a page is the same page on every device and the top bar counts real pages. Zoom, fit-page and the paged flip are the same controls a PDF has. The book's own stylesheets are kept — title pages, chapter heads, code blocks and tables look the way the publisher set them — after a pass that removes scripts, inline handlers, and anything that reaches outside the page. A book from a printed edition also carries its printed page numbers, shown in the top bar beside the page number.
 
 The pages are cut when the book is first opened and stored with the book, never recomputed: `[p.N]` means what it means in a PDF, so lesson prep, chapter spines, clickable citations, full-text search and the outline all read an EPUB without knowing it is one, and a page number already written into a note cannot move.
 
@@ -85,10 +85,7 @@ Highlights, underlines, the AI pen, ink, the list of what you marked, notes, the
 
 On an iPad, open a book through Files; on the desktop the file picker takes `.epub` beside `.pdf`.
 
-<!-- Screenshot to add: an EPUB open in the reader — the app's own typography and
-     paper ground, a highlight, and the AI's reply anchored to it. Save it as
-     docs/assets/epub-reading.png and replace this comment with:
-     ![An EPUB in the reader](docs/assets/epub-reading.png) -->
+![An EPUB in the reader](docs/assets/epub-reading.png)
 
 ## Reading on the phone
 
@@ -123,7 +120,7 @@ A book reaches inwards, so it gets the other kind: one spine per chapter — wha
 
 Both kinds of note carry `[p.N]` and `[fig:N]` anchors, so a reply quoting one gives you the same chips you can click anywhere else.
 
-![Lesson prep running while reading](docs/assets/classroom-prep.png)
+![The prep panel beside the page, with every paper's state](docs/assets/classroom-prep.png)
 
 ## Citations you can click
 
@@ -206,7 +203,7 @@ Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.
 
 ## Status
 
-Early development, moving fast. Books are PDF or EPUB; EPUB arrived in 0.16.0, and the phone started reading EPUBs in 0.20.0. Features get removed as well as added: the generated slide deck and the whole-book notes tab both shipped and are both gone. The screenshots above come from real reading sessions and lag behind the current interface.
+Early development, moving fast. Books are PDF or EPUB; EPUB arrived in 0.16.0, and the phone started reading EPUBs in 0.20.0. Features get removed as well as added: the generated slide deck and the whole-book notes tab both shipped and are both gone. The screenshots above come from real reading sessions.
 
 ## License
 
