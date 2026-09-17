@@ -142,6 +142,10 @@ function TopicShelf(props: {
   const [onDevice, setOnDevice] = useState<ReadonlySet<string> | null>(null);
   const [can, setCan] = useState<FetchAbility>({ configured: false, signedIn: false });
   const [downloading, setDownloading] = useState<string | null>(null);
+  // Bumped when a download puts a book's bytes here: the cover of a book that
+  // was in the cloud could not be rendered before, and nothing about the files
+  // themselves changed to say it can be now.
+  const [coverRevision, setCoverRevision] = useState(0);
 
   const files = sortedFiles(topic);
 
@@ -190,6 +194,7 @@ function TopicShelf(props: {
       try {
         await fetchBook(action.bookId);
         await readShelf();
+        setCoverRevision((n) => n + 1);
         props.onOpenBook({
           bookId: action.bookId,
           name: m.title,
@@ -223,7 +228,7 @@ function TopicShelf(props: {
               {books.map((m) => (
                 <li key={m.file.path}>
                   <button className={LIBRARY_CARD} onClick={() => void tap(m)}>
-                    <CoverBand tiles={singleCoverTile(m.file)} />
+                    <CoverBand tiles={singleCoverTile(m.file)} revision={coverRevision} />
                     <span className={BOOK_LABEL}>
                       <span className={BOOK_TITLE} title={m.file.name}>
                         {m.title}

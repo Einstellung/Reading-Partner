@@ -15,7 +15,15 @@ import { bookCover } from "./cover-source";
 
 export type Covers = Record<string, string | null>;
 
-export function useCovers(files: FileRef[]): {
+/**
+ * `revision` is for a host that knows the answer has changed although the files
+ * have not: the phone downloads a book that was in the cloud, and the card it
+ * was tapped on can now have a cover (docs/70). Bumping it asks again.
+ */
+export function useCovers(
+  files: FileRef[],
+  revision = 0,
+): {
   covers: Covers;
   // A URL that will not decode is the same as no cover.
   markFailed: (path: string) => void;
@@ -25,7 +33,7 @@ export function useCovers(files: FileRef[]): {
   // `files` is a fresh array on every render of the host, so depending on it
   // would restart every request whenever the host re-rendered; the array the
   // effect closes over is the one from the render that changed this key.
-  const key = files.map((f) => f.path).join("\0");
+  const key = `${revision}\n${files.map((f) => f.path).join("\0")}`;
 
   useEffect(() => {
     let cancelled = false;

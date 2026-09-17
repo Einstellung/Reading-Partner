@@ -23,8 +23,19 @@ import { useCovers } from "./useCovers";
 const PLACEHOLDER =
   "flex h-full w-full items-start justify-start overflow-hidden bg-secondary p-2 text-lg leading-none font-medium text-secondary-foreground";
 
-export default function CoverBand({ tiles }: { tiles: CoverTile[] }) {
-  const { covers, markFailed } = useCovers(tiles.map((t) => t.file));
+// `revision` is passed through to useCovers: a host that has just put a book on
+// the device bumps it and the band asks for that cover again.
+export default function CoverBand({
+  tiles,
+  revision = 0,
+}: {
+  tiles: CoverTile[];
+  revision?: number;
+}) {
+  const { covers, markFailed } = useCovers(
+    tiles.map((t) => t.file),
+    revision,
+  );
   const template = coverGridTemplate(tiles.length);
 
   if (tiles.length === 0) {
