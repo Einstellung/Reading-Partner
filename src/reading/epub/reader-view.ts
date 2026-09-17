@@ -52,7 +52,8 @@ import {
   type Zoom,
 } from "./page-geometry";
 import { showsThroughBody, visibleRects } from "./mark-geometry";
-import { createMarkLayer, type MarkLayer, type SpineText } from "./mark-layer";
+import type { SpineText } from "./mark-draw";
+import { createMarkLayer, type MarkLayer } from "./mark-layer";
 import { createCardPool } from "./card-pool";
 import { createPageCard, type PageCard } from "./page-card";
 import { createPageResources } from "./page-mount";
