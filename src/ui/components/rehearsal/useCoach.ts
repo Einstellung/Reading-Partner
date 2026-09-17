@@ -5,7 +5,8 @@
 // domain meets the chat rendering: a write to the outline is both a file on disk
 // and a card in the conversation, and one of those two is a render concern.
 // Everything decidable without React (the prompt, the turn, the pass message) is
-// in reading/rehearsal and tested there.
+// in reading/rehearsal and tested there; the streaming itself is the chat
+// layer's useStreamingTurn.
 //
 // The coach never opens the conversation itself. A talk with no pass in it has
 // nothing to say about, so the turn runs when the conversation is waiting on a
@@ -15,11 +16,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderId } from "../../../ai";
 import { runAgentTurn } from "../../../legion/execute/turn";
 import { soulHarness } from "../../../soul";
-import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
-import { holdsNoAnswer, refusalRow } from "../../../ai/turn-rows";
 import { appendMessage, type ThreadMessage as StoredMessage } from "../../../platform/app/threads";
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
-import { toolStatusLabel } from "../../../reading/context";
 import { buildCoachTurn } from "../../../reading/rehearsal";
 import {
   editTalkOutline,
@@ -28,14 +26,9 @@ import {
   type TalkArrangementCardData,
   type TalkOutline,
 } from "../../../reading/talk";
-import {
-  cardRow,
-  insertBeforeLast,
-  nextCardId,
-  rehydrateMessage,
-  toPersistedCardPart,
-} from "../chat/chatParts";
+import { rehydrateMessage } from "../chat/chatParts";
 import type { ThreadMessage } from "../chat/types";
+import { useStreamingTurn } from "../chat/useStreamingTurn";
 import { awaitingReply, coachThreadId, openCoachThread } from "./coach-thread";
 
 function toDisplay(msgs: readonly StoredMessage[]): ThreadMessage[] {
@@ -56,15 +49,10 @@ export interface CoachController {
 
 export function useCoach(outlineId: string, topicName: string, passKey = 0): CoachController {
   const [outline, setOutline] = useState<TalkOutline | null>(null);
-  const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const outlineRef = useRef<TalkOutline | null>(null);
   const settingsRef = useRef<Settings | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const partialRef = useRef<{ ts: number; text: string } | null>(null);
   // The last thing already answered, or being answered. Without it the effect
   // that answers a waiting message would fire again on every re-render of the
   // same conversation and run a second turn against it.
@@ -76,15 +64,23 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
 
   const key = talkThreadKey(outlineId);
   const threadId = coachThreadId(outlineId);
+  const {
+    messages,
+    setMessages,
+    streaming,
+    error,
+    setError,
+    begin,
+    raiseCard,
+    running,
+    stop,
+    abort,
+  } = useStreamingTurn(key, threadId);
 
   const topicNameRef = useRef(topicName);
   useEffect(() => {
     topicNameRef.current = topicName;
   }, [topicName]);
-
-  const patchRow = useCallback((ts: number, fn: (m: ThreadMessage) => ThreadMessage) => {
-    setMessages((rows) => rows.map((m) => (m.ts === ts && m.role === "ai" ? fn(m) : m)));
-  }, []);
 
   // One turn. Assembled from the outline as it stands and the whole thread, so
   // the second pass is read with the first one and what was said about it.
@@ -96,49 +92,12 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
       setError("Configure a provider in Settings and I can tell you how that pass went.");
       return;
     }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const ts = Date.now();
-    partialRef.current = { ts, text: "" };
-    setError(null);
-    setStreaming(true);
-    setMessages((rows) => [
-      ...rows.filter((m) => !holdsNoAnswer(m)),
-      { role: "ai", text: "", ts, streaming: true },
-    ]);
-
-    const finish = () => {
-      if (abortRef.current === controller) abortRef.current = null;
-      partialRef.current = null;
-      setStreaming(false);
-    };
-    const fail = (text: string) => {
-      finish();
-      patchRow(ts, () => ({ role: "ai", text, ts, failed: true }));
-    };
-    const decline = (message: string) => {
-      finish();
-      patchRow(ts, (m) => ({ ...m, ...refusalRow(m, message) }));
-    };
-
-    // A receipt for a write to the outline, shown above the reply being written
-    // and persisted with it, so a reopened conversation still shows what landed.
-    const raiseCard = (payload: TalkArrangementCardData) => {
-      const cardId = nextCardId("talk");
-      const cardTs = Date.now();
-      setMessages((rows) => insertBeforeLast(rows, cardRow(cardId, payload, cardTs)));
-      appendMessage(key, threadId, {
-        role: "ai",
-        text: "",
-        ts: cardTs,
-        parts: [toPersistedCardPart(cardId, payload)],
-      });
-    };
+    const run = begin();
 
     void (async () => {
       const stored = await openCoachThread(outlineId).catch((): StoredMessage[] => []);
-      if (controller.signal.aborted) return;
-      const turn = await buildCoachTurn({
+      if (run.signal.aborted) return;
+      const assembled = await buildCoachTurn({
         outline: current,
         topicName: topicNameRef.current,
         settings: s,
@@ -159,57 +118,28 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
             return next;
           },
         },
-        onCard: raiseCard,
+        onCard: (payload: TalkArrangementCardData) => raiseCard("talk", payload),
       });
       // Declined before sending: the same inputs assemble the same call, so
       // there is nothing a second press would change (docs/pitfall/65).
-      if (turn.refusal) {
-        decline(turn.refusal);
+      if (assembled.refusal) {
+        run.decline(assembled.refusal);
         return;
       }
       void runAgentTurn({
         providerId: s.defaultProviderId as ProviderId,
         modelId: s.defaultModelId as string,
-        systemPrompt: turn.systemPrompt,
-        messages: turn.messages,
-        tools: turn.tools,
-        signal: controller.signal,
+        systemPrompt: assembled.systemPrompt,
+        messages: assembled.messages,
+        tools: assembled.tools,
+        signal: run.signal,
         reasoning: toReasoning(s.chatThinking),
         telemetry: { surface: "talk", thread: threadId },
         harness: soulHarness(),
-        onDelta: (chunk) => {
-          const p = partialRef.current;
-          if (p) p.text += chunk;
-          patchRow(ts, (m) => ({ ...m, text: m.text + chunk }));
-        },
-        onToolStart: (info) =>
-          patchRow(ts, (m) => ({
-            ...m,
-            text: "",
-            tools: appendRunningTool(m.tools, info.name, toolStatusLabel(info.name, info.args)),
-          })),
-        onToolEnd: (info) =>
-          patchRow(ts, (m) => {
-            const tools = resolveToolStatus(m.tools, info.name, info.isError);
-            return tools ? { ...m, tools } : m;
-          }),
-        onDone: (full) => {
-          if (controller.signal.aborted) return; // stop() already kept the partial
-          finish();
-          patchRow(ts, (m) => ({
-            role: "ai",
-            text: full,
-            ts,
-            tools: (m.tools ?? []).filter((t) => t.state === "error"),
-            ...(turn.notice ? { notice: turn.notice } : {}),
-          }));
-          appendMessage(key, threadId, { role: "ai", text: full, ts });
-        },
-        onError: (message) => fail(`⚠️ Couldn't reach the model. ${message}`),
-        onRefusal: (message) => decline(message),
+        ...run.handlers(assembled.notice),
       });
     })();
-  }, [outlineId, key, threadId, patchRow]);
+  }, [outlineId, threadId, begin, raiseCard, setError]);
 
   // Open the talk and its conversation, and read them again when a pass has been
   // handed in: `passKey` is bumped by the shell the moment a pass reaches disk,
@@ -238,7 +168,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
       // The pass that has just been handed in, or a message left unanswered when
       // the app was last closed. Either way the conversation is waiting.
       const last = stored[stored.length - 1];
-      if (!abortRef.current && awaitingReply(stored) && last && last.ts > answeredRef.current) {
+      if (!running() && awaitingReply(stored) && last && last.ts > answeredRef.current) {
         answeredRef.current = last.ts;
         runTurn();
       }
@@ -246,18 +176,12 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
     return () => {
       cancelled = true;
     };
-  }, [outlineId, passKey, runTurn]);
+  }, [outlineId, passKey, runTurn, running, setError, setMessages]);
 
   // Leaving stops the turn. Nothing is distilled here: what the coach hears is
   // the reader giving a talk rather than answering for a chapter, and what an
   // observation would be made of has not been decided (docs/44).
-  useEffect(
-    () => () => {
-      abortRef.current?.abort();
-      abortRef.current = null;
-    },
-    [outlineId],
-  );
+  useEffect(() => () => abort(), [outlineId, abort]);
 
   const send = useCallback(
     (text: string) => {
@@ -269,27 +193,8 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
       setMessages((rows) => [...rows, { role: "user", text: trimmed, ts }]);
       runTurn();
     },
-    [key, threadId, runTurn],
+    [key, threadId, runTurn, setMessages],
   );
-
-  // Stop keeps the half sentence: the abort silences the agent, so persisting it
-  // here is the only way it survives.
-  const stop = useCallback(() => {
-    const controller = abortRef.current;
-    const partial = partialRef.current;
-    if (!controller) return;
-    controller.abort();
-    abortRef.current = null;
-    setStreaming(false);
-    const text = (partial?.text ?? "").trim();
-    if (partial && text) {
-      appendMessage(key, threadId, { role: "ai", text, ts: partial.ts });
-      patchRow(partial.ts, () => ({ role: "ai", text, ts: partial.ts }));
-    } else if (partial) {
-      setMessages((rows) => rows.filter((m) => !(m.ts === partial.ts && m.role === "ai")));
-    }
-    partialRef.current = null;
-  }, [key, threadId, patchRow]);
 
   return { outline, messages, loading, streaming, error, send, stop };
 }

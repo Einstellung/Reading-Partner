@@ -6,7 +6,8 @@
 // both a write to the retell file and a card in the conversation, and one of those
 // two is a render concern. Everything decidable without React — the outline
 // operations, the turn assembly, the list rows — is in the domain and tested
-// there; what is left here is wiring.
+// there; the streaming itself is the chat layer's useStreamingTurn. What is left
+// here is wiring.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -20,8 +21,6 @@ import { loadSettings, toReasoning, type Settings } from "../../../platform/app/
 import type { ProviderId } from "../../../ai";
 import { runAgentTurn } from "../../../legion/execute/turn";
 import { soulHarness } from "../../../soul";
-import { toolStatusLabel } from "../../../reading/context";
-import type { RetellDecisionCardData, TalkArrangementCardData } from "../../../reading/retell";
 import {
   editTalkOutline,
   talkOutlineForRetell,
@@ -38,16 +37,9 @@ import {
   type Retell,
 } from "../../../reading/retell";
 import { distillRetell } from "../../../memory";
-import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { ThreadMessage } from "../chat/types";
-import {
-  cardRow,
-  insertBeforeLast,
-  nextCardId,
-  rehydrateMessage,
-  toPersistedCardPart,
-} from "../chat/chatParts";
-import { holdsNoAnswer, refusalRow } from "../../../ai/turn-rows";
+import { rehydrateMessage } from "../chat/chatParts";
+import { useStreamingTurn } from "../chat/useStreamingTurn";
 
 // A retell has exactly one conversation, so the thread id is the retell id. Nothing
 // has to be looked up, and a thread file with a second thread in it could only
@@ -78,18 +70,13 @@ export interface RetellController {
 export function useRetell(retellId: string, topicName: string): RetellController {
   const [retell, setRetell] = useState<Retell | null>(null);
   const [materials, setMaterials] = useState<LoadedMaterial[]>([]);
-  const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Read by the stable turn callback, so a reply in flight always writes against
   // the retell as it is now rather than as it was when the turn started.
   const retellRef = useRef<Retell | null>(null);
   const materialsRef = useRef<LoadedMaterial[]>([]);
   const settingsRef = useRef<Settings | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const partialRef = useRef<{ ts: number; text: string } | null>(null);
 
   useEffect(() => {
     retellRef.current = retell;
@@ -116,6 +103,19 @@ export function useRetell(retellId: string, topicName: string): RetellController
     onSettledRef.current = null;
     pending?.();
   }, []);
+
+  const {
+    messages,
+    setMessages,
+    streaming,
+    error,
+    setError,
+    begin,
+    raiseCard,
+    running,
+    stop,
+    abort,
+  } = useStreamingTurn(key, threadId, settleExit);
 
   // Leaving the retell is this conversation's hangup (docs/31: the retell is
   // the most worth observing stretch of conversation there is, and it had no
@@ -154,13 +154,13 @@ export function useRetell(retellId: string, topicName: string): RetellController
           .filter((m) => m.text.trim() !== "")
           .map(({ id, role, text, ts }) => ({ ...(id ? { id } : {}), role, text, ts })),
       });
-    if (abortRef.current) {
+    if (running()) {
       onSettledRef.current = run;
       return true;
     }
     run();
     return false;
-  }, [key, threadId]);
+  }, [key, threadId, running]);
 
   // Open the retell: its file, its materials, its conversation. Runs once per
   // retell; leaving the view unmounts the hook, distils what was said and stops
@@ -197,14 +197,9 @@ export function useRetell(retellId: string, topicName: string): RetellController
       // wanted. Aborting one it is waiting for would leave the pass hanging on a
       // reply that is never coming.
       if (captureExit()) return;
-      abortRef.current?.abort();
-      abortRef.current = null;
+      abort();
     };
-  }, [retellId, key, threadId, captureExit]);
-
-  const patchRow = useCallback((ts: number, fn: (m: ThreadMessage) => ThreadMessage) => {
-    setMessages((rows) => rows.map((m) => (m.ts === ts && m.role === "ai" ? fn(m) : m)));
-  }, []);
+  }, [retellId, key, threadId, captureExit, abort, setError, setMessages]);
 
   // One turn. Assembles from the retell as it stands, streams into the last row,
   // persists on done. A decision recorded mid-turn writes the file and drops a
@@ -217,59 +212,10 @@ export function useRetell(retellId: string, topicName: string): RetellController
       setError("Configure a provider in Settings to start the retell.");
       return;
     }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const ts = Date.now();
-    partialRef.current = { ts, text: "" };
-    setError(null);
-    setStreaming(true);
-    setMessages((rows) => [
-      ...rows.filter((m) => !holdsNoAnswer(m)),
-      { role: "ai", text: "", ts, streaming: true },
-    ]);
-
-    const finish = () => {
-      if (abortRef.current === controller) abortRef.current = null;
-      partialRef.current = null;
-      setStreaming(false);
-    };
-
-    const fail = (text: string) => {
-      finish();
-      patchRow(ts, () => ({ role: "ai", text, ts, failed: true }));
-      // The turn is over, however it ended. A distillation waiting on it takes
-      // the conversation as it stands: the reader's half is on disk either way,
-      // and a failed reply is no reason to lose what they said.
-      settleExit();
-    };
-
-    // The loop declined rather than failed to reach the model, so the sentence is
-    // the app talking about the turn, not a reply (turn-rows.ts). Same ending
-    // otherwise: nothing to retry, and the exit still settles.
-    const decline = (message: string) => {
-      finish();
-      patchRow(ts, (m) => ({ ...m, ...refusalRow(m, message) }));
-      settleExit();
-    };
-
-    // A receipt for something the AI just wrote: shown above the reply being
-    // written and persisted with it, so a reopened retell still shows what was
-    // settled. The same for a chapter decision and for a write to the talk
-    // outline — only the id prefix differs.
-    const raiseCard = (prefix: string, payload: RetellDecisionCardData | TalkArrangementCardData) => {
-      const cardId = nextCardId(prefix);
-      const cardTs = Date.now();
-      setMessages((rows) => insertBeforeLast(rows, cardRow(cardId, payload, cardTs)));
-      appendMessage(key, threadId, {
-        role: "ai",
-        text: "",
-        ts: cardTs,
-        parts: [toPersistedCardPart(cardId, payload)],
-      });
-    };
+    const run = begin();
 
     void (async () => {
-      const turn = await buildRetellTurn({
+      const assembled = await buildRetellTurn({
         retell: retellRef.current ?? current,
         materials: materialsRef.current,
         topicName,
@@ -311,59 +257,27 @@ export function useRetell(retellId: string, topicName: string): RetellController
         onDecisionCard: (payload) => raiseCard("retell", payload),
         onArrangeCard: (payload) => raiseCard("talk", payload),
       });
-      if (controller.signal.aborted) return;
+      if (run.signal.aborted) return;
       // Declined before sending: the same inputs assemble the same call, so
       // there is nothing a second press would change (docs/pitfall/65).
-      if (turn.refusal) {
-        decline(turn.refusal);
+      if (assembled.refusal) {
+        run.decline(assembled.refusal);
         return;
       }
       void runAgentTurn({
         providerId: s.defaultProviderId as ProviderId,
         modelId: s.defaultModelId as string,
-        systemPrompt: turn.systemPrompt,
-        messages: turn.messages,
-        tools: turn.tools,
-        signal: controller.signal,
+        systemPrompt: assembled.systemPrompt,
+        messages: assembled.messages,
+        tools: assembled.tools,
+        signal: run.signal,
         reasoning: toReasoning(s.chatThinking),
         telemetry: { surface: "talk", thread: threadId },
         harness: soulHarness(),
-        onDelta: (chunk) => {
-          const p = partialRef.current;
-          if (p) p.text += chunk;
-          patchRow(ts, (m) => ({ ...m, text: m.text + chunk }));
-        },
-        onToolStart: (info) =>
-          patchRow(ts, (m) => ({
-            ...m,
-            text: "",
-            tools: appendRunningTool(m.tools, info.name, toolStatusLabel(info.name, info.args)),
-          })),
-        onToolEnd: (info) =>
-          patchRow(ts, (m) => {
-            const tools = resolveToolStatus(m.tools, info.name, info.isError);
-            return tools ? { ...m, tools } : m;
-          }),
-        onDone: (full) => {
-          if (controller.signal.aborted) return; // stop() already kept the partial
-          finish();
-          patchRow(ts, (m) => ({
-            role: "ai",
-            text: full,
-            ts,
-            tools: (m.tools ?? []).filter((t) => t.state === "error"),
-            ...(turn.notice ? { notice: turn.notice } : {}),
-          }));
-          appendMessage(key, threadId, { role: "ai", text: full, ts });
-          // After the append, never before: a distillation deferred by an exit
-          // mid-answer reads the thread file, which only now holds the reply.
-          settleExit();
-        },
-        onError: (message) => fail(`⚠️ Couldn't reach the model. ${message}`),
-        onRefusal: (message) => decline(message),
+        ...run.handlers(assembled.notice),
       });
     })();
-  }, [retellId, key, threadId, topicName, patchRow, settleExit]);
+  }, [retellId, key, threadId, topicName, begin, raiseCard, setError]);
 
   // A retell opened with nothing in it starts itself: stage one of the retell is
   // the AI laying out the skeleton and asking which thread the retell should
@@ -387,27 +301,8 @@ export function useRetell(retellId: string, topicName: string): RetellController
       setMessages((rows) => [...rows, { role: "user", text: trimmed, ts }]);
       runTurn();
     },
-    [key, threadId, runTurn],
+    [key, threadId, runTurn, setMessages],
   );
-
-  // Stop keeps the half sentence: the abort silences the agent, so persisting it
-  // here is the only way it survives.
-  const stop = useCallback(() => {
-    const controller = abortRef.current;
-    const partial = partialRef.current;
-    if (!controller) return;
-    controller.abort();
-    abortRef.current = null;
-    setStreaming(false);
-    const text = (partial?.text ?? "").trim();
-    if (partial && text) {
-      appendMessage(key, threadId, { role: "ai", text, ts: partial.ts });
-      patchRow(partial.ts, () => ({ role: "ai", text, ts: partial.ts }));
-    } else if (partial) {
-      setMessages((rows) => rows.filter((m) => !(m.ts === partial.ts && m.role === "ai")));
-    }
-    partialRef.current = null;
-  }, [key, threadId, patchRow]);
 
   // The outline edits. Each writes the file and takes what came back, so what is
   // on screen is what a reload would show.
