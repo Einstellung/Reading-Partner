@@ -4,12 +4,9 @@
 
 import type { BookMeta } from "../../shelf/file-title";
 import type { Topic } from "../../../../platform/app/topics";
+import { plural } from "../../../../platform/std/text";
 
 const DAY = 24 * 60 * 60 * 1000;
-
-function plural(n: number, unit: string): string {
-  return `${n} ${unit}${n === 1 ? "" : "s"}`;
-}
 
 // The most recent time any file in the topic was opened, or null for a topic
 // nobody has read yet.

@@ -8,10 +8,7 @@
 import type { Briefing } from "../../../info/boxes/types";
 import { NOTHING_CHANGED, briefingCovers, isEmptyDay } from "./briefing-view";
 import type { BookMeta } from "../shelf/file-title";
-
-function plural(n: number, unit: string): string {
-  return `${n} ${unit}${n === 1 ? "" : "s"}`;
-}
+import { plural } from "../../../platform/std/text";
 
 // The date above the heading, in the device's own locale and calendar. No year:
 // the screen is called Today.
