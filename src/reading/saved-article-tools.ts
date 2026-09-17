@@ -24,6 +24,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/execute/turn";
 import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
+import { clipLineTight } from "../platform/std/text";
 import type { FetchOutcome } from "./prep/papers/pipeline";
 import { uniqueSlug } from "./prep/papers/plan";
 import type { IngestedPaper } from "./prep/papers/source-tool";
@@ -90,7 +91,7 @@ function publishedDay(publishedAt: string): string {
   const raw = publishedAt.trim();
   if (raw === "") return "";
   const at = new Date(raw);
-  return Number.isNaN(at.getTime()) ? clip(raw, 40) : at.toISOString().slice(0, 10);
+  return Number.isNaN(at.getTime()) ? clipLineTight(raw, 40) : at.toISOString().slice(0, 10);
 }
 
 function publishedYear(publishedAt: string): number | null {
@@ -100,13 +101,8 @@ function publishedYear(publishedAt: string): number | null {
   return year > 1900 && year < 2200 ? year : null;
 }
 
-function clip(text: string, max: number): string {
-  const t = text.trim().replace(/\s+/g, " ");
-  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
-}
-
 function sourceLabel(article: SavedArticle): string {
-  return clip(article.sourceName, SAVED_SOURCE_MAX) || "unnamed source";
+  return clipLineTight(article.sourceName, SAVED_SOURCE_MAX) || "unnamed source";
 }
 
 function dateLabel(article: SavedArticle): string {
@@ -121,7 +117,7 @@ function row(article: SavedArticle, n: number): string {
   const length = article.summaryOnly
     ? `${chars} characters (summary only — the full text was never read)`
     : `${chars} characters`;
-  const title = clip(article.title, SAVED_TITLE_MAX) || "(untitled)";
+  const title = clipLineTight(article.title, SAVED_TITLE_MAX) || "(untitled)";
   return `${n}. "${title}" — ${sourceLabel(article)} — ${dateLabel(article)} — ${length} — id: ${article.id}`;
 }
 
@@ -312,7 +308,7 @@ export function buildSavedArticleTools(ports: SavedArticlePorts): AgentTool[] {
         }
         if (savedArticleTextChars(article) === 0) {
           throw new Error(
-            `"${clip(article.title, SAVED_TITLE_MAX)}" was kept without any body text` +
+            `"${clipLineTight(article.title, SAVED_TITLE_MAX)}" was kept without any body text` +
               `${article.summaryOnly ? " — not even a summary" : ""}, so there is nothing to ` +
               `read. Say the text was never captured rather than working from the title.`,
           );

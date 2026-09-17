@@ -3,16 +3,12 @@
 // cite them as [fig:N] without spending tokens on full captions. Capped; for a
 // long survey the cap keeps the figures nearest the reader's current page. Pure.
 
+import { clipLine } from "../../platform/std/text";
 import { compareFigureIds } from "./lookup";
 import type { Figure } from "./types";
 
 const DEFAULT_MAX = 40;
 const CAPTION_CHARS = 100;
-
-function clip(text: string, max: number): string {
-  const t = text.trim().replace(/\s+/g, " ");
-  return t.length <= max ? t : t.slice(0, max).trimEnd() + "…";
-}
 
 export interface CatalogOptions {
   max?: number;
@@ -47,7 +43,7 @@ export function buildFigureCatalog(figures: Figure[], opts: CatalogOptions = {})
     opts.heading ?? "Figures in this document (cite one as [fig:N] when it shows what you explain):",
   ];
   for (const f of chosen) {
-    lines.push(`- [fig:${f.id}] p.${f.page} — ${clip(f.caption, CAPTION_CHARS)}`);
+    lines.push(`- [fig:${f.id}] p.${f.page} — ${clipLine(f.caption, CAPTION_CHARS)}`);
   }
   if (chosen.length < figures.length) {
     lines.push(`(${figures.length - chosen.length} more figures elsewhere; ask to read a page to find them.)`);

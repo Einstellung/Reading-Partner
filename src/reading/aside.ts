@@ -20,6 +20,9 @@ import {
   type Thread,
   type ThreadMessage,
 } from "../platform/app/threads";
+// A selection across a Markdown list or a code block brings the newlines with
+// it, and every place a span or a question is shown or stated is one line.
+import { clipLineTight } from "../platform/std/text";
 
 // How far back the tail reaches, counted in the reader's own questions.
 //
@@ -109,18 +112,10 @@ export const ASIDE_SPAN_MAX = 400;
 // How much of the reader's first question the receipt repeats.
 export const ASIDE_QUESTION_MAX = 140;
 
-// One line, cut to `max`. A selection across a Markdown list or a code block
-// brings the newlines with it, and every place a span or a question is shown or
-// stated is one line.
-function oneLine(raw: string, max: number): string {
-  const text = raw.replace(/\s+/g, " ").trim();
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
 // The reader's selection as the record stores it. Null when there is nothing
 // there to ask about.
 export function asideSpan(raw: string): string | null {
-  const text = oneLine(raw, ASIDE_SPAN_MAX);
+  const text = clipLineTight(raw, ASIDE_SPAN_MAX);
   return text.length < ASIDE_SPAN_MIN ? null : text;
 }
 
@@ -171,7 +166,7 @@ export function asideFraming(
   return {
     parentThreadId: thread.parentThreadId,
     from: anchor ? "chat" : "mark",
-    span: oneLine(anchor ? anchor.text : markText, ASIDE_SPAN_MAX),
+    span: clipLineTight(anchor ? anchor.text : markText, ASIDE_SPAN_MAX),
   };
 }
 
@@ -248,7 +243,7 @@ export const ASIDE_ANCHOR_MAX = 24;
 // words it was pulled out of. Empty when there is neither.
 export function asideAnchorLabel(item: AsideReceiptItem): string {
   if (item.page !== undefined) return `p.${item.page}`;
-  return item.span === "" ? "" : `“${oneLine(item.span, ASIDE_ANCHOR_MAX)}”`;
+  return item.span === "" ? "" : `“${clipLineTight(item.span, ASIDE_ANCHOR_MAX)}”`;
 }
 
 // The one line a receipt of several asides is collapsed to.
@@ -313,10 +308,10 @@ export function asideReceipt(input: {
   // An aside the reader opened and asked nothing in leaves nothing behind.
   const asked = messages.find((m) => m.role === "user" && m.text.trim() !== "");
   if (!asked) return null;
-  const question = oneLine(asked.text, ASIDE_QUESTION_MAX);
+  const question = clipLineTight(asked.text, ASIDE_QUESTION_MAX);
   const item: AsideReceiptItem = {
     threadId,
-    span: oneLine(span, ASIDE_SPAN_MAX),
+    span: clipLineTight(span, ASIDE_SPAN_MAX),
     question,
     ...(typeof page === "number" ? { page } : {}),
   };

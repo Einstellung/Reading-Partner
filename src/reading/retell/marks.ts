@@ -6,20 +6,9 @@
 // the prompt forbids asking about them one by one, and this module only lays
 // them out so that is possible.
 
+import { clipWords } from "../../platform/std/text";
 import { chapterOfPage } from "./skeleton";
 import type { Mark, RetellChapter } from "./types";
-
-// Trim to `max` characters on a word boundary, adding an ellipsis when cut. The
-// same shape as reading/context.ts's clip, kept local: importing it would make
-// reading/retell depend on the group root that assembles the turn, and the
-// turn already depends on this unit (tests/layering.test.ts calls that a cycle).
-function clip(text: string, max: number): string {
-  const t = text.trim();
-  if (t.length <= max) return t;
-  const cut = t.slice(0, max);
-  const sp = cut.lastIndexOf(" ");
-  return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + "…";
-}
 
 // A single mark's text cap. Long enough that a marked paragraph survives whole,
 // short enough that one runaway selection cannot eat the chapter.
@@ -48,11 +37,11 @@ export function bucketMarks(
 }
 
 function markLine(m: Mark, max: number): string {
-  const text = clip(m.text, max);
+  const text = clipWords(m.text, max);
   const head = m.page === null ? "-" : `- [p.${m.page}]`;
   const body = text ? ` "${text}"` : "";
   const note = (m.comment ?? "").trim();
-  return note ? `${head}${body} — their note: "${clip(note, max)}"` : `${head}${body}`;
+  return note ? `${head}${body} — their note: "${clipWords(note, max)}"` : `${head}${body}`;
 }
 
 export interface MarksFormat {

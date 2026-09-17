@@ -8,7 +8,6 @@ import type { TopicMaterial } from "../../src/fulltext/format";
 import {
   annotationPage,
   buildReadingTools,
-  clip,
   findMaterial,
   formatAnnotations,
   markedPagesSection,
@@ -29,15 +28,6 @@ test("annotationPage converts 0-based pageIndex to 1-based, null when absent", (
   expect(annotationPage({})).toBeNull();
   expect(annotationPage(undefined)).toBeNull();
   expect(annotationPage(null)).toBeNull();
-});
-
-test("clip trims to a word boundary and appends an ellipsis only when cut", () => {
-  expect(clip("short text", 100)).toBe("short text");
-  const long = "the quick brown fox jumps over the lazy dog again and again";
-  const out = clip(long, 20);
-  expect(out.length).toBeLessThanOrEqual(21);
-  expect(out.endsWith("…")).toBe(true);
-  expect(out.includes("  ")).toBe(false);
 });
 
 // The marked page and the page either side, under the headers read_pages
