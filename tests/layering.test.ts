@@ -48,6 +48,8 @@ const LAYER: Record<string, Layer> = {
   platform: "platform",
   "platform/app": "platform",
   "platform/http": "platform",
+  // The standard library the app lacks: pure helpers that import nothing.
+  "platform/std": "platform",
   "platform/sync": "platform",
   "platform/sync/merge": "platform",
 

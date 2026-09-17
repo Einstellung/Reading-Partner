@@ -16,6 +16,7 @@
 
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
+import { extractJson } from "../../platform/std/json";
 import type { CableHit } from "../cable/types";
 import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
@@ -218,16 +219,6 @@ export function screenUserMessage(
 }
 
 // --- validation -----------------------------------------------------------
-
-function extractJson(text: string): string | null {
-  let s = text.trim();
-  const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(s);
-  if (fence) s = fence[1].trim();
-  const start = s.indexOf("{");
-  const end = s.lastIndexOf("}");
-  if (start === -1 || end === -1 || end < start) return null;
-  return s.slice(start, end + 1);
-}
 
 export type ScreenParseOutcome =
   | { ok: true; verdicts: ScreenVerdict[] }

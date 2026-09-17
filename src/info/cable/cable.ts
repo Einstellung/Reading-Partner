@@ -1,5 +1,6 @@
 // Reading a day of cables. Pure, unit-tested; the files are store.ts next door.
 
+import { isObject } from "../../platform/std/json";
 import { CABLES_VERSION, type Cable, type CableDay, type CableHit } from "./types";
 
 /**
@@ -40,8 +41,4 @@ function readCable(entry: unknown): Cable | null {
     hits.push({ labId: h.labId, observables });
   }
   return { ...(entry as unknown as Cable), hits };
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
 }

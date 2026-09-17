@@ -8,6 +8,7 @@
 // an id naming nothing, a likelihood word nobody uses are dropped with a warning
 // and the rest of the delta still lands.
 
+import { asArray, asText, isObject } from "../../platform/std/json";
 import {
   CONFIDENCES,
   LIKELIHOODS,
@@ -405,20 +406,6 @@ function readQuestion(entry: unknown): OpenQuestion | null {
   if (typeof entry.text !== "string") return null;
   if (typeof entry.askedOn !== "string") return null;
   return entry as unknown as OpenQuestion;
-}
-
-// --- reading a value nobody promised anything about ------------------------
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
-}
-
-function asArray(v: unknown): unknown[] {
-  return Array.isArray(v) ? v : [];
-}
-
-function asText(v: unknown): string {
-  return typeof v === "string" ? v.trim() : "";
 }
 
 function short(text: string): string {

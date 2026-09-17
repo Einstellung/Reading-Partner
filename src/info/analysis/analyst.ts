@@ -18,7 +18,8 @@ import type { ParseTally } from "../../platform/app/structured-output";
 import { pictureSummary } from "../picture/picture";
 import type { Confidence, Likelihood, Picture, PictureDelta } from "../picture/types";
 import { formatSignals } from "../sources/item";
-import { asArray, asText, isObject, readObject } from "./json";
+import { asArray, asText, isObject } from "../../platform/std/json";
+import { readObject } from "./json";
 import type { AnalystCable, AnalystInput, AnalystOutput, ParseOutcome } from "./types";
 
 // How much of each cable's body the analyst reads. The same cut triage used:
