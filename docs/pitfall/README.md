@@ -71,7 +71,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 336）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 338）。
 
 ## EmbedPDF 引擎
 
@@ -180,6 +180,7 @@
 - [237-per-field-merge-splits-a-pair](./237-per-field-merge-splits-a-pair.md) — `settings.json` 走 `fields` 策略，每个键独立按内容 hash 定胜负，等于一个键掷一次硬币；`defaultProviderId` 和 `defaultModelId` 因此被拆成双方都没有过的组合（22 组实测 10 组不存在），此后每次调用都 `unknown model 'X' for DeepSeek`。`fieldGroupsFor` 按路径声明字段组，`fields` 把一组键当一个复合值整组定胜负；`enforceKnownModel` 留在两条读盘的路上兜合并层看不见的原因（下架的模型、更老的构建），`resolveModel` 从磁盘读，所以必须写回盘
 - [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
 - [331-a-seeded-library-json-of-the-wrong-shape-is-renamed-away](./331-a-seeded-library-json-of-the-wrong-shape-is-renamed-away.md) — `library.json` 是 `{"books":{…}}` 不是扁平表；形状不对的守卫会把它改名成 `library.json.corrupt-<时间戳>` 再当空库跑，界面上只看到一个每张卡都当 PDF、没有续读的书架。喂完种子先查容器里有没有 `*.corrupt-*`
+- [336-home-glob-scope-does-not-cross-a-dotted-directory](./336-home-glob-scope-does-not-cross-a-dotted-directory.md) — capability 里 `$HOME/**` 匹配不了带点的目录（比如 `.cache`），文件确实在 HOME 下也照样被 fs 插件拒绝；`$APPDATA` 下的路径不受影响，读隐藏目录下的文件要么挪去 appdata，要么显式加一条 scope
 
 ## 提取（壳侧 pdf.js）
 
@@ -401,6 +402,7 @@
 - [311-another-sessions-server-answers-on-the-port](./311-another-sessions-server-answers-on-the-port.md) — 端口被同会话另一个 agent 的 harness 服务器占着，自己那条 `nohup http.server` 当场 `Address already in use` 退掉（只进日志），`curl` 的 200 是旧服务器答的，连截三轮都是改动前的界面。起完 grep 页面里的 bundle 文件名和 build 输出比对，端口按会话取
 - [299-negated-class-spans-lines-in-a-grep-guard](./299-negated-class-spans-lines-in-a-grep-guard.md) — 扫源码的守卫正则里 `[^;]*` 会跨行，命中比 grep 多；否定类要排掉 `\n`
 - [332-copying-any-file-into-the-mac-checkout-resets-the-nav-stack](./332-copying-any-file-into-the-mac-checkout-resets-the-nav-stack.md) — vite 监听整个项目根，`scp` 一个驱动脚本进去也整页 reload，手机壳的导航栈回到首页，接着按记下的坐标点下去点的全是别的屏。驱动界面的过程中不往 Mac 的 checkout 里写文件
+- [337-sim-bridge-eval-error-with-no-message-prints-as-at-sign](./337-sim-bridge-eval-error-with-no-message-prints-as-at-sign.md) — WebKit 里没带 message 的错误（`TypeError` 之类）的 `stack` 不带消息行，sim bridge 的 client 原样 `String(e.stack)` 送回来，看着就是一个孤零零的 `@`；查了半天才发现是自己写的选择器/断言没命中。别去改 bridge 的错误传递，eval 脚本里每处 DOM 查找自己 `throw new Error("说清楚的话")`
 
 ## 历史（zotero/reader 引擎时代）
 
