@@ -5,16 +5,6 @@
 // provider, network or token spend. Run: bun test.
 
 import { expect, test } from "bun:test";
-import {
-  createAssistantMessageEventStream,
-  type Api,
-  type Model,
-} from "@earendil-works/pi-ai";
-import { runHarnessTurn, type StreamFn } from "../../src/legion/execute/turn";
-import { createSessionFileSystem } from "../../src/platform/app/session-fs";
-import { memoryAppData } from "../support/memory-appdata";
-import { createTurnSettler } from "../../src/legion/subagent/turn";
-import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/legion/subagent/types";
 import { FileObservationAdapter } from "../../src/memory/observations/adapter";
 import { runDistillPass } from "../../src/memory/observations/distill";
 import {
@@ -26,47 +16,17 @@ import {
   type RetellPassInput,
 } from "../../src/memory/observations/retell";
 import { ObservationFileStore, topicPassStore } from "../../src/memory/observations/store";
-import { turnEvents, type Turn } from "../support/scripted-turn";
+import type { Turn } from "../support/scripted-turn";
+import { scriptedSubagentRunner } from "../support/scripted-runner";
 
 // The topic every store in this file is mounted on.
 const TOPIC = "t";
 import { JULY_17, JULY_20, makeFakeFs } from "./fakefs";
 
 
-// A SubagentTurnFn over the real loop, recording what each run was asked for.
+// Rounds past the end of the script answer "done" here rather than failing.
 function scriptedRunner(turns: Turn[]) {
-  const requests: SubagentTurnRequest[] = [];
-  let round = 0;
-  const stream: StreamFn = () => {
-    const events = turnEvents(turns[round++] ?? { text: "done" });
-    const s = createAssistantMessageEventStream();
-    void (async () => {
-      for (const ev of events) {
-        await Promise.resolve();
-        s.push(ev);
-      }
-      s.end();
-    })();
-    return s;
-  };
-  const run: SubagentTurnFn = (request) => {
-    requests.push(request);
-    const settler = createTurnSettler(request.signal, request.onRound);
-    void runHarnessTurn({
-      stream,
-      fileSystem: createSessionFileSystem(memoryAppData()),
-      model: { id: "m", provider: "faux" } as unknown as Model<Api>,
-      systemPrompt: request.systemPrompt,
-      messages: [{ role: "user", content: request.task, timestamp: 0 }],
-      tools: request.tools,
-      signal: request.signal,
-      maxRounds: request.maxRounds,
-      purpose: request.purpose,
-      ...settler.callbacks,
-    });
-    return settler.outcome.finally(() => settler.dispose());
-  };
-  return { run, requests };
+  return scriptedSubagentRunner(turns, { exhausted: { text: "done" } });
 }
 
 function makeStore() {
