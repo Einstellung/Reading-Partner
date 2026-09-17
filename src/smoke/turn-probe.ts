@@ -18,8 +18,7 @@
 import { addPluginListener, type PluginListener } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
-import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { note, paintPrompt, sleep as after, writeProbeResult } from "./probe-shell";
 import { holdTheScreen } from "./wake-lock";
 
 export const TURN_RESULT_DIR = "turn";
@@ -86,56 +85,14 @@ type TurnResult = {
   timestamp: string;
 };
 
-const after = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 async function write(result: TurnResult): Promise<void> {
-  try {
-    await mkdir(TURN_RESULT_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeTextAtomic(TURN_RESULT_FILE, JSON.stringify(result, null, 2));
-  } catch (e) {
-    console.error("writing the turn result failed", e);
-  }
+  await writeProbeResult(TURN_RESULT_DIR, TURN_RESULT_FILE, result, (e) =>
+    console.error("writing the turn result failed", e),
+  );
 }
 
-/// A line on the device console from the webview. `console.log` in a WKWebView
-/// reaches nothing a cable can read, so it goes out through the plugin and
-/// `idevicesyslog -p 'Reading Partner'` picks it up. Never throws: a broken
-/// breadcrumb must not end a run.
-async function note(text: string): Promise<void> {
-  try {
-    await invoke("plugin:voice|speech_probe", {
-      args: { label: text, source: "trimmed", pace: "burst", fixtureDir: "", mode: "note" },
-    });
-  } catch {
-    /* the run matters, the breadcrumb does not */
-  }
-}
-
-/// The only channel the person has. Repainted on every tick; a dozen repaints
-/// costs nothing and there is no state to keep.
-function paint(head: string, line: string, hint: string, go: boolean): void {
-  const root = document.getElementById("root");
-  if (!root) return;
-  root.innerHTML = "";
-  const box = document.createElement("div");
-  box.style.cssText =
-    "font:15px/1.6 -apple-system,system-ui,sans-serif;padding:24px;min-height:100vh;" +
-    `background:${go ? "#0a7d28" : "#101418"};color:#fff;box-sizing:border-box;` +
-    "display:flex;flex-direction:column;justify-content:center;gap:20px";
-  const title = document.createElement("div");
-  title.style.cssText = "font-size:28px;font-weight:800;letter-spacing:.5px";
-  title.textContent = head;
-  const sentence = document.createElement("div");
-  sentence.style.cssText =
-    "font-size:30px;font-weight:600;line-height:1.5;padding:16px;border-radius:12px;" +
-    "background:rgba(255,255,255,.14)";
-  sentence.textContent = line;
-  const foot = document.createElement("div");
-  foot.style.cssText = "font-size:19px;opacity:.85";
-  foot.textContent = hint;
-  box.append(title, sentence, foot);
-  root.appendChild(box);
-}
+const paint = (head: string, line: string, hint: string, go: boolean) =>
+  paintPrompt(head, line, hint, go, { sentencePx: 30, footPx: 19 });
 
 /// Three seconds with the sentence already on the screen, so nobody is reading
 /// it for the first time on the word "now".

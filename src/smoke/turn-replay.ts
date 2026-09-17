@@ -13,8 +13,7 @@
 // file: which case, which position, what each side said.
 
 import { invoke } from "@tauri-apps/api/core";
-import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { note, writeProbeResult } from "./probe-shell";
 import {
   resolveTurnDetectConfig,
   type TurnDetectConfig,
@@ -67,24 +66,9 @@ interface ReplayResult {
 }
 
 async function write(result: ReplayResult): Promise<void> {
-  try {
-    await mkdir(TURN_REPLAY_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeTextAtomic(TURN_REPLAY_FILE, JSON.stringify(result, null, 2));
-  } catch (e) {
-    console.error("writing the replay result failed", e);
-  }
-}
-
-/// A line on the device console from the webview, the way turn-probe.ts does it:
-/// `console.log` in a WKWebView reaches nothing a cable can read.
-async function note(text: string): Promise<void> {
-  try {
-    await invoke("plugin:voice|speech_probe", {
-      args: { label: text, source: "trimmed", pace: "burst", fixtureDir: "", mode: "note" },
-    });
-  } catch {
-    /* the run matters, the breadcrumb does not */
-  }
+  await writeProbeResult(TURN_REPLAY_DIR, TURN_REPLAY_FILE, result, (e) =>
+    console.error("writing the replay result failed", e),
+  );
 }
 
 /// One case through the device. The frames go over as they are: -Infinity has no
