@@ -45,13 +45,13 @@ EmbedPDF 的 WASM 是 PDFium(C++)编译产物,渲染是黑盒调用,我们不写
 
 `position.rects` 是 `[left, top, right, bottom]`，PDF pt 文档坐标系（存疑项 3 的翻转公式转成 EmbedPDF 的 top-left 页坐标）。
 
-残余坑（[pitfall/](../pitfall/)）：02 sumPrecise polyfill、04 程序化选中不弹窗、07 image 标注膨胀、10 跨 realm Uint8Array、11 引擎就绪才能调。
+残余坑：sumPrecise polyfill、image 标注膨胀、跨 realm Uint8Array、引擎就绪才能调，均已随换引擎或功能改动作废或并入现存坑。
 
 ## 适配层形态（和调研预期的差异）
 
 - 引擎装配用 React headless：`usePdfiumEngine` + `<EmbedPDF>` provider + 每个插件的 `/react` 层组件（Viewport / Scroller / RenderLayer / SelectionLayer / AnnotationLayer / PagePointerProvider），不是 vanilla PluginRegistry 手搓。壳本来就是 React，这条更省。
 - 命令式操作（setTool / navigate / zoom / spread / CRUD / select）从 `onInitialized(registry)` 里拿各插件 capability 的 `forDocument(docId)` scope 组装成一个 handle。
-- spike 当时的结论：引擎必须直连（`worker: false`）且页面跨源隔离，否则加载静默卡死（pitfall 18）；这条已被 pitfall 21 的绝对 wasm URL 修法推翻，worker 引擎现在是默认，跨源隔离也不是必需。initialDocuments 不能用，要 init 后显式开（pitfall 19）。RenderLayer 要 `pointerEvents:none` 否则划词死（pitfall 20）。
+- spike 当时的结论：引擎必须直连（`worker: false`）且页面跨源隔离，否则加载静默卡死；这条已被 pitfall 21 的绝对 wasm URL 修法推翻，worker 引擎现在是默认，跨源隔离也不是必需。initialDocuments 不能用，要 init 后显式开（pitfall 19）。RenderLayer 要 `pointerEvents:none` 否则划词死（pitfall 20）。
 
 ## 跑起来的验证清单（全绿）
 
@@ -60,7 +60,7 @@ EmbedPDF 的 WASM 是 PDFium(C++)编译产物,渲染是黑盒调用,我们不写
 ## 没验证的
 
 - iOS/WKWebView（无开发者账号）。
-- WebKitGTK 拖选/手写延迟（pitfall 12）在 PDFium 渲染路径下的表现——需真机 Tauri，未跑（pitfall 14 OOM 顾虑）。
+- WebKitGTK 拖选/手写延迟在 PDFium 渲染路径下的表现——需真机 Tauri，未跑（pitfall 14 OOM 顾虑）。
 - 壳真机全链路：App 集成层（`EmbedReaderPane`）已接线并通过类型检查、开 flag 后 App 能正常启动到 Topics 库，但"打开书"要 Tauri `readFile`，未在纯浏览器里跑通开书后的完整交互；引擎本体交互已在 harness 里全测。
 - ink 压感、highlight 精确页内滚动还原、点批注 popup 的精确视口锚点（当前用视口中心兜底，原生 `AnnotationLayer` 的 `selectionMenu` 是精确锚点路径）。
 
@@ -75,7 +75,7 @@ AI 弹窗卡 = 同一棵 React 树的重渲染回归。老 zotero 引擎在 ifra
 | 修前（memo off） | 60 |
 | 修后（memo on） | 0 |
 
-缩放卡 = 整页重光栅化。原来 renderPage 直接用 `<RenderLayer>`，每变一档缩放就把整页按新 scale 重栅一遍。改成官方推荐的双层：base `<RenderLayer scale={1}>`（固定低清，只被 CSS 缩放）+ `<TilingLayer>`（只栅格可视区高清 tile）。实测缩放时 img 数量随可视 tile 增减（10↔12），不再整页重栅，seed 批注仍在。注意：这个卡顿是 WebKitGTK 合成路径特有（对比 pitfall 12），headless Chromium 复现不出来（zoom 一步 longtask 计数为 0），所以缩放这项只能给"改对了渲染策略"的定性结论 + tile 行为验证，给不出 WebKitGTK 下的前后毫秒数——要真机 tauri dev 才量得到（pitfall 14 OOM 顾虑没跑）。
+缩放卡 = 整页重光栅化。原来 renderPage 直接用 `<RenderLayer>`，每变一档缩放就把整页按新 scale 重栅一遍。改成官方推荐的双层：base `<RenderLayer scale={1}>`（固定低清，只被 CSS 缩放）+ `<TilingLayer>`（只栅格可视区高清 tile）。实测缩放时 img 数量随可视 tile 增减（10↔12），不再整页重栅，seed 批注仍在。注意：这个卡顿是 WebKitGTK 合成路径特有（拖选/手写在这条合成路径上也一样慢），headless Chromium 复现不出来（zoom 一步 longtask 计数为 0），所以缩放这项只能给"改对了渲染策略"的定性结论 + tile 行为验证，给不出 WebKitGTK 下的前后毫秒数——要真机 tauri dev 才量得到（pitfall 14 OOM 顾虑没跑）。
 
 worker 引擎（本想拿它把光栅化挪出主线程）当时实测在 openDocument 处永久挂起（25s 仍卡），根因是 wasm URL 传了根相对路径；pitfall 21 的绝对 URL 修法解决后 worker 引擎已转正为默认，直连降级为兜底。
 

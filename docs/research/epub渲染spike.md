@@ -23,17 +23,17 @@ iframe 那条路已被 [64](../64-epub纸页.md) 取代：正文在 shadow DOM �
 | 内联 `on*` | 不执行 | 不执行 |
 | blob 图 / CSS / 字体 | 全部加载 | 全部加载 |
 
-COEP `require-corp` 不拦任何一条：blob 是同源 local scheme，CORP 不适用。iOS 下 `crossOriginIsolated` 仍是 `false`（与坑 33 一致），Linux 下是 `true`；两边行为没差别。
+COEP `require-corp` 不拦任何一条：blob 是同源 local scheme，CORP 不适用。iOS 下 `crossOriginIsolated` 仍是 `false`（与坑 21 一致），Linux 下是 `true`；两边行为没差别。
 
 Tauri 的 `on_navigation` 也不拦：`navigation.rs` 已经显式放行 `blob:` 并带单测，实测两个后端都放行。
 
-CSP 的结论和 docs/39 的预判相反，见坑 245：`frame-src 'self'` 在 WebKit 上拦不住 blob frame，真正被拦的是 frame 里的 blob CSS 和字体（`style-src`、`font-src` 里没有 `blob:`）。图能出，因为 `img-src` 已经有 `blob:`。违规事件派发在子文档上，父页收不到，所以只能看效果判断。
+CSP 的结论和 docs/39 的预判相反：`frame-src 'self'` 在 WebKit 上拦不住 blob frame，真正被拦的是 frame 里的 blob CSS 和字体（`style-src`、`font-src` 里没有 `blob:`）。图能出，因为 `img-src` 已经有 `blob:`。违规事件派发在子文档上，父页收不到，所以只能看效果判断。
 
-量这条时踩了坑 246：iframe 插进 DOM 会先为 about:blank 发一次 `load`，第一版探针因此把一次没发生的导航报成了成功。
+量这条时踩了个坑：iframe 插进 DOM 会先为 about:blank 发一次 `load`，第一版探针因此把一次没发生的导航报成了成功。
 
 ## 二、不给 allow-scripts 的代价
 
-代价是 iframe 里一个 DOM 事件都不派发，两个后端一致。见坑 244（WebKit bug 218086，foliate-js 上游就是因为它才写 `allow-scripts` 的）。
+代价是 iframe 里一个 DOM 事件都不派发，两个后端一致。（WebKit bug 218086，foliate-js 上游就是因为它才写 `allow-scripts` 的）。
 
 DOM 读写、`Range`、CFI 计算、`getComputedStyle` 全部正常。不正常的只有事件：父页在 `contentDocument` 上装的监听器收不到任何东西，连父页自己 `dispatchEvent` 派进去的合成事件都收不到。
 
@@ -45,7 +45,7 @@ DOM 读写、`Range`、CFI 计算、`getComputedStyle` 全部正常。不正常�
 
 用得上的九个文件：`view.js`、`paginator.js`、`epub.js`、`epubcfi.js`、`overlayer.js`、`search.js`、`progress.js`、`text-walker.js`、`fixed-layout.js`。
 
-另外七个（`mobi.js`、`fb2.js`、`comic-book.js`、`pdf.js`、`tts.js`、`vendor/zip.js`、`vendor/fflate.js`）是抛异常的桩：`view.js` 从 `makeBook()` 和 `initTTS()` 里动态 import 它们，那些分支我们永远不走，但 vite 在 transform 阶段就要解析字面量的动态 import，缺文件整个模块报错。见坑 243。存桩而不删分支，`view.js` 才能和上游逐字节相同。
+另外七个（`mobi.js`、`fb2.js`、`comic-book.js`、`pdf.js`、`tts.js`、`vendor/zip.js`、`vendor/fflate.js`）是抛异常的桩：`view.js` 从 `makeBook()` 和 `initTTS()` 里动态 import 它们，那些分支我们永远不走，但 vite 在 transform 阶段就要解析字面量的动态 import，缺文件整个模块报错。存桩而不删分支，`view.js` 才能和上游逐字节相同。
 
 上游只改了一处：`paginator.js` 的正文 iframe 从 `allow-same-origin allow-scripts` 改成 `allow-same-origin`（可用 `globalThis.__foliateSandbox` 覆盖，供 A/B）。改动带 `PATCHED:` 注释，README 里列着。
 
@@ -112,7 +112,7 @@ CSP 改三项，不是一项。`tauri.conf.json` 的 `csp` 里：
 
 foliate 的文件：用九个，桩七个，清单在 `vendor/foliate-js/README.md`。`search.js` 现在没接上，但先留着——它是 `[p.N]` 跳转按引文定位那条路（`jumpToQuote`）在 EPUB 侧的对应件。
 
-事件全在父页做。 坑 244 是这次最硬的约束：正文 iframe 里收不到事件，所以点击翻页、笔手路由、`overlayer.hitTest` 都要在包着 iframe 的容器上监听，按坐标换算进 frame。`touch-routing.ts` 那些纯函数照搬，接线重写。选区靠父页手势加轮询 `contentDocument.getSelection()`，不能等 frame 里的 `selectionchange`。
+事件全在父页做。 这是这次最硬的约束：正文 iframe 里收不到事件，所以点击翻页、笔手路由、`overlayer.hitTest` 都要在包着 iframe 的容器上监听，按坐标换算进 frame。`touch-routing.ts` 那些纯函数照搬，接线重写。选区靠父页手势加轮询 `contentDocument.getSelection()`，不能等 frame 里的 `selectionchange`。
 
 摄入和渲染共用一次解包。 `unzipSync` 一本 71 MB 的书要 1.2 秒、150 MB 内存，不能在摄入时解一次、渲染时再解一次。解包结果的持有者和生命周期要在阶段 2/3 交界处定死。
 
@@ -131,11 +131,11 @@ iPad Pro 11-inch (M5) / iOS 26.5，`tauri ios dev`，竖屏，阅读区 834×111
 | 书里的图 | 出得来。`blob:tauri://localhost/…`，`naturalWidth` 918 / 2137 / 1905，按 720px 正文宽缩排 |
 | frame | `tauri://localhost` 同源、`application/xhtml+xml`、`sandbox="allow-same-origin"`、0 个 `<script>`、0 个 `<link>`、head 里 2 个注入的 `<style>` |
 | CSP 三项 | `img-src blob:` 生效（图出得来）。`style-src`/`font-src` 的 `blob:` 这条路根本没用上：书自己的 CSS 被消毒器整块丢掉，也不加载任何 web 字体，`document.fonts.size` 是 0。排版全来自注入的 `<style>`，走的是 `'unsafe-inline'` |
-| 正文宽度 | 修前滚动 456px、翻页 674px；修后两个模式都 720px（坑 247） |
+| 正文宽度 | 修前滚动 456px、翻页 674px；修后两个模式都 720px |
 | 字号 | Zoom in 一次 19px → 21px |
 | 翻页/滚动模式切换 | 菜单里 Paged flip 开关生效，切过去正文重排，宽度不变 |
 | 关书重开 | 位置留住。回首页显示「p. 1 of 59」，Materials 里显示「Read 5%」 |
-| 点击区翻页、滑动翻页、书内链接 | 全部无效。落在正文 iframe 上的触摸，父页一个事件都收不到（坑 252） |
+| 点击区翻页、滑动翻页、书内链接 | 全部无效。落在正文 iframe 上的触摸，父页一个事件都收不到 |
 | 长按正文 | 系统选区手柄和 callout 正常弹，父页 `contentDocument.getSelection()` 读得到（实测 9 个字符）。阶段 4 的事，没动 |
 | iOS 文档类型 | `CFBundleDocumentTypes` 已在构建产物 `.app/Info.plist` 里（EPUB + PDF，Viewer / Alternate）。但 app 里没有任何东西消费进来的 file URL，见下 |
 
@@ -147,7 +147,7 @@ WebContent 进程 RSS：打开前 524 MB，打开后 1019 MB。一本书 +495 MB
 
 ### 三件没解决的
 
-事件层在真机上从来没通过。坑 252。翻页点击区、滑动翻页、这次加的书内链接命中测试，全都挂在父页的 pointer 事件上，而落在 iframe 上的触摸父页收不到。frame 上 `pointer-events: none` 能修（实测立刻从 2/59 翻到 3/59），代价是 iOS 长按选区同时归零（实测选中字符数 9 → 0）。两个都要就得做一层可开关的盖板，这次没动，留给标注那一阶段。（后续：标注那边取了 `pointer-events: none`，系统选区不要，选区改在父页用 `caretRangeFromPoint` 自己做。）
+事件层在真机上从来没通过。翻页点击区、滑动翻页、这次加的书内链接命中测试，全都挂在父页的 pointer 事件上，而落在 iframe 上的触摸父页收不到。frame 上 `pointer-events: none` 能修（实测立刻从 2/59 翻到 3/59），代价是 iOS 长按选区同时归零（实测选中字符数 9 → 0）。两个都要就得做一层可开关的盖板，这次没动，留给标注那一阶段。（后续：标注那边取了 `pointer-events: none`，系统选区不要，选区改在父页用 `caretRangeFromPoint` 自己做。）
 
 分享进来的书没人接。`CFBundleDocumentTypes` 让「文件」和分享面板愿意把 EPUB 交给这个 app，但全仓库只有 OAuth 那条路在听 `onOpenUrl`（`platform/sync/auth.ts`，而且只在登录挂起时才注册）。一个 EPUB 送到 Inbox 之后不会发生任何事。要接得先定：进哪个 topic、没有 topic 时怎么办、进来之后是直接打开还是只入库。
 
@@ -159,17 +159,17 @@ Materials 页的按钮还写着「+ Add PDF」，文件选择器早就收 epub �
 
 ## 模拟器验证（第二轮：触摸与标注）
 
-2026-09-09，iPad Pro 11-inch (M5)、iOS 26.5，`tauri ios dev`，触摸走 idb 的 HID 通道。验的是 frame 透明（坑 252 的解法）和阶段 4 的标注在真触摸下成不成立。
+2026-09-09，iPad Pro 11-inch (M5)、iOS 26.5，`tauri ios dev`，触摸走 idb 的 HID 通道。验的是 frame 透明（pointer-events:none 那个解法）和阶段 4 的标注在真触摸下成不成立。
 
 | 项 | 结论 |
 |---|---|
 | 点击区翻页 | 通。右区一次一页（`scrollLeft` +720），左区回一页 |
-| 滑动翻页 | 修前一次翻三页，修后一次一页（坑 260） |
+| 滑动翻页 | 修前一次翻三页，修后一次一页 |
 | 滚动模式手指滚动 | 通。600px 拖动滚 1076px，惯性再走 54px。`pointerdown` → 6 个 `pointermove` → `pointercancel`，没有 `pointerup`：滚动归 WebKit，pane 收 cancel 收场 |
 | vertical / paged 切换 | 通。菜单里的 Paged flip 开关，位置留住 |
 | 高亮：横拖 | 通。落标注、overlayer 画一个 `g`、盘上 JSON 和 Linux 那轮逐字段一致（range CFI 带两个逗号、`pageLabel`、`quote` 三件套） |
 | 高亮：斜拖/竖拖 | 修前六个 move 之后被滚动抢走，标注落不下（坑 261）。修后 81 个 move 一路到 `pointerup`，`scrollTop` 不动，标注落下 |
-| 翻页模式下拖选区 | 修前落标注的同时页面往回翻一页，修后只落标注（坑 260） |
+| 翻页模式下拖选区 | 修前落标注的同时页面往回翻一页，修后只落标注 |
 | 点已有标注 | 弹编辑器（七个色块 + Delete）。改色后盘上 `color` 变 `#2ea8e5`，overlayer 仍是一个 |
 | 笔在手上时点标注 | 不弹。笔在手上，`pointerAction` 是 draw，落点走 `beginDraw`/`endDraw`，够不到 `consumeUp`。要点标注先收笔——和 PDF 那侧一样 |
 | 痕迹列表页码 | 对。盘上 `pageLabel` 7 的那条显示 Page 7，6 的显示 Page 6 |
@@ -201,7 +201,7 @@ Materials 页的按钮还写着「+ Add PDF」，文件选择器早就收 epub �
 | 纸书页码（page-list） | 数据是对的。《The Experience Machine》pagination `source: "page-list"`、294 条，`labelForBlock` 给块 50/137/200/239 的标签是 42/129/192/287。界面上只有痕迹和 pip 卡（`p. <label>`）用它 |
 | `createImageBitmap` 解 SVG | 在 WKWebView 上也抛 `InvalidStateError`，和 WebKitGTK 一致（坑 263）。`<img>` 按 `viewBox` 报 400×200、`drawImage` 画对颜色、JPEG 编得出来 |
 | Materials 的按钮 | 「+ Add book」 |
-| 开书时的异常 | 每开一本抛一次 `columnize` 的 null document（坑 265），已修 |
+| 开书时的异常 | 每开一本抛一次 `columnize` 的 null document，已修 |
 
 ### 没验完的
 

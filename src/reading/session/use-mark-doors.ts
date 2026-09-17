@@ -339,8 +339,9 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
     [reopenThreadCall, markDoor, setPopup],
   );
 
-  // Trace-list click: jump to the mark. Programmatic select does not open the
-  // popup (pitfall 04), which is what we want for a list jump.
+  // Trace-list click: jump to the mark. `selectAnnotations` below already
+  // opens the editor on its own via the plugin's selection state
+  // (annotation-selection.ts), so this hook does not call setPopup itself.
   const onTraceSelect = useCallback(
     (id: string) => {
       const action = traceSelectAction(annsRef.current.get(id), hasThread);

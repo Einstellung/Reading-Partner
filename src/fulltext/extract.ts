@@ -131,7 +131,7 @@ export async function extractFromDocument(doc: PdfDocument): Promise<Omit<Fullte
 let pdfjsPromise: Promise<typeof import("pdfjs-dist/legacy/build/pdf.mjs")> | null = null;
 
 // WebKitGTK (the Tauri webview) trails newer JS built-ins; the reader's own
-// pdf.js needed a Math.sumPrecise polyfill for the same reason (pitfall 02).
+// pdf.js needed a Math.sumPrecise polyfill for the same reason.
 // pdf.js 4.x uses Promise.withResolvers, so guard it before loading the engine.
 function ensurePromiseWithResolvers(): void {
   const P = Promise as unknown as { withResolvers?: unknown };

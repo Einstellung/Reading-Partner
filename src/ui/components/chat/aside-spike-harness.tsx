@@ -10,7 +10,7 @@
 // selection. The bar is native and invisible to JS, so that half of the
 // measurement comes from the accessibility tree (scripts/ios-sim.sh native) and
 // the rest from here (window.__aside). A programmatic selection raises no
-// callout (docs/pitfall/04), so everything here is arranged for a real finger.
+// native callout, so everything here is arranged for a real finger.
 
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
