@@ -1,7 +1,7 @@
 // Pull down at the top of the briefing or an article to open the chat that is
-// already about it (docs/22). Pure and DOM-free, the same shape as
-// edge-back-gesture.ts: it eats normalized pointer samples and emits commands
-// the host turns into an offset and a call to the screen's own ask action.
+// already about it (docs/22). The machine itself is axis-gesture.ts, shared with
+// the left-edge back swipe; this file is what makes it a pull — the y axis, the
+// at-the-top gate, and the thresholds.
 //
 // This is not pull to refresh. What comes out of the top is a conversation about
 // what is already on screen, not new content — the phone's answer to "I want to
@@ -13,6 +13,17 @@
 // competes with a scroll in progress: a pull that begins mid-page is a scroll
 // and stays one for the rest of the sequence. That check belongs to the host,
 // which reads the scroll container and reports it on pointerdown.
+
+import {
+  classifyAxisMove,
+  initAxisGestureState,
+  shouldClaimAxisTouch,
+  stepAxisGesture,
+  type AxisGestureInput,
+  type AxisGesturePhase,
+  type AxisGestureSpec,
+  type AxisGestureState,
+} from "./axis-gesture";
 
 // How close to the top counts as the top, in CSS px. Not zero: WebKit hands out
 // fractional scroll positions, and a scroll that settles against the top can sit
@@ -65,15 +76,14 @@ export function isAtTop(scrollTop: number, epsilon: number = TOP_EPSILON): boole
 }
 
 // Whether a touch that started at the top has moved enough, and clearly enough
-// downward, to be taken from the browser. Same axis ratio the gesture itself
-// uses, so a claim and a commit disagree as rarely as possible.
+// downward, to be taken from the browser.
 export function shouldClaimTouch(
   dx: number,
   dy: number,
   claimPx: number = TOUCH_CLAIM_PX,
   ratio: number = AXIS_RATIO,
 ): boolean {
-  return dy >= claimPx && dy > Math.abs(dx) * ratio;
+  return shouldClaimAxisTouch(dy, dx, claimPx, ratio);
 }
 
 // What a move past the slop means: "ask" once it is downward and vertically
@@ -85,12 +95,8 @@ export function classifyMove(
   slop: number,
   ratio: number,
 ): "wait" | "ask" | "abandon" {
-  const ax = Math.abs(dx);
-  const ay = Math.abs(dy);
-  if (ax < slop && ay < slop) return "wait";
-  if (ax >= ay * ratio) return "abandon"; // sideways: not this gesture
-  if (ay >= ax * ratio) return dy > 0 ? "ask" : "abandon";
-  return "wait"; // diagonal: let the move resolve
+  const verdict = classifyAxisMove(dy, dx, slop, ratio);
+  return verdict === "go" ? "ask" : verdict;
 }
 
 // How far the surface actually moves for a given pull: one to one up to the
@@ -144,10 +150,7 @@ function resolve(config: PullToAskConfig): Cfg {
 export type PullToAskInput =
   // atTop is the host's reading of the scroll container under the finger at the
   // moment it landed. False makes the whole sequence a scroll.
-  | { type: "pointerdown"; id: number; x: number; y: number; t: number; atTop: boolean }
-  | { type: "pointermove"; id: number; x: number; y: number; t: number }
-  | { type: "pointerup"; id: number; x: number; y: number; t: number }
-  | { type: "pointercancel"; id: number };
+  AxisGestureInput<{ atTop: boolean }>;
 
 export type PullToAskCommand =
   // The gesture is ours from here: setPointerCapture(id) and preventDefault.
@@ -159,61 +162,29 @@ export type PullToAskCommand =
   // Released. `ask` true means open the chat, false means settle back.
   | { type: "pullEnd"; ask: boolean };
 
-export type PullToAskPhase =
-  // Nothing in flight.
-  | "idle"
-  // A pointer is down at the top of the screen, still deciding.
-  | "pending"
-  // Following the finger.
-  | "drag"
-  // This pointer is not ours (the screen was scrolled, the move went the wrong
-  // way, or a second finger landed). Ignored until every pointer is up.
-  | "off";
+export type PullToAskPhase = AxisGesturePhase;
 
-export interface PullToAskState {
-  phase: PullToAskPhase;
-  pointerId: number | null;
-  // How many pointers are down, so the machine only returns to idle when the
-  // glass is clear: a second finger must not hand the gesture back mid-flight.
-  downCount: number;
-  startX: number;
-  startY: number;
-  // The raw distance pulled, before damping — what the thresholds are read
-  // against, while the host is shown the damped offset.
-  lastDy: number;
-  vy: number; // smoothed vertical velocity, px/ms
-  vLastY: number;
-  vLastT: number;
-}
+export type PullToAskState = AxisGestureState;
 
 export function initPullToAskState(): PullToAskState {
-  return {
-    phase: "idle",
-    pointerId: null,
-    downCount: 0,
-    startX: 0,
-    startY: 0,
-    lastDy: 0,
-    vy: 0,
-    vLastY: 0,
-    vLastT: 0,
-  };
+  return initAxisGestureState();
 }
 
-function updateVelocity(s: PullToAskState, y: number, t: number): void {
-  const dt = Math.max(t - s.vLastT, 1);
-  const inst = (y - s.vLastY) / dt;
-  s.vy = s.vy * 0.3 + inst * 0.7;
-  s.vLastY = y;
-  s.vLastT = t;
-}
-
-function move(s: PullToAskState, cfg: Cfg, dy: number): PullToAskCommand {
-  s.lastDy = Math.max(0, dy);
+function spec(cfg: Cfg): AxisGestureSpec<{ atTop: boolean }, PullToAskCommand> {
   return {
-    type: "pullMove",
-    offset: followPull(s.lastDy, cfg.commitDistance, cfg.resist, cfg.maxPull),
-    armed: s.lastDy >= cfg.commitDistance,
+    axis: "y",
+    slop: cfg.slop,
+    axisRatio: cfg.axisRatio,
+    canStart: (down) => down.atTop,
+    moveCommand: (dy) => ({
+      type: "pullMove",
+      offset: followPull(dy, cfg.commitDistance, cfg.resist, cfg.maxPull),
+      armed: dy >= cfg.commitDistance,
+    }),
+    endCommand: (dy, vy, cancelled) => ({
+      type: "pullEnd",
+      ask: cancelled ? false : resolvePullToAsk(dy, vy, cfg.commitDistance, cfg.cancelVelocity),
+    }),
   };
 }
 
@@ -224,81 +195,5 @@ export function stepPullToAsk(
   input: PullToAskInput,
   config: PullToAskConfig = {},
 ): { state: PullToAskState; commands: PullToAskCommand[] } {
-  const cfg = resolve(config);
-  const s: PullToAskState = { ...prev };
-  const cmds: PullToAskCommand[] = [];
-
-  switch (input.type) {
-    case "pointerdown": {
-      s.downCount += 1;
-      if (s.downCount > 1) {
-        // A second finger is a pinch or a two-finger scroll, never a pull.
-        if (s.phase === "drag") cmds.push({ type: "pullEnd", ask: false });
-        s.phase = "off";
-        s.pointerId = null;
-        break;
-      }
-      s.pointerId = input.id;
-      s.startX = input.x;
-      s.startY = input.y;
-      s.lastDy = 0;
-      s.vy = 0;
-      s.vLastY = input.y;
-      s.vLastT = input.t;
-      s.phase = input.atTop ? "pending" : "off";
-      break;
-    }
-
-    case "pointermove": {
-      if (input.id !== s.pointerId) break;
-      updateVelocity(s, input.y, input.t);
-
-      if (s.phase === "pending") {
-        const verdict = classifyMove(
-          input.x - s.startX,
-          input.y - s.startY,
-          cfg.slop,
-          cfg.axisRatio,
-        );
-        if (verdict === "abandon") {
-          s.phase = "off";
-          break;
-        }
-        if (verdict === "wait") break;
-        s.phase = "drag";
-        cmds.push({ type: "capture", id: input.id });
-        cmds.push(move(s, cfg, input.y - s.startY));
-        break;
-      }
-
-      if (s.phase === "drag") {
-        // Clamped at rest: pulling back past the start must not push the screen
-        // off the top, it must only undo the pull.
-        cmds.push(move(s, cfg, input.y - s.startY));
-      }
-      break;
-    }
-
-    case "pointerup":
-    case "pointercancel": {
-      const mine = input.id === s.pointerId;
-      s.downCount = Math.max(0, s.downCount - 1);
-      if (mine && s.phase === "drag") {
-        if (input.type === "pointerup") updateVelocity(s, input.y, input.t);
-        const ask =
-          input.type === "pointercancel"
-            ? false
-            : resolvePullToAsk(s.lastDy, s.vy, cfg.commitDistance, cfg.cancelVelocity);
-        cmds.push({ type: "pullEnd", ask });
-      }
-      if (mine) s.pointerId = null;
-      // Only a clear screen returns the machine to idle: a finger left over from
-      // an abandoned gesture must not start a new one mid-way.
-      if (s.downCount === 0) return { state: initPullToAskState(), commands: cmds };
-      s.phase = "off";
-      break;
-    }
-  }
-
-  return { state: s, commands: cmds };
+  return stepAxisGesture(prev, input, spec(resolve(config)));
 }

@@ -1,6 +1,6 @@
 // The phone shell's pull-down-to-ask gesture: when it may start, what abandons
 // it to the scroll underneath, how far the surface follows, and what a release
-// resolves to.
+// resolves to. The drag machine underneath is axis-gesture.test.ts.
 
 import { expect, test } from "bun:test";
 import {
@@ -206,9 +206,4 @@ test("a second finger abandons a pull in flight and the first one cannot restart
   expect(state.phase).toBe("off");
   const after = stepPullToAsk(state, { type: "pointermove", id: 1, x: 200, y: 500, t: 300 });
   expect(after.commands).toEqual([]);
-});
-
-test("every pointer lifting returns the machine to rest", () => {
-  const { state } = drive(slowPull(COMMIT_DISTANCE + 20));
-  expect(state).toEqual(initPullToAskState());
 });

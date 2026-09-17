@@ -1,5 +1,6 @@
 // The phone shell's left-edge back swipe: where it may start, what abandons it
-// to the page underneath, and what a release resolves to.
+// to the page underneath, and what a release resolves to. The drag machine
+// underneath is axis-gesture.test.ts.
 
 import { expect, test } from "bun:test";
 import {
@@ -167,9 +168,4 @@ test("a second finger abandons a drag in flight and the first one cannot restart
     width: WIDTH,
   });
   expect(after.commands).toEqual([]);
-});
-
-test("every pointer lifting returns the machine to rest", () => {
-  const { state } = drive(slowDrag(6, 6 + WIDTH * 0.5));
-  expect(state).toEqual(initEdgeBackState());
 });

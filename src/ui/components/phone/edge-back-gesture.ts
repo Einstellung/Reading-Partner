@@ -1,8 +1,7 @@
-// The left-edge back swipe on the phone shell (docs/22). Pure and DOM-free: it
-// eats normalized pointer samples and emits commands the host turns into a
-// transform and a stack pop. Same shape as the reader's paged-gesture.ts, for
-// the same reason — the thresholds are the whole gesture, and they need to be
-// readable and testable without a device.
+// The left-edge back swipe on the phone shell (docs/22). The machine itself is
+// axis-gesture.ts, shared with the pull down to ask; this file is what makes it
+// a back swipe — the x axis, the edge band, and the thresholds, which are the
+// whole gesture and need to be readable and testable without a device.
 //
 // Why an edge band and not the whole page: an article can carry a wide table or
 // a code block that scrolls sideways (docs/pitfall/68 is about exactly those on
@@ -15,6 +14,17 @@
 // horizontally dominant move claims it (see shouldClaimTouch — the claim runs
 // on the raw touch channel, because the pointer channel cannot hold a gesture
 // the browser has decided to scroll with).
+
+import {
+  classifyAxisMove,
+  initAxisGestureState,
+  shouldClaimAxisTouch,
+  stepAxisGesture,
+  type AxisGestureInput,
+  type AxisGesturePhase,
+  type AxisGestureSpec,
+  type AxisGestureState,
+} from "./axis-gesture";
 
 // Distance from the left edge a gesture may start in, CSS px. UIKit's own
 // screen-edge recognizer lives in roughly the outer 20pt; 24 is that with a
@@ -46,17 +56,14 @@ export const COMMIT_VELOCITY = 0.5;
 export const TOUCH_CLAIM_PX = 3;
 
 // Whether a touch that started in the band has moved enough, and clearly
-// enough sideways, to be taken from the browser. Deliberately the same axis
-// ratio the gesture itself uses, so a claim and a commit disagree as rarely as
-// possible — a claimed gesture that then resolves to a scroll cannot hand the
-// scroll back.
+// enough sideways, to be taken from the browser.
 export function shouldClaimTouch(
   dx: number,
   dy: number,
   claimPx: number = TOUCH_CLAIM_PX,
   ratio: number = AXIS_RATIO,
 ): boolean {
-  return dx >= claimPx && dx > Math.abs(dy) * ratio;
+  return shouldClaimAxisTouch(dx, dy, claimPx, ratio);
 }
 
 export interface EdgeBackConfig {
@@ -84,10 +91,7 @@ function resolve(config: EdgeBackConfig): Cfg {
 
 export type EdgeBackInput =
   // x is measured from the left edge of the surface, not the viewport.
-  | { type: "pointerdown"; id: number; x: number; y: number; t: number }
-  | { type: "pointermove"; id: number; x: number; y: number; t: number }
-  | { type: "pointerup"; id: number; x: number; y: number; t: number }
-  | { type: "pointercancel"; id: number };
+  AxisGestureInput;
 
 export type EdgeBackCommand =
   // The gesture is ours from here: setPointerCapture(id) and preventDefault.
@@ -97,43 +101,12 @@ export type EdgeBackCommand =
   // Released. `back` true means run the back action, false means settle home.
   | { type: "dragEnd"; back: boolean };
 
-export type EdgeBackPhase =
-  // Nothing in flight.
-  | "idle"
-  // A pointer is down inside the band, still deciding.
-  | "pending"
-  // Following the finger.
-  | "drag"
-  // This pointer is not ours (started outside the band, went the wrong way, or
-  // a second finger landed). Ignored until every pointer is up.
-  | "off";
+export type EdgeBackPhase = AxisGesturePhase;
 
-export interface EdgeBackState {
-  phase: EdgeBackPhase;
-  pointerId: number | null;
-  // How many pointers are down, so the machine only returns to idle when the
-  // glass is clear: a second finger must not hand the gesture back mid-flight.
-  downCount: number;
-  startX: number;
-  startY: number;
-  lastDx: number;
-  vx: number; // smoothed horizontal velocity, px/ms
-  vLastX: number;
-  vLastT: number;
-}
+export type EdgeBackState = AxisGestureState;
 
 export function initEdgeBackState(): EdgeBackState {
-  return {
-    phase: "idle",
-    pointerId: null,
-    downCount: 0,
-    startX: 0,
-    startY: 0,
-    lastDx: 0,
-    vx: 0,
-    vLastX: 0,
-    vLastT: 0,
-  };
+  return initAxisGestureState();
 }
 
 // --- pure decision helpers (exported for direct unit tests) -----------------
@@ -151,12 +124,8 @@ export function classifyMove(
   slop: number,
   ratio: number,
 ): "wait" | "back" | "abandon" {
-  const ax = Math.abs(dx);
-  const ay = Math.abs(dy);
-  if (ax < slop && ay < slop) return "wait";
-  if (ay >= ax * ratio) return "abandon"; // the page is being scrolled
-  if (ax >= ay * ratio) return dx > 0 ? "back" : "abandon";
-  return "wait"; // diagonal: let the move resolve
+  const verdict = classifyAxisMove(dx, dy, slop, ratio);
+  return verdict === "go" ? "back" : verdict;
 }
 
 // Whether a release goes back. A fling wins by its direction, so a fast flick
@@ -174,12 +143,20 @@ export function resolveEdgeBack(
   return dx >= width * commitFraction;
 }
 
-function updateVelocity(s: EdgeBackState, x: number, t: number): void {
-  const dt = Math.max(t - s.vLastT, 1);
-  const inst = (x - s.vLastX) / dt;
-  s.vx = s.vx * 0.3 + inst * 0.7;
-  s.vLastX = x;
-  s.vLastT = t;
+function spec(cfg: Cfg): AxisGestureSpec<unknown, EdgeBackCommand> {
+  return {
+    axis: "x",
+    slop: cfg.slop,
+    axisRatio: cfg.axisRatio,
+    canStart: (down) => inEdgeZone(down.x, cfg.edgeZone),
+    moveCommand: (dx) => ({ type: "dragMove", dx }),
+    endCommand: (dx, vx, cancelled) => ({
+      type: "dragEnd",
+      back: cancelled
+        ? false
+        : resolveEdgeBack(dx, vx, cfg.width, cfg.commitFraction, cfg.commitVelocity),
+    }),
+  };
 }
 
 // Fold one input in. The input state is treated as immutable; a shallow clone
@@ -189,89 +166,5 @@ export function stepEdgeBack(
   input: EdgeBackInput,
   config: EdgeBackConfig,
 ): { state: EdgeBackState; commands: EdgeBackCommand[] } {
-  const cfg = resolve(config);
-  const s: EdgeBackState = { ...prev };
-  const cmds: EdgeBackCommand[] = [];
-
-  switch (input.type) {
-    case "pointerdown": {
-      s.downCount += 1;
-      if (s.downCount > 1) {
-        // A second finger is a pinch or a two-finger scroll, never a back.
-        if (s.phase === "drag") cmds.push({ type: "dragEnd", back: false });
-        s.phase = "off";
-        s.pointerId = null;
-        break;
-      }
-      s.pointerId = input.id;
-      s.startX = input.x;
-      s.startY = input.y;
-      s.lastDx = 0;
-      s.vx = 0;
-      s.vLastX = input.x;
-      s.vLastT = input.t;
-      s.phase = inEdgeZone(input.x, cfg.edgeZone) ? "pending" : "off";
-      break;
-    }
-
-    case "pointermove": {
-      if (input.id !== s.pointerId) break;
-      updateVelocity(s, input.x, input.t);
-
-      if (s.phase === "pending") {
-        const verdict = classifyMove(
-          input.x - s.startX,
-          input.y - s.startY,
-          cfg.slop,
-          cfg.axisRatio,
-        );
-        if (verdict === "abandon") {
-          s.phase = "off";
-          break;
-        }
-        if (verdict === "wait") break;
-        s.phase = "drag";
-        s.lastDx = Math.max(0, input.x - s.startX);
-        cmds.push({ type: "capture", id: input.id });
-        cmds.push({ type: "dragMove", dx: s.lastDx });
-        break;
-      }
-
-      if (s.phase === "drag") {
-        // Clamped at rest: dragging back past the start must not push the
-        // screen off the other side, it must only undo the pull.
-        s.lastDx = Math.max(0, input.x - s.startX);
-        cmds.push({ type: "dragMove", dx: s.lastDx });
-      }
-      break;
-    }
-
-    case "pointerup":
-    case "pointercancel": {
-      const mine = input.id === s.pointerId;
-      s.downCount = Math.max(0, s.downCount - 1);
-      if (mine && s.phase === "drag") {
-        if (input.type === "pointerup") updateVelocity(s, input.x, input.t);
-        const back =
-          input.type === "pointercancel"
-            ? false
-            : resolveEdgeBack(
-                s.lastDx,
-                s.vx,
-                cfg.width,
-                cfg.commitFraction,
-                cfg.commitVelocity,
-              );
-        cmds.push({ type: "dragEnd", back });
-      }
-      if (mine) s.pointerId = null;
-      // Only a clear screen returns the machine to idle: a finger left over
-      // from an abandoned gesture must not start a new one mid-way.
-      if (s.downCount === 0) return { state: initEdgeBackState(), commands: cmds };
-      s.phase = "off";
-      break;
-    }
-  }
-
-  return { state: s, commands: cmds };
+  return stepAxisGesture(prev, input, spec(resolve(config)));
 }
