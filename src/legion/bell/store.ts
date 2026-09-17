@@ -13,7 +13,12 @@
 // The file system is injected. The default reads and writes AppData; the tests
 // hand in a Map.
 
-import { appData } from "../../platform/app/appdata";
+import {
+  appRecordDirIo,
+  readRecords,
+  recordFileName,
+  type RecordDirIo,
+} from "../../platform/app/record-dir";
 import {
   BRIEF_MAX,
   bellRank,
@@ -27,13 +32,7 @@ import {
 export const BELL_DIR = "legion/bell";
 
 /** What the store needs of a disk. */
-export interface BellIo {
-  /** The file names in the bell directory. Empty when there is no directory. */
-  list(): Promise<string[]>;
-  /** A file's text, or null when it is not there. */
-  read(name: string): Promise<string | null>;
-  write(name: string, contents: string): Promise<void>;
-}
+export type BellIo = RecordDirIo;
 
 // A bell id has to be a file name, and file names that need escaping are file
 // names two ids can collide on. Run and schedule ids are ours, so this is a
@@ -58,16 +57,6 @@ export interface BellStore {
   ack(id: string): Promise<void>;
   /** One bell by id, whatever its state, or null. */
   get(id: string): Promise<Bell | null>;
-}
-
-function fileName(id: string): string {
-  return `${id}.json`;
-}
-
-function idOf(name: string): string | null {
-  if (!name.endsWith(".json")) return null;
-  const id = name.slice(0, -".json".length);
-  return ID.test(id) ? id : null;
 }
 
 // The default id: the thing the bell is about. Two `run-done` bells for one run
@@ -113,7 +102,7 @@ export function createBellStore(io: BellIo): BellStore {
   // Reading a bell back before raising its state, so the raise is over what is
   // on disk rather than over what this process remembers writing.
   async function get(id: string): Promise<Bell | null> {
-    const text = await io.read(fileName(id));
+    const text = await io.read(recordFileName(id));
     return text === null ? null : parse(text, id);
   }
 
@@ -122,7 +111,7 @@ export function createBellStore(io: BellIo): BellStore {
     // A state only goes up. An ack that arrives twice, or an ack that overtook
     // its own delivered, leaves the bell where it already is.
     if (!bell || bellRank(state) <= bellRank(bell.state)) return;
-    await io.write(fileName(id), JSON.stringify({ ...bell, state }, null, 2));
+    await io.write(recordFileName(id), JSON.stringify({ ...bell, state }, null, 2));
   }
 
   return {
@@ -133,22 +122,12 @@ export function createBellStore(io: BellIo): BellStore {
       const already = await get(id);
       if (already) return already;
       const bell = { id, type, at, state: "queued" as const, payload: fit(type, payload) } as Bell;
-      await io.write(fileName(id), JSON.stringify(bell, null, 2));
+      await io.write(recordFileName(id), JSON.stringify(bell, null, 2));
       return bell;
     },
 
     async read() {
-      const bells: Bell[] = [];
-      for (const name of await io.list()) {
-        const id = idOf(name);
-        if (!id) continue;
-        const bell = await get(id);
-        // A file that will not parse is not a bell anybody can answer. It is
-        // left where it is: deleting it would take the only evidence of what
-        // went wrong with it.
-        if (!bell || bell.state === "acked") continue;
-        bells.push(bell);
-      }
+      const bells = (await readRecords(io, ID, get)).filter((bell) => bell.state !== "acked");
       bells.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
       return bells;
     },
@@ -160,21 +139,7 @@ export function createBellStore(io: BellIo): BellStore {
 }
 
 /** The bell directory on this device. */
-export const appBellIo: BellIo = {
-  async list() {
-    const entries = await appData.readDir(BELL_DIR).catch(() => []);
-    return entries.filter((e) => e.isFile).map((e) => e.name);
-  },
-  async read(name) {
-    const path = `${BELL_DIR}/${name}`;
-    if (!(await appData.exists(path))) return null;
-    return appData.readText(path).catch(() => null);
-  },
-  async write(name, contents) {
-    await appData.mkdirp(BELL_DIR);
-    await appData.writeAtomic(`${BELL_DIR}/${name}`, contents);
-  },
-};
+export const appBellIo: BellIo = appRecordDirIo(BELL_DIR);
 
 let live: BellStore | undefined;
 

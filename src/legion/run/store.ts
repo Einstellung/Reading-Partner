@@ -13,8 +13,14 @@
 // The file system is injected, the way the bell store beside it takes one. The
 // default reads and writes AppData; the tests hand in a Map.
 
-import { appData } from "../../platform/app/appdata";
 import { contentHash } from "../../platform/app/content-hash";
+import {
+  appRecordDirIo,
+  createRecordReader,
+  readRecords,
+  recordFileName,
+  type RemovableRecordDirIo,
+} from "../../platform/app/record-dir";
 import {
   idempotencyKey,
   isTerminal,
@@ -29,37 +35,18 @@ import { asRun } from "./merge";
 
 export const RUNS_DIR = "legion/runs";
 
-/** What the store needs of a disk. */
-export interface RunIo {
-  /** The file names in the runs directory. Empty when there is no directory. */
-  list(): Promise<string[]>;
-  /** A file's text, or null when it is not there. */
-  read(name: string): Promise<string | null>;
-  /** Written whole, and atomically: a half-written run is a run nobody can merge. */
-  write(name: string, contents: string): Promise<void>;
-  /**
-   * Take a file away. Local only: sync propagates no file deletion of its own
-   * (pitfall 208), so whoever calls this owes the remote half as well — the
-   * ledger's housekeeping asks for the remote purge before it asks for this
-   * (legion/ledger/housekeeping.ts).
-   */
-  remove(name: string): Promise<void>;
-}
+/**
+ * What the store needs of a disk. Removable, unlike the box's or the bell's: a
+ * folded run is taken off this device, and the ledger's housekeeping is the only
+ * caller — it asks for the remote purge before it asks for this
+ * (legion/ledger/housekeeping.ts).
+ */
+export type RunIo = RemovableRecordDirIo;
 
 // A run id has to be a file name, and it is also what the palace row matches on
 // (palace/kinds.ts). Both ways of making one — the hash of kind and key, and
 // the random one — land inside this shape.
 const ID = /^r-[0-9a-f]{32}$/;
-
-function fileName(id: string): string {
-  return `${id}.json`;
-}
-
-function idOf(name: string): string | null {
-  if (!name.endsWith(".json")) return null;
-  const id = name.slice(0, -".json".length);
-  return ID.test(id) ? id : null;
-}
 
 /**
  * The id two devices derive independently for the same step of the same batch.
@@ -201,22 +188,10 @@ function matches(run: Run, filter: RunFilter): boolean {
 }
 
 export function createRunStore(io: RunIo): RunStore {
-  // Read back from disk rather than from what this process remembers writing:
-  // a pull may have landed the other device's copy since.
-  async function get(id: string): Promise<Run | null> {
-    if (!ID.test(id)) return null;
-    const text = await io.read(fileName(id));
-    if (text === null) return null;
-    try {
-      const run = asRun(JSON.parse(text));
-      return run && run.id === id ? run : null;
-    } catch {
-      return null;
-    }
-  }
+  const get = createRecordReader(io, ID, asRun);
 
   async function put(run: Run): Promise<Run> {
-    await io.write(fileName(run.id), JSON.stringify(run, null, 2));
+    await io.write(recordFileName(run.id), JSON.stringify(run, null, 2));
     return run;
   }
 
@@ -256,16 +231,7 @@ export function createRunStore(io: RunIo): RunStore {
     get,
 
     async list(filter = {}) {
-      const runs: Run[] = [];
-      for (const name of await io.list()) {
-        const id = idOf(name);
-        if (!id) continue;
-        const run = await get(id);
-        // A file that will not parse is not a run anybody can act on. It is
-        // left where it is: deleting it would take the only evidence of what
-        // went wrong with it.
-        if (run && matches(run, filter)) runs.push(run);
-      }
+      const runs = (await readRecords(io, ID, get)).filter((run) => matches(run, filter));
       runs.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
       return runs;
     },
@@ -355,7 +321,7 @@ export function createRunStore(io: RunIo): RunStore {
 
     async remove(id) {
       if (!ID.test(id)) return;
-      await io.remove(fileName(id));
+      await io.remove(recordFileName(id));
     },
 
     async report(id, progress, at) {
@@ -372,24 +338,7 @@ export function createRunStore(io: RunIo): RunStore {
 }
 
 /** The runs directory on this device. */
-export const appRunIo: RunIo = {
-  async list() {
-    const entries = await appData.readDir(RUNS_DIR).catch(() => []);
-    return entries.filter((e) => e.isFile).map((e) => e.name);
-  },
-  async read(name) {
-    const path = `${RUNS_DIR}/${name}`;
-    if (!(await appData.exists(path))) return null;
-    return appData.readText(path).catch(() => null);
-  },
-  async write(name, contents) {
-    await appData.mkdirp(RUNS_DIR);
-    await appData.writeAtomic(`${RUNS_DIR}/${name}`, contents);
-  },
-  async remove(name) {
-    await appData.remove(`${RUNS_DIR}/${name}`).catch(() => {});
-  },
-};
+export const appRunIo: RunIo = appRecordDirIo(RUNS_DIR);
 
 let live: RunStore | undefined;
 

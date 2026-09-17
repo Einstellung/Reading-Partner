@@ -73,6 +73,19 @@ test("a rehearsal written comes back the way it went in", async () => {
   expect(await listRehearsalsForTopic("topic-2")).toEqual([]);
 });
 
+// The bytes, not just the object: the file is on the reader's disk and in the
+// sync range, so the name, the indentation and the order of the keys are the
+// contract and not an implementation detail.
+test("a rehearsal is written under its own name, pretty-printed, in the object's own key order", async () => {
+  const made = await startRehearsal({
+    topicId: "topic-1",
+    name: "Deck",
+    outlineId: "o-1",
+    now: 3,
+  });
+  expect(disk.files.get("rehearsal-3.json")).toBe(JSON.stringify(made, null, 2));
+});
+
 test("the runs file is not seen by the listing", async () => {
   const made = await startRehearsal({
     topicId: "topic-1",

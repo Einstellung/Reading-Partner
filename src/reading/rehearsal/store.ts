@@ -43,6 +43,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { createRecordStore, removeRecordFiles } from "../../platform/app/record-store";
 import { requestRemotePurge } from "../../platform/sync";
 import { talkOutlineForRetell } from "../talk/store";
 import { runEntryOf } from "./summary";
@@ -63,8 +64,18 @@ import {
   type RehearsalRunPages,
 } from "./types";
 
-const PREFIX = "rehearsal-";
 const RUNS_PREFIX = "runs-";
+
+// A file this build cannot use reads as null and is left exactly where it is:
+// the listing walks the whole directory, and a build that moved every file it
+// did not recognize would turn one rename into a pile of .bad files.
+const records = createRecordStore<Rehearsal>({
+  prefix: "rehearsal-",
+  parse: normalizeRehearsal,
+  newest: (rehearsal) => rehearsal.createdAt,
+  newId: newRehearsalId,
+  read: { kind: "warn", message: "failed to read a rehearsal" },
+});
 
 // Where the transcripts live, one directory per rehearsal, the way article
 // bodies and book blobs have one of their own. Not flat in the AppData root:
@@ -96,9 +107,7 @@ export function runPagesFile(rehearsalId: string, runId: string): string | null 
   return dir && PATH_SEGMENT.test(runId) ? `${dir}/${runId}.json` : null;
 }
 
-export function rehearsalFile(rehearsalId: string): string {
-  return `${PREFIX}${rehearsalId}.json`;
-}
+export const rehearsalFile = records.file;
 
 export function rehearsalRunsFile(rehearsalId: string): string {
   return `${RUNS_PREFIX}${rehearsalFile(rehearsalId)}`;
@@ -107,49 +116,15 @@ export function rehearsalRunsFile(rehearsalId: string): string {
 // A rehearsal id out of a file name, or null for anything else in the directory.
 // runs-rehearsal-<id>.json does not match: it is prefixed, and the prefix is
 // checked at the start of the name.
-export function rehearsalIdOf(fileName: string): string | null {
-  if (!fileName.startsWith(PREFIX) || !fileName.endsWith(".json")) return null;
-  const id = fileName.slice(PREFIX.length, -".json".length);
-  return id || null;
-}
+export const rehearsalIdOf = records.idOf;
 
-// Missing is normal. A file this build cannot use reads as null and is left
-// exactly where it is — the listing walks the whole directory, and a build that
-// moved every file it did not recognize would turn one rename into a pile of
-// .bad files.
-export async function loadRehearsal(rehearsalId: string): Promise<Rehearsal | null> {
-  try {
-    const file = rehearsalFile(rehearsalId);
-    if (!(await appData.exists(file))) return null;
-    return normalizeRehearsal(JSON.parse(await appData.readText(file)) as unknown);
-  } catch (e) {
-    console.warn("failed to read a rehearsal", rehearsalId, e);
-    return null;
-  }
-}
+/** The rehearsal, or null when there is none this build can use. Missing is normal. */
+export const loadRehearsal = records.load;
 
-export async function saveRehearsal(rehearsal: Rehearsal): Promise<void> {
-  await writeTextAtomic(rehearsalFile(rehearsal.id), JSON.stringify(rehearsal, null, 2));
-}
+export const saveRehearsal = records.save;
 
-// Every rehearsal on disk, newest first. Unreadable files are skipped.
-export async function listAllRehearsals(): Promise<Rehearsal[]> {
-  let entries;
-  try {
-    entries = await appData.readDir(".");
-  } catch {
-    return [];
-  }
-  const out: Rehearsal[] = [];
-  for (const e of entries) {
-    if (!e.isFile || !e.name) continue;
-    const id = rehearsalIdOf(e.name);
-    if (!id) continue;
-    const rehearsal = await loadRehearsal(id);
-    if (rehearsal) out.push(rehearsal);
-  }
-  return out.sort((a, b) => b.createdAt - a.createdAt);
-}
+/** Every rehearsal on disk, newest first. Unreadable files are skipped. */
+export const listAllRehearsals = records.listAll;
 
 export async function listRehearsalsForTopic(topicId: string): Promise<Rehearsal[]> {
   return (await listAllRehearsals()).filter((r) => r.topicId === topicId);
@@ -170,11 +145,7 @@ export interface StartRehearsalInput {
  * the same name.
  *
  */
-export async function reserveRehearsalId(now = Date.now()): Promise<{ id: string; at: number }> {
-  let at = now;
-  while (await appData.exists(rehearsalFile(newRehearsalId(at)))) at += 1;
-  return { id: newRehearsalId(at), at };
-}
+export const reserveRehearsalId = records.reserveId;
 
 // Create a rehearsal and write it.
 export async function startRehearsal(input: StartRehearsalInput): Promise<Rehearsal> {
@@ -536,13 +507,7 @@ export async function deleteRehearsal(rehearsalId: string): Promise<void> {
   } catch (e) {
     console.warn("failed to queue a rehearsal for remote deletion", rehearsalId, e);
   }
-  for (const file of files) {
-    try {
-      if (await appData.exists(file)) await appData.remove(file);
-    } catch (e) {
-      console.warn("failed to delete", file, e);
-    }
-  }
+  await removeRecordFiles(files);
   // The transcripts go as a directory: one per pass, and there is no list of
   // them left to walk once the index above is gone.
   const dir = runPagesDir(rehearsalId);

@@ -17,7 +17,13 @@
 // `subscribe` covers the other direction only: a write made in this process,
 // so the screen that made it does not wait for a tick.
 
-import { appData } from "../platform/app/appdata";
+import {
+  appRecordDirIo,
+  createRecordReader,
+  readRecords,
+  recordFileName,
+  type RecordDirIo,
+} from "../platform/app/record-dir";
 import { asBoxItem } from "./merge";
 import {
   isExit,
@@ -31,28 +37,11 @@ import {
 export const BOX_DIR = "box";
 
 /** What the store needs of a disk. */
-export interface BoxIo {
-  /** The file names in the box directory. Empty when there is no directory. */
-  list(): Promise<string[]>;
-  /** A file's text, or null when it is not there. */
-  read(name: string): Promise<string | null>;
-  /** Written whole, and atomically: a half-written item is one nobody can merge. */
-  write(name: string, contents: string): Promise<void>;
-}
+export type BoxIo = RecordDirIo;
 
 // An item id has to be a file name, and it is also what the palace row matches
 // on (palace/kinds.ts).
 const ID = /^b-[0-9a-f]{32}$/;
-
-function fileName(id: string): string {
-  return `${id}.json`;
-}
-
-function idOf(name: string): string | null {
-  if (!name.endsWith(".json")) return null;
-  const id = name.slice(0, -".json".length);
-  return ID.test(id) ? id : null;
-}
 
 /** An item has no key of its own to derive from, so its id is random. */
 export function randomBoxItemId(): string {
@@ -142,37 +131,16 @@ export function createBoxStore(io: BoxIo): BoxStore {
     for (const listener of [...listeners]) listener(item);
   }
 
-  // Read back from disk rather than from what this process remembers writing: a
-  // pull may have landed the other device's copy since.
-  async function get(id: string): Promise<BoxItem | null> {
-    if (!ID.test(id)) return null;
-    const text = await io.read(fileName(id));
-    if (text === null) return null;
-    try {
-      const item = asBoxItem(JSON.parse(text));
-      return item && item.id === id ? item : null;
-    } catch {
-      return null;
-    }
-  }
+  const get = createRecordReader(io, ID, asBoxItem);
 
   async function put(item: BoxItem): Promise<BoxItem> {
-    await io.write(fileName(item.id), JSON.stringify(item, null, 2));
+    await io.write(recordFileName(item.id), JSON.stringify(item, null, 2));
     announce(item);
     return item;
   }
 
   async function all(filter: BoxFilter): Promise<BoxItem[]> {
-    const items: BoxItem[] = [];
-    for (const name of await io.list()) {
-      const id = idOf(name);
-      if (!id) continue;
-      const item = await get(id);
-      // A file that will not parse is not an item anybody can act on. It is
-      // left where it is: deleting it would take the only evidence of what went
-      // wrong with it.
-      if (item && matches(item, filter)) items.push(item);
-    }
+    const items = (await readRecords(io, ID, get)).filter((item) => matches(item, filter));
     // Newest first, and the id breaks the tie so two devices draw one order.
     items.sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id));
     return items;
@@ -232,21 +200,7 @@ export function createBoxStore(io: BoxIo): BoxStore {
 }
 
 /** The box directory on this device. */
-export const appBoxIo: BoxIo = {
-  async list() {
-    const entries = await appData.readDir(BOX_DIR).catch(() => []);
-    return entries.filter((e) => e.isFile).map((e) => e.name);
-  },
-  async read(name) {
-    const path = `${BOX_DIR}/${name}`;
-    if (!(await appData.exists(path))) return null;
-    return appData.readText(path).catch(() => null);
-  },
-  async write(name, contents) {
-    await appData.mkdirp(BOX_DIR);
-    await appData.writeAtomic(`${BOX_DIR}/${name}`, contents);
-  },
-};
+export const appBoxIo: BoxIo = appRecordDirIo(BOX_DIR);
 
 let live: BoxStore | undefined;
 
