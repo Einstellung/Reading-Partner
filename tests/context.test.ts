@@ -22,21 +22,23 @@ test("base prompt carries the reading context and trims the marked passage", () 
   expect(out).toContain("- Page: 12");
   expect(out).toContain('- Marked passage: "the semantics in SSA form"');
   // No M6 sections when their fields are absent.
-  expect(out).not.toContain("Text around the marked passage");
+  expect(out).not.toContain("MARKED PAGES");
   expect(out).not.toContain("The materials in this topic");
   expect(out).not.toContain("Tools:");
   expect(out).not.toContain("machine-readable");
 });
 
-test("chapter and surrounding text appear only when provided", () => {
+test("chapter and the marked pages appear only when provided", () => {
   const out = buildSystemPrompt({
     ...base,
     chapterTitle: "5. Global Value Numbering",
-    surroundingText: "GVN folds redundant expressions across the graph.",
+    markedPages: "MARKED PAGES\n=== Page 12 === [p.12]\nGVN folds redundant expressions.",
   });
   expect(out).toContain("- Chapter: 5. Global Value Numbering");
-  expect(out).toContain("Text around the marked passage:");
-  expect(out).toContain("GVN folds redundant expressions across the graph.");
+  expect(out).toContain("=== Page 12 === [p.12]");
+  // Directly after the passage it belongs to, and before everything the turn
+  // gathered around it.
+  expect(out.indexOf("MARKED PAGES")).toBeGreaterThan(out.indexOf("- Marked passage:"));
 });
 
 test("an unreadable current book states the limitation", () => {
@@ -67,15 +69,15 @@ test("the book-level prompt drops every selection-derived part but keeps positio
     selectionText: "the semantics in SSA form",
     selectionComment: "confusing",
     chapterTitle: "5. Global Value Numbering",
-    surroundingText: "GVN folds redundant expressions across the graph.",
+    markedPages: "MARKED PAGES",
     materials,
     toolNames: ["read_pages", "search_topic"],
   });
-  // No passage, note, or surrounding text.
+  // No passage, note, or pages around a mark.
   expect(out).not.toContain("Marked passage");
   expect(out).not.toContain("the semantics in SSA form");
   expect(out).not.toContain("The user's note on it");
-  expect(out).not.toContain("Text around the marked passage");
+  expect(out).not.toContain("MARKED PAGES");
   // Position, chapter, booklist and tools all survive.
   expect(out).toContain("- Topic: what makes JITs fast");
   expect(out).toContain("- File: sea-of-nodes.pdf");
@@ -288,13 +290,14 @@ test("a chat-span aside names the span for what it is and carries no page text",
     bookLevel: true,
     aside: { from: "chat" },
     selectionText: "  the semantics in SSA form  ",
-    surroundingText: "GVN folds redundant expressions across the graph.",
+    markedPages: "MARKED PAGES",
   });
   expect(out).toContain('taken by the reader out of something you');
   expect(out).toContain('wrote earlier in the lesson: "the semantics in SSA form"');
   expect(out).not.toContain("Marked passage");
-  // The text around a page has nothing to do with words out of a reply.
-  expect(out).not.toContain("Text around the marked passage");
+  // The pages around the reader's scroll position have nothing to do with words
+  // out of a reply.
+  expect(out).not.toContain("MARKED PAGES");
 });
 
 // Rebuilt every turn from the stored span, so it may not point at anything the
@@ -357,20 +360,20 @@ test("an aside drawn on the page is a marked passage like any other", () => {
     bookLevel: true,
     aside: { from: "mark" },
     selectionComment: "confusing",
-    surroundingText: "GVN folds redundant expressions across the graph.",
+    markedPages: "MARKED PAGES",
   });
   expect(out).toContain('- Marked passage: "the semantics in SSA form"');
   expect(out).toContain('- The user\'s note on it: "confusing"');
-  expect(out).toContain("Text around the marked passage:");
+  expect(out).toContain("MARKED PAGES");
   expect(out).not.toContain("taken by the reader out of something you");
 });
 
 // The lesson itself is unchanged by any of this.
 test("the book-level thread still carries nothing selection-derived", () => {
-  const out = buildSystemPrompt({ ...base, bookLevel: true, surroundingText: "around" });
+  const out = buildSystemPrompt({ ...base, bookLevel: true, markedPages: "MARKED PAGES" });
   expect(out).not.toContain("Marked passage");
   expect(out).not.toContain("taken by the reader out of something you");
-  expect(out).not.toContain("Text around the marked passage");
+  expect(out).not.toContain("MARKED PAGES");
 });
 
 // The entry leads the reader through a chapter; it does not examine them

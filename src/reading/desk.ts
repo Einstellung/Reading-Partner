@@ -16,8 +16,9 @@
 import {
   annotationPage,
   buildReadingTools,
+  markedPageRange,
+  markedPagesSection,
   spineOverviewSection,
-  surroundingText,
 } from "./context";
 import { toAnnotationLite, type AnnotationLite, type TopicMaterial } from "../fulltext/format";
 import { modelSupportsImages, type ProviderId } from "../ai";
@@ -350,8 +351,6 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     : currentPage;
   const chapterTitle =
     currentFulltext && page ? chapterAt(currentFulltext, page)?.title ?? null : null;
-  const surrounding =
-    onMark && currentFulltext && page ? surroundingText(currentFulltext, page) : "";
   // The current book is in the list, marked as current. It used to be filtered
   // out, which read as "the other materials" and was fine until read_annotations
   // was mounted: that tool takes a title "as shown in the topic booklist", and
@@ -375,6 +374,17 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // [Some Article p.4] in a supplement (docs/67).
   const pageAnchor = (page: number) =>
     viewing ? `[${viewing.title} p.${page}]` : `[p.${page}]`;
+  // The text of the marked page and its neighbours, inlined so the turn does not
+  // have to fetch them (reading/context.ts). Only where the page is the mark's:
+  // the book-level thread's page follows the reader's scrolling and a chat-span
+  // aside has no page at all. Whatever document is on screen, book or supplement
+  // — it is the same full text read_pages would return, under the same anchors.
+  const markedRange =
+    onMark && currentFulltext && page ? markedPageRange(currentFulltext, page) : null;
+  const markedPages =
+    markedRange && currentFulltext && page
+      ? markedPagesSection(currentFulltext, page, pageAnchor)
+      : "";
   let tools = buildReadingTools({ currentFulltext, materials, pageAnchor });
 
   // The lecture load (docs/09). The chapter table decides what read_chapter can
@@ -755,7 +765,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       selectionText,
       selectionComment,
       chapterTitle,
-      surroundingText: surrounding,
+      markedPages,
       fulltextAvailable: currentFulltext?.status === "ok",
       materials: dropped.has("booklist-thin") ? booklistThin : booklist,
       // The whole visual-aid block, not the bare figure list: when to cite a
@@ -821,6 +831,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
         outlines: chapterSpine ? chapterOutlines.length : 0,
         prepNotes: notes.length,
         hasChapterTable: !!chapterTable,
+        ...(markedRange ? { markedPages: markedRange } : {}),
         ...(spineProgress ? { spine: spineProgress } : {}),
         ...(aside ? { aside: { ...aside, lessonReplayed: replayedLesson(dropped) > 0 } } : {}),
       }),
@@ -947,12 +958,12 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // An aside is priced as if it were paying for the inlined chapter in full:
   // src/budget/fit.ts knows one assembled call, not two conversations sharing a
   // provider cache. For a chat-span aside that costs nothing — its stable half is
-  // the lesson's byte for byte, it carries no page window and no surrounding
-  // text, and its history is a handful of messages against the lesson's forty, so
+  // the lesson's byte for byte, it carries no page window and no inlined marked
+  // pages, and its history is a handful of messages against the lesson's forty, so
   // its call is smaller than the lesson's and a window the lesson fits in fits it.
   //
-  // One drawn on the page is bigger: the page images and the text around the mark
-  // are its own. If that is what puts it over the line, the ladder gives up
+  // One drawn on the page is bigger: the page images and the marked page's own
+  // text are its own. If that is what puts it over the line, the ladder gives up
   // reader-statements and notes-overview before it gives up the page window.
   // The statements now ride the volatile half with the rest of memory, so it is
   // the notes that cut the shared prefix: it ends where the spine was, and the
