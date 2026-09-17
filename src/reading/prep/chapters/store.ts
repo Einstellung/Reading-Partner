@@ -11,10 +11,11 @@
 
 import { appData } from "../../../platform/app/appdata";
 import { writeTextAtomic } from "../../../platform/app/atomic-fs";
+import { loadPrepStateFile, prepDir, readPrepTextFile } from "../store-base";
 import { CHAPTER_SPINE_VERSION, type ChapterSpineState } from "./types";
 
 function dirFor(bookId: string): string {
-  return `prep-${bookId}/chapters`;
+  return `${prepDir(bookId)}/chapters`;
 }
 
 function stateFile(bookId: string): string {
@@ -37,18 +38,12 @@ async function ensureChapterSpineDir(bookId: string): Promise<void> {
   await appData.mkdirp(dirFor(bookId));
 }
 
-// Missing state is normal (the spine was never generated); a corrupt or stale-version
-// state reads as null so the pipeline starts fresh instead of crashing.
 export async function loadChapterSpineState(bookId: string): Promise<ChapterSpineState | null> {
-  try {
-    if (!(await appData.exists(stateFile(bookId)))) return null;
-    const parsed = JSON.parse(await appData.readText(stateFile(bookId))) as ChapterSpineState;
-    if (!parsed || parsed.version !== CHAPTER_SPINE_VERSION) return null;
-    return parsed;
-  } catch (e) {
-    console.warn("failed to read chapter-spine state", e);
-    return null;
-  }
+  return loadPrepStateFile<ChapterSpineState>(
+    stateFile(bookId),
+    CHAPTER_SPINE_VERSION,
+    "chapter-spine state",
+  );
 }
 
 export async function saveChapterSpineState(state: ChapterSpineState): Promise<void> {
@@ -62,13 +57,7 @@ export async function writeChapterSpine(bookId: string, index: number, body: str
 }
 
 export async function readChapterSpine(bookId: string, index: number): Promise<string | null> {
-  try {
-    if (!(await appData.exists(chapterFile(bookId, index)))) return null;
-    return await appData.readText(chapterFile(bookId, index));
-  } catch (e) {
-    console.warn("failed to read chapter note", e);
-    return null;
-  }
+  return readPrepTextFile(chapterFile(bookId, index), "chapter note");
 }
 
 export async function writeSpineOverview(bookId: string, body: string): Promise<void> {
@@ -77,11 +66,5 @@ export async function writeSpineOverview(bookId: string, body: string): Promise<
 }
 
 export async function readSpineOverview(bookId: string): Promise<string | null> {
-  try {
-    if (!(await appData.exists(overviewFile(bookId)))) return null;
-    return await appData.readText(overviewFile(bookId));
-  } catch (e) {
-    console.warn("failed to read overview note", e);
-    return null;
-  }
+  return readPrepTextFile(overviewFile(bookId), "overview note");
 }
