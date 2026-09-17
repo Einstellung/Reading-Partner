@@ -12,6 +12,7 @@ import {
   type PlanOutcome,
 } from "../../../../src/reading/prep/chapters/pipeline";
 import { CHAPTER_SPINE_VERSION, type SpineChapter, type ChapterSpineState } from "../../../../src/reading/prep/chapters/types";
+import { makeClock } from "../../../support/clock";
 
 // A short retry delay so error-path tests (which retry the stall watchdog's
 // maxAttempts) don't wait out the real 2s default between attempts, and no
@@ -85,56 +86,6 @@ function statuses(p: ChapterSpinePipeline): Record<number, string> {
 
 async function drain(p: ChapterSpinePipeline): Promise<void> {
   for (let i = 0; i < 200 && p.snapshot().running; i++) await new Promise((r) => setTimeout(r, 1));
-}
-
-// The virtual clock the watchdog and limiter tests use, for the paths where real
-// waiting would be minutes.
-function makeClock(start = 1000) {
-  interface Ev {
-    at: number;
-    seq: number;
-    fire: () => void;
-    cancelled: boolean;
-  }
-  let now = start;
-  let seq = 0;
-  let pumping = false;
-  const q: Ev[] = [];
-  function schedule(ms: number, fire: () => void): Ev {
-    const ev: Ev = { at: now + Math.max(0, ms), seq: seq++, fire, cancelled: false };
-    q.push(ev);
-    if (!pumping) {
-      pumping = true;
-      void pump();
-    }
-    return ev;
-  }
-  async function pump(): Promise<void> {
-    for (let guard = 0; guard < 100000; guard++) {
-      await new Promise<void>((r) => setTimeout(r, 0));
-      const live = q.filter((e) => !e.cancelled);
-      if (live.length === 0) {
-        pumping = false;
-        return;
-      }
-      live.sort((a, b) => a.at - b.at || a.seq - b.seq);
-      const ev = live[0];
-      q.splice(q.indexOf(ev), 1);
-      if (ev.at > now) now = ev.at;
-      ev.fire();
-    }
-    pumping = false;
-  }
-  return {
-    now: () => now,
-    sleep: (ms: number) => new Promise<void>((resolve) => schedule(ms, resolve)),
-    setTimer: (ms: number, cb: () => void) => {
-      const ev = schedule(ms, cb);
-      return () => {
-        ev.cancelled = true;
-      };
-    },
-  };
 }
 
 test("full run: plan, every chapter, the graph, everything on disk", async () => {
