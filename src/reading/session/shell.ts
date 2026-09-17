@@ -53,7 +53,7 @@ export interface ReaderShell {
   // reader closes the whole session, not just the document showing.
   releaseBook(): void;
 
-  // The two panels attached to the open book (docs/09, docs/14).
+  // The two panels attached to the open book (docs/09).
   resetPrep(): void;
   resumePrep(bookId: string, name: string, ft: Fulltext): Promise<void>;
   resetChapterSpine(): void;

@@ -282,7 +282,7 @@ function badFile(rehearsalId: string): string {
  * transcripts. A rehearsal that has never been given reads as
  * an empty log, and so does one whose file this build cannot use — but in that
  * case the bytes are moved aside first, so the empty log the caller gets is
- * never the only copy left. That is the shape docs/29 recorded on
+ * never the only copy left. That is the shape pitfall 339 recorded on
  * slides/retells.json: parse fails, the loader returns empty, the next write
  * commits the empty version over the top, and every entry is gone with no error
  * anywhere.

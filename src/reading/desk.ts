@@ -3,7 +3,7 @@
 // This is everything a reading turn's material contributes to one call: which
 // tools the book mounts, how much of it is inlined, the prompt those blocks come
 // out in, the replayed conversation and the ladder of what to give up when the
-// window is tight (M6/M9, docs/03, docs/09, docs/14, docs/21, docs/24). What it
+// window is tight (M6/M9, docs/03, docs/09, docs/21, docs/24). What it
 // does not do is assemble a call — the desk hands these items to src/soul,
 // which is the one place a turn is put together, whatever is lying on it.
 //
@@ -729,7 +729,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // this turn at all — it is a run now (docs/68), handed over with the soul's
   // delegate and answered back into this thread when it is finished.
   tools = [...tools, buildFindPaperTool(literatureDeps)];
-  // The whole-book outline from the reader's notes (docs/14), when they exist.
+  // The whole-book outline from the reader's notes (docs/09 书的备课：章脉络), when they exist.
   const spineOverview = spineOverviewSection(await readSpineOverview(bookId));
   // A booklist entry with no text layer and no marks is a title the model can do
   // nothing with; the first thing to go when the window is tight.

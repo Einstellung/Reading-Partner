@@ -48,7 +48,7 @@ export function talkOutlineIdOf(fileName: string): string | null {
 /**
  * The outline, or null when there is none this build can use. Content that will
  * not parse, or that is not this shape, is moved aside by readGuardedJson before
- * the null comes back — the failure docs/29 recorded on slides/retells.json is a
+ * the null comes back — the failure pitfall 339 recorded on slides/retells.json is a
  * loader that answers empty and a writer that then makes the empty version the
  * only one left.
  */

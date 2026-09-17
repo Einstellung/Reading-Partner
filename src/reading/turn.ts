@@ -1,4 +1,4 @@
-// One reading-companion turn (M6/M9, docs/03, docs/09, docs/14, docs/21,
+// One reading-companion turn (M6/M9, docs/03, docs/09, docs/21,
 // docs/24), as the reader's session asks for it: system prompt, tool set and
 // replayed history for the AI-pen bubble and the book-level thread.
 //

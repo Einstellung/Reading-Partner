@@ -1,7 +1,7 @@
 // The rehearsal on disk (src/reading/rehearsal/store.ts): the object, the log of
 // its passes, one transcript file per pass, the ordinal the store hands out, and
 // what a file that will not parse does — which is the point of the log, because
-// the shape it must not repeat (docs/29) is a loader that returns empty and a
+// the shape it must not repeat (pitfall 339) is a loader that returns empty and a
 // writer that then commits the empty version over the top. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
@@ -231,7 +231,7 @@ test("one rehearsal's runs are not another's", async () => {
   expect((await loadRehearsalRuns("1754400000001")).runs.map((r) => r.id)).toEqual(["other"]);
 });
 
-// docs/29: the loss that has already happened once, on slides/retells.json.
+// pitfall 339: the loss that has already happened once, on slides/retells.json.
 test("a runs file that will not parse is moved aside before the empty log is handed back", async () => {
   disk.files.set(RUNS, "{not json");
   const log = await loadRehearsalRuns(ID);
@@ -264,7 +264,7 @@ test("a file that would not open is left alone", async () => {
   expect(disk.files.has(RUNS)).toBe(true);
 });
 
-// docs/29 on the other branch. appendRun reads through the loader before it
+// pitfall 339 on the other branch. appendRun reads through the loader before it
 // writes, so an empty log handed back for a read that failed is not a fallback
 // the caller displays — it is the whole history replaced by the one run being
 // recorded, on a file the other device syncs.
@@ -325,7 +325,7 @@ test("a run the file cannot use is dropped and the rest of the log survives", as
 // transcript will not open is still a pass that happened: it keeps its row, its
 // counts and its place in the numbering, and the passes either side of it are
 // untouched. The alternative — an unreadable file taking the whole history with
-// it — is docs/29 again, one directory lower.
+// it — is pitfall 339 again, one directory lower.
 test("a transcript that will not open costs its own words and nothing else", async () => {
   await appendRun(aRun("r1"));
   await appendRun(aRun("r2"));

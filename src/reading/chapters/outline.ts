@@ -1,5 +1,5 @@
 // Where a chapter table comes from when the PDF carries one: its outline
-// (docs/09, docs/14). Only the top-level entries — descending into sub-sections
+// (docs/09). Only the top-level entries — descending into sub-sections
 // turns a twenty-chapter book into a two-hundred-entry list nothing can be
 // prepared or taught against.
 //

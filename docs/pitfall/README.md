@@ -160,6 +160,7 @@
 
 ## 存储与数据目录
 
+- [339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file](./339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file.md) — `retells.json` 解析失败时 loader 返回空数组，下一次追加拿空数组覆写整个文件，所有 deck 无声消失；内容不能重建的 JSON 走 `readGuardedJson`，坏内容先隔离再兜底
 - [338-concurrent-appends-to-one-jsonl-keep-only-the-last](./338-concurrent-appends-to-one-jsonl-keep-only-the-last.md) — 一个回合 19 次 fire-and-forget 的 `recordModelCall`，`model-calls-*.jsonl` 里只剩 1 行：追加是「读整份 → 拼行 → 原子写回」，同一 tick 的调用读到同一份旧内容再互相盖。按路径把读-改-写串行化（`memory/usage/log.ts` 的 `writeInTurn`），不改走 `appendText`——同步靠 `writeTextAtomic` 的通知知道文件变了，字节上限也要读整份
 - [293-a-fixed-zip-mtime-is-not-fixed-across-time-zones](./293-a-fixed-zip-mtime-is-not-fixed-across-time-zones.md) — 给 zip 条目定死一个 UTC 瞬间做时间戳，字节仍然跨时区变：zip 存 DOS 日期，fflate 用本地时间取值器拆字段，同一瞬间在三个时区写出三种字节，构建出来的 EPUB 于是在另一台设备上哈希成第二本书。时间戳要用本地日历字段构造（`new Date(2001, 0, 1, 12, 0, 0)`），`mtime: 0` 在 DOS 日期里表示不出来
 - [297-openzip-text-only-answers-for-markup-entries](./297-openzip-text-only-answers-for-markup-entries.md) — 打进 EPUB 的 `cover.svg`，`zip.has()` 为 true、`entries` 里列着，`zip.text()` 却返回 null：`openZip` 只预解 markup 条目，`text()` 只查那张表，查不到不区分「没这条」和「没预解」。非 markup 条目走 `zip.bytes()` 自己 decode
@@ -325,7 +326,7 @@
 
 ## markdown 渲染
 
-- [136-react-18-warns-on-every-hyphenated-svg-attribute](./136-react-18-warns-on-every-hyphenated-svg-attribute.md) — React 18 把 `stroke-width` 这类连字符 SVG 属性照写进 DOM，但每个都报一次 `Invalid DOM property`，一张图刷几十条；元素树保留真名，交给 React 前驼峰化，`aria-*`/`data-*` 除外。文里的图表卡和 `SvgFigure` 已删（作废 2026-08-20，见 [40](../40-聊天里画结构图.md)），React 18 的这个行为本身仍成立，再手写 SVG 元素树按这条办
+- [136-react-18-warns-on-every-hyphenated-svg-attribute](./136-react-18-warns-on-every-hyphenated-svg-attribute.md) — React 18 把 `stroke-width` 这类连字符 SVG 属性照写进 DOM，但每个都报一次 `Invalid DOM property`，一张图刷几十条；元素树保留真名，交给 React 前驼峰化，`aria-*`/`data-*` 除外。文里的图表卡和 `SvgFigure` 已删（作废 2026-08-20），React 18 的这个行为本身仍成立，再手写 SVG 元素树按这条办
 - [153-a-cjk-full-stop-keeps-bold-from-closing](./153-a-cjk-full-stop-keeps-bold-from-closing.md) — CommonMark 的 flanking 规则不让 `**` 在中文标点和汉字之间收尾，`**结论：**这样不行` 整句连星号一起显示，而模型写中文时几乎每段都这么写；加 `remark-cjk-friendly` 和 `remark-cjk-friendly-gfm-strikethrough`（后者必须排在 `remarkGfm` 之后），插件表单独一个模块以免把 lazy chunk 拖进主包
 - [154-react-markdown-hands-every-override-a-node-prop](./154-react-markdown-hands-every-override-a-node-prop.md) — react-markdown v10 给每个换成组件的元素多传一个 `node`（hast 节点），`AnchorHTMLAttributes` 里没有这个字段，它跟着 `...rest` 铺到 `<a>` 上渲染成 `node="[object Object]"`；类型全绿、React 18 也不警告。签名交叉上包里的 `ExtraProps` 再把 `node` 解构出来丢掉
 - [156-a-display-fence-must-be-alone-on-its-line](./156-a-display-fence-must-be-alone-on-its-line.md) — remark-math 只认独占一行的 `$$`：开头行 `$$` 后面的内容变成 `meta` 被丢掉，`\end{bmatrix}$$` 不算收尾，没收上的块把后面的正文一起吃进同一个 math 节点渲染成红色原文；模型写的多行公式全是这个形状，一处规范形式都没有。解析前逐行走一遍，把这个形状的开头行和收尾行各切一刀（`mathFences.ts`），行中间的 `$$`、单行成对的、代码里的都不动；只有被切开又等不到收尾的开头行（流式写到一半）转义成 `&#36;&#36;`

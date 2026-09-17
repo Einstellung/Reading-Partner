@@ -1,6 +1,6 @@
 // A talk's outline on disk (src/reading/talk/store.ts): the file name, what a
 // file that will not parse does, and what a read that failed must not let a
-// write do. The shape this must never repeat is docs/29's: a loader that answers
+// write do. The shape this must never repeat is pitfall 339's: a loader that answers
 // empty and a writer that then commits the empty version over the top.
 // Run: bun test.
 

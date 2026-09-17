@@ -1,6 +1,6 @@
 # 记忆：观察与 statement
 
-> 2026-09-05 定案。取代 [34](./34-画像与猜测.md) 的 guess/declared，那份留作历史。外部证据底账在 [记忆与画像调研](./research/记忆与画像调研.md)，dream 的先例调研在 [dream调研](./research/dream调研.md)，现在跑着的这套 memory 在 [02](./02-AI核心与memory设计.md) 第二部分。
+> 2026-09-05 定案。取代原先画像的 guess/declared 两段。外部证据底账在 [记忆与画像调研](./research/记忆与画像调研.md)，dream 的先例调研在 [dream调研](./research/dream调研.md)，现在跑着的这套 memory 在 [02](./02-AI核心与memory设计.md) 第二部分。
 
 ---
 

@@ -1,4 +1,4 @@
-// Chapter-spine data model (docs/09, docs/14). One run per book, keyed by the
+// Chapter-spine data model (docs/09). One run per book, keyed by the
 // book id (library.ts content hash). The state file is a derived view —
 // rebuildable from the book plus the model — and lives under prep-<bookId>/chapters/
 // next to the per-chapter spines and the chapter graph it indexes.

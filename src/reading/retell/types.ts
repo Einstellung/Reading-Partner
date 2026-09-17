@@ -160,7 +160,7 @@ export function normalizeRetell(retell: Retell): Retell | null {
 export const PLAN_VERSION = 1 as const;
 
 // Where the skeleton came from, in descending order of how much it knows.
-//   "notes-plan"  the chapter plan the notes pipeline already wrote (docs/14),
+//   "notes-plan"  the chapter plan the notes pipeline already wrote (docs/09 书的备课：章脉络),
 //                 which has real titles and real ranges.
 //   "outline"     the PDF's own top-level table of contents.
 //   "whole-book"  neither existed, so the book is one chapter.
