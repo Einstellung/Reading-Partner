@@ -34,7 +34,6 @@ export interface ReadingContext {
   selectionText: string;
   selectionComment?: string | null;
   chapterTitle?: string | null;
-  surroundingText?: string | null;
   // Explicitly false only when the current book has no usable text layer; adds a
   // line telling the model it can't page through or search this book.
   fulltextAvailable?: boolean;
@@ -91,6 +90,11 @@ export interface ReadingContext {
   observations?: string;
   // The prep list: every nominated reference and what exists of it.
   prepStatus?: string;
+  // The marked page and the page either side, page by page under the anchors
+  // read_pages returns (reading/context.ts). Volatile because it is built around
+  // the mark's page, and set only on a conversation anchored to one — the block
+  // arrives assembled, so this only decides where it sits.
+  markedPages?: string;
   // The page images riding this turn's message.
   pageWindow?: string;
   // The last thing before the question: what this turn is actually carrying.
@@ -345,13 +349,12 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
   }
   push(position.join("\n"));
 
-  // Rides wherever the page is the passage's rather than whatever they have
-  // open — the same test as the page line above. A chat-span aside's span came
-  // out of a reply, and the text around the reader's scroll position has nothing
-  // to do with it.
-  if (!bookPage && ctx.surroundingText && ctx.surroundingText.trim()) {
-    push(["Text around the marked passage:", '"""', ctx.surroundingText.trim(), '"""'].join("\n"));
-  }
+  // Next to the passage, because it is the passage in its place: the page it was
+  // marked on and the page either side, whole. Rides wherever the page is the
+  // passage's rather than whatever the reader has open — the same test as the
+  // page line above. A chat-span aside's span came out of a reply, so the pages
+  // around the reader's scroll position have nothing to do with it.
+  if (!bookPage) push(ctx.markedPages);
   if (ctx.fulltextAvailable === false) {
     push(
       [

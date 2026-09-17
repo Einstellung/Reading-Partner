@@ -6,7 +6,10 @@
 //           instructions, the current user message, the marked passage and the
 //           user's note on it, the current position, the prep status list, the
 //           tool schemas already offered this turn, and the last two rounds of
-//           conversation.
+//           conversation. The marked page and the page either side, inlined
+//           (reading/context.ts), are tier 0 too: they exist to spare the turn a
+//           read_pages round trip, and a rung that gives them up buys back their
+//           tokens by making the model fetch them.
 //   tier 1  redundancy. Nothing the model could not derive or fetch, so it goes
 //           silently.
 //   tier 2  still silent, because a tool can fetch it back — the stub says so.

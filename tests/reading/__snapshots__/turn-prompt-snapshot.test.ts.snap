@@ -96,10 +96,20 @@ Current reading context:
 - Marked passage: "inline caches"
 - The user's note on it: "why is this fast?"
 
-Text around the marked passage:
-"""
-Chapter one talks about compilers.Page two: inline caches.Page three: deoptimization.
-"""
+The page the marked passage sits on, and the page either side:
+
+=== Page 1 === [p.1]
+Chapter one talks about compilers.
+
+=== Page 2 === [p.2]
+Page two: inline caches.
+
+=== Page 3 === [p.3]
+Page three: deoptimization.
+
+These pages are already in front of you: answer from them and cite them by the
+anchors above. Call read_pages or read_chapter only for pages outside this
+window.
 
 The figures in this document, which you have and the reader can see:
 - [fig:1] p.2 — Inline cache layout

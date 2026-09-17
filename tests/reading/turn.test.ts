@@ -658,7 +658,7 @@ test("an aborted signal drops the turn", async () => {
 test("the book-level thread carries no marked passage", async () => {
   const turn = await buildReadingTurn(input({ annotationId: "", annotation: undefined }));
   expect(turn!.systemPrompt).not.toContain("Marked passage");
-  expect(turn!.systemPrompt).not.toContain("Text around the marked passage");
+  expect(turn!.systemPrompt).not.toContain("The page the marked passage sits on");
 });
 
 // --- fitting the turn to the model's context window (src/budget) ---
@@ -694,6 +694,94 @@ test("a turn that fits keeps everything and says nothing", async () => {
   expect(turn!.systemPrompt).toContain("[fig:1]");
 });
 
+// --- the pages a mark sits in (docs/12) ---
+//
+// The window the marked passage's own page and its neighbours ride in. Book
+// enough that nothing else inlines any of it, so what these see is this block
+// and not the lecture load.
+
+const UNINLINED = cjkSurvey(300);
+
+test("a marked passage's turn carries its page and the page either side", async () => {
+  const turn = await buildReadingTurn(input({ fulltext: UNINLINED }));
+  expect(turn!.inline).toBe("none");
+  expect(turn!.systemPrompt).toContain("=== Page 1 === [p.1]");
+  expect(turn!.systemPrompt).toContain("=== Page 2 === [p.2]");
+  expect(turn!.systemPrompt).toContain("=== Page 3 === [p.3]");
+  expect(turn!.systemPrompt).not.toContain("=== Page 4 ===");
+  expect(turn!.systemPrompt).toContain("These pages are already in front of you");
+});
+
+// The book-level thread's page follows the reader's scrolling, so there is no
+// page for a window to sit on (docs/12).
+test("the book-level thread carries no pages around the reader's position", async () => {
+  createBookThread(BOOK, "book-pages");
+  const turn = await buildReadingTurn(
+    input({
+      threadId: "book-pages",
+      annotationId: "",
+      annotation: undefined,
+      fulltext: UNINLINED,
+    }),
+  );
+  expect(turn!.systemPrompt).not.toContain("The page the marked passage sits on");
+});
+
+// An aside drawn on the page is a marked passage; one pulled out of a reply is
+// not, and the pages under the reader's scroll position are not its subject.
+test("a page-mark aside gets the window and a chat-span aside does not", async () => {
+  createBookThread(BOOK, "lesson-window");
+  createAsideThread(BOOK, "aside-mark", {
+    parentThreadId: "lesson-window",
+    annotationId: "ann-1",
+  });
+  createAsideThread(BOOK, "aside-span", {
+    parentThreadId: "lesson-window",
+    asideAnchor: { messageTs: 1, text: "a sentence out of a reply" },
+  });
+
+  const drawn = await buildReadingTurn(
+    input({ threadId: "aside-mark", fulltext: UNINLINED }),
+  );
+  expect(drawn!.systemPrompt).toContain("=== Page 2 === [p.2]");
+
+  const span = await buildReadingTurn(
+    input({
+      threadId: "aside-span",
+      annotationId: "",
+      annotation: undefined,
+      fulltext: UNINLINED,
+    }),
+  );
+  expect(span!.systemPrompt).not.toContain("The page the marked passage sits on");
+});
+
+// The block is volatile, and every byte of it has to stay that way: two marks on
+// different pages of the same book share their prefix, or a provider's cache
+// writes the whole stable half again for the second one.
+test("the pages ride below the stable half, whichever page the mark is on", async () => {
+  createThread(BOOK, "ann-1", "mark-p2");
+  createThread(BOOK, "ann-9", "mark-p9");
+  const early = await buildReadingTurn(input({ threadId: "mark-p2", fulltext: UNINLINED }));
+  const late = await buildReadingTurn(
+    input({
+      threadId: "mark-p9",
+      annotationId: "ann-9",
+      annotation: {
+        id: "ann-9",
+        text: "inline caches",
+        position: { pageIndex: 8 },
+      } as unknown as Annotation,
+      fulltext: UNINLINED,
+      context: { ...input().context, pageLabel: "9", pageIndex: 8 },
+    }),
+  );
+  const stable = (out: string): string => out.slice(0, out.indexOf("Current reading context:"));
+  expect(stable(late!.systemPrompt)).toBe(stable(early!.systemPrompt));
+  expect(stable(early!.systemPrompt)).not.toContain("=== Page 1 === [p.1]");
+  expect(late!.systemPrompt).toContain("=== Page 9 === [p.9]");
+});
+
 // --- the three loads (docs/09) ---
 
 // A book that lands in the whole-book tier: 30 pages of CJK is 30k on the raw
@@ -705,7 +793,9 @@ const INLINE_BOOK = cjkSurvey(30);
 test("a book inside the whole-book tier is inlined page by page, under its anchors", async () => {
   const turn = await buildReadingTurn(input({ fulltext: INLINE_BOOK }));
   expect(turn!.inline).toBe("whole");
-  expect(turn!.systemPrompt).toContain("=== Page 2 === [p.2]");
+  // Page 5 rather than the marked page's own window (pp.1-3), which rides every
+  // mark turn whatever the load is (reading/context.ts).
+  expect(turn!.systemPrompt).toContain("=== Page 5 === [p.5]");
   expect(turn!.systemPrompt).toContain("the full text of");
   expect(turn!.notice).toBe("");
 });
@@ -715,9 +805,12 @@ test("a book inside the whole-book tier is inlined page by page, under its ancho
 test("a book past the tier is not inlined at all, and the prompt says what it has", async () => {
   const turn = await buildReadingTurn(input({ fulltext: cjkSurvey(300) }));
   expect(turn!.inline).toBe("none");
-  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+  expect(turn!.systemPrompt).not.toContain("=== Page 5 ===");
   expect(turn!.systemPrompt).toContain("What you have in this turn's prompt");
-  expect(turn!.systemPrompt).toContain("No text from");
+  // What it does have is the marked page and its neighbours, and the statement
+  // names them rather than claiming the book is absent entirely.
+  expect(turn!.systemPrompt).toContain('p.1-3 of "survey.pdf", the marked page and its neighbours');
+  expect(turn!.systemPrompt).not.toContain("No text from");
   expect(names(turn!.tools)).toContain("read_pages");
   expect(names(turn!.tools)).toContain("read_chapter");
 });
@@ -776,7 +869,7 @@ test("the narrowest window gives up the notes and then the book, and says so", a
     "Note: some of my notes on the reference papers were left out to make room; this didn't " +
       "fit in context, so I read the pages I needed instead of having it all in view.",
   );
-  expect(turn!.systemPrompt).not.toContain("=== Page 2 === [p.2]");
+  expect(turn!.systemPrompt).not.toContain("=== Page 5 === [p.5]");
   expect(names(turn!.tools)).toContain("read_pages");
   expect(names(turn!.tools)).toContain("read_chapter");
 });
@@ -803,7 +896,7 @@ test("the reading ladder drops the catalog, then the book, and leaves the conver
   // Silent rung: gone from the prompt, absent from the notice.
   expect(turn!.systemPrompt).not.toContain("[fig:1]");
   // Evidence rung: gone, and the notice says exactly this and nothing else.
-  expect(turn!.systemPrompt).not.toContain("=== Page 2 === [p.2]");
+  expect(turn!.systemPrompt).not.toContain("=== Page 5 === [p.5]");
   expect(turn!.notice).toBe(
     "Note: this didn't fit in context, so I read the pages I needed instead of having it all in view.",
   );
@@ -822,7 +915,7 @@ test("a model the catalog doesn't know skips the budget rather than blocking the
   );
   expect(turn!.notice).toBe("");
   expect(turn!.refusal).toBe("");
-  expect(turn!.systemPrompt).toContain("=== Page 2 === [p.2]");
+  expect(turn!.systemPrompt).toContain("=== Page 5 === [p.5]");
 });
 
 test("a figure the conversation has already cited keeps its catalog", async () => {
@@ -833,7 +926,7 @@ test("a figure the conversation has already cited keeps its catalog", async () =
     input({ fulltext: cjkSurvey(300), figures, settings: small }),
   );
   expect(turn!.systemPrompt).toContain("[fig:1]");
-  expect(turn!.systemPrompt).not.toContain("=== Page 2 ===");
+  expect(turn!.systemPrompt).not.toContain("=== Page 5 ===");
 });
 
 // --- how a turn with no reply is shown (turnFailureView) ---
@@ -1238,7 +1331,7 @@ test("a chat-span aside carries its span and says where it came from", async () 
   expect(turn!.systemPrompt).toContain("This turn is a side conversation");
   expect(turn!.systemPrompt).toContain("pulled one\nsentence out of the lesson");
   // Page-anchored blocks have no meaning for words out of a reply.
-  expect(turn!.systemPrompt).not.toContain("Text around the marked passage");
+  expect(turn!.systemPrompt).not.toContain("The page the marked passage sits on");
   expect(turn!.messages.some((m) => m.images?.length)).toBe(false);
 });
 

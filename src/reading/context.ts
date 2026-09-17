@@ -5,12 +5,16 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/execute/turn";
-import { textAround } from "../fulltext/query";
-import { formatPages, formatSearch, MAX_PAGES, type TopicMaterial } from "../fulltext/format";
+import { estimateTextTokens } from "../budget";
+import {
+  formatPages,
+  formatSearch,
+  MAX_PAGES,
+  type PageLabel,
+  type TopicMaterial,
+} from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";
-
-const SURROUND_RADIUS = 200;
-const SURROUND_MAX = 700;
+import { PAGE_WINDOW_RADIUS } from "./figures/page-window";
 
 // Engine annotation page (0-based position.pageIndex) -> 1-based page for the
 // full-text helpers. Defined with the annotation shape it reads so the units
@@ -47,11 +51,110 @@ export function spineOverviewSection(overview: string | null | undefined, max = 
   ].join("\n");
 }
 
-// A short window of text around a marked page, for the kickoff context. Empty
-// when the book has no usable text layer.
-export function surroundingText(ft: Fulltext, page: number): string {
-  if (ft.status !== "ok") return "";
-  return clip(textAround(ft, page, SURROUND_RADIUS), SURROUND_MAX);
+// --- the pages a marked passage sits in ---
+
+// The ceiling on the whole block. Three typeset pages come to about 2k tokens;
+// a dense one can be twice that, and past this the block costs more than the
+// round trip it exists to save. Measured the way the send path measures
+// (src/budget/estimate.ts), so a CJK page is counted as a CJK page.
+export const MARK_PAGES_MAX_TOKENS = 4000;
+
+// The page header, identical to the one read_pages returns: the model copies the
+// anchor it can see, and one page must not carry two spellings depending on
+// which way it arrived. A supplement's anchor names its title (docs/67).
+function pageLabel(pageAnchor?: (page: number) => string): PageLabel {
+  return (p) => `=== Page ${p} === ${pageAnchor ? pageAnchor(p) : `[p.${p}]`}`;
+}
+
+// Cut `text` down to `maxTokens` on the same estimate. Proportional, then
+// corrected, because the estimate is charged per character class and a straight
+// ratio overshoots on mixed scripts.
+function clipToTokens(text: string, maxTokens: number): string {
+  let out = text;
+  for (let i = 0; i < 12; i++) {
+    const tokens = estimateTextTokens(out);
+    if (tokens <= maxTokens || out.length === 0) break;
+    const next = Math.max(1, Math.floor((out.length * maxTokens) / tokens) - 1);
+    if (next >= out.length) break;
+    out = out.slice(0, next);
+  }
+  return out;
+}
+
+// The pages the block below covers, clamped to the document, or null when there
+// is nothing to inline. The turn's load statement names the same range, so it is
+// answered once and read twice.
+export function markedPageRange(
+  ft: Fulltext | null,
+  page: number,
+): { from: number; to: number } | null {
+  if (!ft || ft.status !== "ok") return null;
+  const total = ft.pages.length;
+  if (page < 1 || page > total) return null;
+  return {
+    from: Math.max(1, page - PAGE_WINDOW_RADIUS),
+    to: Math.min(total, page + PAGE_WINDOW_RADIUS),
+  };
+}
+
+// The page a passage was marked on and the page either side, inlined. The mark
+// used to ride a few hundred characters of text around it, and the model
+// answered by calling read_pages first and answering second — an extra round
+// trip on two turns in three, 6.7s at the median. This is that fetch, made
+// before the turn is sent.
+//
+// Same radius as the page-image window (figures/page-window.ts): a marked
+// passage is answered out of its page and its neighbours, and the rest of the
+// document is what read_pages and read_chapter are for.
+//
+// Empty when the document has no usable text layer or the page is off the end.
+export function markedPagesSection(
+  ft: Fulltext | null,
+  page: number,
+  pageAnchor?: (page: number) => string,
+): string {
+  const span = markedPageRange(ft, page);
+  if (!ft || !span) return "";
+  const label = pageLabel(pageAnchor);
+  const render = (p: number): string => formatPages(ft, p, p, label, 1);
+
+  const { from: first, to: last } = span;
+  const nums: number[] = [];
+  for (let p = first; p <= last; p++) nums.push(p);
+
+  let body = nums.map(render).join("\n\n");
+  let shown = nums.length;
+  const notes: string[] = [];
+  // The neighbours go first: they are the context, the marked page is the
+  // subject. Either cut says so, because a cut the model cannot see reads as
+  // "this is all those pages say".
+  if (nums.length > 1 && estimateTextTokens(body) > MARK_PAGES_MAX_TOKENS) {
+    body = render(page);
+    shown = 1;
+    notes.push(
+      `[The pages either side of p.${page} were left out to keep this turn in budget;`,
+      "read_pages returns them.]",
+    );
+  }
+  if (estimateTextTokens(body) > MARK_PAGES_MAX_TOKENS) {
+    const head = label(page);
+    const room = Math.max(1, MARK_PAGES_MAX_TOKENS - estimateTextTokens(head));
+    body = `${head}\n${clipToTokens(ft.pages[page - 1] ?? "", room)}`;
+    notes.push(`[Page ${page} is cut off here; read_pages returns it in full.]`);
+  }
+
+  return [
+    shown === 1
+      ? "The page the marked passage sits on:"
+      : "The page the marked passage sits on, and the page either side:",
+    "",
+    body,
+    "",
+    ...(notes.length > 0 ? [...notes, ""] : []),
+    "These pages are already in front of you: answer from them and cite them by the",
+    "anchors above. Call read_pages or read_chapter only for pages outside this",
+    "window.",
+  ].join("\n");
 }
 
 // Human phrase for a running/failed tool call, shown in the chat trace.

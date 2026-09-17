@@ -90,6 +90,10 @@ export interface TurnLoad {
   chapter: TableChapter | null;
   // How many body pages went in, when mode is "whole".
   bodyPages?: number;
+  // The pages inlined around a marked passage (reading/context.ts), when this
+  // turn is anchored on one. Named here because the list below is what the model
+  // has, and a turn that inlines nothing else still has these.
+  markedPages?: { from: number; to: number };
   // Counts of the other blocks, so the sentence describes the prompt rather than
   // the app's intentions.
   outlines?: number;
@@ -161,6 +165,16 @@ export function turnLoadStatement(load: TurnLoad): string {
     const c = load.chapter;
     const name = c.number === null ? `"${c.title}"` : `chapter ${c.number} ("${c.title}")`;
     has.push(`the full text of ${name}, p.${c.startPage}-${c.endPage}, above, page by page`);
+  }
+  // Only worth a line when the book's own text is not already above it: inside an
+  // inlined chapter or an inlined book these pages are the same words twice.
+  if (load.markedPages && load.mode === "none") {
+    const { from, to } = load.markedPages;
+    has.push(
+      from === to
+        ? `p.${from} of "${load.bookName}", the page the passage is marked on, above`
+        : `p.${from}-${to} of "${load.bookName}", the marked page and its neighbours, above`,
+    );
   }
   if (load.hasChapterTable) has.push("this book's chapter table with page ranges");
   if (load.outlines) has.push(`the chapter spine, ${load.outlines} chapter(s) of it`);
