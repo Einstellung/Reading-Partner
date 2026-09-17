@@ -18,7 +18,7 @@
 // they are history already written into events-<topicId>.jsonl.
 
 import { appData } from "../../platform/app/appdata";
-import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { createRecordStore } from "../../platform/app/record-store";
 import { requestRemotePurge } from "../../platform/sync";
 import { deleteRehearsalsForRetell } from "../rehearsal/store";
 import {
@@ -31,59 +31,34 @@ import {
 } from "./types";
 import { upsertDecision } from "./outline";
 
-const PREFIX = "retell-";
+// A corrupt or stale-version file reads as null rather than throwing: the list
+// must still draw, and one unreadable retell must not take the topic's whole
+// sidebar with it. Nothing is quarantined, because the listing walks the whole
+// directory and a build that moved every file it did not recognize would turn
+// one rename into a pile of .bad files.
+const records = createRecordStore<Retell>({
+  prefix: "retell-",
+  parse: (raw) => normalizeRetell(raw as Retell),
+  newest: (retell) => retell.createdAt,
+  newId: newRetellId,
+  read: { kind: "warn", message: "failed to read a retell" },
+});
 
-export function retellFile(retellId: string): string {
-  return `${PREFIX}${retellId}.json`;
-}
+export const retellFile = records.file;
 
 // A retell id out of a file name, or null for anything else in the directory.
 // threads-retell-<id>.json is the retell's conversation and does not match: it
 // is prefixed, and the prefix is checked at the start of the name. Neither does
 // rehearsal-<id>.json, nor a talk-<id>.json left by a build before the rename.
-export function retellIdOf(fileName: string): string | null {
-  if (!fileName.startsWith(PREFIX) || !fileName.endsWith(".json")) return null;
-  const id = fileName.slice(PREFIX.length, -".json".length);
-  return id || null;
-}
+export const retellIdOf = records.idOf;
 
-// Missing is normal. A corrupt or stale-version file reads as null rather than
-// throwing: the list must still draw, and one unreadable retell must not take the
-// topic's whole sidebar with it.
-export async function loadRetell(retellId: string): Promise<Retell | null> {
-  try {
-    const file = retellFile(retellId);
-    if (!(await appData.exists(file))) return null;
-    const parsed = JSON.parse(await appData.readText(file)) as Retell;
-    return normalizeRetell(parsed);
-  } catch (e) {
-    console.warn("failed to read a retell", retellId, e);
-    return null;
-  }
-}
+/** The retell, or null when there is none this build can use. Missing is normal. */
+export const loadRetell = records.load;
 
-export async function saveRetell(retell: Retell): Promise<void> {
-  await writeTextAtomic(retellFile(retell.id), JSON.stringify(retell, null, 2));
-}
+export const saveRetell = records.save;
 
-// Every retell on disk, newest first. Unreadable files are skipped.
-export async function listAllRetells(): Promise<Retell[]> {
-  let entries;
-  try {
-    entries = await appData.readDir(".");
-  } catch {
-    return [];
-  }
-  const out: Retell[] = [];
-  for (const e of entries) {
-    if (!e.isFile || !e.name) continue;
-    const id = retellIdOf(e.name);
-    if (!id) continue;
-    const retell = await loadRetell(id);
-    if (retell) out.push(retell);
-  }
-  return out.sort((a, b) => b.createdAt - a.createdAt);
-}
+/** Every retell on disk, newest first. Unreadable files are skipped. */
+export const listAllRetells = records.listAll;
 
 export async function listRetellsForTopic(topicId: string): Promise<Retell[]> {
   return (await listAllRetells()).filter((t) => t.topicId === topicId);
@@ -101,14 +76,13 @@ export interface StartRetellInput {
 // the next free millisecond is taken, because the id is also the deck's
 // directory name and two retells cannot share one.
 export async function startRetell(input: StartRetellInput): Promise<Retell> {
-  let now = input.now ?? Date.now();
-  while (await appData.exists(retellFile(newRetellId(now)))) now += 1;
+  const { id, at } = await records.reserveId(input.now ?? Date.now());
   const retell = newRetell({
-    id: newRetellId(now),
+    id,
     topicId: input.topicId,
     materials: input.materials,
     name: input.name,
-    now,
+    now: at,
   });
   await saveRetell(retell);
   return retell;

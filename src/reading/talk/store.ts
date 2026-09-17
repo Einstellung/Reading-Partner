@@ -22,8 +22,8 @@
 // (reading/retell/store.ts), those files are still on disk, and a listing that
 // picked them up would be showing retells as outlines.
 
-import { appData } from "../../platform/app/appdata";
-import { readGuardedJson, writeTextAtomic } from "../../platform/app/atomic-fs";
+import { readGuardedJson } from "../../platform/app/atomic-fs";
+import { createRecordStore, removeRecordFiles } from "../../platform/app/record-store";
 import { requestRemotePurge } from "../../platform/sync";
 import {
   newTalkOutline,
@@ -32,30 +32,25 @@ import {
   type TalkOutline,
 } from "./types";
 
-const PREFIX = "outline-";
+// Content that will not parse, or that is not this shape, is moved aside before
+// a read answers null — the failure pitfall 339 recorded on slides/retells.json
+// is a loader that answers empty and a writer that then makes the empty version
+// the only one left.
+const records = createRecordStore<TalkOutline>({
+  prefix: "outline-",
+  parse: normalizeTalkOutline,
+  newest: (outline) => outline.createdAt,
+  newId: newTalkOutlineId,
+  read: { kind: "guard" },
+});
 
-export function talkOutlineFile(outlineId: string): string {
-  return `${PREFIX}${outlineId}.json`;
-}
+export const talkOutlineFile = records.file;
 
 /** An outline id out of a file name, or null for anything else in the directory. */
-export function talkOutlineIdOf(fileName: string): string | null {
-  if (!fileName.startsWith(PREFIX) || !fileName.endsWith(".json")) return null;
-  const id = fileName.slice(PREFIX.length, -".json".length);
-  return id || null;
-}
+export const talkOutlineIdOf = records.idOf;
 
-/**
- * The outline, or null when there is none this build can use. Content that will
- * not parse, or that is not this shape, is moved aside by readGuardedJson before
- * the null comes back — the failure pitfall 339 recorded on slides/retells.json is a
- * loader that answers empty and a writer that then makes the empty version the
- * only one left.
- */
-export async function loadTalkOutline(outlineId: string): Promise<TalkOutline | null> {
-  const read = await readGuardedJson(talkOutlineFile(outlineId), normalizeTalkOutline);
-  return read.status === "ok" ? read.value : null;
-}
+/** The outline, or null when there is none this build can use. */
+export const loadTalkOutline = records.load;
 
 /**
  * The same read, for a caller that is about to write the file back. A read that
@@ -76,9 +71,7 @@ async function outlineToEdit(outlineId: string): Promise<TalkOutline | null> {
   return null;
 }
 
-export async function saveTalkOutline(outline: TalkOutline): Promise<void> {
-  await writeTextAtomic(talkOutlineFile(outline.id), JSON.stringify(outline, null, 2));
-}
+export const saveTalkOutline = records.save;
 
 /**
  * Read an outline, change it, and write back only what changed. Answers the
@@ -107,11 +100,7 @@ export async function editTalkOutline(
  * the same reservation a rehearsal makes, so two objects created in one gesture
  * cannot land on one name.
  */
-export async function reserveTalkOutlineId(now = Date.now()): Promise<{ id: string; at: number }> {
-  let at = now;
-  while (await appData.exists(talkOutlineFile(newTalkOutlineId(at)))) at += 1;
-  return { id: newTalkOutlineId(at), at };
-}
+export const reserveTalkOutlineId = records.reserveId;
 
 export interface StartTalkOutlineInput {
   topicId: string;
@@ -134,23 +123,7 @@ export async function startTalkOutline(input: StartTalkOutlineInput): Promise<Ta
 }
 
 /** Every outline on disk, newest first. Unreadable files are skipped. */
-export async function listAllTalkOutlines(): Promise<TalkOutline[]> {
-  let entries;
-  try {
-    entries = await appData.readDir(".");
-  } catch {
-    return [];
-  }
-  const out: TalkOutline[] = [];
-  for (const e of entries) {
-    if (!e.isFile || !e.name) continue;
-    const id = talkOutlineIdOf(e.name);
-    if (!id) continue;
-    const outline = await loadTalkOutline(id);
-    if (outline) out.push(outline);
-  }
-  return out.sort((a, b) => b.createdAt - a.createdAt);
-}
+export const listAllTalkOutlines = records.listAll;
 
 export async function listTalkOutlinesForTopic(topicId: string): Promise<TalkOutline[]> {
   return (await listAllTalkOutlines()).filter((o) => o.topicId === topicId);
@@ -212,9 +185,5 @@ export async function deleteTalkOutline(outlineId: string): Promise<void> {
   } catch (e) {
     console.warn("failed to queue for remote deletion", file, e);
   }
-  try {
-    if (await appData.exists(file)) await appData.remove(file);
-  } catch (e) {
-    console.warn("failed to delete", file, e);
-  }
+  await removeRecordFiles([file]);
 }
