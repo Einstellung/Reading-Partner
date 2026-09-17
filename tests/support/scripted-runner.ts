@@ -20,6 +20,9 @@ import { createSessionFileSystem } from "../../src/platform/app/session-fs";
 import { createTurnSettler } from "../../src/legion/subagent/turn";
 import type { SubagentTurnFn, SubagentTurnRequest } from "../../src/legion/subagent/types";
 import { memoryAppData } from "./memory-appdata";
+import { holdHarness } from "../../src/legion/execute/held";
+import { toPiMessages } from "../../src/ai/providers";
+import type { SendBellTurn } from "../../src/soul";
 import { turnEvents, type Turn } from "./scripted-turn";
 
 export const FAUX_MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
@@ -33,6 +36,9 @@ export interface ScriptedStreamOptions {
   // Fires as each round is asked for (0-based), which is where a test that
   // cancels an in-flight pass raises its signal.
   beforeRound?: (round: number) => void;
+  // Fires with each round's context, for the files that record what was asked
+  // rather than reading it back off `contexts` afterwards.
+  onContext?: (context: Context) => void;
 }
 
 export interface ScriptedStream {
@@ -53,6 +59,7 @@ export function scriptedStream(
     const i = round++;
     options.beforeRound?.(i);
     contexts.push(context);
+    options.onContext?.(context);
     const s = createAssistantMessageEventStream();
     const events = turnEvents(turns[i] ?? exhausted);
     void (async () => {
@@ -104,4 +111,35 @@ export function scriptedSubagentRunner(
     return settler.outcome.finally(() => settler.dispose());
   };
   return { ...scripted, run, requests };
+}
+
+// The bell answered over the real turn machinery with the provider scripted:
+// what is under test at the call sites is the desk the bell is answered over and
+// where the reply goes, never how the stream is decoded.
+export function scriptedBellSender(
+  turns: readonly Turn[],
+  options: ScriptedStreamOptions = {},
+): SendBellTurn {
+  const { stream } = scriptedStream(turns, options);
+  const held = holdHarness({
+    lane: { name: "soul", sessions: "soul" },
+    fileSystem: createSessionFileSystem(memoryAppData()),
+  });
+  return (turn) =>
+    new Promise<string>((resolve, reject) => {
+      void runHarnessTurn({
+        stream,
+        model: FAUX_MODEL,
+        systemPrompt: turn.systemPrompt,
+        messages: toPiMessages(turn.messages),
+        tools: turn.tools,
+        maxRounds: 4,
+        held,
+        onDelta: () => {},
+        onToolStart: () => {},
+        onToolEnd: () => {},
+        onDone: (text) => resolve(text),
+        onError: (message) => reject(new Error(message)),
+      });
+    });
 }

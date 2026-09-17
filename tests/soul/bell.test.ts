@@ -4,20 +4,10 @@
 // Run: scripts/t.sh tests/soul/bell.test.ts
 
 import { beforeEach, expect, test } from "bun:test";
-import {
-  createAssistantMessageEventStream,
-  type Api,
-  type Context,
-  type Message,
-  type Model,
-} from "@earendil-works/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 import { answerBell, renderBell, type SendBellTurn } from "../../src/soul";
 import { createBellStore, type BellStore } from "../../src/legion/bell";
 import { createRunStore } from "../../src/legion/run/store";
-import { holdHarness } from "../../src/legion/execute/held";
-import { runHarnessTurn, type StreamFn } from "../../src/legion/execute/turn";
-import { toPiMessages } from "../../src/ai/providers";
-import { createSessionFileSystem } from "../../src/platform/app/session-fs";
 import { doorKey, doorDate } from "../../src/soul";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
 import {
@@ -29,16 +19,14 @@ import { registerDelivery, type Delivery } from "../../src/soul";
 import { createBoxStore, type BoxStore } from "../../src/box";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 import { mapDisk } from "../support/map-disk";
-import { memoryAppData } from "../support/memory-appdata";
-import { turnEvents, type Turn } from "../support/scripted-turn";
+import type { Turn } from "../support/scripted-turn";
+import { scriptedBellSender } from "../support/scripted-runner";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
   defaultProviderId: "anthropic",
   defaultModelId: "claude-sonnet-4-5",
 };
-
-const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
 
 let disk: FakeDisk;
 beforeEach(() => {
@@ -51,47 +39,13 @@ function bellStore(): { bells: BellStore; files: Map<string, string> } {
   return { bells: createBellStore(io), files: io.files };
 }
 
-// The real turn machinery on the real held harness, with the provider scripted:
-// what is under test is what the bell puts in front of the model and what is
-// done with what comes back, not how the stream is decoded.
+// What the bell put in front of the model each round, which is what this file
+// reads; what is done with what comes back is the other half.
 function sender(turns: Turn[]): { send: SendBellTurn; rounds: Message[][] } {
   const rounds: Message[][] = [];
-  let round = 0;
-  const stream: StreamFn = (_model, context: Context) => {
-    const i = round++;
-    rounds.push(context.messages);
-    const out = createAssistantMessageEventStream();
-    const events = turnEvents(turns[i] ?? { error: "no scripted turn" });
-    (async () => {
-      for (const ev of events) {
-        await Promise.resolve();
-        out.push(ev);
-      }
-      out.end();
-    })();
-    return out;
-  };
-  const held = holdHarness({
-    lane: { name: "soul", sessions: "soul" },
-    fileSystem: createSessionFileSystem(memoryAppData()),
+  const send = scriptedBellSender(turns, {
+    onContext: (context) => void rounds.push(context.messages),
   });
-  const send: SendBellTurn = (turn) =>
-    new Promise<string>((resolve, reject) => {
-      void runHarnessTurn({
-        stream,
-        model: MODEL,
-        systemPrompt: turn.systemPrompt,
-        messages: toPiMessages(turn.messages),
-        tools: turn.tools,
-        maxRounds: 4,
-        held,
-        onDelta: () => {},
-        onToolStart: () => {},
-        onToolEnd: () => {},
-        onDone: (text) => resolve(text),
-        onError: (message) => reject(new Error(message)),
-      });
-    });
   return { send, rounds };
 }
 

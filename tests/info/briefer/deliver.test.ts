@@ -4,20 +4,10 @@
 // Run: scripts/t.sh tests/info/briefer/deliver.test.ts
 
 import { beforeEach, expect, test } from "bun:test";
-import {
-  createAssistantMessageEventStream,
-  type Api,
-  type Context,
-  type Model,
-} from "@earendil-works/pi-ai";
 import { answerBell, doorDate, doorKey, type SendBellTurn } from "../../../src/soul";
 import { createBellStore, type BellStore } from "../../../src/legion/bell";
 import { createBoxStore, type BoxStore } from "../../../src/box";
 import { mapDisk } from "../../support/map-disk";
-import { holdHarness } from "../../../src/legion/execute/held";
-import { runHarnessTurn, type StreamFn } from "../../../src/legion/execute/turn";
-import { toPiMessages } from "../../../src/ai/providers";
-import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
 import { DEFAULT_SETTINGS, type Settings } from "../../../src/platform/app/settings";
 import {
   appendMessage,
@@ -29,8 +19,8 @@ import { registerInfoDesk } from "../../../src/info/briefer/desk";
 import { registerSecretaryRole } from "../../../src/info/briefer/role";
 import { registerBriefingDelivery } from "../../../src/info/briefer/deliver";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
-import { memoryAppData } from "../../support/memory-appdata";
-import { turnEvents, type Turn } from "../../support/scripted-turn";
+import type { Turn } from "../../support/scripted-turn";
+import { scriptedBellSender } from "../../support/scripted-runner";
 
 const DATE = "2026-09-16";
 const BOOK = `info-${DATE}`;
@@ -42,8 +32,6 @@ const settings: Settings = {
   defaultProviderId: "anthropic",
   defaultModelId: "claude-sonnet-4-5",
 };
-
-const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
 
 registerInfoDesk();
 registerSecretaryRole();
@@ -63,46 +51,13 @@ function boxStore(): { box: BoxStore; files: Map<string, string> } {
   return { box: createBoxStore(io), files: io.files };
 }
 
-// The real turn machinery with the provider scripted: what is under test is the
-// desk the bell is answered over and where the reply goes.
+// What each round was asked to say, which is the half of the turn this file
+// reads.
 function sender(turns: Turn[]): { send: SendBellTurn; prompts: string[] } {
   const prompts: string[] = [];
-  let round = 0;
-  const stream: StreamFn = (_model, context: Context) => {
-    const i = round++;
-    prompts.push(String(context.systemPrompt ?? ""));
-    const out = createAssistantMessageEventStream();
-    const events = turnEvents(turns[i] ?? { error: "no scripted turn" });
-    (async () => {
-      for (const ev of events) {
-        await Promise.resolve();
-        out.push(ev);
-      }
-      out.end();
-    })();
-    return out;
-  };
-  const held = holdHarness({
-    lane: { name: "soul", sessions: "soul" },
-    fileSystem: createSessionFileSystem(memoryAppData()),
+  const send = scriptedBellSender(turns, {
+    onContext: (context) => void prompts.push(String(context.systemPrompt ?? "")),
   });
-  const send: SendBellTurn = (turn) =>
-    new Promise<string>((resolve, reject) => {
-      void runHarnessTurn({
-        stream,
-        model: MODEL,
-        systemPrompt: turn.systemPrompt,
-        messages: toPiMessages(turn.messages),
-        tools: turn.tools,
-        maxRounds: 4,
-        held,
-        onDelta: () => {},
-        onToolStart: () => {},
-        onToolEnd: () => {},
-        onDone: (text) => resolve(text),
-        onError: (message) => reject(new Error(message)),
-      });
-    });
   return { send, prompts };
 }
 
