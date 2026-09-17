@@ -155,11 +155,6 @@ export function fitZoom(lock: ZoomLock, viewport: Viewport): number {
   return raw > 0 ? clampZoom(raw) : 1;
 }
 
-/** The fit a layout locks to: fit-width in the column, fit-page in the flip. */
-export function lockedZoom(layout: ReadingLayout, viewport: Viewport): number {
-  return fitZoom(LAYOUT_SETTINGS[layout].zoom, viewport);
-}
-
 // The zoom in effect: a lock that follows the viewport, or a number a pinch or
 // a button left behind.
 export type Zoom = { kind: "lock"; lock: ZoomLock } | { kind: "scale"; scale: number };

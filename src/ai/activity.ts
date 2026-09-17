@@ -20,6 +20,3 @@ export interface TurnActivity {
   name: string;
   phase: "start" | "end";
 }
-
-/** Told about a turn's activity. Returns the unsubscribe where it is a stream. */
-export type TurnActivityListener = (event: TurnActivity) => void;

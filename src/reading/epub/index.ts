@@ -19,7 +19,7 @@ export {
   textSteps,
   type ParsedCfi,
 } from "./cfi";
-export { parseEpub, spineIndexOf, EpubParseError, type EpubBook, type SpineDocument } from "./parse";
+export { parseEpub, EpubParseError, type EpubBook, type SpineDocument } from "./parse";
 export {
   buildArticleEpub,
   MISSING_IMAGE_HEIGHT,
@@ -39,12 +39,11 @@ export {
 export { PAGE_GEOMETRY, PAGE_WIDTH, PAGE_HEIGHT } from "./page-geometry";
 export {
   createPaginationStore,
-  getPagination,
   paginationFile,
   parsePagination,
   putPagination,
 } from "./pagination-store";
-export { fulltextFrom, outlineFor, readEpub, type EpubFulltext } from "./fulltext";
+export { fulltextFrom, outlineFor, type EpubFulltext } from "./fulltext";
 export { extractEpubFulltext } from "./live";
 export { acquireEpub, ensurePagination, heldEpub, preparePagination, releaseEpub } from "./book-cache";
 export { remapEpubAnnotations } from "./migrate";

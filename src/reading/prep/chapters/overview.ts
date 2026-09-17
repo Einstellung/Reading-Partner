@@ -11,7 +11,6 @@
 // the state keeps the name overviewStatus. Pure prompt parts; the AI call is
 // wired in live.ts.
 
-import { type ThinkingLevel } from "@earendil-works/pi-ai";
 import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings";
 
 // The graph prompt for a given output language. The output language is templated
@@ -62,10 +61,4 @@ export function overviewUserMessage(chapters: { index: number; title: string; bo
   }
   parts.push("Write the chapter graph now.");
   return parts.join("\n\n");
-}
-
-export interface OverviewModel {
-  providerId: string;
-  modelId: string;
-  reasoning?: ThinkingLevel;
 }

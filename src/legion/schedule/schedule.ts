@@ -68,10 +68,6 @@ export function registeredSchedules(): Schedule[] {
   return [...registry.values()];
 }
 
-export function scheduleById(id: string): Schedule | null {
-  return registry.get(id) ?? null;
-}
-
 // --- when ---------------------------------------------------------------
 
 interface Anchor {

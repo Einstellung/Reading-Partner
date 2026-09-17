@@ -310,13 +310,6 @@ export function createParseReporter(log: LogFn): ParseReporter {
 // event: instrumentation must never break the pipeline it observes.
 let live = createParseReporter(logEvent);
 
-// The reporter as this module was first imported with. It counts consecutive
-// failures per site and only a success clears them, so the attempt number an
-// event carries is a running total over whatever else ran in the process.
-export function rebuildParseReporterForTests(): void {
-  live = createParseReporter(logEvent);
-}
-
 // Forwarded rather than bound: `live.reportParse` taken once here would still be
 // the reporter the rebuild replaced.
 export const reportParse: ParseReporter["reportParse"] = (input) => live.reportParse(input);

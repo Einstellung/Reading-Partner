@@ -121,10 +121,6 @@ const store = createPaginationStore({
   onError: (e) => reportStoreError("pagination", e),
 });
 
-export function getPagination(bookId: string): Promise<Pagination | null> {
-  return store.get(bookId);
-}
-
 export function readPagination(bookId: string): Promise<StoredPagination> {
   return store.read(bookId);
 }

@@ -231,10 +231,6 @@ export function currentDeviceId(): string {
   return store.id();
 }
 
-export function saveDeviceSettings(settings: DeviceSettings): Promise<void> {
-  return store.save(settings);
-}
-
 export function patchDeviceSettings(patch: Partial<DeviceSettings>): Promise<void> {
   return store.patch(patch);
 }

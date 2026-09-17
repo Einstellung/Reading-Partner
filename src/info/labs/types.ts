@@ -37,8 +37,3 @@ export interface Lab {
 }
 
 export const LABS_VERSION = 1 as const;
-
-export interface LabsFile {
-  version: typeof LABS_VERSION;
-  labs: Lab[];
-}

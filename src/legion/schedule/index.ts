@@ -24,7 +24,6 @@ export {
   lastAnchor,
   registerSchedule,
   registeredSchedules,
-  scheduleById,
   type CronAt,
   type DailyAt,
   type DueSchedule,

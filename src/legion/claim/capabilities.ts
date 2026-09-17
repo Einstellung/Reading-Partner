@@ -36,8 +36,3 @@ export function registerKindCapabilities(kind: string, requires: readonly string
 export function capabilitiesFor(kind: string): readonly string[] | null {
   return needs.get(kind) ?? null;
 }
-
-/** Every kind registered so far. */
-export function registeredKinds(): string[] {
-  return [...needs.keys()];
-}

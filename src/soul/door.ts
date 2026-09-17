@@ -14,7 +14,7 @@
 // is wired to this yet.
 
 import { openDesk, type DeskEnv, type DeskMessage } from "../desk";
-import { registerDistillSource, type SourceUnit } from "../memory";
+import { type SourceUnit } from "../memory";
 import { resolvePalace } from "../palace";
 import { appData } from "../platform/app/appdata";
 import { loadThreads, peekThreads } from "../platform/app/threads";
@@ -121,17 +121,4 @@ export async function listDoorUnits(): Promise<SourceUnit[]> {
     }
   }
   return units;
-}
-
-/**
- * Register the door conversations as a distillation source. For the shell to
- * call on the way up; the undo is for tests.
- */
-export function registerDoorDistillSource(): () => void {
-  return registerDistillSource({
-    kind: DOOR_KIND,
-    listUnits: listDoorUnits,
-    cursor: "distilledMessages",
-    afterEnd: "keep",
-  });
 }

@@ -11,11 +11,9 @@ import {
   PAGINATION_VERSION,
   blockNumberAt,
   blockTexts,
-  paginate,
-  type PageRuler,
   type Pagination,
 } from "./paginate";
-import { parseEpub, type EpubBook } from "./parse";
+import { type EpubBook } from "./parse";
 
 /**
  * The outline, with each entry's page being the position block its target falls
@@ -68,21 +66,6 @@ export function fulltextFrom(book: EpubBook, pagination: Pagination): Omit<Fullt
     // empty strings would have the display show a blank where a number goes.
     ...(labels.some((l) => l !== "") ? { pageLabels: labels } : {}),
   };
-}
-
-/**
- * Read an EPUB end to end. `existing` is the book's stored pagination table when
- * it has one; passing it is what keeps a re-extraction from moving every [p.N]
- * already written down.
- */
-export async function readEpub(
-  bytes: Uint8Array,
-  ruler: PageRuler,
-  existing?: Pagination | null,
-): Promise<EpubFulltext> {
-  const book = parseEpub(bytes);
-  const pagination = existing ?? (await paginate(book, ruler));
-  return { fulltext: fulltextFrom(book, pagination), pagination, book };
 }
 
 export { FULLTEXT_VERSION };

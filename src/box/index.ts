@@ -12,7 +12,6 @@ registerLattice("box-item", joinBoxItemFiles);
 
 export {
   BOX_ITEM_STATES,
-  BOX_SOURCES,
   isBoxItemState,
   isBoxSource,
   isExit,

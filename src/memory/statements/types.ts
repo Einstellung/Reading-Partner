@@ -26,10 +26,6 @@ export function isStatementKind(v: string): v is StatementKind {
 export const STATEMENT_AUTHORS = ["reader", "dream"] as const;
 export type StatementAuthor = (typeof STATEMENT_AUTHORS)[number];
 
-export function isStatementAuthor(v: string): v is StatementAuthor {
-  return (STATEMENT_AUTHORS as readonly string[]).includes(v);
-}
-
 export interface Statement {
   // "s-" + 16 hex, the same 64-bit width an observation id and a message id
   // have (memory/observations/store.ts, platform/app/threads.ts).
