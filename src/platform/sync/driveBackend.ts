@@ -27,6 +27,7 @@
 // (docs/pitfall/52).
 
 import { cleanTauriFetch, type TauriFetch } from "../app/tauri-fetch";
+import { sleep } from "../http/throttled-fetch";
 import {
   isAuthFailure,
   isRetryableFailure,
@@ -126,10 +127,6 @@ function asBody(bytes: Uint8Array): ArrayBuffer {
     return bytes.buffer as ArrayBuffer;
   }
   return bytes.slice().buffer as ArrayBuffer;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((done) => setTimeout(done, ms));
 }
 
 // Anything that is not a status: DNS, TLS, a reset connection, a body that

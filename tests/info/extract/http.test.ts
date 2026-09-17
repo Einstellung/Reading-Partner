@@ -1,6 +1,8 @@
 // fetchText's retry policy (src/info/extract/http.ts): what it waits when a
 // source names a Retry-After, what it waits when it does not, that the cap
-// holds, and that a stopped run does not sit out the cooldown. Fake fetch, fake
+// holds, and that a stopped run does not sit out the cooldown. The loop is
+// platform's (tests/platform/http/throttled-fetch.test.ts covers the header
+// forms once); what is pinned here is the budget info hands it. Fake fetch, fake
 // clock, fake sleep — no network and no real timers. Run: bun test.
 //
 // The assertions are on an ordered log rather than a list of durations, because
@@ -65,15 +67,6 @@ test("a 429 with Retry-After in seconds waits that long before retrying", async 
   expect(h.log).toEqual(["fetch 1", "wait 2000", "waited 2000", "fetch 2"]);
 });
 
-test("a Retry-After given as an HTTP date waits until that date", async () => {
-  const at = new Date(NOW + 12_000).toUTCString();
-  const h = harness([rateLimited(at), ok("later")]);
-
-  await fetchText("https://example.com/a", h.fetchFn, undefined, h.opts);
-
-  expect(h.log).toEqual(["fetch 1", "wait 12000", "waited 12000", "fetch 2"]);
-});
-
 test("a malformed Retry-After falls back to the normal backoff", async () => {
   const h = harness([rateLimited("in a bit"), rateLimited("in a bit"), ok("finally")]);
 
@@ -92,26 +85,24 @@ test("a 429 with no Retry-After at all backs off the same way", async () => {
   expect(h.log).toEqual(["fetch 1", "wait 500", "waited 500", "fetch 2"]);
 });
 
-test("a Retry-After longer than the cap waits only the cap", async () => {
-  const h = harness([rateLimited("3600"), ok("an hour early")]);
-
-  await fetchText("https://example.com/a", h.fetchFn, undefined, h.opts);
-
-  expect(h.log).toEqual([
-    "fetch 1",
-    `wait ${MAX_RETRY_WAIT_MS}`,
-    `waited ${MAX_RETRY_WAIT_MS}`,
-    "fetch 2",
-  ]);
-  expect(MAX_RETRY_WAIT_MS).toBeLessThan(3600 * 1000);
-});
-
 test("a 5xx still retries, and now waits between attempts", async () => {
   const h = harness([() => new Response("boom", { status: 503 }), ok("recovered")]);
 
   const text = await fetchText("https://example.com/a", h.fetchFn, undefined, h.opts);
 
   expect(text).toBe("recovered");
+  expect(h.log).toEqual(["fetch 1", "wait 500", "waited 500", "fetch 2"]);
+});
+
+test("a network error backs off too, instead of retrying flat out", async () => {
+  const boom = (): Response => {
+    throw new TypeError("Failed to fetch");
+  };
+  const h = harness([boom, ok("second time lucky")]);
+
+  const text = await fetchText("https://example.com/a", h.fetchFn, undefined, h.opts);
+
+  expect(text).toBe("second time lucky");
   expect(h.log).toEqual(["fetch 1", "wait 500", "waited 500", "fetch 2"]);
 });
 

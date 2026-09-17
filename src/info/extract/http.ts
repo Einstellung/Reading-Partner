@@ -4,10 +4,9 @@
 // the native fetch is used so bun/dev at least runs. Both feeds gate on a
 // browser User-Agent (see user-agent.ts), so it is forced on the plugin path.
 
-import { isAbortError, throwIfAborted } from "../../platform/app/abort";
 import { isTauri, type FetchFn } from "../../platform/app/host";
 import { cleanTauriFetch } from "../../platform/app/tauri-fetch";
-import { MAX_RETRY_WAIT_MS, retryAfterMs } from "../../platform/http/retry-after";
+import { fetchWithRetry, noThrottle } from "../../platform/http/throttled-fetch";
 import { INFO_USER_AGENT } from "./user-agent";
 
 export type { FetchFn };
@@ -40,58 +39,29 @@ export function retryBackoffMs(attempt: number): number {
   return 500 * 2 ** attempt;
 }
 
-const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-// The wait, cut short when the run is stopped: a briefing the user gave up on
-// must not go on sitting out a rate limiter's cooldown. The loop's abort check
-// turns the short-circuit into an AbortError on the next turn.
-function waitFor(
-  ms: number,
-  sleep: (ms: number) => Promise<void>,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (!signal) return sleep(ms);
-  if (signal.aborted) return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    signal.addEventListener("abort", () => resolve(), { once: true });
-    void sleep(ms).then(resolve);
-  });
-}
-
 // Fetch text with a small retry on network/429/5xx, waiting the `Retry-After` a
-// rate limiter names (capped) or backing off on its own when it names none.
-// Non-OK (404/403) throws so the caller can degrade that one item without
-// failing the whole run. `init` carries per-source request headers (a private
-// API key, a UA override) from the engine.
+// rate limiter names (capped) or backing off on its own when it names none. The
+// loop itself is platform's (throttled-fetch.ts); what is info's own is the
+// budget — a shorter backoff, no per-host spacing (the briefing paces its
+// sources itself) — and that a non-OK status throws, so the caller can degrade
+// that one item without failing the whole run. `init` carries per-source request
+// headers (a private API key, a UA override) from the engine.
 export async function fetchText(
   url: string,
   fetchFn: FetchFn = infoFetch,
   init?: RequestInit,
   opts: FetchTextOptions = {},
 ): Promise<string> {
-  const retries = opts.retries ?? 2;
   const signal = opts.signal;
-  const sleep = opts.sleep ?? defaultSleep;
-  const now = opts.now ?? Date.now;
-  const request: RequestInit | undefined = signal ? { ...init, signal } : init;
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    throwIfAborted(signal);
-    try {
-      const res = await fetchFn(url, request);
-      if (res.ok) return await res.text();
-      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
-        lastErr = new Error(`HTTP ${res.status} from ${url}`);
-        const asked = retryAfterMs(res.headers.get("Retry-After"), now());
-        await waitFor(Math.min(asked ?? retryBackoffMs(attempt), MAX_RETRY_WAIT_MS), sleep, signal);
-        continue;
-      }
-      throw new Error(`HTTP ${res.status} from ${url}`);
-    } catch (e) {
-      lastErr = e;
-      if (isAbortError(e) || signal?.aborted) break;
-      if (attempt >= retries) break;
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+  const res = await fetchWithRetry(url, signal ? { ...init, signal } : init, {
+    retries: opts.retries ?? 2,
+    fetchFn,
+    sleep: opts.sleep,
+    now: opts.now,
+    signal,
+    throttle: noThrottle,
+    backoff: (attempt) => retryBackoffMs(attempt),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
+  return await res.text();
 }

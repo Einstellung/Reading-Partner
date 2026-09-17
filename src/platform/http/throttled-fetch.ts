@@ -1,4 +1,6 @@
-// HTTP for the literature clients and the prep pipeline. Inside Tauri, requests
+// HTTP for the literature clients and the prep pipeline, and the one retry loop
+// every outbound request in the app goes through — info's briefing fetch
+// (info/extract/http.ts) wraps it with its own budget. Inside Tauri, requests
 // go through the http plugin (same posture as the AI fetch bridge): the
 // webview's CORS never sees them, and the allowed hosts live in
 // src-tauri/capabilities/default.json
@@ -7,6 +9,7 @@
 // (plain vite dev) the native fetch is used and CORS failures surface as
 // fetch errors — the pipeline degrades those papers, it doesn't crash.
 
+import { isAbortError, throwIfAborted } from "../app/abort";
 import { isTauri, type FetchFn } from "../app/host";
 import { cleanTauriFetch } from "../app/tauri-fetch";
 import { MAX_RETRY_WAIT_MS, retryAfterMs } from "./retry-after";
@@ -94,9 +97,13 @@ export interface Clock {
   sleep(ms: number): Promise<void>;
 }
 
+// The one wait on a real timer, for every backoff in the app that has no fake
+// clock injected.
+export const sleep = (ms: number): Promise<void> => new Promise<void>((r) => setTimeout(r, ms));
+
 const realClock: Clock = {
   now: () => Date.now(),
-  sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+  sleep,
 };
 
 // A gate that spaces out requests per host. Serializes calls for the same host
@@ -131,7 +138,9 @@ export function createThrottle(
 
 // Process-wide gate used by the real fetch path.
 let hostThrottle = createThrottle(HOST_MIN_INTERVAL_MS, realClock, DEFAULT_HOST_INTERVAL_MS);
-const noopThrottle: Throttle = () => Promise.resolve();
+// For callers that do their own pacing (info's briefing fetch spaces its sources
+// out itself) and for fakes.
+export const noThrottle: Throttle = () => Promise.resolve();
 
 // Exponential backoff with deterministic jitter, exported for tests.
 export function backoffMs(attempt: number, baseMs = 1000): number {
@@ -147,9 +156,30 @@ export interface RetryOptions {
   throttle?: Throttle;
   // Injected by tests. Read only to measure an HTTP-date Retry-After against.
   now?: () => number;
+  // Cancels the request in flight and ends the retry loop. A stopped run must
+  // not spend a retry, nor go on sitting out a rate limiter's cooldown, for a
+  // request the caller already gave up on.
+  signal?: AbortSignal;
+  // The wait when the server names no Retry-After. Jittered exponential by
+  // default; info's briefing fetch doubles from half a second flat, which is a
+  // budget for a user waiting on a page and not for a background pipeline.
+  backoff?: (attempt: number, baseMs: number) => number;
 }
 
-const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// The wait, cut short when the run is stopped. The loop's abort check turns the
+// short-circuit into an AbortError before the next request goes out.
+function waitFor(
+  ms: number,
+  doSleep: (ms: number) => Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!signal) return doSleep(ms);
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    signal.addEventListener("abort", () => resolve(), { once: true });
+    void doSleep(ms).then(resolve);
+  });
+}
 
 // Retry budget for a lookup someone is waiting on — a chat tool mid-conversation,
 // as opposed to the prep pipeline's background fetches. The default budget is
@@ -173,13 +203,15 @@ export function interactiveRetry(fetchFn?: FetchFn): RetryOptions {
 export async function fetchWithRetry(url: string, init?: RequestInit, opts?: RetryOptions): Promise<Response> {
   const retries = opts?.retries ?? 3;
   const doFetch = opts?.fetchFn ?? readingFetch;
-  const sleep = opts?.sleep ?? defaultSleep;
+  const doSleep = opts?.sleep ?? sleep;
   // An injected fetchFn means a fake: don't make it wait on the real per-host
   // gate. The live path (no fetchFn) keeps the process-wide spacing.
-  const throttle = opts?.throttle ?? (opts?.fetchFn ? noopThrottle : hostThrottle);
+  const throttle = opts?.throttle ?? (opts?.fetchFn ? noThrottle : hostThrottle);
   const baseMs = opts?.baseMs ?? 1000;
   const base429 = opts?.base429Ms ?? 5000;
+  const backoff = opts?.backoff ?? backoffMs;
   const now = opts?.now ?? Date.now;
+  const signal = opts?.signal;
   const host = new URL(url).hostname;
 
   let lastError: unknown = null;
@@ -189,7 +221,8 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
   // than adding a second sleep on top of it.
   let waitBeforeNext = 0;
   for (let attempt = 0; attempt <= retries; attempt++) {
-    if (attempt > 0 && waitBeforeNext > 0) await sleep(waitBeforeNext);
+    if (attempt > 0 && waitBeforeNext > 0) await waitFor(waitBeforeNext, doSleep, signal);
+    throwIfAborted(signal);
     await throttle(host);
     try {
       const res = await doFetch(url, init);
@@ -205,14 +238,15 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts?: Ret
         waitBeforeNext =
           asked !== null && asked > 0
             ? Math.min(asked, MAX_RETRY_WAIT_MS)
-            : backoffMs(attempt, base);
+            : backoff(attempt, base);
         continue;
       }
       return res;
     } catch (e) {
+      if (isAbortError(e) || signal?.aborted) throw e;
       lastError = e;
       lastWas429 = false;
-      waitBeforeNext = backoffMs(attempt, baseMs);
+      waitBeforeNext = backoff(attempt, baseMs);
     }
   }
   if (lastWas429) throw new RateLimitError(host);
