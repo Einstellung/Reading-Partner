@@ -4,33 +4,7 @@
 import { expect, test } from "bun:test";
 import type { DreamCandidates } from "../../src/memory/dream/candidates";
 import { parseProposals, validateProposals } from "../../src/memory/dream/proposals";
-import type { Observation } from "../../src/memory/observations/types";
-import type { Statement } from "../../src/memory/statements/types";
-
-function observation(over: Partial<Observation> & { id: string }): Observation {
-  return {
-    type: "stuck-point",
-    summary: "a summary",
-    body: "a body",
-    created: "2026-08-01",
-    updated: "2026-08-01",
-    anchors: { annotationIds: [], messageIds: [] },
-    ...over,
-  };
-}
-
-function statement(over: Partial<Statement> & { id: string }): Statement {
-  return {
-    kind: "profile",
-    text: "reads past the maths",
-    author: "dream",
-    evidence: [],
-    contradictedBy: [],
-    established: "2026-07-02",
-    lastSupported: "2026-08-01",
-    ...over,
-  };
-}
+import { observation, statement } from "../support/memory-fixtures";
 
 // Three observations on three different days, and two statements: one the night
 // wrote and one the reader wrote.

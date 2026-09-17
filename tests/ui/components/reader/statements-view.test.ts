@@ -4,18 +4,16 @@
 import { expect, test } from "bun:test";
 import { statementRows } from "../../../../src/ui/components/reader/statements-view";
 import type { Statement } from "../../../../src/memory";
+import { statement as statementRecord } from "../../../support/memory-fixtures";
 
+// The rows print the text and the date, so both are pinned here.
 function statement(over: Partial<Statement> & { id: string }): Statement {
-  return {
-    kind: "profile",
+  return statementRecord({
     text: "wants the full derivation",
-    author: "dream",
-    evidence: [],
-    contradictedBy: [],
     established: "2026-08-01",
     lastSupported: "2026-08-20",
     ...over,
-  };
+  });
 }
 
 test("a row carries the text, the kind, who said it and when it was last supported", () => {

@@ -9,35 +9,33 @@ import {
 } from "../../src/memory/live/memory-section";
 import type { Observation } from "../../src/memory/observations/types";
 import type { Statement } from "../../src/memory/statements/types";
+import {
+  observation as observationRecord,
+  statement as statementRecord,
+} from "../support/memory-fixtures";
 
 const BOOK = "book-a";
 const STUCK = "m-1111111111111111";
 const READ = "m-2222222222222222";
 
+// The wording and the dates below are what the rendered paragraph is asserted
+// against, so they are spelled out here rather than taken from the fixture.
 function statement(over: Partial<Statement> & { id: string }): Statement {
-  return {
-    kind: "profile",
+  return statementRecord({
     text: "wants the full derivation, not a picture",
-    author: "dream",
-    evidence: [],
-    contradictedBy: [],
     established: "2026-08-01",
     lastSupported: "2026-08-20",
     ...over,
-  };
+  });
 }
 
 function observation(over: Partial<Observation> & { id: string }): Observation {
-  return {
-    type: "stuck-point",
+  return observationRecord({
     summary: "stuck on the softmax scaling",
     body: "",
-    created: "2026-08-01",
-    updated: "2026-08-01",
-    anchors: { annotationIds: [], messageIds: [] },
     bookId: BOOK,
     ...over,
-  };
+  });
 }
 
 const line = (id: string, summary = "a thing that happened", type = "stuck-point") =>

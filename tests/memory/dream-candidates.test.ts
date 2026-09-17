@@ -2,33 +2,7 @@
 
 import { expect, test } from "bun:test";
 import { selectDreamCandidates } from "../../src/memory/dream/candidates";
-import type { Observation } from "../../src/memory/observations/types";
-import type { Statement } from "../../src/memory/statements/types";
-
-function observation(over: Partial<Observation> & { id: string }): Observation {
-  return {
-    type: "stuck-point",
-    summary: "a summary",
-    body: "a body",
-    created: "2026-08-01",
-    updated: "2026-08-01",
-    anchors: { annotationIds: [], messageIds: [] },
-    ...over,
-  };
-}
-
-function statement(over: Partial<Statement> & { id: string }): Statement {
-  return {
-    kind: "profile",
-    text: "about the reader",
-    author: "dream",
-    evidence: [],
-    contradictedBy: [],
-    established: "2026-07-02",
-    lastSupported: "2026-08-01",
-    ...over,
-  };
-}
+import { observation, statement } from "../support/memory-fixtures";
 
 const A = "m-1111111111111111";
 const B = "m-2222222222222222";

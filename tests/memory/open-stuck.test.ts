@@ -4,21 +4,20 @@
 import { expect, test } from "bun:test";
 import { openStuckPoints } from "../../src/memory/observations/open-stuck";
 import type { Observation } from "../../src/memory/observations/types";
+import { observation as record } from "../support/memory-fixtures";
 
 const BOOK = "book-a";
 const OTHER = "book-b";
 
+// Everything here is a stuck point on one book, which is what the function under
+// test asks about; the cases that need the other book say so.
 function observation(over: Partial<Observation> & { id: string }): Observation {
-  return {
-    type: "stuck-point",
+  return record({
     summary: "stuck on the attention formula",
     body: "",
-    created: "2026-08-01",
-    updated: "2026-08-01",
-    anchors: { annotationIds: [], messageIds: [] },
     bookId: BOOK,
     ...over,
-  };
+  });
 }
 
 const STUCK = "m-1111111111111111";
