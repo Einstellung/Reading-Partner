@@ -7,6 +7,7 @@
 import type { Fulltext } from "../../../fulltext/types";
 import type { ParseTally } from "../../../platform/app/structured-output";
 import { chapterRanges, type TableChapter } from "../../chapters";
+import { extractJson, pageBlocks } from "../model-output";
 
 // How many leading pages of the book to hand the model when it has to read the
 // table of contents itself (no PDF outline).
@@ -35,18 +36,11 @@ export const CHAPTER_SPINE_PLAN_SYSTEM_PROMPT = [
 // The leading pages of the book, page-marked, for the model to read the TOC.
 export function planUserMessage(ft: Fulltext, maxPages: number = TOC_MAX_PAGES): string {
   const n = Math.min(ft.pages.length, Math.max(1, maxPages));
-  const parts: string[] = [`Here are the first ${n} pages of the book:`];
-  for (let i = 0; i < n; i++) parts.push(`=== Page ${i + 1} ===\n${ft.pages[i]}`);
-  parts.push("Return the chapter structure now.");
-  return parts.join("\n\n");
-}
-
-// Models wrap JSON in fences or preamble; cut from the first "{" to the last "}".
-export function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("no JSON object in the model output");
-  return text.slice(start, end + 1);
+  return [
+    `Here are the first ${n} pages of the book:`,
+    ...pageBlocks(ft, n),
+    "Return the chapter structure now.",
+  ].join("\n\n");
 }
 
 // Parse the plan call's output into chapters with whole-book page ranges. Throws

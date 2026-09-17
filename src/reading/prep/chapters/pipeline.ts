@@ -25,7 +25,7 @@
 
 import { runWithWatchdog, StoppedError, type AiCallOptions, type WatchdogConfig } from "../../../legion/execute/watchdog";
 import { CallLimiter, type LimiterConfig } from "../../../legion/execute/limiter";
-import { ObservableRun, type RunActivity, type RunSnapshot } from "../../../legion/execute/observable-run";
+import { ObservableRun, type RunActivity, type RunSnapshot, type RunTimers } from "../../../legion/execute/observable-run";
 import type { BookChapter } from "../../chapters";
 import { createChapterSpineState, normalizeChapterSpineOnLoad, type SpineChapter, type ChapterSpineState } from "./types";
 
@@ -53,7 +53,9 @@ export interface ChapterGenInput {
   instruction?: string;
 }
 
-export interface ChapterSpineDeps {
+// The clock, the sleep and the watchdog timer are RunTimers: injected so tests
+// drive the whole state machine on a virtual clock instead of real time.
+export interface ChapterSpineDeps extends RunTimers {
   loadState(bookId: string): Promise<ChapterSpineState | null>;
   saveState(state: ChapterSpineState): Promise<void>;
   buildPlan(opts: AiCallOptions): Promise<PlanOutcome>;
@@ -65,9 +67,6 @@ export interface ChapterSpineDeps {
     opts: AiCallOptions,
   ): Promise<string>;
   writeOverview(body: string): Promise<void>;
-  now(): number;
-  sleep(ms: number): Promise<void>;
-  setTimer(ms: number, cb: () => void): () => void;
 }
 
 // Runtime-only liveness of an in-flight long AI call. Never persisted — it exists
@@ -75,14 +74,10 @@ export interface ChapterSpineDeps {
 // the panel can show a live counter. With several chapters in flight the snapshot
 // carries the one that started earliest; which chapters are running is in the
 // state's per-chapter statuses, where the panel already reads it.
-export interface ChapterSpineActivity {
+export interface ChapterSpineActivity extends RunActivity {
   kind: "plan" | "chapter" | "overview";
   // The chapter index for a "chapter" activity.
   chapter?: number;
-  startedAt: number;
-  chars: number;
-  attempt: number;
-  attempts: number;
 }
 
 export type ChapterSpineSnapshot = RunSnapshot<ChapterSpineState | null, ChapterSpineActivity>;

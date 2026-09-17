@@ -11,6 +11,7 @@ import {
   resolveWatchdogConfig,
   type WatchdogHooks,
 } from "../../../src/legion/execute/watchdog";
+import { makeClock } from "../../support/clock";
 
 // A failure as it reaches the watchdog: pi's AssistantMessage for the failed
 // turn, wrapped the way callModel wraps it.
@@ -18,58 +19,6 @@ function providerFailure(errorMessage: string): ModelCallError {
   return new ModelCallError(errorMessage, {
     assistant: fauxAssistantMessage("", { stopReason: "error", errorMessage }),
   });
-}
-
-// The same virtual clock the prep pipeline tests use: events fire in due-time
-// order, one macrotask tick per step so imminent settles win over the watchdog.
-function makeClock(start = 1000) {
-  interface Ev {
-    at: number;
-    seq: number;
-    fire: () => void;
-    cancelled: boolean;
-  }
-  let now = start;
-  let seq = 0;
-  let pumping = false;
-  const q: Ev[] = [];
-  function schedule(ms: number, fire: () => void): Ev {
-    const ev: Ev = { at: now + Math.max(0, ms), seq: seq++, fire, cancelled: false };
-    q.push(ev);
-    ensurePump();
-    return ev;
-  }
-  function ensurePump(): void {
-    if (pumping) return;
-    pumping = true;
-    void pump();
-  }
-  async function pump(): Promise<void> {
-    for (let guard = 0; guard < 100000; guard++) {
-      await new Promise<void>((r) => setTimeout(r, 0));
-      const live = q.filter((e) => !e.cancelled);
-      if (live.length === 0) {
-        pumping = false;
-        return;
-      }
-      live.sort((a, b) => a.at - b.at || a.seq - b.seq);
-      const ev = live[0];
-      q.splice(q.indexOf(ev), 1);
-      if (ev.at > now) now = ev.at;
-      ev.fire();
-    }
-    pumping = false;
-  }
-  return {
-    now: () => now,
-    sleep: (ms: number) => new Promise<void>((resolve) => schedule(ms, resolve)),
-    setTimer: (ms: number, cb: () => void) => {
-      const ev = schedule(ms, cb);
-      return () => {
-        ev.cancelled = true;
-      };
-    },
-  };
 }
 
 function noopHooks(): WatchdogHooks {

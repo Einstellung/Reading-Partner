@@ -12,7 +12,12 @@ import {
   type AiCallOptions,
   type WatchdogConfig,
 } from "../../../legion/execute/watchdog";
-import { ObservableRun, type RunSnapshot } from "../../../legion/execute/observable-run";
+import {
+  ObservableRun,
+  type RunActivity,
+  type RunSnapshot,
+  type RunTimers,
+} from "../../../legion/execute/observable-run";
 import { cooldownAfter } from "../../../legion/execute/limiter";
 import { isRateLimitError } from "../../../platform/http/throttled-fetch";
 import { abstractNoteBody } from "./notes";
@@ -55,7 +60,9 @@ export interface PlanOutcome {
   papers: PrepPaper[];
 }
 
-export interface PipelineDeps {
+// The clock, the sleep and the watchdog timer are RunTimers: injected so tests
+// drive the whole state machine on a virtual clock instead of real time.
+export interface PipelineDeps extends RunTimers {
   loadState(hash: string): Promise<PrepState | null>;
   saveState(state: PrepState): Promise<void>;
   buildPlan(opts: AiCallOptions): Promise<PlanOutcome>;
@@ -64,27 +71,14 @@ export interface PipelineDeps {
   writeNote(paper: PrepPaper, body: string): Promise<void>;
   // Resolve a user-typed query (title or arXiv id) to a paper stub.
   resolveAddition(query: string, taken: Set<string>): PrepPaper;
-  now(): number;
-  // Wait out a cooldown before re-checking the queue (injected so tests never
-  // touch real timers).
-  sleep(ms: number): Promise<void>;
-  // Schedule the watchdog; returns a cancel handle. Injected so tests drive it
-  // on a virtual clock instead of real setTimeout.
-  setTimer(ms: number, cb: () => void): () => void;
 }
 
 // Runtime-only liveness of the in-flight long AI call. Never persisted in
 // PrepState — it exists only while a plan/digest streams, exposed through the
 // snapshot so the panel can show a live counter.
-export interface PrepActivity {
+export interface PrepActivity extends RunActivity {
   kind: "plan" | "digest";
   slug?: string;
-  startedAt: number;
-  chars: number;
-  // 1-based attempt and the total allowed; attempt > 1 means a retry is in
-  // flight after a stall or stream error.
-  attempt: number;
-  attempts: number;
 }
 
 export type PrepSnapshot = RunSnapshot<PrepState | null, PrepActivity>;

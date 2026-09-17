@@ -7,6 +7,7 @@
 // — from a link the user pasted rather than from the survey's reference list.
 
 import { resolveUrlSource } from "../../sources";
+import { extractJson, pageBlocks } from "../model-output";
 import type { PrepChapter, PrepPaper, PrepReference } from "./types";
 import type { ParseTally } from "../../../platform/app/structured-output";
 import type { Fulltext } from "../../../fulltext/types";
@@ -59,23 +60,10 @@ export const PLAN_SYSTEM_PROMPT = [
 // The survey text with explicit page markers so citedInChapters/startPage can
 // be grounded. No truncation: the survey is the whole input by design.
 export function planUserMessage(ft: Fulltext): string {
-  const parts: string[] = ["Here is the survey, page by page:"];
-  for (let i = 0; i < ft.pages.length; i++) {
-    parts.push(`=== Page ${i + 1} ===\n${ft.pages[i]}`);
-  }
-  return parts.join("\n\n");
+  return ["Here is the survey, page by page:", ...pageBlocks(ft)].join("\n\n");
 }
 
 // --- parsing ---
-
-// Models wrap JSON in fences or preamble despite instructions; cut from the
-// first "{" to the last "}" before parsing.
-export function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("no JSON object in the model output");
-  return text.slice(start, end + 1);
-}
 
 function asString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v.trim() : fallback;

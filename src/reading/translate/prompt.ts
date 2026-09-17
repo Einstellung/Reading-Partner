@@ -13,6 +13,8 @@
 // would otherwise put every following translation under the wrong paragraph,
 // and a translation under the wrong paragraph is worse than no translation.
 
+import { extractJson } from "../prep/model-output";
+
 /** A term the model fixed a rendering for, carried into the next batch. */
 export interface GlossaryEntry {
   source: string;
@@ -140,14 +142,9 @@ export function translateBatchMessage(request: TranslateBatchRequest): string {
   return parts.join("\n\n");
 }
 
-// Models wrap JSON in fences or preamble despite instructions; cut from the
-// first "{" to the last "}" before parsing.
-function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new BatchShapeError("no JSON object in the model output");
-  return text.slice(start, end + 1);
-}
+// A missing JSON object is a shape problem like any other here, so the shared
+// cut (prep/model-output.ts) throws this run's error type.
+const shapeError = (message: string): Error => new BatchShapeError(message);
 
 function asEntries(v: unknown): GlossaryEntry[] {
   if (!Array.isArray(v)) return [];
@@ -174,7 +171,7 @@ export function parseBatchResponse(
 ): TranslateBatchResponse {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(extractJson(raw));
+    parsed = JSON.parse(extractJson(raw, shapeError));
   } catch (err) {
     throw new BatchShapeError(`the model's output was not JSON: ${String(err)}`);
   }
@@ -206,7 +203,7 @@ export function parseBatchResponse(
 export function parseGlossaryResponse(raw: string): GlossaryEntry[] {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(extractJson(raw));
+    parsed = JSON.parse(extractJson(raw, shapeError));
   } catch (err) {
     throw new BatchShapeError(`the glossary was not JSON: ${String(err)}`);
   }

@@ -8,22 +8,19 @@
 import { appData } from "../../../platform/app/appdata";
 import { writeTextAtomic } from "../../../platform/app/atomic-fs";
 import { hashPath } from "../../../platform/app/storage";
+import { loadPrepStateFile, prepDir, readPrepTextFile } from "../store-base";
 import { PREP_VERSION, type PrepState } from "./types";
 
-function dirFor(hash: string): string {
-  return `prep-${hash}`;
-}
-
 function stateFile(hash: string): string {
-  return `${dirFor(hash)}/state.json`;
+  return `${prepDir(hash)}/state.json`;
 }
 
 function noteFile(hash: string, slug: string): string {
-  return `${dirFor(hash)}/${slug}.md`;
+  return `${prepDir(hash)}/${slug}.md`;
 }
 
 function pdfFile(hash: string, slug: string): string {
-  return `${dirFor(hash)}/pdf/${slug}.pdf`;
+  return `${prepDir(hash)}/pdf/${slug}.pdf`;
 }
 
 // The synthetic path that keys a prepped paper's fulltext cache entry (fed
@@ -37,21 +34,11 @@ export function paperFulltextHash(surveyHash: string, slug: string): string {
 }
 
 async function ensurePrepDir(hash: string): Promise<void> {
-  await appData.mkdirp(dirFor(hash));
+  await appData.mkdirp(prepDir(hash));
 }
 
-// Missing state is normal (prep never started); a corrupt or stale-version
-// state reads as null so the pipeline replans instead of crashing.
 export async function loadPrepState(hash: string): Promise<PrepState | null> {
-  try {
-    if (!(await appData.exists(stateFile(hash)))) return null;
-    const parsed = JSON.parse(await appData.readText(stateFile(hash))) as PrepState;
-    if (!parsed || parsed.version !== PREP_VERSION) return null;
-    return parsed;
-  } catch (e) {
-    console.warn("failed to read prep state", e);
-    return null;
-  }
+  return loadPrepStateFile<PrepState>(stateFile(hash), PREP_VERSION, "prep state");
 }
 
 export async function savePrepState(state: PrepState): Promise<void> {
@@ -65,17 +52,11 @@ export async function writePrepNote(hash: string, slug: string, content: string)
 }
 
 export async function readPrepNote(hash: string, slug: string): Promise<string | null> {
-  try {
-    if (!(await appData.exists(noteFile(hash, slug)))) return null;
-    return await appData.readText(noteFile(hash, slug));
-  } catch (e) {
-    console.warn("failed to read prep note", e);
-    return null;
-  }
+  return readPrepTextFile(noteFile(hash, slug), "prep note");
 }
 
 export async function writePaperPdf(hash: string, slug: string, bytes: ArrayBuffer): Promise<void> {
-  await appData.mkdirp(`${dirFor(hash)}/pdf`);
+  await appData.mkdirp(`${prepDir(hash)}/pdf`);
   await appData.writeBytes(pdfFile(hash, slug), new Uint8Array(bytes));
 }
 
