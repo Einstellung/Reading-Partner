@@ -170,6 +170,19 @@ test("an item that is only further along did not collide; two writes of one gene
   expect(collided(dismissed, dismissed)).toBe(false);
 });
 
+test("a field only one side ever wrote is a collision, settled by content", () => {
+  const bare = item({ state: "told", revision: 2, stateAt: 2_000 });
+  const bodied = item({ state: "told", revision: 2, stateAt: 2_000, body: "out/a.md" });
+  expect(collided(bare, bodied)).toBe(true);
+  const merged = mergeBoxItem(bare, bodied);
+  expect(mergeBoxItem(bodied, bare)).toEqual(merged);
+  expect([bare, bodied]).toContainEqual(merged);
+
+  // createdAt is folded, so a side that only knows the item is older is not a
+  // second write of the same generation.
+  expect(collided(item({ createdAt: 500 }), item({ createdAt: 900 }))).toBe(false);
+});
+
 test("the comparator answers zero only when the two are indistinguishable", () => {
   expect(compareBoxItem(item({}), item({}))).toBe(0);
   expect(compareBoxItem(item({}), item({ cover: "another line" }))).not.toBe(0);
