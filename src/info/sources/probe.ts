@@ -11,6 +11,7 @@
 // without a network. The feed parser (parseFeed) and text measurer (htmlToText)
 // are the same DOM-free helpers the engine uses.
 
+import { errMsg } from "../../platform/std/errors";
 import { parseFeed, type FeedEntry } from "./feed";
 import { htmlToText } from "../extract/sanitize";
 import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
@@ -424,10 +425,6 @@ export interface ProbeResult {
   note?: string;
   // The step-by-step probe log, one line per URL tried.
   steps: string[];
-}
-
-function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
 
 // Probe a site: try each feed candidate, then fall back to the homepage. Returns

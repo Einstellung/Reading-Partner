@@ -14,6 +14,8 @@
 //
 // The component keeps pointer binding, the elapsed-seconds timer and JSX.
 
+import { errMsg } from "../../platform/std/errors";
+
 export type PressStatus =
   | "idle"
   // pressed; config load / recorder start in flight.
@@ -179,8 +181,4 @@ export async function beginPress<C>(deps: BeginPressDeps<C>): Promise<BeginOutco
     return { type: "failed", message: errMsg(e) };
   }
   return { type: "started", config };
-}
-
-export function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
