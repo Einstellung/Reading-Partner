@@ -34,6 +34,7 @@
 // removes what reaches out of the archive or out of the page box. What a page
 // card lays over the app's baseline is exactly this tree's CSS.
 
+import { escapeHtmlText } from "../../platform/std/text";
 import { sanitizeCss, sanitizeDeclarations, type CssUrlResolver } from "./css-sanitize";
 import { hrefFragment, resolveZipPath } from "./zip";
 
@@ -184,19 +185,11 @@ export interface SanitizedDocument {
 
 // --- serialization ----------------------------------------------------------
 
-function escapeText(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    // A literal CR in the output is turned into LF by the next parse's input
-    // preprocessing, so the same string renders differently on the read after
-    // this one (docs/pitfall/127).
-    .replace(/\r/g, "&#13;");
-}
-
+// An attribute value here carries the text escaper's CR guard as well, which
+// the one in platform/std does not: these documents are re-parsed on every
+// read and a literal CR would come back as LF (docs/pitfall/127).
 function escapeAttr(s: string): string {
-  return escapeText(s).replace(/"/g, "&quot;");
+  return escapeHtmlText(s).replace(/"/g, "&quot;");
 }
 
 // --- the walk ---------------------------------------------------------------
@@ -306,7 +299,7 @@ function emitChildren(state: WalkState, node: Node): void {
 
 function emit(state: WalkState, node: Node): void {
   if (node.nodeType === 3 /* text */ || node.nodeType === 4 /* cdata */) {
-    state.out.push(escapeText(node.nodeValue ?? ""));
+    state.out.push(escapeHtmlText(node.nodeValue ?? ""));
     return;
   }
   if (node.nodeType !== 1) return; // comments, PIs and doctypes are dropped
@@ -328,7 +321,7 @@ function emit(state: WalkState, node: Node): void {
   }
   if (tag === "style") {
     const css = sanitizeCss(el.textContent ?? "", { resolveUrl: cssResolver(state) });
-    if (css !== "") state.out.push(`<style>${escapeText(css)}</style>`);
+    if (css !== "") state.out.push(`<style>${escapeHtmlText(css)}</style>`);
     return;
   }
   // A <link> is a stylesheet of the archive or nothing: any other relation

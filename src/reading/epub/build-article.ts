@@ -24,7 +24,7 @@
 
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { contentHash } from "../../platform/app/content-hash";
-import { oneLine } from "../../platform/std/text";
+import { escapeXml, oneLine } from "../../platform/std/text";
 import { sanitizeDocument } from "./sanitize";
 
 export interface ArticleImage {
@@ -111,14 +111,6 @@ const FIXED_MTIME = new Date(2001, 0, 1, 12, 0, 0).getTime();
 // constant for the same reason the timestamps above are: the file may not
 // depend on when it was built.
 const FIXED_MODIFIED = "2001-01-01T00:00:00Z";
-
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 // --- images -----------------------------------------------------------------
 

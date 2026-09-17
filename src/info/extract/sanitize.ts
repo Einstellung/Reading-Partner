@@ -23,7 +23,7 @@
 // record renders differently depending on how many times it has been read. Safe
 // twice is a weaker property and it is not the one to test for. Three things
 // here exist only for that property and cost nothing to safety: the CR escape
-// in escapeText, the leading newline in padPre, and the AUTO_CLOSES table with
+// in escapeHtmlText, the leading newline in padPre, and the AUTO_CLOSES table with
 // the extra parse it can ask for. What each of them is compensating for is in
 // docs/pitfall/127; none of it was reasoned out, the fuzzer found all of it.
 //
@@ -43,6 +43,18 @@
 // longer reaches anything: the webview does not fetch these images at all, the
 // Rust img: handler does (docs/pitfall/30), and hotlink protection wants the
 // article's URL in the Referer rather than nothing at all.
+
+// The serializers below write text nodes and attribute values back out. The CR
+// escape in the text one is the round-trip guard docs/pitfall/127 names. In the
+// attribute one, escaping "&" is stability rather than safety: this runs on
+// every read of a stored body, and `https://&#101;vil.example/a.jpg` written
+// out unescaped is `https://evil.example/a.jpg` to the next pass — same record,
+// different host, no attacker beyond the one who wrote the entity. The scheme
+// test is not what that protects ("&" cannot spell http(s)), the rest of the
+// URL is. image-proxy.ts reads src back out of this text with a regex and
+// decodes these four entities before proxying, so a query string's "&" still
+// reaches the img: handler as one character.
+import { escapeHtmlAttr, escapeHtmlText } from "../../platform/std/text";
 
 // Everything that may appear in the output: the tags proseCss.ts styles, plus
 // the inline semantics a news page uses. An element that is not here loses its
@@ -217,42 +229,6 @@ interface TagAttr {
   value: string;
 }
 
-// Text is written back escaped, so no run of characters in a text node can
-// become a tag when the renderer parses this string.
-//
-// CR is escaped for the same reason "&" is in an attribute value: not safety,
-// stability. The tokenizer normalizes a literal CR in the source to LF before
-// anything else looks at it, but a character reference is decoded after that
-// step, so `&#13;` really does put a CR in a text node. Writing it back as a
-// literal CR hands the next parse an LF instead, and `<pre>&#13;&#10;x</pre>`
-// loses its blank line one read later. `&#13;` survives the round trip.
-function escapeText(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\r/g, "&#13;");
-}
-
-// An attribute value for a double-quoted slot. "&" is escaped first, so the
-// value the renderer decodes back out is the value that was checked here.
-// Leaving it bare kept the string safe but not stable: this runs on every read
-// of a stored body, and `https://&#101;vil.example/a.jpg` written out unescaped
-// is `https://evil.example/a.jpg` to the next pass. Same record, different host,
-// no attacker needed beyond the one who wrote the entity. The scheme test is not
-// what this protects — "&" cannot spell http(s) — the rest of the URL is.
-//
-// image-proxy.ts reads src back out of this text with a regex and now decodes
-// these four entities before proxying, so a query string's "&" still reaches the
-// img: handler as one character.
-function escapeAttr(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 // Strip what a browser strips from a URL before it looks at the scheme: C0
 // controls, tab, CR, LF. That is what makes "jav&#x09;ascript:" a javascript:
 // URL to the renderer, so the scheme test below has to read the same string.
@@ -291,7 +267,7 @@ function looksLikeImageUrl(url: string): boolean {
 }
 
 function buildImg(url: string): string {
-  return `<img src="${escapeAttr(url)}" loading="lazy">`;
+  return `<img src="${escapeHtmlAttr(url)}" loading="lazy">`;
 }
 
 // Lazy-load-agnostic image rewrite. Instead of a hard-coded attribute-name list
@@ -344,7 +320,7 @@ function anchorTag(attrs: readonly TagAttr[]): string {
   if (!/^https?:\/\//i.test(cleaned)) return "<a>";
   const url = toHttpUrl(href, false);
   if (!url) return "<a>";
-  return `<a href="${escapeAttr(url)}" target="_blank" rel="noreferrer noopener">`;
+  return `<a href="${escapeHtmlAttr(url)}" target="_blank" rel="noreferrer noopener">`;
 }
 
 function openTag(name: string, attrs: readonly TagAttr[]): string {
@@ -403,7 +379,7 @@ function serializeChildren(root: Element): Pass {
       continue;
     }
     if (item.nodeType === 3) {
-      const text = escapeText(item.nodeValue ?? "");
+      const text = escapeHtmlText(item.nodeValue ?? "");
       if (text !== "") out.push(text);
       continue;
     }
