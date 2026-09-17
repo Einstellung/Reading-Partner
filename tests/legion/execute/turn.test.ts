@@ -818,7 +818,7 @@ test("a loop driven with no telemetry records nothing", async () => {
 // announces every message it writes down — so a turn on a ten-message history
 // hears nine message_end events before its first request goes out. None of
 // them is a call: a line for one would carry round 0, no usage at all, and a
-// duration measured from the epoch (docs/pitfall/325).
+// duration measured from the epoch (docs/pitfall/335).
 test("a replayed assistant message is not a round on either log", async () => {
 	const written: ModelCallInput[] = [];
 	const undo = setModelCallSink(async (calls) => {

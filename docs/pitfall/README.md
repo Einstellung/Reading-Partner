@@ -71,7 +71,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 335）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 336）。
 
 ## EmbedPDF 引擎
 
@@ -341,7 +341,7 @@
 - [308-an-open-operation-blocks-its-lane-until-settled](./308-an-open-operation-blocks-its-lane-until-settled.md) — 重开 session 后上个进程留下的 open operation 让同一条 lane 的新 `accept` 报 `LaneBusy`；`resume()` 写完合成的中断 toolResult 会接着调模型跑完那条没人听的 run，`abort()` 同样写中断结果但以 aborted 结算、不发请求。常驻 lane（soul）重开时逐条 abort，不 resume
 - [313-a-tool-mounted-on-a-global-registry-comes-and-goes](./313-a-tool-mounted-on-a-global-registry-comes-and-goes.md) — `delegate` 按「这台设备登记过 worker 才挂」建，工具清单就跟着一个没有注销口子的模块级 Map 走：单跑绿、整套跑红，哪些文件红取决于文件顺序（坑 303 同一个病根）。工具无条件挂，能跑哪些 kind 写进参数描述，调用时按 kind 拒
 - [324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness](./324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness.md) — soul 每个回合挂一份 `statement_write`，简报的 desk item 又挂一份，回合组装照过、harness 的 `validateToolNames` 才抛 `Duplicate tool name`，而且说不出两边是谁；`assembleTurn` 的重名检查当时只比角色和 item，漏了 soul 自己那套基础工具。工具只挂在一处，检查改成走一遍最终清单、按 name 记 owner
-- [325-accepting-a-prompt-announces-every-replayed-message](./325-accepting-a-prompt-announces-every-replayed-message.md) — harness 为它写进 session 的每条消息发 `message_end`，`lane.accept` 把整段重放历史逐条播出来，埋点把里面的 assistant 消息当成一轮，记出一串 `round: 0`、用量全 null、`ms` 等于 Unix 时间戳的幽灵行。按 `runId` 等于本回合的 `operationId` 分辨，不按 role；另记 `model-calls-*.jsonl` 是读改整体写回加 fire-and-forget，并发写只留最后一个
+- [335-accepting-a-prompt-announces-every-replayed-message](./335-accepting-a-prompt-announces-every-replayed-message.md) — harness 为它写进 session 的每条消息发 `message_end`，`lane.accept` 把整段重放历史逐条播出来，埋点把里面的 assistant 消息当成一轮，记出一串 `round: 0`、用量全 null、`ms` 等于 Unix 时间戳的幽灵行。按 `runId` 等于本回合的 `operationId` 分辨，不按 role；另记 `model-calls-*.jsonl` 是读改整体写回加 fire-and-forget，并发写只留最后一个
 
 ## 开发环境
 
