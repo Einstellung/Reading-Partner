@@ -6,4 +6,4 @@
 
 解法：按 run 分辨，不按 role。harness 流出来的消息带发起它的 operation id（`message_end` 的 `runId`），只写进 session 的消息不带；`turn.ts` 只在 `runId` 等于本回合 `accept` 拿到的 `operationId` 时才记一轮。
 
-读日志时另记一条：`model-calls-*.jsonl` 的同一批幽灵只留下 1 行。`createModelCallLog` 是读整个文件再整体原子写回，而记录是 fire-and-forget 的，19 次并发写各自读到同一份旧内容，最后一个赢。两个 sink 行数对不上不代表只有一个 sink 出错。
+读日志时另记一条：`model-calls-*.jsonl` 的同一批幽灵只留下 1 行——这是并发写互相覆盖的另一个坑，见坑 338。两个 sink 行数对不上不代表只有一个 sink 出错。
