@@ -101,6 +101,14 @@ test("the conversation file is not mistaken for a retell", async () => {
   expect(retellIdOf("rehearsal-100.json")).toBeNull();
 });
 
+// The bytes, not just the object: the file is on the reader's disk and in the
+// sync range, so the name, the indentation and the order of the keys are the
+// contract and not an implementation detail.
+test("a retell is written under its own name, pretty-printed, in the object's own key order", async () => {
+  const made = await startRetell({ topicId: "topic-1", materials: MATERIALS, now: 100 });
+  expect(disk.files.get("retell-100.json")).toBe(JSON.stringify(made, null, 2));
+});
+
 // Files this object left behind when it was called a talk are not read back and
 // not migrated: the listing walks the directory, and nothing there matches.
 test("a file left by a build that called this a talk is not seen", async () => {

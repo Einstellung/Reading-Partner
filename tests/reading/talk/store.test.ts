@@ -35,6 +35,14 @@ test("an outline written comes back the way it went in", async () => {
   expect(await listTalkOutlinesForTopic("topic-2")).toEqual([]);
 });
 
+// The bytes, not just the object: the file is on the reader's disk and in the
+// sync range, so the name, the indentation and the order of the keys are the
+// contract and not an implementation detail.
+test("an outline is written under its own name, pretty-printed, in the object's own key order", async () => {
+  const made = await startTalkOutline({ topicId: "topic-1", name: "智能简史", now: 7 });
+  expect(disk.files.get("outline-7.json")).toBe(JSON.stringify(made, null, 2));
+});
+
 // The name has to be one nothing else in the AppData root answers to. An earlier
 // build wrote the retells as talk-<id>.json and those files are still there.
 test("the listing sees outlines and nothing else in the directory", () => {
