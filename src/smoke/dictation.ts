@@ -18,8 +18,7 @@
 // module's own markers and plays a phrase over a speaker while the microphone
 // is open; each scenario names the phrase it expects to hear.
 
-import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { pointer, renderReport, sleep, stubPointerCapture, writeProbeResult } from "./probe-shell";
 import { holdTheScreen } from "./wake-lock";
 import {
   hasOnDeviceDictation,
@@ -76,8 +75,6 @@ export interface DictationSmokeResult {
   error: string | null;
   timestamp: string;
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // A real hold keeps the screen awake by itself — a finger on the glass resets
 // the idle timer. A synthesised pointer event does not, so without the shared
@@ -227,32 +224,6 @@ async function overlappingStart(): Promise<Record<string, unknown>> {
 
 // --- the composer's own bar -------------------------------------------------
 
-// A synthesised pointer id is not a live pointer, so setPointerCapture throws
-// NotFoundError and would abort the handler before it dispatched `down`. The
-// two capture calls are the only thing stubbed; everything the bar does after
-// them is the shipped path.
-function stubPointerCapture(): void {
-  const proto = Element.prototype as unknown as Record<string, unknown>;
-  proto.setPointerCapture = function () {};
-  proto.releasePointerCapture = function () {};
-}
-
-function pointer(el: Element, type: string, x: number, y: number): void {
-  el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-      pointerId: 1,
-      pointerType: "touch",
-      isPrimary: true,
-      clientX: x,
-      clientY: y,
-      buttons: type === "pointerup" ? 0 : 1,
-    }),
-  );
-}
-
 /// Mounts the real composer bar and holds it. Resolves with whatever the bar
 /// decided to do with the words.
 async function holdTheBar(holdMs: number, glossary?: string): Promise<Record<string, unknown>> {
@@ -356,33 +327,12 @@ function script(): Scenario[] {
 }
 
 async function write(result: DictationSmokeResult): Promise<void> {
-  try {
-    await mkdir(DICTATION_RESULT_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeTextAtomic(DICTATION_RESULT_FILE, JSON.stringify(result, null, 2));
-  } catch (e) {
-    note(`writing the result failed: ${String(e)}`);
-  }
+  await writeProbeResult(DICTATION_RESULT_DIR, DICTATION_RESULT_FILE, result, (e) =>
+    note(`writing the result failed: ${String(e)}`),
+  );
 }
 
-function render(result: DictationSmokeResult): void {
-  const root = document.getElementById("root");
-  if (!root) return;
-  root.innerHTML = "";
-  const box = document.createElement("div");
-  box.style.cssText =
-    "font:13px/1.5 -apple-system,system-ui,sans-serif;padding:14px;color:#111;background:#fff;min-height:100vh";
-  const head = document.createElement("div");
-  head.style.cssText = `font-size:20px;font-weight:700;margin-bottom:10px;color:${
-    result.ok ? "#0a7d28" : "#c00"
-  }`;
-  head.textContent = result.ok ? "DICTATION SMOKE DONE" : `RUNNING — ${result.stage}`;
-  box.appendChild(head);
-  const pre = document.createElement("pre");
-  pre.style.cssText = "white-space:pre-wrap;font-size:11px;margin:0";
-  pre.textContent = JSON.stringify(result, null, 2);
-  box.appendChild(pre);
-  root.appendChild(box);
-}
+const render = (result: DictationSmokeResult) => renderReport(result, "DICTATION SMOKE DONE");
 
 export async function runDictationSmoke(): Promise<void> {
   const result: DictationSmokeResult = {

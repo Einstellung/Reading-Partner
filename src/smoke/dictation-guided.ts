@@ -29,8 +29,7 @@
 // is refused without user activation, and without it the phone locks two
 // minutes in and takes the rest of the script with it (docs/pitfall/162).
 
-import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { pointer, sleep, stubPointerCapture, writeProbeResult } from "./probe-shell";
 import { holdTheScreen } from "./wake-lock";
 import { hasOnDeviceDictation } from "../ai/voice/dictation";
 
@@ -114,8 +113,6 @@ const SCRIPT: Hold[] = [
 const COUNTDOWN_MS = 3000;
 const REST_MS = 2000;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 // --- the screen --------------------------------------------------------------
 
 interface Screen {
@@ -168,38 +165,10 @@ function paint(
   s.clock.textContent = clock;
 }
 
-// A synthesised pointer id is not a live pointer, so setPointerCapture throws
-// NotFoundError and would abort the handler before it dispatched `down`.
-function stubPointerCapture(): void {
-  const proto = Element.prototype as unknown as Record<string, unknown>;
-  proto.setPointerCapture = function () {};
-  proto.releasePointerCapture = function () {};
-}
-
-function pointer(el: Element, type: string, x: number, y: number): void {
-  el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-      pointerId: 1,
-      pointerType: "touch",
-      isPrimary: true,
-      clientX: x,
-      clientY: y,
-      buttons: type === "pointerup" ? 0 : 1,
-    }),
-  );
-}
-
 async function write(result: GuidedResult): Promise<void> {
-  try {
-    await mkdir(GUIDED_RESULT_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeTextAtomic(GUIDED_RESULT_FILE, JSON.stringify(result, null, 2));
-  } catch {
-    // The console still has every timing; a failed write is not worth stopping
-    // a person who is standing there talking.
-  }
+  // The console still has every timing; a failed write is not worth stopping a
+  // person who is standing there talking.
+  await writeProbeResult(GUIDED_RESULT_DIR, GUIDED_RESULT_FILE, result, () => {});
 }
 
 // --- the run -----------------------------------------------------------------

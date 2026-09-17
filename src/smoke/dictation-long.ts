@@ -29,8 +29,8 @@
 // Every record carries a wall clock, so a gap reads as a gap rather than as an
 // absence.
 
-import { mkdir, writeTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { writeTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
+import { sleep, writeProbeResult } from "./probe-shell";
 import { holdTheScreen } from "./wake-lock";
 import {
   joinSpeech,
@@ -81,8 +81,6 @@ export interface LongResult {
   error: string | null;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 // One line, appended, flushed before the next thing happens. Failures are
 // swallowed: a run that cannot write is still worth watching in the console, and
 // throwing here would end the very session under test.
@@ -98,13 +96,9 @@ async function journal(record: Record<string, unknown>): Promise<void> {
 }
 
 async function write(result: LongResult): Promise<void> {
-  try {
-    await mkdir(LONG_RESULT_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeTextAtomic(LONG_RESULT_FILE, JSON.stringify(result, null, 2));
-  } catch {
-    // The console carries the same story; a failed write does not stop a run
-    // that is twenty minutes long.
-  }
+  // The console carries the same story; a failed write does not stop a run that
+  // is twenty minutes long.
+  await writeProbeResult(LONG_RESULT_DIR, LONG_RESULT_FILE, result, () => {});
 }
 
 export async function runLongDictation(): Promise<void> {

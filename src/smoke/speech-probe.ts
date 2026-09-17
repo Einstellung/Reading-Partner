@@ -15,7 +15,13 @@ import { addPluginListener, type PluginListener } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { mkdir, readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import {
+  note,
+  paintPrompt as promptScreen,
+  renderReport,
+  sleep as after,
+  writeProbeResult,
+} from "./probe-shell";
 import { judgeRelayLeg } from "./relay-verdict";
 import { holdTheScreen } from "./wake-lock";
 import {
@@ -23,6 +29,7 @@ import {
   nativeDictation,
   releaseDictationMicrophone,
   type DictationEvent,
+  type DictationSource,
 } from "../ai/voice/dictation";
 
 export const SPEECH_RESULT_DIR = "speech";
@@ -164,6 +171,64 @@ function emptyEcho(label: string, spoken: string): EchoResult {
   };
 }
 
+/// The recogniser every echo leg listens with. The locale is not optional here.
+/// Without one the native side walks `Locale.preferredLanguages` and lands on
+/// en-US, and a Chinese sentence decoded as English comes back as fluent
+/// English nonsense rather than as a bad transcript (docs/pitfall/164) — which
+/// scores zero against every Chinese bigram and reads exactly like an echo
+/// canceller doing its job.
+function echoDictation(): DictationSource | null {
+  return hasOnDeviceDictation() ? nativeDictation({ locale: "zh-CN" }) : null;
+}
+
+/// The player's own `speaking` events, as two promises: one that settles when it
+/// has started and one when it has stopped again. `live` is what says the first
+/// of them settled rather than the timeout beside it.
+async function watchPlayer(): Promise<{
+  listener: PluginListener;
+  started: Promise<void>;
+  ended: Promise<void>;
+  live: () => boolean;
+}> {
+  let live = false;
+  let onStart: (() => void) | null = null;
+  let onEnd: (() => void) | null = null;
+  const started = new Promise<void>((resolve) => (onStart = resolve));
+  const ended = new Promise<void>((resolve) => (onEnd = resolve));
+  const listener = await addPluginListener("voice", "speech", (event: SpeechEvent) => {
+    if (event.kind !== "speaking") return;
+    if (event.value === 1) {
+      live = true;
+      onStart?.();
+      return;
+    }
+    if (live) onEnd?.();
+  });
+  return { listener, started, ended, live: () => live };
+}
+
+/// What every echo leg does on the way out, however it got there. The
+/// microphone goes between legs: the next one switches the voice-processing
+/// unit, and a switch under a live recogniser is a different experiment.
+async function closeEcho(
+  out: EchoResult,
+  source: DictationSource | null,
+  dictating: boolean,
+  player: { listener: PluginListener } | null,
+  began: number,
+): Promise<void> {
+  if (dictating && source) {
+    try {
+      await source.cancel();
+    } catch {
+      // The stack the next leg builds is the one that matters.
+    }
+  }
+  await player?.listener.unregister();
+  await releaseDictationMicrophone();
+  out.wallMs = Math.round(performance.now() - began);
+}
+
 /// Peak and mean of the level events, folded in as they arrive so that nothing
 /// has to hold thousands of them.
 function newMeter() {
@@ -183,35 +248,12 @@ function newMeter() {
   };
 }
 
-const after = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-function render(result: SpeechResult): void {
-  const root = document.getElementById("root");
-  if (!root) return;
-  root.innerHTML = "";
-  const box = document.createElement("div");
-  box.style.cssText =
-    "font:13px/1.5 -apple-system,system-ui,sans-serif;padding:14px;color:#111;background:#fff;min-height:100vh";
-  const head = document.createElement("div");
-  head.style.cssText = `font-size:20px;font-weight:700;margin-bottom:10px;color:${
-    result.ok ? "#0a7d28" : "#c00"
-  }`;
-  head.textContent = result.ok ? "SPEECH PROBE DONE" : `RUNNING — ${result.stage}`;
-  box.appendChild(head);
-  const pre = document.createElement("pre");
-  pre.style.cssText = "white-space:pre-wrap;font-size:11px;margin:0";
-  pre.textContent = JSON.stringify(result, null, 2);
-  box.appendChild(pre);
-  root.appendChild(box);
-}
+const render = (result: SpeechResult) => renderReport(result, "SPEECH PROBE DONE");
 
 async function write(result: SpeechResult): Promise<void> {
-  try {
-    await mkdir(SPEECH_RESULT_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeTextAtomic(SPEECH_RESULT_FILE, JSON.stringify(result, null, 2));
-  } catch (e) {
-    console.error("writing the speech result failed", e);
-  }
+  await writeProbeResult(SPEECH_RESULT_DIR, SPEECH_RESULT_FILE, result, (e) =>
+    console.error("writing the speech result failed", e),
+  );
 }
 
 /// Generous — the fixture is 75 s of speech and the measured pace adds its
@@ -396,14 +438,9 @@ async function runEcho(
   out.vpio = vpio;
   const meter = newMeter();
 
-  let listener: PluginListener | null = null;
+  let player: Awaited<ReturnType<typeof watchPlayer>> | null = null;
   let dictating = false;
-  // The locale is not optional here. Without one the native side walks
-  // `Locale.preferredLanguages` and lands on en-US, and a Chinese sentence
-  // decoded as English comes back as fluent English nonsense rather than as a
-  // bad transcript (docs/pitfall/164) — which scores zero against every Chinese
-  // bigram and reads exactly like an echo canceller doing its job.
-  const source = hasOnDeviceDictation() ? nativeDictation({ locale: "zh-CN" }) : null;
+  const source = echoDictation();
   try {
     if (!source) throw new Error("This device has no on-device dictation.");
     await invoke("plugin:voice|speech_probe", {
@@ -411,20 +448,7 @@ async function runEcho(
     });
     await after(800);
 
-    let live = false;
-    let started: (() => void) | null = null;
-    let ended: (() => void) | null = null;
-    const speakingStarted = new Promise<void>((resolve) => (started = resolve));
-    const speakingEnded = new Promise<void>((resolve) => (ended = resolve));
-    listener = await addPluginListener("voice", "speech", (event: SpeechEvent) => {
-      if (event.kind !== "speaking") return;
-      if (event.value === 1) {
-        live = true;
-        started?.();
-        return;
-      }
-      if (live) ended?.();
-    });
+    player = await watchPlayer();
 
     await invoke("plugin:voice|speech_probe", {
       args: {
@@ -435,8 +459,8 @@ async function runEcho(
         limit: sentences,
       },
     });
-    await Promise.race([speakingStarted, after(20_000)]);
-    if (!live) throw new Error("The player never started, so there was nothing to hear.");
+    await Promise.race([player.started, after(20_000)]);
+    if (!player.live()) throw new Error("The player never started, so there was nothing to hear.");
 
     await source.start((event: DictationEvent) => {
       // Levels are the meter. They say nothing about what was transcribed, but
@@ -446,7 +470,7 @@ async function runEcho(
       else out.events += 1;
     });
     dictating = true;
-    await Promise.race([speakingEnded, after(120_000)]);
+    await Promise.race([player.ended, after(120_000)]);
     // The tail of the last sentence is still settling when the player stops.
     await after(1500);
     out.heard = await source.stop();
@@ -457,18 +481,7 @@ async function runEcho(
   } catch (e) {
     out.error = String(e);
   } finally {
-    if (dictating && source) {
-      try {
-        await source.cancel();
-      } catch {
-        // The stack the next leg builds is the one that matters.
-      }
-    }
-    await listener?.unregister();
-    // The microphone goes between legs: the next one switches the unit, and a
-    // switch under a live recogniser is a different experiment.
-    await releaseDictationMicrophone();
-    out.wallMs = Math.round(performance.now() - began);
+    await closeEcho(out, source, dictating, player, began);
   }
   return out;
 }
@@ -486,31 +499,9 @@ const HUMAN_DUPLEX_LINE = "今天天气很好，我们出去走一走吧。";
 
 /// The only channel the human legs have. One of them plays nothing at all and
 /// the other plays something the reader is told to ignore, so the screen is
-/// what says when to start. Repainted on every tick: a dozen repaints over a
-/// dozen seconds costs nothing and there is no state to keep.
-function paintPrompt(head: string, line: string, note: string, go: boolean): void {
-  const root = document.getElementById("root");
-  if (!root) return;
-  root.innerHTML = "";
-  const box = document.createElement("div");
-  box.style.cssText =
-    "font:15px/1.6 -apple-system,system-ui,sans-serif;padding:24px;min-height:100vh;" +
-    `background:${go ? "#0a7d28" : "#101418"};color:#fff;box-sizing:border-box;` +
-    "display:flex;flex-direction:column;justify-content:center;gap:20px";
-  const title = document.createElement("div");
-  title.style.cssText = "font-size:28px;font-weight:800;letter-spacing:.5px";
-  title.textContent = head;
-  const sentence = document.createElement("div");
-  sentence.style.cssText =
-    "font-size:32px;font-weight:600;line-height:1.5;padding:16px;border-radius:12px;" +
-    "background:rgba(255,255,255,.14)";
-  sentence.textContent = line;
-  const foot = document.createElement("div");
-  foot.style.cssText = "font-size:20px;opacity:.85";
-  foot.textContent = note;
-  box.append(title, sentence, foot);
-  root.appendChild(box);
-}
+/// what says when to start.
+const paintPrompt = (head: string, line: string, hint: string, go: boolean) =>
+  promptScreen(head, line, hint, go, { sentencePx: 32, footPx: 20 });
 
 /// The positive control. Everything `echo-vpio-on` does — voice processing on,
 /// the same microphone, the same recogniser, the same bigram scoring against
@@ -537,14 +528,9 @@ async function runHuman(
   const out = emptyEcho(label, target);
   const meter = newMeter();
 
-  let listener: PluginListener | null = null;
+  let player: Awaited<ReturnType<typeof watchPlayer>> | null = null;
   let dictating = false;
-  // The locale is not optional here. Without one the native side walks
-  // `Locale.preferredLanguages` and lands on en-US, and a Chinese sentence
-  // decoded as English comes back as fluent English nonsense rather than as a
-  // bad transcript (docs/pitfall/164) — which scores zero against every Chinese
-  // bigram and reads exactly like an echo canceller doing its job.
-  const source = hasOnDeviceDictation() ? nativeDictation({ locale: "zh-CN" }) : null;
+  const source = echoDictation();
   try {
     if (!source) throw new Error("This device has no on-device dictation.");
     // The same switch the echo legs make, in the same place, and a no-op by the
@@ -562,30 +548,18 @@ async function runHuman(
       await after(1000);
     }
 
-    let live = false;
-    let started: (() => void) | null = null;
-    let ended: (() => void) | null = null;
-    const speakingStarted = new Promise<void>((resolve) => (started = resolve));
-    const speakingEnded = new Promise<void>((resolve) => (ended = resolve));
-
     if (options.duplex) {
-      listener = await addPluginListener("voice", "speech", (event: SpeechEvent) => {
-        if (event.kind !== "speaking") return;
-        if (event.value === 1) {
-          live = true;
-          started?.();
-          return;
-        }
-        if (live) ended?.();
-      });
+      player = await watchPlayer();
       // Player first and microphone second, for the reason the echo leg gives:
       // a stack that has a player can take a microphone, a stack that has none
       // has to be rebuilt to get one, and the rebuild takes the recogniser.
       await invoke("plugin:voice|speech_probe", {
         args: { label, source: "trimmed", pace: "burst", fixtureDir, limit: options.played },
       });
-      await Promise.race([speakingStarted, after(20_000)]);
-      if (!live) throw new Error("The player never started, so there was nothing to talk over.");
+      await Promise.race([player.started, after(20_000)]);
+      if (!player.live()) {
+        throw new Error("The player never started, so there was nothing to talk over.");
+      }
     }
 
     await source.start((event: DictationEvent) => {
@@ -600,7 +574,7 @@ async function runHuman(
     // The duplex leg keeps listening until the player is done, so that the
     // played text is scored over its whole length and not over the reader's
     // window.
-    if (options.duplex) await Promise.race([speakingEnded, after(60_000)]);
+    if (player) await Promise.race([player.ended, after(60_000)]);
     await after(1500);
 
     out.heard = await source.stop();
@@ -611,16 +585,7 @@ async function runHuman(
   } catch (e) {
     out.error = String(e);
   } finally {
-    if (dictating && source) {
-      try {
-        await source.cancel();
-      } catch {
-        // The stack the next leg builds is the one that matters.
-      }
-    }
-    await listener?.unregister();
-    await releaseDictationMicrophone();
-    out.wallMs = Math.round(performance.now() - began);
+    await closeEcho(out, source, dictating, player, began);
   }
   return out;
 }
@@ -628,21 +593,6 @@ async function runHuman(
 /// `live` adds the leg that synthesises. It is off by default because it needs
 /// a key and a network, and the fixture legs are the control that must keep
 /// working without either.
-/// A line on the device console, from the webview. `console.log` in a WKWebView
-/// reaches nothing a cable can read, so it goes through the plugin and out of
-/// NSLog, where `idevicesyslog -p 'Reading Partner'` picks it up. The arguments
-/// besides `label` are only there because the probe's argument type requires
-/// them. Never throws: a broken breadcrumb must not end a run.
-async function note(text: string): Promise<void> {
-  try {
-    await invoke("plugin:voice|speech_probe", {
-      args: { label: text, source: "trimmed", pace: "burst", fixtureDir: "", mode: "note" },
-    });
-  } catch {
-    /* the run matters, the breadcrumb does not */
-  }
-}
-
 export async function runSpeechProbe(
   options: { live?: boolean; echoOnly?: boolean; control?: boolean } = {},
 ): Promise<void> {

@@ -13,8 +13,7 @@
 // get_app_container); the on-screen status is only a human witness for the
 // screenshot artifact.
 
-import { mkdir, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { writeTextAtomic } from "../platform/app/atomic-fs";
+import { writeProbeResult } from "./probe-shell";
 import type { PdfEngine } from "@embedpdf/models";
 import { getPdfiumEngine, pdfiumEngineMode } from "../reading/engine/engine-singleton";
 import { SMOKE_PDF_BASE64, decodeBase64 } from "./smoke-pdf";
@@ -99,14 +98,11 @@ async function analyzeBlob(
 }
 
 async function writeResult(result: SmokeResult): Promise<void> {
-  try {
-    await mkdir(SMOKE_RESULT_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeTextAtomic(SMOKE_RESULT_FILE, JSON.stringify(result, null, 2));
-  } catch (e) {
+  await writeProbeResult(SMOKE_RESULT_DIR, SMOKE_RESULT_FILE, result, (e) => {
     // The file is the machine verdict; if even this fails, surface it on screen
     // so the screenshot still carries the reason.
     renderStatus({ ...result, error: `${result.error ?? ""}\n[writeResult failed] ${String(e)}` });
-  }
+  });
 }
 
 function renderStatus(result: SmokeResult, pageCanvas?: HTMLCanvasElement): void {
