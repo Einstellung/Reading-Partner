@@ -45,7 +45,7 @@ EmbedPDF 的 WASM 是 PDFium(C++)编译产物,渲染是黑盒调用,我们不写
 
 `position.rects` 是 `[left, top, right, bottom]`，PDF pt 文档坐标系（存疑项 3 的翻转公式转成 EmbedPDF 的 top-left 页坐标）。
 
-残余坑（[pitfall/](./pitfall/)）：02 sumPrecise polyfill、04 程序化选中不弹窗、07 image 标注膨胀、10 跨 realm Uint8Array、11 引擎就绪才能调。
+残余坑（[pitfall/](../pitfall/)）：02 sumPrecise polyfill、04 程序化选中不弹窗、07 image 标注膨胀、10 跨 realm Uint8Array、11 引擎就绪才能调。
 
 ## 适配层形态（和调研预期的差异）
 

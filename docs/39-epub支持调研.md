@@ -12,7 +12,7 @@
 
 阶段 2 落地：`src/reading/epub/` 解 zip、消毒、分页、全文、大纲、图目录，intake 认 EPUB，阅读区先给占位。
 
-渲染 spike 见 [62](./62-epub渲染spike.md)：blob iframe 在 iOS 和 WebKitGTK 上都能用且同源；不给 `allow-scripts` 的代价是 iframe 里一个 DOM 事件都不派发（坑 244），事件全部挪到父页；CSP 要 `style-src`/`font-src`/`frame-src` 三项一起加 `blob:`（坑 245）。
+渲染 spike 见 [epub渲染spike](./research/epub渲染spike.md)：blob iframe 在 iOS 和 WebKitGTK 上都能用且同源；不给 `allow-scripts` 的代价是 iframe 里一个 DOM 事件都不派发（坑 244），事件全部挪到父页；CSP 要 `style-src`/`font-src`/`frame-src` 三项一起加 `blob:`（坑 245）。
 
 阶段 3 落地：`EpubReaderPane` 实现 `ViewInstance`，阅读位置（CFI）、`[p.N]` 跳转、引文高亮、布局切换、字号、大纲跳转都走现有的壳。三条与本文原判断不同的做法：
 
@@ -228,7 +228,7 @@ zip 解压用 fflate（MIT，0.8.3，无依赖）。XHTML 用 DOMParser，测试
 
 - iOS WKWebView 自定义协议下能不能建 `blob:` iframe。坑 99 记的是桌面 WebKitGTK 的 `on_navigation` 行为，iOS 侧没测过。
 - COEP `require-corp` 下 blob iframe 和 blob 资源是否放行。坑 33 记着 iOS 自定义协议下没有跨源隔离。
-- 长章节上 CSS multi-column 的分页耗时和内存。docs/08 记过 WKWebView 有页面进程内存上限，PDFium 的堆已经占了一份。
+- 长章节上 CSS multi-column 的分页耗时和内存。[EmbedPDF spike](./research/EmbedPDF-spike结果.md) 记过 WKWebView 有页面进程内存上限，PDFium 的堆已经占了一份。
 - iframe 里的文本选择手柄和系统 callout。坑 49 是在阅读区根节点关掉 `user-select` 解决的，这次要在 iframe 里重新面对。
 - 笔手路由。坑 37/38/117 那套是给 EmbedPDF 的页 div 写的，iframe 里要重来，且坑 117 记着 iOS 和桌面的触摸抢占参数完全不同。
 - Web Crypto 的 SHA-1 在自定义协议下可用（字体解混淆），`Intl.Segmenter` 可用（搜索分词）。

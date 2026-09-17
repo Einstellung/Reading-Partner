@@ -1,7 +1,7 @@
 // The one parsed copy of the open book, and the one pagination per open. An
 // EPUB is read twice over — once by the ingestion (full text, figures) and once
 // by the reading pane — and both want the same archive: unzipping a 71 MB book
-// costs 1.2 seconds and 150 MB of resident memory (docs/62 §4), which is not a
+// costs 1.2 seconds and 150 MB of resident memory (docs/research/epub渲染spike.md §4), which is not a
 // thing to do twice.
 //
 // It lives here rather than in a store because it is not persisted state: it is

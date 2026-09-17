@@ -41,7 +41,7 @@ export interface DreamRunInput extends DreamInput {
 }
 
 // Which of the four the night ended in. The enum is the waterline rule
-// (docs/49, "结局枚举决定水位线"): "merged" and "no-change" advance
+// (docs/research/dream调研.md, "结局枚举决定水位线"): "merged" and "no-change" advance
 // lastInputHash, "failed" leaves it where it was so the same input is
 // reconsidered rather than written off.
 //

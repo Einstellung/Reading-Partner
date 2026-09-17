@@ -24,4 +24,4 @@ WebKit bug 218086。sandbox 关掉脚本的同时把事件派发一起关了，�
 
 - 点击翻页、笔手路由、高亮命中测试（`overlayer.hitTest(event)`）都要在父页的容器上做，用坐标换算进 frame，不能在 frame 的 document 上监听。
 - 系统自己的东西不受影响：长按仍然出 iOS 选区手柄和 callout，选区仍然落在 frame 的 document 上，父页 `cd.getSelection()` 读得到（实测有值）。所以「选中一段文字变成标注」这条路还在，走的是轮询/父页手势，不是 frame 里的 `selectionchange`。
-- 想恢复事件就只能给 `allow-scripts`，那就必须先有一道消毒把书里的 `<script>` 和 `on*` 删干净，安全性从"浏览器保证"降级成"我们的清洗代码保证"。这个取舍见 docs/62。
+- 想恢复事件就只能给 `allow-scripts`，那就必须先有一道消毒把书里的 `<script>` 和 `on*` 删干净，安全性从"浏览器保证"降级成"我们的清洗代码保证"。这个取舍见 [epub 渲染 spike](../research/epub渲染spike.md)。

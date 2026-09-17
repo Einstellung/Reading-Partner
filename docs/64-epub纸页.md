@@ -1,6 +1,6 @@
 # EPUB 纸页
 
-EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 docs/62 的 iframe 重排路线，docs/39 的「位置块」概念改为「排出来的页」。
+EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 [epub 渲染 spike](./research/epub渲染spike.md) 的 iframe 重排路线，docs/39 的「位置块」概念改为「排出来的页」。
 
 这份只管 iPad 和 PC。手机不排纸页，用自己的重排列，见 [docs/70](70-手机读EPUB.md)；坐标系（分页表、CFI、标注形状）两边同一份。
 

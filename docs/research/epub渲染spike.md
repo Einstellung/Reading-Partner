@@ -1,6 +1,6 @@
 # EPUB 渲染 spike
 
-iframe 那条路已被 [64](./64-epub纸页.md) 取代：正文在 shadow DOM 页卡片里，事件在 app 的 DOM 里。第二、七节的事件结论只当历史。
+iframe 那条路已被 [64](../64-epub纸页.md) 取代：正文在 shadow DOM 页卡片里，事件在 app 的 DOM 里。第二、七节的事件结论只当历史。
 
 把 docs/39 第七节里"只有真机才能验的"逐条量了一遍，并把 foliate-js vendor 进仓库跑通。产出是结论，不是功能。
 
@@ -82,7 +82,7 @@ book 对象按 docs/39 说的自己实现：zip 用 fflate 的 `unzipSync`，喂
 
 首屏不受书大小影响：foliate 一次只排一个 spine 项，13ms 就有东西可读。花钱的是 `unzipSync` 一次把 71 MB 解开。
 
-内存看 WebContent 进程的 RSS（iOS 上 `performance.memory` 不存在，数只能从进程外取）：打开 71 MB 那本前 621 MB，打开后 775 MB，读到中段峰值 775 MB，回落到 691 MB。一本书 +154 MB，而 PDFium 的堆已经占着一份。docs/08 记的页面进程内存上限在这里是真实约束。
+内存看 WebContent 进程的 RSS（iOS 上 `performance.memory` 不存在，数只能从进程外取）：打开 71 MB 那本前 621 MB，打开后 775 MB，读到中段峰值 775 MB，回落到 691 MB。一本书 +154 MB，而 PDFium 的堆已经占着一份。[EmbedPDF spike](./EmbedPDF-spike结果.md) 记的页面进程内存上限在这里是真实约束。
 
 翻到书的最后一页之后 `next()` 不再发 `relocate`，等它的代码会一直等——探针里要有超时。
 
@@ -143,7 +143,7 @@ iPad Pro 11-inch (M5) / iOS 26.5，`tauri ios dev`，竖屏，阅读区 834×111
 
 `Fundamentals of Active Inference`（71 MB，1088 个位置块），点卡片到首屏可读 709 ms（含一次 bridge 往返，是上界）。
 
-WebContent 进程 RSS：打开前 524 MB，打开后 1019 MB。一本书 +495 MB，是 docs/62 第四节只量渲染那半时（+154 MB）的三倍多——摄入解包、消毒后的整棵树、分页表和渲染各持有一份。docs/08 记的页面进程内存上限在这里是硬约束，71 MB 已经在能开的上限附近。
+WebContent 进程 RSS：打开前 524 MB，打开后 1019 MB。一本书 +495 MB，是本文第四节只量渲染那半时（+154 MB）的三倍多——摄入解包、消毒后的整棵树、分页表和渲染各持有一份。[EmbedPDF spike](./EmbedPDF-spike结果.md) 记的页面进程内存上限在这里是硬约束，71 MB 已经在能开的上限附近。
 
 ### 三件没解决的
 

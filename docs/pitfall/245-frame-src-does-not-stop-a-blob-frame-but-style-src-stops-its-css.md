@@ -26,4 +26,4 @@
 
 判断 blob 子资源有没有被拦，只能看效果，不能等违规事件：读 `contentDocument` 的 `getComputedStyle`（CSS 有没有生效）和 `document.fonts.size`（字体有没有加载）。`epub-spike.html` 的探针就是这么写的。
 
-EPUB 渲染要放行的是三项，不是一项：`frame-src`、`style-src`、`font-src` 都加 `blob:`。见 docs/62。
+EPUB 渲染要放行的是三项，不是一项：`frame-src`、`style-src`、`font-src` 都加 `blob:`。见 [epub 渲染 spike](../research/epub渲染spike.md)。

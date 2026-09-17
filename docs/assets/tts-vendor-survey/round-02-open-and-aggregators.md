@@ -1,6 +1,6 @@
 # 开放权重与聚合平台
 
-> TTS 供应商横评的原始输出，机械转写自 JSON，措辞未改。结论已吸收进 [46](../../46-TTS供应商横评.md)。
+> TTS 供应商横评的原始输出，机械转写自 JSON，措辞未改。结论已吸收进 [TTS供应商横评](../../research/TTS供应商横评.md)。
 >
 > 本轮的 JSON 是候选表形态（每个候选一组字段加一个 sourceUrl），不是 companion-research 那种一条 finding 一个 Source/Date/Confidence 的形态，逐条日期与置信度在源数据里就不存在，此处不补。抓取日期统一为 2026-08-27。
 >

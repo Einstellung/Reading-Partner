@@ -131,7 +131,7 @@ final class SpeechOut {
     static let shared = SpeechOut()
 
     /// 24 kHz mono float32, deinterleaved: what Core Audio calls its standard
-    /// format and what every vendor in docs/46 returns. A sentence that arrives
+    /// format and what every vendor in docs/research/TTS供应商横评.md returns. A sentence that arrives
     /// at any other rate is refused rather than resampled — a resampler here
     /// would hide a vendor change that the account in SpeechClock depends on.
     static let sampleRate: Double = 24000

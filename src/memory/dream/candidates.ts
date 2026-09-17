@@ -4,7 +4,7 @@
 // observations no standing statement has read yet, and the statements that
 // still stand. There is no window and no nightly cap — the store is in the
 // hundreds and the whole of it is cheap to read, while every precedent's window
-// constant was tuned for a corpus three orders of magnitude bigger (docs/49,
+// constant was tuned for a corpus three orders of magnitude bigger (docs/research/dream调研.md,
 // "明确拒绝": copying one is how "12 lines per topic hid 74% of the records"
 // happened).
 //

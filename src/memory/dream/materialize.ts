@@ -1,6 +1,6 @@
 // The night's input as bytes, and the hash of those bytes.
 //
-// The hash is what decides whether a model is called at all (docs/49, "判脏用
+// The hash is what decides whether a model is called at all (docs/research/dream调研.md, "判脏用
 // 物化后的字节比对"): a database watermark says "nothing newer than X", which
 // misses a record another device edited or deleted, and both of those are
 // reasons to think again. Materializing the whole input and comparing bytes
@@ -9,7 +9,7 @@
 //
 // So the rendering has to be a function of the content and of nothing else. It
 // numbers from 1 in both lists — those numbers are the only handle the model
-// gets on a record (docs/49, "模型只交下标和动作") — and the order they number
+// gets on a record (docs/research/dream调研.md, "模型只交下标和动作") — and the order they number
 // comes from candidates.ts, which sorts by id.
 
 import { hashText } from "../../platform/sync/merge/text";

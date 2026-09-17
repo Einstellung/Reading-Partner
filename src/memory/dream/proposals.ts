@@ -2,7 +2,7 @@
 // is kept.
 //
 // The model hands over numbers and one action each; every id, date and author
-// is looked up here from the lists it was numbered against (docs/49, "模型只交
+// is looked up here from the lists it was numbered against (docs/research/dream调研.md, "模型只交
 // 下标和动作"). It never copies a record back, so there is nothing for a changed
 // character to invalidate — which is why a proposal that breaks a rule is
 // dropped on its own and the rest of the batch is written. Rejecting a whole
@@ -111,7 +111,7 @@ export function validateProposals(raw: unknown, candidates: DreamCandidates): Va
   // Observations already spent by an accepted `state` in this same batch. One
   // observation supporting two new statements is one occasion written up twice,
   // which is the duplication the nightly pass exists to stop rather than cause
-  // (docs/49: 61% of one system's nightly entries were restatements).
+  // (docs/research/dream调研.md: 61% of one system's nightly entries were restatements).
   const claimed = new Set<number>();
 
   for (const element of raw) {
