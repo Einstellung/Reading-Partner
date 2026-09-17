@@ -466,7 +466,7 @@ scenario_paged_flip() {
 }
 
 # What WebKit itself does with a touch, measured on a plain scroll container
-# rather than the reader (whose page boxes are touch-action:none, docs/37).
+# rather than the reader (whose page boxes are touch-action:none, docs/pitfall/37).
 # Answers the two questions docs/pitfall/70 and 71 left open for iOS: does
 # WKWebView send pointercancel when it takes a scroll, and how far has the
 # finger already travelled when the page gets its first touchmove.
