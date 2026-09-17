@@ -11,7 +11,7 @@
 // wanted, not the prose: a first sentence introduces what its paragraph is
 // about, and the same budget buys five times as many paragraphs.
 
-import { estimateTokens } from "./batch";
+import { estimateTextTokens } from "../../budget";
 import type { GlossaryRequest } from "./prompt";
 import type { TranslatableBlock } from "./segment";
 
@@ -51,13 +51,13 @@ export function glossaryRequestFor(
     if (HEADING.test(block.element.localName.toLowerCase())) headings.push(block.text);
     else rest.push(block);
   }
-  let left = budget - headings.reduce((n, h) => n + estimateTokens(h), 0);
+  let left = budget - headings.reduce((n, h) => n + estimateTextTokens(h), 0);
   const sample: string[] = [];
   for (const block of rest) {
     if (left <= 0) break;
     const sentence = firstSentence(block.text);
     sample.push(sentence);
-    left -= estimateTokens(sentence);
+    left -= estimateTextTokens(sentence);
   }
   return { title, headings, sample };
 }

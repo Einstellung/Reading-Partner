@@ -2,17 +2,22 @@
 // Run: bash scripts/t.sh tests/reading/translate/batch.test.ts
 
 import { expect, test } from "bun:test";
-import { estimateTokens, planBatches } from "../../../src/reading/translate/batch";
+import { estimateTextTokens } from "../../../src/budget";
+import { planBatches } from "../../../src/reading/translate/batch";
 import type { TranslatableBlock } from "../../../src/reading/translate/segment";
 
 function block(id: string, text: string): TranslatableBlock {
   return { id, element: null as unknown as Element, mode: "sibling", text, masks: [] };
 }
 
+// The cut is priced by src/budget's estimator, the one the send path uses, so a
+// Chinese article's punctuation is charged as CJK rather than as a quarter of a
+// Latin character. Its own behaviour is pinned in tests/budget/estimate.test.ts;
+// what matters here is that the planner asks it and nothing else.
 test("the estimate counts CJK by the character and Latin by the four", () => {
-  expect(estimateTokens("abcd")).toBe(1);
-  expect(estimateTokens("中文")).toBe(2);
-  expect(estimateTokens("")).toBe(0);
+  expect(estimateTextTokens("abcd")).toBe(1);
+  expect(estimateTextTokens("中文，。")).toBe(4);
+  expect(estimateTextTokens("")).toBe(0);
 });
 
 test("blocks are grouped consecutively and cut at the target", () => {
@@ -21,7 +26,7 @@ test("blocks are grouped consecutively and cut at the target", () => {
   const batches = planBatches(blocks, { target: 500, max: 600 });
   expect(batches.flat().map((b) => b.id)).toEqual(blocks.map((b) => b.id));
   for (const batch of batches.slice(0, -1)) {
-    const size = batch.reduce((n, b) => n + estimateTokens(b.text), 0);
+    const size = batch.reduce((n, b) => n + estimateTextTokens(b.text), 0);
     expect(size).toBeGreaterThanOrEqual(500);
     expect(size).toBeLessThanOrEqual(600);
   }
