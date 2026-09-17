@@ -780,6 +780,121 @@ test("the phone policy leaves the data channel alone", async () => {
   expect(engine.status().lastError).toBeNull();
 });
 
+// --- one book on demand -----------------------------------------------------
+//
+// Under the phone policy the only book transfers are the ones the shelf asks
+// for: a tap on a book in the cloud, and a book just imported on the phone.
+
+test("fetchBook brings one book down under the phone policy", async () => {
+  const be = makeBackend();
+  be.books.set("h", enc("EPUB"));
+  const { books, store } = makeBooks();
+  const { engine } = makeEngine({ backend: be.backend, books, booksPolicy: "off", snapshot: {} });
+
+  await engine.fetchBook("h");
+
+  expect(dec(store.get("h")!)).toBe("EPUB");
+});
+
+test("pushBook sends one book up under the phone policy", async () => {
+  const be = makeBackend();
+  const { books } = makeBooks({ h: "EPUB" });
+  const { engine } = makeEngine({ backend: be.backend, books, booksPolicy: "off", snapshot: {} });
+
+  await engine.pushBook("h");
+
+  expect(dec(be.books.get("h")!)).toBe("EPUB");
+});
+
+test("pushBook leaves a blob the remote already has and does not read the local one", async () => {
+  const be = makeBackend();
+  be.books.set("h", enc("REMOTE"));
+  let reads = 0;
+  const { books } = makeBooks({ h: "LOCAL" });
+  const counting: BookFs = {
+    ...books,
+    async read(hash) {
+      reads += 1;
+      return books.read(hash);
+    },
+  };
+  const { engine } = makeEngine({ backend: be.backend, books: counting, snapshot: {} });
+
+  await engine.pushBook("h");
+
+  expect(dec(be.books.get("h")!)).toBe("REMOTE");
+  expect(reads).toBe(0);
+});
+
+test("pushBook waits for a running pass, and a pass does not start while it runs", async () => {
+  const be = makeBackend();
+  let releaseList!: () => void;
+  const listGate = new Promise<void>((r) => (releaseList = r));
+  let lists = 0;
+  let releaseUpload!: () => void;
+  const uploadGate = new Promise<void>((r) => (releaseUpload = r));
+  const order: string[] = [];
+  const backend: SyncBackend = {
+    ...be.backend,
+    async listRemote() {
+      lists += 1;
+      if (lists === 1) await listGate;
+      return be.backend.listRemote();
+    },
+    async uploadBook(hash, bytes) {
+      order.push("upload");
+      await uploadGate;
+      await be.backend.uploadBook(hash, bytes);
+    },
+  };
+  const { books } = makeBooks({ h: "EPUB" });
+  const { engine } = makeEngine({ backend, books, booksPolicy: "off", snapshot: {} });
+
+  const pass = engine.syncNow().then(() => order.push("pass done"));
+  await Promise.resolve();
+  const push = engine.pushBook("h");
+  await new Promise((r) => setTimeout(r, 0));
+  // The upload has not started while the pass holds the remote.
+  expect(order).toEqual([]);
+  releaseList();
+  await pass;
+  await new Promise((r) => setTimeout(r, 0));
+  expect(order).toEqual(["pass done", "upload"]);
+
+  // A pass asked for mid-upload stands down.
+  await engine.syncNow();
+  expect(lists).toBe(1);
+  releaseUpload();
+  await push;
+  expect(dec(be.books.get("h")!)).toBe("EPUB");
+});
+
+test("pushBook on an expired token signs the device out and fails", async () => {
+  const be = makeBackend();
+  let signedOut = 0;
+  const backend: SyncBackend = {
+    ...be.backend,
+    async hasBook() {
+      const e = new Error("token expired");
+      e.name = "GoogleAuthError";
+      throw e;
+    },
+  };
+  const { books } = makeBooks({ h: "EPUB" });
+  const { engine } = makeEngine({
+    backend,
+    books,
+    booksPolicy: "off",
+    snapshot: {},
+    onSignedOut: () => {
+      signedOut += 1;
+    },
+  });
+
+  await expect(engine.pushBook("h")).rejects.toThrow("token expired");
+  expect(signedOut).toBe(1);
+});
+
 // --- the app leaving and coming back ----------------------------------------
 //
 // The tick pulls once every PULL_INTERVAL_MS, and on a phone it does not run at

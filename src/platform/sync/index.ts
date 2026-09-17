@@ -357,6 +357,17 @@ export async function fetchBook(hash: string): Promise<void> {
   await ensureEngine().fetchBook(hash);
 }
 
+/**
+ * Upload one book's blob to the account (docs/70): a book imported on the
+ * phone, which mirrors none, so the iPad can open it. "no-account" when this
+ * device cannot reach one; that is not an error, the book stays here.
+ */
+export async function pushBook(hash: string): Promise<"uploaded" | "no-account"> {
+  if (!signedIn || !isGoogleConfigured()) return "no-account";
+  await ensureEngine().pushBook(hash);
+  return "uploaded";
+}
+
 export async function syncNow(): Promise<void> {
   if (!signedIn || !isGoogleConfigured()) throw new Error("Sign in to Google to sync");
   await ensureEngine().syncNow();

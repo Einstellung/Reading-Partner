@@ -355,6 +355,7 @@ export default function PhoneApp({
               onOpenBook={openReader}
               onBack={goBack}
               onSay={(line) => pushToast("warn", line)}
+              onImported={refreshShelf}
             />
           )}
 

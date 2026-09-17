@@ -1,17 +1,18 @@
 // The phone's shelf (docs/70): the topics, and one level in, what is filed under
 // one of them. The same cards the desk draws — the cover band, the label strip,
 // the grid's own class names — with everything the phone does not have taken
-// off: no adding, no renaming, no deleting, no retell, no rehearsal, no
-// observations.
+// off: no renaming, no deleting, no retell, no rehearsal, no observations.
+// Adding is one button, and it takes EPUBs only (reading/session/import-book.ts).
 //
 // What it adds instead is the two answers only this shell needs: a PDF is drawn
 // but not opened, and a book that is not on this device says so and is fetched
 // when it is tapped (shelf-list.ts).
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { listLibraryEntries, libraryHas, type LibraryEntry } from "../../../platform/app/library";
 import { fetchBook, subscribeSyncStatus } from "../../../platform/sync";
 import { sortedFiles, type Topic } from "../../../platform/app/topics";
+import { importEpub, uploadImported } from "../../../reading/session/import-book";
 import CoverBand from "../shelf/CoverBand";
 import {
   BOOK_LABEL,
@@ -53,6 +54,8 @@ export default function PhoneShelf(props: {
   onBack: () => void;
   // One line, said out loud: a PDF, or a book this device cannot go and get.
   onSay: (line: string) => void;
+  // A book was filed under the topic on this device: the topics are stale.
+  onImported: () => Promise<void>;
 }) {
   if (props.topic) {
     return (
@@ -61,23 +64,33 @@ export default function PhoneShelf(props: {
         onOpenBook={props.onOpenBook}
         onBack={props.onBack}
         onSay={props.onSay}
+        onImported={props.onImported}
       />
     );
   }
   return <TopicList topics={props.topics} onOpen={props.onOpenTopic} onBack={props.onBack} />;
 }
 
-function Header(props: { title: string; sub: string; onBack: () => void; backLabel: string }) {
+function Header(props: {
+  title: string;
+  sub: string;
+  onBack: () => void;
+  backLabel: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="flex-none border-b border-border-subtle px-4 pt-3 pb-3">
-      <Button
-        variant="link"
-        size="link"
-        className="text-[13px] text-muted-foreground"
-        onClick={props.onBack}
-      >
-        ‹ {props.backLabel}
-      </Button>
+      <div className="flex items-center justify-between gap-3">
+        <Button
+          variant="link"
+          size="link"
+          className="text-[13px] text-muted-foreground"
+          onClick={props.onBack}
+        >
+          ‹ {props.backLabel}
+        </Button>
+        {props.action}
+      </div>
       <h1 className="mx-0 mt-1 mb-0 font-display text-[20px] font-semibold">{props.title}</h1>
       <p className="mx-0 mt-1 mb-0 text-[13px] text-muted-foreground">{props.sub}</p>
     </div>
@@ -133,6 +146,7 @@ function TopicShelf(props: {
   onOpenBook: (book: PhoneBookOpen) => void;
   onBack: () => void;
   onSay: (line: string) => void;
+  onImported: () => Promise<void>;
 }) {
   const { topic } = props;
   const [entries, setEntries] = useState<Record<string, LibraryEntry>>({});
@@ -142,6 +156,7 @@ function TopicShelf(props: {
   const [onDevice, setOnDevice] = useState<ReadonlySet<string> | null>(null);
   const [can, setCan] = useState<FetchAbility>({ configured: false, signedIn: false });
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   // Bumped when a download puts a book's bytes here: the cover of a book that
   // was in the cloud could not be rendered before, and nothing about the files
   // themselves changed to say it can be now.
@@ -211,6 +226,25 @@ function TopicShelf(props: {
     [can, onDevice, props, readShelf, topic.id],
   );
 
+  const importBook = useCallback(async (): Promise<void> => {
+    setImporting(true);
+    let bookId: string;
+    try {
+      const result = await importEpub(topic.id);
+      if (result.kind === "cancelled") return;
+      if (result.kind === "refused") return props.onSay(result.why);
+      bookId = result.bookId;
+      await props.onImported();
+    } catch (e) {
+      console.warn("failed to import the book", e);
+      return props.onSay(e instanceof Error ? e.message : "This book could not be imported");
+    } finally {
+      setImporting(false);
+    }
+    const line = await uploadImported(bookId);
+    if (line) props.onSay(line);
+  }, [props, topic.id]);
+
   return (
     <div className="absolute inset-0 flex flex-col bg-background">
       <Header
@@ -218,6 +252,16 @@ function TopicShelf(props: {
         sub={fileCountLabel(topic.files.length)}
         backLabel="Library"
         onBack={props.onBack}
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={importing}
+            onClick={() => void importBook()}
+          >
+            {importing ? "Importing…" : "Import EPUB"}
+          </Button>
+        }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-safe-6">
         {materials.length === 0 ? (
