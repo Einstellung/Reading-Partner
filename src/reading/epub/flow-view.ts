@@ -37,7 +37,7 @@ import {
 } from "./flow-gesture";
 import { createFlowMarks, type FlowDoc, type PressPoint } from "./flow-marks";
 import { mountFlowDocument } from "./flow-mount";
-import type { SpineText } from "./mark-layer";
+import type { SpineText } from "./mark-draw";
 import { createPageResources, readingFontsReady } from "./page-mount";
 import type { Pagination } from "./paginate";
 import type { EpubBook } from "./parse";

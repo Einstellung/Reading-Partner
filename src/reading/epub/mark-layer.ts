@@ -14,24 +14,19 @@
 // (mark-geometry.ts). The card converts between them.
 
 import type { Annotation, AnnotationPopupParams, Tool } from "../../platform/app/reader-contract";
-import { MARKUP_OPACITY } from "../engine/convert";
 import { pointerKindOf, routePointer, toolKindOf, type ToolKind } from "../engine/gesture/touch-routing";
 import {
   DEFAULT_MARK_COLOR,
   epubInkOf,
-  epubPositionOf,
-  epubSortOffset,
-  findQuoteSpan,
   markKind,
   newEpubInk,
   newEpubMark,
   quoteSelectorAt,
-  quoteSelectorOf,
-  sameWords,
   type MarkKind,
 } from "./annotation";
 import { caretAtPoint, rangeBetween, type CaretPoint } from "./caret";
-import { epubRangeCfi, parseEpubRangeCfi, resolveSteps, textSteps } from "./cfi";
+import { parseEpubRangeCfi, resolveSteps } from "./cfi";
+import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "./mark-draw";
 import type { PageCard } from "./page-card";
 import { PAGE_HEIGHT, PAGE_WIDTH } from "./page-geometry";
 import {
@@ -48,24 +43,13 @@ import {
   rectsHit,
   shouldAppendInkPoint,
   showsThroughBody,
-  underlineBand,
   unionRect,
   type PagePoint,
   type PageRect,
 } from "./mark-geometry";
-import { runAt, offsetOfPoint, type DocumentText, type TextRun } from "./text";
+import { offsetOfPoint } from "./text";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-
-/** The book's side of one spine item, as the layer needs it. */
-export interface SpineText {
-  index: number;
-  idref: string;
-  /** The ingestion tree: what the offsets and the pagination were taken on. */
-  root: Element;
-  text: DocumentText;
-  runs: Map<Node, TextRun>;
-}
 
 export interface MarkHost {
   owner: Document;
@@ -147,21 +131,14 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
   let drag: Drag | null = null;
 
   const owner = host.owner;
+  const painter = createMarkPainter(owner);
 
   // --- the overlay's own layers ------------------------------------------
 
   // The overlay is shared with the AI-quote highlight, which owns a sublayer of
   // its own: each one clears only what it drew.
   function sublayer(card: PageCard, name: string): HTMLElement | null {
-    const overlay = card.overlay;
-    if (!overlay) return null;
-    const existing = overlay.querySelector<HTMLElement>(`.${name}`);
-    if (existing) return existing;
-    const el = owner.createElement("div");
-    el.className = name;
-    el.style.cssText = "position:absolute;inset:0;pointer-events:none";
-    overlay.append(el);
-    return el;
+    return card.overlay ? painter.sublayer(card.overlay, name) : null;
   }
 
   // --- reading a mark -----------------------------------------------------
@@ -171,55 +148,15 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     return typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : null;
   }
 
-  function colorOf(ann: Annotation): string {
-    const color = ann.color;
-    return typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color) ? color : DEFAULT_MARK_COLOR;
-  }
-
-  /** A live Range on this card for a span of the ingestion text. */
-  function rangeOfSpan(card: PageCard, spine: SpineText, span: { start: number; end: number }): Range | null {
-    const from = runAt(spine.text.runs, span.start);
-    const to = runAt(spine.text.runs, span.end);
-    if (!from || !to) return null;
-    const startLocal = textSteps(from.node, from.offset);
-    const endLocal = textSteps(to.node, to.offset);
-    if (startLocal === null || endLocal === null) return null;
-    return card.rangeOf(epubRangeCfi(spine.index, spine.idref, startLocal, endLocal));
-  }
-
-  /**
-   * Where a text mark is on this card. The CFI first; the quote when the CFI
-   * resolves to nothing, or to words that are not the ones that were marked.
-   */
-  function rangeForMark(card: PageCard, ann: Annotation): Range | null {
-    const position = epubPositionOf(ann);
-    if (!position) return null;
-    const quote = quoteSelectorOf(ann);
-    const byCfi = card.rangeOf(position.value);
-    if (byCfi && !byCfi.collapsed && (!quote || sameWords(byCfi.toString(), quote.exact))) return byCfi;
-    if (!quote || card.spine === null) return byCfi && !byCfi.collapsed ? byCfi : null;
-    const spine = host.spineOf(card.spine);
-    if (!spine) return null;
-    const near = epubSortOffset(ann.sortIndex) ?? undefined;
-    const span = findQuoteSpan(spine.text.text, quote, near);
-    if (!span) return null;
-    return rangeOfSpan(card, spine, span);
+  /** The card's tree and spine item, for the shared mark lookup. */
+  function rangesOf(card: PageCard) {
+    return {
+      rangeOfCfi: (cfi: string) => card.rangeOf(cfi),
+      spine: (): SpineText | null => (card.spine === null ? null : host.spineOf(card.spine)),
+    };
   }
 
   // --- painting -----------------------------------------------------------
-
-  function rectDiv(r: PageRect, css: string): HTMLElement {
-    const el = owner.createElement("div");
-    el.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;${css}`;
-    return el;
-  }
-
-  function drawStroke(into: HTMLElement, kind: "highlight" | "underline", rects: PageRect[], color: string): void {
-    for (const r of rects) {
-      const box = kind === "underline" ? underlineBand(r) : r;
-      into.append(rectDiv(box, `background:${color};opacity:${MARKUP_OPACITY};border-radius:1px`));
-    }
-  }
 
   function drawInk(into: HTMLElement, paths: readonly number[][], color: string, width: number): void {
     const svg = owner.createElementNS(SVG_NS, "svg");
@@ -250,16 +187,6 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     into.append(svg);
   }
 
-  /** The one selected mark's outline. The shell selects at most one at a time. */
-  function drawSelection(into: HTMLElement, rects: PageRect[], color: string): void {
-    const box = unionRect(rects);
-    if (!box) return;
-    const grown = { left: box.left - 3, top: box.top - 3, width: box.width + 6, height: box.height + 6 };
-    into.append(
-      rectDiv(grown, `border:1.5px solid ${color};border-radius:3px;box-sizing:border-box;opacity:0.9`),
-    );
-  }
-
   function marksOnPage(pageIndex: number): Annotation[] {
     const out: Annotation[] = [];
     for (const ann of marks.values()) {
@@ -284,16 +211,16 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
         const box = pathsBounds(ink.paths);
         const bounds = box ? [box] : [];
         drawn.push({ id: ann.id, kind, rects: bounds, paths: ink.paths, width: ink.width });
-        if (selected.has(ann.id)) drawSelection(layer, bounds, color);
+        if (selected.has(ann.id)) painter.drawSelection(layer, bounds, color);
         continue;
       }
-      const range = rangeForMark(card, ann);
+      const range = rangeForMark(rangesOf(card), ann);
       if (!range) continue;
       const rects = clipRects(card.rectsOf(range));
       if (rects.length === 0) continue;
-      drawStroke(layer, kind, rects, color);
+      painter.drawStroke(layer, kind, rects, color);
       drawn.push({ id: ann.id, kind, rects, paths: [], width: 0 });
-      if (selected.has(ann.id)) drawSelection(layer, rects, color);
+      if (selected.has(ann.id)) painter.drawSelection(layer, rects, color);
     }
     painted.set(pageIndex, drawn);
   }
@@ -332,7 +259,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
       return;
     }
     if (!drag.range) return;
-    drawStroke(layer, drag.stroke, clipRects(drag.card.rectsOf(drag.range)), drag.color);
+    painter.drawStroke(layer, drag.stroke, clipRects(drag.card.rectsOf(drag.range)), drag.color);
   }
 
   // --- writing a mark -----------------------------------------------------
@@ -571,7 +498,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
       const ann = marks.get(id);
       if (!card || !ann) return;
       if (markKind(ann) !== "ink") {
-        const range = rangeForMark(card, ann);
+        const range = rangeForMark(rangesOf(card), ann);
         // The table put the mark on this page; this device's layout may have
         // put it a column over, exactly as it may a cited quote.
         if (range && !showsThroughBody(card.rectsOf(range))) card.showColumnOf(range);

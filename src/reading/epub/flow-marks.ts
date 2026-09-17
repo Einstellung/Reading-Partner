@@ -14,25 +14,14 @@
 // viewport rect.
 
 import type { Annotation, AnnotationPopupParams } from "../../platform/app/reader-contract";
-import { MARKUP_OPACITY } from "../engine/convert";
-import {
-  DEFAULT_MARK_COLOR,
-  epubPositionOf,
-  epubSortOffset,
-  findQuoteSpan,
-  markKind,
-  newEpubMark,
-  quoteSelectorAt,
-  quoteSelectorOf,
-  sameWords,
-} from "./annotation";
+import { DEFAULT_MARK_COLOR, epubPositionOf, markKind, newEpubMark, quoteSelectorAt } from "./annotation";
 import { caretAtPoint, rangeBetween, type CaretPoint } from "./caret";
-import { epubRangeCfi, parseCfiStart, parseEpubRangeCfi, rangeToCfi, resolveRange, resolveSteps, textSteps } from "./cfi";
+import { parseCfiStart, parseEpubRangeCfi, rangeToCfi, resolveRange, resolveSteps } from "./cfi";
 import type { FlowTool } from "./flow-contract";
 import { wordBoundsAt } from "./flow-gesture";
-import { popupRect, rectsHit, underlineBand, unionRect, type PageRect } from "./mark-geometry";
-import type { SpineText } from "./mark-layer";
-import { offsetOfPoint, runAt } from "./text";
+import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "./mark-draw";
+import { popupRect, rectsHit, unionRect, type PageRect } from "./mark-geometry";
+import { offsetOfPoint } from "./text";
 
 /** One spine document as it stands in the column. */
 export interface FlowDoc {
@@ -114,18 +103,7 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
   let toolColor = DEFAULT_MARK_COLOR;
   let drag: Drag | null = null;
   const owner = host.owner;
-
-  // --- the overlay's own layers ------------------------------------------
-
-  function sublayer(doc: FlowDoc, name: string): HTMLElement {
-    const existing = doc.overlay.querySelector<HTMLElement>(`.${name}`);
-    if (existing) return existing;
-    const el = owner.createElement("div");
-    el.className = name;
-    el.style.cssText = "position:absolute;inset:0;pointer-events:none";
-    doc.overlay.append(el);
-    return el;
-  }
+  const painter = createMarkPainter(owner);
 
   // --- reading a mark -----------------------------------------------------
 
@@ -135,40 +113,15 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     return parseCfiStart(position.value)?.spineIndex ?? null;
   }
 
-  function colorOf(ann: Annotation): string {
-    const color = ann.color;
-    return typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color) ? color : DEFAULT_MARK_COLOR;
-  }
-
-  function rangeOfSpan(doc: FlowDoc, spine: SpineText, span: { start: number; end: number }): Range | null {
-    const from = runAt(spine.text.runs, span.start);
-    const to = runAt(spine.text.runs, span.end);
-    if (!from || !to) return null;
-    const startLocal = textSteps(from.node, from.offset);
-    const endLocal = textSteps(to.node, to.offset);
-    if (startLocal === null || endLocal === null) return null;
-    const parsed = parseEpubRangeCfi(epubRangeCfi(spine.index, spine.idref, startLocal, endLocal));
-    return parsed ? resolveRange(doc.root, parsed) : null;
-  }
-
-  /**
-   * Where a text mark is in this document. The CFI first; the quote when the
-   * CFI resolves to nothing, or to words that are not the ones that were marked.
-   */
-  function rangeForMark(doc: FlowDoc, ann: Annotation): Range | null {
-    const position = epubPositionOf(ann);
-    if (!position) return null;
-    const parsed = parseEpubRangeCfi(position.value);
-    const quote = quoteSelectorOf(ann);
-    const byCfi = parsed ? resolveRange(doc.root, parsed) : null;
-    if (byCfi && !byCfi.collapsed && (!quote || sameWords(byCfi.toString(), quote.exact))) return byCfi;
-    if (!quote) return byCfi && !byCfi.collapsed ? byCfi : null;
-    const spine = host.spineOf(doc.spine);
-    if (!spine) return null;
-    const near = epubSortOffset(ann.sortIndex) ?? undefined;
-    const span = findQuoteSpan(spine.text.text, quote, near);
-    if (!span) return null;
-    return rangeOfSpan(doc, spine, span);
+  /** The document's tree and spine item, for the shared mark lookup. */
+  function rangesOf(doc: FlowDoc) {
+    return {
+      rangeOfCfi: (cfi: string) => {
+        const parsed = parseEpubRangeCfi(cfi);
+        return parsed ? resolveRange(doc.root, parsed) : null;
+      },
+      spine: (): SpineText | null => host.spineOf(doc.spine),
+    };
   }
 
   // --- painting -----------------------------------------------------------
@@ -184,42 +137,22 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     return out;
   }
 
-  function rectDiv(r: PageRect, css: string): HTMLElement {
-    const el = owner.createElement("div");
-    el.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;${css}`;
-    return el;
-  }
-
-  function drawStroke(into: HTMLElement, kind: "highlight" | "underline", rects: PageRect[], color: string): void {
-    for (const r of rects) {
-      const box = kind === "underline" ? underlineBand(r) : r;
-      into.append(rectDiv(box, `background:${color};opacity:${MARKUP_OPACITY};border-radius:1px`));
-    }
-  }
-
-  function drawSelection(into: HTMLElement, rects: PageRect[], color: string): void {
-    const box = unionRect(rects);
-    if (!box) return;
-    const grown = { left: box.left - 3, top: box.top - 3, width: box.width + 6, height: box.height + 6 };
-    into.append(rectDiv(grown, `border:1.5px solid ${color};border-radius:3px;box-sizing:border-box;opacity:0.9`));
-  }
-
   function paint(doc: FlowDoc): void {
-    const layer = sublayer(doc, "rp-marks");
+    const layer = painter.sublayer(doc.overlay, "rp-marks");
     layer.replaceChildren();
     const drawn: PaintedMark[] = [];
     for (const ann of marks.values()) {
       if (spineOfMark(ann) !== doc.spine) continue;
       const kind = markKind(ann);
       if (!kind || kind === "ink") continue;
-      const range = rangeForMark(doc, ann);
+      const range = rangeForMark(rangesOf(doc), ann);
       if (!range) continue;
       const rects = rectsIn(doc, range);
       if (rects.length === 0) continue;
       const color = colorOf(ann);
-      drawStroke(layer, kind, rects, color);
+      painter.drawStroke(layer, kind, rects, color);
       drawn.push({ id: ann.id, rects });
-      if (selected.has(ann.id)) drawSelection(layer, rects, color);
+      if (selected.has(ann.id)) painter.drawSelection(layer, rects, color);
     }
     painted.set(doc.spine, drawn);
     dirty.delete(doc.spine);
@@ -244,10 +177,10 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
 
   function paintDraft(): void {
     if (!drag) return;
-    const layer = sublayer(drag.doc, "rp-draft");
+    const layer = painter.sublayer(drag.doc.overlay, "rp-draft");
     layer.replaceChildren();
     if (!drag.range) return;
-    drawStroke(layer, "highlight", rectsIn(drag.doc, drag.range), drag.color);
+    painter.drawStroke(layer, "highlight", rectsIn(drag.doc, drag.range), drag.color);
   }
 
   function clearDraft(doc: FlowDoc): void {
