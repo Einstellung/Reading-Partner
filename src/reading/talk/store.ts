@@ -189,7 +189,7 @@ export async function talkOutlineForRetell(input: {
 
 // The talk's conversation lives in its own thread file, keyed like every other
 // one (platform/app/threads.ts). Anchored on the outline and not on a rehearsal
-// or a pass (docs/43, with the anchor now the outline): one conversation spans
+// or a pass (docs/44, with the anchor now the outline): one conversation spans
 // every pass over this talk, so the coach reads the second pass with the first
 // one still in front of it. The key is prefixed so it can never collide with a
 // book's content hash or with a retell's.

@@ -69,9 +69,9 @@ export function newRehearsal(fields: NewRehearsalFields): Rehearsal {
 // are (reading/retell/store.ts).
 //
 // It now also covers the rehearsals written against a deck, which carry a
-// deckFile and no outlineId (docs/43). Same treatment: unread, unmigrated, left
+// deckFile and no outlineId (docs/44). Same treatment: unread, unmigrated, left
 // where they are, and so are their runs — nothing here writes over them, and
-// REHEARSAL_VERSION is deliberately unchanged (docs/43) so a device still on the
+// REHEARSAL_VERSION is deliberately unchanged (docs/44) so a device still on the
 // old build goes on reading them and sync goes on carrying them rather than
 // quarantining them. The alternative was inventing an outline to hang them on,
 // which is a talk nobody wrote under a history that really happened.
@@ -151,7 +151,7 @@ export interface RehearsalRunEntry {
   // block is up (docs/44), so there is nothing to write down, and nothing reads
   // these back. They stay on the entry for the passes that filled them in — one
   // given a block at a time, or against a deck — because those are on disk and
-  // on other devices, and RUN_LOG_VERSION is deliberately unchanged (docs/43: a
+  // on other devices, and RUN_LOG_VERSION is deliberately unchanged (docs/44: a
   // version bump makes an older build quarantine every file it syncs and then
   // write its own empty history over the top).
   segmentIds: string[];

@@ -4,7 +4,7 @@
 // One conversation per outline, not per rehearsal and not per pass. The reader
 // gives the talk again and again, and the point of coming back is that the coach
 // remembers the last time — three passes in three threads would be three
-// strangers (docs/43). The key and the reason are in reading/talk/store.ts; what
+// strangers (docs/44). The key and the reason are in reading/talk/store.ts; what
 // is here is the wiring to platform/app/threads.
 
 import {

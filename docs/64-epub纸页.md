@@ -63,7 +63,7 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 [ep
 
 ## 纸色
 
-护眼开关（docs/42）在 EPUB 和 PDF 上是同一层：`engine/page-wash.ts` 的两个常量，PDF 侧当 React style 用，卡片侧当 cssText 用（`PAGE_WASH_GROUP_CSS`/`PAGE_WASH_CSS`）。shadow root 里 `.rp-paper`（`isolation: isolate`）装 `.rp-clip` 和 `.rp-wash`，`.rp-overlay` 在组外，标注和引文高亮不被乘。组上不写 `pointer-events: none`：PDF 那半的组里只有光栅，这半装着书的正文，笔要从里面取 caret。
+护眼开关（docs/52）在 EPUB 和 PDF 上是同一层：`engine/page-wash.ts` 的两个常量，PDF 侧当 React style 用，卡片侧当 cssText 用（`PAGE_WASH_GROUP_CSS`/`PAGE_WASH_CSS`）。shadow root 里 `.rp-paper`（`isolation: isolate`）装 `.rp-clip` 和 `.rp-wash`，`.rp-overlay` 在组外，标注和引文高亮不被乘。组上不写 `pointer-events: none`：PDF 那半的组里只有光栅，这半装着书的正文，笔要从里面取 caret。
 
 纸的白画在宿主 `.rp-page` 上，在组外面，乘出来仍然正好是 `--page-wash`（坑 281）。实测页边距 EPUB `#f6efdc` == PDF `#f6efdc`，关掉一起回 `#ffffff`；Linux WebKitGTK 和 iPad 模拟器上的数一样（下面「验证」一节）。
 

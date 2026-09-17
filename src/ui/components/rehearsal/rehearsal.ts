@@ -64,7 +64,7 @@ export interface FinishRunInput<Saved = unknown> {
 // End a rehearsal: close the speech, build the run out of everything that
 // arrived, write it. True when a run reached the store, which is the only case
 // in which the rehearsal's history has changed and has to be read again — a
-// write that failed did not happen (docs/43).
+// write that failed did not happen (docs/44).
 //
 // Every pass is written, including one with no words in it. There is nothing
 // left to tell a pass from a non-pass: the surface reports nothing, so a

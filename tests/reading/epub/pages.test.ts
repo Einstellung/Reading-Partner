@@ -409,7 +409,7 @@ describe("the one migration", () => {
 // --- the sheet's layers ------------------------------------------------------
 //
 // The paper tint is a multiply, so what it reaches is decided by which layers
-// share a blend group (docs/42, engine/page-wash.ts). jsdom lays nothing out and
+// share a blend group (docs/52, engine/page-wash.ts). jsdom lays nothing out and
 // blends nothing, but it builds the tree and keeps the inline styles, and the
 // tree is the whole of the rule: sheet and book inside the group, marks and the
 // quote band outside it.

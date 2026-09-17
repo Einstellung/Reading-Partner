@@ -249,7 +249,7 @@ export function mountDocument(shadow: ShadowRoot, doc: SpineDocument, res: PageR
   columns.append(root);
   clip.append(columns);
   // The paper and the tint over it, blended as one group and finished before
-  // the overlay is drawn (engine/page-wash.ts, docs/42). The book's own text and
+  // the overlay is drawn (engine/page-wash.ts, docs/52). The book's own text and
   // whatever colour its stylesheet paints under it are inside; the marks and the
   // quote band are in the overlay, outside, so the tint never multiplies them.
   const paper = owner.createElement("div");

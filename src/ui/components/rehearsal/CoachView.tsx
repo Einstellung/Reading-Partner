@@ -24,7 +24,7 @@ export default function CoachView(props: {
   // Bumped when a pass has reached disk and been handed to the conversation.
   passKey?: number;
   // A pass is still being written: the reader has stopped, and the last of what
-  // they said is coming back from the recogniser (docs/43 — stopping a segmented
+  // they said is coming back from the recogniser (docs/44 — stopping a segmented
   // source waits for every segment still uploading). Said out loud rather than
   // shown as an empty conversation, which would read as the coach having nothing.
   pending?: boolean;

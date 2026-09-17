@@ -1,4 +1,4 @@
-// The desktop TranscriptSource (docs/43): one continuous recording, cut into
+// The desktop TranscriptSource (docs/44): one continuous recording, cut into
 // segments, every segment uploaded on its own.
 //
 // Desktop STT returns a block of text and nothing else — no word timings, no
@@ -109,7 +109,7 @@ class SegmentedTranscriptSource implements TranscriptSource {
   private status: "idle" | "running" | "stopped" = "idle";
   // The one stop in progress. Every later caller waits on this same promise
   // rather than being told the source is already stopped: the view stops the
-  // source from an effect cleanup and again when it writes the run (docs/43),
+  // source from an effect cleanup and again when it writes the run (docs/44),
   // and a second call that returned early would let the run be built while the
   // last segments were still on their way up.
   private stopping: Promise<void> | null = null;

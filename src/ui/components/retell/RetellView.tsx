@@ -60,7 +60,7 @@ export default function RetellView(props: {
   // (useRetell's cleanup), and stepping over to a pass for ten minutes is not
   // leaving the retell.
   //
-  // What is being given is a rehearsal object (docs/43), found or made by the
+  // What is being given is a rehearsal object (docs/44), found or made by the
   // press: the topic's Rehearsal section opens the same object, so the two doors
   // end at one history and not two.
   const [rehearsing, setRehearsing] = useState<Rehearsal | null>(null);

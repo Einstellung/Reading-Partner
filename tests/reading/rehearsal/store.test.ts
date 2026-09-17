@@ -86,7 +86,7 @@ test("the runs file is not seen by the listing", async () => {
   expect(rehearsalIdOf(rehearsalFile(made.id))).toBe(made.id);
 });
 
-// docs/43: the Rehearse button on a retell and the topic's Rehearsal section are
+// docs/44: the Rehearse button on a retell and the topic's Rehearsal section are
 // two doors into one object.
 test("both doors into a retell's talk reach the same rehearsal", async () => {
   const input = {

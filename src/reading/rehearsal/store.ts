@@ -1,5 +1,5 @@
 // Rehearsals on disk:
-//   rehearsal-<rehearsalId>.json         — the object (docs/43)
+//   rehearsal-<rehearsalId>.json         — the object (docs/44)
 //   runs-rehearsal-<rehearsalId>.json    — the index of its passes, oldest first
 //   runs/<rehearsalId>/<runId>.json      — one pass's transcript
 //
@@ -223,7 +223,7 @@ export async function rehearsalForOutline(input: {
 
 /**
  * The rehearsal of a retell's talk, made if this is the first time. Both doors
- * into a rehearsal end here (docs/43): the Rehearse button on the retell's
+ * into a rehearsal end here (docs/44): the Rehearse button on the retell's
  * header and the topic's Rehearsal section are asking for the same object, and
  * pressing Rehearse twice must not leave two histories behind.
  *

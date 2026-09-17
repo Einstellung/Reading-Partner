@@ -1,4 +1,4 @@
-// The segmented source with the app's own STT behind it (docs/15, docs/43).
+// The segmented source with the app's own STT behind it (docs/15, docs/44).
 // Nothing here decides anything: the cutting rules are in segmented-source.ts
 // and the transport is the voice line's.
 //

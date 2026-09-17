@@ -7,7 +7,7 @@
 // marks: the pass is the evidence, and it arrives in the conversation.
 //
 // The conversation is anchored on the outline and not on a rehearsal or a pass
-// (docs/43, "对话锚在 PPT 上"): one thread spans every pass over this talk, so
+// (docs/44): one thread spans every pass over this talk, so
 // the second time the reader gives it the coach has the first pass and
 // everything said about it still in front of it.
 

@@ -1,4 +1,4 @@
-// What the topic's Rehearsal section lists (docs/43, "入口"): every talk under
+// What the topic's Rehearsal section lists (docs/44): every talk under
 // this topic that can be given, whether its outline came out of a retell or was
 // started on its own.
 //

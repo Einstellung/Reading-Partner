@@ -26,7 +26,7 @@ export function cancelRecording(): Promise<void> {
 }
 
 // A recording session: one continuously running capture, cut into segments
-// without a gap (rehearsal, docs/43). The mic stream stays open across a cut, so
+// without a gap (rehearsal, docs/44). The mic stream stays open across a cut, so
 // no audio is lost at the seam and the session never stops itself.
 
 // `maxSegmentSeconds` is a fallback cut for a segment nobody ends — it keeps the

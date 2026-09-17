@@ -17,7 +17,7 @@
 // forever; stop joins the thread, then encodes everything the callback wrote.
 //
 // Recording session (start/cut/stop/cancel_voice_session), for rehearsal
-// (docs/43): one stream stays open for the whole session and the callback never
+// (docs/44): one stream stays open for the whole session and the callback never
 // pauses. Cutting a segment only swaps the buffer the callback writes into, so
 // nothing is lost between segments and the seam is sample-exact.
 //

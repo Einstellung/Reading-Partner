@@ -30,7 +30,7 @@ test("core user-data files are in range", () => {
     // a thread file keyed by the retell.
     "retell-1754400000000.json",
     "threads-retell-1754400000000.json",
-    // A rehearsal (docs/43), the index of every pass over its deck, and one
+    // A rehearsal (docs/44), the index of every pass over its deck, and one
     // transcript file per pass. A trace of the reader, so all three travel; the
     // deck they were given against does not.
     "rehearsal-1754400000000.json",

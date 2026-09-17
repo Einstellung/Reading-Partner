@@ -1,5 +1,5 @@
 // The repairs and backfills the app runs once on the way up, lifted out of App.
-// Two of them rewrite files the reader never asked about (docs/21, docs/43) and
+// Two of them rewrite files the reader never asked about (docs/21, docs/44) and
 // the third gives every topic file a content hash (docs/13, M-sync-1): import it
 // into the library, move its legacy path-hash-keyed data under the id the hash
 // gives it, and write the id down.
@@ -18,7 +18,7 @@ import { splitSavedArticleBodiesOnce } from "../saved-articles";
 export interface StartupMigrationIo {
   /** A kept article's body, out of saved-articles.json and into a file (docs/21). */
   splitSavedArticleBodies(): Promise<unknown>;
-  /** What the reader said on a pass, out of the rehearsal log (docs/43). */
+  /** What the reader said on a pass, out of the rehearsal log (docs/44). */
   splitRehearsalRunPages(): Promise<unknown>;
   /** Names an iOS import left percent-encoded (docs/pitfall/106). */
   repairTopicPaths(): Promise<boolean>;

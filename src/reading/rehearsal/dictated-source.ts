@@ -1,4 +1,4 @@
-// The on-device TranscriptSource (docs/43, docs/15): iOS transcribes while the
+// The on-device TranscriptSource (docs/44, docs/15): iOS transcribes while the
 // reader is still talking. SpeechAnalyzer settles one stretch at a time and the
 // voice plugin pushes each one out as a `final` event, so the words arrive
 // already cut and each one is stamped with the host clock the deck's page

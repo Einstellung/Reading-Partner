@@ -73,7 +73,7 @@ test("the files the app writes are classified by what they hold", () => {
   // is nothing to merge. Named to land here rather than in "prose" (a .md tail)
   // or "records" (an entry in the set above), which is what the check is for.
   expect(strategyFor("article-bodies/0123456789abcdef0123456789abcdef.json")).toBe("opaque");
-  // A rehearsal's passes (docs/43). The index is rows with ids, so two devices
+  // A rehearsal's passes (docs/44). The index is rows with ids, so two devices
   // that each gave the deck a turn keep both passes; one pass's transcript is
   // written once under that pass's id and has nothing to merge. The transcript
   // is classified by its directory, which is what keeps a run that happened to

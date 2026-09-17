@@ -496,7 +496,7 @@ export function IconBooks({ size = 20 }: IconProps) {
 // so it sits with IconSidebar and IconGear in the same bar. Only the sparkle
 // takes a colour, and it takes the one token allowed to carry the green:
 // --accent-line, through the `stroke-accent-line` utility rather than a hex, so
-// it follows the palette (docs/42 — the green draws marks and lines, never an
+// it follows the palette (docs/52 — the green draws marks and lines, never an
 // area of fill), which is also why the sparkle is stroked hollow.
 //
 // Every coordinate is traced from the reference drawing rather than estimated:

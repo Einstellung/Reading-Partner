@@ -30,7 +30,7 @@ test("the entry is a book drawn in the house system, with one green sparkle", ()
   expect(markup).toContain('stroke="currentColor"');
   expect(markup).toContain('stroke-width="1.5"');
   // The sparkle is the only coloured part, and it takes the green from the
-  // token rather than from a hex (docs/42).
+  // token rather than from a hex (docs/52).
   expect(markup).toContain('class="stroke-accent-line"');
 
   // Every icon in the file draws in currentColor or in a token, so a hex

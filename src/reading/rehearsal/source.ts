@@ -20,7 +20,7 @@ export interface TranscriptSource {
   // Close the segment being recorded and send it. A source that records and
   // uploads (the desktop, segmented-source.ts) has to break the recording up
   // somewhere: what comes back from STT is one block of text with no timings
-  // inside it (docs/43), so an hour recorded in one piece is an hour of upload
+  // inside it (docs/44), so an hour recorded in one piece is an hour of upload
   // waited for at the end. A source that transcribes as the speech happens —
   // iOS on-device, where every final already carries its own host timestamp —
   // has nothing to cut, and does nothing.
