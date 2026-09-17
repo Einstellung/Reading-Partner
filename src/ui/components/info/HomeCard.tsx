@@ -64,20 +64,9 @@ export function CardBodyPlaceholder() {
   );
 }
 
-export function BriefingCardBody({
-  snap,
-  ready,
-  configured,
-  hasSources,
-  noLabs,
-  collecting,
-  notices,
-  onAsk,
-  onStop,
-  onOpen,
-  onOpenSettings,
-  onStartSubscribing,
-}: {
+// What every drawing of the day's briefing card takes: the body here, and the
+// card around it in Vestibule.tsx.
+export interface BriefingCardProps {
   snap: InfoSnapshot | null;
   // Whether the shell's start-up reads have answered (useShellBootstrap). Until
   // they have, `configured` is false and `collecting` is false because nothing
@@ -106,7 +95,22 @@ export function BriefingCardBody({
   onOpen: () => void;
   onOpenSettings: () => void;
   onStartSubscribing: () => void;
-}) {
+}
+
+export function BriefingCardBody({
+  snap,
+  ready,
+  configured,
+  hasSources,
+  noLabs,
+  collecting,
+  notices,
+  onAsk,
+  onStop,
+  onOpen,
+  onOpenSettings,
+  onStartSubscribing,
+}: BriefingCardProps) {
   const running = !!snap?.running;
   const stopping = !!snap?.stopping;
   const elapsed = useElapsed(running);

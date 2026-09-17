@@ -12,9 +12,8 @@
 // and the briefing card's other states in HomeCard (shared with the phone).
 
 import { useEffect, useState } from "react";
-import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import type { FileRef, Topic } from "../../../platform/app/topics";
-import { BriefingCardBody, CardBodyPlaceholder } from "./HomeCard";
+import { BriefingCardBody, CardBodyPlaceholder, type BriefingCardProps } from "./HomeCard";
 import { Button } from "../ui/button";
 import { IconChevronRight } from "../base/icons";
 import AddCard from "../shelf/AddCard";
@@ -65,29 +64,19 @@ export function Vestibule({
   onOpenBriefing,
   onOpenSettings,
   onStartSubscribing,
-}: {
+}: Omit<BriefingCardProps, "onOpen"> & {
   // The book to resume, null when there is none, and undefined while the library
   // has not been read — "Nothing open yet" is a claim about a shelf nobody has
   // looked at.
   continueBook: { file: FileRef; topicName: string } | null | undefined;
   // The shelf, or null while it is being read.
   topics: Topic[] | null;
-  snap: InfoSnapshot | null;
-  ready: boolean;
-  configured: boolean;
-  hasSources: boolean | null;
-  noLabs: boolean | null;
-  collecting: boolean;
-  notices: string[];
   onContinue: () => void;
   onOpenLibrary: () => void;
   onOpenTopic: (topic: Topic) => void;
   onCreateTopic: (name: string) => void;
-  onAsk: () => void;
-  onStop: () => void;
+  // The card's own onOpen, named for what it opens: this screen has several.
   onOpenBriefing: () => void;
-  onOpenSettings: () => void;
-  onStartSubscribing: () => void;
 }) {
   const [creating, setCreating] = useState(false);
   const shelf = topics ? shelfOrder(topics) : [];
@@ -242,20 +231,7 @@ function ContinueCard(props: {
 // The day's briefing, when there is one: the overview, the top of the list, and
 // what is left over. Every other state is HomeCard's, drawn in place of the
 // rows — the card is not a button in any of them, because they carry buttons.
-function BriefingCard(props: {
-  snap: InfoSnapshot | null;
-  ready: boolean;
-  configured: boolean;
-  hasSources: boolean | null;
-  noLabs: boolean | null;
-  collecting: boolean;
-  notices: string[];
-  onAsk: () => void;
-  onStop: () => void;
-  onOpen: () => void;
-  onOpenSettings: () => void;
-  onStartSubscribing: () => void;
-}) {
+function BriefingCard(props: BriefingCardProps) {
   const { snap } = props;
   const briefing = snap?.running ? null : (snap?.briefing ?? null);
 
