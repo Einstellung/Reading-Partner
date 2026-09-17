@@ -53,8 +53,15 @@ export interface OAuthProviderConfig {
 	 * (Anthropic only shows the code on a registered code-display redirect).
 	 */
 	manualRedirectUri?: string;
-	/** Authorize params beyond the PKCE core, appended after it. */
-	authorizeParams?: Record<string, string>;
+	/**
+	 * The authorize query, in wire order, from the PKCE core. `core` arrives as
+	 * client_id, response_type, redirect_uri, scope, code_challenge,
+	 * code_challenge_method, state; a provider reorders it and adds its own
+	 * params. Order is part of the URL we hand a third party, and neither
+	 * endpoint is one this repo can test against, so each provider's order is
+	 * pinned byte for byte by tests/ai/oauth-authorize-url.test.ts.
+	 */
+	authorizeParams?: (core: Record<string, string>) => Record<string, string>;
 	/** How the token endpoint wants the grant: a JSON object or a form body. */
 	tokenBody: "json" | "form";
 	/** The token endpoint wants the state echoed back with the code. */
@@ -100,7 +107,7 @@ export function createOAuthFlow(config: OAuthProviderConfig): OAuthFlow {
 		state: string,
 		redirectUri: string = config.redirectUri,
 	): string {
-		const params = new URLSearchParams({
+		const core: Record<string, string> = {
 			client_id: config.clientId,
 			response_type: "code",
 			redirect_uri: redirectUri,
@@ -108,8 +115,8 @@ export function createOAuthFlow(config: OAuthProviderConfig): OAuthFlow {
 			code_challenge: challenge,
 			code_challenge_method: "S256",
 			state,
-			...config.authorizeParams,
-		});
+		};
+		const params = new URLSearchParams(config.authorizeParams?.(core) ?? core);
 		return `${config.authorizeUrl}?${params.toString()}`;
 	}
 

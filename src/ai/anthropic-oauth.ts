@@ -9,6 +9,13 @@ import { createOAuthFlow } from "./oauth-flow";
 const CALLBACK_PORT = 53692;
 const CALLBACK_PATH = "/callback";
 
+// The code-display variant: with this registered redirect, the authorize page
+// lands on a console.anthropic.com page that shows the code (code#state) for
+// copy-paste. The localhost redirect never displays a code — `code=true` alone
+// does not change that — so the manual flow must use this one (real-iPad
+// finding; Claude Code's own paste-code login uses the same).
+export const MANUAL_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback";
+
 const flow = createOAuthFlow({
 	id: "anthropic",
 	label: "Anthropic",
@@ -20,13 +27,9 @@ const flow = createOAuthFlow({
 	redirectUri: `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`,
 	callbackPort: CALLBACK_PORT,
 	callbackPath: CALLBACK_PATH,
-	// The code-display variant: with this registered redirect, the authorize page
-	// lands on a console.anthropic.com page that shows the code (code#state) for
-	// copy-paste. The localhost redirect never displays a code — `code=true` alone
-	// does not change that — so the manual flow must use this one (real-iPad
-	// finding; Claude Code's own paste-code login uses the same).
-	manualRedirectUri: "https://console.anthropic.com/oauth/code/callback",
-	authorizeParams: { code: "true" },
+	manualRedirectUri: MANUAL_REDIRECT_URI,
+	// `code=true` leads, then the PKCE core unchanged.
+	authorizeParams: (core) => ({ code: "true", ...core }),
 	tokenBody: "json",
 	// The token endpoint takes JSON and wants the state back with the code, so it
 	// is the server that checks it.
@@ -34,6 +37,8 @@ const flow = createOAuthFlow({
 	verifyPastedState: false,
 	stateFor: (verifier) => verifier, // pi uses the PKCE verifier as the state value
 });
+
+export const buildAuthUrl = flow.buildAuthUrl;
 
 /**
  * Full loopback login: open the system browser, capture the redirect on

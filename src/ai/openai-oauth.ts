@@ -51,11 +51,15 @@ const flow = createOAuthFlow({
 	redirectUri: `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`,
 	callbackPort: CALLBACK_PORT,
 	callbackPath: CALLBACK_PATH,
-	authorizeParams: {
+	// response_type leads, then the rest of the core, then the Codex flags.
+	authorizeParams: ({ client_id, response_type, ...rest }) => ({
+		response_type,
+		client_id,
+		...rest,
 		id_token_add_organizations: "true",
 		codex_cli_simplified_flow: "true",
 		originator: "pi",
-	},
+	}),
 	// Codex's token endpoint takes form-encoded params and does not want the
 	// state back.
 	tokenBody: "form",
