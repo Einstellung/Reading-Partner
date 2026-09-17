@@ -451,8 +451,17 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     // leave the tokens the request already cost, and pi fills the usage it had
     // at message_start. A recovery message is the harness's own stand-in for
     // a request that never went out, and is not a round.
-    listen("message_end", ({ message, recovery }) => {
+    //
+    // A message_end is not a request either. The harness emits one for every
+    // message it appends to the session, and the prompt this turn accepts is
+    // the whole conversation — every assistant turn replayed into it included,
+    // each of them announced here before the first request goes out. What
+    // tells a round from a replay is the run: a message the harness streamed
+    // carries the id of the operation that asked for it, and a message merely
+    // written down carries none.
+    listen("message_end", ({ message, recovery, runId }) => {
       if (recovery || message.role !== "assistant") return;
+      if (runId === undefined || runId !== operationId) return;
       recordRound(message, message.stopReason !== "error" && message.stopReason !== "aborted");
     });
     listen("tool_start", ({ toolName, args }) => {
