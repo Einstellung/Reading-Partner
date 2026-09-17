@@ -85,7 +85,7 @@ info 的盒（60、63）等 Red Boxes 落地时用同一个 `src/box/`，简报�
 
 三片 2026-09-15 都已进 main。实现时定的几条：
 
-- `delegate` 每个 soul 回合都挂，不看本机有没有登记 kind；kind 清单写在参数说明里，错的 kind 调用时拒绝（坑 313）。
+- `delegate` 每个 soul 回合都挂，不看本机有没有登记 kind；kind 清单写在参数说明里，错的 kind 调用时拒绝（坑 303）。
 - `local` 档的 run 在 runner 之外读不到，所以 `run-done` / `run-failed` 铃的 payload 自带 `deliverTo`，答铃先读 payload，再退到 run 文件。
 - 任务书写在 `legion/briefs/<uuid>.md`，产出写在 `legion/outputs/<runId>.md`，都是本地文件，palace 行 `run-brief` / `run-output`。
 - 答铃按地方装配走 `soul/delivery.ts` 的登记表（place → opener），reading 在 `reading/deliver.ts` 登记 `book`；简报页还没传 origin，从简报派的 run 暂时在门口答。

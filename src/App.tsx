@@ -601,9 +601,8 @@ export default function App() {
   const gate = levelGate(call, parentThreadThere);
   const toolType = toolInCall(pickedTool, call);
 
-  // Apply the tool once the view is initialized (setTool before the pdf viewer
-  // is ready throws — PDFViewerApplication null, pitfall 11). The AI pen is the
-  // underline tool in a fixed purple.
+  // Apply the tool once the view is initialized (setTool before the engine
+  // is ready throws). The AI pen is the underline tool in a fixed purple.
   useEffect(() => {
     if (!viewReady) return;
     const tool =

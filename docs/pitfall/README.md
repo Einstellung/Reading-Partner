@@ -11,10 +11,9 @@
 | iPad 触摸、笔、缩放、翻页 | 触摸与手势 + EmbedPDF 引擎 |
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 鼠标滚轮、触控板 pinch | 触摸与手势 |
-| EPUB 渲染、书里的 iframe、blob 资源 | WebKit / webview + 网络与 CSP + 触摸与手势 |
+| EPUB 页卡片、shadow root、blob 资源 | WebKit / webview + 网络与 CSP + 触摸与手势 |
 | 发请求、外链资源、CSP | 网络与 CSP |
 | 比不同供应商的网络延迟、量首包时间 | 网络与 CSP |
-| 改 deck / 幻灯片的宿主桥、iframe srcdoc | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
 | 往 jsonl 日志追加行、写不 await 的埋点 | 存储与数据目录 |
 | 加自动跑的后台/夜间任务、写数据迁移 | 存储与数据目录 |
@@ -70,22 +69,17 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-末尾的「历史」是换引擎前留下的，日常不用扫。
-
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 339）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 341）。
 
 ## EmbedPDF 引擎
 
-- [18-embedpdf-load-hangs-progress-zero](./18-embedpdf-load-hangs-progress-zero.md) — 文档加载静默卡 progress 0，解法是跨源隔离头 + 直连引擎（worker:false）；归因是错的：pdfium.wasm 不是 pthread 构建，不需要 SharedArrayBuffer，worker 那次挂在根相对 wasmUrl（坑 21）
 - [19-embedpdf-initialdocuments-hang](./19-embedpdf-initialdocuments-hang.md) — initialDocuments 卡 loading，改成 init 后显式 openDocumentBuffer
 - [20-embedpdf-renderlayer-eats-pointer](./20-embedpdf-renderlayer-eats-pointer.md) — RenderLayer 的 img 吃指针事件，划词失效，需 pointerEvents:none
 - [21-embedpdf-worker-engine-hangs](./21-embedpdf-worker-engine-hangs.md) — worker 引擎拿根相对 wasmUrl 会永久挂起（blob: 基址解不了根相对路径，错误 post 成主线程不认的消息类型），wasmUrl 要用 `location.href` 拼绝对地址；旧文档归因到 pthread 辅助 worker，是错的
-- [22-embedpdf-scrolltopage-viewport-gap](./22-embedpdf-scrolltopage-viewport-gap.md) — scrollToPage 的 pageCoordinates 多加 viewport gap，页内位置还原要减掉
 - [23-embedpdf-current-page-metrics-zero](./23-embedpdf-current-page-metrics-zero.md) — "当前页"的可见区 origin 常是 0，持久化锚点要用最顶上的可见页
 - [27-embedpdf-searchinpage-not-on-engine](./27-embedpdf-searchinpage-not-on-engine.md) — searchInPage 在 IPdfiumExecutor 不在 PdfEngine，定点搜索改用 searchAllPages 按页过滤
 - [32-embedpdf-useviewportref-vs-element](./32-embedpdf-useviewportref-vs-element.md) — useViewportRef 每次新建 ref（挂自渲染元素用），读现有滚动容器要用 useViewportElement
 - [40-embedpdf-horizontal-strip-no-page-snap](./40-embedpdf-horizontal-strip-no-page-snap.md) — 横向布局是紧挨排布的页带、scrollToPage 左对齐、pageGap 运行期改不了；"一屏一页"要宿主自己算 alignX 居中
-- [42-scroll-strategy-relayout-not-guaranteed](./42-scroll-strategy-relayout-not-guaranteed.md) — 换 scroll strategy 的重排在文档非 loaded 时静默跳过，竖屏下 fit-page 和 fit-width 数值相同也不触发重排；切布局要全量应用 + 下一帧再断言
 - [50-programmatic-jump-fights-gesture-scroll](./50-programmatic-jump-fights-gesture-scroll.md) — 宿主跳页不停掉惯性就被自己的 fling 覆盖（落点差两千像素），`behavior:"smooth"` 还把 scrollTop 交给浏览器动画；跳转要先 resetGestures 再 instant 落点
 - [56-layout-switch-centres-before-geometry](./56-layout-switch-centres-before-geometry.md) — 切布局后居中跑在 DOM 重排前面，落点被浏览器夹掉且无人察觉；重复 setScrollStrategy 是空操作、同尺度 requestZoom 不重排，要按几何判据等 + 复核落点
 - [57-zoom-plugin-rewrites-scroll-150ms-after-resize](./57-zoom-plugin-rewrites-scroll-150ms-after-resize.md) — 缩放插件用 150ms debounce 回应视口变化，到期时按缓存里的旧滚动位置再写一次，把旋转后刚居中的页面拉回去；落点确认要盯满整个帧预算
@@ -109,7 +103,6 @@
 
 ## 触摸与手势
 
-- [265-a-paginator-renders-before-its-iframe-has-a-document](./265-a-paginator-renders-before-its-iframe-has-a-document.md) — foliate 的容器 ResizeObserver 在 iframe 还没有文档的那一小段里就调 `render()`，`columnize`/`expand` 读 `this.document.documentElement` 抛 TypeError；每开一本书一次，首屏照常出来，只在 `window.onerror` 上看得见。`View.render()`/`View.expand()` 各加一条 `if (!this.document) return`
 - [267-a-rulers-nodes-belong-to-the-clone-it-laid-out](./267-a-rulers-nodes-belong-to-the-clone-it-laid-out.md) — 分页量尺交回的是离屏克隆树的节点，按节点身份查摄入树的偏移表全部落空成 0：CFI 对、charOffset 错、单测全绿（测试量尺用的是原树）。先取 CFI 步，在摄入树上解析回节点再取偏移
 - [268-a-books-font-family-paginates-differently-on-every-device](./268-a-books-font-family-paginates-differently-on-every-device.md) — 书的 `font-family: Georgia, serif` 压过基线，Georgia 没装就回退到设备默认字体，同一本书 73 页对 74 页，而分页表是跨设备同步写一次不重算的。消毒器把通用族名和未内嵌的具名字体一律改写成打包的字体栈，书自带 `@font-face` 的名字保留
 - [274-a-page-card-holds-the-whole-chapter](./274-a-page-card-holds-the-whole-chapter.md) — 页卡片挂的是整份 spine 文档，看不见的列还在 DOM 里：`innerText` 给整章，`textContent` 还夹着书自带 `<style>` 的 CSS 源码。页的文本只从分页表的 `charOffset` 或 `Fulltext.pages[]` 来
@@ -117,12 +110,11 @@
 - [282-a-books-page-background-only-fills-the-text-block](./282-a-books-page-background-only-fills-the-text-block.md) — 书的 `html`/`body` 背景只铺到版心为止，纸的页边距露的是卡片自己的白：同一张纸量出 `#f4edda`（版心，书写了 `background-color: #fdfdfd`）和 `#f6efdc`（页边），按哪个都能得出相反结论。量纸面颜色取页边距
 - [280-page-counts-differ-between-webkitgtk-and-wkwebview](./280-page-counts-differ-between-webkitgtk-and-wkwebview.md) — 同一本书同一份几何，WebKitGTK 75 页、iOS WKWebView 77 页：改写字体（坑 268）解决不了两个 WebKit 分支的断行差异。分页表按设备算，页码不是跨设备的稳定标识
 - [278-caretrangefrompoint-stops-at-the-shadow-host](./278-caretrangefrompoint-stops-at-the-shadow-host.md) — `document.caretRangeFromPoint` 在 WebKitGTK 上穿进 shadow root，在 WKWebView 上停在宿主给 `DIV@0`；iOS 上走的一直是 `caret.ts` 自己二分的那条。在 Linux 上验过 caret 不等于在 iOS 上验过
-- [260-foliate-turns-the-page-itself-once-the-frame-is-transparent](./260-foliate-turns-the-page-itself-once-the-frame-is-transparent.md) — foliate 的 paginator 构造函数里自带 touchstart/move/end，跟手平移列、抬手按速度 snap。书的 iframe 透明之后触摸够得着它，和父页 pane 一起翻：一次滑动翻三页，笔拖选区顺带把页翻回去。按 vendor README 的 `PATCHED:` 约定不注册那三个监听器，手势只留 pane 一个读法；滚动模式本来就不归它（`if (this.scrolled) return`）
 - [261-a-selection-drag-on-an-epub-is-taken-by-the-scroller](./261-a-selection-drag-on-an-epub-is-taken-by-the-scroller.md) — 滚动模式下拖选区，六个 pointermove 之后 WebKit 把序列收走去滚容器，`pointercancel`、选区没了，也就是所有跨行的选区。`pointermove` 上 preventDefault 无效，只有 `touchmove` 拦得住；EPUB 又不能像 PDF 那样全局 touch-action:none。pane 上挂 `{passive:false}` 的 touchmove，`claimsTouch()` 判：拖选区时抢、翻页模式一律抢。React 的 onTouchMove 是 passive 的
 - [271-a-ranges-client-rects-cover-every-column](./271-a-ranges-client-rects-cover-every-column.md) — 页卡片里整章都排进 multi-column，一个 Range 的 `getClientRects()` 报的是所有列里的位置，被 `overflow:hidden` 裁掉的照样有矩形，跨十几列的段落矩形散在一万像素宽里。按纸的边框（576）裁不干净，下一列开头 48 像素会漏进页边距；标注矩形一律裁到版心 `BODY_BOX`，墨迹裁到整张纸
 - [283-a-page-can-lay-its-own-text-in-an-earlier-column](./283-a-page-can-lay-its-own-text-in-an-earlier-column.md) — 比版心宽的表格被 multicol 切开摊在三列上，页 23 的起点 CFI 在第 22 列、页内正文在第 21 列：引文高亮画到 `left: -137`，而「碰没碰到这张纸」的判据说它可见，卡片不挪列。判可见和裁着画用同一个盒子（版心 `BODY_BOX`，`showsThroughBody`/`visibleRects`），亚像素的碎片不算数；判不可见就 `showColumnOf` 跟着字走
 - [272-two-painters-on-one-overlay-erase-each-other](./272-two-painters-on-one-overlay-erase-each-other.md) — 引文高亮和标注共用一层 `.rp-overlay`，两边各自 `replaceChildren()` 清的都是整层：AI 一引用，这页的高亮和墨迹全没。一层 overlay 里开 `.rp-marks` 和 `.rp-quote` 两个子层各清各的；判据是「谁清场」
-- [262-the-long-press-moves-to-the-parent-page](./262-the-long-press-moves-to-the-parent-page.md) — frame 不收触摸之后，长按落到阅读区自己身上：书里的 `-webkit-touch-callout: none` 管不着父页，iOS 给一个空选区配 Copy/Translate/Share。阅读区补 `data-reader-surface`（PDF 那侧一直带着的那条规则）；书的文档不继承它，笔要拖的选区不受影响
+- [262-the-long-press-moves-to-the-parent-page](./262-the-long-press-moves-to-the-parent-page.md) — 长按正文要不弹系统选区，靠的是祖先节点上 `data-reader-surface` 那条规则顺 CSS 继承进每张页卡片的 shadow root；PDF 和 EPUB 两侧的阅读区根节点都要带这个属性，删掉原生选区和长按菜单就回来（旧版本这条写的是 iframe 时代的症状，现在渲染没有 iframe 了）
 - [37-embedpdf-page-touch-action-none-all-modes](./37-embedpdf-page-touch-action-none-all-modes.md) — 每页 div 所有模式都 touch-action:none，页面上原生触摸滚动不可能；笔手路由必须在 viewport 容器 capture 阶段按 pointerType 逐事件做
 - [38-embedpdf-pinch-selection-global-pause](./38-embedpdf-pinch-selection-global-pause.md) — 缩放走原生 touch 通道、选区 handler 不分 pointerId、pause 是全局的；多指/手掌/笔占用期间要逐指针 stopPropagation 而不是 pause。附：`setPointerCapture` 重定向掉引擎的 pointerup，每次滚动都留活 anchor，之后任意一个 move 就把整页选蓝；接管时要补发合成 pointerup
 - [39-ios-no-web-palm-rejection](./39-ios-no-web-palm-rejection.md) — iPad 上笔手互斥由系统强制且关不掉，接触面积也拿不到；web 层的掌抑制做不了也不用做，按面积判掌反而会掐死 pinch
@@ -154,13 +146,11 @@
 - [73-s2-citation-edges-null-and-ignored-year](./73-s2-citation-edges-null-and-ignored-year.md) — S2 的 `/references`、`/citations` 会回 `data: null`（出版商抽掉字段，照文档写就抛 TypeError），`year=` 参数静默忽略；引用图往后由 S2 领跑、往前只有 OpenAlex 能服务端过滤加排序，空结果必须能降级到下一个库
 - [322-ossinsight-trending-answers-empty-with-a-data-quality-note](./322-ossinsight-trending-answers-empty-with-a-data-quality-note.md) — OSS Insight `/v1/trends/repos/` 从 2026-03-01 起对所有 period 回 200 加空 `rows`，原因在文档没写的顶层 `data_quality.status: "unavailable"` 里（事件流采集只剩 0.3%，排序是噪声）；照文档解析就是「今天没有」、健康全绿。`rows` 空且有这个块要抛错带上 `reason`，只有没有它的空表才是真空。行值全是字符串，`stars`/`forks` 是时间窗增量不是总数
 - [323-hf-daily-papers-has-no-weekend-page](./323-hf-daily-papers-has-no-weekend-page.md) — `api/daily_papers?date=` 按日精确匹配，周末没有页，返回 200 加 `[]`，源健康照样是绿的；要周末轮询也有东西就把 `days` 给 3，不要改成不带 date 的「最新一页」请求
-- [152-srcdoc-iframe-inherits-the-parent-csp](./152-srcdoc-iframe-inherits-the-parent-csp.md) — `srcdoc`（和 `blob:`）iframe 不过 `frame-src`，CSP 从父页继承：deck 的内联脚本是靠 app 自己的 `script-src 'unsafe-inline'` 在跑；22 MB 的 srcdoc load 415 ms，CSP 一个字不用改
-- [245-frame-src-does-not-stop-a-blob-frame-but-style-src-stops-its-css](./245-frame-src-does-not-stop-a-blob-frame-but-style-src-stops-its-css.md) — WebKit 不按 `frame-src` 判 blob: 的 frame 导航（`'self'` 照样放行，Chromium 会拦），但那个 frame 继承父页 CSP 去判自己的子资源：`img-src` 有 `blob:` 图能出，`style-src`/`font-src` 没有，CSS 和字体静静失效。违规事件派发在子文档上，父页的监听器一条都收不到；判有没有被拦只能读 `getComputedStyle` 和 `document.fonts.size`。EPUB 渲染要三项一起加 `blob:`
 - [186-fake-ip-dns-does-not-say-what-is-proxied](./186-fake-ip-dns-does-not-say-what-is-proxied.md) — fake-ip 模式下 DNS 永远返回 `198.18.0.x` 占位 IP，分流在连接建立时才按反查回的域名匹配，「三个域名解析结果一样」推不出「三家路径相同」（`dns-hijack: any:53` 让 `dig` 也拿不到真实 IP）；`geosite.dat` 停在 2025-11-19，2026 年才上线的 `api.xiaomimimo.com` 没命中 `GEOSITE,CN,DIRECT`，落到兜底走代理，TLS 882ms 对另两家 93/82ms，被写成「小米服务端慢」。确诊查 mihomo 的 `/connections` 看每条连接的 `rule` 和 `chains`，解法是最前面加 `DOMAIN-SUFFIX,<域名>,DIRECT` 再热重载；走代理时「请求→首帧」也含代理往返，去掉隧道后服务端那一段同样快了一倍
 
 ## 存储与数据目录
 
-- [339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file](./339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file.md) — `retells.json` 解析失败时 loader 返回空数组，下一次追加拿空数组覆写整个文件，所有 deck 无声消失；内容不能重建的 JSON 走 `readGuardedJson`，坏内容先隔离再兜底
+- [339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file](./339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file.md) — loader 解析失败时返回空值，下一次追加拿空值覆写整个登记表，所有条目无声消失；内容不能重建的 JSON 走 `readGuardedJson`，坏内容先隔离再兜底
 - [338-concurrent-appends-to-one-jsonl-keep-only-the-last](./338-concurrent-appends-to-one-jsonl-keep-only-the-last.md) — 一个回合 19 次 fire-and-forget 的 `recordModelCall`，`model-calls-*.jsonl` 里只剩 1 行：追加是「读整份 → 拼行 → 原子写回」，同一 tick 的调用读到同一份旧内容再互相盖。按路径把读-改-写串行化（`memory/usage/log.ts` 的 `writeInTurn`），不改走 `appendText`——同步靠 `writeTextAtomic` 的通知知道文件变了，字节上限也要读整份
 - [293-a-fixed-zip-mtime-is-not-fixed-across-time-zones](./293-a-fixed-zip-mtime-is-not-fixed-across-time-zones.md) — 给 zip 条目定死一个 UTC 瞬间做时间戳，字节仍然跨时区变：zip 存 DOS 日期，fflate 用本地时间取值器拆字段，同一瞬间在三个时区写出三种字节，构建出来的 EPUB 于是在另一台设备上哈希成第二本书。时间戳要用本地日历字段构造（`new Date(2001, 0, 1, 12, 0, 0)`），`mtime: 0` 在 DOS 日期里表示不出来
 - [297-openzip-text-only-answers-for-markup-entries](./297-openzip-text-only-answers-for-markup-entries.md) — 打进 EPUB 的 `cover.svg`，`zip.has()` 为 true、`entries` 里列着，`zip.text()` 却返回 null：`openZip` 只预解 markup 条目，`text()` 只查那张表，查不到不区分「没这条」和「没预解」。非 markup 条目走 `zip.bytes()` 自己 decode
@@ -195,7 +185,6 @@
 
 - [31-ios-deep-link-scheme-build-time](./31-ios-deep-link-scheme-build-time.md) — 自定义 scheme 只能构建期静态注册进 tauri.conf，不能靠 env，且要和 env client id 手工对齐
 - [157-a-cached-crate-never-replays-its-build-script](./157-a-cached-crate-never-replays-its-build-script.md) — 依赖 crate 命中 rust-cache 就不重新编译，它 build script 写进 `gen/apple/Info.plist` 的 `CFBundleURLTypes` 也就没人写；`gen/apple` 每次现生成，于是 build 48/53 发出去才发现 Google 回调回不来。CI 自己从 tauri.conf 注入（幂等），并在 ipa 的 binary plist 上断言，缺 scheme 就红
-- [33-ios-no-cross-origin-isolation-still-renders](./33-ios-no-cross-origin-isolation-still-renders.md) — iOS WKWebView 自定义协议下没有跨源隔离/SAB，PDFium 照样渲染（wasm 本就不是 pthread 构建，worker 引擎也不需要 SAB）；闸门可在模拟器无签名验证
 - [34-ios-init-default-icon-alpha](./34-ios-init-default-icon-alpha.md) — tauri ios init 用内置默认图标模板，CI init 后要覆盖 appiconset；iOS 图标 strip alpha，CFBundleIconName 兜底
 - [35-ios-unsigned-linkedit-vmsize](./35-ios-unsigned-linkedit-vmsize.md) — 完全无签名 Mach-O 过第三方重签名器时 __LINKEDIT vmsize 不更新，真机秒崩；产线预 ad-hoc 签名规避
 - [47-asc-key-role-cloud-signing](./47-asc-key-role-cloud-signing.md) — CI 云签名要 Admin 权限的 App Store Connect API key，App Manager 在 export 阶段被拒；试探权限不能用坏 payload
@@ -214,7 +203,6 @@
 - [200-devicectl-cannot-list-processes-while-console-is-attached](./200-devicectl-cannot-list-processes-while-console-is-attached.md) — `devicectl device process launch --console` 挂着的时候，并发的 `devicectl device info processes` 列不出这个进程，无人值守跑的点名整轮都读成 `GONE`，而 app 还在按秒写日志；判活改看日志文件的 mtime，或者直接看 `--console` 那份日志的最后一行
 - [201-a-kept-player-node-outlives-its-engine](./201-a-kept-player-node-outlives-its-engine.md) — `SpeechOut` 缓存的 player 节点属于上一张图，`play()` 抛 `player started when in a disconnected state`（ObjC 异常 = abort）。拆栈握着锁，只能异步通知缓存方，实测窗口 1.3 秒，里面新开一副 front 就会拿到「旧 player + 新 engine」两个 guard 都过。解法是取用侧同步问一句 `isCurrentSpeaker`；一般教训是缓存别处持有的指针就得有办法问它还算不算数
 - [202-the-reverse-tunnel-dies-with-the-network](./202-the-reverse-tunnel-dies-with-the-network.md) — 连 Mac 构建机的反向隧道把 Linux 的地址写死在 Mac 那头，换网就断；本地端口还听着，所以症状是 `Connection timed out during banner exchange` 而不是拒绝，跑到一半的构建和 `devicectl` 一起卡死。两头在同一个热点上时直连（`172.20.10.0/28`，Mac `.11`），断了先扫网段别修隧道
-- [216-a-pinned-git-remote-answers-from-the-old-address](./216-a-pinned-git-remote-answers-from-the-old-address.md) — Mac 上的 `linux` remote 写死着 Linux 当时的局域网地址（坑 202 那次改直连时的热点段），Linux 换网之后那个地址上是别的设备，`git fetch` 报的是 `Connection closed by <旧 ip> port 22` 而不是超时，看起来像对端 sshd 拒绝你。先 `ssh <ip> hostname` 确认是不是目标机器，再 `git remote set-url`；凡是把 Linux 地址存在 Mac 上的东西，换网就要全过一遍
 - [204-github-com-breaks-at-the-http2-framing-layer](./204-github-com-breaks-at-the-http2-framing-layer.md) — Mac 到 github.com 在 HTTP/2 帧层就断，`git clone`/`fetch` 直接报错，但 SwiftPM/xcodebuild 解析依赖撞上同一故障要先重试约三分钟才失败，看起来像卡死；解法是把依赖 vendor 成本地 `path:` 依赖（swift-rs 从 DerivedData 拷出剥 `.git`），代码走 `git bundle` + `scp`，包解析彻底不碰 github
 - [205-git-fetch-refuses-a-branch-that-is-checked-out](./205-git-fetch-refuses-a-branch-that-is-checked-out.md) — 给机器用的一次性检出目录里，`git fetch` 更新正被检出的分支会被拒绝，本地 fetch 一样中招；一律 `git checkout --force --detach`，别停在分支名上
 - [206-xcodebuild-buffers-its-output-until-the-build-ends](./206-xcodebuild-buffers-its-output-until-the-build-ends.md) — `xcodebuild ... | tail -n 20` 整个构建期间不打印一行，结束才一次性吐出来；重定向到文件再另开 `tail -f` 看实时进度
@@ -250,7 +238,6 @@
 - [193-the-simulator-input-node-reports-zero-hertz](./193-the-simulator-input-node-reports-zero-hertz.md) — iPhone 模拟器上 `inputNode.outputFormat(forBus:0).sampleRate` 是 0：`setCategory` / `setActive` / `setVoiceProcessingEnabled` 三步全成功，只有问硬件要格式才暴露。播放节点挂在采集那台引擎上，采集起不来就等于播放起不来，模拟器上一句都放不出来。模拟器只能验命令分发、参数解码、事件订阅、错误回传这些接线，音频本身必须真机
 - [194-a-stale-generated-permission-keeps-a-command-alive](./194-a-stale-generated-permission-keeps-a-command-alive.md) — `tauri_plugin::Builder` 把权限生成进源码树而且只写不删：命令从 `build.rs` 的 `COMMANDS` 里掉了，旧的 `autogenerated/commands/<name>.toml` 还在、还被提交着，ACL 照样放行。漏登记因此零报错，直到有人清空重新生成。`default.toml` 的每条 `allow-*` 都要在 `COMMANDS` 里对得上
 - [196-a-freeze-point-is-not-a-punctuation-mark](./196-a-freeze-point-is-not-a-punctuation-mark.md) — 流式切句要先冻结一段去跑整段的规范化，安全点不是标点：删掉的引号会把自己的位置让给后面的字符、`\s*` 匹配换行所以 `¥\n9` 是一个匹配、markdown 的配对跨边界且分隔符在哪一步被删会改后面规则的结果。三处都只有对抗性随机文本的属性测试才暴露，正常简报语料九万次比对全绿。冻结点的三个条件和依据在 `src/info/briefer/speech/split.ts` 的注释里
-- [198-detaching-a-node-from-a-running-engine-aborts](./198-detaching-a-node-from-a-running-engine-aborts.md) — engine 还在跑就 `detach` 节点，`AVAudioEngineGraph::RemoveNode` 抛的是 ObjC 异常而不是往 `NSError**` 里填错误，Swift 接不住，整个进程 abort；触发点是播放中途的路由变化、中断和进后台，现象是「腿卡住了、日志里什么都没有」。拆栈顺序改成摘 tap → 停 player → 停 engine → 最后 detach（这一版还不够，见坑 199）
 - [215-speechdetector-reports-no-results](./215-speechdetector-reports-no-results.md) — iOS 26.6 上 `SpeechDetector` 挂得上、`reportResults` 传了 true、序列到点自己正常结束，71.7 秒里 `detectorEvents` 是 0，同一次运行的转写流一切正常；不抛错也没有任何诊断。Apple 自己的文档两处互相矛盾（`Result` 的摘要说只支持错误处理，构造器的摘要说它报告结果），实测站在前一句这边。VAD 的源因此定成 tap 里自算电平，不等它；探针要把 attached / reportResults / events / streamEnded 四个都记下来，少一个「零结果」就会被读成「没挂上」
 - [203-voice-processing-off-leaves-the-engine-with-no-output](./203-voice-processing-off-leaves-the-engine-with-no-output.md) — `setVoiceProcessingEnabled(false)` 之后 `engine.outputNode.outputFormat(forBus:0)` 是 0 Hz：开 VPIO 那 450 ms 是 I/O 单元把采集和播放一起绑上硬件，关掉它只剩输入那半被 `inputNode` 拉起来。懒创建的 `mainMixerNode` 于是退回兜底的 44100 立体声，`play()` 抛 `player started when in a disconnected state`。`nodeOut=1 mixerOut=1` 和 `isRunning=1` 全是真的也没用——连接是声明出来的，渲染链里没有输出这一段；唯一的判据是输出格式的采样率为 0。同一轮里「拆栈重建 + VPIO 开」那条腿好好的，所以拆栈不是变量
 - [199-stopping-the-engine-first-does-not-make-detach-safe](./199-stopping-the-engine-first-does-not-make-detach-safe.md) — 停了 engine 再 `detach` 照样 abort，`RemoveNode` 的前置条件从外面看不全，而它报错的方式是 ObjC 异常；解法是拆栈时根本不 detach，摘 tap、停 player、停 engine，然后让 engine 引用置空带走整张图。真机实测有效：同一处拆栈走完打出 `RP-DICT front closed`，没再 abort，崩的是它后面 1.3 秒的另一件事（坑 201）
@@ -259,9 +246,8 @@
 
 - [304-a-detached-shadow-host-lays-out-again-from-scratch](./304-a-detached-shadow-host-lays-out-again-from-scratch.md) — 页卡片是 shadow host，从文档里 `remove()` 再挂回去等于整篇 spine 文档重排一遍；Cordis 那本公式书上一次摘挂 830-870ms，而卡片上的 `show()`、CFI 解析、换栏加起来不到 2ms。滚动时每翻一页就摘挂一次，0.18.1 保留 MathML 把同一棵树从 2344 个元素撑到 40497 个，平均帧 217ms 变 876ms。卡片改挂在 strip 上按页号摆位，离开窗口只 `visibility: hidden`
 - [281-a-multiply-over-a-transparent-backdrop-paints-the-source](./281-a-multiply-over-a-transparent-backdrop-paints-the-source.md) — `isolation: isolate` 的组里，`mix-blend-mode: multiply` 盖在没人画过的地方直接画出乘数色本身（αb 为 0 时 `(1-αb)·Cs + αb·B` 就是 Cs）：纸留在组外，整张纸照样正好乘成 `--page-wash`。组里放什么按「谁该被乘」定，别为了垫底把纸搬进组，也别把「组里空的」当成 no-op
-- [291-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it](./291-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it.md) — `scaleY(0)` 的矩阵不可逆，浏览器整个不画这个元素；加 `vector-effect="non-scaling-stroke"` 保线宽之后线宽按屏幕像素算，1000 见方的 viewBox 里 `strokeWidth={9}` 在 72 px 的元素上从 0.65 px 变成 9 px。形状之间要变就画几张交叉淡入，缩放一律留不为零的下限
+- [340-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it](./340-scaling-an-svg-stroke-to-flat-drops-it-or-slabs-it.md) — `scaleY(0)` 的矩阵不可逆，浏览器整个不画这个元素；加 `vector-effect="non-scaling-stroke"` 保线宽之后线宽按屏幕像素算，1000 见方的 viewBox 里 `strokeWidth={9}` 在 72 px 的元素上从 0.65 px 变成 9 px。形状之间要变就画几张交叉淡入，缩放一律留不为零的下限
 - [219-ios-webkit-clips-a-blur-to-the-elements-box](./219-ios-webkit-clips-a-blur-to-the-elements-box.md) — iOS WebKit 把 `filter: blur()` 的结果裁在元素自己的盒子上，`rounded-full` 也不管，模糊的光晕在真 iPad webview 里是个硬边方块（桌面 Chromium 和 WebKitGTK 都是圆的）；光晕改用径向渐变，不用 filter
-- [12-webkitgtk-drag-latency](./12-webkitgtk-drag-latency.md) — WebKitGTK 拖选高亮时选区滞后于鼠标（根因未定，换引擎后没复测）
 - [16-webkitgtk-clipboard-image](./16-webkitgtk-clipboard-image.md) — DOM paste 事件不带图片，贴图要从 Rust 读剪贴板
 - [43-webkit-tap-highlight-orphan-shadow](./43-webkit-tap-highlight-orphan-shadow.md) — 不引 preflight 也就没关掉 WKWebView 的原生点击高亮；点完即卸载的按钮会留下孤儿阴影。引入 preflight 后自动消失，手写那条已删；按下反馈仍要用 active:（同族的坑 49 反过来，preflight 管不着，收在「触摸与手势」）
 - [67-webkit-tap-does-not-focus-a-button](./67-webkit-tap-does-not-focus-a-button.md) — WebKit 点击不给按钮焦点，靠 `.focus()` + `onBlur` 收起的二次确认在 iPad 上按了等于没按（blur 抢在 click 前面解除武装，React 又复用同一个 button 节点，这一下变成解除再武装）；收起改用 document 上 capture 的 pointerdown
@@ -284,13 +270,6 @@
 - [116-no-sign-in-control-is-not-a-session](./116-no-sign-in-control-is-not-a-session.md) — 「页面上还有没有登录入口」在登录窗口里两头不成立：彭博登录页上一个可点标签都不匹配（写的是 Continue），按这个信号读出来用户正在输密码的那页是"已登录"；未登录首页的登录入口第 2 次 poll（约 6 秒）才渲染出来，而 readyState 到 21 秒才 complete。要同站、非登录路径、字符数 ≥2000、且字符数不再变化连续两次才认
 - [141-a-blocked-main-thread-stops-the-scroll-outright](./141-a-blocked-main-thread-stops-the-scroll-outright.md) — 主线程占多久屏幕就冻多久（90ms 阻塞冻 82-119ms），和挂不挂 wheel 监听、passive 与否无关，Chromium 同样冻；滚动路径上别占主线程，判据用屏幕像素不用页内计数
 - [178-webkit-pays-per-font-family-before-first-paint](./178-webkit-pays-per-font-family-before-first-paint.md) — 生产构建提交到出像素之间 WebKit 空 78ms、Chromium 12ms、Firefox 25ms，和 JS 体积无关；`body` 字体栈里 WebKit 解析不出的每个 family（`system-ui`、`"Segoe UI"`）各查询约 33ms，Chromium/Firefox 换栈没差别。字体栈至今没按平台拆分，坑还在
-- [254-the-overlayer-is-attached-after-create-overlay-fires](./254-the-overlayer-is-attached-after-create-overlay-fires.md) — foliate 的 `create-overlay` 是在 `#createOverlayer` 里同步发的，`attach` 在它 return 之后才跑：事件处理器里读 `getContents()` 拿不到覆盖层，画进去的标注全丢，而且事件只发一次不会补。挂点里 `queueMicrotask` 再画
-- [255-overlayer-coordinates-are-the-frames-not-the-pages](./255-overlayer-coordinates-are-the-frames-not-the-pages.md) — overlayer 的 SVG 挂在父页（父页事件够得着），里面的矩形却是 frame 的视口坐标；滚动模式下 foliate 把 iframe 撑成整章高、由父页容器滚，两个空间差一个很大的负数。`hitTest` 和 `caretRangeFromPoint` 要减 `frameElement.getBoundingClientRect()`，出去的 rect 要加回来
-- [258-a-closed-shadow-root-is-open-from-the-inside-out](./258-a-closed-shadow-root-is-open-from-the-inside-out.md) — `attachShadow({mode:'closed'})` 只挡「从外面拿 shadowRoot」，从里面一个节点 `parentElement` 往上是通的：`getContents()[0].doc.defaultView.frameElement.parentElement.parentElement` 就是 foliate 关着的 `#container`，读写都行。量 vendor 的 shadow DOM 不用改源码。配套两条：挑够长的一节（书名页只有 182px 高，看起来像不能滚），派发合成事件验冒泡要写 `composed: true`（实测同一个容器上 true 收到 1 次、false 收到 0 次）
-- [244-a-scriptless-sandboxed-iframe-dispatches-no-events-in-webkit](./244-a-scriptless-sandboxed-iframe-dispatches-no-events-in-webkit.md) — `sandbox="allow-same-origin"` 不给 `allow-scripts` 时，WebKit 连 DOM 事件都不派发（bug 218086，iOS 26.5 与 WebKitGTK 一致）：父页在 `contentDocument` 上装的监听器收不到任何东西，DOM 读写、Range、CFI 全都正常。EPUB 正文 iframe 里的点击翻页、笔手路由、`overlayer.hitTest` 都得挪到父页做；系统的长按选区和 callout 不受影响，选区照样读得到
-- [247-a-unitless-gap-drops-the-rule-that-caps-the-text](./247-a-unitless-gap-drops-the-rule-that-caps-the-text.md) — foliate 的几何属性进自定义属性后被读两遍：JS 侧 `parseFloat` 认不认单位都得 6，CSS 侧影子样式表拿它们算 `calc()`，`calc(720px - 6)` 非法，撑着行宽的整条 `grid-template-columns` 作废——1280px 窗口一行一百二十个字符，iPad 上滚动 456px、翻页 674px 两个宽度。每个值按用途带单位（`gap` 是 `%`，长度是 `px`）；带对之后两种流仍差 4px（各扣几个 gap 不同），gap 归零、留白改成 `<foliate-view>` 上的 `padding-inline`，两边才都是 720px
-- [252-the-books-frame-swallows-every-touch](./252-the-books-frame-swallows-every-touch.md) — 坑 244 的另一半：落在书的 iframe 上的触摸，父页一条事件都收不到（frame 的 padding 里和元素外面都正常）。翻页点击区、滑动、书内链接命中测试在真机上从来没生效过。frame 上 `pointer-events: none` 能把事件让给父页，代价是 iOS 长按选区同时没了；两个都要得自己做一层可开关的盖板
-- [246-an-iframes-first-load-event-is-about-blank](./246-an-iframes-first-load-event-is-about-blank.md) — iframe 一插进 DOM，WebKit 立刻为它的初始 about:blank 发一次 `load`，早于取 `src`；配上坑 99 那种静默取消，一次没发生的导航看起来和成功一模一样。判导航成功要看 `documentURI` 落在哪，不看事件
 - [288-a-books-dark-mode-rides-the-system-appearance-into-a-light-page](./288-a-books-dark-mode-rides-the-system-appearance-into-a-light-page.md) — iPad 日落自动切系统深色，WKWebView 的 `prefers-color-scheme` 跟着变，书自带的 `@media (prefers-color-scheme: dark)` 把正文改成为黑底准备的浅灰，浮在 app 那张始终浅色的纸上（图是位图不受影响）。消毒器把条件含 `prefers-color-scheme` 的 `@media` 整块丢掉，dark 和 light 都丢
 
 ## 浮层与 shadcn 原语
@@ -326,7 +305,6 @@
 
 ## markdown 渲染
 
-- [136-react-18-warns-on-every-hyphenated-svg-attribute](./136-react-18-warns-on-every-hyphenated-svg-attribute.md) — React 18 把 `stroke-width` 这类连字符 SVG 属性照写进 DOM，但每个都报一次 `Invalid DOM property`，一张图刷几十条；元素树保留真名，交给 React 前驼峰化，`aria-*`/`data-*` 除外。文里的图表卡和 `SvgFigure` 已删（作废 2026-08-20），React 18 的这个行为本身仍成立，再手写 SVG 元素树按这条办
 - [153-a-cjk-full-stop-keeps-bold-from-closing](./153-a-cjk-full-stop-keeps-bold-from-closing.md) — CommonMark 的 flanking 规则不让 `**` 在中文标点和汉字之间收尾，`**结论：**这样不行` 整句连星号一起显示，而模型写中文时几乎每段都这么写；加 `remark-cjk-friendly` 和 `remark-cjk-friendly-gfm-strikethrough`（后者必须排在 `remarkGfm` 之后），插件表单独一个模块以免把 lazy chunk 拖进主包
 - [154-react-markdown-hands-every-override-a-node-prop](./154-react-markdown-hands-every-override-a-node-prop.md) — react-markdown v10 给每个换成组件的元素多传一个 `node`（hast 节点），`AnchorHTMLAttributes` 里没有这个字段，它跟着 `...rest` 铺到 `<a>` 上渲染成 `node="[object Object]"`；类型全绿、React 18 也不警告。签名交叉上包里的 `ExtraProps` 再把 `node` 解构出来丢掉
 - [156-a-display-fence-must-be-alone-on-its-line](./156-a-display-fence-must-be-alone-on-its-line.md) — remark-math 只认独占一行的 `$$`：开头行 `$$` 后面的内容变成 `meta` 被丢掉，`\end{bmatrix}$$` 不算收尾，没收上的块把后面的正文一起吃进同一个 math 节点渲染成红色原文；模型写的多行公式全是这个形状，一处规范形式都没有。解析前逐行走一遍，把这个形状的开头行和收尾行各切一刀（`mathFences.ts`），行中间的 `$$`、单行成对的、代码里的都不动；只有被切开又等不到收尾的开头行（流式写到一半）转义成 `&#36;&#36;`
@@ -343,7 +321,6 @@
 - [306-the-harness-holds-a-stream-to-the-provider-grammar](./306-the-harness-holds-a-stream-to-the-provider-grammar.md) — 换到 pi-agent-core 的 `AgentHarness` 后，只推 `text_delta` + `done` 的脚本化假流在第一个 delta 就把 harness 封死（`HarnessFault`，原因在 `.cause`："text block 0 has not started"）：帧编码器按真 provider 的语法收事件，`start` → 每块 `*_start` / `*_delta` / `*_end` → `done`/`error`。假流一律从 `tests/support/scripted-turn.ts` 出
 - [307-a-pi-lane-carries-no-prompt-of-its-own](./307-a-pi-lane-carries-no-prompt-of-its-own.md) — pi 的 lane 只带模型、思考档和活跃工具名（`LaneConfiguration` 三个字段），systemPrompt 和工具注册表是 harness 级的，`OperationRequest` 也没有单次覆盖口子：要自己 prompt 或自己工具集的 worker（隔离上下文的子 agent）得自己开 harness，身份写在 lane 名和 session 组上
 - [308-an-open-operation-blocks-its-lane-until-settled](./308-an-open-operation-blocks-its-lane-until-settled.md) — 重开 session 后上个进程留下的 open operation 让同一条 lane 的新 `accept` 报 `LaneBusy`；`resume()` 写完合成的中断 toolResult 会接着调模型跑完那条没人听的 run，`abort()` 同样写中断结果但以 aborted 结算、不发请求。常驻 lane（soul）重开时逐条 abort，不 resume
-- [313-a-tool-mounted-on-a-global-registry-comes-and-goes](./313-a-tool-mounted-on-a-global-registry-comes-and-goes.md) — `delegate` 按「这台设备登记过 worker 才挂」建，工具清单就跟着一个没有注销口子的模块级 Map 走：单跑绿、整套跑红，哪些文件红取决于文件顺序（坑 303 同一个病根）。工具无条件挂，能跑哪些 kind 写进参数描述，调用时按 kind 拒
 - [324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness](./324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness.md) — soul 每个回合挂一份 `statement_write`，简报的 desk item 又挂一份，回合组装照过、harness 的 `validateToolNames` 才抛 `Duplicate tool name`，而且说不出两边是谁；`assembleTurn` 的重名检查当时只比角色和 item，漏了 soul 自己那套基础工具。工具只挂在一处，检查改成走一遍最终清单、按 name 记 owner
 - [335-accepting-a-prompt-announces-every-replayed-message](./335-accepting-a-prompt-announces-every-replayed-message.md) — harness 为它写进 session 的每条消息发 `message_end`，`lane.accept` 把整段重放历史逐条播出来，埋点把里面的 assistant 消息当成一轮，记出一串 `round: 0`、用量全 null、`ms` 等于 Unix 时间戳的幽灵行。按 `runId` 等于本回合的 `operationId` 分辨，不按 role；另记 `model-calls-*.jsonl` 是读改整体写回加 fire-and-forget，并发写只留最后一个
 
@@ -355,7 +332,6 @@
 - [289-playwright-from-bunx-brings-no-browser](./289-playwright-from-bunx-brings-no-browser.md) — `bunx playwright` 每次拉当天最新包，它只认自己那版钉死的 chromium revision，`~/.cache/ms-playwright/` 里已有的别的 revision 一律不用，`chromium.launch()` 直接报 executable 不存在。别去 `playwright install`，launch 时用 `executablePath` 指到 cache 里现成的 headless shell
 - [290-networkidle-never-comes-on-an-animated-page](./290-networkidle-never-comes-on-an-animated-page.md) — vite 的 HMR websocket 加页面自己的 rAF 循环把连接数顶住，`waitUntil: "networkidle"` 必超时；改 `domcontentloaded` 加 `waitForSelector`
 - [292-killing-vite-by-its-wrapper-pid-leaves-the-server-up](./292-killing-vite-by-its-wrapper-pid-leaves-the-server-up.md) — `bun run vite` 是外壳，监听端口的是它的子进程；kill 外壳不带走它，新起的那份撞 `strictPort` 当场退出（只写进日志），`curl` 的 200 是旧服务器答的，于是三轮改动截图一模一样。按 `lsof -ti:<port>` 杀，起完 grep 一句刚加的标识符确认服务器是新的
-- [55-worktree-dev-server-serves-stale-modules](./55-worktree-dev-server-serves-stale-modules.md) — worktree 在 `.claude/` 下，正好被 Vite 的 watch ignore 命中，dev server 看不见自己的改动；每次改完要重启
 - [239-vite-prebundle-freezes-a-dependency](./239-vite-prebundle-freezes-a-dependency.md) — `node_modules/.vite/deps` 把 pi-ai 的模型表整份内联冻在几周前，pull 后没 `bun install` 也没重建缓存，app 看到的表比磁盘旧，`enforceKnownModel` 如实把「不在目录里」的模型换掉并写回盘；`bun install && rm -rf node_modules/.vite` 再重启，判据是拿 `bun -e` 直读 `node_modules` 和 app 里看到的对比
 - [118-the-simulator-is-the-same-webkit-with-a-different-finger](./118-the-simulator-is-the-same-webkit-with-a-different-finger.md) — iPad 模拟器跑的是真 WKWebView + 真 PDFium + 经 HID 注入的真触摸，橡皮筋、笔手路由、双指缩放都能量出数；但没有笔（`pointerType` 恒为 touch）、没有接触面积（恒 40×40）、idb 一次只有一根手指（双指只能走 XCUITest 的 pinch，三指以上无解）。跑法在 `scripts/ios-sim.sh`
 - [303-a-boot-at-module-scope-registers-for-every-test-file](./303-a-boot-at-module-scope-registers-for-every-test-file.md) — 测试文件在模块顶层 boot 领域（注册蒸馏源、desk kind），`afterAll` 要等本文件跑完才 undo，中间每个文件问注册表都看得见那几个源；两个文件单跑都绿。boot 放进用例体 try/finally，断言按 kind 数不按总数
@@ -366,12 +342,8 @@
 - [121-react-dom-decides-once-whether-it-is-in-a-browser](./121-react-dom-decides-once-whether-it-is-in-a-browser.md) — react-dom 在模块求值时算一次 `canUseDOM`，晚了就永久不监听 `input`，受控 input 的 `onChange` 静默不响；bun 先求值 node_modules 再求值本地依赖，调 import 顺序没用，只能让 `useDom()` 注册完窗口再动态 import 并返回 `@testing-library/react`
 - [122-spyon-swaps-an-esm-export-and-puts-it-back](./122-spyon-swaps-an-esm-export-and-puts-it-back.md) — bun 的 ESM 命名空间可写：`spyOn(ns, "导出名")` 导入方看得见，`mockRestore()` 能还原，命名导出/默认导出/再导出链都成立；这是 119 之外替换模块导出的另一条路，还原写在 finally 里。`createXStore(io)` 的接线表在 import 时求值，`loadPdfjs,` 这种抄值的字段读不到那个槽，spy 就白装了（实测 store-disk 6 个用例红 4 个），一律写成 `() => loadPdfjs()`
 - [135-headless-chrome-window-size-is-not-the-viewport](./135-headless-chrome-window-size-is-not-the-viewport.md) — 无头截图核对渲染时 `--window-size` 给的是外窗，视口矮 87px、宽度还有 500px 下限，图底部被裁掉一截还容易误判成布局出界；窗口开大 + `--force-device-scale-factor=1` + 零边距包装页
-- [220-a-phone-width-screenshot-is-cropped-not-laid-out](./220-a-phone-width-screenshot-is-cropped-not-laid-out.md) — 坑 135 那条「宽度有 500px 下限」抬的是视口：`--window-size=390` 的图是按 500 排完裁到 390 的，换行位置全是假的；要量手机宽度就开 ≥500 的窗口，把形态包进一个 `w-[390px]` 的盒子（组件里有断点的除外）。高度那半见坑 225：87px 还在
 - [222-virtual-time-budget-hangs-on-a-vite-dev-page](./222-virtual-time-budget-hangs-on-a-vite-dev-page.md) — `--virtual-time-budget` 在 vite dev server 的页面上永远等不到「加载完」（HMR 的 WebSocket 一直挂着），Chrome 不退出也不写 PNG；拍 dev server 就别加这个 flag，要等异步内容就拍 `vite preview` 的静态产物
 - [221-two-overlay-components-blank-a-headless-harness](./221-two-overlay-components-blank-a-headless-harness.md) — 无头 Chrome 的静态探针页里挂 `PenToolbar` 或 `MoreMenu`，React #185（更新深度超限）把整棵树打白，别的组件都正常；成因未定，排除过内联 props 和 `.safe-probe` 的量值，两者唯一共同点是 `useOverlaySafePadding()`。探针页别放这两个
-- [224-a-probe-page-only-gets-the-classes-src-uses](./224-a-probe-page-only-gets-the-classes-src-uses.md) — 无头探针页在 `src/` 之外，Tailwind 没扫到就不生成，页面里现写的 `grid-cols-4` 之类静默不存在，图看上去像组件排版坏了；探针页只用组件自带的 class 和它导出的常量，自己搭壳用 inline style
-- [225-the-shot-is-taller-than-the-page-it-shot](./225-the-shot-is-taller-than-the-page-it-shot.md) — 无头截图的视口比 `--window-size` 矮 87px（Chrome 144，实测 834→747），画布仍是外窗尺寸，多出来那条由页面背景补上，看着像页面没排满高度；要拍满 H 就传 H+87，否则只认 PNG 顶上的 H-87
-- [227-virtual-time-shoots-before-the-pdfium-worker-answers](./227-virtual-time-shoots-before-the-pdfium-worker-answers.md) — `--virtual-time-budget` 的虚拟时钟在主线程空闲时直接跳表，不等 worker 里 PDFium 的 wasm 编译和 raster，图拍的是回退态（封面全是首字母块），预算调大只会先撞引擎自己的 15s 超时；要等异步内容改用 CDP 驱动：页面挂个完成标志，脚本轮询到了再 `Page.captureScreenshot`，视口用 `Emulation.setDeviceMetricsOverride`（顺带绕开坑 135、220）
 - [230-virtual-time-never-lets-the-pdf-engine-come-up](./230-virtual-time-never-lets-the-pdf-engine-come-up.md) — `--virtual-time-budget` 在静态产物上也拍不到阅读器：虚拟时钟不等 PDFium 的 wasm 编译、init 和跨 worker 握手，图里侧栏都在、页面那半是空的，资源面板还显示 `pdfium.wasm` 200；要跑引擎的页面走 CDP 用真实时间等，`Emulation.setDeviceMetricsOverride` 钉视口
 - [231-a-thrown-render-blanks-the-page-and-says-nothing](./231-a-thrown-render-blanks-the-page-and-says-nothing.md) — React 18 吃到未捕获异常会卸掉整棵根树，留下空的 `#root`，于是「没挂载」和「挂载后炸了」在 DOM 上一模一样，无头 Chrome 又不打印页面异常；截图脚本一律 `Runtime.enable` 并把 `exceptionThrown` 和 error 级 `consoleAPICalled` 打出来
 - [284-a-photo-of-a-screen-is-mostly-the-room](./284-a-photo-of-a-screen-is-mostly-the-room.md) — 用户拍的屏幕照片里八成的光是屋里反射的（实测反射项占纸面亮度 78–83%），对比度被整体压平成「蒙了一层」，照度不匀又在同一页里排出假的深浅次序；判渲染问题只认设备截图或 `scripts/ios-sim.sh shot`，非要用照片就先拿同图里两块真实同色的面对读数
@@ -390,15 +362,12 @@
 - [174-the-file-order-belongs-to-the-filesystem](./174-the-file-order-belongs-to-the-filesystem.md) — bun 的文件顺序是 readdir 顺序，`--seed` 只是拿它洗牌；ext4 按文件名哈希读、种子在超级块里，所以同一块盘上的主 checkout / worktree / 新 clone 顺序完全相同，换到 tmpfs 就 302 个位置差 297 个，默认顺序下同一个 commit 从 0 fail 变 7 fail。worktree 里的全绿推不出 CI 也绿。`bun test a b c` 不认参数顺序，`Ran N tests across M files` 的 M 照数链接期就死掉的文件。能转述的只有每文件一进程那一趟，且要拿"每文件用例总数 == 单进程用例总数"当闸，两个数都当场算不写死
 - [175-a-static-radix-import-races-the-first-usedom](./175-a-static-radix-import-races-the-first-usedom.md) — 16 个原语里 11 个（要 portal 的那些 Radix 包）传递地拉进 react-dom 客户端 bundle，静态 import 它们的测试文件跑在第一个 `useDom()` 之前，就打死这一轮每一个 `useDom()` 文件（mirror 树上 21 个文件 load 崩、170 个测试不跑），跑在之后则无事发生，而文件顺序不可移植。改成 `await useDom()` 加 `await import(...)`；不加静态检查，精确规矩要传递闭包分析，便宜的近似今天命中的 5 个文件里 3 个根本不拉那个 bundle（`Button`、`overlay.tsx`、`react-dom/server`、`@radix-ui/react-slot` 都是干净的）。危险的形状不是"静态 import 了 `ui/components`"，是"拉了 bundle 又从不要 window"——拉了又自己 `useDom()` 的单跑就红，藏起来的那种单跑绿，只能靠 `bash scripts/isolate.sh` 的每文件探针看见
 - [176-a-selection-outlives-the-tree-that-made-it](./176-a-selection-outlives-the-tree-that-made-it.md) — `document.getSelection()` 挂在 document 上不挂在树上，RTL 的 `cleanup()` 卸树卸不掉它；一个用例选中文字但没有让手势收走选区，就把它原样留给下一个用例，`--seed` 洗过顺序后随机撞上不同的用例（chat-pen-strokes：seed=1 撞 stylus 用例自己的 isCollapsed 断言，seed=4 撞 chat.tsx:379 那道"点击是不是划词收尾"的判断）。`afterEach` 里 `cleanup()` 之后补一句 `document.getSelection()?.removeAllRanges()`
-- [181-vite-strict-port-1420-survives-a-failed-run](./181-vite-strict-port-1420-survives-a-failed-run.md) — `vite.config.ts` 的 `strictPort: true` 撞见上一轮失败残留的 vite 进程占着 1420，`pkill -f 'bun.*vite'` 匹配不到它，下一轮直接退出；起前按端口 `lsof` 找出来 `kill -9`
 - [182-plugin-listener-commands-are-not-implemented-by-tauri](./182-plugin-listener-commands-are-not-implemented-by-tauri.md) — 移动端插件从 Swift 侧发事件，JS 的 `addPluginListener` 挂不上：它 invoke 的 `register_listener`/`remove_listener` 是 Tauri 核心没实现的两个命令，插件自己在 Rust 侧转发给 Swift 基类；不是 iOS 专属，Android 插件一样撞
 - [218-bun-resolves-an-import-case-insensitively](./218-bun-resolves-an-import-case-insensitively.md) — bun 扫目录不分大小写，同目录的 `orb.ts` 和 `Orb.tsx` 互相顶掉，`import "./orb"` 报一个不存在的 `orb.tsx` 的 ENOENT；扩展名还是 `.tsx` 优先于 `.ts`。同目录基名不许只差大小写
 - [185-tauri-command-args-are-taken-by-parameter-name](./185-tauri-command-args-are-taken-by-parameter-name.md) — Tauri 命令的参数按参数名从 JS 对象里取，写 `payload: T` 就逼 JS 多包一层；想收平铺对象就把字段列成独立参数
 - [232-a-virtual-clock-on-setTimeout-costs-real-time](./232-a-virtual-clock-on-setTimeout-costs-real-time.md) — 「跑在虚拟时钟上所以不花真实时间」的测试，时钟自己是 `setTimeout(r, 0)` 推的：宿主把 0 钳到约 1ms，`settle()` 空转 200 轮就是 200 毫秒，七个用例 1.4 秒。被测代码自己不碰真定时器时改用 `Promise.resolve()` 推进，1408ms → 130ms，空转不要钱之后轮数还能往上加
 - [233-a-failing-fetch-test-pays-the-retry-ladder](./233-a-failing-fetch-test-pays-the-retry-ladder.md) — 注入了 fetch 不等于注入了时间：故意发 500 的用例照走生产的重试退避（0.5s + 1s 真定时器），六个用例 7.5 秒，而 bun 对这个量级的用例一个 per-test 时间都不打。编排层把 `sleep` 一起收成可选注入转发给 `fetchText`，默认值不变；定位靠失败路径上的 `console.warn` 行数，验收拿 `expect() calls` 总数不变当闸
-- [243-vite-resolves-a-dynamic-import-that-never-runs](./243-vite-resolves-a-dynamic-import-that-never-runs.md) — `vite:import-analysis` 对带字面量的动态 import 和静态 import 一视同仁，transform 阶段就要解析：一条永远跑不到的分支里 `await import('./x.js')` 解析不到，整个模块变错误页。vendor 一个库时，它引用过的文件都得存在，哪怕只是抛异常的桩
 - [264-evaluate-javascript-only-returns-a-string](./264-evaluate-javascript-only-returns-a-string.md) — python 的 WebKit2 绑定跑无头页面时，`evaluate_javascript_finish` 只认字符串，脚本收尾是 Promise 或 null 就报 `Unsupported result type`，看着像页面炸了其实已经跑了；每段 JS 以字符串收尾，异步结果挂 `window` 上轮询
-- [269-vite-serves-a-worktree-edit-stale-until-it-restarts](./269-vite-serves-a-worktree-edit-stale-until-it-restarts.md) — `vite.config.ts` 把 `.claude/` 排除在 watcher 外，worktree 里改了源码、重载页面，跑着的 vite 还给旧 transform；改完要重启 vite
 - [273-an-evaled-probe-gets-no-bare-specifiers](./273-an-evaled-probe-gets-no-bare-specifiers.md) — sim bridge 探针里 `import("react")` 抛错、`import("/src/**")` 没事：裸模块名靠 vite 的 import-analysis 改写，eval 进去的字符串没经过 transform。从 `/src/main.tsx` 的 transform 结果里抠出 `deps/react.js?v=` 的 URL 再 import；`react-dom_client.js` 是 CJS 预打包，`createRoot` 在 `default` 上
 - [270-xwd-on-xvfb-run-needs-the-runs-own-xauthority](./270-xwd-on-xvfb-run-needs-the-runs-own-xauthority.md) — `xvfb-run` 的显示带自己的临时 Xauthority，另一个 shell 里 `xwd -root` 直接退 1；`XAUTHORITY=/tmp/xvfb-run.*/Xauthority`，xwd 原始输出用 PIL 解成 PNG
 
@@ -406,13 +375,3 @@
 - [299-negated-class-spans-lines-in-a-grep-guard](./299-negated-class-spans-lines-in-a-grep-guard.md) — 扫源码的守卫正则里 `[^;]*` 会跨行，命中比 grep 多；否定类要排掉 `\n`
 - [332-copying-any-file-into-the-mac-checkout-resets-the-nav-stack](./332-copying-any-file-into-the-mac-checkout-resets-the-nav-stack.md) — vite 监听整个项目根，`scp` 一个驱动脚本进去也整页 reload，手机壳的导航栈回到首页，接着按记下的坐标点下去点的全是别的屏。驱动界面的过程中不往 Mac 的 checkout 里写文件
 - [337-sim-bridge-eval-error-with-no-message-prints-as-at-sign](./337-sim-bridge-eval-error-with-no-message-prints-as-at-sign.md) — WebKit 里没带 message 的错误（`TypeError` 之类）的 `stack` 不带消息行，sim bridge 的 client 原样 `String(e.stack)` 送回来，看着就是一个孤零零的 `@`；查了半天才发现是自己写的选择器/断言没命中。别去改 bridge 的错误传递，eval 脚本里每处 DOM 查找自己 `throw new Error("说清楚的话")`
-
-## 历史（zotero/reader 引擎时代）
-
-引擎已换成 EmbedPDF，这几篇留着是因为还有东西没随引擎一起死。每篇开头一行写明哪部分还成立。
-
-- [02-math-sumprecise-polyfill](./02-math-sumprecise-polyfill.md) — mobile pdf.js 裸调 Math.sumPrecise；WebKitGTK 落后于新内建这条仍在，现在体现为加载 pdf.js 前要补 `Promise.withResolvers`
-- [04-programmatic-select-no-popup](./04-programmatic-select-no-popup.md) — 程序化选中不弹浮窗；EmbedPDF 下结论反过来了，弹窗照开
-- [07-image-annotation-base64](./07-image-annotation-base64.md) — image 标注内联截图导致 JSON 膨胀；区域框选已移除，但"大字段拆出 JSON 单独落盘"被 threads 沿用
-- [10-cross-realm-uint8array](./10-cross-realm-uint8array.md) — iframe 跨 realm 的 Uint8Array instanceof；app 里的 iframe 回来了（deck 的 srcdoc，见坑 152），但走 postMessage 不传字节，撞不上
-- [11-engine-calls-before-init](./11-engine-calls-before-init.md) — 引擎方法必须等就绪信号之后调；PDFViewerApplication 没了，规矩还在

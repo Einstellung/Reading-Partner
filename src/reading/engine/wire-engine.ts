@@ -354,7 +354,7 @@ export async function wireEngine(
   // Re-applying a scroll strategy the plugin already holds is a no-op inside
   // it — setScrollStrategyForDocument returns early on `strategy === newStrategy`
   // — so the layout refresh it silently skipped (document not "loaded" at that
-  // instant, pitfall 42) can only be forced by going through the other strategy
+  // instant, pitfall 56) can only be forced by going through the other strategy
   // first. Both calls are synchronous, so the intermediate layout never reaches
   // the screen. Used only as a repair, when the virtual items say the refresh
   // did not happen.

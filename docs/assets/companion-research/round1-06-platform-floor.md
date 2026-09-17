@@ -130,7 +130,7 @@ Apple engineer, Developer Forums thread 770862, June 2025: "These feature flags 
 
 Measured in-repo on the iPad simulator running the real WKWebView with the app's `tauri://` custom protocol, despite `app.security.headers` setting COOP=same-origin and COEP=require-corp in tauri.conf.json (which does work on desktop WebKitGTK). Consequences for a companion: no SharedArrayBuffer ring buffer between an AudioWorklet and the main thread, and no multi-threaded WASM — so an in-webview whisper.cpp / sherpa-onnx / VAD build gets one thread. PDFium still rendered fine in the same run (engineReady 256 ms, open 12 ms, render 730 ms) because that wasm is not a pthread build. COEP=require-corp does still block cross-origin subresources, which is why external images route through a Rust `img:` scheme.
 
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/33-ios-no-cross-origin-isolation-still-renders.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/21-embedpdf-worker-engine-hangs.md
 - Date: 2026-06
 - Confidence: high
 - Runs on device: ios-yes
@@ -299,7 +299,7 @@ Live2D's SDK page: "Individuals and small-scale businesses are exempt from the l
 ### PDFium render timings measured in the real iPad WKWebView under tauri://
 
 - Value: engineReady 256 ms, open 12 ms, render 730 ms (200×200)
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/33-ios-no-cross-origin-isolation-still-renders.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/21-embedpdf-worker-engine-hangs.md
 
 ### OSStatus returned when AVAudioEngine.start() is called from the background
 

@@ -54,7 +54,7 @@ Google 登录 2026-08-06 也接上了,走 Android 类型 client + 自定义 URI 
 }
 ```
 
-和 iOS 那次(坑 33)同一个结论:没有跨源隔离、没有 SharedArrayBuffer,直连引擎照样渲染。verdict 里没有 voice 那几项 —— 那个 probe 已经删了,见下面「麦克风」。
+和 iOS 那次(坑 21)同一个结论:没有跨源隔离、没有 SharedArrayBuffer,直连引擎照样渲染。verdict 里没有 voice 那几项 —— 那个 probe 已经删了,见下面「麦克风」。
 
 ## 从 CI 产物里读出来的硬事实
 

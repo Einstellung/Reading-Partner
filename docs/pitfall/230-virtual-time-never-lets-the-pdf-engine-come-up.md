@@ -18,4 +18,6 @@
 --window-size=<w>,<h+200> --user-data-dir=<临时目录> about:blank
 ```
 
-连上以后 `Emulation.setDeviceMetricsOverride` 钉死视口（这样窗口边框和 500px 宽度下限都碰不到，坑 135/220 一并绕开），`Page.navigate`，`Bun.sleep(12000)`，再 `Page.captureScreenshot`。要证明某个改动生效就在同一个连接里 `Runtime.evaluate` 量元素，把数字和图一起留下。
+连上以后 `Emulation.setDeviceMetricsOverride` 钉死视口（这样窗口边框和 500px 宽度下限都碰不到，坑 135 一并绕开），`Page.navigate`，`Bun.sleep(12000)`，再 `Page.captureScreenshot`。要证明某个改动生效就在同一个连接里 `Runtime.evaluate` 量元素，把数字和图一起留下。
+
+判据是页面自己报的一个标志，不是图好不好看：封面缩略图这条路上四张卡片全是首字母占位块、控制台没有失败记录时也是同一个病根——渲染完成时挂一个 `window.__rig = {...}`，脚本轮询到 `{"kind":"ok","bytes":16229}` 才说明光栅化真跑过；预算调大不解决，跳过去的是虚拟毫秒，worker 里的真实耗时一秒没少，只会先撞上引擎自己的 15s 探针超时。

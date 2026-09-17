@@ -6,7 +6,7 @@ import { simBridge } from "./scripts/sim-bridge";
 
 // Cross-origin isolation, kept but not for the reason it was added. The wasm was
 // believed to be a pthread build needing SharedArrayBuffer; it is not, and the
-// reader runs with crossOriginIsolated false in the packaged app (pitfall 18).
+// reader runs with crossOriginIsolated false in the packaged app (pitfall 21).
 // Production gets the same headers from tauri.conf.json (app.security.headers).
 const isolationHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",

@@ -241,8 +241,8 @@ cmd_tap() { "$IDB" ui tap --udid "$UDID" "$1" "$2"; }
 
 # The same finger, held. A long press is what raises WebKit's loupe and, with
 # it, the native Copy | Look Up | Translate bar; a selection made from JS raises
-# neither (docs/pitfall/04), so anything measured against that bar has to start
-# here. 0.5s is already past the gesture's threshold; the default leaves room.
+# neither, so anything measured against that bar has to start here. 0.5s is
+# already past the gesture's threshold; the default leaves room.
 cmd_press() { "$IDB" ui tap --udid "$UDID" --duration "${3:-1.0}" "$1" "$2"; }
 
 # What the page cannot see. The selection callout, the share sheet and the

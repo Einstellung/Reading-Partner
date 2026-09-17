@@ -86,7 +86,7 @@ export interface ThreadMessage {
   ts: number;
   // Filenames of attached images under images/threads/<threadId>/, e.g.
   // "1720000000000-0.png". Kept out of the thread JSON body so the file stays
-  // small (same reasoning as image annotations, pitfall 07); the base64 is read
+  // small (same reasoning as image annotations: base64 inline bloats the JSON); the base64 is read
   // back on demand for display and for resending to the model.
   images?: string[];
   // The durable message-parts structure. Absent on plain text turns and on files

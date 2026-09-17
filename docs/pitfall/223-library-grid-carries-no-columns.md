@@ -23,4 +23,10 @@
 
 ## 解法
 
-用这个常量就必须自己带列数。要和书架一致就拼 `TOPIC_GRID_COLUMNS_CLASS`，是另一种排布就自己写 `grid-cols-*`。
+用这个常量就必须自己带列数。要和书架一致就拼 `TOPIC_GRID_COLUMNS_CLASS`，是另一种排布就自己写 `grid-cols-*`。「换成 `LIBRARY_GRID` 就正常了」这句话本身会让人以为这个常量自带列数——它不带，正常的原因永远是列数类跟着一起拼上了。
+
+## 同一个坑的另一张脸：探针页在 `src/` 外，现写的列数类不生效
+
+无头截图用的静态探针页如果放在 `src/` 之外，还会撞上另一层：Tailwind v4 只生成它在扫描目标里见过的 class，这个仓库扫的是 `src/`，探针页里现写的 `grid-cols-4` 不在任何 `src/` 文件里出现过，`dist/assets/index-*.css` 里就没有这条规则。浏览器拿到一个不存在的 class 不报错，`display:grid` 生效、列数没设，于是变成一列，卡片被拉满宽——和上面「忘拼列数类」长得一模一样，但这次代码里明明写了 `grid-cols-4`。
+
+探针页只用两种 class：组件自己带的，和从组件文件里导出的常量（`LIBRARY_GRID`、`TOPIC_GRID_COLUMNS_CLASS` 这些）。要自己搭壳就用 inline `style`，别现写 utility class。写完先在图里找一处只可能来自那条 class 的效果，确认它真的生效。
