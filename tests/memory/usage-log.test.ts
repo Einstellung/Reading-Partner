@@ -90,3 +90,29 @@ test("bad bytes already in the file are left exactly where they are", () => {
   // Two lines: the corrupt one, untouched, and the new one after it.
   expect(out.split("\n").filter((l) => l.trim() !== "").length).toBe(2);
 });
+
+// Callers log without awaiting, so two of them overlap. Appending is
+// read-modify-write over the whole file: without one writer at a time both read
+// the same prior content and the second write drops the first batch
+// (pitfall 338).
+test("batches logged at the same moment all land, in the order they were logged", async () => {
+  const files = new Map<string, string>();
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const log = createUsageLog({
+    async read(path) {
+      await tick();
+      return files.get(path) ?? null;
+    },
+    async write(path, content) {
+      await tick();
+      files.set(path, content);
+    },
+    deviceId: () => "device1",
+    now: () => JULY_17,
+  });
+
+  const ids = Array.from({ length: 8 }, (_, i) => `s-${i}`);
+  await Promise.all(ids.map((id) => log.logUsage([{ kind: "shown", id }])));
+
+  expect(lines(files.get(usageLogFile("device1")) as string).map((e) => e.id)).toEqual(ids);
+});

@@ -16,6 +16,7 @@
 | 比不同供应商的网络延迟、量首包时间 | 网络与 CSP |
 | 改 deck / 幻灯片的宿主桥、iframe srcdoc | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
+| 往 jsonl 日志追加行、写不 await 的埋点 | 存储与数据目录 |
 | 加自动跑的后台/夜间任务、写数据迁移 | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 造一个字节要可复现的文件（zip、EPUB） | 存储与数据目录 |
@@ -71,7 +72,7 @@
 
 末尾的「历史」是换引擎前留下的，日常不用扫。
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 338）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 339）。
 
 ## EmbedPDF 引擎
 
@@ -159,6 +160,7 @@
 
 ## 存储与数据目录
 
+- [338-concurrent-appends-to-one-jsonl-keep-only-the-last](./338-concurrent-appends-to-one-jsonl-keep-only-the-last.md) — 一个回合 19 次 fire-and-forget 的 `recordModelCall`，`model-calls-*.jsonl` 里只剩 1 行：追加是「读整份 → 拼行 → 原子写回」，同一 tick 的调用读到同一份旧内容再互相盖。按路径把读-改-写串行化（`memory/usage/log.ts` 的 `writeInTurn`），不改走 `appendText`——同步靠 `writeTextAtomic` 的通知知道文件变了，字节上限也要读整份
 - [293-a-fixed-zip-mtime-is-not-fixed-across-time-zones](./293-a-fixed-zip-mtime-is-not-fixed-across-time-zones.md) — 给 zip 条目定死一个 UTC 瞬间做时间戳，字节仍然跨时区变：zip 存 DOS 日期，fflate 用本地时间取值器拆字段，同一瞬间在三个时区写出三种字节，构建出来的 EPUB 于是在另一台设备上哈希成第二本书。时间戳要用本地日历字段构造（`new Date(2001, 0, 1, 12, 0, 0)`），`mtime: 0` 在 DOS 日期里表示不出来
 - [297-openzip-text-only-answers-for-markup-entries](./297-openzip-text-only-answers-for-markup-entries.md) — 打进 EPUB 的 `cover.svg`，`zip.has()` 为 true、`entries` 里列着，`zip.text()` 却返回 null：`openZip` 只预解 markup 条目，`text()` 只查那张表，查不到不区分「没这条」和「没预解」。非 markup 条目走 `zip.bytes()` 自己 decode
 - [277-a-pdfium-cover-failure-outlives-pdfium](./277-a-pdfium-cover-failure-outlives-pdfium.md) — 上一版 PDFium 写下的 `covers/*.failed.json`（`FPDF_LoadMemDocument failed`）在 24 小时内一律当数，升级后书架上的 EPUB 还是无封面卡片。失败记号写下是哪个 reader 失败的，没写的不算证据

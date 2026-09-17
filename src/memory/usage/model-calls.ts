@@ -10,7 +10,7 @@
 // Ids and numbers only: no prompt, no reply, no title.
 
 import type { AiSurface } from "../../platform/app/cache-telemetry";
-import { appendLines, type UsageIo } from "./log";
+import { appendLines, writeInTurn, type UsageIo } from "./log";
 
 // Who spent it. The tool-loop surfaces answer with the value they already carry
 // for the cache accounting (platform/app/cache-telemetry.ts), so the two logs
@@ -106,11 +106,17 @@ export function createModelCallLog(io: UsageIo): ModelCallLog {
       // drops the same way for the same reason.
       const device = io.deviceId();
       if (!device) return;
+      // Stamped when the call reported, not when its turn at the file came:
+      // the send path reports fire-and-forget, so a turn's calls queue behind
+      // each other here (writeInTurn) while all of them happened at once.
       const at = new Date(io.now()).toISOString();
       const path = modelCallLogFile(device);
-      const prior = (await io.read(path)) ?? "";
-      const written = appendLines(prior, calls.map((c) => ({ at, device, ...c })));
-      await io.write(path, capToBytes(written, MODEL_CALL_LOG_MAX_BYTES));
+      const lines = calls.map((c) => ({ at, device, ...c }));
+      await writeInTurn(path, async () => {
+        const prior = (await io.read(path)) ?? "";
+        const written = appendLines(prior, lines);
+        await io.write(path, capToBytes(written, MODEL_CALL_LOG_MAX_BYTES));
+      });
     },
   };
 }
