@@ -2,8 +2,10 @@
 
 import { expect, test } from "bun:test";
 import {
+  appendUnique,
   buildIndex,
   isoDate,
+  laterDay,
   localDate,
   oneLine,
   parseIndex,
@@ -196,6 +198,22 @@ test("buildIndex sorts newest-updated first and parseIndex skips junk lines", ()
 test("isoDate and oneLine", () => {
   expect(isoDate(new Date("2026-07-17T23:59:00Z").getTime())).toBe("2026-07-17");
   expect(oneLine("  a\n b\tc ")).toBe("a b c");
+});
+
+test("laterDay never moves a date backwards", () => {
+  expect(laterDay("2026-07-17", "2026-07-02")).toBe("2026-07-17");
+  expect(laterDay("2026-07-02", "2026-07-17")).toBe("2026-07-17");
+});
+
+test("appendUnique keeps order and treats a padded id as the one it names", () => {
+  expect(appendUnique(["a"], ["b", "a", "c", "b"])).toEqual(["a", "b", "c"]);
+  // Both stores append through this, so a whitespace-padded anchor must not
+  // become a second entry for the same observation.
+  expect(appendUnique(["m-1"], [" m-1 ", "\nm-2\t"])).toEqual(["m-1", "m-2"]);
+  expect(appendUnique([], ["", "  "])).toEqual([]);
+  // What is already on disk is left exactly as it is: reading a file does not
+  // rewrite the entries in it.
+  expect(appendUnique([" m-1 "], [])).toEqual([" m-1 "]);
 });
 
 test("localDate reads the device's own clock, not UTC", () => {

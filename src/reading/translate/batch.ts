@@ -9,27 +9,17 @@
 //
 // The size is counted in source tokens, estimated rather than measured: a
 // tokenizer would have to be the model's own, and the number is only deciding
-// where to cut.
+// where to cut. The estimate is src/budget's, the same one the send path prices
+// a context with. Counting by script matters here because the source is whatever
+// the article was written in, and an estimate four times too small would send a
+// batch four times too large.
 
+import { estimateTextTokens } from "../../budget";
 import type { TranslatableBlock } from "./segment";
 
 /** The size a batch aims for, and the size it may not exceed. */
 export const BATCH_TARGET_TOKENS = 2000;
 export const BATCH_MAX_TOKENS = 2500;
-
-// A CJK character is about a token; Latin prose is about four characters to
-// one. Counting both ways matters because the source is whatever the article
-// was written in, and an estimate four times too small would send a batch four
-// times too large.
-const CJK = /[㐀-鿿豈-﫿぀-ヿ가-힯]/u;
-
-/** Roughly how many tokens a string costs. Deliberately coarse. */
-export function estimateTokens(s: string): number {
-  let cjk = 0;
-  for (const ch of s) if (CJK.test(ch)) cjk++;
-  const rest = s.length - cjk;
-  return cjk + Math.ceil(rest / 4);
-}
 
 export interface BatchLimits {
   target?: number;
@@ -52,7 +42,7 @@ export function planBatches(
   let size = 0;
 
   for (const block of blocks) {
-    const cost = estimateTokens(block.text);
+    const cost = estimateTextTokens(block.text);
     if (current.length > 0 && size + cost > max) {
       batches.push(current);
       current = [];

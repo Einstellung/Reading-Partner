@@ -13,6 +13,7 @@
 // is the gate on every field this format may still grow, so the passthrough
 // ships before any of them.
 
+import { parseRecordIds } from "../../platform/app/record-lines";
 import {
   isObservationType,
   type Observation,
@@ -25,14 +26,36 @@ export function isoDate(now: number): string {
 
 // The same YYYY-MM-DD on the device's own clock. Two date formatters rather than
 // one because they date different things: isoDate stamps a file write, where any
-// consistent clock will do, while this one dates something the reader remembers
-// happening. At UTC+8 an hour of late-night reading falls on the previous UTC
-// day, so a conversation held after midnight would be written up as the day
-// before — a small version of exactly the lie this is here to stop.
-export function localDate(now: number): string {
-  const d = new Date(now);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+// consistent clock will do, while localDate dates something the reader remembers
+// happening. Re-exported from platform because the deleted-books file dates its
+// own records the same way.
+export { localDate } from "../../platform/app/day";
+
+// The later of two "YYYY-MM-DD" days, for both memory stores: an observation's
+// `updated` and a statement's `lastSupported` are each the last day the evidence
+// behind them covers, and neither may move backwards. Evidence is folded in
+// oldest-first as often as newest-first — a dream pass works through a backlog —
+// so a pass reading an older conversation must not make either look staler than
+// what it already carries.
+export function laterDay(a: string, b: string): string {
+  return a > b ? a : b;
+}
+
+// Append to a list of ids, keeping it unique and in order. Whitespace around an
+// entry is not part of the id: a statement given " m-abc" after "m-abc" would
+// otherwise cite the same observation twice. Only what is being appended is
+// normalized — entries already on disk are passed through untouched, so no read
+// of an old file rewrites it.
+export function appendUnique(existing: readonly string[], added: readonly string[]): string[] {
+  const out = [...existing];
+  const seen = new Set(existing);
+  for (const item of added) {
+    const value = item.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
 }
 
 // Summaries are one line by contract: collapse whitespace so neither the
@@ -222,16 +245,5 @@ export function appendTombstone(text: string, id: string, at: string): string {
 // Tolerant like the rest of this file: a line that does not parse, or carries no
 // id, is not a tombstone and is skipped rather than failing the read.
 export function parseTombstones(text: string): Set<string> {
-  const ids = new Set<string>();
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (line === "") continue;
-    try {
-      const value = JSON.parse(line) as { id?: unknown };
-      if (typeof value?.id === "string" && value.id !== "") ids.add(value.id);
-    } catch {
-      continue;
-    }
-  }
-  return ids;
+  return parseRecordIds(text, "id");
 }

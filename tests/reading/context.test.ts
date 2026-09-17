@@ -105,12 +105,16 @@ test("over the ceiling, the neighbours go before the marked page", () => {
   expect(out).toContain("the marked page");
   expect(out).not.toContain("=== Page 1 ===");
   expect(out).toContain("The pages either side of p.2 were left out");
-  expect(estimateTextTokens(out)).toBeLessThan(MARK_PAGES_MAX_TOKENS * 1.2);
+  // The ceiling covers the pages; the surrounding instructions are the rest of
+  // the allowance here. The cut itself is src/legion's binary search, which
+  // returns the largest prefix that fits — so the page is inside the ceiling
+  // rather than near it, and this bound is exact rather than a fifth over.
+  expect(estimateTextTokens(out)).toBeLessThan(MARK_PAGES_MAX_TOKENS + 100);
 
   const huge = markedPagesSection(ft(["a", dense, "b"]), 2);
   expect(huge).toContain("=== Page 2 === [p.2]");
   expect(huge).toContain("Page 2 is cut off here");
-  expect(estimateTextTokens(huge)).toBeLessThan(MARK_PAGES_MAX_TOKENS * 1.2);
+  expect(estimateTextTokens(huge)).toBeLessThan(MARK_PAGES_MAX_TOKENS + 100);
 });
 
 test("toolStatusLabel phrases each tool, single vs range pages", () => {

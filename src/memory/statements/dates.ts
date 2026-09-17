@@ -12,6 +12,11 @@
 import { parseMessageAnchor } from "../observations/anchors";
 import { localDate } from "../observations/files";
 
+// `lastSupported` never moves backwards. Shared with the observation store,
+// which needs the same of `updated`, and re-exported here because dating a
+// statement is what this module is.
+export { laterDay } from "../observations/files";
+
 // A closed span of days, both ends inclusive, "YYYY-MM-DD".
 export interface DaySpan {
   first: string;
@@ -53,12 +58,4 @@ export function unionSpans(spans: readonly DaySpan[]): DaySpan | null {
     if (last === null || span.last > last) last = span.last;
   }
   return first === null || last === null ? null : { first, last };
-}
-
-// The later of two days. `lastSupported` never moves backwards: evidence is
-// appended oldest-first as often as newest-first (a dream pass works through a
-// backlog), and a statement must not look staler for having been given more to
-// stand on.
-export function laterDay(a: string, b: string): string {
-  return a > b ? a : b;
 }
