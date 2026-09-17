@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   cleanAuthor,
+  coverBytesPlan,
   COVER_RENDER_LIMIT,
   COVER_RETRY_AFTER_MS,
   COVER_WIDTH_PX,
@@ -200,6 +201,56 @@ describe("single flight", () => {
     await expect(flight.run("k", work)).rejects.toThrow("boom");
     expect(await flight.run("k", work)).toBe("cover");
     expect(runs).toBe(2);
+  });
+
+  test("a forgotten answer is produced again, and only that one", async () => {
+    const flight = createSingleFlight<string>();
+    const runs: string[] = [];
+    const work = (key: string) => async () => {
+      runs.push(key);
+      return key;
+    };
+    await flight.run("a", work("a"));
+    await flight.run("b", work("b"));
+    flight.forget("a");
+    expect(await flight.run("a", work("a"))).toBe("a");
+    expect(await flight.run("b", work("b"))).toBe("b");
+    expect(runs).toEqual(["a", "b", "a"]);
+  });
+
+  test("forgetting a key nobody asked about is not an error", () => {
+    const flight = createSingleFlight<string>();
+    expect(() => flight.forget("nothing")).not.toThrow();
+  });
+});
+
+describe("where a book's bytes come from", () => {
+  const PICKED = { path: "/books/a.pdf" };
+  const HASHED = { path: "/books/a.pdf", hash: "deadbeef" };
+
+  test("a book this device holds is read out of the library", () => {
+    const plan = coverBytesPlan(HASHED, true);
+    expect(plan.from).toBe("library");
+    expect(plan.absence).toBe("unreadable");
+  });
+
+  test("a book that is only in the account is not here yet, not broken", () => {
+    const plan = coverBytesPlan(HASHED, false);
+    expect(plan.absence).toBe("not-here-yet");
+  });
+
+  test("a file that was picked and never imported is read by its path", () => {
+    const plan = coverBytesPlan(PICKED, false);
+    expect(plan.from).toBe("picked");
+    expect(plan.absence).toBe("unreadable");
+  });
+
+  test("only a file read by its path is answered by that path's marker", () => {
+    expect(coverBytesPlan(PICKED, false).pathMarkerApplies).toBe(true);
+    // The book arrived: the marker a build wrote when it had only the path is
+    // about a read this entry no longer makes.
+    expect(coverBytesPlan(HASHED, true).pathMarkerApplies).toBe(false);
+    expect(coverBytesPlan(HASHED, false).pathMarkerApplies).toBe(false);
   });
 });
 

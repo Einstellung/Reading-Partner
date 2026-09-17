@@ -42,6 +42,34 @@ export function coverRequestKey(ref: CoverRef): string {
   return ref.hash ? `id-${ref.hash}` : unreadableKey(ref.path);
 }
 
+// Where a shelf entry's bytes are read from, and what it means when they will
+// not come. All three answers follow from one question — whether this device
+// holds the book itself (library.ts) or only the path some device once picked it
+// from — so they are decided together.
+export interface CoverBytesPlan {
+  // "library" reads the authoritative copy under the book id; "picked" reads the
+  // file where the reader keeps it, which on another device is a path to
+  // nothing.
+  from: "library" | "picked";
+  // Whether a recorded failure to read this path still speaks for the entry. It
+  // does not once the book itself is on the device: the marker was written by a
+  // read of a path this entry no longer goes through, and the download is what
+  // changed.
+  pathMarkerApplies: boolean;
+  // What a failed read means. A book with an id whose bytes are not here is not
+  // broken, it is not here yet (docs/70): it arrives when the reader taps it, so
+  // nothing about it is written down or remembered.
+  absence: "unreadable" | "not-here-yet";
+}
+
+export function coverBytesPlan(ref: CoverRef, inLibrary: boolean): CoverBytesPlan {
+  // No book id: a file the reader picked and never imported. The path is all
+  // there is, and a path that will not open is unreadable.
+  if (!ref.hash) return { from: "picked", pathMarkerApplies: true, absence: "unreadable" };
+  if (inLibrary) return { from: "library", pathMarkerApplies: false, absence: "unreadable" };
+  return { from: "picked", pathMarkerApplies: false, absence: "not-here-yet" };
+}
+
 // A cover is shown at about a third of a library card's width on an iPad, so
 // ~120 CSS px; rastered at 2x for retina. Wider is wasted bytes on the shelf's
 // first paint, narrower is visibly soft.
@@ -126,6 +154,12 @@ export function coverRetryDue(failure: CoverFailure | null, now: number): boolea
 
 export interface SingleFlight<T> {
   run(key: string, work: () => Promise<T>): Promise<T>;
+  /**
+   * Drop a settled answer, so the next caller asks again. For an answer that
+   * was only true of the moment it was given: a book whose bytes this device
+   * did not hold yet is a different question once it has been downloaded.
+   */
+  forget(key: string): void;
 }
 
 // Runs `work` once per key: callers that arrive while it is in flight join the
@@ -144,6 +178,9 @@ export function createSingleFlight<T>(): SingleFlight<T> {
         if (entries.get(key) === started) entries.delete(key);
       });
       return started;
+    },
+    forget(key) {
+      entries.delete(key);
     },
   };
 }

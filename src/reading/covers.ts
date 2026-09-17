@@ -31,6 +31,7 @@ import {
   COVER_JPEG_QUALITY,
   COVER_RENDER_LIMIT,
   COVER_WIDTH_PX,
+  coverBytesPlan,
   coverFailurePath,
   coverImagePath,
   coverMetaPath,
@@ -69,35 +70,59 @@ const NONE: BookCover = { url: null, author: null };
 const flight = createSingleFlight<BookCover>();
 const renders = createGate(COVER_RENDER_LIMIT);
 
+// An answer, and whether it may be kept for the session. Everything a render
+// settles is kept; an answer that only says the book is not on this device yet
+// is not, because the next ask comes after the download that changes it.
+interface Produced {
+  cover: BookCover;
+  keep: boolean;
+}
+
+function kept(cover: BookCover): Produced {
+  return { cover, keep: true };
+}
+
 /**
  * The cover and author for a shelf entry. Concurrent calls for the same file
  * share one render, and a resolved cover is kept for the session.
  */
 export function bookCover(file: FileRef): Promise<BookCover> {
-  return flight.run(coverRequestKey(file), () => produce(file));
+  const key = coverRequestKey(file);
+  return flight.run(key, async () => {
+    const produced = await produce(file);
+    if (!produced.keep) flight.forget(key);
+    return produced.cover;
+  });
 }
 
-async function produce(file: FileRef): Promise<BookCover> {
+async function produce(file: FileRef): Promise<Produced> {
   // The fast path a cold start takes: the book id is known, the cover and its
   // record are on disk under it, and the PDF itself is never touched.
   if (file.hash) {
     const cached = await readCached(file.hash);
-    if (cached) return cached;
-    if (await givenUp(file.hash)) return NONE;
+    if (cached) return kept(cached);
+    if (await givenUp(file.hash)) return kept(NONE);
   }
-  if (await givenUp(unreadableKey(file.path))) return NONE;
+  const plan = coverBytesPlan(file, file.hash ? await libraryHas(file.hash) : false);
+  if (plan.pathMarkerApplies && (await givenUp(unreadableKey(file.path)))) return kept(NONE);
 
   let bytes: Uint8Array;
   try {
-    // The one read here that is not AppData-relative: a file the reader picked,
-    // still at wherever they keep it, because this book has never been imported.
+    // The read that is not AppData-relative: a file the reader picked, still at
+    // wherever they keep it, because this book has never been imported.
     bytes =
-      file.hash && (await libraryHas(file.hash))
-        ? await readLibraryBook(file.hash)
+      plan.from === "library"
+        ? await readLibraryBook(file.hash as string)
         : await appData.readPicked(file.path);
   } catch (e) {
+    if (plan.absence === "not-here-yet") {
+      // Nothing is wrong with this book: its bytes are in the account and this
+      // device has not fetched them (docs/70). No marker and no remembered
+      // answer — either would outlive the download that puts them here.
+      return { cover: NONE, keep: false };
+    }
     await recordFailure(unreadableKey(file.path), file, "unreadable", e, "file");
-    return NONE;
+    return kept(NONE);
   }
 
   const bookId = file.hash ?? (await contentHash(bytes));
@@ -106,8 +131,8 @@ async function produce(file: FileRef): Promise<BookCover> {
     // been consulted under it yet — an earlier session may have rendered this
     // very content already.
     const cached = await readCached(bookId);
-    if (cached) return cached;
-    if (await givenUp(bookId)) return NONE;
+    if (cached) return kept(cached);
+    if (await givenUp(bookId)) return kept(NONE);
   }
 
   const rendered = await renders.run(() => renderCover(bytes, bookId, file));
@@ -116,10 +141,10 @@ async function produce(file: FileRef): Promise<BookCover> {
     // nothing beside it. If the render that would have written one just failed,
     // the picture is still a picture: show it, with no name under it.
     const stale = await readCoverImage(bookId);
-    return stale ? { url: stale, author: null } : NONE;
+    return kept(stale ? { url: stale, author: null } : NONE);
   }
   await writeCover(bookId, rendered.jpeg, rendered.author);
-  return { url: dataUrl(rendered.jpeg), author: rendered.author || null };
+  return kept({ url: dataUrl(rendered.jpeg), author: rendered.author || null });
 }
 
 // --- rendering -------------------------------------------------------------
