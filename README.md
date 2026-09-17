@@ -16,7 +16,7 @@ Collecting means polling every source around the clock, opening article pages in
 
 The collector publishes the finished briefing and the text of the articles in it into your Drive folder, and every reader picks them up from there. On a reader, asking for a fresh briefing hands the request to the collector rather than running it locally. Subscribing to a source and signing in to a site are the collector's too, because both have to prove they can actually fetch an article before they mean anything.
 
-A phone with no desktop behind it gets an app with no briefing in it.
+A phone with no desktop behind it gets an app with no briefing in it. Books are the other half and need no collector: the phone opens the EPUBs in your Drive on its own (see [Reading on the phone](#reading-on-the-phone)).
 
 The iPhone app needs **iOS 26 or later, on an iPhone 14 or newer**. It listens on the device — hold the composer's bar and speak, and the transcript is written by the phone with nothing uploaded — and the framework behind that (`SpeechAnalyzer`) is iOS 26 API whose availability is also a hardware answer: it is false on a Neural Engine below a certain size, and always false in the simulator. Measured reports put the real cutoff at iPhone 12; the stated floor keeps a notch of margin. Either way it is the whole app's floor, not the feature's.
 
@@ -90,6 +90,18 @@ On an iPad, open a book through Files; on the desktop the file picker takes `.ep
      docs/assets/epub-reading.png and replace this comment with:
      ![An EPUB in the reader](docs/assets/epub-reading.png) -->
 
+## Reading on the phone
+
+The phone reads EPUBs. Its home has a Library card carrying the book you were reading, and behind it your topics with the same covers the tablet shows. A book opens as one reflowed column at phone width, scrolled natively, and the top bar counts the pages the tablet counts — with the printed page label when the book carries one — so a page cited on one device is that page on the other. The outline comes up as a sheet.
+
+![The topic shelf on the phone](docs/assets/phone-shelf.png)
+
+Press and hold a word to highlight it, drag to extend, lift to keep it; the highlight pen and a drag do the same. Tap a mark to delete it. Marks and the reading position are the same files the tablet writes, so a line drawn on the phone is there on the iPad, and a book left open on the iPad opens at that page on the phone.
+
+![An EPUB on the phone, with a highlight](docs/assets/phone-reading.png)
+
+A book comes down when you open it: one that is in your Drive but not on the device shows as in the cloud, and tapping it fetches that book alone. PDFs stay on the iPad and desktop — their covers are on the phone's shelf, and tapping one says so. The AI is not on the phone yet; the AI pen and Learn this book with AI are drawn and disabled, each with its reason for a label.
+
 ## Marking and asking
 
 Mark a passage with the AI pen and it explains it in place, like a video call with the book: the reply opens in a bubble you can expand to cover the page, and the thread stays anchored to your highlight forever. The AI can turn pages on its own, run full-text search across the books in your topic, and read your existing highlights and their comments when the conversation needs them. A button in the top bar opens a book-level thread for questions that belong to no particular passage ("what is this chapter about?").
@@ -147,7 +159,7 @@ Every chat composer on the desktop has a push-to-talk mic. Hold to record, relea
 
 ## Sync across devices
 
-Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, prep material, retells and talk outlines, your profile, your sources, and the briefing the collector published — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same book opened on two devices lines up, and phones stay out of that channel entirely — they don't open books. AI provider credentials are the one thing that never leaves the device.
+Sign in with Google in Settings and everything syncs — books, reading positions, marks and highlights, conversations, prep material, retells and talk outlines, your profile, your sources, and the briefing the collector published — through a visible "Reading Partner" folder in your own Google Drive. No accounts, no server: your data stays in your Drive, and you can open the folder and see the files. Sync runs automatically after sign-in, with a manual toggle and a Sync now button in Settings. Books are content-addressed, so the same book opened on two devices lines up; the phone does not mirror the shelf and pulls a book down when you open it. AI provider credentials are the one thing that never leaves the device.
 
 ## Thinking levels
 
@@ -194,7 +206,7 @@ Drive sync needs your own Google OAuth Desktop client: copy `.env.example` to `.
 
 ## Status
 
-Early development, moving fast. Books are PDF or EPUB; EPUB arrived in 0.16.0. Features get removed as well as added: the generated slide deck and the whole-book notes tab both shipped and are both gone. The screenshots above come from real reading sessions and lag behind the current interface.
+Early development, moving fast. Books are PDF or EPUB; EPUB arrived in 0.16.0, and the phone started reading EPUBs in 0.20.0. Features get removed as well as added: the generated slide deck and the whole-book notes tab both shipped and are both gone. The screenshots above come from real reading sessions and lag behind the current interface.
 
 ## License
 
