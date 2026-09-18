@@ -60,7 +60,7 @@ export type PersistedPart =
 //
 // Not a UUID: this string is written into prose and into a frontmatter list the
 // reader reads, and 36 characters per anchor buys nothing over 64 bits here.
-function newMessageId(): string {
+export function newThreadMessageId(): string {
   return `t-${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
@@ -242,6 +242,19 @@ export interface ThreadIo {
   onCorrupt?: (report: CorruptFileReport) => void;
   timer?: WriterTimer;
   exit?: (onExit: () => void) => void;
+  // A message was appended to a thread under this key. Called synchronously,
+  // with the message as it was stored — the id included, which is what tells a
+  // listener its own append apart from someone else's.
+  onAppend?: (append: ThreadAppend) => void;
+}
+
+/** One appended message, as the channel below reports it. */
+export interface ThreadAppend {
+  // The store key the thread's file is under: a book id, or a day for the
+  // door's conversation (threadFileName).
+  key: string;
+  threadId: string;
+  message: ThreadMessage;
 }
 
 // What the store holds for one file.
@@ -703,9 +716,19 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       // no path can append a message without one. A caller that already has an
       // id keeps it (a resend, a test); the stored object is a copy, so nothing
       // the caller still holds is mutated behind its back.
-      thread.messages.push(message.id ? message : { id: newMessageId(), ...message });
+      const stored = message.id ? message : { id: newThreadMessageId(), ...message };
+      thread.messages.push(stored);
       entry.gen++;
       schedule(bookId);
+      // After the message is in the thread, so a listener that reads the store
+      // back sees what it is being told about. A listener exists to display
+      // something; one that throws must not turn an append that happened into
+      // one that failed.
+      try {
+        io.onAppend?.({ key: bookId, threadId, message: stored });
+      } catch (e) {
+        console.error(`thread append listener failed for ${bookId}`, e);
+      }
       return thread;
     },
     // Merge a patch into the stored message identified by `ts` (used to record a
@@ -755,6 +778,42 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
   };
 }
 
+// A conversation the app is showing can be written to by something that is not
+// the view: a delegated run answered by the soul (soul/bell.ts) appends its
+// reply to the thread it was sent from, whoever is looking at it. Without this
+// the view learns nothing — it holds its rows in React state, and the reader
+// who stayed in the conversation to wait sees an empty screen until they close
+// it and open it again (docs/68).
+//
+// Module-level rather than per-store, so a store rebuilt for a test does not
+// take the app's listeners with it, and a store a test builds announces to its
+// own io.onAppend and to nobody else.
+const appendListeners = new Set<(append: ThreadAppend) => void>();
+
+/**
+ * Hear about every message appended through this module's appendMessage, after
+ * it is in the thread. Returns the undo.
+ *
+ * Local appends only. A message that arrives by sync is a new version of the
+ * whole file and comes through the sync engine's own route, not this one.
+ */
+export function onThreadMessage(listener: (append: ThreadAppend) => void): () => void {
+  appendListeners.add(listener);
+  return () => {
+    appendListeners.delete(listener);
+  };
+}
+
+function announceAppend(append: ThreadAppend): void {
+  for (const listener of [...appendListeners]) {
+    try {
+      listener(append);
+    } catch (e) {
+      console.error(`thread append listener failed for ${append.key}`, e);
+    }
+  }
+}
+
 function liveStore(): ThreadStore {
   return createThreadStore({
     read: readTextOrNull,
@@ -762,6 +821,7 @@ function liveStore(): ThreadStore {
     quarantine: quarantineFile,
     onError: (e) => reportStoreError("threads", e),
     onCorrupt: (report) => reportStoreError("corrupt-file", report),
+    onAppend: announceAppend,
   });
 }
 

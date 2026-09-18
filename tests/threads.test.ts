@@ -11,10 +11,12 @@ import {
   deleteThreadTree,
   getBookThread,
   getThread,
+  onThreadMessage,
   patchThreadMessage,
   threadKind,
   type PersistedPart,
   type Thread,
+  type ThreadAppend,
   type ThreadMessage,
 } from "../src/platform/app/threads";
 
@@ -177,4 +179,66 @@ test("patchThreadMessage merges into the stored message by ts (e.g. a card flip)
   expect(part.card.added).toBe(true);
   // A miss (unknown ts) is a no-op, not a throw.
   expect(() => patchThreadMessage(path, "th-c", 999, { text: "x" })).not.toThrow();
+});
+
+// --- the append channel ----------------------------------------------------
+// What a view with the conversation open hears about (docs/68): a delegated run
+// the soul answers into that thread has to reach the screen, and nothing else
+// tells the view its file moved.
+
+test("onThreadMessage reports an append with its key, thread and stored message", () => {
+  const path = "/books/channel-a.pdf";
+  createThread(path, "ann-c", "th-ch1");
+  const heard: ThreadAppend[] = [];
+  const off = onThreadMessage((append) => heard.push(append));
+  appendMessage(path, "th-ch1", { role: "ai", text: "the run is done", ts: 7 });
+  off();
+
+  expect(heard).toHaveLength(1);
+  expect(heard[0].key).toBe(path);
+  expect(heard[0].threadId).toBe("th-ch1");
+  expect(heard[0].message.text).toBe("the run is done");
+  // The message as it was stored, so a listener can tell an append it made
+  // itself from one it did not.
+  expect(heard[0].message.id).toBe(getThread(path, "th-ch1")?.messages[0].id);
+});
+
+test("every listener hears an append, and one that throws does not stop the rest", () => {
+  const path = "/books/channel-b.pdf";
+  createThread(path, "ann-c", "th-ch2");
+  const heard: string[] = [];
+  const offs = [
+    onThreadMessage(() => {
+      throw new Error("a listener that fell over");
+    }),
+    onThreadMessage((a) => heard.push(`one:${a.message.text}`)),
+    onThreadMessage((a) => heard.push(`two:${a.message.text}`)),
+  ];
+  expect(() => appendMessage(path, "th-ch2", { role: "ai", text: "x", ts: 1 })).not.toThrow();
+  for (const off of offs) off();
+
+  expect(heard).toEqual(["one:x", "two:x"]);
+});
+
+test("an unsubscribed listener hears nothing more", () => {
+  const path = "/books/channel-c.pdf";
+  createThread(path, "ann-c", "th-ch3");
+  const heard: string[] = [];
+  const off = onThreadMessage((a) => heard.push(a.message.text));
+  appendMessage(path, "th-ch3", { role: "user", text: "first", ts: 1 });
+  off();
+  appendMessage(path, "th-ch3", { role: "ai", text: "second", ts: 2 });
+  // Unsubscribing twice is a no-op, not a throw.
+  expect(() => off()).not.toThrow();
+
+  expect(heard).toEqual(["first"]);
+});
+
+test("an append to a thread that is not there says nothing", () => {
+  const heard: ThreadAppend[] = [];
+  const off = onThreadMessage((append) => heard.push(append));
+  expect(appendMessage("/books/channel-d.pdf", "missing", { role: "ai", text: "x", ts: 1 })).toBeUndefined();
+  off();
+
+  expect(heard).toEqual([]);
 });
