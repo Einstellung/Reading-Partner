@@ -115,3 +115,35 @@ test("the sync alert rides on Settings and says so in the name", () => {
   expect(html).toContain("Settings — sync needs attention");
   expect(render({ alert: false })).not.toContain("sync needs attention");
 });
+
+// A downloaded desktop update is one row above Settings, named with the version
+// it restarts into, and absent otherwise (docs/72).
+test("the restart-to-update row appears only with an update waiting", () => {
+  const withUpdate = (update: Parameters<typeof AppSidebar>[0]["update"]) =>
+    renderToStaticMarkup(
+      <AppSidebar
+        active="today"
+        onSelect={() => {}}
+        onOpenSettings={() => {}}
+        settingsAlert={false}
+        collapsed={false}
+        onToggleCollapsed={() => {}}
+        lumenShown={true}
+        onToggleLumen={() => {}}
+        update={update}
+        onApplyUpdate={() => {}}
+      />,
+    );
+  expect(render()).not.toContain("Restart to update");
+  expect(withUpdate({ kind: "none" })).not.toContain("Restart to update");
+
+  const ready = withUpdate({ kind: "ready", version: "0.21.0" });
+  expect(ready).toContain('title="Restart to update (v0.21.0)"');
+  expect(ready.indexOf(">Restart to update<")).toBeGreaterThan(-1);
+  expect(ready.indexOf(">Restart to update<")).toBeLessThan(ready.indexOf(">Settings<"));
+
+  const installing = withUpdate({ kind: "installing", version: "0.21.0" });
+  expect(installing).toContain(">Updating…<");
+  expect(installing).toContain('title="Updating to v0.21.0…"');
+  expect(installing).toContain('disabled=""');
+});

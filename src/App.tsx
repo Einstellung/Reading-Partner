@@ -113,6 +113,7 @@ import { activeNavFor, screenForNav } from "./ui/components/base/shell-nav";
 import { shellPlaces } from "./ui/components/base/places";
 import { registerPlaces } from "./desk";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
+import { applyAppUpdate, useAppUpdate } from "./ui/components/common/useAppUpdate";
 import { clearScrollMemory } from "./ui/components/common/scroll-memory";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
 import type { PendingImage } from "./ui/components/chat/types";
@@ -334,6 +335,8 @@ export default function App() {
     ready: bootstrapped,
     syncReport,
   } = useShellBootstrap({ settingsOpen: settingsShowing || readerSettings, pushToast });
+  // A downloaded desktop update, drawn as a row in the sidebar (docs/72).
+  const appUpdateState = useAppUpdate();
   const fingerDraw = !!device?.fingerDraw;
 
 
@@ -1461,6 +1464,8 @@ export default function App() {
             onToggleCollapsed={toggleShellSidebar}
             lumenShown={lumenShown}
             onToggleLumen={toggleLumen}
+            update={appUpdateState}
+            onApplyUpdate={applyAppUpdate}
           />
         )}
         {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the

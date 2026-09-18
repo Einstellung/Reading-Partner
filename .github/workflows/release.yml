@@ -53,6 +53,41 @@ jobs:
         shell: bash
         run: bun run wasm
 
+      # Developer ID signing and notarization for the macOS bundle (docs/72).
+      # Exported to the job only when the certificate secret exists: tauri
+      # treats a set-but-empty APPLE_CERTIFICATE as a certificate to import and
+      # fails, so without it the build stays unsigned, as before. Notarization
+      # reuses the App Store Connect API key the iOS workflow uses, and is only
+      # attempted on a signed build.
+      - name: macOS signing and notarization
+        if: matrix.platform == 'macos-latest'
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          if [ -z "$CERT" ]; then
+            echo "::warning::APPLE_CERTIFICATE is not set; the macOS build is unsigned and not notarized."
+            exit 0
+          fi
+          # One line whatever the secret was pasted as: GITHUB_ENV is line-based
+          # and the certificate is base64.
+          echo "APPLE_CERTIFICATE=$(printf '%s' "$CERT" | tr -d ' \r\n')" >> "$GITHUB_ENV"
+          echo "APPLE_CERTIFICATE_PASSWORD=$CERT_PASSWORD" >> "$GITHUB_ENV"
+          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          if [ -z "$API_KEY_P8_BASE64" ] || [ -z "$API_KEY_ID" ] || [ -z "$API_ISSUER" ]; then
+            echo "::warning::App Store Connect API key secrets missing; signed but not notarized."
+            exit 0
+          fi
+          mkdir -p ~/private_keys
+          printf '%s' "$API_KEY_P8_BASE64" | base64 --decode > ~/private_keys/AuthKey_${API_KEY_ID}.p8
+          echo "APPLE_API_ISSUER=$API_ISSUER" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY=$API_KEY_ID" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_PATH=$HOME/private_keys/AuthKey_${API_KEY_ID}.p8" >> "$GITHUB_ENV"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -61,12 +96,23 @@ jobs:
           # (PKCE is the protection), but it still lives in repo secrets.
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
+          # Signs every update bundle (.app.tar.gz, AppImage, deb, rpm, msi,
+          # setup.exe) with the updater key, whose public half is in
+          # tauri.conf.json (docs/72). The key has no password.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Reading Partner ${{ github.ref_name }}"
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+          # latest.json carries a key per installer (linux-x86_64-deb, -rpm,
+          # -appimage, windows-x86_64-msi, -nsis, darwin-*-app), and the updater
+          # looks up the one it was installed from first. This only picks what
+          # the bare windows-x86_64 fallback points at: the setup.exe, which is
+          # what the release page offers first.
+          updaterJsonPreferNsis: true
 
   # The fourth product of the same tag: a signed arm64 APK, built once by the
   # reusable Android workflow and attached to the release the desktop

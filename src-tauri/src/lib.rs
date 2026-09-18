@@ -64,6 +64,11 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        // Self-update from GitHub Releases (docs/72): the frontend checks,
+        // downloads in the background and installs when the user says so;
+        // process is only for the relaunch that follows.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(voice::VoiceState::default())
         // The fetcher's state is also what the navigation guard reads to tell a
         // hidden fetcher window from the app's own, so it is managed before any
