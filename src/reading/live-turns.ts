@@ -13,6 +13,8 @@
 // Pure bookkeeping: it aborts controllers and holds messages, and never touches
 // React state, storage or the network.
 
+import type { Steering } from "./steering";
+
 // The streaming row a turn owns. Structural, so the shell stores its own display
 // message type (trace, images, notice and all) without this module knowing it.
 export interface LiveMessage {
@@ -31,6 +33,11 @@ export interface LiveTurn<M extends LiveMessage> {
   // keeps, which is why it is tracked here and not only in React state: a closed
   // bubble stops re-rendering, and the turn keeps writing.
   message: M;
+  // The reader's lines said into this turn while it ran (reading/steering.ts).
+  // Held here for the same reason the row is: the stop button needs to know
+  // what the model was never handed, and a closed bubble has stopped
+  // re-rendering by then.
+  steering?: Steering;
   // Run once the turn lands. Hanging up mid-stream defers the observation
   // distillation to here, so it reads a whole answer instead of half a sentence.
   onSettled?: () => void;
@@ -38,6 +45,10 @@ export interface LiveTurn<M extends LiveMessage> {
 
 export interface LiveTurns<M extends LiveMessage> {
   start(turn: Omit<LiveTurn<M>, "onSettled">): void;
+  // The reader spoke mid-turn and the model has been handed it, so the reply
+  // that follows is a new row (docs/72). Only the controller that owns the
+  // entry may swap the row, for the same reason only it may settle one.
+  openRow(threadId: string, controller: AbortController, message: M): void;
   get(threadId: string): LiveTurn<M> | undefined;
   has(threadId: string): boolean;
   patch(threadId: string, ts: number, fn: (message: M) => M): void;
@@ -57,11 +68,24 @@ export function createLiveTurns<M extends LiveMessage>(): LiveTurns<M> {
   };
 
   return {
-    // A thread runs one turn at a time: a follow-up question or a retry replaces
-    // the turn already on it, and nothing else is touched.
+    // A thread runs one turn at a time. Reaching here with one already running
+    // is a bug upstream rather than a case to handle: the reader talking into
+    // a running turn steers it (docs/72), and nothing else starts a second.
+    // The abort is the last resort that keeps two streams from writing the
+    // same row, and it says so out loud.
     start(turn) {
-      turns.get(turn.threadId)?.controller.abort();
+      const running = turns.get(turn.threadId);
+      if (running) {
+        console.error("a second turn started on a thread that was still running", turn.threadId);
+        running.controller.abort();
+      }
       turns.set(turn.threadId, { ...turn });
+    },
+
+    openRow(threadId, controller, message) {
+      const turn = turns.get(threadId);
+      if (!turn || turn.controller !== controller) return;
+      turn.message = message;
     },
 
     get: (threadId) => turns.get(threadId),

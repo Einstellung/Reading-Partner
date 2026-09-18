@@ -49,6 +49,7 @@
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
+| 给回合加中途插话、动 live-turns 注册表 | 开发环境 + AI 调用与上下文窗口 |
 | 测试里造假的 desk item、注册 desk kind、注册蒸馏源 | 开发环境 |
 | 升依赖、pull 完 app 行为对不上源码 | 开发环境 |
 | 新建源文件、给同目录两个文件起名 | 开发环境 |
@@ -323,10 +324,12 @@
 - [307-a-pi-lane-carries-no-prompt-of-its-own](./307-a-pi-lane-carries-no-prompt-of-its-own.md) — pi 的 lane 只带模型、思考档和活跃工具名（`LaneConfiguration` 三个字段），systemPrompt 和工具注册表是 harness 级的，`OperationRequest` 也没有单次覆盖口子：要自己 prompt 或自己工具集的 worker（隔离上下文的子 agent）得自己开 harness，身份写在 lane 名和 session 组上
 - [308-an-open-operation-blocks-its-lane-until-settled](./308-an-open-operation-blocks-its-lane-until-settled.md) — 重开 session 后上个进程留下的 open operation 让同一条 lane 的新 `accept` 报 `LaneBusy`；`resume()` 写完合成的中断 toolResult 会接着调模型跑完那条没人听的 run，`abort()` 同样写中断结果但以 aborted 结算、不发请求。常驻 lane（soul）重开时逐条 abort，不 resume
 - [324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness](./324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness.md) — soul 每个回合挂一份 `statement_write`，简报的 desk item 又挂一份，回合组装照过、harness 的 `validateToolNames` 才抛 `Duplicate tool name`，而且说不出两边是谁；`assembleTurn` 的重名检查当时只比角色和 item，漏了 soul 自己那套基础工具。工具只挂在一处，检查改成走一遍最终清单、按 name 记 owner
+- [360-a-steer-queued-before-drive-lands-in-the-first-round](./360-a-steer-queued-before-drive-lands-in-the-first-round.md) — `accept` 之后 `drive` 之前塞的 steer 在第一次请求前就被 drain 进 transcript（run 自己的起始边界也是边界）；界面上那一刻 AI 行还是空的，切行会留空行，所以按「行里有没有字」决定切不切
 - [335-accepting-a-prompt-announces-every-replayed-message](./335-accepting-a-prompt-announces-every-replayed-message.md) — harness 为它写进 session 的每条消息发 `message_end`，`lane.accept` 把整段重放历史逐条播出来，埋点把里面的 assistant 消息当成一轮，记出一串 `round: 0`、用量全 null、`ms` 等于 Unix 时间戳的幽灵行。按 `runId` 等于本回合的 `operationId` 分辨，不按 role；另记 `model-calls-*.jsonl` 是读改整体写回加 fire-and-forget，并发写只留最后一个
 
 ## 开发环境
 
+- [359-a-streaming-turn-outlives-its-test-file](./359-a-streaming-turn-outlives-its-test-file.md) — `readingTurns()` 是模块单例，一个 mock 成永不 resolve 的回合会留在 `"t1"` 上，下个测试文件的 `send` 就走 steer 不起新回合；会调 `send` 的文件都要 `afterEach(resetReadingTurns)`
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
 - [334-a-second-page-on-the-dev-server-shares-the-sim-bridge](./334-a-second-page-on-the-dev-server-shares-the-sim-bridge.md) — 模拟器的 Safari 里留着一个 `localhost:1420` 标签，它也连着 sim bridge，`eval` 在 app 和它之间轮流执行：触摸落在 app 上，读数一半来自那个标签，于是"截图有高亮、`saved` 是 0"。先连问 `!!window.__TAURI_INTERNALS__`，答 false 的页面送去 `about:blank`
 - [286-vite-started-outside-the-worktree-root-kills-the-sim-bridge](./286-vite-started-outside-the-worktree-root-kills-the-sim-bridge.md) — 验证脚本把 vite 起在 scratchpad 而不是 worktree 根，vite 报 ready 但 `/` 是 404，webview 白屏；sim bridge 是 vite 插件、eval 要页面自己连上来，没加载就没人接，`drive.py` 一律 `page never answered`，连 reload 都送不进去。起完先 curl 断言 200，白屏了只能按 PID 重启 app

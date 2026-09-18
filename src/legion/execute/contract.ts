@@ -97,8 +97,43 @@ export interface AgentToolEnd {
   error?: string;
 }
 
+// Something said into a turn that is already streaming (docs/72). The reader
+// talking mid-answer is not an interruption: the message joins the queue and
+// the model is handed it at the end of the round in flight.
+export interface SteerMessage {
+  text: string;
+  // Not the reader's words but the app's — a delegated run coming back while
+  // the turn that asked for it is still running. It goes into the model's
+  // context and nowhere else: no row on screen, no line in the thread file.
+  // Declared here, not yet honoured: the bell's turn is the next piece, and
+  // this is the parameter it needs rather than a second shape.
+  internal?: boolean;
+}
+
+// What became of one steer. A turn that has ended says so rather than dropping
+// the message: the caller still holds the reader's sentence and has to decide
+// what to do with it (reading/session: it opens the next turn).
+export type SteerOutcome =
+  | { ok: true; id: string }
+  | { ok: false; reason: "ended" | "rejected"; message: string };
+
+// Queue one message into the turn in flight. The id it returns is the id
+// `onSteered` reports back when the model is actually handed it.
+export type SteerPort = (message: string | SteerMessage) => Promise<SteerOutcome>;
+
+// A turn that has already settled, or had not started when the port was used.
+export const STEER_ENDED = "the turn had already ended";
+
 export interface AgentCallbacks {
   onDelta(text: string): void;
+  // The turn can be steered from here on: it has a run of its own to queue
+  // into. Fires at most once, before any round's output. A caller with no use
+  // for steering leaves it out and nothing is queued.
+  onSteerable?(steer: SteerPort): void;
+  // The queue was drained: these steered messages are in the model's context
+  // as of now, and the reply that follows is an answer to them. Ids are the
+  // ones `steer` handed back. Fires once per drained message.
+  onSteered?(ids: string[]): void;
   // Reasoning/thinking deltas, kept separate from onDelta so thinking is never
   // rendered as the reply; the unattended digest wires it as watchdog liveness.
   onThinking?(delta: string): void;

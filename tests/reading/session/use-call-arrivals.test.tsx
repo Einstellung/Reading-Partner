@@ -8,6 +8,7 @@
 // threads in memory.
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
+import { resetReadingTurns } from "../../../src/reading/live-turns";
 import * as agent from "../../../src/legion/execute/turn";
 import { appendMessage, createThread, rebuildThreadStoreForTests } from "../../../src/platform/app/threads";
 import * as turn from "../../../src/reading/turn";
@@ -18,6 +19,9 @@ import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn } from "../../sup
 
 const { act, cleanup, renderHook } = await useDom();
 afterEach(cleanup);
+// The registry of running turns is a module, so a turn a test leaves streaming
+// is still on its thread when the next file mounts the hook (docs/pitfall/359).
+afterEach(resetReadingTurns);
 
 const MARK = "mark-1";
 

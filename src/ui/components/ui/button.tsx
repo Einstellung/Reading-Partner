@@ -75,6 +75,11 @@ const buttonVariants = cva(
         footnote:
           "rounded-md px-1 py-[calc(0.1875rem*var(--chat-scale,1))] text-[calc(0.8125rem*var(--chat-scale,1))] leading-snug coarse:min-h-[44px]",
         icon: "h-8 w-8 rounded-md coarse:h-11 coarse:w-11",
+        // The chat composer's round Send and Stop, at the big pill's size and
+        // at the corner bubble's. Here rather than at the call site so the two
+        // of them cannot drift apart or lose the touch target.
+        composer: "h-9 w-9 rounded-full coarse:h-11 coarse:w-11",
+        "composer-sm": "h-6 w-6 rounded-full coarse:h-11 coarse:w-11",
         link: `relative p-0 coarse:px-2 coarse:py-1.5 ${HIT_44}`,
       },
     },

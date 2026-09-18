@@ -613,3 +613,82 @@ test("the AI pen comes back on the way out, and the other tools are never touche
     expect(toolInCall(tool, LESSON)).toBe(tool);
   }
 });
+
+// --- the reader speaking into a running turn (docs/72) ----------------------
+
+test("a line said mid-answer lands under the reply being written, marked", () => {
+  const state = call({
+    messages: [
+      { role: "user", text: "why?", ts: 1 },
+      { role: "ai", text: "because", ts: 2, streaming: true },
+    ],
+  });
+  const next = reduce(state, {
+    type: "row-appended",
+    threadId: "t1",
+    row: { role: "user", text: "and the other one?", ts: 3, queued: true },
+  })!;
+  expect(next.messages.map((m) => m.ts)).toEqual([1, 2, 3]);
+  // The reply above it is still being written: nothing was cut off.
+  expect(next.messages[1].streaming).toBe(true);
+  expect(next.messages[2].queued).toBe(true);
+});
+
+test("the model handed the line: the reply so far is a row, the rest is a new one", () => {
+  const state = call({
+    messages: [
+      { role: "ai", text: "because", ts: 2, streaming: true, phase: "writing" },
+      { role: "user", text: "and the other one?", ts: 3, queued: true },
+    ],
+  });
+  const split = reduce(state, {
+    type: "row-split",
+    threadId: "t1",
+    ts: 2,
+    row: { role: "ai", text: "", ts: 4, streaming: true },
+  })!;
+  expect(split.messages.map((m) => m.ts)).toEqual([2, 3, 4]);
+  // Finished where it stands: the words stay, the marks of a turn in flight go.
+  expect(split.messages[0]).toMatchObject({ text: "because", streaming: undefined, phase: undefined });
+  expect(split.messages[2].streaming).toBe(true);
+
+  // The next delta writes into the new row, not the one above the reader.
+  const wrote = reduce(split, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 4,
+    change: { kind: "delta", chunk: "the other one is" },
+  })!;
+  expect(wrote.messages[0].text).toBe("because");
+  expect(wrote.messages[2].text).toBe("the other one is");
+});
+
+test("the queued mark comes off the row it was on, and off nothing else", () => {
+  const state = call({
+    messages: [
+      { role: "user", text: "first", ts: 3, queued: true },
+      { role: "user", text: "second", ts: 5, queued: true },
+    ],
+  });
+  const next = reduce(state, { type: "row-delivered", threadId: "t1", ts: 3 })!;
+  expect(next.messages[0].queued).toBeUndefined();
+  expect(next.messages[1].queued).toBe(true);
+});
+
+test("handed-over keeps the words and the failed calls, and ends the row", () => {
+  const row: Row = {
+    role: "ai",
+    text: "half a thought",
+    ts: 2,
+    streaming: true,
+    phase: "writing",
+    tools: [{ name: "read_page", label: "Reading", state: "error" }],
+  };
+  const handed = applyRowChange(row, { kind: "handed-over" } as RowChange);
+  expect(handed).toMatchObject({
+    text: "half a thought",
+    streaming: undefined,
+    phase: undefined,
+  });
+  expect(handed.tools).toHaveLength(1);
+});
