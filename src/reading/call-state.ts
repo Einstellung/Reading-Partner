@@ -39,6 +39,10 @@ export interface CallRow {
   // The AI row currently being written, and the one whose turn failed.
   streaming?: boolean;
   failed?: boolean;
+  // A reader's row said while a turn was running and not yet handed to the
+  // model (docs/72). Display-only and never persisted: by the time the line is
+  // in the thread file it is in the model's context too, and the mark is gone.
+  queued?: boolean;
   // The transient tool-call trace above a streaming reply (M6). Never persisted.
   tools?: ToolStatus[];
   // What the running turn is doing (ai/turn-rows.ts), for the status line the
@@ -95,6 +99,10 @@ export type RowChange =
   | { kind: "phase"; phase: "thinking" }
   // A chunk of the reply arrived.
   | { kind: "delta"; chunk: string }
+  // The reader spoke mid-answer and the model has now been handed it, so this
+  // row is finished as it stands and the reply that follows is a new one
+  // (docs/72). What it wrote stays; only the marks of a turn in flight go.
+  | { kind: "handed-over" }
   // A tool started. What the round wrote before calling it stays where it is,
   // with a blank line opened under it for the next round (docs/pitfall/291); the
   // status line is drawn in that gap and comes off when the tool returns.
@@ -121,6 +129,8 @@ export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M 
       return { ...row, phase: change.phase };
     case "delta":
       return { ...row, text: row.text + change.chunk, phase: "writing" };
+    case "handed-over":
+      return { ...row, streaming: undefined, phase: undefined };
     case "tool-start":
       return {
         ...row,
@@ -199,6 +209,12 @@ export type CallAction<M extends CallRow> =
   | { type: "row-changed"; threadId: string; ts: number; change: RowChange; error?: boolean }
   // A row that is not a turn's: the reader's own message.
   | { type: "row-appended"; threadId: string; row: M }
+  // The reader spoke into the running turn and the model has been handed it:
+  // the AI row at `ts` is finished where it stands and the reply that follows
+  // starts a row of its own (docs/72).
+  | { type: "row-split"; threadId: string; ts: number; row: M }
+  // A queued reader row reached the model, so its mark comes off.
+  | { type: "row-delivered"; threadId: string; ts: number }
   // Someone outside the view wrote into this conversation while it was open — a
   // delegated run the soul answered into the thread it was sent from (docs/68).
   // The view's own writes never come through here (reading/thread-arrivals.ts).
@@ -266,6 +282,23 @@ export function callReducer<M extends CallRow>(
       };
     case "row-appended":
       return { ...state, messages: [...state.messages, action.row] };
+    case "row-split":
+      return {
+        ...state,
+        messages: [
+          ...state.messages.map((m) =>
+            m.ts === action.ts && m.role === "ai" ? applyRowChange(m, { kind: "handed-over" }) : m,
+          ),
+          action.row,
+        ],
+      };
+    case "row-delivered":
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.ts === action.ts && m.role === "user" && m.queued ? { ...m, queued: undefined } : m,
+        ),
+      };
     case "row-arrived": {
       // By id, never by what it says: a run answered twice with the same words
       // is two answers, and one answer reported twice is one. A row with no id

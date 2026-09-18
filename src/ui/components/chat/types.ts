@@ -31,6 +31,10 @@ export interface ThreadMessage {
 	failed?: boolean;
 	// Transient tool-call trace shown above the streaming reply (M6).
 	tools?: ToolStatus[];
+	// A reader's row said into a turn that was already running and not yet
+	// handed to the model (docs/72). Display-only: by the time the line is in
+	// the thread file the model has it, and the mark is gone.
+	queued?: boolean;
 	// What the running turn is doing, for the status line drawn while nothing is
 	// written yet (turn-rows.ts). Set only while `streaming`; cleared when the
 	// turn lands.

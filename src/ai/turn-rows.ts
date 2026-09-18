@@ -30,6 +30,12 @@ import type { ToolStatus } from "./tool-status";
 //   writing  — the reply is arriving, so there is nothing left to stand in for.
 export type TurnPhase = "thinking" | "tool" | "writing";
 
+// The one line under a reader's row that the model has not been handed yet
+// (docs/72): they said it into a turn already running, and it joins the
+// model's view at the end of the round in flight — one round at most. It comes
+// off the moment that happens, and is never persisted.
+export const QUEUED_NOTE = "after this step";
+
 // The tool trace a stopped turn keeps: the calls that failed, which explain the
 // stop, and none of the ones that ran fine.
 function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {

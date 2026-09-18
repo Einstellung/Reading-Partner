@@ -75,9 +75,12 @@ import { joinRoundTexts } from "../../ai/turn-rows";
 import {
   REFUSE_MIDTURN,
   REFUSE_ROUNDS,
+  STEER_ENDED,
   type AgentCallbacks,
   type AgentTool,
   type RunAgentTurnOptions,
+  type SteerMessage,
+  type SteerPort,
   type StreamFn,
   type TurnLane,
 } from "./contract";
@@ -87,11 +90,15 @@ import type { AgentLane, HeldHarness, HeldLane } from "./held";
 export {
   REFUSE_MIDTURN,
   REFUSE_ROUNDS,
+  STEER_ENDED,
   type AgentCallbacks,
   type AgentTool,
   type AgentToolEnd,
   type AgentToolStart,
   type RunAgentTurnOptions,
+  type SteerMessage,
+  type SteerOutcome,
+  type SteerPort,
   type StreamFn,
   type ToolResult,
   type ToolResultImage,
@@ -190,6 +197,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, headers } = params;
   const { sessionId, maxRounds } = params;
   const { onDelta, onThinking, onResponse, onRound, onToolStart, onToolEnd, onDone, onError } = params;
+  const { onSteerable, onSteered } = params;
   const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
   const refuse = params.onRefusal ?? ((message: string) => onError(message));
   const purpose = params.purpose ?? "chat";
@@ -232,6 +240,31 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   let lane: AgentLane | undefined;
   let operationId: string | undefined;
   const ctx = BACKGROUND_CONTEXT;
+
+  // Steered messages this turn queued and has not yet seen injected, by the id
+  // the lane gave them. A queued message becomes an entry in the transcript
+  // when the round boundary drains it, and the entry carries that same id — so
+  // `entry_added` is the moment the model was handed it, not a guess from the
+  // round after. Nothing is reported twice: an id leaves the set as it lands.
+  const queuedSteer = new Set<string>();
+  // No more queueing: the run has settled (or never started). A steer after
+  // this is refused rather than swallowed, because the caller is still holding
+  // the reader's sentence.
+  let ended = false;
+
+  const steer: SteerPort = async (message) => {
+    const m: SteerMessage = typeof message === "string" ? { text: message } : message;
+    if (ended || signal?.aborted || !lane || !operationId) {
+      return { ok: false, reason: "ended", message: STEER_ENDED };
+    }
+    const queued = await lane.steer(m.text, undefined, ctx);
+    if (!queued.ok) return { ok: false, reason: "rejected", message: queued.error.message };
+    // The run may have settled while the enqueue was in flight; the message is
+    // then sitting in a queue nothing will drain.
+    if (ended) return { ok: false, reason: "ended", message: STEER_ENDED };
+    queuedSteer.add(queued.value.entryId);
+    return { ok: true, id: queued.value.entryId };
+  };
 
   const abortRun = async (): Promise<void> => {
     if (!lane || !operationId) return;
@@ -473,19 +506,31 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     listen("handler_error", ({ error }) => {
       handlerError ??= new Error(error);
     });
+    // A queued steer that reached the transcript. The harness writes the
+    // pending entry under the id it was queued with (planBoundaryInbox), so
+    // matching the ids this turn holds is exact — no other lane's traffic and
+    // no replayed history can be mistaken for one.
+    listen("entry_added", ({ entry }) => {
+      if (!queuedSteer.delete(entry.id)) return;
+      onSteered?.([entry.id]);
+    });
 
     signal?.addEventListener("abort", onAbort, { once: true });
 
     const admitted = await lane.accept({ kind: "prompt", prompt: params.messages as AgentMessage[] }, ctx);
     if (!admitted.ok) {
+      ended = true;
       onError(admitted.error.message);
       return;
     }
     operationId = admitted.value.operationId;
     // The signal may have fired between the check above and the run existing.
     if (signal?.aborted) await abortRun();
+    // There is a run to queue into from here until it settles below.
+    onSteerable?.(steer);
 
     const driven = await lane.drive({ operationId, waitForRetry: true }, ctx);
+    ended = true;
     if (!driven.ok) {
       onError(driven.error.message);
       return;
@@ -517,9 +562,11 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     const text = assistantText(last);
     onDone(text, last, joinRoundTexts([...written, text]));
   } catch (e) {
+    ended = true;
     if (signal?.aborted) return;
     onError(e instanceof Error ? e.message : String(e), undefined, e);
   } finally {
+    ended = true;
     signal?.removeEventListener("abort", onAbort);
     for (const off of subscriptions) off();
     borrowed?.release();
@@ -556,6 +603,8 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
     onRound,
     onToolStart,
     onToolEnd,
+    onSteerable,
+    onSteered,
     onDone,
     onError,
     onRefusal,
@@ -602,6 +651,8 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       onRound,
       onToolStart,
       onToolEnd,
+      onSteerable,
+      onSteered,
       onDone,
       onError,
       onRefusal,

@@ -29,7 +29,7 @@ import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
-import type { TurnPhase } from '../../../ai/turn-rows';
+import { QUEUED_NOTE, type TurnPhase } from '../../../ai/turn-rows';
 import { phaseLabel } from './phase-line';
 import {
 	createStrokeGate,
@@ -799,6 +799,9 @@ const MessageBubble = memo(function MessageBubble({
 						{message.text}
 					</div>
 				)}
+				{message.queued && (
+					<div className="px-1 text-[11px] leading-none text-neutral-400">{QUEUED_NOTE}</div>
+				)}
 			</div>
 		);
 	}
@@ -1130,7 +1133,9 @@ export function Composer({
 		(pill
 			? 'max-h-[calc(10rem*var(--chat-scale,1))] py-1.5 text-[max(16px,calc(1rem*var(--chat-scale,1)))] leading-[1.5] text-neutral-800'
 			: 'max-h-[100px] px-1 py-1 text-[13px] leading-5 coarse:text-[16px] coarse:leading-6 text-neutral-800');
-	const stopBtn = 'flex shrink-0 items-center justify-center rounded-full bg-neutral-800 text-white';
+	// Not a variant: nothing else in the app is this ink, and the composer's Stop
+	// has been this colour since before there was a variant table.
+	const stopInk = 'shrink-0 bg-neutral-800 text-white can-hover:hover:bg-neutral-700';
 
 	return (
 		<div className="flex flex-col gap-2">
@@ -1182,27 +1187,43 @@ export function Composer({
 							size={pill ? 'lg' : 'sm'}
 						/>
 					)}
-					{pill &&
-						!(voiceMode && !streaming) &&
-						(streaming ? (
-							<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} h-9 w-9 coarse:h-11 coarse:w-11`}>
-								<IconStop size={16} />
-							</button>
-						) : (
-							<button
-								type="button"
+					{/* Both keys are up while the reply streams (docs/72): Stop cuts it
+					    off, Send says the next thing into it without cutting anything
+					    off. Neither stands in for the other, so neither replaces the
+					    other on the row. */}
+					{pill && !(voiceMode && !streaming) && (
+						<>
+							{streaming && (
+								<Button variant="ghost" size="composer" aria-label="Stop" onClick={onStop} className={stopInk}>
+									<IconStop size={16} />
+								</Button>
+							)}
+							<Button size="composer" aria-label="Send" onClick={send} disabled={!canSend} className="shrink-0">
+								<IconSend size={17} />
+							</Button>
+						</>
+					)}
+					{!pill && streaming && (
+						<>
+							<Button
+								variant="ghost"
+								size="composer-sm"
+								aria-label="Stop"
+								onClick={onStop}
+								className={`${stopInk} mb-0.5`}
+							>
+								<IconStop size={12} />
+							</Button>
+							<Button
+								size="composer-sm"
 								aria-label="Send"
 								onClick={send}
 								disabled={!canSend}
-								className="flex h-9 w-9 coarse:h-11 coarse:w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
+								className="mb-0.5 shrink-0"
 							>
-								<IconSend size={17} />
-							</button>
-						))}
-					{!pill && streaming && (
-						<button type="button" aria-label="Stop" onClick={onStop} className={`${stopBtn} mb-0.5 h-6 w-6 coarse:h-11 coarse:w-11`}>
-							<IconStop size={12} />
-						</button>
+								<IconSend size={12} />
+							</Button>
+						</>
 					)}
 				</div>
 			</div>
