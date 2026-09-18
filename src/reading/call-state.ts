@@ -56,10 +56,6 @@ export interface CallRow {
   // What the turn left out to fit the context window (src/budget) — the app's
   // remark about the turn, not model output. Display-only, like the trace.
   notice?: string;
-  // Which handed-off piece of work this row answers (docs/72), on a delivered
-  // row and on no other. It is how the dispatch ticket that sent the run off
-  // finds the reply it is to point at.
-  origin?: { runId: string };
 }
 
 export interface CallState<M extends CallRow> {
