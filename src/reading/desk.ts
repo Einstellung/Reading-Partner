@@ -650,6 +650,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
         bookId,
         docId,
         topicId,
+        threadId,
         model: {
           providerId: s.defaultProviderId as ProviderId,
           modelId: s.defaultModelId as string,

@@ -1,20 +1,24 @@
-// The one line a running translation gets on screen (docs/67): a count while it
-// runs, its closing sentence when it is over, and nothing at all the rest of the
-// time. No panel — the reader asked for this in a sentence and the answer comes
-// back in the conversation; this is only so the minutes in between are not
-// silent.
+// The one line a running translation gets on screen (docs/67): what the run
+// says it is doing while it runs, its closing sentence when it is over, and
+// nothing at all the rest of the time. No panel — the reader asked for this in a
+// sentence and the answer comes back in the conversation; this is only so the
+// minutes in between are not silent.
+//
+// The line is the run's own (docs/55 step 11): the worker writes one and the
+// runner puts it on the record, at most one every thirty seconds, so what moves
+// here moves by the half minute rather than by the block.
 //
 // It is also where the reader is moved onto the translated document, because the
 // original is deleted the moment the translation lands and this component is the
 // one thing already watching the run. What to do is decided by fileToReopen
-// (run.ts), which is pure and tested; this binds it.
+// (book-run.ts), which is pure and tested; this binds it.
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import { fileToReopen, translateRun, type Replacement } from "../../../reading/translate/run";
+import { fileToReopen, type Replacement, type TranslateView } from "../../../reading/translate/book-run";
+import { translateWatch } from "../../../reading/translate/watch";
 
-const subscribe = (fn: () => void): (() => void) => translateRun.subscribe(fn);
-const snapshot = (): ReturnType<typeof translateRun.snapshot>["state"] =>
-  translateRun.snapshot().state;
+const subscribe = (fn: () => void): (() => void) => translateWatch().subscribe(fn);
+const snapshot = (): TranslateView | null => translateWatch().snapshot();
 
 export default function TranslateStatus({
   openDocId,
@@ -26,31 +30,27 @@ export default function TranslateStatus({
   openDocId: () => string | null;
   onReopen?: (replacement: Replacement) => void;
 }) {
-  const state = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const view = useSyncExternalStore(subscribe, snapshot, snapshot);
   const reopened = useRef<string | null>(null);
 
   useEffect(() => {
-    const replacement = fileToReopen(state, openDocId());
+    const replacement = fileToReopen(view, openDocId());
     if (!replacement || reopened.current === replacement.hash) return;
     reopened.current = replacement.hash;
     onReopen?.(replacement);
-  }, [state, openDocId, onReopen]);
+  }, [view, openDocId, onReopen]);
 
-  if (state.phase === "idle") return null;
-  const text =
-    state.phase === "running"
-      ? `Translating "${state.title}" — ${state.done}/${state.total} blocks`
-      : state.message;
+  if (!view) return null;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
       <div className="pointer-events-auto flex max-w-full items-center gap-3 rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-card-foreground shadow-lg backdrop-blur">
-        <span className="truncate">{text}</span>
-        {state.phase !== "running" && (
+        <span className="truncate">{view.text}</span>
+        {view.phase !== "running" && (
           <button
             type="button"
             className="shrink-0 text-muted-foreground can-hover:hover:text-foreground"
-            onClick={() => translateRun.clear()}
+            onClick={() => translateWatch().dismiss(view.runId)}
             aria-label="Dismiss"
           >
             ×
