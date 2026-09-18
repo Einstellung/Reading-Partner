@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { installFetchBridge } from "./ai/fetch-bridge";
 import { applyStoredAutostart } from "./platform/app/autostart";
+import { startUpdateChecks } from "./platform/app/updater";
 import { initDeviceSettings } from "./platform/app/device";
 import { detectShell } from "./platform/app/shell";
 import { syncSpeechKey } from "./ai/voice/speech-key";
@@ -125,6 +126,11 @@ if (import.meta.env.VITE_SMOKE === "1") {
   void initDeviceSettings()
     .catch(() => {})
     .then(() => applyStoredAutostart());
+
+  // Look for a new desktop version now and every six hours after (docs/72).
+  // Here for the same reason as autostart: the installed bundle is the
+  // machine's, whichever shell is showing. A no-op on mobile and in dev.
+  startUpdateChecks();
 
   // The voice plugin holds the speaking key for the process, so it is handed
   // over once here rather than carried on every turn (ai/voice/speech-key.ts).

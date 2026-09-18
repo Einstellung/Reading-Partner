@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "iOS": {
       "minimumSystemVersion": "26.0"
     },
@@ -51,6 +52,15 @@
           "appLink": false
         }
       ]
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc2RTcxRTQ2MTFBRDkxQUEKUldTcWthMFJSaDduZG1zZVU0Mm9USHlianFhM2dlVG8wb2VCWjdxaVBUVUQwRGZ0Y0FHSnBIYUoK",
+      "endpoints": [
+        "https://github.com/Einstellung/Reading-Partner/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

@@ -13,7 +13,8 @@
 
 import appIcon from "../../assets/app-icon.png";
 import { lumenToggleTitle } from "../lumen/corner-pref";
-import { IconBriefing, IconBooks, IconGear, IconSidebar, IconToday } from "../base/icons";
+import { IconBriefing, IconBooks, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
+import { restartLabel, type UpdateState } from "../../../platform/app/update-policy";
 import { SHELL_NAV_ITEMS, type ShellNavId } from "../base/shell-nav";
 import {
   collapseToggleTitle,
@@ -43,6 +44,7 @@ function Row(props: {
   collapsed: boolean;
   active?: boolean;
   title?: string;
+  disabled?: boolean;
   onClick: () => void;
   children?: React.ReactNode;
 }) {
@@ -60,6 +62,7 @@ function Row(props: {
       title={props.title ?? props.label}
       aria-label={props.title ?? props.label}
       aria-current={props.active ? "page" : undefined}
+      disabled={props.disabled}
       onClick={props.onClick}
     >
       <Icon size={20} />
@@ -88,6 +91,12 @@ export default function AppSidebar(props: {
   // hangs off them rather than off a control of its own.
   lumenShown: boolean;
   onToggleLumen: () => void;
+  // A new desktop version downloaded and waiting (docs/72). The row appears
+  // only then, above Settings, and restarts into it on a click. Omitted, or
+  // "none", draws nothing — which is every phone and every check that found
+  // nothing.
+  update?: UpdateState;
+  onApplyUpdate?: () => void;
 }) {
   const collapsed = props.collapsed;
   const toggle = (
@@ -144,6 +153,17 @@ export default function AppSidebar(props: {
       ))}
 
       <span className="flex-1" />
+
+      {props.update && restartLabel(props.update) && (
+        <Row
+          label={props.update.kind === "installing" ? "Updating…" : "Restart to update"}
+          icon={IconRestart}
+          collapsed={collapsed}
+          title={restartLabel(props.update) ?? undefined}
+          disabled={props.update.kind === "installing"}
+          onClick={() => props.onApplyUpdate?.()}
+        />
+      )}
 
       <Row
         label="Settings"

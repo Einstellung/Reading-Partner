@@ -644,3 +644,20 @@ export function IconChevronRight({ size = 20 }: IconProps) {
 		</svg>
 	);
 }
+
+// The shell sidebar's "Restart to update" (docs/72): an arrow coming round to
+// where it started.
+export function IconRestart({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M16 10A6 6 0 1 1 13.8 5.35" />
+			<path d="M14.2 2.8V5.7H11.3" />
+		</svg>
+	);
+}
