@@ -32,6 +32,7 @@ import {
   turnFailureView,
 } from "../../src/reading/turn";
 import { installAppData } from "../support/appdata-fake";
+import { appRunner } from "../../src/legion/execute/runner";
 import { registerWorker } from "../../src/legion/execute/worker";
 import type { Run } from "../../src/legion/run";
 import { toolText } from "../support/tool-text";
@@ -1464,6 +1465,7 @@ test("read_chapter on an aside parks nothing, on either end", async () => {
 test("delegating from a book names the book, the thread and the page", async () => {
   let started: Run | undefined;
   let briefPath = "";
+  let stop = (): void => {};
   registerWorker({
     kind: "fake-literature",
     tier: "local",
@@ -1473,7 +1475,12 @@ test("delegating from a book names the book, the thread and the page", async () 
     run: (brief, ctx) => {
       briefPath = brief;
       started = ctx.run;
-      return { cancel: () => {}, done: new Promise(() => {}) };
+      // It never settles on its own — the tool has to answer while the work is
+      // still going — but it does stop when it is asked to, so the test can end
+      // it. A `local` run left going outlives the file: the process is the whole
+      // suite, and every soul assembled afterwards is told this one is still out
+      // (src/soul/self.ts, docs/pitfall/365).
+      return { cancel: () => stop(), done: new Promise<void>((resolve) => (stop = resolve)) };
     },
   });
 
@@ -1497,4 +1504,12 @@ test("delegating from a book names the book, the thread and the page", async () 
   // The brief is a path, and what the model wrote is at the end of it.
   expect(briefPath).toStartWith("legion/briefs/");
   expect(started!.brief).toBe(briefPath);
+
+  // A `local` run lives in this process and the process is the whole test suite:
+  // left going, it is a run still out over this book in every file that runs
+  // after this one, and the soul prints those into its prompt (src/soul/self.ts,
+  // docs/pitfall/365). The worker never settles, so only a cancel ends it.
+  await appRunner().cancel(started!.id);
+  await appRunner().idle();
+  expect((await appRunner().list({ kind: "fake-literature" }))[0]?.state).toBe("cancelled");
 });

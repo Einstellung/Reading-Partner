@@ -18,7 +18,7 @@
 
 线程文件按发生顺序落五种东西：读者说的话、soul 说的话、回执单（soul 做了一件写入：记了什么）、派工单（派出去了什么，跑到哪，回来后指向那条回复）、送达（run 回来 soul 说的话，带一个标说明答的是哪一问）。
 
-`PersistedPart` 从 text / card 扩到 text / card / trace / receipt / dispatch。rehydrate 按文件顺序画，不从别处重建——盒（68）和 run 文件仍是各自的真相源，线程里的回执单和派工单只是那次发生的一条记录。
+`PersistedPart` 从 text / card 扩到 text / card / trace：落盘的只有 trace，回执单和派工单由它派生（`messageToParts`），一次发生只有一条记录。rehydrate 按文件顺序画，不从别处重建——盒（68）和 run 文件仍是各自的真相源。
 
 ## 工具契约
 
@@ -73,6 +73,8 @@ Composer 在流式期间 Send 和 Stop 都在。
 - `ingest_url` 改 kind `ingest-url`，写 run 就返回。
 - `WorkerRegistration.delegable` 正向标记：soul 的 delegate 目录只列声明了的，`collect` 因此不再出现在目录里。
 - `Runner.subscribe`。
+- 回执单与派工单：trace 里带 receipt 的 done 项派生成 part，`link.kind === "run"` 的派生成派工单，派工单读 run 文件（`dispatch-view.ts`）。
+- soul 装配时带上这条线程还在跑的 run（`self.ts` 的 `openRuns`）。
 
 其余按契约、思考态、回执单与派工单、steer 四片进行。
 

@@ -329,6 +329,7 @@
 
 ## 开发环境
 
+- [365-a-local-run-outlives-the-test-file-that-started-it](./365-a-local-run-outlives-the-test-file-that-started-it.md) — `tier: "local"` 的 run 在 `runner.ts` 的模块级 Map 里跨文件活着，永不 settle 的假 worker 就是「这条线程还有活在跑」永远为真，soul 的提示词快照在别的文件里红；`cancel()` 只写下请停，worker 的 `done` 不 settle 状态就不动，假 worker 的 `cancel` 要解掉自己那个 promise
 - [359-a-streaming-turn-outlives-its-test-file](./359-a-streaming-turn-outlives-its-test-file.md) — `readingTurns()` 是模块单例，一个 mock 成永不 resolve 的回合会留在 `"t1"` 上，下个测试文件的 `send` 就走 steer 不起新回合；会调 `send` 的文件都要 `afterEach(resetReadingTurns)`
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
 - [334-a-second-page-on-the-dev-server-shares-the-sim-bridge](./334-a-second-page-on-the-dev-server-shares-the-sim-bridge.md) — 模拟器的 Safari 里留着一个 `localhost:1420` 标签，它也连着 sim bridge，`eval` 在 app 和它之间轮流执行：触摸落在 app 上，读数一半来自那个标签，于是"截图有高亮、`saved` 是 0"。先连问 `!!window.__TAURI_INTERNALS__`，答 false 的页面送去 `about:blank`

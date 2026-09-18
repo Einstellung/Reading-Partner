@@ -32,7 +32,10 @@ import { getThread } from "../platform/app/threads";
 import type { AgentTool } from "../legion/execute/turn";
 import { UNSEEN, appBox, type BoxOrigin, type BoxStore } from "../box";
 import { buildDelegateTools } from "./delegate";
-import { originLabel } from "./delivery";
+import { originLabel, parseOrigin } from "./delivery";
+import { appRunner } from "../legion/execute/runner";
+import type { Run } from "../legion/run";
+import { appData } from "../platform/app/appdata";
 
 export interface Soul {
   // statement_write, the conversation tools, the catalogue tools, the
@@ -74,6 +77,10 @@ export interface SoulExtras {
   origin?: BoxOrigin;
   // The Red Box. The device's own unless a test hands one in.
   box?: BoxStore;
+  // Every run this device knows of. The runner's own unless a test hands one in.
+  runs?: () => Promise<readonly Run[]>;
+  // The brief behind a run, by the path the run carries. AppData unless injected.
+  readBrief?: (path: string) => Promise<string>;
 }
 
 /** A role as one turn holds it: what it is, and the tools it built for that turn. */
@@ -192,6 +199,12 @@ export async function openSoul(
   // is byte for byte what it was (docs/09).
   const covers = await openCovers(extra.box ?? appBox());
   if (covers) prompt = prompt === "" ? covers : `${prompt}\n\n${covers}`;
+  // What this conversation has already sent away and is still waiting on
+  // (docs/72). Beside the box because it is the other half of the same fact:
+  // one is what came back, the other is what has not. Same rule as the box —
+  // nothing to say adds not one byte.
+  const runs = await openRuns(env.thread.id, anchor?.bookId, extra);
+  if (runs) prompt = prompt === "" ? runs : `${prompt}\n\n${runs}`;
   return {
     tools,
     statements: await assembleStatements(),
@@ -266,6 +279,78 @@ async function openCovers(box: BoxStore): Promise<string> {
   return [
     "Waiting in the box, not yet opened by the reader. Mention one only where it bears on",
     "what is being said; they are not a list to read out.",
+    ...lines,
+  ].join("\n");
+}
+
+/** How many runs the soul is told about. Beyond this it is a list, not a reminder. */
+export const OPEN_RUN_CAP = 10;
+
+/**
+ * The runs this conversation sent off and is still waiting on. A run is this
+ * conversation's when it was delivered back to this thread; a turn held with no
+ * thread of its own falls back to the book, which is what a bell rung against a
+ * whole book delivers into.
+ */
+export function runsForHere(
+  runs: readonly Run[],
+  threadId: string,
+  bookId?: string,
+): Run[] {
+  const here = runs.filter((run) => {
+    if (run.state !== "pending" && run.state !== "running") return false;
+    const origin = parseOrigin(run.deliverTo);
+    if (!origin || origin.place !== "book") return false;
+    return threadId ? origin.threadId === threadId : !!bookId && origin.bookId === bookId;
+  });
+  return here.sort((a, b) => a.createdAt - b.createdAt).slice(0, OPEN_RUN_CAP);
+}
+
+/** How long ago something was set going, in the words a person would use. */
+function sentAgo(at: number, now: number): string {
+  const mins = Math.floor(Math.max(0, now - at) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+/** The first line of a brief, which is the sentence it opens with. */
+function briefLine(text: string): string {
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (t) return t;
+  }
+  return "";
+}
+
+// What is still out, as the soul reads it (docs/72). The run record is the whole
+// of it: what kind of work, what it was asked, how long it has been gone, and
+// the one line the worker last wrote about itself. A conversation that has sent
+// nothing away adds nothing at all, so a turn with no runs behind it is byte for
+// byte what it was.
+export async function openRuns(threadId: string, bookId: string | undefined, extra: SoulExtras): Promise<string> {
+  const list = extra.runs ?? (() => appRunner().list());
+  const read = extra.readBrief ?? ((path: string) => appData.readText(path));
+  const runs = await list().catch(() => [] as Run[]);
+  const mine = runsForHere(runs, threadId, bookId);
+  if (mine.length === 0) return "";
+  const now = Date.now();
+  const lines: string[] = [];
+  for (const run of mine) {
+    const asked = await read(run.brief).then(briefLine).catch(() => "");
+    const parts = [`[out] ${run.kind.replace(/[-_]/g, " ")}`];
+    if (asked) parts.push(asked);
+    parts.push(`sent ${sentAgo(run.startedAt ?? run.createdAt, now)}`);
+    if (run.progress) parts.push(run.progress);
+    lines.push(parts.join(" — "));
+  }
+  return [
+    "Work this conversation has already handed off and is still waiting on. Each one answers",
+    "here when it is done. Do not do its job over, and do not offer a second time what one of",
+    "these is already doing.",
     ...lines,
   ].join("\n");
 }
