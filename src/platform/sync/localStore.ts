@@ -27,7 +27,15 @@
 
 import { appData } from "../app/appdata";
 import { writeBytesAtomic, writeTextAtomic } from "../app/atomic-fs";
-import { holdingsPath, isDeviceId, SELF_KEY, type HoldingsStore } from "./holdings";
+import {
+  HOLDINGS_DIR,
+  holdingsPath,
+  isDeviceId,
+  parseHoldings,
+  SELF_KEY,
+  type Holdings,
+  type HoldingsStore,
+} from "./holdings";
 
 export const BASE_DIR = "sync-base";
 export const TRASH_FILE = "sync-trash.jsonl";
@@ -106,6 +114,32 @@ export const tauriHoldingsStore: HoldingsStore = {
     await writeBytesAtomic(holdingsPath(key), bytes);
   },
 };
+
+// Every peer tree this device has cached, parsed, for readers other than the
+// pass: today, the check for a desktop on an older build (peer-versions.ts).
+// The self copy and `self` (a peer can never be this device) are skipped; a
+// file that does not parse is skipped too. A missing directory is no peers.
+export async function readCachedPeerHoldings(
+  self: string,
+  fs: Pick<typeof appData, "readDir" | "readBytes"> = appData,
+): Promise<Holdings[]> {
+  let names: string[];
+  try {
+    names = (await fs.readDir(HOLDINGS_DIR)).filter((e) => e.isFile).map((e) => e.name);
+  } catch {
+    return [];
+  }
+  const out: Holdings[] = [];
+  for (const name of names.sort()) {
+    if (!name.endsWith(".json")) continue;
+    const key = name.slice(0, -".json".length);
+    if (key === SELF_KEY || key === self || !isDeviceId(key)) continue;
+    const bytes = await fs.readBytes(holdingsPath(key)).catch(() => null);
+    const h = parseHoldings(bytes);
+    if (h) out.push(h);
+  }
+  return out;
+}
 
 // --- the delete journal -----------------------------------------------------
 

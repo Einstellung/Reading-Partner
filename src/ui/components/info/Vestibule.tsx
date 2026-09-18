@@ -19,6 +19,7 @@ import { IconChevronRight } from "../base/icons";
 import AddCard from "../shelf/AddCard";
 import CoverBand from "../shelf/CoverBand";
 import NameDialog from "../common/NameDialog";
+import PeerUpdateNotice from "../common/PeerUpdateNotice";
 import TopicCard from "../shelf/TopicCard";
 import { LIBRARY_GRID } from "../shelf/cardStyles";
 import { readBookMeta } from "../shelf/book-meta";
@@ -85,6 +86,9 @@ export function Vestibule({
     <div className={PAGE}>
       <div className="text-[13px] text-muted-foreground">{todayDateLine(new Date())}</div>
       <h1 className="mb-5 mt-1 font-display text-[26px] font-semibold text-foreground">Today</h1>
+
+      {/* A desktop on an older build; draws only on an iPad. */}
+      <PeerUpdateNotice className="mb-3" />
 
       <ContinueCard book={continueBook} onContinue={onContinue} onOpenLibrary={onOpenLibrary} />
 

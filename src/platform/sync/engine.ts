@@ -207,7 +207,8 @@ export interface EngineDeps {
   deviceId?: () => string;
   // The version and platform label to publish alongside this device's tree
   // (docs/59's holdings "app" field), read at pass time for the same reason as
-  // deviceId above. Display only: a caller with nothing to hand simply
+  // deviceId above. Shown in the report and read by the phone's lagging-desktop
+  // check (peer-versions.ts); a caller with nothing to hand simply
   // publishes no app field, and buildHoldings already treats that as absent.
   appVersion?: () => string;
   // Where the published and the cached peer trees live (holdings.ts). Left out,
@@ -868,8 +869,8 @@ export class SyncEngine {
     }
   }
 
-  // Publish this device's tree, but only when it is not the tree already
-  // published: an idle pass must stay at one request (docs/59 §2), and
+  // Publish this device's tree, but only when it is not the tree (or the
+  // build) already published: an idle pass must stay at one request (docs/59 §2), and
   // everything in the file that is not a path or a hash — `at` above all —
   // would make every pass an upload.
   //
@@ -887,7 +888,11 @@ export class SyncEngine {
     const mine = this.selfHoldings(local);
     pass.self = mine;
     const last = parseHoldings(await store.read(SELF_KEY));
-    if (last && sameFiles(last.files, mine.files)) return;
+    // A new build republishes once even over the same tree: the app field is
+    // how a phone tells that this desktop is behind (peer-versions.ts), and an
+    // update that left the tree alone would otherwise go on reading as the old
+    // version.
+    if (last && sameFiles(last.files, mine.files) && last.app === mine.app) return;
 
     const name = holdingsRemoteName(mine.device);
     const bytes = serializeHoldings(mine);

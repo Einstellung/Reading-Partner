@@ -3,6 +3,7 @@
 // last opened on any device, so the way back into a book is one tap from the
 // screen the app opens on.
 
+import PeerUpdateNotice from "../common/PeerUpdateNotice";
 import SettingsButton from "../common/SettingsButton";
 import type { ContinueBook } from "./shelf-list";
 import { lumenToggleTitle } from "../lumen/corner-pref";
@@ -55,6 +56,8 @@ export default function PhoneHome({
         </div>
         <SettingsButton alert={settingsAlert} onClick={launch.onOpenSettings} />
       </div>
+
+      <PeerUpdateNotice className="mt-4" />
 
       <div className="mt-5 flex flex-col gap-4">
         <Card>

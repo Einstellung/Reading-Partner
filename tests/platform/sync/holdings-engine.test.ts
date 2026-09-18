@@ -316,6 +316,26 @@ test("an idle pass publishes nothing and fetches no peer tree", async () => {
   expect(remote.downloads()).toBe(downloads);
 });
 
+test("a new build republishes over the same tree, once", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": "topics" });
+  const B = makeDevice("d-b");
+  let version = "0.19.2 (macos)";
+  const a = engineFor(remote, A, { appVersion: () => version });
+  const b = engineFor(remote, B);
+  await settle(a.engine, b.engine);
+  expect(B.cached("d-a")!.app).toBe("0.19.2 (macos)");
+
+  version = "0.20.1 (macos)";
+  const uploads = remote.uploads();
+  await settle(a.engine, b.engine);
+  expect(remote.uploads()).toBe(uploads + 1);
+  expect(B.cached("d-a")!.app).toBe("0.20.1 (macos)");
+
+  await settle(a.engine, b.engine);
+  expect(remote.uploads()).toBe(uploads + 1);
+});
+
 test("the same tree scanned twice publishes the same bytes", async () => {
   const remote = makeRemote();
   const A = makeDevice("d-a", { "topics.json": "topics" });

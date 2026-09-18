@@ -75,7 +75,9 @@ export interface Holdings {
   v: 1;
   device: string;
   at: number;
-  // The app version, when the caller has one to hand. Display only.
+  // The app version, when the caller has one to hand: "0.20.1 (macos)". Shown
+  // in the report, and read by the phone to tell a desktop is behind
+  // (peer-versions.ts).
   app?: string;
   // Whether the scan behind this was complete (fs.list() returned normally). A
   // false one is shown but never reasoned from: absences in a partial scan are

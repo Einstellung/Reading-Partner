@@ -20,7 +20,13 @@ import { SyncEngine, type EngineDeps } from "./engine";
 import { dispatchPull } from "./pull-routes";
 import { tauriSyncFs } from "./syncFs";
 import { tauriBookFs } from "./books";
-import { tauriBaseStore, tauriHoldingsStore, tauriTrashJournal } from "./localStore";
+import {
+  readCachedPeerHoldings,
+  tauriBaseStore,
+  tauriHoldingsStore,
+  tauriTrashJournal,
+} from "./localStore";
+import { laggingDesktops, type LaggingDesktop } from "./peer-versions";
 import { currentDeviceId } from "../app/device";
 import { currentPlatform } from "../app/platform";
 import { currentAppVersion } from "../app/version";
@@ -46,6 +52,7 @@ export { isGoogleConfigured } from "./googleConfig";
 // soul's bell pass (src/soul/bell.ts) — runs on the same one rather than on a
 // second timer nobody would think to keep in step with it.
 export { TICK_MS } from "./engine";
+export type { LaggingDesktop } from "./peer-versions";
 export {
   syncHealth,
   SYNC_GRACE_MS,
@@ -338,6 +345,14 @@ export async function requestRemotePurge(paths: readonly string[]): Promise<void
 // that did something also logs one line of it (engine.ts).
 export function syncHoldingsReport(): string {
   return engine?.holdingsReport() ?? "sync: no engine";
+}
+
+// The desktops whose last published tree says they run an older build than
+// this one, most recently seen first (peer-versions.ts). Read from the cached
+// peer trees, so it costs no request and is as fresh as the last pass.
+export async function laggingDesktopPeers(now: number = Date.now()): Promise<LaggingDesktop[]> {
+  const peers = await readCachedPeerHoldings(currentDeviceId());
+  return laggingDesktops(peers, currentAppVersion(), now);
 }
 
 // Asking for one book, said the way the shelf has to say it when the answer is
