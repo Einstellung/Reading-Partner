@@ -13,6 +13,7 @@ import {
 	useContext,
 	useEffect,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 	type RefObject,
@@ -61,6 +62,9 @@ import {
 	type PenDrag,
 } from './chat-pen-drag';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
+import { DispatchPart } from './DispatchPart';
+import { ReceiptPart } from './ReceiptPart';
+import { DeliveredRunsContext, deliveredRunIds, type DeliveredRuns } from './deliveredRuns';
 import { useCardRegistry } from './cardRegistryContext';
 import type { CleanupModel } from '../../../ai/voice';
 import type { ProviderId } from '../../../ai/providers';
@@ -817,6 +821,10 @@ const MessageBubble = memo(function MessageBubble({
 	const cardParts = parts.filter((p): p is Extract<typeof p, { type: 'card' }> => p.type === 'card');
 	const toolPart = parts.find((p): p is Extract<typeof p, { type: 'tool-trace' }> => p.type === 'tool-trace');
 	const textPart = parts.find((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text' && !!p.text);
+	const ticketParts = parts.filter(
+		(p): p is Extract<typeof p, { type: 'receipt' } | { type: 'dispatch' }> =>
+			p.type === 'receipt' || p.type === 'dispatch',
+	);
 
 	// A card row (add-source flow) stands alone in the flow — no prose or trace.
 	//
@@ -865,24 +873,74 @@ const MessageBubble = memo(function MessageBubble({
 		);
 	}
 	const trace = toolPart ? <ToolTrace tools={toolPart.tools} size={size} /> : null;
+	// What this round wrote down and what it sent off, between the words and the
+	// trace: the records of the turn, in the order the calls finished.
+	const tickets = ticketParts.length ? (
+		<div className="flex flex-col gap-1.5">
+			{ticketParts.map((p, i) =>
+				p.type === 'dispatch' ? (
+					<DispatchPart key={i} runId={p.runId} receipt={p.receipt} size={size} />
+				) : (
+					<ReceiptPart
+						key={i}
+						receipt={p.receipt}
+						size={size}
+						{...(p.receipt.link?.kind === 'book'
+							? {
+									onOpen: () =>
+										onCardAction?.(`receipt-${message.ts}-${i}`, {
+											kind: 'navigate',
+											to: 'book',
+											arg: (p.receipt.link as { kind: 'book'; id: string }).id,
+										}),
+								}
+							: {})}
+					/>
+				),
+			)}
+		</div>
+	) : null;
 	// While a tool runs with no reply text yet, the trace is the status line.
 	if (streaming && !textPart) {
+		if (tickets) {
+			return (
+				<div className="flex flex-col gap-2">
+					{tickets}
+					{trace}
+				</div>
+			);
+		}
 		return trace ?? <PhaseLine phase={message.phase} size={size} />;
 	}
 	// A turn that stopped before writing anything (turn-rows.ts): the notice is
 	// the whole row. Not red and with no Copy — nothing failed and there are no
 	// model words to take.
 	if (!textPart) {
-		if (!notice) return trace;
+		if (!notice) {
+			if (!tickets) return trace;
+			return (
+				<div className="flex flex-col gap-2">
+					{tickets}
+					{trace}
+				</div>
+			);
+		}
 		return (
 			<div className="flex flex-col gap-2">
+				{tickets}
 				{trace}
 				<BudgetNotice text={notice} size={size} />
 			</div>
 		);
 	}
 	return (
-		<div ref={rowRef} className="group flex flex-col gap-2">
+		<div
+			ref={rowRef}
+			className="group flex flex-col gap-2"
+			// Which handed-off run this row answers, where it answers one: it is how
+			// the dispatch ticket further up finds the reply to scroll to.
+			data-origin-run={message.origin?.runId}
+		>
 			{/* data-reply-ts is the marker a pen stroke resolves against — the
 			    predicate (mayMarkReply), written where it can be read back off the
 			    DOM. On the prose element and not on the row: the row also holds the
@@ -905,6 +963,7 @@ const MessageBubble = memo(function MessageBubble({
 					<Markdown text={textPart.text} />
 				</ChatMarkLayer>
 			</div>
+			{tickets}
 			{/* Under the words, not above them: what the round wrote before calling a
 			    tool stays where the reader read it, and the next round continues
 			    below this line (docs/pitfall/291). */}
@@ -954,7 +1013,25 @@ export function MessageList({
 	const host = marks ?? null;
 	usePenStrokes(listRef, host);
 
+	// Which handed-off runs this thread already holds the answer to, and the way
+	// down to one. Only this component knows both: a ticket is drawn from the row
+	// that sent the work off, and the reply is somewhere else in the list.
+	const answered = useMemo(() => deliveredRunIds(messages), [messages]);
+	const delivered = useMemo<DeliveredRuns>(
+		() => ({
+			has: (runId) => answered.has(runId),
+			scrollTo(runId) {
+				const row = listRef.current?.querySelector(
+					`[data-origin-run="${CSS.escape(runId)}"]`,
+				);
+				row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			},
+		}),
+		[answered],
+	);
+
 	return (
+		<DeliveredRunsContext.Provider value={delivered}>
 		<ChatMarksContext.Provider value={host}>
 			<div
 				ref={listRef}
@@ -986,6 +1063,7 @@ export function MessageList({
 				))}
 			</div>
 		</ChatMarksContext.Provider>
+		</DeliveredRunsContext.Provider>
 	);
 }
 

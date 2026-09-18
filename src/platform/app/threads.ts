@@ -113,6 +113,10 @@ export interface ThreadMessage {
   // written before parts existed — a reader then falls back to `text` alone, so
   // old { role, text, ts } messages keep loading unchanged.
   parts?: PersistedPart[];
+  // Which handed-off piece of work this row is the answer to (docs/72). Written
+  // on a delivery and on nothing else, so the dispatch ticket that sent the run
+  // off can point at the reply when it comes back.
+  origin?: { runId: string };
 }
 
 // Where a chat-span aside was pulled out of: the parent AI message, and the

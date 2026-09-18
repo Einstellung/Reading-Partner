@@ -21,7 +21,7 @@ import type {
   ThreadMessage as StoredMessage,
 } from "../../../platform/app/threads";
 import type { ThreadMessage } from "./types";
-import { persistedTrace, type ToolStatus } from "../../../ai/tool-status";
+import { persistedTrace, type Receipt, type ToolStatus } from "../../../ai/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
 // (info/boxes/cards.ts, reading/retell/cards.ts, reading/aside.ts); this
@@ -61,7 +61,15 @@ export type ChatPart =
   // A block-level card. `id` is the stable handle for dispatch and for patchPart;
   // `state` is transient view state the host may attach to a card (persisted
   // cards keep their state in the payload instead).
-  | { type: "card"; id: string; card: CardPayload; state?: Record<string, unknown> };
+  | { type: "card"; id: string; card: CardPayload; state?: Record<string, unknown> }
+  // What a write left behind, for the reader (docs/72). Derived, never stored:
+  // the trace beside it is what the thread file keeps, and this is read back off
+  // it, so there is one durable record of a turn and not two that can disagree.
+  | { type: "receipt"; receipt: Receipt; toolName: string }
+  // Work handed off to a run. Derived the same way, from a receipt that points
+  // at a run: what a reader wants from a piece of work sent away is where it got
+  // to, which is in the run file and not in this thread.
+  | { type: "dispatch"; runId: string; receipt: Receipt };
 
 // The effects a card can ask of its host. The host's onCardAction owns
 // orchestration — a single user gesture may perform several of these — so cards
@@ -93,13 +101,51 @@ export interface CardComponentProps<P extends CardPayload = CardPayload> {
   surface: CardSurface;
 }
 
+// The receipts and dispatch tickets a settled trace carries (docs/72). A done
+// call that reported a receipt becomes one part: a dispatch where the receipt
+// points at a run, a plain receipt otherwise. Running calls have nothing to show
+// yet and failed ones keep their red line in the trace, so neither is derived.
+// The order is the order the calls finished in.
+function tracedReceipts(tools: readonly ToolStatus[]): ChatPart[] {
+  const out: ChatPart[] = [];
+  for (const t of tools) {
+    if (t.state !== "done" || !t.receipt) continue;
+    const link = t.receipt.link;
+    out.push(
+      link && link.kind === "run"
+        ? { type: "dispatch", runId: link.id, receipt: t.receipt }
+        : { type: "receipt", receipt: t.receipt, toolName: t.name },
+    );
+  }
+  return out;
+}
+
 // Derive the render parts for a message. When `parts` is set it is authoritative;
 // otherwise the legacy { text, tools, card } fields map to parts in the order
 // they are drawn: the reply, the tool trace under it, then a standalone card.
 // role / images / streaming / failed stay message-level flags — they are not
 // parts.
+//
+// Receipts and dispatch tickets are then unfolded out of each trace and placed
+// in front of it: after the words the round wrote, before the grey line naming
+// the calls. The same array comes back untouched when a row has none, so a row
+// the reader has scrolled past is not rebuilt on every render.
 export function messageToParts(m: ThreadMessage): ChatPart[] {
-  if (m.parts) return m.parts;
+  const base = m.parts ?? legacyParts(m);
+  const out: ChatPart[] = [];
+  let derived = 0;
+  for (const p of base) {
+    if (p.type === "tool-trace") {
+      const receipts = tracedReceipts(p.tools);
+      derived += receipts.length;
+      out.push(...receipts);
+    }
+    out.push(p);
+  }
+  return derived ? out : base;
+}
+
+function legacyParts(m: ThreadMessage): ChatPart[] {
   const parts: ChatPart[] = [];
   if (m.text) parts.push({ type: "text", text: m.text });
   if (m.tools && m.tools.length) parts.push({ type: "tool-trace", tools: m.tools });
@@ -251,7 +297,15 @@ export function rehydrateParts(parts: PersistedPart[]): ChatPart[] {
 export function rehydrateMessage(m: StoredMessage): ThreadMessage {
   // The id rides along: it is how a message that arrives in a conversation the
   // reader has open is told apart from the copy of it already on screen.
-  const stamp = { ...(m.id ? { id: m.id } : {}), role: m.role, text: m.text, ts: m.ts };
+  // The run this row answers, where it is a delivery: what a dispatch ticket
+  // further up the thread points at when its run comes back (docs/72).
+  const stamp = {
+    ...(m.id ? { id: m.id } : {}),
+    ...(m.origin ? { origin: m.origin } : {}),
+    role: m.role,
+    text: m.text,
+    ts: m.ts,
+  };
   if (m.parts && m.parts.length) {
     return { ...stamp, parts: rehydrateParts(m.parts) };
   }

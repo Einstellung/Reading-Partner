@@ -53,4 +53,8 @@ export interface ThreadMessage {
 	// messageToParts, which maps the legacy text/tools/card fields when parts is
 	// absent). Optional so callers that still set the legacy fields keep working.
 	parts?: ChatPart[];
+	// Which handed-off piece of work this row answers (docs/72). Set on a
+	// delivery; the dispatch ticket that sent the run off reads it to draw the
+	// way back down to the reply.
+	origin?: { runId: string };
 }

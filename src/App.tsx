@@ -528,6 +528,9 @@ export default function App() {
   // Same reason, for the switch between the book and a supplement: a clicked
   // citation may name one, and onCitation is written above the door.
   const openDocumentRef = useRef<(id: string, name: string) => Promise<void>>(async () => {});
+  // And for opening a book from the shelf, which a receipt in the conversation
+  // may point at: the shelf is read further down than onCardAction is written.
+  const openBookRef = useRef<(bookId: string) => Promise<void>>(async () => {});
   const {
     call,
     captureHangup,
@@ -619,11 +622,13 @@ export default function App() {
     viewRef.current?.setTool(tool);
   }, [toolType, penColor, viewReady]);
 
-  // What a card in the reading conversation raises. One does: an aside's
-  // receipt, which navigates back into the side conversation it stands for.
+  // What a card in the reading conversation raises. Two do: an aside's receipt,
+  // which navigates back into the side conversation it stands for, and a write's
+  // receipt pointing at a book (docs/72), which opens it.
   const onCardAction = useCallback((_cardId: string, action: CardAction) => {
     if (action.kind !== "navigate") return;
     if (action.to === "aside" && action.arg) openAsideThreadRef.current(action.arg);
+    if (action.to === "book" && action.arg) void openBookRef.current(action.arg);
   }, []);
 
   // Pay down whatever the observations still owe, on a timer and whenever the
@@ -1239,6 +1244,10 @@ export default function App() {
     }),
     [topics, openFile, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
   );
+
+  // The same shelf lookup a receipt's book link needs. One way in, so a card and
+  // a receipt cannot open a book two different ways.
+  openBookRef.current = lumenTargets.openBook;
 
   // Where the soul may take the reader (docs/71, ui/components/base/places.ts).
   // The table is registered here because the moves are this shell's state; it
