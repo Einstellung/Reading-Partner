@@ -29,6 +29,8 @@ import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
 import type { ToolStatus } from '../../../ai/tool-status';
+import type { TurnPhase } from '../../../ai/turn-rows';
+import { phaseLabel } from './phase-line';
 import {
 	createStrokeGate,
 	locateChatMarks,
@@ -656,14 +658,22 @@ function MessageImages({ images }: { images: CompressedImage[] }) {
 	);
 }
 
-// The "thinking" state before the first streamed token arrives: three quiet
-// pulsing dots where the reply will appear.
-function TypingDots() {
+// An arbitrary font size brings no line height of its own, where text-sm did.
+function traceText(size: 'sm' | 'lg') {
+	return size === 'lg' ? 'text-[calc(0.875rem*var(--chat-scale,1))] leading-[1.43]' : 'text-xs';
+}
+
+// What a turn is doing before it has written anything, as one subdued line where
+// the reply will appear — the same line a running tool draws, because extended
+// thinking is the same wait with nothing to show for it. The thinking itself is
+// never rendered. Nothing is drawn once the reply is arriving, and nothing while
+// a tool runs: ToolTrace is already saying it.
+function PhaseLine({ phase, size }: { phase?: TurnPhase; size: 'sm' | 'lg' }) {
+	const label = phaseLabel(phase);
+	if (!label) return null;
 	return (
-		<div className="flex items-center gap-1 py-1 text-neutral-400" aria-label="Thinking">
-			<span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:0ms]" />
-			<span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:150ms]" />
-			<span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:300ms]" />
+		<div className={'text-neutral-400 ' + traceText(size)} aria-label={label}>
+			{label}…
 		</div>
 	);
 }
@@ -673,8 +683,7 @@ function TypingDots() {
 // --destructive, the app's one red. The reply resumes under it in the next round
 // (docs/pitfall/291), and a successful call's line is gone by then.
 function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) {
-	// An arbitrary font size brings no line height of its own, where text-sm did.
-	const text = size === 'lg' ? 'text-[calc(0.875rem*var(--chat-scale,1))] leading-[1.43]' : 'text-xs';
+	const text = traceText(size);
 	return (
 		<div className="flex flex-col gap-0.5">
 			{tools.map((t, i) =>
@@ -846,9 +855,9 @@ const MessageBubble = memo(function MessageBubble({
 		);
 	}
 	const trace = toolPart ? <ToolTrace tools={toolPart.tools} size={size} /> : null;
-	// While a tool runs with no reply text yet, the trace stands in for the dots.
+	// While a tool runs with no reply text yet, the trace is the status line.
 	if (streaming && !textPart) {
-		return trace ?? <TypingDots />;
+		return trace ?? <PhaseLine phase={message.phase} size={size} />;
 	}
 	// A turn that stopped before writing anything (turn-rows.ts): the notice is
 	// the whole row. Not red and with no Copy — nothing failed and there are no

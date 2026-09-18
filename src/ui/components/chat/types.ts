@@ -2,6 +2,7 @@
 
 import type { CompressedImage } from "../../../ai/image-utils";
 import type { ToolStatus } from "../../../ai/tool-status";
+import type { TurnPhase } from "../../../ai/turn-rows";
 import type { InfoCard } from "../../../info/boxes/cards";
 import type { ChatPart } from "./chatParts";
 
@@ -30,6 +31,10 @@ export interface ThreadMessage {
 	failed?: boolean;
 	// Transient tool-call trace shown above the streaming reply (M6).
 	tools?: ToolStatus[];
+	// What the running turn is doing, for the status line drawn while nothing is
+	// written yet (turn-rows.ts). Set only while `streaming`; cleared when the
+	// turn lands.
+	phase?: TurnPhase;
 	// What this turn had to leave out of the model's view to fit the context
 	// window (src/budget). One quiet line after the answer. Never persisted and
 	// never part of `text`: it is the app talking about the turn, not the model's

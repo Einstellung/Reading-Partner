@@ -480,6 +480,30 @@ test("what only the surface knows about the row survives its images arriving", (
   expect(next?.messages[1].images).toEqual([{ data: "AAA", mediaType: "image/png" }]);
 });
 
+// The status line the row draws while it has written nothing (chat/phase-line).
+test("the phase follows the turn: thinking, then the tool, then the reply", () => {
+  const row = ai(1, "", { streaming: true });
+  const thinking = applyRowChange(row, { kind: "phase", phase: "thinking" });
+  expect(thinking.phase).toBe("thinking");
+
+  const calling = applyRowChange(thinking, { kind: "tool-start", name: "s", label: "S" });
+  expect(calling.phase).toBe("tool");
+
+  expect(applyRowChange(calling, { kind: "delta", chunk: "so" }).phase).toBe("writing");
+});
+
+test("every way a turn ends clears the phase", () => {
+  const endings: RowChange[] = [
+    { kind: "answer", text: "done" },
+    { kind: "error", text: "no reply" },
+    { kind: "refusal", text: "too big" },
+    { kind: "stopped", text: "half a sen" },
+  ];
+  const row = applyRowChange(ai(1, "", { streaming: true }), { kind: "phase", phase: "thinking" });
+
+  expect(endings.map((e) => applyRowChange(row, e).phase)).toEqual(endings.map(() => undefined));
+});
+
 // The registry's copy of the row and the one on screen are patched separately;
 // they stay in step only because one function applies the change to both.
 test("a change nothing matches hands the row back untouched", () => {

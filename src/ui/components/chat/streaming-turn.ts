@@ -4,7 +4,7 @@
 
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { AgentToolEnd, AgentToolStart } from "../../../legion/execute/contract";
-import { holdsNoAnswer } from "../../../ai/turn-rows";
+import { appendRoundBreak, holdsNoAnswer, type TurnPhase } from "../../../ai/turn-rows";
 import { toolStatusLabel } from "../../../reading/context";
 import type { ThreadMessage } from "./types";
 
@@ -28,16 +28,24 @@ export function dropAiRow(rows: readonly ThreadMessage[], ts: number): ThreadMes
   return rows.filter((m) => !(m.ts === ts && m.role === "ai"));
 }
 
-export function withDelta(m: ThreadMessage, chunk: string): ThreadMessage {
-  return { ...m, text: m.text + chunk };
+// The model is reasoning with nothing written yet: the row has a status line to
+// draw and no text to show for it.
+export function withPhase(m: ThreadMessage, phase: TurnPhase): ThreadMessage {
+  return { ...m, phase };
 }
 
-// A tool starting clears the text: what the round wrote before calling it is
-// replaced by the status line.
+export function withDelta(m: ThreadMessage, chunk: string): ThreadMessage {
+  return { ...m, text: m.text + chunk, phase: "writing" };
+}
+
+// What the round wrote before calling the tool stays where it is, with a blank
+// line opened under it for the next round (docs/pitfall/291). The status line is
+// drawn in that gap and comes off when the tool returns.
 export function withToolStart(m: ThreadMessage, info: AgentToolStart): ThreadMessage {
   return {
     ...m,
-    text: "",
+    text: appendRoundBreak(m.text),
+    phase: "tool",
     tools: appendRunningTool(m.tools, info.name, toolStatusLabel(info.name, info.args)),
   };
 }

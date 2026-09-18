@@ -49,6 +49,7 @@ import {
   type CallView,
   type RowChange,
 } from "../call-state";
+import type { TurnPhase } from "../../ai/turn-rows";
 import { annotationPage, toolStatusLabel } from "../context";
 import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
@@ -493,8 +494,21 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       dispatch({ type: "row-changed", threadId, ts, change, error });
     };
 
-    const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) =>
+    // The phase the row was last told about. A thinking delta arrives by the
+    // hundred and says nothing the status line does not already say, so only a
+    // change of phase is written through; delta and tool-start carry their own
+    // phase (call-state.ts), so this only has to follow them.
+    let phase: TurnPhase | null = null;
+    const onThinking = (ts: number) => {
+      if (phase === "thinking") return;
+      phase = "thinking";
+      write({ kind: "phase", phase: "thinking" }, ts);
+    };
+
+    const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) => {
+      phase = "tool";
       write({ kind: "tool-start", name: info.name, label: toolStatusLabel(info.name, info.args) }, ts);
+    };
     const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
       write({ kind: "tool-end", name: info.name, isError: info.isError }, ts);
 
@@ -614,7 +628,12 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         telemetry: { surface: "reading", inline: turn.inline, thread: threadId },
         about: { bookId },
         harness: soulHarness(),
-        onDelta: (chunk) => write({ kind: "delta", chunk }, ts),
+        onDelta: (chunk) => {
+          phase = "writing";
+          write({ kind: "delta", chunk }, ts);
+        },
+        // The thinking itself is dropped; only that it is happening is shown.
+        onThinking: () => onThinking(ts),
         onToolStart: (info) => onToolStart(info, ts),
         onToolEnd: (info) => onToolEnd(info, ts),
         // Every round's words, not only the answering round's: a round that
