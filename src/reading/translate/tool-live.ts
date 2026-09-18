@@ -270,11 +270,10 @@ export function registerTranslateBookWorker(deps: TranslateWorkerDeps = {}): voi
     // docs/55 step 11 is not done.
     tier: "local",
     requires: [],
-    // Not something the soul hands a brief to. The task book is JSON a program
-    // writes — which document, which topic, which model — and a model asked to
-    // delegate this would write prose the worker cannot read. The entrance is
-    // translate_document and there is no other.
-    delegable: false,
+    // Not `delegable`: the task book is JSON a program writes — which document,
+    // which topic, which model — and a model asked to delegate this would write
+    // prose the worker cannot read. The entrance is translate_document and
+    // there is no other.
     run: translateBookWorker(deps),
   });
 }

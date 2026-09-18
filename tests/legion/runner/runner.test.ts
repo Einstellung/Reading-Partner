@@ -408,15 +408,15 @@ test("a local run never reaches the folder and finishes at once", async () => {
   expect(w.runDisk.files.size).toBe(0);
 });
 
-// A kind whose brief is a structured task book a program writes is not something
-// a model may be handed: the soul's delegate tool reads the delegable half of
-// the table, and the runner's own poll reads all of it (docs/55 step 11).
+// Only a kind registered as `delegable` is offered to the model: a kind whose
+// brief is a shape a program writes (a date, a URL, a document) is registered
+// for the runner's own poll but left out of the soul's catalogue.
 test("a kind that takes no brief from a model is registered but not offered", () => {
   const open = kind("open");
   const shut = kind("shut");
   const body = (): WorkerHandle => ({ cancel: () => {}, done: Promise.resolve() });
-  registerWorker({ kind: open, run: body });
-  registerWorker({ kind: shut, delegable: false, run: body });
+  registerWorker({ kind: open, delegable: true, run: body });
+  registerWorker({ kind: shut, run: body });
 
   expect(registeredWorkerKinds()).toContain(open);
   expect(registeredWorkerKinds()).toContain(shut);

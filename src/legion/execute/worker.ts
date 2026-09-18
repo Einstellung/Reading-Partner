@@ -88,10 +88,11 @@ export interface WorkerRegistration {
   /** There is a model inside it. An agent worker may not delegate. */
   agent?: boolean;
   /**
-   * Whether the soul may hand this kind a brief of its own writing. Defaults to
-   * true. A kind whose brief is a structured task book a program writes says
-   * false: the model would send prose, the worker could not read it, and the
-   * run would fail for a reason nobody could act on (translate, docs/55).
+   * The soul may hand this kind a job of its own: its brief is prose a model
+   * writes, and the kind is in the delegate tool's catalogue. A kind without it
+   * is started by its own domain's code with a brief that has a shape — a date,
+   * a URL, a book — which is not something the model could write from a
+   * conversation, so the catalogue leaves it out.
    */
   delegable?: boolean;
 }
@@ -157,7 +158,7 @@ export function registeredWorkerKinds(): string[] {
   return [...workers.keys()];
 }
 
-/** The kinds of those a model may be offered as something to delegate. */
+/** The kinds the soul may delegate: the catalogue its delegate tool prints. */
 export function delegableWorkerKinds(): string[] {
-  return [...workers.values()].filter((one) => one.delegable !== false).map((one) => one.kind);
+  return [...workers.values()].filter((w) => w.delegable).map((w) => w.kind);
 }

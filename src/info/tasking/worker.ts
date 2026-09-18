@@ -27,6 +27,7 @@ export function registerTaskingWorker(deps: AgentWorkerDeps = {}): void {
     kind: TASKING_KIND,
     tier: "local",
     agent: true,
+    delegable: true,
     run: taskingWorker(deps),
   });
 }

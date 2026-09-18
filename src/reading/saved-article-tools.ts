@@ -27,8 +27,7 @@ import { FULLTEXT_VERSION, type Fulltext } from "../fulltext/types";
 import { clipLineTight } from "../platform/std/text";
 import type { FetchOutcome } from "./prep/papers/pipeline";
 import { uniqueSlug } from "./prep/papers/plan";
-import type { IngestedPaper } from "./prep/papers/source-tool";
-import type { PrepPaper } from "./prep/papers/types";
+import type { PaperStatus, PrepPaper } from "./prep/papers/types";
 import { savedArticleTextChars, type SavedArticle, type SavedArticleBody } from "./saved-articles";
 
 // Rows the list answers with at most. A kept list is a queue, meant to be
@@ -38,6 +37,16 @@ import { savedArticleTextChars, type SavedArticle, type SavedArticleBody } from 
 // Chinese ones (59 and 151 per row) — affordable on demand, not affordable by
 // accident. Past the cap the most recently saved are shown and the answer points
 // at `query` instead of offering more.
+/** A source on the prep list: what read_paper can read, and how it went. */
+export interface IngestedPaper {
+  slug: string;
+  kind: "pdf" | "article";
+  pages: number; // for a PDF
+  chars: number; // for an article
+  status: PaperStatus;
+  error?: string;
+}
+
 export const SAVED_ARTICLES_MAX = 40;
 
 // A title longer than this is cut in a row. Long enough for a headline with its

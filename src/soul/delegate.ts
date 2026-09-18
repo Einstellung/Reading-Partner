@@ -44,9 +44,10 @@ export interface DelegateDeps {
   /** Where the brief text is put, answering the path. AppData unless injected. */
   writeBrief?: (text: string) => Promise<string>;
   /**
-   * The kinds this device can run and would take a brief from a model. The
-   * module registry unless injected; a kind that registered itself as not
-   * delegable is not among them (legion/execute/worker.ts).
+   * The kinds this device can run and the soul may ask for. The module registry
+   * unless injected — and only the kinds registered as `delegable`: a kind whose
+   * brief is a shape rather than prose (the day's collection, a URL to take in)
+   * is started by its own domain's code and is not the soul's to hand a task to.
    */
   kinds?: () => readonly string[];
 }
