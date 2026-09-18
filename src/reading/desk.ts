@@ -107,13 +107,10 @@ import {
   type TableChapter,
 } from "./chapters";
 import { buildClassroomTools } from "./prep/papers/tools";
-import { INGEST_URL_PROMPT, buildSourceTools, type IngestResult } from "./prep/papers/source-tool";
-import { ingestUrlLive } from "./ingest/live";
+import { INGEST_URL_PROMPT, buildSourceTools } from "./prep/papers/source-tool";
+import { startUrlIngest } from "./ingest/url-run";
 import { REMOVE_SUPPLEMENT_PROMPT, buildSupplementTools } from "./ingest/remove-tool";
-import { ensureDocumentFulltext } from "./ingest/fulltext";
-import { formatOfBytes, readLibraryBook } from "../platform/app/library";
 import { listSupplements, removeSupplement } from "../platform/app/supplements";
-import { prepareCapturedDocument } from "./prep/papers/captured-source";
 import { TRANSLATE_PROMPT, buildTranslateTools } from "./translate/tool";
 import { bookDeleter, liveTranslateToolDeps } from "./translate/tool-live";
 import {
@@ -351,6 +348,18 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     : currentPage;
   const chapterTitle =
     currentFulltext && page ? chapterAt(currentFulltext, page)?.title ?? null : null;
+  // Where the reader is, for a run delegated from this turn to be delivered back
+  // to (docs/68). The page is the one the turn is about: the marked passage's
+  // page on a mark thread, and the reader's position otherwise. A function
+  // because this turn hands runs over from two places — the desk it answers
+  // with, and the ingest tool below.
+  const deliveryOrigin = (): BoxOrigin => ({
+    place: "book",
+    bookId,
+    threadId,
+    ...(annotationId ? { annotationId } : {}),
+    ...(page ?? currentPage ? { page: (page ?? currentPage) as number } : {}),
+  });
   // The current book is in the list, marked as current. It used to be filtered
   // out, which read as "the other materials" and was fine until read_annotations
   // was mounted: that tool takes a title "as shown in the topic booklist", and
@@ -533,78 +542,38 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     mediaType,
   }));
 
-  // The text of a document that is not on screen, cut into the pages the reader
-  // will see when they open it (reading/ingest/fulltext.ts). Cached under the
-  // document own id, so opening it later reads this copy back rather than
-  // cutting the pages a second time under different numbers. Null when the text
-  // could not be extracted, which costs the prep half and nothing else.
-  const documentFulltext = async (hash: string): Promise<Fulltext | null> => {
-    try {
-      const bytes = await readLibraryBook(hash);
-      const buffer = bytes.slice().buffer as ArrayBuffer;
-      return await ensureDocumentFulltext(hash, buffer, formatOfBytes(bytes));
-    } catch (e) {
-      console.warn("could not read the ingested document text", e);
-      return null;
-    }
-  };
-
   // Link ingestion (docs/09, docs/67 「辅助资料」): the model can ingest a
   // user-pasted URL with ingest_url on any thread of this book — "compare this
   // link with ch.3" is a question a marked passage can raise as easily as the
   // book-level thread can.
   //
-  // Mounted on every book thread, with a prep pipeline or without one. What a
-  // pasted link always produces is a supplement of this book, which the reader
-  // can open in the same reader; the prep half — full text the model reads with
-  // read_paper — rides along wherever there is a pipeline to carry it. A tool
+  // Mounted on every book thread, with a prep pipeline or without one. A tool
   // that is only sometimes there is one the model stops reaching for, which is
   // the same judgement translate makes below.
+  //
+  // The taking-in itself is a run (reading/ingest/url-worker.ts): the tool writes
+  // it and this turn ends, and what came in is said back into this thread when
+  // the run lands. What a pasted link always produces is a supplement of this
+  // book, which the reader can open in the same reader; the prep half — full
+  // text the model reads with read_paper — rides along wherever there is a
+  // pipeline to carry it, and the run reaches for the same one this turn holds.
   const livePipeline = getPipeline();
-  const canReadIngested = livePipeline !== null && currentFulltext?.status === "ok";
   tools = [
     ...tools,
     ...buildSourceTools({
-      ingest: async (url, note) => {
-        // One URL, one object (docs/67 「和 ingest_url 合并」). The document is
-        // made first, because it is the thing: the reader opens it from the
-        // Outline, its bytes are in the library, and its text — cut into the
-        // pages they will see — is what the prep run digests. The page is
-        // fetched once and every [Title p.N] the model writes lands on the page
-        // in front of them.
-        const ingested = await ingestUrlLive(url, { kind: "book", bookId });
-        onSupplement?.();
-        const kind = ingested.kind === "article" ? ("article" as const) : ("pdf" as const);
-        let prep: IngestResult["prep"];
-        if (livePipeline && canReadIngested) {
-          const ft = await documentFulltext(ingested.entry.hash);
-          if (ft && ft.status === "ok") {
-            const prepared = prepareCapturedDocument(
-              {
-                documentId: ingested.entry.hash,
-                title: ingested.title,
-                kind,
-                ...(ingested.entry.sourceUrl ? { sourceUrl: ingested.entry.sourceUrl } : {}),
-              },
-              ft,
-              note ?? "",
-            );
-            const paper = await livePipeline.ingestCaptured(prepared.mint, prepared.fetched);
-            prep = {
-              slug: paper.slug,
-              kind: paper.kind ?? kind,
-              pages: ft.pages.length,
-              chars: ft.pages.reduce((n, pg) => n + pg.length, 0),
-              status: paper.status,
-              ...(paper.error === undefined ? {} : { error: paper.error }),
-            };
-          }
-        }
-        return {
-          title: ingested.title,
-          ...(prep ? { prep } : {}),
-          document: { title: ingested.title },
-        };
+      start: async (url, note) => {
+        const started = await startUrlIngest(
+          { url, bookId, ...(note ? { note } : {}) },
+          { origin: deliveryOrigin() },
+        );
+        // The Outline is asked again when the run lands, not now: the supplement
+        // does not exist yet, and by the time it does this turn is long over and
+        // nothing else would think to look. Not awaited — that is the whole
+        // point of the run.
+        void started.done
+          ?.then(() => onSupplement?.())
+          .catch(() => {});
+        return { runId: started.runId };
       },
     }),
   ];
@@ -987,15 +956,8 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     },
     history: { compose: composeMessages },
     // Where the reader is, for a run delegated from this turn to be delivered
-    // back to (docs/68). The page is the one the turn is about, which is the
-    // marked passage's page on a mark thread and the reader's position otherwise.
-    origin: {
-      place: "book",
-      bookId,
-      threadId,
-      ...(annotationId ? { annotationId } : {}),
-      ...(page ?? currentPage ? { page: (page ?? currentPage) as number } : {}),
-    } satisfies BoxOrigin,
+    // back to (docs/68).
+    origin: deliveryOrigin(),
     report: { inline },
     afterFit: (dropped) =>
       reportPageWindow(threadId, pageWindow, pageImages, !dropped.has("page-window")),

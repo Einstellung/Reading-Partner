@@ -39,5 +39,5 @@ export {
   buildSourceTools,
   INGEST_URL_PROMPT,
   type SourceIngestor,
-  type IngestResult,
+  type StartedIngest,
 } from "./source-tool";

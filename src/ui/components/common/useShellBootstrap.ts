@@ -39,6 +39,7 @@ import { registerReadingDistillSources } from "../../../reading/distill/source";
 import { registerReadingDesk } from "../../../reading/desk";
 import { registerBookDelivery } from "../../../reading/deliver";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
+import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerInfoCollectWorker } from "../../../info/program/live";
 import { registerBriefingDelivery } from "../../../info/briefer/deliver";
@@ -186,6 +187,11 @@ export function bootDomains(): void {
   registerReadingDesk();
   // The literature research kind, and where its answer is given back (docs/68).
   registerResearchWorker();
+  // Taking a pasted URL in, as a run of its own (docs/55): the reader's turn
+  // writes it and ends, and what came in is said back into the same thread. Not
+  // a kind the soul can delegate — the ask is a URL and a book, and the tool
+  // writes it (reading/ingest/url-worker.ts).
+  registerIngestUrlWorker();
   registerBookDelivery();
   // The same pair on the info side: a question the briefing did not answer, and
   // the day's briefing thread it is answered back into (docs/63, docs/68).

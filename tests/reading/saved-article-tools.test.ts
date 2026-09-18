@@ -16,7 +16,7 @@ import {
   savedArticleProvenance,
   type SavedArticlePorts,
 } from "../../src/reading/saved-article-tools";
-import type { IngestedPaper } from "../../src/reading/prep/papers/source-tool";
+import type { IngestedPaper } from "../../src/reading/saved-article-tools";
 import type { SavedArticle } from "../../src/reading/saved-articles";
 
 // The body prepareSavedArticle is handed. It lives in its own file now
