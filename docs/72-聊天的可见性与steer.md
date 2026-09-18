@@ -75,12 +75,18 @@ Composer 在流式期间 Send 和 Stop 都在。
 - `Runner.subscribe`。
 - 回执单与派工单：trace 里带 receipt 的 done 项派生成 part，`link.kind === "run"` 的派生成派工单，派工单读 run 文件（`dispatch-view.ts`）。
 - soul 装配时带上这条线程还在跑的 run（`self.ts` 的 `openRuns`）。
+- 工具契约：`label(args)` / `effect` / `gate` / `receipt`，write 类无 receipt 适配层抛错，`tests/soul/tool-contract.test.ts` 的 ROSTER 管完整性，三张人话表删除。
+- 思考态一行：`TurnPhase`，`PhaseLine` 替掉三个点，三个界面都接 `onThinking`。
+- steer：`onSteerable` 端口，`reading/steering.ts`，Composer 流式期间 Send 与 Stop 并存，停止时未注入的话开下一回合。
+- 答铃 steer 进在跑的轮（`reading/delivered.ts`），答铃自起的回合按 silent 登记进 liveTurns，送达行落 `origin: { runId }`。
 
-其余按契约、思考态、回执单与派工单、steer 四片进行。
+以上随 v0.20.2 发出。
 
 ## 尾巴
 
 答铃回合印的是 brief 和 output 的路径，没有工具能读它们。
+
+steer 只在书的对话里；retell、rehearsal、简报对话仍是另起回合。图片不能随 steer，留到下一次普通发送。答铃自起的回合不流式，回复一次到达；silent 回合结束时未交出的话写进文件但不自动续跑。
 
 Outline 刷新靠 `local` 档 run 的 `done`，`synced` 档没有。
 
