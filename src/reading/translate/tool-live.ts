@@ -2,7 +2,19 @@
 // marks, the delete path and the provider. Separate from tool.ts and replace.ts
 // for the usual reason — everything here reaches the host, and none of it runs
 // under bun.
+//
+// Both halves of the run live here (docs/55 step 11). The turn's half writes a
+// task book and asks the runner for a run of kind `translate-book`; the
+// worker's half is everything that used to happen behind a fire-and-forget
+// promise — opening the document, cutting it up, the dozen model calls, the
+// replacement — with one line of progress on the run as it goes. The pure parts
+// of both are in book-run.ts, where they can be read back under bun.
 
+import { appData } from "../../platform/app/appdata";
+import { appRunner } from "../../legion/execute/runner";
+import { OUTPUTS_DIR } from "../../legion/execute/outputs";
+import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/execute/worker";
+import type { BoxOrigin } from "../../box";
 import { contentHash } from "../../platform/app/content-hash";
 import { loadAnnotations, saveAnnotations } from "../../platform/app/annotations";
 import type { Annotation } from "../../platform/app/reader-contract";
@@ -37,7 +49,17 @@ import {
   type ReplaceResult,
   type TranslationHome,
 } from "./replace";
-import { translateRun } from "./run";
+import {
+  TRANSLATE_BRIEFS_DIR,
+  TRANSLATE_KIND,
+  failedLine,
+  openingLine,
+  parseTranslateBrief,
+  segmentedLine,
+  translatedLine,
+  type Replacement,
+  type TranslateBrief,
+} from "./book-run";
 import { hasTranslations, segmentDocument } from "./segment";
 import { translateArticleEpub } from "./translate-article";
 import type { MarkRecord } from "./carry-marks";
@@ -121,8 +143,18 @@ export interface TranslateDeskRef {
   /** The document on screen — the book itself, or one of its supplements. */
   docId: string;
   topicId: string | null;
+  /** The conversation the reader asked in, for the run to name where it came from. */
+  threadId: string;
   /** The conversation's model: the translation is made by whoever is talking. */
   model: TranslateModel;
+}
+
+/** Write the task book for a translation about to be delegated, answering its path. */
+async function writeTranslateBrief(brief: TranslateBrief): Promise<string> {
+  const path = `${TRANSLATE_BRIEFS_DIR}/translate-${crypto.randomUUID()}.json`;
+  await appData.mkdirp(TRANSLATE_BRIEFS_DIR);
+  await appData.writeAtomic(path, JSON.stringify(brief, null, 2));
+  return path;
 }
 
 export function liveTranslateToolDeps(ref: TranslateDeskRef): TranslateToolDeps {
@@ -155,34 +187,131 @@ export function liveTranslateToolDeps(ref: TranslateDeskRef): TranslateToolDeps 
         home,
       };
     },
-    inspect: async (target) => {
-      const body = bodyOf(await readLibraryBook(target.bookId));
-      if (!body) return { blocks: 0, translated: false };
-      if (hasTranslations(body)) return { blocks: 0, translated: true };
-      return { blocks: segmentDocument(body).length, translated: false };
+    // One at a time, app-wide. Not a resource limit — the runner already runs
+    // one run of a kind at a time on a device — but a product one: two articles
+    // translating at once is two lines of numbers about work the reader asked
+    // for one sentence at a time, and the second request is better answered
+    // with "one is already running".
+    busy: async () => {
+      const going = await appRunner()
+        .list({ kind: TRANSLATE_KIND, state: ["pending", "running"] })
+        .catch(() => []);
+      return going.length > 0;
     },
-    start: (target, blocks) => {
-      translateRun.begin(target.title, blocks);
-      void runTranslation(target, ref);
+    start: async (target) => {
+      const origin: BoxOrigin = {
+        place: "book",
+        bookId: ref.bookId,
+        threadId: ref.threadId,
+      };
+      const brief = await writeTranslateBrief({ target, ref });
+      const result = await appRunner().delegate({
+        kind: TRANSLATE_KIND,
+        // Nobody's question: the reader is told by the worker, in the sentence
+        // the replacement writes, so the bell about this run is acknowledged
+        // and nothing more is said (soul/bell.ts). Only its failure reaches
+        // them, as one card to decide about.
+        delegator: { kind: "program", name: "translate" },
+        brief,
+        deliverTo: JSON.stringify(origin),
+      });
+      return result.ok
+        ? { ok: true as const, runId: result.run.id }
+        : { ok: false as const, reason: result.reason };
     },
-    busy: () => translateRun.busy(),
   };
 }
 
-async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): Promise<void> {
+// --- the worker ---------------------------------------------------------------
+
+export interface TranslateWorkerDeps {
+  /** The task book, read back off its path. AppData unless injected. */
+  readBrief?: (path: string) => Promise<string>;
+}
+
+/**
+ * Run one translation: open the document, cut it into blocks, translate them,
+ * and put the bilingual copy where the original was.
+ *
+ * A document that cannot be translated — gone from the shelf, bilingual
+ * already, empty — is not a failed run. The worker says so in the conversation
+ * and the run is done: a failure is retried, and retrying any of those three
+ * would spend a dozen model calls to reach the same sentence.
+ */
+export function translateBookWorker(deps: TranslateWorkerDeps = {}) {
+  const readBrief = deps.readBrief ?? ((path: string) => appData.readText(path));
+  return (brief: string, ctx: WorkerContext): WorkerHandle => {
+    const stop = new AbortController();
+    const done = (async () => {
+      const { target, ref } = parseTranslateBrief(await readBrief(brief));
+      await ctx.report(openingLine(target.title));
+      try {
+        return await runTranslation(target, ref, ctx, stop.signal);
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        // The last line the run carries, so the screen says what went wrong
+        // rather than where it had got to. The reader is not told here: this
+        // is one attempt of up to three, and a run that has spent them leaves
+        // a card in the box with this same reason on it.
+        await ctx.report(failedLine(target.title, reason));
+        throw e;
+      }
+    })();
+    return { cancel: () => stop.abort(), done };
+  };
+}
+
+/** Hand legion the translation kind. Called once at startup; deps are for tests. */
+export function registerTranslateBookWorker(deps: TranslateWorkerDeps = {}): void {
+  registerWorker({
+    kind: TRANSLATE_KIND,
+    // In this process, on the reader's own device. The task book is machine-
+    // local and so is the shelf the document is on; the cross-device half of
+    // docs/55 step 11 is not done.
+    tier: "local",
+    requires: [],
+    // Not something the soul hands a brief to. The task book is JSON a program
+    // writes — which document, which topic, which model — and a model asked to
+    // delegate this would write prose the worker cannot read. The entrance is
+    // translate_document and there is no other.
+    delegable: false,
+    run: translateBookWorker(deps),
+  });
+}
+
+async function runTranslation(
+  target: TranslateTarget,
+  ref: TranslateBrief["ref"],
+  ctx: WorkerContext,
+  signal: AbortSignal,
+): Promise<{ output?: string; progress?: string }> {
   const entry = await getLibraryEntry(target.bookId);
   if (!entry) {
-    translateRun.fail(`"${target.title}" is no longer on the shelf.`);
-    return;
+    const line = `"${target.title}" is no longer on the shelf.`;
+    await tell(target.bookId, line);
+    return { progress: line };
   }
   const removeBook = deleteBook;
-  if (!removeBook) {
-    translateRun.fail("the app is not ready to replace a document yet");
-    return;
+  if (!removeBook) throw new Error("the app is not ready to replace a document yet");
+
+  // What the turn used to do before it answered: a megabyte of EPUB, a parse
+  // and a walk of the body. It is the same two questions, asked where the
+  // reader is not waiting on them.
+  const body = bodyOf(await readLibraryBook(target.bookId));
+  if (body && hasTranslations(body)) {
+    const line = `"${target.title}" is already bilingual.`;
+    await tell(target.bookId, line);
+    return { progress: line };
   }
-  let result: ReplaceResult;
-  try {
-    result = await replaceWithTranslation(
+  const blocks = body ? segmentDocument(body).length : 0;
+  if (blocks === 0) {
+    const line = `"${target.title}" has nothing to translate.`;
+    await tell(target.bookId, line);
+    return { progress: line };
+  }
+  await ctx.report(segmentedLine(target.title, blocks));
+
+  const result: ReplaceResult = await replaceWithTranslation(
       entry,
       target.home,
       {
@@ -192,6 +321,7 @@ async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): P
             translateGlossary: translateGlossaryLive(ref.model),
             translateBatch: translateBatchLive(ref.model),
             onProgress,
+            signal,
           }),
         hash: contentHash,
         importBook,
@@ -223,14 +353,11 @@ async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): P
         },
         deleteBook: removeBook,
       },
-      (done, total) => translateRun.progress(done, total),
+      // The counter, as one line the run carries. The runner writes it to disk
+      // at most once every thirty seconds (docs/55), so this is a sentence that
+      // reads the same whether the reader catches one of them or ten.
+      (done, total) => void ctx.report(translatedLine(target.title, done, total)),
     );
-  } catch (e) {
-    const reason = e instanceof Error ? e.message : String(e);
-    translateRun.fail(`"${target.title}" could not be translated: ${reason}`);
-    await tell(target.bookId, `"${target.title}" could not be translated: ${reason}`);
-    return;
-  }
   const line = summaryLine(target.title, result);
   await tell(result.entry.hash, line);
   if (target.home.kind === "book") {
@@ -240,14 +367,21 @@ async function runTranslation(target: TranslateTarget, ref: TranslateDeskRef): P
     // over are the pages the reader gets (reading/ingest/fulltext.ts).
     await retargetSupplement(target.home.bookId, target.bookId, result.entry.hash);
   }
-  translateRun.finish(line, {
+  // What the reader who had the original open is moved onto. A reference on
+  // the run, like everything else a run produces: the screen reads it back off
+  // the file when the run reaches `done` (watch.ts).
+  const replaced: Replacement = {
     oldBookId: target.bookId,
     path: result.path,
     hash: result.entry.hash,
     topicId: target.home.kind === "topic" ? target.home.topicId : null,
     bookId: target.home.kind === "book" ? target.home.bookId : null,
     title: translatedTitle(entry.originalFilename),
-  });
+  };
+  const output = `${OUTPUTS_DIR}/${ctx.run.id}.json`;
+  await appData.mkdirp(OUTPUTS_DIR);
+  await appData.writeAtomic(output, JSON.stringify(replaced, null, 2));
+  return { output, progress: line };
 }
 
 // The prep run's side of a replaced supplement, and the new document's text. A

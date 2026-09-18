@@ -13,7 +13,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/execute/turn";
 import { appRunner } from "../legion/execute/runner";
-import { registeredWorkerKinds } from "../legion/execute/worker";
+import { delegableWorkerKinds } from "../legion/execute/worker";
 import type { DelegateInput, Delegated } from "../legion/execute/worker";
 import { appData } from "../platform/app/appdata";
 import type { BoxOrigin } from "../box";
@@ -43,7 +43,11 @@ export interface DelegateDeps {
   delegate?: (input: DelegateInput) => Promise<Delegated>;
   /** Where the brief text is put, answering the path. AppData unless injected. */
   writeBrief?: (text: string) => Promise<string>;
-  /** The kinds this device can run. The module registry unless injected. */
+  /**
+   * The kinds this device can run and would take a brief from a model. The
+   * module registry unless injected; a kind that registered itself as not
+   * delegable is not among them (legion/execute/worker.ts).
+   */
   kinds?: () => readonly string[];
 }
 
@@ -63,7 +67,7 @@ export async function writeBriefFile(text: string): Promise<string> {
  * can read why.
  */
 export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
-  const kinds = (deps.kinds ?? registeredWorkerKinds)();
+  const kinds = (deps.kinds ?? delegableWorkerKinds)();
   const write = deps.writeBrief ?? writeBriefFile;
   const send = deps.delegate ?? ((input: DelegateInput) => appRunner().delegate(input));
   const origin = deps.origin;

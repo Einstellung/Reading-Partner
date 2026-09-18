@@ -278,7 +278,15 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 
 偏离：wake 铃照旧摇，soul 照旧在门口答一次，采集经理不是 soul 用模型回合派的（docs/63 的设计），铃的文案改成「run 已由日 tick 派出」。跑完那条 `run-done` 不再起第二个回合：程序派的 run 按「bell」一节答铃（2026-09-16 改，此前日更每天早上两个回合、门口多一句「采集跑完了」、盒里多一张指回门口的卡）。`BriefingView` 的 snapshot 仍订阅 pipeline，没改成订阅 run 文件。`collectorView().request` 不再有 `busy` 这个回答：两次 `generate_briefing` 是两个 run，第二个排队而不是被拒。任务书写在 `legion/briefs/`，那一行 palace 是 local——三个口都只在 `amICollecting()` 为真的机器上派，选举把 run 发回同一台，所以今天够用；选举中途换机器时那个 run 在新机器上读不到任务书而失败。分析员和综合拆成子 run 留待下一步。
 
-未开始：session 到对话文件的投影、translate 接入。开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
+第 11 步（2026-09-18）：translate 接入。reading 在 `src/reading/translate/tool-live.ts` 登记 kind `translate-book`（程序 worker、`local` 档、不要能力标签、`delegable: false`），身体是原来那个 fire-and-forget 的 `runTranslation`：打开文档、切块、一打模型调用、替换，整段搬进 worker，进度翻成一行 `ctx.report`（`openingLine` / `segmentedLine` / `translatedLine`，纯函数在 `book-run.ts`）。工具的 execute 只剩 `find` 加写 run —— 读整本 EPUB 字节再 `segmentDocument` 那一步从回合里搬走了，「已经是双语」和「没有可翻的」改由 worker 说。
+
+单例 `translateRun` 删了。`TranslateStatus.tsx` 订阅 `src/reading/translate/watch.ts`，它在 runner 写 run 之后重读 run 记录；进度从 `done/total` 计数器变成一行字，三十秒一行是节流定的。替换后的文档写进 `legion/outputs/<runId>.json`，run 的 `output` 指着它，把读者搬到新文档那一步读它。
+
+legion 加了三样。`WorkerRegistration.delegable`（默认 true）和 `delegableWorkerKinds()`：`translate-book` 的任务书是程序写的 JSON，模型写不出来，soul 的 `delegate` 因此只列 delegable 的那半。`Runner.list(filter)` 和 `Runner.subscribe(fn)`：`local` 档的 run 在 runner 自己的 Map 里，屏幕没有文件可看，所以由 runner 在每次写 run 之后告一声。
+
+偏离：`local` 档，不是双设备，「iPad 派、PC 跑」那条验收没做。`delegator` 是 `program`，收尾那句话仍由 worker 直接写进那条线程，不经铃起回合；`deliverTo` 照填在 run 上，铃对 program 的 run 不读它。失败按 legion 走：worker 报一行原因再抛，跑满三次进 `failed`，读者从盒里那张卡知道；「书不在架上了」「已经是双语」「没有可翻的」三种不算失败，说一句就把 run 做完——重跑它们只会花一打模型调用再说同一句话。取消通道接上了（`AbortController` 进 `translateArticleEpub` 的 `signal`），界面上没有按钮调它。
+
+未开始：session 到对话文件的投影。开发时手摇一条铃走 `scripts/ios-sim.sh eval 'window.__bell.ring(...)'`。
 
 1. 底座：`platform/app/session-fs.ts`、palace 的 `session` 登记行、`legion/execute/harness.ts` 的 harness 工厂。验收：杀掉进程再起，`resume()` 接上，未完成的工具写成合成 toolResult。
 2. turn 换成 harness 背后的那一份：`legion/execute/turn.ts` 顶掉 `src/ai/agent.ts` 的手写循环，调用方改 import，`legion/subagent` 退成 lane 上的薄壳。验收：行为不变，`tests/ai/agent.test.ts` 那 24 条行为测试搬过去仍绿。
@@ -290,7 +298,7 @@ legion 在 `tests/layering.test.ts` 的 LAYER 表里登记为 capability，上�
 8. bell：ring / read / ack，`run-done` / `run-failed` / `wake` 三种。验收：投递后 ack 到达；未 ack 的出现在待恢复集合里；重复 ring 同一条不产生两份；三种铃各起一个没有用户输入的 soul 回合；取消和进度不产生铃。
 9. （已落地）ledger 折叠：`foldRun` 纯函数、三条判据、墓碑含时刻比较。验收：两台折出逐字节相同的一行；创建时刻更晚的同名新 run 不被误删；未 ack 的终态 run 不折。
 10. （已落地）research 接入（第一个调用方）：reading 登记 kind `research-literature`，agent worker、`local` 档，身体是 `src/reading/papers/research-agent.ts`；soul 换成通用 `delegate` 工具加 kind 目录，阅读回合不再挂 `research_literature` 子 agent 工具；run 带 `deliverTo`，答铃按它装配并把回复写回那条线程。验收：阅读回合里派一个文献研究，回合立刻结束；结果回来追加进那条划线线程，同时盒里多一项。
-11. translate 接入：kind `translate-book` 注册，`TranslateRun` 单例的工作体抽成一个程序 worker 并补 cancel 通道和 `report`，状态 UI 改成订阅 run 文件的 `progress`。验收：无头双设备测试跑完 A 写 pending、B 当选执行、产出与 `run-done` 的 ack 回到 A 的整条链；取消在跑到一半时生效；真机确认一次，iPad 派、PC 跑。
+11. （已落地，`local` 档那半）translate 接入：kind `translate-book` 注册，`TranslateRun` 单例的工作体抽成一个程序 worker 并补 cancel 通道和 `report`，状态 UI 改成订阅 run 文件的 `progress`。验收：无头双设备测试跑完 A 写 pending、B 当选执行、产出与 `run-done` 的 ack 回到 A 的整条链；取消在跑到一半时生效；真机确认一次，iPad 派、PC 跑。
 
 ## 为什么不用现成的
 

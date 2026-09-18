@@ -43,7 +43,7 @@ import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerInfoCollectWorker } from "../../../info/program/live";
 import { registerBriefingDelivery } from "../../../info/briefer/deliver";
 import { deleteBook } from "../../../reading/delete/delete-book";
-import { setBookDeleter } from "../../../reading/translate/tool-live";
+import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
 import { registerRetellDesk } from "../../../reading/retell/desk";
 import type { SyncHealthReport } from "../../../platform/sync";
@@ -199,6 +199,10 @@ export function bootDomains(): void {
   // that does that is reached from here rather than from inside reading/
   // (tool-live.ts says why).
   setBookDeleter(deleteBook);
+  // Translating a document, as a run (docs/55 step 11). Not delegable: the
+  // entrance is translate_document, and its task book is JSON rather than
+  // something a model writes.
+  registerTranslateBookWorker();
   registerRetellDesk();
   registerRehearsalDesk();
   registerInfoDesk();

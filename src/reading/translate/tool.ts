@@ -2,10 +2,15 @@
 // one" and the article on the shelf is replaced by a bilingual copy of itself.
 // There is no button, and this is the whole entrance.
 //
-// It returns as soon as the run has started. A dozen model calls is longer than
-// a turn should be held open, and the reader asked a question in the same breath
-// half the time; the count goes to the screen (run.ts) and the closing line to
-// the conversation (tool-live.ts) when it is over.
+// It returns as soon as the run is written. A dozen model calls is longer than a
+// turn should be held open, and the reader asked a question in the same breath
+// half the time; the line goes to the screen (watch.ts) and the closing sentence
+// to the conversation (tool-live.ts) when it is over.
+//
+// Nothing is read here but the shelf's own index. Opening the document, cutting
+// it into blocks and finding out it was translated already are the worker's, not
+// the turn's: they are a megabyte of EPUB and a parse, and the reader is sitting
+// in front of a composer that has stopped answering while they happen.
 //
 // Everything it reaches is injected, so what the model is told in each of the
 // five cases is pinned by a test with no library, no topic and no provider.
@@ -32,12 +37,15 @@ export interface TranslateToolDeps {
    * names none. Null when nothing on this shelf answers to the name.
    */
   find(query: string | undefined): Promise<TranslateTarget | null>;
-  /** How much there is to do, and whether it has been done already. */
-  inspect(target: TranslateTarget): Promise<{ blocks: number; translated: boolean }>;
-  /** Start the run. Returns once it is under way, not once it is finished. */
-  start(target: TranslateTarget, blocks: number): void;
+  /**
+   * Hand the work over. Answers once the run is written, not once it is done;
+   * a refusal is the runner's own sentence.
+   */
+  start(
+    target: TranslateTarget,
+  ): Promise<{ ok: true; runId: string } | { ok: false; reason: string }>;
   /** Whether a translation is already in flight. */
-  busy(): boolean;
+  busy(): Promise<boolean>;
 }
 
 // The line added to the companion prompt wherever the tool is mounted.
@@ -56,7 +64,9 @@ export function buildTranslateTools(deps: TranslateToolDeps): AgentTool[] {
         "bilingual document — every paragraph followed by its translation — and " +
         "it replaces the original in the topic, marks and all. Works on web " +
         "articles only, not on PDFs or books. Runs in the background: this " +
-        "returns as soon as it has started.",
+        "returns as soon as the work has been handed over, before the document " +
+        "has even been opened, so a document that turns out to be bilingual " +
+        "already is said so afterwards rather than here.",
       parameters: Type.Object({
         document: Type.Optional(
           Type.String({
@@ -81,21 +91,17 @@ export function buildTranslateTools(deps: TranslateToolDeps): AgentTool[] {
             `paper or a book has to be read in its own language for now.`
           );
         }
-        if (deps.busy()) {
+        if (await deps.busy()) {
           return "A translation is already running. It has to finish before another starts.";
         }
-        const { blocks, translated } = await deps.inspect(target);
-        if (translated) {
-          return `"${target.title}" is already bilingual.`;
+        const started = await deps.start(target);
+        if (!started.ok) {
+          return `"${target.title}" could not be handed over: ${started.reason}`;
         }
-        if (blocks === 0) {
-          return `"${target.title}" has nothing to translate.`;
-        }
-        deps.start(target, blocks);
         return (
-          `Started translating "${target.title}" — about ${blocks} blocks. It runs in ` +
-          `the background and the result replaces this document on the shelf; I will ` +
-          `say when it is done.`
+          `Started translating "${target.title}" (run ${started.runId}). It runs in the ` +
+          `background and the result replaces this document on the shelf; I will say ` +
+          `when it is done.`
         );
       },
     },
