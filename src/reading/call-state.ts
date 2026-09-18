@@ -29,6 +29,11 @@ export interface CallRow {
   role: "user" | "ai";
   text: string;
   ts: number;
+  // The stored message's own id (platform/app/threads.ts), on the rows that came
+  // from the file or arrived from outside the view. It is what `row-arrived`
+  // dedupes on; absent on every row the session drew itself and on every message
+  // written before ids existed, which is why that action is the only reader.
+  id?: string;
   // Display-form image bytes on a user row (persistence keeps filenames).
   images?: CompressedImage[];
   // The AI row currently being written, and the one whose turn failed.
@@ -182,6 +187,10 @@ export type CallAction<M extends CallRow> =
   | { type: "row-changed"; threadId: string; ts: number; change: RowChange; error?: boolean }
   // A row that is not a turn's: the reader's own message.
   | { type: "row-appended"; threadId: string; row: M }
+  // Someone outside the view wrote into this conversation while it was open — a
+  // delegated run the soul answered into the thread it was sent from (docs/68).
+  // The view's own writes never come through here (reading/thread-arrivals.ts).
+  | { type: "row-arrived"; threadId: string; row: M }
   // A turn stopped before writing anything, so its row is not a row.
   | { type: "row-dropped"; threadId: string; ts: number };
 
@@ -245,6 +254,15 @@ export function callReducer<M extends CallRow>(
       };
     case "row-appended":
       return { ...state, messages: [...state.messages, action.row] };
+    case "row-arrived": {
+      // By id, never by what it says: a run answered twice with the same words
+      // is two answers, and one answer reported twice is one. A row with no id
+      // is one this reducer has never seen, because the only rows that carry one
+      // are the ones that came off the file.
+      const { id } = action.row;
+      if (id !== undefined && state.messages.some((m) => m.id === id)) return state;
+      return { ...state, messages: [...state.messages, action.row] };
+    }
     case "row-dropped":
       return {
         ...state,
