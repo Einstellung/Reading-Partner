@@ -24,15 +24,17 @@ import {
   openAnswerRow,
   patchAiRow,
   withDelta,
+  withPhase,
   withToolEnd,
   withToolStart,
 } from "./streaming-turn";
+import type { TurnPhase } from "../../../ai/turn-rows";
 import type { ThreadMessage } from "./types";
 
 // The callbacks a caller passes straight through to runAgentTurn.
 type TurnHandlers = Pick<
   AgentCallbacks,
-  "onDelta" | "onToolStart" | "onToolEnd" | "onDone" | "onError" | "onRefusal"
+  "onDelta" | "onThinking" | "onToolStart" | "onToolEnd" | "onDone" | "onError" | "onRefusal"
 >;
 
 export interface StreamingTurnRun {
@@ -83,6 +85,10 @@ export function useStreamingTurn(
 
   const abortRef = useRef<AbortController | null>(null);
   const partialRef = useRef<{ ts: number; text: string } | null>(null);
+  // The phase the row was last told about. Thinking deltas arrive by the
+  // hundred and say nothing the line does not already say, so only a change of
+  // phase is written through.
+  const phaseRef = useRef<TurnPhase | null>(null);
 
   // Read rather than closed over, so begin() stays stable across renders.
   const settledRef = useRef(onSettled);
@@ -112,6 +118,7 @@ export function useStreamingTurn(
     abortRef.current = controller;
     const ts = Date.now();
     partialRef.current = { ts, text: "" };
+    phaseRef.current = null;
     setError(null);
     setStreaming(true);
     setMessages((rows) => openAnswerRow(rows, ts));
@@ -119,6 +126,7 @@ export function useStreamingTurn(
     const finish = () => {
       if (abortRef.current === controller) abortRef.current = null;
       partialRef.current = null;
+      phaseRef.current = null;
       setStreaming(false);
     };
     // The turn is over, however it ended. Work waiting on it takes the
@@ -132,7 +140,7 @@ export function useStreamingTurn(
     };
     const decline = (message: string) => {
       finish();
-      patchRow(ts, (m) => ({ ...m, ...refusalRow(m, message) }));
+      patchRow(ts, (m) => ({ ...m, ...refusalRow(m, message), phase: undefined }));
       settle();
     };
 
@@ -144,12 +152,26 @@ export function useStreamingTurn(
         onDelta: (chunk) => {
           const p = partialRef.current;
           if (p) p.text += chunk;
+          phaseRef.current = "writing";
           patchRow(ts, (m) => withDelta(m, chunk));
         },
-        onToolStart: (info) => patchRow(ts, (m) => withToolStart(m, info)),
+        // The thinking itself is dropped; only that it is happening is shown.
+        onThinking: () => {
+          if (phaseRef.current === "thinking") return;
+          phaseRef.current = "thinking";
+          patchRow(ts, (m) => withPhase(m, "thinking"));
+        },
+        onToolStart: (info) => {
+          phaseRef.current = "tool";
+          patchRow(ts, (m) => withToolStart(m, info));
+        },
         onToolEnd: (info) => patchRow(ts, (m) => withToolEnd(m, info)),
-        onDone: (full) => {
+        // Every round's words, not the answering round's alone: a round that
+        // called a tool may have written a sentence first, and it has been on
+        // screen since (withToolStart keeps it), so it is part of the reply.
+        onDone: (finalText, _assistant, turnText) => {
           if (controller.signal.aborted) return; // stop() already kept the partial
+          const full = turnText || finalText;
           finish();
           patchRow(ts, (m) => answeredRow(m, full, ts, notice));
           appendMessage(key, threadId, { role: "ai", text: full, ts });
