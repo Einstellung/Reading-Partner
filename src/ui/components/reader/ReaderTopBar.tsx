@@ -22,24 +22,23 @@ import { readerPageText } from "./reader-page-text";
 import { zoomResetLabel } from "./reader-zoom-keys";
 import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";
-import appIcon from "../../assets/app-icon.png";
+import lumenIcon from "../lumen/lumen-icon.webp";
 import { Separator } from "../ui/separator";
 
 // The blackboard's label. What it opens, and the half of the dim button's line
 // that names the control.
 const BOOK_THREAD = "Learn this book with AI";
 
-// Lumen's row in the overflow menu wears Lumen's own face. Every other row
-// there carries a drawn glyph; the companion has a picture instead, and a
-// line-art stand-in would be a second Lumen to keep in step with the first.
+// Lumen's row in the overflow menu wears Lumen's own face: the hand-drawn
+// water drop on a transparent ground, strokes thickened so they hold up at
+// menu size. Every other row there carries a line glyph.
 function IconLumen({ size = 20 }: { size?: number }) {
   return (
     <img
-      src={appIcon}
+      src={lumenIcon}
       alt=""
       width={size}
       height={size}
-      className="rounded-[5px]"
       style={{ width: size, height: size }}
     />
   );
