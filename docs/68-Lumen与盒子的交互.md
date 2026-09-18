@@ -89,5 +89,5 @@ info 的盒（60、63）等 Red Boxes 落地时用同一个 `src/box/`，简报�
 - `local` 档的 run 在 runner 之外读不到，所以 `run-done` / `run-failed` 铃的 payload 自带 `deliverTo`，答铃先读 payload，再退到 run 文件。
 - 任务书写在 `legion/briefs/<uuid>.md`，产出写在 `legion/outputs/<runId>.md`，都是本地文件，palace 行 `run-brief` / `run-output`。
 - 答铃按地方装配走 `soul/delivery.ts` 的登记表（place → opener），reading 在 `reading/deliver.ts` 登记 `book`；简报页还没传 origin，从简报派的 run 暂时在门口答。
-- 阅读聊天里不再显示子 agent 的进度行，进度走 run 的 `progress`。
+- 阅读聊天里不展开子 agent 的工具流；派出去的 run 在派它的那一回合留一张派工单，派工单读 run 的 `progress`（[72](./72-聊天的可见性与steer.md)）。
 - 门口和简报的卡片带日期但页面只画当天，跳转只选页面不选日子。鼠标设备用悬停出现的叉代替横划。
