@@ -32,6 +32,7 @@ import {
   createRunStore,
   type Run,
   type RunClaimant,
+  type RunFilter,
   type RunIo,
   type RunStore,
 } from "../run";
@@ -83,6 +84,18 @@ export interface Runner {
   cancel(id: string): Promise<Run | null>;
   /** The runs this device is executing right now. */
   active(): string[];
+  /**
+   * The runs this device knows of: the ones executing in this process and the
+   * ones in the synced folder. What a screen showing a run reads.
+   */
+  list(filter?: RunFilter): Promise<Run[]>;
+  /**
+   * Called after every write this device makes to a run — a state change or a
+   * line of progress. A screen watching a run subscribes to this instead of
+   * polling; a run another device is executing arrives by sync and is not
+   * announced here. Returns the undo.
+   */
+  subscribe(fn: () => void): () => void;
   /** Settles when everything this device is executing has finished. */
   idle(): Promise<void>;
   /** Stop polling. What is running is left to finish. */
@@ -116,7 +129,13 @@ interface Reporter {
 // reports in the same tick cannot read-modify-write over each other. The first
 // report always writes: a worker that says what it is doing and then goes quiet
 // for an hour must not look like a worker that never started.
-function createReporter(store: RunStore, id: string, now: () => number, throttleMs: number): Reporter {
+function createReporter(
+  store: RunStore,
+  id: string,
+  now: () => number,
+  throttleMs: number,
+  notify: () => void,
+): Reporter {
   let lastWriteAt = Number.NEGATIVE_INFINITY;
   let line: string | undefined;
   let chain: Promise<void> = Promise.resolve();
@@ -126,7 +145,7 @@ function createReporter(store: RunStore, id: string, now: () => number, throttle
       const at = now();
       if (at - lastWriteAt < throttleMs) return chain;
       lastWriteAt = at;
-      chain = chain.then(() => store.report(id, text, at)).then(() => {});
+      chain = chain.then(() => store.report(id, text, at)).then(() => notify());
       return chain;
     },
     last: () => line,
@@ -162,6 +181,20 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
   const idle = deps.workers ? () => false : () => registeredWorkerKinds().length === 0;
 
   const active = new Map<string, Active>();
+  // Whoever is watching a run of this device's go by. A watcher that throws is
+  // its own problem: the run is already written and nothing here is undone.
+  const watchers = new Set<() => void>();
+  function announce(): void {
+    for (const fn of [...watchers]) {
+      try {
+        fn();
+      } catch (e) {
+        console.warn("a run watcher threw", e);
+      }
+    }
+  }
+
+
   const inFlight = new Set<Promise<void>>();
   let ticking = false;
   let reclaimed = false;
@@ -184,7 +217,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
     for (;;) {
       const run = await store.get(id);
       if (!run || run.state !== "running") return;
-      const reporter = createReporter(store, id, now, REPORT_THROTTLE_MS);
+      const reporter = createReporter(store, id, now, REPORT_THROTTLE_MS, announce);
       const ctx: WorkerContext = {
         run,
         report: (text) => reporter.report(text),
@@ -233,6 +266,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
 
       if (entry.cancelling || current.cancelRequested) {
         await store.transition(id, "cancelled", { at, ...carry });
+        announce();
         return;
       }
 
@@ -244,6 +278,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
           ...(output === undefined ? {} : { output }),
         });
         const final = moved.ok ? moved.run : current;
+        announce();
         await bells
           .ring("run-done", {
             runId: id,
@@ -262,6 +297,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
       // never leaves `running`.
       if (current.attempts >= MAX_ATTEMPTS) {
         await store.transition(id, "failed", { at, ...carry });
+        announce();
         await bells
           .ring("run-failed", {
             runId: id,
@@ -275,6 +311,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
       }
       const again = await store.retake(id, { deviceId: deviceId(), startedAt: at });
       if (!again.ok) return;
+      announce();
     }
   }
 
@@ -325,6 +362,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
     const run = await store.cancel(id, now());
     const entry = active.get(id);
     if (entry) tellWorkerToStop(entry);
+    announce();
     return run;
   }
 
@@ -373,6 +411,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
       return { ok: true, run, existing: true };
     }
 
+    announce();
     // A local run never waits for a poll: it is in this process, it is quick,
     // and there is no other device that could take it.
     if (tier === "local") {
@@ -383,6 +422,7 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
         at,
       });
       if (!started.ok) return { ok: false, reason: started.reason, run };
+      announce();
       const done = track(execute(locals, run.id, reg)).then(
         async () => (await locals.get(run.id)) ?? started.run,
       );
@@ -434,6 +474,25 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
     },
 
     active: () => [...active.keys()],
+
+    async list(filter) {
+      // The two stores answer the same question about different runs, and a
+      // run is only ever in one of them: the local store is a Map in this
+      // process and the folder is what crossed a device.
+      const here = await locals.list(filter);
+      const disk = await runs.list(filter).catch(() => [] as Run[]);
+      const seen = new Set(here.map((one) => one.id));
+      return [...here, ...disk.filter((one) => !seen.has(one.id))].sort(
+        (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+      );
+    },
+
+    subscribe(fn) {
+      watchers.add(fn);
+      return () => {
+        watchers.delete(fn);
+      };
+    },
 
     async idle() {
       while (inFlight.size > 0) await Promise.allSettled([...inFlight]);

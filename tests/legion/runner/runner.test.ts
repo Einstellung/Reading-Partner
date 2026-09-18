@@ -8,7 +8,12 @@
 
 import { expect, test } from "bun:test";
 import { createRunner } from "../../../src/legion/execute/runner";
-import { registerWorker, type WorkerHandle } from "../../../src/legion/execute/worker";
+import {
+  delegableWorkerKinds,
+  registerWorker,
+  registeredWorkerKinds,
+  type WorkerHandle,
+} from "../../../src/legion/execute/worker";
 import { createBellStore, type Bell } from "../../../src/legion/bell";
 import { createRunStore, mergeRun, type Run } from "../../../src/legion/run";
 import type { DeviceClaim } from "../../../src/legion/claim";
@@ -401,4 +406,20 @@ test("a local run never reaches the folder and finishes at once", async () => {
   expect(finished?.output).toBe("pages/12.json");
   expect(await w.runs.list()).toEqual([]);
   expect(w.runDisk.files.size).toBe(0);
+});
+
+// A kind whose brief is a structured task book a program writes is not something
+// a model may be handed: the soul's delegate tool reads the delegable half of
+// the table, and the runner's own poll reads all of it (docs/55 step 11).
+test("a kind that takes no brief from a model is registered but not offered", () => {
+  const open = kind("open");
+  const shut = kind("shut");
+  const body = (): WorkerHandle => ({ cancel: () => {}, done: Promise.resolve() });
+  registerWorker({ kind: open, run: body });
+  registerWorker({ kind: shut, delegable: false, run: body });
+
+  expect(registeredWorkerKinds()).toContain(open);
+  expect(registeredWorkerKinds()).toContain(shut);
+  expect(delegableWorkerKinds()).toContain(open);
+  expect(delegableWorkerKinds()).not.toContain(shut);
 });
