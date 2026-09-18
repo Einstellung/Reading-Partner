@@ -99,8 +99,11 @@ test("the thread the hangup distils is read when the turn lands, not when the âœ
     expect(distilled[0]?.messages).toEqual([
       { role: "user", text: "what is this mark about?", ts: 1, threadId: "t1" },
       { role: "ai", text: "the 1962 figure", ts: 2, threadId: "t1" },
-      { role: "user", text: "why?", ts: expect.any(Number), threadId: "t1" },
+      // The two the session wrote itself carry the id it minted for them
+      // (reading/thread-arrivals.ts), which is what an anchor points at.
+      { id: expect.any(String), role: "user", text: "why?", ts: expect.any(Number), threadId: "t1" },
       {
+        id: expect.any(String),
         role: "ai",
         text: "because the mark is on that page",
         ts: expect.any(Number),

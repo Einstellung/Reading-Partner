@@ -15,6 +15,11 @@ export interface ThreadMessage {
 	role: 'user' | 'ai';
 	text: string;
 	ts: number;
+	// The stored message's id, carried through rehydration so a row that arrives
+	// in an open conversation from outside the view can be told from the copy
+	// already on screen (reading/thread-arrivals.ts). Absent on rows a surface
+	// drew itself and on messages written before ids existed.
+	id?: string;
 	// Image bytes in display form: bare base64 + MIME type, ready for a data:
 	// URL, the same shape the compressor hands back. (Persistence keeps filename
 	// references instead; see threads.ts.)
