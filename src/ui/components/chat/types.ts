@@ -4,6 +4,7 @@ import type { CompressedImage } from "../../../ai/image-utils";
 import type { ToolStatus } from "../../../ai/tool-status";
 import type { TurnPhase } from "../../../ai/turn-rows";
 import type { InfoCard } from "../../../info/boxes/cards";
+import type { MessageOrigin } from "../../../platform/app/threads";
 import type { ChatPart } from "./chatParts";
 
 // A staged (pre-send) image. It appears instantly as a placeholder while the
@@ -21,6 +22,9 @@ export interface ThreadMessage {
 	// already on screen (reading/thread-arrivals.ts). Absent on rows a surface
 	// drew itself and on messages written before ids existed.
 	id?: string;
+	// The run this line of the soul's answers, when it answers one rather than
+	// the reader (platform/app/threads.ts). Carried through rehydration.
+	origin?: MessageOrigin;
 	// Image bytes in display form: bare base64 + MIME type, ready for a data:
 	// URL, the same shape the compressor hands back. (Persistence keeps filename
 	// references instead; see threads.ts.)

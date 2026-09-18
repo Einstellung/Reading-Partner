@@ -129,6 +129,17 @@ test("rehydrateMessage restores a stored card row on thread reopen", () => {
   expect((live.parts?.[0] as Extract<ChatPart, { type: "card" }>).card.kind).toBe("probe-confirm");
 });
 
+test("rehydrateMessage carries the run a delivered reply answers", () => {
+  // What the soul said about a run that came back (docs/72). The mark is on
+  // disk, so reopening the conversation days later still finds it.
+  expect(rehydrateMessage({ role: "ai", text: "The literature is in.", ts: 9, origin: { runId: "r-1" } })).toEqual({
+    role: "ai",
+    text: "The literature is in.",
+    ts: 9,
+    origin: { runId: "r-1" },
+  });
+});
+
 test("rehydrateMessage leaves a plain (pre-parts) message text-only", () => {
   // Written before parts existed: no parts key at all.
   expect(rehydrateMessage({ role: "user", text: "hello", ts: 3 })).toEqual({

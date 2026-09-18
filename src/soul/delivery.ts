@@ -10,6 +10,7 @@
 // kind is registered on the desk: reading hands over an opener at startup and
 // this file only knows that some place answers to "book".
 
+import type { SteerPort } from "../legion/execute/contract";
 import type { Settings } from "../platform/app/settings";
 import type { BoxOrigin } from "../box";
 import type { AssembledTurn } from "./turn";
@@ -30,6 +31,21 @@ export interface DeliveryInput {
  */
 export type DeliveredTurn = Pick<AssembledTurn, "systemPrompt" | "tools" | "messages" | "refusal">;
 
+/**
+ * What a place holds open while a bell's own turn runs there (docs/72). The
+ * conversation is not free while it is running: the reader's Stop has to reach
+ * it, and the reader talking into it has to steer it rather than open a second
+ * turn on the same thread.
+ */
+export interface DeliveryHold {
+  /** The signal the turn must be sent with, so Stop reaches it. */
+  signal: AbortSignal;
+  /** The turn can be steered from here on. */
+  steerable: (port: SteerPort) => void;
+  /** The turn has landed, whichever way. Called exactly once. */
+  release: () => void;
+}
+
 /** One turn, assembled where the question was asked, and where its reply goes. */
 export interface Delivery {
   /** The thread store's key for that conversation (platform/app/threads.ts). */
@@ -44,6 +60,12 @@ export interface Delivery {
    * then the card is always put.
    */
   watching?: () => boolean;
+  /**
+   * Take the conversation for the length of this turn. Absent where the place
+   * has no notion of a turn running in it — the door, a briefing — and then the
+   * bell's turn runs unheld, the way every bell's did before docs/72.
+   */
+  hold?: (signal?: AbortSignal) => DeliveryHold;
 }
 
 /**
@@ -53,7 +75,27 @@ export interface Delivery {
  */
 export type DeliveryOpener = (input: DeliveryInput) => Promise<Delivery | null>;
 
+/** A bell for a place where a turn is already running. */
+export interface LiveDelivery {
+  origin: BoxOrigin;
+  /** The bell rendered as prose — the same text a trailing message carries. */
+  bell: string;
+  /** Stamped on the line the soul writes once the model has been handed this. */
+  runId: string;
+}
+
+/**
+ * Put a bell into the turn already running in that place. Resolves null when
+ * nothing was running there, or when the turn ended before the model was handed
+ * it — and then the bell is answered by a turn of its own, unacked until it is.
+ * `watching` is the same question Delivery asks, asked at the moment it landed.
+ */
+export type LiveDeliverer = (
+  input: LiveDelivery,
+) => Promise<{ threadId: string; watching: boolean } | null>;
+
 const OPENERS = new Map<BoxOrigin["place"], DeliveryOpener>();
+const LIVE = new Map<BoxOrigin["place"], LiveDeliverer>();
 
 /**
  * Register how one place assembles a delivery. Returns the undo. A second
@@ -69,6 +111,22 @@ export function registerDelivery(place: BoxOrigin["place"], open: DeliveryOpener
 /** The opener for a place, or null where no domain registered one. */
 export function deliveryOpener(place: BoxOrigin["place"]): DeliveryOpener | null {
   return OPENERS.get(place) ?? null;
+}
+
+/**
+ * Say how one place hands a bell to a turn it already has running. Returns the
+ * undo. A place that registers none never takes this path.
+ */
+export function registerLiveDelivery(place: BoxOrigin["place"], into: LiveDeliverer): () => void {
+  LIVE.set(place, into);
+  return () => {
+    if (LIVE.get(place) === into) LIVE.delete(place);
+  };
+}
+
+/** How a place takes a bell into a running turn, or null where none does. */
+export function liveDeliverer(place: BoxOrigin["place"]): LiveDeliverer | null {
+  return LIVE.get(place) ?? null;
 }
 
 /**

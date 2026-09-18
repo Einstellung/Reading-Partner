@@ -20,10 +20,18 @@
 // One at a time. The soul's harness serialises turns anyway (legion/execute/
 // held.ts), but a pass that fired every bell at once would queue a stack of
 // turns behind a reader who is in the middle of one.
+//
+// Except where the reader is in the middle of one right there: a bell for a
+// conversation that already has a turn running is put into that turn instead
+// (docs/72). The soul is mid-answer to the reader, and a second turn behind it
+// would answer the machine into a room the reader has left. The bell is acked
+// when the model has actually been handed it, so a turn that ends first leaves
+// the bell queued for the next pass.
 
 import { appBells, type Bell, type BellStore } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
 import { runAgentTurn, type AgentTool } from "../legion/execute/turn";
+import type { SteerPort } from "../legion/execute/contract";
 import type { HeldHarness } from "../legion/execute/held";
 import type { DeskMessage } from "../desk";
 import type { ProviderId } from "../ai";
@@ -31,7 +39,13 @@ import { appendMessage, createBookThread, flushThreads, getBookThread, loadThrea
 import { toReasoning, type Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
 import { doorDate, doorKey, openDoorTurn } from "./door";
-import { deliveryOpener, parseOrigin, type DeliveredTurn, type Delivery } from "./delivery";
+import {
+  deliveryOpener,
+  liveDeliverer,
+  parseOrigin,
+  type DeliveredTurn,
+  type Delivery,
+} from "./delivery";
 import { soulHarness } from "./harness";
 
 /** What one bell turn is sent. The default sender is the app's; tests pass one. */
@@ -43,6 +57,12 @@ export interface BellTurn {
   harness: HeldHarness;
   threadId: string;
   signal?: AbortSignal;
+  /**
+   * The turn has a run to queue into. The place holding the conversation open
+   * takes it, so the reader talking while the bell is being answered steers
+   * that turn instead of starting a second one on the same thread (docs/72).
+   */
+  onSteerable?: (port: SteerPort) => void;
 }
 
 /** Runs one assembled bell turn and answers with what the soul said. */
@@ -111,6 +131,7 @@ const appSend: SendBellTurn = (turn) =>
       tools: turn.tools,
       harness: turn.harness,
       ...(turn.signal ? { signal: turn.signal } : {}),
+      ...(turn.onSteerable ? { onSteerable: turn.onSteerable } : {}),
       reasoning: toReasoning(turn.settings.chatThinking),
       telemetry: { surface: "bell", thread: turn.threadId },
       // Nothing is watching this turn happen: there is no composer open and no
@@ -214,6 +235,50 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
       origin = parseOrigin(bell.payload.deliverTo) ?? parseOrigin(run?.deliverTo);
     }
     const rendered = renderBell(bell);
+    // A turn already running where the question was asked takes the bell as it
+    // stands (docs/72): it goes into that turn's context as an internal steer
+    // and nowhere else — no line in the thread file, no row of its own — and
+    // what the soul says next is the delivery. Acked only once the model has
+    // really been handed it; anything short of that leaves the bell queued.
+    if (origin && bell.type !== "wake") {
+      const { runId, kind } = bell.payload;
+      const into = liveDeliverer(origin.place);
+      const handed = into
+        ? await into({ origin, bell: rendered, runId }).catch((e) => {
+            console.warn(`a bell could not be put into the turn running at ${origin.place}`, e);
+            return null;
+          })
+        : null;
+      if (handed) {
+        // Same rule as below: a card only where nobody was looking. A turn
+        // running on a conversation is not the same thing as a reader in front
+        // of it, so the question is asked rather than assumed.
+        if (!handed.watching) {
+          await box
+            .put({
+              boxId: runId,
+              source: "run",
+              // No reply to take a first sentence from: the soul is still
+              // writing it. The run's own brief is what the card says instead.
+              cover: coverOf(bell.type === "run-failed" ? bell.payload.reason : bell.payload.brief),
+              ...(bell.type === "run-done" && bell.payload.output
+                ? { body: bell.payload.output }
+                : {}),
+              origin,
+              kind,
+              runId,
+              needsDecision: bell.type === "run-failed",
+              at,
+            })
+            .catch((e) => console.warn(`run ${runId} was delivered but its box item would not write`, e));
+        }
+        await bells.delivered(bell.id);
+        await bells.ack(bell.id);
+        await runs.markDelivered(runId, now()).catch(() => null);
+        answered += 1;
+        continue;
+      }
+    }
     const placed = origin ? await openDelivery(origin, rendered, deps) : null;
 
     let key: string;
@@ -249,6 +314,11 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
       break;
     }
 
+    // The conversation is busy for as long as this turn runs: the reader's Stop
+    // reaches it and their next line steers it rather than opening a second turn
+    // on the same thread (docs/72). Only where the place knows what a running
+    // turn is; the door does not.
+    const hold = placed?.hold?.(deps.signal);
     let reply: string;
     try {
       reply = await send({
@@ -258,9 +328,11 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
         tools: turn.tools,
         harness,
         threadId,
-        ...(deps.signal ? { signal: deps.signal } : {}),
+        ...(hold ? { signal: hold.signal, onSteerable: hold.steerable } : {}),
+        ...(!hold && deps.signal ? { signal: deps.signal } : {}),
       });
     } catch (e) {
+      hold?.release();
       // Whatever went wrong with this turn will go wrong with the next bell too
       // — the same model, the same key, the same window. The pass stops and the
       // whole queue waits for the next tick.
@@ -271,11 +343,20 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     // A bell the soul decided to say nothing about is answered all the same: the
     // decision was the turn, and the ledger is waiting on the ack.
     if (reply.trim() !== "") {
-      appendMessage(key, threadId, { role: "ai", text: reply, ts: now() });
+      appendMessage(key, threadId, {
+        role: "ai",
+        text: reply,
+        ts: now(),
+        // What this line is an answer to. The reader never said anything it
+        // could be read as answering, and the work order drawn on it is found
+        // by this (docs/72).
+        ...(bell.type !== "wake" ? { origin: { runId: bell.payload.runId } } : {}),
+      });
       // On disk before the bell is confirmed. The store coalesces its writes,
       // so without this the ack could outlive the reply it is confirming.
       await flushThreads();
     }
+    hold?.release();
     // The card that points back at the reply just written (docs/68). Program
     // work: the cover is the reply's first sentence, and the body is a reference
     // to what the run produced rather than the text of it. After the reply is on

@@ -9,7 +9,7 @@
 // pinned here is only what the session itself reads and writes.
 
 import type { CompressedImage } from "../ai/image-utils";
-import type { AsideAnchor } from "../platform/app/threads";
+import type { AsideAnchor, MessageOrigin } from "../platform/app/threads";
 import {
   appendRunningTool,
   relabelRunningTool,
@@ -35,6 +35,10 @@ export interface CallRow {
   // dedupes on; absent on every row the session drew itself and on every message
   // written before ids existed, which is why that action is the only reader.
   id?: string;
+  // The run this row of the soul's answers, when it answers one rather than
+  // the reader: a delegated run delivered back into the turn (docs/72). Stored
+  // with the message, unlike every display-only flag below it.
+  origin?: MessageOrigin;
   // Display-form image bytes on a user row (persistence keeps filenames).
   images?: CompressedImage[];
   // The AI row currently being written, and the one whose turn failed.

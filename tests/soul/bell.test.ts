@@ -15,7 +15,8 @@ import {
   rebuildThreadStoreForTests,
   threadFileName,
 } from "../../src/platform/app/threads";
-import { registerDelivery, type Delivery } from "../../src/soul";
+import { registerDelivery, registerLiveDelivery, type Delivery, type LiveDelivery } from "../../src/soul";
+import type { SteerPort } from "../../src/legion/execute/contract";
 import { createBoxStore, type BoxStore } from "../../src/box";
 import { installAppData, type FakeDisk } from "../support/appdata-fake";
 import { mapDisk } from "../support/map-disk";
@@ -553,4 +554,213 @@ test("a run the soul delegated is still answered in a turn", async () => {
     messages: [expect.objectContaining({ role: "ai", text: "Four papers came back." })],
   });
   expect([...cards.values()].length).toBe(1);
+});
+
+
+// --- a bell for a conversation that already has a turn running (docs/72) ---
+
+// The other half of what a domain registers: how it hands a bell to the turn it
+// already has in flight. `watching` is the same question the opener answers.
+function liveBookDelivery(
+  taken: LiveDelivery[],
+  answer: { threadId: string; watching: boolean } | null,
+): () => void {
+  return registerLiveDelivery("book", async (input) => {
+    taken.push(input);
+    return answer;
+  });
+}
+
+test("a bell for a conversation with a turn running goes into that turn, not a second one", async () => {
+  const taken: LiveDelivery[] = [];
+  const off = liveBookDelivery(taken, { threadId: "thread-1", watching: true });
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box, files: cards } = boxStore();
+    const { runs } = runFiles();
+    await bells.ring(
+      "run-done",
+      { runId: "r-1", kind: "research-literature", brief: "the literature is in", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    const { send, rounds } = sender([{ text: "should never be sent" }]);
+
+    expect(await answerBell({ settings, bells, runs, box, send, now: () => NOW })).toBe(1);
+
+    // No turn of its own, and the bell text is what a trailing message carries.
+    expect(rounds).toEqual([]);
+    expect(taken.length).toBe(1);
+    expect(taken[0]!.runId).toBe("r-1");
+    expect(taken[0]!.bell).toContain("not said by the reader");
+    expect(taken[0]!.origin).toEqual(JSON.parse(bookOrigin));
+    // Nothing of the bell's is written into the conversation — the file was
+    // never touched, so there is nothing on disk at all.
+    expect(bookThreadFile()).toBeNull();
+    expect(doorFile()).toBeNull();
+    // Handed over is answered: the ledger is stamped and the inbox is empty.
+    expect((await bells.read()).length).toBe(0);
+    expect((await bells.get("run-done-r-1"))?.state).toBe("acked");
+    // The reader is looking at it, so there is no card.
+    expect([...cards.values()].length).toBe(0);
+  } finally {
+    off();
+  }
+});
+
+test("a delivery into a running turn nobody is watching still leaves a card", async () => {
+  const off = liveBookDelivery([], { threadId: "thread-1", watching: false });
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box, files: cards } = boxStore();
+    await bells.ring(
+      "run-done",
+      {
+        runId: "r-1",
+        kind: "research-literature",
+        brief: "Four papers came back. The first settles it.",
+        output: "legion/outputs/r-1.md",
+        deliverTo: bookOrigin,
+      },
+      { at: NOW - 1000 },
+    );
+    const { send } = sender([]);
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+
+    const item = JSON.parse([...cards.values()][0]!) as Record<string, unknown>;
+    expect(item.runId).toBe("r-1");
+    expect(item.body).toBe("legion/outputs/r-1.md");
+    // No reply to take a first sentence from: the run's own brief says it.
+    expect(item.cover).toBe("Four papers came back.");
+  } finally {
+    off();
+  }
+});
+
+test("a bell the running turn never took is answered by a turn of its own", async () => {
+  const offLive = liveBookDelivery([], null);
+  const off = bookDelivery(true);
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box } = boxStore();
+    await bells.ring(
+      "run-done",
+      { runId: "r-1", kind: "research-literature", brief: "in", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    const { send, rounds } = sender([{ text: "Back." }]);
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+    expect(rounds.length).toBe(1);
+    expect(bookThreadFile()!.messages).toEqual([
+      expect.objectContaining({ role: "ai", text: "Back." }),
+    ]);
+  } finally {
+    off();
+    offLive();
+  }
+});
+
+test("the line the bell's own turn writes says which run it answers", async () => {
+  const off = bookDelivery(true);
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box } = boxStore();
+    await bells.ring(
+      "run-done",
+      { runId: "r-7", kind: "translate-book", brief: "done", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    const { send } = sender([{ text: "The translation is in." }]);
+    await answerBell({ settings, bells, box, send, now: () => NOW });
+    expect(bookThreadFile()!.messages).toEqual([
+      expect.objectContaining({ role: "ai", text: "The translation is in.", origin: { runId: "r-7" } }),
+    ]);
+  } finally {
+    off();
+  }
+});
+
+test("the place holds the conversation for the length of the bell's turn", async () => {
+  let held = 0;
+  let released = 0;
+  let port: SteerPort | null = null;
+  const controller = new AbortController();
+  const off = registerDelivery("book", async (input) => {
+    if (input.origin.place !== "book") return null;
+    return {
+      key: input.origin.bookId,
+      threadId: input.origin.threadId,
+      turn: { systemPrompt: "", tools: [], messages: [{ role: "user", text: input.bell }], refusal: "" },
+      watching: () => true,
+      hold: () => {
+        held += 1;
+        return {
+          signal: controller.signal,
+          steerable: (p) => (port = p),
+          release: () => (released += 1),
+        };
+      },
+    } satisfies Delivery;
+  });
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box } = boxStore();
+    await bells.ring(
+      "run-done",
+      { runId: "r-1", kind: "collect", brief: "in", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    // A sender that reports a run to queue into, the way the app's does.
+    const send: SendBellTurn = async (turn) => {
+      expect(turn.signal).toBe(controller.signal);
+      turn.onSteerable?.(async () => ({ ok: true, id: "e1" }));
+      return "Back.";
+    };
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+    expect(held).toBe(1);
+    expect(released).toBe(1);
+    expect(port).not.toBeNull();
+  } finally {
+    off();
+  }
+});
+
+test("a bell's turn that failed releases the conversation all the same", async () => {
+  let released = 0;
+  const off = registerDelivery("book", async (input) => {
+    if (input.origin.place !== "book") return null;
+    return {
+      key: input.origin.bookId,
+      threadId: input.origin.threadId,
+      turn: { systemPrompt: "", tools: [], messages: [{ role: "user", text: input.bell }], refusal: "" },
+      hold: () => ({
+        signal: new AbortController().signal,
+        steerable: () => {},
+        release: () => (released += 1),
+      }),
+    } satisfies Delivery;
+  });
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box } = boxStore();
+    await bells.ring(
+      "run-done",
+      { runId: "r-1", kind: "collect", brief: "in", deliverTo: bookOrigin },
+      { at: NOW - 1000 },
+    );
+    const send: SendBellTurn = async () => {
+      throw new Error("the model would not answer");
+    };
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(0);
+    expect(released).toBe(1);
+    // Nothing answered: the bell is where it was.
+    expect((await bells.read()).length).toBe(1);
+  } finally {
+    off();
+  }
 });
