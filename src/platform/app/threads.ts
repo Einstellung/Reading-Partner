@@ -98,6 +98,16 @@ export interface ThreadMessage {
   // written before parts existed — a reader then falls back to `text` alone, so
   // old { role, text, ts } messages keep loading unchanged.
   parts?: PersistedPart[];
+  // What this line of the soul's is an answer to, when it is not an answer to
+  // the reader: a run they delegated, come back (docs/72). Absent on every
+  // ordinary message — only a delivery carries one, and it is what the work
+  // order on the row is found by.
+  origin?: MessageOrigin;
+}
+
+/** The run a delivered reply came back from (soul/bell.ts). */
+export interface MessageOrigin {
+  runId: string;
 }
 
 // Where a chat-span aside was pulled out of: the parent AI message, and the

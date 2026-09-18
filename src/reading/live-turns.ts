@@ -13,6 +13,7 @@
 // Pure bookkeeping: it aborts controllers and holds messages, and never touches
 // React state, storage or the network.
 
+import type { Delivered } from "./delivered";
 import type { Steering } from "./steering";
 
 // The streaming row a turn owns. Structural, so the shell stores its own display
@@ -38,6 +39,16 @@ export interface LiveTurn<M extends LiveMessage> {
   // what the model was never handed, and a closed bubble has stopped
   // re-rendering by then.
   steering?: Steering;
+  // The runs delivered back into this turn while it ran (reading/delivered.ts).
+  // On the entry rather than in the turn's own closure for the same reason the
+  // steering is: the bell reaches a turn it did not start, and this registry is
+  // the only handle on it.
+  delivered?: Delivered;
+  // A turn this session did not start and draws no row for: the soul answering
+  // a bell into this conversation (soul/bell.ts). It is registered all the same
+  // so the thread is known to be busy — the reader talking into it steers it
+  // rather than opening a second turn on the same conversation.
+  silent?: boolean;
   // Run once the turn lands. Hanging up mid-stream defers the observation
   // distillation to here, so it reads a whole answer instead of half a sentence.
   onSettled?: () => void;
@@ -129,7 +140,7 @@ export function createLiveTurns<M extends LiveMessage>(): LiveTurns<M> {
     // Reopening a mark mid-answer picks the stream back up where it is.
     withLive(threadId, messages) {
       const turn = turns.get(threadId);
-      if (!turn) return messages;
+      if (!turn || turn.silent) return messages;
       if (messages.some((m) => m.ts === turn.message.ts)) return messages;
       return [...messages, turn.message];
     },

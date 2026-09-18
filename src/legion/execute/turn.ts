@@ -197,7 +197,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   const { stream, model, apiKey, systemPrompt, tools, signal, reasoning, transport, headers } = params;
   const { sessionId, maxRounds } = params;
   const { onDelta, onThinking, onResponse, onRound, onToolStart, onToolEnd, onDone, onError } = params;
-  const { onSteerable, onSteered } = params;
+  const { onSteerable, onSteered, onDelivered } = params;
   const maxRetries = params.maxRetries ?? DEFAULT_MAX_RETRIES;
   const refuse = params.onRefusal ?? ((message: string) => onError(message));
   const purpose = params.purpose ?? "chat";
@@ -247,6 +247,10 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   // `entry_added` is the moment the model was handed it, not a guess from the
   // round after. Nothing is reported twice: an id leaves the set as it lands.
   const queuedSteer = new Set<string>();
+  // Of those, the ones the app queued rather than the reader (SteerMessage
+  // `internal`). Held apart so the landing is reported on the callback that
+  // says whose words they were.
+  const internalSteer = new Set<string>();
   // No more queueing: the run has settled (or never started). A steer after
   // this is refused rather than swallowed, because the caller is still holding
   // the reader's sentence.
@@ -263,6 +267,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     // then sitting in a queue nothing will drain.
     if (ended) return { ok: false, reason: "ended", message: STEER_ENDED };
     queuedSteer.add(queued.value.entryId);
+    if (m.internal) internalSteer.add(queued.value.entryId);
     return { ok: true, id: queued.value.entryId };
   };
 
@@ -512,7 +517,8 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     // no replayed history can be mistaken for one.
     listen("entry_added", ({ entry }) => {
       if (!queuedSteer.delete(entry.id)) return;
-      onSteered?.([entry.id]);
+      if (internalSteer.delete(entry.id)) onDelivered?.([entry.id]);
+      else onSteered?.([entry.id]);
     });
 
     signal?.addEventListener("abort", onAbort, { once: true });
@@ -605,6 +611,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
     onToolEnd,
     onSteerable,
     onSteered,
+    onDelivered,
     onDone,
     onError,
     onRefusal,
@@ -653,6 +660,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       onToolEnd,
       onSteerable,
       onSteered,
+      onDelivered,
       onDone,
       onError,
       onRefusal,

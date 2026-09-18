@@ -65,10 +65,11 @@ export interface AgentToolEnd {
 export interface SteerMessage {
   text: string;
   // Not the reader's words but the app's — a delegated run coming back while
-  // the turn that asked for it is still running. It goes into the model's
-  // context and nowhere else: no row on screen, no line in the thread file.
-  // Declared here, not yet honoured: the bell's turn is the next piece, and
-  // this is the parameter it needs rather than a second shape.
+  // the turn that asked for it is still running (soul/bell.ts). It goes into
+  // the model's context and nowhere else: no row on screen, no line in the
+  // thread file. Which is why its landing is reported through `onDelivered`
+  // and never `onSteered`: a caller that draws the reader's rows off the
+  // steered ids would otherwise draw a row for a message the reader never said.
   internal?: boolean;
 }
 
@@ -94,8 +95,12 @@ export interface AgentCallbacks {
   onSteerable?(steer: SteerPort): void;
   // The queue was drained: these steered messages are in the model's context
   // as of now, and the reply that follows is an answer to them. Ids are the
-  // ones `steer` handed back. Fires once per drained message.
+  // ones `steer` handed back. Fires once per drained message. Internal
+  // messages are not among them — see `onDelivered`.
   onSteered?(ids: string[]): void;
+  // The same moment for an internal steer (`SteerMessage.internal`): the model
+  // has been handed something the app put there, not something the reader said.
+  onDelivered?(ids: string[]): void;
   // Reasoning/thinking deltas, kept separate from onDelta so thinking is never
   // rendered as the reply; the unattended digest wires it as watchdog liveness.
   onThinking?(delta: string): void;

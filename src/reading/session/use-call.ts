@@ -55,6 +55,7 @@ import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { readingTurns, type LiveTurn } from "../live-turns";
+import { createDelivered } from "../delivered";
 import { createSteering, type Steering } from "../steering";
 import { boxUnseenTurn, setOpenCallPeek, watching, type TurnOutcome } from "../turn-box";
 import { arrivedMessage, createOwnAppends } from "../thread-arrivals";
@@ -542,13 +543,26 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     // row. Deferred to that moment rather than done on the spot so a turn that
     // ends right after the injection leaves no empty row behind.
     let splitPending = false;
+    // The run whose answer the row being written is a reply to (docs/72), and
+    // the one the next row will be. Set when a delegated run is delivered into
+    // this turn; null on every ordinary row, which is all of them.
+    let rowOrigin: { runId: string } | null = null;
+    let nextOrigin: { runId: string } | null = null;
 
     const splitRow = () => {
       splitPending = false;
       rowPersisted = null;
       const was = rowTs;
       rowTs = Math.max(Date.now(), was + 1);
-      const row = shapes.current.newRow({ role: "ai", text: "", ts: rowTs, streaming: true });
+      rowOrigin = nextOrigin;
+      nextOrigin = null;
+      const row = shapes.current.newRow({
+        role: "ai",
+        text: "",
+        ts: rowTs,
+        streaming: true,
+        ...(rowOrigin ? { origin: rowOrigin } : {}),
+      });
       liveTurns.openRow(threadId, controller, row);
       dispatch({ type: "row-split", threadId, ts: was, row });
       phase = null;
@@ -594,6 +608,29 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       splitPending = head !== "";
     });
 
+    // A run this conversation delegated, come back while the turn that asked
+    // for it is still running (docs/72). The model is handed it the way the
+    // reader's line is handed over, and nothing else about it is the same: the
+    // bell said nothing the reader can be shown, so no row is drawn for it and
+    // nothing goes into the thread file. What is left behind is the reply — a
+    // row of its own, marked with the run it answers.
+    const delivered = createDelivered((runId) => {
+      steered = true;
+      const head = (liveTurns.get(threadId)?.message.text ?? "").trim();
+      if (head && head !== rowPersisted) {
+        appendOwn(home, threadId, { role: "ai", text: head, ts: rowTs });
+        persisted.push(head);
+        rowPersisted = head;
+      }
+      // Handed it before a word was written: this row is the answer, and an
+      // empty row above it would be the whole of what the split left behind.
+      if (head === "") rowOrigin = { runId };
+      else {
+        splitPending = true;
+        nextOrigin = { runId };
+      }
+    });
+
     const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) => {
       phase = "tool";
       write({ kind: "tool-start", name: info.name, label: toolStatusLabel(info.name, info.args) }, ts);
@@ -630,6 +667,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     // again is the way back.
     const showFailure = (kind: TurnFailure, message: string, ts: number) => {
       const live = liveTurns.settle(threadId, controller);
+      delivered.close();
       if (controller.signal.aborted) return; // deleted thread / closed book, not a failure
       const view = turnFailureView(kind, message);
       if (callRef.current?.threadId === threadId) {
@@ -661,7 +699,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const ts = Date.now();
     rowTs = ts;
     const streamingRow = shapes.current.newRow({ role: "ai", text: "", ts, streaming: true });
-    liveTurns.start({ threadId, bookId, home, controller, message: streamingRow, steering });
+    liveTurns.start({ threadId, bookId, home, controller, message: streamingRow, steering, delivered });
     dispatch({ type: "turn-started", threadId, row: streamingRow });
 
     void (async () => {
@@ -694,6 +732,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       });
       if (!turn) {
         liveTurns.settle(threadId, controller); // aborted while reading history
+        delivered.close();
         return;
       }
       // The turn could not be assembled small enough to leave the model room to
@@ -732,14 +771,19 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         onThinking: () => onThinking(writingRow()),
         onToolStart: (info) => onToolStart(info, writingRow()),
         onToolEnd: (info) => onToolEnd(info, rowTs),
-        onSteerable: (port) => steering.open(port),
+        onSteerable: (port) => {
+          steering.open(port);
+          delivered.open(port);
+        },
         onSteered: (ids) => steering.injected(ids),
+        onDelivered: (ids) => delivered.injected(ids),
         // Every round's words, not only the answering round's: a round that
         // called a tool may have written a sentence first, and it has been on
         // screen since (ai/turn-rows.ts). A single-round turn is the same text
         // either way.
         onDone: (finalText, _assistant, turnText) => {
           const live = liveTurns.settle(threadId, controller);
+          delivered.close();
           if (controller.signal.aborted) return; // stopTurn already kept the partial
           // A turn nobody spoke into is the whole reply, persisted here. One
           // that was steered has already written the rows above the reader's
@@ -761,7 +805,12 @@ export function useCall<M extends CallRow, I extends StagedImage>(
             // next turn as if the model had written it, and it would then describe a
             // turn whose assembly no longer applies.
             write({ kind: "answer", text: tail, ...(turn.notice ? { notice: turn.notice } : {}) }, rowTs);
-            appendOwn(home, threadId, { role: "ai", text: tail, ts: rowTs });
+            appendOwn(home, threadId, {
+              role: "ai",
+              text: tail,
+              ts: rowTs,
+              ...(rowOrigin ? { origin: rowOrigin } : {}),
+            });
           } else {
             write({ kind: "handed-over" }, rowTs);
           }
@@ -1035,11 +1084,16 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         if (!trimmed) return;
         const at = Math.max(Date.now(), steerTsRef.current + 1);
         steerTsRef.current = at;
-        dispatch({
-          type: "row-appended",
-          threadId: c.threadId,
-          row: shapes.current.newRow({ role: "user", text: trimmed, ts: at, queued: true }),
-        });
+        // A turn this session did not start writes its own rows into the thread
+        // file and they arrive here from outside the view (reading/deliver.ts).
+        // Drawing one now would leave a second copy of the line on screen.
+        if (!live.silent) {
+          dispatch({
+            type: "row-appended",
+            threadId: c.threadId,
+            row: shapes.current.newRow({ role: "user", text: trimmed, ts: at, queued: true }),
+          });
+        }
         live.steering.say(at, trimmed);
         return;
       }
@@ -1114,6 +1168,11 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     if (!c) return;
     const live = liveTurnsRef.current.stop(c.threadId);
     if (!live) return;
+    // A turn started elsewhere and answered into this conversation (a bell:
+    // soul/bell.ts): the abort above is the whole of stopping it. It drew no
+    // row here to keep half of, and what the reader said into it is its own
+    // holder's to put back (reading/deliver.ts).
+    if (live.silent) return;
     const { ts } = live.message;
     const partial = keepPartial(live);
     // What it wrote stays as a finished row; a turn that wrote nothing leaves no

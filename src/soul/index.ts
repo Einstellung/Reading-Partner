@@ -24,13 +24,18 @@ export {
 } from "./delegate";
 export {
   deliveryOpener,
+  liveDeliverer,
   originLabel,
   parseOrigin,
   registerDelivery,
+  registerLiveDelivery,
   type Delivery,
   type DeliveredTurn,
+  type DeliveryHold,
   type DeliveryInput,
   type DeliveryOpener,
+  type LiveDelivery,
+  type LiveDeliverer,
 } from "./delivery";
 export {
   listRoles,
