@@ -12,7 +12,7 @@
 
 写入类动作一条而过：工具成功即从状态行删除、从不落盘，回答关掉之后什么都没留下。
 
-工具契约没有面向读者的通道：`AgentTool` 只有 `name`、`description`、`parameters`、`execute`，`ToolResult` 只有 `text`、`images`。于是三张人话表各自生长——`info/briefer` 一张、reading 一张、tasking 一张——互相不认识，也覆盖不全（坑 17、44）。
+工具契约没有面向读者的通道：`AgentTool` 只有 `name`、`description`、`parameters`、`execute`，`ToolResult` 只有 `text`、`images`。于是三张人话表各自生长——reading 一张、info/briefer 一张、info/sources 一张——互相不认识，合起来只覆盖 44 个工具里的 17 个，其余显示裸工具名。
 
 ## 线程是时间线
 
@@ -26,7 +26,7 @@
 
 `ToolResult` 加 `receipt`：`label`、`summary`、`link`。label 透传 SDK 的 label 槽，receipt 走 details 槽——这两个槽位今天都被适配层填空。
 
-write 类工具执行完没带 `receipt` 回来，适配层抛错。闸从此在运行时成立，不再是「可见性应当是闸的一部分」这句话，而是漏一个就炸。完整性由一个测试走所有工具工厂强制，不设集中清单：reading 和 info 都 import soul，soul 不反向，一份集中表会是环。
+write 类工具执行完没带 `receipt` 回来，适配层抛错。闸从此在运行时成立，21 说的「可见性是闸的一部分」有了实现。
 
 三张人话表删除。
 
