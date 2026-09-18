@@ -56,7 +56,7 @@ import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { navigateAway } from "../chat/call-layout";
-import { appendRoundBreak, refusalRow, replayableHistory } from "../../../ai/turn-rows";
+import { appendRoundBreak, refusalRow, replayableHistory, type TurnPhase } from "../../../ai/turn-rows";
 import {
   cardRow,
   findCardPart,
@@ -538,6 +538,10 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     abortRef.current = controller;
     setStreaming(true);
     let full = "";
+    // The phase the row was last told about (ai/turn-rows.ts). A thinking delta
+    // arrives by the hundred and says nothing the status line does not already
+    // say, so only a change of phase is written through.
+    let phase: TurnPhase | null = null;
 
     void runAgentTurn({
       providerId: settings.defaultProviderId as ProviderId,
@@ -551,14 +555,23 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       harness: soulHarness(),
       onDelta: (t) => {
         full += t;
-        patchLast({ text: full, streaming: true });
+        phase = "writing";
+        patchLast({ text: full, streaming: true, phase: "writing" });
+      },
+      // The thinking itself is dropped; only that it is happening is shown.
+      onThinking: () => {
+        if (phase === "thinking") return;
+        phase = "thinking";
+        patchLast({ phase: "thinking" });
       },
       // What this round wrote before calling the tool stays on screen, with a
       // blank line opened under it for the next round (docs/pitfall/291).
       onToolStart: (info) => {
         full = appendRoundBreak(full);
+        phase = "tool";
         patchLast((m) => ({
           text: full,
+          phase: "tool",
           tools: appendRunningTool(m.tools, info.name, companionToolStatusLabel(info.name, info.args)),
         }));
       },
@@ -568,7 +581,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         })),
       onDone: (text, _assistant, turnText) => {
         const finalText = turnText || text || full;
-        patchLast((m) => ({ text: finalText, streaming: false, tools: (m.tools ?? []).filter((t) => t.state === "error") }));
+        patchLast((m) => ({ text: finalText, streaming: false, phase: undefined, tools: (m.tools ?? []).filter((t) => t.state === "error") }));
         setStreaming(false);
         abortRef.current = null;
         if (finalText.trim()) appendMessage(bookId, anchor.threadId, { role: "ai", text: finalText, ts: Date.now() });
@@ -577,16 +590,16 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       // not an error and there is nothing to retry, so it is not dressed as one
       // (turn-rows.ts; App and useRetell pass this too).
       onRefusal: (m) => {
-        patchLast((prev) => refusalRow(prev, m));
+        patchLast((prev) => ({ ...refusalRow(prev, m), phase: undefined }));
         setStreaming(false);
         abortRef.current = null;
       },
       onError: (m) => {
         if (controller.signal.aborted) {
-          patchLast({ streaming: false });
+          patchLast({ streaming: false, phase: undefined });
           if (full.trim()) appendMessage(bookId, anchor.threadId, { role: "ai", text: full, ts: Date.now() });
         } else {
-          patchLast({ text: m || "The reply failed.", failed: true, streaming: false, tools: undefined });
+          patchLast({ text: m || "The reply failed.", failed: true, streaming: false, phase: undefined, tools: undefined });
         }
         setStreaming(false);
         abortRef.current = null;

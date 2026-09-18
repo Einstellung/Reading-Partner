@@ -9,6 +9,7 @@ import {
   openAnswerRow,
   patchAiRow,
   withDelta,
+  withPhase,
   withToolEnd,
   withToolStart,
 } from "../../../../src/ui/components/chat/streaming-turn";
@@ -56,12 +57,29 @@ test("withDelta appends to the text already streamed", () => {
   expect(withDelta(ai(1, "he"), "llo").text).toBe("hello");
 });
 
-test("withToolStart clears the text and puts the tool on the trace as running", () => {
+test("the phase follows the turn: thinking, then the tool, then the reply", () => {
+  const thinking = withPhase(ai(1), "thinking");
+  expect(thinking.phase).toBe("thinking");
+  const calling = withToolStart(thinking, { name: "read_talk_outline", args: {} });
+  expect(calling.phase).toBe("tool");
+  expect(withDelta(calling, "so").phase).toBe("writing");
+});
+
+test("the answer clears the phase", () => {
+  const row = withPhase(ai(1, "", { streaming: true }), "thinking");
+  expect(answeredRow(row, "done", 1).phase).toBeUndefined();
+});
+
+test("withToolStart keeps what the round wrote and puts the tool on the trace as running", () => {
   const next = withToolStart(ai(1, "let me look"), { name: "read_talk_outline", args: {} });
-  expect(next.text).toBe("");
+  expect(next.text).toBe("let me look\n\n");
   expect(next.tools).toEqual([
     { name: "read_talk_outline", label: expect.any(String), state: "running" },
   ]);
+});
+
+test("withToolStart opens no gap on a round that wrote nothing", () => {
+  expect(withToolStart(ai(1), { name: "read_talk_outline", args: {} }).text).toBe("");
 });
 
 test("withToolEnd takes a finished tool off the trace and marks a failed one", () => {

@@ -19,6 +19,17 @@
 
 import type { ToolStatus } from "./tool-status";
 
+// What a turn is doing right now, for the one status line a row draws where the
+// reply will appear. Only while the turn runs — every ending clears it:
+//
+//   thinking — the model is reasoning and nothing is on screen yet. Extended
+//              thinking streams for tens of seconds before the first word, and
+//              the raw thinking is never shown, so the line is all there is.
+//   tool     — a call is running. The tool trace draws that line itself; this
+//              only says the status line must not draw a second one.
+//   writing  — the reply is arriving, so there is nothing left to stand in for.
+export type TurnPhase = "thinking" | "tool" | "writing";
+
 // The tool trace a stopped turn keeps: the calls that failed, which explain the
 // stop, and none of the ones that ran fine.
 function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
@@ -28,8 +39,7 @@ function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
 // `text` is deliberately left as it stands. On the two chat surfaces it can hold
 // what the rounds before the stop wrote (a tool start keeps those words and opens
 // a blank line, appendRoundBreak below), and then the row is those words with the
-// notice under them. It is empty where nothing was written before the stop, and
-// on the rehearsal surfaces, which still blank the row at every tool start; the
+// notice under them. It is empty where nothing was written before the stop; the
 // notice is then the whole row and chat.tsx draws it alone.
 //
 // `failed` is cleared rather than left alone. Every call site spreads this over

@@ -16,7 +16,7 @@ import {
   resolveToolStatus,
   type ToolStatus,
 } from "../ai/tool-status";
-import { appendRoundBreak, holdsNoAnswer, refusalRow } from "../ai/turn-rows";
+import { appendRoundBreak, holdsNoAnswer, refusalRow, type TurnPhase } from "../ai/turn-rows";
 
 // Picture-in-picture (docs/03): the bubble by the mark, chat taking the whole
 // window with reading shrunk to a corner card, and reading back with chat
@@ -41,6 +41,9 @@ export interface CallRow {
   failed?: boolean;
   // The transient tool-call trace above a streaming reply (M6). Never persisted.
   tools?: ToolStatus[];
+  // What the running turn is doing (ai/turn-rows.ts), for the status line the
+  // surface draws while nothing is written yet. Display-only, like the trace.
+  phase?: TurnPhase;
   // What the turn left out to fit the context window (src/budget) — the app's
   // remark about the turn, not model output. Display-only, like the trace.
   notice?: string;
@@ -87,6 +90,9 @@ export interface CallState<M extends CallRow> {
 // closed) and the one on screen. One function applies it, so the two cannot
 // drift.
 export type RowChange =
+  // The model started reasoning: the row has a status line to draw and nothing
+  // else. The thinking text itself is never carried — it is not shown.
+  | { kind: "phase"; phase: "thinking" }
   // A chunk of the reply arrived.
   | { kind: "delta"; chunk: string }
   // A tool started. What the round wrote before calling it stays where it is,
@@ -111,12 +117,15 @@ export type RowChange =
 
 export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M {
   switch (change.kind) {
+    case "phase":
+      return { ...row, phase: change.phase };
     case "delta":
-      return { ...row, text: row.text + change.chunk };
+      return { ...row, text: row.text + change.chunk, phase: "writing" };
     case "tool-start":
       return {
         ...row,
         text: appendRoundBreak(row.text),
+        phase: "tool",
         tools: appendRunningTool(row.tools, change.name, change.label),
       };
     case "tool-end": {
@@ -133,6 +142,7 @@ export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M 
         text: change.text,
         streaming: undefined,
         failed: undefined,
+        phase: undefined,
         notice: change.notice,
         tools: (row.tools ?? []).filter((t) => t.state === "error"),
       };
@@ -142,17 +152,19 @@ export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M 
         text: change.text,
         failed: true,
         streaming: undefined,
+        phase: undefined,
         notice: undefined,
         tools: undefined,
       };
     case "refusal":
-      return { ...row, ...refusalRow(row, change.text) };
+      return { ...row, ...refusalRow(row, change.text), phase: undefined };
     case "stopped":
       return {
         ...row,
         text: change.text,
         streaming: undefined,
         failed: undefined,
+        phase: undefined,
         notice: undefined,
         tools: undefined,
       };
