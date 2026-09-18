@@ -17,6 +17,7 @@ import {
 import type { Lab } from "../../../src/info/labs/types";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
 import type { LabArchiveCardData, LabProposalCardData } from "../../../src/info/boxes/cards";
+import { toolText } from "../../support/tool-text";
 
 function source(id: string, name: string): SourceDescriptor {
   return {
@@ -63,12 +64,12 @@ function tools(labs: Lab[] = [], sources = SOURCES) {
 // Everything it could write is behind the card's Apply.
 test("proposing a lab drafts a card and writes nothing", async () => {
   const { propose, cards } = tools();
-  const said = await propose.execute({
+  const said = toolText(await propose.execute({
     name: "Embodied AI",
     scope: "Robot learning and the hardware under it.",
     questions: ["Which labs ship on real hardware?"],
     sources: ["qbitai"],
-  });
+  }));
   expect(cards).toEqual([
     {
       kind: "lab-proposal",
@@ -97,17 +98,17 @@ test("a lab with no name or no scope is refused before any card is drawn", async
 // nothing downstream would ever put back together.
 test("a name an open lab already answers to proposes nothing", async () => {
   const { propose, cards } = tools([lab()]);
-  const said = await propose.execute({
+  const said = toolText(await propose.execute({
     name: "embodied ai",
     scope: "Same ground again.",
     questions: [],
     sources: [],
-  });
+  }));
   expect(cards).toEqual([]);
   expect(String(said)).toContain("lab-1234abcd");
   // An archived room by that name does not stand in the way of reopening one.
   const reopen = tools([lab({ status: "archived" })]);
-  await reopen.propose.execute({ name: "Embodied AI", scope: "Again.", questions: [], sources: [] });
+  toolText(await reopen.propose.execute({ name: "Embodied AI", scope: "Again.", questions: [], sources: [] }));
   expect(reopen.cards.length).toBe(1);
 });
 
@@ -125,12 +126,12 @@ test("claimed sources resolve by id or by name, and what matches neither is drop
   });
 
   const { propose, cards } = tools();
-  const said = await propose.execute({
+  const said = toolText(await propose.execute({
     name: "Macro",
     scope: "Rates and credit.",
     questions: [],
     sources: ["qbitai", "The Information"],
-  });
+  }));
   expect(cards[0].kind === "lab-proposal" && cards[0].sources).toEqual(["qbitai"]);
   expect(String(said)).toContain("The Information");
   expect(String(said)).toContain("not in the user's source list");
@@ -138,7 +139,7 @@ test("claimed sources resolve by id or by name, and what matches neither is drop
 
 test("archive_lab drafts a close card for the room the model named, by id or name", async () => {
   const { archive, cards } = tools([lab()]);
-  const said = await archive.execute({ labId: "Embodied AI" });
+  const said = toolText(await archive.execute({ labId: "Embodied AI" }));
   expect(cards).toEqual([
     {
       kind: "lab-archive",
@@ -153,7 +154,7 @@ test("archive_lab drafts a close card for the room the model named, by id or nam
 
 test("archiving a room that is not open proposes nothing and shows what is", async () => {
   const { archive, cards } = tools([lab()]);
-  const said = await archive.execute({ labId: "lab-nope" });
+  const said = toolText(await archive.execute({ labId: "lab-nope" }));
   expect(cards).toEqual([]);
   expect(String(said)).toContain("Embodied AI (id: lab-1234abcd)");
   expect(resolveLab("lab-nope", [lab()])).toBeNull();

@@ -30,6 +30,8 @@ const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
 
 const echoTool: AgentTool = {
   name: "echo",
+  label: () => "Running the fake tool",
+  effect: "read" as const,
   description: "Echo the value back",
   parameters: Type.Object({ value: Type.String() }),
   execute: async (args) => `echo:${args.value as string}`,
@@ -103,8 +105,9 @@ test("a refusal under a written answer is a quiet notice, not a failure", () => 
   // The model's own words are left exactly as they were written.
   expect(next.text).toBe("Here is what I found so far.");
   expect(next.streaming).toBe(false);
-  // The trace keeps what explains the stop and drops the calls that went fine.
-  expect(next.tools?.map((t) => t.name)).toEqual(["probe"]);
+  // The trace keeps every call: the ones that went fine are what the turn did,
+  // and the one that failed is what explains the stop.
+  expect(next.tools?.map((t) => t.name)).toEqual(["echo", "probe"]);
 });
 
 // The shape the companion actually meets. Both refusal exits fire after at least

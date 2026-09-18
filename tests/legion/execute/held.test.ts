@@ -55,6 +55,8 @@ function scriptStream(turns: Turn[]): { fn: StreamFn; rounds: Message[][] } {
 
 const echo: AgentTool = {
   name: "echo",
+  label: () => "Running the fake tool",
+  effect: "read" as const,
   description: "Echo the value back",
   parameters: Type.Object({ value: Type.String() }),
   execute: async (args) => `echo:${args.value}`,
@@ -89,7 +91,7 @@ async function turn(
     held,
     onDelta: () => {},
     onToolStart: () => {},
-    onToolEnd: (info) => out.toolEnds.push(info.resultPreview),
+    onToolEnd: (info) => out.toolEnds.push(info.name),
     onDone: (text) => {
       out.done = text;
     },
@@ -134,7 +136,7 @@ test("three turns on one harness: each provider round sees its own turn only", a
   ]);
 
   expect([first.done, second.done, third.done]).toEqual(["a1", "a2", "a3"]);
-  expect(first.toolEnds).toEqual(["echo:a"]);
+  expect(first.toolEnds).toEqual(["echo"]);
 
   // Turn one: its prompt, then its prompt plus its own tool round.
   expect(roles(first.rounds[0]!)).toEqual(["user:h1", "user:q1"]);
@@ -187,6 +189,8 @@ test("a tool left running by a dead process is settled as interrupted, not rerun
   const entered: string[] = [];
   const hang: AgentTool = {
     name: "echo",
+    label: () => "Running the fake tool",
+    effect: "read" as const,
     description: "never returns",
     parameters: Type.Object({ value: Type.String() }),
     execute: async (args) => {
@@ -229,6 +233,8 @@ test("two turns asked at once run one after the other", async () => {
   const order: string[] = [];
   const slow: AgentTool = {
     name: "echo",
+    label: () => "Running the fake tool",
+    effect: "read" as const,
     description: "slow",
     parameters: Type.Object({ value: Type.String() }),
     execute: async (args) => {
@@ -269,7 +275,7 @@ test("a turn's hooks do not outlive it on the held harness", async () => {
     { text: "a2" },
   ]);
   // Each turn heard its own tool end once, not the other turn's as well.
-  expect(first.toolEnds).toEqual(["echo:a"]);
-  expect(second.toolEnds).toEqual(["echo:b"]);
+  expect(first.toolEnds).toEqual(["echo"]);
+  expect(second.toolEnds).toEqual(["echo"]);
   await held.close(ctx);
 });

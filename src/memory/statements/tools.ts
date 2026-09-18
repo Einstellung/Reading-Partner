@@ -63,6 +63,8 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
   return [
     {
       name: "statement_write",
+      label: () => "Writing down what you said about yourself",
+      effect: "write",
       description:
         "Write down something the reader has just told you about themselves, in their own " +
         "words. Call it when they say how they want to be taught (\"stop drawing diagrams\", " +
@@ -125,7 +127,10 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
         const supersedes = args.supersedes === undefined ? "" : String(args.supersedes).trim();
         if (!supersedes) {
           const written = await ctx.store.createStatement(input);
-          return `Wrote ${written.id} (${written.kind}, in the reader's own words): ${written.text}`;
+          return {
+            text: `Wrote ${written.id} (${written.kind}, in the reader's own words): ${written.text}`,
+            receipt: { label: `Wrote down a ${written.kind}`, summary: written.text },
+          };
         }
 
         // Checked before writing, and the reason handed back rather than
@@ -134,14 +139,28 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
         // linking the two.
         const old = await ctx.store.getStatement(supersedes);
         if (!old) {
-          return `No statement with id "${supersedes}", so nothing was written. Check the id, or leave supersedes out to write this as a new statement.`;
+          return {
+            text: `No statement with id "${supersedes}", so nothing was written. Check the id, or leave supersedes out to write this as a new statement.`,
+            receipt: null,
+          };
         }
         if (old.supersededBy) {
-          return `${supersedes} was already superseded by ${old.supersededBy}, so nothing was written. Supersede ${old.supersededBy} instead if it is what the reader has now overturned.`;
+          return {
+            text: `${supersedes} was already superseded by ${old.supersededBy}, so nothing was written. Supersede ${old.supersededBy} instead if it is what the reader has now overturned.`,
+            receipt: null,
+          };
         }
         const written = await ctx.store.supersede(supersedes, input);
-        if (!written) return `No statement with id "${supersedes}", so nothing was written.`;
-        return `Wrote ${written.id} (${written.kind}, in the reader's own words): ${written.text}\nIt supersedes ${supersedes}, which is kept.`;
+        if (!written) {
+          return {
+            text: `No statement with id "${supersedes}", so nothing was written.`,
+            receipt: null,
+          };
+        }
+        return {
+          text: `Wrote ${written.id} (${written.kind}, in the reader's own words): ${written.text}\nIt supersedes ${supersedes}, which is kept.`,
+          receipt: { label: `Rewrote a ${written.kind}`, summary: written.text },
+        };
       },
     },
   ];

@@ -77,10 +77,12 @@ import {
   REFUSE_ROUNDS,
   type AgentCallbacks,
   type AgentTool,
+  type Receipt,
   type RunAgentTurnOptions,
   type StreamFn,
   type TurnLane,
 } from "./contract";
+import { normalizeToolResult, toolLabel } from "./tool-result";
 import { createHarness, createSessionRepo } from "./harness";
 import type { AgentLane, HeldHarness, HeldLane } from "./held";
 
@@ -93,6 +95,10 @@ export {
   type AgentToolStart,
   type RunAgentTurnOptions,
   type StreamFn,
+  type Receipt,
+  type ReceiptLink,
+  type ToolEffect,
+  type ToolGate,
   type ToolResult,
   type ToolResultImage,
   type TurnLane,
@@ -293,9 +299,16 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     }
   };
 
-  const harnessTools: AgentHarnessTool<undefined>[] = tools.map((tool) => ({
+  // The tools by name, so the two harness events — which carry a name and not a
+  // tool — can reach the label and the effect the tool declared.
+  const byName = new Map(tools.map((tool) => [tool.name, tool]));
+
+  const harnessTools: AgentHarnessTool<Receipt | undefined>[] = tools.map((tool) => ({
     name: tool.name,
-    label: tool.name,
+    // pi's own label is one fixed string, so it gets the argument-free reading of
+    // the tool's label and is only ever a fallback; the line the reader sees is
+    // computed per call at tool_start below.
+    label: toolLabel(tool, {}),
     description: tool.description,
     parameters: tool.parameters,
     // Validate/coerce against the tool's schema before executing; a throw here
@@ -316,12 +329,12 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     // result whose text is the error's message, exactly as the loop did.
     async execute(_id, args) {
       const raw = await tool.execute(args as Record<string, any>);
-      const text = typeof raw === "string" ? raw : raw.text;
+      const { text, images, receipt } = normalizeToolResult(tool, raw);
       const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-      if (typeof raw !== "string") {
-        for (const im of raw.images ?? []) content.push({ type: "image", data: im.data, mimeType: im.mimeType });
-      }
-      return { content, details: undefined };
+      for (const im of images) content.push({ type: "image", data: im.data, mimeType: im.mimeType });
+      // pi carries `details` through to tool_end untouched and never shows it to
+      // the model: it is the channel a receipt travels on to the UI.
+      return { content, details: receipt };
     },
   }));
 
@@ -465,10 +478,22 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       recordRound(message, message.stopReason !== "error" && message.stopReason !== "aborted");
     });
     listen("tool_start", ({ toolName, args }) => {
-      onToolStart({ name: toolName, args: args as Record<string, any> });
+      const tool = byName.get(toolName);
+      const a = args as Record<string, any>;
+      onToolStart({ name: toolName, args: a, label: tool ? toolLabel(tool, a) : toolName });
     });
     listen("tool_end", ({ toolName, result, isError }) => {
-      onToolEnd({ name: toolName, resultPreview: preview(contentText(result.content)), isError });
+      // A failure's text is the message the tool threw, which is what the reader
+      // is shown in place of the line that was running; a success carries the
+      // receipt the adapter parked in `details` and no text (the text is the
+      // model's to read).
+      const receipt = result.details as Receipt | undefined;
+      onToolEnd({
+        name: toolName,
+        isError,
+        ...(isError ? { error: preview(contentText(result.content)) } : {}),
+        ...(!isError && receipt ? { receipt } : {}),
+      });
     });
     listen("handler_error", ({ error }) => {
       handlerError ??= new Error(error);

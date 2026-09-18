@@ -45,6 +45,8 @@ function formatReadout(url: string, r: PageReadout): string {
 export function buildReadPageTool(deps: { fetchFn: FetchFn }): AgentTool {
   return {
     name: "read_page",
+    label: (args) => `Reading ${String(args.url ?? "the page")}`,
+    effect: "read",
     description:
       "Fetch a web page and return a readable summary — its title, visible text, and the FULL " +
       "list of links (anchor text → absolute URL). Use it to scout a site before probe_source: " +

@@ -28,7 +28,6 @@ import {
   setThreadTopic,
 } from "../../../platform/app/threads";
 import { buildLiveCompanionTools } from "../../../info/briefer/companion-live";
-import { companionToolStatusLabel } from "../../../info/briefer/companion-tools";
 import {
   BRIEFING_CARD_ID,
   OPENING_KICKOFF,
@@ -54,6 +53,7 @@ import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
 import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
+import type { ToolStatus } from "../../../ai/tool-status";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { navigateAway } from "../chat/call-layout";
 import { appendRoundBreak, refusalRow, replayableHistory } from "../../../ai/turn-rows";
@@ -65,6 +65,7 @@ import {
   patchCardPayload,
   rehydrateMessage,
   toPersistedCardPart,
+  toPersistedTracePart,
   upsertCardRow,
   type CardAction,
 } from "../chat/chatParts";
@@ -559,19 +560,37 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         full = appendRoundBreak(full);
         patchLast((m) => ({
           text: full,
-          tools: appendRunningTool(m.tools, info.name, companionToolStatusLabel(info.name, info.args)),
+          tools: appendRunningTool(m.tools, info.name, info.label),
         }));
       },
       onToolEnd: (info) =>
         patchLast((m) => ({
-          tools: resolveToolStatus(m.tools, info.name, info.isError) ?? [...(m.tools ?? [])],
+          tools:
+            resolveToolStatus(m.tools, info.name, info.isError, {
+              ...(info.receipt ? { receipt: info.receipt } : {}),
+              ...(info.error ? { error: info.error } : {}),
+            }) ?? [...(m.tools ?? [])],
         })),
       onDone: (text, _assistant, turnText) => {
         const finalText = turnText || text || full;
-        patchLast((m) => ({ text: finalText, streaming: false, tools: (m.tools ?? []).filter((t) => t.state === "error") }));
+        let toolsAtDone: ToolStatus[] = [];
+        patchLast((m) => {
+          toolsAtDone = [...(m.tools ?? [])];
+          return { text: finalText, streaming: false, tools: toolsAtDone };
+        });
         setStreaming(false);
         abortRef.current = null;
-        if (finalText.trim()) appendMessage(bookId, anchor.threadId, { role: "ai", text: finalText, ts: Date.now() });
+        if (finalText.trim()) {
+          // The settled trace is stored with the answer (chatParts.ts): what the
+          // turn did is part of the reply the reader comes back to.
+          const trace = toPersistedTracePart(toolsAtDone);
+          appendMessage(bookId, anchor.threadId, {
+            role: "ai",
+            text: finalText,
+            ts: Date.now(),
+            ...(trace ? { parts: [trace] } : {}),
+          });
+        }
       },
       // The loop declined mid-turn rather than failing to reach the model. It is
       // not an error and there is nothing to retry, so it is not dressed as one

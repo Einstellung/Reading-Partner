@@ -9,6 +9,7 @@ import {
   type SupplementListing,
   type SupplementToolDeps,
 } from "../../../src/reading/ingest/remove-tool";
+import { toolText } from "../../support/tool-text";
 
 const LIST: SupplementListing[] = [
   { hash: "h1", title: "How a web page becomes a book" },
@@ -29,7 +30,7 @@ function tool(over: Partial<SupplementToolDeps> = {}): {
     ...over,
   };
   const t = buildSupplementTools(deps)[0];
-  return { run: (title) => t.execute({ title }) as Promise<string>, removed };
+  return { run: async (title: string) => toolText(await t.execute({ title })), removed };
 }
 
 test("a title is matched the way a citation is: whitespace and case are nothing", () => {

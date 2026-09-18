@@ -675,18 +675,25 @@ function TypingDots() {
 function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) {
 	// An arbitrary font size brings no line height of its own, where text-sm did.
 	const text = size === 'lg' ? 'text-[calc(0.875rem*var(--chat-scale,1))] leading-[1.43]' : 'text-xs';
+	// The calls that finished collapse into one grey line under the answer, in the
+	// order they ran; a running call keeps its own line with the ellipsis, and a
+	// failure keeps its own line in red with the sentence the tool threw.
+	const done = tools.filter((t) => t.state === 'done');
 	return (
 		<div className="flex flex-col gap-0.5">
 			{tools.map((t, i) =>
 				t.state === 'error' ? (
 					<div key={i} className={'text-destructive ' + text}>
-						{t.label} — failed
+						{t.label} — {t.error || 'failed'}
 					</div>
-				) : (
+				) : t.state === 'running' ? (
 					<div key={i} className={'text-neutral-400 ' + text}>
 						{t.label}…
 					</div>
-				),
+				) : null,
+			)}
+			{done.length > 0 && (
+				<div className={'text-neutral-400 ' + text}>{done.map((t) => t.label).join(' · ')}</div>
 			)}
 		</div>
 	);

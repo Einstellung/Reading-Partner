@@ -57,28 +57,31 @@ test("withDelta appends to the text already streamed", () => {
 });
 
 test("withToolStart clears the text and puts the tool on the trace as running", () => {
-  const next = withToolStart(ai(1, "let me look"), { name: "read_talk_outline", args: {} });
+  const next = withToolStart(ai(1, "let me look"), { name: "read_talk_outline", args: {}, label: "Reading the talk outline" });
   expect(next.text).toBe("");
   expect(next.tools).toEqual([
     { name: "read_talk_outline", label: expect.any(String), state: "running" },
   ]);
 });
 
-test("withToolEnd takes a finished tool off the trace and marks a failed one", () => {
-  const started = withToolStart(ai(1), { name: "read_talk_outline", args: {} });
-  expect(withToolEnd(started, { name: "read_talk_outline", resultPreview: "", isError: false }).tools)
-    .toEqual([]);
+test("withToolEnd settles a finished tool in place and marks a failed one", () => {
+  const started = withToolStart(ai(1), { name: "read_talk_outline", args: {}, label: "Reading the talk outline" });
+  expect(withToolEnd(started, { name: "read_talk_outline", isError: false }).tools).toEqual([
+    { name: "read_talk_outline", label: expect.any(String), state: "done" },
+  ]);
   expect(
-    withToolEnd(started, { name: "read_talk_outline", resultPreview: "", isError: true }).tools,
-  ).toEqual([{ name: "read_talk_outline", label: expect.any(String), state: "error" }]);
+    withToolEnd(started, { name: "read_talk_outline", isError: true, error: "no outline" }).tools,
+  ).toEqual([
+    { name: "read_talk_outline", label: expect.any(String), state: "error", error: "no outline" },
+  ]);
 });
 
 test("withToolEnd leaves the row alone when nothing of that name is running", () => {
   const row = ai(1, "text");
-  expect(withToolEnd(row, { name: "absent", resultPreview: "", isError: false })).toBe(row);
+  expect(withToolEnd(row, { name: "absent", isError: false })).toBe(row);
 });
 
-test("answeredRow keeps only the failed tools and carries the notice when there is one", () => {
+test("answeredRow keeps the whole trace and carries the notice when there is one", () => {
   const row = ai(1, "partial", {
     streaming: true,
     tools: [
@@ -90,7 +93,10 @@ test("answeredRow keeps only the failed tools and carries the notice when there 
     role: "ai",
     text: "the whole answer",
     ts: 1,
-    tools: [{ name: "b", label: "B", state: "error" }],
+    tools: [
+      { name: "a", label: "A", state: "running" },
+      { name: "b", label: "B", state: "error" },
+    ],
   });
   expect(answeredRow(row, "x", 1, "left out chapter 3").notice).toBe("left out chapter 3");
 });

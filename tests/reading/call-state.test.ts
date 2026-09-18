@@ -212,7 +212,9 @@ test("a second round continues under the first, one blank line apart", () => {
   expect(open.messages[0].text).toBe(
     "Let me check p. 4.\n\nThe page argues the retina is not a camera.",
   );
-  expect(open.messages[0].tools).toEqual([]);
+  expect(open.messages[0].tools).toEqual([
+    { name: "read_page", label: "Reading p. 4", state: "done" },
+  ]);
 
   // The answer the loop hands over is the same two paragraphs, so nothing on
   // screen moves when the turn lands.
@@ -245,7 +247,7 @@ test("the gap between rounds is opened once", () => {
   expect(open.messages[0].text).toBe("first\n\nsecond");
 });
 
-test("a tool that finished comes off the trace, and a failed one stays", () => {
+test("a tool that finished is settled in place, and a failed one carries why", () => {
   const started = call({
     messages: [
       ai(1, "", {
@@ -270,8 +272,12 @@ test("a tool that finished comes off the trace, and a failed one stays", () => {
     change: { kind: "tool-end", name: "search", isError: true },
   });
 
-  expect(ok?.messages[0].tools?.map((t) => t.name)).toEqual(["search"]);
+  expect(ok?.messages[0].tools?.map((t) => [t.name, t.state])).toEqual([
+    ["read_page", "done"],
+    ["search", "running"],
+  ]);
   expect(failed?.messages[0].tools).toEqual([
+    { name: "read_page", label: "Reading p. 4", state: "done" },
     { name: "search", label: "Searching", state: "error" },
   ]);
 });
@@ -317,7 +323,8 @@ test("the answer landing keeps only the calls that failed, and carries the notic
   expect(row?.text).toBe("the whole answer");
   expect(row?.streaming).toBeFalsy();
   expect(row?.notice).toBe("left out chapter 2");
-  expect(row?.tools).toEqual([{ name: "search", label: "Searching", state: "error" }]);
+  // The whole trace stays under the answer now, the calls that went fine too.
+  expect(row?.tools?.map((t) => t.state)).toContain("error");
 });
 
 test("a turn that could not reach the model says so in the row and offers a retry", () => {

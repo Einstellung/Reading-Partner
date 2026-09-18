@@ -176,25 +176,6 @@ function argsFulltextMode(args: Record<string, unknown>): string {
   }
 }
 
-// A running/failed status line for a source tool call, shown in the chat trace.
-// The webview line is what stands between the user and a silent minute; it reads
-// off the descriptor, not the host, so on a host with no webview fetcher (iOS)
-// it flashes for the instant the summary-only trial takes.
-export function sourceToolStatusLabel(name: string, args: Record<string, unknown>): string {
-  switch (name) {
-    case "probe_source":
-      return `Probing ${String(args.input ?? "the site")}`;
-    case "trial_source":
-      return argsFulltextMode(args) === "webview"
-        ? `Fetching ${WEBVIEW_TRIAL_LIMIT} article through a background browser window — tens of seconds`
-        : `Fetching ${TRIAL_LIMIT} articles to test`;
-    case "add_source":
-      return "Adding the source";
-    default:
-      return `Running ${name}`;
-  }
-}
-
 // Resolve the descriptor a trial/add call refers to: the JSON descriptor the
 // model assembled from (or received verbatim from) a probe. Always enabled.
 function resolveDescriptor(args: Record<string, unknown>): SourceDescriptor {
@@ -224,6 +205,8 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
   return [
     {
       name: "probe_source",
+      label: (args) => `Probing ${String(args.input ?? "the site")}`,
+      effect: "read",
       description:
         "Given a site URL or bare domain the user named or linked, try the common feed " +
         "paths (/feed, /rss, wp-json, …), detect RSS/Atom/RDF/JSON, judge whether the feed " +
@@ -253,6 +236,11 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
     },
     {
       name: "trial_source",
+      label: (args) => argsFulltextMode(args) === "webview"
+          ? `Fetching ${WEBVIEW_TRIAL_LIMIT} article through a background browser window — tens of seconds`
+          : `Fetching ${TRIAL_LIMIT} articles to test`,
+      effect: "write",
+      gate: "card",
       description:
         "Really fetch 3 articles through the generic engine to prove a source works " +
         "before adding it. Pass a descriptorJson — from probe_source, or one you drafted or " +
@@ -279,14 +267,18 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
           .map((s, i) => `${i + 1}. ${s.title} — ${s.chars} chars${s.fullText ? " (full text)" : " (summary only)"}`)
           .join("\n");
         const note = trial.note ? `\n\n${trial.note}` : "";
-        return (
-          `Trial of "${descriptor.name}" (${label}) succeeded:\n${lines}${note}\n\n` +
-          `A confirmation card is now shown to the user. Only call add_source after they explicitly say yes.`
-        );
+        return {
+          text:
+            `Trial of "${descriptor.name}" (${label}) succeeded:\n${lines}${note}\n\n` +
+            `A confirmation card is now shown to the user. Only call add_source after they explicitly say yes.`,
+          receipt: { label: "Trialled a source", summary: `${descriptor.name} (${label})` },
+        };
       },
     },
     {
       name: "add_source",
+      label: () => "Adding the source",
+      effect: "write",
       description:
         "Add a source to the user's list. ONLY call this after you have shown a trial " +
         "result of this exact descriptor and the user has explicitly agreed to add it. Pass " +
@@ -295,7 +287,10 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
       execute: async (args) => {
         const descriptor = resolveDescriptor(args);
         await deps.addSource(descriptor);
-        return `Added "${descriptor.name}" to the user's sources.`;
+        return {
+          text: `Added "${descriptor.name}" to the user's sources.`,
+          receipt: { label: "Added a source", summary: descriptor.name },
+        };
       },
     },
   ];

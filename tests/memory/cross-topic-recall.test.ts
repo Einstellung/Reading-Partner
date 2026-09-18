@@ -18,6 +18,7 @@ import {
 } from "../../src/memory/observations/recall";
 import { buildObservationTools } from "../../src/memory/observations/tools";
 import type { Observation, ObservationType } from "../../src/memory/observations/types";
+import { toolText } from "../support/tool-text";
 
 function obs(
   id: string,
@@ -125,14 +126,14 @@ test("an id a search handed back from another topic can be read", async () => {
 
 test("an observation in another topic cannot be written from here", async () => {
   const m = mount([obs("m-aaaaaaaa")], [RL_TOPIC]);
-  const updated = String(await m.write.execute({ action: "update", id: "m-11111111", summary: "x" }));
+  const updated = String(toolText(await m.write.execute({ action: "update", id: "m-11111111", summary: "x" })));
   expect(updated).toContain('topic "Reinforcement learning"');
-  const deleted = String(await m.write.execute({ action: "delete", id: "m-11111111" }));
+  const deleted = String(toolText(await m.write.execute({ action: "delete", id: "m-11111111" })));
   expect(deleted).toContain('topic "Reinforcement learning"');
   expect(deleted).not.toContain("Deleted");
   expect(m.writeDescription).toContain("this topic only");
   // An id that is nowhere still reads as a typo, not as someone else's.
-  expect(String(await m.write.execute({ action: "update", id: "m-99999999", summary: "x" }))).toBe(
+  expect(String(toolText(await m.write.execute({ action: "update", id: "m-99999999", summary: "x" })))).toBe(
     'No observation with id "m-99999999".',
   );
 });

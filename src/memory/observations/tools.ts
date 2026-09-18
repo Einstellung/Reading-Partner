@@ -357,6 +357,8 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
   return [
     {
       name: "observation_search",
+      label: (args) => args.query ? `Searching its observations for “${args.query}”` : "Searching its observations",
+      effect: "read",
       description:
         "Keyword-search your observations of this reader. " +
         (otherTopics
@@ -390,6 +392,8 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
     },
     {
       name: "observation_read",
+      label: () => "Reading an observation",
+      effect: "read",
       description: "Read one observation in full by its id (as returned by observation_search or the index).",
       parameters: Type.Object({
         id: Type.String({ description: "The observation id, e.g. m-1a2b3c4d." }),
@@ -409,6 +413,12 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
     },
     {
       name: OBSERVATION_WRITE_TOOL,
+      label: (args) => args.action === "delete"
+          ? "Dropping an observation"
+          : args.action === "create"
+            ? "Writing down an observation"
+            : "Updating an observation",
+      effect: "write",
       description:
         (relations
           ? "Write one observation about this reader, add evidence to one that is " +
@@ -631,7 +641,14 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             }
           }
           opts.onWrite?.("create", relation?.kind);
-          return `Created ${entry.id}.`;
+          return {
+            text: `Created ${entry.id}.`,
+            receipt: {
+              label: "Wrote down an observation",
+              summary: entry.summary,
+              link: { kind: "observation" as const, id: entry.id },
+            },
+          };
         }
 
         if (relations && action === "same-as") {
@@ -661,7 +678,14 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           );
           if (!grown) throw reject("bad-index", `${target} is no longer on this reader's record.`);
           opts.onWrite?.("same-as", "same-as");
-          return `Added evidence to ${grown.id}.`;
+          return {
+            text: `Added evidence to ${grown.id}.`,
+            receipt: {
+              label: "Added evidence to an observation",
+              summary: grown.summary,
+              link: { kind: "observation" as const, id: grown.id },
+            },
+          };
         }
 
         const id = String(args.id ?? "").trim();
@@ -669,10 +693,13 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
 
         if (action === "delete") {
           const foreign = await otherTopicOwner(id);
-          if (foreign) return notYours(id, foreign);
+          if (foreign) return { text: notYours(id, foreign), receipt: null };
           await adapter.correct(id, null);
           opts.onWrite?.("delete");
-          return `Deleted ${id}.`;
+          return {
+            text: `Deleted ${id}.`,
+            receipt: { label: "Dropped an observation", summary: id },
+          };
         }
 
         if (!relations && action === "update") {
@@ -689,10 +716,20 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           });
           if (!entry) {
             const foreign = await otherTopicOwner(id);
-            return foreign ? notYours(id, foreign) : `No observation with id "${id}".`;
+            return {
+              text: foreign ? notYours(id, foreign) : `No observation with id "${id}".`,
+              receipt: null,
+            };
           }
           opts.onWrite?.("update");
-          return `Updated ${entry.id}.`;
+          return {
+            text: `Updated ${entry.id}.`,
+            receipt: {
+              label: "Updated an observation",
+              summary: entry.summary,
+              link: { kind: "observation" as const, id: entry.id },
+            },
+          };
         }
 
         throw new Error(

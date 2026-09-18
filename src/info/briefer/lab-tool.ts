@@ -152,6 +152,9 @@ export function labGuidance(
 export function buildProposeLabTool(deps: LabToolDeps): AgentTool {
   return {
     name: "propose_lab",
+    label: (args) => `Drafting a lab for ${String(args.name ?? "what you follow")}`,
+    effect: "write",
+    gate: "card",
     description:
       "Propose a research lab: a standing room that watches one area for the user from now on. " +
       "Call it when they say what they want followed ('keep an eye on embodied AI', '我想盯住 " +
@@ -185,11 +188,13 @@ export function buildProposeLabTool(deps: LabToolDeps): AgentTool {
       // just needs to see that the room is already open.
       const taken = labNameTaken(name, labs);
       if (taken) {
-        return (
-          `The user already has a lab called "${taken.name}" (id: ${taken.id}), so nothing was ` +
-          `proposed. Talk about that one instead — widen its charter if this is really the same ` +
-          `ground — or propose a differently named lab if it is not.`
-        );
+        return {
+          text:
+            `The user already has a lab called "${taken.name}" (id: ${taken.id}), so nothing was ` +
+            `proposed. Talk about that one instead — widen its charter if this is really the same ` +
+            `ground — or propose a differently named lab if it is not.`,
+          receipt: null,
+        };
       }
       const questions = toStrings(args.questions);
       const { claimed, unknown } = resolveClaimedSources(toStrings(args.sources), await deps.sources());
@@ -209,11 +214,13 @@ export function buildProposeLabTool(deps: LabToolDeps): AgentTool {
           `out — say so if it matters, and do not claim the lab reads ` +
           `${unknown.length === 1 ? "it" : "them"}.`
         : "";
-      return (
-        `Proposed a lab called "${name}"${claimed.length ? `, claiming ${claimed.map((s) => s.name).join(", ")}` : ", claiming no sources yet"}. ` +
-        `A card now shows the user the charter. Nothing is filed yet — they Apply it themselves, ` +
-        `and they can have you change any of it first.${dropped}`
-      );
+      return {
+        text:
+          `Proposed a lab called "${name}"${claimed.length ? `, claiming ${claimed.map((s) => s.name).join(", ")}` : ", claiming no sources yet"}. ` +
+          `A card now shows the user the charter. Nothing is filed yet — they Apply it themselves, ` +
+          `and they can have you change any of it first.${dropped}`,
+        receipt: { label: "Drafted a lab", summary: `${name} — ${scope}` },
+      };
     },
   };
 }
@@ -225,6 +232,9 @@ export function buildProposeLabTool(deps: LabToolDeps): AgentTool {
 export function buildArchiveLabTool(deps: LabToolDeps): AgentTool {
   return {
     name: "archive_lab",
+    label: (args) => `Proposing to close ${String(args.labId ?? "a lab")}`,
+    effect: "write",
+    gate: "card",
     description:
       "Propose closing one of the user's research labs, when they say they are done with it " +
       "('stop following the macro stuff', '这个不用盯了'). Never on your own initiative: a quiet " +
@@ -242,12 +252,14 @@ export function buildArchiveLabTool(deps: LabToolDeps): AgentTool {
       const lab = resolveLab(raw, labs);
       if (!lab) {
         const open = activeLabs(labs);
-        return (
+        return {
+          receipt: null,
+          text:
           `"${raw}" is not one of the user's open labs, so nothing was proposed. ` +
           (open.length
             ? `The open ones:\n${open.map((l) => `- ${l.name} (id: ${l.id})`).join("\n")}\nAsk which they mean.`
-            : `They have no open labs at all.`)
-        );
+            : `They have no open labs at all.`),
+        };
       }
       deps.onLabCard({
         kind: "lab-archive",
@@ -256,10 +268,12 @@ export function buildArchiveLabTool(deps: LabToolDeps): AgentTool {
         name: lab.name,
         phase: "draft",
       });
-      return (
-        `Proposed closing the "${lab.name}" lab. A card now shows the user; nothing is closed ` +
-        `until they apply it. Its picture and what it has filed are kept either way.`
-      );
+      return {
+        text:
+          `Proposed closing the "${lab.name}" lab. A card now shows the user; nothing is closed ` +
+          `until they apply it. Its picture and what it has filed are kept either way.`,
+        receipt: { label: "Proposed closing a lab", summary: lab.name },
+      };
     },
   };
 }

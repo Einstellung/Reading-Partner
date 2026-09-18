@@ -7,6 +7,7 @@ import { expect, test } from "bun:test";
 import { buildArrangeTools, formatTalkOutline } from "../../../src/reading/talk/tools";
 import type { TalkArrangementCardData } from "../../../src/reading/talk/cards";
 import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
+import { toolText } from "../../support/tool-text";
 
 const last = (cards: TalkArrangementCardData[]) => cards[cards.length - 1];
 
@@ -37,11 +38,11 @@ function harness() {
 
 test("the spine writes only the fields it was sent", async () => {
   const h = harness();
-  await h.byName("set_talk_spine").execute({
+  toolText(await h.byName("set_talk_spine").execute({
     thesis: "The eye throws most of it away",
     audience: "people who have never taken a vision course",
-  });
-  await h.byName("set_talk_spine").execute({ conventions: ["no English acronyms", "  "] });
+  }));
+  toolText(await h.byName("set_talk_spine").execute({ conventions: ["no English acronyms", "  "] }));
   expect(h.outline?.spine).toEqual({
     thesis: "The eye throws most of it away",
     audience: "people who have never taken a vision course",
@@ -58,7 +59,7 @@ test("the spine writes only the fields it was sent", async () => {
 
 test("a spine call with nothing in it writes nothing", async () => {
   const h = harness();
-  const out = String(await h.byName("set_talk_spine").execute({}));
+  const out = String(toolText(await h.byName("set_talk_spine").execute({})));
   expect(out).toContain("No field was given");
   expect(h.outline).toBeNull();
 });
@@ -66,7 +67,7 @@ test("a spine call with nothing in it writes nothing", async () => {
 test("a new block is minted with a random id, and the card is the block", async () => {
   const h = harness();
   const body = "## The opening\n\nask them what they think the retina sends";
-  const out = String(await h.byName("write_talk_segment").execute({ body }));
+  const out = String(toolText(await h.byName("write_talk_segment").execute({ body })));
   expect(out).toContain("Added block 1 of 1");
   const segment = h.outline!.segments[0];
   expect(segment.body).toBe(body);
@@ -82,15 +83,15 @@ test("a new block is minted with a random id, and the card is the block", async 
 
 test("a write with no block in it writes nothing", async () => {
   const h = harness();
-  const out = String(await h.byName("write_talk_segment").execute({ position: 1 }));
+  const out = String(toolText(await h.byName("write_talk_segment").execute({ position: 1 })));
   expect(out).toContain("No block was given");
   expect(h.outline).toBeNull();
 });
 
 test("two blocks added at the same position get different ids", async () => {
   const h = harness();
-  await h.byName("write_talk_segment").execute({ body: "First", position: 1 });
-  await h.byName("write_talk_segment").execute({ body: "Second", position: 1 });
+  toolText(await h.byName("write_talk_segment").execute({ body: "First", position: 1 }));
+  toolText(await h.byName("write_talk_segment").execute({ body: "Second", position: 1 }));
   const [a, b] = h.outline!.segments;
   expect(a.body).toBe("Second");
   expect(b.body).toBe("First");
@@ -110,15 +111,15 @@ test("a formula and a figure citation are stored as written", async () => {
     "",
     "[fig:4] the ganglion map",
   ].join("\n");
-  await h.byName("write_talk_segment").execute({ body });
+  toolText(await h.byName("write_talk_segment").execute({ body }));
   expect(h.outline!.segments[0].body).toBe(body);
 });
 
 test("writing a block by id replaces it whole", async () => {
   const h = harness();
-  await h.byName("write_talk_segment").execute({ body: "Draft" });
+  toolText(await h.byName("write_talk_segment").execute({ body: "Draft" }));
   const id = h.outline!.segments[0].id;
-  const out = String(await h.byName("write_talk_segment").execute({ id, body: "## Act one" }));
+  const out = String(toolText(await h.byName("write_talk_segment").execute({ id, body: "## Act one" })));
   expect(out).toContain("Rewrote block 1 of 1");
   expect(h.outline!.segments[0]).toMatchObject({ id, body: "## Act one" });
   expect(last(h.cards)).toMatchObject({ change: "segment", body: "## Act one", position: 1 });
@@ -126,11 +127,11 @@ test("writing a block by id replaces it whole", async () => {
 
 test("a block moves to a 1-based position, and an unknown id says so", async () => {
   const h = harness();
-  await h.byName("write_talk_segment").execute({ body: "A" });
-  await h.byName("write_talk_segment").execute({ body: "B" });
-  await h.byName("write_talk_segment").execute({ body: "C" });
+  toolText(await h.byName("write_talk_segment").execute({ body: "A" }));
+  toolText(await h.byName("write_talk_segment").execute({ body: "B" }));
+  toolText(await h.byName("write_talk_segment").execute({ body: "C" }));
   const c = h.outline!.segments[2].id;
-  const out = String(await h.byName("move_talk_segment").execute({ id: c, position: 1 }));
+  const out = String(toolText(await h.byName("move_talk_segment").execute({ id: c, position: 1 })));
   expect(out).toContain("block 1 of 3");
   expect(h.outline!.segments.map((s) => s.body)).toEqual(["C", "A", "B"]);
   expect(last(h.cards)).toEqual({
@@ -140,7 +141,7 @@ test("a block moves to a 1-based position, and an unknown id says so", async () 
     position: 1,
     total: 3,
   });
-  expect(String(await h.byName("move_talk_segment").execute({ id: "nope", position: 1 }))).toContain(
+  expect(String(toolText(await h.byName("move_talk_segment").execute({ id: "nope", position: 1 })))).toContain(
     "no block nope",
   );
 });
@@ -149,10 +150,10 @@ test("a block moves to a 1-based position, and an unknown id says so", async () 
 // its first line — the same name the rehearsal's list and the pass handoff use.
 test("a removed block is reported by its first line, and an unknown id writes nothing", async () => {
   const h = harness();
-  await h.byName("write_talk_segment").execute({ body: "## A\n\nthe hook under it" });
-  await h.byName("write_talk_segment").execute({ body: "B" });
+  toolText(await h.byName("write_talk_segment").execute({ body: "## A\n\nthe hook under it" }));
+  toolText(await h.byName("write_talk_segment").execute({ body: "B" }));
   const a = h.outline!.segments[0].id;
-  const out = String(await h.byName("remove_talk_segment").execute({ id: a }));
+  const out = String(toolText(await h.byName("remove_talk_segment").execute({ id: a })));
   expect(out).toContain('Dropped "A"');
   expect(h.outline!.segments.map((s) => s.body)).toEqual(["B"]);
   expect(last(h.cards)).toEqual({
@@ -161,7 +162,7 @@ test("a removed block is reported by its first line, and an unknown id writes no
     title: "A",
     total: 1,
   });
-  const missing = String(await h.byName("remove_talk_segment").execute({ id: "nope" }));
+  const missing = String(toolText(await h.byName("remove_talk_segment").execute({ id: "nope" })));
   expect(missing).toContain("no block nope");
   expect(h.cards.filter((c) => c.change === "removed")).toHaveLength(1);
 });
@@ -171,11 +172,11 @@ test("a removed block is reported by its first line, and an unknown id writes no
 // whole, because a summary of it is not the thing the reader is editing.
 test("read_talk_outline prints the spine, the order and every block whole", async () => {
   const h = harness();
-  expect(String(await h.byName("read_talk_outline").execute({}))).toContain("nothing arranged yet");
-  await h.byName("set_talk_spine").execute({ thesis: "One line", audience: "beginners" });
+  expect(String(toolText(await h.byName("read_talk_outline").execute({})))).toContain("nothing arranged yet");
+  toolText(await h.byName("set_talk_spine").execute({ thesis: "One line", audience: "beginners" }));
   const body = "## The opening\n\na question\n\n$$\ne^{i\\pi}+1=0\n$$";
-  await h.byName("write_talk_segment").execute({ body });
-  const text = String(await h.byName("read_talk_outline").execute({}));
+  toolText(await h.byName("write_talk_segment").execute({ body }));
+  const text = String(toolText(await h.byName("read_talk_outline").execute({})));
   expect(text).toContain("Through-line: One line");
   expect(text).toContain("Audience: beginners");
   expect(text).toContain(`--- 1 (id: ${h.outline!.segments[0].id}) ---`);

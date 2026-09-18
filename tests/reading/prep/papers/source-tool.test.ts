@@ -7,6 +7,7 @@ import {
   buildSourceTools,
   type SourceIngestor,
 } from "../../../../src/reading/prep/papers/source-tool";
+import { toolText } from "../../../support/tool-text";
 
 function tool(ingestor: SourceIngestor) {
   const [t] = buildSourceTools(ingestor);
@@ -25,7 +26,7 @@ function starts(spy?: (url: string, note?: string) => void): SourceIngestor {
 test("writes a run and says so, naming it and the thread it answers in", async () => {
   let seen = "";
   const t = tool(starts((u) => (seen = u)));
-  const out = (await t.execute({ url: "https://a.test/post" })) as string;
+  const out = (toolText(await t.execute({ url: "https://a.test/post" }))) as string;
   expect(seen).toBe("https://a.test/post");
   expect(out).toContain("r-1");
   expect(out).toContain("does not wait");
@@ -36,7 +37,7 @@ test("writes a run and says so, naming it and the thread it answers in", async (
 test("the note the reader gave rides along with the URL", async () => {
   let note: string | undefined;
   const t = tool(starts((_u, n) => (note = n)));
-  await t.execute({ url: "https://a.test/post", note: "compare with ch.3" });
+  toolText(await t.execute({ url: "https://a.test/post", note: "compare with ch.3" }));
   expect(note).toBe("compare with ch.3");
 });
 
@@ -52,14 +53,14 @@ test("returns without waiting for the run to finish", async () => {
       return { runId: "r-2" };
     },
   });
-  const out = (await t.execute({ url: "https://a.test/slow.pdf" })) as string;
+  const out = (toolText(await t.execute({ url: "https://a.test/slow.pdf" }))) as string;
   expect(finished).toBe(false);
   expect(out).toContain("r-2");
 });
 
 test("says nothing about what the page contains, because nothing has been read", async () => {
   const t = tool(starts());
-  const out = (await t.execute({ url: "https://a.test/post" })) as string;
+  const out = (toolText(await t.execute({ url: "https://a.test/post" }))) as string;
   expect(out).not.toContain("read_paper");
   expect(out).toContain("say nothing about what is in it");
 });
@@ -77,7 +78,7 @@ test("takes an http URL and rejects any other scheme before writing a run", asyn
 
   let seen = "";
   const t = tool(starts((u) => (seen = u)));
-  await t.execute({ url: "http://a.test/post" });
+  toolText(await t.execute({ url: "http://a.test/post" }));
   expect(seen).toBe("http://a.test/post");
 });
 

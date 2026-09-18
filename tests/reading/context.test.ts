@@ -13,7 +13,6 @@ import {
   markedPagesSection,
   MARK_PAGES_MAX_TOKENS,
   spineOverviewSection,
-  toolStatusLabel,
 } from "../../src/reading/context";
 import { estimateTextTokens } from "../../src/budget";
 
@@ -107,17 +106,6 @@ test("over the ceiling, the neighbours go before the marked page", () => {
   expect(estimateTextTokens(huge)).toBeLessThan(MARK_PAGES_MAX_TOKENS + 100);
 });
 
-test("toolStatusLabel phrases each tool, single vs range pages", () => {
-  expect(toolStatusLabel("read_pages", { from: 5, to: 5 })).toBe("Reading page 5");
-  expect(toolStatusLabel("read_pages", { from: 43, to: 41 })).toBe("Reading pages 41–43");
-  expect(toolStatusLabel("search_topic", { query: "turkey problem" })).toBe(
-    "Searching the topic for “turkey problem”",
-  );
-  expect(toolStatusLabel("read_annotations", { material: "Fooled by Randomness" })).toBe(
-    "Reading your notes on Fooled by Randomness",
-  );
-  expect(toolStatusLabel("mystery", {})).toBe("Running mystery");
-});
 
 test("findMaterial matches exact case-insensitively, then substring", () => {
   const materials: TopicMaterial[] = [

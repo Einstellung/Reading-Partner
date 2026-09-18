@@ -62,6 +62,8 @@ export function buildPaperSearchTools(deps: PaperSearchToolDeps): AgentTool[] {
   return [
     {
       name: "search_papers",
+      label: (args) => args.query ? `Searching the literature for “${args.query}”` : "Searching the literature",
+      effect: "read",
       description:
         "Search the academic literature by topic. Covers arXiv (preprints in CS, " +
         "physics, maths), PubMed (biomedicine and neuroscience), OpenAlex and " +

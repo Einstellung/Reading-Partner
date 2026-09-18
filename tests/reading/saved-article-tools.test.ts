@@ -18,6 +18,7 @@ import {
 } from "../../src/reading/saved-article-tools";
 import type { IngestedPaper } from "../../src/reading/saved-article-tools";
 import type { SavedArticle } from "../../src/reading/saved-articles";
+import { toolText } from "../support/tool-text";
 
 // The body prepareSavedArticle is handed. It lives in its own file now
 // (saved-articles.ts), so the record beside it only says how long it is.
@@ -71,12 +72,12 @@ function tools(p: SavedArticlePorts) {
 
 test("an empty list says so rather than pretending to be filtered", async () => {
   const { list } = tools(ports([]));
-  expect((await list.execute({})) as string).toBe("The reader has kept no articles.");
+  expect((toolText(await list.execute({}))) as string).toBe("The reader has kept no articles.");
 });
 
 test("a row carries id, source, publication date and length", async () => {
   const { list } = tools(ports([article()]));
-  const out = (await list.execute({})) as string;
+  const out = (toolText(await list.execute({}))) as string;
   expect(out).toContain("1 saved article(s), newest first:");
   expect(out).toContain('"Attention is all you need, again"');
   expect(out).toContain("The Feed");
@@ -96,10 +97,10 @@ test("query filters on title and on source name, case-insensitively", async () =
     article({ id: "2", title: "Rust in the kernel", sourceName: "LWN" }),
   ];
   const { list: tool } = tools(ports(list));
-  const byTitle = (await tool.execute({ query: "KERNEL" })) as string;
+  const byTitle = (toolText(await tool.execute({ query: "KERNEL" }))) as string;
   expect(byTitle).toContain("Rust in the kernel");
   expect(byTitle).not.toContain("Compilers today");
-  const bySource = (await tool.execute({ query: "feed" })) as string;
+  const bySource = (toolText(await tool.execute({ query: "feed" }))) as string;
   expect(bySource).toContain("Compilers today");
   expect(bySource).not.toContain("Rust in the kernel");
 });
@@ -194,7 +195,7 @@ test("add: an article kept without a body is refused instead of digested empty",
 test("add: the answer names the slug, the read_paper call, the date and the source", async () => {
   let seen: SavedArticle | null = null;
   const { add } = tools(ports([article()], {}, (a) => (seen = a)));
-  const out = (await add.execute({ id: "https://example.com/a" })) as string;
+  const out = (toolText(await add.execute({ id: "https://example.com/a" }))) as string;
   expect(seen).not.toBeNull();
   expect(out).toContain('read_paper("attention-is-all-you-need-again"');
   expect(out).toContain("4200 characters");
@@ -208,7 +209,7 @@ test("add: the answer names the slug, the read_paper call, the date and the sour
 
 test("add: summaryOnly reaches the tool's answer", async () => {
   const { add } = tools(ports([article({ summaryOnly: true })]));
-  const out = (await add.execute({ id: "https://example.com/a" })) as string;
+  const out = (toolText(await add.execute({ id: "https://example.com/a" }))) as string;
   expect(out).toContain("the full text was never read");
 });
 

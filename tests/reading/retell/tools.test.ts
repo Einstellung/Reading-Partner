@@ -12,6 +12,7 @@ import type {
   PlanDecision,
   RetellPlan,
 } from "../../../src/reading/retell/types";
+import { toolText } from "../../support/tool-text";
 
 const chapters: RetellChapter[] = [
   { index: 1, title: "Openings", startPage: 1, endPage: 10, hasNote: true },
@@ -47,11 +48,11 @@ function harness(notes: Record<number, string> = {}) {
 
 test("a decision is written with the chapter's own title and stamped", async () => {
   const h = harness();
-  await h.byName("record_chapter_decision").execute({
+  toolText(await h.byName("record_chapter_decision").execute({
     chapter: 1,
     include: true,
     points: ["the 1962 data does the work", "  ", ""],
-  });
+  }));
   expect(h.recorded).toEqual([
     {
       chapter: 1,
@@ -66,12 +67,12 @@ test("a decision is written with the chapter's own title and stamped", async () 
 // The card is the reader's receipt: the same content, minus the timestamp.
 test("the decision raises a card carrying what was written", async () => {
   const h = harness();
-  await h.byName("record_chapter_decision").execute({
+  toolText(await h.byName("record_chapter_decision").execute({
     chapter: 2,
     include: false,
     points: [],
     note: "nothing to say about it",
-  });
+  }));
   expect(h.cards).toEqual([
     {
       kind: "retell-decision",
@@ -86,35 +87,35 @@ test("the decision raises a card carrying what was written", async () => {
 
 test("blank optional fields are left out rather than stored empty", async () => {
   const h = harness();
-  await h.byName("record_chapter_decision").execute({
+  toolText(await h.byName("record_chapter_decision").execute({
     chapter: 1,
     include: true,
     points: ["one"],
     figure: "   ",
     note: "",
-  });
+  }));
   expect("figure" in h.recorded[0]).toBe(false);
   expect("note" in h.recorded[0]).toBe(false);
 });
 
 test("a figure reference rides along", async () => {
   const h = harness();
-  await h.byName("record_chapter_decision").execute({
+  toolText(await h.byName("record_chapter_decision").execute({
     chapter: 1,
     include: true,
     points: ["one"],
     figure: "[fig:3]",
-  });
+  }));
   expect(h.recorded[0].figure).toBe("[fig:3]");
 });
 
 test("a chapter that does not exist writes nothing and lists the ones that do", async () => {
   const h = harness();
-  const out = await h.byName("record_chapter_decision").execute({
+  const out = toolText(await h.byName("record_chapter_decision").execute({
     chapter: 9,
     include: true,
     points: ["one"],
-  });
+  }));
   expect(h.recorded).toHaveLength(0);
   expect(h.cards).toHaveLength(0);
   expect(String(out)).toContain("1. Openings");
@@ -122,19 +123,19 @@ test("a chapter that does not exist writes nothing and lists the ones that do", 
 
 test("the reply says which way the decision went", async () => {
   const h = harness();
-  const kept = await h.byName("record_chapter_decision").execute({ chapter: 1, include: true, points: ["a"] });
-  const cut = await h.byName("record_chapter_decision").execute({ chapter: 2, include: false, points: [] });
+  const kept = toolText(await h.byName("record_chapter_decision").execute({ chapter: 1, include: true, points: ["a"] }));
+  const cut = toolText(await h.byName("record_chapter_decision").execute({ chapter: 2, include: false, points: [] }));
   expect(String(kept)).toContain("going in the retell");
   expect(String(cut)).toContain("cut from the retell");
 });
 
 test("read_chapter_note returns the note, or says there is none", async () => {
   const h = harness({ 1: "The chapter argues X." });
-  expect(await h.byName("read_chapter_note").execute({ chapter: 1 })).toBe("The chapter argues X.");
-  expect(String(await h.byName("read_chapter_note").execute({ chapter: 2 }))).toContain(
+  expect(toolText(await h.byName("read_chapter_note").execute({ chapter: 1 }))).toBe("The chapter argues X.");
+  expect(String(toolText(await h.byName("read_chapter_note").execute({ chapter: 2 })))).toContain(
     "No note on file for chapter 2",
   );
-  expect(String(await h.byName("read_chapter_note").execute({ chapter: 9 }))).toContain(
+  expect(String(toolText(await h.byName("read_chapter_note").execute({ chapter: 9 })))).toContain(
     "No chapter 9",
   );
 });
@@ -142,24 +143,24 @@ test("read_chapter_note returns the note, or says there is none", async () => {
 test("read_retell_outline reads the outline back, including the chapter just recorded", async () => {
   const h = harness();
   // Before anything is settled there is no outline, and saying so is the answer.
-  expect(String(await h.byName("read_retell_outline").execute({}))).toContain(
+  expect(String(toolText(await h.byName("read_retell_outline").execute({})))).toContain(
     "No chapter has been settled yet",
   );
 
-  await h.byName("record_chapter_decision").execute({
+  toolText(await h.byName("record_chapter_decision").execute({
     chapter: 1,
     include: true,
     points: ["the 1962 data does the work"],
     figure: "fig:2",
-  });
-  await h.byName("record_chapter_decision").execute({
+  }));
+  toolText(await h.byName("record_chapter_decision").execute({
     chapter: 2,
     include: false,
     points: [],
     note: "could not say anything about it",
-  });
+  }));
 
-  const out = String(await h.byName("read_retell_outline").execute({}));
+  const out = String(toolText(await h.byName("read_retell_outline").execute({})));
   expect(out).toContain("1. Openings");
   expect(out).toContain("the 1962 data does the work");
   expect(out).toContain("figure: fig:2");
@@ -169,9 +170,9 @@ test("read_retell_outline reads the outline back, including the chapter just rec
 
 test("read_retell_outline is read-only: it records nothing and raises no card", async () => {
   const h = harness();
-  await h.byName("record_chapter_decision").execute({ chapter: 1, include: true, points: ["a"] });
+  toolText(await h.byName("record_chapter_decision").execute({ chapter: 1, include: true, points: ["a"] }));
   const before = h.recorded.length;
-  await h.byName("read_retell_outline").execute({});
+  toolText(await h.byName("read_retell_outline").execute({}));
   expect(h.recorded.length).toBe(before);
   expect(h.cards.length).toBe(1);
 });

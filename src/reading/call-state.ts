@@ -14,6 +14,7 @@ import {
   appendRunningTool,
   relabelRunningTool,
   resolveToolStatus,
+  type Receipt,
   type ToolStatus,
 } from "../ai/tool-status";
 import { appendRoundBreak, holdsNoAnswer, refusalRow } from "../ai/turn-rows";
@@ -93,7 +94,7 @@ export type RowChange =
   // with a blank line opened under it for the next round (docs/pitfall/291); the
   // status line is drawn in that gap and comes off when the tool returns.
   | { kind: "tool-start"; name: string; label: string }
-  | { kind: "tool-end"; name: string; isError: boolean }
+  | { kind: "tool-end"; name: string; isError: boolean; receipt?: Receipt; error?: string }
   // A running tool said something new about itself — one line, rewritten in
   // place (docs/25).
   | { kind: "tool-label"; name: string; label: string }
@@ -120,7 +121,10 @@ export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M 
         tools: appendRunningTool(row.tools, change.name, change.label),
       };
     case "tool-end": {
-      const tools = resolveToolStatus(row.tools, change.name, change.isError);
+      const tools = resolveToolStatus(row.tools, change.name, change.isError, {
+        ...(change.receipt ? { receipt: change.receipt } : {}),
+        ...(change.error ? { error: change.error } : {}),
+      });
       return tools ? { ...row, tools } : row;
     }
     case "tool-label": {
@@ -134,7 +138,6 @@ export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M 
         streaming: undefined,
         failed: undefined,
         notice: change.notice,
-        tools: (row.tools ?? []).filter((t) => t.state === "error"),
       };
     case "error":
       return {

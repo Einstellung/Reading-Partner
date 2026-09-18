@@ -82,6 +82,8 @@ function wantsTool(name: string): AssistantMessage {
 
 const NOOP_TOOL = {
 	name: "look",
+	label: () => "Looking something up",
+	effect: "read" as const,
 	description: "look something up",
 	parameters: { type: "object", properties: {} } as any,
 	execute: async () => "found",

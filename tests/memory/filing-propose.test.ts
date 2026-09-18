@@ -14,6 +14,7 @@ import {
   type TopicChoice,
   type TopicProposalCardData,
 } from "../../src/memory";
+import { toolText } from "../support/tool-text";
 
 const TOPICS: TopicChoice[] = [
   { id: "brief", name: "Brief" },
@@ -34,10 +35,10 @@ function tool(topics: TopicChoice[] = TOPICS) {
 // Everything it could write is behind the card's Apply.
 test("proposing an existing topic drafts a card and writes nothing", async () => {
   const { t, cards } = tool();
-  const said = await t.execute({
+  const said = toolText(await t.execute({
     topic: "t-9f2",
     meaning: "First eval of the new refusal set.",
-  });
+  }));
   expect(cards).toEqual([
     {
       kind: "topic-proposal",
@@ -54,7 +55,7 @@ test("proposing an existing topic drafts a card and writes nothing", async () =>
 
 test("a name no topic answers to is a proposal for a new one", async () => {
   const { t, cards } = tool();
-  await t.execute({ topic: "Robot learning", meaning: "A second line of work." });
+  toolText(await t.execute({ topic: "Robot learning", meaning: "A second line of work." }));
   expect(cards[0].topic).toEqual({ newName: "Robot learning" });
 });
 

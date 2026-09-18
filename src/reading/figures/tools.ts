@@ -53,6 +53,8 @@ export function buildFigureTools(opts: BuildFigureToolsOptions): AgentTool[] {
   return [
     {
       name: "view_figure",
+      label: (args) => args.id ? `Looking at figure ${args.id}` : "Looking at a figure",
+      effect: "read",
       description:
         "Look at a figure from the current document by its number, exactly as the figure catalog lists it (\"3\", \"3a\", \"3.8\", \"3-1\"). Returns the figure image so you can describe what it shows.",
       parameters: Type.Object({

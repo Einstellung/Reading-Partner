@@ -28,9 +28,9 @@ export const RESEARCH_TOOL_NAME = "research_literature";
 // Named here, beside the sub-agent it runs, because the prompt below has to say it.
 export const RESEARCH_KIND = "research-literature";
 
-// The one line the reader sees while a run is going. Shared with
-// src/reading/context.ts's toolStatusLabel so the row does not change its wording
-// the moment the first progress event lands.
+// The one line the reader sees while a run is going. The sub-agent tool's own
+// label (legion/subagent/tool.ts) and every progress event repeat it, so the row
+// does not change its wording the moment the first update lands.
 export const RESEARCH_LABEL = "Searching the literature";
 
 // The pot one reader turn may spend on literature research, every

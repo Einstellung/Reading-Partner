@@ -26,6 +26,8 @@ function definition(): SubagentDefinition {
     tools: [
       {
         name: "search",
+        label: () => "Running the fake tool",
+        effect: "read" as const,
         description: "search",
         parameters: { type: "object", properties: {} } as never,
         execute: async () => "one record",

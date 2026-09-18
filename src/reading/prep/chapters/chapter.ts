@@ -24,6 +24,7 @@ import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings"
 import { clipLine } from "../../../platform/std/text";
 import type { BookChapter } from "../../chapters";
 import type { SpineChapter } from "./types";
+import { pageRangeLabel } from "../../../ai/tool-labels";
 
 const CHAPTER_MAX_ROUNDS = 16;
 
@@ -225,6 +226,8 @@ export function buildChapterTools(params: {
   const tools: AgentTool[] = [
     {
       name: "read_pages",
+      label: (args) => pageRangeLabel(args),
+      effect: "read",
       description:
         "Read a 1-based, inclusive page range of the book (at most 10 pages per call).",
       parameters: Type.Object({
@@ -236,6 +239,8 @@ export function buildChapterTools(params: {
     },
     {
       name: "search_book",
+      label: (args) => args.query ? `Searching the book for “${args.query}”` : "Searching the book",
+      effect: "read",
       description: "Keyword-search the book's full text. Returns ranked snippets with pages.",
       parameters: Type.Object({
         query: Type.String({ description: "Search terms." }),

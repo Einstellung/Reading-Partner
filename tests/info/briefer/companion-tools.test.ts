@@ -10,7 +10,6 @@ import {
   buildGenerateBriefingTool,
   buildReadPageTool,
   buildSignInTool,
-  companionToolStatusLabel,
   type BriefingScope,
   type SiteSignInDeps,
 } from "../../../src/info/briefer/companion-tools";
@@ -20,6 +19,7 @@ import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
 import type { ExtractReadable } from "../../../src/info/extract/readable-select";
 import type { SessionStatus, SignInOutcome } from "../../../src/info/extract/webview-session";
 import type { RunStart } from "../../../src/info/boxes/pipeline";
+import { toolText } from "../../support/tool-text";
 
 const extract: ExtractReadable = () => ({ title: "t", contentHtml: "<p>b</p>", textContent: "b" });
 
@@ -116,7 +116,7 @@ test("read_page fetches a page and reports its title, text, and links", async ()
   const tool = buildReadPageTool({
     fetchFn: async () => new Response(html, { headers: { "content-type": "text/html" } }),
   });
-  const out = String(await tool.execute({ url: "jiemian.com" }));
+  const out = String(toolText(await tool.execute({ url: "jiemian.com" })));
   expect(out).toMatch(/Title: News Hub/);
   expect(out).toMatch(/Front page\./);
   expect(out).toMatch(/时政 → https:\/\/jiemian\.com\/lists\/65\.html/);
@@ -127,20 +127,20 @@ test("read_page returns a non-HTML body raw with its content-type", async () => 
   const tool = buildReadPageTool({
     fetchFn: async () => new Response(feed, { headers: { "content-type": "application/rss+xml" } }),
   });
-  const out = String(await tool.execute({ url: "https://site.com/feed" }));
+  const out = String(toolText(await tool.execute({ url: "https://site.com/feed" })));
   expect(out).toMatch(/non-HTML content \(content-type: application\/rss\+xml\)/);
   expect(out).toMatch(/<rss>/);
 });
 
 test("read_page reports an HTTP error and a fetch failure without throwing", async () => {
   const notFound = buildReadPageTool({ fetchFn: async () => new Response("", { status: 404 }) });
-  expect(String(await notFound.execute({ url: "https://site.com/x" }))).toMatch(/HTTP 404/);
+  expect(String(toolText(await notFound.execute({ url: "https://site.com/x" })))).toMatch(/HTTP 404/);
   const broke = buildReadPageTool({
     fetchFn: async () => {
       throw new Error("network down");
     },
   });
-  expect(String(await broke.execute({ url: "https://site.com/x" }))).toMatch(/Could not read.*network down/);
+  expect(String(toolText(await broke.execute({ url: "https://site.com/x" })))).toMatch(/Could not read.*network down/);
 });
 
 test("read_page rejects an empty or invalid URL", async () => {
@@ -149,17 +149,28 @@ test("read_page rejects an empty or invalid URL", async () => {
   await expect(tool.execute({ url: "http://" })).rejects.toThrow(/valid http/i);
 });
 
-test("companionToolStatusLabel labels the companion tools and defers to source labels", () => {
-  expect(companionToolStatusLabel("read_page", { url: "https://site.com" })).toMatch(/Reading https:\/\/site\.com/);
-  expect(companionToolStatusLabel("statement_write", {})).toMatch(/Writing down what you said/);
-  expect(companionToolStatusLabel("propose_lab", { name: "Embodied AI" })).toMatch(/Drafting a lab for Embodied AI/);
-  expect(companionToolStatusLabel("archive_lab", { labId: "lab-1234abcd" })).toMatch(/close lab-1234abcd/);
-  expect(companionToolStatusLabel("generate_briefing", { scope: "full" })).toMatch(/Regenerating the briefing/);
-  expect(companionToolStatusLabel("generate_briefing", { scope: "retriage" })).toMatch(/Re-sorting today's briefing/);
-  expect(companionToolStatusLabel("add_source", {})).toMatch(/Adding the source/);
-  expect(companionToolStatusLabel("open_site_sign_in", { site: "bloomberg.com" })).toMatch(
-    /Waiting for the bloomberg\.com sign-in/,
-  );
+// The status lines, off the tools themselves: the companion's own plus the ones
+// the soul mounts on any info turn.
+test("each companion tool gives a human phrase for the call", () => {
+  const tools = buildCompanionTools({
+    ...deps(),
+    labs: {
+      threadId: "briefing-2026-09-09",
+      labs: async () => [],
+      sources: async () => [],
+      onLabCard: () => {},
+    },
+    siteSignIn: signInDeps().d,
+  });
+  const label = (name: string, args: Record<string, unknown>): string =>
+    tools.find((t) => t.name === name)!.label(args);
+  expect(label("read_page", { url: "https://site.com" })).toMatch(/Reading https:\/\/site\.com/);
+  expect(label("propose_lab", { name: "Embodied AI" })).toMatch(/Drafting a lab for Embodied AI/);
+  expect(label("archive_lab", { labId: "lab-1234abcd" })).toMatch(/close lab-1234abcd/);
+  expect(label("generate_briefing", { scope: "full" })).toMatch(/Regenerating the briefing/);
+  expect(label("generate_briefing", { scope: "retriage" })).toMatch(/Re-sorting today/);
+  expect(label("add_source", {})).toMatch(/Adding the source/);
+  expect(label("open_site_sign_in", { site: "bloomberg.com" })).toMatch(/bloomberg\.com/);
 });
 
 function briefingDeps() {
@@ -185,7 +196,7 @@ function briefingDeps() {
 test("generate_briefing starts a full regeneration and returns without claiming completion", async () => {
   const h = briefingDeps();
   const tool = buildGenerateBriefingTool(h.deps);
-  const out = String(await tool.execute({ scope: "full" }));
+  const out = String(toolText(await tool.execute({ scope: "full" })));
   expect(h.started).toEqual(["full"]);
   expect(out).toMatch(/re-collecting every source/i);
   expect(out).toMatch(/do not say the briefing is done/i);
@@ -193,7 +204,7 @@ test("generate_briefing starts a full regeneration and returns without claiming 
 
 test("generate_briefing scope 'retriage' re-analyzes without re-collecting", async () => {
   const h = briefingDeps();
-  const out = String(await buildGenerateBriefingTool(h.deps).execute({ scope: "retriage" }));
+  const out = toolText(await buildGenerateBriefingTool(h.deps).execute({ scope: "retriage" }));
   expect(h.started).toEqual(["retriage"]);
   expect(out).toMatch(/re-analysis of today's cables/i);
 });
@@ -204,7 +215,7 @@ test("generate_briefing scope 'retriage' re-analyzes without re-collecting", asy
 test("generate_briefing reports a refusal instead of claiming its request started", async () => {
   const h = briefingDeps();
   h.setRunning(true);
-  const out = String(await buildGenerateBriefingTool(h.deps).execute({ scope: "full" }));
+  const out = toolText(await buildGenerateBriefingTool(h.deps).execute({ scope: "full" }));
   expect(h.started).toEqual([]);
   expect(out).toMatch(/already under way/i);
   expect(out).toMatch(/started nothing/i);
@@ -215,7 +226,7 @@ test("generate_briefing reports a refusal instead of claiming its request starte
 // starts nothing at all — it leaves a request for the machine that does — and
 // the companion must not turn that into "a briefing is being built".
 test("generate_briefing on a reader says the request was passed on, not started", async () => {
-  const out = String(
+  const out = toolText(
     await buildGenerateBriefingTool({ startBriefing: () => "asked" }).execute({ scope: "full" }),
   );
   expect(out).toMatch(/does not collect/i);
@@ -312,7 +323,7 @@ test("open_site_sign_in refuses an address and opens nothing", async () => {
     "https://www.bloomberg.com/account/signin",
     "evil.test",
   ]) {
-    const out = String(await tool.execute({ site: arg }));
+    const out = String(toolText(await tool.execute({ site: arg })));
     expect(out).toMatch(/not a site in the user's source list/);
     // The refusal shows the real list so the model can ask rather than guess.
     expect(out).toMatch(/bloomberg\.com — Bloomberg Technology/);

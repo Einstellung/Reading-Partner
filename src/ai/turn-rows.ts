@@ -19,10 +19,10 @@
 
 import type { ToolStatus } from "./tool-status";
 
-// The tool trace a stopped turn keeps: the calls that failed, which explain the
-// stop, and none of the ones that ran fine.
+// The tool trace a stopped turn keeps: all of it. A call that ran is part of
+// what the turn did, and the ones that failed are what explain the stop.
 function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
-  return (previous.tools ?? []).filter((t) => t.state === "error");
+  return [...(previous.tools ?? [])];
 }
 
 // `text` is deliberately left as it stands. On the two chat surfaces it can hold

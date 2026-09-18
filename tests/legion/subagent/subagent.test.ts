@@ -44,6 +44,8 @@ const HAYSTACK = "abstract: ".repeat(500);
 function searchTool(result: string | (() => never) = HAYSTACK): AgentTool {
   return {
     name: "search_papers",
+    label: () => "Running the fake tool",
+    effect: "read" as const,
     description: "search the literature",
     parameters: Type.Object({ query: Type.String() }),
     execute: async () => (typeof result === "string" ? result : result()),
@@ -279,6 +281,8 @@ test("a run that ended in anything but a failed call carries no error of its own
 test("one broken tool among several leaves a usable brief with the failure named", async () => {
   const flaky: AgentTool = {
     name: "walk_citations",
+    label: () => "Running the fake tool",
+    effect: "read" as const,
     description: "walk the citation graph",
     parameters: Type.Object({ paper: Type.String() }),
     execute: async () => {
@@ -313,6 +317,8 @@ test("the reader hanging up kills the run and produces no brief at all", async (
   const controller = new AbortController();
   const hangUp: AgentTool = {
     name: "search_papers",
+    label: () => "Running the fake tool",
+    effect: "read" as const,
     description: "search the literature",
     parameters: Type.Object({ query: Type.String() }),
     execute: async () => {

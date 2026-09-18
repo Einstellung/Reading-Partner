@@ -67,6 +67,13 @@ export async function writeBriefFile(text: string): Promise<string> {
  * for. A call naming a kind nothing runs is refused in the call, where the model
  * can read why.
  */
+// The brief's first sentence, for the receipt: the whole brief is a paragraph
+// written for a worker, and the receipt has one line.
+function firstSentence(task: string): string {
+  const end = task.search(/[.!?](\s|$)/);
+  return end < 0 ? task : task.slice(0, end + 1);
+}
+
 export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
   const kinds = (deps.kinds ?? delegableWorkerKinds)();
   const write = deps.writeBrief ?? writeBriefFile;
@@ -75,6 +82,8 @@ export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
   return [
     {
       name: DELEGATE_TOOL,
+      label: (args) => args.kind ? `Handing this to a ${args.kind} worker` : "Handing this over to a worker",
+      effect: "write",
       description: DELEGATE_DESCRIPTION,
       parameters: Type.Object({
         kind: Type.String({
@@ -113,12 +122,18 @@ export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
         // A refusal is the runner's own sentence — too deep, a step already
         // spent — and is handed back as it is written rather than reworded.
         if (!result.ok) throw new Error(result.reason);
-        return (
-          `Delegated as run ${result.run.id} (kind: ${kind}). It is running now and this ` +
-          `turn does not wait for it: what it comes back with will arrive in this ` +
-          `conversation later. Tell the reader the answer is coming rather than ` +
-          `answering the question yourself.`
-        );
+        return {
+          text:
+            `Delegated as run ${result.run.id} (kind: ${kind}). It is running now and this ` +
+            `turn does not wait for it: what it comes back with will arrive in this ` +
+            `conversation later. Tell the reader the answer is coming rather than ` +
+            `answering the question yourself.`,
+          receipt: {
+            label: `Sent off ${kind} work`,
+            summary: firstSentence(task),
+            link: { kind: "run" as const, id: result.run.id },
+          },
+        };
       },
     },
   ];

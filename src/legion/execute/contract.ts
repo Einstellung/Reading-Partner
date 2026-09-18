@@ -18,6 +18,7 @@ import type { BudgetPurpose } from "../../budget";
 import type { AiSurface, TurnTelemetry } from "../../platform/app/cache-telemetry";
 import type { ModelCallAbout } from "../../ai/model-usage";
 import type { ChatMessage, ProviderId, ResponseHead, StreamOutcome } from "../../ai/providers";
+import type { Receipt } from "../../ai/tool-status";
 import type { HeldHarness } from "./held";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
@@ -29,12 +30,33 @@ export interface ToolResultImage {
   mimeType: string;
 }
 
+// A write's receipt lives with the chat row that shows it (ai/tool-status.ts),
+// so it is declared there and named here.
+export type { Receipt, ReceiptLink } from "../../ai/tool-status";
+
 // A richer tool result: text (also used as the UI trace preview) plus optional
-// images. A tool may still return a plain string, which becomes { text }.
+// images and, for a write, its receipt. A tool may still return a plain string,
+// which becomes { text }.
 export interface ToolResult {
   text: string;
   images?: ToolResultImage[];
+  // A write says what it did, or says null when this call wrote nothing (the id
+  // named nothing, a run was already going). Leaving it out is the one thing a
+  // write may not do: turn.ts turns that into an error, so a write can never be
+  // added without the reader being told about it.
+  receipt?: Receipt | null;
 }
+
+// What a tool does to the world. A read leaves a trace line and nothing else; a
+// write must come back with a receipt (turn.ts throws when it does not).
+export type ToolEffect = "read" | "write";
+
+// The gate a write goes through before it lands (docs/21, soul/roles.ts):
+// "card" — the tool pushes a card the reader confirms; "trial" — it runs a trial
+// the reader looks at first; "instruction" — it only runs on an explicit
+// instruction. Absent means the tool lands the write itself and the receipt is
+// the whole of its visibility.
+export type ToolGate = "card" | "trial" | "instruction";
 
 // A tool the model can call. `parameters` is a TypeBox schema (e.g.
 // Type.Object({...}) / StringEnum(...)) — the same shape pi's Tool expects.
@@ -42,21 +64,37 @@ export interface ToolResult {
 // returns the tool result: a string, or { text, images } to attach pictures.
 export interface AgentTool {
   name: string;
+  // For the model.
   description: string;
   parameters: TSchema;
+  // For the reader, while the call runs: "Reading pages 41–44". Called with the
+  // validated arguments — and with {} by the completeness test and by the SDK
+  // fallback, so it must not depend on any argument being there. One short
+  // clause, no trailing period.
+  label(args: Record<string, any>): string;
+  // A read leaves a trace line; a write must come back with a receipt.
+  effect: ToolEffect;
+  // The gate a write goes through. Reads leave it unset.
+  gate?: ToolGate;
   execute(args: Record<string, any>): Promise<string | ToolResult>;
 }
 
 export interface AgentToolStart {
   name: string;
   args: Record<string, any>;
+  // `tool.label(args)`, computed once here so no surface has to keep its own
+  // table of tool names to say what is running.
+  label: string;
 }
 
 export interface AgentToolEnd {
   name: string;
-  // The tool's returned/errored text, truncated for a compact UI trace.
-  resultPreview: string;
   isError: boolean;
+  // What the write did, when the tool reported one.
+  receipt?: Receipt;
+  // The sentence the tool threw, when it failed: what the reader is shown in
+  // place of the line that was running.
+  error?: string;
 }
 
 export interface AgentCallbacks {

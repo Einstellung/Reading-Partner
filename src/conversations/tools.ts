@@ -68,6 +68,8 @@ export function buildConversationTools(
   return [
     {
       name: "search_conversations",
+      label: (args) => args.query ? `Searching past conversations for “${args.query}”` : "Searching past conversations",
+      effect: "read",
       description:
         "Keyword-search everything you and this reader have already said to each other — " +
         "conversations over books, over retells and talks, and over the daily briefing. " +
@@ -108,6 +110,8 @@ export function buildConversationTools(
     },
     {
       name: "read_conversation",
+      label: () => "Reading back a conversation",
+      effect: "read",
       description:
         "Read a stretch of one past conversation in full, by the fileKey and threadId a " +
         "search_conversations hit gave you. A thread id alone is not enough: the same id " +

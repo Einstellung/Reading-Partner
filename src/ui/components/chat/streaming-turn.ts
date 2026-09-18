@@ -5,7 +5,6 @@
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { AgentToolEnd, AgentToolStart } from "../../../legion/execute/contract";
 import { holdsNoAnswer } from "../../../ai/turn-rows";
-import { toolStatusLabel } from "../../../reading/context";
 import type { ThreadMessage } from "./types";
 
 // Only the AI row at `ts` is rewritten; a user row that happens to share the
@@ -38,17 +37,20 @@ export function withToolStart(m: ThreadMessage, info: AgentToolStart): ThreadMes
   return {
     ...m,
     text: "",
-    tools: appendRunningTool(m.tools, info.name, toolStatusLabel(info.name, info.args)),
+    tools: appendRunningTool(m.tools, info.name, info.label),
   };
 }
 
 export function withToolEnd(m: ThreadMessage, info: AgentToolEnd): ThreadMessage {
-  const tools = resolveToolStatus(m.tools, info.name, info.isError);
+  const tools = resolveToolStatus(m.tools, info.name, info.isError, {
+    ...(info.receipt ? { receipt: info.receipt } : {}),
+    ...(info.error ? { error: info.error } : {}),
+  });
   return tools ? { ...m, tools } : m;
 }
 
-// The finished answer: the streaming flags go, and of the tool trace only what
-// failed stays on screen.
+// The finished answer: the streaming flags go and the tool trace stays, settled
+// — a grey line saying what was done, red where something failed.
 export function answeredRow(
   m: ThreadMessage,
   full: string,
@@ -59,7 +61,7 @@ export function answeredRow(
     role: "ai",
     text: full,
     ts,
-    tools: (m.tools ?? []).filter((t) => t.state === "error"),
+    tools: [...(m.tools ?? [])],
     ...(notice ? { notice } : {}),
   };
 }
