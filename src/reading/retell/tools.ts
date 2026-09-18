@@ -41,6 +41,9 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
   return [
     {
       name: "record_chapter_decision",
+      label: (args) => args.chapter === undefined ? "Settling a chapter" : `Settling chapter ${args.chapter}`,
+      effect: "write",
+      gate: "card",
       description:
         "Record what this chapter contributes to the retell, after discussing it with " +
         "the reader. Call once per chapter, when that chapter's exchange is finished; " +
@@ -66,7 +69,10 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
         const chapter = Math.round(Number(args.chapter));
         const target = find(chapter);
         if (!target) {
-          return `No chapter ${args.chapter} in this book's skeleton. Chapters: ${chapterList(deps.chapters)}.`;
+          return {
+            text: `No chapter ${args.chapter} in this book's skeleton. Chapters: ${chapterList(deps.chapters)}.`,
+            receipt: null,
+          };
         }
         const points = Array.isArray(args.points)
           ? (args.points as unknown[]).map((p) => String(p).trim()).filter(Boolean)
@@ -86,13 +92,21 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
         const { updatedAt, ...rest } = decision;
         void updatedAt;
         deps.onCard?.({ kind: "retell-decision", ...rest });
-        return decision.include
-          ? `Recorded chapter ${chapter} as going in the retell, with ${points.length} point(s). The reader can see the entry.`
-          : `Recorded chapter ${chapter} as cut from the retell. The reader can see the entry.`;
+        return {
+          text: decision.include
+            ? `Recorded chapter ${chapter} as going in the retell, with ${points.length} point(s). The reader can see the entry.`
+            : `Recorded chapter ${chapter} as cut from the retell. The reader can see the entry.`,
+          receipt: {
+            label: decision.include ? "Kept a chapter" : "Cut a chapter",
+            summary: `${chapter}. ${target.title}`,
+          },
+        };
       },
     },
     {
       name: "read_chapter_note",
+      label: (args) => args.chapter === undefined ? "Reading a chapter note" : `Reading the note on chapter ${args.chapter}`,
+      effect: "read",
       description:
         "Read the note the reader's notes pass wrote for a chapter of this book, by " +
         "chapter number. Background only — it is not the reader talking.",
@@ -112,6 +126,8 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
     },
     {
       name: "read_retell_outline",
+      label: () => "Reading the retell outline",
+      effect: "read",
       description:
         "Read the whole retell outline back: every chapter settled so far, what each " +
         "one contributes, which were cut, and which are not settled yet. Use it when " +

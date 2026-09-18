@@ -59,6 +59,8 @@ export function buildTranslateTools(deps: TranslateToolDeps): AgentTool[] {
   return [
     {
       name: "translate_document",
+      label: (args) => args.document ? `Translating “${args.document}”` : "Translating this document",
+      effect: "write",
       description:
         "Translate a web article on the shelf into Chinese. The result is a " +
         "bilingual document — every paragraph followed by its translation — and " +
@@ -80,29 +82,46 @@ export function buildTranslateTools(deps: TranslateToolDeps): AgentTool[] {
         const query = args.document ? String(args.document).trim() : undefined;
         const target = await deps.find(query);
         if (!target) {
-          return query
-            ? `There is no document called "${query}" here.`
-            : "There is no document open to translate.";
+          return {
+            text: query
+              ? `There is no document called "${query}" here.`
+              : "There is no document open to translate.",
+            receipt: null,
+          };
         }
         if (!target.article) {
-          return (
-            `"${target.title}" is not a web article, so it cannot be translated ` +
-            `in the app — that works on a page that was ingested from a URL. A PDF ` +
-            `paper or a book has to be read in its own language for now.`
-          );
+          return {
+            text:
+              `"${target.title}" is not a web article, so it cannot be translated ` +
+              `in the app — that works on a page that was ingested from a URL. A PDF ` +
+              `paper or a book has to be read in its own language for now.`,
+            receipt: null,
+          };
         }
         if (await deps.busy()) {
-          return "A translation is already running. It has to finish before another starts.";
+          return {
+            text: "A translation is already running. It has to finish before another starts.",
+            receipt: null,
+          };
         }
         const started = await deps.start(target);
         if (!started.ok) {
-          return `"${target.title}" could not be handed over: ${started.reason}`;
+          return {
+            text: `"${target.title}" could not be handed over: ${started.reason}`,
+            receipt: null,
+          };
         }
-        return (
-          `Started translating "${target.title}" (run ${started.runId}). It runs in the ` +
-          `background and the result replaces this document on the shelf; I will say ` +
-          `when it is done.`
-        );
+        return {
+          text:
+            `Started translating "${target.title}" (run ${started.runId}). It runs in the ` +
+            `background and the result replaces this document on the shelf; I will say ` +
+            `when it is done.`,
+          receipt: {
+            label: "Started a translation",
+            summary: target.title,
+            link: { kind: "run", id: started.runId },
+          },
+        };
       },
     },
   ];

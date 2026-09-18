@@ -71,6 +71,8 @@ function parseLimit(raw: unknown): number | undefined {
 export function buildFindPaperTool(fetchDeps: CitationDeps): AgentTool {
   return {
     name: "find_paper",
+    label: (args) => args.paper ? `Looking up “${args.paper}”` : "Looking up a paper",
+    effect: "read",
     description:
       "Identify one specific paper you already know of — a citation from the book's " +
       "endnotes or bibliography, a title someone mentioned, a DOI or arXiv id — and " +
@@ -111,6 +113,8 @@ export function buildWalkCitationsTool(deps: CitationToolDeps): AgentTool {
   const { canIngest, ...fetchDeps } = deps;
   return {
     name: "walk_citations",
+    label: (args) => args.paper ? `Walking the citations of “${args.paper}”` : "Walking the citations",
+    effect: "read",
     description:
       "Follow the citation graph one step out from a paper. direction \"citations\" " +
       "(forward) returns papers that cite it, which is how you find work published " +

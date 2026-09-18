@@ -6,6 +6,7 @@ import { localDate } from "../../src/memory/observations/files";
 import { createStatementStore, STATEMENTS_FILE } from "../../src/memory/statements/store";
 import { buildStatementTools, latestReaderMessage } from "../../src/memory/statements/tools";
 import type { AgentTool } from "../../src/legion/execute/turn";
+import { toolText } from "../support/tool-text";
 
 const THREAD = "11111111-2222-3333-4444-555555555555";
 const TS = new Date("2026-09-05T02:30:00Z").getTime();
@@ -59,7 +60,7 @@ test("the reader's own words become a statement anchored on the message they sai
   const tool = only(buildStatementTools({ store, message: MESSAGE, threadId: THREAD }));
   expect(tool.name).toBe("statement_write");
 
-  const result = await tool.execute({ kind: "profile", text: "  No diagrams; give the derivation  " });
+  const result = toolText(await tool.execute({ kind: "profile", text: "  No diagrams; give the derivation  " }));
 
   const [s] = read();
   expect(s.kind).toBe("profile");
@@ -78,8 +79,8 @@ test("a concern keeps the interval it was given; a profile statement does not", 
   const { store, read } = makeStore();
   const tool = only(buildStatementTools({ store, message: MESSAGE, threadId: THREAD }));
 
-  await tool.execute({ kind: "concern", text: "Watching the KV-cache papers", expectedIntervalDays: 7 });
-  await tool.execute({ kind: "profile", text: "Reads the maths", expectedIntervalDays: 7 });
+  toolText(await tool.execute({ kind: "concern", text: "Watching the KV-cache papers", expectedIntervalDays: 7 }));
+  toolText(await tool.execute({ kind: "profile", text: "Reads the maths", expectedIntervalDays: 7 }));
 
   const [concern, profile] = read();
   expect(concern.expectedIntervalDays).toBe(7);
@@ -90,10 +91,10 @@ test("supersedes links the new statement to the old and keeps the old one", asyn
   const { store, read } = makeStore();
   const tool = only(buildStatementTools({ store, message: MESSAGE, threadId: THREAD }));
 
-  await tool.execute({ kind: "profile", text: "Wants diagrams" });
+  toolText(await tool.execute({ kind: "profile", text: "Wants diagrams" }));
   const old = read()[0];
   const result = String(
-    await tool.execute({ kind: "profile", text: "Stop drawing diagrams", supersedes: old.id }),
+    toolText(await tool.execute({ kind: "profile", text: "Stop drawing diagrams", supersedes: old.id })),
   );
 
   const all = read();
@@ -110,7 +111,7 @@ test("a supersedes that names nothing writes nothing and says why", async () => 
   const tool = only(buildStatementTools({ store, message: MESSAGE, threadId: THREAD }));
 
   const result = String(
-    await tool.execute({ kind: "profile", text: "Stop drawing diagrams", supersedes: "s-nope" }),
+    toolText(await tool.execute({ kind: "profile", text: "Stop drawing diagrams", supersedes: "s-nope" })),
   );
 
   expect(read()).toEqual([]);
@@ -122,13 +123,13 @@ test("a statement already superseded cannot be superseded again", async () => {
   const { store, read } = makeStore();
   const tool = only(buildStatementTools({ store, message: MESSAGE, threadId: THREAD }));
 
-  await tool.execute({ kind: "profile", text: "Wants diagrams" });
+  toolText(await tool.execute({ kind: "profile", text: "Wants diagrams" }));
   const first = read()[0].id;
-  await tool.execute({ kind: "profile", text: "Stop drawing diagrams", supersedes: first });
+  toolText(await tool.execute({ kind: "profile", text: "Stop drawing diagrams", supersedes: first }));
   const second = read()[1].id;
 
   const result = String(
-    await tool.execute({ kind: "profile", text: "Diagrams are fine again", supersedes: first }),
+    toolText(await tool.execute({ kind: "profile", text: "Diagrams are fine again", supersedes: first })),
   );
 
   expect(read()).toHaveLength(2);

@@ -20,6 +20,7 @@ import { BOOK_PAGE_LABEL, formatPages } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
 import { MAX_CHAPTER_PAGES } from "./inline";
 import type { TableChapter } from "../chapters";
+import { pageRangeLabel } from "../../ai/tool-labels";
 
 // The page-range form's cap. Four times read_pages', because the reader asking
 // for "the part about attention" on a book with no chapter table is asking for
@@ -59,6 +60,8 @@ export function buildReadChapterTool(deps: ReadChapterDeps): AgentTool {
   if (chapters && chapters.length > 0) {
     return {
       name: "read_chapter",
+      label: (args) => args.chapter === undefined ? "Reading a chapter" : `Reading chapter ${args.chapter}`,
+      effect: "read",
       description:
         "Read one whole chapter of the book the reader is in, by the chapter number " +
         `printed in the book. Returns every page of it with its page anchors. ${ONLY_WHEN_NAMED}`,
@@ -89,6 +92,8 @@ export function buildReadChapterTool(deps: ReadChapterDeps): AgentTool {
 
   return {
     name: "read_chapter",
+    label: (args) => pageRangeLabel(args),
+    effect: "read",
     description:
       "Read a chapter-sized stretch of the book the reader is in: a 1-based, inclusive " +
       `page range of up to ${READ_CHAPTER_MAX_PAGES} pages, returned with its page anchors. ` +

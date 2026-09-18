@@ -42,15 +42,30 @@ import {
 import { reportStoreError } from "./store-errors";
 
 // A durable message part (the persisted projection of the UI's ChatPart, in
-// src/ui/components/chatParts.ts). Only durable parts reach disk: text, and a card
-// whose kind is worth keeping (the confirm card, the briefing-ready card). The
-// tool trace and the transient briefing progress/failure cards are never stored.
-// The card payload is kept opaque here so persistence does not depend on the info
-// domain; the UI casts it back to its payload type on rehydrate.
+// src/ui/components/chat/chatParts.ts). Only durable parts reach disk: text, a
+// card whose kind is worth keeping (the confirm card, the briefing-ready card),
+// and the settled tool trace. The transient briefing progress/failure cards are
+// never stored. The card payload is kept opaque here so persistence does not
+// depend on the info domain; the UI casts it back to its payload type on
+// rehydrate.
 export type PersistedCardPayload = { kind: string } & Record<string, unknown>;
+
+// One settled call in a stored trace. Only what the reader is shown is kept:
+// a running row belongs to a turn that is over, and is dropped on the way to
+// disk. The receipt rides along unread for now — the part that draws it comes
+// next — so a reopened thread still knows what the turn wrote.
+export interface PersistedToolStatus {
+  name: string;
+  label: string;
+  state: "done" | "error";
+  receipt?: { label: string; summary: string; link?: Record<string, unknown> };
+  error?: string;
+}
+
 export type PersistedPart =
   | { type: "text"; text: string }
-  | { type: "card"; id: string; card: PersistedCardPayload };
+  | { type: "card"; id: string; card: PersistedCardPayload }
+  | { type: "trace"; tools: PersistedToolStatus[] };
 
 // A message's own id, minted when it is appended. `t-` for turn: observation
 // ids are `m-<hex>` and the two travel together in an observation's `messages:`

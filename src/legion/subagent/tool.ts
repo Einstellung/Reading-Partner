@@ -47,6 +47,11 @@ export function subagentTool(definition: SubagentDefinition, deps: SubagentToolD
   }
   return {
     name: definition.name,
+    // The definition's own line, the same one a progress update keeps alive in
+    // the trace (reading/papers/research-agent.ts). A run reads nothing of the
+    // app's and writes nothing of it either: what it comes back with is a brief.
+    label: () => definition.label,
+    effect: "read",
     description: `${definition.description.trim()}\n\n${DELEGATION_NOTE}`,
     parameters: Type.Object({
       task: Type.String({

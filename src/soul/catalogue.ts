@@ -456,6 +456,8 @@ export function buildCatalogueTools(io: CatalogueIo = appCatalogueIo): AgentTool
   return [
     {
       name: "list_palace",
+      label: () => "Looking over the palace",
+      effect: "read",
       description:
         "What this reader keeps in the app: every kind of thing — books, topics, " +
         "conversations, kept articles, retellings, what the memory holds — with a line " +
@@ -466,6 +468,8 @@ export function buildCatalogueTools(io: CatalogueIo = appCatalogueIo): AgentTool
     },
     {
       name: "list_kind",
+      label: (args) => args.kind ? `Listing the ${args.kind}` : "Listing what is in the palace",
+      effect: "read",
       description:
         "The entries of one kind from list_palace — ids and names, newest first — so you " +
         "can name a book, a topic or a kept article the reader has. Contents are not " +

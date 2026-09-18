@@ -101,6 +101,9 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
   return [
     {
       name: "set_talk_spine",
+      label: () => "Setting the spine of the talk",
+      effect: "write",
+      gate: "card",
       description:
         "Write the layer of the talk that holds for all of it: the through-line, the " +
         "ribs under it, who is listening, what holds in every segment, what the talk " +
@@ -142,16 +145,25 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
         if (Array.isArray(args.conventions)) patch.conventions = strings(args.conventions);
         if (Array.isArray(args.excluded)) patch.excluded = strings(args.excluded);
         if (Object.keys(patch).length === 0) {
-          return "No field was given, so nothing was written. Send the ones you want to change.";
+          return {
+            text: "No field was given, so nothing was written. Send the ones you want to change.",
+            receipt: null,
+          };
         }
         const next = await deps.editOutline((o) => setSpine(o, patch, now()));
-        if (!next) return NO_OUTLINE;
+        if (!next) return { text: NO_OUTLINE, receipt: null };
         deps.onCard?.({ kind: "talk-arrangement", change: "spine", spine: next.spine });
-        return `Written: ${Object.keys(patch).join(", ")}. The reader can see the entry.`;
+        return {
+          text: `Written: ${Object.keys(patch).join(", ")}. The reader can see the entry.`,
+          receipt: { label: "Set the spine of the talk", summary: Object.keys(patch).join(", ") },
+        };
       },
     },
     {
       name: "write_talk_segment",
+      label: () => "Writing a block of the talk",
+      effect: "write",
+      gate: "card",
       description:
         "Write one block of the note — one stretch of the talk, as the reader will see " +
         "it while saying it. Omit `id` to add a block, give it to rewrite one; a " +
@@ -206,16 +218,25 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
             after.segments.find((s) => s.id === edit.id);
           return after;
         });
-        if (!next || !written) return NO_OUTLINE;
+        if (!next || !written) return { text: NO_OUTLINE, receipt: null };
         const seg = written;
         const card = segmentCard(next, seg.id);
         if (card) deps.onCard?.(card);
         const place = next.segments.findIndex((s) => s.id === seg.id) + 1;
-        return `${known ? "Rewrote" : "Added"} block ${place} of ${next.segments.length} (id: ${seg.id}). The reader can see the entry.`;
+        return {
+          text: `${known ? "Rewrote" : "Added"} block ${place} of ${next.segments.length} (id: ${seg.id}). The reader can see the entry.`,
+          receipt: {
+            label: known ? "Rewrote a block of the talk" : "Added a block to the talk",
+            summary: segmentLabel(seg),
+          },
+        };
       },
     },
     {
       name: "move_talk_segment",
+      label: () => "Moving a block of the talk",
+      effect: "write",
+      gate: "card",
       description:
         "Move a block to another place in the note. The order of the blocks is the " +
         "order the talk is given in; nothing else says it.",
@@ -228,16 +249,20 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
       execute: async (args) => {
         const id = String(args.id ?? "").trim();
         const to = toIndex(args.position);
-        if (!id || to === undefined) return "A block id and a position are both needed.";
+        if (!id || to === undefined) {
+          return { text: "A block id and a position are both needed.", receipt: null };
+        }
         let title = "";
         const next = await deps.editOutline((o) => {
           const seg = o.segments.find((s) => s.id === id);
           title = seg ? segmentLabel(seg) : "";
           return moveSegment(o, id, to, now());
         });
-        if (!next) return NO_OUTLINE;
+        if (!next) return { text: NO_OUTLINE, receipt: null };
         const place = next.segments.findIndex((s) => s.id === id) + 1;
-        if (place === 0) return `There is no block ${id} in the talk. Read it back first.`;
+        if (place === 0) {
+          return { text: `There is no block ${id} in the talk. Read it back first.`, receipt: null };
+        }
         deps.onCard?.({
           kind: "talk-arrangement",
           change: "moved",
@@ -245,11 +270,17 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
           position: place,
           total: next.segments.length,
         });
-        return `"${title}" is now block ${place} of ${next.segments.length}. The reader can see the entry.`;
+        return {
+          text: `"${title}" is now block ${place} of ${next.segments.length}. The reader can see the entry.`,
+          receipt: { label: "Moved a block of the talk", summary: `${title} — now block ${place}` },
+        };
       },
     },
     {
       name: "remove_talk_segment",
+      label: () => "Dropping a block of the talk",
+      effect: "write",
+      gate: "card",
       description:
         "Drop a block from the note. For a block the reader has decided against — " +
         "rewriting one is write_talk_segment with its id.",
@@ -258,14 +289,16 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
       }),
       execute: async (args) => {
         const id = String(args.id ?? "").trim();
-        if (!id) return "A block id is needed.";
+        if (!id) return { text: "A block id is needed.", receipt: null };
         let dropped: TalkSegment | undefined;
         const next = await deps.editOutline((o) => {
           dropped = o.segments.find((s) => s.id === id);
           return removeSegment(o, id, now());
         });
-        if (!next) return NO_OUTLINE;
-        if (!dropped) return `There is no block ${id} in the talk. Read it back first.`;
+        if (!next) return { text: NO_OUTLINE, receipt: null };
+        if (!dropped) {
+          return { text: `There is no block ${id} in the talk. Read it back first.`, receipt: null };
+        }
         const title = segmentLabel(dropped);
         deps.onCard?.({
           kind: "talk-arrangement",
@@ -273,11 +306,16 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
           title,
           total: next.segments.length,
         });
-        return `Dropped "${title}". The note now has ${next.segments.length} block(s). The reader can see the entry.`;
+        return {
+          text: `Dropped "${title}". The note now has ${next.segments.length} block(s). The reader can see the entry.`,
+          receipt: { label: "Dropped a block of the talk", summary: title },
+        };
       },
     },
     {
       name: "read_talk_outline",
+      label: () => "Reading the talk outline",
+      effect: "read",
       description:
         "Read the talk back as it now stands: the spine, and every block of the note " +
         "in order, whole, with its id. Read-only. Use it before moving or rewriting a " +

@@ -9,6 +9,7 @@ import {
   type TranslateToolDeps,
 } from "../../../src/reading/translate/tool";
 import { fileToReopen, type TranslateView } from "../../../src/reading/translate/book-run";
+import { toolText } from "../../support/tool-text";
 
 const ARTICLE: TranslateTarget = {
   bookId: "b1",
@@ -34,7 +35,7 @@ function tool(over: Partial<TranslateToolDeps> = {}): {
   const [t] = buildTranslateTools(deps);
   return {
     run: async (document) =>
-      String(await t.execute(document === undefined ? {} : { document })),
+      String(toolText(await t.execute(document === undefined ? {} : { document }))),
     started,
   };
 }

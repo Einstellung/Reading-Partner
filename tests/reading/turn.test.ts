@@ -34,6 +34,7 @@ import {
 import { installAppData } from "../support/appdata-fake";
 import { registerWorker } from "../../src/legion/execute/worker";
 import type { Run } from "../../src/legion/run";
+import { toolText } from "../support/tool-text";
 
 // An empty in-memory AppData, so every optional read misses (the overview note,
 // the observation index) and the turn treats them as "not there yet" — and so
@@ -376,8 +377,8 @@ test("the mount gate does not read the records; a tool call reads them once", as
   expect(gates).toBe(1);
   expect(reads).toBe(0);
   const list = turn!.tools.find((t) => t.name === "list_saved_articles")!;
-  expect((await list.execute({})) as string).toContain("A kept piece");
-  await list.execute({ query: "feed" });
+  expect((toolText(await list.execute({}))) as string).toContain("A kept piece");
+  toolText(await list.execute({ query: "feed" }));
   expect(reads).toBe(1);
 });
 
@@ -397,7 +398,7 @@ test("add_saved_article queues the kept text and caches it under the slug it got
     }),
   );
   const add = turn!.tools.find((t) => t.name === "add_saved_article")!;
-  const out = (await add.execute({ id: "https://feed.test/piece" })) as string;
+  const out = (toolText(await add.execute({ id: "https://feed.test/piece" }))) as string;
 
   expect(queued.length).toBe(1);
   expect(queued[0].kind).toBe("article");
@@ -1478,10 +1479,10 @@ test("delegating from a book names the book, the thread and the page", async () 
 
   const turn = await buildReadingTurn(input());
   const delegate = turn!.tools.find((t) => t.name === "delegate")!;
-  const said = await delegate.execute({
+  const said = toolText(await delegate.execute({
     kind: "fake-literature",
     task: "what has been published on inline caches since 2020",
-  });
+  }));
 
   // It came back with the run still going.
   expect(said).toContain("later");

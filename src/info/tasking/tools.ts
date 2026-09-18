@@ -100,6 +100,8 @@ export function cableLine(cable: Cable): string {
 function buildSearchCablesTool(io: Stores): AgentTool {
   return {
     name: "search_cables",
+    label: (args) => args.query ? `Searching the cables for “${args.query}”` : "Searching the cables",
+    effect: "read",
     description:
       "Search the cables this device holds — every item the bureau's own collection screened " +
       "and filed, for the last thirty days. Answers with each cable's id, title, source, the " +
@@ -154,6 +156,8 @@ function buildSearchCablesTool(io: Stores): AgentTool {
 function buildReadCableTool(io: Stores): AgentTool {
   return {
     name: "read_cable",
+    label: () => "Reading a cable",
+    effect: "read",
     description:
       "Read the body of one cable by its id, as the collection obtained it. Answers with the " +
       "title, source, date and URL, then the text. Some sources only ever give a summary and " +
@@ -219,6 +223,8 @@ function buildReadCableTool(io: Stores): AgentTool {
 function buildReadPictureTool(io: Stores): AgentTool {
   return {
     name: "read_picture",
+    label: (args) => args.lab ? `Reading the picture for ${args.lab}` : "Reading the situation picture",
+    effect: "read",
     description:
       "Read where one research room stands: what normal looks like there, what it watches, the " +
       "judgements it has made and what is still open. Called with no room it lists the open " +

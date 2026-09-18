@@ -11,6 +11,7 @@ import { requalifyNoteAnchors } from "../anchors";
 import { parseNote, stripModelAsides } from "./notes";
 import { paperFulltextHash, readPrepNote } from "./store";
 import type { PrepPaper, PrepState } from "./types";
+import { pageRangeLabel } from "../../../ai/tool-labels";
 
 function slugList(states: readonly PrepState[]): string {
   return states.flatMap((s) => s.papers.map((p) => p.slug)).join(", ") || "(none)";
@@ -55,6 +56,8 @@ export function buildClassroomTools(getStates: () => readonly PrepState[]): Agen
   return [
     {
       name: "read_paper",
+      label: (args) => pageRangeLabel(args),
+      effect: "read",
       description:
         "Read a 1-based, inclusive page range from a pre-read reference paper's " +
         "full text. Use the paper's slug from the prep notes (at most 10 pages per call).",
@@ -94,6 +97,8 @@ export function buildClassroomTools(getStates: () => readonly PrepState[]): Agen
     },
     {
       name: "read_note",
+      label: () => "Reading the note on a paper",
+      effect: "read",
       description: "Read the whole prep note of a pre-read reference paper, by slug.",
       parameters: Type.Object({
         slug: Type.String({ description: "The paper's slug." }),

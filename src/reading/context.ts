@@ -17,6 +17,7 @@ import {
 } from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";
 import { PAGE_WINDOW_RADIUS } from "./figures/page-window";
+import { pageRangeLabel } from "../ai/tool-labels";
 
 // Engine annotation page (0-based position.pageIndex) -> 1-based page for the
 // full-text helpers. Defined with the annotation shape it reads so the units
@@ -135,33 +136,6 @@ export function markedPagesSection(
   ].join("\n");
 }
 
-// Human phrase for a running/failed tool call, shown in the chat trace.
-export function toolStatusLabel(name: string, args: Record<string, any>): string {
-  switch (name) {
-    case "read_pages": {
-      const from = Number(args.from);
-      const to = Number(args.to);
-      const lo = Math.min(from, to);
-      const hi = Math.max(from, to);
-      return lo === hi ? `Reading page ${lo}` : `Reading pages ${lo}–${hi}`;
-    }
-    case "search_topic":
-      return `Searching the topic for “${args.query}”`;
-    case "read_annotations":
-      return `Reading your notes on ${args.material}`;
-    case "find_paper":
-      return `Looking up “${args.paper}”`;
-    case "observation_search":
-      return `Searching its observations for “${args.query}”`;
-    case "observation_read":
-      return "Reading an observation";
-    case "observation_update":
-      return args.action === "delete" ? "Dropping an observation" : "Updating an observation";
-    default:
-      return `Running ${name}`;
-  }
-}
-
 // --- tool result formatting (pure) ---
 
 // Match a material by label: exact (case-insensitive) first, then substring.
@@ -221,6 +195,8 @@ export function buildReadingTools(ctx: {
   if (currentFulltext?.status === "ok") {
     tools.push({
       name: "read_pages",
+      label: (args) => pageRangeLabel(args),
+      effect: "read",
       description:
         "Read a page range from the book the user is currently in. Pages are 1-based and inclusive; at most " +
         `${MAX_PAGES} pages per call.`,
@@ -243,6 +219,8 @@ export function buildReadingTools(ctx: {
   if (materials.some((m) => m.fulltext?.status === "ok")) {
     tools.push({
       name: "search_topic",
+      label: (args) => args.query ? `Searching the topic for “${args.query}”` : "Searching the topic",
+      effect: "read",
       description:
         "Keyword-search the full text of every material in this topic. Returns ranked snippets, each tagged with its book and page.",
       parameters: Type.Object({
@@ -255,6 +233,8 @@ export function buildReadingTools(ctx: {
   if (materials.some((m) => m.annotations.length > 0)) {
     tools.push({
       name: "read_annotations",
+      label: (args) => args.material ? `Reading your notes on ${args.material}` : "Reading your notes",
+      effect: "read",
       description:
         "List the user's highlights, underlines, and notes on one named topic material. Use the material's title as shown in the topic booklist.",
       parameters: Type.Object({

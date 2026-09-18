@@ -8,6 +8,7 @@ import { buildDelegateTools, DELEGATE_TOOL } from "../../src/soul";
 import type { DelegateInput, Delegated } from "../../src/legion/execute/worker";
 import type { Run } from "../../src/legion/run";
 import type { BoxOrigin } from "../../src/box";
+import { toolText } from "../support/tool-text";
 
 const ORIGIN: BoxOrigin = {
   place: "book",
@@ -61,7 +62,7 @@ test("the tool is there whatever this device can run", () => {
 
 test("the brief goes to a file and the run carries the path, never the text", async () => {
   const { tool: t, briefs, seen } = tool();
-  await t.execute({ kind: "research-literature", task: "what has been published since 2020" });
+  toolText(await t.execute({ kind: "research-literature", task: "what has been published since 2020" }));
 
   expect(seen.length).toBe(1);
   const [path] = [...briefs.keys()];
@@ -71,20 +72,20 @@ test("the brief goes to a file and the run carries the path, never the text", as
 
 test("where the answer goes is the soul's to fill in, as the origin's JSON", async () => {
   const { tool: t, seen } = tool();
-  await t.execute({ kind: "research-literature", task: "anything" });
+  toolText(await t.execute({ kind: "research-literature", task: "anything" }));
   expect(JSON.parse(seen[0]!.deliverTo!)).toEqual(ORIGIN);
   expect(seen[0]!.delegator).toEqual({ kind: "soul" });
 });
 
 test("a turn held nowhere in particular delegates without a place to answer in", async () => {
   const { tool: t, seen } = tool({ origin: undefined });
-  await t.execute({ kind: "research-literature", task: "anything" });
+  toolText(await t.execute({ kind: "research-literature", task: "anything" }));
   expect(seen[0]!.deliverTo).toBeUndefined();
 });
 
 test("what comes back is the run id and the fact that the answer is not in this turn", async () => {
   const { tool: t } = tool();
-  const said = await t.execute({ kind: "research-literature", task: "anything" });
+  const said = toolText(await t.execute({ kind: "research-literature", task: "anything" }));
   expect(said).toContain("r-1");
   expect(said).toContain("later");
 });

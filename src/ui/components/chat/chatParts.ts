@@ -21,7 +21,7 @@ import type {
   ThreadMessage as StoredMessage,
 } from "../../../platform/app/threads";
 import type { ThreadMessage } from "./types";
-import type { ToolStatus } from "../../../ai/tool-status";
+import { persistedTrace, type ToolStatus } from "../../../ai/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
 // (info/boxes/cards.ts, reading/retell/cards.ts, reading/aside.ts); this
@@ -220,6 +220,13 @@ export function patchCardPayload(
   return found ? next : messages;
 }
 
+// Project a settled tool trace into a durable part. A trace whose calls are all
+// still running belongs to a turn that never landed, and is not stored.
+export function toPersistedTracePart(tools: readonly ToolStatus[]): PersistedPart | null {
+  const settled = persistedTrace(tools);
+  return settled ? { type: "trace", tools: settled } : null;
+}
+
 // Project a card into a durable part. Persistence keeps cards opaque (an info
 // interface, not a Record), so the payload is widened through unknown here.
 export function toPersistedCardPart(cardId: string, payload: CardPayload): PersistedPart {
@@ -229,11 +236,13 @@ export function toPersistedCardPart(cardId: string, payload: CardPayload): Persi
 // Map a persisted message's parts back to live render parts on thread reopen, so
 // a stored card is re-rendered through the registry by its payload kind.
 export function rehydrateParts(parts: PersistedPart[]): ChatPart[] {
-  return parts.map((p) =>
-    p.type === "card"
-      ? { type: "card", id: p.id, card: p.card as unknown as CardPayload }
-      : { type: "text", text: p.text },
-  );
+  return parts.map((p) => {
+    if (p.type === "card") return { type: "card", id: p.id, card: p.card as unknown as CardPayload };
+    if (p.type === "trace") {
+      return { type: "tool-trace", tools: p.tools as unknown as ToolStatus[] };
+    }
+    return { type: "text", text: p.text };
+  });
 }
 
 // Persisted thread message -> live UI message on reopen. A stored card message

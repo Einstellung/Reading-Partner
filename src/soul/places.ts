@@ -48,6 +48,8 @@ export function buildPlaceTools(): AgentTool[] {
   return [
     {
       name: GO_TO_TOOL,
+      label: (args) => args.place ? `Going to ${args.place}` : "Going somewhere in the app",
+      effect: "write",
       description: placesDescription(mounted),
       parameters: Type.Object({
         place: Type.String({ description: `Where to go: one of ${ids(mounted)}.` }),
@@ -57,10 +59,16 @@ export function buildPlaceTools(): AgentTool[] {
         const places = listPlaces();
         const place = places.find((p) => p.id === asked);
         if (!place) {
-          return `No place named "${asked}"; the places are: ${ids(places)}.`;
+          return {
+            text: `No place named "${asked}"; the places are: ${ids(places)}.`,
+            receipt: null,
+          };
         }
         await place.go();
-        return `Went to ${place.id}.`;
+        return {
+          text: `Went to ${place.id}.`,
+          receipt: { label: "Went somewhere", summary: place.id },
+        };
       },
     },
   ];

@@ -57,6 +57,8 @@ export function buildSupplementTools(deps: SupplementToolDeps): AgentTool[] {
   return [
     {
       name: "remove_supplement",
+      label: (args) => args.title ? `Removing “${args.title}”` : "Removing a supplement",
+      effect: "write",
       description:
         "Take one of this book's supplements away: it leaves the Outline, the " +
         "library and this book's prep list, with its marks and side conversations. " +
@@ -68,17 +70,24 @@ export function buildSupplementTools(deps: SupplementToolDeps): AgentTool[] {
       execute: async (args) => {
         const query = String(args.title ?? "").trim();
         const supplements = await deps.list();
-        if (supplements.length === 0) return "This book has no supplements to remove.";
+        if (supplements.length === 0) {
+          return { text: "This book has no supplements to remove.", receipt: null };
+        }
         const found = matchSupplement(query, supplements);
         if (!found) {
           const titles = supplements.map((s) => `"${s.title}"`).join(", ");
-          return `There is no supplement called "${query}" here. This book has: ${titles}.`;
+          return {
+            text: `There is no supplement called "${query}" here. This book has: ${titles}.`,
+            receipt: null,
+          };
         }
         await deps.remove(found);
-        return (
-          `Removed "${found.title}". It is off the Outline and out of the library, and ` +
-          `you can no longer read it.`
-        );
+        return {
+          text:
+            `Removed "${found.title}". It is off the Outline and out of the library, and ` +
+            `you can no longer read it.`,
+          receipt: { label: "Removed a supplement", summary: found.title },
+        };
       },
     },
   ];

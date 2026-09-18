@@ -50,7 +50,9 @@ import {
   type RowChange,
 } from "../call-state";
 import { joinRoundTexts, type TurnPhase } from "../../ai/turn-rows";
-import { annotationPage, toolStatusLabel } from "../context";
+import { annotationPage } from "../context";
+import { persistedTrace, type ToolStatus } from "../../ai/tool-status";
+import type { AgentToolEnd, AgentToolStart } from "../../legion/execute/contract";
 import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
@@ -631,12 +633,21 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       }
     });
 
-    const onToolStart = (info: { name: string; args: Record<string, any> }, ts: number) => {
+    const onToolStart = (info: AgentToolStart, ts: number) => {
       phase = "tool";
-      write({ kind: "tool-start", name: info.name, label: toolStatusLabel(info.name, info.args) }, ts);
+      write({ kind: "tool-start", name: info.name, label: info.label }, ts);
     };
-    const onToolEnd = (info: { name: string; isError: boolean }, ts: number) =>
-      write({ kind: "tool-end", name: info.name, isError: info.isError }, ts);
+    const onToolEnd = (info: AgentToolEnd, ts: number) =>
+      write(
+        {
+          kind: "tool-end",
+          name: info.name,
+          isError: info.isError,
+          ...(info.receipt ? { receipt: info.receipt } : {}),
+          ...(info.error ? { error: info.error } : {}),
+        },
+        ts,
+      );
 
     // The mark this conversation hangs off, and where a card pointing back at it
     // would land. Both read now rather than when the turn settles: the marks and
@@ -805,11 +816,18 @@ export function useCall<M extends CallRow, I extends StagedImage>(
             // next turn as if the model had written it, and it would then describe a
             // turn whose assembly no longer applies.
             write({ kind: "answer", text: tail, ...(turn.notice ? { notice: turn.notice } : {}) }, rowTs);
+            // The settled trace goes to disk with the answer: what the turn did
+            // is part of the reply, and a reopened thread that shows the words
+            // without them is a thread that says the answer came from nowhere.
+            const trace = persistedTrace(
+              (live?.message as { tools?: ToolStatus[] } | undefined)?.tools ?? [],
+            );
             appendOwn(home, threadId, {
               role: "ai",
               text: tail,
               ts: rowTs,
               ...(rowOrigin ? { origin: rowOrigin } : {}),
+              ...(trace ? { parts: [{ type: "trace" as const, tools: trace }] } : {}),
             });
           } else {
             write({ kind: "handed-over" }, rowTs);

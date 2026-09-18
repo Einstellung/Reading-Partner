@@ -14,9 +14,16 @@ test("a started tool is appended as running", () => {
   ]);
 });
 
-test("a successful tool is dropped", () => {
+test("a successful tool is settled in place, not dropped", () => {
   const tools = appendRunningTool(undefined, "read_pages", "Reading pages");
-  expect(resolveToolStatus(tools, "read_pages", false)).toEqual([]);
+  expect(resolveToolStatus(tools, "read_pages", false)).toEqual([
+    { name: "read_pages", label: "Reading pages", state: "done" },
+  ]);
+  // The receipt a write reported rides along with it.
+  const receipt = { label: "Wrote it down", summary: "the thing" };
+  expect(resolveToolStatus(tools, "read_pages", false, { receipt })).toEqual([
+    { name: "read_pages", label: "Reading pages", state: "done", receipt },
+  ]);
 });
 
 test("a failed tool stays visible as an error", () => {
@@ -31,6 +38,7 @@ test("the last running status of that name is the one resolved", () => {
   tools = appendRunningTool(tools, "read_pages", "second");
   expect(resolveToolStatus(tools, "read_pages", false)).toEqual([
     { name: "read_pages", label: "first", state: "running" },
+    { name: "read_pages", label: "second", state: "done" },
   ]);
 });
 

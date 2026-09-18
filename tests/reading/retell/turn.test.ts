@@ -29,6 +29,7 @@ import type { Retell, RetellDecision } from "../../../src/reading/retell/types";
 import { newTalkOutline, type TalkOutline } from "../../../src/reading/talk/types";
 import { putSegment, setSpine } from "../../../src/reading/talk/edit";
 import type { TalkArrangementCardData } from "../../../src/reading/retell/cards";
+import { toolText } from "../../support/tool-text";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
@@ -241,13 +242,13 @@ test("record_chapter_decision writes a decision filed under its book", async () 
     }),
   );
   const tool = turn.tools.find((t) => t.name === "record_chapter_decision");
-  const result = await tool!.execute({
+  const result = toolText(await tool!.execute({
     chapter: 2,
     include: true,
     points: ["the ganglion density argument"],
     figure: "[fig:3]",
-  });
-  expect(String(result)).toContain("going in the retell");
+  }));
+  expect(result).toContain("going in the retell");
   expect(written).toEqual([
     {
       bookId: "b1",
@@ -266,7 +267,7 @@ test("a chapter number that is not in the retell is refused, not written", async
   const written: RetellDecision[] = [];
   const turn = await buildRetellTurn(input({ record: async (d) => void written.push(d) }));
   const tool = turn.tools.find((t) => t.name === "record_chapter_decision");
-  expect(String(await tool!.execute({ chapter: 9, include: true, points: [] }))).toContain(
+  expect(toolText(await tool!.execute({ chapter: 9, include: true, points: [] }))).toContain(
     "No chapter 9",
   );
   expect(written).toEqual([]);
@@ -310,14 +311,14 @@ test("read_retell_outline answers from the retell as it stands, not the turn's s
     }),
   );
   const outline = turn.tools.find((t) => t.name === "read_retell_outline")!;
-  expect(String(await outline.execute({}))).toContain("No chapter has been settled yet");
+  expect(String(toolText(await outline.execute({})))).toContain("No chapter has been settled yet");
 
   await turn.tools.find((t) => t.name === "record_chapter_decision")!.execute({
     chapter: 2,
     include: true,
     points: ["the ganglion density argument"],
   });
-  const text = String(await outline.execute({}));
+  const text = String(toolText(await outline.execute({})));
   expect(text).toContain("2. Two");
   expect(text).toContain("the ganglion density argument");
   expect(text).toContain("Not settled yet: 1. One.");
@@ -350,7 +351,7 @@ test("read_retell_outline reads back in the retell's combined numbering", async 
     points: ["theirs"],
   });
   expect(current.decisions[0]).toMatchObject({ bookId: "b2", chapter: 1 });
-  expect(String(await turn.tools.find((t) => t.name === "read_retell_outline")!.execute({}))).toContain(
+  expect(toolText(await turn.tools.find((t) => t.name === "read_retell_outline")!.execute({}))).toContain(
     "3. One",
   );
 });
@@ -639,7 +640,7 @@ test("a block written into the note lands in the talk and raises a card", async 
     "",
     "[fig:3] the ganglion map",
   ].join("\n");
-  const out = String(
+  const out = toolText(
     await turn.tools.find((t) => t.name === "write_talk_segment")!.execute({ body }),
   );
   expect(out).toContain("Added block 1 of 1");

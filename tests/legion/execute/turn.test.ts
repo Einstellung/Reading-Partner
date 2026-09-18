@@ -77,8 +77,8 @@ function run(params: Omit<HarnessTurnParams, "fileSystem">): Promise<void> {
 
 function collectCallbacks() {
 	const deltas: string[] = [];
-	const toolStarts: { name: string; args: Record<string, any> }[] = [];
-	const toolEnds: { name: string; resultPreview: string; isError: boolean }[] = [];
+	const toolStarts: { name: string; args: Record<string, any>; label: string }[] = [];
+	const toolEnds: { name: string; isError: boolean; error?: string }[] = [];
 	let done: string | undefined;
 	let turnText: string | undefined;
 	let error: string | undefined;
@@ -134,6 +134,8 @@ function collectCallbacks() {
 
 const echoTool: AgentTool = {
 	name: "echo",
+	label: () => "Running the fake tool",
+	effect: "read" as const,
 	description: "Echo the value back",
 	parameters: Type.Object({ value: Type.String() }),
 	execute: async (args) => `echo:${args.value}`,
@@ -165,8 +167,10 @@ test("happy path: one tool round then a final answer", async () => {
 	// The round that answered, and the whole of what the model wrote this turn.
 	expect(c.turnText).toBe("let me check\n\nthe answer is hi");
 	expect(c.error).toBeUndefined();
-	expect(c.toolStarts).toEqual([{ name: "echo", args: { value: "hi" } }]);
-	expect(c.toolEnds).toEqual([{ name: "echo", resultPreview: "echo:hi", isError: false }]);
+	expect(c.toolStarts).toEqual([
+		{ name: "echo", args: { value: "hi" }, label: "Running the fake tool" },
+	]);
+	expect(c.toolEnds).toEqual([{ name: "echo", isError: false }]);
 	// The second turn's context must carry the tool result fed back to the model.
 	expect(toolResultTexts(script.contexts[1].messages)).toContain("echo:hi");
 	expect(script.calls()).toBe(2);
@@ -190,7 +194,7 @@ test("multi-round: two tool rounds before answering", async () => {
 	});
 
 	expect(c.done).toBe("done");
-	expect(c.toolEnds.map((t) => t.resultPreview)).toEqual(["echo:a", "echo:b"]);
+	expect(c.toolEnds.map((t) => t.name)).toEqual(["echo", "echo"]);
 	expect(script.calls()).toBe(3);
 	// Round 2's context has round 1's result; round 3's has both.
 	expect(toolResultTexts(script.contexts[2].messages)).toEqual(["echo:a", "echo:b"]);
@@ -224,6 +228,8 @@ test("the turn's text is every round's words, and never a tool result", async ()
 test("a throwing execute becomes a tool-result error, not a crash", async () => {
 	const boom: AgentTool = {
 		name: "boom",
+		label: () => "Running the fake tool",
+		effect: "read" as const,
 		description: "always throws",
 		parameters: Type.Object({}),
 		execute: async () => {
@@ -247,7 +253,7 @@ test("a throwing execute becomes a tool-result error, not a crash", async () => 
 
 	expect(c.done).toBe("recovered");
 	expect(c.error).toBeUndefined();
-	expect(c.toolEnds).toEqual([{ name: "boom", resultPreview: "kaboom", isError: true }]);
+	expect(c.toolEnds).toEqual([{ name: "boom", isError: true, error: "kaboom" }]);
 	// The error text is fed back to the model as the tool result.
 	const results = script.contexts[1].messages.filter((m) => m.role === "toolResult");
 	expect(results[0]).toMatchObject({ isError: true });
@@ -283,6 +289,8 @@ test("abort during a tool stops before the next round", async () => {
 	const controller = new AbortController();
 	const abortingTool: AgentTool = {
 		name: "echo",
+		label: () => "Running the fake tool",
+		effect: "read" as const,
 		description: "aborts mid-execution",
 		parameters: Type.Object({ value: Type.String() }),
 		execute: async (args) => {
@@ -306,7 +314,7 @@ test("abort during a tool stops before the next round", async () => {
 		...c.cb,
 	});
 
-	expect(c.toolEnds).toEqual([{ name: "echo", resultPreview: "echo:x", isError: false }]);
+	expect(c.toolEnds).toEqual([{ name: "echo", isError: false }]);
 	expect(c.done).toBeUndefined();
 	expect(c.error).toBeUndefined();
 	// The tool ran (round 1) but the second model turn was never requested.
@@ -367,6 +375,8 @@ test("a caller with no refusal exit still hears about it, through onError", asyn
 test("a tool result with images is fed back as image content (M9)", async () => {
 	const viewFigure: AgentTool = {
 		name: "view_figure",
+		label: () => "Running the fake tool",
+		effect: "read" as const,
 		description: "returns a figure image",
 		parameters: Type.Object({ id: Type.String() }),
 		execute: async () => ({ text: "Figure 3", images: [{ data: "ABCD", mimeType: "image/jpeg" }] }),
@@ -388,7 +398,7 @@ test("a tool result with images is fed back as image content (M9)", async () => 
 
 	expect(c.done).toBe("it shows a pipeline");
 	// The trace preview uses the text; the image rides the tool-result content.
-	expect(c.toolEnds).toEqual([{ name: "view_figure", resultPreview: "Figure 3", isError: false }]);
+	expect(c.toolEnds).toEqual([{ name: "view_figure", isError: false }]);
 	const results = script.contexts[1].messages.filter((m) => m.role === "toolResult");
 	expect(results[0].content).toEqual([
 		{ type: "text", text: "Figure 3" },
@@ -600,6 +610,8 @@ function sizedModel(contextWindow: number): Model<Api> {
 // makes the two estimates disagree, since pi charges every script chars/4.
 const pagesTool: AgentTool = {
 	name: "read_pages",
+	label: () => "Running the fake tool",
+	effect: "read" as const,
 	description: "Return pages of the book",
 	parameters: Type.Object({ chars: Type.Number() }),
 	execute: async (args) => "章".repeat(args.chars),

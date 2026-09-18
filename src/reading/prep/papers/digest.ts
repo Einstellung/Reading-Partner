@@ -13,6 +13,7 @@ import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings"
 import { formatPages, formatSearch } from "../../../fulltext/format";
 import type { Fulltext } from "../../../fulltext/types";
 import type { PrepPaper } from "./types";
+import { pageRangeLabel } from "../../../ai/tool-labels";
 
 export const SHORT_PAPER_MAX = 10;
 const DIGEST_MAX_ROUNDS = 12;
@@ -102,6 +103,8 @@ export function buildDigestTools(ft: Fulltext): AgentTool[] {
   return [
     {
       name: "read_pages",
+      label: (args) => pageRangeLabel(args),
+      effect: "read",
       description:
         "Read a 1-based, inclusive page range of the paper (at most 10 pages per call).",
       parameters: Type.Object({
@@ -113,6 +116,8 @@ export function buildDigestTools(ft: Fulltext): AgentTool[] {
     },
     {
       name: "search_paper",
+      label: (args) => args.query ? `Searching the paper for “${args.query}”` : "Searching the paper",
+      effect: "read",
       description: "Keyword-search the paper's full text. Returns ranked snippets with pages.",
       parameters: Type.Object({
         query: Type.String({ description: "Search terms." }),

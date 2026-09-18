@@ -4,12 +4,13 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildSourceTools, sourceToolStatusLabel, trialSource } from "../../../src/info/sources/source-tools";
+import { buildSourceTools, trialSource } from "../../../src/info/sources/source-tools";
 import type { ProbeConfirmCardData } from "../../../src/info/sources/source-cards";
 import type { ExtractReadable } from "../../../src/info/extract/readable-select";
 import type { SourceDescriptor } from "../../../src/info/sources/descriptor";
 import type { WebviewArticle } from "../../../src/info/extract/webview-article";
 import { textResponse } from "../../support/fetch";
+import { toolText } from "../../support/tool-text";
 
 // fetchText retries a 5xx twice, waiting 0.5s then 1s on a real timer. The
 // discovery-failure test serves a 500 on purpose and is about what the failure
@@ -60,7 +61,7 @@ test("trial_source tool fires a confirm card and demands consent before add", as
     onProbeCard: (c) => cards.push(c),
   });
   const trial = tools.find((t) => t.name === "trial_source")!;
-  const out = await trial.execute({ descriptorJson: JSON.stringify(FEED_DESC) });
+  const out = toolText(await trial.execute({ descriptorJson: JSON.stringify(FEED_DESC) }));
   expect(cards.length).toBe(1);
   expect(cards[0].kind).toBe("probe-confirm");
   expect(cards[0].samples.length).toBe(3);
@@ -78,7 +79,7 @@ test("add_source writes the trialed descriptor enabled", async () => {
     onProbeCard: () => {},
   });
   const add = tools.find((t) => t.name === "add_source")!;
-  await add.execute({ descriptorJson: JSON.stringify({ ...FEED_DESC, enabled: false }) });
+  toolText(await add.execute({ descriptorJson: JSON.stringify({ ...FEED_DESC, enabled: false }) }));
   expect(added.length).toBe(1);
   expect(added[0].id).toBe(FEED_DESC.id);
   expect(added[0].enabled).toBe(true);
@@ -133,17 +134,28 @@ test("a hand-drafted (non-probe) descriptor trials and adds like any other", asy
     fulltext: { mode: "fetch-page" },
   };
   const trial = tools.find((t) => t.name === "trial_source")!;
-  await trial.execute({ descriptorJson: JSON.stringify(drafted) });
+  toolText(await trial.execute({ descriptorJson: JSON.stringify(drafted) }));
   expect(cards.length).toBe(1);
   const add = tools.find((t) => t.name === "add_source")!;
-  await add.execute({ descriptorJson: JSON.stringify(drafted) });
+  toolText(await add.execute({ descriptorJson: JSON.stringify(drafted) }));
   expect(added[0].id).toBe("hand");
 });
 
-test("sourceToolStatusLabel gives a human phrase per tool", () => {
-  expect(sourceToolStatusLabel("probe_source", { input: "x.com" })).toMatch(/Probing x.com/);
-  expect(sourceToolStatusLabel("trial_source", {})).toMatch(/Fetching 3 articles/);
-  expect(sourceToolStatusLabel("add_source", {})).toMatch(/Adding the source/);
+// The status line each source tool gives for a call, off the tool itself.
+function sourceLabel(name: string, args: Record<string, unknown>): string {
+  const tools = buildSourceTools({
+    fetchFn: async () => textResponse(""),
+    extract,
+    addSource: async () => {},
+    onProbeCard: () => {},
+  });
+  return tools.find((t) => t.name === name)!.label(args);
+}
+
+test("each source tool gives a human phrase for the call", () => {
+  expect(sourceLabel("probe_source", { input: "x.com" })).toMatch(/Probing x.com/);
+  expect(sourceLabel("trial_source", {})).toMatch(/Fetching 3 articles/);
+  expect(sourceLabel("add_source", {})).toMatch(/Adding the source/);
 });
 
 // --- webview sources: the trial has to open the window too -------------------
@@ -240,7 +252,7 @@ test("trial_source hands the webview fetcher to the trial", async () => {
     onProbeCard: (c) => cards.push(c),
   });
   const trial = tools.find((t) => t.name === "trial_source")!;
-  const out = String(await trial.execute({ descriptorJson: JSON.stringify(WEBVIEW_DESC) }));
+  const out = String(toolText(await trial.execute({ descriptorJson: JSON.stringify(WEBVIEW_DESC) })));
   expect(cards.length).toBe(1);
   expect(cards[0].samples.length).toBe(1);
   expect(cards[0].samples[0].fullText).toBe(true);
@@ -249,9 +261,9 @@ test("trial_source hands the webview fetcher to the trial", async () => {
 });
 
 test("the trial status line warns about the browser window before the wait", () => {
-  const label = sourceToolStatusLabel("trial_source", { descriptorJson: JSON.stringify(WEBVIEW_DESC) });
+  const label = sourceLabel("trial_source", { descriptorJson: JSON.stringify(WEBVIEW_DESC) });
   expect(label).toMatch(/browser window/i);
   expect(label).toMatch(/1 article/);
   // A descriptor that does not parse yet falls back to the plain wording.
-  expect(sourceToolStatusLabel("trial_source", { descriptorJson: "{ half" })).toMatch(/3 articles/);
+  expect(sourceLabel("trial_source", { descriptorJson: "{ half" })).toMatch(/3 articles/);
 });

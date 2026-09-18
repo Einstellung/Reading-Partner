@@ -120,6 +120,9 @@ export function resolveProposedTopic(
 export function buildProposeTopicTool(deps: ProposeTopicDeps): AgentTool {
   return {
     name: "propose_topic",
+    label: (args) => args.topic ? `Proposing this belongs under ${args.topic}` : "Proposing where this belongs",
+    effect: "write",
+    gate: "card",
     description:
       "Propose where this conversation belongs and what it adds. Call this when the user " +
       "keeps something, and when a conversation settles on what it is for. `topic` is the " +
@@ -153,10 +156,12 @@ export function buildProposeTopicTool(deps: ProposeTopicDeps): AgentTool {
       });
       const where =
         "id" in topic ? `the existing topic "${topic.name}"` : `a new topic "${topic.newName}"`;
-      return (
-        `Proposed ${where}. A confirm card now shows the user the proposal. Nothing is filed ` +
-        `yet — they Apply it themselves.`
-      );
+      return {
+        text:
+          `Proposed ${where}. A confirm card now shows the user the proposal. Nothing is filed ` +
+          `yet — they Apply it themselves.`,
+        receipt: { label: "Proposed where this belongs", summary: where },
+      };
     },
   };
 }

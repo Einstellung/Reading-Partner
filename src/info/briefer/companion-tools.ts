@@ -12,7 +12,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
 import type { RequestOutcome } from "./reader";
-import { buildSourceTools, sourceToolStatusLabel, type SourceToolDeps } from "../sources/source-tools";
+import { buildSourceTools, type SourceToolDeps } from "../sources/source-tools";
 import {
   resolveSignInSite,
   signInSiteLine,
@@ -85,6 +85,8 @@ export function buildGenerateBriefingTool(
 ): AgentTool {
   return {
     name: "generate_briefing",
+    label: (args) => args.scope === "retriage" ? "Re-sorting today’s briefing" : "Regenerating the briefing",
+    effect: "write",
     description:
       "Regenerate today's briefing. Call this ONLY when the user explicitly asks to redo it " +
       "('regenerate today's, drop the old one', 're-run with the new source', 'this sorting is " +
@@ -110,31 +112,37 @@ export function buildGenerateBriefingTool(
       if (!scope) throw new Error("generate_briefing needs scope: 'retriage' or 'full'.");
       const outcome = deps.startBriefing(scope);
       if (outcome === "busy") {
-        return (
+        return {
+          receipt: null,
+          text:
           "A briefing run was ALREADY under way, so this started nothing — the requested " +
           `${scope} did not run. The progress card is now following the run already going. ` +
           "Tell the user a run is already in progress and its result will land when it " +
-          "settles; do not say their request started."
-        );
+          "settles; do not say their request started.",
+        };
       }
       if (outcome === "asked") {
-        return (
+        return {
+          receipt: { label: "Passed the request on", summary: `${scope} briefing` },
+          text:
           "This device does not collect, so NOTHING is running here. The request has been " +
           `left for the computer that collects the user's sources; it will pick the ${scope} ` +
           "up the next time it syncs, which can be a quarter of an hour, and the new briefing " +
           "will arrive here when it is done. Tell the user you have passed the request on — " +
           "not that a briefing is being built or is nearly ready — and give no estimate. If " +
-          "that computer never picks it up, the request expires after six hours."
-        );
+          "that computer never picks it up, the request expires after six hours.",
+        };
       }
       const what =
         scope === "full"
           ? "Started a full regeneration (re-collecting every source, then re-analyzing)"
           : "Started a re-analysis of today's cables";
-      return (
-        `${what} in the background. A progress card is now showing it. Do NOT say the briefing is ` +
-        `done — it is still running; a note will report the new briefing when it settles.`
-      );
+      return {
+        text:
+          `${what} in the background. A progress card is now showing it. Do NOT say the briefing is ` +
+          `done — it is still running; a note will report the new briefing when it settles.`,
+        receipt: { label: "Started a briefing run", summary: what },
+      };
     },
   };
 }
@@ -193,6 +201,11 @@ function sessionVerdict(site: SignInSite, s: SessionStatus): string {
 export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
   return {
     name: "open_site_sign_in",
+    label: (args) => `Waiting for the ${String(args.site ?? "site")} sign-in`,
+    // A read: the tool writes nothing of the app's own. What changes is the
+    // site's session in a window the reader signed in to themselves, which they
+    // watched happen — there is no receipt to give them that they do not have.
+    effect: "read",
     description:
       "Open a site's own sign-in page in a window the user can type into, for one of the sites " +
       "their sources read through. Call it ONLY when the user asks to sign in ('log me into " +
@@ -284,20 +297,3 @@ export function buildCompanionTools(deps: CompanionToolDeps): AgentTool[] {
   ];
 }
 
-// A running/failed status line for every tool an info turn can call, extending
-// the source labels. The companion's own, plus the ones the soul mounts on any
-// turn (statement_write, propose_topic) and the chat still has to label.
-export function companionToolStatusLabel(name: string, args: Record<string, unknown>): string {
-  if (name === "read_page") return `Reading ${String(args.url ?? "the page")}`;
-  if (name === "statement_write") return "Writing down what you said about yourself";
-  if (name === "propose_topic") return `Proposing this belongs under ${String(args.topic ?? "a topic")}`;
-  if (name === "propose_lab") return `Drafting a lab for ${String(args.name ?? "what you follow")}`;
-  if (name === "archive_lab") return `Proposing to close ${String(args.labId ?? "a lab")}`;
-  if (name === "generate_briefing") {
-    return args.scope === "retriage" ? "Re-sorting today's briefing" : "Regenerating the briefing";
-  }
-  // The label stands for as long as the window is open, so it says what is being
-  // waited on rather than what was clicked.
-  if (name === "open_site_sign_in") return `Waiting for the ${String(args.site ?? "site")} sign-in`;
-  return sourceToolStatusLabel(name, args);
-}
