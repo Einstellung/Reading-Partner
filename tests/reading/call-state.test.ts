@@ -383,6 +383,36 @@ test("the reader's message goes on the end of the conversation it was typed in",
   expect(reduce(open, { type: "row-appended", threadId: "other", row })).toBe(open);
 });
 
+test("a run answered into the open conversation lands in it", () => {
+  const open = call({ messages: [user(1, "look into this")] });
+  const row = ai(2, "here is what it found", { id: "t-run" });
+  const next = reduce(open, { type: "row-arrived", threadId: "t1", row });
+
+  expect(next?.messages.map((m) => m.ts)).toEqual([1, 2]);
+  // A conversation that has since moved on is not the one it was written into.
+  expect(reduce(open, { type: "row-arrived", threadId: "other", row })).toBe(open);
+});
+
+test("a row that arrives twice is one row", () => {
+  const open = call({ messages: [ai(2, "here is what it found", { id: "t-run" })] });
+  const again = ai(2, "here is what it found", { id: "t-run" });
+
+  expect(reduce(open, { type: "row-arrived", threadId: "t1", row: again })).toBe(open);
+});
+
+test("arrivals are told apart by id, not by what they say", () => {
+  const open = call({ messages: [ai(2, "done", { id: "t-one" })] });
+  // The same words, at the same second, from a second run.
+  const other = ai(2, "done", { id: "t-two" });
+  const next = reduce(open, { type: "row-arrived", threadId: "t1", row: other });
+
+  expect(next?.messages.map((m) => m.id)).toEqual(["t-one", "t-two"]);
+  // And a row with no id has never been seen: nothing on screen carries one to
+  // compare it against.
+  const idless = ai(3, "from an older file");
+  expect(reduce(next, { type: "row-arrived", threadId: "t1", row: idless })?.messages).toHaveLength(3);
+});
+
 test("the stop button keeps the half sentence as a finished row", () => {
   const open = call({
     messages: [ai(1, "half a sen", { streaming: true, tools: [{ name: "s", label: "S", state: "running" }] })],

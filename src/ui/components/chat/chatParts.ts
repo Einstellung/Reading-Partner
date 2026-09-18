@@ -240,8 +240,11 @@ export function rehydrateParts(parts: PersistedPart[]): ChatPart[] {
 // rehydrates its parts; a message written before parts existed (or one carrying
 // an empty array) stays text-only, so the row falls back to `text` alone.
 export function rehydrateMessage(m: StoredMessage): ThreadMessage {
+  // The id rides along: it is how a message that arrives in a conversation the
+  // reader has open is told apart from the copy of it already on screen.
+  const stamp = { ...(m.id ? { id: m.id } : {}), role: m.role, text: m.text, ts: m.ts };
   if (m.parts && m.parts.length) {
-    return { role: m.role, text: m.text, ts: m.ts, parts: rehydrateParts(m.parts) };
+    return { ...stamp, parts: rehydrateParts(m.parts) };
   }
-  return { role: m.role, text: m.text, ts: m.ts };
+  return stamp;
 }

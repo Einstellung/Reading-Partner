@@ -26,6 +26,7 @@ import {
   createAsideThread,
   deleteThreadTree,
   getThread,
+  onThreadMessage,
   patchThreadMessage,
   readThreadImages,
   saveThreadImages,
@@ -54,6 +55,7 @@ import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
 import { readingTurns, type LiveTurn } from "../live-turns";
 import { boxUnseenTurn, setOpenCallPeek, watching, type TurnOutcome } from "../turn-box";
+import { arrivedMessage, createOwnAppends } from "../thread-arrivals";
 import { deferHangup } from "./hangup";
 import { threadHome, type ThreadOwner } from "./documents";
 import { createPendingImages, type StagedImage } from "../pending-images";
@@ -302,6 +304,40 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   useEffect(
     () => setOpenCallPeek(() => ({ open: callRef.current, bookId: bookIdRef.current })),
     [bookIdRef],
+  );
+
+  // Every message this hook writes to a thread file carries an id it minted, so
+  // the channel below can tell its own appends from everyone else's.
+  const ownRef = useRef(createOwnAppends());
+  const appendOwn = useCallback(
+    (home: string, threadId: string, message: ThreadMessage) =>
+      appendMessage(home, threadId, ownRef.current.mint(message)),
+    [],
+  );
+
+  // A conversation the reader has open can be written to by something that is
+  // not this view: the soul answers a delegated run into the thread it was sent
+  // from (soul/bell.ts), and because the reader is looking at that thread no
+  // card is put in the box for it (docs/68) — this is the whole delivery. So the
+  // row is appended here as it lands, instead of appearing only once the reader
+  // gives up, closes the conversation and opens it again.
+  //
+  // Stored images are not hydrated: what arrives this way is the soul's prose.
+  useEffect(
+    () =>
+      onThreadMessage((append) => {
+        const c = callRef.current;
+        const home = homeOf(c);
+        const message = arrivedMessage(
+          append,
+          c && home ? { threadId: c.threadId, home } : null,
+          ownRef.current,
+        );
+        if (!message) return;
+        const row = shapes.current.toDisplay([message])[0];
+        if (row) dispatch({ type: "row-arrived", threadId: append.threadId, row });
+      }),
+    [homeOf],
   );
 
   // Push a thread's staging into what the composer renders. Every write goes
@@ -593,7 +629,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           // next turn as if the model had written it, and it would then describe a
           // turn whose assembly no longer applies.
           write({ kind: "answer", text: full, ...(turn.notice ? { notice: turn.notice } : {}) }, ts);
-          appendMessage(home, threadId, { role: "ai", text: full, ts });
+          appendOwn(home, threadId, { role: "ai", text: full, ts });
           // read_chapter may have parked the conversation on a chapter while the
           // turn ran (docs/09); the status row is how the reader finds out.
           syncFocusChapter();
@@ -708,7 +744,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         });
         return;
       }
-      appendMessage(bookId, to.parent.id, {
+      appendOwn(bookId, to.parent.id, {
         role: "ai",
         text: receipt.text,
         ts: Date.now(),
@@ -876,7 +912,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           ts,
           ...(imageNames.length ? { images: imageNames } : {}),
         };
-        appendMessage(home, c.threadId, persistMsg);
+        appendOwn(home, c.threadId, persistMsg);
         const row = shapes.current.newRow({
           role: "user",
           text: trimmed,
@@ -902,7 +938,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   const keepPartial = useCallback((live: LiveTurn<M>) => {
     const partial = live.message.text.trim();
     if (partial) {
-      appendMessage(live.home, live.threadId, { role: "ai", text: partial, ts: live.message.ts });
+      appendOwn(live.home, live.threadId, { role: "ai", text: partial, ts: live.message.ts });
     }
     live.onSettled?.();
     return partial;
