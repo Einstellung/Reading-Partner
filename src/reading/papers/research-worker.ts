@@ -46,6 +46,7 @@ export function registerResearchWorker(deps: AgentWorkerDeps = {}): void {
     kind: RESEARCH_KIND,
     tier: "local",
     agent: true,
+    delegable: true,
     run: researchWorker(deps),
   });
 }

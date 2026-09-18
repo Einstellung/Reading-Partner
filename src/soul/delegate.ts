@@ -13,7 +13,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/execute/turn";
 import { appRunner } from "../legion/execute/runner";
-import { registeredWorkerKinds } from "../legion/execute/worker";
+import { delegableWorkerKinds } from "../legion/execute/worker";
 import type { DelegateInput, Delegated } from "../legion/execute/worker";
 import { appData } from "../platform/app/appdata";
 import type { BoxOrigin } from "../box";
@@ -43,7 +43,12 @@ export interface DelegateDeps {
   delegate?: (input: DelegateInput) => Promise<Delegated>;
   /** Where the brief text is put, answering the path. AppData unless injected. */
   writeBrief?: (text: string) => Promise<string>;
-  /** The kinds this device can run. The module registry unless injected. */
+  /**
+   * The kinds this device can run and the soul may ask for. The module registry
+   * unless injected — and only the kinds registered as `delegable`: a kind whose
+   * brief is a shape rather than prose (the day's collection, a URL to take in)
+   * is started by its own domain's code and is not the soul's to hand a task to.
+   */
   kinds?: () => readonly string[];
 }
 
@@ -63,7 +68,7 @@ export async function writeBriefFile(text: string): Promise<string> {
  * can read why.
  */
 export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
-  const kinds = (deps.kinds ?? registeredWorkerKinds)();
+  const kinds = (deps.kinds ?? delegableWorkerKinds)();
   const write = deps.writeBrief ?? writeBriefFile;
   const send = deps.delegate ?? ((input: DelegateInput) => appRunner().delegate(input));
   const origin = deps.origin;

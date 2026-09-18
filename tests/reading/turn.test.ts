@@ -1467,6 +1467,8 @@ test("delegating from a book names the book, the thread and the page", async () 
     kind: "fake-literature",
     tier: "local",
     agent: true,
+    // Stands in for the literature kind, which is the soul's to hand a task to.
+    delegable: true,
     run: (brief, ctx) => {
       briefPath = brief;
       started = ctx.run;

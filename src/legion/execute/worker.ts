@@ -87,6 +87,14 @@ export interface WorkerRegistration {
   requires?: readonly string[];
   /** There is a model inside it. An agent worker may not delegate. */
   agent?: boolean;
+  /**
+   * The soul may hand this kind a job of its own: its brief is prose a model
+   * writes, and the kind is in the delegate tool's catalogue. A kind without it
+   * is started by its own domain's code with a brief that has a shape — a date,
+   * a URL, a book — which is not something the model could write from a
+   * conversation, so the catalogue leaves it out.
+   */
+  delegable?: boolean;
 }
 
 /** What anybody asks the runner to start. */
@@ -148,4 +156,9 @@ export const workerFor: WorkerTable = (kind) => workers.get(kind) ?? null;
 /** Every kind this device has a worker for. */
 export function registeredWorkerKinds(): string[] {
   return [...workers.keys()];
+}
+
+/** The kinds the soul may delegate: the catalogue its delegate tool prints. */
+export function delegableWorkerKinds(): string[] {
+  return [...workers.values()].filter((w) => w.delegable).map((w) => w.kind);
 }
