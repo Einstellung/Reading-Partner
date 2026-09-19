@@ -34,7 +34,7 @@ run 完成不打断用户，不弹窗、不红点、不进任何系统通知。6
 | `boxId` | 所属的盒 |
 | `source` | `run`、`cable` 或 `turn` |
 | `cover` | 封面一句 |
-| `body` | 正文引用，run 的就是它的 `output` |
+| `body` | 正文。run 的就是它产出的文本（读 `output` 那个文件，截到 `OUTPUT_MAX`），不是路径：项随盒同步而产出文件不同步，路径到了另一台设备打不开（2026-09-19 改） |
 | `origin` | 书 + 线程 + 划线，或门口某天，或简报某天 |
 | `kind` | run 的 kind，或 cable 的类别 |
 | `runId` | 来自 run 时有 |
