@@ -105,10 +105,13 @@ export interface CardComponentProps<P extends CardPayload = CardPayload> {
 // call that reported a receipt becomes one part: a dispatch where the receipt
 // points at a run, a plain receipt otherwise. Running calls have nothing to show
 // yet and failed ones keep their red line in the trace, so neither is derived.
+// A quiet call is not derived either: the reader is shown nothing about it, and
+// its receipt stays where the trace keeps it, on disk.
 // The order is the order the calls finished in.
 function tracedReceipts(tools: readonly ToolStatus[]): ChatPart[] {
   const out: ChatPart[] = [];
   for (const t of tools) {
+    if (t.quiet) continue;
     if (t.state !== "done" || !t.receipt) continue;
     const link = t.receipt.link;
     out.push(

@@ -419,6 +419,10 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
             ? "Writing down an observation"
             : "Updating an observation",
       effect: "write",
+      // Bookkeeping, not something the reader came here to read (docs/72): no
+      // phase, no trace line, no receipt. It is still written to the thread
+      // file with its receipt, and a call that fails still shows its red line.
+      quiet: true,
       description:
         (relations
           ? "Write one observation about this reader, add evidence to one that is " +

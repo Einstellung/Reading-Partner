@@ -30,6 +30,19 @@ import type { ToolStatus } from "./tool-status";
 //   writing  — the reply is arriving, so there is nothing left to stand in for.
 export type TurnPhase = "thinking" | "tool" | "writing";
 
+// The phase a row moves to when a tool starts. A quiet tool (docs/72,
+// legion/execute/contract.ts) is not named on screen and draws no trace line of
+// its own, so naming it here would leave the status line blank for as long as it
+// runs: the row keeps the phase it had — still "Thinking…" where it was
+// thinking, still writing where the reply had started.
+export function phaseOnToolStart(
+  current: TurnPhase | null | undefined,
+  quiet?: boolean,
+): TurnPhase | undefined {
+  if (!quiet) return "tool";
+  return current ?? undefined;
+}
+
 // The one line under a reader's row that the model has not been handed yet
 // (docs/72): they said it into a turn already running, and it joins the
 // model's view at the end of the round in flight — one round at most. It comes

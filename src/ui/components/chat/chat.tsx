@@ -29,7 +29,7 @@ import { scrollMemory } from '../common/scroll-memory';
 import { stickToBottom } from '../common/stick-to-bottom';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
-import type { ToolStatus } from '../../../ai/tool-status';
+import { visibleTrace, type ToolStatus } from '../../../ai/tool-status';
 import { QUEUED_NOTE, type TurnPhase } from '../../../ai/turn-rows';
 import { phaseLabel } from './phase-line';
 import {
@@ -690,11 +690,13 @@ function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) 
 	const text = traceText(size);
 	// The calls that finished collapse into one grey line under the answer, in the
 	// order they ran; a running call keeps its own line with the ellipsis, and a
-	// failure keeps its own line in red with the sentence the tool threw.
-	const done = tools.filter((t) => t.state === 'done');
+	// failure keeps its own line in red with the sentence the tool threw. Quiet
+	// calls are not here at all (ai/tool-status.ts) unless they failed.
+	const shown = visibleTrace(tools);
+	const done = shown.filter((t) => t.state === 'done');
 	return (
 		<div className="flex flex-col gap-0.5">
-			{tools.map((t, i) =>
+			{shown.map((t, i) =>
 				t.state === 'error' ? (
 					<div key={i} className={'text-destructive ' + text}>
 						{t.label} — {t.error || 'failed'}
@@ -872,7 +874,12 @@ const MessageBubble = memo(function MessageBubble({
 			</div>
 		);
 	}
-	const trace = toolPart ? <ToolTrace tools={toolPart.tools} size={size} /> : null;
+	// A trace of nothing but quiet calls draws nothing at all — and must not draw
+	// an empty box in place of the status line the row would otherwise show.
+	const trace =
+		toolPart && visibleTrace(toolPart.tools).length ? (
+			<ToolTrace tools={toolPart.tools} size={size} />
+		) : null;
 	// What this round wrote down and what it sent off, between the words and the
 	// trace: the records of the turn, in the order the calls finished.
 	const tickets = ticketParts.length ? (

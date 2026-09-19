@@ -10,7 +10,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { AgentCallbacks } from "../../../legion/execute/contract";
 import { appendMessage } from "../../../platform/app/threads";
-import { refusalRow } from "../../../ai/turn-rows";
+import { phaseOnToolStart, refusalRow } from "../../../ai/turn-rows";
 import {
   cardRow,
   insertBeforeLast,
@@ -161,8 +161,10 @@ export function useStreamingTurn(
           phaseRef.current = "thinking";
           patchRow(ts, (m) => withPhase(m, "thinking"));
         },
+        // A quiet call leaves the phase where it was, so the row goes on saying
+        // whatever it was saying (turn-rows.ts).
         onToolStart: (info) => {
-          phaseRef.current = "tool";
+          phaseRef.current = phaseOnToolStart(phaseRef.current, info.quiet) ?? null;
           patchRow(ts, (m) => withToolStart(m, info));
         },
         onToolEnd: (info) => patchRow(ts, (m) => withToolEnd(m, info)),

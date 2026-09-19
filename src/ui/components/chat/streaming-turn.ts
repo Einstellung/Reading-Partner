@@ -4,7 +4,7 @@
 
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import type { AgentToolEnd, AgentToolStart } from "../../../legion/execute/contract";
-import { appendRoundBreak, holdsNoAnswer, type TurnPhase } from "../../../ai/turn-rows";
+import { appendRoundBreak, holdsNoAnswer, phaseOnToolStart, type TurnPhase } from "../../../ai/turn-rows";
 import type { ThreadMessage } from "./types";
 
 // Only the AI row at `ts` is rewritten; a user row that happens to share the
@@ -39,13 +39,14 @@ export function withDelta(m: ThreadMessage, chunk: string): ThreadMessage {
 
 // What the round wrote before calling the tool stays where it is, with a blank
 // line opened under it for the next round (docs/pitfall/291). The status line is
-// drawn in that gap and comes off when the tool returns.
+// drawn in that gap and comes off when the tool returns — a quiet call draws
+// none and leaves the phase where it was (turn-rows.ts).
 export function withToolStart(m: ThreadMessage, info: AgentToolStart): ThreadMessage {
   return {
     ...m,
     text: appendRoundBreak(m.text),
-    phase: "tool",
-    tools: appendRunningTool(m.tools, info.name, info.label),
+    phase: phaseOnToolStart(m.phase, info.quiet),
+    tools: appendRunningTool(m.tools, info.name, info.label, info.quiet),
   };
 }
 

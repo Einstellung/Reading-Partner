@@ -4,8 +4,11 @@
 import { expect, test } from "bun:test";
 import {
   appendRunningTool,
+  persistedTrace,
   relabelRunningTool,
   resolveToolStatus,
+  visibleTrace,
+  type ToolStatus,
 } from "../../src/ai/tool-status";
 
 test("a started tool is appended as running", () => {
@@ -67,4 +70,52 @@ test("the same label again, a finished tool and an absent one all leave the mess
   expect(relabelRunningTool(tools, "read_pages", "Reading page 3")).toBeNull();
   const done = resolveToolStatus(tools, "research_literature", true)!;
   expect(relabelRunningTool(done, "research_literature", "Searching the literature (3/6)")).toBeNull();
+});
+
+// A quiet tool (docs/72) is the app's own bookkeeping: the reader is shown
+// nothing about it, and the trace still carries it so the record of the turn is
+// complete.
+test("a quiet call is carried through the trace and kept on disk", () => {
+  const tools = appendRunningTool(undefined, "observation_update", "Updating an observation", true);
+  expect(tools).toEqual([
+    { name: "observation_update", label: "Updating an observation", state: "running", quiet: true },
+  ]);
+  const receipt = { label: "Updated an observation", summary: "They read the epilogue first." };
+  const done = resolveToolStatus(tools, "observation_update", false, { receipt })!;
+  expect(persistedTrace(done)).toEqual([
+    {
+      name: "observation_update",
+      label: "Updating an observation",
+      state: "done",
+      receipt,
+      quiet: true,
+    },
+  ]);
+});
+
+test("the trace the reader sees drops quiet calls and keeps the ones that failed", () => {
+  const quietDone: ToolStatus = {
+    name: "statement_write",
+    label: "Writing it down",
+    state: "done",
+    quiet: true,
+  };
+  const quietRunning: ToolStatus = {
+    name: "observation_update",
+    label: "Updating",
+    state: "running",
+    quiet: true,
+  };
+  const quietFailed: ToolStatus = {
+    name: "observation_update",
+    label: "Updating an observation",
+    state: "error",
+    error: "no such observation",
+    quiet: true,
+  };
+  const loud: ToolStatus = { name: "read_pages", label: "Reading pages", state: "done" };
+  expect(visibleTrace([quietDone, quietRunning, loud, quietFailed])).toEqual([loud, quietFailed]);
+  // A stored trace from before the flag existed has no quiet call in it, so
+  // every line it holds is one the reader was shown.
+  expect(visibleTrace([loud])).toEqual([loud]);
 });

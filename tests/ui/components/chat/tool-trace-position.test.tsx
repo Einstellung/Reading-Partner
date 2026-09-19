@@ -41,6 +41,47 @@ test("a tool that ran before any words stands in for the dots", () => {
   expect(html).not.toContain('aria-label="Thinking"');
 });
 
+// A quiet call (docs/72) is the app's own bookkeeping: no line while it runs,
+// none once it is done, and the status line goes on saying what it was saying.
+test("a quiet call leaves no line in the trace", () => {
+	const quiet = { name: 'observation_update', label: 'Updating an observation', quiet: true } as const;
+	const running = renderToStaticMarkup(
+		<MessageList
+			messages={row({ text: '', streaming: true, phase: 'thinking', tools: [{ ...quiet, state: 'running' }] })}
+		/>,
+	);
+	expect(running).not.toContain('Updating an observation');
+	// The line the row was already showing is still the line it shows.
+	expect(running).toContain('aria-label="Thinking"');
+
+	const settled = renderToStaticMarkup(
+		<MessageList messages={row({ tools: [{ ...quiet, state: 'done' }] })} />,
+	);
+	expect(settled).toContain(FIRST);
+	expect(settled).not.toContain('Updating an observation');
+});
+
+test("a quiet call that failed keeps its red line", () => {
+	const html = renderToStaticMarkup(
+		<MessageList
+			messages={row({
+				tools: [
+					{
+						name: 'observation_update',
+						label: 'Updating an observation',
+						state: 'error',
+						error: 'no observation with that id',
+						quiet: true,
+					},
+				],
+			})}
+		/>,
+	);
+	expect(html).toContain('Updating an observation');
+	expect(html).toContain('no observation with that id');
+	expect(html).toContain('text-destructive');
+});
+
 test("the line a failed call leaves stays under the answer", () => {
   const html = renderToStaticMarkup(
     <MessageList

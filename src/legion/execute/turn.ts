@@ -518,7 +518,12 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     listen("tool_start", ({ toolName, args }) => {
       const tool = byName.get(toolName);
       const a = args as Record<string, any>;
-      onToolStart({ name: toolName, args: a, label: tool ? toolLabel(tool, a) : toolName });
+      onToolStart({
+        name: toolName,
+        args: a,
+        label: tool ? toolLabel(tool, a) : toolName,
+        ...(tool?.quiet ? { quiet: true as const } : {}),
+      });
     });
     listen("tool_end", ({ toolName, result, isError }) => {
       // A failure's text is the message the tool threw, which is what the reader
