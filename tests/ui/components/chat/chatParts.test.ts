@@ -154,6 +154,74 @@ test("rehydrateMessage leaves a plain (pre-parts) message text-only", () => {
   expect(messageToParts(empty)).toEqual([{ type: "text", text: "hi" }]);
 });
 
+// A reply that called a tool is stored with its words at message level and only
+// the settled trace as a part. `parts` is authoritative, so the reopened row
+// drew the grey trace line and none of the answer.
+test("rehydrateMessage puts the stored words in front of a trace part", () => {
+  const stored: StoredMessage = {
+    role: "ai",
+    text: "answer",
+    ts: 7,
+    parts: [
+      { type: "trace", tools: [{ name: "read_pages", label: "Reading pages 1–2", state: "done" }] },
+    ],
+  };
+  expect(messageToParts(rehydrateMessage(stored))).toEqual([
+    { type: "text", text: "answer" },
+    {
+      type: "tool-trace",
+      tools: [{ name: "read_pages", label: "Reading pages 1–2", state: "done" }],
+    },
+  ]);
+});
+
+test("a rehydrated trace row unfolds its dispatch ticket after the words", () => {
+  // The live row's order (legacyParts + messageToParts): text, then what the
+  // round left behind, then the trace naming the calls.
+  const receipt = { label: "Sent to the bureau", summary: "Attention economics", link: { kind: "run", id: "r-9" } };
+  const stored: StoredMessage = {
+    role: "ai",
+    text: "On its way.",
+    ts: 8,
+    parts: [
+      { type: "trace", tools: [{ name: "start_run", label: "Starting a run", state: "done", receipt }] },
+    ],
+  };
+  const parts = messageToParts(rehydrateMessage(stored));
+  expect(parts.map((p) => p.type)).toEqual(["text", "dispatch", "tool-trace"]);
+  expect(parts[0]).toEqual({ type: "text", text: "On its way." });
+  expect(parts[1]).toMatchObject({ type: "dispatch", runId: "r-9" });
+});
+
+test("rehydrateMessage does not give a stored card row a second body", () => {
+  // A card row renders as the card alone, and its `text` is the sentence an
+  // aside receipt writes for the model — never shown to the reader.
+  const stored: StoredMessage = {
+    role: "ai",
+    text: "",
+    ts: 5,
+    parts: [toPersistedCardPart("c1", probe(true))],
+  };
+  const parts = messageToParts(rehydrateMessage(stored));
+  expect(parts).toHaveLength(1);
+  expect(parts[0]).toMatchObject({ type: "card", id: "c1" });
+});
+
+test("rehydrateMessage leaves a stored text part alone", () => {
+  const stored: StoredMessage = {
+    role: "ai",
+    text: "answer",
+    ts: 6,
+    parts: [
+      { type: "text", text: "answer" },
+      { type: "trace", tools: [{ name: "read_pages", label: "Reading pages 1–2", state: "done" }] },
+    ],
+  };
+  const parts = messageToParts(rehydrateMessage(stored));
+  expect(parts.filter((p) => p.type === "text")).toHaveLength(1);
+  expect(parts.map((p) => p.type)).toEqual(["text", "tool-trace"]);
+});
+
 // --- the one-line glance (the corner chat card) ----------------------------
 
 // A row carrying a card renders as the card and nothing else, so its `text` is
