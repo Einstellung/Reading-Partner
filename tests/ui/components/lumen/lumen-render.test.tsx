@@ -371,3 +371,59 @@ test("a barge-in takes the queued sentence away", () => {
 	for (let i = 0; i <= 30; i++) frame(s.startAt + i * 16);
 	expect(num(s.el, "--lumen-mouth-open")).toBe(0);
 });
+
+// The case (docs/68). Beside an open book the breath loop never starts, so the
+// reach has to bring a frame loop of its own — and hand the body back upright
+// when the case is down.
+test("a still body goes with the case and comes back", () => {
+	const s = session("idle");
+	const reach = { w: 0 };
+	const view = render(<Lumen handle={s.handle} still reach={reach} reaching />);
+	const el = body(view.container);
+	let t = performance.now();
+	const run = (frames: number) => {
+		for (let i = 0; i < frames; i++) {
+			t += 16;
+			frame(t);
+		}
+	};
+
+	// Nothing has moved yet: the reach is zero and the pose is the default.
+	run(2);
+	expect(num(el, "--lumen-gx")).toBeCloseTo(0, 3);
+
+	reach.w = 1;
+	run(40);
+	// Eyes down at the case on the lower left, and the body leaning over it.
+	expect(num(el, "--lumen-gx")).toBeLessThan(-0.4);
+	expect(num(el, "--lumen-gy")).toBeGreaterThan(0.4);
+	expect(Number.parseFloat(el.style.getPropertyValue("--lumen-tilt"))).toBeLessThan(-2);
+
+	// The case is down: the corner drops the reach and stops asking.
+	reach.w = 0;
+	view.rerender(<Lumen handle={s.handle} still reach={reach} reaching={false} />);
+	run(80);
+	expect(num(el, "--lumen-gx")).toBe(0);
+	expect(num(el, "--lumen-gy")).toBe(0);
+	expect(Number.parseFloat(el.style.getPropertyValue("--lumen-tilt"))).toBe(0);
+});
+
+test("a body with a loop of its own reads the reach on its own frames", () => {
+	const s = session("idle");
+	const reach = { w: 0 };
+	const { container } = render(<Lumen handle={s.handle} reach={reach} reaching />);
+	const el = body(container);
+	let t = performance.now();
+	const run = (frames: number) => {
+		for (let i = 0; i < frames; i++) {
+			t += 16;
+			frame(t);
+		}
+	};
+	run(10);
+	const straight = Number.parseFloat(el.style.getPropertyValue("--lumen-tilt"));
+	reach.w = 1;
+	run(20);
+	expect(num(el, "--lumen-gx")).toBeLessThan(-0.4);
+	expect(Number.parseFloat(el.style.getPropertyValue("--lumen-tilt"))).toBeLessThan(straight - 2);
+});
