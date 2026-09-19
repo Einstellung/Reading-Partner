@@ -12,8 +12,9 @@
 //
 // Beside a book it is still: `still` stops the loop dead, and the resting pose
 // the custom-property defaults paint is what stands there. The one thing that
-// moves in the reader is a glance: when the count goes up the eyes drop to the
-// case and come back, once (case-glance.ts).
+// moves in the reader is the case: something arrives and Lumen pulls it out
+// from behind itself and sets it down, the box empties and it puts it back
+// (case-motion.ts). The eyes and the lean go with it, in the reader too.
 //
 // The case is the only control in the corner. It is the trigger the column
 // rises from, and the body beside it is a picture — pressing it does nothing and
@@ -35,7 +36,7 @@ import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { VoiceCallHandle } from "../orb/orb";
-import { Lumen, LumenCase, caseTriggerStyle } from "./Lumen";
+import { Lumen, LumenCase } from "./Lumen";
 import {
 	bookIdsIn,
 	badgeCount,
@@ -47,7 +48,7 @@ import {
 	showsCase,
 	sortBoxCards,
 } from "./box-cards";
-import { NO_GLANCE, stepGlance } from "./case-glance";
+import { useCaseMotion } from "./use-case-motion";
 import { planJump, type Place, type Shell } from "./box-jump";
 
 // The corner is not a call. Lumen still wants a handle — it is the same body the
@@ -97,10 +98,13 @@ export function LumenCorner({
 }) {
 	const [open, setOpen] = useState(false);
 	const [count, setCount] = useState(0);
-	const [glance, setGlance] = useState(NO_GLANCE);
 	const [items, setItems] = useState<BoxItem[] | null>(null);
 	const [titles, setTitles] = useState<Record<string, string>>({});
 	const [note, setNote] = useState<string | null>(null);
+	// The case's own life: pulled out when the count first rises, put back
+	// when the box empties, and where it is drawn on every frame in between
+	// (use-case-motion.ts).
+	const box = useCaseMotion(count);
 
 	// The number on the badge. Both readings land here: the store's announcement
 	// of a write this process made, and the tick that catches the other device's.
@@ -112,7 +116,10 @@ export function LumenCorner({
 				.then((n) => {
 					if (!alive) return;
 					setCount(n);
-					setGlance((seen) => stepGlance(seen, n));
+					// The last card followed or pressed away takes the column with
+					// it: the case is about to be put away, and a column hanging off
+					// a case on its way out reads as a tear.
+					if (!showsCase(n)) setOpen(false);
 				})
 				.catch(() => {});
 		};
@@ -229,12 +236,18 @@ export function LumenCorner({
 				    anchoring it to the case alone would set it in from the margin
 				    the corner keeps by the width of the body. */}
 				<PopoverAnchor asChild>
-					<div className="relative">
+					{/* `isolate`: the case comes out from behind the body, and a
+					    negative layer only means "under the body" inside a stacking
+					    context of its own — without one it would go under the page
+					    the corner floats over. */}
+					<div className="relative isolate">
 						<Lumen
 							handle={SILENT}
-							// Beside an open book nothing moves but the glance (docs/68).
+							// Beside an open book nothing moves but the case and the
+							// hands on it (docs/68).
 							still={inReader}
-							glance={glance.nonce}
+							reach={box.reach}
+							reaching={box.moving}
 							label="Lumen"
 							// Not a control: no pointer events, off the tab order and
 							// out of the accessibility tree. The element is still a
@@ -246,20 +259,34 @@ export function LumenCorner({
 							onActivate={NOTHING}
 							className="h-18 w-18"
 						/>
-						{showsCase(count) && (
+						{box.drawn && (
 							<PopoverTrigger asChild>
 								<button
+									ref={box.caseRef}
 									type="button"
 									aria-label={caseLabel(count)}
+									// A case in Lumen's hands is not a button: no press, no
+									// tab stop and nothing announced until it is standing in
+									// its place.
+									aria-hidden={box.atRest ? undefined : true}
+									tabIndex={box.atRest ? undefined : -1}
 									// `box-content`: the style's padding is the 44px
 									// touch target and it grows outwards, so the case
 									// draws at its own size (case-box.ts).
-									className="pointer-events-auto absolute box-content block"
-									style={caseTriggerStyle()}
+									className={cn(
+										"absolute box-content block",
+										box.atRest ? "pointer-events-auto" : "pointer-events-none",
+									)}
+									// The pose at the last render. The loop owns the
+									// element's style between renders, and every render it
+									// does make lands on the same numbers.
+									style={box.style}
 								>
 									<span className="relative block h-full w-full">
 										<LumenCase />
-										<CountBadge count={count} />
+										{/* The number rides the case, it does not travel
+										    with it: it appears once the case is down. */}
+										{box.atRest && <CountBadge count={count} />}
 									</span>
 								</button>
 							</PopoverTrigger>

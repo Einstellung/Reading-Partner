@@ -37,7 +37,6 @@ import {
 	useRef,
 	useState,
 	type ComponentProps,
-	type CSSProperties,
 	type ReactNode,
 } from "react";
 
@@ -89,11 +88,12 @@ import {
 	type EnvelopeQueue,
 } from "./envelope";
 import {
-	GLANCE_K,
-	glanceGaze,
-	glanceOver,
-} from "./case-glance";
-import { CASE_HIT_PAD_PX, caseRect } from "./case-box";
+	CASE_LOOK_K,
+	caseLeanDeg,
+	caseLookGaze,
+	easeToward,
+	type CaseReach,
+} from "./case-motion";
 import bodyUrl from "./lumen-body.webp";
 import caseUrl from "./lumen-case.webp";
 import tuftUrl from "./lumen-tuft.webp";
@@ -122,7 +122,8 @@ export interface LumenProps extends Omit<ComponentProps<"button">, "children"> {
 	rest?: boolean;
 	className?: string;
 	still?: boolean;
-	glance?: number;
+	reach?: CaseReach;
+	reaching?: boolean;
 	onActivate?: () => void;
 	label?: string;
 	overlay?: ReactNode;
@@ -146,11 +147,13 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	// beside an open book (docs/68) — a body breathing next to the text is a
 	// second thing to read.
 	still = false,
-	// One glance at the case and back (docs/68). A number that goes up once per
-	// glance owed rather than a flag, so two arrivals are two glances; zero is
-	// nothing having arrived yet. `still` does not stop it: the loop is the
-	// breath, and this is a one-shot.
-	glance = 0,
+	// Pulling the case out from behind itself and setting it down (docs/68).
+	// `reach` is how much of that act the body is in, written by the corner's
+	// own loop and read here every frame; `reaching` is only whether that loop
+	// is running, which is what a still body needs to know to start one of its
+	// own. `still` does not stop it: the loop is the breath, and this is an act.
+	reach,
+	reaching = false,
 	// What a press does, where that is not starting and stopping a call. Kept
 	// for the voice entry the column will grow one day (docs/68); the corner
 	// wires nothing to it.
@@ -175,8 +178,13 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	const levelRef = useRef(0);
 	const restMixRef = useRef(rest ? 1 : 0);
 	const gazeRef = useRef<Gaze>(GAZE_ZERO);
-	// When the last glance began, for the loop to read. Null between glances.
-	const glanceRef = useRef<{ at: number } | null>(null);
+	// The corner's reach, for the loop to read. Absent everywhere but the corner.
+	const reachRef = useRef<CaseReach | undefined>(reach);
+	reachRef.current = reach;
+	// Where a still body's eyes and lean are, between the runs of the one rAF
+	// that paints them.
+	const stillGazeRef = useRef<Gaze>(GAZE_ZERO);
+	const stillLeanRef = useRef(0);
 
 	const subscribe = handle.subscribeLevel;
 	const subscribeEnvelope = handle.subscribeEnvelope;
@@ -289,13 +297,12 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 			// meant to be looking up at a thought would be the wrong story told
 			// louder.
 			const following = shown === "rest" && pointer !== null && now - pointerAt < GAZE_RELEASE_MS;
-			// A glance at the case outranks all of it for the half second it
-			// lasts: something arrived, and that is what the eyes are on.
-			const glancing = glanceRef.current;
-			const glanceMs = glancing === null ? Infinity : now - glancing.at;
-			const looking = !glanceOver(glanceMs);
+			// The case being moved outranks all of it: the hands are on it, and
+			// that is where the eyes are.
+			const reachW = reachRef.current?.w ?? 0;
+			const looking = reachW > 0;
 			const target = looking
-				? glanceGaze(glanceMs)
+				? caseLookGaze(reachW)
 				: shown !== "rest"
 					? actGaze(shown, actMs)
 					: following && pointer
@@ -311,7 +318,7 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 				gazeRef.current,
 				target,
 				dt,
-				looking ? GLANCE_K : GAZE_K_ACT[shown],
+				looking ? CASE_LOOK_K : GAZE_K_ACT[shown],
 			);
 
 			const common = {
@@ -350,7 +357,12 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 			set("--lumen-mouth-open", v.mouthOpen);
 			el.style.setProperty("--lumen-x", `${(v.shiftX * 100).toFixed(3)}%`);
 			el.style.setProperty("--lumen-y", `${(v.shiftY * 100).toFixed(3)}%`);
-			el.style.setProperty("--lumen-tilt", `${v.tiltDeg.toFixed(3)}deg`);
+			// The lean over the case rides on top of the act's own tilt: it is a
+			// body reaching past itself, not a fifth act.
+			el.style.setProperty(
+				"--lumen-tilt",
+				`${(v.tiltDeg + caseLeanDeg(reachW)).toFixed(3)}deg`,
+			);
 			el.style.setProperty("--lumen-tuft-lean", `${v.tuftLeanDeg.toFixed(3)}deg`);
 		};
 
@@ -396,45 +408,62 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 		};
 	}, [still, subscribe, subscribeEnvelope]);
 
-	// The glance. A still body has no loop to paint it, so the glance brings its
-	// own rAF and hands the two properties back at zero when it is done; a body
-	// that is running one only leaves a mark for the loop to read.
+	// The reach, beside an open book. A still body has no loop to paint it, so
+	// it brings its own rAF for as long as the case is moving and for the tail
+	// the eyes and the lean take to come back; a body that is running a loop
+	// only has the number read off it every frame.
 	useEffect(() => {
-		if (glance <= 0) return;
+		if (!still) return;
 		const el = rootRef.current;
 		if (!el) return;
-		const at = performance.now();
-		glanceRef.current = { at };
-		if (!still) {
-			return () => {
-				glanceRef.current = null;
-			};
-		}
-		let gaze = GAZE_ZERO;
-		let last = at;
+		// The two are held outside the effect: it re-runs the moment the case
+		// settles, and the eyes and the lean have to carry on back from where
+		// they are rather than snap.
+		if (!reaching && stillLeanRef.current === 0 && stillGazeRef.current === GAZE_ZERO) return;
+		let last = performance.now();
 		let frame = 0;
+		const write = () => {
+			el.style.setProperty("--lumen-gx", stillGazeRef.current.x.toFixed(4));
+			el.style.setProperty("--lumen-gy", stillGazeRef.current.y.toFixed(4));
+			el.style.setProperty("--lumen-tilt", `${stillLeanRef.current.toFixed(3)}deg`);
+		};
 		const step = (now: number) => {
-			const elapsed = now - at;
-			gaze = easeGaze(gaze, glanceGaze(elapsed), now - last, GLANCE_K);
+			const dt = now - last;
 			last = now;
-			if (glanceOver(elapsed)) {
-				el.style.setProperty("--lumen-gx", "0");
-				el.style.setProperty("--lumen-gy", "0");
+			const w = reachRef.current?.w ?? 0;
+			const gaze = easeGaze(stillGazeRef.current, caseLookGaze(w), dt, CASE_LOOK_K);
+			const lean = easeToward(stillLeanRef.current, caseLeanDeg(w), dt, CASE_LOOK_K);
+			stillGazeRef.current = gaze;
+			stillLeanRef.current = lean;
+			// Back to the resting pose the defaults paint, exactly: a still body
+			// left holding a thousandth of a degree is a body standing crooked.
+			// Only once the case has stopped moving — the reach is nothing at
+			// the start of a pull-out too, and a loop that gave up there would
+			// never see the act it was started for.
+			if (
+				!reaching &&
+				w === 0 &&
+				Math.abs(gaze.x) < 0.002 &&
+				Math.abs(gaze.y) < 0.002 &&
+				Math.abs(lean) < 0.02
+			) {
+				stillGazeRef.current = GAZE_ZERO;
+				stillLeanRef.current = 0;
+				write();
 				frame = 0;
 				return;
 			}
-			el.style.setProperty("--lumen-gx", gaze.x.toFixed(4));
-			el.style.setProperty("--lumen-gy", gaze.y.toFixed(4));
+			write();
 			frame = requestAnimationFrame(step);
 		};
 		frame = requestAnimationFrame(step);
+		// Only the frame is dropped. The properties are left where they are:
+		// this effect re-runs in the middle of the act, and zeroing them on the
+		// way through would be one frame of a body snapping upright.
 		return () => {
-			glanceRef.current = null;
 			if (frame !== 0) cancelAnimationFrame(frame);
-			el.style.setProperty("--lumen-gx", "0");
-			el.style.setProperty("--lumen-gy", "0");
 		};
-	}, [glance, still]);
+	}, [still, reaching]);
 
 	const idle = handle.phase === "idle";
 
@@ -509,25 +538,7 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 // feet on the same line. The rim light down its right side is the body's — it
 // is why the two read as standing in one place, and why the cut keeps it.
 
-/**
- * The trigger's own box: the case, grown by the touch target on every side.
- * `box-content` on the element is what makes the padding grow outwards rather
- * than eat the drawing, so the case draws at about 24px in the corner and the
- * finger still gets 44.
- */
-export function caseTriggerStyle(): CSSProperties {
-	const rect = caseRect();
-	const pct = (n: number) => `${(n * 100).toFixed(3)}%`;
-	return {
-		left: `calc(${pct(rect.left)} - ${CASE_HIT_PAD_PX}px)`,
-		bottom: `calc(${pct(rect.bottom)} - ${CASE_HIT_PAD_PX}px)`,
-		width: pct(rect.width),
-		height: pct(rect.height),
-		padding: `${CASE_HIT_PAD_PX}px`,
-	};
-}
-
-/** The case itself, filling whatever box it is given. */
+/** The case itself, filling whatever box it is given (case-motion.ts sets it). */
 export function LumenCase() {
 	return (
 		<img
