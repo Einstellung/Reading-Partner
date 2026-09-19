@@ -11,6 +11,7 @@ import {
   appendRoundBreak,
   holdsNoAnswer,
   joinRoundTexts,
+  phaseOnToolStart,
   refusalRow,
   replayableHistory,
 } from "../../src/ai/turn-rows";
@@ -140,4 +141,20 @@ test("joining the rounds gives what the streamed row already holds", () => {
     row = appendRoundBreak(row);
   }
   expect(joinRoundTexts(rounds)).toBe(row.replace(/\n+$/, ""));
+});
+
+// A quiet tool draws no line of its own (docs/72), so the status line goes on
+// saying whatever it was saying rather than name a call nobody is shown.
+test("a quiet tool start leaves the phase where it was", () => {
+  expect(phaseOnToolStart("thinking", true)).toBe("thinking");
+  expect(phaseOnToolStart("writing", true)).toBe("writing");
+  expect(phaseOnToolStart("tool", true)).toBe("tool");
+  // Nothing has happened on the row yet: still nothing.
+  expect(phaseOnToolStart(null, true)).toBeUndefined();
+  expect(phaseOnToolStart(undefined, true)).toBeUndefined();
+});
+
+test("an ordinary tool start moves the row to the tool phase", () => {
+  expect(phaseOnToolStart("thinking")).toBe("tool");
+  expect(phaseOnToolStart(null, false)).toBe("tool");
 });

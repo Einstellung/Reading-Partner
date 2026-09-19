@@ -17,7 +17,13 @@ import {
   type Receipt,
   type ToolStatus,
 } from "../ai/tool-status";
-import { appendRoundBreak, holdsNoAnswer, refusalRow, type TurnPhase } from "../ai/turn-rows";
+import {
+  appendRoundBreak,
+  holdsNoAnswer,
+  phaseOnToolStart,
+  refusalRow,
+  type TurnPhase,
+} from "../ai/turn-rows";
 
 // Picture-in-picture (docs/03): the bubble by the mark, chat taking the whole
 // window with reading shrunk to a corner card, and reading back with chat
@@ -110,8 +116,9 @@ export type RowChange =
   | { kind: "handed-over" }
   // A tool started. What the round wrote before calling it stays where it is,
   // with a blank line opened under it for the next round (docs/pitfall/291); the
-  // status line is drawn in that gap and comes off when the tool returns.
-  | { kind: "tool-start"; name: string; label: string }
+  // status line is drawn in that gap and comes off when the tool returns. A
+  // quiet call (docs/72) draws no line and leaves the phase where it was.
+  | { kind: "tool-start"; name: string; label: string; quiet?: true }
   | { kind: "tool-end"; name: string; isError: boolean; receipt?: Receipt; error?: string }
   // A running tool said something new about itself — one line, rewritten in
   // place (docs/25).
@@ -140,8 +147,8 @@ export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M 
       return {
         ...row,
         text: appendRoundBreak(row.text),
-        phase: "tool",
-        tools: appendRunningTool(row.tools, change.name, change.label),
+        phase: phaseOnToolStart(row.phase, change.quiet),
+        tools: appendRunningTool(row.tools, change.name, change.label, change.quiet),
       };
     case "tool-end": {
       const tools = resolveToolStatus(row.tools, change.name, change.isError, {

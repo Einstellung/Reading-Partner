@@ -229,6 +229,11 @@ test("the info companion mounts its own tools plus the source tools", () => {
 const EFFECTS = new Set(["read", "write"]);
 const GATES = new Set(["card", "trial", "instruction"]);
 
+// The tools the reader is shown nothing about (docs/72). Written out here for
+// the same reason the roster is: a tool that starts or stops being quiet is a
+// change to what the reader sees, and it fails this line until it is meant.
+const QUIET = ["observation_update", "statement_write"];
+
 test("every tool declares a label, an effect and — where it has one — a known gate", () => {
   const all = [...ROSTER.flatMap((r) => r.tools), ...companion];
   expect(all.length).toBeGreaterThan(40);
@@ -245,7 +250,26 @@ test("every tool declares a label, an effect and — where it has one — a know
       expect(`${tool.name}: ${tool.gate}`).toBe(`${tool.name}: ${GATES.has(tool.gate) ? tool.gate : "?"}`);
       expect(`${tool.name}: ${tool.effect}`).toBe(`${tool.name}: write`);
     }
+    if (tool.quiet !== undefined) {
+      // One value, so "quiet: false" cannot mean anything.
+      expect(`${tool.name}: ${tool.quiet}`).toBe(`${tool.name}: true`);
+      // Shown nothing about, and still a write that has to hand back a receipt:
+      // unshown is not unrecorded.
+      expect(`${tool.name}: ${tool.effect}`).toBe(`${tool.name}: write`);
+    }
   }
+});
+
+test("the quiet tools are the ones the roster names, and no others", () => {
+  const all = [...ROSTER.flatMap((r) => r.tools), ...companion];
+  expect(all.filter((t) => t.quiet).map((t) => t.name).sort()).toEqual([...QUIET].sort());
+});
+
+test("a quiet write is held to the receipt rule like any other", () => {
+  const quiet = any({ name: "observation_update", effect: "write", quiet: true });
+  expect(() => normalizeToolResult(quiet, "done")).toThrow(/without a receipt/);
+  const receipt = { label: "Updated an observation", summary: "the thing" };
+  expect(normalizeToolResult(quiet, { text: "done", receipt }).receipt).toEqual(receipt);
 });
 
 test("toolLabel falls back to the tool's name when its label throws or is blank", () => {

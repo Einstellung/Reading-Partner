@@ -76,6 +76,13 @@ export interface AgentTool {
   effect: ToolEffect;
   // The gate a write goes through. Reads leave it unset.
   gate?: ToolGate;
+  // The reader is not shown this call: no phase, no trace line, no receipt; it
+  // stays in the stored trace. For bookkeeping the app does on its own behalf —
+  // the memory writes — which is a record of the turn and not something the
+  // reader came here to read. A quiet tool is still a write with a receipt: the
+  // record is complete, it is only unshown, and a quiet call that fails keeps
+  // its red line like any other.
+  quiet?: true;
   execute(args: Record<string, any>): Promise<string | ToolResult>;
 }
 
@@ -85,6 +92,9 @@ export interface AgentToolStart {
   // `tool.label(args)`, computed once here so no surface has to keep its own
   // table of tool names to say what is running.
   label: string;
+  // `tool.quiet`, carried the same way, so a surface decides what to draw from
+  // the call in front of it and never from a list of tool names.
+  quiet?: true;
 }
 
 export interface AgentToolEnd {

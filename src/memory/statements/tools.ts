@@ -65,6 +65,10 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
       name: "statement_write",
       label: () => "Writing down what you said about yourself",
       effect: "write",
+      // Bookkeeping, not something the reader came here to read (docs/72): no
+      // phase, no trace line, no receipt. It is still written to the thread
+      // file with its receipt, and a call that fails still shows its red line.
+      quiet: true,
       description:
         "Write down something the reader has just told you about themselves, in their own " +
         "words. Call it when they say how they want to be taught (\"stop drawing diagrams\", " +

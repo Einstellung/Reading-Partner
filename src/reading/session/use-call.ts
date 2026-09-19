@@ -49,7 +49,7 @@ import {
   type CallView,
   type RowChange,
 } from "../call-state";
-import { joinRoundTexts, type TurnPhase } from "../../ai/turn-rows";
+import { joinRoundTexts, phaseOnToolStart, type TurnPhase } from "../../ai/turn-rows";
 import { annotationPage } from "../context";
 import { persistedTrace, type ToolStatus } from "../../ai/tool-status";
 import type { AgentToolEnd, AgentToolStart } from "../../legion/execute/contract";
@@ -633,9 +633,19 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       }
     });
 
+    // A quiet call is not named on screen, so the phase stays where it was
+    // (ai/turn-rows.ts): the row goes on saying "Thinking…", or on writing.
     const onToolStart = (info: AgentToolStart, ts: number) => {
-      phase = "tool";
-      write({ kind: "tool-start", name: info.name, label: info.label }, ts);
+      phase = phaseOnToolStart(phase, info.quiet) ?? null;
+      write(
+        {
+          kind: "tool-start",
+          name: info.name,
+          label: info.label,
+          ...(info.quiet ? { quiet: true as const } : {}),
+        },
+        ts,
+      );
     };
     const onToolEnd = (info: AgentToolEnd, ts: number) =>
       write(

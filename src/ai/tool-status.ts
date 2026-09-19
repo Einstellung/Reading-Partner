@@ -45,6 +45,19 @@ export interface ToolStatus {
   receipt?: Receipt;
   // Why it failed, on an 'error' row: the message the tool threw.
   error?: string;
+  // The tool declared itself quiet (legion/execute/contract.ts): the reader is
+  // shown nothing while it runs and no line once it is done, and no receipt is
+  // derived from it. It is still stored, so what the turn did is on disk in
+  // full. A quiet call that failed is shown: the red line is the one thing
+  // about it the reader has to see.
+  quiet?: true;
+}
+
+// The calls in a trace the reader is shown. Quiet ones drop out — except when
+// they failed. Used both while the turn runs and after it settles, so a quiet
+// write is absent from the line either way; the trace itself keeps every call.
+export function visibleTrace(tools: readonly ToolStatus[]): ToolStatus[] {
+  return tools.filter((t) => !t.quiet || t.state === "error");
 }
 
 // Project a settled trace into the durable shape the thread store writes
@@ -59,6 +72,10 @@ export function persistedTrace(tools: readonly ToolStatus[]): PersistedToolStatu
       state: t.state,
       ...(t.receipt ? { receipt: t.receipt } : {}),
       ...(t.error ? { error: t.error } : {}),
+      // Stored with the flag it ran under, so a reopened thread hides it the
+      // way the live turn did. A file written before the flag existed has none,
+      // and every call in it is shown — which is what it was.
+      ...(t.quiet ? { quiet: true as const } : {}),
     }));
   return settled.length ? settled : null;
 }
@@ -68,8 +85,9 @@ export function appendRunningTool(
   tools: ToolStatus[] | undefined,
   name: string,
   label: string,
+  quiet?: boolean,
 ): ToolStatus[] {
-  return [...(tools ?? []), { name, label, state: "running" }];
+  return [...(tools ?? []), { name, label, state: "running", ...(quiet ? { quiet: true as const } : {}) }];
 }
 
 // A running tool said something new about itself: rewrite its label in place. The

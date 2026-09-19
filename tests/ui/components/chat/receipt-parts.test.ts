@@ -16,10 +16,10 @@ function row(tools: ToolStatus[], text = "Noted."): ThreadMessage {
 }
 
 const wrote: ToolStatus = {
-  name: "observation_update",
-  label: "Writing it down",
+  name: "add_saved_article",
+  label: "Saving the article",
   state: "done",
-  receipt: { label: "Added an observation", summary: "They read the epilogue first." },
+  receipt: { label: "Saved an article", summary: "Why the retina is not a camera." },
 };
 
 const sent: ToolStatus = {
@@ -37,8 +37,8 @@ test("a done call that reported a receipt becomes a receipt part", () => {
   const parts = messageToParts(row([wrote]));
   expect(parts.map((p) => p.type)).toEqual(["text", "receipt", "tool-trace"]);
   const receipt = parts[1];
-  expect(receipt.type === "receipt" && receipt.receipt.label).toBe("Added an observation");
-  expect(receipt.type === "receipt" && receipt.toolName).toBe("observation_update");
+  expect(receipt.type === "receipt" && receipt.receipt.label).toBe("Saved an article");
+  expect(receipt.type === "receipt" && receipt.toolName).toBe("add_saved_article");
 });
 
 test("a receipt pointing at a run becomes a dispatch part instead", () => {
@@ -91,6 +91,40 @@ test("a stored trace derives its receipts the same way a live one does", () => {
     ],
   };
   expect(messageToParts(m).map((p) => p.type)).toEqual(["text", "receipt", "tool-trace"]);
+});
+
+// The memory bookkeeping writes are quiet (docs/72): the receipt is stored with
+// the trace and nothing is derived from it, live or on reopen.
+const quietWrote: ToolStatus = {
+  name: "observation_update",
+  label: "Updating an observation",
+  state: "done",
+  receipt: { label: "Updated an observation", summary: "They read the epilogue first." },
+  quiet: true,
+};
+
+test("a quiet call derives no receipt part", () => {
+  expect(messageToParts(row([quietWrote])).map((p) => p.type)).toEqual(["text", "tool-trace"]);
+  // And it does not hide the receipts of the calls beside it.
+  expect(messageToParts(row([quietWrote, wrote])).map((p) => p.type)).toEqual([
+    "text",
+    "receipt",
+    "tool-trace",
+  ]);
+});
+
+test("a stored quiet call derives no receipt part either", () => {
+  const m: ThreadMessage = {
+    role: "ai",
+    text: "Noted.",
+    ts: 1,
+    parts: [
+      { type: "text", text: "Noted." },
+      { type: "tool-trace", tools: [quietWrote] },
+    ],
+  };
+  // The same array back: nothing was derived, so nothing was rebuilt.
+  expect(messageToParts(m)).toBe(m.parts!);
 });
 
 test("the answers a thread already holds are the rows that carry an origin", () => {

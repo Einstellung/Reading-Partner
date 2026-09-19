@@ -56,7 +56,13 @@ import { forgetScroll } from "../common/scroll-memory";
 import type { ToolStatus } from "../../../ai/tool-status";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { navigateAway } from "../chat/call-layout";
-import { appendRoundBreak, refusalRow, replayableHistory, type TurnPhase } from "../../../ai/turn-rows";
+import {
+  appendRoundBreak,
+  phaseOnToolStart,
+  refusalRow,
+  replayableHistory,
+  type TurnPhase,
+} from "../../../ai/turn-rows";
 import {
   cardRow,
   findCardPart,
@@ -566,14 +572,16 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         patchLast({ phase: "thinking" });
       },
       // What this round wrote before calling the tool stays on screen, with a
-      // blank line opened under it for the next round (docs/pitfall/291).
+      // blank line opened under it for the next round (docs/pitfall/291). A
+      // quiet call is not named and leaves the phase alone (ai/turn-rows.ts).
       onToolStart: (info) => {
         full = appendRoundBreak(full);
-        phase = "tool";
+        phase = phaseOnToolStart(phase, info.quiet) ?? null;
+        const next = phase;
         patchLast((m) => ({
           text: full,
-          phase: "tool",
-          tools: appendRunningTool(m.tools, info.name, info.label),
+          phase: next ?? undefined,
+          tools: appendRunningTool(m.tools, info.name, info.label, info.quiet),
         }));
       },
       onToolEnd: (info) =>

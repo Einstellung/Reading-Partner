@@ -28,6 +28,8 @@
 
 write 类工具执行完没带 `receipt` 回来，适配层抛错。闸从此在运行时成立，21 说的「可见性是闸的一部分」有了实现。
 
+`quiet?: true` 是读者看不见的那一类：不进阶段行、不进灰字行、不派生回执单，只留在落盘的 trace 里。记忆的两个簿记写入带它——`observation_update` 和 `statement_write`。它们仍是 write，仍必须带 receipt 回来，失败照样出红字：不给看不等于不记。
+
 三张人话表删除。
 
 ## 读者看到的
@@ -81,6 +83,8 @@ Composer 在流式期间 Send 和 Stop 都在。
 - 答铃 steer 进在跑的轮（`reading/delivered.ts`），答铃自起的回合按 silent 登记进 liveTurns，送达行落 `origin: { runId }`。
 
 以上随 v0.20.2 发出。
+
+2026-09-19 进 main 未发版：`quiet`，记忆的两个簿记写入默默干（`AgentToolStart` 和 `ToolStatus` 都带着这个标走，界面据此判断，不认工具名）。
 
 ## 尾巴
 
