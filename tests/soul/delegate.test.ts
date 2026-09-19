@@ -83,11 +83,13 @@ test("a turn held nowhere in particular delegates without a place to answer in",
   expect(seen[0]!.deliverTo).toBeUndefined();
 });
 
-test("what comes back is the run id and the fact that the answer is not in this turn", async () => {
+test("what comes back is that the answer is not in this turn, and no run id to parrot", async () => {
   const { tool: t } = tool();
   const said = toolText(await t.execute({ kind: "research-literature", task: "anything" }));
-  expect(said).toContain("r-1");
   expect(said).toContain("later");
+  expect(said).toContain("work order");
+  // The reader has no use for a run id, and a model given one repeats it.
+  expect(said).not.toContain("r-1");
 });
 
 test("a kind nothing here runs is refused before a brief is written", async () => {

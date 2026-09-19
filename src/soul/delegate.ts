@@ -124,10 +124,10 @@ export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
         if (!result.ok) throw new Error(result.reason);
         return {
           text:
-            `Delegated as run ${result.run.id} (kind: ${kind}). It is running now and this ` +
-            `turn does not wait for it: what it comes back with will arrive in this ` +
-            `conversation later. Tell the reader the answer is coming rather than ` +
-            `answering the question yourself.`,
+            `Handed to a ${kind} worker. It is running now and this turn does not wait for ` +
+            `it: the conversation already shows a work order for it, and what it comes back ` +
+            `with will arrive in this conversation later. Tell the reader the answer is ` +
+            `coming rather than answering the question yourself.`,
           receipt: {
             label: `Sent off ${kind} work`,
             summary: firstSentence(task),

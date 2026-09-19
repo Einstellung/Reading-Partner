@@ -104,6 +104,8 @@ test("a run delegated from the briefing is answered in that day's thread, and le
       { at: NOW - 1000 },
     );
     const { send, prompts } = sender([{ text: "It was 8%, set in March. The cable is from 商务部." }]);
+    // What the run wrote, where the soul reads it back from.
+    disk.files.set("legion/outputs/r-t1.md", "8% from March, per 商务部 announcement 2026-03-11.");
 
     expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
 
@@ -121,7 +123,9 @@ test("a run delegated from the briefing is answered in that day's thread, and le
     expect(item.boxId).toBe("r-t1");
     expect(item.kind).toBe("tasking");
     expect(item.origin).toEqual({ place: "briefing", date: DATE });
-    expect(item.body).toBe("legion/outputs/r-t1.md");
+    // The card carries what the run produced, not the path to a file that does
+    // not travel with it (src/soul/bell.ts).
+    expect(item.body).toBe("8% from March, per 商务部 announcement 2026-03-11.");
     expect(String(item.cover)).toContain("It was 8%");
   } finally {
     off();

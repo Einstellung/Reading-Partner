@@ -5,8 +5,8 @@
 
 import { beforeEach, expect, test } from "bun:test";
 import type { Message } from "@earendil-works/pi-ai";
-import { answerBell, renderBell, type SendBellTurn } from "../../src/soul";
-import { createBellStore, type BellStore } from "../../src/legion/bell";
+import { answerBell, renderBell, OUTPUT_MAX, type SendBellTurn } from "../../src/soul";
+import { createBellStore, BRIEF_MAX, type Bell, type BellStore } from "../../src/legion/bell";
 import { createRunStore } from "../../src/legion/run/store";
 import { doorKey, doorDate } from "../../src/soul";
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
@@ -61,19 +61,56 @@ function doorFile(): { messages: { role: string; text: string }[] } | null {
 
 const NOW = new Date(2026, 8, 14, 9, 0, 0).getTime();
 
-test("the bell says who is speaking, and says it before the payload", () => {
-  const text = renderBell({
+const doneBell = (payload: Record<string, unknown>): Bell =>
+  ({
     id: "run-done-r1",
     type: "run-done",
     at: NOW,
     state: "queued",
-    payload: { runId: "r1", kind: "translate-book", brief: "chapter 3", truncated: true, output: "runs/r1/out" },
-  });
+    payload: { runId: "r1", kind: "translate-book", ...payload },
+  }) as Bell;
+
+test("the bell says who is speaking, and says it before the payload", () => {
+  const text = renderBell(
+    doneBell({ brief: "legion/briefs/b1.md", output: "legion/outputs/r1.md" }),
+    {
+      brief: "Translate chapter 3.",
+      briefCut: false,
+      output: "Chapter 3, in English.",
+      outputCut: false,
+      outputMissing: false,
+    },
+  );
   expect(text.split("\n")[0]).toContain("not said by the reader");
-  expect(text).toContain("r1");
   expect(text).toContain("translate-book");
-  expect(text).toContain("chapter 3");
-  expect(text).toContain("runs/r1/out");
+  // What was asked and what came back, both as text: the turn has no tool that
+  // opens a path, so no path is put in front of it.
+  expect(text).toContain("Translate chapter 3.");
+  expect(text).toContain("Chapter 3, in English.");
+  expect(text).not.toContain("legion/");
+});
+
+test("a bell says what was cut and what is not here, rather than where it is", () => {
+  const cut = renderBell(doneBell({ brief: "legion/briefs/b1.md", output: "legion/outputs/r1.md" }), {
+    brief: "Translate chapter 3.",
+    briefCut: true,
+    output: "Chapter 3, in English.",
+    outputCut: true,
+    outputMissing: false,
+  });
+  expect(cut).toContain("The task above was cut to fit.");
+  expect(cut).toContain("cut to fit here");
+
+  const gone = renderBell(doneBell({ brief: "legion/briefs/b1.md", output: "legion/outputs/r1.md" }), {
+    brief: null,
+    briefCut: false,
+    output: null,
+    outputCut: false,
+    outputMissing: true,
+  });
+  expect(gone).toContain("The output is not on this device.");
+  expect(gone).toContain("The task it was given is not on this device.");
+  expect(gone).not.toContain("legion/");
 });
 
 test("nothing in the inbox costs one listing and no turn", async () => {
@@ -194,6 +231,25 @@ function boxStore(): { box: BoxStore; files: Map<string, string> } {
   return { box: createBoxStore(io), files: io.files };
 }
 
+// What a run left on disk, as the soul reads it back: the brief the soul wrote
+// when it delegated and the output the worker wrote. A path nothing was written
+// to throws, the way the disk throws.
+function leftOnDisk(files: Record<string, string>): (path: string) => Promise<string> {
+  return async (path) => {
+    const text = files[path];
+    if (text === undefined) throw new Error(`no such file: ${path}`);
+    return text;
+  };
+}
+
+const BRIEF_TEXT = "Find what has been written about the 1971 result.";
+const OUTPUT_TEXT = "Four papers, oldest first. Kuhn 1971 settles it.";
+
+const RUN_FILES = leftOnDisk({
+  "legion/briefs/b-1.md": BRIEF_TEXT,
+  "legion/outputs/r-1.md": OUTPUT_TEXT,
+});
+
 // A domain's delivery opener, as reading registers one: it says where the reply
 // goes and hands back a turn. The bell knows nothing else about a book.
 // `seen` is what reading answers off what is on screen (reading/turn-box.ts);
@@ -244,7 +300,7 @@ test("a run delegated from a book is answered in that book's thread, not at the 
       {
         runId: "r-1",
         kind: "research-literature",
-        brief: "the literature is in",
+        brief: "legion/briefs/b-1.md",
         output: "legion/outputs/r-1.md",
         deliverTo: bookOrigin,
       },
@@ -252,7 +308,9 @@ test("a run delegated from a book is answered in that book's thread, not at the 
     );
     const { send, rounds } = sender([{ text: "Four papers came back. The first settles it." }]);
 
-    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+    expect(
+      await answerBell({ settings, bells, box, send, readFile: RUN_FILES, now: () => NOW }),
+    ).toBe(1);
 
     // The book's own file holds the reply; the door was never opened.
     expect(bookThreadFile()!.messages).toEqual([
@@ -260,7 +318,13 @@ test("a run delegated from a book is answered in that book's thread, not at the 
     ]);
     expect(doorFile()).toBeNull();
     expect(rounds.length).toBe(1);
-    expect(String(rounds[0]![0]!.content)).toContain("not said by the reader");
+    // The turn was handed what the run was asked and what it produced, not the
+    // two paths — it has no tool that would open either.
+    const asked = String(rounds[0]![0]!.content);
+    expect(asked).toContain("not said by the reader");
+    expect(asked).toContain(BRIEF_TEXT);
+    expect(asked).toContain(OUTPUT_TEXT);
+    expect(asked).not.toContain("legion/");
 
     // One card, pointing back at what was just written.
     const item = JSON.parse([...files.values()][0]!) as Record<string, unknown>;
@@ -269,9 +333,85 @@ test("a run delegated from a book is answered in that book's thread, not at the 
     expect(item.source).toBe("run");
     expect(item.state).toBe("in-box");
     expect(item.needsDecision).toBe(false);
-    expect(item.body).toBe("legion/outputs/r-1.md");
+    // The item travels between devices and the output file does not, so the
+    // card holds the text of it.
+    expect(item.body).toBe(OUTPUT_TEXT);
     expect(item.cover).toBe("Four papers came back.");
     expect(item.origin).toEqual(JSON.parse(bookOrigin));
+  } finally {
+    off();
+  }
+});
+
+test("a brief and an output too long for a turn are cut, and the turn is told they were", async () => {
+  const off = bookDelivery();
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box } = boxStore();
+    await bells.ring(
+      "run-done",
+      {
+        runId: "r-1",
+        kind: "research-literature",
+        brief: "legion/briefs/b-1.md",
+        output: "legion/outputs/r-1.md",
+        deliverTo: bookOrigin,
+      },
+      { at: NOW - 1000 },
+    );
+    const { send, rounds } = sender([{ text: "Back." }]);
+    await answerBell({
+      settings,
+      bells,
+      box,
+      send,
+      readFile: leftOnDisk({
+        "legion/briefs/b-1.md": "b".repeat(BRIEF_MAX + 500),
+        "legion/outputs/r-1.md": "o".repeat(OUTPUT_MAX + 500),
+      }),
+      now: () => NOW,
+    });
+
+    const asked = String(rounds[0]![0]!.content);
+    expect(asked).toContain("b".repeat(BRIEF_MAX));
+    expect(asked).not.toContain("b".repeat(BRIEF_MAX + 1));
+    expect(asked).toContain("The task above was cut to fit.");
+    expect(asked).toContain("o".repeat(OUTPUT_MAX));
+    expect(asked).not.toContain("o".repeat(OUTPUT_MAX + 1));
+    expect(asked).toContain("cut to fit here");
+  } finally {
+    off();
+  }
+});
+
+test("a run whose files are not on this device says so rather than naming them", async () => {
+  const off = bookDelivery();
+  try {
+    createBookThread(BOOK, "thread-1");
+    const { bells } = bellStore();
+    const { box, files } = boxStore();
+    await bells.ring(
+      "run-done",
+      {
+        runId: "r-1",
+        kind: "research-literature",
+        brief: "legion/briefs/b-1.md",
+        output: "legion/outputs/r-1.md",
+        deliverTo: bookOrigin,
+      },
+      { at: NOW - 1000 },
+    );
+    const { send, rounds } = sender([{ text: "Nothing came through." }]);
+    await answerBell({ settings, bells, box, send, readFile: leftOnDisk({}), now: () => NOW });
+
+    const asked = String(rounds[0]![0]!.content);
+    expect(asked).toContain("The task it was given is not on this device.");
+    expect(asked).toContain("The output is not on this device.");
+    expect(asked).not.toContain("legion/");
+    // Nothing to put on the card either, so it carries the cover alone.
+    const item = JSON.parse([...files.values()][0]!) as Record<string, unknown>;
+    expect(item.body).toBeUndefined();
   } finally {
     off();
   }
@@ -626,11 +766,13 @@ test("a delivery into a running turn nobody is watching still leaves a card", as
       { at: NOW - 1000 },
     );
     const { send } = sender([]);
-    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+    expect(
+      await answerBell({ settings, bells, box, send, readFile: RUN_FILES, now: () => NOW }),
+    ).toBe(1);
 
     const item = JSON.parse([...cards.values()][0]!) as Record<string, unknown>;
     expect(item.runId).toBe("r-1");
-    expect(item.body).toBe("legion/outputs/r-1.md");
+    expect(item.body).toBe(OUTPUT_TEXT);
     // No reply to take a first sentence from: the run's own brief says it.
     expect(item.cover).toBe("Four papers came back.");
   } finally {
