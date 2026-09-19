@@ -28,8 +28,9 @@
 // when the model has actually been handed it, so a turn that ends first leaves
 // the bell queued for the next pass.
 
-import { appBells, type Bell, type BellStore } from "../legion/bell";
+import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
+import { appData } from "../platform/app/appdata";
 import { runAgentTurn, type AgentTool } from "../legion/execute/turn";
 import type { SteerPort } from "../legion/execute/contract";
 import type { HeldHarness } from "../legion/execute/held";
@@ -79,6 +80,12 @@ export interface AnswerBellDeps {
   /** The lane every soul turn runs on. */
   harness?: HeldHarness;
   send?: SendBellTurn;
+  /**
+   * Reads a file a run pointed at — its brief, its output. AppData unless a
+   * test hands one in: legion keeps references and the soul is the layer that
+   * may open them.
+   */
+  readFile?: ReadAppText;
   now?: () => number;
   newThreadId?: () => string;
   signal?: AbortSignal;
@@ -86,18 +93,106 @@ export interface AnswerBellDeps {
   onTrouble?: (bell: Bell, reason: string) => void;
 }
 
+/** Reads one of the app's files. Injected so a test can stub it. */
+export type ReadAppText = (path: string) => Promise<string>;
+
+/**
+ * How much of what a run produced goes to the model. Wider than BRIEF_MAX
+ * because this is the thing the turn is about: the brief only says what was
+ * asked, and the turn has to answer the reader out of the product itself.
+ */
+export const OUTPUT_MAX = 24000;
+
+/**
+ * A run's references, read into the text the turn is answered from. A run
+ * record holds paths and nothing else (legion/execute/outputs.ts), and a turn
+ * has no tool that opens them — so the substance is resolved here, before the
+ * turn, and the paths never reach the model.
+ */
+export interface RunSubstance {
+  /** The task the run was given. Null when the brief is not on this device. */
+  brief: string | null;
+  /** The brief was cut to fit. */
+  briefCut: boolean;
+  /** What the run produced. Null when it produced nothing, or it is not here. */
+  output: string | null;
+  /** The output was cut to fit. */
+  outputCut: boolean;
+  /** The run pointed at an output and this device could not read it. */
+  outputMissing: boolean;
+}
+
+// A bell's `brief` is whatever the delegator handed the runner. The soul writes
+// its briefs to a file and delegates the path (soul/delegate.ts); a delegator
+// that has the words in hand — a schedule, a program — rings with the text. So
+// a string shaped like one of legion's brief paths is opened, and anything else
+// is already the brief.
+const BRIEF_PATH = /^legion\/briefs\/\S+$/;
+
+function cap(text: string, max: number): { text: string; cut: boolean } {
+  return text.length <= max ? { text, cut: false } : { text: text.slice(0, max), cut: true };
+}
+
+/** Open what a finished run pointed at, so the turn is given the substance. */
+export async function runSubstance(
+  payload: RunDonePayload,
+  read: ReadAppText,
+): Promise<RunSubstance> {
+  let brief: string | null = payload.brief;
+  let briefCut = payload.truncated === true;
+  if (BRIEF_PATH.test(payload.brief)) {
+    const text = await read(payload.brief).catch(() => null);
+    if (text === null) {
+      brief = null;
+      briefCut = false;
+    } else {
+      const fitted = cap(text.trim(), BRIEF_MAX);
+      brief = fitted.text;
+      briefCut = fitted.cut;
+    }
+  }
+
+  if (!payload.output) {
+    return { brief, briefCut, output: null, outputCut: false, outputMissing: false };
+  }
+  const produced = await read(payload.output).catch(() => null);
+  if (produced === null) {
+    return { brief, briefCut, output: null, outputCut: false, outputMissing: true };
+  }
+  const fitted = cap(produced.trim(), OUTPUT_MAX);
+  return { brief, briefCut, output: fitted.text, outputCut: fitted.cut, outputMissing: false };
+}
+
 /**
  * What the model is told a bell is. Flat text, and it says in its first line
  * that legion sent it — a turn that mistook this for the reader speaking would
  * answer the machine instead of the person.
+ *
+ * A run-done bell is rendered from the substance runSubstance read off the
+ * run's paths; without it there is only the brief the bell carries, which for a
+ * soul-delegated run is a path and not a sentence.
  */
-export function renderBell(bell: Bell): string {
+export function renderBell(bell: Bell, substance?: RunSubstance | null): string {
   const lines = ["[bell from legion — this was not said by the reader]"];
   if (bell.type === "run-done") {
-    const { runId, kind, brief, truncated, output } = bell.payload;
-    lines.push(`A run you delegated has finished: ${runId} (kind: ${kind}).`, "", brief);
-    if (truncated) lines.push("", "The brief above was cut to fit; the whole of it is in the output.");
-    if (output) lines.push("", `Everything the run produced is at: ${output}`);
+    const { kind } = bell.payload;
+    const found = substance ?? {
+      brief: BRIEF_PATH.test(bell.payload.brief) ? null : bell.payload.brief,
+      briefCut: bell.payload.truncated === true,
+      output: null,
+      outputCut: false,
+      outputMissing: bell.payload.output !== undefined,
+    };
+    lines.push(`A run you delegated has finished (kind: ${kind}).`, "");
+    lines.push("What it was asked to do:", "");
+    lines.push(found.brief ?? "The task it was given is not on this device.");
+    if (found.briefCut) lines.push("", "The task above was cut to fit.");
+    const nothing = found.outputMissing
+      ? "The output is not on this device."
+      : "It left nothing behind.";
+    lines.push("", "What it came back with:", "");
+    lines.push(found.output ?? nothing);
+    if (found.outputCut) lines.push("", "What it came back with was cut to fit here; what is above is the start of it.");
   } else if (bell.type === "run-failed") {
     const { runId, kind, reason } = bell.payload;
     lines.push(
@@ -183,6 +278,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
   if (queued.length === 0) return 0;
 
   const send = deps.send ?? appSend;
+  const readFile = deps.readFile ?? ((path: string) => appData.readText(path));
   const harness = deps.harness ?? soulHarness();
   const now = deps.now ?? Date.now;
   const newThreadId = deps.newThreadId ?? (() => crypto.randomUUID());
@@ -234,7 +330,11 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
       }
       origin = parseOrigin(bell.payload.deliverTo) ?? parseOrigin(run?.deliverTo);
     }
-    const rendered = renderBell(bell);
+    // What the run pointed at, read once: the turn is answered out of it and
+    // the card in the box carries it.
+    const substance =
+      bell.type === "run-done" ? await runSubstance(bell.payload, readFile) : null;
+    const rendered = renderBell(bell, substance);
     // A turn already running where the question was asked takes the bell as it
     // stands (docs/72): it goes into that turn's context as an internal steer
     // and nowhere else — no line in the thread file, no row of its own — and
@@ -260,10 +360,11 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
               source: "run",
               // No reply to take a first sentence from: the soul is still
               // writing it. The run's own brief is what the card says instead.
-              cover: coverOf(bell.type === "run-failed" ? bell.payload.reason : bell.payload.brief),
-              ...(bell.type === "run-done" && bell.payload.output
-                ? { body: bell.payload.output }
-                : {}),
+              cover:
+                bell.type === "run-failed"
+                  ? coverOf(bell.payload.reason)
+                  : coverOf(substance?.brief ?? "") || `${kind} came back`,
+              ...(substance?.output ? { body: substance.output } : {}),
               origin,
               kind,
               runId,
@@ -358,10 +459,12 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     }
     hold?.release();
     // The card that points back at the reply just written (docs/68). Program
-    // work: the cover is the reply's first sentence, and the body is a reference
-    // to what the run produced rather than the text of it. After the reply is on
-    // disk and before the ack, so an item can never point at a conversation that
-    // is not there.
+    // work: the cover is the reply's first sentence, and the body is what the
+    // run produced. The text of it and not the path to it — an item travels
+    // between devices (palace kind `box-item`) and the output file does not, so
+    // a path here is a card that opens on nothing on the other device. After the
+    // reply is on disk and before the ack, so an item can never point at a
+    // conversation that is not there.
     //
     // None of it when the reader is looking at that conversation as the reply
     // lands — the same rule a plain reading turn follows (reading/turn-box.ts).
@@ -375,9 +478,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
           boxId: runId,
           source: "run",
           cover: coverOf(reply),
-          ...(bell.type === "run-done" && bell.payload.output
-            ? { body: bell.payload.output }
-            : {}),
+          ...(substance?.output ? { body: substance.output } : {}),
           origin: origin ?? { place: "door", date },
           kind,
           runId,

@@ -24,9 +24,10 @@ export function bellRank(state: BellState): number {
 }
 
 /**
- * The most brief a bell will carry. What the worker wrote in full is in the
- * output reference; this is the part that goes to the model, so it is capped
- * where a turn can afford it rather than where the worker stopped writing.
+ * The most brief a bell will carry, and the same cap the soul applies to a
+ * brief it read off a file (src/soul/bell.ts). A brief says what was asked, not
+ * what came of it, so it is capped where a turn can afford it rather than where
+ * whoever wrote it stopped writing.
  */
 export const BRIEF_MAX = 2000;
 
@@ -34,11 +35,20 @@ export const BRIEF_MAX = 2000;
 export interface RunDonePayload {
   runId: string;
   kind: string;
-  /** At most BRIEF_MAX characters. */
+  /**
+   * Whatever the delegator handed the runner, at most BRIEF_MAX characters: the
+   * soul writes its briefs to a file and delegates the path (soul/delegate.ts),
+   * a delegator with the words in hand rings with the text. The soul opens the
+   * one and reads the other as it stands (soul/bell.ts).
+   */
   brief: string;
-  /** Set when the brief was cut to fit. The rest is at `output`. */
+  /** Set when the brief as it was rung was cut to fit. */
   truncated?: boolean;
-  /** Where the whole of what the run produced was put, if it put it anywhere. */
+  /**
+   * The path what the run produced was written to, if it produced anything
+   * (legion/execute/outputs.ts). A reference, like everything else on a run
+   * record; whoever answers the bell reads it.
+   */
   output?: string;
   /**
    * The run's own `deliverTo`, copied onto the bell. Carried rather than looked

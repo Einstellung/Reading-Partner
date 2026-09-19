@@ -55,7 +55,7 @@ export interface PutBoxItemInput {
   source: BoxItemSource;
   /** One line. Written now and never rewritten. */
   cover: string;
-  /** A reference to the full body. Never the text. */
+  /** The full body, or a reference to it. See BoxItem. */
   body?: string;
   origin: BoxOrigin;
   kind?: string;

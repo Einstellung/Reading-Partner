@@ -80,7 +80,11 @@ export interface BoxItem {
   source: BoxItemSource;
   /** One line, written once. */
   cover: string;
-  /** A reference to the full body (a run's output path). Never the text. */
+  /**
+   * The whole of what arrived, or a reference to it: a run's output is the text
+   * of it, because an item travels between devices and the output file does
+   * not; a cable's is an anchor into the day's briefing, which travels.
+   */
   body?: string;
   origin: BoxOrigin;
   kind?: string;
