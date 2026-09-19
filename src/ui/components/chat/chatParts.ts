@@ -291,6 +291,21 @@ export function rehydrateParts(parts: PersistedPart[]): ChatPart[] {
   });
 }
 
+// Whether the words the row was stored with still have to be turned into a part.
+// A reply that called a tool is written to the thread file with its text at
+// message level and only the settled trace as a part; `parts` is authoritative
+// for the renderer, so on reopen that row would draw the grey trace line and
+// none of the answer. The text is put back in front of the parts it was stored
+// beside.
+//
+// Not when a card is among them: a card row renders as the card alone, and its
+// `text` is not something the reader has been shown — on an aside receipt it is
+// the sentence written for the model (reading/aside.ts).
+function needsStoredText(m: StoredMessage, parts: readonly PersistedPart[]): boolean {
+  if (!m.text) return false;
+  return !parts.some((p) => p.type === "text" || p.type === "card");
+}
+
 // Persisted thread message -> live UI message on reopen. A stored card message
 // rehydrates its parts; a message written before parts existed (or one carrying
 // an empty array) stays text-only, so the row falls back to `text` alone.
@@ -307,7 +322,11 @@ export function rehydrateMessage(m: StoredMessage): ThreadMessage {
     ts: m.ts,
   };
   if (m.parts && m.parts.length) {
-    return { ...stamp, parts: rehydrateParts(m.parts) };
+    const parts = rehydrateParts(m.parts);
+    return {
+      ...stamp,
+      parts: needsStoredText(m, m.parts) ? [{ type: "text", text: m.text }, ...parts] : parts,
+    };
   }
   return stamp;
 }
