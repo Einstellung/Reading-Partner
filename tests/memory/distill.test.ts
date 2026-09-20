@@ -958,13 +958,13 @@ test("a signal already aborted never reaches the model", async () => {
 });
 
 test("system prompt carries the curation rules, the date, and the numbered index", () => {
-  const prompt = buildDistillSystemPrompt(makeInput({ indexText: "- [belief] x (updated 2026-07-01, id m-11111111)" }));
+  const prompt = buildDistillSystemPrompt(makeInput({ indexText: "- [belief] x (updated 2026-07-01, id m-1111111111111111)" }));
   expect(prompt).toContain("conversation below happened on 2026-07-17");
   expect(prompt).toContain("never rewritten");
   expect(prompt).toContain("cannot be re-derived");
   // The index line keeps its id — a body names other observations by id — and
   // gains the number "same-as" points at.
-  expect(prompt).toContain("[1] - [belief] x (updated 2026-07-01, id m-11111111)");
+  expect(prompt).toContain("[1] - [belief] x (updated 2026-07-01, id m-1111111111111111)");
   // With nothing held about the reader yet, the two statement relations have no
   // target and are not offered.
   expect(prompt).toContain('Every observation you create is relation "new"');
@@ -974,7 +974,7 @@ test("system prompt carries the curation rules, the date, and the numbered index
 test("the statements a pass may point at are printed numbered, superseded ones left out", () => {
   const prompt = buildDistillSystemPrompt(
     makeInput({
-      indexText: "- [belief] x (updated 2026-07-01, id m-11111111)",
+      indexText: "- [belief] x (updated 2026-07-01, id m-1111111111111111)",
       statements: [
         {
           id: "s-1111111111111111",
@@ -1270,7 +1270,7 @@ test("the marks prompt says there was no conversation and refuses comprehension 
     bookName: "margin-of-safety.pdf",
     marks: [mark({ id: "m1", page: 20, text: "owner earnings", comment: "why not FCF?" })],
     capped: false,
-    indexText: "- [belief] x (updated 2026-07-01, id m-11111111)",
+    indexText: "- [belief] x (updated 2026-07-01, id m-1111111111111111)",
     dates: { first: "2026-07-17", last: "2026-07-17" },
   };
   const prompt = buildMarksDistillSystemPrompt(input);
@@ -1285,7 +1285,7 @@ test("the marks prompt says there was no conversation and refuses comprehension 
   // again, not a second one.
   expect(prompt).toContain('"same-as"');
   expect(prompt).toContain("stretch of marks below happened on 2026-07-17");
-  expect(prompt).toContain("id m-11111111");
+  expect(prompt).toContain("id m-1111111111111111");
 
   const msg = buildMarksDistillUserMessage(input);
   expect(msg).toContain("margin-of-safety.pdf");
@@ -1449,7 +1449,7 @@ test("classifyDistillFailure sorts an outcome, then an error's own words", () =>
   expect(failed("429 rate limit exceeded")).toBe("rate-limit");
   expect(failed("401 unauthorized: invalid api key")).toBe("auth");
   expect(failed("prompt is too long for the context window")).toBe("context");
-  expect(failed("failed to write memory-x/m-11111111.md: os error 2")).toBe("storage");
+  expect(failed("failed to write memory-x/m-1111111111111111.md: os error 2")).toBe("storage");
   expect(failed("unexpected token in JSON at position 4")).toBe("parse");
   expect(failed("something nobody has seen before")).toBe("unknown");
   // A thrown non-Error still classifies rather than throwing again.

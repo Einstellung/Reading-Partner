@@ -111,15 +111,11 @@ export function anchorSiblings(index: AnchorIndex, entry: Observation): Observat
 // --- observation -> observation ---
 
 // An observation id as it appears mid-prose. The boundaries matter: without the
-// trailing one a longer hex run would match its own first eight characters, and
-// without the leading one the tail of another token would match. The leading
+// trailing one a longer hex run would match its own first sixteen characters,
+// and without the leading one the tail of another token would match. The leading
 // boundary is a consumed group rather than a lookbehind because this ships to
 // WKWebView on iOS and a lookbehind is not worth the floor it sets.
-// Either width while both exist on disk: the migration widens the ids
-// (src/migrate) and an unmigrated device still writes narrow ones. The 16-hex
-// alternative is first so a wide id is read whole rather than as its own first
-// eight characters. Narrows to 16 at 0.13.
-const MENTION = /(^|[^0-9a-z-])(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))(?![0-9a-f])/gi;
+const MENTION = /(^|[^0-9a-z-])(m-[0-9a-f]{16})(?![0-9a-f])/gi;
 
 // Every observation id mentioned in a piece of text, de-duplicated, in the
 // order they first appear. `self` drops the entry's own id, which is prose

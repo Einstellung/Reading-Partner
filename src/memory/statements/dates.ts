@@ -23,10 +23,9 @@ export interface DaySpan {
   last: string;
 }
 
-// Either width while both exist on disk: the 0.12 migration widens observation
-// ids from 8 hex to 16 and a device that has not run it still writes narrow
-// ones (src/migrate). Narrows to 16 at 0.13, with the rest of them.
-const OBSERVATION_ID = /^m-(?:[0-9a-f]{16}|[0-9a-f]{8})$/;
+// An observation id is 16 hex. The 8-hex ids written before 0.12 were widened
+// on disk by that release's migration and none are left.
+const OBSERVATION_ID = /^m-[0-9a-f]{16}$/;
 
 // Whether a piece of evidence names an observation rather than a message. Asked
 // first, because a bare observation id would otherwise parse as a message

@@ -9,10 +9,10 @@ import { installAppData, type FakeDisk } from "../support/appdata-fake";
 import { observationFs } from "../../src/memory/live/live";
 import { ObservationFileStore } from "../../src/memory/observations/store";
 
-const ENTRY_PATH = "observations/m-1a2b3c4d.md";
+const ENTRY_PATH = "observations/m-1a2b3c4d1a2b3c4d.md";
 const ENTRY_TEXT = [
   "---",
-  "id: m-1a2b3c4d",
+  "id: m-1a2b3c4d1a2b3c4d",
   "type: belief",
   "created: 2026-07-17",
   "updated: 2026-07-17",
@@ -43,7 +43,7 @@ function makeStore(): ObservationFileStore {
 test("reading an observation probes nothing first", async () => {
   disk.files.set(ENTRY_PATH, ENTRY_TEXT);
 
-  const entry = await makeStore().get("m-1a2b3c4d");
+  const entry = await makeStore().get("m-1a2b3c4d1a2b3c4d");
 
   expect(entry?.summary).toBe("Thinks attention is just soft lookup");
   expect(disk.reads).toEqual(["observations/deleted-observations.jsonl", ENTRY_PATH]);
@@ -53,12 +53,12 @@ test("reading an observation probes nothing first", async () => {
 test("a file that is not there is absent through the whole store path", async () => {
   const store = makeStore();
 
-  expect(await store.get("m-1a2b3c4d")).toBeNull();
+  expect(await store.get("m-1a2b3c4d1a2b3c4d")).toBeNull();
   expect(await store.readIndexText()).toBe("");
   expect(await store.readIndex()).toEqual([]);
   expect(await store.getMeta("t")).toEqual({ lastDistilledAt: null, lastAnnotationDistillAt: null });
-  expect(await store.delete("m-1a2b3c4d")).toBe(false);
-  expect(await store.update("m-1a2b3c4d", { body: "b" })).toBeNull();
+  expect(await store.delete("m-1a2b3c4d1a2b3c4d")).toBe(false);
+  expect(await store.update("m-1a2b3c4d1a2b3c4d", { body: "b" })).toBeNull();
   expect(fs.exists).not.toHaveBeenCalled();
 });
 
@@ -70,7 +70,7 @@ test("a file that will not open is absent too", async () => {
   disk.files.set(ENTRY_PATH, ENTRY_TEXT);
   disk.unreadable.add(ENTRY_PATH);
 
-  expect(await makeStore().get("m-1a2b3c4d")).toBeNull();
+  expect(await makeStore().get("m-1a2b3c4d1a2b3c4d")).toBeNull();
 });
 
 test("listing a directory that is not there is empty, and does not probe first", async () => {
@@ -84,9 +84,9 @@ test("listing a directory that is not there is empty, and does not probe first",
 
 test("a listing keeps the files and drops everything else", async () => {
   spyOn(fs, "readDir").mockImplementation(async () => [
-    { name: "m-1a2b3c4d.md", isFile: true, isDirectory: false, isSymlink: false },
+    { name: "m-1a2b3c4d1a2b3c4d.md", isFile: true, isDirectory: false, isSymlink: false },
     { name: "nested", isFile: false, isDirectory: true, isSymlink: false },
   ]);
 
-  expect(await observationFs.listDir("memory-topic-1")).toEqual(["m-1a2b3c4d.md"]);
+  expect(await observationFs.listDir("memory-topic-1")).toEqual(["m-1a2b3c4d1a2b3c4d.md"]);
 });

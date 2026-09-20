@@ -18,7 +18,7 @@ import { mergeFile } from "../../src/platform/sync/merge";
 import type { Observation } from "../../src/memory/observations/types";
 
 const ENTRY: Observation = {
-  id: "m-1a2b3c4d",
+  id: "m-1a2b3c4d1a2b3c4d",
   type: "stuck-point",
   summary: "Stuck on why attention scales quadratically",
   body: "Asked twice why self-attention is O(n^2); the length-squared pairing didn't click.",
@@ -67,7 +67,7 @@ test("a multi-line summary is collapsed to one line on write", () => {
 test("unknown frontmatter keys round-trip byte-identically", () => {
   const text = [
     "---",
-    "id: m-1a2b3c4d",
+    "id: m-1a2b3c4d1a2b3c4d",
     "type: stuck-point",
     "created: 2026-07-17",
     "updated: 2026-07-17",
@@ -138,7 +138,7 @@ test("unknown keys survive the merge two devices run on these files", () => {
 
   const bytes = (t: string) => new TextEncoder().encode(t);
   const merged = mergeFile({
-    path: "observations/m-1a2b3c4d.md",
+    path: "observations/m-1a2b3c4d1a2b3c4d.md",
     base: bytes(base),
     local: bytes(local),
     remote: bytes(remote),
@@ -159,7 +159,7 @@ test("malformed file or unknown type parses as null", () => {
 
 test("index line round-trips, including a summary with brackets and colons", () => {
   const e = {
-    id: "m-1a2b3c4d",
+    id: "m-1a2b3c4d1a2b3c4d",
     type: "belief" as const,
     summary: "Thinks [CLS] pooling: overrated (see 3.2)",
     updated: "2026-07-17",
@@ -171,14 +171,14 @@ test("index line round-trips, including a summary with brackets and colons", () 
 // one topic's worth already and drops it (files.ts). Both parse.
 test("an index line round-trips with a topic on it and without", () => {
   const e = {
-    id: "m-1a2b3c4d",
+    id: "m-1a2b3c4d1a2b3c4d",
     type: "belief" as const,
     summary: "Thinks [CLS] pooling: overrated (see 3.2)",
     updated: "2026-07-17",
     topic: "topic-1",
   };
   const file = buildIndex([e]);
-  expect(file).toContain("topic topic-1, id m-1a2b3c4d");
+  expect(file).toContain("topic topic-1, id m-1a2b3c4d1a2b3c4d");
   expect(parseIndex(file)).toEqual([e]);
 
   const { topic: _topic, ...bare } = e;
@@ -188,11 +188,11 @@ test("an index line round-trips with a topic on it and without", () => {
 
 test("buildIndex sorts newest-updated first and parseIndex skips junk lines", () => {
   const text = buildIndex([
-    { id: "m-aaaaaaaa", type: "belief", summary: "old", updated: "2026-07-01" },
-    { id: "m-bbbbbbbb", type: "stuck-point", summary: "new", updated: "2026-07-17" },
+    { id: "m-aaaaaaaaaaaaaaaa", type: "belief", summary: "old", updated: "2026-07-01" },
+    { id: "m-bbbbbbbbbbbbbbbb", type: "stuck-point", summary: "new", updated: "2026-07-17" },
   ]);
   const entries = parseIndex(text + "junk line\n");
-  expect(entries.map((e) => e.id)).toEqual(["m-bbbbbbbb", "m-aaaaaaaa"]);
+  expect(entries.map((e) => e.id)).toEqual(["m-bbbbbbbbbbbbbbbb", "m-aaaaaaaaaaaaaaaa"]);
 });
 
 test("isoDate and oneLine", () => {

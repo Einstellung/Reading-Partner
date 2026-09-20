@@ -59,20 +59,20 @@ function mount(home: Observation[], others?: TopicObservations[]) {
 }
 
 const RL_TOPIC = topic("t-frame", "Reinforcement learning", [
-  obs("m-11111111", { summary: "no reinforcement-learning vocabulary", body: "asked what a policy is" }),
+  obs("m-1111111111111111", { summary: "no reinforcement-learning vocabulary", body: "asked what a policy is" }),
 ]);
 
 test("a search from one topic finds a hit in another, labelled with that topic", async () => {
-  const m = mount([obs("m-aaaaaaaa", { summary: "reads transformers closely" })], [RL_TOPIC]);
+  const m = mount([obs("m-aaaaaaaaaaaaaaaa", { summary: "reads transformers closely" })], [RL_TOPIC]);
   const out = await m.search("reinforcement policy");
-  expect(out).toContain("m-11111111");
+  expect(out).toContain("m-1111111111111111");
   expect(out).toContain('topic "Reinforcement learning"');
   // Named at the line, not only under a heading: the model quotes lines.
-  expect(out).toMatch(/\[m-11111111\] \(topic "Reinforcement learning", /);
+  expect(out).toMatch(/\[m-1111111111111111\] \(topic "Reinforcement learning", /);
 });
 
 test("cross-topic hits are the default — the model is given no way to ask for them", async () => {
-  const m = mount([obs("m-aaaaaaaa", { summary: "reads transformers closely" })], [RL_TOPIC]);
+  const m = mount([obs("m-aaaaaaaaaaaaaaaa", { summary: "reads transformers closely" })], [RL_TOPIC]);
   const params = m.searchDescription;
   expect(params).toContain("other topics");
   // The only parameter is the query: no scope, no "wider", nothing to opt into.
@@ -82,11 +82,11 @@ test("cross-topic hits are the default — the model is given no way to ask for 
   ).find((t) => t.name === "observation_search")!;
   expect(Object.keys((tool.parameters as { properties: Record<string, unknown> }).properties)).toEqual(["query"]);
   // And it happened without being asked for.
-  expect(await m.search("reinforcement policy")).toContain("m-11111111");
+  expect(await m.search("reinforcement policy")).toContain("m-1111111111111111");
 });
 
 test("the same-topic answer is unchanged when nothing outside it matches", async () => {
-  const home = [obs("m-aaaaaaaa", { summary: "reads transformers closely" })];
+  const home = [obs("m-aaaaaaaaaaaaaaaa", { summary: "reads transformers closely" })];
   const alone = await mount(home).search("transformers");
   const widened = await mount(home, [RL_TOPIC]).search("transformers");
   expect(widened).toBe(alone);
@@ -94,7 +94,7 @@ test("the same-topic answer is unchanged when nothing outside it matches", async
 });
 
 test("no topic list mounted leaves the tool exactly as it was", async () => {
-  const home = [obs("m-aaaaaaaa", { summary: "reads transformers closely" })];
+  const home = [obs("m-aaaaaaaaaaaaaaaa", { summary: "reads transformers closely" })];
   const m = mount(home);
   expect(m.searchDescription).toContain("This topic only");
   expect(m.searchDescription).not.toContain("other topics");
@@ -118,30 +118,30 @@ test("the topic in hand keeps all its slots — the other topics only add", asyn
 });
 
 test("an id a search handed back from another topic can be read", async () => {
-  const m = mount([obs("m-aaaaaaaa")], [RL_TOPIC]);
-  const out = await m.read("m-11111111");
+  const m = mount([obs("m-aaaaaaaaaaaaaaaa")], [RL_TOPIC]);
+  const out = await m.read("m-1111111111111111");
   expect(out).toContain("asked what a policy is");
   expect(out).toContain("topic: Reinforcement learning");
 });
 
 test("an observation in another topic cannot be written from here", async () => {
-  const m = mount([obs("m-aaaaaaaa")], [RL_TOPIC]);
-  const updated = String(toolText(await m.write.execute({ action: "update", id: "m-11111111", summary: "x" })));
+  const m = mount([obs("m-aaaaaaaaaaaaaaaa")], [RL_TOPIC]);
+  const updated = String(toolText(await m.write.execute({ action: "update", id: "m-1111111111111111", summary: "x" })));
   expect(updated).toContain('topic "Reinforcement learning"');
-  const deleted = String(toolText(await m.write.execute({ action: "delete", id: "m-11111111" })));
+  const deleted = String(toolText(await m.write.execute({ action: "delete", id: "m-1111111111111111" })));
   expect(deleted).toContain('topic "Reinforcement learning"');
   expect(deleted).not.toContain("Deleted");
   expect(m.writeDescription).toContain("this topic only");
   // An id that is nowhere still reads as a typo, not as someone else's.
-  expect(String(toolText(await m.write.execute({ action: "update", id: "m-99999999", summary: "x" })))).toBe(
-    'No observation with id "m-99999999".',
+  expect(String(toolText(await m.write.execute({ action: "update", id: "m-9999999999999999", summary: "x" })))).toBe(
+    'No observation with id "m-9999999999999999".',
   );
 });
 
 test("a body's mention resolves into another topic once that topic is mounted", async () => {
-  const home = [obs("m-aaaaaaaa", { body: "he said the opposite in m-11111111." })];
-  expect(await mount(home).read("m-aaaaaaaa")).toContain("Mentioned but not in the observations you can see");
-  const widened = await mount(home, [RL_TOPIC]).read("m-aaaaaaaa");
+  const home = [obs("m-aaaaaaaaaaaaaaaa", { body: "he said the opposite in m-1111111111111111." })];
+  expect(await mount(home).read("m-aaaaaaaaaaaaaaaa")).toContain("Mentioned but not in the observations you can see");
+  const widened = await mount(home, [RL_TOPIC]).read("m-aaaaaaaaaaaaaaaa");
   expect(widened).toContain('topic "Reinforcement learning"');
   expect(widened).toContain("no reinforcement-learning vocabulary");
   expect(widened).not.toContain("Mentioned but not in");
@@ -150,9 +150,9 @@ test("a body's mention resolves into another topic once that topic is mounted", 
 test("a mark that sits in two topics shows both topics' observations", async () => {
   // A book can belong to two topics, and then one annotation carries an
   // observation under each.
-  const home = [obs("m-aaaaaaaa", { annotations: ["a-1"] })];
-  const other = topic("t-other", "Other", [obs("m-cccccccc", { annotations: ["a-1"], summary: "same mark, other frame" })]);
-  const out = await mount(home, [other]).read("m-aaaaaaaa");
+  const home = [obs("m-aaaaaaaaaaaaaaaa", { annotations: ["a-1"] })];
+  const other = topic("t-other", "Other", [obs("m-cccccccccccccccc", { annotations: ["a-1"], summary: "same mark, other frame" })]);
+  const out = await mount(home, [other]).read("m-aaaaaaaaaaaaaaaa");
   expect(out).toContain("Other observations from the same evidence:");
   expect(out).toContain('topic "Other", ');
   expect(out).toContain("same mark, other frame");
@@ -164,15 +164,15 @@ test("a mark that sits in two topics shows both topics' observations", async () 
 // on his real store. Spanning topics is the first read wide enough for it to
 // matter, so the tie has a rule instead of an accident.
 test("a colliding id resolves to the topic in hand", () => {
-  const home = [obs("m-dddddddd", { summary: "local" })];
-  const other = [topic("t-other", "Other", [obs("m-dddddddd", { summary: "foreign" })])];
-  expect(unionById(home, other).get("m-dddddddd")!.summary).toBe("local");
-  expect(otherTopicNames(home, other).has("m-dddddddd")).toBe(false);
+  const home = [obs("m-dddddddddddddddd", { summary: "local" })];
+  const other = [topic("t-other", "Other", [obs("m-dddddddddddddddd", { summary: "foreign" })])];
+  expect(unionById(home, other).get("m-dddddddddddddddd")!.summary).toBe("local");
+  expect(otherTopicNames(home, other).has("m-dddddddddddddddd")).toBe(false);
 });
 
 test("a foreign hit knows which topic it came from even across several", () => {
   const hits = searchOtherTopics(
-    [RL_TOPIC, topic("t-third", "Third", [obs("m-22222222", { summary: "policy of the third book" })])],
+    [RL_TOPIC, topic("t-third", "Third", [obs("m-2222222222222222", { summary: "policy of the third book" })])],
     "policy",
   );
   expect(hits.length).toBeGreaterThan(1);
@@ -183,7 +183,7 @@ test("a foreign hit knows which topic it came from even across several", () => {
 test("ranking two topics apart never compares their scores", () => {
   // Same entry text in a small topic and a large one: a merged corpus would
   // score them differently by idf alone. Ranked apart, each keeps its own.
-  const entry = obs("m-eeeeeeee", { summary: "attention is a soft lookup" });
+  const entry = obs("m-eeeeeeeeeeeeeeee", { summary: "attention is a soft lookup" });
   const small = rankObservations([entry], "attention", 6);
   const inOthers = searchOtherTopics([topic("t-small", "Small", [entry])], "attention");
   expect(inOthers[0].score).toBe(small[0].score);

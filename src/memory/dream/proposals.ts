@@ -44,7 +44,7 @@ const MIN_DAYS = 2;
 // An id anywhere in the text. The evidence list carries the ids; a text that
 // names one is a claim that reads as a citation and cannot be resolved by
 // anything downstream, since nothing renders statement text against a store.
-const ID_IN_TEXT = /\bm-[0-9a-f]{8}(?:[0-9a-f]{8})?\b/;
+const ID_IN_TEXT = /\bm-[0-9a-f]{16}\b/;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

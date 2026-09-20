@@ -105,7 +105,7 @@ test("deleting an already tombstoned id succeeds and writes no second line", asy
 
   expect(await store.delete(gone.id)).toBe(true);
   expect(files.get(TOMBSTONES)).toBe(after);
-  expect(await store.delete("m-00000000")).toBe(false);
+  expect(await store.delete("m-0000000000000000")).toBe(false);
 });
 
 // The migration. A store written before this file existed has entries on disk
@@ -116,9 +116,9 @@ test("deleting an already tombstoned id succeeds and writes no second line", asy
 test("a topic with no tombstone file gets an empty one and loses nothing", async () => {
   const { store, files } = makeStore();
   files.set(
-    "observations/m-11111111.md",
+    "observations/m-1111111111111111.md",
     serializeObservation({
-      id: "m-11111111",
+      id: "m-1111111111111111",
       type: "belief",
       summary: "on disk but not in the index",
       body: "b",
@@ -133,8 +133,8 @@ test("a topic with no tombstone file gets an empty one and loses nothing", async
   await store.rebuildIndex();
 
   expect(files.get(TOMBSTONES)).toBe("");
-  expect((await store.readIndex()).map((e) => e.id)).toEqual(["m-11111111"]);
-  expect(files.has("observations/m-11111111.md")).toBe(true);
+  expect((await store.readIndex()).map((e) => e.id)).toEqual(["m-1111111111111111"]);
+  expect(files.has("observations/m-1111111111111111.md")).toBe(true);
 });
 
 // --- the file as sync sees it ------------------------------------------------
@@ -151,18 +151,18 @@ test("the tombstone file is merged as records wherever it sits", () => {
 });
 
 test("two devices that each deleted a different observation keep both tombstones", () => {
-  const base = bytes(`${tombstone("m-11111111", "2026-07-17")}\n`);
-  const local = bytes(`${tombstone("m-11111111", "2026-07-17")}\n${tombstone("m-22222222", "2026-07-18")}\n`);
-  const remote = bytes(`${tombstone("m-11111111", "2026-07-17")}\n${tombstone("m-33333333", "2026-07-19")}\n`);
+  const base = bytes(`${tombstone("m-1111111111111111", "2026-07-17")}\n`);
+  const local = bytes(`${tombstone("m-1111111111111111", "2026-07-17")}\n${tombstone("m-2222222222222222", "2026-07-18")}\n`);
+  const remote = bytes(`${tombstone("m-1111111111111111", "2026-07-17")}\n${tombstone("m-3333333333333333", "2026-07-19")}\n`);
 
   const out = mergeFile({ path: "memory-t1/deleted-observations.jsonl", base, local, remote });
   const lines = decode(out.merged).trim().split("\n");
   expect(lines).toHaveLength(3);
   expect(lines.sort()).toEqual(
     [
-      tombstone("m-11111111", "2026-07-17"),
-      tombstone("m-22222222", "2026-07-18"),
-      tombstone("m-33333333", "2026-07-19"),
+      tombstone("m-1111111111111111", "2026-07-17"),
+      tombstone("m-2222222222222222", "2026-07-18"),
+      tombstone("m-3333333333333333", "2026-07-19"),
     ].sort(),
   );
   expect(out.copies).toEqual([]);
@@ -172,8 +172,8 @@ test("two devices that each deleted a different observation keep both tombstones
 // A device that has never pulled this file has no base, and with no base the
 // merge cannot tell a deletion it never had from one it removed — so it unions.
 test("a device seeing the file for the first time keeps the other device's tombstones", () => {
-  const local = bytes(`${tombstone("m-22222222", "2026-07-18")}\n`);
-  const remote = bytes(`${tombstone("m-33333333", "2026-07-19")}\n`);
+  const local = bytes(`${tombstone("m-2222222222222222", "2026-07-18")}\n`);
+  const remote = bytes(`${tombstone("m-3333333333333333", "2026-07-19")}\n`);
 
   const out = mergeFile({
     path: "memory-t1/deleted-observations.jsonl",
@@ -182,16 +182,16 @@ test("a device seeing the file for the first time keeps the other device's tombs
     remote,
   });
   expect(decode(out.merged).trim().split("\n").sort()).toEqual(
-    [tombstone("m-22222222", "2026-07-18"), tombstone("m-33333333", "2026-07-19")].sort(),
+    [tombstone("m-2222222222222222", "2026-07-18"), tombstone("m-3333333333333333", "2026-07-19")].sort(),
   );
 });
 
 // Both devices merge the same three inputs with themselves as `local`, and have
 // to land on the same bytes or the file uploads back and forth forever.
 test("both devices merge the same pair to the same bytes", () => {
-  const base = bytes(`${tombstone("m-11111111", "2026-07-17")}\n`);
-  const a = bytes(`${tombstone("m-11111111", "2026-07-17")}\n${tombstone("m-22222222", "2026-07-18")}\n`);
-  const b = bytes(`${tombstone("m-11111111", "2026-07-17")}\n${tombstone("m-33333333", "2026-07-19")}\n`);
+  const base = bytes(`${tombstone("m-1111111111111111", "2026-07-17")}\n`);
+  const a = bytes(`${tombstone("m-1111111111111111", "2026-07-17")}\n${tombstone("m-2222222222222222", "2026-07-18")}\n`);
+  const b = bytes(`${tombstone("m-1111111111111111", "2026-07-17")}\n${tombstone("m-3333333333333333", "2026-07-19")}\n`);
   const path = "memory-t1/deleted-observations.jsonl";
 
   expect(decode(mergeFile({ path, base, local: a, remote: b }).merged)).toBe(
@@ -213,10 +213,10 @@ test("the same deletion made on both devices is one line, not two", async () => 
   await two.store.delete(b.id);
   // Two stores, so two minted ids; the format is what is being compared.
   const anonymised = (files: Map<string, string>, id: string) =>
-    (files.get(TOMBSTONES) as string).replace(id, "m-00000000");
+    (files.get(TOMBSTONES) as string).replace(id, "m-0000000000000000");
   expect(anonymised(one.files, a.id)).toBe(anonymised(two.files, b.id));
 
-  const line = bytes(`${tombstone("m-00000000", "2026-07-20")}\n`);
+  const line = bytes(`${tombstone("m-0000000000000000", "2026-07-20")}\n`);
   const out = mergeFile({
     path: "memory-t1/deleted-observations.jsonl",
     base: null,

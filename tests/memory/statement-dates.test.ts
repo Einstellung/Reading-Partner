@@ -15,8 +15,8 @@ const JULY_20 = new Date("2026-07-20T12:00:00Z").getTime();
 
 test("an observation id is told from a message anchor by its shape", () => {
   expect(isObservationId("m-0123456789abcdef")).toBe(true);
-  // The narrow width still on disk until the 0.12 migration has run everywhere.
-  expect(isObservationId("m-0123abcd")).toBe(true);
+  // The 8-hex width ids had before 0.12, widened on disk by that release.
+  expect(isObservationId("m-0123abcd")).toBe(false);
   expect(isObservationId("t-0123456789abcdef")).toBe(false);
   expect(isObservationId("thread-1:1750000000000")).toBe(false);
   expect(isObservationId("m-0123456789abcdef@thread-1:1750000000000")).toBe(false);
