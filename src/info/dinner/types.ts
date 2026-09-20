@@ -68,6 +68,13 @@ export interface Dish {
   // "dish-" + 8 lowercase hex.
   id: string;
   name: string;
+  // The dish's canonical English name as people search for it ("mapo tofu",
+  // "shakshuka", "sheet pan salmon"), singular and lower case. It is what the
+  // photograph is looked up by (dish-photos.ts), and it is the cache's key, so
+  // two weeks planning the same dish look it up once. An invented combination
+  // has no such name and gets no photograph — which is why the model is asked
+  // to plan dishes that have one.
+  searchName: string;
   // One line the reader reads on the card and on the day.
   oneLine: string;
   // What is cooked ahead. Empty for a dish with nothing worth keeping.
@@ -79,11 +86,45 @@ export interface Dish {
   handsOnMinutes: number;
   ingredients: Ingredient[];
   // A photograph of the dish: an app-relative path, or an https URL that the
-  // screen loads through the image proxy (images.ts, docs/73 图片). Absent on
-  // most dishes, and a dish without one is drawn from its ingredients' pictures
-  // instead — the reader cannot tell one vegetable from another, so a night
-  // never goes on screen with nothing to look at.
+  // screen loads through the image proxy (images.ts, docs/73 图片). Written by
+  // the program from the photo cache when a plan is applied, never by the model
+  // — a URL out of a model is a fact through a model. Absent when the search
+  // found nothing, and a dish without one is drawn from its ingredients'
+  // pictures instead: the reader cannot tell one vegetable from another, so a
+  // night never goes on screen with nothing to look at.
   image?: string;
+}
+
+// One dish photograph as the search answered, kept whole because the licence
+// obliges the screen to name the creator and link back to where it was found.
+export interface DishPhoto {
+  // The full-size image, what the night's card loads.
+  url: string;
+  // The search's own thumbnail. Unused today; kept so a smaller square does not
+  // mean a second lookup.
+  thumb: string;
+  title: string;
+  creator: string;
+  // Display-ready ("CC BY-SA 2.0"), assembled at lookup time from the code and
+  // the version. The caption shows this string as it stands.
+  license: string;
+  licenseUrl: string;
+  // The page the photograph lives on. What the caption opens.
+  foreignLandingUrl: string;
+}
+
+// A search that found nothing usable. Kept, rather than left absent, so a dish
+// the index does not have is not looked up again every time a week is planned.
+export interface DishPhotoMiss {
+  none: true;
+  checkedAt: number;
+}
+
+export type DishPhotoEntry = DishPhoto | DishPhotoMiss;
+
+/** Whether a cache entry is a search that came back empty. */
+export function isDishPhotoMiss(entry: DishPhotoEntry): entry is DishPhotoMiss {
+  return (entry as DishPhotoMiss).none === true;
 }
 
 export interface DayPlan {
@@ -183,6 +224,9 @@ export interface DinnerState {
   plan: WeekPlan | null;
   shopping: ShoppingItem[];
   deviations: Deviation[];
+  // Dish photographs by searchName, kept across weeks: a dish is looked up once
+  // and never again, and a week that repeats a dish costs no request at all.
+  dishPhotos: Record<string, DishPhotoEntry>;
 }
 
 export const DINNER_VERSION = 1 as const;
@@ -192,4 +236,5 @@ export const EMPTY_DINNER: DinnerState = {
   plan: null,
   shopping: [],
   deviations: [],
+  dishPhotos: {},
 };

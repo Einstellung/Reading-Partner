@@ -34,6 +34,7 @@ function week(): WeekPlan {
       {
         id: "dish-a",
         name: "Traybake",
+        searchName: "chicken traybake",
         oneLine: "one tray",
         base: "b",
         fresh: "f",
@@ -188,11 +189,16 @@ test("a category or shelf life the model invented falls back instead of throwing
   const dishes = toDishDrafts([
     {
       name: "x",
+      searchName: "  Kelp Salad ",
       ingredients: [{ name: "kelp", en: "kelp", qty: "1", category: "seaweed", keeps: "forever" }],
     },
+    { name: "y" },
   ]);
   expect(dishes[0]?.ingredients[0]).toMatchObject({ category: "other", keeps: "d3-5" });
   expect(dishes[0]?.handsOnMinutes).toBe(0);
+  // The search name is filed the way the photo cache is keyed, not as written.
+  expect(dishes[0]?.searchName).toBe("kelp salad");
+  expect(dishes[1]?.searchName).toBe("");
 });
 
 test("a day with a mode nobody defined is dropped, not guessed at", () => {

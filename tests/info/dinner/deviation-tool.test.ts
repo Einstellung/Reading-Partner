@@ -42,6 +42,7 @@ function week(): WeekPlan {
       {
         id: "dish-a",
         name: "Traybake",
+        searchName: "chicken traybake",
         oneLine: "one tray",
         base: "b",
         fresh: "f",
@@ -52,6 +53,7 @@ function week(): WeekPlan {
       {
         id: "dish-b",
         name: "Stew",
+        searchName: "beef stew",
         oneLine: "one pot",
         base: "b",
         fresh: "f",

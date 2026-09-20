@@ -169,6 +169,8 @@ export function weekId(startDate: string): string {
 // (docs/73 事实不经模型).
 export interface DishDraft {
   name: string;
+  // The dish's common English name, what the photograph is searched for by.
+  searchName: string;
   oneLine: string;
   base: string;
   fresh: string;
@@ -246,6 +248,7 @@ export function assembleWeekPlan(draft: WeekDraft, opts: AssembleOptions): Assem
     minted.set(fold(name), {
       id: newDishId(opts.random),
       name,
+      searchName: d.searchName,
       oneLine: d.oneLine,
       base: d.base,
       fresh: d.fresh,

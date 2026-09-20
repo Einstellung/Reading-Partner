@@ -37,6 +37,7 @@ function week(): WeekPlan {
       {
         id: "dish-a",
         name: "Traybake",
+        searchName: "chicken traybake",
         oneLine: "",
         base: "b",
         fresh: "f",
@@ -146,6 +147,7 @@ function fullDraft(): WeekDraft {
     dishes: [
       {
         name: "Chicken traybake",
+        searchName: "chicken traybake",
         oneLine: "one tray",
         base: "chicken and roots",
         fresh: "a handful of leaves",
