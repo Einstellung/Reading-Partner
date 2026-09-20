@@ -60,6 +60,7 @@ export function deriveShoppingList(plan: WeekPlan, today: string): ShoppingItem[
       if (!seen) {
         byKey.set(key, {
           name,
+          en: ing.en.trim(),
           qty: ing.qty.trim(),
           category: ing.category,
           keeps: ing.keeps,
@@ -70,6 +71,8 @@ export function deriveShoppingList(plan: WeekPlan, today: string): ShoppingItem[
         continue;
       }
       seen.qty = mergeQty(seen.qty, ing.qty);
+      // Only fills a gap: the first English name this line was given stands.
+      if (!seen.en) seen.en = ing.en.trim();
       // The shorter of the two windows, because the list is eaten in this
       // order and the earlier deadline is the one that bites.
       seen.keeps = shorterKeeps(seen.keeps, ing.keeps);

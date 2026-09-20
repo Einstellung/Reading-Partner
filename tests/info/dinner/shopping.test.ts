@@ -18,7 +18,7 @@ import type { Dish, Ingredient, WeekPlan } from "../../../src/info/dinner/types"
 const MON = "2026-09-21";
 
 function ing(over: Partial<Ingredient> & { name: string }): Ingredient {
-  return { qty: "1", category: "produce", keeps: "d3-5", ...over };
+  return { en: "", qty: "1", category: "produce", keeps: "d3-5", ...over };
 }
 
 function dish(id: string, ingredients: Ingredient[], over: Partial<Dish> = {}): Dish {

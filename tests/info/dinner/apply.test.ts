@@ -37,7 +37,7 @@ function week(over: Partial<WeekPlan> = {}): WeekPlan {
         fresh: "f",
         keepsADay: true,
         handsOnMinutes: 10,
-        ingredients: [{ name: "chicken", qty: "600g", category: "protein", keeps: "d1-2" }],
+        ingredients: [{ name: "chicken", en: "chicken", qty: "600g", category: "protein", keeps: "d1-2" }],
       },
       {
         id: "dish-b",
@@ -47,7 +47,7 @@ function week(over: Partial<WeekPlan> = {}): WeekPlan {
         fresh: "",
         keepsADay: false,
         handsOnMinutes: 10,
-        ingredients: [{ name: "sea bass", qty: "2", category: "protein", keeps: "d1-2" }],
+        ingredients: [{ name: "sea bass", en: "sea bass", qty: "2", category: "protein", keeps: "d1-2" }],
       },
     ],
     createdAt: 1,

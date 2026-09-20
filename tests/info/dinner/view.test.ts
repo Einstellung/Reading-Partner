@@ -29,6 +29,7 @@ function dish(id: string, name: string, names: string[] = []): Dish {
     handsOnMinutes: 10,
     ingredients: names.map((n) => ({
       name: n,
+      en: n,
       qty: "1",
       category: "produce" as const,
       keeps: "d3-5" as const,
@@ -112,17 +113,27 @@ test("the last night of the week leaves nothing for the compact list", () => {
 
 test("a dish stands in with up to three of its ingredients' pictures", () => {
   const d = dish("dish-3", "Soup", ["a", "b", "c", "d"]);
+  // Resolved by the English name, which is the only one images.ts has a row for.
   expect(dishThumbnails(d, (n) => `/img/${n}.jpg`)).toEqual(["/img/a.jpg", "/img/b.jpg", "/img/c.jpg"]);
   // Names the bank has never heard of are skipped, not drawn as gaps.
   expect(dishThumbnails(d, (n) => (n === "c" ? "/img/c.jpg" : null))).toEqual(["/img/c.jpg"]);
   expect(dishThumbnails(null)).toEqual([]);
-  // The live bank answers nothing yet, so a dish falls through to the block.
+  // The names above are not ingredients, so the live table has nothing for them
+  // and the night falls through to the block.
   expect(dishThumbnails(d)).toEqual([]);
+  // A dish of real ingredients gets real photographs, in the order it lists
+  // them, and skips the one nothing has a picture of.
+  const real = dish("dish-4", "Stew", ["farro", "kale", "garlic", "lemon", "ginger"]);
+  const urls = dishThumbnails(real);
+  expect(urls.length).toBe(3);
+  expect(urls[0]).toContain("Kale-small.png");
+  expect(urls[2]).toContain("Lemon-small.png");
 });
 
 function item(name: string, category: ShoppingItem["category"], checked = false): ShoppingItem {
   return {
     name,
+    en: "",
     qty: "1",
     category,
     keeps: "d3-5",

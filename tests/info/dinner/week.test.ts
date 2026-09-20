@@ -152,7 +152,7 @@ function fullDraft(): WeekDraft {
         keepsADay: true,
         handsOnMinutes: 12,
         ingredients: [
-          { name: "chicken thighs", qty: "600g", category: "protein", keeps: "d1-2" },
+          { name: "chicken thighs", en: "chicken thighs", qty: "600g", category: "protein", keeps: "d1-2" },
         ],
       },
     ],

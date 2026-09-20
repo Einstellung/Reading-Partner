@@ -47,6 +47,12 @@ export const KEEPS_ORDER: readonly KeepsClass[] = ["d1-2", "d3-5", "w1", "w2plus
 
 export interface Ingredient {
   name: string;
+  // The English common name, singular and lower case ("bok choy", "eggplant").
+  // It is what resolves the photograph (images.ts): `name` is in the reader's
+  // language and a picture table cannot be written in every language, so the
+  // model writes both and the program looks this one up. Empty when the model
+  // left it out, and an empty one simply has no picture.
+  en: string;
   // Free text ("2 handfuls", "400g"), never a number the program does maths on:
   // a quantity is the model's, and nothing here adds two of them up.
   qty: string;
@@ -115,6 +121,10 @@ export interface WeekPlan {
 
 export interface ShoppingItem {
   name: string;
+  // The English common name this line resolves its photograph by. Lines merge
+  // by `name`, and the first English name seen for one wins: a second spelling
+  // of the same thing would swap the picture halfway through deriving.
+  en: string;
   // The merged quantity text of every dish that wants it.
   qty: string;
   category: IngredientCategory;

@@ -133,6 +133,8 @@ export function dinnerGuidance(state: DinnerState, today: string): string {
     "part added at serving, so a cook day can be followed by a reheat day that eats that base",
     "with something fresh on it. A dish that does not keep a day is a one-night dish.",
     "List a dish's ingredients for every serving it is planned for, the reheat night included.",
+    "Give every ingredient its English common name in `en` beside the name in their own language,",
+    "singular and lower case — it is what puts a photograph on their shopping list.",
     "Vegetables heavy, whole grains, lean protein, little oil, salt and refined carbohydrate.",
     "Never count calories, never give grams of anything nutritional, never talk about nutrition",
     "numbers at all — health is a filter on what you propose, not a subject.",
@@ -251,6 +253,11 @@ export function buildProposeDinnerPlanTool(deps: DinnerToolDeps): AgentTool {
           ingredients: Type.Array(
             Type.Object({
               name: Type.String(),
+              en: Type.String({
+                description:
+                  "The same thing's English common name, singular and lower case " +
+                  "('bok choy', 'eggplant', 'ground pork'). It is what finds its photograph.",
+              }),
               qty: Type.String({ description: "Free text, e.g. '2 handfuls', '400g'." }),
               category: Type.String({
                 description: `One of: ${CATEGORY_ORDER.join(", ")}.`,
@@ -493,6 +500,7 @@ function toIngredients(raw: unknown): Ingredient[] {
       const e = record(entry);
       return {
         name: String(e.name ?? "").trim(),
+        en: String(e.en ?? "").trim().toLowerCase(),
         qty: String(e.qty ?? "").trim(),
         category: toCategory(e.category),
         keeps: toKeeps(e.keeps),

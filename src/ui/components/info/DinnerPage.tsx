@@ -8,6 +8,7 @@
 //
 // None of the bureau's vocabulary appears here. It is dinner.
 
+import { openExternal } from "../../../platform/app/external-link";
 import type { DinnerState, ShoppingItem } from "../../../info/dinner/types";
 import { ingredientImageUrl } from "../../../info/dinner/images";
 import { shoppingItemKey } from "../../../info/dinner/shopping";
@@ -146,7 +147,7 @@ function ShoppingLine({
         onCheckedChange={(v) => onToggle(v === true)}
         aria-label={item.name}
       />
-      <IngredientThumb url={ingredientImageUrl(item.name)} category={item.category} alt={item.name} />
+      <IngredientThumb url={ingredientImageUrl(item.en)} category={item.category} alt={item.name} />
       <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
         <span className="block truncate text-[15px] leading-snug text-foreground">{item.name}</span>
         <span className="block text-[12px] text-faint-foreground">
@@ -261,7 +262,28 @@ export function DinnerPage(props: DinnerPageProps) {
           )}
         </>
       )}
+      <PhotoCredit />
     </div>
+  );
+}
+
+/**
+ * TheMealDB's terms ask for a link back wherever their artwork is used, and
+ * every photograph on this screen is theirs. One line, at the bottom, opened in
+ * the system browser like every other outbound link.
+ */
+function PhotoCredit() {
+  return (
+    <p className="mt-8 text-[11px] leading-snug text-faint-foreground">
+      Ingredient photos from{" "}
+      <button
+        type="button"
+        className="underline underline-offset-2 can-hover:hover:text-muted-foreground"
+        onClick={() => openExternal("https://www.themealdb.com")}
+      >
+        TheMealDB
+      </button>
+    </p>
   );
 }
 
