@@ -5,12 +5,16 @@
 // tool call and tool result is appended to a session file as it happens, so a
 // run that dies mid-tool is still on disk. The second process learns about it
 // from AgentHarness.create, which hands back the list of operations that were
-// still open, and aborting each one writes a synthetic tool result that says
-// the execution was interrupted, rather than running the tool again.
+// still open.
 //
-// That settling is the only thing the previous session is wanted for, so a
-// process start settles it and then starts a fresh session (rotateSession
-// below), and the group keeps its newest few files (sweepSessionGroup).
+// Finishing what the previous process left open is the only thing that session
+// is wanted for, so a process start hands it over and then starts a fresh
+// session of its own (rotateSession below), and the group keeps its newest few
+// files (sweepSessionGroup). Who finishes it and how is the caller's: a caller
+// that names a `recovery` is given the previous session's own harness and does
+// what it likes with it, and one that does not gets settlePrevious — abort each
+// open operation, which writes pi's synthetic "execution was interrupted" tool
+// result without calling the model, and let the session go.
 //
 // Two things are injected and everything else follows from them.
 //
@@ -114,6 +118,38 @@ export interface HarnessDeps {
   compaction?: CompactionSettings;
   /** How one round's tool calls run; the harness's default (parallel) when unset. */
   toolExecution?: "sequential" | "parallel";
+  /**
+   * Take over whatever the previous session left open instead of aborting it
+   * (rotateSession). Ignored when a `session` is passed in: there is then no
+   * previous session to speak of.
+   */
+  recovery?: Recovery;
+}
+
+/** The previous process's session, with everything needed to finish it. */
+export interface PreviousSession {
+  harness: Harness<undefined>;
+  session: Session<JsonlSessionMetadata>;
+  /** What it left running. One entry per lane with an operation still open. */
+  open: OpenOperation[];
+  /** Close the harness and release the session handle. */
+  close(context: Context): Promise<void>;
+}
+
+/** How a caller takes the previous session over. */
+export interface Recovery {
+  /**
+   * How the harness over that session is built. Its own, because the live
+   * harness's are read off the turn currently holding it (held.ts) and a
+   * recovery sharing them would be handed whatever the reader is doing now.
+   */
+  deps: Pick<HarnessDeps, "models" | "model" | "streamFn" | "systemPrompt" | "toProviderMessages">;
+  /**
+   * The previous session, when it has something open. Called before this
+   * process's own harness is built and never awaited: the first turn of this
+   * process does not wait on the last turn of the one before it.
+   */
+  take(previous: PreviousSession, context: Context): void;
 }
 
 export interface HarnessHandle {
@@ -306,39 +342,71 @@ async function rotateSession(
   const existing = await repo.list({ cwd }, context);
   const newest = [...existing].sort((a, b) => b.createdAt - a.createdAt)[0];
   if (newest) {
-    let previous: Session<JsonlSessionMetadata> | undefined;
+    let opened: Session<JsonlSessionMetadata> | undefined;
     try {
-      previous = await repo.open(newest, context);
+      opened = await repo.open(newest, context);
     } catch (error) {
       if (isFileFailure(error)) throw error;
       await setAside(fileSystem, newest.path, now(), error, context);
     }
-    if (previous) await settle(deps, previous, context);
+    if (opened) {
+      const previous = await attachPrevious(deps, opened, context);
+      // Nothing was left running, so there is nothing to hand over and nothing
+      // to settle: the file stays where it is and this process moves on.
+      if (previous.open.length === 0) await previous.close(context);
+      else if (deps.recovery) deps.recovery.take(previous, context);
+      else await settlePrevious(previous, context);
+    }
   }
   const session = await repo.create({ cwd }, context);
   await sweepSessionGroup(fileSystem, session, context);
   return session;
 }
 
-// Abort every operation the session still holds, then let it go. Abort rather
-// than resume: the tool that was running when the process died is not run
-// again — pi writes its synthetic "execution was interrupted" result and
-// settles the operation — and the answer it was in the middle of has no caller
-// left to hear it (docs/pitfall/308).
-async function settle(
+// A harness over the previous session, so its lanes can be reached. Built with
+// the recovery's own deps where there is one; with this process's otherwise,
+// which is enough for the abort that is all the default settle does.
+async function attachPrevious(
   deps: HarnessDeps,
   session: Session<JsonlSessionMetadata>,
   context: Context,
+): Promise<PreviousSession> {
+  const { harness, open } = await buildHarness(
+    { ...deps, ...(deps.recovery ? deps.recovery.deps : {}), tools: [] },
+    session,
+    context,
+  );
+  return {
+    harness,
+    session,
+    open,
+    async close(ctx) {
+      await harness.close(ctx);
+      await session.close(ctx);
+    },
+  };
+}
+
+/**
+ * Abort every operation the session still holds, then let it go. Abort rather
+ * than resume: the tool that was running when the process died is not run again
+ * — pi writes its synthetic "execution was interrupted" result and settles the
+ * operation — and no request goes out (docs/pitfall/308).
+ *
+ * What a caller that can find the answer's receiver does instead is resume it
+ * (src/soul/recover.ts); this is what happens to everything else.
+ */
+export async function settlePrevious(
+  previous: PreviousSession,
+  context: Context,
 ): Promise<void> {
-  const { harness, open } = await buildHarness(deps, session, context);
   try {
-    for (const operation of open) {
-      const lane = await harness.lane(operation.lane, context);
+    for (const operation of previous.open) {
+      const lane = await previous.harness.lane(operation.lane, context);
       await lane.abort(context);
     }
   } finally {
-    await harness.close(context);
-    await session.close(context);
+    await previous.close(context);
   }
 }
 

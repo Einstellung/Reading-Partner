@@ -274,6 +274,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
         reasoning: toReasoning(s.chatThinking),
         telemetry: { surface: "talk", thread: threadId },
         harness: soulHarness(),
+        ...(assembled.origin ? { deliverTo: assembled.origin } : {}),
         ...run.handlers(assembled.notice),
       });
     })();

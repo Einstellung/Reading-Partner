@@ -19,6 +19,7 @@ import {
   type AgentHarnessTool,
   type Entry,
   type FileSystem,
+  type JsonlSessionMetadata,
 } from "@earendil-works/pi-agent-core";
 import { Type, type Api, type Model } from "@earendil-works/pi-ai";
 import {
@@ -32,7 +33,9 @@ import type { StreamFn } from "../../../src/legion/execute/turn";
 import {
   createHarness,
   createSessionRepo,
+  settlePrevious,
   type HarnessDeps,
+  type PreviousSession,
 } from "../../../src/legion/execute/harness";
 import { createSessionFileSystem, SESSIONS_ROOT } from "../../../src/platform/app/session-fs";
 import { memoryAppData, type MemoryDisk } from "../../support/memory-appdata";
@@ -413,4 +416,97 @@ test("a session handed in is used as it is: nothing settled, nothing created, no
   expect(groupFiles(disk, GROUP)).toEqual(before);
 
   await handle.close(ctx);
+});
+
+// One interrupted run on a session of its own, and the file it is written to.
+async function interrupt(
+  fileSystem: FileSystem,
+  entered: string[],
+): Promise<{ path: string }> {
+  const first = rig(fileSystem);
+  const hang = tool("probe_work", async (p) => {
+    entered.push(`first:${p.note}`);
+    await new Promise<void>(() => {});
+    return "unreachable";
+  });
+  const handle = await createHarness(deps(first, { tools: [hang] }), ctx);
+  first.faux.setResponses([
+    fauxAssistantMessage([fauxToolCall("probe_work", { note: "job" }, { id: "c1" })], {
+      stopReason: "toolUse",
+    }),
+  ]);
+  const lane = await handle.harness.lane("soul", ctx);
+  void lane.prompt("do the job", undefined, ctx);
+  await Bun.sleep(40);
+  // The repo addresses a session absolutely; the disk behind it is a Map keyed
+  // relatively, and this is read against that Map.
+  const path = (handle.session.metadata as JsonlSessionMetadata).path.replace(/^\//, "");
+  await handle.session.close(ctx);
+  return { path };
+}
+
+// The other half of that decision: a caller that means to finish the run is
+// handed the previous session instead, and nothing is settled behind its back.
+test("a caller that takes the previous session over gets it unsettled, and settles it itself", async () => {
+  const disk = memoryAppData();
+  const fileSystem = createSessionFileSystem(disk);
+  const entered: string[] = [];
+  const { path: interrupted } = await interrupt(fileSystem, entered);
+
+  // --- second process, taking the run over ---
+  const second = rig(fileSystem);
+  const taken: PreviousSession[] = [];
+  const reopened = await createHarness(
+    deps(second, {
+      recovery: {
+        deps: { model: second.model, streamFn: second.streamFn },
+        take: (previous) => void taken.push(previous),
+      },
+    }),
+    ctx,
+  );
+  expect(taken).toHaveLength(1);
+  expect(taken[0]!.open).toHaveLength(1);
+  expect(taken[0]!.open[0]!.kind).toBe("run");
+  expect(taken[0]!.open[0]!.lane).toBe("soul");
+  // Handed over, not settled: the interrupted result is not written yet, and
+  // the sweep that ran when this process created its own session left the file
+  // being recovered exactly where it was.
+  expect(text(disk, interrupted)).not.toContain("Tool execution was interrupted");
+  expect(sessionFiles(disk)).toContain(interrupted);
+
+  // What the caller does when it cannot finish the run after all.
+  await settlePrevious(taken[0]!, ctx);
+  expect(text(disk, interrupted)).toContain("Tool execution was interrupted");
+  expect(entered).toEqual(["first:job"]);
+  await reopened.close(ctx);
+});
+
+// The sweep keeps the newest five files by name, and the session being
+// recovered is the second newest — so the one file still being written to is
+// never the one that goes.
+test("the sweep after a fresh create never removes the session being recovered", async () => {
+  const disk = memoryAppData();
+  for (let day = 1; day <= 6; day += 1) {
+    await seed(disk, GROUP, `2020-01-0${day}T00-00-00-000Z_s${day}.jsonl`);
+  }
+  const fileSystem = createSessionFileSystem(disk);
+  const { path: interrupted } = await interrupt(fileSystem, []);
+
+  const second = rig(fileSystem);
+  const taken: PreviousSession[] = [];
+  const reopened = await createHarness(
+    deps(second, {
+      recovery: {
+        deps: { model: second.model, streamFn: second.streamFn },
+        take: (previous) => void taken.push(previous),
+      },
+    }),
+    ctx,
+  );
+  expect(taken).toHaveLength(1);
+  expect(groupFiles(disk, GROUP)).toHaveLength(5);
+  expect(disk.files.has(interrupted)).toBe(true);
+  await settlePrevious(taken[0]!, ctx);
+  await reopened.close(ctx);
 });

@@ -36,7 +36,7 @@ import type { SteerPort } from "../legion/execute/contract";
 import type { HeldHarness } from "../legion/execute/held";
 import type { DeskMessage } from "../desk";
 import type { ProviderId } from "../ai";
-import { appendMessage, createBookThread, flushThreads, getBookThread, loadThreads } from "../platform/app/threads";
+import { createBookThread, getBookThread, loadThreads } from "../platform/app/threads";
 import { toReasoning, type Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
 import { doorDate, doorKey, openDoorTurn } from "./door";
@@ -47,6 +47,7 @@ import {
   type DeliveredTurn,
   type Delivery,
 } from "./delivery";
+import { landReply } from "./landing";
 import { soulHarness } from "./harness";
 
 /** What one bell turn is sent. The default sender is the app's; tests pass one. */
@@ -442,51 +443,40 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
     }
 
     // A bell the soul decided to say nothing about is answered all the same: the
-    // decision was the turn, and the ledger is waiting on the ack.
-    if (reply.trim() !== "") {
-      appendMessage(key, threadId, {
-        role: "ai",
-        text: reply,
-        ts: now(),
-        // What this line is an answer to. The reader never said anything it
-        // could be read as answering, and the work order drawn on it is found
-        // by this (docs/72).
-        ...(bell.type !== "wake" ? { origin: { runId: bell.payload.runId } } : {}),
-      });
-      // On disk before the bell is confirmed. The store coalesces its writes,
-      // so without this the ack could outlive the reply it is confirming.
-      await flushThreads();
-    }
-    hold?.release();
-    // The card that points back at the reply just written (docs/68). Program
-    // work: the cover is the reply's first sentence, and the body is what the
-    // run produced. The text of it and not the path to it — an item travels
-    // between devices (palace kind `box-item`) and the output file does not, so
-    // a path here is a card that opens on nothing on the other device. After the
-    // reply is on disk and before the ack, so an item can never point at a
-    // conversation that is not there.
-    //
-    // None of it when the reader is looking at that conversation as the reply
-    // lands — the same rule a plain reading turn follows (reading/turn-box.ts).
-    // A failure is no exception: what the reader has to decide about, they are
-    // already reading. Asked now and not when the turn was assembled, because
-    // the run took a while and they may have walked over to it in the meantime.
-    if (bell.type !== "wake" && !placed?.watching?.()) {
-      const { runId, kind } = bell.payload;
-      await box
-        .put({
-          boxId: runId,
-          source: "run",
-          cover: coverOf(reply),
-          ...(substance?.output ? { body: substance.output } : {}),
-          origin: origin ?? { place: "door", date },
-          kind,
-          runId,
-          needsDecision: bell.type === "run-failed",
-          at,
-        })
-        .catch((e) => console.warn(`run ${runId} was answered but its box item would not write`, e));
-    }
+    // decision was the turn, and the ledger is waiting on the ack. The reply,
+    // the flush and the card go in that order (landing.ts); the card that points
+    // back at the line just written is program work — the cover is the reply's
+    // first sentence, and the body is what the run produced. The text of it and
+    // not the path to it: an item travels between devices (palace kind
+    // `box-item`) and the output file does not, so a path here is a card that
+    // opens on nothing on the other device. A failure is no exception to the
+    // watching rule: what the reader has to decide about, they are already
+    // reading.
+    await landReply({
+      key,
+      threadId,
+      reply,
+      at: now(),
+      box,
+      ...(bell.type !== "wake" ? { answers: { runId: bell.payload.runId } } : {}),
+      ...(hold ? { release: () => hold.release() } : {}),
+      ...(placed?.watching ? { watching: placed.watching } : {}),
+      ...(bell.type === "wake"
+        ? {}
+        : {
+            card: () => ({
+              boxId: bell.payload.runId,
+              source: "run" as const,
+              cover: coverOf(reply),
+              ...(substance?.output ? { body: substance.output } : {}),
+              origin: origin ?? { place: "door" as const, date },
+              kind: bell.payload.kind,
+              runId: bell.payload.runId,
+              needsDecision: bell.type === "run-failed",
+              at,
+            }),
+          }),
+    });
     await bells.delivered(bell.id);
     await bells.ack(bell.id);
     // The ack is what the fold waits on (docs/55), and the run file is where

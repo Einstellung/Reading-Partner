@@ -54,7 +54,7 @@ thread 是旧名字，概念是 conversation 和 span，存储里的标识符还
 
 没归 topic 的对话不蒸馏；读者点头之后整段都算。攒够数据再决定这堆没 topic 的对话要不要别的处置。
 
-session 不同步。它是本机的运行时——soul 和它派出的 worker 这一轮在想什么——palace 登记一行 `session`，sync 为 local。进程启动先结掉上个进程的 session（把还开着的 operation 逐条 abort），然后另起一个新的；该组只留最新五个文件。对话文件是 session 的单向投影：soul 说的每一句落地时写进归属文件；反向不投影，另一台设备写的对话到了本机，下回合装配上下文时从数据层读，走 sequence。压缩摘要不跨设备。本地 worker 的过程不进对话文件，对话里只有 soul 对用户说的话。两台设备各跑一个 soul 进程，共享 memory 和对话即同一个人，各自一份「此刻在想什么」；PC 不在线时 iPad 照样有 soul。
+session 不同步。它是本机的运行时——soul 和它派出的 worker 这一轮在想什么——palace 登记一行 `session`，sync 为 local。进程启动先另起一个新 session 给本进程用；上个进程没答完的那个回合在旧 session 上后台接着跑完（resume），答案写回当初提问的那段对话，跑完才关掉它（docs/55、坑 308）。该组只留最新五个文件。对话文件是 session 的单向投影：soul 说的每一句落地时写进归属文件；反向不投影，另一台设备写的对话到了本机，下回合装配上下文时从数据层读，走 sequence。压缩摘要不跨设备。本地 worker 的过程不进对话文件，对话里只有 soul 对用户说的话。两台设备各跑一个 soul 进程，共享 memory 和对话即同一个人，各自一份「此刻在想什么」；PC 不在线时 iPad 照样有 soul。
 
 ## 顺序
 

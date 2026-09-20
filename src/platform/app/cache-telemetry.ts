@@ -40,7 +40,9 @@ export type AiSurface =
   // A lesson-prep paper digest, in its tool-loop form.
   | "digest"
   // A turn no reader opened: the soul answering a bell (src/soul/bell.ts).
-  | "bell";
+  | "bell"
+  // A turn a dead process started, finished by the next one (src/soul/recover.ts).
+  | "recovery";
 
 // Which conversation a turn belongs to. `thread` is the id whose previous turn
 // the gap is measured against; a run with no conversation of its own (a chapter

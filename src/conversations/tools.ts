@@ -70,6 +70,10 @@ export function buildConversationTools(
       name: "search_conversations",
       label: (args) => args.query ? `Searching past conversations for “${args.query}”` : "Searching past conversations",
       effect: "read",
+      // Off this device's own files, and the same answer however often it is
+      // asked: a call left in flight by a dead process is run again rather than
+      // handed pi's interrupted result (src/soul/recover.ts).
+      replay: "safe",
       description:
         "Keyword-search everything you and this reader have already said to each other — " +
         "conversations over books, over retells and talks, and over the daily briefing. " +
@@ -112,6 +116,10 @@ export function buildConversationTools(
       name: "read_conversation",
       label: () => "Reading back a conversation",
       effect: "read",
+      // Off this device's own files, and the same answer however often it is
+      // asked: a call left in flight by a dead process is run again rather than
+      // handed pi's interrupted result (src/soul/recover.ts).
+      replay: "safe",
       description:
         "Read a stretch of one past conversation in full, by the fileKey and threadId a " +
         "search_conversations hit gave you. A thread id alone is not enough: the same id " +

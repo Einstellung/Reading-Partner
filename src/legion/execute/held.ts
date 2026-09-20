@@ -18,12 +18,17 @@
 // context is assembled from the conversation files each turn (docs/71).
 //
 // The first acquire in a process is the expensive one: createHarness lists the
-// group's sessions, settles whatever the previous process left open on the
-// newest one, and hands back a fresh session for this process (harness.ts). A
-// tool that was running when the last process died is not run again; its
-// operation is aborted, which writes pi's synthetic "execution was interrupted"
-// tool result, and the model is not called for it. Every acquire after that is
-// a few appended session lines: the lane's configuration and a root navigation.
+// group's sessions, deals with whatever the previous process left open on the
+// newest one, and hands back a fresh session for this process (harness.ts).
+// Every acquire after that is a few appended session lines: the lane's
+// configuration and a root navigation.
+//
+// What happens to that open run is `recover`'s to say. Without one it is
+// aborted — pi's synthetic "execution was interrupted" tool result, no request.
+// With one, the previous session arrives as a HeldRecovery: a second harness,
+// with a turn slot of its own so the live one is untouched, standing where the
+// interrupted run stopped rather than on the session root. The soul finishes
+// its turn there (src/soul/recover.ts) while this process's own turns go on.
 
 import {
   type AgentHarness as Harness,
@@ -31,6 +36,9 @@ import {
   type AgentMessage,
   type Context,
   type FileSystem,
+  type JsonValue,
+  type LaneSnapshot,
+  type OpenOperation,
 } from "@earendil-works/pi-agent-core";
 import {
   createModels,
@@ -38,9 +46,15 @@ import {
   type Api,
   type Message,
   type Model,
+  type Models,
 } from "@earendil-works/pi-ai";
 import type { StreamFn, TurnLane } from "./contract";
-import { createHarness, type HarnessHandle } from "./harness";
+import {
+  createHarness,
+  settlePrevious,
+  type HarnessHandle,
+  type PreviousSession,
+} from "./harness";
 
 // The package exports the harness type but not its lane's.
 export type AgentLane = Awaited<ReturnType<Harness<undefined>["lane"]>>;
@@ -72,16 +86,56 @@ export interface HeldHarness {
   close(context: Context): Promise<void>;
 }
 
+/**
+ * The previous process's session, held the same way: one turn at a time, with a
+ * slot and a model registry of its own. What it is not is a fresh lane — the
+ * run that was interrupted is still open on it, so nothing navigates and
+ * nothing accepts a prompt; the turn resumes that run where it stopped
+ * (turn.ts, `resume`).
+ */
+export interface HeldRecovery {
+  /** What that session left running. */
+  open: OpenOperation[];
+  /** Configure the previous harness for one turn and borrow its lane. */
+  acquire(turn: HeldTurn, lane: string, context: Context): Promise<HeldLane>;
+  /** A lane as the dead process left it: its branch, and what is queued on it. */
+  inspect(lane: string, context: Context): Promise<LaneSnapshot>;
+  /** One entry of the recovery's own bookkeeping, on that lane. */
+  note(lane: string, customType: string, data: JsonValue, context: Context): Promise<void>;
+  /** Settle one lane's operation without calling the model. */
+  abort(lane: string, context: Context): Promise<void>;
+  /** Abort whatever is still open and close it: what happens with no recovery. */
+  settle(context: Context): Promise<void>;
+  /** Close the harness and its session, leaving the file as it stands. */
+  close(context: Context): Promise<void>;
+}
+
 export interface HoldOptions {
   lane: TurnLane;
   /** Defaults to the AppData session store. */
   fileSystem?: FileSystem;
   sessionsRoot?: string;
   now?: () => number;
+  /**
+   * Finish what the previous process left open instead of aborting it. Called
+   * once, on the first acquire of this process, and not awaited — the turn that
+   * paid for the open goes on without it.
+   */
+  recover?: (previous: HeldRecovery, context: Context) => void | Promise<void>;
 }
 
-export function holdHarness(options: HoldOptions): HeldHarness {
-  const { lane: laneId } = options;
+// One turn's worth of configuration, and the pi plumbing that reads it back.
+// The harness fixes its model registry, its stream, its system prompt and its
+// reduction at creation (docs/pitfall/307), so all four are delegates over a
+// slot the caller swaps a turn into. Two harnesses means two slots: the live
+// one and the previous session's.
+function turnSlot(): {
+  take: (turn: HeldTurn) => void;
+  models: Models;
+  streamFn: StreamFn;
+  systemPrompt: () => string;
+  toProviderMessages: (messages: AgentMessage[], context: Context) => Message[] | Promise<Message[]>;
+} {
   // Every model a turn has brought, by provider then id. pi's Models is a
   // registry of providers, each with its catalogue, and the harness resolves
   // the lane's configured model from it by name; a provider is re-set with its
@@ -89,9 +143,6 @@ export function holdHarness(options: HoldOptions): HeldHarness {
   const catalogue = new Map<string, Map<string, Model<Api>>>();
   const models = createModels();
   let current: HeldTurn | undefined;
-  let handle: Promise<HarnessHandle> | undefined;
-  // The turn holding the lane, as a promise the next acquire waits on.
-  let tail: Promise<void> = Promise.resolve();
 
   const streamFn: StreamFn = (model, context, streamOptions) => {
     if (!current) throw new Error("no turn holds the harness");
@@ -115,9 +166,102 @@ export function holdHarness(options: HoldOptions): HeldHarness {
     );
   };
 
+  return {
+    take: (turn) => {
+      current = turn;
+      register(turn.model);
+    },
+    models,
+    streamFn,
+    systemPrompt: () => current?.systemPrompt ?? "",
+    toProviderMessages: (messages, ctx) =>
+      current ? current.toProviderMessages(messages, ctx) : (messages as Message[]),
+  };
+}
+
+// Configure a harness for one turn and hand back its lane. The same three
+// writes on either harness — the tool registry, the lane's active tools, the
+// lane's model — and they are what a turn brings that the harness fixed at
+// creation.
+async function configure(
+  harness: Harness<undefined>,
+  laneName: string,
+  turn: HeldTurn,
+  context: Context,
+): Promise<AgentLane> {
+  const lane = await harness.lane(laneName, context);
+  await harness.setTools(turn.tools, context);
+  await lane.setActiveTools(
+    turn.tools.map((tool) => tool.name),
+    context,
+  );
+  await lane.setModel({ provider: turn.model.provider, modelId: turn.model.id }, context);
+  return lane;
+}
+
+// The previous session as the recovery holds it. Turns are serialised on it the
+// same way, so two open operations are finished one after the other.
+function heldRecovery(previous: PreviousSession, slot: ReturnType<typeof turnSlot>): HeldRecovery {
+  let tail: Promise<void> = Promise.resolve();
+  return {
+    open: previous.open,
+    async acquire(turn, laneName, context) {
+      const waiting = tail;
+      let release!: () => void;
+      tail = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await waiting;
+      try {
+        slot.take(turn);
+        // No navigation: the run to be finished is standing on its own branch,
+        // and moving the lane to the root would strand it there.
+        const lane = await configure(previous.harness, laneName, turn, context);
+        return { harness: previous.harness, lane, release };
+      } catch (e) {
+        release();
+        throw e;
+      }
+    },
+    async inspect(laneName, context) {
+      const lane = await previous.harness.lane(laneName, context);
+      const watch = await lane.watch(context);
+      // One reading, not a subscription: the snapshot is what a resume decides
+      // from, and nothing here is listening for a session nobody is writing.
+      watch.unsubscribe();
+      return watch.snapshot;
+    },
+    async note(laneName, customType, data, context) {
+      const lane = await previous.harness.lane(laneName, context);
+      await lane.appendCustomEntry(customType, data, context);
+    },
+    async abort(laneName, context) {
+      const lane = await previous.harness.lane(laneName, context);
+      await lane.abort(context);
+    },
+    settle: (context) => settlePrevious(previous, context),
+    close: (context) => previous.close(context),
+  };
+}
+
+export function holdHarness(options: HoldOptions): HeldHarness {
+  const { lane: laneId } = options;
+  const slot = turnSlot();
+  const { models, streamFn } = slot;
+  let handle: Promise<HarnessHandle> | undefined;
+  // The turn holding the lane, as a promise the next acquire waits on.
+  let tail: Promise<void> = Promise.resolve();
+
   const open = (turn: HeldTurn, context: Context): Promise<HarnessHandle> => {
     handle ??= (async () => {
-      register(turn.model);
+      slot.take(turn);
+      const recover = options.recover;
+      // The recovery's own slot, seeded with this turn's model so the previous
+      // session opens with a registry that can answer at all. Which model its
+      // interrupted run captured is the run's own business; the turn that
+      // resumes it brings that one.
+      const recoverySlot = recover ? turnSlot() : undefined;
+      recoverySlot?.take(turn);
       const opened = await createHarness(
         {
           ...(options.fileSystem ? { fileSystem: options.fileSystem } : {}),
@@ -128,12 +272,35 @@ export function holdHarness(options: HoldOptions): HeldHarness {
           model: turn.model,
           streamFn,
           tools: [],
-          systemPrompt: () => current?.systemPrompt ?? "",
-          toProviderMessages: (messages, ctx) =>
-            current ? current.toProviderMessages(messages, ctx) : (messages as Message[]),
+          systemPrompt: slot.systemPrompt,
+          toProviderMessages: slot.toProviderMessages,
           retry: { enabled: false, maxRetries: 0, baseDelayMs: 0 },
           compaction: { enabled: false, reserveTokens: 0, keepRecentTokens: 0 },
           toolExecution: "sequential",
+          ...(recover && recoverySlot
+            ? {
+                recovery: {
+                  deps: {
+                    models: recoverySlot.models,
+                    model: turn.model,
+                    streamFn: recoverySlot.streamFn,
+                    systemPrompt: recoverySlot.systemPrompt,
+                    toProviderMessages: recoverySlot.toProviderMessages,
+                  },
+                  take: (previous, ctx) => {
+                    const taken = heldRecovery(previous, recoverySlot);
+                    void (async () => {
+                      try {
+                        await recover(taken, ctx);
+                      } catch (e) {
+                        console.warn("the previous session could not be recovered", e);
+                        await taken.settle(ctx).catch(() => {});
+                      }
+                    })();
+                  },
+                },
+              }
+            : {}),
         },
         context,
       );
@@ -159,16 +326,9 @@ export function holdHarness(options: HoldOptions): HeldHarness {
       await previous;
       try {
         const opened = await open(turn, context);
-        current = turn;
-        register(turn.model);
+        slot.take(turn);
         const { harness } = opened;
-        const lane = await harness.lane(laneId.name, context);
-        await harness.setTools(turn.tools, context);
-        await lane.setActiveTools(
-          turn.tools.map((tool) => tool.name),
-          context,
-        );
-        await lane.setModel({ provider: turn.model.provider, modelId: turn.model.id }, context);
+        const lane = await configure(harness, laneId.name, turn, context);
         if ((await lane.getTipId(context)) !== null) {
           const moved = await lane.navigateTree(null, { summarize: false }, context);
           if (!moved.ok) throw new Error(moved.error.message);

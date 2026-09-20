@@ -783,6 +783,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         telemetry: { surface: "reading", inline: turn.inline, thread: threadId },
         about: { bookId },
         harness: soulHarness(),
+        // Where this turn's reply goes, if this process does not live to give
+        // it (src/soul/recover.ts).
+        ...(turn.origin ? { deliverTo: turn.origin } : {}),
         onDelta: (chunk) => {
           const at = writingRow();
           phase = "writing";

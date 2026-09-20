@@ -136,12 +136,18 @@ export function liveDeliverer(place: BoxOrigin["place"]): LiveDeliverer | null {
  */
 export function parseOrigin(deliverTo: string | undefined): BoxOrigin | null {
   if (!deliverTo) return null;
-  let value: unknown;
   try {
-    value = JSON.parse(deliverTo);
+    return originOf(JSON.parse(deliverTo));
   } catch {
     return null;
   }
+}
+
+/**
+ * The same three shapes, read off a value that is already parsed: what a
+ * session entry holds (src/soul/recover.ts). Null for anything else.
+ */
+export function originOf(value: unknown): BoxOrigin | null {
   if (typeof value !== "object" || value === null) return null;
   const o = value as Record<string, unknown>;
   if (o.place === "book") {

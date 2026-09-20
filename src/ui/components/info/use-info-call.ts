@@ -560,6 +560,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       signal: controller.signal,
       telemetry: { surface: "info", thread: anchor.threadId },
       harness: soulHarness(),
+      ...(turn.origin ? { deliverTo: turn.origin } : {}),
       onDelta: (t) => {
         full += t;
         phase = "writing";

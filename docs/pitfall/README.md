@@ -71,7 +71,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 367）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 369）。
 
 ## EmbedPDF 引擎
 
@@ -152,6 +152,7 @@
 
 ## 存储与数据目录
 
+- [368-appendcustomentry-queues-while-a-run-is-open](./368-appendcustomentry-queues-while-a-run-is-open.md) — lane 上还有 operation 开着的时候 `appendCustomEntry` 只写 pending value 进 inbox，等 run 跑到 drain 边界才落成 entry，`findEntries` 这段窗口里查不到；数「试过几次」要把 `lane.watch()` 快照里的 `queues` 一起数，否则每次都死在模型调用之前的回合永远是试过 0 次，每次启动再 resume 一遍
 - [367-a-bad-line-in-the-middle-of-a-session-file-is-fatal-forever](./367-a-bad-line-in-the-middle-of-a-session-file-is-fatal-forever.md) — pi 的 `JsonlStorage.open` 把整份 session 从头回放，只自愈没有结尾换行的最后一行，中间坏一行就永远抛（`Invalid JSONL storage …: line 67408`）；我们抛完只把 handle 清掉让下个回合重试同一份文件，于是每个 soul 回合都死在同一行，用户只能清 app 数据。打不开就 rename 成 `.corrupt-<now>`（`list` 只认 `.jsonl`）再新建一份，不删；盘读不出来（`cause` 链上有 `FileError`）照旧抛，不挪
 - [339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file](./339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file.md) — loader 解析失败时返回空值，下一次追加拿空值覆写整个登记表，所有条目无声消失；内容不能重建的 JSON 走 `readGuardedJson`，坏内容先隔离再兜底
 - [338-concurrent-appends-to-one-jsonl-keep-only-the-last](./338-concurrent-appends-to-one-jsonl-keep-only-the-last.md) — 一个回合 19 次 fire-and-forget 的 `recordModelCall`，`model-calls-*.jsonl` 里只剩 1 行：追加是「读整份 → 拼行 → 原子写回」，同一 tick 的调用读到同一份旧内容再互相盖。按路径把读-改-写串行化（`memory/usage/log.ts` 的 `writeInTurn`），不改走 `appendText`——同步靠 `writeTextAtomic` 的通知知道文件变了，字节上限也要读整份
@@ -324,7 +325,7 @@
 - [291-a-tool-start-wiped-the-round-it-interrupted](./291-a-tool-start-wiped-the-round-it-interrupted.md) — 文字聊天里模型输出一段再调工具，那段话被 `tool-start` 清空（`call-state.ts` / `use-info-call.ts`），工具成功后状态行也 splice 掉，行里空了；`onDone` 只交最后一轮，前面几轮永久丢失。每轮都挂工具之后（d7f90559）成了默认体验。拼法收到 `appendRoundBreak` / `joinRoundTexts` 一处，`onDone` 第三个参数交全文，第一个参数仍是答出来的那一轮给产出物用；工具状态行画在文字下面
 - [306-the-harness-holds-a-stream-to-the-provider-grammar](./306-the-harness-holds-a-stream-to-the-provider-grammar.md) — 换到 pi-agent-core 的 `AgentHarness` 后，只推 `text_delta` + `done` 的脚本化假流在第一个 delta 就把 harness 封死（`HarnessFault`，原因在 `.cause`："text block 0 has not started"）：帧编码器按真 provider 的语法收事件，`start` → 每块 `*_start` / `*_delta` / `*_end` → `done`/`error`。假流一律从 `tests/support/scripted-turn.ts` 出
 - [307-a-pi-lane-carries-no-prompt-of-its-own](./307-a-pi-lane-carries-no-prompt-of-its-own.md) — pi 的 lane 只带模型、思考档和活跃工具名（`LaneConfiguration` 三个字段），systemPrompt 和工具注册表是 harness 级的，`OperationRequest` 也没有单次覆盖口子：要自己 prompt 或自己工具集的 worker（隔离上下文的子 agent）得自己开 harness，身份写在 lane 名和 session 组上
-- [308-an-open-operation-blocks-its-lane-until-settled](./308-an-open-operation-blocks-its-lane-until-settled.md) — 重开 session 后上个进程留下的 open operation 让同一条 lane 的新 `accept` 报 `LaneBusy`；`resume()` 写完合成的中断 toolResult 会接着调模型跑完那条没人听的 run，`abort()` 同样写中断结果但以 aborted 结算、不发请求。常驻 lane（soul）重开时逐条 abort，不 resume
+- [308-an-open-operation-blocks-its-lane-until-settled](./308-an-open-operation-blocks-its-lane-until-settled.md) — 重开 session 后上个进程留下的 open operation 让同一条 lane 的新 `accept` 报 `LaneBusy`；`resume()` 写完合成的中断 toolResult 会接着调模型跑完那条 run，`abort()` 同样写中断结果但以 aborted 结算、不发请求。收件方能找回来就 resume（accept 前写在 lane 上的 `reading-partner.delivery` 条目，在旧 session 自己的 harness 上后台跑），找不回来、试过两次、不是 run 的才 abort
 - [324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness](./324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness.md) — soul 每个回合挂一份 `statement_write`，简报的 desk item 又挂一份，回合组装照过、harness 的 `validateToolNames` 才抛 `Duplicate tool name`，而且说不出两边是谁；`assembleTurn` 的重名检查当时只比角色和 item，漏了 soul 自己那套基础工具。工具只挂在一处，检查改成走一遍最终清单、按 name 记 owner
 - [360-a-steer-queued-before-drive-lands-in-the-first-round](./360-a-steer-queued-before-drive-lands-in-the-first-round.md) — `accept` 之后 `drive` 之前塞的 steer 在第一次请求前就被 drain 进 transcript（run 自己的起始边界也是边界）；界面上那一刻 AI 行还是空的，切行会留空行，所以按「行里有没有字」决定切不切
 - [335-accepting-a-prompt-announces-every-replayed-message](./335-accepting-a-prompt-announces-every-replayed-message.md) — harness 为它写进 session 的每条消息发 `message_end`，`lane.accept` 把整段重放历史逐条播出来，埋点把里面的 assistant 消息当成一轮，记出一串 `round: 0`、用量全 null、`ms` 等于 Unix 时间戳的幽灵行。按 `runId` 等于本回合的 `operationId` 分辨，不按 role；另记 `model-calls-*.jsonl` 是读改整体写回加 fire-and-forget，并发写只留最后一个

@@ -44,6 +44,8 @@ import {
   type AgentHarnessTool,
   type AgentMessage,
   type FileSystem,
+  type JsonValue,
+  type OperationResultRecord,
 } from "@earendil-works/pi-agent-core";
 import { validateToolCall } from "@earendil-works/pi-ai";
 import type {
@@ -113,6 +115,13 @@ export {
 
 const DEFAULT_MAX_ROUNDS = 8;
 const PREVIEW_LIMIT = 200;
+
+/**
+ * The session entry that says where a turn's reply goes. Written before the
+ * prompt is accepted and read back by whoever finds that run still open
+ * (src/soul/recover.ts). Nothing projects it, so it never reaches the model.
+ */
+export const DELIVERY_ENTRY = "reading-partner.delivery";
 
 // Where a turn runs when the caller does not say: one directory of
 // one-file-per-turn sessions beside whatever the soul will keep, and one lane
@@ -188,6 +197,16 @@ export interface HarnessTurnParams extends AgentCallbacks {
   // (src/soul/harness.ts). `lane` and `fileSystem` are then the harness's own
   // and ignored here.
   held?: HeldHarness;
+  // Where this turn's reply goes, stamped on the session beside the run before
+  // it starts, so a later process can rebuild the receiver for a run it finds
+  // still open (src/soul/recover.ts). Only a borrowed lane is stamped: a turn
+  // with a session of its own is over when the process is.
+  deliverTo?: Record<string, unknown>;
+  // Finish the operation of this id on the borrowed lane instead of accepting a
+  // prompt: `messages` is not sent, because that prompt is already in the
+  // session the lane belongs to. Everything else about the turn is unchanged —
+  // the same hooks, the same listeners, the same budget fit.
+  resume?: string;
 }
 
 // The two ways this turn ends a run on its own: neither is a failure, and the
@@ -349,6 +368,10 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     label: toolLabel(tool, {}),
     description: tool.description,
     parameters: tool.parameters,
+    // Whether a call left in flight by a dead process is run again or handed
+    // pi's synthetic interrupted result. Declared by the tool; "never" is what
+    // pi assumes of one that says nothing.
+    ...(tool.replay ? { replay: tool.replay } : {}),
     // Validate/coerce against the tool's schema before executing; a throw here
     // becomes a tool-result error the model can react to, not a crashed turn.
     // Both outcomes are recorded (platform/app/structured-output.ts): this is
@@ -558,31 +581,59 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
 
     signal?.addEventListener("abort", onAbort, { once: true });
 
-    const admitted = await lane.accept({ kind: "prompt", prompt: params.messages as AgentMessage[] }, ctx);
-    if (!admitted.ok) {
+    let record: OperationResultRecord;
+    if (params.resume !== undefined) {
+      // The run is already on the lane: it was admitted by the process that
+      // died, its prompt is in the session, and its id is known before a line
+      // of it is driven — so the listeners above can tell its messages from the
+      // replayed history from the first one.
+      operationId = params.resume;
+      if (signal?.aborted) await abortRun();
+      onSteerable?.(steer);
+      const resumed = await lane.resume(ctx);
       ended = true;
-      onError(admitted.error.message);
-      return;
-    }
-    operationId = admitted.value.operationId;
-    // The signal may have fired between the check above and the run existing.
-    if (signal?.aborted) await abortRun();
-    // There is a run to queue into from here until it settles below.
-    onSteerable?.(steer);
+      if (!resumed.ok) {
+        onError(resumed.error.message);
+        return;
+      }
+      if (resumed.value.status === "suspended") {
+        onError("the model turn stopped to wait on deferred");
+        return;
+      }
+      if (handlerError) throw handlerError;
+      record = resumed.value;
+    } else {
+      // The stamp goes on before the prompt, so a run found open later is never
+      // without one. Only on a borrowed lane: a turn with a session of its own
+      // has nobody coming back for it.
+      if (borrowed && params.deliverTo !== undefined) {
+        await lane.appendCustomEntry(DELIVERY_ENTRY, params.deliverTo as JsonValue, ctx);
+      }
+      const admitted = await lane.accept({ kind: "prompt", prompt: params.messages as AgentMessage[] }, ctx);
+      if (!admitted.ok) {
+        ended = true;
+        onError(admitted.error.message);
+        return;
+      }
+      operationId = admitted.value.operationId;
+      // The signal may have fired between the check above and the run existing.
+      if (signal?.aborted) await abortRun();
+      // There is a run to queue into from here until it settles below.
+      onSteerable?.(steer);
 
-    const driven = await lane.drive({ operationId, waitForRetry: true }, ctx);
-    ended = true;
-    if (!driven.ok) {
-      onError(driven.error.message);
-      return;
+      const driven = await lane.drive({ operationId, waitForRetry: true }, ctx);
+      ended = true;
+      if (!driven.ok) {
+        onError(driven.error.message);
+        return;
+      }
+      if (driven.value.kind !== "settled") {
+        onError(`the model turn stopped to wait on ${driven.value.reason}`);
+        return;
+      }
+      if (handlerError) throw handlerError;
+      record = driven.value.outcome;
     }
-    if (driven.value.kind !== "settled") {
-      onError(`the model turn stopped to wait on ${driven.value.reason}`);
-      return;
-    }
-    if (handlerError) throw handlerError;
-
-    const record = driven.value.outcome;
     if (record.status === "aborted") {
       if (refusal) refuse(refusal.message);
       return;
@@ -638,6 +689,8 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
     about,
     lane,
     harness,
+    deliverTo,
+    resume,
     onDelta,
     onThinking,
     onResponse,
@@ -687,6 +740,8 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       telemetry,
       ...(lane ? { lane } : {}),
       ...(harness ? { held: harness } : {}),
+      ...(deliverTo ? { deliverTo } : {}),
+      ...(resume === undefined ? {} : { resume }),
       onDelta,
       onThinking,
       onResponse,

@@ -9,6 +9,7 @@
 // Pure assembly plus reads. It never touches React state and never starts the
 // stream; the caller owns runAgentTurn.
 
+import type { BoxOrigin } from "../../box";
 import type { AgentTool } from "../../legion/execute/turn";
 import { assembleTurn } from "../../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../../desk";
@@ -45,6 +46,10 @@ export interface CoachTurn {
   // Set when the turn cannot be made small enough to leave the model room to
   // answer. Show this instead of sending; retrying changes nothing.
   refusal: string;
+  // Where this turn is being held, when the desk is a place (docs/68): what a
+  // run delegated from it is delivered back to, and what the turn is stamped
+  // with so a process after this one can find its receiver.
+  origin?: BoxOrigin;
 }
 
 export async function buildCoachTurn(input: CoachTurnInput): Promise<CoachTurn> {
@@ -70,5 +75,6 @@ export async function buildCoachTurn(input: CoachTurnInput): Promise<CoachTurn> 
     messages: assembled.messages as CoachTurnMessage[],
     notice: assembled.notice,
     refusal: assembled.refusal,
+    ...(assembled.origin === undefined ? {} : { origin: assembled.origin }),
   };
 }

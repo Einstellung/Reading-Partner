@@ -69,6 +69,12 @@ export interface AssembledTurn {
   refusal: string;
   // What the items handed back about themselves, merged in desk order.
   report: Record<string, unknown>;
+  // Where this turn is being held, as the assembly resolved it: what the caller
+  // said, or the first item on the desk that is a place. What fills the
+  // deliverTo of a run delegated this turn (soul/delegate.ts), and what the
+  // turn is stamped with so a later process can find its receiver
+  // (legion/execute/turn.ts, src/soul/recover.ts).
+  origin?: BoxOrigin;
 }
 
 /**
@@ -223,6 +229,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
       notice: "",
       refusal: "",
       report,
+      ...(origin === undefined ? {} : { origin }),
     };
   }
   const fitted = fitToBudget<string, DeskMessage>({
@@ -249,6 +256,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
     notice: fitted.notice,
     refusal: fitted.refusal,
     report,
+    ...(origin === undefined ? {} : { origin }),
   };
 }
 

@@ -12,6 +12,7 @@
 // Pure assembly plus reads — it never touches React state and never starts the
 // stream; the caller owns runAgentTurn.
 
+import type { BoxOrigin } from "../box";
 import type { AgentTool } from "../legion/execute/turn";
 import { assembleTurn } from "../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../desk";
@@ -77,6 +78,10 @@ export interface ReadingTurn {
   // to answer. Show this instead of sending; retrying changes nothing, since the
   // same inputs assemble the same call.
   refusal: string;
+  // Where this turn is being held, when the desk is a place (docs/68): what a
+  // run delegated from it is delivered back to, and what the turn is stamped
+  // with so a process after this one can find its receiver.
+  origin?: BoxOrigin;
 }
 
 // Why a turn produced no reply. The distinction the UI has to make is not what
@@ -175,5 +180,6 @@ export async function buildReadingTurn(input: ReadingTurnInput): Promise<Reading
     inline: (assembled.report.inline as InlineMode | undefined) ?? "none",
     notice: assembled.notice,
     refusal: assembled.refusal,
+    ...(assembled.origin === undefined ? {} : { origin: assembled.origin }),
   };
 }

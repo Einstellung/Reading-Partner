@@ -136,6 +136,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
         reasoning: toReasoning(s.chatThinking),
         telemetry: { surface: "talk", thread: threadId },
         harness: soulHarness(),
+        ...(assembled.origin ? { deliverTo: assembled.origin } : {}),
         ...run.handlers(assembled.notice),
       });
     })();

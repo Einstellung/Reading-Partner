@@ -174,6 +174,7 @@ export function askOnThread(opts: {
             signal,
             telemetry: { surface: "info", thread: opts.anchor.threadId },
             harness: soulHarness(),
+            ...(turn.origin ? { deliverTo: turn.origin } : {}),
             onDelta,
             // No tool trace: there is no row to draw one in, and the silence a
             // tool call leaves is what the orb's `thinking` is for (docs/33

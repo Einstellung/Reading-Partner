@@ -359,6 +359,10 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
       name: "observation_search",
       label: (args) => args.query ? `Searching its observations for “${args.query}”` : "Searching its observations",
       effect: "read",
+      // Off this device's own files, and the same answer however often it is
+      // asked: a call left in flight by a dead process is run again rather than
+      // handed pi's interrupted result (src/soul/recover.ts).
+      replay: "safe",
       description:
         "Keyword-search your observations of this reader. " +
         (otherTopics
@@ -394,6 +398,10 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
       name: "observation_read",
       label: () => "Reading an observation",
       effect: "read",
+      // Off this device's own files, and the same answer however often it is
+      // asked: a call left in flight by a dead process is run again rather than
+      // handed pi's interrupted result (src/soul/recover.ts).
+      replay: "safe",
       description: "Read one observation in full by its id (as returned by observation_search or the index).",
       parameters: Type.Object({
         id: Type.String({ description: "The observation id, e.g. m-1a2b3c4d." }),

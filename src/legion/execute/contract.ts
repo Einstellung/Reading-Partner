@@ -76,6 +76,12 @@ export interface AgentTool {
   effect: ToolEffect;
   // The gate a write goes through. Reads leave it unset.
   gate?: ToolGate;
+  // Safe to run a second time when a process died with this call in flight. A
+  // turn finished by a later process (src/soul/recover.ts) runs such a call
+  // again; every other tool is handed pi's synthetic "execution was
+  // interrupted" result instead, whatever it had already done. Only for tools
+  // that read: running one twice must cost nothing but the read.
+  replay?: "safe";
   // The reader is not shown this call: no phase, no trace line, no receipt; it
   // stays in the stored trace. For bookkeeping the app does on its own behalf —
   // the memory writes — which is a record of the turn and not something the
@@ -236,6 +242,15 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
   // soul's (src/soul/harness.ts); a worker or a background pass leaves it
   // unset and gets a harness to itself. `lane` is ignored when this is set.
   harness?: HeldHarness;
+  // Where this turn's reply goes, written to the session beside the run it
+  // belongs to. Opaque to legion: it is stored and handed back, never read.
+  // What it is for is a process that finds this run still open after this one
+  // died — it can rebuild the receiver and finish the turn (src/soul/recover.ts).
+  deliverTo?: Record<string, unknown>;
+  // Finish this operation instead of starting one: the harness above is the
+  // dead process's, standing where its run stopped, and `messages` is not sent
+  // because the prompt is already in that session (src/soul/recover.ts).
+  resume?: string;
 }
 
 // The two things the turn says when it gives up. Both are refusals rather than
