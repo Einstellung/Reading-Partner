@@ -18,8 +18,6 @@ const topic = (files: { path: string; hash?: string }[]): Topic =>
 function fakeIo(over: Partial<StartupMigrationIo> = {}) {
   const wrote: string[] = [];
   const io: StartupMigrationIo = {
-    splitSavedArticleBodies: async () => {},
-    splitRehearsalRunPages: async () => {},
     repairTopicPaths: async () => false,
     repairLibraryNames: async () => false,
     listTopics: async () => [],

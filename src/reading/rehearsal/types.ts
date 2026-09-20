@@ -157,11 +157,6 @@ export interface RehearsalRunEntry {
   segmentIds: string[];
   spokenSegmentIds: string[];
   wordsSpoken: number;
-  // Where the transcript used to sit, before it moved into a file of its own.
-  // Still read: a log written by a build that predates the split carries it, and
-  // so does one synced from a device still on that build. Nothing here writes
-  // it, and summary.ts counts off it when it is there.
-  pages?: RehearsalPage[];
 }
 
 // One pass with its transcript: the entry, plus the pages read back from the
@@ -265,19 +260,8 @@ export function normalizeRunPages(raw: unknown): RehearsalPage[] | null {
   return normalizePages(file.pages);
 }
 
-// The moment a pass stopped, for an entry written before that was a field of its
-// own. A run cut short has no endedAt, and the last thing that happened is still
-// on its pages.
-function lastMomentFrom(startedAt: number, endedAt: number | null, pages: RehearsalPage[]): number {
-  if (endedAt !== null) return endedAt;
-  let last = startedAt;
-  for (const p of pages) last = Math.max(last, p.enteredAt, p.leftAt ?? p.enteredAt);
-  return last;
-}
-
-// A stored count, or 0. Not derived from the pages here: only summary.ts knows
-// how a word is counted, and it is the one thing that reads these back — an
-// entry that still carries its pages is counted off them there.
+// A stored count, or 0. Not derived from the pages here: they are a file of
+// their own, and a row must be drawable without opening one.
 function count(value: unknown): number {
   return Number.isFinite(value) && (value as number) >= 0 ? Math.round(value as number) : 0;
 }
@@ -301,10 +285,6 @@ function normalizeRunEntry(raw: unknown, rehearsalId: string): RehearsalRunEntry
   if (!run || typeof run !== "object") return null;
   if (typeof run.id !== "string" || !run.id) return null;
   if (!Number.isFinite(run.startedAt)) return null;
-  // Only when the key is really there. An entry whose pages have been split out
-  // must come back without one, or the split below would find something to do on
-  // every pass and rewrite the whole log each time.
-  const inlined = "pages" in run ? normalizePages(run.pages) : null;
   const endedAt = Number.isFinite(run.endedAt as number) ? (run.endedAt as number) : null;
   const entry: RehearsalRunEntry = {
     id: run.id,
@@ -313,14 +293,14 @@ function normalizeRunEntry(raw: unknown, rehearsalId: string): RehearsalRunEntry
       typeof run.rehearsalId === "string" && run.rehearsalId ? run.rehearsalId : rehearsalId,
     startedAt: run.startedAt,
     endedAt,
-    lastMomentAt: Number.isFinite(run.lastMomentAt)
-      ? run.lastMomentAt
-      : lastMomentFrom(run.startedAt, endedAt, inlined ?? []),
+    // An entry written before this was a field of its own: the moment it
+    // stopped is the moment it ended, and a pass cut short has only the moment
+    // it started.
+    lastMomentAt: Number.isFinite(run.lastMomentAt) ? run.lastMomentAt : (endedAt ?? run.startedAt),
     segmentIds: segmentIds(run.segmentIds),
     spokenSegmentIds: segmentIds(run.spokenSegmentIds),
     wordsSpoken: count(run.wordsSpoken),
   };
-  if (inlined !== null) entry.pages = inlined;
   return entry;
 }
 

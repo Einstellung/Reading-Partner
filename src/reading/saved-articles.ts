@@ -96,11 +96,6 @@ export interface SavedArticle {
   // prints it on every row (saved-article-tools.ts) — and reading thirty body
   // files to draw a list would put the bodies back in the hot path.
   textChars: number;
-  // Where the body used to sit, before it moved into a file of its own. Still
-  // read: a record can arrive over sync from a device on the older build, and
-  // the split below is what finally lifts it out. Nothing here writes them.
-  text?: string;
-  html?: string;
 }
 
 // The two forms of one article's body, as they are stored together.
@@ -114,11 +109,11 @@ export interface SavedArticleBody {
 
 export const NO_ARTICLE_BODY: SavedArticleBody = { text: "", html: "" };
 
-// Everything a caller supplies; id/savedAt, the split and the image stripping
-// are ours.
+// Everything a caller supplies; id/savedAt, the body file and the image
+// stripping are ours.
 export type SavedArticleInput = Omit<
   SavedArticle,
-  "id" | "savedAt" | "bodyHash" | "textChars" | "text" | "html"
+  "id" | "savedAt" | "bodyHash" | "textChars"
 > &
   SavedArticleBody;
 
@@ -208,11 +203,10 @@ export function buildSavedArticle(
   };
 }
 
-// How long this article's text is, for a caller drawing a list. Reads the
-// denormalized count, and falls back to a body still inlined in the record.
+// How long this article's text is, for a caller drawing a list. The
+// denormalized count, or 0 when the record off disk carries no number.
 export function savedArticleTextChars(article: SavedArticle): number {
-  if (typeof article.textChars === "number") return article.textChars;
-  return asString(article.text).length;
+  return typeof article.textChars === "number" ? article.textChars : 0;
 }
 
 // The body file this record points at, or "" for none. The records file is
@@ -222,19 +216,6 @@ export function savedArticleTextChars(article: SavedArticle): number {
 export function articleBodyHashOf(article: SavedArticle): string {
   const hash = asString(article.bodyHash);
   return BODY_HASH.test(hash) ? hash : "";
-}
-
-// The body a record still carries inline, made safe to render. What a device on
-// the older build wrote, and what the split lifts out.
-function inlinedBody(article: SavedArticle): SavedArticleBody {
-  return { text: asString(article.text), html: sanitizeStoredHtml(article.html) };
-}
-
-// Whether the body is still sitting in the record. Judged by shape rather than
-// by a version flag: the split is idempotent because a record it has already
-// been through has no such key left.
-export function hasInlinedBody(article: SavedArticle): boolean {
-  return "text" in article || "html" in article;
 }
 
 // One body file's contents, made safe to render.
@@ -310,12 +291,6 @@ export interface ParsedSavedArticles {
 // Null when the file is not an array: that is not this writer's shape at all,
 // and readGuardedJson quarantines it.
 //
-// A body still inlined in a record is sanitized here, on the way out of the
-// file, for the reason parseArticleBody gives: a record can arrive without ever
-// having passed through this device's write path. Only when the key is really
-// there, though — a record whose body has been split out must come back without
-// one, or the split would find something to do on every pass and rewrite the
-// whole file each time.
 export function parseSavedArticles(raw: unknown): ParsedSavedArticles | null {
   if (!Array.isArray(raw)) return null;
   const articles: SavedArticle[] = [];
@@ -342,9 +317,7 @@ export function parseSavedArticles(raw: unknown): ParsedSavedArticles | null {
       continue;
     }
     seen.add(id);
-    const carried: SavedArticle = { ...(entry as SavedArticle), id };
-    if ("html" in carried) carried.html = sanitizeStoredHtml(record.html);
-    articles.push(carried);
+    articles.push({ ...(entry as SavedArticle), id });
   }
   return { articles, repaired };
 }
@@ -403,9 +376,7 @@ export const savedArticlesIo: SavedArticlesIo = {
   exists: (file) => appData.exists(file).catch(() => false),
 };
 
-// The body of one kept article. Reads the file the record points at, and falls
-// back to a body still inlined in the record — which is what a device on the
-// older build wrote, and what a record synced from one still carries.
+// The body of one kept article, read from the file the record points at.
 //
 // A pointer with no file behind it answers with an empty body rather than
 // raising: the records and the bodies are separate files and arrive over sync
@@ -416,9 +387,9 @@ export async function loadSavedArticleBody(
   io: SavedArticlesIo = savedArticlesIo,
 ): Promise<SavedArticleBody> {
   const hash = articleBodyHashOf(article);
-  if (hash === "") return inlinedBody(article);
+  if (hash === "") return NO_ARTICLE_BODY;
   const raw = await io.readBody(articleBodyPath(hash));
-  return raw === null ? inlinedBody(article) : parseArticleBody(raw);
+  return raw === null ? NO_ARTICLE_BODY : parseArticleBody(raw);
 }
 
 // Write one body and answer with the hash the record will point at. "" when
@@ -537,60 +508,6 @@ export async function saveArticle(
   const read = await readSavedArticles(io);
   const wrote = await save(io, upsertSavedArticle(read.list, article), read.repaired);
   return wrote ? article : null;
-}
-
-// Lift every body still sitting in the records into a file of its own. Answers
-// with how many records moved.
-//
-// Idempotent by shape, not by a flag on disk: a record this has already been
-// through carries no text/html key, so a second pass finds nothing to move and
-// writes nothing at all — not the same bytes again, nothing, so it costs no sync
-// revision and no merge.
-//
-// Two devices converge without coordinating. Both start from the same records
-// (the file merges record by record, so both hold the same ones), the body bytes
-// are a fixed serialisation of the same two strings, and the file name is the
-// hash of those bytes — so both write the same body file and the same pointer,
-// and the merge is handed two identical records rather than a conflict.
-//
-// A record whose inlined body was empty keeps whatever pointer it already had:
-// the empty keys are dropped and nothing else about it changes, so a record that
-// went through an older device's write path (which re-added `html: ""`) settles
-// rather than losing its body.
-export async function splitSavedArticleBodies(
-  io: SavedArticlesIo = savedArticlesIo,
-): Promise<number> {
-  const read = await readSavedArticles(io);
-  let moved = 0;
-  const next: SavedArticle[] = [];
-  for (const article of read.list) {
-    if (!hasInlinedBody(article)) {
-      next.push(article);
-      continue;
-    }
-    const body = buildArticleBody(inlinedBody(article));
-    const hash = await writeArticleBody(io, body);
-    const { text: _text, html: _html, ...rest } = article;
-    next.push({
-      ...rest,
-      bodyHash: hash === "" ? articleBodyHashOf(article) : hash,
-      textChars: hash === "" ? savedArticleTextChars(article) : body.text.length,
-    });
-    moved += 1;
-  }
-  if (moved === 0) return 0;
-  await save(io, next, read.repaired);
-  return moved;
-}
-
-// The split, run at most once per process. Both shells call it on the way up and
-// React runs their effects twice under StrictMode; two passes over the same file
-// would produce the same bytes, but they would race each other's write.
-let splitRun: Promise<number> | null = null;
-export function splitSavedArticleBodiesOnce(
-  io: SavedArticlesIo = savedArticlesIo,
-): Promise<number> {
-  return (splitRun ??= splitSavedArticleBodies(io));
 }
 
 // Move a kept article to another topic (docs/21): the write behind the reader

@@ -3,10 +3,8 @@
 // re-reading anything — which is now literal, since the transcripts are files of
 // their own (store.ts) and a row must be drawable without opening one.
 //
-// So the counting happens twice over: runEntryOf does it once, when the run is
-// written, and runSummary reads what it left. The second path is for an entry
-// that still carries its pages — one written before the split, or synced from a
-// device still on that build.
+// So the counting happens once, in runEntryOf, when the run is written;
+// runSummary reads what it left.
 
 import type { BuiltRun, RehearsalPage, RehearsalRunEntry } from "./types";
 
@@ -33,11 +31,7 @@ export function segmentIdOf(page: RehearsalPage): string {
 // Which segments a pass covered, and which of them were spoken to, in the order
 // buildRun left them. A page with no id belongs to no segment and is left out of
 // both — which is every pass given from the note, since the note does not say
-// which block is up and its one page carries no id (docs/44). It is still
-// computed rather than assumed empty: the migration that lifts an old log's
-// transcripts out of it (store.ts) rebuilds those entries through here, and two
-// devices on two builds have to rebuild them the same way or the merged log
-// disagrees with itself.
+// which block is up and its one page carries no id (docs/44).
 export function coverageOf(pages: readonly RehearsalPage[]): {
   segmentIds: string[];
   spokenSegmentIds: string[];
@@ -90,18 +84,13 @@ function countPages(pages: readonly RehearsalPage[]): number {
 }
 
 export function runSummary(entry: RehearsalRunEntry): RunSummary {
-  // An entry that still carries its pages predates the split, and its counts
-  // were never written down. Counting them here rather than repairing the file
-  // keeps a list draw free of writes; the split (store.ts) is what settles it.
-  const lastAt = entry.pages
-    ? lastMoment({ ...entry, pages: entry.pages })
-    : entry.lastMomentAt;
+  const lastAt = entry.lastMomentAt;
   return {
     ordinal: entry.ordinal,
     startedAt: entry.startedAt,
     minutes: Math.max(0, Math.round((lastAt - entry.startedAt) / 60_000)),
     elapsedMs: Math.max(0, lastAt - entry.startedAt),
-    wordsSpoken: entry.pages ? countPages(entry.pages) : entry.wordsSpoken,
+    wordsSpoken: entry.wordsSpoken,
   };
 }
 

@@ -23,7 +23,6 @@ import {
   loadSavedArticles,
   removeSavedArticle,
   saveArticle,
-  splitSavedArticleBodies,
   type SavedArticle,
   type SavedArticleInput,
 } from "../../src/reading/saved-articles";
@@ -281,10 +280,6 @@ test("hasSavedArticles says no when the file cannot be read", async () => {
 // after its own bytes: written once, then cold forever (docs/21).
 
 // One record as the pre-split build wrote it: the body sitting inside it.
-function inlined(over: Partial<SavedArticle> & { text?: string; html?: string } = {}): SavedArticle {
-  return { ...record(), text: "body text", html: "<p>body text</p>", ...over };
-}
-
 function bodyFiles(from: FakeAppData = io): string[] {
   return [...from.files.keys()].filter((f) => f.startsWith("article-bodies/")).sort();
 }
@@ -317,83 +312,6 @@ test("an article kept with no body gets no body file", async () => {
   expect(bodyFiles()).toEqual([]);
 });
 
-test("the split lifts every inlined body out and leaves the index a pointer", async () => {
-  io.files.set(
-    FILE,
-    JSON.stringify([
-      inlined(),
-      inlined({ id: "https://example.com/b", url: "https://example.com/b", text: "other", html: "<p>other</p>" }),
-    ]),
-  );
-
-  expect(await splitSavedArticleBodies(io)).toBe(2);
-
-  const onDisk = io.json(FILE) as SavedArticle[];
-  for (const a of onDisk) {
-    expect("text" in a).toBe(false);
-    expect("html" in a).toBe(false);
-    expect(a.bodyHash).toMatch(/^[0-9a-f]{32}$/);
-  }
-  expect(onDisk.map((a) => a.textChars)).toEqual([9, 5]);
-  expect(bodyFiles().length).toBe(2);
-  expect(await loadSavedArticleBody(onDisk[0], io)).toEqual({
-    text: "body text",
-    html: "<p>body text</p>",
-  });
-});
-
-// Run at start-up on every device, every launch. A second pass must find nothing
-// to do and write nothing at all — not the same bytes again, nothing, or every
-// launch would publish a sync revision the other device has to fetch.
-test("the split is idempotent: the second pass writes nothing", async () => {
-  io.files.set(FILE, JSON.stringify([inlined(), inlined({ id: "b", url: "https://example.com/b" })]));
-  expect(await splitSavedArticleBodies(io)).toBe(1 + 1);
-
-  const after = new Map(io.files);
-  const writes: string[] = [];
-  const watched = { ...io, write: async (f: string, c: string) => { writes.push(f); await io.write(f, c); } };
-
-  expect(await splitSavedArticleBodies(watched)).toBe(0);
-  expect(writes).toEqual([]);
-  expect([...io.files.entries()]).toEqual([...after.entries()]);
-});
-
-// The two devices never talk: they each run the split over the same records and
-// have to land on the same bytes, or the next sync is a conflict on every record
-// and a second copy of every body.
-test("two devices splitting the same records converge without talking", async () => {
-  const before = JSON.stringify([
-    inlined(),
-    inlined({ id: "https://example.com/b", url: "https://example.com/b", text: "other", html: "<p>other</p>" }),
-  ]);
-  const one = createFakeAppData();
-  const two = createFakeAppData();
-  one.files.set(FILE, before);
-  two.files.set(FILE, before);
-
-  await splitSavedArticleBodies(one);
-  await splitSavedArticleBodies(two);
-
-  expect(one.files.get(FILE)).toBe(two.files.get(FILE));
-  expect(bodyFiles(one)).toEqual(bodyFiles(two));
-  for (const f of bodyFiles(one)) expect(one.files.get(f)).toBe(two.files.get(f));
-});
-
-// The one device is already split, the other is still on the old build and keeps
-// re-adding an empty html to the records it writes. Dropping the key is all
-// there is to do — re-hashing an empty body would blank a pointer that is right.
-test("a record whose inlined body is empty keeps the pointer it already had", async () => {
-  io.files.set(FILE, JSON.stringify([{ ...record(), html: "", text: "" }]));
-
-  expect(await splitSavedArticleBodies(io)).toBe(1);
-
-  const onDisk = (io.json(FILE) as SavedArticle[])[0];
-  expect(onDisk.bodyHash).toBe("0123456789abcdef0123456789abcdef");
-  expect(onDisk.textChars).toBe(4);
-  expect("html" in onDisk).toBe(false);
-  expect(bodyFiles()).toEqual([]);
-});
-
 // Two devices, two files, and they arrive separately. The record can be here
 // before its body is; that reads as an article with nothing in it yet, not as a
 // failure, and never as a raise into the screen drawing the list.
@@ -408,15 +326,6 @@ test("a bodyHash that is not a hash never becomes a path", async () => {
   io.files.set("../../secrets.json", JSON.stringify({ text: "secret", html: "" }));
   const hostile = { ...record(), bodyHash: "../../secrets" };
   expect(await loadSavedArticleBody(hostile, io)).toEqual({ text: "", html: "" });
-});
-
-// The pre-split build's records still render: they arrive over sync from a device
-// that has not been updated, and the split may not have run yet on this one.
-test("a body still inlined in a record is read straight out of it", async () => {
-  expect(await loadSavedArticleBody(inlined(), io)).toEqual({
-    text: "body text",
-    html: "<p>body text</p>",
-  });
 });
 
 // File-level deletes do not propagate (docs/13), so a device that dropped a body

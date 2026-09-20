@@ -310,23 +310,19 @@ async function setAside(rehearsalId: string): Promise<void> {
  * once, under a name nothing else will ever use. The one thing that must not
  * happen is the pass disappearing from the history because its transcript
  * would not open.
- *
- * A pass that predates the split still carries its pages in the entry, and they
- * are the answer when there is no file to open.
  */
 export async function loadRunPages(entry: RehearsalRunEntry): Promise<RehearsalPage[]> {
-  const inlined = entry.pages ?? [];
   const file = runPagesFile(entry.rehearsalId, entry.id);
-  if (!file) return inlined;
+  if (!file) return [];
   try {
-    if (!(await appData.exists(file))) return inlined;
+    if (!(await appData.exists(file))) return [];
     const pages = normalizeRunPages(JSON.parse(await appData.readText(file)) as unknown);
     if (pages) return pages;
     console.warn(`${file} is not a transcript this build can read`);
   } catch (e) {
     console.warn("failed to read the transcript of", entry.id, e);
   }
-  return inlined;
+  return [];
 }
 
 /** One pass, row and transcript together. */
@@ -334,8 +330,9 @@ export async function loadRehearsalRun(entry: RehearsalRunEntry): Promise<Rehear
   return { ...entry, pages: await loadRunPages(entry) };
 }
 
-// Write one pass's transcript. False when there is nowhere to put it, which is
-// the caller's cue to leave the pages in the log entry rather than lose them.
+// Write one pass's transcript. False when there is nowhere to put it: the run's
+// id is not a name a file can have, which cannot happen to a run this app
+// recorded, whose id is a UUID.
 //
 // A file already there holds this pass's transcript: the name is the run's own
 // id and a run is recorded once, so a second write has nothing to add. Skipping
@@ -382,86 +379,10 @@ async function writeLog(log: RehearsalLog): Promise<void> {
 export async function appendRun(run: BuiltRun): Promise<RehearsalRunEntry> {
   const log = await loadRehearsalRuns(run.rehearsalId);
   const ordinal = log.runs.reduce((max, r) => Math.max(max, r.ordinal), 0) + 1;
-  const wrote = await writeRunPages(run.rehearsalId, run.id, run.pages);
+  await writeRunPages(run.rehearsalId, run.id, run.pages);
   const entry = runEntryOf({ ...run, ordinal });
-  // Nowhere to put the transcript means the run's id is not a name a file can
-  // have. Keeping the pages in the entry is the one answer that loses nothing;
-  // it cannot happen to a run this app recorded, whose id is a UUID.
-  const stored: RehearsalRunEntry = wrote ? entry : { ...entry, pages: [...run.pages] };
-  await writeLog({ ...log, runs: [...log.runs, stored] });
-  return stored;
-}
-
-/**
- * Lift every transcript still sitting in one rehearsal's log into a file of its
- * own. Answers with how many passes moved.
- *
- * Idempotent by shape, not by a marker on disk: an entry this has already been
- * through carries no `pages` key, so a second run finds nothing to move and
- * writes nothing at all — not the same bytes again, nothing, so it costs no sync
- * revision and no merge.
- *
- * Two devices converge without coordinating. Both start from the same entries
- * (the log merges entry by entry, platform/sync/merge/contract.ts), the counts
- * are a pure function of the pages, and the file name is the run's own id — so
- * both write the same transcript to the same path and the same row into the log,
- * and the merge is handed two identical entries rather than a conflict.
- *
- * An entry whose inlined transcript was empty keeps whatever counts it already
- * had and gets no file: there is nothing in it to store, and a build that did
- * not know about the split writes `pages: []` back on every append — writing an
- * empty transcript over a real one would be the one destructive thing here.
- */
-export async function splitRehearsalRunPages(rehearsalId: string): Promise<number> {
-  const log = await loadRehearsalRuns(rehearsalId);
-  let moved = 0;
-  const next: RehearsalRunEntry[] = [];
-  for (const entry of log.runs) {
-    if (!("pages" in entry)) {
-      next.push(entry);
-      continue;
-    }
-    const { pages = [], ...rest } = entry;
-    if (pages.length === 0) {
-      next.push(rest);
-      moved += 1;
-      continue;
-    }
-    if (!(await writeRunPages(rehearsalId, entry.id, pages))) {
-      next.push(entry);
-      continue;
-    }
-    next.push(runEntryOf({ ...rest, pages }));
-    moved += 1;
-  }
-  if (moved === 0) return 0;
-  await writeLog({ ...log, runs: next });
-  return moved;
-}
-
-/**
- * The same over every rehearsal on this device. One log that will not open costs
- * its own passes and nothing else — the rest still move, and the one that did
- * not is tried again next start-up.
- */
-export async function splitRehearsalRunPagesEverywhere(): Promise<number> {
-  let moved = 0;
-  for (const rehearsal of await listAllRehearsals()) {
-    try {
-      moved += await splitRehearsalRunPages(rehearsal.id);
-    } catch (e) {
-      console.warn("failed to split the transcripts of", rehearsal.id, e);
-    }
-  }
-  return moved;
-}
-
-// The split, run at most once per process. The shell calls it on the way up and
-// React runs its effects twice under StrictMode; two passes over the same log
-// would produce the same bytes, but they would race each other's write.
-let splitRun: Promise<number> | null = null;
-export function splitRehearsalRunPagesOnce(): Promise<number> {
-  return (splitRun ??= splitRehearsalRunPagesEverywhere());
+  await writeLog({ ...log, runs: [...log.runs, entry] });
+  return entry;
 }
 
 // Every transcript this rehearsal has on disk, as AppData-relative paths. Listed

@@ -187,11 +187,6 @@ test("a rehearsal transcript is a unit under the run id, in the reader's own voi
         segmentIds: [],
         spokenSegmentIds: [],
         wordsSpoken: 9,
-        pages: [
-          { index: 0, kind: "", title: "one", enteredAt: 1000, leftAt: 1500, transcript: "so the first thing" },
-          { index: 1, kind: "", title: "two", enteredAt: 1500, leftAt: 2000, transcript: "and then the second" },
-          { index: 2, kind: "", title: "three", enteredAt: 2000, leftAt: null, transcript: "   " },
-        ],
       },
       // A pass the reader gave in silence leaves nothing to distil.
       {
@@ -204,9 +199,25 @@ test("a rehearsal transcript is a unit under the run id, in the reader's own voi
         segmentIds: [],
         spokenSegmentIds: [],
         wordsSpoken: 0,
-        pages: [],
       },
     ],
+  });
+  // The transcripts are files of their own, one per pass.
+  put("runs/h1/run-uuid-1.json", {
+    version: 1,
+    rehearsalId: "h1",
+    runId: "run-uuid-1",
+    pages: [
+      { index: 0, kind: "", title: "one", enteredAt: 1000, leftAt: 1500, transcript: "so the first thing" },
+      { index: 1, kind: "", title: "two", enteredAt: 1500, leftAt: 2000, transcript: "and then the second" },
+      { index: 2, kind: "", title: "three", enteredAt: 2000, leftAt: null, transcript: "   " },
+    ],
+  });
+  put("runs/h1/run-uuid-2.json", {
+    version: 1,
+    rehearsalId: "h1",
+    runId: "run-uuid-2",
+    pages: [],
   });
 
   expect(await owed()).toEqual([["rehearsal-run", "run-uuid-1", 2]]);
