@@ -14,4 +14,5 @@
 - [dream调研](./dream调研.md)：夜间批处理记忆整理的先例，Letta、Mem0、Zep、Codex 等怎么做。2026-09-01。
 - [epub渲染spike](./epub渲染spike.md)：iframe 重排路线在 iOS WKWebView 和 WebKitGTK 上的实测，事件、CSP 和内存；路线已被 docs/64 取代。
 - [端侧ASR调研](./端侧ASR调研.md)：桌面按住说话换成本机 sherpa-onnx 跑 SenseVoiceSmall 的资料调研。2026-09-12。
+- [食材与菜品图片源调研](./食材与菜品图片源调研.md)：给购物清单每行和每道菜配公开图，TheMealDB 加 Spoonacular 兜底的覆盖实测、条款与落空链条，给 [north-star/diet](../north-star/diet.md) 用。2026-09-20。
 - [Jev开源生态调研](./Jev开源生态调研.md)：Jev 发布后五天的开源复刻、独立评测和 TypeSafe 官方口径，供 [north-star/system-one](../north-star/system-one.md) 定接入时机用。2026-09-20。
