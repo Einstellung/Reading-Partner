@@ -8,11 +8,13 @@
 // only write.
 
 import type { DinnerCharterCardData, DinnerPlanCardData } from "./cards";
+import { searchNamesToLookup, withDishPhotos, type DishPhotoLookup } from "./dish-photos";
 import { deriveShoppingList, reconcileShoppingList } from "./shopping";
 import type {
   Deviation,
   DinnerCharter,
   DinnerState,
+  DishPhotoEntry,
   ShoppingItem,
   WeekPlan,
 } from "./types";
@@ -30,6 +32,16 @@ export interface DinnerPorts {
     plan: WeekPlan,
     shopping: readonly ShoppingItem[],
   ): Promise<unknown>;
+  // The photographs looked up for a plan, and that plan carrying them. Optional
+  // because a host with no network still applies plans — without these two the
+  // week is simply drawn from its ingredients.
+  saveDishPhotos?(
+    photos: Readonly<Record<string, DishPhotoEntry>>,
+    plan: WeekPlan,
+  ): Promise<unknown>;
+  // One search for one dish name. Says whether it got an answer at all, and
+  // never throws.
+  lookupDishPhoto?(searchName: string): Promise<DishPhotoLookup>;
   // The host's clock and calendar. Never the model's (docs/73 事实不经模型).
   now(): number;
   today(): string;
@@ -44,6 +56,10 @@ export interface Applied {
   // The synthetic user turn telling the AI what the reader just did. Empty when
   // nothing happened, because there is then nothing to tell it.
   note: string;
+  // Work still running after the note was handed back: the dish photographs.
+  // The host ignores it — the screen reloads when they land — and a test awaits
+  // it instead of guessing at a number of ticks.
+  pending?: Promise<void>;
 }
 
 const NOTHING: Applied = { ok: false, note: "" };
@@ -112,7 +128,66 @@ export async function applyPlan(
     return NOTHING;
   }
   ports.changed();
-  return { ok: true, note: planNote(card, shopping) };
+  // The photographs are searched for after the week is on disk and after the
+  // note is handed back: a slow index must not hold up either. The screen
+  // reloads a second time when they land, the way it already does after Apply.
+  const pending = resolveDishPhotos(plan, ports)
+    .then((wrote) => {
+      if (wrote) ports.changed();
+    })
+    .catch(() => {});
+  return { ok: true, note: planNote(card, shopping), pending };
+}
+
+/**
+ * The photographs for a plan's dishes: one search per dish name never searched
+ * before, in order, then one write carrying both the cache and the plan whose
+ * dishes now point at the pictures.
+ *
+ * Sequential rather than fanned out. Seven names is nothing, but the index
+ * allows twenty requests a minute to an anonymous caller and a burst is how an
+ * app gets a refusal instead of a photograph.
+ *
+ * A search that got no answer at all stops the run and writes nothing for that
+ * name: if the index cannot be reached, the names after it cannot be reached
+ * either, and remembering "no photograph" for a dish nobody managed to ask
+ * about would take it off the screen for a month. They are asked again at the
+ * next Apply.
+ *
+ * True when something was written. Never throws: every failure is one dish
+ * without a picture.
+ */
+export async function resolveDishPhotos(plan: WeekPlan, ports: DinnerPorts): Promise<boolean> {
+  const lookup = ports.lookupDishPhoto;
+  const save = ports.saveDishPhotos;
+  if (!lookup || !save) return false;
+  const state = await ports.current();
+  const cache: Record<string, DishPhotoEntry> = { ...state.dishPhotos };
+  const fresh: Record<string, DishPhotoEntry> = {};
+  const now = ports.now();
+  for (const name of searchNamesToLookup(plan.dishes, cache, now)) {
+    let answer: DishPhotoLookup;
+    try {
+      answer = await lookup(name);
+    } catch {
+      answer = { ok: false };
+    }
+    if (!answer.ok) break;
+    // An answer of "nothing" is cached too, so the same dish is not searched
+    // for again next week. It expires; a hit does not.
+    const entry: DishPhotoEntry = answer.photo ?? { none: true, checkedAt: now };
+    cache[name] = entry;
+    fresh[name] = entry;
+  }
+  const photographed = withDishPhotos(plan, cache);
+  const nothingNew = Object.keys(fresh).length === 0 && photographed === plan;
+  if (nothingNew) return false;
+  try {
+    await save(fresh, photographed);
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 /**

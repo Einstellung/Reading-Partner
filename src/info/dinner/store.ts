@@ -28,6 +28,7 @@ import {
   type Deviation,
   type DinnerCharter,
   type DinnerState,
+  type DishPhotoEntry,
   type ShoppingItem,
   type WeekPlan,
 } from "./types";
@@ -71,7 +72,10 @@ export function parseDinnerFile(raw: unknown): DinnerState | null {
   const deviations = Array.isArray(raw.deviations)
     ? raw.deviations.filter(isDeviation)
     : [];
-  return { charter, plan, shopping, deviations };
+  const dishPhotos = isObject(raw.dishPhotos)
+    ? (raw.dishPhotos as Record<string, DishPhotoEntry>)
+    : {};
+  return { charter, plan, shopping, deviations, dishPhotos };
 }
 
 function validateCharter(raw: unknown): DinnerCharter | null {
@@ -160,6 +164,32 @@ export async function saveShopping(
   io: DinnerIo = dinnerIo,
 ): Promise<DinnerState> {
   return mutate(io, (s) => ({ ...s, shopping: [...shopping] }));
+}
+
+/**
+ * Write the dish photographs a plan's Apply looked up, and the plan that now
+ * carries them, in one write.
+ *
+ * The cache is merged rather than replaced: it is keyed by dish name and
+ * outlives every week, so a concurrent write that added another dish's
+ * photograph is not undone by this one.
+ *
+ * The plan is written back only when the one on disk is still the one that was
+ * photographed. A lookup takes seconds, and in those seconds the reader may
+ * have applied an adjustment; the photographs are still worth keeping — they
+ * are by name — but the week they were fetched for is stale and must not
+ * overwrite the newer one.
+ */
+export async function saveDishPhotos(
+  photos: Readonly<Record<string, DishPhotoEntry>>,
+  plan: WeekPlan,
+  io: DinnerIo = dinnerIo,
+): Promise<DinnerState> {
+  return mutate(io, (s) => ({
+    ...s,
+    dishPhotos: { ...s.dishPhotos, ...photos },
+    plan: s.plan && s.plan.id === plan.id && s.plan.revision === plan.revision ? plan : s.plan,
+  }));
 }
 
 /**

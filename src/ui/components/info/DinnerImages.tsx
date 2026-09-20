@@ -135,11 +135,15 @@ export function DishImage({
   thumbnails,
   alt,
   className,
+  onPhotoFailed,
 }: {
   image?: string;
   thumbnails: string[];
   alt: string;
   className?: string;
+  // Told when the dish's own photograph fails to load, so a caller drawing its
+  // credit line can take the line down with the picture.
+  onPhotoFailed?: () => void;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const wanted = imageSrc(image);
@@ -153,7 +157,10 @@ export function DishImage({
         alt={alt}
         className={`${box} size-full object-cover`}
         loading="lazy"
-        onError={() => setFailed(wanted)}
+        onError={() => {
+          setFailed(wanted);
+          onPhotoFailed?.();
+        }}
       />
     );
   }

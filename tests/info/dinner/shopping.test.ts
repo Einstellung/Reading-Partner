@@ -25,6 +25,7 @@ function dish(id: string, ingredients: Ingredient[], over: Partial<Dish> = {}): 
   return {
     id,
     name: id,
+    searchName: id,
     oneLine: "",
     base: "base",
     fresh: "",

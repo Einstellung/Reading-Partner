@@ -32,6 +32,7 @@ function week(over: Partial<WeekPlan> = {}): WeekPlan {
       {
         id: "dish-a",
         name: "Traybake",
+        searchName: "chicken traybake",
         oneLine: "",
         base: "b",
         fresh: "f",
@@ -42,6 +43,7 @@ function week(over: Partial<WeekPlan> = {}): WeekPlan {
       {
         id: "dish-b",
         name: "Sea bass",
+        searchName: "baked sea bass",
         oneLine: "",
         base: "b",
         fresh: "",
@@ -210,4 +212,44 @@ test("a deviation with no week to move writes nothing", async () => {
   );
   expect(out.ok).toBe(false);
   expect(f.changed).toBe(0);
+});
+
+test("Apply hands its note back before the photographs, and the screen reloads when they land", async () => {
+  const f = fake();
+  let release: (() => void) | null = null;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const photo = {
+    url: "https://live.staticflickr.com/1/mapo_b.jpg",
+    thumb: "",
+    title: "Mapo Tofu",
+    creator: "avlxyz",
+    license: "CC BY-SA 2.0",
+    licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
+    foreignLandingUrl: "https://www.flickr.com/photos/1/2",
+  };
+  let saved: WeekPlan | null = null;
+  const ports: DinnerPorts = {
+    ...f.ports,
+    lookupDishPhoto: async () => {
+      await held;
+      return { ok: true as const, photo };
+    },
+    saveDishPhotos: async (_photos, plan) => {
+      saved = plan;
+    },
+  };
+
+  const applied = await applyPlan(planCard(), ports);
+  // The week is written, the note is back, and no photograph has been searched
+  // for yet: the reader is not kept waiting on an image index.
+  expect(applied.ok).toBe(true);
+  expect(f.changed).toBe(1);
+  expect(saved).toBeNull();
+
+  release!();
+  await applied.pending;
+  expect(f.changed).toBe(2);
+  expect(saved!.dishes[0]?.image).toBe(photo.url);
 });

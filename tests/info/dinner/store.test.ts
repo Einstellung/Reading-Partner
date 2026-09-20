@@ -141,6 +141,12 @@ test("a half-understood file keeps what this build can read and drops what it ca
 });
 
 test("a file body round-trips through the parser", () => {
-  const state = { charter: charter(), plan: plan(), shopping: [item("lettuce")], deviations: [] };
+  const state = {
+    charter: charter(),
+    plan: plan(),
+    shopping: [item("lettuce")],
+    deviations: [],
+    dishPhotos: {},
+  };
   expect(parseDinnerFile(JSON.parse(dinnerFileBody(state)))).toEqual(state);
 });

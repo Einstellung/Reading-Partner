@@ -7,7 +7,8 @@
 
 import type { DinnerPorts } from "./apply";
 import type { DinnerCard } from "./cards";
-import { loadDinner, saveCharter, saveDeviation, savePlan } from "./store";
+import { lookupDishPhoto } from "./dish-photos";
+import { loadDinner, saveCharter, saveDeviation, saveDishPhotos, savePlan } from "./store";
 import {
   buildProposeDinnerCharterTool,
   buildProposeDinnerPlanTool,
@@ -35,6 +36,8 @@ export function liveDinnerPorts(opts: Pick<LiveDinnerOptions, "today" | "changed
     saveCharter: (charter) => saveCharter(charter),
     savePlan: (plan, shopping) => savePlan(plan, shopping),
     saveDeviation: (deviation, plan, shopping) => saveDeviation(deviation, plan, shopping),
+    saveDishPhotos: (photos, plan) => saveDishPhotos(photos, plan),
+    lookupDishPhoto: (searchName) => lookupDishPhoto(searchName),
     now: () => Date.now(),
     today: opts.today,
     changed: opts.changed,

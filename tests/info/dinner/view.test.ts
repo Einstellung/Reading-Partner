@@ -22,6 +22,7 @@ function dish(id: string, name: string, names: string[] = []): Dish {
   return {
     id,
     name,
+    searchName: name.toLowerCase(),
     oneLine: "",
     base: "",
     fresh: "",

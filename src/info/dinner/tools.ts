@@ -135,6 +135,9 @@ export function dinnerGuidance(state: DinnerState, today: string): string {
     "List a dish's ingredients for every serving it is planned for, the reheat night included.",
     "Give every ingredient its English common name in `en` beside the name in their own language,",
     "singular and lower case — it is what puts a photograph on their shopping list.",
+    "Prefer dishes that have a common name over combinations you make up: the reader is shown a",
+    "photograph of a named dish and nothing at all of an invented one. Give that name in",
+    "`searchName`, in English and the way people say it.",
     "Vegetables heavy, whole grains, lean protein, little oil, salt and refined carbohydrate.",
     "Never count calories, never give grams of anything nutritional, never talk about nutrition",
     "numbers at all — health is a filter on what you propose, not a subject.",
@@ -236,6 +239,13 @@ export function buildProposeDinnerPlanTool(deps: DinnerToolDeps): AgentTool {
       dishes: Type.Array(
         Type.Object({
           name: Type.String({ description: "The dish, named the way it would be said." }),
+          searchName: Type.String({
+            description:
+              "The dish's common English name as people search for it, singular and lower " +
+              "case: 'mapo tofu', 'shakshuka', 'minestrone', 'dal', 'ratatouille', 'sheet pan " +
+              "salmon'. Not a description of your own invention — it is what finds the dish's " +
+              "photograph, and a name nobody else uses finds nothing.",
+          }),
           oneLine: Type.String({ description: "One line: what it is and why tonight." }),
           base: Type.String({
             description: "The part cooked ahead that keeps a day. Empty if there is none.",
@@ -516,6 +526,7 @@ export function toDishDrafts(raw: unknown): DishDraft[] {
       const e = record(entry);
       return {
         name: String(e.name ?? "").trim(),
+        searchName: String(e.searchName ?? "").trim().toLowerCase(),
         oneLine: String(e.oneLine ?? "").trim(),
         base: String(e.base ?? "").trim(),
         fresh: String(e.fresh ?? "").trim(),
