@@ -9,6 +9,8 @@
 // decidable from its inputs.
 
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND, type FileArticle } from "./desk";
+import { INFO_DINNER_KIND } from "../dinner/desk";
+import type { DinnerState } from "../dinner/types";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
 import { briefingOverview } from "../boxes/briefing";
@@ -23,6 +25,15 @@ export interface InfoCallAnchor {
   // of the briefing and article ids; "onboarding" is a constant because the
   // add-source flow happens once.
   threadId: string;
+  // The thread file this conversation lives in, when it is not the day's own
+  // (call.ts: infoBookId). A standing conversation — dinner's — has one thread
+  // that outlives any day, so it needs a book that does too; everything
+  // anchored to a date leaves this out.
+  bookKey?: string;
+  // A first user turn to send when the thread is empty. The screen's own button
+  // said it, in the reader's voice. Sent once, gated on the on-disk thread
+  // being empty, so a reopened conversation never repeats it.
+  kickoff?: string;
   // The chat window's empty-state heading and composer placeholder.
   emptyTitle: string;
   placeholder: string;
@@ -186,6 +197,46 @@ export function onboardingAnchor(aiLanguage?: AiLanguage): InfoCallAnchor {
     desk: [{ kind: INFO_BRIEFING_KIND, ref: { onboarding: true, aiLanguage } }],
     position: { title: "Subscriptions", line: "Set up your information sources" },
   };
+}
+
+// --- dinner ------------------------------------------------------------------
+//
+// One thread per household, not one per week (docs/73): planning next week is
+// the same conversation as saying last night went differently. So it has a book
+// of its own rather than the day's, which also keeps its thread id unique
+// across every thread file (docs/pitfall/209) instead of repeating it in each
+// day's.
+
+/** The standing dinner thread, and the file it lives in. */
+export const DINNER_THREAD_ID = "dinner";
+export const DINNER_BOOK_ID = "info-dinner";
+
+/** What the screen's button says to start a week off. */
+export const DINNER_KICKOFF = "Plan this week.";
+
+const DINNER_TITLE = "Dinner";
+
+/** The dinner conversation: the household, the week, and the tools for both. */
+export function dinnerAnchor(
+  state: DinnerState,
+  today: string,
+  opts?: { kickoff?: string },
+): InfoCallAnchor {
+  return {
+    threadId: DINNER_THREAD_ID,
+    bookKey: DINNER_BOOK_ID,
+    emptyTitle: DINNER_TITLE,
+    placeholder: "Ask about dinner…",
+    desk: [{ kind: INFO_DINNER_KIND, ref: { state, today } }],
+    position: { title: DINNER_TITLE, line: dinnerLine(state) },
+    ...(opts?.kickoff ? { kickoff: opts.kickoff } : {}),
+  };
+}
+
+function dinnerLine(state: DinnerState): string | null {
+  if (!state.plan) return "No week planned yet";
+  const left = state.shopping.filter((i) => !i.checked).length;
+  return left ? `This week's dinners · ${left} still to buy` : "This week's dinners";
 }
 
 // The day's briefing on the desk. One place because two anchors put it there —
