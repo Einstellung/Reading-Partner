@@ -9,8 +9,11 @@
 //
 // Rendering only; which URL an image resolves to is in info/dinner/images.ts.
 
+import { useState } from "react";
+
 import { imageSrc } from "../../../info/dinner/images";
 import type { IngredientCategory } from "../../../info/dinner/types";
+import { hideBrokenImage } from "../markdown/proseCss";
 
 function Glyph({ size = 20, children }: { size?: number; children: React.ReactNode }) {
   return (
@@ -85,9 +88,15 @@ export function CategoryGlyph({ category, size }: { category: IngredientCategory
 }
 
 /**
- * One ingredient's 40px square: its photograph when the bank has one, the
- * aisle's glyph when it does not. Never a broken-image icon — an image that
- * fails to load falls back to the glyph like a missing one.
+ * One ingredient's 40px square: its photograph when a source has one, the
+ * aisle's glyph when it does not. Never a broken-image icon — a picture that
+ * 404s, or that cannot be reached at all, lands on the glyph like a missing
+ * one.
+ *
+ * A failed load has no CSS to hit (docs/pitfall/30), so the square listens for
+ * the error in the capture phase — `error` does not bubble but it does capture
+ * — and remembers which src failed. Remembering the src rather than a flag is
+ * what lets a re-render with a different photograph try again.
  */
 export function IngredientThumb({
   url,
@@ -98,11 +107,16 @@ export function IngredientThumb({
   category: IngredientCategory;
   alt: string;
 }) {
+  const [failed, setFailed] = useState<string | null>(null);
   const src = imageSrc(url);
+  const usable = src && src !== failed ? src : null;
   return (
-    <span className="flex size-10 flex-none items-center justify-center overflow-hidden rounded-md bg-muted-soft text-faint-foreground">
-      {src ? (
-        <img src={src} alt={alt} className="size-full object-cover" loading="lazy" />
+    <span
+      className="flex size-10 flex-none items-center justify-center overflow-hidden rounded-md bg-muted-soft text-faint-foreground"
+      onErrorCapture={() => setFailed(src)}
+    >
+      {usable ? (
+        <img src={usable} alt={alt} className="size-full object-cover" loading="lazy" />
       ) : (
         <CategoryGlyph category={category} size={20} />
       )}
@@ -127,12 +141,25 @@ export function DishImage({
   alt: string;
   className?: string;
 }) {
-  const src = imageSrc(image);
+  const [failed, setFailed] = useState<string | null>(null);
+  const wanted = imageSrc(image);
+  const src = wanted && wanted !== failed ? wanted : null;
   const box = `block overflow-hidden rounded-lg border border-border-subtle bg-muted-soft ${className ?? ""}`;
-  if (src) return <img src={src} alt={alt} className={`${box} size-full object-cover`} loading="lazy" />;
+  // The dish's own photograph failing falls back to the strip, not to a gap.
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className={`${box} size-full object-cover`}
+        loading="lazy"
+        onError={() => setFailed(wanted)}
+      />
+    );
+  }
   if (thumbnails.length) {
     return (
-      <span className={`${box} flex`}>
+      <span className={`${box} flex`} onErrorCapture={(e) => hideBrokenImage(e.target)}>
         {thumbnails.map((url, i) => (
           <img
             key={i}
