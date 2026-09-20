@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   isPageMark,
   type Annotation,
@@ -20,7 +19,6 @@ import {
 import { useSidebarColumn } from "./ui/components/reader/useSidebarColumn";
 import { ANNOTATION_COLORS } from "./platform/app/annotations";
 import {
-  addFileToTopic,
   createTopic,
   listTopics,
   markOpened,
@@ -86,7 +84,8 @@ import { AI_PEN_COLOR, useMarks } from "./reading/session/use-marks";
 import { openBook, switchDocument } from "./reading/session/open-book";
 import { supplementForSlug, supplementTitles } from "./reading/session/supplement-citation";
 import { createPasteHandler, systemImageReader } from "./reading/session/paste-images";
-import { runStartupMigrations } from "./reading/session/startup-migrations";
+import { runStartupRepairs } from "./reading/session/startup-repairs";
+import { importPickedBook } from "./reading/session/import-book";
 import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
 import { fileSharedBook, watchSharedBooks } from "./reading/session/shared-file";
 import type { ReaderShell } from "./reading/session/shell";
@@ -215,9 +214,9 @@ export default function App() {
   // entered. lastCallThread: the thread a call-start was last logged for.
   const pageDwellRef = useRef<{ page: number; since: number } | null>(null);
   const lastCallThreadRef = useRef<string | null>(null);
-  // Guards the one-time content-hash backfill so StrictMode's double effect run
-  // doesn't start it twice.
-  const migrationRan = useRef(false);
+  // Guards the one-time startup repairs so StrictMode's double effect run
+  // doesn't start them twice.
+  const repairsRan = useRef(false);
 
   // Null until the library has been read. Not [] — an empty array is a shelf
   // with nothing on it, which is what the vestibule would announce to a user who
@@ -430,13 +429,13 @@ export default function App() {
     refreshTopics().catch(() => setTopics([]));
   }, [refreshTopics]);
 
-  // The repairs and backfills that run once on the way up
-  // (reading/session/startup-migrations.ts), in the background. The ref makes it
+  // The repairs that run once on the way up
+  // (reading/session/startup-repairs.ts), in the background. The ref makes it
   // once: StrictMode runs this effect twice.
   useEffect(() => {
-    if (migrationRan.current) return;
-    migrationRan.current = true;
-    void runStartupMigrations().then((changed) => {
+    if (repairsRan.current) return;
+    repairsRan.current = true;
+    void runStartupRepairs().then((changed) => {
       if (changed) return refreshTopics().catch(() => {});
     });
   }, [refreshTopics]);
@@ -1001,25 +1000,35 @@ export default function App() {
   useEffect(
     () =>
       watchSharedBooks((url) => {
-        // openFile refreshes the shelf and says so itself when the bytes cannot
-        // be read; what is left here is the topic write ahead of it.
+        // The import belongs to this door now (shared-file.ts); openFile takes
+        // the row from there and refreshes the shelf. The bytes are read here,
+        // so a sandbox copy the system already swept is said here too.
         void fileSharedBook(url)
           .then((filed) => filed && openFile(filed.file, filed.topicId))
-          .catch((e) => console.error("failed to file a shared book", e));
+          .catch((e) => {
+            console.error("failed to file a shared book", e);
+            pushToast("error", "Can't open this file — it may have been moved or deleted.");
+          });
       }),
-    [openFile],
+    [openFile, pushToast],
   );
 
+  // The desk's door. The book is imported as it is picked, the same as on the
+  // phone and the same as one shared in (reading/session/import-book.ts). No
+  // upload here: the desk mirrors its books through sync, only the phone pushes
+  // one by hand.
   const addFile = useCallback(async () => {
     if (!activeTopicId) return;
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "Books", extensions: ["pdf", "epub"] }],
-    });
-    if (typeof selected !== "string") return;
-    await addFileToTopic(activeTopicId, selected);
-    await refreshTopics();
-  }, [activeTopicId, refreshTopics]);
+    try {
+      const filed = await importPickedBook(activeTopicId);
+      if (filed.kind === "cancelled") return;
+      if (filed.kind === "refused") return pushToast("error", filed.why);
+      await refreshTopics();
+    } catch (e) {
+      console.error("failed to import the picked file", e);
+      pushToast("error", "Can't read this file — it may have been moved or deleted.");
+    }
+  }, [activeTopicId, refreshTopics, pushToast]);
 
   const continueReading = useCallback(() => {
     const recent = mostRecentlyOpened(topics ?? []);

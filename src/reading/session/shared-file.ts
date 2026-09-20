@@ -10,10 +10,10 @@
 // OAuth callback arrives on (platform/sync/auth.ts). One stream, two consumers,
 // so each recognises only its own URLs and leaves the rest alone.
 //
-// From there it is the ordinary import: the path goes into a topic and the first
-// open reads it, hashes it and copies it into the library (open-file.ts). The
-// Inbox copy belongs to the system and may be swept, which is why a shared book
-// is opened at once rather than left as a row pointing at it.
+// From there it is the ordinary import: the bytes are read, copied into the
+// library and listed under a topic in one go (import-book.ts). That happens at
+// this door rather than at the first open because the Inbox copy belongs to the
+// system and may be swept, leaving a row pointing at nothing.
 //
 // The destination is the Brief topic, always: the share sheet is outside the
 // app, so whichever topic happened to be open says nothing about the document.
@@ -23,13 +23,8 @@
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { isTauri } from "../../platform/app/host";
 import { basename, normalizeFilePath } from "../../platform/app/path";
-import {
-  addFileToTopic,
-  ensureBriefTopic,
-  listTopics,
-  type FileRef,
-  type Topic,
-} from "../../platform/app/topics";
+import { ensureBriefTopic, listTopics, type FileRef, type Topic } from "../../platform/app/topics";
+import { BOOKS, fileBook, fileBookIo, type FileBookIo } from "./import-book";
 
 const BOOK_EXTENSIONS: readonly string[] = ["pdf", "epub"];
 
@@ -124,19 +119,19 @@ export function watchSharedBooks(
   };
 }
 
-export interface SharedBookIo {
+export interface SharedBookIo extends FileBookIo {
   ensureBriefTopic(): Promise<Topic>;
-  addFileToTopic(topicId: string, path: string): Promise<void>;
   listTopics(): Promise<Topic[]>;
 }
 
-export const sharedBookIo: SharedBookIo = { ensureBriefTopic, addFileToTopic, listTopics };
+export const sharedBookIo: SharedBookIo = { ...fileBookIo, ensureBriefTopic, listTopics };
 
 /**
- * List a shared book in the default topic and answer with the row to open.
- * Null when the URL named no book, or when the topic store refused the path —
- * the store owns what a row looks like, so the row is read back from it rather
- * than assembled here.
+ * Import a shared book into the default topic and answer with the row to open.
+ * Null when the URL named no book, when the bytes turn out to be neither format
+ * the reader opens, or when the topic store refused the path — the store owns
+ * what a row looks like, so the row is read back from it rather than assembled
+ * here.
  */
 export async function fileSharedBook(
   url: string,
@@ -145,8 +140,9 @@ export async function fileSharedBook(
   const path = sharedBookPath(url);
   if (path === null) return null;
   const topic = await io.ensureBriefTopic();
-  await io.addFileToTopic(topic.id, path);
+  const imported = await fileBook(topic.id, path, BOOKS, io);
+  if (imported.kind !== "imported") return null;
   const filed = (await io.listTopics()).find((t) => t.id === topic.id);
-  const file = filed?.files.find((f) => f.path === path);
+  const file = filed?.files.find((f) => f.path === imported.path);
   return file ? { topicId: topic.id, file } : null;
 }

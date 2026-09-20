@@ -31,7 +31,7 @@ import { addSupplement, listSupplements, removeSupplement } from "../../platform
 import { ensureDocumentFulltext } from "../ingest/fulltext";
 import { matchSupplement } from "../ingest/remove-tool";
 import { peekPrepPipeline } from "../prep/papers/live";
-import { addFileToTopic, listTopics, setFileHash } from "../../platform/app/topics";
+import { addFileToTopic, listTopics } from "../../platform/app/topics";
 import {
   adoptThreads,
   appendMessage,
@@ -324,10 +324,7 @@ async function runTranslation(
           }),
         hash: contentHash,
         importBook,
-        attach: async (topicId, path, hash) => {
-          await addFileToTopic(topicId, path);
-          await setFileHash(topicId, path, hash);
-        },
+        attach: (topicId, path, hash) => addFileToTopic(topicId, path, hash),
         // Listed before the original is taken off, so the book is never a book
         // with one supplement fewer than the reader put there.
         replaceSupplement: async (bookId, oldHash, supplement) => {

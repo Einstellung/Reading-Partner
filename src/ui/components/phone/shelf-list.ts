@@ -6,8 +6,9 @@
 // format this shell can draw, and are the bytes even on this device. Both are
 // decided here so the grid only renders the answer.
 //
-// Neither question has an answer for a file the library has never described: a
-// file added on the desk is imported the first time it is opened, and the two
+// Neither question has an answer for a file the library has never described.
+// Every door imports the book as it writes the row, so such a row was written
+// before that was true, or its library revision has not arrived yet — the two
 // files a card is made of (topics.json, library.json) sync apart. Such a card
 // says it was not imported rather than guessing PDF, which is what it used to
 // do — and a PDF is the one card this shell refuses to open.

@@ -1,7 +1,11 @@
 // Which copy of a topic file to open, and what has to be written down on the way
-// (docs/13, M-sync-1). The library holds the authoritative copy once a file has
-// been imported, because the original path may be gone — moved, or on a device
-// that never had it.
+// (docs/13, M-sync-1). The library holds the authoritative copy, because the
+// original path may be gone — moved, or on a device that never had it.
+//
+// Every door imports the book as it files it (import-book.ts), so the ordinary
+// open reads the library and writes nothing. The second route below is a
+// repair, not the normal way in: it serves a row written before the doors
+// imported, and a row whose library copy is missing.
 //
 // The io is an argument so this can be run without a filesystem. The default
 // binds the real one; App passes nothing.
@@ -29,8 +33,8 @@ export const bookSourceIo: BookSourceIo = {
 
 // The bytes to open and the id everything about this book is keyed by. A file
 // whose id is known and whose copy is in the library is read straight from it;
-// anything else is read from its original path, imported and backfilled so the
-// next open takes the first route.
+// anything else is read from its original path, imported and its id written
+// down, so the next open takes the first route.
 export async function resolveBookSource(
   file: FileRef,
   topicId: string,

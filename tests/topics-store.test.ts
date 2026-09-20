@@ -103,7 +103,7 @@ test("a delete over an unreadable file deletes nothing", async () => {
 test("renaming, adding and removing over an unreadable file are all refused", async () => {
   disk.readFails = true;
   await expect(renameTopic("t1", "renamed")).rejects.toThrow(/could not be read/);
-  await expect(addFileToTopic("t1", "/books/new.pdf")).rejects.toThrow(/could not be read/);
+  await expect(addFileToTopic("t1", "/books/new.pdf", "h3")).rejects.toThrow(/could not be read/);
   await expect(removeFileFromTopic("t1", "/books/jit.pdf")).rejects.toThrow(/could not be read/);
   expect(disk.files.get(TOPICS_FILE)).toBe(SHELF_JSON);
 });
@@ -149,6 +149,16 @@ test("the Brief topic is created once and found thereafter", async () => {
   expect(onDisk().topics.filter((t) => t.id === BRIEF_TOPIC_ID).length).toBe(1);
   // And it did not take the shelf with it on the way in.
   expect(onDisk().topics.map((t) => t.id).sort()).toEqual(["brief", "t1", "t2"]);
+});
+
+// The door has the book in the library before it writes the row, so the row is
+// written whole: one revision of topics.json, not two.
+test("a file is added with its book id already on it", async () => {
+  await addFileToTopic("t2", "/books/attention.pdf", "h4");
+
+  expect(topicOnDisk("t2").files).toEqual([
+    { path: "/books/attention.pdf", name: "attention.pdf", addedAt: expect.any(Number), hash: "h4" },
+  ]);
 });
 
 // Both of these ride along with opening a book, inside the catch that tells the
@@ -215,12 +225,12 @@ test("two renames at once both land", async () => {
   expect(names).toEqual({ t1: "JITs", t2: "attention heads" });
 });
 
-// The startup backfill's shape: setFileHash walking every file of every topic
-// while the user is on the shelf doing something else.
-test("a hash backfill running against a user's edit loses neither", async () => {
+// A book filed on one shelf while the user is on another doing something else:
+// three writes of the whole file, overlapping.
+test("a hash repair running against a user's edit loses neither", async () => {
   await Promise.all([
     setFileHash("t1", "/books/tracing.pdf", "h2"),
-    addFileToTopic("t2", "/books/attention.pdf"),
+    addFileToTopic("t2", "/books/attention.pdf", "h4"),
     markOpened("t1", "/books/tracing.pdf"),
   ]);
 

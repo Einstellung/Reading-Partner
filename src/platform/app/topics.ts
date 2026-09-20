@@ -13,9 +13,10 @@ export interface FileRef {
   name: string;
   addedAt: number;
   lastOpenedAt?: number;
-  // The book id (content hash), backfilled the first time the file is opened or
-  // by the startup migration. Absent for files added but never opened since the
-  // upgrade; the app falls back to reading `path` in that case.
+  // The book id (content hash), written by the door the file came in by
+  // (reading/session/import-book.ts). Absent only on a row written before
+  // 2026-09-21, when a door wrote the path alone; the app falls back to reading
+  // `path` and writes the id then (reading/session/open-file.ts).
   hash?: string;
 }
 
@@ -104,7 +105,7 @@ export interface TopicStore {
   ensureBrief: () => Promise<Topic>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  addFile: (id: string, rawPath: string) => Promise<void>;
+  addFile: (id: string, rawPath: string, hash: string) => Promise<void>;
   removeFile: (id: string, path: string) => Promise<void>;
   setFileHash: (id: string, path: string, hash: string) => Promise<void>;
   markOpened: (id: string, path: string) => Promise<void>;
@@ -113,9 +114,10 @@ export interface TopicStore {
 export function createTopicStore(io: TopicIo): TopicStore {
   // Every mutator is load -> await -> save of the whole file, so two of them
   // overlapping read the same library twice and the second write drops the first
-  // one's edit. The startup hash backfill does exactly that: it calls setFileHash
-  // once per file across every topic with multi-second awaits in between, while
-  // the user is on the shelf renaming and adding. So mutations run one at a time.
+  // one's edit. Filing a book does exactly that: a book is hundreds of MB, so
+  // the read and the import between picking the file and writing its row take
+  // seconds the user spends on the shelf renaming and adding. So mutations run
+  // one at a time.
   //
   // This is one store's queue over its own file, not a lock on the file. The
   // sync engine writes topics.json through syncFs without taking anything, and
@@ -242,13 +244,17 @@ export function createTopicStore(io: TopicIo): TopicStore {
     // path on desktop and a percent-encoded file URL on iOS, and everything
     // stored downstream (the library title, the notes state's book name) is
     // derived from what lands here. Normalize once, at the door.
-    addFile: (id, rawPath) => {
+    //
+    // The book id comes with the path because by the time a row is written the
+    // bytes are already in the library (reading/session/import-book.ts). One
+    // write, one sync revision.
+    addFile: (id, rawPath, hash) => {
       const path = normalizeFilePath(rawPath);
       return serialize(async () => {
         const store = await load();
         const topic = store.topics.find((t) => t.id === id);
         if (!topic || topic.files.some((f) => f.path === path)) return;
-        topic.files.push({ path, name: basename(path), addedAt: io.now() });
+        topic.files.push({ path, name: basename(path), addedAt: io.now(), hash });
         await save(store);
       });
     },
@@ -262,11 +268,13 @@ export function createTopicStore(io: TopicIo): TopicStore {
         await save(store);
       }),
 
-    // Record a file's book id (content hash) once known. Matched by path within
-    // the topic; a no-op if already set to the same hash.
+    // Repair a file's book id. Matched by path within the topic; a no-op if
+    // already set to the same hash. The door writes the id (addFile above), so
+    // this is for the row it does not cover: one written before the doors
+    // imported, and one whose library copy has gone missing.
     //
-    // This one and markOpened below are backfills that ride along with opening a
-    // book, so an unreadable file makes them do nothing rather than raise: the
+    // This one and markOpened below ride along with opening a book, so an
+    // unreadable file makes them do nothing rather than raise: the
     // book still opens, and the id is written the next time it is opened after a
     // read that worked. Raising here would tell the user the file they are
     // looking at could not be opened (App.tsx's openFile catches around both).
@@ -330,8 +338,8 @@ export function removeTopicRecord(id: string): Promise<void> {
   return store.remove(id);
 }
 
-export function addFileToTopic(id: string, rawPath: string): Promise<void> {
-  return store.addFile(id, rawPath);
+export function addFileToTopic(id: string, rawPath: string, hash: string): Promise<void> {
+  return store.addFile(id, rawPath, hash);
 }
 
 export function removeFileFromTopic(id: string, path: string): Promise<void> {
