@@ -13,5 +13,3 @@
 ## 解法
 
 索引按 id 存一个数组（`Map<threadId, ThreadRef[]>`，`ThreadRef` 带上文件路径），遍历消息时走所有实例。凡是"这个 id 的线程持有这个时间戳吗"的判断，都变成"这个 id 下有几个线程持有它"：正好一个才能往下做，两个以上一律拒绝并报出来，不猜。
-
-见 `src/migrate/threads.ts` 的 `byId` 和 `holdersOfStamp`。
