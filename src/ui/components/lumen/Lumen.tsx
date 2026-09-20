@@ -154,9 +154,9 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	// own. `still` does not stop it: the loop is the breath, and this is an act.
 	reach,
 	reaching = false,
-	// What a press does, where that is not starting and stopping a call. Kept
-	// for the voice entry the column will grow one day (docs/68); the corner
-	// wires nothing to it.
+	// What a press does, where that is not starting and stopping a call. The
+	// corner wires it to nothing on purpose: there a session is opened and
+	// ended by a hold, and a tap on the body means nothing (docs/68).
 	onActivate,
 	// The button's accessible name, where the call's four phases are not what
 	// the press means.
@@ -496,13 +496,13 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 				    where it sits, not darker. A radial gradient and not a blur —
 				    iOS WebKit clips a filter to the element's own box and the
 				    blurred version is a hard-edged square (docs/pitfall/219). */}
-				<span className="absolute bottom-[9%] left-1/2 h-[12%] w-[72%] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(closest-side,#7ba9ff,transparent)] [opacity:calc(var(--lumen-pool)*0.62)] scale-x-(--lumen-pool-x)" />
+				<span className="absolute bottom-[9%] left-1/2 h-[12%] w-[72%] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(closest-side,#7ba9ff,transparent)] [opacity:calc((var(--lumen-pool)+var(--lumen-charge,0)*0.58)*0.62)] scale-x-(--lumen-pool-x)" />
 				{/* The halo. The level's second reading, the way the orb's was — but
 				    not in the app's accent green: Lumen is blue light, and the token
 				    is the ink of a control. Faint on purpose. The page is paper, and
 				    on paper a glow can only be a cool tint; anything strong enough to
 				    read as light reads instead as a dirty ring. */}
-				<span className="absolute inset-[-16%] rounded-full bg-[radial-gradient(circle,#8fb8ff_16%,transparent_60%)] [opacity:calc(var(--lumen-glow)*0.34)] [scale:var(--lumen-sx)_var(--lumen-sy)]" />
+				<span className="absolute inset-[-16%] rounded-full bg-[radial-gradient(circle,#8fb8ff_16%,transparent_60%)] [opacity:calc((var(--lumen-glow)+var(--lumen-charge,0)*0.70)*0.34)] [scale:var(--lumen-sx)_var(--lumen-sy)]" />
 				{/* The body group: one transform for the whole character, so the
 				    tuft, the light inside it and the face all breathe together. */}
 				<span className="absolute inset-0 block [transform-origin:50%_86%] translate-x-(--lumen-x) translate-y-(--lumen-y) rotate-(--lumen-tilt) [scale:var(--lumen-sx)_var(--lumen-sy)] motion-reduce:rotate-0">

@@ -65,6 +65,13 @@ hound = "3.5"
 # sentence rather than not existing, so the desktop build loads.
 tauri-plugin-voice = { path = "../plugins/voice" }
 
+# The two taps the hand feels when a hold on Lumen opens or ends the voice
+# session (docs/68). The mirror image of autostart below: a motor exists only on
+# a phone, so the crate is a dependency only there and the desktop build never
+# sees it.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-haptics = "2"
+
 # Start with the machine, if the user asks for it (docs/36). The crate exists
 # only for the three desktop platforms, so it is scoped to them rather than
 # guarded at the use site; on mobile it is not a dependency at all.

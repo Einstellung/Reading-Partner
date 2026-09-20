@@ -26,7 +26,7 @@ export type { SpeechEnvelope };
 export type OrbPhase = "idle" | "listening" | "thinking" | "speaking";
 
 // What the orb needs from the session driving it. The hook that implements this
-// lives in ui/components/info/use-voice-call.ts; the type is declared here so
+// lives in ui/components/lumen/use-voice-call.ts; the type is declared here so
 // the orb depends on the shape and not on the hook.
 //
 // `subscribeLevel` and not a `level` field: the level arrives about ten times a
