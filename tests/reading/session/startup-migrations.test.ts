@@ -25,8 +25,6 @@ function fakeIo(over: Partial<StartupMigrationIo> = {}) {
     listTopics: async () => [],
     readFile: async () => new Uint8Array([1]),
     importBook: async (_bytes, path) => ({ hash: `hash:${path}` }),
-    migrateBookLive: async () => {},
-    pathHash: (path) => `path-hash:${path}`,
     setFileHash: async (topicId, path, hash) => {
       wrote.push(`${topicId} ${path} ${hash}`);
     },
@@ -49,16 +47,11 @@ test("a file that already carries an id is left alone", async () => {
   expect(wrote).toEqual([]);
 });
 
-test("a file with no id is imported, migrated off its path hash, and written down", async () => {
-  const migrations: string[] = [];
+test("a file with no id is imported and written down", async () => {
   const { io, wrote } = fakeIo({
     listTopics: async () => [topic([{ path: "/a.pdf" }])],
-    migrateBookLive: async (from, to) => {
-      migrations.push(`${from} -> ${to}`);
-    },
   });
   expect(await runStartupMigrations(io)).toBe(true);
-  expect(migrations).toEqual(["path-hash:/a.pdf -> hash:/a.pdf"]);
   expect(wrote).toEqual(["t1 /a.pdf hash:/a.pdf"]);
 });
 

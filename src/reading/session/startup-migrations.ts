@@ -1,16 +1,13 @@
 // The repairs and backfills the app runs once on the way up, lifted out of App.
 // Two of them rewrite files the reader never asked about (docs/21, docs/44) and
 // the third gives every topic file a content hash (docs/13, M-sync-1): import it
-// into the library, move its legacy path-hash-keyed data under the id the hash
-// gives it, and write the id down.
+// into the library and write the id down.
 //
 // The io is an argument so this can be run without a filesystem. The default
 // binds the real one; App passes nothing.
 
 import { appData } from "../../platform/app/appdata";
 import { importBook, repairLibraryNames } from "../../platform/app/library";
-import { migrateBookLive } from "../../platform/app/migrate";
-import { hashPath } from "../../platform/app/storage";
 import { listTopics, repairTopicPaths, setFileHash, type Topic } from "../../platform/app/topics";
 import { splitRehearsalRunPagesOnce } from "../rehearsal";
 import { splitSavedArticleBodiesOnce } from "../saved-articles";
@@ -27,8 +24,6 @@ export interface StartupMigrationIo {
   /** The file at the absolute path the reader picked, not an AppData one. */
   readFile(path: string): Promise<Uint8Array>;
   importBook(bytes: Uint8Array, originalPath: string): Promise<{ hash: string }>;
-  migrateBookLive(oldKey: string, newKey: string): Promise<void>;
-  pathHash(path: string): string;
   setFileHash(topicId: string, path: string, hash: string): Promise<void>;
 }
 
@@ -40,8 +35,6 @@ export const startupMigrationIo: StartupMigrationIo = {
   listTopics,
   readFile: (path) => appData.readPicked(path),
   importBook,
-  migrateBookLive,
-  pathHash: hashPath,
   setFileHash,
 };
 
@@ -80,7 +73,6 @@ export async function runStartupMigrations(
         // once.
         const bytes = await io.readFile(f.path);
         const entry = await io.importBook(bytes, f.path);
-        await io.migrateBookLive(io.pathHash(f.path), entry.hash);
         await io.setFileHash(t.id, f.path, entry.hash);
         changed = true;
       } catch (e) {
