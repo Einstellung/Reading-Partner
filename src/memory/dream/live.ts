@@ -12,8 +12,6 @@ import { logEvent } from "../../platform/app/events";
 import { AI_EVENT_TOPIC } from "../../platform/app/structured-output";
 import { callModel } from "../../ai/model-call";
 import { observationFs } from "../live/live";
-import { observationLayoutFs } from "../live/fs";
-import { legacyObservationLayout } from "../observations/legacy";
 import {
   addEvidence,
   createStatement,
@@ -72,11 +70,6 @@ async function allObservations(): Promise<Observation[]> {
 // start-up, foreground and the five-minute tick all reach the same object.
 const gate = createDreamGate();
 
-// A night that stood down before reading anything.
-function standDown(): DreamResult {
-  return { outcome: "waiting-migration", candidates: 0, written: 0, dropped: 0, inputHash: null };
-}
-
 // One night, if one is due. Never throws: this rides the collector's five-minute
 // tick, and a night that cannot run must not take the morning briefing's
 // schedule down with it.
@@ -89,17 +82,6 @@ export async function runDreamIfDue(now = Date.now()): Promise<DreamResult | nul
   try {
     const state = await loadDreamState();
     if (!isDreamDue(state, now)) return null;
-
-    // Before the stores are read, because the whole point is not to read them:
-    // observations still sitting in a per-topic directory are about to move, and
-    // a statement written against what a half-moved store answers would name a
-    // file that is somewhere else by the time the reader presses the button
-    // (docs/pitfall/210). The same judgement the migration button makes
-    // (migrate/pending.ts), out of the same rule.
-    if (await legacyObservationLayout(observationLayoutFs)) {
-      logEvent(AI_EVENT_TOPIC, "dream-run", { outcome: "waiting-migration" });
-      return standDown();
-    }
 
     const [observations, statements] = await Promise.all([allObservations(), listStatements()]);
     const result = await runDream(

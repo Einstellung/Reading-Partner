@@ -31,9 +31,7 @@ statement 两种 kind：
 
 观察全部存在一个目录 `observations/` 里：一条观察一个 `m-<16hex>.md`，一份 `index.md`、一份 `meta.json`、一份 `deleted-observations.jsonl`。id 本来就全局唯一，topic 是 frontmatter 上的一个字段（写入时从会话的 topicId 填），不是目录。index 的每行带 topic，按 topic 取索引就不用把每个文件都打开；发给模型的那份投影里不印 topic。`meta.json` 的 `lastDistilledAt` 和 `lastAnnotationDistillAt` 按 topicId 键，蒸馏节流仍然按 topic；`distilledMessages` 和 `distilledMarks` 的键本来就是 threadId 和 bookId，全局一份。
 
-老布局（一个 topic 一个 `memory-<topicId>/`）还留在盘上时整个 app 不可用。两个外壳启动时各判一次 `needsMigration(appDataMigrationFs)`（`src/migrate/pending.ts`，dream 停手用的也是这条），为真就盖一层全屏蒙层（`ui/components/common/MigrationGate.tsx`，规则和状态在同目录的 `migration-gate.ts`）：一句话加一个按钮，不能关，没有 Esc，点外面也不关，层级 `OVERLAY_Z.blocking` 压在锚定浮层之上。按一次等于设置页那张卡的两次——先 dry run 再 apply，进度和报告复用 `settings/migration-card.ts` 的状态机。放行只认盘：跑完再问一次 `needsMigration`，为假才撤蒙层，为真就留着报告和 Try again。每轮同步结束时再问一次（订阅 `subscribeSyncStatus`，`running` 由真变假的那一下，不轮询），因为还在老版本的机器随时可能同步来一个 `memory-<topicId>/`。第一次判据答出来之前 app 照常画，那是两次目录列举的工夫。
-
-搬运遇到 `observations/` 里已经有同名文件时不许把源文件留在原地：闸门看的就是 `memory-*/` 里还有没有源。字节相同（比的是把 topic 盖进去之后的搬运结果）就删源；不同就一个字节不动目标，把源的版本按 `m-<id>.conflict-<digest>.md` 停在旁边再删源。两份都留，迁移不挑；后缀取自内容，重跑落到同一个名字。第二台设备的正常状态就是目标全都已经被同步送到了（坑 236）。
+老布局（一个 topic 一个 `memory-<topicId>/`）和 8 位 id 只存在于 0.12 之前。0.12 到 0.14 期间有一套搬运：全屏蒙层、设置页那张卡、dream 停手、同名冲突另存 `m-<id>.conflict-<digest>.md`（坑 236）。2026-09-20 在 0.20.x 把它整套删了：代码里只剩平铺布局和 16 位 id，没有兼容路径，也没有回头路。
 
 statement 目录 `src/memory/statements/`，合并策略 `records`。"profile"这个词的旧用法（`loadProfile`、`readerProfileSection`、`user-profile.md`）按下文的作废清单删函数、留文件，名字空出来给新的。
 
@@ -146,8 +144,6 @@ concern 不进聊天段，消费者是 info 分拣和 dream。
 pass 只做追加和刷新，不做整组替换。哪条下场由有效期决定，不由这一轮没被重新提起决定。140 条 / 10 万字全量重读在这个量级不贵，不设窗口——照抄先例的窗口常数，结果就是"每主题 12 行导致 74% 的记录不可见"。
 
 dream 只能读同步范围内的东西：它跑在 PC 上而阅读发生在 iPad 上，本地状态它看不见。concern 落后阅读最多一趟同步，这个延迟要认。
-
-迁移未完成不跑：观察目录里还有 8 位 id 的文件，整晚停手（`waiting-migration`，不推进日期也不推进 hash），否则写出的证据指着马上要被改名的文件（坑 210）。
 
 supersede 一次可以指多条：两条 statement 说同一件事就合成一条，证据取并集，每条目标各自受 `author` 规则约束。
 

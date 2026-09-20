@@ -61,7 +61,6 @@ import {
 import { useEdgeBack } from "./ui/components/phone/useEdgeBack";
 import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsDialog from "./ui/components/SettingsDialog";
-import MigrationGate from "./ui/components/common/MigrationGate";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
@@ -401,11 +400,6 @@ export default function PhoneApp({
           goToBriefing: () => onNavigate("briefing"),
         }}
       />
-
-      {/* Covers everything above, or renders nothing (docs/48). Outside the
-          sliding surface: what it means is that the app is out of play, and a
-          cover that travelled with the back swipe would leave the screen. */}
-      <MigrationGate />
     </div>
   );
 }

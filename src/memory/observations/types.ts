@@ -76,8 +76,7 @@ export interface Observation {
   // a cross-topic search labels a hit with — and nothing scores on it.
   //
   // Optional because the field is younger than the files. Everything written
-  // through the adapter carries it, and the migration stamps what each per-topic
-  // directory held onto the entries it moves.
+  // through the adapter carries it; entries older than the field have none.
   topic?: string;
   // Frontmatter pairs this build has no field for, kept so it can write them
   // back out (files.ts). Opaque above the file format: nothing reads a value

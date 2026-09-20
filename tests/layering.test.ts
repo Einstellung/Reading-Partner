@@ -162,11 +162,6 @@ const LAYER: Record<string, Layer> = {
   // bodies, a room's picture — and the briefer only names its kind, so the edge
   // runs briefer -> tasking and never back.
   "info/tasking": "domain",
-  // The 0.12 data migration, deleted wholesale at 0.13. A domain rather than a
-  // capability because it drives the observation store and the thread files
-  // rather than serving them, and because nothing below it may ever grow a
-  // dependency on something that is about to be deleted.
-  migrate: "domain",
   reading: "domain",
   "reading/chapters": "domain",
   // Deleting a book, which is one order of operations across the library, the
