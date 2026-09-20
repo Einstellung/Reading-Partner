@@ -6,11 +6,13 @@
 // without React (CLAUDE.md). Nothing here formats a nutrition number, because
 // there is none anywhere in this line.
 
+import { photoForDish } from "./dish-photos";
 import { ingredientImageUrl } from "./images";
 import {
   CATEGORY_ORDER,
   type DayPlan,
   type Dish,
+  type DishPhotoEntry,
   type DinnerMode,
   type IngredientCategory,
   type KeepsClass,
@@ -127,6 +129,35 @@ export function headlineDays(plan: WeekPlan | null, today: string): DayView[] {
 /** Everything after those two, as the compact list. */
 export function laterDays(plan: WeekPlan | null, today: string): DayView[] {
   return upcomingDays(plan, today).slice(2);
+}
+
+// The line under a dish photograph, and where it goes when it is tapped.
+export interface DishPhotoCredit {
+  text: string;
+  url: string;
+}
+
+/**
+ * The credit a dish photograph owes: its creator and its licence, and the page
+ * it was found on.
+ *
+ * Only for the photograph actually on screen — the dish's `image` has to be the
+ * one the cache holds, or a credit would name the wrong photographer. Null for
+ * a dish drawn from its ingredients, whose credit is the screen's standing
+ * TheMealDB line instead.
+ */
+export function dishPhotoCredit(
+  dish: Dish | null | undefined,
+  photos: Readonly<Record<string, DishPhotoEntry>> | undefined,
+): DishPhotoCredit | null {
+  if (!dish?.image) return null;
+  const photo = photoForDish(dish, photos);
+  if (!photo || photo.url !== dish.image) return null;
+  const who = photo.creator.trim();
+  const parts = ["Photo", who ? `: ${who}` : "", photo.license ? ` · ${photo.license}` : ""];
+  const url = photo.foreignLandingUrl || photo.licenseUrl;
+  if (!url) return null;
+  return { text: parts.join(""), url };
 }
 
 /**

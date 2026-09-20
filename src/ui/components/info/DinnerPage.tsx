@@ -8,12 +8,15 @@
 //
 // None of the bureau's vocabulary appears here. It is dinner.
 
+import { useState } from "react";
+
 import { openExternal } from "../../../platform/app/external-link";
 import type { DinnerState, ShoppingItem } from "../../../info/dinner/types";
 import { ingredientImageUrl } from "../../../info/dinner/images";
 import { shoppingItemKey } from "../../../info/dinner/shopping";
 import { planExhausted } from "../../../info/dinner/week";
 import {
+  dishPhotoCredit,
   dishThumbnails,
   headlineDays,
   keepsLabel,
@@ -22,6 +25,7 @@ import {
   modeWord,
   shoppingGroups,
   type DayView,
+  type DishPhotoCredit,
 } from "../../../info/dinner/view";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -49,8 +53,12 @@ function BasePlus({ label, text }: { label: string; text: string }) {
   );
 }
 
-function HeadlineDay({ view }: { view: DayView }) {
+function HeadlineDay({ view, credit }: { view: DayView; credit: DishPhotoCredit | null }) {
   const { day, dish } = view;
+  // The credit belongs to the photograph, so it goes when the photograph does:
+  // a dish picture that fails to load falls back to the ingredient strip, which
+  // is TheMealDB's and is credited at the foot of the screen instead.
+  const [photoFailed, setPhotoFailed] = useState(false);
   const cooked = day.mode === "cook" || day.mode === "reheat";
   const fresh = day.mode === "reheat" ? (day.freshAdd ?? dish?.fresh ?? "") : (dish?.fresh ?? "");
   return (
@@ -71,8 +79,18 @@ function HeadlineDay({ view }: { view: DayView }) {
           thumbnails={dishThumbnails(dish, ingredientImageUrl)}
           alt={dish?.name ?? modeWord(day.mode)}
           className="size-full"
+          onPhotoFailed={() => setPhotoFailed(true)}
         />
       </div>
+      {credit && !photoFailed && (
+        <button
+          type="button"
+          className="mt-1 block max-w-full truncate text-left text-[11px] leading-snug text-faint-foreground underline underline-offset-2 can-hover:hover:text-muted-foreground"
+          onClick={() => openExternal(credit.url)}
+        >
+          {credit.text}
+        </button>
+      )}
 
       {cooked && dish ? (
         <>
@@ -199,7 +217,11 @@ export function DinnerPage(props: DinnerPageProps) {
         <>
           <div className="flex flex-col gap-4">
             {head.map((v) => (
-              <HeadlineDay key={v.day.date} view={v} />
+              <HeadlineDay
+                key={v.day.date}
+                view={v}
+                credit={dishPhotoCredit(v.dish, state.dishPhotos)}
+              />
             ))}
           </div>
 
