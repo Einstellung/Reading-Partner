@@ -61,8 +61,10 @@ function HeadlineDay({ view }: { view: DayView }) {
         <span className="text-[13px] font-medium text-accent-line">{modeWord(day.mode)}</span>
       </div>
 
-      {/* 16:9, so a phone spends a third of a screen on the picture and no more. */}
-      <div className="mt-3 aspect-[16/9] w-full">
+      {/* 16:9, capped: a photograph gets the width, and the neutral block a
+          night has no picture for never grows into a hole the length of the
+          card on a wide screen. */}
+      <div className="mt-3 aspect-[16/9] max-h-40 w-full">
         <DishImage
           image={dish?.image}
           thumbnails={dishThumbnails(dish, ingredientImageUrl)}

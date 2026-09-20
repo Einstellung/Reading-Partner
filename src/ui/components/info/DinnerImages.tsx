@@ -128,7 +128,7 @@ export function DishImage({
   className?: string;
 }) {
   const src = imageSrc(image);
-  const box = `overflow-hidden rounded-lg bg-muted-soft ${className ?? ""}`;
+  const box = `block overflow-hidden rounded-lg border border-border-subtle bg-muted-soft ${className ?? ""}`;
   if (src) return <img src={src} alt={alt} className={`${box} size-full object-cover`} loading="lazy" />;
   if (thumbnails.length) {
     return (
