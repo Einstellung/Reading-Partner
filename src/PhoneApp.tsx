@@ -26,7 +26,6 @@ import { startRunner } from "./legion/execute/runner";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
-  splitSavedArticleBodiesOnce,
   type SavedArticle,
 } from "./reading/saved-articles";
 import { registerPlaces } from "./desk";
@@ -184,14 +183,9 @@ export default function PhoneApp({
   }, []);
 
   // The kept list is this shell's own: it is most of what the phone shows, and
-  // nothing in the shared bootstrap knows about it. The bodies moved out of the
-  // records (docs/21); lifting out any that are still inlined comes first, so
-  // the list below is drawn from the shape the rest of this shell expects. It
-  // writes nothing when there is nothing to move.
+  // nothing in the shared bootstrap knows about it, so it is read here.
   useEffect(() => {
-    void splitSavedArticleBodiesOnce()
-      .catch((e) => console.warn("saved-article body split skipped", e))
-      .then(() => refreshSavedArticles());
+    void refreshSavedArticles();
   }, [refreshSavedArticles]);
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows

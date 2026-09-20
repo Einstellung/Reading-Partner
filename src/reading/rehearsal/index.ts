@@ -65,9 +65,6 @@ export {
   RUN_PAGES_DIR,
   runPagesDir,
   runPagesFile,
-  splitRehearsalRunPages,
-  splitRehearsalRunPagesEverywhere,
-  splitRehearsalRunPagesOnce,
   startRehearsal,
   type StartRehearsalInput,
 } from "./store";

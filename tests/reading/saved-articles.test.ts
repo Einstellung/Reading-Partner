@@ -13,7 +13,6 @@ import {
   buildArticleBody,
   buildSavedArticle,
   formatPublishedAt,
-  hasInlinedBody,
   parseArticleBody,
   normalizeArticleUrl,
   parseSavedArticles,
@@ -121,9 +120,6 @@ test("buildSavedArticle derives the id, pins savedAt and points at the body", ()
   expect(a.savedAt).toBe(1_700_000_000_000);
   expect(a.bodyHash).toBe("0123456789abcdef0123456789abcdef");
   expect(a.textChars).toBe(9);
-  // The record is the index now: the body is not in it, and neither is the room
-  // it used to take (883 KB of file, of which 857 KB was body).
-  expect(hasInlinedBody(a)).toBe(false);
 });
 
 // The record grew to 41 KB apiece by carrying the body; a base64 image inside it
@@ -207,13 +203,6 @@ test("savedArticlesForTopic filters by topic, newest save first", () => {
 });
 
 // --- parse / display --------------------------------------------------------
-
-// parseSavedArticles takes what readGuardedJson parsed; these tests still start
-// from the bytes, so they parse first. A body that will not parse at all never
-// reaches it — readGuardedJson quarantines the file instead.
-function parseFile(text: string): SavedArticle[] {
-  return parseSavedArticles(JSON.parse(text) as unknown)?.articles ?? [];
-}
 
 test("parseSavedArticles keeps every record it can identify", () => {
   const good = saved(input(), 1);
@@ -353,23 +342,6 @@ test("parseArticleBody survives a body file that is not the shape it writes", ()
   expect(parseArticleBody({ text: 42, html: 42 })).toEqual({ text: "", html: "" });
   expect(parseArticleBody(null)).toEqual({ text: "", html: "" });
   expect(parseArticleBody(["a"])).toEqual({ text: "", html: "" });
-});
-
-// A record from a device still on the older build carries its body inline, and
-// that body reaches dangerouslySetInnerHTML the same way. So the record read
-// sanitizes it too — but only when it is really there: a record whose body has
-// been split out must come back with no html key at all, or the split would find
-// something to do on every pass.
-test("a body still inlined in a record is sanitized, and an absent one is not invented", () => {
-  const parsed = parseFile(
-    JSON.stringify([
-      { id: "x", html: `<p onclick=alert(1)>old</p>` },
-      { id: "y", html: 42 },
-      { id: "z", bodyHash: "0123456789abcdef0123456789abcdef", textChars: 4 },
-    ]),
-  );
-  expect(parsed.map((a) => a.html)).toEqual(["<p>old</p>", "", undefined]);
-  expect(parsed.map(hasInlinedBody)).toEqual([true, true, false]);
 });
 
 test("formatPublishedAt shows an unparseable date verbatim and nothing for none", () => {

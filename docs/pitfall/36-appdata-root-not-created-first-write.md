@@ -12,6 +12,6 @@ Tauri 从 bundle identifier 推导出 app 的 per-app 数据目录，但从不�
 
 ## 解法
 
-把「数据根目录存在」提为启动时的元能力，收口到 Rust。`src-tauri/src/lib.rs` 的 `setup` 钩子里（`migrate_legacy_dirs` 之前）用 `app.path().app_data_dir()` 拿路径、`std::fs::create_dir_all` 创建。幂等，每次启动都跑；失败只记日志不 panic——真出问题会在实际写入处自然暴露。
+把「数据根目录存在」提为启动时的元能力，收口到 Rust。`src-tauri/src/lib.rs` 的 `setup` 钩子最前面用 `app.path().app_data_dir()` 拿路径、`std::fs::create_dir_all` 创建。幂等，每次启动都跑；失败只记日志不 panic——真出问题会在实际写入处自然暴露。
 
 前端随之删掉所有「只保障根目录」的 `ensureDir`（helper、调用点、多余 import）。注意甄别：创建**子目录**的 `mkdir`（`sync/books.ts` 的 `library/`、`syncFs.ts` 的父目录逻辑、`slides`、`prep`、`notes`、`app/library` 等）一律保留——那些不是根目录保障，Rust 的元能力也不覆盖它们。

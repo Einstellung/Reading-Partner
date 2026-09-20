@@ -114,32 +114,10 @@ test("punctuation on its own is not a word", () => {
 // once, when the run was written — the entry a list is drawn from carries no
 // pages at all.
 test("a row is drawn from the counts in the entry, not from any pages", () => {
-  const counted = entry([page(0, "两个字"), page(1, "two words here")]);
-  expect(counted.pages).toBeUndefined();
-  const s = runSummary(counted);
+  const s = runSummary(entry([page(0, "两个字"), page(1, "two words here")]));
   expect(s.wordsSpoken).toBe(6);
   expect(s.minutes).toBe(10);
   expect(s.elapsedMs).toBe(600_000);
-});
-
-// An entry written before the split still carries its transcript and has no
-// counts of its own. Counting off the pages there keeps its row right without
-// rewriting the log to draw it.
-test("an entry that still carries its pages is counted off them", () => {
-  const s = runSummary({
-    id: "run-1",
-    ordinal: 1,
-    rehearsalId: "1754400000000",
-    startedAt: 0,
-    endedAt: 600_000,
-    lastMomentAt: 0,
-    segmentIds: [],
-    spokenSegmentIds: [],
-    wordsSpoken: 0,
-    pages: [page(0, "opening"), page(1, ""), page(2, "the argument")],
-  });
-  expect(s.wordsSpoken).toBe(3);
-  expect(s.minutes).toBe(10);
 });
 
 test("a whole run's words are the sum of its segments", () => {

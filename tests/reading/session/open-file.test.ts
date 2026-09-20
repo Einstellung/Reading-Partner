@@ -19,8 +19,6 @@ function fakeIo(over: Partial<BookSourceIo> = {}) {
     readLibraryBook: async () => LIBRARY_BYTES,
     readFile: async () => DISK_BYTES,
     importBook: async () => ({ hash: "content-hash" }),
-    migrateBookLive: async () => {},
-    pathHash: (path) => `path-hash:${path}`,
     setFileHash: async () => {},
     ...over,
   };
@@ -51,17 +49,14 @@ test("a book already in the library is read from it, not from where it came from
   expect(calls).toEqual(["libraryHas", "readLibraryBook"]);
 });
 
-test("a file with no id yet is imported, migrated and its id written back", async () => {
+test("a file with no id yet is imported and its id written back", async () => {
   const written: unknown[] = [];
-  const migrated: unknown[] = [];
   const { io } = fakeIo({
     setFileHash: async (...args) => void written.push(args),
-    migrateBookLive: async (...args) => void migrated.push(args),
   });
   const opened = await resolveBookSource(file(), "topic-1", io);
 
   expect(opened).toEqual({ bookId: "content-hash", bytes: DISK_BYTES });
-  expect(migrated).toEqual([["path-hash:/books/a.pdf", "content-hash"]]);
   expect(written).toEqual([["topic-1", "/books/a.pdf", "content-hash"]]);
 });
 

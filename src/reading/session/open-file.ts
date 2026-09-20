@@ -8,8 +8,6 @@
 
 import { appData } from "../../platform/app/appdata";
 import { importBook, libraryHas, readLibraryBook } from "../../platform/app/library";
-import { migrateBookLive } from "../../platform/app/migrate";
-import { hashPath } from "../../platform/app/storage";
 import { setFileHash, type FileRef } from "../../platform/app/topics";
 
 export interface BookSourceIo {
@@ -18,10 +16,6 @@ export interface BookSourceIo {
   /** The file at the absolute path the reader picked, not an AppData one. */
   readFile(path: string): Promise<Uint8Array>;
   importBook(bytes: Uint8Array, originalPath: string): Promise<{ hash: string }>;
-  // Legacy path-hash-keyed data (annotations, threads, position) moved under the
-  // book id the content hash gives it.
-  migrateBookLive(oldKey: string, newKey: string): Promise<void>;
-  pathHash(path: string): string;
   setFileHash(topicId: string, path: string, hash: string): Promise<void>;
 }
 
@@ -30,15 +24,13 @@ export const bookSourceIo: BookSourceIo = {
   readLibraryBook,
   readFile: (path) => appData.readPicked(path),
   importBook,
-  migrateBookLive,
-  pathHash: hashPath,
   setFileHash,
 };
 
 // The bytes to open and the id everything about this book is keyed by. A file
 // whose id is known and whose copy is in the library is read straight from it;
-// anything else is read from its original path, imported, migrated and backfilled
-// so the next open takes the first route.
+// anything else is read from its original path, imported and backfilled so the
+// next open takes the first route.
 export async function resolveBookSource(
   file: FileRef,
   topicId: string,
@@ -50,7 +42,6 @@ export async function resolveBookSource(
   const bytes = await io.readFile(file.path);
   const entry = await io.importBook(bytes, file.path);
   const bookId = entry.hash;
-  await io.migrateBookLive(io.pathHash(file.path), bookId);
   // Nothing to write when the file already carried this id: the copy was simply
   // missing from the library.
   if (file.hash !== bookId) await io.setFileHash(topicId, file.path, bookId);

@@ -20,8 +20,6 @@ import {
   rehearsalRunsFile,
   renameRehearsal,
   runPagesFile,
-  splitRehearsalRunPages,
-  splitRehearsalRunPagesEverywhere,
   startRehearsal,
 } from "../../../src/reading/rehearsal/store";
 import type { BuiltRun } from "../../../src/reading/rehearsal/types";
@@ -200,7 +198,6 @@ test("a run written comes back the way it went in", async () => {
 test("the log holds what a row shows and no transcript", async () => {
   await appendRun(aRun("r1"));
   const entry = (await loadRehearsalRuns(ID)).runs[0];
-  expect(entry.pages).toBeUndefined();
   expect(entry.segmentIds).toEqual(["seg-open"]);
   expect(entry.spokenSegmentIds).toEqual(["seg-open"]);
   expect(entry.wordsSpoken).toBe(2);
@@ -310,9 +307,8 @@ test("a run the file cannot use is dropped and the rest of the log survives", as
           deckFile: null,
           startedAt: 1,
           endedAt: 2,
-          pages: [],
         },
-        { ordinal: 2, startedAt: 3, pages: [] },
+        { ordinal: 2, startedAt: 3 },
         {
           id: "r3",
           ordinal: 3,
@@ -320,17 +316,12 @@ test("a run the file cannot use is dropped and the rest of the log survives", as
           deckFile: null,
           startedAt: 5,
           endedAt: null,
-          pages: [
-            { index: 1, kind: "content", title: "Two", enteredAt: 5, leftAt: null, transcript: "" },
-            { index: "nope", kind: "content", title: "x", enteredAt: 6, transcript: "" },
-          ],
         },
       ],
     }),
   );
   const log = await loadRehearsalRuns(ID);
   expect(log.runs.map((r) => r.id)).toEqual(["r1", "r3"]);
-  expect((await loadRunPages(log.runs[1])).map((p) => p.index)).toEqual([1]);
   expect(disk.renames).toEqual([]);
 });
 
@@ -381,124 +372,6 @@ test("a run id that is not a plain name never becomes a path", async () => {
   const log = await loadRehearsalRuns(ID);
   expect(await loadRunPages(log.runs[0])).toEqual([]);
   expect(disk.reads).not.toContain("secrets");
-});
-
-// --- the split ---------------------------------------------------------------
-
-// A log written before the transcripts had files of their own.
-function inlinedLog(rehearsalId: string, ids: string[]): string {
-  return JSON.stringify(
-    {
-      version: 1,
-      rehearsalId,
-      runs: ids.map((id, i) => ({
-        id,
-        ordinal: i + 1,
-        rehearsalId,
-        deckFile: "slides/x.html",
-        startedAt: 1_000,
-        endedAt: 601_000,
-        pages: [
-          {
-            index: 0,
-            kind: "seg-open",
-            title: "Eye and Brain",
-            enteredAt: 1_000,
-            leftAt: 61_000,
-            transcript: "Good evening.",
-          },
-        ],
-      })),
-    },
-    null,
-    2,
-  );
-}
-
-test("the split lifts every transcript out and leaves the rows behind", async () => {
-  disk.files.set(RUNS, inlinedLog(ID, ["r1", "r2"]));
-
-  expect(await splitRehearsalRunPages(ID)).toBe(2);
-
-  const log = await loadRehearsalRuns(ID);
-  expect(log.runs.map((r) => r.id)).toEqual(["r1", "r2"]);
-  expect(log.runs.map((r) => r.ordinal)).toEqual([1, 2]);
-  expect(log.runs.every((r) => r.pages === undefined)).toBe(true);
-  // The counts the rows were drawn from are written down now, so drawing them
-  // never opens a transcript again.
-  // The deckFile an older build wrote is read past and not carried forward.
-  expect("deckFile" in log.runs[0]).toBe(false);
-  expect(log.runs[0].segmentIds).toEqual(["seg-open"]);
-  expect(log.runs[0].wordsSpoken).toBe(2);
-  expect(log.runs[0].lastMomentAt).toBe(601_000);
-  expect(disk.files.get(RUNS)).not.toContain("Good evening.");
-  for (const id of ["r1", "r2"]) {
-    expect(await loadRunPages(log.runs.find((r) => r.id === id)!)).toHaveLength(1);
-  }
-});
-
-// Idempotent by shape, not by a marker: an entry it has already been through has
-// no `pages` key, so a second pass finds nothing and writes nothing at all — not
-// the same bytes again, nothing. Rewriting with identical bytes would cost a
-// local write on every start-up and a merge on the device that pulled it.
-test("a second split writes nothing at all", async () => {
-  disk.files.set(RUNS, inlinedLog(ID, ["r1", "r2"]));
-  await splitRehearsalRunPages(ID);
-  const after = new Map(disk.files);
-  disk.writes.length = 0;
-
-  expect(await splitRehearsalRunPages(ID)).toBe(0);
-
-  expect(disk.writes).toEqual([]);
-  expect([...disk.files.entries()]).toEqual([...after.entries()]);
-});
-
-// Two devices reach the same bytes without talking to each other: same entries
-// in, same counts out, same file name — so the merge is handed two identical
-// entries rather than a conflict.
-test("two devices that each run the split land on the same files", async () => {
-  disk.files.set(RUNS, inlinedLog(ID, ["r1", "r2"]));
-  await splitRehearsalRunPages(ID);
-  const first = new Map(disk.files);
-
-  // The other device, starting from the same log it synced.
-  disk = installAppData();
-  disk.files.set(RUNS, inlinedLog(ID, ["r1", "r2"]));
-  await splitRehearsalRunPages(ID);
-
-  expect([...disk.files.entries()].sort()).toEqual([...first.entries()].sort());
-});
-
-// A build that does not know about the split writes `pages: []` back on every
-// append. Re-splitting that must not put an empty transcript over a real one.
-test("an empty inlined transcript drops its key and writes no file", async () => {
-  await appendRun(aRun("r1"));
-  const real = disk.files.get(runPagesFile(ID, "r1")!);
-  const log = await loadRehearsalRuns(ID);
-  disk.files.set(
-    RUNS,
-    JSON.stringify({ ...log, runs: log.runs.map((r) => ({ ...r, pages: [] })) }, null, 2),
-  );
-
-  expect(await splitRehearsalRunPages(ID)).toBe(1);
-
-  const after = await loadRehearsalRuns(ID);
-  expect(after.runs[0].pages).toBeUndefined();
-  expect(after.runs[0].wordsSpoken).toBe(2);
-  expect(disk.files.get(runPagesFile(ID, "r1")!)).toBe(real);
-});
-
-test("the split covers every rehearsal on the device, and one bad log is its own", async () => {
-  const a = await startRehearsal({ topicId: "t", name: "A", outlineId: "o-a", now: 1 });
-  const b = await startRehearsal({ topicId: "t", name: "B", outlineId: "o-b", now: 2 });
-  disk.files.set(rehearsalRunsFile(a.id), inlinedLog(a.id, ["r1"]));
-  disk.files.set(rehearsalRunsFile(b.id), inlinedLog(b.id, ["r2"]));
-  disk.unreadable.add(rehearsalRunsFile(a.id));
-
-  expect(await splitRehearsalRunPagesEverywhere()).toBe(1);
-
-  expect(disk.files.has(runPagesFile(b.id, "r2")!)).toBe(true);
-  expect(disk.files.get(rehearsalRunsFile(a.id))).toContain("Good evening.");
 });
 
 test("deleting takes the object, the runs and the rescue copy", async () => {
