@@ -65,6 +65,12 @@ export interface BellTurn {
    * that turn instead of starting a second one on the same thread (docs/72).
    */
   onSteerable?: (port: SteerPort) => void;
+  /**
+   * Where the reply goes, stamped on the session so a process that finds this
+   * turn still open can finish it there (recover.ts). Only where the bell was
+   * answered in a place with a desk to lay; the door has no receiver to rebuild.
+   */
+  deliverTo?: BoxOrigin;
 }
 
 /** Runs one assembled bell turn and answers with what the soul said. */
@@ -228,6 +234,7 @@ const appSend: SendBellTurn = (turn) =>
       harness: turn.harness,
       ...(turn.signal ? { signal: turn.signal } : {}),
       ...(turn.onSteerable ? { onSteerable: turn.onSteerable } : {}),
+      ...(turn.deliverTo ? { deliverTo: turn.deliverTo } : {}),
       reasoning: toReasoning(turn.settings.chatThinking),
       telemetry: { surface: "bell", thread: turn.threadId },
       // Nothing is watching this turn happen: there is no composer open and no
@@ -432,6 +439,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
         threadId,
         ...(hold ? { signal: hold.signal, onSteerable: hold.steerable } : {}),
         ...(!hold && deps.signal ? { signal: deps.signal } : {}),
+        ...(placed && origin ? { deliverTo: origin } : {}),
       });
     } catch (e) {
       hold?.release();

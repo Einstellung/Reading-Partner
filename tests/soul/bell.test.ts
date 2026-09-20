@@ -859,6 +859,9 @@ test("the place holds the conversation for the length of the bell's turn", async
     // A sender that reports a run to queue into, the way the app's does.
     const send: SendBellTurn = async (turn) => {
       expect(turn.signal).toBe(controller.signal);
+      // Stamped with the place it was answered in, so a process that finds this
+      // turn still open can finish it there (recover.ts).
+      expect(turn.deliverTo).toEqual(JSON.parse(bookOrigin));
       turn.onSteerable?.(async () => ({ ok: true, id: "e1" }));
       return "Back.";
     };
