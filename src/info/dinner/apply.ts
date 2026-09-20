@@ -8,13 +8,12 @@
 // only write.
 
 import type { DinnerCharterCardData, DinnerPlanCardData } from "./cards";
-import { searchNamesToLookup, withDishPhotos } from "./dish-photos";
+import { searchNamesToLookup, withDishPhotos, type DishPhotoLookup } from "./dish-photos";
 import { deriveShoppingList, reconcileShoppingList } from "./shopping";
 import type {
   Deviation,
   DinnerCharter,
   DinnerState,
-  DishPhoto,
   DishPhotoEntry,
   ShoppingItem,
   WeekPlan,
@@ -40,9 +39,9 @@ export interface DinnerPorts {
     photos: Readonly<Record<string, DishPhotoEntry>>,
     plan: WeekPlan,
   ): Promise<unknown>;
-  // One search for one dish name. Answers null for a dish the index does not
-  // have, and never throws.
-  lookupDishPhoto?(searchName: string): Promise<DishPhoto | null>;
+  // One search for one dish name. Says whether it got an answer at all, and
+  // never throws.
+  lookupDishPhoto?(searchName: string): Promise<DishPhotoLookup>;
   // The host's clock and calendar. Never the model's (docs/73 事实不经模型).
   now(): number;
   today(): string;
@@ -149,6 +148,12 @@ export async function applyPlan(
  * allows twenty requests a minute to an anonymous caller and a burst is how an
  * app gets a refusal instead of a photograph.
  *
+ * A search that got no answer at all stops the run and writes nothing for that
+ * name: if the index cannot be reached, the names after it cannot be reached
+ * either, and remembering "no photograph" for a dish nobody managed to ask
+ * about would take it off the screen for a month. They are asked again at the
+ * next Apply.
+ *
  * True when something was written. Never throws: every failure is one dish
  * without a picture.
  */
@@ -161,15 +166,16 @@ export async function resolveDishPhotos(plan: WeekPlan, ports: DinnerPorts): Pro
   const fresh: Record<string, DishPhotoEntry> = {};
   const now = ports.now();
   for (const name of searchNamesToLookup(plan.dishes, cache, now)) {
-    let photo: DishPhoto | null = null;
+    let answer: DishPhotoLookup;
     try {
-      photo = await lookup(name);
+      answer = await lookup(name);
     } catch {
-      photo = null;
+      answer = { ok: false };
     }
-    // An empty answer is cached too, so the same dish is not searched for again
-    // next week. It expires; a hit does not.
-    const entry: DishPhotoEntry = photo ?? { none: true, checkedAt: now };
+    if (!answer.ok) break;
+    // An answer of "nothing" is cached too, so the same dish is not searched
+    // for again next week. It expires; a hit does not.
+    const entry: DishPhotoEntry = answer.photo ?? { none: true, checkedAt: now };
     cache[name] = entry;
     fresh[name] = entry;
   }

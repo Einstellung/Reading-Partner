@@ -12,9 +12,11 @@
 // index does not have today may be there next season and asking again every
 // week is not.
 //
-// Nothing here throws at its caller. A dead network, a changed response shape
-// and a rate-limit refusal are all one answer: no photograph, draw the
-// ingredients instead.
+// Nothing here throws at its caller, but it does distinguish two failures. An
+// index that answered and had nothing is a fact about the dish and is cached; a
+// dead network, a timeout and a refusal are facts about the moment and are not.
+// Caching the second as "this dish has no photograph" would take a dish off the
+// screen for a month over one flight-mode Apply.
 
 import { isDishPhotoMiss, type Dish, type DishPhoto, type DishPhotoEntry, type WeekPlan } from "./types";
 
@@ -52,11 +54,24 @@ export function normalizeSearchName(raw: string): string {
 }
 
 /**
- * The photograph for one dish name, or null when there is none to be had.
+ * What one search came back with: an answer, which is a photograph or nothing,
+ * or no answer at all.
  *
- * Null is a real answer and the only failure this returns: the caller caches it
- * and the screen falls back to the ingredient strip. Nothing is thrown into the
- * Apply path.
+ * The two are not the same fact. `{ ok: true, photo: null }` says the index
+ * has no photograph of this dish and is worth remembering; `{ ok: false }` says
+ * the question did not get through — offline, timed out, refused, or answered
+ * with something that is not JSON — and is worth nothing at all.
+ */
+export type DishPhotoLookup = { ok: true; photo: DishPhoto | null } | { ok: false };
+
+const UNANSWERED: DishPhotoLookup = { ok: false };
+
+/**
+ * The photograph for one dish name.
+ *
+ * Nothing is thrown into the Apply path: every failure is `{ ok: false }`. A
+ * 2xx whose body parses but holds no usable result is an answer, not a failure,
+ * because that is the index saying it has nothing.
  *
  * `fetchFn` is injected so the whole selection is tested against a fake without
  * a network.
@@ -64,9 +79,11 @@ export function normalizeSearchName(raw: string): string {
 export async function lookupDishPhoto(
   searchName: string,
   fetchFn: FetchLike = fetch,
-): Promise<DishPhoto | null> {
+): Promise<DishPhotoLookup> {
   const name = normalizeSearchName(searchName);
-  if (!name) return null;
+  // Nothing was asked, so there is nothing to remember. resolveDishPhotos never
+  // gets here — it drops empty names before it calls.
+  if (!name) return UNANSWERED;
   const control = new AbortController();
   const timer = setTimeout(() => control.abort(), TIMEOUT_MS);
   try {
@@ -74,10 +91,12 @@ export async function lookupDishPhoto(
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
       signal: control.signal,
     });
-    if (!res.ok) return null;
-    return pickPhoto(await res.json());
+    // 429 included: a refusal to answer is not an answer.
+    if (!res.ok) return UNANSWERED;
+    // A body that will not parse lands in the catch below, unanswered.
+    return { ok: true, photo: pickPhoto(await res.json()) };
   } catch {
-    return null;
+    return UNANSWERED;
   } finally {
     clearTimeout(timer);
   }

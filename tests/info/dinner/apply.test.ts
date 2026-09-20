@@ -234,7 +234,7 @@ test("Apply hands its note back before the photographs, and the screen reloads w
     ...f.ports,
     lookupDishPhoto: async () => {
       await held;
-      return photo;
+      return { ok: true as const, photo };
     },
     saveDishPhotos: async (_photos, plan) => {
       saved = plan;

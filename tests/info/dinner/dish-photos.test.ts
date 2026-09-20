@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import { resolveDishPhotos, type DinnerPorts } from "../../../src/info/dinner/apply";
 import {
   dishPhotoQuery,
+  type DishPhotoLookup,
   type FetchLike,
   licenseLabel,
   lookupDishPhoto,
@@ -105,15 +106,17 @@ test("a found dish comes back with its creator and a display licence", async () 
     };
     return new Response(body([result()]));
   };
-  const photo = await lookupDishPhoto("Mapo Tofu", fake);
-  expect(photo).toEqual({
-    url: "https://live.staticflickr.com/2106/mapo_b.jpg",
-    thumb: "https://api.openverse.org/v1/images/abc/thumb/",
-    title: "Mapo Tofu",
-    creator: "avlxyz",
-    license: "CC BY-SA 2.0",
-    licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
-    foreignLandingUrl: "https://www.flickr.com/photos/10559879@N00/2268560276",
+  expect(await lookupDishPhoto("Mapo Tofu", fake)).toEqual({
+    ok: true,
+    photo: {
+      url: "https://live.staticflickr.com/2106/mapo_b.jpg",
+      thumb: "https://api.openverse.org/v1/images/abc/thumb/",
+      title: "Mapo Tofu",
+      creator: "avlxyz",
+      license: "CC BY-SA 2.0",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
+      foreignLandingUrl: "https://www.flickr.com/photos/10559879@N00/2268560276",
+    },
   });
   expect(seen!.url).toContain("q=mapo%20tofu");
   expect(String(seen!.ua)).toContain("ReadingPartner");
@@ -138,23 +141,33 @@ test("a result flagged mature, or with no url, is not shown", () => {
   expect(pickPhoto({ results: [unknown] })).toBeNull();
 });
 
-test("an invented name, an error status and a body of the wrong shape are all no photograph", async () => {
+test("an index that answered and had nothing is an answer", async () => {
   const empty: FetchLike = async () => new Response(body([]));
-  expect(await lookupDishPhoto("sheet pan salmon broccoli", empty)).toBeNull();
+  expect(await lookupDishPhoto("sheet pan salmon broccoli", empty)).toEqual({
+    ok: true,
+    photo: null,
+  });
 
+  // A 2xx body that parses but is not the shape this reader expects is the
+  // index saying it has nothing, not the index failing to speak.
+  const shapeless: FetchLike = async () => new Response(JSON.stringify({ detail: "hm" }));
+  expect(await lookupDishPhoto("mapo tofu", shapeless)).toEqual({ ok: true, photo: null });
+});
+
+test("a question that never got through is not an answer and is not remembered", async () => {
   const refused: FetchLike = async () => new Response("too many", { status: 429 });
-  expect(await lookupDishPhoto("mapo tofu", refused)).toBeNull();
+  expect(await lookupDishPhoto("mapo tofu", refused)).toEqual({ ok: false });
 
   const junk: FetchLike = async () => new Response("<html>nope</html>");
-  expect(await lookupDishPhoto("mapo tofu", junk)).toBeNull();
+  expect(await lookupDishPhoto("mapo tofu", junk)).toEqual({ ok: false });
 
   const dead: FetchLike = async () => {
     throw new Error("offline");
   };
-  expect(await lookupDishPhoto("mapo tofu", dead)).toBeNull();
+  expect(await lookupDishPhoto("mapo tofu", dead)).toEqual({ ok: false });
 
   const never: FetchLike = async () => new Response(body([result()]));
-  expect(await lookupDishPhoto("   ", never)).toBeNull();
+  expect(await lookupDishPhoto("   ", never)).toEqual({ ok: false });
 });
 
 test("the licence is spelled the way a credit line has to spell it", () => {
@@ -214,7 +227,7 @@ interface Fake {
 
 function fake(
   state: Partial<DinnerState>,
-  answer: (name: string) => Promise<DishPhoto | null>,
+  answer: (name: string) => Promise<DishPhotoLookup>,
 ): Fake {
   const f: Fake = {
     state: { ...EMPTY_DINNER, ...state },
@@ -244,7 +257,7 @@ function fake(
 }
 
 test("an applied week looks each new dish up once and writes the plan with the pictures", async () => {
-  const f = fake({}, async (name) => (name === "mapo tofu" ? PHOTO : null));
+  const f = fake({}, async (name) => ({ ok: true, photo: name === "mapo tofu" ? PHOTO : null }));
   const week = plan([
     dish({ id: "dish-a", searchName: "mapo tofu" }),
     dish({ id: "dish-b", searchName: "made up bowl" }),
@@ -260,7 +273,7 @@ test("an applied week looks each new dish up once and writes the plan with the p
 });
 
 test("a dish already in the cache costs no request, and a week that is all cached writes nothing", async () => {
-  const f = fake({ dishPhotos: { "mapo tofu": PHOTO } }, async () => PHOTO);
+  const f = fake({ dishPhotos: { "mapo tofu": PHOTO } }, async () => ({ ok: true, photo: PHOTO }));
   const week = plan([dish({ id: "dish-a", searchName: "mapo tofu", image: PHOTO.url })]);
   expect(await resolveDishPhotos(week, f.ports)).toBe(false);
   expect(f.asked).toEqual([]);
@@ -269,28 +282,52 @@ test("a dish already in the cache costs no request, and a week that is all cache
 
 test("a miss older than thirty days is asked again, a fresh one is not", async () => {
   const stale = { none: true as const, checkedAt: NOW - PHOTO_MISS_RETRY_MS - 1 };
-  const old = fake({ dishPhotos: { shakshuka: stale } }, async () => PHOTO);
+  const old = fake({ dishPhotos: { shakshuka: stale } }, async () => ({ ok: true, photo: PHOTO }));
   await resolveDishPhotos(plan([dish({ searchName: "shakshuka" })]), old.ports);
   expect(old.asked).toEqual(["shakshuka"]);
 
   const fresh = fake(
     { dishPhotos: { shakshuka: { none: true, checkedAt: NOW - 1000 } } },
-    async () => PHOTO,
+    async () => ({ ok: true, photo: PHOTO }),
   );
   await resolveDishPhotos(plan([dish({ searchName: "shakshuka" })]), fresh.ports);
   expect(fresh.asked).toEqual([]);
 });
 
-test("a search that throws is one dish without a picture, not a failed Apply", async () => {
-  const f = fake({}, async () => {
+test("a search that could not be made writes nothing, and a throw is the same", async () => {
+  const refused = fake({}, async () => ({ ok: false }));
+  expect(await resolveDishPhotos(plan([dish({ searchName: "mapo tofu" })]), refused.ports)).toBe(
+    false,
+  );
+  expect(refused.asked).toEqual(["mapo tofu"]);
+  expect(refused.saved).toBeNull();
+
+  const thrown = fake({}, async () => {
     throw new Error("offline");
   });
-  expect(await resolveDishPhotos(plan([dish({ searchName: "mapo tofu" })]), f.ports)).toBe(true);
-  expect(f.saved?.photos["mapo tofu"]).toEqual({ none: true, checkedAt: NOW });
+  expect(await resolveDishPhotos(plan([dish({ searchName: "mapo tofu" })]), thrown.ports)).toBe(
+    false,
+  );
+  expect(thrown.saved).toBeNull();
+});
+
+test("one unreachable search stops the run; the names after it wait for the next Apply", async () => {
+  // The second dish would be a clean miss. It is never asked, because the first
+  // failure says the index is not answering at all.
+  const f = fake({}, async (name) =>
+    name === "mapo tofu" ? { ok: false } : { ok: true, photo: null },
+  );
+  const week = plan([
+    dish({ id: "dish-a", searchName: "mapo tofu" }),
+    dish({ id: "dish-b", searchName: "shakshuka" }),
+  ]);
+  expect(await resolveDishPhotos(week, f.ports)).toBe(false);
+  expect(f.asked).toEqual(["mapo tofu"]);
+  expect(f.saved).toBeNull();
 });
 
 test("a host with no lookup applies its week and searches for nothing", async () => {
-  const f = fake({}, async () => PHOTO);
+  const f = fake({}, async () => ({ ok: true, photo: PHOTO }));
   const ports: DinnerPorts = { ...f.ports, lookupDishPhoto: undefined };
   expect(await resolveDishPhotos(plan([dish()]), ports)).toBe(false);
   expect(f.asked).toEqual([]);
