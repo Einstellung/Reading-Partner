@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { ViewState } from "../../../src/platform/app/reader-contract";
 import { extractDocumentText } from "../../../src/reading/epub/text";
 import { characterRuler, paginate, type Pagination } from "../../../src/reading/epub/paginate";
-import { PAGE_GEOMETRY } from "../../../src/reading/epub/page-geometry";
+import { PAGE_GEOMETRY, columnScrollTop } from "../../../src/reading/epub/page-geometry";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import {
   blockIndexAt,
@@ -15,6 +15,7 @@ import {
   labelForBlock,
   offsetOfPoint,
   pageIndexOfCfi,
+  pageScroll,
   bookLinkTarget,
   quoteQueries,
   restoreTarget,
@@ -119,6 +120,23 @@ describe("where the reader is", () => {
     expect(pinched.canZoomReset).toBe(true);
     // The paged flip's lock is fit-page; a fit-width lock there is a reset away.
     expect(statsOf({ pageIndex: 1, pagination, layout: "paged", zoom: lock, scale: 1 }).canZoomReset).toBe(true);
+  });
+
+  test("placing a page in the flip writes both axes", () => {
+    // The flip owns x and has no vertical position of its own. scrollTop must
+    // come back as a number, not as "leave it": the column's leftover offset
+    // survives into a strip one slot high and puts the sheets off screen.
+    const flip = pageScroll("paged", 4, 900, 1, 834);
+    expect(flip.scrollLeft).toBe(4 * 834);
+    expect(flip.scrollTop).toBe(0);
+    expect(pageScroll("paged", 0, 0, 2, 1024).scrollTop).toBe(0);
+  });
+
+  test("placing a page in the column leaves the sideways pan alone", () => {
+    const column = pageScroll("vertical", 4, 120, 1.5, 0);
+    expect(column.scrollTop).toBe(columnScrollTop(4, 120, 1.5));
+    expect(column.scrollLeft).toBeNull();
+    expect(pageScroll("vertical", 0, 0, 1, 0).scrollTop).toBe(columnScrollTop(0, 0, 1));
   });
 
   test("a state without a CFI does not carry an empty one", () => {

@@ -35,7 +35,6 @@ import {
   anchorAt,
   clampZoom,
   columnPosition,
-  columnScrollTop,
   deskMetrics,
   fitZoom,
   flipPosition,
@@ -63,6 +62,7 @@ import {
   blockIndexAt,
   bookLinkTarget,
   findQuoteAt,
+  pageScroll,
   restoreTarget,
   statsOf,
   viewStateOf,
@@ -383,11 +383,9 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
 
   function placePage(index: number, y = 0): void {
     const i = Math.min(Math.max(0, index), pagesCount - 1);
-    if (layout === "vertical") {
-      scroller.scrollTop = columnScrollTop(i, y, scale);
-    } else {
-      scroller.scrollLeft = i * slotSize().pitchX;
-    }
+    const to = pageScroll(layout, i, y, scale, slotSize().pitchX);
+    if (to.scrollLeft !== null) scroller.scrollLeft = to.scrollLeft;
+    if (to.scrollTop !== null) scroller.scrollTop = to.scrollTop;
     readPosition();
     syncMounted();
     emit();

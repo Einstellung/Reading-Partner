@@ -10,7 +10,7 @@
 import type { ViewState, ViewStats } from "../../platform/app/reader-contract";
 import type { ReadingLayout } from "../engine/layout-modes";
 import { compareLocal, parseCfiStart } from "./cfi";
-import { atLockedZoom, canZoomIn, canZoomOut, type Zoom } from "./page-geometry";
+import { atLockedZoom, canZoomIn, canZoomOut, columnScrollTop, type Zoom } from "./page-geometry";
 import { blockNumberAt, type Pagination } from "./paginate";
 
 export { indexRuns, offsetOfPoint } from "./text";
@@ -83,6 +83,36 @@ export function restoreTarget(pagination: Pagination, state: ViewState | null): 
   }
   if (typeof state.pageIndex === "number") return { pageIndex: clamp(state.pageIndex), pageX, pageY };
   return { pageIndex: 0, pageX: 0, pageY: 0 };
+}
+
+export interface PageScroll {
+  /** The offset to write on this axis, or null when the axis is the reader's to pan. */
+  scrollLeft: number | null;
+  scrollTop: number | null;
+}
+
+/**
+ * Where the strip has to sit to show a page: the column places the sheet down
+ * the y axis and leaves x to a zoomed-in reader's pan, the flip places it
+ * along x and has no vertical position of its own (readPosition reports
+ * pageY 0 there).
+ *
+ * The axis a layout owns is always written, even when the answer is 0: a
+ * WKWebView that has just had its content shortened keeps reporting the old
+ * offset on an axis nobody wrote, and the strip then sits off screen
+ * (docs/pitfall/366).
+ */
+export function pageScroll(
+  layout: ReadingLayout,
+  index: number,
+  y: number,
+  scale: number,
+  pitchX: number,
+): PageScroll {
+  if (layout === "vertical") {
+    return { scrollLeft: null, scrollTop: columnScrollTop(index, y, scale) };
+  }
+  return { scrollLeft: index * pitchX, scrollTop: 0 };
 }
 
 // ------------------------------------------------------------- the shapes ---

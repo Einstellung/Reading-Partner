@@ -71,7 +71,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 353）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 367）。
 
 ## EmbedPDF 引擎
 
@@ -273,6 +273,7 @@
 - [141-a-blocked-main-thread-stops-the-scroll-outright](./141-a-blocked-main-thread-stops-the-scroll-outright.md) — 主线程占多久屏幕就冻多久（90ms 阻塞冻 82-119ms），和挂不挂 wheel 监听、passive 与否无关，Chromium 同样冻；滚动路径上别占主线程，判据用屏幕像素不用页内计数
 - [178-webkit-pays-per-font-family-before-first-paint](./178-webkit-pays-per-font-family-before-first-paint.md) — 生产构建提交到出像素之间 WebKit 空 78ms、Chromium 12ms、Firefox 25ms，和 JS 体积无关；`body` 字体栈里 WebKit 解析不出的每个 family（`system-ui`、`"Segoe UI"`）各查询约 33ms，Chromium/Firefox 换栈没差别。字体栈至今没按平台拆分，坑还在
 - [288-a-books-dark-mode-rides-the-system-appearance-into-a-light-page](./288-a-books-dark-mode-rides-the-system-appearance-into-a-light-page.md) — iPad 日落自动切系统深色，WKWebView 的 `prefers-color-scheme` 跟着变，书自带的 `@media (prefers-color-scheme: dark)` 把正文改成为黑底准备的浅灰，浮在 app 那张始终浅色的纸上（图是位图不受影响）。消毒器把条件含 `prefers-color-scheme` 的 `@media` 整块丢掉，dark 和 light 都丢
+- [366-a-shortened-scroller-keeps-the-old-offset](./366-a-shortened-scroller-keeps-the-old-offset.md) — 内容变矮之后 WKWebView 不夹回过期的 `scrollTop`，也不发 scroll 事件：它照旧报旧偏移并把这段量算进 `scrollHeight`，直到有人往这条轴上写一次。EPUB 从纵向栏切 paged flip 时 `placePage` 只写 `scrollLeft`，一行卡片的页带被顶到视口上方 2068px，整片全白而页码照走。改内容尺寸之后，该布局拥有的那条轴无条件写一遍，答案是 0 也写
 
 ## 浮层与 shadcn 原语
 
