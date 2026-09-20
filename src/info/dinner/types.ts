@@ -72,6 +72,12 @@ export interface Dish {
   // Hands-on minutes, the hard constraint being 15 (diet.md 省事的约束写死).
   handsOnMinutes: number;
   ingredients: Ingredient[];
+  // A photograph of the dish: an app-relative path, or an https URL that the
+  // screen loads through the image proxy (images.ts, docs/73 图片). Absent on
+  // most dishes, and a dish without one is drawn from its ingredients' pictures
+  // instead — the reader cannot tell one vegetable from another, so a night
+  // never goes on screen with nothing to look at.
+  image?: string;
 }
 
 export interface DayPlan {

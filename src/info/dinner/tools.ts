@@ -10,10 +10,12 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
+import { recordDeviation, type DinnerPorts } from "./apply";
 import type { DinnerCard, DinnerCharterCardData, DinnerPlanCardData } from "./cards";
 import {
   CATEGORY_ORDER,
   KEEPS_ORDER,
+  type Deviation,
   type DinnerMode,
   type DinnerState,
   type Ingredient,
@@ -24,6 +26,7 @@ import {
 import {
   HANDS_ON_LIMIT,
   WEEK_DAYS,
+  addDays,
   assembleWeekPlan,
   daysBetween,
   dishForDay,
@@ -351,6 +354,108 @@ export function buildProposeDinnerPlanTool(deps: DinnerToolDeps): AgentTool {
       };
     },
   };
+}
+
+// --- a night that went differently -------------------------------------------
+
+/**
+ * Record what actually happened on a night, from the reader's own sentence.
+ *
+ * The only tool of the three that writes. It is not a card and does not need
+ * one: a deviation is the reader saying what they did, which is the explicit
+ * instruction gate of the harness principle, and there is nothing for them to
+ * approve about their own sentence. What the program did with it comes back in
+ * the result, `attention` included, so the model can follow with
+ * propose_dinner_plan as an adjustment for exactly those days.
+ */
+export function buildRecordDeviationTool(
+  deps: DinnerToolDeps & { ports: DinnerPorts },
+): AgentTool {
+  return {
+    name: "record_dinner_deviation",
+    label: () => "Recording what you ate instead",
+    effect: "write",
+    description:
+      "Call this the moment they say a night went differently from the plan ('we ordered in', " +
+      "'ended up at the noodle place'). It writes that night down and clears whatever depended " +
+      "on it. It answers with the days that are now without a dinner: plan only those, with " +
+      "propose_dinner_plan and adjustment set. Do not call it for boredom or 'too much hassle' " +
+      "— that is next week's business, not tonight's.",
+    parameters: Type.Object({
+      day: Type.String({
+        description:
+          "Which night: 'today', 'yesterday', or the day number 1 to 7 from your instructions.",
+      }),
+      became: Type.String({ description: "What the night actually was: cook, reheat, out or delivery." }),
+      place: Type.String({ description: "Where, for out or delivery, in their words." }),
+      said: Type.String({ description: "Their own sentence, as they said it." }),
+    }),
+    execute: async (args) => {
+      const state = await deps.state();
+      if (!state.plan) {
+        return {
+          receipt: null,
+          text: "There is no week planned, so there is nothing to record a change against.",
+        };
+      }
+      const date = resolveDeviationDate(String(args.day ?? ""), state.plan.startDate, deps.today());
+      if (!date) {
+        return {
+          receipt: null,
+          text:
+            "That is not a night of this week. Say 'today', 'yesterday', or the day number 1 to 7.",
+        };
+      }
+      const mode = String(args.became ?? "").trim().toLowerCase();
+      if (!(MODES as readonly string[]).includes(mode)) {
+        return {
+          receipt: null,
+          text: `became must be one of: ${MODES.join(", ")}.`,
+        };
+      }
+      const said = String(args.said ?? "").trim();
+      if (!said) throw new Error("record_dinner_deviation needs their sentence.");
+      const place = String(args.place ?? "").trim();
+      const deviation: Deviation = {
+        date,
+        said,
+        became: mode as DinnerMode,
+        ...(place ? { place } : {}),
+        changed: "",
+        at: deps.now(),
+      };
+      const { ok, attention } = await recordDeviation(deviation, deps.ports);
+      if (!ok) {
+        return { receipt: null, text: "The change could not be written. Nothing was recorded." };
+      }
+      return {
+        text: attention.length
+          ? `Recorded. ${attention.join(" and ")} now has nothing planned — call ` +
+            `propose_dinner_plan with adjustment set for those days only.`
+          : "Recorded. Nothing else in the week moved, so there is nothing to re-plan.",
+        receipt: { label: "Recorded a change of plan", summary: `${date}: ${said}` },
+      };
+    },
+  };
+}
+
+/**
+ * The date a night's name stands for. "today" and "yesterday" are the two the
+ * reader actually says out loud; a number is the day of the week exactly as
+ * dinnerGuidance printed it. Null for anything outside the planned week, which
+ * the tool refuses rather than guessing at.
+ */
+export function resolveDeviationDate(
+  raw: string,
+  startDate: string,
+  today: string,
+): string | null {
+  const word = raw.trim().toLowerCase();
+  if (word === "today") return today;
+  if (word === "yesterday") return addDays(today, -1);
+  const n = Number(word);
+  if (!Number.isFinite(n) || n < 1 || n > WEEK_DAYS) return null;
+  return addDays(startDate, Math.round(n) - 1);
 }
 
 // --- reading what the model sent ---------------------------------------------

@@ -18,9 +18,10 @@ export type HomeScreen =
   | "briefing"
   | "article"
   | "sources"
+  | "dinner"
   | "settings";
 
-export type ShellNavId = "today" | "briefing" | "topics" | "settings";
+export type ShellNavId = "today" | "briefing" | "dinner" | "topics" | "settings";
 
 // Top to bottom, in the order a day uses them: what is open now, what came in
 // overnight, everything else. Settings is a nav id but not one of these — it is
@@ -28,8 +29,16 @@ export type ShellNavId = "today" | "briefing" | "topics" | "settings";
 export const SHELL_NAV_ITEMS: readonly { id: ShellNavId; label: string }[] = [
   { id: "today", label: "Today" },
   { id: "briefing", label: "Briefing" },
+  { id: "dinner", label: "Dinner" },
   { id: "topics", label: "Topics" },
 ];
+
+// The items a sidebar actually draws. Dinner is opt-in (settings.dinner,
+// docs/73) and is left out entirely when it is off — not greyed, not a teaser:
+// a switch that is off means the reader has said they do not want the line.
+export function shellNavItems(opts: { dinner: boolean }): { id: ShellNavId; label: string }[] {
+  return SHELL_NAV_ITEMS.filter((item) => item.id !== "dinner" || opts.dinner);
+}
 
 // Where an item goes. The shelf is what Topics opens; a topic that is already
 // open stays open, which is App's business and not this table's.
@@ -39,6 +48,8 @@ export function screenForNav(id: ShellNavId): HomeScreen {
       return "vestibule";
     case "briefing":
       return "briefing";
+    case "dinner":
+      return "dinner";
     case "topics":
       return "library";
     case "settings":
@@ -58,6 +69,8 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
     case "article":
     case "sources":
       return "briefing";
+    case "dinner":
+      return "dinner";
     case "library":
       return "topics";
     case "settings":

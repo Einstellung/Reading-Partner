@@ -611,6 +611,21 @@ export function IconToday({ size = 20 }: IconProps) {
 }
 
 // The shell sidebar's Briefing: a folded sheet of ruled text.
+export function IconDinner({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<circle cx="10" cy="10" r="6" />
+			<circle cx="10" cy="10" r="2.6" />
+		</svg>
+	);
+}
+
 export function IconBriefing({ size = 20 }: IconProps) {
 	return (
 		<svg

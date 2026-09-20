@@ -49,6 +49,11 @@ import {
   applyLabProposal,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
+import { applyCharter, applyPlan } from "../../../info/dinner/apply";
+import type { DinnerCard, DinnerCharterCardData, DinnerPlanCardData } from "../../../info/dinner/cards";
+import { buildLiveDinnerTools, liveDinnerPorts } from "../../../info/dinner/live";
+import { withDinnerTools } from "../../../info/dinner/desk";
+import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
 import { distillInfoThread } from "../../../memory";
@@ -97,6 +102,9 @@ export interface InfoCallOptions {
   // there, so the host reloads it.
   onTopicsChanged?: () => void;
   onOpenBriefing?: (date: string) => void;
+  // The dinner screen reloads. Applying a plan and recording a deviation both
+  // write without the screen asking, so nothing else would tell it.
+  onDinnerChanged?: () => void;
 }
 
 export interface InfoCallController {
@@ -124,13 +132,15 @@ export function infoStickKey(dateKey: string, threadId: string): string {
 }
 
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
-  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing } =
+  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onDinnerChanged } =
     opts;
   const [swapped, setSwapped] = useState(false);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const bookId = infoBookId(dateKey);
+  // A conversation anchored to a date lives in that day's file; a standing one
+  // (dinner's) names its own, so its thread outlives any day (anchors.ts).
+  const bookId = anchor.bookKey ?? infoBookId(dateKey);
   const stickKey = infoStickKey(dateKey, anchor.threadId);
 
   // An info call ends by its component unmounting, where a reading call ends at
@@ -216,6 +226,11 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       if (anchor.onboarding && thread.messages.length === 0) {
         void runAgent([{ role: "user", text: OPENING_KICKOFF }], { seedStreaming: true });
       }
+      // A screen's button opened this conversation with something to say ("Plan
+      // this week."). Sent as the reader's own turn, shown and persisted, and
+      // only into an empty thread — a standing conversation reopened next week
+      // would otherwise re-say it every time.
+      if (anchor.kickoff && thread.messages.length === 0) void send(anchor.kickoff);
     })();
     return () => {
       live = false;
@@ -292,7 +307,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       | ProbeConfirmCardData
       | TopicProposalCardData
       | LabProposalCardData
-      | LabArchiveCardData,
+      | LabArchiveCardData
+      | DinnerCard,
   ) {
     const cardId = nextCardId(prefix);
     const ts = Date.now();
@@ -415,6 +431,51 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, noteTurn, onSourcesChanged],
   );
 
+  // The dinner charter's Apply. One household, so a second charter replaces the
+  // first; the shape is handleApplyLab's, down to the order of the three
+  // effects.
+  const handleApplyDinnerCharter = useCallback(
+    async (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "dinner-charter") return;
+      const card = found.payload;
+      const { ok, note } = await applyCharter(
+        card,
+        liveDinnerPorts({ today: () => todayLocal(), changed: () => onDinnerChanged?.() }),
+      );
+      if (!ok) return;
+      const applied: DinnerCharterCardData = { ...card, phase: "applied" };
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
+      patchThreadMessage(bookId, anchor.threadId, found.ts, {
+        parts: [toPersistedCardPart(cardId, applied)],
+      });
+      noteTurn(note);
+    },
+    [bookId, anchor.threadId, noteTurn, onDinnerChanged],
+  );
+
+  // The week's Apply: the plan and the shopping list derived from it, in one
+  // write, and the screen reloaded through the ports' `changed`.
+  const handleApplyDinnerPlan = useCallback(
+    async (cardId: string) => {
+      const found = findCardPart(messagesRef.current, cardId);
+      if (!found || found.payload.kind !== "dinner-plan") return;
+      const card = found.payload;
+      const { ok, note } = await applyPlan(
+        card,
+        liveDinnerPorts({ today: () => todayLocal(), changed: () => onDinnerChanged?.() }),
+      );
+      if (!ok) return;
+      const applied: DinnerPlanCardData = { ...card, phase: "applied" };
+      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
+      patchThreadMessage(bookId, anchor.threadId, found.ts, {
+        parts: [toPersistedCardPart(cardId, applied)],
+      });
+      noteTurn(note);
+    },
+    [bookId, anchor.threadId, noteTurn, onDinnerChanged],
+  );
+
   // The card action dispatcher wired into the message list. Stable across
   // streaming deltas, so the memoized rows never churn. It owns orchestration:
   // one gesture may fan out to several effects (see handleAddFromCard).
@@ -426,6 +487,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           else if (action.op === "apply-topic") void handleApplyTopic(cardId);
           else if (action.op === "apply-lab") void handleApplyLab(cardId);
           else if (action.op === "apply-lab-archive") void handleArchiveLab(cardId);
+          else if (action.op === "apply-dinner-charter") void handleApplyDinnerCharter(cardId);
+          else if (action.op === "apply-dinner-plan") void handleApplyDinnerPlan(cardId);
           else if (action.op === "retriage") runBriefingJob("retriage");
           else if (action.op === "retry-briefing") runBriefingJob(lastJobRef.current);
           break;
@@ -457,6 +520,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       handleApplyTopic,
       handleApplyLab,
       handleArchiveLab,
+      handleApplyDinnerCharter,
+      handleApplyDinnerPlan,
       onOpenBriefing,
       onHangUp,
       pipCards,
@@ -497,6 +562,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     let turn: AssembledTurn | null;
     try {
       const desk = await openDesk(
+        withDinnerTools(
         withCompanionTools(anchor.desk, () =>
           buildLiveCompanionTools(
             (payload) => insertCard("probe", payload),
@@ -509,6 +575,14 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
               },
             },
           ),
+        ),
+        async () =>
+          buildLiveDinnerTools({
+            threadId: anchor.threadId,
+            onDinnerCard: (payload) => insertCard("dinner", payload),
+            today: () => todayLocal(),
+            changed: () => onDinnerChanged?.(),
+          }),
         ),
         {
           settings,

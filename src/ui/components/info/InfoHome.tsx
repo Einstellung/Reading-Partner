@@ -12,12 +12,16 @@ import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
+import { DINNER_KICKOFF } from "../../../info/briefer/anchors";
+import { EMPTY_DINNER } from "../../../info/dinner/types";
 import type { SignInSite } from "../../../info/sources/site-session";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
 import { SourcesPage } from "./SourcesPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
+import { DinnerPage } from "./DinnerPage";
+import { useDinner } from "./use-dinner";
 import { useInfoHome } from "./use-info-home";
 import { noLabsOpen } from "./no-labs";
 
@@ -112,6 +116,10 @@ export default function InfoHome(props: {
   // that has it and this screen keeps importing nothing from either shell —
   // the same hole renderLaunch is (docs/22).
   wrapScreen?: (screen: AskableScreen, children: React.ReactNode) => React.ReactNode;
+  // Whether the dinner line is switched on (settings.dinner, docs/73). Off, and
+  // there is no entry to this screen anywhere and nothing is read off disk for
+  // it; the data stays where it is.
+  dinnerEnabled?: boolean;
   // Whether the call keeps its corner cards (docs/03). Default, and the desktop
   // shell: it does. The phone shell turns them off — there the chat is a screen
   // of the navigation stack with gestures in and out of it, and a card that
@@ -120,6 +128,7 @@ export default function InfoHome(props: {
   pipCards?: boolean;
 }) {
   const { screen, onNavigate } = props;
+  const dinner = useDinner(props.dinnerEnabled === true);
   const info = useInfoHome({
     role: props.role,
     onNavigate,
@@ -208,6 +217,27 @@ export default function InfoHome(props: {
         );
       })()}
 
+      {screen === "dinner" && props.dinnerEnabled && (() => {
+        const openChat = (kickoff?: string) => info.askDinner(dinner.state ?? EMPTY_DINNER, dinner.today, kickoff);
+        const page = (
+          <div className="absolute inset-0 overflow-y-auto bg-background">
+            <DinnerPage
+              state={dinner.state}
+              today={dinner.today}
+              onPlanWeek={() => openChat(DINNER_KICKOFF)}
+              onAsk={() => openChat()}
+              onToggleItem={dinner.toggleItem}
+            />
+          </div>
+        );
+        // The same pull-down the briefing has: dinner is a screen with
+        // something to talk about, and the phone's way into a chat is one
+        // gesture everywhere (docs/22).
+        return props.wrapScreen
+          ? props.wrapScreen({ label: "Ask about dinner", onAsk: () => openChat() }, page)
+          : page;
+      })()}
+
       {screen === "sources" && (
         <div className="absolute inset-0 overflow-y-auto bg-background">
           <SourcesPage
@@ -276,6 +306,7 @@ export default function InfoHome(props: {
           onSourcesChanged={info.refreshSources}
           onTopicsChanged={() => void props.onTopicsChanged()}
           onOpenBriefing={() => onNavigate("briefing")}
+          onDinnerChanged={dinner.reload}
           pipCards={props.pipCards}
         />
       )}

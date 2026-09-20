@@ -18,6 +18,8 @@ export default function PhoneHome({
   onContinue,
   onOpenLibrary,
   settingsAlert,
+  dinner,
+  onOpenDinner,
   lumenShown,
   onToggleLumen,
 }: {
@@ -31,6 +33,10 @@ export default function PhoneHome({
   onContinue: (book: ContinueBook) => void;
   onOpenLibrary: () => void;
   settingsAlert: boolean;
+  // Whether the dinner line is switched on (settings.dinner, docs/73). Off, and
+  // the row is not here at all.
+  dinner: boolean;
+  onOpenDinner: () => void;
   // The corner companion's switch (docs/68). The phone has no sidebar, so the
   // app's own name on the home screen is what carries it.
   lumenShown: boolean;
@@ -77,6 +83,25 @@ export default function PhoneHome({
             onStartSubscribing={launch.onStartSubscribing}
           />
         </Card>
+
+        {/* Under the briefing, above what is kept: it is the other thing the
+            day needs deciding, and it is decided in the evening. */}
+        {dinner && (
+          <Card>
+            <CardLabel>Dinner</CardLabel>
+            <button
+              className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
+              onClick={onOpenDinner}
+            >
+              <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
+                This week's dinners and what to buy.
+              </p>
+              <div className="mt-4 flex items-center justify-end">
+                <span className="text-[13px] font-medium text-accent-line">Open →</span>
+              </div>
+            </button>
+          </Card>
+        )}
 
         <Card>
           <CardLabel>Saved</CardLabel>

@@ -18,6 +18,7 @@ export type ScreenKind =
   | "briefing"
   | "article"
   | "sources"
+  | "dinner"
   | "saved"
   | "savedArticle"
   | "library"
@@ -34,6 +35,7 @@ export type PhoneScreen =
   | { kind: "briefing" }
   | { kind: "article" }
   | { kind: "sources" }
+  | { kind: "dinner" }
   | { kind: "saved" }
   | { kind: "savedArticle"; article: SavedArticle }
   | { kind: "library" }

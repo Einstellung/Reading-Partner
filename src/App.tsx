@@ -1474,6 +1474,7 @@ export default function App() {
             onToggleLumen={toggleLumen}
             update={appUpdateState}
             onApplyUpdate={applyAppUpdate}
+            dinner={settings.dinner}
           />
         )}
         {/* Sidebar sits on the LEFT (Zotero iPad Annotations position); the
@@ -1560,6 +1561,7 @@ export default function App() {
           <InfoHome
             screen={inReader ? null : homeScreen}
             onNavigate={setHomeScreen}
+            dinnerEnabled={settings.dinner}
             role={deviceRole}
             continueBook={(() => {
               if (topics === null) return undefined;
