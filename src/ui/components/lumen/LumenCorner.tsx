@@ -27,6 +27,12 @@
 // Where nothing is registered and no call is up the body does not even charge,
 // which is what makes the gesture legible: it only lights up where it can talk.
 //
+// A call that never got going says so. The hold charges and buzzes before
+// anything is known about the microphone, and iOS can refuse it outright, so a
+// failure with nothing on screen is a hold that swallowed the gesture. The one
+// line stacks over the body the way the briefing's layer drew it (ErrorLine),
+// and takes no presses: the way back is another hold, on the body behind it.
+//
 // The count. `appBox()` caches nothing, so the number is read twice over: the
 // store's own subscribe covers a write made in this process, and the sync tick
 // covers an item that arrived from the other device.
@@ -41,8 +47,10 @@ import { hasNativeSpeech } from "../../../platform/app/platform";
 import { TICK_MS } from "../../../platform/sync";
 import { displayFileTitle } from "../shelf/file-title";
 import { cn } from "../lib/utils";
+import { orbErrorLine } from "../orb/orb";
 import { OVERLAY_Z } from "../ui/overlay";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { ErrorLine } from "./ErrorLine";
 import { Lumen, LumenCase } from "./Lumen";
 import { useHoldToggle } from "./use-hold-toggle";
 import { useVoiceCall, voiceCallHandle } from "./use-voice-call";
@@ -126,6 +134,11 @@ export function LumenCorner({
 	// the iOS plugin's (docs/33) — and neither has a screen with nothing to talk
 	// about, unless the call the hold would end is already up.
 	const canTalk = hasNativeSpeech() && (live || context !== null);
+	const handle = voiceCallHandle(call);
+	// Only where the body is a control: everywhere else there is no call of
+	// theirs to have broken, and a sentence in the corner of a book would be
+	// about nothing they did.
+	const errorLine = canTalk ? orbErrorLine(handle.error) : null;
 	const { start, stop } = call;
 
 	const toggle = useCallback(() => {
@@ -254,7 +267,7 @@ export function LumenCorner({
 	return (
 		<div
 			className={cn(
-				"pointer-events-none fixed inset-x-0 bottom-0 flex flex-col items-end pb-safe-6 pr-safe-4",
+				"pointer-events-none fixed inset-x-0 bottom-0 flex flex-col items-end gap-2 pb-safe-6 pr-safe-4",
 				OVERLAY_Z.floating,
 			)}
 			// Margin and not padding: the padding above is the corner's own margin
@@ -262,6 +275,7 @@ export function LumenCorner({
 			// edge is for it, not how much air the body keeps.
 			style={liftPx ? { marginBottom: `${liftPx}px` } : undefined}
 		>
+			{errorLine && <ErrorLine line={errorLine} />}
 			<Popover open={open} onOpenChange={setOpen}>
 				{/* The body's own box, with the case hanging off its left edge.
 				    Nothing here clips: the corner's footprint is wider than the
@@ -279,7 +293,7 @@ export function LumenCorner({
 					<div className="relative isolate">
 						<Lumen
 							ref={hold.ref}
-							handle={voiceCallHandle(call)}
+							handle={handle}
 							attention={call.attention}
 							// Beside an open book nothing moves but the case and the
 							// hands on it (docs/68).

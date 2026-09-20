@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ErrorLine } from "../lumen/ErrorLine";
 import { Lumen } from "../lumen/Lumen";
 import type { Attention } from "../lumen/lumen-motion";
 import { orbErrorLine, type OrbPhase, type SpeechEnvelope, type VoiceCallHandle } from "../orb/orb";
@@ -54,19 +55,6 @@ function OrbLayer({
 				className="pointer-events-auto h-18 w-18"
 			/>
 		</div>
-	);
-}
-
-// What a call that died says. One line, and the orb behind it is back at rest —
-// a broken call cannot be resumed, and a tap starts a new one (docs/33).
-function ErrorLine({ line }: { line: string }) {
-	return (
-		<p
-			role="status"
-			className="pointer-events-none m-0 max-w-[16rem] rounded-lg border border-border-soft bg-popover px-3 py-1.5 text-[13px] leading-snug text-muted-foreground shadow-sm"
-		>
-			{line}
-		</p>
 	);
 }
 
