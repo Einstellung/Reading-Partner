@@ -86,7 +86,7 @@ import {
   type TurnLane,
 } from "./contract";
 import { normalizeToolResult, toolLabel } from "./tool-result";
-import { createHarness, createSessionRepo } from "./harness";
+import { createHarness, createSessionRepo, sweepSessionGroup } from "./harness";
 import type { AgentLane, HeldHarness, HeldLane } from "./held";
 
 export {
@@ -428,7 +428,12 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       const fileSystem = params.fileSystem ?? createSessionFileSystem();
       const laneId = params.lane ?? READER_TURN;
       const repo = createSessionRepo({ fileSystem });
+      // A session of this turn's own, and one file left behind per turn. The
+      // same sweep the process-start path runs keeps the group from growing
+      // without bound; nothing here settles a previous session, because a turn
+      // that is over has no operation anyone is coming back for.
       const session = await repo.create({ cwd: laneId.sessions }, ctx);
+      await sweepSessionGroup(fileSystem, session, ctx);
       handle = await createHarness(
         {
           fileSystem,

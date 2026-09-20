@@ -1334,7 +1334,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     gc: "domain-housekeeping",
-    note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/71)",
+    note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). A process start settles the previous session and begins a fresh one; the group keeps its newest five files (legion/execute/harness.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/71)",
   },
 
   // -- the red box ----------------------------------------------------------

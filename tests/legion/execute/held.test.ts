@@ -3,7 +3,8 @@
 // an in-memory AppData. What is pinned down is that the session records every
 // turn and feeds none of them forward: each turn's provider sees that turn's
 // prompt and its own tool rounds, and nothing from the turns before — in one
-// process, and again after a restart onto the same files.
+// process, and again after a restart, which settles the previous session and
+// starts a fresh one in the same group.
 // Run: scripts/t.sh tests/legion/execute/held.test.ts
 
 import { expect, test } from "bun:test";
@@ -113,8 +114,15 @@ function roles(messages: Message[]): string[] {
   );
 }
 
+// Oldest first: a session file is named after its creation time.
 function sessionFiles(disk: MemoryDisk, group: string): string[] {
-  return [...disk.files.keys()].filter((p) => p.includes(`--session-${group}--/`) && p.endsWith(".jsonl"));
+  return [...disk.files.keys()]
+    .filter((p) => p.includes(`--session-${group}--/`) && p.endsWith(".jsonl"))
+    .sort();
+}
+
+function written(disk: MemoryDisk, path: string): string {
+  return new TextDecoder().decode(disk.files.get(path)!);
 }
 
 function hold(disk: MemoryDisk): HeldHarness {
@@ -150,14 +158,14 @@ test("three turns on one harness: each provider round sees its own turn only", a
   // One session file in the group, and every turn is in it.
   const files = sessionFiles(disk, "soul");
   expect(files).toHaveLength(1);
-  const written = new TextDecoder().decode(disk.files.get(files[0]!));
+  const body = written(disk, files[0]!);
   for (const needle of ["q1", "q2", "q3", "a1", "a2", "a3", "echo:a", "echo:b"]) {
-    expect(written).toContain(needle);
+    expect(body).toContain(needle);
   }
   await held.close(ctx);
 });
 
-test("a restart reopens the same session, and the next turn still sees itself only", async () => {
+test("a restart starts a fresh session, and the next turn still sees itself only", async () => {
   const disk = memoryAppData();
   const held = hold(disk);
   await turn(held, [user("q1")], [{ text: "a1" }]);
@@ -175,11 +183,13 @@ test("a restart reopens the same session, and the next turn still sees itself on
   expect(roles(fourth.rounds[0]!)).toEqual(["user:h4", "user:q4"]);
   expect(roles(fourth.rounds[1]!)).toEqual(["user:h4", "user:q4", "assistant", "toolResult"]);
 
+  // The process before it wrote its own file and this one writes another; the
+  // three turns of the first process stay where they were.
   const files = sessionFiles(disk, "soul");
-  expect(files).toHaveLength(1);
-  const written = new TextDecoder().decode(disk.files.get(files[0]!));
-  expect(written).toContain("q4");
-  expect(written).toContain("q1");
+  expect(files).toHaveLength(2);
+  expect(written(disk, files[0]!)).toContain("q1");
+  expect(written(disk, files[1]!)).toContain("q4");
+  expect(written(disk, files[1]!)).not.toContain("q1");
   await again.close(ctx);
 });
 
@@ -220,10 +230,12 @@ test("a tool left running by a dead process is settled as interrupted, not rerun
   expect(roles(next.rounds[0]!)).toEqual(["user:q2"]);
   expect(entered).toEqual(["first:x"]);
 
+  // The interrupted run is settled on the file that holds it, and turn two is
+  // in this process's own.
   const files = sessionFiles(disk, "soul");
-  expect(files).toHaveLength(1);
-  const written = new TextDecoder().decode(disk.files.get(files[0]!));
-  expect(written).toContain("Tool execution was interrupted");
+  expect(files).toHaveLength(2);
+  expect(written(disk, files[0]!)).toContain("Tool execution was interrupted");
+  expect(written(disk, files[1]!)).toContain("q2");
   await again.close(ctx);
 });
 

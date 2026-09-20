@@ -4,11 +4,13 @@
 // What the harness adds over a plain agent loop is durability: every message,
 // tool call and tool result is appended to a session file as it happens, so a
 // run that dies mid-tool is still on disk. The second process learns about it
-// from AgentHarness.create, which hands back the list of
-// operations that were still open, and lane.resume() finishes each one —
-// writing a synthetic tool result that says the execution was interrupted,
-// rather than running the tool again (only a tool that declares replay: "safe"
-// is re-executed).
+// from AgentHarness.create, which hands back the list of operations that were
+// still open, and aborting each one writes a synthetic tool result that says
+// the execution was interrupted, rather than running the tool again.
+//
+// That settling is the only thing the previous session is wanted for, so a
+// process start settles it and then starts a fresh session (rotateSession
+// below), and the group keeps its newest few files (sweepSessionGroup).
 //
 // Two things are injected and everything else follows from them.
 //
@@ -36,6 +38,7 @@ import {
   type CompactionSettings,
   type Context,
   type FileSystem,
+  type JsonlSessionMetadata,
   type OpenOperation,
   type Session,
 } from "@earendil-works/pi-agent-core";
@@ -80,8 +83,8 @@ export interface HarnessDeps {
   cwd?: string;
   /**
    * Attach to this session instead of resolving one. When absent the newest
-   * session under `cwd` is reopened, and a first run creates one: that is what
-   * makes an operation left open by a dead process findable at all.
+   * session under `cwd` is settled and a fresh one is created for this process
+   * (rotateSession).
    */
   session?: Session;
   model: Model<Api>;
@@ -116,8 +119,13 @@ export interface HarnessDeps {
 export interface HarnessHandle {
   harness: Harness<undefined>;
   /**
-   * What the previous process left running. One entry per lane with an
-   * operation still open; `lane.resume()` finishes it.
+   * What this session left running. One entry per lane with an operation still
+   * open; `lane.resume()` finishes it and `lane.abort()` settles it.
+   *
+   * Always empty when the session was resolved here rather than passed in: that
+   * path settles the previous session itself and then hands back a fresh one,
+   * which holds nothing. It stays on the handle because a caller that passes
+   * its own `session` gets what that session holds.
    */
   open: OpenOperation[];
   session: Session;
@@ -216,18 +224,39 @@ export function createSessionRepo(deps: StoreDeps) {
 /**
  * Open a harness on a durable session.
  *
- * `open` is the whole point of coming back: an operation the previous process
- * started and never finished is listed there, and resuming its lane is what
- * makes a crash mid-tool a pause rather than a loss.
+ * Without an explicit `session` this is a process start: whatever the previous
+ * process left open is settled on the session that holds it, and the harness
+ * comes back on a fresh session of the same group (rotateSession).
  */
 export async function createHarness(deps: HarnessDeps, context: Context): Promise<HarnessHandle> {
   const store = sessionStore(deps);
   const repo = store.repo;
   const cwd = deps.cwd ?? SESSIONS_ROOT;
-  const session = deps.session ?? (await openOrCreateSession(store, cwd, context));
-  const tools = deps.tools ?? [];
+  const session = deps.session ?? (await rotateSession(store, deps, cwd, context));
+  const { harness, open } = await buildHarness(deps, session, context);
 
-  const { harness, open } = await AgentHarness.create<undefined>(
+  return {
+    harness,
+    open,
+    session,
+    repo,
+    async close(ctx) {
+      await harness.close(ctx);
+      await session.close(ctx);
+    },
+  };
+}
+
+// The harness itself, over a session someone else resolved. Two callers: the
+// one above, and the settling pass below, which needs a harness on the previous
+// session to reach its lanes.
+async function buildHarness(
+  deps: HarnessDeps,
+  session: Session,
+  context: Context,
+): Promise<{ harness: Harness<undefined>; open: OpenOperation[] }> {
+  const tools = deps.tools ?? [];
+  return await AgentHarness.create<undefined>(
     {
       session,
       models: deps.models ?? modelsFor(deps.model, deps.streamFn),
@@ -246,22 +275,19 @@ export async function createHarness(deps: HarnessDeps, context: Context): Promis
     },
     context,
   );
-
-  return {
-    harness,
-    open,
-    session,
-    repo,
-    async close(ctx) {
-      await harness.close(ctx);
-      await session.close(ctx);
-    },
-  };
 }
 
-// The newest session of the group, or a new one. Newest rather than all of
-// them: an operation left open belongs to the run that was interrupted, and
-// that is the last session written.
+// Settle the group's newest session and start a fresh one for this process.
+//
+// Nothing written to a session is ever read back as context: every turn
+// navigates its lane to the session root and assembles the round from the
+// conversation files (docs/71). So the newest session is wanted for one thing —
+// finishing what a dead process left open — and once that is done, staying on
+// it only makes a file that grows by a few hundred lines per answer and is
+// replayed whole on every start.
+//
+// Newest rather than all of them: an operation left open belongs to the run
+// that was interrupted, and that is the last session written.
 //
 // A session that will not open is set aside rather than retried forever. The
 // JSONL storage replays every line on open and throws on the first bad one; it
@@ -270,8 +296,9 @@ export async function createHarness(deps: HarnessDeps, context: Context): Promis
 // (docs/pitfall/367). A session is machine-local runtime state and losing one
 // costs a device its resumable operations, not its history — the conversation
 // the reader sees is projected from elsewhere (src/palace/kinds.ts, docs/71).
-async function openOrCreateSession(
+async function rotateSession(
   store: ReturnType<typeof sessionStore>,
+  deps: HarnessDeps,
   cwd: string,
   context: Context,
 ): Promise<Session> {
@@ -279,14 +306,80 @@ async function openOrCreateSession(
   const existing = await repo.list({ cwd }, context);
   const newest = [...existing].sort((a, b) => b.createdAt - a.createdAt)[0];
   if (newest) {
+    let previous: Session<JsonlSessionMetadata> | undefined;
     try {
-      return await repo.open(newest, context);
+      previous = await repo.open(newest, context);
     } catch (error) {
       if (isFileFailure(error)) throw error;
       await setAside(fileSystem, newest.path, now(), error, context);
     }
+    if (previous) await settle(deps, previous, context);
   }
-  return await repo.create({ cwd }, context);
+  const session = await repo.create({ cwd }, context);
+  await sweepSessionGroup(fileSystem, session, context);
+  return session;
+}
+
+// Abort every operation the session still holds, then let it go. Abort rather
+// than resume: the tool that was running when the process died is not run
+// again — pi writes its synthetic "execution was interrupted" result and
+// settles the operation — and the answer it was in the middle of has no caller
+// left to hear it (docs/pitfall/308).
+async function settle(
+  deps: HarnessDeps,
+  session: Session<JsonlSessionMetadata>,
+  context: Context,
+): Promise<void> {
+  const { harness, open } = await buildHarness(deps, session, context);
+  try {
+    for (const operation of open) {
+      const lane = await harness.lane(operation.lane, context);
+      await lane.abort(context);
+    }
+  } finally {
+    await harness.close(context);
+    await session.close(context);
+  }
+}
+
+/** How many files a session group keeps, the one just created included. */
+const KEEP_SESSIONS = 5;
+
+/**
+ * Delete everything in a freshly created session's group but the newest few
+ * files. This is the "domain-housekeeping" the palace's `session` row promises
+ * (src/palace/kinds.ts).
+ *
+ * The directory is the repo's own: `metadata.path` is the file the repo just
+ * wrote, so its parent is the directory the repo slugged out of `cwd`, and the
+ * name is never spelled a second time here. A session file is named after its
+ * ISO creation time, so sorting the names sorts by age; a file set aside as
+ * `.corrupt-…` keeps the timestamp it was named with and ages out with it.
+ *
+ * A removal that fails is logged and left where it is: the next start sweeps
+ * the same directory again.
+ */
+export async function sweepSessionGroup(
+  fileSystem: FileSystem,
+  session: Session<JsonlSessionMetadata>,
+  context: Context,
+): Promise<void> {
+  const path = session.metadata.path;
+  const directory = path.slice(0, path.lastIndexOf("/"));
+  const listed = await fileSystem.listDir(directory, context);
+  if (!listed.ok) {
+    console.warn(`session group ${directory} could not be listed: ${listed.error.message}`);
+    return;
+  }
+  const files = listed.value
+    .filter((entry) => entry.kind !== "directory")
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const stale of files.slice(0, Math.max(0, files.length - KEEP_SESSIONS))) {
+    const removed = await fileSystem.remove(stale.path, { force: true }, context);
+    if (!removed.ok) {
+      console.warn(`session ${stale.path} could not be swept: ${removed.error.message}`);
+    }
+  }
 }
 
 // Rename the file out of the way. `JsonlSessionRepo.list` only considers names

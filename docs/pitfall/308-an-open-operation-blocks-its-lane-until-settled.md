@@ -16,6 +16,6 @@ open operation 是 lane 状态的一部分，重开 session 时随分支记录�
 
 ## 解法
 
-重开时对每条 open operation 调 `lane.abort()` 而不是 `resume()`：`requestAbort` 后 drive 走 recovery 分支，同样写出那条合成的中断 toolResult，然后以 `aborted` 结算，不发请求。之后 lane 空闲，新回合照常 accept。`legion/execute/held.ts` 的 `open()` 就是这么做的；测试在 `tests/legion/execute/held.test.ts`「a tool left running by a dead process…」，断言重启后的进程只有新回合那一次 stream 调用。
+重开时对每条 open operation 调 `lane.abort()` 而不是 `resume()`：`requestAbort` 后 drive 走 recovery 分支，同样写出那条合成的中断 toolResult，然后以 `aborted` 结算，不发请求。之后 lane 空闲，新回合照常 accept。`legion/execute/harness.ts` 的 `rotateSession` 就是这么做的，结算完那个 session 就关掉、另起一个新的；测试在 `tests/legion/execute/held.test.ts`「a tool left running by a dead process…」，断言重启后的进程只有新回合那一次 stream 调用。
 
 要真接着跑的场景（本地 worker 的长任务）才用 resume，而且要先确认它的收件方还在。

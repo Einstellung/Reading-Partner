@@ -5,9 +5,10 @@
 // is scripted; the session store is createSessionFileSystem over an in-memory
 // AppData, so the session files are a Map.
 //
-// The last case is the one the whole harness exists for: a tool that never
-// returns, a process that dies on top of it, and a second createHarness over
-// the same store that finds the run still open and finishes it.
+// The case the whole harness exists for: a tool that never returns, a process
+// that dies on top of it, and a second createHarness over the same store that
+// finds the run still open, settles it on the file that holds it, and starts
+// this process on a session of its own.
 // Run: scripts/t.sh tests/legion/execute/harness.test.ts
 
 import { expect, test } from "bun:test";
@@ -28,7 +29,11 @@ import {
   type FauxProviderHandle,
 } from "@earendil-works/pi-ai/providers/faux";
 import type { StreamFn } from "../../../src/legion/execute/turn";
-import { createHarness, type HarnessDeps } from "../../../src/legion/execute/harness";
+import {
+  createHarness,
+  createSessionRepo,
+  type HarnessDeps,
+} from "../../../src/legion/execute/harness";
 import { createSessionFileSystem, SESSIONS_ROOT } from "../../../src/platform/app/session-fs";
 import { memoryAppData, type MemoryDisk } from "../../support/memory-appdata";
 
@@ -189,12 +194,21 @@ test("steering cuts in after the tool result of the round it interrupted", async
   await handle.close(ctx);
 });
 
+function sessionFiles(disk: MemoryDisk): string[] {
+  return [...disk.files.keys()].filter((path) => path.endsWith(".jsonl"));
+}
+
+function text(disk: MemoryDisk, path: string): string {
+  return new TextDecoder().decode(disk.files.get(path)!);
+}
+
 // The reason for all of it. The tool never returns and the harness is dropped
 // without closing — a process death, as far as the store is concerned. Only the
 // session handle is released, because the repo will not hand out a session it
 // still thinks is open.
-test("a run interrupted mid-tool is listed as open and resumes to completion", async () => {
-  const fileSystem = createSessionFileSystem(memoryAppData());
+test("a run interrupted mid-tool is settled on its own file, and this process starts fresh", async () => {
+  const disk = memoryAppData();
+  const fileSystem = createSessionFileSystem(disk);
   const first = rig(fileSystem);
   const entered: string[] = [];
 
@@ -208,18 +222,18 @@ test("a run interrupted mid-tool is listed as open and resumes to completion", a
     fauxAssistantMessage([fauxToolCall("probe_work", { note: "job" }, { id: "c1" })], {
       stopReason: "toolUse",
     }),
-    fauxAssistantMessage([fauxText("finished after resume")], { stopReason: "stop" }),
+    fauxAssistantMessage([fauxText("unreachable answer")], { stopReason: "stop" }),
   ]);
   const lane = await handle.harness.lane("soul", ctx);
   void lane.prompt("do the job", undefined, ctx);
   await Bun.sleep(40);
   await handle.session.close(ctx);
+  expect(sessionFiles(disk)).toHaveLength(1);
+  const interrupted = sessionFiles(disk)[0]!;
 
   // --- second process, same files ---
   const second = rig(fileSystem);
-  second.faux.setResponses([
-    fauxAssistantMessage([fauxText("finished after resume")], { stopReason: "stop" }),
-  ]);
+  second.faux.setResponses([fauxAssistantMessage([fauxText("this turn")], { stopReason: "stop" })]);
   const reopened = await createHarness(
     deps(second, {
       tools: [
@@ -231,26 +245,26 @@ test("a run interrupted mid-tool is listed as open and resumes to completion", a
     }),
     ctx,
   );
-  expect(reopened.open.map((o) => `${o.lane}:${o.kind}`)).toEqual(["soul:run"]);
 
-  const resumedLane = await reopened.harness.lane(reopened.open[0]!.lane, ctx);
-  expect((await resumedLane.resume(ctx)).ok).toBe(true);
+  // A session of this process's own, with nothing left over on it.
+  expect(reopened.open).toEqual([]);
+  expect(sessionFiles(disk)).toHaveLength(2);
+  expect(sessionFiles(disk)).toContain(interrupted);
 
-  // The default is not to run the tool again: the result the model reads is a
-  // synthetic one saying the execution was interrupted.
+  // The tool is not run again: the interrupted run's file got pi's synthetic
+  // result, and no model call was made for it.
   expect(entered).toEqual(["first:job"]);
-  const lines = transcript(await resumedLane.findEntries(undefined, ctx));
-  expect(lines[0]).toBe("user text:do the job");
-  expect(lines[1]).toBe("assistant toolCall:probe_work");
-  expect(lines[2]).toContain("Tool execution was interrupted");
-  expect(lines[3]).toBe("assistant text:finished after resume");
+  expect(text(disk, interrupted)).toContain("Tool execution was interrupted");
+
+  const freshLane = await reopened.harness.lane("soul", ctx);
+  expect((await freshLane.prompt("hello", undefined, ctx)).ok).toBe(true);
+  expect(transcript(await freshLane.findEntries(undefined, ctx))).toEqual([
+    "user text:hello",
+    "assistant text:this turn",
+  ]);
 
   await reopened.close(ctx);
 });
-
-function sessionFiles(disk: MemoryDisk): string[] {
-  return [...disk.files.keys()].filter((path) => path.endsWith(".jsonl"));
-}
 
 function setAsideFiles(disk: MemoryDisk): string[] {
   return [...disk.files.keys()].filter((path) => path.includes(".jsonl.corrupt-"));
@@ -306,16 +320,13 @@ test("a session whose middle line will not replay is set aside and a fresh one t
   expect(sessionFiles(disk)).toHaveLength(1);
   await reopened.close(ctx);
 
-  // --- third process: the fresh session opens, and nothing is set aside ---
+  // --- third process: the second's session opens, is settled and left behind ---
   const third = rig(fileSystem);
   const again = await createHarness(deps(third), ctx);
-  const sameLane = await again.harness.lane("soul", ctx);
-  expect(transcript(await sameLane.findEntries(undefined, ctx))).toEqual([
-    "user text:hello again",
-    "assistant text:second answer",
-  ]);
+  expect(transcript(await (await again.harness.lane("soul", ctx)).findEntries(undefined, ctx)))
+    .toEqual([]);
   expect(setAsideFiles(disk)).toHaveLength(1);
-  expect(sessionFiles(disk)).toHaveLength(1);
+  expect(sessionFiles(disk)).toHaveLength(2);
   await again.close(ctx);
 });
 
@@ -339,4 +350,67 @@ test("a disk that will not answer is not set aside", async () => {
   await expect(createHarness(deps(second), ctx)).rejects.toThrow(/Failed to read JSONL storage/);
   expect(setAsideFiles(disk)).toEqual([]);
   expect(sessionFiles(disk)).toHaveLength(1);
+});
+
+// The group directory the repo slugs out of the default `cwd`, and one for a
+// group nothing here opens.
+const GROUP = "session/--session--";
+const OTHER_GROUP = "session/--session-other--";
+
+// A file with a name the group would have given it and a body the repo cannot
+// read as a session: the sweep goes by name and never opens anything.
+async function seed(disk: MemoryDisk, directory: string, name: string): Promise<void> {
+  await disk.mkdirp(directory);
+  disk.files.set(`${directory}/${name}`, new TextEncoder().encode("not a session header\n"));
+}
+
+function groupFiles(disk: MemoryDisk, directory: string): string[] {
+  return [...disk.files.keys()]
+    .filter((path) => path.startsWith(`${directory}/`))
+    .map((path) => path.slice(directory.length + 1))
+    .sort();
+}
+
+test("a group keeps its newest five files and nothing outside it is touched", async () => {
+  const disk = memoryAppData();
+  for (let day = 1; day <= 7; day += 1) {
+    await seed(disk, GROUP, `2020-01-0${day}T00-00-00-000Z_s${day}.jsonl`);
+  }
+  await seed(disk, GROUP, "2020-01-02T00-00-00-000Z_s2.jsonl.corrupt-1700000000000");
+  await seed(disk, OTHER_GROUP, "2020-01-01T00-00-00-000Z_o1.jsonl");
+
+  const r = rig(createSessionFileSystem(disk));
+  const handle = await createHarness(deps(r), ctx);
+
+  const kept = groupFiles(disk, GROUP);
+  expect(kept).toHaveLength(5);
+  expect(kept.slice(0, 4)).toEqual([
+    "2020-01-04T00-00-00-000Z_s4.jsonl",
+    "2020-01-05T00-00-00-000Z_s5.jsonl",
+    "2020-01-06T00-00-00-000Z_s6.jsonl",
+    "2020-01-07T00-00-00-000Z_s7.jsonl",
+  ]);
+  expect(kept[4]!.endsWith(".jsonl")).toBe(true);
+  expect(groupFiles(disk, OTHER_GROUP)).toEqual(["2020-01-01T00-00-00-000Z_o1.jsonl"]);
+
+  await handle.close(ctx);
+});
+
+test("a session handed in is used as it is: nothing settled, nothing created, nothing swept", async () => {
+  const disk = memoryAppData();
+  for (let day = 1; day <= 7; day += 1) {
+    await seed(disk, GROUP, `2020-01-0${day}T00-00-00-000Z_s${day}.jsonl`);
+  }
+
+  const fileSystem = createSessionFileSystem(disk);
+  const r = rig(fileSystem);
+  const session = await createSessionRepo({ fileSystem }).create({ cwd: SESSIONS_ROOT }, ctx);
+  const before = groupFiles(disk, GROUP);
+  expect(before).toHaveLength(8);
+
+  const handle = await createHarness(deps(r, { session }), ctx);
+  expect(handle.session).toBe(session);
+  expect(groupFiles(disk, GROUP)).toEqual(before);
+
+  await handle.close(ctx);
 });

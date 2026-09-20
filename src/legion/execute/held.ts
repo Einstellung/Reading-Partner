@@ -17,13 +17,13 @@
 // own branch off the root; none of them is read back as context, because the
 // context is assembled from the conversation files each turn (docs/71).
 //
-// The first acquire in a process is the expensive one: it lists the group's
-// sessions, reopens the newest (reading the whole file back) or creates one,
-// and finishes whatever the previous process left open — a tool that was
-// running when it died is not run again; the operation is aborted, which
-// writes pi's synthetic "execution was interrupted" tool result and settles
-// it, and the model is not called for it. Every acquire after that is a few
-// appended session lines: the lane's configuration and a root navigation.
+// The first acquire in a process is the expensive one: createHarness lists the
+// group's sessions, settles whatever the previous process left open on the
+// newest one, and hands back a fresh session for this process (harness.ts). A
+// tool that was running when the last process died is not run again; its
+// operation is aborted, which writes pi's synthetic "execution was interrupted"
+// tool result, and the model is not called for it. Every acquire after that is
+// a few appended session lines: the lane's configuration and a root navigation.
 
 import {
   type AgentHarness as Harness,
@@ -137,13 +137,6 @@ export function holdHarness(options: HoldOptions): HeldHarness {
         },
         context,
       );
-      // What the previous process left running is settled here, not resumed:
-      // the tool's synthetic result is written, and the answer it was in the
-      // middle of has no caller left to hear it.
-      for (const op of opened.open) {
-        const stale = await opened.harness.lane(op.lane, context);
-        await stale.abort(context);
-      }
       return opened;
     })();
     // A store that would not open is retried by the next turn rather than
