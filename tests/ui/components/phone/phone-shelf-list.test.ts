@@ -10,6 +10,8 @@ import {
   materialNote,
   materialTap,
   shelfMaterials,
+  NOT_FILED_YET,
+  NOT_IMPORTED,
   PDF_ELSEWHERE,
 } from "../../../../src/ui/components/phone/shelf-list";
 
@@ -30,13 +32,70 @@ function entry(hash: string, over: Partial<LibraryEntry> = {}): LibraryEntry {
   };
 }
 
-test("a file is an EPUB only if the registry says so", () => {
-  const files = [file("a.epub", "h1"), file("b.pdf", "h2"), file("never-imported.epub")];
-  const entries = { h1: entry("h1"), h2: entry("h2", { format: "pdf" }) };
-  const m = shelfMaterials(files, entries, new Set(["h1", "h2"]));
-  expect(m.map((x) => x.format)).toEqual(["epub", "pdf", "pdf"]);
-  // A file the registry has never heard of is not a book this shell can open.
-  expect(m[2].onDevice).toBe(false);
+test("the registry says what a file is, and its name says so when the registry has not", () => {
+  const files = [
+    file("a.epub", "h1"),
+    file("b.pdf", "h2"),
+    // The registry's answer wins over the name.
+    file("named-pdf.pdf", "h3"),
+    file("never-imported.epub"),
+    file("never-imported.pdf"),
+    file("notes.txt"),
+  ];
+  const entries = {
+    h1: entry("h1"),
+    h2: entry("h2", { format: "pdf" }),
+    h3: entry("h3", { format: "epub" }),
+  };
+  const m = shelfMaterials(files, entries, new Set(["h1", "h2", "h3"]));
+  expect(m.map((x) => x.format)).toEqual(["epub", "pdf", "epub", "epub", "pdf", "unknown"]);
+  expect(m.map((x) => x.filed)).toEqual([true, true, true, false, false, false]);
+  // A file the registry has never heard of is not on this device either.
+  expect(m[3].onDevice).toBe(false);
+});
+
+test("an entry with no format is the PDF it was before EPUBs existed", () => {
+  const entries = { h1: { hash: "h1", title: "x", originalFilename: "x", addedAt: 1 } };
+  const [m] = shelfMaterials([file("old.epub", "h1")], entries, new Set(["h1"]));
+  expect(m.format).toBe("pdf");
+});
+
+test("an EPUB the desk has not imported says so instead of calling itself a PDF", () => {
+  const [m] = shelfMaterials([file("added-on-the-desk.epub")], {}, new Set());
+  expect(m.format).toBe("epub");
+  expect(m.filed).toBe(false);
+  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "unavailable", why: NOT_IMPORTED });
+  expect(materialNote(m, false)).toBe("Not imported");
+});
+
+test("an EPUB whose library entry has not arrived yet is not fetched", () => {
+  // topics.json and library.json are separate sync units: the row can be here
+  // before the entry that describes it.
+  const [m] = shelfMaterials([file("a.epub", "h1")], {}, new Set());
+  expect(m.format).toBe("epub");
+  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "unavailable", why: NOT_FILED_YET });
+  expect(materialNote(m, false)).toBe("Not synced yet");
+});
+
+test("a file nothing describes and whose name says nothing is not opened", () => {
+  const [m] = shelfMaterials([file("notes")], {}, new Set());
+  expect(m.format).toBe("unknown");
+  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "unavailable", why: NOT_IMPORTED });
+  expect(materialNote(m, false)).toBe("Not imported");
+  // Not even with bytes beside it: nothing has said what they are.
+  const [here] = shelfMaterials([file("notes", "h9")], {}, new Set(["h9"]));
+  expect(materialTap(here, SIGNED_IN).kind).toBe("unavailable");
+});
+
+test("a PDF the desk has not imported is still read elsewhere", () => {
+  const [m] = shelfMaterials([file("paper.pdf")], {}, new Set());
+  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "pdf" });
+  expect(materialNote(m, false)).toBe("PDF");
+});
+
+test("an extension is read whatever its case", () => {
+  const m = shelfMaterials([file("A.EPUB"), file("B.Pdf")], {}, new Set());
+  expect(m.map((x) => x.format)).toEqual(["epub", "pdf"]);
 });
 
 test("an article is an EPUB and opens as one", () => {

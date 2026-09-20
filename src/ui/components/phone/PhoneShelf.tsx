@@ -4,12 +4,13 @@
 // off: no renaming, no deleting, no retell, no rehearsal, no observations.
 // Adding is one button, and it takes EPUBs only (reading/session/import-book.ts).
 //
-// What it adds instead is the two answers only this shell needs: a PDF is drawn
-// but not opened, and a book that is not on this device says so and is fetched
-// when it is tapped (shelf-list.ts).
+// What it adds instead is the answers only this shell needs: a PDF is drawn but
+// not opened, a book that is not on this device says so and is fetched when it
+// is tapped, and a file the desk has not imported yet says that instead of
+// pretending to be either (shelf-list.ts).
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { listLibraryEntries, libraryHas, type LibraryEntry } from "../../../platform/app/library";
+import { libraryHas, type LibraryEntry } from "../../../platform/app/library";
 import { fetchBook, subscribeSyncStatus } from "../../../platform/sync";
 import { sortedFiles, type Topic } from "../../../platform/app/topics";
 import { importEpub, uploadImported } from "../../../reading/session/import-book";
@@ -49,6 +50,11 @@ export default function PhoneShelf(props: {
   topics: Topic[] | null;
   // The topic being looked into, or null for the list of topics.
   topic: Topic | null;
+  // The library registry, held by the shell so a pull that lands library.json
+  // redraws these cards (PhoneApp registers the shelf's pull route). A file
+  // that is in a topic but not in here has not been imported on the desk yet,
+  // and the card says so rather than guessing (shelf-list.ts).
+  entries: Record<string, LibraryEntry>;
   onOpenTopic: (topicId: string) => void;
   onOpenBook: (book: PhoneBookOpen) => void;
   onBack: () => void;
@@ -61,6 +67,7 @@ export default function PhoneShelf(props: {
     return (
       <TopicShelf
         topic={props.topic}
+        entries={props.entries}
         onOpenBook={props.onOpenBook}
         onBack={props.onBack}
         onSay={props.onSay}
@@ -143,13 +150,13 @@ function topicLine(topics: Topic[]): string {
 
 function TopicShelf(props: {
   topic: Topic;
+  entries: Record<string, LibraryEntry>;
   onOpenBook: (book: PhoneBookOpen) => void;
   onBack: () => void;
   onSay: (line: string) => void;
   onImported: () => Promise<void>;
 }) {
-  const { topic } = props;
-  const [entries, setEntries] = useState<Record<string, LibraryEntry>>({});
+  const { topic, entries } = props;
   // The book ids whose bytes are in the library directory. Null while it is
   // being worked out: "in the cloud" is a claim about a directory nobody has
   // listed yet.
@@ -164,21 +171,23 @@ function TopicShelf(props: {
 
   const files = sortedFiles(topic);
 
-  const readShelf = useCallback(async (): Promise<void> => {
-    const all = await listLibraryEntries().catch((): Record<string, LibraryEntry> => ({}));
+  // Which of this topic's books have their bytes here. Re-run whenever the
+  // shell hands down a new topic or a new registry — a pull that wrote
+  // topics.json or library.json does both (PhoneApp), and a book downloaded
+  // here does it on its own.
+  const readOnDevice = useCallback(async (): Promise<void> => {
     const here = new Set<string>();
     await Promise.all(
       sortedFiles(topic).map(async (f) => {
         if (f.hash && (await libraryHas(f.hash).catch(() => false))) here.add(f.hash);
       }),
     );
-    setEntries(all);
     setOnDevice(here);
-  }, [topic]);
+  }, [topic, entries]);
 
   useEffect(() => {
-    void readShelf();
-  }, [readShelf]);
+    void readOnDevice();
+  }, [readOnDevice]);
 
   useEffect(
     () => subscribeSyncStatus((s) => setCan({ configured: s.configured, signedIn: s.signedIn })),
@@ -208,7 +217,7 @@ function TopicShelf(props: {
       setDownloading(action.bookId);
       try {
         await fetchBook(action.bookId);
-        await readShelf();
+        await readOnDevice();
         setCoverRevision((n) => n + 1);
         props.onOpenBook({
           bookId: action.bookId,
@@ -223,7 +232,7 @@ function TopicShelf(props: {
         setDownloading(null);
       }
     },
-    [can, onDevice, props, readShelf, topic.id],
+    [can, onDevice, props, readOnDevice, topic.id],
   );
 
   const importBook = useCallback(async (): Promise<void> => {

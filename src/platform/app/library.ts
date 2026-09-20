@@ -23,6 +23,17 @@ export function bookExtension(format: BookFormat | undefined): string {
   return format === "epub" ? "epub" : "pdf";
 }
 
+// The other direction, for a file that has no entry yet: what its name says it
+// is. A file added on the desk is imported the first time it is opened, so a
+// shelf can hold a row for it before anything has looked at its bytes. Null
+// when the name says neither — not knowing is not the same as a PDF.
+export function bookFormatOfPath(path: string): BookFormat | null {
+  const name = basename(path).toLowerCase();
+  if (name.endsWith(".epub")) return "epub";
+  if (name.endsWith(".pdf")) return "pdf";
+  return null;
+}
+
 // The library copy's path. The extension follows the format, so nothing on the
 // way to opening a book has to be told what kind it is a second time.
 export function libraryBookPath(bookId: string, format?: BookFormat): string {
