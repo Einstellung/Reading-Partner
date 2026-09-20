@@ -146,6 +146,11 @@ const LAYER: Record<string, Layer> = {
   "info/briefer": "domain",
   "info/cable": "domain",
   "info/collect": "domain",
+  // The dinner line (docs/73): a research room by the reasoning of docs/63,
+  // with its own store rather than a Lab record, because it claims no sources
+  // and must not enter the collection pipeline. It reads nothing else under
+  // info/, so it is a leaf.
+  "info/dinner": "domain",
   "info/extract": "domain",
   "info/labs": "domain",
   "info/picture": "domain",
