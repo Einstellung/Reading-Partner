@@ -17,8 +17,8 @@ import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../soul/voi
 import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 import type { Briefing } from "../../../info/boxes/types";
 import type { TurnActivity } from "../../../ai/activity";
-import { useAttention } from "../lumen/use-attention";
-import type { Attention } from "../lumen/lumen-motion";
+import { useAttention } from "./use-attention";
+import type { Attention } from "./lumen-motion";
 
 export interface VoiceCallOptions {
   /** The day whose thread the call is about. */

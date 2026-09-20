@@ -210,7 +210,7 @@ export default function InfoHome(props: {
             {wrapped}
             {/* The corner entry is Lumen's now, in every shell and on every
                 screen (ui/components/lumen/LumenCorner, docs/68). The voice call
-                itself is not gone — use-voice-call and the iOS plugin stand —
+                itself is not gone — lumen/use-voice-call and the iOS plugin stand —
                 but nothing reaches it until it comes back as the bottom item of
                 Lumen's column. */}
           </>

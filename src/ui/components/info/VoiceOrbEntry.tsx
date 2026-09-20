@@ -21,7 +21,7 @@ import type { Attention } from "../lumen/lumen-motion";
 import { orbErrorLine, type OrbPhase, type SpeechEnvelope, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
-import { useVoiceCall, type VoiceCallView } from "./use-voice-call";
+import { useVoiceCall, type VoiceCallView } from "../lumen/use-voice-call";
 import type { Briefing } from "../../../info/boxes/types";
 
 // `briefing` is the day's briefing as this page holds it, passed down rather
@@ -137,7 +137,7 @@ function useStubCall(): { handle: VoiceCallHandle; rest: boolean; attention: Att
 	// Asleep is not a phase (src/ui/components/lumen/lumen-motion.ts) and nothing in the
 	// app sets it yet, so the harness is the only thing that can show it.
 	const [rest, setRest] = useState(false);
-	// A live call gets this from its turns' tool calls (use-voice-call.ts); here
+	// A live call gets this from its turns' tool calls (lumen/use-voice-call.ts); here
 	// it is a knob, so the check act can be seen without a turn behind it.
 	const [attention, setAttention] = useState<Attention>("reader");
 	const subscribers = useRef(new Set<(value: number) => void>());
