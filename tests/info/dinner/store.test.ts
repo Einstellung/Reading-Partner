@@ -59,6 +59,7 @@ function plan(over: Partial<WeekPlan> = {}): WeekPlan {
 function item(name: string, checked = false): ShoppingItem {
   return {
     name,
+    en: "",
     qty: "1",
     category: "produce",
     keeps: "d3-5",

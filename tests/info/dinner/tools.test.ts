@@ -71,7 +71,7 @@ const fullWeek = {
       keepsADay: true,
       handsOnMinutes: 12,
       ingredients: [
-        { name: "chicken thighs", qty: "600g", category: "protein", keeps: "d1-2" },
+        { name: "chicken thighs", en: "chicken thighs", qty: "600g", category: "protein", keeps: "d1-2" },
       ],
     },
   ],
@@ -188,7 +188,7 @@ test("a category or shelf life the model invented falls back instead of throwing
   const dishes = toDishDrafts([
     {
       name: "x",
-      ingredients: [{ name: "kelp", qty: "1", category: "seaweed", keeps: "forever" }],
+      ingredients: [{ name: "kelp", en: "kelp", qty: "1", category: "seaweed", keeps: "forever" }],
     },
   ]);
   expect(dishes[0]?.ingredients[0]).toMatchObject({ category: "other", keeps: "d3-5" });
