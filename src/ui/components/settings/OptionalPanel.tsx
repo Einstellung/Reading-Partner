@@ -8,6 +8,7 @@
 
 import { type Settings } from "../../../platform/app/settings";
 import { Input } from "../ui/input";
+import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { CARD } from "./cardStyles";
 import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
@@ -32,6 +33,24 @@ export default function OptionalPanel({
       </p>
 
       <div className={SETTINGS_PANEL}>
+        {/* Not a key, and the one thing on this tab that costs nothing to turn
+            on. Off, the app has no dinner screen and no entry to one; the data
+            it has already written stays where it is (docs/73). */}
+        <SettingsSection title="Dinner">
+          <div className={CARD}>
+            <Label>
+              <Switch
+                checked={settings.dinner}
+                onCheckedChange={(v) => onSettingsChange({ ...settings, dinner: v === true })}
+              />
+              Dinner
+            </Label>
+            <p className="m-0 text-xs text-faint-foreground">
+              Plan the week's dinners, keep the shopping list, say when you ate something else.
+            </p>
+          </div>
+        </SettingsSection>
+
         <SettingsSection title="Lesson prep">
           <div className={CARD}>
             <Label layout="stack">

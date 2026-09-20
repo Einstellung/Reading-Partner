@@ -13,9 +13,9 @@
 
 import appIcon from "../../assets/app-icon.png";
 import { lumenToggleTitle } from "../lumen/corner-pref";
-import { IconBriefing, IconBooks, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
+import { IconBriefing, IconBooks, IconDinner, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
 import { restartLabel, type UpdateState } from "../../../platform/app/update-policy";
-import { SHELL_NAV_ITEMS, type ShellNavId } from "../base/shell-nav";
+import { shellNavItems, type ShellNavId } from "../base/shell-nav";
 import {
   collapseToggleTitle,
   sidebarLabelClass,
@@ -30,6 +30,7 @@ import { Button } from "../ui/button";
 const ICONS: Record<ShellNavId, (p: { size?: number }) => JSX.Element> = {
   today: IconToday,
   briefing: IconBriefing,
+  dinner: IconDinner,
   topics: IconBooks,
   settings: IconGear,
 };
@@ -97,6 +98,9 @@ export default function AppSidebar(props: {
   // nothing.
   update?: UpdateState;
   onApplyUpdate?: () => void;
+  // Whether the dinner line is switched on (settings.dinner, docs/73). Off, and
+  // its row is not in the column at all.
+  dinner?: boolean;
 }) {
   const collapsed = props.collapsed;
   const toggle = (
@@ -141,7 +145,7 @@ export default function AppSidebar(props: {
       </div>
       {collapsed && toggle}
 
-      {SHELL_NAV_ITEMS.map((item) => (
+      {shellNavItems({ dinner: props.dinner === true }).map((item) => (
         <Row
           key={item.id}
           label={item.label}

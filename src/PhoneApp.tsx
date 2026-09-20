@@ -79,6 +79,8 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
       return "article";
     case "sources":
       return "sources";
+    case "dinner":
+      return "dinner";
     default:
       return null;
   }
@@ -311,6 +313,7 @@ export default function PhoneApp({
             // so a chat over one would not know what it was reading. The gesture
             // is this shell's, so it is this shell that wraps the screen in it.
             wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
+            dinnerEnabled={settings.dinner}
             // No corner cards over the chat. The reader pulled it down or
             // pressed Ask and pops it with a back, so the chat is a screen like
             // any other; a card that shrank it away would be a second way out,
@@ -325,6 +328,8 @@ export default function PhoneApp({
                 onContinue={(book) => openReader({ ...book, name: book.title })}
                 onOpenLibrary={() => setStack((s) => push(s, screen("library")))}
                 settingsAlert={syncReport.alert !== "none"}
+                dinner={settings.dinner}
+                onOpenDinner={() => onNavigate("dinner")}
                 lumenShown={lumenShown}
                 onToggleLumen={toggleLumen}
               />
