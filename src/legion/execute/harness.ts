@@ -28,6 +28,7 @@
 
 import {
   AgentHarness,
+  FileError,
   JsonlSessionRepo,
   type AgentHarnessTool,
   type AgentMessage,
@@ -183,13 +184,33 @@ export async function resolveHarnessStream(params: {
   return { model: call.model, streamFn };
 }
 
+type StoreDeps = Pick<HarnessDeps, "fileSystem" | "sessionsRoot" | "now">;
+
+// The repo and the disk it was built on, resolved together. Setting a session
+// file aside (openOrCreateSession) renames it behind the repo's back, so it has
+// to happen on the very filesystem the repo reads — resolving the default twice
+// would put the rename on a second instance.
+function sessionStore(deps: StoreDeps): {
+  repo: JsonlSessionRepo;
+  fileSystem: FileSystem;
+  now: () => number;
+} {
+  const fileSystem = deps.fileSystem ?? createSessionFileSystem();
+  const now = deps.now ?? Date.now;
+  return {
+    fileSystem,
+    now,
+    repo: new JsonlSessionRepo({
+      fileSystem,
+      sessionsRoot: deps.sessionsRoot ?? SESSIONS_ROOT,
+      now,
+    }),
+  };
+}
+
 /** The session store, as this app keeps it. */
-export function createSessionRepo(deps: Pick<HarnessDeps, "fileSystem" | "sessionsRoot" | "now">) {
-  return new JsonlSessionRepo({
-    fileSystem: deps.fileSystem ?? createSessionFileSystem(),
-    sessionsRoot: deps.sessionsRoot ?? SESSIONS_ROOT,
-    ...(deps.now ? { now: deps.now } : {}),
-  });
+export function createSessionRepo(deps: StoreDeps) {
+  return sessionStore(deps).repo;
 }
 
 /**
@@ -200,9 +221,10 @@ export function createSessionRepo(deps: Pick<HarnessDeps, "fileSystem" | "sessio
  * makes a crash mid-tool a pause rather than a loss.
  */
 export async function createHarness(deps: HarnessDeps, context: Context): Promise<HarnessHandle> {
-  const repo = createSessionRepo(deps);
+  const store = sessionStore(deps);
+  const repo = store.repo;
   const cwd = deps.cwd ?? SESSIONS_ROOT;
-  const session = deps.session ?? (await openOrCreateSession(repo, cwd, context));
+  const session = deps.session ?? (await openOrCreateSession(store, cwd, context));
   const tools = deps.tools ?? [];
 
   const { harness, open } = await AgentHarness.create<undefined>(
@@ -240,12 +262,64 @@ export async function createHarness(deps: HarnessDeps, context: Context): Promis
 // The newest session of the group, or a new one. Newest rather than all of
 // them: an operation left open belongs to the run that was interrupted, and
 // that is the last session written.
+//
+// A session that will not open is set aside rather than retried forever. The
+// JSONL storage replays every line on open and throws on the first bad one; it
+// heals a torn last line and nothing else, so one bad line in the middle makes
+// that file fatal for good, and every turn after it dies on the same open
+// (docs/pitfall/367). A session is machine-local runtime state and losing one
+// costs a device its resumable operations, not its history — the conversation
+// the reader sees is projected from elsewhere (src/palace/kinds.ts, docs/71).
 async function openOrCreateSession(
-  repo: JsonlSessionRepo,
+  store: ReturnType<typeof sessionStore>,
   cwd: string,
   context: Context,
 ): Promise<Session> {
+  const { repo, fileSystem, now } = store;
   const existing = await repo.list({ cwd }, context);
   const newest = [...existing].sort((a, b) => b.createdAt - a.createdAt)[0];
-  return newest ? await repo.open(newest, context) : await repo.create({ cwd }, context);
+  if (newest) {
+    try {
+      return await repo.open(newest, context);
+    } catch (error) {
+      if (isFileFailure(error)) throw error;
+      await setAside(fileSystem, newest.path, now(), error, context);
+    }
+  }
+  return await repo.create({ cwd }, context);
+}
+
+// Rename the file out of the way. `JsonlSessionRepo.list` only considers names
+// ending in `.jsonl`, so the renamed one is never opened again; nothing deletes
+// it, because it is the only copy of what the run had written.
+async function setAside(
+  fileSystem: FileSystem,
+  path: string,
+  now: number,
+  cause: unknown,
+  context: Context,
+): Promise<void> {
+  const aside = `${path}.corrupt-${now}`;
+  const renamed = await fileSystem.renameFile(path, aside, context);
+  console.warn(
+    renamed.ok
+      ? `session ${path} would not open; set aside as ${aside} and starting a fresh one`
+      : `session ${path} would not open and could not be set aside (${renamed.error.message}); starting a fresh one`,
+    cause,
+  );
+}
+
+// Whether the open failed because the disk would not answer, rather than
+// because of what the file holds. session-fs.ts reports every filesystem
+// failure as pi's FileError and the repo rethrows it as its own error's
+// `cause`; a bad line arrives with a plain Error instead. An unreadable disk
+// keeps behaving as it did — the next turn retries it and nothing is renamed.
+function isFileFailure(error: unknown): boolean {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    if (current instanceof FileError) return true;
+    // `cause` is ES2022 and this project's lib is older; the runtime has it.
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }

@@ -152,6 +152,7 @@
 
 ## 存储与数据目录
 
+- [367-a-bad-line-in-the-middle-of-a-session-file-is-fatal-forever](./367-a-bad-line-in-the-middle-of-a-session-file-is-fatal-forever.md) — pi 的 `JsonlStorage.open` 把整份 session 从头回放，只自愈没有结尾换行的最后一行，中间坏一行就永远抛（`Invalid JSONL storage …: line 67408`）；我们抛完只把 handle 清掉让下个回合重试同一份文件，于是每个 soul 回合都死在同一行，用户只能清 app 数据。打不开就 rename 成 `.corrupt-<now>`（`list` 只认 `.jsonl`）再新建一份，不删；盘读不出来（`cause` 链上有 `FileError`）照旧抛，不挪
 - [339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file](./339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file.md) — loader 解析失败时返回空值，下一次追加拿空值覆写整个登记表，所有条目无声消失；内容不能重建的 JSON 走 `readGuardedJson`，坏内容先隔离再兜底
 - [338-concurrent-appends-to-one-jsonl-keep-only-the-last](./338-concurrent-appends-to-one-jsonl-keep-only-the-last.md) — 一个回合 19 次 fire-and-forget 的 `recordModelCall`，`model-calls-*.jsonl` 里只剩 1 行：追加是「读整份 → 拼行 → 原子写回」，同一 tick 的调用读到同一份旧内容再互相盖。按路径把读-改-写串行化（`memory/usage/log.ts` 的 `writeInTurn`），不改走 `appendText`——同步靠 `writeTextAtomic` 的通知知道文件变了，字节上限也要读整份
 - [293-a-fixed-zip-mtime-is-not-fixed-across-time-zones](./293-a-fixed-zip-mtime-is-not-fixed-across-time-zones.md) — 给 zip 条目定死一个 UTC 瞬间做时间戳，字节仍然跨时区变：zip 存 DOS 日期，fflate 用本地时间取值器拆字段，同一瞬间在三个时区写出三种字节，构建出来的 EPUB 于是在另一台设备上哈希成第二本书。时间戳要用本地日历字段构造（`new Date(2001, 0, 1, 12, 0, 0)`），`mtime: 0` 在 DOS 日期里表示不出来

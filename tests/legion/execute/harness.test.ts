@@ -13,6 +13,8 @@
 import { expect, test } from "bun:test";
 import {
   BACKGROUND_CONTEXT,
+  FileError,
+  err,
   type AgentHarnessTool,
   type Entry,
   type FileSystem,
@@ -28,7 +30,7 @@ import {
 import type { StreamFn } from "../../../src/legion/execute/turn";
 import { createHarness, type HarnessDeps } from "../../../src/legion/execute/harness";
 import { createSessionFileSystem, SESSIONS_ROOT } from "../../../src/platform/app/session-fs";
-import { memoryAppData } from "../../support/memory-appdata";
+import { memoryAppData, type MemoryDisk } from "../../support/memory-appdata";
 
 const ctx = BACKGROUND_CONTEXT;
 
@@ -244,4 +246,97 @@ test("a run interrupted mid-tool is listed as open and resumes to completion", a
   expect(lines[3]).toBe("assistant text:finished after resume");
 
   await reopened.close(ctx);
+});
+
+function sessionFiles(disk: MemoryDisk): string[] {
+  return [...disk.files.keys()].filter((path) => path.endsWith(".jsonl"));
+}
+
+function setAsideFiles(disk: MemoryDisk): string[] {
+  return [...disk.files.keys()].filter((path) => path.includes(".jsonl.corrupt-"));
+}
+
+// A line the storage cannot replay. pi heals a torn last line and nothing
+// else, so a bad line in the middle is fatal for every turn after it unless
+// the file is moved out of the way (docs/pitfall/367).
+function corruptMiddleLine(disk: MemoryDisk, path: string): void {
+  const lines = new TextDecoder().decode(disk.files.get(path)!).split("\n");
+  expect(lines.length).toBeGreaterThan(4);
+  lines[2] = "{ this is not json";
+  disk.files.set(path, new TextEncoder().encode(lines.join("\n")));
+}
+
+test("a session whose middle line will not replay is set aside and a fresh one takes over", async () => {
+  const disk = memoryAppData();
+  const fileSystem = createSessionFileSystem(disk);
+
+  const first = rig(fileSystem);
+  const handle = await createHarness(deps(first), ctx);
+  first.faux.setResponses([
+    fauxAssistantMessage([fauxText("first answer")], { stopReason: "stop" }),
+  ]);
+  const lane = await handle.harness.lane("soul", ctx);
+  expect((await lane.prompt("hello", undefined, ctx)).ok).toBe(true);
+  await handle.close(ctx);
+
+  const path = sessionFiles(disk)[0]!;
+  corruptMiddleLine(disk, path);
+  const broken = disk.files.get(path)!;
+
+  // --- second process, same store ---
+  const second = rig(fileSystem);
+  second.faux.setResponses([
+    fauxAssistantMessage([fauxText("second answer")], { stopReason: "stop" }),
+  ]);
+  const reopened = await createHarness(deps(second), ctx);
+  expect(reopened.open).toEqual([]);
+  const freshLane = await reopened.harness.lane("soul", ctx);
+  expect((await freshLane.prompt("hello again", undefined, ctx)).ok).toBe(true);
+  expect(transcript(await freshLane.findEntries(undefined, ctx))).toEqual([
+    "user text:hello again",
+    "assistant text:second answer",
+  ]);
+
+  // The broken file is off the repo's listing but still on the disk, byte for
+  // byte: nothing deletes the only copy of what the run wrote.
+  expect(disk.files.has(path)).toBe(false);
+  expect(setAsideFiles(disk)).toHaveLength(1);
+  expect(setAsideFiles(disk)[0]!.startsWith(`${path}.corrupt-`)).toBe(true);
+  expect(disk.files.get(setAsideFiles(disk)[0]!)).toEqual(broken);
+  expect(sessionFiles(disk)).toHaveLength(1);
+  await reopened.close(ctx);
+
+  // --- third process: the fresh session opens, and nothing is set aside ---
+  const third = rig(fileSystem);
+  const again = await createHarness(deps(third), ctx);
+  const sameLane = await again.harness.lane("soul", ctx);
+  expect(transcript(await sameLane.findEntries(undefined, ctx))).toEqual([
+    "user text:hello again",
+    "assistant text:second answer",
+  ]);
+  expect(setAsideFiles(disk)).toHaveLength(1);
+  expect(sessionFiles(disk)).toHaveLength(1);
+  await again.close(ctx);
+});
+
+// The other half of the decision: a filesystem that refuses is not the file's
+// content being wrong, and the next turn is meant to retry the same file.
+test("a disk that will not answer is not set aside", async () => {
+  const disk = memoryAppData();
+  const fileSystem = createSessionFileSystem(disk);
+  const first = rig(fileSystem);
+  const handle = await createHarness(deps(first), ctx);
+  first.faux.setResponses([fauxAssistantMessage([fauxText("answer")], { stopReason: "stop" })]);
+  const lane = await handle.harness.lane("soul", ctx);
+  expect((await lane.prompt("hello", undefined, ctx)).ok).toBe(true);
+  await handle.close(ctx);
+
+  const asleep: FileSystem = {
+    ...fileSystem,
+    readTextFile: async (path) => err(new FileError("unknown", "the disk is asleep", path)),
+  };
+  const second = rig(asleep);
+  await expect(createHarness(deps(second), ctx)).rejects.toThrow(/Failed to read JSONL storage/);
+  expect(setAsideFiles(disk)).toEqual([]);
+  expect(sessionFiles(disk)).toHaveLength(1);
 });
