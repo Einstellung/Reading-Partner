@@ -132,7 +132,10 @@ export function laterDays(plan: WeekPlan | null, today: string): DayView[] {
 /**
  * Up to three ingredient photographs standing in for a dish that has no picture
  * of its own. Three is what fits in a strip the width of one card; ingredients
- * the bank has never heard of are skipped rather than drawn as a gap.
+ * no source has a photograph of are skipped rather than drawn as a gap.
+ *
+ * Resolved by the English name, never the reader's — images.ts is one table in
+ * one language.
  */
 export function dishThumbnails(
   dish: Dish | null,
@@ -141,7 +144,7 @@ export function dishThumbnails(
   if (!dish) return [];
   const urls: string[] = [];
   for (const ing of dish.ingredients) {
-    const url = resolve(ing.name);
+    const url = resolve(ing.en);
     if (url) urls.push(url);
     if (urls.length === 3) break;
   }
