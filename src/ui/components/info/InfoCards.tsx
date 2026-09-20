@@ -19,6 +19,10 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
 } from "../../../info/boxes/cards";
+import type { DinnerCharterCardData, DinnerPlanCardData } from "../../../info/dinner/cards";
+import type { WeekPlan } from "../../../info/dinner/types";
+import { modeWord, weekdayName } from "../../../info/dinner/view";
+import { dishForDay } from "../../../info/dinner/week";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -313,6 +317,107 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 // The info domain's share of the card registry, merged with the other domains'
 // in ui/components/cardRegistry.ts — which is where the render layer looks a card
 // up.
+// The dinner charter: what the AI understood about the household after two or
+// three questions (docs/73 三张卡). The paragraph in their own words is the
+// card — the counted fields are what the program sorts by, and reading them
+// back as a form is what this line exists not to be.
+export function DinnerCharterCard({ payload, dispatch }: CardComponentProps<DinnerCharterCardData>) {
+  const applied = payload.phase === "applied";
+  return (
+    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
+        {applied ? "Saved" : "Your dinners"}
+      </div>
+      <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{payload.text}</div>
+      <div className="mt-2 text-[12px] leading-relaxed text-faint-foreground">
+        {payload.people} eating · {payload.nightsCooking} cooking, {payload.nightsOut} out,{" "}
+        {payload.nightsDelivery} delivery
+        {payload.stores.length ? ` · ${payload.stores.join(", ")}` : ""}
+      </div>
+      {payload.dislikes.length > 0 && (
+        <div className="mt-1 text-[12px] text-faint-foreground">
+          Never: {payload.dislikes.join(", ")}
+        </div>
+      )}
+      <div className="mt-3.5 flex items-center justify-end gap-2">
+        {applied ? (
+          <span className="text-[12px] text-faint-foreground">Saved. Change it by saying so.</span>
+        ) : (
+          <Button
+            type="button"
+            variant="cta"
+            size="chip"
+            className="px-3.5 py-1.5"
+            onClick={() => dispatch({ kind: "mutate", op: "apply-dinner-charter" })}
+          >
+            That's right
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// The week, or the night or two a deviation reopened. Seven rows either way —
+// the card always carries the whole week as it would stand once applied — with
+// the days this call actually changes marked, since on an adjustment those are
+// the only ones the reader has to read.
+export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<DinnerPlanCardData>) {
+  const applied = payload.phase === "applied";
+  const changed = new Set(payload.changedDates);
+  const plan: WeekPlan = {
+    id: "",
+    startDate: payload.startDate,
+    days: payload.days,
+    dishes: payload.dishes,
+    createdAt: 0,
+    revision: 0,
+  };
+  return (
+    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
+        {applied ? "Planned" : payload.adjustment ? "A change to the week" : "This week's dinners"}
+      </div>
+      <ul className="m-0 mt-2 flex list-none flex-col p-0">
+        {payload.days.map((day) => {
+          const dish = dishForDay(plan, day);
+          const mark = changed.has(day.date);
+          return (
+            <li
+              key={day.date}
+              className={
+                "flex items-center gap-2 py-1 text-[13px] leading-snug " +
+                (mark ? "font-medium text-foreground" : "text-muted-foreground")
+              }
+            >
+              <span className="w-16 flex-none text-faint-foreground">{weekdayName(day.date)}</span>
+              <span className="w-14 flex-none">{modeWord(day.mode)}</span>
+              <span className="min-w-0 flex-1 truncate">{dish?.name ?? day.place ?? ""}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-3.5 flex items-center justify-end gap-2">
+        {applied ? (
+          <span className="text-[12px] text-faint-foreground">
+            It's on your dinner screen, shopping list and all.
+          </span>
+        ) : (
+          <Button
+            type="button"
+            variant="cta"
+            size="chip"
+            className="px-3.5 py-1.5"
+            onClick={() => dispatch({ kind: "mutate", op: "apply-dinner-plan" })}
+          >
+            {payload.adjustment ? "Change it" : "Plan the week"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "probe-confirm": ProbeConfirmCard,
   "briefing-progress": BriefingProgressCard,
@@ -321,4 +426,6 @@ export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "lab-proposal": LabProposalCard,
   "lab-archive": LabArchiveCard,
   "briefing-failed": BriefingFailedCard,
+  "dinner-charter": DinnerCharterCard,
+  "dinner-plan": DinnerPlanCard,
 };
