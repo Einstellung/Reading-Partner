@@ -5,20 +5,37 @@
 // card here answers two questions the desk's shelf never has to ask: is this a
 // format this shell can draw, and are the bytes even on this device. Both are
 // decided here so the grid only renders the answer.
+//
+// Neither question has an answer for a file the library has never described: a
+// file added on the desk is imported the first time it is opened, and the two
+// files a card is made of (topics.json, library.json) sync apart. Such a card
+// says it was not imported rather than guessing PDF, which is what it used to
+// do — and a PDF is the one card this shell refuses to open.
 
-import { isArticleEntry, type LibraryEntry } from "../../../platform/app/library";
+import {
+  bookFormatOfPath,
+  isArticleEntry,
+  type LibraryEntry,
+} from "../../../platform/app/library";
 import { mostRecentlyOpened, type FileRef, type Topic } from "../../../platform/app/topics";
 import { articleRowLine } from "../shelf/article-row";
 import { displayFileTitle } from "../shelf/file-title";
 
 // What the phone can do with a file. "pdf" is drawn like any other book — its
-// cover renders — and says so only when it is tapped.
-export type MaterialFormat = "epub" | "pdf";
+// cover renders — and says so only when it is tapped. "unknown" is a file no
+// library entry describes and whose name says neither: the shelf says it does
+// not know rather than calling it a PDF.
+export type MaterialFormat = "epub" | "pdf" | "unknown";
 
 export interface ShelfMaterial {
   file: FileRef;
   bookId: string | null;
   format: MaterialFormat;
+  // Whether the library registry on this device describes this file. False for
+  // a file the desk added to a topic but has not imported yet, and for one
+  // whose topics.json row arrived before the matching library.json revision.
+  // The format then comes from the file's name, and there is nothing to fetch.
+  filed: boolean;
   title: string;
   // Whether the blob is on this device. A phone mirrors no books, so an EPUB
   // read on the desk is in the account and not here until it is asked for.
@@ -50,13 +67,23 @@ export function shelfMaterials(
     return {
       file,
       bookId: file.hash ?? null,
-      format: entry?.format === "epub" ? "epub" : "pdf",
+      format: materialFormat(file, entry),
+      filed: entry !== undefined,
       title: displayFileTitle(file.name),
       onDevice: file.hash !== undefined && onDevice.has(file.hash),
       article: isArticleEntry(entry),
       line: entry && isArticleEntry(entry) ? articleRowLine(entry) : "",
     };
   });
+}
+
+// What is actually known about a file's kind. The entry is the import's own
+// answer and wins — an absent `format` there means PDF (platform/app/library.ts).
+// Without an entry the name is all there is, and a name that says neither leaves
+// the question open.
+function materialFormat(file: FileRef, entry: LibraryEntry | undefined): MaterialFormat {
+  if (entry) return entry.format === "epub" ? "epub" : "pdf";
+  return bookFormatOfPath(file.path) ?? "unknown";
 }
 
 /**
@@ -107,19 +134,27 @@ export type MaterialTap =
   | { kind: "pdf" }
   // Pull this one book out of the account, then open it.
   | { kind: "download"; bookId: string }
-  // The bytes are elsewhere and this device cannot go and get them.
+  // There is nothing here to open, and no copy this device can go and get.
   | { kind: "unavailable"; why: string };
 
 export const PDF_ELSEWHERE = "PDFs open on iPad and desktop";
 const NOT_CONFIGURED = "This build has no Google account set up, so it cannot download the book";
 const SIGNED_OUT = "Sign in to your account in Settings to download this book";
-const NO_BOOK_ID = "This file has never been imported, so there is nothing to download";
+// No entry and no book id: the desk filed the path and nothing has read the
+// file's bytes yet, so no copy of it exists anywhere to be fetched.
+export const NOT_IMPORTED = "The desk has not imported this file yet, so there is nothing to get";
+// A book id but no entry: the topics row got here before library.json did.
+export const NOT_FILED_YET = "This book has not finished syncing to this device yet";
 
 /** What a tap on one card does. */
 export function materialTap(m: ShelfMaterial, can: FetchAbility): MaterialTap {
   if (m.format === "pdf") return { kind: "pdf" };
+  // A file nothing has described, whatever bytes may be beside it: opening it
+  // would hand the reflow view something it may not be able to draw.
+  if (m.format === "unknown") return { kind: "unavailable", why: NOT_IMPORTED };
   if (m.onDevice) return { kind: "open" };
-  if (!m.bookId) return { kind: "unavailable", why: NO_BOOK_ID };
+  if (!m.bookId) return { kind: "unavailable", why: NOT_IMPORTED };
+  if (!m.filed) return { kind: "unavailable", why: NOT_FILED_YET };
   if (!can.configured) return { kind: "unavailable", why: NOT_CONFIGURED };
   if (!can.signedIn) return { kind: "unavailable", why: SIGNED_OUT };
   return { kind: "download", bookId: m.bookId };
@@ -133,5 +168,7 @@ export function materialTap(m: ShelfMaterial, can: FetchAbility): MaterialTap {
 export function materialNote(m: ShelfMaterial, downloading: boolean): string | null {
   if (m.format === "pdf") return "PDF";
   if (downloading) return "Downloading…";
-  return m.onDevice ? null : "In the cloud";
+  if (m.format === "unknown" || !m.bookId) return "Not imported";
+  if (m.onDevice) return null;
+  return m.filed ? "In the cloud" : "Not synced yet";
 }

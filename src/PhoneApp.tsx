@@ -20,7 +20,7 @@ import type { FlowReaderPaneProps } from "./reading/epub/flow-contract";
 import { initSync, TICK_MS } from "./platform/sync";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { registerPullRoute } from "./platform/sync/pull-routes";
-import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
+import { KEPT_ARTICLES_PULL_ROUTE, SHELF_PULL_ROUTE } from "./reading/pull-routes";
 import { startBellWatch } from "./soul";
 import { startRunner } from "./legion/execute/runner";
 import {
@@ -194,6 +194,11 @@ export default function PhoneApp({
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.
+  // The shelf is the other half: topics.json and library.json are what its cards
+  // are made of, and a book added on the desk reaches the phone as a pull and
+  // nothing else — without this route the phone drew the topics it had when the
+  // screen was last left. The two routes overlap on saved-articles.json, which
+  // costs one extra read of the shelf's two files.
   // Every other file a pull writes has a route of its own (platform/sync/
   // pull-routes.ts), settings.json included — this shell holds it whole in
   // memory and saves it whole, so a field merged in from another device is
@@ -208,11 +213,19 @@ export default function PhoneApp({
     void initSync("phone")
       .catch((e) => console.warn("sync init failed", e))
       .finally(() => void purgeLegacyChapterNotes());
-    return registerPullRoute({
+    const offKept = registerPullRoute({
       ...KEPT_ARTICLES_PULL_ROUTE,
       onPulled: () => void refreshSavedArticles(),
     });
-  }, [refreshSavedArticles]);
+    const offShelf = registerPullRoute({
+      ...SHELF_PULL_ROUTE,
+      onPulled: () => void refreshShelf(),
+    });
+    return () => {
+      offKept();
+      offShelf();
+    };
+  }, [refreshSavedArticles, refreshShelf]);
 
   // The soul's inbox, on the same beat as the pull (docs/55). The phone runs no
   // heavy work of its own, but a run it delegated to the desktop rings its bell
@@ -350,6 +363,7 @@ export default function PhoneApp({
                   ? (topics?.find((t) => t.id === base.topicId) ?? null)
                   : null
               }
+              entries={entries}
               onOpenTopic={(topicId) => setStack((s) => push(s, { kind: "topic", topicId }))}
               onOpenBook={openReader}
               onBack={goBack}

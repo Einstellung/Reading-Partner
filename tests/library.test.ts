@@ -7,6 +7,7 @@ import { contentHash } from "../src/platform/app/content-hash";
 import {
   LIBRARY_FILE,
   addEntry,
+  bookFormatOfPath,
   getLibraryEntry,
   displaySource,
   healLibrary,
@@ -44,6 +45,16 @@ test("libraryBookPath keys the copy by book id, and names it by format", () => {
   expect(libraryBookPath("deadbeef")).toBe("library/deadbeef.pdf");
   expect(libraryBookPath("deadbeef", "pdf")).toBe("library/deadbeef.pdf");
   expect(libraryBookPath("deadbeef", "epub")).toBe("library/deadbeef.epub");
+});
+
+test("bookFormatOfPath reads the name of a file no entry describes yet", () => {
+  expect(bookFormatOfPath("/books/a.epub")).toBe("epub");
+  expect(bookFormatOfPath("C:\\books\\a.PDF")).toBe("pdf");
+  // A name that says neither is not quietly turned into a PDF.
+  expect(bookFormatOfPath("/books/notes.txt")).toBeNull();
+  expect(bookFormatOfPath("/books/epub")).toBeNull();
+  // A directory that ends in ".epub" says nothing about the file in it.
+  expect(bookFormatOfPath("/books/x.epub/inner")).toBeNull();
 });
 
 test("addEntry registers a new book and is a no-op on re-import", () => {
