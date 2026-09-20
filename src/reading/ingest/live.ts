@@ -6,7 +6,7 @@
 
 import { importBook } from "../../platform/app/library";
 import { addSupplement } from "../../platform/app/supplements";
-import { addFileToTopic, setFileHash } from "../../platform/app/topics";
+import { addFileToTopic } from "../../platform/app/topics";
 import { loadExtractReadable } from "../../info/extract/readable-lazy";
 import { fetchWithRetry } from "../../platform/http/throttled-fetch";
 import {
@@ -38,10 +38,7 @@ export async function liveIngestDeps(): Promise<ArticleIngestDeps> {
     // once and the ingest itself never awaits a chunk mid-way.
     extractReadable: await loadExtractReadable(),
     importBook,
-    attachToTopic: async (topicId, path, hash) => {
-      await addFileToTopic(topicId, path);
-      await setFileHash(topicId, path, hash);
-    },
+    attachToTopic: (topicId, path, hash) => addFileToTopic(topicId, path, hash),
     // The clock is here rather than in the ingest: when it was taken in is a
     // fact about this device's run, and article.ts stays a function of its
     // inputs.

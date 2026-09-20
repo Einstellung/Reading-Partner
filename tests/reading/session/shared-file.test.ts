@@ -100,14 +100,18 @@ test("a book shared into the running app is opened, a callback is not", async ()
 
 const BRIEF: Topic = { id: "brief", name: "Brief", createdAt: 1, files: [] };
 
+const PDF = new TextEncoder().encode("%PDF-1.7\n1 0 obj\n");
+
 function fakeIo(over: Partial<SharedBookIo> = {}) {
-  const added: Array<{ topicId: string; path: string }> = [];
+  const added: Array<{ topicId: string; path: string; hash: string }> = [];
   const topic: Topic = { ...BRIEF, files: [] };
   const io: SharedBookIo = {
     ensureBriefTopic: async () => topic,
-    addFileToTopic: async (topicId, path) => {
-      added.push({ topicId, path });
-      topic.files.push({ path, name: path.split("/").pop() ?? path, addedAt: 2 });
+    readFile: async () => PDF,
+    importBook: async () => ({ hash: "content-hash" }),
+    addFileToTopic: async (topicId, path, hash) => {
+      added.push({ topicId, path, hash });
+      topic.files.push({ path, name: path.split("/").pop() ?? path, addedAt: 2, hash });
     },
     listTopics: async () => [topic],
     ...over,
@@ -115,18 +119,30 @@ function fakeIo(over: Partial<SharedBookIo> = {}) {
   return { io, added };
 }
 
-test("a shared book is filed in the Brief topic and comes back as its row", async () => {
+test("a shared book is imported and filed in the Brief topic with its book id", async () => {
   const { io, added } = fakeIo();
   const filed = await fileSharedBook(`${INBOX}/%E5%85%A8%E7%90%83.pdf`, io);
 
-  expect(added).toEqual([{ topicId: "brief", path: `${INBOX.slice(7)}/全球.pdf` }]);
+  expect(added).toEqual([
+    { topicId: "brief", path: `${INBOX.slice(7)}/全球.pdf`, hash: "content-hash" },
+  ]);
   expect(filed?.topicId).toBe("brief");
   expect(filed?.file.name).toBe("全球.pdf");
-  expect(filed?.file.hash).toBeUndefined();
+  expect(filed?.file.hash).toBe("content-hash");
 });
 
 test("a URL that names no book files nothing", async () => {
   const { io, added } = fakeIo();
   expect(await fileSharedBook("https://example.com/a.pdf", io)).toBeNull();
+  expect(added).toEqual([]);
+});
+
+// The name said PDF and the bytes say otherwise. Nothing is filed: a row would
+// point at something the reader cannot open.
+test("a shared file whose bytes are no book files nothing", async () => {
+  const { io, added } = fakeIo({
+    readFile: async () => new TextEncoder().encode("<html>an error page</html>"),
+  });
+  expect(await fileSharedBook(`${INBOX}/a.pdf`, io)).toBeNull();
   expect(added).toEqual([]);
 });

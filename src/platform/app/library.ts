@@ -24,9 +24,10 @@ export function bookExtension(format: BookFormat | undefined): string {
 }
 
 // The other direction, for a file that has no entry yet: what its name says it
-// is. A file added on the desk is imported the first time it is opened, so a
-// shelf can hold a row for it before anything has looked at its bytes. Null
-// when the name says neither — not knowing is not the same as a PDF.
+// is. Every door imports the book as it writes the row, so a row with no entry
+// is one written before that was true, or one whose library revision has not
+// arrived yet — topics.json and library.json sync apart. Null when the name
+// says neither — not knowing is not the same as a PDF.
 export function bookFormatOfPath(path: string): BookFormat | null {
   const name = basename(path).toLowerCase();
   if (name.endsWith(".epub")) return "epub";
