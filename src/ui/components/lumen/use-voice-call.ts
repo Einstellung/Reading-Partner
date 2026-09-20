@@ -98,6 +98,10 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
   const start = useCallback(() => {
     if (callRef.current || startingRef.current) return;
     startingRef.current = true;
+    // A new attempt starts with a clean line: the sentence a failed or lost call
+    // left above the body is about that call, and the corner is on every screen
+    // now, so it would otherwise stay up until the next failure replaced it.
+    setError(null);
     void (async () => {
       try {
         const call = await createLiveVoiceCall(optsRef.current);
@@ -135,6 +139,7 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
   const stop = useCallback(() => {
     const call = drop();
     setPhase("idle");
+    setError(null);
     void call?.stop().catch(() => {});
   }, [drop]);
 
