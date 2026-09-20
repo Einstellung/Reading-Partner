@@ -92,11 +92,10 @@ function numberMap(value: unknown): Record<string, number> {
   return out;
 }
 
-// Either width. The migration widens every id from 8 to 16 hex (src/migrate),
-// and a device that has not run it yet still holds narrow files — a build that
-// could not see those is worse than one that sees both. Narrows to 16 at 0.13,
-// when the migration directory is deleted.
-const ENTRY_FILE = /^(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))\.md$/;
+// An entry file: `m-<16hex>.md`. Ids were 8 hex before 0.12 and the 0.12
+// migration widened every one of them on disk; that migration is gone and no
+// store holds a narrow id any more.
+const ENTRY_FILE = /^(m-[0-9a-f]{16})\.md$/;
 
 // A conflict copy sync left beside an entry: `<id>.conflict-<digest>.md`, the
 // whole losing version of a file two devices both edited (platform/sync/merge).
@@ -104,8 +103,7 @@ const ENTRY_FILE = /^(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))\.md$/;
 // join the index or a prompt, and must not be rewritten by a later update — but
 // nothing else matched them either, so the reader's own writing sat on disk with
 // no way to know it was there. This is that way.
-// Either width, for as long as ENTRY_FILE is; narrows to 16 at 0.13.
-const CONFLICT_FILE = /^(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))\.conflict-[0-9a-f]+\.md$/;
+const CONFLICT_FILE = /^(m-[0-9a-f]{16})\.conflict-[0-9a-f]+\.md$/;
 
 // A conflict copy of the index, which is a different thing entirely: the index
 // is derived — rebuilt from the entry files after every mutation — so a losing
@@ -115,7 +113,7 @@ const CONFLICT_FILE = /^(m-(?:[0-9a-f]{16}|[0-9a-f]{8}))\.conflict-[0-9a-f]+\.md
 // owns this file's content.
 const INDEX_CONFLICT_FILE = /^index\.conflict-[0-9a-f]+\.md$/;
 
-// One line per deleted observation: `{"id":"m-1234abcd","at":"2026-08-31"}`.
+// One line per deleted observation: `{"id":"m-1234abcd5678ef90","at":"2026-08-31"}`.
 //
 // Removing the entry file is not a deletion that survives. Sync propagates no
 // file deletion by design — reconcile.ts leaves a file missing locally but
@@ -153,9 +151,7 @@ export interface ObservationConflict {
 }
 
 // 16 hex, the same 64-bit shape a message id has (platform/app/threads.ts).
-// Eight was 32 bits, and the migration that widens what is already on disk
-// (src/migrate) would be undone on the next write by a build still minting
-// narrow ones.
+// Eight was 32 bits, which 0.12 widened everywhere.
 function newId(): string {
   return `m-${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
@@ -205,8 +201,7 @@ export class ObservationFileStore {
   // `topic` filters on the archival label, which is what a caller asking for
   // "this topic's observations" means. Filtering rather than addressing: an
   // entry written before the field existed belongs to no topic and is left out
-  // of every topic's list, which is the migration's business to fix, not this
-  // read's to guess at.
+  // of every topic's list, which this read does not guess at.
   async list(topic?: string): Promise<Observation[]> {
     return this.readEntries(await this.fs.listDir(this.dir), await this.readTombstones(), topic);
   }
@@ -298,7 +293,7 @@ export class ObservationFileStore {
     if (!prev) return null;
     // Only a rewritten body is cleaned. One this build already wrote is clean,
     // and one it did not is a file on disk that a correction of some other
-    // field must not quietly rewrite — repairing those is migration work.
+    // field must not quietly rewrite.
     // Anchors found in a rewritten body still merge into whatever the entry
     // ends up with, patch or previous.
     const cleaned = cleanObservationBody(
@@ -399,7 +394,7 @@ export class ObservationFileStore {
   // store written before this file existed, an entry on disk and absent from the
   // index cannot be told from one the other device created and synced in before
   // this device last rebuilt — the owner's three arrived by exactly that route —
-  // so the migration deletes nothing and infers nothing.
+  // so this deletes nothing and infers nothing.
   async rebuildIndex(): Promise<void> {
     const text = await this.fs.read(this.tombstonePath);
     if (text === null) await this.fs.write(this.tombstonePath, "");

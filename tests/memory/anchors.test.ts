@@ -158,8 +158,8 @@ function obs(id: string, messages: string[]): Observation {
 // One turn, cited by an observation written before ids existed and by one
 // written after. Asking with only one form finds only half of them.
 test("a turn's observations are found through every stored form", () => {
-  const old = obs("m-aaaaaaaa", ["thread-1:2000"]);
-  const fresh = obs("m-bbbbbbbb", [`${ID_A}@thread-1:2000`]);
+  const old = obs("m-aaaaaaaaaaaaaaaa", ["thread-1:2000"]);
+  const fresh = obs("m-bbbbbbbbbbbbbbbb", [`${ID_A}@thread-1:2000`]);
   const index = buildAnchorIndex([old, fresh]);
 
   expect(observationsForMessage(index, MIXED[2], "thread-1")).toEqual([fresh, old]);
@@ -168,7 +168,7 @@ test("a turn's observations are found through every stored form", () => {
 });
 
 test("an observation citing a turn in two forms is listed once", () => {
-  const both = obs("m-cccccccc", ["thread-1:2000", `${ID_A}@thread-1:2000`]);
+  const both = obs("m-cccccccccccccccc", ["thread-1:2000", `${ID_A}@thread-1:2000`]);
   const index = buildAnchorIndex([both]);
   expect(observationsForMessage(index, MIXED[2], "thread-1")).toEqual([both]);
 });

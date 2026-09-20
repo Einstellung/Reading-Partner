@@ -21,8 +21,7 @@ test("create writes one file per observation and an index line", async () => {
     anchors: { annotationIds: ["ann-9"] },
   });
 
-  // 16 hex since 0.12: the migration widens what is on disk, and a build still
-  // minting 8 would grow the store both widths again.
+  // 16 hex since 0.12, which widened every id already on disk.
   expect(entry.id).toMatch(/^m-[0-9a-f]{16}$/);
   expect(entry.created).toBe("2026-07-17");
   expect(files.has(`observations/${entry.id}.md`)).toBe(true);
@@ -112,8 +111,8 @@ test("update keeps unpatched fields and anchors", async () => {
 
 test("update/delete of an unknown id is a null/false no-op", async () => {
   const { store } = makeStore();
-  expect(await store.update("m-00000000", { body: "x" })).toBeNull();
-  expect(await store.delete("m-00000000")).toBe(false);
+  expect(await store.update("m-0000000000000000", { body: "x" })).toBeNull();
+  expect(await store.delete("m-0000000000000000")).toBe(false);
 });
 
 test("delete removes the file and its index line", async () => {
@@ -138,7 +137,7 @@ test("rebuildIndex regenerates the index from the entry files", async () => {
 test("list skips non-entry and malformed files", async () => {
   const { store, files } = makeStore();
   const a = await store.create({ type: "belief", summary: "s", body: "b" });
-  files.set("observations/m-deadbeef.md", "not an observation");
+  files.set("observations/m-deadbeefdeadbeef.md", "not an observation");
   files.set("observations/notes.md", "unrelated");
 
   expect((await store.list()).map((e) => e.id)).toEqual([a.id]);
@@ -216,12 +215,12 @@ test("a pass over one topic does not drop another topic's cursors or stamp", asy
 // read. Nothing between here and the file format has to know about them.
 test("update keeps frontmatter keys the store has no field for", async () => {
   const { store, files } = makeStore();
-  const path = "observations/m-1a2b3c4d.md";
+  const path = "observations/m-1a2b3c4d1a2b3c4d.md";
   files.set(
     path,
     [
       "---",
-      "id: m-1a2b3c4d",
+      "id: m-1a2b3c4d1a2b3c4d",
       "type: belief",
       "created: 2026-07-01",
       "updated: 2026-07-01",
@@ -235,7 +234,7 @@ test("update keeps frontmatter keys the store has no field for", async () => {
     ].join("\n"),
   );
 
-  const updated = await store.update("m-1a2b3c4d", { body: "Said so a third time." });
+  const updated = await store.update("m-1a2b3c4d1a2b3c4d", { body: "Said so a third time." });
   const extra: [string, string][] = [
     ["layer", "durable"],
     ["valid-until", "2027-01-01"],
@@ -249,7 +248,7 @@ test("update keeps frontmatter keys the store has no field for", async () => {
 
   // And through the read path the index rebuild and every prompt use.
   expect((await store.list())[0].extra).toEqual(extra);
-  expect((await store.get("m-1a2b3c4d"))?.extra).toEqual(extra);
+  expect((await store.get("m-1a2b3c4d1a2b3c4d"))?.extra).toEqual(extra);
 });
 
 test("a created observation carries no unknown keys", async () => {
@@ -297,13 +296,13 @@ test("conflict copies are readable, and still not observations", async () => {
 
 test("a conflict copy that will not parse is still reported", async () => {
   const { store, files } = makeStore();
-  files.set("observations/m-1a2b3c4d.conflict-deadbeef.md", "not frontmatter at all");
+  files.set("observations/m-1a2b3c4d1a2b3c4d.conflict-deadbeef.md", "not frontmatter at all");
   // A copy of the derived index is not a copy of anything the reader wrote.
-  files.set("observations/index.conflict-cafebabe.md", "- [belief] x (updated 2026-07-17, id m-1a2b3c4d)");
+  files.set("observations/index.conflict-cafebabe.md", "- [belief] x (updated 2026-07-17, id m-1a2b3c4d1a2b3c4d)");
 
   const conflicts = await store.listConflicts();
   expect(conflicts).toHaveLength(1);
-  expect(conflicts[0].id).toBe("m-1a2b3c4d");
+  expect(conflicts[0].id).toBe("m-1a2b3c4d1a2b3c4d");
   expect(conflicts[0].summary).toBe("");
 });
 

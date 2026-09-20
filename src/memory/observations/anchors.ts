@@ -109,11 +109,11 @@ export function parseMessageAnchor(anchor: string): ParsedAnchor | null {
 //   neither half decides                   -> no
 //
 // Two ids that differ falls back rather than failing, because the backfill runs
-// per device: two devices migrating the same message independently would mint
+// per device: two devices backfilling the same message independently would mint
 // two ids for it, and the anchor's id then names a message that is the same
-// turn under another name. (The migration derives its ids from a hash of the
-// old identity so that this cannot happen; this is the belt beside those
-// braces.) The pair was written from the same message at the same moment as the
+// turn under another name. (The backfill derived its ids from a hash of the old
+// identity so that this cannot happen; this is the belt beside those braces.)
+// The pair was written from the same message at the same moment as the
 // id, so it still names the right turn — it only gives back the user/ai
 // precision, which is exactly the precision everything written before ids has.
 //

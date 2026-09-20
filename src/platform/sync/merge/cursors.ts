@@ -31,8 +31,7 @@
 // parks the losing side's whole file at meta.conflict-<digest>.json where no
 // reader in src/ looks for it. One of the owner's per-topic directories held
 // three such copies — 2026-08-13, and two on 2026-08-19 — carrying 1, 14 and 9
-// distilledMessages cursors that the live file never got; the flattening step
-// folds those in as it goes past (migrate/flatten.ts).
+// distilledMessages cursors that the live file never got.
 
 import { chooseByContent, type Json } from "./text";
 

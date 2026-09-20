@@ -104,7 +104,6 @@ import {
   readLumenCornerShown,
   writeLumenCornerShown,
 } from "./ui/components/lumen/corner-pref";
-import MigrationGate from "./ui/components/common/MigrationGate";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -1818,9 +1817,6 @@ export default function App() {
         openBookId={bookIdRef.current}
         targets={lumenTargets}
       />
-
-      {/* Covers everything above, or renders nothing (docs/48). */}
-      <MigrationGate />
 
       {readerSettings && (
         <SettingsDialog

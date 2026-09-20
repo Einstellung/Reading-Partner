@@ -404,7 +404,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
       replay: "safe",
       description: "Read one observation in full by its id (as returned by observation_search or the index).",
       parameters: Type.Object({
-        id: Type.String({ description: "The observation id, e.g. m-1a2b3c4d." }),
+        id: Type.String({ description: "The observation id, e.g. m-1a2b3c4d5e6f7a8b." }),
       }),
       execute: async (args) => {
         const id = String(args.id);

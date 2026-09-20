@@ -40,15 +40,11 @@ export interface DreamRunInput extends DreamInput {
   lastInputHash?: string | null;
 }
 
-// Which of the four the night ended in. The enum is the waterline rule
+// Which of the three the night ended in. The enum is the waterline rule
 // (docs/research/dream调研.md, "结局枚举决定水位线"): "merged" and "no-change" advance
 // lastInputHash, "failed" leaves it where it was so the same input is
 // reconsidered rather than written off.
-//
-// "waiting-migration" is the one runDream never returns. The store was still
-// half-migrated and live.ts stood the night down before reading anything
-// (gate.ts); it advances neither the hash nor the day.
-export type DreamOutcome = "no-change" | "merged" | "failed" | "waiting-migration";
+export type DreamOutcome = "no-change" | "merged" | "failed";
 
 export interface DreamResult {
   outcome: DreamOutcome;

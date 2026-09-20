@@ -40,11 +40,11 @@ function readTool(entries: Observation[]) {
 }
 
 test("a mentioned observation is printed with its type and summary", async () => {
-  const target = obs("m-bbbbbbbb", { type: "correction", summary: "ω is not a ratio" });
-  const entry = obs("m-aaaaaaaa", { body: "解开的过程记在 m-bbbbbbbb。" });
-  const out = String(await readTool([entry, target]).execute({ id: "m-aaaaaaaa" }));
+  const target = obs("m-bbbbbbbbbbbbbbbb", { type: "correction", summary: "ω is not a ratio" });
+  const entry = obs("m-aaaaaaaaaaaaaaaa", { body: "解开的过程记在 m-bbbbbbbbbbbbbbbb。" });
+  const out = String(await readTool([entry, target]).execute({ id: "m-aaaaaaaaaaaaaaaa" }));
   expect(out).toContain("Observations this one mentions:");
-  expect(out).toContain("- [m-bbbbbbbb] (correction, updated 2026-07-05) ω is not a ratio");
+  expect(out).toContain("- [m-bbbbbbbbbbbbbbbb] (correction, updated 2026-07-05) ω is not a ratio");
 });
 
 // Phrased by where the read looked rather than by what became of the id: with
@@ -52,38 +52,38 @@ test("a mentioned observation is printed with its type and summary", async () =>
 // given (recall.ts), so a deleted mention and one in a topic nobody handed us
 // are the same silence.
 test("a mention none of the visible observations hold is named, not printed as a link", async () => {
-  const entry = obs("m-aaaaaaaa", { body: "取代了 m-cccccccc。" });
-  const out = String(await readTool([entry]).execute({ id: "m-aaaaaaaa" }));
-  expect(out).toContain("Mentioned but not in the observations you can see: m-cccccccc.");
+  const entry = obs("m-aaaaaaaaaaaaaaaa", { body: "取代了 m-cccccccccccccccc。" });
+  const out = String(await readTool([entry]).execute({ id: "m-aaaaaaaaaaaaaaaa" }));
+  expect(out).toContain("Mentioned but not in the observations you can see: m-cccccccccccccccc.");
   expect(out).not.toContain("Observations this one mentions:");
 });
 
 test("observations built on the same mark or message are printed as the same evidence", async () => {
-  const entry = obs("m-aaaaaaaa", { annotations: ["ann-1"], messages: ["t:10"] });
-  const sameMark = obs("m-bbbbbbbb", { annotations: ["ann-1"], summary: "same mark" });
-  const sameMessage = obs("m-cccccccc", { messages: ["t:10"], summary: "same turn" });
-  const unrelated = obs("m-dddddddd", { annotations: ["ann-9"] });
+  const entry = obs("m-aaaaaaaaaaaaaaaa", { annotations: ["ann-1"], messages: ["t:10"] });
+  const sameMark = obs("m-bbbbbbbbbbbbbbbb", { annotations: ["ann-1"], summary: "same mark" });
+  const sameMessage = obs("m-cccccccccccccccc", { messages: ["t:10"], summary: "same turn" });
+  const unrelated = obs("m-dddddddddddddddd", { annotations: ["ann-9"] });
   const out = String(
-    await readTool([entry, sameMark, sameMessage, unrelated]).execute({ id: "m-aaaaaaaa" }),
+    await readTool([entry, sameMark, sameMessage, unrelated]).execute({ id: "m-aaaaaaaaaaaaaaaa" }),
   );
   expect(out).toContain("Other observations from the same evidence:");
-  expect(out).toContain("[m-bbbbbbbb]");
-  expect(out).toContain("[m-cccccccc]");
-  expect(out).not.toContain("[m-dddddddd]");
+  expect(out).toContain("[m-bbbbbbbbbbbbbbbb]");
+  expect(out).toContain("[m-cccccccccccccccc]");
+  expect(out).not.toContain("[m-dddddddddddddddd]");
 });
 
 test("an observation with no neighbours prints exactly what it always did", async () => {
-  const entry = obs("m-aaaaaaaa", { annotations: ["ann-1"], messages: ["t:10"] });
-  const out = String(await readTool([entry]).execute({ id: "m-aaaaaaaa" }));
+  const entry = obs("m-aaaaaaaaaaaaaaaa", { annotations: ["ann-1"], messages: ["t:10"] });
+  const out = String(await readTool([entry]).execute({ id: "m-aaaaaaaaaaaaaaaa" }));
   expect(out).toBe(
     [
-      "id: m-aaaaaaaa",
+      "id: m-aaaaaaaaaaaaaaaa",
       "type: stuck-point",
       "created: 2026-07-01, updated: 2026-07-05",
       "annotations: ann-1",
       "messages: t:10",
       "",
-      "body of m-aaaaaaaa",
+      "body of m-aaaaaaaaaaaaaaaa",
     ].join("\n"),
   );
 });
@@ -93,10 +93,10 @@ test("an observation with no neighbours prints exactly what it always did", asyn
 // and not a link.
 test("a long mention list is capped and says how many it dropped", async () => {
   const targets = Array.from({ length: 20 }, (_, i) =>
-    obs(`m-${(0x10000000 + i).toString(16)}`),
+    obs(`m-${(0x10000000 + i).toString(16)}00000000`),
   );
-  const entry = obs("m-aaaaaaaa", { body: targets.map((t) => t.id).join(" ") });
-  const out = String(await readTool([entry, ...targets]).execute({ id: "m-aaaaaaaa" }));
+  const entry = obs("m-aaaaaaaaaaaaaaaa", { body: targets.map((t) => t.id).join(" ") });
+  const out = String(await readTool([entry, ...targets]).execute({ id: "m-aaaaaaaaaaaaaaaa" }));
   expect(out.split("\n").filter((l) => l.startsWith("- ["))).toHaveLength(12);
   expect(out).toContain("(8 more mentioned in the body above)");
 });

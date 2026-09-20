@@ -1,8 +1,5 @@
-// One of the two things that have to be true before a night starts: no other run
-// is already in flight. The other — that the observation store is not still laid
-// out the way the migration is about to change — is the same judgement the
-// migration itself makes and lives with it (memory/observations/legacy.ts,
-// migrate/pending.ts).
+// What has to be true before a night starts: no other run is already in flight,
+// and this process has not already finished one today.
 //
 // Pure, so it is testable. live.ts holds one gate for the process.
 //
@@ -24,9 +21,9 @@ export interface DreamGate {
   enter(day: string): boolean;
   // Ends the run enter() let through. `finished` marks the day used up in this
   // process, whatever the outcome was — a night that failed has still had its
-  // look, and the day gate is one look a day. A run that stood down without
-  // looking (the migration is pending) passes false, so the night can still
-  // happen once the reader presses the button.
+  // look, and the day gate is one look a day. A caller that turned back before
+  // looking, because the night was not due yet, passes false: it used nothing
+  // up, and a later tick on the same day must still be let through.
   leave(day: string, finished: boolean): void;
 }
 

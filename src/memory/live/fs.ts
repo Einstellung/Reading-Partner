@@ -6,7 +6,6 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
-import type { LegacyLayoutFs } from "../observations/legacy";
 import type { ObservationFs } from "../observations/store";
 
 // No exists() probe before a read or a listing. Each probe is a round trip
@@ -45,23 +44,5 @@ export const observationFs: ObservationFs = {
     } catch {
       return [];
     }
-  },
-};
-
-// The listings the "is the store still laid out the old way" question needs
-// (observations/legacy.ts). Separate from observationFs because that interface
-// is the store's and the store has no business listing directories: it knows one
-// directory and never looks for another.
-export const observationLayoutFs: LegacyLayoutFs = {
-  async listSubdirs(path) {
-    try {
-      const entries = await appData.readDir(path || ".");
-      return entries.filter((e) => e.isDirectory).map((e) => e.name);
-    } catch {
-      return [];
-    }
-  },
-  listDir(path) {
-    return observationFs.listDir(path);
   },
 };

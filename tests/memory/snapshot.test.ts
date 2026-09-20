@@ -9,16 +9,16 @@ import {
 } from "../../src/memory/observations/select";
 import type { ObservationIndexEntry, ObservationType } from "../../src/memory/observations/types";
 
-function e(type: ObservationType, summary: string, updated: string, id = "m-00000001"): ObservationIndexEntry {
+function e(type: ObservationType, summary: string, updated: string, id = "m-0000000100000001"): ObservationIndexEntry {
   return { id, type, summary, updated };
 }
 
 test("snapshot orders sections position → stuck → understood and keeps newest first", () => {
   const snap = buildObservationSnapshot([
-    e("understood-concept", "got residuals", "2026-07-10", "m-cccccccc"),
-    e("stuck-point", "stuck on attention", "2026-07-12", "m-bbbbbbbb"),
-    e("reading-position", "page 40 of the survey", "2026-07-15", "m-aaaaaaaa"),
-    e("stuck-point", "stuck on layernorm", "2026-07-14", "m-dddddddd"),
+    e("understood-concept", "got residuals", "2026-07-10", "m-cccccccccccccccc"),
+    e("stuck-point", "stuck on attention", "2026-07-12", "m-bbbbbbbbbbbbbbbb"),
+    e("reading-position", "page 40 of the survey", "2026-07-15", "m-aaaaaaaaaaaaaaaa"),
+    e("stuck-point", "stuck on layernorm", "2026-07-14", "m-dddddddddddddddd"),
   ]);
   const lines = snap.split("\n");
   expect(lines[0]).toContain("page 40");
@@ -44,9 +44,9 @@ test("snapshot caps per type and overall", () => {
 test("snapshot puts cannot-explain behind stuck-point and can-explain further down", () => {
   const lines = buildObservationSnapshot([
     e("can-explain", "gives chapter 22 unprompted", "2026-08-07", "m-yyyyyyyy"),
-    e("understood-concept", "got predictive coding", "2026-08-07", "m-cccccccc"),
+    e("understood-concept", "got predictive coding", "2026-08-07", "m-cccccccccccccccc"),
     e("cannot-explain", "chapter 23: conclusion only", "2026-08-01", "m-nnnnnnnn"),
-    e("stuck-point", "stuck on volition", "2026-07-12", "m-bbbbbbbb"),
+    e("stuck-point", "stuck on volition", "2026-07-12", "m-bbbbbbbbbbbbbbbb"),
   ]).split("\n");
   expect(lines[0]).toContain("volition");
   expect(lines[1]).toContain("chapter 23");
@@ -86,7 +86,7 @@ test("a trim falls through to the unnamed types and stops at the limit", () => {
 });
 
 test("prompt section: snapshot text, recall discipline, and correction ownership", () => {
-  const section = observationPromptSection("- [stuck-point] x (updated 2026-07-17, id m-00000001)", true);
+  const section = observationPromptSection("- [stuck-point] x (updated 2026-07-17, id m-0000000100000001)", true);
   expect(section).toContain("Your observations of this reader");
   expect(section).toContain("[stuck-point] x");
   expect(section).toContain("re-search with");

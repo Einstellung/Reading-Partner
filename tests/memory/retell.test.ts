@@ -241,12 +241,12 @@ test("the system prompt leads with reconciliation against the current index", ()
   const prompt = buildRetellDistillSystemPrompt(
     input({
       indexText:
-        "- [stuck-point] Stuck on how active inference relates to volition (updated 2026-07-01, id m-11111111)",
+        "- [stuck-point] Stuck on how active inference relates to volition (updated 2026-07-01, id m-1111111111111111)",
     }),
   );
   // The index is carried whole, every pass: the cursor bounds the input, never
   // what may be rewritten.
-  expect(prompt).toContain("id m-11111111");
+  expect(prompt).toContain("id m-1111111111111111");
   expect(prompt).toContain("Start by reconciling, not by writing.");
   expect(prompt).toContain("Crossing types is");
   expect(prompt).toContain("Never leave two observations standing for the two ends of one story");
