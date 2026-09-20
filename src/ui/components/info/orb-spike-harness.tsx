@@ -1,5 +1,5 @@
 // Standalone runtime harness for the orb (docs/45). Not part of the app; it
-// mounts the real BriefingPage under the real VoiceOrbEntry, over a canned
+// mounts the real BriefingPage under the stub companion layer, over a canned
 // briefing, so the orb can be looked at in the iOS simulator. Served by Vite in
 // dev at /orb-spike.html.
 //
@@ -7,7 +7,7 @@
 // stack does not start there at all (docs/pitfall/193), and a simulator with no
 // AI key and no sources has no briefing to draw the page from. So the page comes
 // from the fixture below and the four states come from `window.__orbStub`, which
-// VoiceOrbEntry publishes in a dev build.
+// VoiceOrbEntry.tsx publishes in a dev build.
 //
 // `?pip` adds the corner card InfoCall draws over this same screen, which is the
 // one thing on the briefing the orb could collide with.
@@ -120,10 +120,9 @@ function Harness() {
           />
         </div>
       )}
-      {/* The stub layer and not VoiceOrbEntry: the entry draws nothing on a
-          host with no native speech, which a plain browser is, and the
-          headless screenshots are taken in one. On the simulator the entry
-          reaches the same layer through its own `stub` branch. */}
+      {/* The stub layer and not the corner: a real session needs native
+          speech, which neither a plain browser nor the simulator has, and the
+          headless screenshots are taken in a browser. */}
       <StubOrbLayer />
     </>
   );

@@ -1,84 +1,28 @@
-// The way into the info voice session (docs/33, docs/66): Lumen resting in the
-// corner of the briefing, tapped to start talking. There is no other screen, no
-// transcript panel and no controls, because the conversation is the interface.
+// The simulator harness's half of the companion (docs/pitfall/193): the same
+// body the corner draws, with a call that has no audio under it, driven from
+// `window.__orbStub`.
+//
+// The way into a real session is Lumen in the corner now, held rather than
+// tapped (ui/components/lumen/LumenCorner.tsx, docs/68). What is left here is
+// the stub layer the orb spike mounts, because the iOS simulator's audio stack
+// cannot start at all and this is the only way to look at the four acts.
 //
 // Rendering and event binding only; the numbers are ui/components/lumen and
 // ui/components/orb.
-//
-// Placement. Bottom right, out of the way of the briefing's own sticky header
-// and its Ask button, and it stays there: one size for the whole call. The box
-// used to grow to 160 px and re-centre itself when a call opened, which meant
-// every call began by throwing a body across the screen and covering the thing
-// being talked about. The four acts are legible at 72 px (docs/66), so the
-// corner is enough. The layer wraps the whole viewport but takes no presses of
-// its own, so the briefing underneath stays scrollable and tappable.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { hasNativeSpeech } from "../../../platform/app/platform";
 import { Lumen } from "../lumen/Lumen";
 import type { Attention } from "../lumen/lumen-motion";
 import { orbErrorLine, type OrbPhase, type SpeechEnvelope, type VoiceCallHandle } from "../orb/orb";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
-import { useVoiceCall, type VoiceCallView } from "../lumen/use-voice-call";
-import type { Briefing } from "../../../info/boxes/types";
 
-// `briefing` is the day's briefing as this page holds it, passed down rather
-// than loaded by the call: see LiveVoiceCallOptions.
-export function VoiceOrbEntry({
-	dateKey,
-	briefing,
-	stub = false,
-}: {
-	dateKey: string;
-	briefing: Briefing | null;
-	stub?: boolean;
-}) {
-	// A host that cannot speak has nothing to enter: the whole audio path is the
-	// iOS plugin's (docs/33), and on the desktop this draws nothing at all.
-	// Constant for the life of the process, so the early return never changes
-	// which hooks run below it.
-	if (!hasNativeSpeech()) return null;
-	// The stub is the simulator harness's: no audio stack can start there
-	// (docs/pitfall/193), so the four states are driven from `window.__orbStub`.
-	if (stub) return <StubOrbLayer />;
-	return <VoiceOrbLayer dateKey={dateKey} briefing={briefing} />;
-}
-
-function VoiceOrbLayer({ dateKey, briefing }: { dateKey: string; briefing: Briefing | null }) {
-	const call = useVoiceCall({ dateKey, briefing });
-	// Attention comes from what the turn is doing, not from what the model says
-	// about itself: a tool call in flight is the check act (docs/66 "四段"), and
-	// the model-emitted SoulIntent field is still ahead of us.
-	return <OrbLayer call={asHandle(call)} attention={call.attention} />;
-}
-
-// Exported for the dev harness (orb-spike-harness.tsx), which has no native
-// speech behind it and so never gets past the gate above. Everything below it
-// is the same code the real entry runs.
+// The layer the harness mounts. Everything below it is the same code a real
+// call runs.
 export function StubOrbLayer() {
 	const { handle, rest, attention } = useStubCall();
 	return <OrbLayer call={handle} rest={rest} attention={attention} />;
-}
-
-// The orb reads an error as a key into its own lines (interrupted, lost) or as
-// a sentence to show as-is; the call reports a reason and a sentence, so the
-// reason goes first where the orb has a line for it.
-function asHandle(call: VoiceCallView): VoiceCallHandle {
-	const error = call.error
-		? call.error.reason === "interrupted" || call.error.reason === "lost"
-			? call.error.reason
-			: call.error.message
-		: null;
-	return {
-		phase: call.phase,
-		start: call.start,
-		stop: call.stop,
-		error,
-		subscribeLevel: call.subscribeLevel,
-		subscribeEnvelope: call.subscribeEnvelope,
-	};
 }
 
 // One box, in one place, whether or not a call is up. 72 px: at 56 the brows

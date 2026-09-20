@@ -23,6 +23,7 @@ import { InfoCall } from "./InfoCall";
 import { DinnerPage } from "./DinnerPage";
 import { useDinner } from "./use-dinner";
 import { useInfoHome } from "./use-info-home";
+import { useRegisterVoiceContext } from "../lumen/voice-context";
 import { noLabsOpen } from "./no-labs";
 
 // The screen union lives in base/shell-nav.ts, which is what maps it to the
@@ -136,6 +137,18 @@ export default function InfoHome(props: {
     onOverlayChange: props.onOverlayChange,
   });
 
+  // What a hold on Lumen would be about (docs/68). The briefing screen is the
+  // one place with a day's thread to talk about, so it publishes it for the
+  // corner, which is a sibling of both shells and cannot be handed it as a
+  // prop. Not while the text call is up: that is the same conversation in the
+  // other medium, and two of them on one screen is two microphones' worth of
+  // the same day.
+  useRegisterVoiceContext(
+    screen === "briefing" && info.snap?.briefing && !info.infoCall
+      ? { dateKey: info.snap.briefing.date, briefing: info.snap.briefing }
+      : null,
+  );
+
   if (screen === null) return null;
 
   return (
@@ -208,11 +221,10 @@ export default function InfoHome(props: {
         return (
           <>
             {wrapped}
-            {/* The corner entry is Lumen's now, in every shell and on every
-                screen (ui/components/lumen/LumenCorner, docs/68). The voice call
-                itself is not gone — lumen/use-voice-call and the iOS plugin stand —
-                but nothing reaches it until it comes back as the bottom item of
-                Lumen's column. */}
+            {/* The corner entry is Lumen's, in every shell and on every screen
+                (ui/components/lumen/LumenCorner, docs/68): a long press there
+                opens the session and a second one ends it. This screen draws
+                none of it and only says what it would be about, above. */}
           </>
         );
       })()}

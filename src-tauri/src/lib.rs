@@ -91,11 +91,17 @@ pub fn run() {
             tray::set_tray_status
         ]);
     #[cfg(mobile)]
-    let builder = builder.invoke_handler(tauri::generate_handler![
-        atomic_fs::write_text_file_atomic,
-        atomic_fs::quarantine_file,
-        oauth_callback::start_oauth_callback_listener
-    ]);
+    let builder = builder
+        // The taps the hand feels when a hold on Lumen opens or ends the voice
+        // session (docs/68). Mobile only, and the crate is a dependency only
+        // there: the iPad has no motor either, which is why the body's own
+        // light is the confirmation and this is the thing added on top of it.
+        .plugin(tauri_plugin_haptics::init())
+        .invoke_handler(tauri::generate_handler![
+            atomic_fs::write_text_file_atomic,
+            atomic_fs::quarantine_file,
+            oauth_callback::start_oauth_callback_listener
+        ]);
 
     builder
         .register_asynchronous_uri_scheme_protocol(image_proxy::SCHEME, image_proxy::handle)

@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "mobile",
+  "description": "What only a device with a vibration motor has. The haptics plugin is a dependency on iOS and Android alone and is registered there alone, so the permission is granted there alone — the same isolation desktop.json gives autostart. Nothing else needs it: the taps are the confirmation added on top of Lumen's own light when a hold opens or ends the voice session (docs/68), and the iPad, which has no motor, gets the light and nothing else.",
+  "platforms": ["iOS", "android"],
+  "windows": ["main"],
+  "permissions": ["haptics:default"]
+}

@@ -16,6 +16,7 @@ import type { SessionPhase } from "../../../soul/voice/voice-session";
 import type { VoiceCall, VoiceCallError, VoiceCallView } from "../../../soul/voice/voice-call";
 import type { SpeechEnvelope } from "../../../soul/voice/conversation";
 import type { Briefing } from "../../../info/boxes/types";
+import type { VoiceCallHandle } from "../orb/orb";
 import type { TurnActivity } from "../../../ai/activity";
 import { useAttention } from "./use-attention";
 import type { Attention } from "./lumen-motion";
@@ -147,4 +148,25 @@ export function useVoiceCall(opts: VoiceCallOptions): VoiceCallState {
   }, [drop]);
 
   return { phase, error, start, stop, subscribeLevel, subscribeEnvelope, attention };
+}
+
+/**
+ * The call as the body reads it. The body takes an error as a key into its own
+ * lines (interrupted, lost) or as a sentence to show as-is; the call reports a
+ * reason and a sentence, so the reason goes first where there is a line for it.
+ */
+export function voiceCallHandle(call: VoiceCallView): VoiceCallHandle {
+  const error = call.error
+    ? call.error.reason === "interrupted" || call.error.reason === "lost"
+      ? call.error.reason
+      : call.error.message
+    : null;
+  return {
+    phase: call.phase,
+    start: call.start,
+    stop: call.stop,
+    error,
+    subscribeLevel: call.subscribeLevel,
+    subscribeEnvelope: call.subscribeEnvelope,
+  };
 }

@@ -16,10 +16,16 @@
 // from behind itself and sets it down, the box empties and it puts it back
 // (case-motion.ts). The eyes and the lean go with it, in the reader too.
 //
-// The case is the only control in the corner. It is the trigger the column
-// rises from, and the body beside it is a picture — pressing it does nothing and
-// it is not announced as a control (docs/68: a press on Lumen is kept for the
-// voice entry that becomes the bottom of this column).
+// Two controls, and the body is one of them now. The case is the trigger the
+// column rises from; a long press on Lumen opens the info voice session and a
+// second one ends it (docs/68, hold-toggle.ts). A tap on the body is still
+// wired to nothing — Lumen is not a button, the props it brings are.
+//
+// The session is the info screen's. What it would be about is published by
+// whichever screen holds it (voice-context.ts) and the call is built here, so
+// it outlives the screen it was opened from and can be hung up from anywhere.
+// Where nothing is registered and no call is up the body does not even charge,
+// which is what makes the gesture legible: it only lights up where it can talk.
 //
 // The count. `appBox()` caches nothing, so the number is read twice over: the
 // store's own subscribe covers a write made in this process, and the sync tick
@@ -29,14 +35,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { UNSEEN, appBox } from "../../../box";
 import type { BoxItem } from "../../../box/types";
+import { voiceStartFeedback, voiceStopFeedback } from "../../../platform/app/haptics";
 import { getLibraryEntry } from "../../../platform/app/library";
+import { hasNativeSpeech } from "../../../platform/app/platform";
 import { TICK_MS } from "../../../platform/sync";
 import { displayFileTitle } from "../shelf/file-title";
 import { cn } from "../lib/utils";
 import { OVERLAY_Z } from "../ui/overlay";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
-import type { VoiceCallHandle } from "../orb/orb";
 import { Lumen, LumenCase } from "./Lumen";
+import { useHoldToggle } from "./use-hold-toggle";
+import { useVoiceCall, voiceCallHandle } from "./use-voice-call";
+import { getVoiceContext, subscribeVoiceContext, type VoiceContext } from "./voice-context";
 import {
 	bookIdsIn,
 	badgeCount,
@@ -51,18 +61,11 @@ import {
 import { useCaseMotion } from "./use-case-motion";
 import { planJump, type Place, type Shell } from "./box-jump";
 
-// The corner is not a call. Lumen still wants a handle — it is the same body the
-// voice entry draws — so it gets one that never speaks: phase `idle` for the
-// whole life of the app, and two subscriptions nothing ever pushes to. The voice
-// entry returns as the bottom item of this column later (docs/68).
-const SILENT: VoiceCallHandle = {
-	phase: "idle",
-	start: () => {},
-	stop: () => {},
-	error: null,
-	subscribeLevel: () => () => {},
-	subscribeEnvelope: () => () => {},
-};
+// What the body is announced as while it can talk: the two names are the two
+// directions of the one gesture. On a screen with nothing to talk about it is
+// not a control at all and has no name.
+const HOLD_TO_TALK = "Hold to talk";
+const HOLD_TO_END = "Hold to end the conversation";
 
 /** What the shell can do about a card, in the shell's own terms. */
 export interface LumenJumpTargets {
@@ -105,6 +108,39 @@ export function LumenCorner({
 	// when the box empties, and where it is drawn on every frame in between
 	// (use-case-motion.ts).
 	const box = useCaseMotion(count);
+
+	// What a hold would talk about, as whichever screen holds it publishes it.
+	const [context, setContext] = useState<VoiceContext | null>(getVoiceContext);
+	useEffect(() => subscribeVoiceContext(() => setContext(getVoiceContext())), []);
+
+	// Built unconditionally and held for the life of the shell. A call that
+	// belonged to the screen would die the moment the reader walked away from
+	// it, and there would be no way to hang up from where they landed.
+	const call = useVoiceCall({
+		dateKey: context?.dateKey ?? "",
+		briefing: context?.briefing ?? null,
+		control: context?.control,
+	});
+	const live = call.phase !== "idle";
+	// A host that cannot speak has nothing to hold for — the whole audio path is
+	// the iOS plugin's (docs/33) — and neither has a screen with nothing to talk
+	// about, unless the call the hold would end is already up.
+	const canTalk = hasNativeSpeech() && (live || context !== null);
+	const { start, stop } = call;
+
+	const toggle = useCallback(() => {
+		if (live) {
+			stop();
+			void voiceStopFeedback();
+			return;
+		}
+		// Read at the moment of the press, not at the render the press began in.
+		if (!getVoiceContext()) return;
+		start();
+		void voiceStartFeedback();
+	}, [live, start, stop]);
+
+	const hold = useHoldToggle(canTalk, toggle);
 
 	// The number on the badge. Both readings land here: the store's announcement
 	// of a write this process made, and the tick that catches the other device's.
@@ -242,22 +278,34 @@ export function LumenCorner({
 					    the corner floats over. */}
 					<div className="relative isolate">
 						<Lumen
-							handle={SILENT}
+							ref={hold.ref}
+							handle={voiceCallHandle(call)}
+							attention={call.attention}
 							// Beside an open book nothing moves but the case and the
 							// hands on it (docs/68).
 							still={inReader}
 							reach={box.reach}
 							reaching={box.moving}
-							label="Lumen"
-							// Not a control: no pointer events, off the tab order and
-							// out of the accessibility tree. The element is still a
-							// button because that is the root Lumen draws, and the
-							// voice entry it is kept for is a press.
-							aria-hidden="true"
-							tabIndex={-1}
-							role="presentation"
+							// A control only where a hold means something. Everywhere
+							// else it keeps what it was: no pointer events, off the tab
+							// order and out of the accessibility tree, a picture that
+							// happens to be drawn on a button.
+							label={canTalk ? (live ? HOLD_TO_END : HOLD_TO_TALK) : "Lumen"}
+							aria-hidden={canTalk ? undefined : true}
+							tabIndex={canTalk ? undefined : -1}
+							role={canTalk ? undefined : "presentation"}
+							// A tap is still wired to nothing: Lumen is not a button,
+							// the props it brings are (docs/68).
 							onActivate={NOTHING}
-							className="h-18 w-18"
+							// `touch-none`, `select-none` and the callout off: a hold on
+							// iOS otherwise raises the system callout and starts a
+							// selection over the body (docs/pitfall/49, 262).
+							className={cn(
+								"h-18 w-18",
+								canTalk &&
+									"pointer-events-auto touch-none select-none [-webkit-touch-callout:none]",
+							)}
+							{...hold.handlers}
 						/>
 						{box.drawn && (
 							<PopoverTrigger asChild>
