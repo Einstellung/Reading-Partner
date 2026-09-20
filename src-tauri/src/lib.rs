@@ -1,6 +1,5 @@
 mod atomic_fs;
 mod image_proxy;
-mod migrate;
 mod navigation;
 mod oauth_callback;
 // Voice capture records the mic in Rust via cpal (WebKitGTK's getUserMedia is
@@ -118,8 +117,6 @@ pub fn run() {
                 }
                 Err(err) => eprintln!("failed to resolve app data dir: {}", err),
             }
-            // Pick up data written under the pre-0.3 bundle identifier.
-            migrate::migrate_legacy_dirs(app.handle());
             // Dev-only: with RP_WEBVIEW_FETCH_PROBE set, fetch those URLs
             // through the hidden webview, print the results and exit. No-op
             // without the variable.
