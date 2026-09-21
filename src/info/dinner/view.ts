@@ -145,6 +145,10 @@ export interface DishPhotoCredit {
  * one the cache holds, or a credit would name the wrong photographer. Null for
  * a dish drawn from its ingredients, whose credit is the screen's standing
  * TheMealDB line instead.
+ *
+ * A web image search knows no author and no licence, so it puts the site in
+ * `creator` and leaves `license` empty: the line reads "Photo: example.com"
+ * and still opens the page the picture was found on.
  */
 export function dishPhotoCredit(
   dish: Dish | null | undefined,
@@ -158,6 +162,21 @@ export function dishPhotoCredit(
   const url = photo.foreignLandingUrl || photo.licenseUrl;
   if (!url) return null;
   return { text: parts.join(""), url };
+}
+
+/**
+ * The page a dish's photograph sits on, for the proxy to send as Referer, or
+ * null. Only the web image search sets it; the picture is loaded without one
+ * otherwise (images.ts, docs/pitfall/30).
+ */
+export function dishPhotoPageUrl(
+  dish: Dish | null | undefined,
+  photos: Readonly<Record<string, DishPhotoEntry>> | undefined,
+): string | null {
+  if (!dish?.image) return null;
+  const photo = photoForDish(dish, photos);
+  if (!photo || photo.url !== dish.image) return null;
+  return photo.pageUrl?.trim() || null;
 }
 
 /**

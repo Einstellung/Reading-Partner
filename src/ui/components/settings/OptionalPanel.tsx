@@ -48,6 +48,48 @@ export default function OptionalPanel({
               Plan the week's dinners, keep the shopping list, say when you ate something else.
             </p>
           </div>
+
+          {/* The dish photographs (docs/73). Without these two the screen looks
+              a dish up in Openverse, which only has dishes that have a name;
+              with them any name gets a picture, invented ones included. */}
+          <div className={CARD}>
+            <Label layout="stack">
+              Google search API key
+              <Input
+                type="password"
+                placeholder="Optional"
+                value={settings.googleSearchApiKey ?? ""}
+                onChange={(e) =>
+                  onSettingsChange({
+                    ...settings,
+                    googleSearchApiKey: e.target.value.trim() || null,
+                  })
+                }
+              />
+            </Label>
+            <Label layout="stack">
+              Search engine ID (cx)
+              <Input
+                placeholder="Optional"
+                value={settings.googleSearchEngineId ?? ""}
+                onChange={(e) =>
+                  onSettingsChange({
+                    ...settings,
+                    googleSearchEngineId: e.target.value.trim() || null,
+                  })
+                }
+              />
+            </Label>
+            <p className="m-0 text-xs text-faint-foreground">
+              The key comes from the Google Cloud console, under Custom Search JSON API; the ID
+              comes from programmablesearchengine.google.com, with "Search the entire web" and
+              image search both on.
+            </p>
+            <p className="m-0 text-xs text-faint-foreground">
+              A hundred searches a day are free. A dish is searched for once and remembered, so a
+              week of new dishes costs about seven.
+            </p>
+          </div>
         </SettingsSection>
 
         <SettingsSection title="Lesson prep">

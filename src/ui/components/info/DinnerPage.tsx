@@ -14,9 +14,11 @@ import { openExternal } from "../../../platform/app/external-link";
 import type { DinnerState, ShoppingItem } from "../../../info/dinner/types";
 import { ingredientImageUrl } from "../../../info/dinner/images";
 import { shoppingItemKey } from "../../../info/dinner/shopping";
+import { markDishPhotoBroken } from "../../../info/dinner/store";
 import { planExhausted } from "../../../info/dinner/week";
 import {
   dishPhotoCredit,
+  dishPhotoPageUrl,
   dishThumbnails,
   headlineDays,
   keepsLabel,
@@ -53,7 +55,15 @@ function BasePlus({ label, text }: { label: string; text: string }) {
   );
 }
 
-function HeadlineDay({ view, credit }: { view: DayView; credit: DishPhotoCredit | null }) {
+function HeadlineDay({
+  view,
+  credit,
+  photoPageUrl,
+}: {
+  view: DayView;
+  credit: DishPhotoCredit | null;
+  photoPageUrl: string | null;
+}) {
   const { day, dish } = view;
   // The credit belongs to the photograph, so it goes when the photograph does:
   // a dish picture that fails to load falls back to the ingredient strip, which
@@ -76,10 +86,17 @@ function HeadlineDay({ view, credit }: { view: DayView; credit: DishPhotoCredit 
       <div className="mt-3 aspect-[16/9] max-h-40 w-full">
         <DishImage
           image={dish?.image}
+          imagePageUrl={photoPageUrl}
           thumbnails={dishThumbnails(dish, ingredientImageUrl)}
           alt={dish?.name ?? modeWord(day.mode)}
           className="size-full"
-          onPhotoFailed={() => setPhotoFailed(true)}
+          onPhotoFailed={() => {
+            setPhotoFailed(true);
+            // A picture the search found and this app cannot load is dropped
+            // from the cache, so the next Apply looks the dish up again rather
+            // than loading the same dead URL every week (store.ts).
+            if (dish?.searchName) void markDishPhotoBroken(dish.searchName);
+          }}
         />
       </div>
       {credit && !photoFailed && (
@@ -127,7 +144,7 @@ function HeadlineDay({ view, credit }: { view: DayView; credit: DishPhotoCredit 
   );
 }
 
-function LaterDay({ view }: { view: DayView }) {
+function LaterDay({ view, photoPageUrl }: { view: DayView; photoPageUrl: string | null }) {
   const { day, dish } = view;
   const name = dish?.name ?? day.place ?? "";
   return (
@@ -137,6 +154,7 @@ function LaterDay({ view }: { view: DayView }) {
         <span className="size-10 flex-none">
           <DishImage
             image={dish?.image}
+            imagePageUrl={photoPageUrl}
             thumbnails={dishThumbnails(dish, ingredientImageUrl)}
             alt={name}
             className="size-full"
@@ -221,6 +239,7 @@ export function DinnerPage(props: DinnerPageProps) {
                 key={v.day.date}
                 view={v}
                 credit={dishPhotoCredit(v.dish, state.dishPhotos)}
+                photoPageUrl={dishPhotoPageUrl(v.dish, state.dishPhotos)}
               />
             ))}
           </div>
@@ -232,7 +251,11 @@ export function DinnerPage(props: DinnerPageProps) {
               </h2>
               <ul className="m-0 flex list-none flex-col divide-y divide-border-subtle p-0">
                 {later.map((v) => (
-                  <LaterDay key={v.day.date} view={v} />
+                  <LaterDay
+                    key={v.day.date}
+                    view={v}
+                    photoPageUrl={dishPhotoPageUrl(v.dish, state.dishPhotos)}
+                  />
                 ))}
               </ul>
             </section>

@@ -111,6 +111,12 @@ export interface DishPhoto {
   licenseUrl: string;
   // The page the photograph lives on. What the caption opens.
   foreignLandingUrl: string;
+  // The page to send as Referer when the picture is fetched, or absent. Set by
+  // the web image search only: its results are arbitrary CDNs, some of which
+  // refuse a request that arrives without one (docs/pitfall/30). Openverse's
+  // and TheMealDB's hosts do not check, and a Referer tells a host something
+  // about the reader, so nothing sends one it does not need.
+  pageUrl?: string;
 }
 
 // A search that found nothing usable. Kept, rather than left absent, so a dish

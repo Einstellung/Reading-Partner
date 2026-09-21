@@ -15,6 +15,7 @@ import {
   type DeskRef,
 } from "../../desk";
 import type { AgentTool } from "../../legion/execute/turn";
+import { googleSearchCreds } from "./google-images";
 import { dinnerGuidance } from "./tools";
 import type { DinnerState } from "./types";
 
@@ -74,7 +75,9 @@ const DUTY = [
 async function openDinner(ref: DinnerDeskRef, env: DeskEnv): Promise<DeskItem | null> {
   const tools = ref.tools ? await ref.tools() : [];
   if (env.signal?.aborted) return null;
-  const prompt = `${DUTY}\n\n${dinnerGuidance(ref.state, ref.today)}`;
+  const prompt = `${DUTY}\n\n${dinnerGuidance(ref.state, ref.today, {
+    imageSearch: googleSearchCreds(env.settings) !== null,
+  })}`;
   return {
     kind: INFO_DINNER_KIND,
     label: "Dinner",

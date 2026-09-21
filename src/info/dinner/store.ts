@@ -22,6 +22,7 @@ import {
 } from "../../platform/app/atomic-fs";
 import { isObject } from "../../platform/std/json";
 import { reportStoreError } from "../../platform/app/store-errors";
+import { withoutDishPhoto } from "./dish-photos";
 import {
   DINNER_VERSION,
   EMPTY_DINNER,
@@ -190,6 +191,24 @@ export async function saveDishPhotos(
     dishPhotos: { ...s.dishPhotos, ...photos },
     plan: s.plan && s.plan.id === plan.id && s.plan.revision === plan.revision ? plan : s.plan,
   }));
+}
+
+/**
+ * Forget the photograph of one dish, because the picture the search found will
+ * not load in this app (see withoutDishPhoto). Called from the screen, not
+ * from Apply: the `<img>` is the only place that finds out.
+ *
+ * Nothing is written when the name is not in the cache, so a strip of
+ * ingredient pictures failing costs no writes at all.
+ */
+export async function markDishPhotoBroken(
+  searchName: string,
+  io: DinnerIo = dinnerIo,
+): Promise<DinnerState> {
+  return mutate(io, (s) => {
+    const next = withoutDishPhoto(s.dishPhotos, searchName);
+    return next ? { ...s, dishPhotos: next } : s;
+  });
 }
 
 /**

@@ -118,6 +118,14 @@ export interface Settings {
   // Optional Semantic Scholar API key. When set, prep fetches use it instead of
   // the shared free rate-limit pool.
   semanticScholarApiKey: string | null;
+  // The reader's own Google Programmable Search key and search engine id
+  // (docs/73 图片). Both or neither: with them the dinner screen looks a dish
+  // up in a general web image search, which has a picture for any name the
+  // model invents; without them it falls back to Openverse, which only knows
+  // dishes that have a name. An ordinary synced setting like the key above —
+  // it buys a hundred free searches a day, not a voice.
+  googleSearchApiKey: string | null;
+  googleSearchEngineId: string | null;
   // How hard the model thinks for chat/distillation and for lesson prep. Omitted
   // silently on models that don't support reasoning.
   chatThinking: ThinkingSetting;
@@ -182,6 +190,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultModelId: null,
   briefingModelId: null,
   semanticScholarApiKey: null,
+  googleSearchApiKey: null,
+  googleSearchEngineId: null,
   chatThinking: "low",
   prepThinking: "medium",
   briefingScreenThinking: "low",

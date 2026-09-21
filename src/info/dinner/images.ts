@@ -152,17 +152,23 @@ export const MEALDB_ALIASES = ALIASES;
  * empty one, so the caller draws its fallback rather than an <img> with no
  * source.
  *
+ * `pageUrl` is the page the picture sits on, which the proxy sends as Referer
+ * (docs/pitfall/30). Only the web image search fills it in: its results are
+ * arbitrary CDNs and some of them refuse a bare request. TheMealDB,
+ * Spoonacular and Openverse pass nothing, and nothing is sent.
+ *
  * `toProxy` is injected so the decision is testable without a webview; outside
  * Tauri the live one answers null and the plain https URL is used, which is
  * what `bun dev` renders.
  */
 export function imageSrc(
   url: string | undefined | null,
-  toProxy: (u: string) => string | null = proxyImageUrl,
+  pageUrl?: string | null,
+  toProxy: (u: string, page?: string | null) => string | null = proxyImageUrl,
 ): string | null {
   const raw = (url ?? "").trim();
   if (!raw) return null;
-  if (/^https?:\/\//i.test(raw)) return toProxy(raw) ?? raw;
+  if (/^https?:\/\//i.test(raw)) return toProxy(raw, (pageUrl ?? "").trim() || null) ?? raw;
   // A data: URI is already inline, and anything else is the app's own path.
   return raw;
 }
