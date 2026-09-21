@@ -22,6 +22,12 @@ interface PenToolbarProps {
 	// says why. Dim and unpressable, never dropped: the rack is where the rule
 	// about levels is legible (docs/03, reading/call-state.ts).
 	disabled?: Partial<Record<ToolType, string>>;
+	// Tools this shell has no such thing for, dropped from the rack rather than
+	// dimmed. Dim and omitted are different sentences: a dim tool is one the
+	// reader could reach and this book will not open; an omitted one is a tool
+	// the form factor does not have — the phone is one scroll with no pages to
+	// lock, so a lock drawn there would state a rule about nothing.
+	omit?: readonly ToolType[];
 }
 
 // 'none' is not a button: it is the state the rack is in when no button is
@@ -42,6 +48,7 @@ export default function PenToolbar({
 	onToolChange,
 	orientation = 'vertical',
 	disabled,
+	omit,
 }: PenToolbarProps) {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	// Where the open palette sits, in viewport coordinates. It cannot be laid out
@@ -159,7 +166,7 @@ export default function PenToolbar({
 			aria-orientation={orientation}
 			aria-label="Reading tools"
 		>
-			{TOOLS.map(({ type, label, Icon }) => {
+			{TOOLS.filter(({ type }) => !omit?.includes(type)).map(({ type, label, Icon }) => {
 				const why = disabled?.[type];
 				return (
 					<Button

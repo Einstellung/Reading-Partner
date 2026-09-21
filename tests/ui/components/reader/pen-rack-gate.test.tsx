@@ -25,7 +25,7 @@ const COLORS = [
 
 const WHY = "Only the book's conversation can open a side one.";
 
-function rack(disabled?: Partial<Record<ToolType, string>>) {
+function rack(disabled?: Partial<Record<ToolType, string>>, omit?: readonly ToolType[]) {
   const picked: Tool[] = [];
   const view = render(
     <PenToolbar
@@ -34,6 +34,7 @@ function rack(disabled?: Partial<Record<ToolType, string>>) {
       colors={COLORS}
       onToolChange={(t) => void picked.push(t)}
       disabled={disabled}
+      omit={omit}
     />,
   );
   const button = (label: string) =>
@@ -87,6 +88,18 @@ test("with nothing dim the rack is the rack it was", () => {
   expect(ai?.getAttribute("aria-label")).toBe("AI pen");
   fireEvent.click(ai as HTMLButtonElement);
   expect(picked).toEqual([{ type: "ai", color: COLORS[0].color }]);
+});
+
+// Omitted is not dim: the phone has no pages to lock, so the rack there does
+// not draw the lock at all, and the rest of the rack is untouched (docs/70).
+test("a tool the shell has no such thing for is gone, not dimmed", () => {
+  const { picked, button } = rack({ ai: WHY }, ["navlock"]);
+
+  expect(button("Navigate only")).toBeNull();
+  expect(button("Highlight")).not.toBeNull();
+  expect(button("AI pen")?.disabled).toBe(true);
+  fireEvent.click(button("Highlight") as HTMLButtonElement);
+  expect(picked).toEqual([{ type: "highlight", color: COLORS[0].color }]);
 });
 
 // --- the blackboard -------------------------------------------------------
