@@ -44,6 +44,7 @@ use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub mod jar;
+pub mod page;
 pub mod policy;
 pub mod session;
 
@@ -331,6 +332,35 @@ fn run_page<R: Runtime>(
     phase: Phase,
     started: Instant,
 ) -> PageOutcome {
+    with_page(
+        app,
+        state,
+        profile,
+        target,
+        phase,
+        started,
+        policy::OVERALL_TIMEOUT,
+        |_window, outcome| outcome,
+    )
+    .unwrap_or_else(|failed| failed)
+}
+
+/// Open `target` in a hidden window, wait for it the way `phase` says to, and
+/// hand the settled window to `finish` while it is still alive. The window is
+/// destroyed as `finish` returns, whatever it returns.
+///
+/// `Err` carries a failure that happened before there was a window to hand
+/// over, so a caller that only wants the outcome can collapse the two.
+pub(crate) fn with_page<R: Runtime, T>(
+    app: &AppHandle<R>,
+    state: &tauri::State<'_, WebviewFetchState>,
+    profile: &PathBuf,
+    target: &Url,
+    phase: Phase,
+    started: Instant,
+    budget: Duration,
+    finish: impl FnOnce(&WebviewWindow<R>, PageOutcome) -> T,
+) -> Result<T, PageOutcome> {
     let label = state.next_label();
     // Registered before the window exists, so the navigation guard already knows
     // this label by the time the first navigation is decided.
@@ -345,7 +375,12 @@ fn run_page<R: Runtime>(
     let (tx, rx) = mpsc::channel::<LoadEvent>();
     let window = match build_window(app, &label, profile, tx.clone(), Chrome::hidden()) {
         Ok(window) => window,
-        Err(err) => return PageOutcome::failed(Status::Network, format!("window failed: {err}")),
+        Err(err) => {
+            return Err(PageOutcome::failed(
+                Status::Network,
+                format!("window failed: {err}"),
+            ))
+        }
     };
 
     // Signals first, navigation second: the window is created blank so a load
@@ -354,7 +389,10 @@ fn run_page<R: Runtime>(
     connect_engine_signals(&window, tx);
 
     if let Err(err) = window.navigate(target.clone()) {
-        return PageOutcome::failed(Status::Network, format!("navigate failed: {err}"));
+        return Err(PageOutcome::failed(
+            Status::Network,
+            format!("navigate failed: {err}"),
+        ));
     }
 
     // The two phases wait for different things. An article is wanted for its
@@ -369,22 +407,27 @@ fn run_page<R: Runtime>(
         Phase::Warmup => match jar::wait_for_warm_jar(&rx, profile, target, started) {
             Ok(jar::Warm::Loaded) => {
                 trace_load(phase, target, navigated);
-                settle_and_extract(&window, &rx, phase, started)
+                settle_and_extract(&window, &rx, phase, started, budget)
             }
             Ok(jar::Warm::Jar(report)) => warmed_by_jar(&window, target, report),
             Err(outcome) => outcome,
         },
-        Phase::Article => match wait_for_load(&rx, policy::LOAD_TIMEOUT, started) {
-            Ok(()) => {
-                trace_load(phase, target, navigated);
-                settle_and_extract(&window, &rx, phase, started)
+        // A plain page waits for the same event as an article; what differs is
+        // what counts as settled, which is `phase`'s business (policy.rs).
+        Phase::Article | Phase::Page => {
+            match wait_for_load(&rx, budget.min(policy::LOAD_TIMEOUT), started) {
+                Ok(()) => {
+                    trace_load(phase, target, navigated);
+                    settle_and_extract(&window, &rx, phase, started, budget)
+                }
+                Err(outcome) => outcome,
             }
-            Err(outcome) => outcome,
-        },
+        }
     };
 
+    let value = finish(&window, outcome);
     drop(guard);
-    outcome
+    Ok(value)
 }
 
 /// End a warm-up that the cookie jar answered for.
@@ -406,7 +449,7 @@ fn trace_load(phase: Phase, target: &Url, navigated: Instant) {
     println!(
         "RP-LOAD {}",
         serde_json::json!({
-            "phase": if phase == Phase::Warmup { "warmup" } else { "article" },
+            "phase": phase.label(),
             "url": target.to_string(),
             "loadMs": navigated.elapsed().as_millis() as u64,
             "at": unix_millis(),
@@ -563,6 +606,16 @@ pub(crate) fn connect_engine_signals<R: Runtime>(window: &WebviewWindow<R>, tx: 
         let view = platform.inner();
 
         view.connect_load_failed(move |_view, _event, uri, error| {
+            // A cancelled load is not a failed one. WebKit reports the same
+            // signal when a navigation is superseded — a page that replaces its
+            // own URL from script gets one of these for the load it abandoned —
+            // and measured on bing.com/images/search it arrives about a second
+            // in, while the document that answers the query goes on loading and
+            // reaches `finished`. Reporting it would fail a page that is fine;
+            // a load that really is over the wire is what the timeouts are for.
+            if error.matches(webkit2gtk::NetworkError::Cancelled) {
+                return false;
+            }
             let _ = tx.send(LoadEvent::Failed(format!("{uri}: {error}")));
             // Let WebKit render its own error page; we are about to give up
             // anyway and the document is never shown.
@@ -672,7 +725,7 @@ fn print_trace(phase: Phase, opened: Instant, poll_started: Instant, readout: &R
     println!(
         "RP-TRACE {}",
         serde_json::json!({
-            "phase": if phase == Phase::Warmup { "warmup" } else { "article" },
+            "phase": phase.label(),
             "at": unix_millis(),
             "ms": opened.elapsed().as_millis() as u64,
             "extractMs": poll_started.elapsed().as_millis() as u64,
@@ -708,6 +761,7 @@ fn settle_and_extract<R: Runtime>(
     rx: &Receiver<LoadEvent>,
     phase: Phase,
     started: Instant,
+    budget: Duration,
 ) -> PageOutcome {
     let trace = trace_config();
     let poll = trace.map_or(policy::SETTLE_POLL, |(_, poll)| poll);
@@ -778,7 +832,7 @@ fn settle_and_extract<R: Runtime>(
         } else if Instant::now() >= deadline {
             break;
         }
-        if started.elapsed() > policy::OVERALL_TIMEOUT {
+        if started.elapsed() > budget {
             break;
         }
         std::thread::sleep(poll);
@@ -788,7 +842,9 @@ fn settle_and_extract<R: Runtime>(
         Some(readout) => {
             let status = policy::classify(&readout);
             let detail = match status {
-                Status::Empty => Some(format!(
+                // "No article body" says nothing about a page nobody asked for
+                // an article from.
+                Status::Empty if phase != Phase::Page => Some(format!(
                     "no article body found (selector {:?}, {} chars)",
                     readout.selector,
                     readout.text.chars().count()
