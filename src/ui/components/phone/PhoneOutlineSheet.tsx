@@ -13,7 +13,7 @@
 
 import type { OutlineItem } from "../../../fulltext/types";
 import type { FlowPaperName } from "../../../reading/epub/flow-display";
-import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogSheetContent, DialogTitle } from "../ui/dialog";
 
 export default function PhoneOutlineSheet(props: {
   open: boolean;
@@ -26,12 +26,7 @@ export default function PhoneOutlineSheet(props: {
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent
-        data-reader-paper={props.paper}
-        // Bottom-pinned: the centring and the box's own padding are replaced,
-        // everything else about a dialog stays.
-        className="top-auto bottom-0 left-0 max-h-[70dvh] w-full translate-x-0 translate-y-0 gap-0 rounded-b-none p-0"
-      >
+      <DialogSheetContent data-reader-paper={props.paper}>
         <DialogTitle className="border-b border-border-subtle px-4 py-3 text-[15px]">
           Outline
         </DialogTitle>
@@ -58,7 +53,7 @@ export default function PhoneOutlineSheet(props: {
             ))}
           </ul>
         )}
-      </DialogContent>
+      </DialogSheetContent>
     </Dialog>
   );
 }

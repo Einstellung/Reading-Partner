@@ -124,6 +124,15 @@ export const OVERLAY_SAFE = {
   // Pinned to the bottom edge: the toast viewport. An edge-pinned overlay only
   // needs the axis it is pinned to; its own max width keeps it off the sides.
   bottom: "bottom-safe-6",
+  // Sitting on the bottom edge and as wide as the screen: the phone's sheets
+  // (ui/dialog.tsx). `bottom` is a margin — it lifts a box that floats above
+  // the edge off the home indicator, and that box keeps itself off the sides.
+  // This one is a height, and only a height: a sheet touches all three edges on
+  // purpose, its background has to reach them the way the full-screen page's
+  // does, and what stays clear of the insets is the content inside it. The one
+  // edge it must not reach is the top, so the clamp is the viewport less
+  // whatever the notch takes, with the sheet scrolling inside that.
+  sheet: "overlay-sheet",
   // Covering the whole app: Settings, the only page shaped this way. Nothing
   // is clamped, because the overlay is the viewport — what needs the
   // insets is the column of content inside it, so this goes on that column and
