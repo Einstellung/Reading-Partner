@@ -35,17 +35,17 @@ export default function OptionalPanel({
         {/* Not a key, and the one thing on this tab that costs nothing to turn
             on. Off, the app has no meals screen and no entry to one; the data
             it has already written stays where it is (docs/73). */}
-        <SettingsSection title="Dinner">
+        <SettingsSection title="Meals">
           <div className={CARD}>
             <Label>
               <Switch
                 checked={settings.meals}
                 onCheckedChange={(v) => onSettingsChange({ ...settings, meals: v === true })}
               />
-              Dinner
+              Meals
             </Label>
             <p className="m-0 text-xs text-faint-foreground">
-              Plan the week's dinners, keep the shopping list, say when you ate something else.
+              Plan the week's breakfasts, lunches and dinners, keep the shopping list, say when you ate something else.
             </p>
           </div>
 

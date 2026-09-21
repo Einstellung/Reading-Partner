@@ -77,8 +77,12 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
       return "article";
     case "sources":
       return "sources";
-    case "dinner":
-      return "dinner";
+    case "meals":
+      return "meals";
+    case "meals-shopping":
+      return "meals-shopping";
+    case "meals-day":
+      return "meals-day";
     default:
       return null;
   }
@@ -268,6 +272,9 @@ export default function PhoneApp({
   // already on the stack, so those stay backs instead of stacking a second copy.
   // "library" cannot arrive: the phone home screen has no way there.
   const onNavigate = useCallback((next: HomeScreen) => {
+    // A day carries its date, so it is opened by onOpenMealsDay rather than by
+    // naming a destination; nothing asks for it through here.
+    if (next === "meals-day") return;
     const kind = next === "vestibule" ? "home" : next;
     setStack((s) => goTo(s, screen(kind)));
   }, []);
@@ -319,7 +326,12 @@ export default function PhoneApp({
             // so a chat over one would not know what it was reading. The gesture
             // is this shell's, so it is this shell that wraps the screen in it.
             wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
-            dinnerEnabled={settings.meals}
+            mealsEnabled={settings.meals}
+            // One day of the week is a stack entry like an opened article, so
+            // the date rides on it and the back gesture leaves it the same way
+            // it leaves anything else.
+            mealsDay={base.kind === "meals-day" ? base.date : null}
+            onOpenMealsDay={(date) => setStack((s) => push(s, { kind: "meals-day", date }))}
             // No corner cards over the chat. The reader pulled it down or
             // pressed Ask and pops it with a back, so the chat is a screen like
             // any other; a card that shrank it away would be a second way out,
@@ -334,8 +346,8 @@ export default function PhoneApp({
                 onContinue={(book) => openReader({ ...book, name: book.title })}
                 onOpenLibrary={() => setStack((s) => push(s, screen("library")))}
                 settingsAlert={syncReport.alert !== "none"}
-                dinner={settings.meals}
-                onOpenDinner={() => onNavigate("dinner")}
+                meals={settings.meals}
+                onOpenMeals={() => onNavigate("meals")}
                 lumenShown={lumenShown}
                 onToggleLumen={toggleLumen}
               />

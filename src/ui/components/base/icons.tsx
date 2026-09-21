@@ -634,7 +634,7 @@ export function IconToday({ size = 20 }: IconProps) {
 }
 
 // The shell sidebar's Briefing: a folded sheet of ruled text.
-export function IconDinner({ size = 20 }: IconProps) {
+export function IconMeals({ size = 20 }: IconProps) {
 	return (
 		<svg
 			{...svgProps(size)}
