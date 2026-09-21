@@ -77,7 +77,11 @@ function modeLine(plan: WeekPlan, index: number): string {
  * week as it stands with today marked, and the rules the program will hold it
  * to anyway.
  */
-export function dinnerGuidance(state: DinnerState, today: string): string {
+export function dinnerGuidance(
+  state: DinnerState,
+  today: string,
+  opts: { imageSearch?: boolean } = {},
+): string {
   const out: string[] = ["DINNER", `Today is ${today}.`, ""];
 
   if (state.charter) {
@@ -135,9 +139,18 @@ export function dinnerGuidance(state: DinnerState, today: string): string {
     "List a dish's ingredients for every serving it is planned for, the reheat night included.",
     "Give every ingredient its English common name in `en` beside the name in their own language,",
     "singular and lower case — it is what puts a photograph on their shopping list.",
-    "Prefer dishes that have a common name over combinations you make up: the reader is shown a",
-    "photograph of a named dish and nothing at all of an invented one. Give that name in",
-    "`searchName`, in English and the way people say it.",
+    // With a web image search configured any name finds a picture, so the
+    // sentence that narrows the menu is only true without one (docs/73 图片).
+    ...(opts.imageSearch
+      ? [
+          "Give every dish a `searchName` in English, the way people say it — it is what puts a",
+          "photograph of the dish on their screen.",
+        ]
+      : [
+          "Prefer dishes that have a common name over combinations you make up: the reader is shown a",
+          "photograph of a named dish and nothing at all of an invented one. Give that name in",
+          "`searchName`, in English and the way people say it.",
+        ]),
     "Vegetables heavy, whole grains, lean protein, little oil, salt and refined carbohydrate.",
     "Never count calories, never give grams of anything nutritional, never talk about nutrition",
     "numbers at all — health is a filter on what you propose, not a subject.",

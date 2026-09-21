@@ -7,24 +7,41 @@ import { imageSrc, ingredientImageUrl, MEALDB_ALIASES } from "../../../src/info/
 import { MEALDB_INGREDIENTS } from "../../../src/info/dinner/mealdb-ingredients";
 
 test("an external picture is routed through the proxy", () => {
-  expect(imageSrc("https://cdn.example/leek.jpg", (u) => `img://localhost/${encodeURIComponent(u)}`)).toBe(
-    "img://localhost/https%3A%2F%2Fcdn.example%2Fleek.jpg",
-  );
+  expect(
+    imageSrc("https://cdn.example/leek.jpg", null, (u) => `img://localhost/${encodeURIComponent(u)}`),
+  ).toBe("img://localhost/https%3A%2F%2Fcdn.example%2Fleek.jpg");
+});
+
+// A web image search result carries the page it was found on, which the proxy
+// sends as Referer; everything else passes nothing and none is sent.
+test("a page URL rides along to the proxy, and only when there is one", () => {
+  const seen: Array<string | null | undefined> = [];
+  const proxy = (u: string, page?: string | null) => {
+    seen.push(page);
+    return u;
+  };
+  imageSrc("https://cdn.example/dish.jpg", "https://site.example/recipe", proxy);
+  imageSrc("https://cdn.example/leek.jpg", null, proxy);
+  imageSrc("https://cdn.example/leek.jpg", "   ", proxy);
+  imageSrc("https://cdn.example/leek.jpg", undefined, proxy);
+  expect(seen).toEqual(["https://site.example/recipe", null, null, null]);
 });
 
 // Outside Tauri the scheme does not exist and the live proxy answers null; the
 // plain URL is what bun dev renders, and a null src would draw nothing at all.
 test("no proxy route leaves the original URL", () => {
-  expect(imageSrc("https://cdn.example/leek.jpg", () => null)).toBe("https://cdn.example/leek.jpg");
+  expect(imageSrc("https://cdn.example/leek.jpg", null, () => null)).toBe(
+    "https://cdn.example/leek.jpg",
+  );
 });
 
 test("an app-relative path and a data URI are loaded as they are", () => {
   const boom = () => {
     throw new Error("nothing local goes near the proxy");
   };
-  expect(imageSrc("/dishes/stew.jpg", boom)).toBe("/dishes/stew.jpg");
-  expect(imageSrc("dishes/stew.jpg", boom)).toBe("dishes/stew.jpg");
-  expect(imageSrc("data:image/png;base64,AAA", boom)).toBe("data:image/png;base64,AAA");
+  expect(imageSrc("/dishes/stew.jpg", null, boom)).toBe("/dishes/stew.jpg");
+  expect(imageSrc("dishes/stew.jpg", null, boom)).toBe("dishes/stew.jpg");
+  expect(imageSrc("data:image/png;base64,AAA", null, boom)).toBe("data:image/png;base64,AAA");
 });
 
 test("nothing to show is null, so the caller draws its fallback", () => {
@@ -134,7 +151,7 @@ test("the list is TheMealDB's 992, deduplicated and sorted", () => {
 test("every picture a name resolves to is proxyable", () => {
   for (const [en] of HITS) {
     const url = ingredientImageUrl(en)!;
-    expect(imageSrc(url, (u) => `img://localhost/${encodeURIComponent(u)}`)).toBe(
+    expect(imageSrc(url, null, (u) => `img://localhost/${encodeURIComponent(u)}`)).toBe(
       `img://localhost/${encodeURIComponent(url)}`,
     );
   }

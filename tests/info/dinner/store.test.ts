@@ -15,11 +15,19 @@ import {
   loadDinner,
   parseDinnerFile,
   saveCharter,
+  markDishPhotoBroken,
   saveDeviation,
+  saveDishPhotos,
   savePlan,
   saveShopping,
 } from "../../../src/info/dinner/store";
-import { EMPTY_DINNER, type DinnerCharter, type ShoppingItem, type WeekPlan } from "../../../src/info/dinner/types";
+import {
+  EMPTY_DINNER,
+  type DinnerCharter,
+  type DishPhoto,
+  type ShoppingItem,
+  type WeekPlan,
+} from "../../../src/info/dinner/types";
 
 const ASIDE = `${DINNER_FILE}${CORRUPT_SUFFIX}`;
 
@@ -149,4 +157,32 @@ test("a file body round-trips through the parser", () => {
     dishPhotos: {},
   };
   expect(parseDinnerFile(JSON.parse(dinnerFileBody(state)))).toEqual(state);
+});
+
+const PHOTO: DishPhoto = {
+  url: "https://cdn.example/mapo.jpg",
+  thumb: "",
+  title: "",
+  creator: "example.com",
+  license: "",
+  licenseUrl: "",
+  foreignLandingUrl: "https://example.com/mapo",
+  pageUrl: "https://example.com/mapo",
+};
+
+// A picture the search found and the webview cannot load: dropped, so the next
+// Apply asks again instead of loading the same dead URL every week.
+test("a broken dish photograph is dropped from the cache", async () => {
+  await saveDishPhotos({ "mapo tofu": PHOTO, shakshuka: PHOTO }, plan(), io);
+  const after = await markDishPhotoBroken("Mapo Tofu", io);
+  expect(Object.keys(after.dishPhotos)).toEqual(["shakshuka"]);
+  expect((await loadDinner(io)).dishPhotos["mapo tofu"]).toBeUndefined();
+});
+
+test("a name the cache never had is written nowhere", async () => {
+  await saveDishPhotos({ "mapo tofu": PHOTO }, plan(), io);
+  const before = io.files.get(DINNER_FILE);
+  const after = await markDishPhotoBroken("lentil soup", io);
+  expect(Object.keys(after.dishPhotos)).toEqual(["mapo tofu"]);
+  expect(io.files.get(DINNER_FILE)).toBe(before);
 });

@@ -86,6 +86,8 @@ test("loadSettings round-trips a fully persisted object", async () => {
     defaultModelId: "claude",
     briefingModelId: "haiku",
     semanticScholarApiKey: "k",
+    googleSearchApiKey: "g",
+    googleSearchEngineId: "cx",
     chatThinking: "high",
     prepThinking: "off",
     briefingScreenThinking: "off",

@@ -186,6 +186,29 @@ export function searchNamesToLookup(
   return out;
 }
 
+/**
+ * The cache with one name's photograph forgotten, or null when there was
+ * nothing to forget.
+ *
+ * A web image search hands back arbitrary CDNs, and some of them refuse the
+ * app's request even with a Referer. The screen falls back to the ingredient
+ * strip, which is right for the night but wrong for the month: the entry would
+ * sit in the cache being loaded and failing every time. Forgotten rather than
+ * written down as a miss, because a miss is the index saying it has nothing
+ * and this is the app failing to load what it found — the next Apply asks
+ * again, and may well get a different picture.
+ */
+export function withoutDishPhoto(
+  cache: Readonly<Record<string, DishPhotoEntry>>,
+  searchName: string,
+): Record<string, DishPhotoEntry> | null {
+  const name = normalizeSearchName(searchName);
+  if (!name || !(name in cache)) return null;
+  const next = { ...cache };
+  delete next[name];
+  return next;
+}
+
 /** The photograph a dish shows, from the cache, or null. */
 export function photoForDish(
   dish: Dish | null | undefined,

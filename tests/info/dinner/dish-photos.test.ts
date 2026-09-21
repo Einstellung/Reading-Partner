@@ -16,9 +16,10 @@ import {
   pickPhoto,
   searchNamesToLookup,
   withDishPhotos,
+  withoutDishPhoto,
   PHOTO_MISS_RETRY_MS,
 } from "../../../src/info/dinner/dish-photos";
-import { dishPhotoCredit } from "../../../src/info/dinner/view";
+import { dishPhotoCredit, dishPhotoPageUrl } from "../../../src/info/dinner/view";
 import {
   EMPTY_DINNER,
   type Dish,
@@ -348,4 +349,48 @@ test("nothing is credited for a dish drawn from its ingredients, or for another 
   expect(dishPhotoCredit(dish({ image: "https://elsewhere/x.jpg" }), { "mapo tofu": PHOTO })).toBeNull();
   expect(dishPhotoCredit(dish({ image: PHOTO.url }), {})).toBeNull();
   expect(dishPhotoCredit(null, { "mapo tofu": PHOTO })).toBeNull();
+});
+
+// --- a web image search result -----------------------------------------------
+
+// What google-images.ts writes: the site instead of an author, no licence, and
+// the page the picture sits on twice — once for the caption to open, once for
+// the proxy to send as Referer.
+const WEB_PHOTO: DishPhoto = {
+  url: "https://cdn.example/salmon.jpg",
+  thumb: "https://encrypted.example/t.jpg",
+  title: "Sheet pan salmon",
+  creator: "example.com",
+  license: "",
+  licenseUrl: "",
+  foreignLandingUrl: "https://example.com/salmon",
+  pageUrl: "https://example.com/salmon",
+};
+
+test("a licence-less photograph is credited to the site it came from", () => {
+  const d = dish({ image: WEB_PHOTO.url, searchName: "sheet pan salmon" });
+  expect(dishPhotoCredit(d, { "sheet pan salmon": WEB_PHOTO })).toEqual({
+    text: "Photo: example.com",
+    url: "https://example.com/salmon",
+  });
+});
+
+test("only a search result carries a page URL for the proxy", () => {
+  const web = dish({ image: WEB_PHOTO.url, searchName: "sheet pan salmon" });
+  expect(dishPhotoPageUrl(web, { "sheet pan salmon": WEB_PHOTO })).toBe("https://example.com/salmon");
+  const open = dish({ image: PHOTO.url });
+  expect(dishPhotoPageUrl(open, { "mapo tofu": PHOTO })).toBeNull();
+  expect(dishPhotoPageUrl(dish(), { "mapo tofu": PHOTO })).toBeNull();
+});
+
+test("a picture that will not load is forgotten, not written down as a miss", () => {
+  const cache = { "mapo tofu": PHOTO, shakshuka: PHOTO };
+  const next = withoutDishPhoto(cache, "  Mapo Tofu  ")!;
+  expect(Object.keys(next)).toEqual(["shakshuka"]);
+  // Forgotten means the next Apply searches again, which a 30-day miss would not.
+  expect(needsPhotoLookup(next["mapo tofu"], NOW)).toBe(true);
+  // Nothing to forget is no write at all.
+  expect(withoutDishPhoto(cache, "lentil soup")).toBeNull();
+  expect(withoutDishPhoto(cache, "  ")).toBeNull();
+  expect(cache["mapo tofu"]).toBe(PHOTO);
 });

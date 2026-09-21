@@ -132,12 +132,16 @@ export function IngredientThumb({
  */
 export function DishImage({
   image,
+  imagePageUrl,
   thumbnails,
   alt,
   className,
   onPhotoFailed,
 }: {
   image?: string;
+  // The page the dish's photograph sits on, sent as Referer by the proxy. Only
+  // a web image search result has one (docs/pitfall/30).
+  imagePageUrl?: string | null;
   thumbnails: string[];
   alt: string;
   className?: string;
@@ -146,7 +150,7 @@ export function DishImage({
   onPhotoFailed?: () => void;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  const wanted = imageSrc(image);
+  const wanted = imageSrc(image, imagePageUrl);
   const src = wanted && wanted !== failed ? wanted : null;
   const box = `block overflow-hidden rounded-lg border border-border-subtle bg-muted-soft ${className ?? ""}`;
   // The dish's own photograph failing falls back to the strip, not to a gap.
