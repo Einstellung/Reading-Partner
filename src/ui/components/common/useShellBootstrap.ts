@@ -41,6 +41,7 @@ import { registerReadingDesk } from "../../../reading/desk";
 import { registerBookDelivery } from "../../../reading/deliver";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
 import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
+import { registerDinnerPhotosWorker } from "../../../info/dinner/photo-worker";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerInfoCollectWorker } from "../../../info/program/live";
 import { registerBriefingDelivery } from "../../../info/briefer/deliver";
@@ -193,6 +194,10 @@ export function bootDomains(): void {
   // a kind the soul can delegate — the ask is a URL and a book, and the tool
   // writes it (reading/ingest/url-worker.ts).
   registerIngestUrlWorker();
+  // The week's photographs, searched in the hidden webview on whichever device
+  // has one (docs/73 图片). Registered on every device: which one searches is
+  // the election's answer over the webview-fetch tag.
+  registerDinnerPhotosWorker();
   registerBookDelivery();
   // The same pair on the info side: a question the briefing did not answer, and
   // the day's briefing thread it is answered back into (docs/63, docs/68).

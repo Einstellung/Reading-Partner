@@ -6,13 +6,12 @@
 // without React (CLAUDE.md). Nothing here formats a nutrition number, because
 // there is none anywhere in this line.
 
-import { photoForDish } from "./dish-photos";
+import { photoForDish, photoForIngredient, type PhotoCache } from "./dish-photos";
 import { ingredientImageUrl } from "./images";
 import {
   CATEGORY_ORDER,
   type DayPlan,
   type Dish,
-  type DishPhotoEntry,
   type DinnerMode,
   type IngredientCategory,
   type KeepsClass,
@@ -138,45 +137,64 @@ export interface DishPhotoCredit {
 }
 
 /**
- * The credit a dish photograph owes: its creator and its licence, and the page
- * it was found on.
- *
- * Only for the photograph actually on screen — the dish's `image` has to be the
- * one the cache holds, or a credit would name the wrong photographer. Null for
- * a dish drawn from its ingredients, whose credit is the screen's standing
- * TheMealDB line instead.
- *
- * A web image search knows no author and no licence, so it puts the site in
- * `creator` and leaves `license` empty: the line reads "Photo: example.com"
- * and still opens the page the picture was found on.
+ * A picture on the screen, and the page it was found on for the proxy to send
+ * as Referer — an arbitrary CDN may be behind a hotlink check
+ * (docs/pitfall/30). Null where there is nothing to send.
  */
-export function dishPhotoCredit(
-  dish: Dish | null | undefined,
-  photos: Readonly<Record<string, DishPhotoEntry>> | undefined,
-): DishPhotoCredit | null {
-  if (!dish?.image) return null;
-  const photo = photoForDish(dish, photos);
-  if (!photo || photo.url !== dish.image) return null;
-  const who = photo.creator.trim();
-  const parts = ["Photo", who ? `: ${who}` : "", photo.license ? ` · ${photo.license}` : ""];
-  const url = photo.foreignLandingUrl || photo.licenseUrl;
-  if (!url) return null;
-  return { text: parts.join(""), url };
+export interface Picture {
+  url: string;
+  pageUrl: string | null;
 }
 
 /**
- * The page a dish's photograph sits on, for the proxy to send as Referer, or
- * null. Only the web image search sets it; the picture is loaded without one
- * otherwise (images.ts, docs/pitfall/30).
+ * The picture a night shows: what the search found for the dish, or the one
+ * written onto the dish when the week was applied.
+ *
+ * The cache first, because it is the newer of the two: a run that landed after
+ * the week was written is a photograph the plan on disk knows nothing about.
  */
-export function dishPhotoPageUrl(
-  dish: Dish | null | undefined,
-  photos: Readonly<Record<string, DishPhotoEntry>> | undefined,
-): string | null {
-  if (!dish?.image) return null;
+export function dishPicture(dish: Dish | null | undefined, photos: PhotoCache | undefined): Picture | null {
   const photo = photoForDish(dish, photos);
-  if (!photo || photo.url !== dish.image) return null;
-  return photo.pageUrl?.trim() || null;
+  if (photo) return { url: photo.url, pageUrl: photo.pageUrl || null };
+  return dish?.image ? { url: dish.image, pageUrl: null } : null;
+}
+
+/**
+ * The picture a shopping line shows: TheMealDB's cut-out where there is one,
+ * and what the search found otherwise.
+ *
+ * The bank first on purpose — a white-background cut-out of a bok choy
+ * identifies the vegetable in the shop better than a photograph of a dish with
+ * some in it (docs/73 图片).
+ */
+export function ingredientPicture(
+  en: string,
+  photos: PhotoCache | undefined,
+  bank: (name: string) => string | null = ingredientImageUrl,
+): Picture | null {
+  const banked = bank(en);
+  if (banked) return { url: banked, pageUrl: null };
+  const photo = photoForIngredient(en, photos);
+  return photo ? { url: photo.url, pageUrl: photo.pageUrl || null } : null;
+}
+
+/**
+ * The credit the photograph on screen owes: the site it was found on, and the
+ * page it sits on. The line reads "Photo: example.com" and opens that page.
+ *
+ * Null for a dish drawn from its ingredients, whose credit is the screen's
+ * standing TheMealDB line instead.
+ */
+export function dishPhotoCredit(
+  dish: Dish | null | undefined,
+  photos: PhotoCache | undefined,
+): DishPhotoCredit | null {
+  const photo = photoForDish(dish, photos);
+  if (!photo) return null;
+  const site = photo.site.trim();
+  const url = photo.pageUrl.trim();
+  if (!site || !url) return null;
+  return { text: `Photo: ${site}`, url };
 }
 
 /**

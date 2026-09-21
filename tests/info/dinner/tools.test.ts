@@ -110,17 +110,12 @@ test("the instruction carries the hard constraints and forbids nutrition numbers
   expect(text).toContain("Never re-plan the week");
 });
 
-// Without a key the only dishes that get a picture are the ones with a name,
-// so the model is told to prefer them; with one, any name finds a photograph
-// and the sentence would narrow the menu for nothing (docs/73 图片).
-test("the menu is narrowed to named dishes only when there is no image search", () => {
-  const without = dinnerGuidance({ ...EMPTY_DINNER }, MON);
-  expect(without).toContain("Prefer dishes that have a common name");
-  expect(without).toContain("`searchName`");
-
-  const with_ = dinnerGuidance({ ...EMPTY_DINNER }, MON, { imageSearch: true });
-  expect(with_).not.toContain("Prefer dishes that have a common name");
-  expect(with_).toContain("Give every dish a `searchName` in English");
+// Any name finds a photograph now, so the menu is not narrowed to named
+// dishes: the search name is what is typed in, not what is cooked (docs/73 图片).
+test("every dish is asked for a search name and nothing is narrowed", () => {
+  const guidance = dinnerGuidance({ ...EMPTY_DINNER }, MON);
+  expect(guidance).toContain("Give every dish a `searchName`");
+  expect(guidance).not.toContain("Prefer dishes that have a common name");
 });
 
 test("the charter tool drafts a card and writes nothing", async () => {

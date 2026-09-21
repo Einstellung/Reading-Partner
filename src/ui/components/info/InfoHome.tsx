@@ -235,6 +235,7 @@ export default function InfoHome(props: {
           <div className="absolute inset-0 overflow-y-auto bg-background">
             <DinnerPage
               state={dinner.state}
+              photos={dinner.photos}
               today={dinner.today}
               onPlanWeek={() => openChat(DINNER_KICKOFF)}
               onAsk={() => openChat()}

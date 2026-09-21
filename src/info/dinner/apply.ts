@@ -8,16 +8,10 @@
 // only write.
 
 import type { DinnerCharterCardData, DinnerPlanCardData } from "./cards";
-import { searchNamesToLookup, withDishPhotos, type DishPhotoLookup } from "./dish-photos";
+import { withDishPhotos, type PhotoCache } from "./dish-photos";
+import { photoQueriesForPlan, type PhotoQuery } from "./photo-run";
 import { deriveShoppingList, reconcileShoppingList } from "./shopping";
-import type {
-  Deviation,
-  DinnerCharter,
-  DinnerState,
-  DishPhotoEntry,
-  ShoppingItem,
-  WeekPlan,
-} from "./types";
+import type { Deviation, DinnerCharter, DinnerState, ShoppingItem, WeekPlan } from "./types";
 import { applyDeviation, weekId } from "./week";
 
 export interface DinnerPorts {
@@ -32,16 +26,15 @@ export interface DinnerPorts {
     plan: WeekPlan,
     shopping: readonly ShoppingItem[],
   ): Promise<unknown>;
-  // The photographs looked up for a plan, and that plan carrying them. Optional
-  // because a host with no network still applies plans — without these two the
-  // week is simply drawn from its ingredients.
-  saveDishPhotos?(
-    photos: Readonly<Record<string, DishPhotoEntry>>,
-    plan: WeekPlan,
-  ): Promise<unknown>;
-  // One search for one dish name. Says whether it got an answer at all, and
-  // never throws.
-  lookupDishPhoto?(searchName: string): Promise<DishPhotoLookup>;
+  // The photographs found so far, by cache key.
+  photos?(): Promise<PhotoCache>;
+  // Start the run that searches for what the week still has no picture of, on
+  // whichever machine has a hidden webview. Optional: a host that cannot start
+  // runs still applies plans, and the week is drawn from its ingredients.
+  startPhotoRun?(planId: string, queries: readonly PhotoQuery[]): Promise<unknown>;
+  // Whether a name already has a picture from a bank, which is what decides
+  // that an ingredient has to be searched for at all.
+  bankImage?(en: string): string | null;
   // The host's clock and calendar. Never the model's (docs/73 事实不经模型).
   now(): number;
   today(): string;
@@ -56,9 +49,9 @@ export interface Applied {
   // The synthetic user turn telling the AI what the reader just did. Empty when
   // nothing happened, because there is then nothing to tell it.
   note: string;
-  // Work still running after the note was handed back: the dish photographs.
-  // The host ignores it — the screen reloads when they land — and a test awaits
-  // it instead of guessing at a number of ticks.
+  // Work still running after the note was handed back: starting the photograph
+  // run. The host ignores it — the screen reloads when the pictures land — and a
+  // test awaits it instead of guessing at a number of ticks.
   pending?: Promise<void>;
 }
 
@@ -110,14 +103,21 @@ export async function applyPlan(
   if (card.phase === "applied") return NOTHING;
   const state = await ports.current();
   const previous = card.adjustment ? state.plan : null;
-  const plan: WeekPlan = {
-    id: weekId(card.startDate),
-    startDate: card.startDate,
-    days: card.days,
-    dishes: card.dishes,
-    createdAt: previous?.createdAt ?? ports.now(),
-    revision: (previous?.revision ?? 0) + 1,
-  };
+  // The pictures already in the cache go on the week as it is written: a dish
+  // cooked in July is on screen the moment the card is applied, and only the
+  // names nobody has searched yet wait for the run.
+  const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
+  const plan: WeekPlan = withDishPhotos(
+    {
+      id: weekId(card.startDate),
+      startDate: card.startDate,
+      days: card.days,
+      dishes: card.dishes,
+      createdAt: previous?.createdAt ?? ports.now(),
+      revision: (previous?.revision ?? 0) + 1,
+    },
+    cache,
+  );
   const shopping = reconcileShoppingList(
     state.shopping,
     deriveShoppingList(plan, ports.today()),
@@ -128,66 +128,62 @@ export async function applyPlan(
     return NOTHING;
   }
   ports.changed();
-  // The photographs are searched for after the week is on disk and after the
-  // note is handed back: a slow index must not hold up either. The screen
-  // reloads a second time when they land, the way it already does after Apply.
-  const pending = resolveDishPhotos(plan, ports)
-    .then((wrote) => {
-      if (wrote) ports.changed();
-    })
-    .catch(() => {});
+  // The photographs are asked for after the week is on disk and after the note
+  // is handed back: the search is a run on another machine and the screen is
+  // usable without it, drawn from the ingredients' pictures until it lands.
+  const pending = startPhotoSearch(plan, cache, ports).then(
+    () => {},
+    () => {},
+  );
   return { ok: true, note: planNote(card, shopping), pending };
 }
 
 /**
- * The photographs for a plan's dishes: one search per dish name never searched
- * before, in order, then one write carrying both the cache and the plan whose
- * dishes now point at the pictures.
+ * Ask for the photographs a week has none of: the dishes by name, then the
+ * ingredients no picture bank has artwork for.
  *
- * Sequential rather than fanned out. Seven names is nothing, but the index
- * allows twenty requests a minute to an anonymous caller and a burst is how an
- * app gets a refusal instead of a photograph.
+ * One run, on whichever machine can search (photo-run.ts). Nothing is waited
+ * for and nothing is written here — the run writes the cache itself, entry by
+ * entry, and the plan picks the pictures up as it renders.
  *
- * A search that got no answer at all stops the run and writes nothing for that
- * name: if the index cannot be reached, the names after it cannot be reached
- * either, and remembering "no photograph" for a dish nobody managed to ask
- * about would take it off the screen for a month. They are asked again at the
- * next Apply.
- *
- * True when something was written. Never throws: every failure is one dish
- * without a picture.
+ * The run's id, or null when the week wants nothing or this host cannot ask.
+ * Never throws: every failure is a week drawn from its ingredients.
  */
-export async function resolveDishPhotos(plan: WeekPlan, ports: DinnerPorts): Promise<boolean> {
-  const lookup = ports.lookupDishPhoto;
-  const save = ports.saveDishPhotos;
-  if (!lookup || !save) return false;
+export async function startPhotoSearch(
+  plan: WeekPlan,
+  cache: PhotoCache,
+  ports: DinnerPorts,
+): Promise<unknown> {
+  const start = ports.startPhotoRun;
+  if (!start) return null;
+  const queries = photoQueriesForPlan(plan, cache, ports.now(), {
+    bankImage: ports.bankImage ?? (() => null),
+  });
+  if (!queries.length) return null;
+  return start(plan.id, queries);
+}
+
+/**
+ * Search the whole week again, the cache ignored: the reader looked at a
+ * picture and said it is not the dish.
+ *
+ * Every query of the plan, including the names already answered and the ones
+ * answered with nothing — that is what asking again means. How many were asked
+ * for, or zero when there is no week, no run to start, or nothing in the week
+ * to search for.
+ */
+export async function refreshPhotos(ports: DinnerPorts): Promise<number> {
+  const start = ports.startPhotoRun;
   const state = await ports.current();
-  const cache: Record<string, DishPhotoEntry> = { ...state.dishPhotos };
-  const fresh: Record<string, DishPhotoEntry> = {};
-  const now = ports.now();
-  for (const name of searchNamesToLookup(plan.dishes, cache, now)) {
-    let answer: DishPhotoLookup;
-    try {
-      answer = await lookup(name);
-    } catch {
-      answer = { ok: false };
-    }
-    if (!answer.ok) break;
-    // An answer of "nothing" is cached too, so the same dish is not searched
-    // for again next week. It expires; a hit does not.
-    const entry: DishPhotoEntry = answer.photo ?? { none: true, checkedAt: now };
-    cache[name] = entry;
-    fresh[name] = entry;
-  }
-  const photographed = withDishPhotos(plan, cache);
-  const nothingNew = Object.keys(fresh).length === 0 && photographed === plan;
-  if (nothingNew) return false;
-  try {
-    await save(fresh, photographed);
-  } catch {
-    return false;
-  }
-  return true;
+  if (!state.plan || !start) return 0;
+  const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
+  const queries = photoQueriesForPlan(state.plan, cache, ports.now(), {
+    bankImage: ports.bankImage ?? (() => null),
+    ignoreCache: true,
+  });
+  if (!queries.length) return 0;
+  await start(state.plan.id, queries);
+  return queries.length;
 }
 
 /**
