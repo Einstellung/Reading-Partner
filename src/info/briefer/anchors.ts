@@ -11,6 +11,7 @@
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND, type FileArticle } from "./desk";
 import { INFO_MEALS_KIND } from "../meals/desk";
 import type { MealsState } from "../meals/types";
+import { leftToBuy } from "../meals/shopping";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
 import { briefingOverview } from "../boxes/briefing";
@@ -235,8 +236,8 @@ export function mealsAnchor(
 
 function mealsLine(state: MealsState): string | null {
   if (!state.plan) return "No week planned yet";
-  const left = state.shopping.filter((i) => !i.checked).length;
-  return left ? `This week's dinners · ${left} still to buy` : "This week's dinners";
+  const left = leftToBuy(state.shopping);
+  return left ? `This week's meals · ${left} still to buy` : "This week's meals";
 }
 
 // The day's briefing on the desk. One place because two anchors put it there —

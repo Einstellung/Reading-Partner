@@ -119,6 +119,7 @@ test("a week takes the pictures the cache has and keeps the ones it has not", ()
     id: "week-2026-09-21",
     startDate: "2026-09-21",
     days: [],
+    breakfastLine: "",
     dishes: [dish(), dish({ id: "dish-b", searchName: "shakshuka", image: "app/old.png" })],
     createdAt: 0,
     revision: 1,

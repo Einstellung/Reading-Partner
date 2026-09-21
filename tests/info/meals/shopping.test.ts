@@ -1,157 +1,171 @@
-// The shopping list derived from a week (src/info/meals/shopping.ts).
-//
-// The list is the one product of this line the reader holds in one hand in a
-// shop, so every rule it is built on is asserted here: what a reheat day buys
-// (nothing), what two dishes wanting the same thing become (one line), what
-// order a store is walked in, and which raw protein is frozen on the way in.
-// Run: scripts/t.sh tests/info/dinner
+// The one shopping trip (src/info/meals/shopping.ts): what three meals a day
+// derive, what the reader's edits do over it, and what Done means.
+// Run: scripts/t.sh tests/info/meals
 
 import { expect, test } from "bun:test";
 import {
+  addReaderItem,
+  currentList,
   deriveShoppingList,
+  isChecked,
+  leftToBuy,
+  markShoppingDone,
+  missed,
   reconcileShoppingList,
+  removeShoppingItem,
+  replaceShoppingItem,
   setShoppingChecked,
+  shoppingGroups,
   shoppingItemKey,
+  stillToGet,
 } from "../../../src/info/meals/shopping";
-import type { Dish, Ingredient, WeekPlan } from "../../../src/info/meals/types";
+import type { ShoppingItem } from "../../../src/info/meals/types";
+import { MON, shopping, week } from "./fixtures/week";
 
-const MON = "2026-09-21";
-
-function ing(over: Partial<Ingredient> & { name: string }): Ingredient {
-  return { en: "", qty: "1", category: "produce", keeps: "d3-5", ...over };
-}
-
-function dish(id: string, ingredients: Ingredient[], over: Partial<Dish> = {}): Dish {
+function reader(name: string): ShoppingItem {
   return {
-    id,
-    name: id,
-    searchName: id,
-    oneLine: "",
-    base: "base",
-    fresh: "",
-    keepsADay: true,
-    handsOnMinutes: 12,
-    ingredients,
-    ...over,
+    name,
+    en: name,
+    qty: "one",
+    category: "other",
+    keeps: "pantry",
+    freezeOnArrival: false,
+    neededBy: "",
   };
 }
 
-// Monday cooks, Tuesday reheats it, Wednesday is delivery, Thursday cooks
-// again, and Sunday cooks the fish.
-function week(dishes: Dish[]): WeekPlan {
-  return {
-    id: `week-${MON}`,
-    startDate: MON,
-    days: [
-      { date: "2026-09-21", mode: "cook", dishId: "dish-a" },
-      { date: "2026-09-22", mode: "reheat", reheatOf: "2026-09-21", freshAdd: "greens" },
-      { date: "2026-09-23", mode: "delivery", place: "the noodle place" },
-      { date: "2026-09-24", mode: "cook", dishId: "dish-b" },
-      { date: "2026-09-25", mode: "reheat", reheatOf: "2026-09-24" },
-      { date: "2026-09-26", mode: "out", place: "the canteen" },
-      { date: "2026-09-27", mode: "cook", dishId: "dish-c" },
-    ],
-    dishes,
-    createdAt: 1,
-    revision: 1,
+test("every cooked meal buys, whichever of the three it is", () => {
+  const items = deriveShoppingList(week(), MON);
+  const names = items.map((i) => i.name);
+  // Breakfast's oats and yogurt, dinner's chickpeas and kale, Tuesday's salmon.
+  expect(names).toContain("oats");
+  expect(names).toContain("yogurt");
+  expect(names).toContain("chickpeas");
+  expect(names).toContain("kale");
+  expect(names).toContain("salmon");
+  // A packed lunch and an out lunch buy nothing of their own.
+  expect(items).toHaveLength(5);
+});
+
+test("the list walks the shop: aisles in order, shortest shelf life first", () => {
+  const items = deriveShoppingList(week(), MON);
+  expect(items.map((i) => i.category)).toEqual([
+    "produce",
+    "protein",
+    "dairy",
+    "grains",
+    "pantry",
+  ]);
+});
+
+test("a line is needed by the first meal that wants it, and raw protein two days out is frozen", () => {
+  const items = deriveShoppingList(week(), MON);
+  const oats = items.find((i) => i.name === "oats")!;
+  expect(oats.neededBy).toBe(MON);
+  const salmon = items.find((i) => i.name === "salmon")!;
+  expect(salmon.neededBy).toBe("2026-09-22");
+  // One day ahead: bought today, cooked tomorrow, no need to freeze.
+  expect(salmon.freezeOnArrival).toBe(false);
+  const earlier = deriveShoppingList(week(), "2026-09-20");
+  expect(earlier.find((i) => i.name === "salmon")!.freezeOnArrival).toBe(true);
+});
+
+test("currentList: dropped lines go, swaps keep the aisle, reader lines come last", () => {
+  const items = deriveShoppingList(week(), MON);
+  const kaleKey = shoppingItemKey(items.find((i) => i.name === "kale")!);
+  const oatsKey = shoppingItemKey(items.find((i) => i.name === "oats")!);
+  let state = shopping({ items });
+  state = { ...state, dropped: { [oatsKey]: true } };
+  state = {
+    ...state,
+    replaced: {
+      [kaleKey]: { name: "spinach", en: "spinach", category: "produce", keeps: "d3-5", qty: "1 bag" },
+    },
   };
-}
+  state = addReaderItem(state, reader("washing up liquid"));
 
-test("only cook days buy anything; out, delivery and reheat buy nothing of their own", () => {
-  const list = deriveShoppingList(
-    week([dish("dish-a", [ing({ name: "chicken", category: "protein", keeps: "d1-2" })])]),
-    MON,
-  );
-  expect(list.map((i) => i.name)).toEqual(["chicken"]);
-  expect(list[0]?.neededBy).toBe("2026-09-21");
-});
-
-test("the same thing wanted by two dishes is one line, quantities joined and the earliest day kept", () => {
-  const list = deriveShoppingList(
-    week([
-      dish("dish-a", [ing({ name: "Olive oil", category: "pantry", keeps: "pantry", qty: "1 tbsp" })]),
-      dish("dish-b", [ing({ name: "olive oil ", category: "pantry", keeps: "pantry", qty: "2 tbsp" })]),
-    ]),
-    MON,
-  );
-  expect(list).toHaveLength(1);
-  expect(list[0]?.qty).toBe("1 tbsp + 2 tbsp");
-  expect(list[0]?.neededBy).toBe("2026-09-21");
-});
-
-test("an identical quantity is not repeated, and the shorter shelf life wins the merge", () => {
-  const list = deriveShoppingList(
-    week([
-      dish("dish-a", [ing({ name: "spinach", keeps: "w1", qty: "1 bag" })]),
-      dish("dish-b", [ing({ name: "spinach", keeps: "d3-5", qty: "1 bag" })]),
-    ]),
-    MON,
-  );
-  expect(list[0]?.qty).toBe("1 bag");
-  expect(list[0]?.keeps).toBe("d3-5");
-});
-
-test("raw protein that keeps a day or two and is needed two days out is frozen on arrival", () => {
-  const list = deriveShoppingList(
-    week([
-      dish("dish-a", [ing({ name: "chicken", category: "protein", keeps: "d1-2" })]),
-      dish("dish-c", [ing({ name: "sea bass", category: "protein", keeps: "d1-2" })]),
-    ]),
-    MON,
-  );
-  const byName = Object.fromEntries(list.map((i) => [i.name, i]));
-  // Cooked tonight: it goes in the fridge.
-  expect(byName.chicken?.freezeOnArrival).toBe(false);
-  // Cooked on Sunday: it would be six days past its window.
-  expect(byName["sea bass"]?.freezeOnArrival).toBe(true);
-});
-
-test("only raw protein is frozen — a vegetable with a short window is not", () => {
-  const list = deriveShoppingList(
-    week([dish("dish-c", [ing({ name: "basil", category: "produce", keeps: "d1-2" })])]),
-    MON,
-  );
-  expect(list[0]?.freezeOnArrival).toBe(false);
-});
-
-test("the list walks the store by category, shortest shelf life first inside one", () => {
-  const list = deriveShoppingList(
-    week([
-      dish("dish-a", [
-        ing({ name: "rice", category: "grains", keeps: "pantry" }),
-        ing({ name: "carrots", category: "produce", keeps: "w2plus" }),
-        ing({ name: "lettuce", category: "produce", keeps: "d3-5" }),
-        ing({ name: "yoghurt", category: "dairy", keeps: "w1" }),
-        ing({ name: "mince", category: "protein", keeps: "d1-2" }),
-      ]),
-    ]),
-    MON,
-  );
+  const list = currentList(state);
   expect(list.map((i) => i.name)).toEqual([
-    "lettuce",
-    "carrots",
-    "mince",
-    "yoghurt",
-    "rice",
+    "spinach",
+    "salmon",
+    "yogurt",
+    "chickpeas",
+    "washing up liquid",
   ]);
+  const spinach = list[0]!;
+  // The swap changed what goes in the basket, not when it is wanted.
+  expect(spinach.category).toBe("produce");
+  expect(spinach.neededBy).toBe(MON);
+  expect(list[4]!.source).toBe("reader");
 });
 
-test("a re-derived list keeps what was already ticked off, and drops what the week no longer wants", () => {
-  const before = deriveShoppingList(
-    week([dish("dish-a", [ing({ name: "lettuce" }), ing({ name: "carrots" })])]),
-    MON,
-  );
-  const ticked = setShoppingChecked(before, shoppingItemKey({ name: "lettuce", category: "produce" }), true);
-  const after = reconcileShoppingList(
-    ticked,
-    deriveShoppingList(week([dish("dish-a", [ing({ name: "lettuce" }), ing({ name: "tofu" })])]), MON),
-  );
-  expect(after.map((i) => [i.name, i.checked])).toEqual([
-    ["lettuce", true],
-    ["tofu", false],
-  ]);
+test("a tick is kept outside the lines, so a re-derive keeps it", () => {
+  const items = deriveShoppingList(week(), MON);
+  const key = shoppingItemKey(items.find((i) => i.name === "kale")!);
+  let state = setShoppingChecked(shopping({ items }), key, true);
+  expect(leftToBuy(state)).toBe(4);
+  state = reconcileShoppingList(state, deriveShoppingList(week(), "2026-09-22"));
+  expect(isChecked(state, currentList(state).find((i) => i.name === "kale")!)).toBe(true);
+  expect(leftToBuy(state)).toBe(4);
 });
 
-test("a day naming a dish the plan does not carry buys nothing rather than throwing", () => {
-  expect(deriveShoppingList(week([]), MON)).toEqual([]);
+test("a re-derive leaves the reader's half alone", () => {
+  let state = addReaderItem(shopping({ items: deriveShoppingList(week(), MON) }), reader("milk"));
+  state = reconcileShoppingList(state, []);
+  expect(currentList(state).map((i) => i.name)).toEqual(["milk"]);
+});
+
+test("remove takes a reader line off and drops a derived one", () => {
+  const items = deriveShoppingList(week(), MON);
+  let state = addReaderItem(shopping({ items }), reader("milk"));
+  const gone = removeShoppingItem(state, "milk")!;
+  expect(gone.removed.name).toBe("milk");
+  expect(currentList(gone.state).some((i) => i.name === "milk")).toBe(false);
+
+  const dropped = removeShoppingItem(state, "kale")!;
+  state = dropped.state;
+  expect(currentList(state).some((i) => i.name === "kale")).toBe(false);
+  // A derived line comes back on the next derivation unless the drop survives.
+  state = reconcileShoppingList(state, deriveShoppingList(week(), MON));
+  expect(currentList(state).some((i) => i.name === "kale")).toBe(false);
+  expect(removeShoppingItem(state, "nothing of the sort")).toBeNull();
+});
+
+test("replace swaps the line and is still findable by its new name", () => {
+  const state = shopping({ items: deriveShoppingList(week(), MON) });
+  const swapped = replaceShoppingItem(state, "kale", { name: "spring onions", en: "spring onions" })!;
+  expect(swapped.line.name).toBe("spring onions");
+  expect(swapped.line.qty).toBe("2 handfuls");
+  const again = removeShoppingItem(swapped.state, "spring onions")!;
+  expect(currentList(again.state).some((i) => i.name === "spring onions")).toBe(false);
+  expect(replaceShoppingItem(state, "durian", { name: "x", en: "x" })).toBeNull();
+});
+
+test("Done splits what is still to get from what the trip missed", () => {
+  const items = deriveShoppingList(week(), MON);
+  let state = shopping({ items });
+  state = setShoppingChecked(state, shoppingItemKey(items[0]!), true);
+  state = addReaderItem(state, reader("milk"));
+  state = markShoppingDone(state, "2026-09-21");
+  expect(state.doneOn).toBe("2026-09-21");
+  // Added before the trip: part of the walk, so it counts as missed.
+  expect(missed(state).map((i) => i.name)).toContain("milk");
+  expect(stillToGet(state)).toEqual([]);
+
+  state = addReaderItem(state, reader("batteries"));
+  expect(stillToGet(state).map((i) => i.name)).toEqual(["batteries"]);
+  expect(missed(state).map((i) => i.name)).not.toContain("batteries");
+});
+
+test("the same line is not added twice", () => {
+  const first = addReaderItem(shopping(), reader("milk"));
+  expect(addReaderItem(first, reader("milk"))).toBe(first);
+});
+
+test("groups sink the ticked lines inside their aisle", () => {
+  const items = deriveShoppingList(week(), MON);
+  const kale = shoppingItemKey(items.find((i) => i.name === "kale")!);
+  const state = setShoppingChecked(shopping({ items }), kale, true);
+  const produce = shoppingGroups(state).find((g) => g.category === "produce")!;
+  expect(produce.items[produce.items.length - 1]!.name).toBe("kale");
 });

@@ -1,166 +1,118 @@
-// record_meals_deviation (src/info/meals/tools.ts): the one dinner tool that
-// writes, because the reader saying what they ate is itself the instruction and
-// there is nothing for them to approve. Run: scripts/t.sh tests/info/dinner
-//
-// The tool is the only part under test here; what applyDeviation moves is
-// apply.test.ts's and week.test.ts's, so the ports are a recording double.
+// record_meals_deviation (src/info/meals/tools.ts): the one sentence the reader
+// says, which meal it is about, and what the tool tells the model to do next.
+// Run: scripts/t.sh tests/info/meals
 
 import { expect, test } from "bun:test";
 import {
   buildRecordDeviationTool,
   resolveDeviationDate,
+  toMealKey,
   type MealsToolDeps,
 } from "../../../src/info/meals/tools";
 import type { MealsPorts } from "../../../src/info/meals/apply";
-import type { MealsCard } from "../../../src/info/meals/cards";
-import {
-  EMPTY_MEALS,
-  type Deviation,
-  type MealsState,
-  type ShoppingItem,
-  type WeekPlan,
-} from "../../../src/info/meals/types";
+import type { Deviation, MealsState, WeekPlan } from "../../../src/info/meals/types";
+import { EMPTY_MEALS } from "../../../src/info/meals/types";
+import { MON, shopping, state } from "./fixtures/week";
 
-const MON = "2026-09-21";
-// Day three of the week, a delivery night to begin with.
-const WED = "2026-09-23";
-
-function week(): WeekPlan {
-  return {
-    id: `week-${MON}`,
-    startDate: MON,
-    days: [
-      { date: "2026-09-21", mode: "cook", dishId: "dish-a" },
-      { date: "2026-09-22", mode: "reheat", reheatOf: "2026-09-21", freshAdd: "leaves" },
-      { date: "2026-09-23", mode: "cook", dishId: "dish-b" },
-      { date: "2026-09-24", mode: "reheat", reheatOf: "2026-09-23", freshAdd: "salad" },
-      { date: "2026-09-25", mode: "out" },
-      { date: "2026-09-26", mode: "out" },
-      { date: "2026-09-27", mode: "out" },
-    ],
-    dishes: [
-      {
-        id: "dish-a",
-        name: "Traybake",
-        searchName: "chicken traybake",
-        oneLine: "one tray",
-        base: "b",
-        fresh: "f",
-        keepsADay: true,
-        handsOnMinutes: 10,
-        ingredients: [],
-      },
-      {
-        id: "dish-b",
-        name: "Stew",
-        searchName: "beef stew",
-        oneLine: "one pot",
-        base: "b",
-        fresh: "f",
-        keepsADay: true,
-        handsOnMinutes: 12,
-        ingredients: [],
-      },
-    ],
-    createdAt: 1,
-    revision: 1,
-  };
-}
-
-interface Written {
-  deviations: Deviation[];
-  plans: WeekPlan[];
-  reloads: number;
-}
-
-function harness(state: MealsState) {
-  const written: Written = { deviations: [], plans: [], reloads: 0 };
-  const cards: MealsCard[] = [];
+function tool(current: MealsState) {
+  const written: { deviation: Deviation; plan: WeekPlan }[] = [];
+  let reloads = 0;
   const ports: MealsPorts = {
-    current: async () => state,
+    current: async () => current,
     saveCharter: async () => {},
     savePlan: async () => {},
-    saveDeviation: async (deviation, plan, _shopping: readonly ShoppingItem[]) => {
-      written.deviations.push(deviation);
-      written.plans.push(plan);
+    saveShopping: async () => {},
+    saveDeviation: async (deviation, plan) => {
+      written.push({ deviation, plan });
     },
-    now: () => 500,
-    today: () => WED,
+    saveDishMethod: async () => {},
+    now: () => 9,
+    today: () => MON,
     changed: () => {
-      written.reloads++;
+      reloads += 1;
     },
   };
-  const deps: MealsToolDeps & { ports: MealsPorts } = {
-    threadId: "t",
-    state: async () => state,
-    today: () => WED,
-    now: () => 500,
-    onMealsCard: (card) => cards.push(card),
-    ports,
+  const deps: MealsToolDeps = {
+    threadId: "meals",
+    state: async () => current,
+    today: () => MON,
+    now: () => 9,
+    onMealsCard: () => {},
   };
-  const tool = buildRecordDeviationTool(deps);
-  // execute answers a string or a ToolResult; these tools always answer the
-  // latter, and the test reads its text.
-  const run = async (args: Record<string, unknown>): Promise<{ text: string }> =>
-    (await tool.execute(args)) as { text: string };
-  return { tool, run, written, cards };
+  return {
+    written,
+    run: async (args: Record<string, unknown>) => {
+      const out = await buildRecordDeviationTool({ ...deps, ports }).execute(args);
+      return typeof out === "string" ? out : String(out.text);
+    },
+    reloads: () => reloads,
+  };
 }
 
-test("a night a day number names is written, and the day left empty comes back", async () => {
-  const { run, written, cards } = harness({ ...EMPTY_MEALS, plan: week() });
-  const out = await run({
-    day: "3",
-    became: "delivery",
-    place: "the noodle place",
-    said: "ordered in tonight",
+test("a lunch that was not carried is recorded, and the next cooked meal is handed back", async () => {
+  const t = tool(state());
+  const out = await t.run({
+    day: "today",
+    meal: "lunch",
+    became: "out",
+    place: "the canteen",
+    said: "didn't take lunch, ate at the canteen",
   });
-  expect(written.deviations).toHaveLength(1);
-  expect(written.deviations[0].date).toBe(WED);
-  expect(written.deviations[0].became).toBe("delivery");
-  expect(written.deviations[0].place).toBe("the noodle place");
-  // Thursday was eating Wednesday's base, so it is the day the model is sent
-  // back to — and the only one.
-  expect(out.text).toContain("2026-09-24");
-  expect(out.text).toContain("propose_meals_plan");
-  expect(written.reloads).toBe(1);
-  // No card: the reader's own sentence is the gate.
-  expect(cards).toEqual([]);
+  expect(t.written[0]!.deviation).toMatchObject({
+    date: MON,
+    meal: "lunch",
+    became: "out",
+    place: "the canteen",
+    at: 9,
+  });
+  expect(out).toContain("2026-09-21 dinner now needs another look");
+  expect(out).toContain("adjustment set");
+  expect(t.reloads()).toBe(1);
 });
 
-test("'today' and 'yesterday' are the two words a reader actually says", () => {
-  expect(resolveDeviationDate("today", MON, WED)).toBe(WED);
-  expect(resolveDeviationDate("yesterday", MON, WED)).toBe("2026-09-22");
-  expect(resolveDeviationDate(" 1 ", MON, WED)).toBe(MON);
-  expect(resolveDeviationDate("7", MON, WED)).toBe("2026-09-27");
+test("a dinner that became delivery hands back the packed lunch it fed", async () => {
+  const t = tool(state());
+  const out = await t.run({ day: "today", meal: "dinner", became: "delivery", said: "ordered in" });
+  expect(out).toContain("2026-09-22 lunch");
+  const lunch = t.written[0]!.plan.days[1]!.lunch;
+  expect(lunch.reheatOf).toBeUndefined();
 });
 
-test("a night outside the week is refused rather than guessed at", async () => {
-  const { run, written } = harness({ ...EMPTY_MEALS, plan: week() });
-  const out = await run({ day: "9", became: "out", said: "went out" });
-  expect(out.text).toContain("not a night of this week");
-  expect(written.deviations).toEqual([]);
-  expect(resolveDeviationDate("8", MON, WED)).toBe(null);
-  expect(resolveDeviationDate("saturday", MON, WED)).toBe(null);
+test("a breakfast that was bought moves nothing", async () => {
+  const t = tool(state());
+  const out = await t.run({ day: "2", meal: "breakfast", became: "bought", said: "grabbed a coffee" });
+  expect(out).toContain("Nothing else in the week moved");
 });
 
-test("a mode the program does not have is refused", async () => {
-  const { run, written } = harness({ ...EMPTY_MEALS, plan: week() });
-  const out = await run({ day: "today", became: "takeaway", said: "picked something up" });
-  expect(out.text).toContain("became must be one of");
-  expect(written.deviations).toEqual([]);
+test("the refusals: no week, a day off the week, a meal that is not one of three, a mode that is not a mode", async () => {
+  const none = tool({ ...EMPTY_MEALS, shopping: shopping() });
+  expect(await none.run({ day: "today", meal: "lunch", became: "out", said: "x" })).toContain(
+    "no week planned",
+  );
+
+  const t = tool(state());
+  expect(await t.run({ day: "9", meal: "lunch", became: "out", said: "x" })).toContain(
+    "not a day of this week",
+  );
+  expect(await t.run({ day: "1", meal: "brunch", became: "out", said: "x" })).toContain(
+    "meal must be one of",
+  );
+  expect(await t.run({ day: "1", meal: "lunch", became: "grazed", said: "x" })).toContain(
+    "became must be one of",
+  );
+  expect(t.written).toEqual([]);
 });
 
-test("with no week planned there is nothing to record a change against", async () => {
-  const { run, written } = harness({ ...EMPTY_MEALS });
-  const out = await run({ day: "today", became: "out", said: "went out" });
-  expect(out.text).toContain("no week planned");
-  expect(written.deviations).toEqual([]);
-  expect(written.reloads).toBe(0);
+test("a day is named the way the reader says it, or refused", () => {
+  expect(resolveDeviationDate("today", MON, "2026-09-23")).toBe("2026-09-23");
+  expect(resolveDeviationDate("yesterday", MON, "2026-09-23")).toBe("2026-09-22");
+  expect(resolveDeviationDate("3", MON, "2026-09-23")).toBe("2026-09-23");
+  expect(resolveDeviationDate("last Tuesday", MON, MON)).toBeNull();
+  expect(resolveDeviationDate("0", MON, MON)).toBeNull();
 });
 
-test("a night that leaves nothing orphaned says so instead of sending the model off", async () => {
-  const { run, written } = harness({ ...EMPTY_MEALS, plan: week() });
-  const out = await run({ day: "7", became: "delivery", said: "ordered in on Sunday" });
-  expect(written.deviations).toHaveLength(1);
-  expect(out.text).toContain("nothing to re-plan");
+test("a meal key is one of three, whatever case it arrives in", () => {
+  expect(toMealKey("Lunch")).toBe("lunch");
+  expect(toMealKey(" dinner ")).toBe("dinner");
+  expect(toMealKey("supper")).toBeNull();
 });

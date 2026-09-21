@@ -10,13 +10,26 @@ import type { MealsCard } from "./cards";
 import { ingredientImageUrl } from "./images";
 import { startPhotoRun } from "./photo-run";
 import { loadMealsPhotos } from "./photo-store";
-import { loadMeals, saveCharter, saveDeviation, savePlan } from "./store";
 import {
+  loadMeals,
+  saveCharter,
+  saveDeviation,
+  saveDishMethod,
+  savePlan,
+  saveShopping,
+} from "./store";
+import {
+  buildAddShoppingItemsTool,
   buildProposeMealsCharterTool,
   buildProposeMealsPlanTool,
   buildRecordDeviationTool,
   buildRefreshMealsPhotosTool,
+  buildRemoveShoppingItemTool,
+  buildReplaceShoppingItemTool,
+  buildWriteMethodTool,
 } from "./tools";
+import { callModel } from "../../ai/model-call";
+import type { MethodPorts } from "./method";
 import type { AgentTool } from "../../legion/execute/turn";
 
 export interface LiveMealsOptions {
@@ -39,6 +52,8 @@ export function liveMealsPorts(opts: Pick<LiveMealsOptions, "today" | "changed">
     saveCharter: (charter) => saveCharter(charter),
     savePlan: (plan, shopping) => savePlan(plan, shopping),
     saveDeviation: (deviation, plan, shopping) => saveDeviation(deviation, plan, shopping),
+    saveShopping: (shopping) => saveShopping(shopping),
+    saveDishMethod: (dishId, method) => saveDishMethod(dishId, method),
     photos: () => loadMealsPhotos(),
     startPhotoRun: (planId, queries) => startPhotoRun({ planId, queries: [...queries] }),
     bankImage: (en) => ingredientImageUrl(en),
@@ -62,6 +77,31 @@ export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
     buildProposeMealsCharterTool(deps),
     buildProposeMealsPlanTool(deps),
     buildRecordDeviationTool({ ...deps, ports }),
+    buildAddShoppingItemsTool({ ...deps, ports }),
+    buildRemoveShoppingItemTool({ ...deps, ports }),
+    buildReplaceShoppingItemTool({ ...deps, ports }),
+    buildWriteMethodTool({ ...deps, ports }),
     buildRefreshMealsPhotosTool({ ...deps, ports }),
   ];
+}
+
+/**
+ * The ports ensureDishMethod runs on: the week off disk and one headless model
+ * turn, on the same background model the other unattended pipelines use.
+ *
+ * No thread and no card — the steps are the dish the reader already agreed to,
+ * said in order (method.ts).
+ */
+export function liveMethodPorts(): MethodPorts {
+  return {
+    plan: async () => (await loadMeals()).plan,
+    charter: async () => (await loadMeals()).charter,
+    ask: (system, user) =>
+      callModel("prep", "chapter-note", system, user, {
+        onProgress: () => {},
+        signal: new AbortController().signal,
+      }),
+    saveDishMethod: (dishId, method) => saveDishMethod(dishId, method),
+    now: () => Date.now(),
+  };
 }

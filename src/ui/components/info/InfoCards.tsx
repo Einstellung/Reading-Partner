@@ -370,6 +370,7 @@ export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<MealsPl
     startDate: payload.startDate,
     days: payload.days,
     dishes: payload.dishes,
+    breakfastLine: payload.breakfastLine,
     createdAt: 0,
     revision: 0,
   };
@@ -391,8 +392,8 @@ export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<MealsPl
               }
             >
               <span className="w-16 flex-none text-faint-foreground">{weekdayName(day.date)}</span>
-              <span className="w-14 flex-none">{modeWord(day.mode)}</span>
-              <span className="min-w-0 flex-1 truncate">{dish?.name ?? day.place ?? ""}</span>
+              <span className="w-14 flex-none">{modeWord(day.dinner.mode)}</span>
+              <span className="min-w-0 flex-1 truncate">{dish?.name ?? day.dinner.place ?? ""}</span>
             </li>
           );
         })}

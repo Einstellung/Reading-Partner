@@ -1,7 +1,7 @@
-// The week read as a week (src/info/meals/week.ts): which night is tonight,
-// whether the plan has run out, what one deviation moves, and what a drafted
-// week becomes once the program has dated it.
-// Run: scripts/t.sh tests/info/dinner
+// The week read as a week (src/info/meals/week.ts): which day is which, what
+// one deviation moves, and what a drafted week becomes once the program has
+// dated it.
+// Run: scripts/t.sh tests/info/meals
 
 import { expect, test } from "bun:test";
 import {
@@ -11,238 +11,210 @@ import {
   dayOn,
   daysBetween,
   dishForDay,
+  dishForMeal,
+  mealOn,
   planExhausted,
-  todayAndTomorrow,
   weekDates,
   type WeekDraft,
 } from "../../../src/info/meals/week";
-import type { Deviation, WeekPlan } from "../../../src/info/meals/types";
+import type { Deviation } from "../../../src/info/meals/types";
+import { MON, week } from "./fixtures/week";
 
-const MON = "2026-09-21";
-
-function week(): WeekPlan {
+function deviation(over: Partial<Deviation>): Deviation {
   return {
-    id: `week-${MON}`,
-    startDate: MON,
-    days: [
-      { date: "2026-09-21", mode: "cook", dishId: "dish-a" },
-      { date: "2026-09-22", mode: "reheat", reheatOf: "2026-09-21", freshAdd: "greens" },
-      { date: "2026-09-23", mode: "delivery", place: "the noodle place" },
-      { date: "2026-09-24", mode: "cook", dishId: "dish-b" },
-      { date: "2026-09-25", mode: "reheat", reheatOf: "2026-09-24" },
-      { date: "2026-09-26", mode: "out", place: "the canteen" },
-      { date: "2026-09-27", mode: "cook", dishId: "dish-c" },
-    ],
-    dishes: [
-      {
-        id: "dish-a",
-        name: "Traybake",
-        searchName: "chicken traybake",
-        oneLine: "",
-        base: "b",
-        fresh: "f",
-        keepsADay: true,
-        handsOnMinutes: 10,
-        ingredients: [],
-      },
-    ],
-    createdAt: 1,
-    revision: 3,
-  };
-}
-
-function deviation(over: Partial<Deviation> = {}): Deviation {
-  return {
-    date: "2026-09-21",
-    said: "ordered in tonight",
+    date: MON,
+    meal: "dinner",
+    said: "ordered in",
     became: "delivery",
-    place: "the noodle place",
     changed: "",
-    at: 100,
+    at: 0,
     ...over,
   };
 }
 
-test("dates are counted, not parsed out of a clock", () => {
-  expect(addDays(MON, 6)).toBe("2026-09-27");
-  // Across a month end and across the spring-forward boundary of a southern
-  // timezone: a calendar day is a calendar day.
-  expect(addDays("2026-09-30", 1)).toBe("2026-10-01");
-  expect(addDays("2026-02-28", 1)).toBe("2026-03-01");
+test("dates are counted, not parsed into a local zone", () => {
+  expect(addDays(MON, 3)).toBe("2026-09-24");
+  expect(addDays(MON, -1)).toBe("2026-09-20");
   expect(daysBetween(MON, "2026-09-27")).toBe(6);
-  expect(daysBetween("2026-09-27", MON)).toBe(-6);
-  expect(daysBetween("not a date", MON)).toBeNull();
   expect(weekDates(MON)).toHaveLength(7);
+  expect(weekDates(MON)[6]).toBe("2026-09-27");
 });
 
-test("tonight and tomorrow night are the two days around the local date", () => {
-  const { today, tomorrow } = todayAndTomorrow(week(), "2026-09-21");
-  expect(today?.mode).toBe("cook");
-  expect(tomorrow?.mode).toBe("reheat");
+test("a meal is reached by date and key, a day by date", () => {
+  const plan = week();
+  expect(dayOn(plan, "2026-09-22")?.date).toBe("2026-09-22");
+  expect(mealOn(plan, "2026-09-22", "lunch")?.mode).toBe("packed");
+  expect(mealOn(plan, "2026-10-01", "lunch")).toBeNull();
 });
 
-test("the last night of the week has no tomorrow, and that is not an error", () => {
-  const { today, tomorrow } = todayAndTomorrow(week(), "2026-09-27");
-  expect(today?.mode).toBe("cook");
-  expect(tomorrow).toBeNull();
+test("a packed lunch shows the dish whose base it carries", () => {
+  const plan = week();
+  const lunch = mealOn(plan, "2026-09-22", "lunch")!;
+  expect(dishForMeal(plan, lunch)?.name).toBe("Chickpea stew");
 });
 
-test("a week is exhausted the day after its last, and no plan at all is exhausted", () => {
-  expect(planExhausted(week(), "2026-09-27")).toBe(false);
-  expect(planExhausted(week(), "2026-09-28")).toBe(true);
+test("a day leads with the cooked meal latest in it", () => {
+  const plan = week();
+  expect(dishForDay(plan, plan.days[0]!)?.name).toBe("Chickpea stew");
+  // Nothing is cooked on the delivery day but breakfast was bought, so there is
+  // no dish at all.
+  expect(dishForDay(plan, plan.days[2]!)).toBeNull();
+  // A day whose only cooking is breakfast leads with breakfast.
+  expect(dishForDay(plan, plan.days[3]!)?.name).toBe("Overnight oats");
+});
+
+test("the week runs out the day after its last", () => {
+  const plan = week();
+  expect(planExhausted(plan, "2026-09-27")).toBe(false);
+  expect(planExhausted(plan, "2026-09-28")).toBe(true);
   expect(planExhausted(null, MON)).toBe(true);
 });
 
-test("a reheat night eats the dish the night before it cooked", () => {
-  const plan = week();
-  const reheat = dayOn(plan, "2026-09-22");
-  expect(dishForDay(plan, reheat!)?.id).toBe("dish-a");
-  expect(dishForDay(plan, dayOn(plan, "2026-09-23")!)).toBeNull();
+test("a dinner that became delivery strands the packed lunch that ate its base", () => {
+  const { plan, attention } = applyDeviation(week(), deviation({}));
+  expect(attention).toEqual([{ date: "2026-09-22", meal: "lunch" }]);
+  const monday = dayOn(plan, MON)!;
+  expect(monday.dinner).toEqual({ mode: "delivery" });
+  const lunch = mealOn(plan, "2026-09-22", "lunch")!;
+  // The mode stays — it is still a lunch nobody cooks — but it points at
+  // nothing, so nothing downstream reads a base that was never made.
+  expect(lunch.mode).toBe("packed");
+  expect(lunch.reheatOf).toBeUndefined();
+  expect(lunch.dishId).toBeUndefined();
+  expect(plan.revision).toBe(2);
 });
 
-test("a night that became delivery settles that night and leaves the base-eater to be re-planned", () => {
-  const { plan, attention } = applyDeviation(week(), deviation());
-  const monday = dayOn(plan, "2026-09-21");
-  expect(monday?.mode).toBe("delivery");
-  expect(monday?.place).toBe("the noodle place");
-  expect(monday?.dishId).toBeUndefined();
-  // Tuesday was going to eat Monday's base. There is no base.
-  const tuesday = dayOn(plan, "2026-09-22");
-  expect(tuesday?.reheatOf).toBeUndefined();
-  expect(attention).toEqual(["2026-09-22"]);
-  expect(plan.revision).toBe(4);
-});
-
-test("a deviation moves nothing else in the week", () => {
-  const before = week();
-  const { plan } = applyDeviation(before, deviation());
-  const untouched = plan.days.filter((d) => d.date > "2026-09-22");
-  expect(untouched).toEqual(before.days.filter((d) => d.date > "2026-09-22"));
-});
-
-test("a night nobody was going to eat off asks for nothing", () => {
-  const { attention } = applyDeviation(week(), deviation({ date: "2026-09-24", became: "out" }));
-  // Thursday's base was for Friday, so Friday is the one left open.
-  expect(attention).toEqual(["2026-09-25"]);
-  const { attention: none } = applyDeviation(
+test("a lunch that was not carried leaves a box, and the next cooked meal is the one to look at", () => {
+  const { plan, attention } = applyDeviation(
     week(),
-    deviation({ date: "2026-09-26", became: "delivery" }),
+    deviation({ meal: "lunch", became: "out", place: "the canteen", said: "ate at the canteen" }),
   );
-  expect(none).toEqual([]);
+  // Nothing pointed at that lunch, so nothing is broken; the stew in the fridge
+  // is what makes tonight's cooking worth reopening.
+  expect(attention).toEqual([{ date: MON, meal: "dinner" }]);
+  const lunch = mealOn(plan, MON, "lunch")!;
+  expect(lunch).toEqual({ mode: "out", place: "the canteen", note: "last week's box" });
+  // The dinner itself is untouched: it is still a good plan.
+  expect(mealOn(plan, MON, "dinner")?.dishId).toBe("dish-stew");
 });
 
 test("a deviation about a day off the plan changes nothing", () => {
   const before = week();
-  const { plan, attention } = applyDeviation(before, deviation({ date: "2026-10-09" }));
-  expect(plan).toBe(before);
+  const { plan, attention } = applyDeviation(before, deviation({ date: "2026-10-05" }));
   expect(attention).toEqual([]);
+  expect(plan).toBe(before);
 });
 
-// --- assembling a draft ------------------------------------------------------
-
-const pinned = () => 0.5;
-
-function fullDraft(): WeekDraft {
-  return {
+test("a draft becomes a dated week, ids minted and bases pointed at", () => {
+  const draft: WeekDraft = {
+    breakfastLine: "Oats, then toast",
     dishes: [
       {
-        name: "Chicken traybake",
-        searchName: "chicken traybake",
-        oneLine: "one tray",
-        base: "chicken and roots",
-        fresh: "a handful of leaves",
+        name: "Tofu pot",
+        searchName: "braised tofu",
+        oneLine: "One pot.",
+        base: "tomato tofu base",
+        fresh: "pak choi",
         keepsADay: true,
         handsOnMinutes: 12,
         ingredients: [
-          { name: "chicken thighs", en: "chicken thighs", qty: "600g", category: "protein", keeps: "d1-2" },
+          { name: "tofu", en: "tofu", qty: "2 blocks", category: "protein", keeps: "d3-5" },
         ],
+      },
+      {
+        name: "Oats",
+        searchName: "overnight oats",
+        oneLine: "Soaked.",
+        base: "soaked oats",
+        fresh: "",
+        keepsADay: true,
+        handsOnMinutes: 3,
+        ingredients: [{ name: "oats", en: "oats", qty: "1 bag", category: "grains", keeps: "pantry" }],
+      },
+    ],
+    days: Array.from({ length: 7 }, (_, i) => ({
+      day: i + 1,
+      breakfast: { mode: "cook" as const, dish: "Oats" },
+      lunch:
+        i === 1
+          ? { mode: "packed" as const, reheatOf: { day: 1, meal: "dinner" as const } }
+          : { mode: "out" as const, place: "the canteen" },
+      dinner: i === 0 ? { mode: "cook" as const, dish: "Tofu pot" } : { mode: "out" as const, place: "out" },
+    })),
+  };
+  let n = 0;
+  const assembled = assembleWeekPlan(draft, {
+    startDate: MON,
+    createdAt: 7,
+    random: () => (n++ % 16) / 16,
+  });
+  expect(assembled.problems).toEqual([]);
+  expect(assembled.plan.breakfastLine).toBe("Oats, then toast");
+  expect(assembled.plan.days).toHaveLength(7);
+  expect(assembled.changed).toHaveLength(21);
+  const lunch = mealOn(assembled.plan, "2026-09-22", "lunch")!;
+  expect(lunch.reheatOf).toEqual({ date: MON, meal: "dinner" });
+  // The program fills the dish in from the base rather than trusting the model.
+  expect(lunch.dishId).toBe(mealOn(assembled.plan, MON, "dinner")!.dishId);
+});
+
+test("the refusals: a packed lunch with no base and no note, a base that does not keep, a slow breakfast", () => {
+  const base: WeekDraft = {
+    breakfastLine: "Oats",
+    dishes: [
+      {
+        name: "Fry-up",
+        searchName: "fry up",
+        oneLine: "Not for tomorrow.",
+        base: "",
+        fresh: "",
+        keepsADay: false,
+        handsOnMinutes: 14,
+        ingredients: [],
       },
     ],
     days: [
-      { day: 1, mode: "cook", dish: "chicken traybake" },
-      { day: 2, mode: "reheat", reheatOfDay: 1, freshAdd: "leaves" },
-      { day: 3, mode: "delivery", place: "the noodle place" },
-      { day: 4, mode: "out", place: "the canteen" },
-      { day: 5, mode: "out" },
-      { day: 6, mode: "out" },
-      { day: 7, mode: "out" },
+      { day: 1, dinner: { mode: "cook", dish: "Fry-up" } },
+      { day: 2, lunch: { mode: "packed" }, dinner: { mode: "reheat", reheatOf: { day: 1, meal: "dinner" } } },
     ],
   };
-}
+  const assembled = assembleWeekPlan(base, { startDate: MON, createdAt: 0, previous: null });
+  expect(assembled.problems.join("\n")).toContain("names neither the meal whose base it eats");
+  expect(assembled.problems.join("\n")).toContain('does not keep a day');
 
-test("a draft is dated by the program, and dish ids are minted here", () => {
-  const { plan, problems } = assembleWeekPlan(fullDraft(), {
-    startDate: MON,
-    createdAt: 5,
-    random: pinned,
-  });
-  expect(problems).toEqual([]);
-  expect(plan.id).toBe("week-2026-09-21");
-  expect(plan.days.map((d) => d.date)).toEqual(weekDates(MON));
-  expect(plan.days[0]?.dishId).toBe("dish-88888888");
-  expect(plan.days[1]?.reheatOf).toBe("2026-09-21");
-  expect(plan.days[2]?.place).toBe("the noodle place");
-  expect(plan.dishes).toHaveLength(1);
-});
-
-test("a dish over the hands-on limit is a problem, not a plan", () => {
-  const draft = fullDraft();
-  draft.dishes[0]!.handsOnMinutes = 40;
-  const { problems } = assembleWeekPlan(draft, { startDate: MON, createdAt: 5, random: pinned });
-  expect(problems[0]).toContain("40 minutes hands-on");
-});
-
-test("a reheat of a base nobody cooks, and a cook day naming no dish, are both reported", () => {
-  const draft: WeekDraft = {
-    dishes: [],
-    days: [
-      { day: 1, mode: "cook", dish: "something that does not exist" },
-      { day: 2, mode: "reheat", reheatOfDay: 1 },
-    ],
-  };
-  const { problems, plan } = assembleWeekPlan(draft, {
-    startDate: MON,
-    createdAt: 5,
-    random: pinned,
-  });
-  expect(problems).toHaveLength(2);
-  expect(plan.days[1]?.reheatOf).toBeUndefined();
-});
-
-test("a reheat of a dish that does not keep is reported", () => {
-  const draft = fullDraft();
-  draft.dishes[0]!.keepsADay = false;
-  const { problems } = assembleWeekPlan(draft, { startDate: MON, createdAt: 5, random: pinned });
-  expect(problems[0]).toContain("does not keep a day");
-});
-
-test("an adjustment writes the days it names and keeps every other night and its dishes", () => {
-  const previous = week();
-  const draft: WeekDraft = {
-    dishes: [],
-    days: [{ day: 2, mode: "delivery", place: "the dumpling place" }],
-  };
-  const { plan, changedDates, problems } = assembleWeekPlan(draft, {
-    startDate: "ignored",
-    createdAt: 9,
-    previous,
-    random: pinned,
-  });
-  expect(problems).toEqual([]);
-  expect(changedDates).toEqual(["2026-09-22"]);
-  expect(plan.startDate).toBe(MON);
-  expect(plan.days[1]?.place).toBe("the dumpling place");
-  expect(plan.days[3]).toEqual(previous.days[3]!);
-  expect(plan.createdAt).toBe(1);
-  expect(plan.revision).toBe(4);
-  // dish-a is still cooked on Monday, so it is still carried.
-  expect(plan.dishes.map((d) => d.id)).toEqual(["dish-a"]);
-});
-
-test("a day number outside the week is reported and plans nothing", () => {
-  const { problems } = assembleWeekPlan(
-    { dishes: [], days: [{ day: 9, mode: "out" }] },
-    { startDate: MON, createdAt: 5, random: pinned },
+  const slow = assembleWeekPlan(
+    {
+      breakfastLine: "Oats",
+      dishes: [
+        {
+          name: "Congee",
+          searchName: "congee",
+          oneLine: "Slow.",
+          base: "congee",
+          fresh: "",
+          keepsADay: true,
+          handsOnMinutes: 14,
+          ingredients: [],
+        },
+      ],
+      days: [{ day: 1, breakfast: { mode: "cook", dish: "Congee" } }],
+    },
+    { startDate: MON, createdAt: 0 },
   );
-  expect(problems[0]).toContain("Day 9");
+  expect(slow.problems[0]).toContain("breakfast allows 10");
+});
+
+test("an adjustment keeps every meal it does not name", () => {
+  const previous = week();
+  const assembled = assembleWeekPlan(
+    { dishes: [], days: [{ day: 1, lunch: { mode: "out", place: "the canteen" } }] },
+    { startDate: MON, createdAt: 0, previous },
+  );
+  expect(assembled.problems).toEqual([]);
+  expect(assembled.changed).toEqual([{ date: MON, meal: "lunch" }]);
+  expect(assembled.changedDates).toEqual([MON]);
+  expect(mealOn(assembled.plan, MON, "dinner")?.dishId).toBe("dish-stew");
+  // The breakfast line is the week's, not this call's.
+  expect(assembled.plan.breakfastLine).toBe(previous.breakfastLine);
+  expect(assembled.plan.revision).toBe(2);
 });

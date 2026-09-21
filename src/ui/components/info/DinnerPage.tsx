@@ -13,7 +13,8 @@ import { useState } from "react";
 import { openExternal } from "../../../platform/app/external-link";
 import type { MealsState, ShoppingItem } from "../../../info/meals/types";
 import type { PhotoCache } from "../../../info/meals/dish-photos";
-import { shoppingItemKey } from "../../../info/meals/shopping";
+import { isChecked, shoppingItemKey } from "../../../info/meals/shopping";
+import { EMPTY_SHOPPING } from "../../../info/meals/types";
 import { markDishPhotoBroken } from "../../../info/meals/photo-store";
 import { planExhausted } from "../../../info/meals/week";
 import {
@@ -75,15 +76,15 @@ function HeadlineDay({
   // is TheMealDB's and is credited at the foot of the screen instead.
   const [photoFailed, setPhotoFailed] = useState(false);
   const picture = dishPicture(dish, photos);
-  const cooked = day.mode === "cook" || day.mode === "reheat";
-  const fresh = day.mode === "reheat" ? (day.freshAdd ?? dish?.fresh ?? "") : (dish?.fresh ?? "");
+  const cooked = day.dinner.mode === "cook" || day.dinner.mode === "reheat";
+  const fresh = day.dinner.mode === "reheat" ? (day.dinner.freshAdd ?? dish?.fresh ?? "") : (dish?.fresh ?? "");
   return (
     <section className="rounded-xl border border-border-soft bg-card p-4">
       <div className="flex items-baseline gap-2">
         <span className="font-display text-[19px] font-semibold text-foreground">{view.word}</span>
         <span className="text-[13px] text-faint-foreground">{view.weekday}</span>
         <span className="flex-1" />
-        <span className="text-[13px] font-medium text-accent-line">{modeWord(day.mode)}</span>
+        <span className="text-[13px] font-medium text-accent-line">{modeWord(day.dinner.mode)}</span>
       </div>
 
       {/* 16:9, capped: a photograph gets the width, and the neutral block a
@@ -94,7 +95,7 @@ function HeadlineDay({
           image={picture?.url}
           imagePageUrl={picture?.pageUrl}
           thumbnails={dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null)}
-          alt={dish?.name ?? modeWord(day.mode)}
+          alt={dish?.name ?? modeWord(day.dinner.mode)}
           className="size-full"
           onPhotoFailed={() => {
             setPhotoFailed(true);
@@ -137,7 +138,7 @@ function HeadlineDay({
       ) : (
         <>
           <div className="mt-3 text-[17px] font-medium leading-snug text-foreground">
-            {day.place || modeWord(day.mode)}
+            {day.dinner.place || modeWord(day.dinner.mode)}
           </div>
           {cooked && (
             <p className="m-0 mt-1 text-[14px] leading-relaxed text-muted-foreground">
@@ -152,7 +153,7 @@ function HeadlineDay({
 
 function LaterDay({ view, photos }: { view: DayView; photos: PhotoCache }) {
   const { day, dish } = view;
-  const name = dish?.name ?? day.place ?? "";
+  const name = dish?.name ?? day.dinner.place ?? "";
   const picture = dishPicture(dish, photos);
   const thumbnails = dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null);
   return (
@@ -169,7 +170,7 @@ function LaterDay({ view, photos }: { view: DayView; photos: PhotoCache }) {
           />
         </span>
       ) : null}
-      <span className="w-16 flex-none text-[13px] text-muted-foreground">{modeWord(day.mode)}</span>
+      <span className="w-16 flex-none text-[13px] text-muted-foreground">{modeWord(day.dinner.mode)}</span>
       <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">{name}</span>
     </li>
   );
@@ -177,19 +178,21 @@ function LaterDay({ view, photos }: { view: DayView; photos: PhotoCache }) {
 
 function ShoppingLine({
   item,
+  checked,
   picture,
   onToggle,
 }: {
+  checked: boolean;
   item: ShoppingItem;
   picture: Picture | null;
   onToggle: (checked: boolean) => void;
 }) {
   const id = `shop-${item.category}-${item.name}`;
   return (
-    <li className={`flex items-center gap-3 py-1 ${item.checked ? "opacity-45" : ""}`}>
+    <li className={`flex items-center gap-3 py-1 ${checked ? "opacity-45" : ""}`}>
       <Checkbox
         id={id}
-        checked={item.checked}
+        checked={checked}
         onCheckedChange={(v) => onToggle(v === true)}
         aria-label={item.name}
       />
@@ -217,8 +220,9 @@ export function DinnerPage(props: DinnerPageProps) {
   const plan = state?.plan ?? null;
   const head = headlineDays(plan, today);
   const later = laterDays(plan, today);
-  const groups = shoppingGroups(state?.shopping ?? []);
-  const left = leftToBuy(state?.shopping ?? []);
+  const shopping = state?.shopping ?? EMPTY_SHOPPING;
+  const groups = shoppingGroups(shopping);
+  const left = leftToBuy(shopping);
   const exhausted = planExhausted(plan, today);
   const planLabel = plan ? "Plan next week" : "Plan this week";
 
@@ -306,6 +310,7 @@ export function DinnerPage(props: DinnerPageProps) {
                           key={`${item.category}:${item.name}`}
                           item={item}
                           picture={ingredientPicture(item.en, props.photos)}
+                          checked={isChecked(shopping, item)}
                           onToggle={(checked) =>
                             props.onToggleItem(shoppingItemKey(item), checked)
                           }

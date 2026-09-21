@@ -10,8 +10,21 @@
 import type { MealsCharterCardData, MealsPlanCardData } from "./cards";
 import { withDishPhotos, type PhotoCache } from "./dish-photos";
 import { photoQueriesForPlan, type PhotoQuery } from "./photo-run";
-import { deriveShoppingList, reconcileShoppingList } from "./shopping";
-import type { Deviation, MealsCharter, MealsState, ShoppingItem, WeekPlan } from "./types";
+import {
+  currentList,
+  deriveShoppingList,
+  isChecked,
+  reconcileShoppingList,
+} from "./shopping";
+import type {
+  Deviation,
+  DishMethod,
+  MealRef,
+  MealsCharter,
+  MealsState,
+  ShoppingState,
+  WeekPlan,
+} from "./types";
 import { applyDeviation, weekId } from "./week";
 
 export interface MealsPorts {
@@ -20,11 +33,15 @@ export interface MealsPorts {
   // moved on since it was drafted.
   current(): Promise<MealsState>;
   saveCharter(charter: MealsCharter): Promise<unknown>;
-  savePlan(plan: WeekPlan, shopping: readonly ShoppingItem[]): Promise<unknown>;
+  savePlan(plan: WeekPlan, shopping: ShoppingState): Promise<unknown>;
+  // The trip alone: a line the reader added, dropped or swapped by saying so.
+  saveShopping(shopping: ShoppingState): Promise<unknown>;
+  // A dish's steps, written onto the week (method.ts).
+  saveDishMethod(dishId: string, method: DishMethod): Promise<unknown>;
   saveDeviation(
     deviation: Deviation,
     plan: WeekPlan,
-    shopping: readonly ShoppingItem[],
+    shopping: ShoppingState,
   ): Promise<unknown>;
   // The photographs found so far, by cache key.
   photos?(): Promise<PhotoCache>;
@@ -113,6 +130,7 @@ export async function applyPlan(
       startDate: card.startDate,
       days: card.days,
       dishes: card.dishes,
+      breakfastLine: card.breakfastLine,
       createdAt: previous?.createdAt ?? ports.now(),
       revision: (previous?.revision ?? 0) + 1,
     },
@@ -187,13 +205,13 @@ export async function refreshPhotos(ports: MealsPorts): Promise<number> {
 }
 
 /**
- * A night that went differently, recorded.
+ * A meal that went differently, recorded.
  *
  * Not a card: the reader says one sentence and the bookkeeping is the
- * program's, so there is nothing to approve. It moves that night and, at most,
- * the night that was going to eat its base; the dates that come back are the
- * ones now without a dinner, for the AI to propose an adjustment for. The week
- * is never re-planned here.
+ * program's, so there is nothing to approve. It moves that meal and, at most,
+ * the one or two meals that leaned on it; the refs that come back are the
+ * ones now needing another look, for the AI to propose an adjustment for. The
+ * week is never re-planned here.
  *
  * Nothing in this slice calls it yet — whoever wires the chat decides whether
  * the sentence reaches it through a tool or through the host (docs/73).
@@ -201,7 +219,7 @@ export async function refreshPhotos(ports: MealsPorts): Promise<number> {
 export async function recordDeviation(
   deviation: Deviation,
   ports: MealsPorts,
-): Promise<Applied & { attention: string[] }> {
+): Promise<Applied & { attention: MealRef[] }> {
   const state = await ports.current();
   if (!state.plan) return { ...NOTHING, attention: [] };
   const { plan, attention } = applyDeviation(state.plan, deviation);
@@ -212,7 +230,7 @@ export async function recordDeviation(
   const said: Deviation = {
     ...deviation,
     changed: attention.length
-      ? `${attention.join(", ")} now has nothing planned.`
+      ? `${attention.map(mealWords).join(", ")} now needs another look.`
       : "Nothing else moved.",
     at: deviation.at || ports.now(),
   };
@@ -231,27 +249,30 @@ export async function recordDeviation(
 // (info/briefer/call.ts): it is their gesture the AI is being told about.
 
 export function charterNote(charter: MealsCharter): string {
-  return `Saved what you understood about our dinners: ${charter.text}`;
+  return `Saved what you understood about our meals: ${charter.text}`;
 }
 
-export function planNote(
-  card: MealsPlanCardData,
-  shopping: readonly ShoppingItem[],
-): string {
-  const freeze = shopping.filter((i) => i.freezeOnArrival).length;
-  const list =
-    ` The shopping list is on my screen — ${shopping.length} things` +
+/** "2026-09-22 lunch", the way a meal is named to the model and in a note. */
+export function mealWords(ref: MealRef): string {
+  return `${ref.date} ${ref.meal}`;
+}
+
+export function planNote(card: MealsPlanCardData, shopping: ShoppingState): string {
+  const list = currentList(shopping).filter((i) => !isChecked(shopping, i));
+  const freeze = list.filter((i) => i.freezeOnArrival).length;
+  const tail =
+    ` The shopping list is on my screen — ${list.length} things` +
     (freeze ? `, ${freeze} to freeze when I get home.` : ".") +
     " Don't read it back to me.";
   if (card.adjustment) {
-    return `Applied the change to ${card.changedDates.join(", ")}.${list}`;
+    return `Applied the change to ${card.changed.map(mealWords).join(", ")}.${tail}`;
   }
-  return `Saved this week's dinners.${list}`;
+  return `Saved this week's meals.${tail}`;
 }
 
-export function deviationNote(deviation: Deviation, attention: readonly string[]): string {
-  const head = `${deviation.date}: ${deviation.said}`;
+export function deviationNote(deviation: Deviation, attention: readonly MealRef[]): string {
+  const head = `${deviation.date} ${deviation.meal}: ${deviation.said}`;
   return attention.length
-    ? `${head} That leaves ${attention.join(" and ")} without a dinner — sort out those days only.`
+    ? `${head} That leaves ${attention.map(mealWords).join(" and ")} to sort out — those meals only.`
     : `${head} Nothing else needs to change.`;
 }

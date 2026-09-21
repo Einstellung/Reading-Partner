@@ -1,288 +1,222 @@
-// What Apply on a meals card does (src/info/meals/apply.ts): the only write
-// in the line, the guard against a second click, and the synthetic turn the AI
+// What Apply on a meals card writes (src/info/meals/apply.ts), and what the AI
 // is told afterwards.
-// Run: scripts/t.sh tests/info/dinner
+// Run: scripts/t.sh tests/info/meals
 
 import { expect, test } from "bun:test";
 import {
   applyCharter,
   applyPlan,
+  deviationNote,
+  planNote,
   recordDeviation,
-  refreshPhotos,
   type MealsPorts,
 } from "../../../src/info/meals/apply";
-import type { MealsCharterCardData, MealsPlanCardData } from "../../../src/info/meals/cards";
-import { EMPTY_MEALS, type MealsState, type ShoppingItem, type WeekPlan } from "../../../src/info/meals/types";
+import type {
+  MealsCharterCardData,
+  MealsPlanCardData,
+} from "../../../src/info/meals/cards";
+import { currentList, shoppingItemKey } from "../../../src/info/meals/shopping";
+import type {
+  Deviation,
+  DishMethod,
+  MealsState,
+  ShoppingState,
+  WeekPlan,
+} from "../../../src/info/meals/types";
+import { MON, shopping, state, week } from "./fixtures/week";
 
-const MON = "2026-09-21";
-
-function week(over: Partial<WeekPlan> = {}): WeekPlan {
-  return {
-    id: `week-${MON}`,
-    startDate: MON,
-    days: [
-      { date: "2026-09-21", mode: "cook", dishId: "dish-a" },
-      { date: "2026-09-22", mode: "reheat", reheatOf: "2026-09-21" },
-      { date: "2026-09-23", mode: "out" },
-      { date: "2026-09-24", mode: "out" },
-      { date: "2026-09-25", mode: "out" },
-      { date: "2026-09-26", mode: "out" },
-      { date: "2026-09-27", mode: "cook", dishId: "dish-b" },
-    ],
-    dishes: [
-      {
-        id: "dish-a",
-        name: "Traybake",
-        searchName: "chicken traybake",
-        oneLine: "",
-        base: "b",
-        fresh: "f",
-        keepsADay: true,
-        handsOnMinutes: 10,
-        ingredients: [{ name: "chicken", en: "chicken", qty: "600g", category: "protein", keeps: "d1-2" }],
-      },
-      {
-        id: "dish-b",
-        name: "Sea bass",
-        searchName: "baked sea bass",
-        oneLine: "",
-        base: "b",
-        fresh: "",
-        keepsADay: false,
-        handsOnMinutes: 10,
-        ingredients: [{ name: "sea bass", en: "sea bass", qty: "2", category: "protein", keeps: "d1-2" }],
-      },
-    ],
-    createdAt: 1,
-    revision: 2,
-    ...over,
-  };
-}
-
-interface Fake {
+interface Harness {
   ports: MealsPorts;
-  state: MealsState;
-  saved: { plan: WeekPlan | null; shopping: ShoppingItem[] };
-  changed: number;
+  saved: { plan: WeekPlan | null; shopping: ShoppingState | null };
+  deviations: Deviation[];
+  methods: { dishId: string; method: DishMethod }[];
+  reloads: number;
 }
 
-function fake(state: MealsState = { ...EMPTY_MEALS }, fail = false): Fake {
-  const f: Fake = {
-    state,
-    saved: { plan: null, shopping: [] },
-    changed: 0,
-    ports: {
-      current: async () => f.state,
-      saveCharter: async (charter) => {
-        if (fail) throw new Error("disk");
-        f.state = { ...f.state, charter };
-      },
-      savePlan: async (plan, shopping) => {
-        if (fail) throw new Error("disk");
-        f.saved = { plan, shopping: [...shopping] };
-        f.state = { ...f.state, plan, shopping: [...shopping] };
-      },
-      saveDeviation: async (deviation, plan, shopping) => {
-        if (fail) throw new Error("disk");
-        f.saved = { plan, shopping: [...shopping] };
-        f.state = {
-          ...f.state,
-          plan,
-          shopping: [...shopping],
-          deviations: [...f.state.deviations, deviation],
-        };
-      },
-      now: () => 500,
-      today: () => MON,
-      changed: () => {
-        f.changed += 1;
-      },
+function harness(over: Partial<MealsState> = {}, fail = false): Harness {
+  const current = state(over);
+  const h: Harness = {
+    saved: { plan: null, shopping: null },
+    deviations: [],
+    methods: [],
+    reloads: 0,
+    ports: null as unknown as MealsPorts,
+  };
+  h.ports = {
+    current: async () => current,
+    saveCharter: async () => {
+      if (fail) throw new Error("no");
+    },
+    savePlan: async (plan, list) => {
+      if (fail) throw new Error("no");
+      h.saved = { plan, shopping: list };
+    },
+    saveShopping: async (list) => {
+      h.saved.shopping = list;
+    },
+    saveDeviation: async (deviation, plan, list) => {
+      if (fail) throw new Error("no");
+      h.deviations.push(deviation);
+      h.saved = { plan, shopping: list };
+    },
+    saveDishMethod: async (dishId, method) => {
+      h.methods.push({ dishId, method });
+    },
+    now: () => 100,
+    today: () => MON,
+    changed: () => {
+      h.reloads += 1;
     },
   };
-  return f;
-}
-
-function charterCard(over: Partial<MealsCharterCardData> = {}): MealsCharterCardData {
-  return {
-    kind: "meals-charter",
-    threadId: "t",
-    people: 2,
-    stores: ["the market"],
-    kitchen: "two burners",
-    dislikes: [],
-    nightsCooking: 4,
-    nightsOut: 1,
-    nightsDelivery: 2,
-    text: "two of us, cooking most nights",
-    phase: "proposed",
-    ...over,
-  };
+  return h;
 }
 
 function planCard(over: Partial<MealsPlanCardData> = {}): MealsPlanCardData {
-  const w = week();
+  const plan = week();
   return {
     kind: "meals-plan",
-    threadId: "t",
-    startDate: w.startDate,
-    days: w.days,
-    dishes: w.dishes,
+    threadId: "meals",
+    startDate: plan.startDate,
+    days: plan.days,
+    dishes: plan.dishes,
+    breakfastLine: plan.breakfastLine,
     adjustment: false,
+    changed: [],
     changedDates: [],
     phase: "proposed",
     ...over,
   };
 }
 
-test("applying the charter writes it with the host's clock on it", async () => {
-  const f = fake();
-  const { ok, note } = await applyCharter(charterCard(), f.ports);
-  expect(ok).toBe(true);
-  expect(f.state.charter?.updatedAt).toBe(500);
-  expect(note).toContain("two of us");
-  expect(f.changed).toBe(1);
+test("applying a plan writes the week and the list derived from three meals a day", async () => {
+  const h = harness({ plan: null });
+  const applied = await applyPlan(planCard(), h.ports);
+  await applied.pending;
+  expect(applied.ok).toBe(true);
+  expect(h.saved.plan?.breakfastLine).toBe("Oats most days, something on the way on Friday");
+  expect(currentList(h.saved.shopping!).map((i) => i.name).sort()).toEqual([
+    "chickpeas",
+    "kale",
+    "oats",
+    "salmon",
+    "yogurt",
+  ]);
+  expect(h.reloads).toBe(1);
+  expect(applied.note).toContain("5 things");
 });
 
-test("a second click on an applied card writes nothing and says nothing", async () => {
-  const f = fake();
-  expect(await applyCharter(charterCard({ phase: "applied" }), f.ports)).toEqual({
-    ok: false,
-    note: "",
+test("a re-derive keeps the ticks and the reader's own lines", async () => {
+  const before = shopping({
+    items: [],
+    reader: [
+      {
+        name: "milk",
+        en: "milk",
+        qty: "two",
+        category: "other",
+        keeps: "w1",
+        freezeOnArrival: false,
+        neededBy: "",
+        source: "reader",
+      },
+    ],
+    checked: { [shoppingItemKey({ name: "kale", category: "produce" })]: true },
   });
-  expect(await applyPlan(planCard({ phase: "applied" }), f.ports)).toEqual({ ok: false, note: "" });
-  expect(f.changed).toBe(0);
+  const h = harness({ shopping: before });
+  await (await applyPlan(planCard({ adjustment: true }), h.ports)).pending;
+  const list = currentList(h.saved.shopping!);
+  expect(list.map((i) => i.name)).toContain("milk");
+  expect(h.saved.shopping!.checked).toEqual(before.checked);
+});
+
+test("a second Apply does nothing", async () => {
+  const h = harness();
+  const applied = await applyPlan(planCard({ phase: "applied" }), h.ports);
+  expect(applied.ok).toBe(false);
+  expect(h.saved.plan).toBeNull();
 });
 
 test("a failed write changes nothing on screen", async () => {
-  const f = fake({ ...EMPTY_MEALS }, true);
-  expect((await applyPlan(planCard(), f.ports)).ok).toBe(false);
-  expect(f.changed).toBe(0);
-  expect(f.state.plan).toBeNull();
+  const h = harness({}, true);
+  const applied = await applyPlan(planCard(), h.ports);
+  expect(applied.ok).toBe(false);
+  expect(h.reloads).toBe(0);
 });
 
-test("applying a week derives its shopping list; the model never wrote one", async () => {
-  const f = fake();
-  const { ok, note } = await applyPlan(planCard(), f.ports);
-  expect(ok).toBe(true);
-  expect(f.saved.shopping.map((i) => i.name)).toEqual(["chicken", "sea bass"]);
-  // Sunday's fish is six days out: it is frozen on the way home.
-  expect(f.saved.shopping.map((i) => i.freezeOnArrival)).toEqual([false, true]);
-  expect(note).toContain("2 things");
-  expect(note).toContain("1 to freeze");
-});
-
-test("an adjustment keeps the week's own age and what was already ticked off", async () => {
-  const f = fake();
-  await applyPlan(planCard(), f.ports);
-  f.state = {
-    ...f.state,
-    shopping: f.state.shopping.map((i) =>
-      i.name === "chicken" ? { ...i, checked: true } : i,
-    ),
+test("the charter card replaces the household", async () => {
+  const h = harness();
+  const card: MealsCharterCardData = {
+    kind: "meals-charter",
+    threadId: "meals",
+    people: 2,
+    stores: ["the market"],
+    kitchen: "one pan",
+    dislikes: ["celery"],
+    nightsCooking: 4,
+    nightsOut: 1,
+    nightsDelivery: 1,
+    text: "Two of us. Breakfast at home.",
+    phase: "proposed",
   };
-  const { note } = await applyPlan(
-    planCard({ adjustment: true, changedDates: ["2026-09-22"] }),
-    f.ports,
-  );
-  expect(f.saved.plan?.createdAt).toBe(500);
-  expect(f.saved.plan?.revision).toBe(2);
-  expect(f.saved.shopping.find((i) => i.name === "chicken")?.checked).toBe(true);
-  expect(note).toContain("2026-09-22");
+  const applied = await applyCharter(card, h.ports);
+  expect(applied.ok).toBe(true);
+  expect(applied.note).toContain("Two of us");
 });
 
-test("a night that went differently is recorded and names only the days left open", async () => {
-  const f = fake({ ...EMPTY_MEALS, plan: week() });
-  const { ok, note, attention } = await recordDeviation(
-    { date: MON, said: "ordered in tonight", became: "delivery", changed: "", at: 0 },
-    f.ports,
+test("a recorded deviation names the meal, not the day", async () => {
+  const h = harness();
+  const { ok, attention, note } = await recordDeviation(
+    {
+      date: MON,
+      meal: "dinner",
+      said: "ordered in",
+      became: "delivery",
+      place: "the usual place",
+      changed: "",
+      at: 0,
+    },
+    h.ports,
   );
   expect(ok).toBe(true);
-  expect(attention).toEqual(["2026-09-22"]);
-  expect(f.state.deviations[0]?.changed).toContain("2026-09-22");
-  expect(f.state.deviations[0]?.at).toBe(500);
-  expect(note).toContain("sort out those days only");
-  // The rest of the week is untouched, and the fish is still on the list.
-  expect(f.saved.plan?.days[6]?.dishId).toBe("dish-b");
+  expect(attention).toEqual([{ date: "2026-09-22", meal: "lunch" }]);
+  expect(h.deviations[0]!.changed).toBe("2026-09-22 lunch now needs another look.");
+  expect(h.deviations[0]!.at).toBe(100);
+  expect(note).toContain("2026-09-22 lunch");
 });
 
-test("a deviation with no week to move writes nothing", async () => {
-  const f = fake();
+test("nothing is recorded against a week that does not exist", async () => {
+  const h = harness({ plan: null });
   const out = await recordDeviation(
-    { date: MON, said: "ordered in", became: "delivery", changed: "", at: 0 },
-    f.ports,
+    { date: MON, meal: "lunch", said: "x", became: "out", changed: "", at: 0 },
+    h.ports,
   );
   expect(out.ok).toBe(false);
-  expect(f.changed).toBe(0);
+  expect(h.deviations).toEqual([]);
 });
 
-test("Apply writes the week, then asks for the photographs it has none of", async () => {
-  const f = fake();
-  const started: { planId: string; queries: { key: string; q: string }[] }[] = [];
-  const ports: MealsPorts = {
-    ...f.ports,
-    photos: async () => ({
-      "dish:chicken traybake": {
-        url: "https://cdn.example/traybake.jpg",
-        thumb: "",
-        pageUrl: "https://example.com/traybake",
-        site: "example.com",
-        foundAt: 1,
+test("the notes are said in the reader's voice and never read the list back", () => {
+  const list = shopping({
+    items: [
+      {
+        name: "salmon",
+        en: "salmon",
+        qty: "2",
+        category: "protein",
+        keeps: "d1-2",
+        freezeOnArrival: true,
+        neededBy: MON,
       },
-    }),
-    bankImage: () => null,
-    startPhotoRun: async (planId, queries) => {
-      started.push({ planId, queries: [...queries] });
-    },
-  };
-
-  const applied = await applyPlan(planCard(), ports);
-  expect(applied.ok).toBe(true);
-  expect(f.changed).toBe(1);
-  // The picture already in the cache is on the week as it is written; only the
-  // names nobody has searched for wait for the run.
-  expect(f.saved.plan?.dishes[0]?.image).toBe("https://cdn.example/traybake.jpg");
-  await applied.pending;
-  expect(started.length).toBe(1);
-  expect(started[0]?.planId).toBe(`week-${MON}`);
-  expect(started[0]?.queries.map((q) => q.key)).toEqual([
-    "dish:baked sea bass",
-    "ingredient:chicken",
-    "ingredient:sea bass",
-  ]);
-});
-
-test("a host that cannot start runs still applies the week", async () => {
-  const f = fake();
-  const applied = await applyPlan(planCard(), f.ports);
-  expect(applied.ok).toBe(true);
-  await applied.pending;
-  expect(f.saved.plan?.dishes.length).toBe(2);
-});
-
-test("asking again searches the whole week, the cache ignored", async () => {
-  const f = fake(
-    { ...EMPTY_MEALS, plan: week(), shopping: [] },
-    false,
-  );
-  const started: { key: string; q: string }[][] = [];
-  const ports: MealsPorts = {
-    ...f.ports,
-    photos: async () => ({ "dish:baked sea bass": { none: true as const, checkedAt: 499 } }),
-    bankImage: () => null,
-    startPhotoRun: async (_planId, queries) => {
-      started.push([...queries]);
-    },
-  };
-  expect(await refreshPhotos(ports)).toBe(4);
-  expect(started[0]?.map((q) => q.key)).toEqual([
-    "dish:chicken traybake",
-    "dish:baked sea bass",
-    "ingredient:chicken",
-    "ingredient:sea bass",
-  ]);
-});
-
-test("asking again with no week planned asks for nothing", async () => {
-  const f = fake();
-  expect(await refreshPhotos({ ...f.ports, startPhotoRun: async () => {} })).toBe(0);
+    ],
+  });
+  expect(planNote(planCard(), list)).toContain("1 things, 1 to freeze");
+  expect(planNote(planCard(), list)).toContain("Don't read it back");
+  expect(
+    planNote(planCard({ adjustment: true, changed: [{ date: MON, meal: "lunch" }] }), list),
+  ).toContain("2026-09-21 lunch");
+  expect(
+    deviationNote(
+      { date: MON, meal: "lunch", said: "canteen", became: "out", changed: "", at: 0 },
+      [],
+    ),
+  ).toContain("Nothing else needs to change");
 });

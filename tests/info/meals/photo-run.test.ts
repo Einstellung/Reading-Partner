@@ -39,6 +39,7 @@ function dish(over: Partial<Dish> = {}): Dish {
 
 function week(dishes: Dish[]): WeekPlan {
   return {
+    breakfastLine: "",
     id: "week-2026-09-21",
     startDate: "2026-09-21",
     days: [],
