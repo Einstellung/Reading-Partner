@@ -1,6 +1,6 @@
-// The dinner line's data (docs/73): one week of dinners, the shopping list the
-// program derives from it, and the sentences the reader says when a night went
-// differently.
+// The meals line's data (docs/73): one week of three meals a day, the one
+// shopping trip derived from it, and the sentences the reader says when a meal
+// went differently.
 //
 // It is a research room in the sense docs/63 means, with the reader themselves
 // as its field of view, but it mints no Lab: a lab with no claimed sources is
@@ -8,9 +8,37 @@
 // nothing. It keeps its own file instead. None of the bureau's vocabulary
 // (room, lab, bureau) is ever shown to the reader.
 
-// What a night is. All four are equal — delivery is a plan, not a failure to
-// plan (docs/north-star/diet.md).
-export type DinnerMode = "cook" | "reheat" | "out" | "delivery";
+// What one meal is. All seven are equal — delivery is a plan, not a failure to
+// plan, and a skipped meal is a meal (docs/north-star/diet.md).
+//
+// cook      made now, from the dish's ingredients
+// reheat    eats a base cooked at an earlier meal, plus something fresh
+// packed    carried from home, eating a base cooked at an earlier meal
+// out       eaten somewhere, at a place the reader names
+// delivery  ordered in, from a place the reader names
+// bought    picked up on the way, not from a place worth planning
+// skip      not eaten, on purpose
+export type MealMode =
+  | "cook"
+  | "reheat"
+  | "packed"
+  | "out"
+  | "delivery"
+  | "bought"
+  | "skip";
+
+// The three meals a day, in the order they are eaten. One key, everywhere: a
+// day is an object with three named fields rather than a list, because every
+// caller wants one of them by name and none of them wants the fourth.
+export type MealKey = "breakfast" | "lunch" | "dinner";
+
+export const MEAL_KEYS: readonly MealKey[] = ["breakfast", "lunch", "dinner"];
+
+/** Which meal of which day. The unit a deviation and a reheat both point at. */
+export interface MealRef {
+  date: string;
+  meal: MealKey;
+}
 
 // The aisle an ingredient is bought in. A shopping list is walked through a
 // store, so the grouping is the store's, not the nutritionist's.
@@ -60,10 +88,27 @@ export interface Ingredient {
   keeps: KeepsClass;
 }
 
+/**
+ * How a dish is actually made, written once and kept (docs/73 做法).
+ *
+ * Asked of the model the first time the reader opens the day it is cooked on,
+ * not when the week is planned: most dishes of a week are never opened, and a
+ * week's worth of steps written up front is a week's worth of tokens spent on
+ * nothing.
+ */
+export interface DishMethod {
+  // One line each, in the order they are done. Between one and ten.
+  steps: string[];
+  // The one thing worth knowing that is not a step ("the fifteen minutes it
+  // simmers are yours"). Absent when there is nothing.
+  note?: string;
+  writtenAt: number;
+}
+
 // One dish, split the way it is actually cooked: a base that keeps a day and a
 // fresh part added at serving that does not (diet.md 做一次吃两顿). The
-// ingredients cover every serving the dish is planned for, so a cook day paired
-// with a reheat day buys the greens for both on the one shopping trip.
+// ingredients cover every meal the dish is planned for, so a dinner cooked once
+// and carried to work the next day buys for both on the one shopping trip.
 export interface Dish {
   // "dish-" + 8 lowercase hex.
   id: string;
@@ -80,7 +125,8 @@ export interface Dish {
   // What is added at serving. Empty when the dish is all base.
   fresh: string;
   keepsADay: boolean;
-  // Hands-on minutes, the hard constraint being 15 (diet.md 省事的约束写死).
+  // Hands-on minutes, the hard constraint being HANDS_ON_LIMITS for the meal it
+  // is cooked at (diet.md 省事的约束写死).
   handsOnMinutes: number;
   ingredients: Ingredient[];
   // A photograph of the dish: an app-relative path, or an https URL that the
@@ -89,8 +135,10 @@ export interface Dish {
   // — a URL out of a model is a fact through a model. Absent when the search
   // found nothing, and a dish without one is drawn from its ingredients'
   // pictures instead: the reader cannot tell one vegetable from another, so a
-  // night never goes on screen with nothing to look at.
+  // meal never goes on screen with nothing to look at.
   image?: string;
+  // The steps, once anyone has asked for them (method.ts). Absent until then.
+  method?: DishMethod;
 }
 
 // One photograph the image search found, for a dish or for an ingredient.
@@ -122,21 +170,37 @@ export function isDishPhotoMiss(entry: DishPhotoEntry): entry is DishPhotoMiss {
   return (entry as DishPhotoMiss).none === true;
 }
 
-export interface DayPlan {
-  // Local "YYYY-MM-DD". Local because dinner is a local-evening ritual.
-  date: string;
-  mode: DinnerMode;
-  // The dish, for a cook day. A reheat day names no dish of its own: it eats
-  // the base made on `reheatOf`.
+/**
+ * One of the three meals of one day.
+ *
+ * `dishId` is on every meal that has a dish to name, cooked or carried: a
+ * packed lunch shows the dish it is a box of. `reheatOf` is the pointer to
+ * where that base was cooked, and it is what goes stale when the meal it
+ * points at stops cooking (applyDeviation).
+ */
+export interface Meal {
+  mode: MealMode;
+  // The dish, for cook; the dish whose base is eaten, for reheat and packed.
   dishId?: string;
-  // The date whose base this reheats. Cleared when that day stops being a cook
-  // day (applyDeviation), which is what makes the day need attention.
-  reheatOf?: string;
-  // What is added to the reheated base at serving, in one phrase.
+  // Which meal cooked the base this one eats. Absent on a box carried over from
+  // a week nobody planned here, which says where it came from in `note`.
+  reheatOf?: MealRef;
+  // What is added to the base at serving, in one phrase.
   freshAdd?: string;
-  // Where, for out and delivery, in the reader's own words ("the noodle place
-  // downstairs"). No POI, no menu — that is not this slice (docs/73).
+  // Where, for out, delivery and bought, in the reader's own words ("the noodle
+  // place downstairs"). No POI, no menu — that is not this slice (docs/73).
   place?: string;
+  // One line of the reader's own about this meal ("last night's box"), for the
+  // cases the modes do not carry. Never a second description of the dish.
+  note?: string;
+}
+
+export interface DayPlan {
+  // Local "YYYY-MM-DD". Local because a day of meals is a local-day ritual.
+  date: string;
+  breakfast: Meal;
+  lunch: Meal;
+  dinner: Meal;
 }
 
 export interface WeekPlan {
@@ -146,9 +210,14 @@ export interface WeekPlan {
   startDate: string;
   // Seven, in date order.
   days: DayPlan[];
-  // Every dish the days name, carried with the plan so one read off disk is
+  // Every dish the meals name, carried with the plan so one read off disk is
   // the whole week.
   dishes: Dish[];
+  // The week's breakfasts as a pattern, in the reader's own words ("oats and
+  // egg on toast, Friday I buy something on the way"). Breakfast is habit, not
+  // seven decisions, so the week says it once; the days still carry real
+  // meals, so the oats are a dish and their oats are on the list.
+  breakfastLine: string;
   createdAt: number;
   // Bumped by every applied adjustment and every deviation, so the UI can tell
   // a stale render from a current one without diffing the week.
@@ -166,18 +235,67 @@ export interface ShoppingItem {
   category: IngredientCategory;
   keeps: KeepsClass;
   // Raw protein that keeps a day or two and is not needed for another two:
-  // freeze it the moment it is home, thaw it the night it is cooked.
+  // freeze it the moment it is home, thaw it the day it is cooked.
   freezeOnArrival: boolean;
-  // Checked in the shop. A checked item is what is in the fridge — the list is
-  // the inventory, so nothing else has to be kept.
-  checked: boolean;
-  // The earliest day a dish needs it, local date.
+  // The earliest day a dish needs it, local date. Empty on a line the reader
+  // asked for, which no meal is waiting on.
   neededBy: string;
+  // Set on the lines the reader added by saying so, which is what keeps them
+  // through a re-derive (shopping.ts).
+  source?: "reader";
+  // Added after the trip was called done: it belongs to "still to get" rather
+  // than to the aisles that were already walked.
+  afterDone?: boolean;
 }
+
+/**
+ * The one shopping trip a week (docs/73 采购单).
+ *
+ * The derived half and the reader's half are kept apart on purpose: an
+ * adjustment re-derives `items` from the week, and a washing-up liquid nobody
+ * planned must not vanish with it. The reader's removals and swaps are held as
+ * overrides keyed by the derived line for the same reason — applied to the
+ * derived array they would be erased by the next derivation.
+ *
+ * `currentList` is the only thing that puts the four together, and it is pure.
+ */
+export interface ShoppingState {
+  // Derived from the week's cooked meals. Rebuilt whole by deriveShoppingList.
+  items: ShoppingItem[];
+  // Lines the reader asked for, in the order they asked.
+  reader: ShoppingItem[];
+  // Derived lines the reader took off, by key.
+  dropped: Record<string, true>;
+  // Derived lines the reader swapped for something else, by key.
+  replaced: Record<string, ShoppingReplacement>;
+  // Ticked in the shop, by key. Outside the lines themselves so a tick survives
+  // a re-derive without the derivation having to carry it.
+  checked: Record<string, true>;
+  // The local date the trip was called done, or null while it is still a list.
+  doneOn: string | null;
+}
+
+/** What a derived line was swapped for. Everything the line draws itself with. */
+export interface ShoppingReplacement {
+  name: string;
+  en: string;
+  category: IngredientCategory;
+  keeps: KeepsClass;
+  qty: string;
+}
+
+export const EMPTY_SHOPPING: ShoppingState = {
+  items: [],
+  reader: [],
+  dropped: {},
+  replaced: {},
+  checked: {},
+  doneOn: null,
+};
 
 // What the household is, learned in two or three questions on the first "Plan
 // this week" and corrected by talking. Never a form (diet.md 不用配置).
-export interface DinnerCharter {
+export interface MealsCharter {
   people: number;
   // The shops they actually buy in, which is what decides the possible
   // ingredients.
@@ -197,14 +315,15 @@ export interface DinnerCharter {
   updatedAt: number;
 }
 
-// A night that went differently, said in one sentence. The plan is the record,
+// A meal that went differently, said in one sentence. The plan is the record,
 // so this is the only input a normal week takes (diet.md 计划就是记录).
 export interface Deviation {
   date: string;
+  meal: MealKey;
   // The reader's own sentence.
   said: string;
-  // What the night actually was.
-  became: DinnerMode;
+  // What the meal actually was.
+  became: MealMode;
   place?: string;
   // What the program did about it, one line, written by the program and not by
   // the model.
@@ -212,20 +331,20 @@ export interface Deviation {
   at: number;
 }
 
-export interface DinnerState {
-  charter: DinnerCharter | null;
+export interface MealsState {
+  charter: MealsCharter | null;
   // The week being eaten. One at a time: a finished week is replaced, not
   // archived, because nothing in this slice reads an old one.
   plan: WeekPlan | null;
-  shopping: ShoppingItem[];
+  shopping: ShoppingState;
   deviations: Deviation[];
 }
 
-export const DINNER_VERSION = 1 as const;
+export const MEALS_VERSION = 1 as const;
 
-export const EMPTY_DINNER: DinnerState = {
+export const EMPTY_MEALS: MealsState = {
   charter: null,
   plan: null,
-  shopping: [],
+  shopping: EMPTY_SHOPPING,
   deviations: [],
 };

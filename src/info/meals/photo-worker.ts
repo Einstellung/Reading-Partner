@@ -1,9 +1,9 @@
-// The dinner-photos kind, as a legion worker (docs/55, docs/73 图片).
+// The meals-photos kind, as a legion worker (docs/55, docs/73 图片).
 //
 // A program worker — there is no model in it — on the `local` tier, needing a
 // hidden webview: it opens one Bing Images page per query in it, reads the
 // result anchors out of the page with a script and writes what it found into
-// info-dinner-photos.json. Nothing about the run reaches the synced folder; the
+// info-meals-photos.json. Nothing about the run reaches the synced folder; the
 // photographs do, which is how the phone gets them.
 //
 // Written one at a time, as each lands, rather than in one write at the end: a
@@ -24,10 +24,10 @@ import { appData } from "../../platform/app/appdata";
 import { fetchPageViaWebview, type WebviewPage } from "../extract/webview-page";
 import { BING_RESULTS_SCRIPT, bingImageQuery, parseBingImages, pickPhoto } from "./photo-search";
 import { savePhotoEntries } from "./photo-store";
-import { DINNER_PHOTOS_KIND, parsePhotoAsk, photoOutputLine, type PhotoQuery } from "./photo-run";
+import { MEALS_PHOTOS_KIND, parsePhotoAsk, photoOutputLine, type PhotoQuery } from "./photo-run";
 import type { DishPhotoEntry } from "./types";
 
-export { DINNER_PHOTOS_KIND };
+export { MEALS_PHOTOS_KIND };
 
 // A page load in a real browser, with its scripts. Longer than a fetch would
 // need and shorter than the reader's patience for the whole week.
@@ -38,7 +38,7 @@ const PAGE_TIMEOUT_MS = 20_000;
 const BETWEEN_MS = 1_500;
 
 /** Everything that reaches the host, so the worker itself is testable. */
-export interface DinnerPhotosWorkerDeps {
+export interface MealsPhotosWorkerDeps {
   /** The ask, read back off its path. */
   readAsk?: (path: string) => Promise<string>;
   /** One page in the hidden webview. */
@@ -57,8 +57,8 @@ function said(query: PhotoQuery): string {
   return query.q;
 }
 
-/** Build the worker legion runs for one dinner-photos run. */
-export function dinnerPhotosWorker(deps: DinnerPhotosWorkerDeps = {}) {
+/** Build the worker legion runs for one meals-photos run. */
+export function mealsPhotosWorker(deps: MealsPhotosWorkerDeps = {}) {
   const readAsk = deps.readAsk ?? ((path: string) => appData.readText(path));
   const fetchPage = deps.fetchPage ?? fetchPageViaWebview;
   const savePhotos = deps.savePhotos ?? ((entries: Record<string, DishPhotoEntry>) => savePhotoEntries(entries));
@@ -119,7 +119,7 @@ export function dinnerPhotosWorker(deps: DinnerPhotosWorkerDeps = {}) {
 }
 
 /**
- * Hand legion the dinner-photos kind. Called once at startup; deps are for tests.
+ * Hand legion the meals-photos kind. Called once at startup; deps are for tests.
  *
  * `local`, so the run never reaches the synced folder, and `webview-fetch`,
  * which is what picks the machine: the phone has no hidden webview to search in
@@ -127,11 +127,11 @@ export function dinnerPhotosWorker(deps: DinnerPhotosWorkerDeps = {}) {
  * list of queries, which is not something the model could write as a brief; the
  * Apply and the refresh tool write it themselves.
  */
-export function registerDinnerPhotosWorker(deps: DinnerPhotosWorkerDeps = {}): void {
+export function registerMealsPhotosWorker(deps: MealsPhotosWorkerDeps = {}): void {
   registerWorker({
-    kind: DINNER_PHOTOS_KIND,
+    kind: MEALS_PHOTOS_KIND,
     tier: "local",
     requires: [WEBVIEW_FETCH],
-    run: dinnerPhotosWorker(deps),
+    run: mealsPhotosWorker(deps),
   });
 }

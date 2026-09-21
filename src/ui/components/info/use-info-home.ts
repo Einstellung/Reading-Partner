@@ -17,7 +17,7 @@ import type { DeviceRole } from "../../../platform/app/device";
 import { buildGlossary } from "../../../ai/voice";
 import { getInfoView } from "../../../info/program/live";
 import { todayLocal } from "../../../info/collect/store";
-import type { DinnerState } from "../../../info/dinner/types";
+import type { MealsState } from "../../../info/meals/types";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import {
   clearCollectorLeftovers,
@@ -42,7 +42,7 @@ import { assembleReaderSection } from "../../../memory/live/assemble";
 import {
   articleAnchor,
   briefingAnchor,
-  dinnerAnchor,
+  mealsAnchor,
   noBriefingAnchor,
   onboardingAnchor,
   type InfoCallAnchor,
@@ -174,7 +174,7 @@ export interface InfoHomeController {
   askBriefing: () => Promise<void>;
   // The dinner conversation. The state and the date are the screen's, already
   // read (use-dinner.ts), so this only names the thread to open.
-  askDinner: (state: DinnerState, today: string, kickoff?: string) => void;
+  askDinner: (state: MealsState, today: string, kickoff?: string) => void;
   askLaunch: () => Promise<void>;
   askArticle: (itemId: string) => Promise<void>;
 }
@@ -415,8 +415,8 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     return { reader, sources, aiLanguage: settings.aiLanguage, canSignIn, collecting };
   }, [canSignIn, collecting]);
 
-  const askDinner = useCallback((state: DinnerState, today: string, kickoff?: string) => {
-    setInfoCall(dinnerAnchor(state, today, kickoff ? { kickoff } : undefined));
+  const askDinner = useCallback((state: MealsState, today: string, kickoff?: string) => {
+    setInfoCall(mealsAnchor(state, today, kickoff ? { kickoff } : undefined));
   }, []);
 
   const askBriefing = useCallback(async () => {

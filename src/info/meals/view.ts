@@ -1,4 +1,4 @@
-// What the dinner screen reads off the state (docs/73): the words for a mode
+// What the meals screen reads off the state (docs/73): the words for a mode
 // and a shelf-life class, which day a date is, what is left of the week, and
 // the order the shopping list is drawn in.
 //
@@ -10,27 +10,50 @@ import { photoForDish, photoForIngredient, type PhotoCache } from "./dish-photos
 import { ingredientImageUrl } from "./images";
 import {
   CATEGORY_ORDER,
+  MEAL_KEYS,
   type DayPlan,
   type Dish,
-  type DinnerMode,
+  type Meal,
+  type MealKey,
+  type MealMode,
   type IngredientCategory,
   type KeepsClass,
   type ShoppingItem,
+  type ShoppingState,
   type WeekPlan,
 } from "./types";
-import { addDays, dishForDay } from "./week";
+import { currentList, isChecked } from "./shopping";
+import { addDays, dishForDay, dishForMeal } from "./week";
 
-/** The mode as a plain word. Four nights, four words, none of them apologetic. */
-export function modeWord(mode: DinnerMode): string {
+/** The mode as a plain word. Seven modes, seven words, none of them apologetic. */
+export function modeWord(mode: MealMode): string {
   switch (mode) {
     case "cook":
       return "Cook";
     case "reheat":
       return "Reheat";
+    case "packed":
+      return "Packed";
     case "out":
       return "Eat out";
     case "delivery":
       return "Delivery";
+    case "bought":
+      return "Bought";
+    case "skip":
+      return "Skip";
+  }
+}
+
+/** Which meal, as its heading. */
+export function mealLabel(meal: MealKey): string {
+  switch (meal) {
+    case "breakfast":
+      return "Breakfast";
+    case "lunch":
+      return "Lunch";
+    case "dinner":
+      return "Dinner";
   }
 }
 
@@ -95,32 +118,68 @@ export function dayWord(date: string, today: string): string {
   return weekdayName(date);
 }
 
+/** One meal of a day, with the dish it eats and the words for both. */
+export interface MealView {
+  key: MealKey;
+  label: string;
+  meal: Meal;
+  dish: Dish | null;
+  word: string;
+}
+
 export interface DayView {
   day: DayPlan;
+  // The three, in the order they are eaten.
+  meals: MealView[];
+  // The dish the day leads with: the cooked meal latest in the day. Breakfast
+  // is a pattern rather than what the day is about, so it only supplies the
+  // picture on a day that cooks nothing else.
   dish: Dish | null;
   word: string;
   weekday: string;
 }
 
+/** The three meals of a day, in order. */
+export function mealViews(plan: WeekPlan, day: DayPlan): MealView[] {
+  return MEAL_KEYS.map((key) => ({
+    key,
+    label: mealLabel(key),
+    meal: day[key],
+    dish: dishForMeal(plan, day[key]),
+    word: modeWord(day[key].mode),
+  }));
+}
+
 function dayView(plan: WeekPlan, day: DayPlan, today: string): DayView {
   return {
     day,
+    meals: mealViews(plan, day),
     dish: dishForDay(plan, day),
     word: dayWord(day.date, today),
     weekday: weekdayName(day.date),
   };
 }
 
+/** One day of the week by its date, or null when the plan does not cover it. */
+export function dayViewOn(
+  plan: WeekPlan | null,
+  date: string,
+  today: string,
+): DayView | null {
+  const day = plan?.days.find((d) => d.date === date);
+  return plan && day ? dayView(plan, day, today) : null;
+}
+
 /**
- * The nights still ahead, today first. A night already eaten leaves the screen:
- * the plan is the record, and there is nothing left to decide about it.
+ * The days still ahead, today first. A day already eaten leaves the screen: the
+ * plan is the record, and there is nothing left to decide about it.
  */
 export function upcomingDays(plan: WeekPlan | null, today: string): DayView[] {
   if (!plan) return [];
   return plan.days.filter((d) => d.date >= today).map((d) => dayView(plan, d, today));
 }
 
-/** The two nights the screen gives its top half to, in order. */
+/** The two days the screen gives its top half to, in order. */
 export function headlineDays(plan: WeekPlan | null, today: string): DayView[] {
   return upcomingDays(plan, today).slice(0, 2);
 }
@@ -220,8 +279,8 @@ export function dishThumbnails(
 }
 
 /** How many lines are still to be bought. The only count the list shows. */
-export function leftToBuy(items: readonly ShoppingItem[]): number {
-  return items.filter((i) => !i.checked).length;
+export function leftToBuy(shopping: ShoppingState): number {
+  return currentList(shopping).filter((i) => !isChecked(shopping, i)).length;
 }
 
 export interface ShoppingGroup {
@@ -238,15 +297,19 @@ export interface ShoppingGroup {
  * Sunk rather than hidden: a ticked line is what is in the fridge, and the list
  * is the inventory (docs/73).
  */
-export function shoppingGroups(items: readonly ShoppingItem[]): ShoppingGroup[] {
+export function shoppingGroups(shopping: ShoppingState): ShoppingGroup[] {
+  const list = currentList(shopping);
   const groups: ShoppingGroup[] = [];
   for (const category of CATEGORY_ORDER) {
-    const mine = items.filter((i) => i.category === category);
+    const mine = list.filter((i) => i.category === category);
     if (!mine.length) continue;
     groups.push({
       category,
       label: categoryLabel(category),
-      items: [...mine.filter((i) => !i.checked), ...mine.filter((i) => i.checked)],
+      items: [
+        ...mine.filter((i) => !isChecked(shopping, i)),
+        ...mine.filter((i) => isChecked(shopping, i)),
+      ],
     });
   }
   return groups;

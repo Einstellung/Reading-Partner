@@ -1,17 +1,17 @@
-// The photograph cache: the file (src/info/dinner/photo-store.ts) and the pure
-// half that reads it (src/info/dinner/dish-photos.ts).
+// The photograph cache: the file (src/info/meals/photo-store.ts) and the pure
+// half that reads it (src/info/meals/dish-photos.ts).
 // Run: scripts/t.sh tests/info/dinner
 
 import { beforeEach, expect, test } from "bun:test";
 import { createFakeAppData, type FakeAppData } from "../../support/guarded-appdata";
 import {
-  DINNER_PHOTOS_FILE,
-  loadDinnerPhotos,
+  MEALS_PHOTOS_FILE,
+  loadMealsPhotos,
   markDishPhotoBroken,
   parsePhotoFile,
   photoFileBody,
   savePhotoEntries,
-} from "../../../src/info/dinner/photo-store";
+} from "../../../src/info/meals/photo-store";
 import {
   PHOTO_MISS_RETRY_MS,
   dishPhotoKey,
@@ -20,8 +20,8 @@ import {
   photoForDish,
   photoForIngredient,
   withDishPhotos,
-} from "../../../src/info/dinner/dish-photos";
-import type { Dish, DishPhoto, WeekPlan } from "../../../src/info/dinner/types";
+} from "../../../src/info/meals/dish-photos";
+import type { Dish, DishPhoto, WeekPlan } from "../../../src/info/meals/types";
 
 let io: FakeAppData;
 
@@ -67,18 +67,18 @@ test("a file body round-trips through the parser", () => {
 });
 
 test("no file is no photographs", async () => {
-  expect(await loadDinnerPhotos(io)).toEqual({});
+  expect(await loadMealsPhotos(io)).toEqual({});
 });
 
 test("what one search found is merged into what is already there", async () => {
   await savePhotoEntries({ "dish:mapo tofu": PHOTO }, io);
   await savePhotoEntries({ "ingredient:kale": { none: true, checkedAt: 5 } }, io);
-  const cache = await loadDinnerPhotos(io);
+  const cache = await loadMealsPhotos(io);
   expect(Object.keys(cache).sort()).toEqual(["dish:mapo tofu", "ingredient:kale"]);
   // Nothing to write is no write at all.
-  const before = io.files.get(DINNER_PHOTOS_FILE);
+  const before = io.files.get(MEALS_PHOTOS_FILE);
   await savePhotoEntries({}, io);
-  expect(io.files.get(DINNER_PHOTOS_FILE)).toBe(before);
+  expect(io.files.get(MEALS_PHOTOS_FILE)).toBe(before);
 });
 
 // A picture the search found and the webview cannot load: dropped, so the next
@@ -87,14 +87,14 @@ test("a broken dish photograph is dropped from the cache", async () => {
   await savePhotoEntries({ "dish:mapo tofu": PHOTO, "dish:shakshuka": PHOTO }, io);
   const after = await markDishPhotoBroken("Mapo Tofu", io);
   expect(Object.keys(after)).toEqual(["dish:shakshuka"]);
-  expect((await loadDinnerPhotos(io))["dish:mapo tofu"]).toBeUndefined();
+  expect((await loadMealsPhotos(io))["dish:mapo tofu"]).toBeUndefined();
 });
 
 test("a name the cache never had is written nowhere", async () => {
   await savePhotoEntries({ "dish:mapo tofu": PHOTO }, io);
-  const before = io.files.get(DINNER_PHOTOS_FILE);
+  const before = io.files.get(MEALS_PHOTOS_FILE);
   await markDishPhotoBroken("lentil soup", io);
-  expect(io.files.get(DINNER_PHOTOS_FILE)).toBe(before);
+  expect(io.files.get(MEALS_PHOTOS_FILE)).toBe(before);
 });
 
 test("a hit stands for good and a miss for thirty days", () => {
@@ -119,6 +119,7 @@ test("a week takes the pictures the cache has and keeps the ones it has not", ()
     id: "week-2026-09-21",
     startDate: "2026-09-21",
     days: [],
+    breakfastLine: "",
     dishes: [dish(), dish({ id: "dish-b", searchName: "shakshuka", image: "app/old.png" })],
     createdAt: 0,
     revision: 1,

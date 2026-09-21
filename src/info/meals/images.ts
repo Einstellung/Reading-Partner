@@ -1,4 +1,4 @@
-// Pictures for the dinner screen (docs/73 图片).
+// Pictures for the meals screen (docs/73 图片).
 //
 // The reader cannot tell one vegetable from another, so every line of the
 // shopping list wants a photograph. The pictures are TheMealDB's ingredient

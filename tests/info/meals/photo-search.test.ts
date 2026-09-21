@@ -1,4 +1,4 @@
-// Reading a page of Bing image results (src/info/dinner/photo-search.ts).
+// Reading a page of Bing image results (src/info/meals/photo-search.ts).
 //
 // The fixture is a real response, stripped to its result anchors: Bing answers
 // curl with the right page and decoy pictures (坑 372), so what is asserted
@@ -14,7 +14,7 @@ import {
   pickPhoto,
   siteOf,
   type BingImage,
-} from "../../../src/info/dinner/photo-search";
+} from "../../../src/info/meals/photo-search";
 
 const PAGE = await Bun.file(
   new URL("./fixtures/bing-images-shakshuka.html", import.meta.url).pathname,

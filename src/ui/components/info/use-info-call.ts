@@ -49,10 +49,10 @@ import {
   applyLabProposal,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
-import { applyCharter, applyPlan } from "../../../info/dinner/apply";
-import type { DinnerCard, DinnerCharterCardData, DinnerPlanCardData } from "../../../info/dinner/cards";
-import { buildLiveDinnerTools, liveDinnerPorts } from "../../../info/dinner/live";
-import { withDinnerTools } from "../../../info/dinner/desk";
+import { applyCharter, applyPlan } from "../../../info/meals/apply";
+import type { MealsCard, MealsCharterCardData, MealsPlanCardData } from "../../../info/meals/cards";
+import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
+import { withMealsTools } from "../../../info/meals/desk";
 import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
@@ -104,7 +104,7 @@ export interface InfoCallOptions {
   onOpenBriefing?: (date: string) => void;
   // The dinner screen reloads. Applying a plan and recording a deviation both
   // write without the screen asking, so nothing else would tell it.
-  onDinnerChanged?: () => void;
+  onMealsChanged?: () => void;
 }
 
 export interface InfoCallController {
@@ -132,7 +132,7 @@ export function infoStickKey(dateKey: string, threadId: string): string {
 }
 
 export function useInfoCall(opts: InfoCallOptions): InfoCallController {
-  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onDinnerChanged } =
+  const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged } =
     opts;
   const [swapped, setSwapped] = useState(false);
   const [messages, setMessages] = useState<UiMessage[]>([]);
@@ -308,7 +308,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       | TopicProposalCardData
       | LabProposalCardData
       | LabArchiveCardData
-      | DinnerCard,
+      | MealsCard,
   ) {
     const cardId = nextCardId(prefix);
     const ts = Date.now();
@@ -434,46 +434,46 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // The dinner charter's Apply. One household, so a second charter replaces the
   // first; the shape is handleApplyLab's, down to the order of the three
   // effects.
-  const handleApplyDinnerCharter = useCallback(
+  const handleApplyMealsCharter = useCallback(
     async (cardId: string) => {
       const found = findCardPart(messagesRef.current, cardId);
-      if (!found || found.payload.kind !== "dinner-charter") return;
+      if (!found || found.payload.kind !== "meals-charter") return;
       const card = found.payload;
       const { ok, note } = await applyCharter(
         card,
-        liveDinnerPorts({ today: () => todayLocal(), changed: () => onDinnerChanged?.() }),
+        liveMealsPorts({ today: () => todayLocal(), changed: () => onMealsChanged?.() }),
       );
       if (!ok) return;
-      const applied: DinnerCharterCardData = { ...card, phase: "applied" };
+      const applied: MealsCharterCardData = { ...card, phase: "applied" };
       setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
       patchThreadMessage(bookId, anchor.threadId, found.ts, {
         parts: [toPersistedCardPart(cardId, applied)],
       });
       noteTurn(note);
     },
-    [bookId, anchor.threadId, noteTurn, onDinnerChanged],
+    [bookId, anchor.threadId, noteTurn, onMealsChanged],
   );
 
   // The week's Apply: the plan and the shopping list derived from it, in one
   // write, and the screen reloaded through the ports' `changed`.
-  const handleApplyDinnerPlan = useCallback(
+  const handleApplyMealsPlan = useCallback(
     async (cardId: string) => {
       const found = findCardPart(messagesRef.current, cardId);
-      if (!found || found.payload.kind !== "dinner-plan") return;
+      if (!found || found.payload.kind !== "meals-plan") return;
       const card = found.payload;
       const { ok, note } = await applyPlan(
         card,
-        liveDinnerPorts({ today: () => todayLocal(), changed: () => onDinnerChanged?.() }),
+        liveMealsPorts({ today: () => todayLocal(), changed: () => onMealsChanged?.() }),
       );
       if (!ok) return;
-      const applied: DinnerPlanCardData = { ...card, phase: "applied" };
+      const applied: MealsPlanCardData = { ...card, phase: "applied" };
       setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
       patchThreadMessage(bookId, anchor.threadId, found.ts, {
         parts: [toPersistedCardPart(cardId, applied)],
       });
       noteTurn(note);
     },
-    [bookId, anchor.threadId, noteTurn, onDinnerChanged],
+    [bookId, anchor.threadId, noteTurn, onMealsChanged],
   );
 
   // The card action dispatcher wired into the message list. Stable across
@@ -487,8 +487,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           else if (action.op === "apply-topic") void handleApplyTopic(cardId);
           else if (action.op === "apply-lab") void handleApplyLab(cardId);
           else if (action.op === "apply-lab-archive") void handleArchiveLab(cardId);
-          else if (action.op === "apply-dinner-charter") void handleApplyDinnerCharter(cardId);
-          else if (action.op === "apply-dinner-plan") void handleApplyDinnerPlan(cardId);
+          else if (action.op === "apply-meals-charter") void handleApplyMealsCharter(cardId);
+          else if (action.op === "apply-meals-plan") void handleApplyMealsPlan(cardId);
           else if (action.op === "retriage") runBriefingJob("retriage");
           else if (action.op === "retry-briefing") runBriefingJob(lastJobRef.current);
           break;
@@ -520,8 +520,8 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       handleApplyTopic,
       handleApplyLab,
       handleArchiveLab,
-      handleApplyDinnerCharter,
-      handleApplyDinnerPlan,
+      handleApplyMealsCharter,
+      handleApplyMealsPlan,
       onOpenBriefing,
       onHangUp,
       pipCards,
@@ -562,7 +562,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     let turn: AssembledTurn | null;
     try {
       const desk = await openDesk(
-        withDinnerTools(
+        withMealsTools(
         withCompanionTools(anchor.desk, () =>
           buildLiveCompanionTools(
             (payload) => insertCard("probe", payload),
@@ -577,11 +577,11 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           ),
         ),
         async () =>
-          buildLiveDinnerTools({
+          buildLiveMealsTools({
             threadId: anchor.threadId,
-            onDinnerCard: (payload) => insertCard("dinner", payload),
+            onMealsCard: (payload) => insertCard("dinner", payload),
             today: () => todayLocal(),
-            changed: () => onDinnerChanged?.(),
+            changed: () => onMealsChanged?.(),
           }),
         ),
         {

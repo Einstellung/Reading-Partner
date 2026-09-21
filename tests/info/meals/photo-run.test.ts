@@ -1,20 +1,20 @@
-// The photograph run: what a week asks for (src/info/dinner/photo-run.ts) and
-// what the worker does with it (src/info/dinner/photo-worker.ts).
+// The photograph run: what a week asks for (src/info/meals/photo-run.ts) and
+// what the worker does with it (src/info/meals/photo-worker.ts).
 // Run: scripts/t.sh tests/info/dinner
 
 import { expect, test } from "bun:test";
 import {
-  DINNER_PHOTOS_KIND,
+  MEALS_PHOTOS_KIND,
   MAX_PHOTO_QUERIES,
   parsePhotoAsk,
   photoOutputLine,
   photoQueriesForPlan,
   startPhotoRun,
-  type DinnerPhotoAsk,
-} from "../../../src/info/dinner/photo-run";
-import { dinnerPhotosWorker } from "../../../src/info/dinner/photo-worker";
+  type MealsPhotoAsk,
+} from "../../../src/info/meals/photo-run";
+import { mealsPhotosWorker } from "../../../src/info/meals/photo-worker";
 import type { WebviewPage } from "../../../src/info/extract/webview-page";
-import type { Dish, DishPhotoEntry, Ingredient, WeekPlan } from "../../../src/info/dinner/types";
+import type { Dish, DishPhotoEntry, Ingredient, WeekPlan } from "../../../src/info/meals/types";
 import type { Run } from "../../../src/legion/run/types";
 import type { WorkerContext } from "../../../src/legion/execute/worker";
 
@@ -39,6 +39,7 @@ function dish(over: Partial<Dish> = {}): Dish {
 
 function week(dishes: Dish[]): WeekPlan {
   return {
+    breakfastLine: "",
     id: "week-2026-09-21",
     startDate: "2026-09-21",
     days: [],
@@ -100,23 +101,23 @@ test("a dish with no search name and an ingredient with no English name ask noth
 });
 
 test("the ask is written, handed to legion, and read back", async () => {
-  const ask: DinnerPhotoAsk = {
+  const ask: MealsPhotoAsk = {
     planId: "week-2026-09-21",
     queries: [{ key: "dish:mapo tofu", q: "mapo tofu" }],
   };
   let sent: { kind: string; brief: string; delegator: unknown } | null = null;
   const id = await startPhotoRun(ask, {
-    write: async () => "legion/briefs/dinner-photos-1.json",
+    write: async () => "legion/briefs/meals-photos-1.json",
     delegate: async (input) => {
       sent = { kind: input.kind, brief: input.brief, delegator: input.delegator };
       return { ok: true, run: { id: "run-1" } as Run, existing: false };
     },
   });
   expect(id).toBe("run-1");
-  expect(sent!.kind).toBe(DINNER_PHOTOS_KIND);
-  expect(sent!.brief).toBe("legion/briefs/dinner-photos-1.json");
+  expect(sent!.kind).toBe(MEALS_PHOTOS_KIND);
+  expect(sent!.brief).toBe("legion/briefs/meals-photos-1.json");
   // Nobody is owed a sentence about it: the pictures appear, that is all.
-  expect(sent!.delegator).toEqual({ kind: "program", name: "dinner" });
+  expect(sent!.delegator).toEqual({ kind: "program", name: "meals" });
 
   expect(await startPhotoRun({ planId: "w", queries: [] }, { write: async () => "x" })).toBeNull();
   expect(parsePhotoAsk(JSON.stringify(ask))).toEqual(ask);
@@ -178,7 +179,7 @@ const ASK = JSON.stringify({
 test("each search is written as it lands, and the run says how it went", async () => {
   const written: Record<string, DishPhotoEntry>[] = [];
   const asked: string[] = [];
-  const worker = dinnerPhotosWorker({
+  const worker = mealsPhotosWorker({
     readAsk: async () => ASK,
     fetchPage: async (url, opts) => {
       asked.push(url);
@@ -215,7 +216,7 @@ test("each search is written as it lands, and the run says how it went", async (
 // queries wait for the next run rather than being written down as misses.
 test("a blocked page fails the run and writes nothing after it", async () => {
   const written: Record<string, DishPhotoEntry>[] = [];
-  const worker = dinnerPhotosWorker({
+  const worker = mealsPhotosWorker({
     readAsk: async () => ASK,
     fetchPage: async () => page({ status: "blocked" }),
     savePhotos: async (entries) => {
@@ -231,7 +232,7 @@ test("a blocked page fails the run and writes nothing after it", async () => {
 
 test("a cancelled run stops between two searches", async () => {
   let n = 0;
-  const worker = dinnerPhotosWorker({
+  const worker = mealsPhotosWorker({
     readAsk: async () => ASK,
     fetchPage: async () => {
       n += 1;

@@ -19,10 +19,10 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
 } from "../../../info/boxes/cards";
-import type { DinnerCharterCardData, DinnerPlanCardData } from "../../../info/dinner/cards";
-import type { WeekPlan } from "../../../info/dinner/types";
-import { modeWord, weekdayName } from "../../../info/dinner/view";
-import { dishForDay } from "../../../info/dinner/week";
+import type { MealsCharterCardData, MealsPlanCardData } from "../../../info/meals/cards";
+import type { WeekPlan } from "../../../info/meals/types";
+import { modeWord, weekdayName } from "../../../info/meals/view";
+import { dishForDay } from "../../../info/meals/week";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -321,7 +321,7 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 // three questions (docs/73 三张卡). The paragraph in their own words is the
 // card — the counted fields are what the program sorts by, and reading them
 // back as a form is what this line exists not to be.
-export function DinnerCharterCard({ payload, dispatch }: CardComponentProps<DinnerCharterCardData>) {
+export function MealsCharterCard({ payload, dispatch }: CardComponentProps<MealsCharterCardData>) {
   const applied = payload.phase === "applied";
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
@@ -348,7 +348,7 @@ export function DinnerCharterCard({ payload, dispatch }: CardComponentProps<Dinn
             variant="cta"
             size="chip"
             className="px-3.5 py-1.5"
-            onClick={() => dispatch({ kind: "mutate", op: "apply-dinner-charter" })}
+            onClick={() => dispatch({ kind: "mutate", op: "apply-meals-charter" })}
           >
             That's right
           </Button>
@@ -362,7 +362,7 @@ export function DinnerCharterCard({ payload, dispatch }: CardComponentProps<Dinn
 // the card always carries the whole week as it would stand once applied — with
 // the days this call actually changes marked, since on an adjustment those are
 // the only ones the reader has to read.
-export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<DinnerPlanCardData>) {
+export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<MealsPlanCardData>) {
   const applied = payload.phase === "applied";
   const changed = new Set(payload.changedDates);
   const plan: WeekPlan = {
@@ -370,6 +370,7 @@ export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<DinnerP
     startDate: payload.startDate,
     days: payload.days,
     dishes: payload.dishes,
+    breakfastLine: payload.breakfastLine,
     createdAt: 0,
     revision: 0,
   };
@@ -391,8 +392,8 @@ export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<DinnerP
               }
             >
               <span className="w-16 flex-none text-faint-foreground">{weekdayName(day.date)}</span>
-              <span className="w-14 flex-none">{modeWord(day.mode)}</span>
-              <span className="min-w-0 flex-1 truncate">{dish?.name ?? day.place ?? ""}</span>
+              <span className="w-14 flex-none">{modeWord(day.dinner.mode)}</span>
+              <span className="min-w-0 flex-1 truncate">{dish?.name ?? day.dinner.place ?? ""}</span>
             </li>
           );
         })}
@@ -408,7 +409,7 @@ export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<DinnerP
             variant="cta"
             size="chip"
             className="px-3.5 py-1.5"
-            onClick={() => dispatch({ kind: "mutate", op: "apply-dinner-plan" })}
+            onClick={() => dispatch({ kind: "mutate", op: "apply-meals-plan" })}
           >
             {payload.adjustment ? "Change it" : "Plan the week"}
           </Button>
@@ -426,6 +427,6 @@ export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "lab-proposal": LabProposalCard,
   "lab-archive": LabArchiveCard,
   "briefing-failed": BriefingFailedCard,
-  "dinner-charter": DinnerCharterCard,
-  "dinner-plan": DinnerPlanCard,
+  "meals-charter": MealsCharterCard,
+  "meals-plan": DinnerPlanCard,
 };
