@@ -103,6 +103,7 @@ export function IngredientThumb({
   pageUrl,
   category,
   alt,
+  size = 40,
 }: {
   url: string | null;
   // The page the picture sits on, sent as Referer by the proxy. Only a picture
@@ -110,19 +111,23 @@ export function IngredientThumb({
   pageUrl?: string | null;
   category: IngredientCategory;
   alt: string;
+  // 40px on the list itself, 28px in the preview on the meals page. Two sizes,
+  // spelled out rather than computed, so the classes survive Tailwind's scan.
+  size?: 28 | 40;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const src = imageSrc(url, pageUrl);
   const usable = src && src !== failed ? src : null;
+  const box = size === 28 ? "size-7 rounded-[5px]" : "size-10 rounded-md";
   return (
     <span
-      className="flex size-10 flex-none items-center justify-center overflow-hidden rounded-md bg-muted-soft text-faint-foreground"
+      className={`flex ${box} flex-none items-center justify-center overflow-hidden bg-muted-soft text-faint-foreground`}
       onErrorCapture={() => setFailed(src)}
     >
       {usable ? (
         <img src={usable} alt={alt} className="size-full object-cover" loading="lazy" />
       ) : (
-        <CategoryGlyph category={category} size={20} />
+        <CategoryGlyph category={category} size={size === 28 ? 16 : 20} />
       )}
     </span>
   );

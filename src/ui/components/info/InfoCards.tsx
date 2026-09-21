@@ -22,7 +22,7 @@ import type {
 import type { MealsCharterCardData, MealsPlanCardData } from "../../../info/meals/cards";
 import type { WeekPlan } from "../../../info/meals/types";
 import { modeWord, weekdayName } from "../../../info/meals/view";
-import { dishForDay } from "../../../info/meals/week";
+import { dishForMeal } from "../../../info/meals/week";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -379,10 +379,28 @@ export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPla
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
         {applied ? "Planned" : payload.adjustment ? "A change to the week" : "This week's meals"}
       </div>
-      <ul className="m-0 mt-2 flex list-none flex-col p-0">
+      {/* Breakfast is a pattern, not seven decisions (docs/73), so it is one
+          line above the week rather than a third column in it. */}
+      {payload.breakfastLine && (
+        <div className="mt-2.5 flex gap-2 border-b border-secondary-border pb-2 text-[13px] leading-snug text-muted-foreground">
+          <span className="w-16 flex-none text-faint-foreground">Breakfast</span>
+          <span className="min-w-0 flex-1">{payload.breakfastLine}</span>
+        </div>
+      )}
+      <ul className="m-0 mt-1.5 flex list-none flex-col p-0">
         {payload.days.map((day) => {
-          const dish = dishForDay(plan, day);
           const mark = changed.has(day.date);
+          const cell = (meal: (typeof day)["lunch"]) => {
+            const dish = dishForMeal(plan, meal);
+            return (
+              <span className="min-w-0 flex-1 truncate">
+                <span className={mark ? "text-muted-foreground" : "text-faint-foreground"}>
+                  {modeWord(meal.mode)}
+                </span>{" "}
+                {dish?.name ?? meal.place ?? ""}
+              </span>
+            );
+          };
           return (
             <li
               key={day.date}
@@ -391,9 +409,11 @@ export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPla
                 (mark ? "font-medium text-foreground" : "text-muted-foreground")
               }
             >
-              <span className="w-16 flex-none text-faint-foreground">{weekdayName(day.date)}</span>
-              <span className="w-14 flex-none">{modeWord(day.dinner.mode)}</span>
-              <span className="min-w-0 flex-1 truncate">{dish?.name ?? day.dinner.place ?? ""}</span>
+              <span className="w-12 flex-none text-faint-foreground">
+                {weekdayName(day.date).slice(0, 3)}
+              </span>
+              {cell(day.lunch)}
+              {cell(day.dinner)}
             </li>
           );
         })}

@@ -6,6 +6,7 @@
 // Rendering and event binding only. The briefing view, the source list, the open
 // article and the conversation that is up all live in use-info-home.ts.
 
+import { useState } from "react";
 import { savedArticleId } from "../../../reading/saved-articles";
 import type { HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
@@ -21,7 +22,11 @@ import { SourcesPage } from "./SourcesPage";
 import { ArticleView } from "./ArticleView";
 import { InfoCall } from "./InfoCall";
 import { MealsHome } from "./MealsPage";
+import { MealsDay } from "./MealsDay";
+import { MealsShopping } from "./MealsShopping";
 import { useMeals } from "./use-meals";
+import type { MealsFocus } from "../../../info/meals/tools";
+import { weekdayName } from "../../../info/meals/view";
 import { useInfoHome } from "./use-info-home";
 import { useRegisterVoiceContext } from "../lumen/voice-context";
 import { noLabsOpen } from "./no-labs";
@@ -29,6 +34,12 @@ import { noLabsOpen } from "./no-labs";
 // The screen union lives in base/shell-nav.ts, which is what maps it to the
 // shell's sidebar; re-exported here so its importers are unchanged.
 export type { HomeScreen } from "../base/shell-nav";
+
+// The three screens of the meals line. They share one hook, one thread and one
+// sidebar item, so they are drawn by one branch.
+function isMealsScreen(screen: HomeScreen | null): boolean {
+  return screen === "meals" || screen === "meals-shopping" || screen === "meals-day";
+}
 
 // What a shell needs to know to put its own affordance around a screen that has
 // something to talk about: the chat the screen's Ask button opens, in the
@@ -121,6 +132,12 @@ export default function InfoHome(props: {
   // there is no entry to this screen anywhere and nothing is read off disk for
   // it; the data stays where it is.
   mealsEnabled?: boolean;
+  // Which day of the week the shell has open, and how it opens one. The day is
+  // one screen of a week, so a shell with a navigation stack (the phone's) puts
+  // the date on the stack entry and hands it back here; a shell without one
+  // (the desktop's) leaves both out and this screen remembers it itself.
+  mealsDay?: string | null;
+  onOpenMealsDay?: (date: string) => void;
   // Whether the call keeps its corner cards (docs/03). Default, and the desktop
   // shell: it does. The phone shell turns them off — there the chat is a screen
   // of the navigation stack with gestures in and out of it, and a card that
@@ -130,6 +147,9 @@ export default function InfoHome(props: {
 }) {
   const { screen, onNavigate } = props;
   const meals = useMeals(props.mealsEnabled === true);
+  // The day the desktop shell has open. It has no navigation stack to hold it,
+  // and the phone's entry overrides this the moment it supplies one.
+  const [localMealsDay, setLocalMealsDay] = useState<string | null>(null);
   const info = useInfoHome({
     role: props.role,
     onNavigate,
@@ -229,26 +249,70 @@ export default function InfoHome(props: {
         );
       })()}
 
-      {screen === "meals" && props.mealsEnabled && (() => {
-        const openChat = (kickoff?: string) => info.askMeals(meals.state ?? EMPTY_MEALS, meals.today, kickoff);
-        const page = (
-          <div className="absolute inset-0 overflow-y-auto bg-background">
+      {isMealsScreen(screen) && props.mealsEnabled && (() => {
+        // One standing thread for all three screens; what the reader has open
+        // rides along as the focus rather than forking it (docs/73).
+        const openChat = (focus: MealsFocus, kickoff?: string) =>
+          info.askMeals(meals.state ?? EMPTY_MEALS, meals.today, {
+            focus,
+            ...(kickoff ? { kickoff } : {}),
+          });
+        const day = props.mealsDay ?? localMealsDay;
+        const openDay = (date: string) => {
+          setLocalMealsDay(date);
+          props.onOpenMealsDay?.(date);
+        };
+        const back = () => onNavigate("meals");
+
+        let inner: React.ReactNode;
+        let ask: AskableScreen;
+        if (screen === "meals-shopping") {
+          ask = { label: "Ask about shopping", onAsk: () => openChat({ kind: "shopping" }) };
+          inner = (
+            <MealsShopping
+              state={meals.state}
+              photos={meals.photos}
+              onBack={back}
+              onAsk={ask.onAsk}
+              onToggleItem={meals.toggleItem}
+              onDone={meals.markDone}
+            />
+          );
+        } else if (screen === "meals-day" && day) {
+          const label =
+            day === meals.today ? "Ask about today" : `Ask about ${weekdayName(day)}`;
+          ask = { label, onAsk: () => openChat({ kind: "day", date: day }) };
+          inner = (
+            <MealsDay
+              state={meals.state}
+              photos={meals.photos}
+              today={meals.today}
+              date={day}
+              onBack={back}
+              onAsk={ask.onAsk}
+              onWriteMethod={meals.writeMethod}
+            />
+          );
+        } else {
+          ask = { label: "Ask about this week", onAsk: () => openChat({ kind: "week" }) };
+          inner = (
             <MealsHome
               state={meals.state}
               photos={meals.photos}
               today={meals.today}
-              onPlanWeek={() => openChat(MEALS_KICKOFF)}
-              onAsk={() => openChat()}
-              onToggleItem={meals.toggleItem}
+              onPlanWeek={() => openChat({ kind: "week" }, MEALS_KICKOFF)}
+              onAsk={ask.onAsk}
+              onOpenShopping={() => onNavigate("meals-shopping")}
+              onOpenDay={openDay}
             />
-          </div>
+          );
+        }
+        const page = (
+          <div className="absolute inset-0 overflow-y-auto bg-background">{inner}</div>
         );
-        // The same pull-down the briefing has: meals is a screen with
-        // something to talk about, and the phone's way into a chat is one
-        // gesture everywhere (docs/22).
-        return props.wrapScreen
-          ? props.wrapScreen({ label: "Ask about meals", onAsk: () => openChat() }, page)
-          : page;
+        // The same pull-down the briefing has, on all three: the phone's way
+        // into a chat is one gesture everywhere (docs/22).
+        return props.wrapScreen ? props.wrapScreen(ask, page) : page;
       })()}
 
       {screen === "sources" && (

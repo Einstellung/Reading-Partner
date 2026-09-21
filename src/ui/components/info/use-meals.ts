@@ -8,11 +8,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { todayLocal } from "../../../info/collect/store";
+import { liveMealsPorts, liveMethodPorts } from "../../../info/meals/live";
+import { ensureDishMethod } from "../../../info/meals/method";
 import { setShoppingChecked } from "../../../info/meals/shopping";
+import { markShoppingTripDone } from "../../../info/meals/tools";
 import type { PhotoCache } from "../../../info/meals/dish-photos";
 import { loadMealsPhotos } from "../../../info/meals/photo-store";
 import { loadMeals, saveShopping } from "../../../info/meals/store";
-import type { MealsState } from "../../../info/meals/types";
+import type { DishMethod, MealsState } from "../../../info/meals/types";
 
 export interface MealsController {
   // Null until info-meals.json has answered. The screen holds on null rather
@@ -24,6 +27,12 @@ export interface MealsController {
   today: string;
   reload: () => void;
   toggleItem: (key: string, checked: boolean) => void;
+  // The trip is over. The host's button, not a tool: the reader is the one who
+  // came home (docs/73), and nothing in this slice reopens it.
+  markDone: () => void;
+  // The steps for one dish, asked for the first time a day that cooks it is
+  // opened. Null is a day with no steps, which is where every day starts.
+  writeMethod: (dishId: string) => Promise<DishMethod | null>;
 }
 
 export function useMeals(enabled: boolean): MealsController {
@@ -80,5 +89,23 @@ export function useMeals(enabled: boolean): MealsController {
     });
   }, []);
 
-  return { state, photos, today, reload, toggleItem };
+  // Done goes through the same ports the tools write on, so what lands on disk
+  // is one shape whoever called it, and the screen is told the way a tool tells
+  // it. Optimistic on screen first, like a tick: the reader is standing in a
+  // doorway with bags.
+  const markDone = useCallback(() => {
+    const date = todayLocal();
+    setState((prev) => (prev ? { ...prev, shopping: { ...prev.shopping, doneOn: date } } : prev));
+    void markShoppingTripDone(
+      liveMealsPorts({ today: () => date, changed: () => reload() }),
+      date,
+    ).catch(() => {});
+  }, [reload]);
+
+  const writeMethod = useCallback(
+    (dishId: string) => ensureDishMethod(dishId, liveMethodPorts()),
+    [],
+  );
+
+  return { state, photos, today, reload, toggleItem, markDone, writeMethod };
 }

@@ -10,6 +10,7 @@
 
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND, type FileArticle } from "./desk";
 import { INFO_MEALS_KIND } from "../meals/desk";
+import type { MealsFocus } from "../meals/tools";
 import type { MealsState } from "../meals/types";
 import { leftToBuy } from "../meals/shopping";
 import type { DeskRef } from "../../desk";
@@ -221,14 +222,19 @@ const MEALS_TITLE = "Meals";
 export function mealsAnchor(
   state: MealsState,
   today: string,
-  opts?: { kickoff?: string },
+  // `focus` is which of the three screens the reader pressed Ask on. It rides
+  // on the desk rather than forking the thread: one standing conversation,
+  // whatever they are looking at (docs/73).
+  opts?: { kickoff?: string; focus?: MealsFocus },
 ): InfoCallAnchor {
   return {
     threadId: MEALS_THREAD_ID,
     bookKey: MEALS_BOOK_ID,
     emptyTitle: MEALS_TITLE,
     placeholder: "Ask about meals…",
-    desk: [{ kind: INFO_MEALS_KIND, ref: { state, today } }],
+    desk: [
+      { kind: INFO_MEALS_KIND, ref: { state, today, ...(opts?.focus ? { focus: opts.focus } : {}) } },
+    ],
     position: { title: MEALS_TITLE, line: mealsLine(state) },
     ...(opts?.kickoff ? { kickoff: opts.kickoff } : {}),
   };

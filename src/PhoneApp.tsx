@@ -79,6 +79,10 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
       return "sources";
     case "meals":
       return "meals";
+    case "meals-shopping":
+      return "meals-shopping";
+    case "meals-day":
+      return "meals-day";
     default:
       return null;
   }
@@ -323,6 +327,11 @@ export default function PhoneApp({
             // is this shell's, so it is this shell that wraps the screen in it.
             wrapScreen={(screen, children) => <PullToAsk {...screen}>{children}</PullToAsk>}
             mealsEnabled={settings.meals}
+            // One day of the week is a stack entry like an opened article, so
+            // the date rides on it and the back gesture leaves it the same way
+            // it leaves anything else.
+            mealsDay={base.kind === "meals-day" ? base.date : null}
+            onOpenMealsDay={(date) => setStack((s) => push(s, { kind: "meals-day", date }))}
             // No corner cards over the chat. The reader pulled it down or
             // pressed Ask and pops it with a back, so the chat is a screen like
             // any other; a card that shrank it away would be a second way out,

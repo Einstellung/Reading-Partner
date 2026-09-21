@@ -1,40 +1,35 @@
-// The meals screen (docs/73): tonight and tomorrow large, the rest of the week
-// small, and the shopping list the program derived from them.
+// The meals page (docs/73): the shopping trip at the top, today and tomorrow
+// under it, and the rest of the week below that. Every card is a button into
+// its own screen — the trip, or one day's three meals.
 //
 // Phone first — one column, 16px gutters, nothing that scrolls sideways at
 // 390px — and the same column centred on a desktop. Rendering and event binding
-// only: which nights are ahead, what a mode is called, how long a thing keeps
-// and the order the list is drawn in are all in info/meals/view.ts.
+// only: which days are ahead, what a mode is called and the order the shopping
+// list is drawn in are all in info/meals/.
 //
-// None of the bureau's vocabulary appears here. It is meals.
+// None of the bureau's vocabulary appears here. It is what they eat.
 
-import { useState } from "react";
-
-import { openExternal } from "../../../platform/app/external-link";
 import type { MealsState, ShoppingItem } from "../../../info/meals/types";
 import type { PhotoCache } from "../../../info/meals/dish-photos";
-import { isChecked, shoppingItemKey } from "../../../info/meals/shopping";
+import {
+  linesInOrder,
+  orderShoppingLines,
+  shoppingPreview,
+  shoppingStatus,
+} from "../../../info/meals/list-order";
 import { EMPTY_SHOPPING } from "../../../info/meals/types";
-import { markDishPhotoBroken } from "../../../info/meals/photo-store";
 import { planExhausted } from "../../../info/meals/week";
 import {
-  dishPhotoCredit,
   dishPicture,
   dishThumbnails,
-  ingredientPicture,
   headlineDays,
-  keepsLabel,
+  ingredientPicture,
   laterDays,
-  leftToBuy,
-  modeWord,
-  shoppingGroups,
+  mealName,
   type DayView,
-  type DishPhotoCredit,
-  type Picture,
 } from "../../../info/meals/view";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
-import { IconSparkle } from "../base/icons";
+import { Chevron, MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
 
 export interface MealsHomeProps {
@@ -47,202 +42,199 @@ export interface MealsHomeProps {
   today: string;
   onPlanWeek: () => void;
   onAsk: () => void;
-  onToggleItem: (key: string, checked: boolean) => void;
+  onOpenShopping: () => void;
+  onOpenDay: (date: string) => void;
 }
 
-// The two labelled lines a cooked night is actually made of.
-function BasePlus({ label, text }: { label: string; text: string }) {
-  if (!text) return null;
+/** The picture a day leads with, at the size the card gives it. */
+function DayPicture({
+  view,
+  photos,
+  big,
+}: {
+  view: DayView;
+  photos: PhotoCache;
+  big: boolean;
+}) {
+  const picture = dishPicture(view.dish, photos);
+  const thumbnails = dishThumbnails(view.dish, (en) => ingredientPicture(en, photos)?.url ?? null);
   return (
-    <div className="mt-1 flex gap-2 text-[13px] leading-snug">
-      <span className="w-14 flex-none text-faint-foreground">{label}</span>
-      <span className="min-w-0 flex-1 text-muted-foreground">{text}</span>
+    <div className={big ? "mt-3 aspect-[16/9] max-h-40 w-full" : "mt-2.5 aspect-[16/9] max-h-24 w-full"}>
+      <DishImage
+        image={picture?.url}
+        imagePageUrl={picture?.pageUrl}
+        thumbnails={thumbnails}
+        alt={view.dish?.name ?? view.word}
+        className="size-full"
+      />
     </div>
   );
 }
 
-function HeadlineDay({
+/** Today's or tomorrow's card: the picture, then the three meals in order. */
+function DayCard({
   view,
   photos,
-  credit,
+  big,
+  onOpen,
 }: {
   view: DayView;
   photos: PhotoCache;
-  credit: DishPhotoCredit | null;
+  big: boolean;
+  onOpen: () => void;
 }) {
-  const { day, dish } = view;
-  // The credit belongs to the photograph, so it goes when the photograph does:
-  // a dish picture that fails to load falls back to the ingredient strip, which
-  // is TheMealDB's and is credited at the foot of the screen instead.
-  const [photoFailed, setPhotoFailed] = useState(false);
-  const picture = dishPicture(dish, photos);
-  const cooked = day.dinner.mode === "cook" || day.dinner.mode === "reheat";
-  const fresh = day.dinner.mode === "reheat" ? (day.dinner.freshAdd ?? dish?.fresh ?? "") : (dish?.fresh ?? "");
   return (
-    <section className="rounded-xl border border-border-soft bg-card p-4">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="block w-full rounded-xl border border-border-soft bg-card p-4 text-left can-hover:hover:bg-secondary-faint coarse:min-h-[44px]"
+    >
       <div className="flex items-baseline gap-2">
-        <span className="font-display text-[19px] font-semibold text-foreground">{view.word}</span>
-        <span className="text-[13px] text-faint-foreground">{view.weekday}</span>
-        <span className="flex-1" />
-        <span className="text-[13px] font-medium text-accent-line">{modeWord(day.dinner.mode)}</span>
-      </div>
-
-      {/* 16:9, capped: a photograph gets the width, and the neutral block a
-          night has no picture for never grows into a hole the length of the
-          card on a wide screen. */}
-      <div className="mt-3 aspect-[16/9] max-h-40 w-full">
-        <DishImage
-          image={picture?.url}
-          imagePageUrl={picture?.pageUrl}
-          thumbnails={dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null)}
-          alt={dish?.name ?? modeWord(day.dinner.mode)}
-          className="size-full"
-          onPhotoFailed={() => {
-            setPhotoFailed(true);
-            // A picture the search found and this app cannot load is dropped
-            // from the cache, so the next Apply looks the dish up again rather
-            // than loading the same dead URL every week (store.ts).
-            if (dish?.searchName) void markDishPhotoBroken(dish.searchName);
-          }}
-        />
-      </div>
-      {credit && !photoFailed && (
-        <button
-          type="button"
-          className="mt-1 block max-w-full truncate text-left text-[11px] leading-snug text-faint-foreground underline underline-offset-2 can-hover:hover:text-muted-foreground"
-          onClick={() => openExternal(credit.url)}
+        <span
+          className={
+            big
+              ? "font-display text-[19px] font-semibold text-foreground"
+              : "font-display text-[17px] font-semibold text-foreground"
+          }
         >
-          {credit.text}
-        </button>
-      )}
-
-      {cooked && dish ? (
-        <>
-          <div className="mt-3 text-[17px] font-medium leading-snug text-foreground">{dish.name}</div>
-          {dish.oneLine && (
-            <p className="m-0 mt-1 text-[14px] leading-relaxed text-muted-foreground">{dish.oneLine}</p>
-          )}
-          <BasePlus label="Base" text={dish.base} />
-          <BasePlus label="Fresh" text={fresh} />
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-[13px] text-faint-foreground">
-              {dish.handsOnMinutes} min hands-on
-            </span>
-            {dish.keepsADay && (
-              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[12px] text-faint-foreground">
-                keeps a day
-              </span>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="mt-3 text-[17px] font-medium leading-snug text-foreground">
-            {day.dinner.place || modeWord(day.dinner.mode)}
-          </div>
-          {cooked && (
-            <p className="m-0 mt-1 text-[14px] leading-relaxed text-muted-foreground">
-              Nothing is planned for this night yet.
-            </p>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-function LaterDay({ view, photos }: { view: DayView; photos: PhotoCache }) {
-  const { day, dish } = view;
-  const name = dish?.name ?? day.dinner.place ?? "";
-  const picture = dishPicture(dish, photos);
-  const thumbnails = dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null);
-  return (
-    <li className="flex items-center gap-3 py-2">
-      <span className="w-20 flex-none text-[13px] text-faint-foreground">{view.weekday}</span>
-      {picture || thumbnails.length ? (
-        <span className="size-10 flex-none">
-          <DishImage
-            image={picture?.url}
-            imagePageUrl={picture?.pageUrl}
-            thumbnails={thumbnails}
-            alt={name}
-            className="size-full"
-          />
+          {view.word}
         </span>
-      ) : null}
-      <span className="w-16 flex-none text-[13px] text-muted-foreground">{modeWord(day.dinner.mode)}</span>
-      <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">{name}</span>
-    </li>
+        {view.word !== view.weekday && (
+          <span className="text-[13px] text-faint-foreground">{view.weekday}</span>
+        )}
+        <span className="flex-1" />
+        <Chevron />
+      </div>
+      <DayPicture view={view} photos={photos} big={big} />
+      <ul className="m-0 mt-3 flex list-none flex-col p-0">
+        {view.meals.map((m) => (
+          <li key={m.key} className="flex items-baseline gap-2 py-[3px] text-[14px] leading-normal">
+            <span className="w-[70px] flex-none text-[12px] text-faint-foreground">{m.label}</span>
+            <span className="w-[58px] flex-none text-[13px] text-accent-line">{m.word}</span>
+            <span className="min-w-0 flex-1 truncate text-foreground">{mealName(m)}</span>
+          </li>
+        ))}
+      </ul>
+    </button>
   );
 }
 
-function ShoppingLine({
-  item,
-  checked,
-  picture,
-  onToggle,
+/** The trip, as a card: what is left of it and the next three lines of it. */
+function ShoppingCard({
+  status,
+  preview,
+  more,
+  photos,
+  onOpen,
 }: {
-  checked: boolean;
-  item: ShoppingItem;
-  picture: Picture | null;
-  onToggle: (checked: boolean) => void;
+  status: string;
+  preview: ShoppingItem[];
+  more: string | null;
+  photos: PhotoCache;
+  onOpen: () => void;
 }) {
-  const id = `shop-${item.category}-${item.name}`;
   return (
-    <li className={`flex items-center gap-3 py-1 ${checked ? "opacity-45" : ""}`}>
-      <Checkbox
-        id={id}
-        checked={checked}
-        onCheckedChange={(v) => onToggle(v === true)}
-        aria-label={item.name}
-      />
-      <IngredientThumb
-        url={picture?.url ?? null}
-        pageUrl={picture?.pageUrl ?? null}
-        category={item.category}
-        alt={item.name}
-      />
-      <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
-        <span className="block truncate text-[15px] leading-snug text-foreground">{item.name}</span>
-        <span className="block text-[12px] text-faint-foreground">
-          {item.qty}
-          {item.qty ? " · " : ""}
-          {keepsLabel(item.keeps)}
-          {item.freezeOnArrival ? " · freeze on arrival" : ""}
+    <button
+      type="button"
+      onClick={onOpen}
+      className="block w-full rounded-xl border border-border-soft bg-card p-4 text-left can-hover:hover:bg-secondary-faint coarse:min-h-[44px]"
+    >
+      <div className="flex items-baseline gap-2">
+        <h2 className="m-0 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
+          Shopping
+        </h2>
+        <span className="flex-1" />
+        <span className="text-[13px] text-faint-foreground">{status}</span>
+        <Chevron />
+      </div>
+      {preview.length > 0 && (
+        <ul className="m-0 mt-2.5 flex list-none flex-col gap-1.5 p-0">
+          {preview.map((item) => (
+            <li key={`${item.category}:${item.name}`} className="flex items-center gap-2.5">
+              <IngredientThumb
+                size={28}
+                url={ingredientPicture(item.en, photos)?.url ?? null}
+                pageUrl={ingredientPicture(item.en, photos)?.pageUrl ?? null}
+                category={item.category}
+                alt={item.name}
+              />
+              <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">{item.name}</span>
+              <span className="flex-none text-[12px] text-faint-foreground">{item.qty}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {more && <div className="mt-2 text-[12px] text-faint-foreground">{more}</div>}
+    </button>
+  );
+}
+
+/** One of the days after tomorrow: a thumbnail and what lunch and dinner are. */
+function WeekRow({
+  view,
+  photos,
+  onOpen,
+}: {
+  view: DayView;
+  photos: PhotoCache;
+  onOpen: () => void;
+}) {
+  const picture = dishPicture(view.dish, photos);
+  const thumbnails = dishThumbnails(view.dish, (en) => ingredientPicture(en, photos)?.url ?? null);
+  const lunch = view.meals.find((m) => m.key === "lunch");
+  const dinner = view.meals.find((m) => m.key === "dinner");
+  return (
+    <li className="border-t border-border-subtle first:border-t-0">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-h-[44px] w-full items-center gap-3 py-2 text-left"
+      >
+        <span className="w-[76px] flex-none text-[13px] text-faint-foreground">{view.weekday}</span>
+        {(picture || thumbnails.length > 0) && (
+          <span className="size-8 flex-none">
+            <DishImage
+              image={picture?.url}
+              imagePageUrl={picture?.pageUrl}
+              thumbnails={thumbnails}
+              alt={view.dish?.name ?? view.weekday}
+              className="size-full"
+            />
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">
+          {lunch ? mealName(lunch) : ""} · {dinner ? mealName(dinner) : ""}
         </span>
-      </label>
+        <Chevron />
+      </button>
     </li>
   );
 }
 
 export function MealsHome(props: MealsHomeProps) {
-  const { state, today } = props;
+  const { state, today, photos } = props;
   const plan = state?.plan ?? null;
   const head = headlineDays(plan, today);
   const later = laterDays(plan, today);
   const shopping = state?.shopping ?? EMPTY_SHOPPING;
-  const groups = shoppingGroups(shopping);
-  const left = leftToBuy(shopping);
+  // The page's own read of the list is a card's worth of preview, so it is
+  // settled here rather than carried: nothing is ticked from this screen.
+  const lines = linesInOrder(shopping, orderShoppingLines(shopping));
+  const preview = shoppingPreview(shopping, lines);
   const exhausted = planExhausted(plan, today);
   const planLabel = plan ? "Plan next week" : "Plan this week";
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
-      <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
-        <span className="font-display text-[17px] font-semibold text-foreground">Meals</span>
-        <span className="flex-1" />
-        <Button variant="secondary" size="chip" onClick={props.onAsk} title="Ask about dinner">
-          <IconSparkle size={14} /> Ask
-        </Button>
-      </div>
+    <MealsColumn>
+      <MealsHeader title="Meals" askLabel="Ask about this week" onAsk={props.onAsk} />
 
       {state === null ? (
         <div className="h-24" />
       ) : !plan || head.length === 0 ? (
         <div className="rounded-xl border border-border-soft bg-card p-5">
           <p className="m-0 font-display text-[17px] leading-relaxed text-foreground">
-            Nothing is planned. Seven nights, the shopping list that goes with them, and you only
-            have to say something when a night goes differently.
+            Nothing is planned. Three meals a day for seven days, the shopping list that goes with
+            them, and you only have to say something when a meal goes differently.
           </p>
           <div className="mt-4">
             <Button variant="cta" onClick={props.onPlanWeek}>
@@ -253,14 +245,31 @@ export function MealsHome(props: MealsHomeProps) {
       ) : (
         <>
           <div className="flex flex-col gap-4">
-            {head.map((v) => (
-              <HeadlineDay
-                key={v.day.date}
-                view={v}
-                photos={props.photos}
-                credit={dishPhotoCredit(v.dish, props.photos)}
+            {lines.length > 0 && (
+              <ShoppingCard
+                status={shoppingStatus(shopping, lines)}
+                preview={preview.items}
+                more={preview.more}
+                photos={photos}
+                onOpen={props.onOpenShopping}
               />
-            ))}
+            )}
+            {head[0] && (
+              <DayCard
+                view={head[0]}
+                photos={photos}
+                big
+                onOpen={() => props.onOpenDay(head[0].day.date)}
+              />
+            )}
+            {head[1] && (
+              <DayCard
+                view={head[1]}
+                photos={photos}
+                big={false}
+                onOpen={() => props.onOpenDay(head[1].day.date)}
+              />
+            )}
           </div>
 
           {later.length > 0 && (
@@ -268,9 +277,14 @@ export function MealsHome(props: MealsHomeProps) {
               <h2 className="mb-1 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
                 The rest of the week
               </h2>
-              <ul className="m-0 flex list-none flex-col divide-y divide-border-subtle p-0">
+              <ul className="m-0 flex list-none flex-col p-0">
                 {later.map((v) => (
-                  <LaterDay key={v.day.date} view={v} photos={props.photos} />
+                  <WeekRow
+                    key={v.day.date}
+                    view={v}
+                    photos={photos}
+                    onOpen={() => props.onOpenDay(v.day.date)}
+                  />
                 ))}
               </ul>
             </section>
@@ -279,73 +293,19 @@ export function MealsHome(props: MealsHomeProps) {
           {exhausted && (
             <div className="mt-6 rounded-xl border border-border-soft bg-card p-4">
               <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">
-                This week runs out after tonight.
+                This week runs out after today.
               </p>
               <div className="mt-3">
                 <Button variant="cta" size="chip" className="px-3.5 py-1.5" onClick={props.onPlanWeek}>
-                  {planLabel}
+                  Plan next week
                 </Button>
               </div>
             </div>
           )}
-
-          {groups.length > 0 && (
-            <section className="mt-8">
-              <div className="mb-2 flex items-baseline gap-2">
-                <h2 className="m-0 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
-                  Shopping
-                </h2>
-                <span className="flex-1" />
-                <span className="text-[13px] text-faint-foreground">{left} left</span>
-              </div>
-              <div className="flex flex-col gap-4">
-                {groups.map((g) => (
-                  <div key={g.category}>
-                    <h3 className="m-0 mb-1 text-[12px] font-medium uppercase tracking-wider text-faint-foreground">
-                      {g.label}
-                    </h3>
-                    <ul className="m-0 flex list-none flex-col p-0">
-                      {g.items.map((item) => (
-                        <ShoppingLine
-                          key={`${item.category}:${item.name}`}
-                          item={item}
-                          picture={ingredientPicture(item.en, props.photos)}
-                          checked={isChecked(shopping, item)}
-                          onToggle={(checked) =>
-                            props.onToggleItem(shoppingItemKey(item), checked)
-                          }
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
         </>
       )}
       <PhotoCredit />
-    </div>
-  );
-}
-
-/**
- * TheMealDB's terms ask for a link back wherever their artwork is used, and
- * every photograph on this screen is theirs. One line, at the bottom, opened in
- * the system browser like every other outbound link.
- */
-function PhotoCredit() {
-  return (
-    <p className="mt-8 text-[11px] leading-snug text-faint-foreground">
-      Ingredient photos from{" "}
-      <button
-        type="button"
-        className="underline underline-offset-2 can-hover:hover:text-muted-foreground"
-        onClick={() => openExternal("https://www.themealdb.com")}
-      >
-        TheMealDB
-      </button>
-    </p>
+    </MealsColumn>
   );
 }
 

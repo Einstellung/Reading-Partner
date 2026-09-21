@@ -139,6 +139,15 @@ export interface DayView {
   weekday: string;
 }
 
+/**
+ * What a meal is called on a row: the dish where there is one, and otherwise
+ * the place the reader named. Empty for a mode that names neither, which draws
+ * as an empty cell rather than as the word "Skip" twice over.
+ */
+export function mealName(view: MealView): string {
+  return view.dish?.name ?? view.meal.place ?? "";
+}
+
 /** The three meals of a day, in order. */
 export function mealViews(plan: WeekPlan, day: DayPlan): MealView[] {
   return MEAL_KEYS.map((key) => ({

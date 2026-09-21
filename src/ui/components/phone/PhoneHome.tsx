@@ -94,7 +94,7 @@ export default function PhoneHome({
               onClick={onOpenMeals}
             >
               <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
-                This week's dinners and what to buy.
+                This week's breakfasts, lunches and dinners, and what to buy.
               </p>
               <div className="mt-4 flex items-center justify-end">
                 <span className="text-[13px] font-medium text-accent-line">Open →</span>
