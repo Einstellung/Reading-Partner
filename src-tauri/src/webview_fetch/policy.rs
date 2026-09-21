@@ -154,6 +154,13 @@ pub const EVAL_TIMEOUT: Duration = Duration::from_secs(10);
 /// rendered HTML, of which the `<article>` element is the part worth keeping.
 pub const MAX_TEXT_CHARS: usize = 200_000;
 pub const MAX_HTML_CHARS: usize = 400_000;
+/// Cap on a whole document's markup, which is what `fetch_page_via_webview`
+/// hands back. Wider than `MAX_HTML_CHARS` because this is the page and not one
+/// container inside it: a search-results page runs to a couple of megabytes of
+/// markup and a 400K cut would drop the results. What it protects is the IPC
+/// channel and the caller's memory, so a page that hits it still comes back —
+/// truncated, and saying so in `detail`.
+pub const MAX_PAGE_HTML_CHARS: usize = 4_000_000;
 /// How much body text is scanned for bot-wall wording. The block page puts it
 /// in the first 600 characters; 4000 covers a wordier one without turning the
 /// whole article into a haystack.
@@ -375,9 +382,9 @@ pub fn looks_blocked(readout: &Readout) -> bool {
     BLOCK_MARKERS.iter().any(|m| haystack.contains(m))
 }
 
-/// Which page a fetch is on. The two ask different things of the same wait: the
+/// Which page a fetch is on. They ask different things of the same wait: the
 /// warm-up wants the site's cookies and any document at all will do, the article
-/// wants a body.
+/// wants a body, a plain page wants neither and only has to stop changing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     /// Load a site's homepage to fill the cookie jar. Nothing is extracted from
@@ -385,6 +392,21 @@ pub enum Phase {
     Warmup,
     /// Load an article and read its body.
     Article,
+    /// Load any page for its own markup (`fetch_page_via_webview`). There is no
+    /// body to wait for — the caller's script decides what the page is worth —
+    /// so this settles as soon as the document holds still.
+    Page,
+}
+
+impl Phase {
+    /// The name this phase carries in a trace line.
+    pub fn label(self) -> &'static str {
+        match self {
+            Phase::Warmup => "warmup",
+            Phase::Article => "article",
+            Phase::Page => "page",
+        }
+    }
 }
 
 /// Whether the settle loop can stop reading, given how many consecutive polls
@@ -412,7 +434,7 @@ pub fn settle_is_done(phase: Phase, stable: u32, readout: &Readout) -> bool {
         return false;
     }
     match phase {
-        Phase::Warmup => true,
+        Phase::Warmup | Phase::Page => true,
         Phase::Article => classify(readout) == Status::Ok,
     }
 }
