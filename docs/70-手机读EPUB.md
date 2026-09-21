@@ -11,7 +11,7 @@
 - AI 在手机上全部置灰：笔架上的 AI pen 和顶栏的 Learn this book with AI 都画出来但不可按，各带一句原因。不隐藏：手机是 reading 的一种形态，规矩要在界面上读得出来。以后开放时只摘掉这个闸。
 - 长按划线。手指按住不动约半秒起一条高亮，拖动延长，抬手落标注。也可以在笔架上选 Highlight 再拖，两条路落的是同一种标注。点已有标注弹出删除。墨迹不做：手机没有页。
 - 手机上只有 Outline 一个侧栏内容，做成 sheet（Radix dialog 贴底边）。条目按分页表的块号跳，不按 href——`outlineFor` 交回的就是块号。没有 Marks 列表、备课面板、痕迹列表。
-- 笔架上的导航锁也置灰：手机没有页可以锁住，一根手指只有滚动一个意思。
+- 笔架上不画导航锁：手机没有页可以锁住，一根手指只有滚动一个意思。那一格改成 Aa，打开显示设置。`PenToolbar` 加 `omit` 省掉某个工具，桌面不变——置灰是「有这个工具，这本书不给开」，省掉是「这个形态没有这种东西」。
 - 书按需下载。手机的 books 通道仍是 off（不对齐 library.json），书架上没下载的 EPUB 显示为在云端，点了从 Drive 拉这一本，拉完打开；PDF 永远不拉。这是 docs/13「书按需下载」的第一次落地，只在手机形态。反方向是手机导入：topic 书架上的 Import EPUB 按钮只收 EPUB（字节用 `isEpub` 复核），选中即读字节进库、挂进当前 topic，不自动打开；随后经 engine 把这一本传上 Drive（`pushBook`，与下载同一条串行队列，远端已有就跳过）。没登录就不传，传失败只提示一句；两种情况都没有补传，之后登录了这本书也只在手机上。2026-09-21 起每道门都在门口入库：桌面「添加文件」和分享进来的书都是选中即读字节、进库、连哈希一次写进 topics.json。书架上仍可能有库里没有记录的行——旧版本写下的，或者 topics.json 的修订先到而 library.json 没到——这时按文件名判 epub/pdf，两样都不是就说不知道，点了只说还没入库，不当成 PDF，也不去 Drive 拉。书架跟着 pull 刷新（`SHELF_PULL_ROUTE`，topics.json / library.json / deleted-books），不再只在退出阅读器时读一次。
 
 ## 坐标系不变
@@ -26,9 +26,24 @@
 
 `src/reading/epub/flow-view.ts`，React 壳 `FlowReaderPane.tsx`，和 `reader-view.ts`/`EpubReaderPane.tsx` 并列。一个滚动容器，spine 文档按顺序各挂一个 shadow host，复用 `page-mount.ts` 的 `mountDocument`/`createPageResources`/`BASELINE_CSS` 和打包字体；书的 CSS 照 docs/64 消毒后保留。单列，宽度随容器，左右 20px，正文 17px、行高 1.6，`img { max-width: 100%; height: auto }`，比容器宽的表格横向滚动。滚动是原生的（`touch-action: pan-y`），不走 `engine/gesture` 的路由。离屏的文档用 `content-visibility: auto`，估计高度按字数。
 
-护眼纸色照 docs/64「纸色」那一层挂在 host 上。不做深色模式，照 PDF。
+纸色照 docs/64「纸色」那一层挂在 host 上，但值由 Aa 里选的纸给（见下），不读 `--page-wash`：阅读屏里只有 Aa 的选择说话，和 app 的护眼开关不叠加。
 
 书内链接照 `reader-logic.ts` 的 `bookLinkTarget` 走；外链走 `platform/app/external-link`。`[p.N]` 跳转和引文高亮手机上没有调用方，不接。
+
+## 显示设置
+
+顶栏的 Aa 开一张贴底 sheet，和 Outline 同一种壳。四组，全部即点即生效，没有确定按钮；没有翻页方式，这个形态只有滚动。
+
+- 字号：14 / 15 / 17 / 19 / 21，−/+ 步进，中间那档 17 是原来的。
+- 行距：1.4 / 1.6 / 1.85（紧、标准、松），1.6 是原来的。
+- 边距：20 / 36（窄、宽），20 是原来的。
+- 纸色：White、Paper（`#f6efdc`，就是护眼开关那个值）、Green（`#e4f0de`，同一条乘法）、Dark。默认 White，和 app 关掉护眼时的样子一致。
+
+深色不是乘法——白乘不出黑。Dark 单独一条：滚动容器画成 `#1b1c1e`，`.rp-wash` 关掉，`html, body` 的背景用 `!important` 压成透明、`html, body, body *` 的 `color` 压成 `#c8c5bf`。书自己写的段落底色、代码块底、表格底留着；图片不动，`color` 碰不到它。顶栏、笔架、标注弹窗和两张 sheet 跟着深：阅读屏根节点带 `data-reader-paper`，styles.css 里 `[data-reader-paper="dark"]` 重定义那一组 token（外加 Tailwind 自己的 `--color-neutral-700`，笔架的图标用的是它）。sheet portal 到 `<body>`，所以属性要在 `DialogContent` 上再写一次。只有这一屏，styles.css 那句「app 不做深色模式」照旧成立——这是一张纸的颜色，不是 app 的主题。
+
+改字号、行距、边距之后位置不跑：`FlowReaderView.setDisplay` 改完每份文档的基线 `<style>`，再走 `relayout()`——标注矩形全部失效，按当前 CFI `settle` 回同一个字。宽度变化走的是同一个入口（原来的 ResizeObserver）。`intrinsicHeightEstimate` 吃当前排版参数，离屏文档的估高跟着字号和边距走。
+
+偏好存 localStorage（`phone-display`），不进同步：iPad 有自己的纸，这是这台手机的显示偏好。默认值、档位表、读写和校验（坏值按字段回默认，不整份丢）在 `reading/epub/flow-display.ts`。`FlowReaderPaneProps` 带初值，pane 挂载时就是上次的设置，不会先 17px 再跳。
 
 ## 外壳
 
