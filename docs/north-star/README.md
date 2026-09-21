@@ -4,6 +4,8 @@
 
 每个文件记三件事:愿景、为什么现在不做、将来做时已知的事实(带出处)。一事一文件。
 
+基础设施里设计文档定了、代码还没做的也记在这里。
+
 - [epub](./epub.md) — EPUB 支持,方案见 [39](../39-epub支持调研.md)
 - [observations](./observations.md) — 仍留在北极星的只有主动联想,其余四项已随 M8 转正
 - [companion](./companion.md) — 形象与养成:形象是 Lumen([66](../66-Lumen.md)),已落地,长按开语音会话([68](../68-Lumen与盒子的交互.md));逗弄、养成推后;主动说话不推后
@@ -11,5 +13,10 @@
 - [diet](./diet.md) — 饮食规划:省事和健康都是硬约束、不腻是区别所在,主件是周计划加购物清单,计划就是记录;第一片([73](../73-晚饭：周计划、采购单与偏离.md))已随 v0.20.5 发出,默认关,六点推送和外部源还没做
 - [telemetry](./telemetry.md) — 匿名使用统计：每天一条平台/机型/版本，无 ID 不存 IP，可强制；后端倾向 Vercel 挂自有域名
 - [system-one](./system-one.md) — 系统一判断模型：yes/no、选项、量表出校准概率，端侧推荐的核心；现产品一处不接，触发条件是 concern 影响排序权重要动手的时候（[生态调研](../research/Jev开源生态调研.md)）
+- [legion-rest](./legion-rest.md) — legion 派活的地基已落地（[55](../55-legion.md)），剩 session 投影、effort 一等维度和两处没闭合的验收；排在它后面的四件现在能排了，一件没动
+- [memory-recycling](./memory-recycling.md) — 记忆的另一半：`memory/gc`、dream 的欠账与回收两段、concern 的 lapsed 与转正、statement 检索，[48](../48-记忆：观察与statement.md)、[58](../58-蒸馏器与dream.md) 定了，等数据
+- [sync-tiers](./sync-tiers.md) — 同步停在档 1，[59](../59-同步：持有清单与裁决.md) 的档 2 删除推断、档 3 消息级线程、档 4 裁决层都没翻开；档 2 翻开前要先补 `retired` 的生产端
+- [topic-in-info](./topic-in-info.md) — cable 在三个出口带 topic（[61](../61-palace与desk.md) 第 4 步），desk 那半落了这半没排，`BRIEF_TOPIC_ID` 还是应急版
+- [info-bureau](./info-bureau.md) — 情报局的其余机构：专项组、编辑部、A 档源、[65](../65-加工手册：常态模型、日更列表、滚雪球与稿.md) 五层，源侧等 [17](../17-信息源系统.md) 重做
 
 webview 渲染管子（隐藏 WebviewWindow 当渲染引擎）已经落地并随彭博社源发货，不再是北极星方向；现状和剩下的缺口（SPA 站发现层）记在 [17](../17-信息源系统.md)。
