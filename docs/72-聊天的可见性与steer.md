@@ -84,11 +84,9 @@ Composer 在流式期间 Send 和 Stop 都在。
 
 以上随 v0.20.2 发出。
 
-2026-09-19 进 main 未发版：`quiet`，记忆的两个簿记写入默默干（`AgentToolStart` 和 `ToolStatus` 都带着这个标走，界面据此判断，不认工具名）。
+随 v0.20.3 发出：`quiet`，记忆的两个簿记写入默默干（`AgentToolStart` 和 `ToolStatus` 都带着这个标走，界面据此判断，不认工具名）；答铃回合改成拿正文，soul 读 brief 和 output 两个文件喂给回合，读不到才说不在这台设备上，盒子项的 body 存产出正文而不是路径。
 
 ## 尾巴
-
-答铃回合改成拿正文：soul 读 brief 和 output 两个文件喂给回合，读不到才说不在这台设备上；盒子项的 body 也存产出正文而不是路径。未发版。
 
 steer 只在书的对话里；retell、rehearsal、简报对话仍是另起回合。图片不能随 steer，留到下一次普通发送。答铃自起的回合不流式，回复一次到达；silent 回合结束时未交出的话写进文件但不自动续跑。
 
