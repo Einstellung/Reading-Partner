@@ -98,6 +98,12 @@ import bodyUrl from "./lumen-body.webp";
 import caseUrl from "./lumen-case.webp";
 import tuftUrl from "./lumen-tuft.webp";
 
+// A gaze as it has to be written for a body that is drawn in a mirror, so that
+// what lands on screen still points where it was aimed.
+function throughMirror(gaze: Gaze, mirrored: boolean): Gaze {
+	return mirrored ? { x: -gaze.x, y: gaze.y } : gaze;
+}
+
 // The face, in the SVG's own 1000-unit box. Kept here rather than in the markup
 // so the two eyes and the four transforms below all read the same numbers.
 const BOX = 1000;
@@ -124,6 +130,7 @@ export interface LumenProps extends Omit<ComponentProps<"button">, "children"> {
 	still?: boolean;
 	reach?: CaseReach;
 	reaching?: boolean;
+	mirrored?: boolean;
 	onActivate?: () => void;
 	label?: string;
 	overlay?: ReactNode;
@@ -154,6 +161,12 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	// own. `still` does not stop it: the loop is the breath, and this is an act.
 	reach,
 	reaching = false,
+	// Whether something above is drawing the body in a mirror — which the
+	// corner does when it is docked at the left edge (LumenCorner). Everything
+	// scripted is mirrored with it and right to be: the glance at the case
+	// follows the case. The pointer is the one thing that is not in the picture,
+	// so the gaze that goes to it is turned back over here.
+	mirrored = false,
 	// What a press does, where that is not starting and stopping a call. The
 	// corner wires it to nothing on purpose: there a session is opened and
 	// ended by a hold, and a tap on the body means nothing (docs/68).
@@ -183,6 +196,8 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 	reachRef.current = reach;
 	// Where a still body's eyes and lean are, between the runs of the one rAF
 	// that paints them.
+	const mirroredRef = useRef(mirrored);
+	mirroredRef.current = mirrored;
 	const stillGazeRef = useRef<Gaze>(GAZE_ZERO);
 	const stillLeanRef = useRef(0);
 
@@ -306,10 +321,13 @@ export const Lumen = forwardRef<HTMLButtonElement, LumenProps>(function Lumen({
 				: shown !== "rest"
 					? actGaze(shown, actMs)
 					: following && pointer
-						? gazeToward(
-								pointer,
-								{ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
-								rect.width / 2,
+						? throughMirror(
+								gazeToward(
+									pointer,
+									{ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+									rect.width / 2,
+								),
+								mirroredRef.current,
 							)
 						: reduced
 							? GAZE_ZERO

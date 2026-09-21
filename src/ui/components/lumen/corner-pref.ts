@@ -9,8 +9,20 @@
 // count is waiting when the logo is pressed again.
 
 import type { PrefStore } from "../base/pref-store";
+import {
+  CORNER_SPOT_DEFAULT,
+  parseCornerSpot,
+  serializeCornerSpot,
+  type CornerSpot,
+} from "./corner-drag";
 
 export const LUMEN_CORNER_KEY = "shell.lumenCorner";
+
+// Where it stands, beside whether it stands at all. The same kind of choice and
+// the same reason for the same storage: a corner dragged out of the way of the
+// phone's Display sheet has not been dragged out of the way of anything on the
+// desk (docs/68).
+export const LUMEN_CORNER_SPOT_KEY = "shell.lumenCornerSpot";
 
 // Shown unless the slot holds exactly the marker for hidden. The companion is
 // the app's own entry to the box, so an unreadable or hand-edited value must
@@ -29,6 +41,23 @@ export function writeLumenCornerShown(store: PrefStore | null, shown: boolean): 
     store?.setItem(LUMEN_CORNER_KEY, shown ? "1" : "0");
   } catch {
     // Full or disabled storage: the choice still holds for this session.
+  }
+}
+
+export function readLumenCornerSpot(store: PrefStore | null): CornerSpot {
+  try {
+    return parseCornerSpot(store?.getItem(LUMEN_CORNER_SPOT_KEY) ?? null);
+  } catch {
+    return CORNER_SPOT_DEFAULT;
+  }
+}
+
+export function writeLumenCornerSpot(store: PrefStore | null, spot: CornerSpot): void {
+  try {
+    store?.setItem(LUMEN_CORNER_SPOT_KEY, serializeCornerSpot(spot));
+  } catch {
+    // Full or disabled storage: the corner stays where it was put for this
+    // session and comes back in the bottom right on the next one.
   }
 }
 

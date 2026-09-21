@@ -8,11 +8,16 @@
 // it so "behind the body" can be told from "behind the page". `?live` is the
 // real thing — useCaseMotion driving a real count, with `window.__case` on it
 // for a browser to drive from outside.
+//
+// `?mirror` is the corner docked at the left edge: the same one transform on
+// the box the two stand in that LumenCorner writes there, and the badge turning
+// itself back over under it.
 
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import "../../../styles.css";
+import { cn } from "../lib/utils";
 import type { VoiceCallHandle } from "../orb/orb";
 import { Lumen, LumenCase } from "./Lumen";
 import { caseLeanDeg, caseLookGaze, caseReach, caseTriggerStyle } from "./case-motion";
@@ -27,9 +32,15 @@ const SILENT: VoiceCallHandle = {
   subscribeEnvelope: () => () => {},
 };
 
+const MIRROR = window.location.search.includes("mirror");
+const MIRRORED = MIRROR ? ({ transform: "scaleX(-1)" } as const) : undefined;
+
 function Badge({ count }: { count: number }) {
   return (
-    <span className="pointer-events-none absolute -left-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-line px-1 text-[10px] font-semibold leading-none text-background ring-2 ring-background">
+    <span
+      className="pointer-events-none absolute -left-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-line px-1 text-[10px] font-semibold leading-none text-background ring-2 ring-background"
+      style={MIRRORED}
+    >
       {count}
     </span>
   );
@@ -74,8 +85,8 @@ function Frame({ p }: { p: number }) {
           <br />
           text page text
         </p>
-        <div ref={ref} className="absolute bottom-1 right-1 h-18 w-18">
-          <div className="relative isolate h-18 w-18">
+        <div ref={ref} className={cn("absolute bottom-1 h-18 w-18", MIRROR ? "left-1" : "right-1")}>
+          <div className="relative isolate h-18 w-18" style={MIRRORED}>
             <Body />
             <button type="button" className="absolute box-content block" style={caseTriggerStyle(p)}>
               <span className="relative block h-full w-full">
@@ -119,8 +130,8 @@ function Live() {
         <br />
         page text page text
       </p>
-      <div className="absolute bottom-2 right-2 h-18 w-18">
-        <div className="relative isolate h-18 w-18">
+      <div className={cn("absolute bottom-2 h-18 w-18", MIRROR ? "left-2" : "right-2")}>
+        <div className="relative isolate h-18 w-18" style={MIRRORED}>
           <Lumen
             handle={SILENT}
             still
