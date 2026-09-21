@@ -71,7 +71,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 373）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 374）。
 
 ## EmbedPDF 引擎
 
@@ -354,6 +354,7 @@
 - [120-a-registered-dom-outlives-the-file-that-registered-it](./120-a-registered-dom-outlives-the-file-that-registered-it.md) — `bun test` 全场一个进程，注册一次 DOM 之后每个文件都有 `window`，`isTauri()`/settings 退出 flush/debounced-writer/overlay 全被推到浏览器分支；窗口按文件搭按文件拆（`tests/support/dom.ts` 的 `useDom()`），拆在 `afterAll`，要趁 DOM 还在做的事放 `afterEach`；跑过一次真 DOM 全场一次性慢 0.11s，不随文件数涨
 - [121-react-dom-decides-once-whether-it-is-in-a-browser](./121-react-dom-decides-once-whether-it-is-in-a-browser.md) — react-dom 在模块求值时算一次 `canUseDOM`，晚了就永久不监听 `input`，受控 input 的 `onChange` 静默不响；bun 先求值 node_modules 再求值本地依赖，调 import 顺序没用，只能让 `useDom()` 注册完窗口再动态 import 并返回 `@testing-library/react`
 - [122-spyon-swaps-an-esm-export-and-puts-it-back](./122-spyon-swaps-an-esm-export-and-puts-it-back.md) — bun 的 ESM 命名空间可写：`spyOn(ns, "导出名")` 导入方看得见，`mockRestore()` 能还原，命名导出/默认导出/再导出链都成立；这是 119 之外替换模块导出的另一条路，还原写在 finally 里。`createXStore(io)` 的接线表在 import 时求值，`loadPdfjs,` 这种抄值的字段读不到那个槽，spy 就白装了（实测 store-disk 6 个用例红 4 个），一律写成 `() => loadPdfjs()`
+- [373-headless-screenshot-never-fires-on-a-live-page](./373-headless-screenshot-never-fires-on-a-live-page.md) — `chrome --screenshot` 的 `--virtual-time-budget` 只在页面空下来时推进，阅读器这种常驻定时器加 vite HMR 的页面永远空不下来，命令挂死一张图不落盘（`--timeout` 管加载不管它）；自己开 `--remote-debugging-port` 走 CDP：`Page.navigate` + 自己等几秒 + `Page.captureScreenshot`
 - [135-headless-chrome-window-size-is-not-the-viewport](./135-headless-chrome-window-size-is-not-the-viewport.md) — 无头截图核对渲染时 `--window-size` 给的是外窗，视口矮 87px、宽度还有 500px 下限，图底部被裁掉一截还容易误判成布局出界；窗口开大 + `--force-device-scale-factor=1` + 零边距包装页
 - [222-virtual-time-budget-hangs-on-a-vite-dev-page](./222-virtual-time-budget-hangs-on-a-vite-dev-page.md) — `--virtual-time-budget` 在 vite dev server 的页面上永远等不到「加载完」（HMR 的 WebSocket 一直挂着），Chrome 不退出也不写 PNG；拍 dev server 就别加这个 flag，要等异步内容就拍 `vite preview` 的静态产物
 - [221-two-overlay-components-blank-a-headless-harness](./221-two-overlay-components-blank-a-headless-harness.md) — 无头 Chrome 的静态探针页里挂 `PenToolbar` 或 `MoreMenu`，React #185（更新深度超限）把整棵树打白，别的组件都正常；成因未定，排除过内联 props 和 `.safe-probe` 的量值，两者唯一共同点是 `useOverlaySafePadding()`。探针页别放这两个

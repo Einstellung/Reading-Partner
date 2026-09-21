@@ -10,7 +10,7 @@
 // here is the binding: the state that sequence produces, the handle the pane
 // hands back, and the four things a tap can reach.
 
-import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
@@ -26,6 +26,12 @@ import type {
   FlowReaderPaneProps,
   FlowReaderView,
 } from "../../../reading/epub/flow-contract";
+import {
+  readFlowDisplay,
+  writeFlowDisplay,
+  type FlowDisplay,
+} from "../../../reading/epub/flow-display";
+import { browserPrefStore } from "../base/pref-store";
 import { IconTrash } from "../base/icons";
 import { cn } from "../lib/utils";
 import type { Tool } from "../reader/types";
@@ -40,6 +46,7 @@ import {
   type PhoneBookIo,
 } from "./open-epub";
 import { flowTool } from "./reader-gate";
+import PhoneDisplaySheet from "./PhoneDisplaySheet";
 import PhoneOutlineSheet from "./PhoneOutlineSheet";
 import PhoneReaderBar from "./PhoneReaderBar";
 
@@ -61,6 +68,11 @@ export default function PhoneReader(props: {
   const [stats, setStats] = useState<ViewStats | null>(null);
   const [tool, setTool] = useState<Tool>({ type: "none", color: ANNOTATION_COLORS[0].color });
   const [outlineOpen, setOutlineOpen] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  // This device's view of the text (flow-display.ts). Read once, synchronously,
+  // so the column mounts at the size and paper the reader left it at.
+  const prefs = useMemo(() => browserPrefStore(window), []);
+  const [display, setDisplay] = useState<FlowDisplay>(() => readFlowDisplay(prefs));
   const [popup, setPopup] = useState<AnnotationPopupParams | null>(null);
   const viewRef = useRef<FlowReaderView | null>(null);
   // Every mark the book has, the half the pane cannot hold included: what is
@@ -107,6 +119,14 @@ export default function PhoneReader(props: {
     viewRef.current?.setTool(flowTool(next));
   }, []);
 
+  const changeDisplay = useCallback(
+    (next: FlowDisplay) => {
+      setDisplay(next);
+      writeFlowDisplay(prefs, next);
+    },
+    [prefs],
+  );
+
   const removeMark = useCallback(
     (id: string) => {
       viewRef.current?.removeAnnotations([id]);
@@ -118,7 +138,10 @@ export default function PhoneReader(props: {
   );
 
   return (
-    <div className="absolute inset-0 flex flex-col bg-background">
+    // The paper the reader chose is the whole screen's, not just the column's:
+    // the dark one redefines the tokens the bar and the sheets are drawn from
+    // (styles.css), and the other three leave them alone.
+    <div className="absolute inset-0 flex flex-col bg-background" data-reader-paper={display.paper}>
       <PhoneReaderBar
         title={name}
         status={status}
@@ -127,6 +150,7 @@ export default function PhoneReader(props: {
         onToolChange={changeTool}
         onBack={props.onBack}
         onOutline={() => setOutlineOpen(true)}
+        onDisplay={() => setDisplayOpen(true)}
       />
 
       <div className="relative min-h-0 flex-1">
@@ -140,6 +164,7 @@ export default function PhoneReader(props: {
             authorName="me"
             viewState={book.viewState}
             tool={flowTool(tool)}
+            display={display}
             className="absolute inset-0"
             onView={(view) => {
               viewRef.current = view;
@@ -175,8 +200,16 @@ export default function PhoneReader(props: {
       <PhoneOutlineSheet
         open={outlineOpen}
         outline={book?.outline ?? []}
+        paper={display.paper}
         onOpenChange={setOutlineOpen}
         onGoToPage={(pageIndex) => viewRef.current?.goToPage(pageIndex)}
+      />
+
+      <PhoneDisplaySheet
+        open={displayOpen}
+        display={display}
+        onOpenChange={setDisplayOpen}
+        onChange={changeDisplay}
       />
     </div>
   );

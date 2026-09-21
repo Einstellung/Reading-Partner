@@ -6,15 +6,20 @@
 // The two dim controls wear the treatment ReaderTopBar gives the blackboard
 // when a level is closed: drawn, disabled, and carrying the reason as its title
 // and in its accessible name. Same PenToolbar, same `disabled` map.
+//
+// The rack's navigation lock is not dim but absent (`omit`), and the Aa that
+// opens the display sheet takes that place in the row: the phone has no pages
+// to lock, and the one thing a reader reaches for there instead is the size of
+// the type (docs/70).
 
 import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import type { ViewStats } from "../../../platform/app/reader-contract";
-import { IconBookSparkle, IconOutline } from "../base/icons";
+import { IconBookSparkle, IconOutline, IconTextSize } from "../base/icons";
 import PenToolbar from "../reader/PenToolbar";
 import { readerPageText } from "../reader/reader-page-text";
 import type { Tool } from "../reader/types";
 import { Button } from "../ui/button";
-import { AI_NOT_ON_PHONE, NO_PAGES_TO_LOCK } from "./reader-gate";
+import { AI_NOT_ON_PHONE, PHONE_OMITTED_TOOLS } from "./reader-gate";
 
 const BOOK_THREAD = "Learn this book with AI";
 
@@ -27,6 +32,7 @@ export default function PhoneReaderBar(props: {
   onToolChange: (tool: Tool) => void;
   onBack: () => void;
   onOutline: () => void;
+  onDisplay: () => void;
 }) {
   const pageText = readerPageText(props.stats);
   return (
@@ -64,13 +70,24 @@ export default function PhoneReaderBar(props: {
         >
           <IconOutline size={20} />
         </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="flex-none text-muted-foreground"
+          title="Display"
+          aria-label="Display"
+          onClick={props.onDisplay}
+        >
+          <IconTextSize size={20} />
+        </Button>
         <div className="min-w-0 flex-1 overflow-x-auto">
           <PenToolbar
             orientation="horizontal"
             tool={props.tool}
             colors={ANNOTATION_COLORS}
             onToolChange={props.onToolChange}
-            disabled={{ ai: AI_NOT_ON_PHONE, navlock: NO_PAGES_TO_LOCK }}
+            disabled={{ ai: AI_NOT_ON_PHONE }}
+            omit={PHONE_OMITTED_TOOLS}
           />
         </div>
         <Button

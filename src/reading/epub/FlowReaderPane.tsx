@@ -25,6 +25,7 @@ function FlowReaderPaneImpl(props: FlowReaderPaneProps) {
       annotations: p.annotations,
       authorName: p.authorName,
       tool: p.tool,
+      display: p.display,
       callbacks: {
         onChangeViewState: (s) => propsRef.current.onChangeViewState(s),
         onChangeViewStats: (s) => propsRef.current.onChangeViewStats(s),
@@ -61,6 +62,15 @@ function FlowReaderPaneImpl(props: FlowReaderPaneProps) {
   useEffect(() => {
     viewRef.current?.setTool(props.tool);
   }, [props.tool]);
+
+  // The column mounts at the display it was handed, so the first value is
+  // already applied; only a change after that is a relayout.
+  const displayRef = useRef(props.display);
+  useEffect(() => {
+    if (props.display === displayRef.current) return;
+    displayRef.current = props.display;
+    viewRef.current?.setDisplay(props.display);
+  }, [props.display]);
 
   return (
     <div

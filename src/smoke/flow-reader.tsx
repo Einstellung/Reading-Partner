@@ -8,6 +8,7 @@
 //   ?book=<id>       the book id (default: from the url, or "flow-smoke")
 //   ?cfi=<cfi>       open at this CFI; ?page=<n> at the start of this page
 //   ?width=<px>      the column's width (default 393)
+//   ?paper=<name>    white | paper | green | dark; ?font=<px>, ?line=<n>, ?pad=<px>
 
 import { ANNOTATION_COLORS } from "../platform/app/annotations";
 import React, { useEffect, useState } from "react";
@@ -17,6 +18,7 @@ import type { Annotation, ViewState } from "../platform/app/reader-contract";
 import type { FlowReaderView, FlowTool } from "../reading/epub/flow-contract";
 import FlowReaderPane from "../reading/epub/FlowReaderPane";
 import { parseEpubRangeCfi, resolveRange } from "../reading/epub/cfi";
+import { FLOW_DISPLAY_DEFAULT, normalizeFlowDisplay, type FlowDisplay } from "../reading/epub/flow-display";
 import { initPaperTint } from "../ui/components/base/paper-tint";
 
 interface FlowLog {
@@ -29,6 +31,7 @@ interface FlowLog {
   selected: string[][];
   popups: unknown[];
   setTool: (tool: FlowTool) => void;
+  setDisplay: (display: FlowDisplay) => void;
   /** The words a range CFI resolves to in a mounted document, for a driver to check a mark by. */
   wordsOf: (cfi: string) => string | null;
 }
@@ -67,11 +70,20 @@ function loadMarks(bookId: string): Annotation[] {
   }
 }
 
-function Harness(props: { bookId: string; buffer: ArrayBuffer; viewState: ViewState | null; width: number; log: FlowLog }) {
+function Harness(props: {
+  bookId: string;
+  buffer: ArrayBuffer;
+  viewState: ViewState | null;
+  width: number;
+  display: FlowDisplay;
+  log: FlowLog;
+}) {
   const [tool, setTool] = useState<FlowTool>({ type: "none", color: ANNOTATION_COLORS[0].color });
+  const [display, setDisplay] = useState<FlowDisplay>(props.display);
   const { log } = props;
   useEffect(() => {
     log.setTool = setTool;
+    log.setDisplay = setDisplay;
   }, [log]);
   return (
     <div style={{ width: props.width, height: "100vh", margin: "0 auto", border: "1px solid var(--border)" }}>
@@ -82,6 +94,7 @@ function Harness(props: { bookId: string; buffer: ArrayBuffer; viewState: ViewSt
         authorName="smoke"
         viewState={props.viewState}
         tool={tool}
+        display={display}
         onView={(view) => {
           log.view = view;
         }}
@@ -125,6 +138,7 @@ export async function runFlowReaderSmoke(): Promise<void> {
     selected: [],
     popups: [],
     setTool: () => {},
+    setDisplay: () => {},
     wordsOf: (cfi) => {
       const parsed = parseEpubRangeCfi(cfi);
       const root = document.querySelectorAll(".rp-flow-doc")[parsed?.spineIndex ?? -1]?.shadowRoot?.querySelector("html");
@@ -149,10 +163,17 @@ export async function runFlowReaderSmoke(): Promise<void> {
       ? { pageIndex: Number(page ?? 0), scale: "auto", scrollMode: 0, layout: "vertical", ...(cfi ? { cfi } : {}) }
       : null;
   const width = Number(params.get("width") ?? 393);
+  const display = normalizeFlowDisplay({
+    ...FLOW_DISPLAY_DEFAULT,
+    ...(params.has("font") ? { fontPx: Number(params.get("font")) } : {}),
+    ...(params.has("line") ? { lineHeight: Number(params.get("line")) } : {}),
+    ...(params.has("pad") ? { padX: Number(params.get("pad")) } : {}),
+    ...(params.has("paper") ? { paper: params.get("paper") } : {}),
+  });
   document.body.style.margin = "0";
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-      <Harness bookId={bookId} buffer={buffer} viewState={viewState} width={width} log={log} />
+      <Harness bookId={bookId} buffer={buffer} viewState={viewState} width={width} display={display} log={log} />
     </React.StrictMode>,
   );
 }

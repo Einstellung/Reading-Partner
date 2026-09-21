@@ -228,6 +228,53 @@
        in it. */
     --page-wash: #f6efdc;
   }
+
+  /* The phone reading screen's dark paper (docs/70). Not the dark mode the
+     paragraph above says this app does not have: the attribute is set on that
+     one screen's root and on the two sheets it opens, nowhere else, and every
+     other screen keeps the palette above. It exists because white cannot be
+     multiplied down to black — the other three papers are a wash over the
+     sheet, and this one has to be its own set of colours.
+
+     Redefined here rather than inline on the screen because the bar, the rack,
+     the mark popup and the sheets are all drawn from the tokens, so the whole
+     screen turns on one attribute. --color-neutral-700 is Tailwind's own theme
+     variable and is in the list for one reason: the pen rack draws its tools
+     in `text-neutral-700`, a flat neutral rather than a token, and a 37%-light
+     glyph on this ground is not there. */
+  [data-reader-paper="dark"] {
+    --background: #1b1c1e;
+    --foreground: #d5d2cb;
+
+    --card: #232427;
+    --card-foreground: #d5d2cb;
+    --popover: #232427;
+    --popover-foreground: #d5d2cb;
+
+    --secondary: #33353a;
+    --secondary-faint: #26282b;
+    --secondary-foreground: #e4e1da;
+    --secondary-border: #3d3f45;
+    --secondary-hover: #3a3c42;
+
+    --muted: #2a2b2e;
+    --accent: #2a2b2e;
+    --accent-foreground: #d5d2cb;
+    --muted-faint: #212326;
+    --muted-soft: #26282b;
+    --muted-strong: #33353a;
+
+    --muted-foreground: #9d9a93;
+    --faint-foreground: #86837c;
+
+    --border: #35373c;
+    --input: #35373c;
+    --border-soft: #2f3135;
+    --border-subtle: #2a2b2e;
+    --border-faint: #232427;
+
+    --color-neutral-700: #b8b5ae;
+  }
 }
 
 @theme inline {

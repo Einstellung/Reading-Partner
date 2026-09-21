@@ -12,17 +12,22 @@
 // is the position block — so a tap is goToPage.
 
 import type { OutlineItem } from "../../../fulltext/types";
+import type { FlowPaperName } from "../../../reading/epub/flow-display";
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 
 export default function PhoneOutlineSheet(props: {
   open: boolean;
   outline: OutlineItem[];
+  // The reading screen's paper. The sheet is portalled to <body>, so the tokens
+  // scoped to that attribute have to be restated on it (docs/70).
+  paper: FlowPaperName;
   onOpenChange: (open: boolean) => void;
   onGoToPage: (pageIndex: number) => void;
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent
+        data-reader-paper={props.paper}
         // Bottom-pinned: the centring and the box's own padding are replaced,
         // everything else about a dialog stays.
         className="top-auto bottom-0 left-0 max-h-[70dvh] w-full translate-x-0 translate-y-0 gap-0 rounded-b-none p-0"
