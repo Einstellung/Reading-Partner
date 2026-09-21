@@ -314,6 +314,29 @@ export function IconOutline({ size = 20 }: IconProps) {
 	);
 }
 
+// Two letters at two sizes: the display settings the phone's reader opens from
+// its bar (type size, leading, margins, paper).
+export function IconTextSize({ size = 20 }: IconProps) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 20 20"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M1.75 15.25L5.5 4.75L9.25 15.25" />
+			<path d="M3.1 11.5H7.9" />
+			<path d="M12 15.25L14.5 8.25L17 15.25" />
+			<path d="M12.9 12.75H16.1" />
+		</svg>
+	);
+}
+
 // Paged reading layout: a page framed by left/right flip chevrons.
 export function IconPagedLayout({ size = 20 }: IconProps) {
 	return (

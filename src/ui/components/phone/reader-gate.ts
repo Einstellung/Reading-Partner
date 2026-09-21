@@ -7,17 +7,21 @@
 // for it — so what is needed here is the reason, not an absence.
 
 import type { FlowTool } from "../../../reading/epub/flow-contract";
-import type { Tool } from "../reader/types";
+import type { Tool, ToolType } from "../reader/types";
 
 export const AI_NOT_ON_PHONE = "The AI does not read with you on the phone yet";
+
 // The lock holds a page still under a finger that is drawing. The phone has no
-// pages to hold: it is one scroll, and the finger scrolls it.
-export const NO_PAGES_TO_LOCK = "There are no pages to lock on the phone";
+// pages to hold — it is one scroll, and the finger scrolls it — so the rack
+// does not draw it here at all, and the Aa that opens the display sheet stands
+// in its place on the bar (docs/70).
+export const PHONE_OMITTED_TOOLS: readonly ToolType[] = ["navlock"];
 
 /**
  * The rack's tool as the reflow pane understands it. The pane knows two states
  * — off, and the highlighter with a colour — so anything else the rack could be
- * in is off (the AI pen and the lock are dim, so it cannot be in those).
+ * in is off (the AI pen is dim and the lock is not drawn, so it cannot be in
+ * either).
  */
 export function flowTool(tool: Tool): FlowTool {
   return {

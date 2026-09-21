@@ -1,12 +1,17 @@
 // The phone's reading screen on a real DOM (docs/70), against a stub pane: the
-// page text the desk prints, the outline sheet, and the two AI controls drawn
-// and unpressable. The pane itself is another file's; what is pinned here is
-// the shell it is handed to. Run: bun test.
+// page text the desk prints, the two sheets, and the two AI controls drawn and
+// unpressable. The pane itself is another file's; what is pinned here is the
+// shell it is handed to. Run: bun test.
 
 import { afterEach, expect, test } from "bun:test";
 import { useEffect } from "react";
 import type { Annotation, ViewStats } from "../../../../src/platform/app/reader-contract";
 import type { FlowReaderPaneProps } from "../../../../src/reading/epub/flow-contract";
+import {
+  FLOW_DISPLAY_DEFAULT,
+  FLOW_DISPLAY_KEY,
+  type FlowDisplay,
+} from "../../../../src/reading/epub/flow-display";
 import { AI_NOT_ON_PHONE } from "../../../../src/ui/components/phone/reader-gate";
 import type { PhoneBookIo } from "../../../../src/ui/components/phone/open-epub";
 import { useDom } from "../../../support/dom";
@@ -32,11 +37,17 @@ const STATS: ViewStats = {
 };
 
 const pages: number[] = [];
+// Every display the pane has been handed, the one it mounted at included. The
+// real pane turns a change into view.setDisplay; the shell's half is the prop.
+const displays: FlowDisplay[] = [];
 
 // What the reflow pane does as far as this screen is concerned: it comes up,
 // reports where the reader is, and hands back a handle. Nothing of the real
 // one is needed to know whether the shell around it is wired.
 function StubPane(props: FlowReaderPaneProps) {
+  useEffect(() => {
+    displays.push(props.display);
+  }, [props.display]);
   useEffect(() => {
     props.onView({
       goToCfi() {},
@@ -46,6 +57,7 @@ function StubPane(props: FlowReaderPaneProps) {
       },
       removeAnnotations() {},
       setTool() {},
+      setDisplay() {},
       destroy() {},
     });
     props.onInitialized();
@@ -133,4 +145,52 @@ test("the outline sheet lists the chapters and navigates by block", async () => 
   expect(pages).toEqual([39]);
   // And the sheet puts itself away behind the reader it navigated.
   expect(container.textContent).toContain("37 / 385");
+});
+
+// --- the display sheet ----------------------------------------------------
+
+test("the rack draws no navigation lock, and an Aa stands where it would have", async () => {
+  const { container } = await openReader();
+  expect(container.querySelector('button[aria-label^="Navigate only"]')).toBeNull();
+  expect(container.querySelector('button[aria-label="Display"]')).not.toBeNull();
+});
+
+test("the sheet's choices reach the pane and the slot on this device", async () => {
+  localStorage.removeItem(FLOW_DISPLAY_KEY);
+  displays.length = 0;
+  const { container, getByLabelText } = await openReader();
+  await act(async () => {
+    fireEvent.click(getByLabelText("Display"));
+  });
+  const larger = document.body.querySelector('button[aria-label="Larger text"]');
+  await act(async () => {
+    fireEvent.click(larger as Element);
+  });
+  const dark = document.body.querySelector('button[aria-label="Dark"]');
+  await act(async () => {
+    fireEvent.click(dark as Element);
+  });
+
+  // Applied on the press, both of them, and nothing was confirmed.
+  expect(displays.length).toBe(3);
+  expect(displays[0]).toEqual(FLOW_DISPLAY_DEFAULT);
+  expect(displays[1].fontPx).toBeGreaterThan(FLOW_DISPLAY_DEFAULT.fontPx);
+  expect(displays[2].paper).toBe("dark");
+  // The screen wears the paper, so the bar and the mark popup turn with it.
+  expect(container.querySelector('[data-reader-paper="dark"]')).not.toBeNull();
+  // And it is this device's, written where a relaunch will find it.
+  expect(JSON.parse(localStorage.getItem(FLOW_DISPLAY_KEY) as string)).toEqual(displays[2]);
+});
+
+test("a book opens at the settings the reader left, not at the default", async () => {
+  localStorage.setItem(
+    FLOW_DISPLAY_KEY,
+    JSON.stringify({ fontPx: 21, lineHeight: 1.4, padX: 36, paper: "green" }),
+  );
+  displays.length = 0;
+  await openReader();
+  // The pane was mounted with them: no 17px frame first, and nothing pushed in
+  // after.
+  expect(displays).toEqual([{ fontPx: 21, lineHeight: 1.4, padX: 36, paper: "green" }]);
+  localStorage.removeItem(FLOW_DISPLAY_KEY);
 });
