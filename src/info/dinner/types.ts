@@ -68,12 +68,10 @@ export interface Dish {
   // "dish-" + 8 lowercase hex.
   id: string;
   name: string;
-  // The dish's canonical English name as people search for it ("mapo tofu",
+  // The English name someone would type into an image search ("mapo tofu",
   // "shakshuka", "sheet pan salmon"), singular and lower case. It is what the
-  // photograph is looked up by (dish-photos.ts), and it is the cache's key, so
-  // two weeks planning the same dish look it up once. An invented combination
-  // has no such name and gets no photograph — which is why the model is asked
-  // to plan dishes that have one.
+  // photograph is searched by (photo-search.ts) and it is the cache's key, so
+  // two weeks planning the same dish search once.
   searchName: string;
   // One line the reader reads on the card and on the day.
   oneLine: string;
@@ -95,32 +93,23 @@ export interface Dish {
   image?: string;
 }
 
-// One dish photograph as the search answered, kept whole because the licence
-// obliges the screen to name the creator and link back to where it was found.
+// One photograph the image search found, for a dish or for an ingredient.
 export interface DishPhoto {
-  // The full-size image, what the night's card loads.
+  // The full-size image, what the card loads.
   url: string;
-  // The search's own thumbnail. Unused today; kept so a smaller square does not
-  // mean a second lookup.
+  // The search's own thumbnail, which is what a 40px square wants.
   thumb: string;
-  title: string;
-  creator: string;
-  // Display-ready ("CC BY-SA 2.0"), assembled at lookup time from the code and
-  // the version. The caption shows this string as it stands.
-  license: string;
-  licenseUrl: string;
-  // The page the photograph lives on. What the caption opens.
-  foreignLandingUrl: string;
-  // The page to send as Referer when the picture is fetched, or absent. Set by
-  // the web image search only: its results are arbitrary CDNs, some of which
-  // refuse a request that arrives without one (docs/pitfall/30). Openverse's
-  // and TheMealDB's hosts do not check, and a Referer tells a host something
-  // about the reader, so nothing sends one it does not need.
-  pageUrl?: string;
+  // The page the picture sits on: what the caption opens, and what the `img:`
+  // proxy sends as Referer — an arbitrary CDN may refuse a request that arrives
+  // without one (docs/pitfall/30).
+  pageUrl: string;
+  // That page's host without `www.`. The caption reads "Photo: <site>".
+  site: string;
+  foundAt: number;
 }
 
-// A search that found nothing usable. Kept, rather than left absent, so a dish
-// the index does not have is not looked up again every time a week is planned.
+// A search that found nothing usable. Kept, rather than left absent, so a name
+// the search has nothing for is not asked again every time a week is planned.
 export interface DishPhotoMiss {
   none: true;
   checkedAt: number;
@@ -230,9 +219,6 @@ export interface DinnerState {
   plan: WeekPlan | null;
   shopping: ShoppingItem[];
   deviations: Deviation[];
-  // Dish photographs by searchName, kept across weeks: a dish is looked up once
-  // and never again, and a week that repeats a dish costs no request at all.
-  dishPhotos: Record<string, DishPhotoEntry>;
 }
 
 export const DINNER_VERSION = 1 as const;
@@ -242,5 +228,4 @@ export const EMPTY_DINNER: DinnerState = {
   plan: null,
   shopping: [],
   deviations: [],
-  dishPhotos: {},
 };

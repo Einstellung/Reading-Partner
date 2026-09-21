@@ -100,15 +100,19 @@ export function CategoryGlyph({ category, size }: { category: IngredientCategory
  */
 export function IngredientThumb({
   url,
+  pageUrl,
   category,
   alt,
 }: {
   url: string | null;
+  // The page the picture sits on, sent as Referer by the proxy. Only a picture
+  // the image search found has one (docs/pitfall/30).
+  pageUrl?: string | null;
   category: IngredientCategory;
   alt: string;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  const src = imageSrc(url);
+  const src = imageSrc(url, pageUrl);
   const usable = src && src !== failed ? src : null;
   return (
     <span

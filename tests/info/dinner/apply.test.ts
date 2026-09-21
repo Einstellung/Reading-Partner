@@ -8,6 +8,7 @@ import {
   applyCharter,
   applyPlan,
   recordDeviation,
+  refreshPhotos,
   type DinnerPorts,
 } from "../../../src/info/dinner/apply";
 import type { DinnerCharterCardData, DinnerPlanCardData } from "../../../src/info/dinner/cards";
@@ -214,42 +215,74 @@ test("a deviation with no week to move writes nothing", async () => {
   expect(f.changed).toBe(0);
 });
 
-test("Apply hands its note back before the photographs, and the screen reloads when they land", async () => {
+test("Apply writes the week, then asks for the photographs it has none of", async () => {
   const f = fake();
-  let release: (() => void) | null = null;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const photo = {
-    url: "https://live.staticflickr.com/1/mapo_b.jpg",
-    thumb: "",
-    title: "Mapo Tofu",
-    creator: "avlxyz",
-    license: "CC BY-SA 2.0",
-    licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
-    foreignLandingUrl: "https://www.flickr.com/photos/1/2",
-  };
-  let saved: WeekPlan | null = null;
+  const started: { planId: string; queries: { key: string; q: string }[] }[] = [];
   const ports: DinnerPorts = {
     ...f.ports,
-    lookupDishPhoto: async () => {
-      await held;
-      return { ok: true as const, photo };
-    },
-    saveDishPhotos: async (_photos, plan) => {
-      saved = plan;
+    photos: async () => ({
+      "dish:chicken traybake": {
+        url: "https://cdn.example/traybake.jpg",
+        thumb: "",
+        pageUrl: "https://example.com/traybake",
+        site: "example.com",
+        foundAt: 1,
+      },
+    }),
+    bankImage: () => null,
+    startPhotoRun: async (planId, queries) => {
+      started.push({ planId, queries: [...queries] });
     },
   };
 
   const applied = await applyPlan(planCard(), ports);
-  // The week is written, the note is back, and no photograph has been searched
-  // for yet: the reader is not kept waiting on an image index.
   expect(applied.ok).toBe(true);
   expect(f.changed).toBe(1);
-  expect(saved).toBeNull();
-
-  release!();
+  // The picture already in the cache is on the week as it is written; only the
+  // names nobody has searched for wait for the run.
+  expect(f.saved.plan?.dishes[0]?.image).toBe("https://cdn.example/traybake.jpg");
   await applied.pending;
-  expect(f.changed).toBe(2);
-  expect(saved!.dishes[0]?.image).toBe(photo.url);
+  expect(started.length).toBe(1);
+  expect(started[0]?.planId).toBe(`week-${MON}`);
+  expect(started[0]?.queries.map((q) => q.key)).toEqual([
+    "dish:baked sea bass",
+    "ingredient:chicken",
+    "ingredient:sea bass",
+  ]);
+});
+
+test("a host that cannot start runs still applies the week", async () => {
+  const f = fake();
+  const applied = await applyPlan(planCard(), f.ports);
+  expect(applied.ok).toBe(true);
+  await applied.pending;
+  expect(f.saved.plan?.dishes.length).toBe(2);
+});
+
+test("asking again searches the whole week, the cache ignored", async () => {
+  const f = fake(
+    { ...EMPTY_DINNER, plan: week(), shopping: [] },
+    false,
+  );
+  const started: { key: string; q: string }[][] = [];
+  const ports: DinnerPorts = {
+    ...f.ports,
+    photos: async () => ({ "dish:baked sea bass": { none: true as const, checkedAt: 499 } }),
+    bankImage: () => null,
+    startPhotoRun: async (_planId, queries) => {
+      started.push([...queries]);
+    },
+  };
+  expect(await refreshPhotos(ports)).toBe(4);
+  expect(started[0]?.map((q) => q.key)).toEqual([
+    "dish:chicken traybake",
+    "dish:baked sea bass",
+    "ingredient:chicken",
+    "ingredient:sea bass",
+  ]);
+});
+
+test("asking again with no week planned asks for nothing", async () => {
+  const f = fake();
+  expect(await refreshPhotos({ ...f.ports, startPhotoRun: async () => {} })).toBe(0);
 });

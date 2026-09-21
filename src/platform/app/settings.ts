@@ -124,8 +124,6 @@ export interface Settings {
   // model invents; without them it falls back to Openverse, which only knows
   // dishes that have a name. An ordinary synced setting like the key above —
   // it buys a hundred free searches a day, not a voice.
-  googleSearchApiKey: string | null;
-  googleSearchEngineId: string | null;
   // How hard the model thinks for chat/distillation and for lesson prep. Omitted
   // silently on models that don't support reasoning.
   chatThinking: ThinkingSetting;
@@ -190,8 +188,6 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultModelId: null,
   briefingModelId: null,
   semanticScholarApiKey: null,
-  googleSearchApiKey: null,
-  googleSearchEngineId: null,
   chatThinking: "low",
   prepThinking: "medium",
   briefingScreenThinking: "low",

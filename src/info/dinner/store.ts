@@ -22,14 +22,12 @@ import {
 } from "../../platform/app/atomic-fs";
 import { isObject } from "../../platform/std/json";
 import { reportStoreError } from "../../platform/app/store-errors";
-import { withoutDishPhoto } from "./dish-photos";
 import {
   DINNER_VERSION,
   EMPTY_DINNER,
   type Deviation,
   type DinnerCharter,
   type DinnerState,
-  type DishPhotoEntry,
   type ShoppingItem,
   type WeekPlan,
 } from "./types";
@@ -73,10 +71,7 @@ export function parseDinnerFile(raw: unknown): DinnerState | null {
   const deviations = Array.isArray(raw.deviations)
     ? raw.deviations.filter(isDeviation)
     : [];
-  const dishPhotos = isObject(raw.dishPhotos)
-    ? (raw.dishPhotos as Record<string, DishPhotoEntry>)
-    : {};
-  return { charter, plan, shopping, deviations, dishPhotos };
+  return { charter, plan, shopping, deviations };
 }
 
 function validateCharter(raw: unknown): DinnerCharter | null {
@@ -165,50 +160,6 @@ export async function saveShopping(
   io: DinnerIo = dinnerIo,
 ): Promise<DinnerState> {
   return mutate(io, (s) => ({ ...s, shopping: [...shopping] }));
-}
-
-/**
- * Write the dish photographs a plan's Apply looked up, and the plan that now
- * carries them, in one write.
- *
- * The cache is merged rather than replaced: it is keyed by dish name and
- * outlives every week, so a concurrent write that added another dish's
- * photograph is not undone by this one.
- *
- * The plan is written back only when the one on disk is still the one that was
- * photographed. A lookup takes seconds, and in those seconds the reader may
- * have applied an adjustment; the photographs are still worth keeping — they
- * are by name — but the week they were fetched for is stale and must not
- * overwrite the newer one.
- */
-export async function saveDishPhotos(
-  photos: Readonly<Record<string, DishPhotoEntry>>,
-  plan: WeekPlan,
-  io: DinnerIo = dinnerIo,
-): Promise<DinnerState> {
-  return mutate(io, (s) => ({
-    ...s,
-    dishPhotos: { ...s.dishPhotos, ...photos },
-    plan: s.plan && s.plan.id === plan.id && s.plan.revision === plan.revision ? plan : s.plan,
-  }));
-}
-
-/**
- * Forget the photograph of one dish, because the picture the search found will
- * not load in this app (see withoutDishPhoto). Called from the screen, not
- * from Apply: the `<img>` is the only place that finds out.
- *
- * Nothing is written when the name is not in the cache, so a strip of
- * ingredient pictures failing costs no writes at all.
- */
-export async function markDishPhotoBroken(
-  searchName: string,
-  io: DinnerIo = dinnerIo,
-): Promise<DinnerState> {
-  return mutate(io, (s) => {
-    const next = withoutDishPhoto(s.dishPhotos, searchName);
-    return next ? { ...s, dishPhotos: next } : s;
-  });
 }
 
 /**

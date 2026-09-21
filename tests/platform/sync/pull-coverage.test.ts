@@ -56,6 +56,10 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
     "the week, the list and the charter are read from disk each time they are wanted — the " +
     "screen when it is drawn, the desk when it is laid, a card when it is applied — and the " +
     "store holds nothing between calls (docs/73)",
+  "info-dinner-photos.json":
+    "the photograph cache is read from disk each time it is wanted — the screen when it is " +
+    "drawn, the Apply when it works out what is still missing — and the store holds nothing " +
+    "between calls (docs/73 图片)",
   "info-picture-":
     "a room's picture is read at the start of its analysis run and written by the collector alone",
   "info-cables-":

@@ -7,35 +7,17 @@
 
 import type { DinnerPorts } from "./apply";
 import type { DinnerCard } from "./cards";
-import { lookupDishPhoto, type DishPhotoLookup } from "./dish-photos";
-import { composeDishPhotoLookup, googleSearchCreds, lookupGoogleImage } from "./google-images";
-import { loadDinner, saveCharter, saveDeviation, saveDishPhotos, savePlan } from "./store";
+import { ingredientImageUrl } from "./images";
+import { startPhotoRun } from "./photo-run";
+import { loadDinnerPhotos } from "./photo-store";
+import { loadDinner, saveCharter, saveDeviation, savePlan } from "./store";
 import {
   buildProposeDinnerCharterTool,
   buildProposeDinnerPlanTool,
   buildRecordDeviationTool,
+  buildRefreshDinnerPhotosTool,
 } from "./tools";
 import type { AgentTool } from "../../legion/execute/turn";
-import { loadSettings } from "../../platform/app/settings";
-
-/**
- * One dish name, through whichever searches this reader has: their own web
- * image search first when they have registered a key, and Openverse behind it
- * always (docs/73 图片).
- *
- * The settings are read per lookup rather than captured when the ports are
- * built: a key typed into Settings is in use at the next Apply, and a reader
- * with no key pays one file read they would pay anyway.
- */
-async function lookupDishPhotoHere(searchName: string): Promise<DishPhotoLookup> {
-  const settings = await loadSettings().catch(() => null);
-  const creds = googleSearchCreds(settings);
-  const lookup = composeDishPhotoLookup(
-    creds ? (name) => lookupGoogleImage(name, creds) : null,
-    (name) => lookupDishPhoto(name),
-  );
-  return lookup(searchName);
-}
 
 export interface LiveDinnerOptions {
   // The conversation the cards belong to.
@@ -57,15 +39,16 @@ export function liveDinnerPorts(opts: Pick<LiveDinnerOptions, "today" | "changed
     saveCharter: (charter) => saveCharter(charter),
     savePlan: (plan, shopping) => savePlan(plan, shopping),
     saveDeviation: (deviation, plan, shopping) => saveDeviation(deviation, plan, shopping),
-    saveDishPhotos: (photos, plan) => saveDishPhotos(photos, plan),
-    lookupDishPhoto: (searchName) => lookupDishPhotoHere(searchName),
+    photos: () => loadDinnerPhotos(),
+    startPhotoRun: (planId, queries) => startPhotoRun({ planId, queries: [...queries] }),
+    bankImage: (en) => ingredientImageUrl(en),
     now: () => Date.now(),
     today: opts.today,
     changed: opts.changed,
   };
 }
 
-/** The three tools the dinner desk mounts. */
+/** The tools the dinner desk mounts. */
 export function buildLiveDinnerTools(opts: LiveDinnerOptions): AgentTool[] {
   const ports = liveDinnerPorts(opts);
   const deps = {
@@ -79,5 +62,6 @@ export function buildLiveDinnerTools(opts: LiveDinnerOptions): AgentTool[] {
     buildProposeDinnerCharterTool(deps),
     buildProposeDinnerPlanTool(deps),
     buildRecordDeviationTool({ ...deps, ports }),
+    buildRefreshDinnerPhotosTool({ ...deps, ports }),
   ];
 }

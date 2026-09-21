@@ -12,14 +12,15 @@ import { useState } from "react";
 
 import { openExternal } from "../../../platform/app/external-link";
 import type { DinnerState, ShoppingItem } from "../../../info/dinner/types";
-import { ingredientImageUrl } from "../../../info/dinner/images";
+import type { PhotoCache } from "../../../info/dinner/dish-photos";
 import { shoppingItemKey } from "../../../info/dinner/shopping";
-import { markDishPhotoBroken } from "../../../info/dinner/store";
+import { markDishPhotoBroken } from "../../../info/dinner/photo-store";
 import { planExhausted } from "../../../info/dinner/week";
 import {
   dishPhotoCredit,
-  dishPhotoPageUrl,
+  dishPicture,
   dishThumbnails,
+  ingredientPicture,
   headlineDays,
   keepsLabel,
   laterDays,
@@ -28,6 +29,7 @@ import {
   shoppingGroups,
   type DayView,
   type DishPhotoCredit,
+  type Picture,
 } from "../../../info/dinner/view";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -38,6 +40,9 @@ export interface DinnerPageProps {
   // Null while info-dinner.json is being read: the screen holds rather than
   // drawing an empty week that is about to be replaced by a full one.
   state: DinnerState | null;
+  // What the search has found so far, keyed by what was searched for. Empty
+  // until the run lands, and a week without it is drawn from its ingredients.
+  photos: PhotoCache;
   today: string;
   onPlanWeek: () => void;
   onAsk: () => void;
@@ -57,18 +62,19 @@ function BasePlus({ label, text }: { label: string; text: string }) {
 
 function HeadlineDay({
   view,
+  photos,
   credit,
-  photoPageUrl,
 }: {
   view: DayView;
+  photos: PhotoCache;
   credit: DishPhotoCredit | null;
-  photoPageUrl: string | null;
 }) {
   const { day, dish } = view;
   // The credit belongs to the photograph, so it goes when the photograph does:
   // a dish picture that fails to load falls back to the ingredient strip, which
   // is TheMealDB's and is credited at the foot of the screen instead.
   const [photoFailed, setPhotoFailed] = useState(false);
+  const picture = dishPicture(dish, photos);
   const cooked = day.mode === "cook" || day.mode === "reheat";
   const fresh = day.mode === "reheat" ? (day.freshAdd ?? dish?.fresh ?? "") : (dish?.fresh ?? "");
   return (
@@ -85,9 +91,9 @@ function HeadlineDay({
           card on a wide screen. */}
       <div className="mt-3 aspect-[16/9] max-h-40 w-full">
         <DishImage
-          image={dish?.image}
-          imagePageUrl={photoPageUrl}
-          thumbnails={dishThumbnails(dish, ingredientImageUrl)}
+          image={picture?.url}
+          imagePageUrl={picture?.pageUrl}
+          thumbnails={dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null)}
           alt={dish?.name ?? modeWord(day.mode)}
           className="size-full"
           onPhotoFailed={() => {
@@ -144,18 +150,20 @@ function HeadlineDay({
   );
 }
 
-function LaterDay({ view, photoPageUrl }: { view: DayView; photoPageUrl: string | null }) {
+function LaterDay({ view, photos }: { view: DayView; photos: PhotoCache }) {
   const { day, dish } = view;
   const name = dish?.name ?? day.place ?? "";
+  const picture = dishPicture(dish, photos);
+  const thumbnails = dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null);
   return (
     <li className="flex items-center gap-3 py-2">
       <span className="w-20 flex-none text-[13px] text-faint-foreground">{view.weekday}</span>
-      {dish?.image || dishThumbnails(dish, ingredientImageUrl).length ? (
+      {picture || thumbnails.length ? (
         <span className="size-10 flex-none">
           <DishImage
-            image={dish?.image}
-            imagePageUrl={photoPageUrl}
-            thumbnails={dishThumbnails(dish, ingredientImageUrl)}
+            image={picture?.url}
+            imagePageUrl={picture?.pageUrl}
+            thumbnails={thumbnails}
             alt={name}
             className="size-full"
           />
@@ -169,9 +177,11 @@ function LaterDay({ view, photoPageUrl }: { view: DayView; photoPageUrl: string 
 
 function ShoppingLine({
   item,
+  picture,
   onToggle,
 }: {
   item: ShoppingItem;
+  picture: Picture | null;
   onToggle: (checked: boolean) => void;
 }) {
   const id = `shop-${item.category}-${item.name}`;
@@ -183,7 +193,12 @@ function ShoppingLine({
         onCheckedChange={(v) => onToggle(v === true)}
         aria-label={item.name}
       />
-      <IngredientThumb url={ingredientImageUrl(item.en)} category={item.category} alt={item.name} />
+      <IngredientThumb
+        url={picture?.url ?? null}
+        pageUrl={picture?.pageUrl ?? null}
+        category={item.category}
+        alt={item.name}
+      />
       <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
         <span className="block truncate text-[15px] leading-snug text-foreground">{item.name}</span>
         <span className="block text-[12px] text-faint-foreground">
@@ -238,8 +253,8 @@ export function DinnerPage(props: DinnerPageProps) {
               <HeadlineDay
                 key={v.day.date}
                 view={v}
-                credit={dishPhotoCredit(v.dish, state.dishPhotos)}
-                photoPageUrl={dishPhotoPageUrl(v.dish, state.dishPhotos)}
+                photos={props.photos}
+                credit={dishPhotoCredit(v.dish, props.photos)}
               />
             ))}
           </div>
@@ -251,11 +266,7 @@ export function DinnerPage(props: DinnerPageProps) {
               </h2>
               <ul className="m-0 flex list-none flex-col divide-y divide-border-subtle p-0">
                 {later.map((v) => (
-                  <LaterDay
-                    key={v.day.date}
-                    view={v}
-                    photoPageUrl={dishPhotoPageUrl(v.dish, state.dishPhotos)}
-                  />
+                  <LaterDay key={v.day.date} view={v} photos={props.photos} />
                 ))}
               </ul>
             </section>
@@ -294,6 +305,7 @@ export function DinnerPage(props: DinnerPageProps) {
                         <ShoppingLine
                           key={`${item.category}:${item.name}`}
                           item={item}
+                          picture={ingredientPicture(item.en, props.photos)}
                           onToggle={(checked) =>
                             props.onToggleItem(shoppingItemKey(item), checked)
                           }

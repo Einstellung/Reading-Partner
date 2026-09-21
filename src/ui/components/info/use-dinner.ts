@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { todayLocal } from "../../../info/collect/store";
 import { setShoppingChecked } from "../../../info/dinner/shopping";
+import type { PhotoCache } from "../../../info/dinner/dish-photos";
+import { loadDinnerPhotos } from "../../../info/dinner/photo-store";
 import { loadDinner, saveShopping } from "../../../info/dinner/store";
 import type { DinnerState } from "../../../info/dinner/types";
 
@@ -16,6 +18,9 @@ export interface DinnerController {
   // Null until info-dinner.json has answered. The screen holds on null rather
   // than drawing an empty week it is about to replace.
   state: DinnerState | null;
+  // The photographs found so far, from the file the search run writes. Empty
+  // until it has answered, and empty is a week drawn from its ingredients.
+  photos: PhotoCache;
   today: string;
   reload: () => void;
   toggleItem: (key: string, checked: boolean) => void;
@@ -23,6 +28,7 @@ export interface DinnerController {
 
 export function useDinner(enabled: boolean): DinnerController {
   const [state, setState] = useState<DinnerState | null>(null);
+  const [photos, setPhotos] = useState<PhotoCache>({});
   const [today, setToday] = useState(todayLocal);
   // The reader's own ticks in flight, so a reload that lands between the tick
   // and its write does not put the box back.
@@ -40,6 +46,14 @@ export function useDinner(enabled: boolean): DinnerController {
       return;
     }
     setToday(todayLocal());
+    // A cache that will not read is no photographs, not a screen that holds:
+    // the week is worth showing without them.
+    void loadDinnerPhotos().then(
+      (next) => {
+        if (live.current) setPhotos(next);
+      },
+      () => {},
+    );
     void loadDinner().then(
       (next) => {
         if (live.current) setState(next);
@@ -66,5 +80,5 @@ export function useDinner(enabled: boolean): DinnerController {
     });
   }, []);
 
-  return { state, today, reload, toggleItem };
+  return { state, photos, today, reload, toggleItem };
 }

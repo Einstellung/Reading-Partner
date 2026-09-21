@@ -10,7 +10,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
-import { recordDeviation, type DinnerPorts } from "./apply";
+import { recordDeviation, refreshPhotos, type DinnerPorts } from "./apply";
 import type { DinnerCard, DinnerCharterCardData, DinnerPlanCardData } from "./cards";
 import {
   CATEGORY_ORDER,
@@ -77,11 +77,7 @@ function modeLine(plan: WeekPlan, index: number): string {
  * week as it stands with today marked, and the rules the program will hold it
  * to anyway.
  */
-export function dinnerGuidance(
-  state: DinnerState,
-  today: string,
-  opts: { imageSearch?: boolean } = {},
-): string {
+export function dinnerGuidance(state: DinnerState, today: string): string {
   const out: string[] = ["DINNER", `Today is ${today}.`, ""];
 
   if (state.charter) {
@@ -139,18 +135,7 @@ export function dinnerGuidance(
     "List a dish's ingredients for every serving it is planned for, the reheat night included.",
     "Give every ingredient its English common name in `en` beside the name in their own language,",
     "singular and lower case — it is what puts a photograph on their shopping list.",
-    // With a web image search configured any name finds a picture, so the
-    // sentence that narrows the menu is only true without one (docs/73 图片).
-    ...(opts.imageSearch
-      ? [
-          "Give every dish a `searchName` in English, the way people say it — it is what puts a",
-          "photograph of the dish on their screen.",
-        ]
-      : [
-          "Prefer dishes that have a common name over combinations you make up: the reader is shown a",
-          "photograph of a named dish and nothing at all of an invented one. Give that name in",
-          "`searchName`, in English and the way people say it.",
-        ]),
+    "Give every dish a `searchName`: the English name someone would type into an image search.",
     "Vegetables heavy, whole grains, lean protein, little oil, salt and refined carbohydrate.",
     "Never count calories, never give grams of anything nutritional, never talk about nutrition",
     "numbers at all — health is a filter on what you propose, not a subject.",
@@ -486,6 +471,52 @@ export function resolveDeviationDate(
   const n = Number(word);
   if (!Number.isFinite(n) || n < 1 || n > WEEK_DAYS) return null;
   return addDays(startDate, Math.round(n) - 1);
+}
+
+/**
+ * Search this week's photographs again (docs/73 图片).
+ *
+ * The one thing the reader can ask about the pictures. The search is a run on
+ * whichever machine has a hidden webview, so this writes the ask and says so;
+ * the pictures appear on the screen as they land, without another turn.
+ */
+export function buildRefreshDinnerPhotosTool(
+  deps: DinnerToolDeps & { ports: DinnerPorts },
+): AgentTool {
+  return {
+    name: "refresh_dinner_photos",
+    label: () => "Looking for better photographs",
+    effect: "write",
+    description:
+      "Call this when they say a picture on the dinner screen is wrong or is not the dish they " +
+      "meant. It searches this week's dishes and ingredients again from scratch. There is " +
+      "nothing to choose and nothing to confirm; say it is looking and move on.",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const state = await deps.state();
+      if (!state.plan) {
+        return {
+          receipt: null,
+          text: "There is no week planned, so there are no photographs to look for.",
+        };
+      }
+      const asked = await refreshPhotos(deps.ports);
+      if (!asked) {
+        return {
+          receipt: null,
+          text:
+            "Nothing could be searched for: this device cannot run the image search and no " +
+            "other one is about.",
+        };
+      }
+      return {
+        receipt: null,
+        text:
+          `Searching again for ${asked} ${asked === 1 ? "photograph" : "photographs"}. They ` +
+          "appear on their screen as they are found; nothing else has to be done.",
+      };
+    },
+  };
 }
 
 // --- reading what the model sent ---------------------------------------------
