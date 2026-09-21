@@ -71,7 +71,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 369）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 372）。
 
 ## EmbedPDF 引擎
 
@@ -264,6 +264,8 @@
 - [99-on-navigation-sees-every-frame-and-cancels-in-silence](./99-on-navigation-sees-every-frame-and-cancels-in-silence.md) — `on_navigation` 拿到的是每个 frame 的导航（WKWebView 不看 `targetFrame`，WebKitGTK 的 NavigationAction 含子框架；Windows 只接顶层，反而盖不到 iframe），而取消是静默的：没有 error、不算 CSP 违规、控制台无输出。`blob:` 放行（自己页面的产物），`data:` 继续取消，所有 Cancel 打日志
 - [108-a-modernised-user-agent-is-what-gets-you-blocked](./108-a-modernised-user-agent-is-what-gets-you-blocked.md) — 把 WebKitGTK 默认 UA 的 `Version/60.5` 换新、或只去掉 `Ubuntu;`、或换成 Chrome UA，彭博冷 profile 一律 403 + 验证码；显式 pin 成引擎默认那一整条才 200。PerimeterX 拿 UA 和引擎其他特征对账，任何偏离都不行
 - [109-a-dead-host-never-fires-load-failed](./109-a-dead-host-never-fires-load-failed.md) — 域名解析不了时只发一个 `load-changed started`，25 秒不发 `load-failed` 也不发 `finished`；TLS 失败 1.3 秒就发。`network` 只能覆盖连上以后的失败，DNS 死掉的只能按 `timeout` 报
+- [370-a-cancelled-load-is-reported-as-a-failed-one](./370-a-cancelled-load-is-reported-as-a-failed-one.md) — 页面自己换地址（Bing 图片搜索加了 `first=1&cw=…`），被取代的那次导航照样发 `load-failed`，取页面 2.9 秒就判 `network` 失败，而 DOM 其实是好的；`connect_load_failed` 里放过 `NetworkError::Cancelled`
+- [371-a-script-that-stringifies-comes-back-double-encoded](./371-a-script-that-stringifies-comes-back-double-encoded.md) — `fetch_page_via_webview` 的脚本值在页内已经 JSON 往返一次，脚本自己再 `JSON.stringify` 就是两层；Bing 的 `a.iusc` 的 `m` 属性本身又是一段 JSON（`murl`/`turl`/`purl`）。脚本抛错不算失败：`result` 为 null、原因进 `detail`、`status` 仍是 `ok`
 - [110-guessing-cookie-domains-misses-the-session](./110-guessing-cookie-domains-misses-the-session.md) — `delete_cookies_for_domain` 只匹配传进去那一个域名不含子域，按主机名拼出来的四种写法漏掉了 `login.<站点>` 上的会话 cookie；要读 `<profile>/cookies` 把该站实际存在的域名全捞出来再删，方向只往子域走不往父域走
 - [111-webkit-writes-the-cookie-jar-on-its-own-schedule](./111-webkit-writes-the-cookie-jar-on-its-own-schedule.md) — 删完 cookie 内存干净了，盘上的 jar 还留着 13 行，下次启动读回来用户又是登录态（删除是 void 调用、落盘时机不归调用方管）；拿一次异步 cookie 读当 barrier 确认删除已处理，再自己重写 jar 文件，实测 48 行 → 0 行
 - [112-wry-builds-its-own-window-for-a-popup](./112-wry-builds-its-own-window-for-a-popup.md) — `on_new_window` 设 `Allow` 之后，弹窗是 wry 自己建的 GTK 窗口：不是 Tauri 窗口、导航拦截看不到、拿不到句柄，而弹窗 `close()` 只销毁 webview 不销毁窗口（这半读源码得出，未验）；用 toplevel 快照差集在登录结束时清扫
