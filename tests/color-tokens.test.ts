@@ -38,6 +38,15 @@ const BY_VALUE_ALLOWED: Record<string, { values: string[]; why: string }> = {
     values: ["#edece5", "#ffffff"],
     why: "the canvas a page is drawn on, with a test of its own against styles.css",
   },
+  // The phone reader's four papers (docs/70). They are the colour of a page,
+  // not of the app: three of them are a sheet and the wash multiplied over it,
+  // and the dark one's surface is duplicated from the `[data-reader-paper]`
+  // block in styles.css because the column is a shadow root filled by hand and
+  // a stylesheet is not importable.
+  "reading/epub/flow-display.ts": {
+    values: ["#ffffff", "#f6efdc", "#1b1c1e"],
+    why: "the paper a page is printed on, chosen in the reader rather than themed",
+  },
   "reading/figures/render.ts": {
     values: ["#ffffff"],
     why: "the white a cropped figure is rasterized onto, not a foreground colour",

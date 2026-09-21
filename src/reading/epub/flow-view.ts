@@ -20,13 +20,11 @@ import type {
   ViewStats,
 } from "../../platform/app/reader-contract";
 import { openExternal } from "../../platform/app/external-link";
-import { PAGE_FRAME } from "../engine/page-frame";
 import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
 import { caretAtPoint } from "./caret";
 import { epubCfi, parseCfiStart, resolvePoint, textSteps } from "./cfi";
 import type { FlowReaderView, FlowTool } from "./flow-contract";
 import {
-  FLOW_PAD_X,
   IDLE,
   LONG_PRESS_MS,
   claimsTouch,
@@ -35,8 +33,9 @@ import {
   type PressEvent,
   type PressState,
 } from "./flow-gesture";
+import { FLOW_PAPERS, type FlowDisplay } from "./flow-display";
 import { createFlowMarks, type FlowDoc, type PressPoint } from "./flow-marks";
-import { mountFlowDocument } from "./flow-mount";
+import { flowBaselineCss, mountFlowDocument } from "./flow-mount";
 import type { SpineText } from "./mark-draw";
 import { createPageResources, readingFontsReady } from "./page-mount";
 import type { Pagination } from "./paginate";
@@ -62,6 +61,7 @@ export interface FlowReaderOptions {
   annotations: Annotation[];
   authorName: string;
   tool: FlowTool;
+  display: FlowDisplay;
   callbacks: FlowReaderCallbacks;
 }
 
@@ -80,6 +80,10 @@ const SETTLE_FRAMES = 3;
 
 interface Column extends FlowDoc {
   ready: Promise<void>;
+  /** The one <style> the baseline is written into (flow-mount.ts). */
+  base: HTMLStyleElement;
+  /** How many characters the document holds, for the off-screen height guess. */
+  chars: number;
 }
 
 /**
@@ -107,7 +111,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     "height:100%",
     "overflow-x:hidden",
     "overflow-y:auto",
-    `background:${PAGE_FRAME.pageBackground}`,
+    `background:${FLOW_PAPERS[opts.display.paper].surface}`,
     "overscroll-behavior:contain",
     // The scroll is the browser's, and only the vertical one.
     "touch-action:pan-y",
@@ -129,10 +133,10 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     el.style.cssText = [
       "position:relative",
       "content-visibility:auto",
-      `contain-intrinsic-size:auto ${intrinsicHeightEstimate(doc.text.text.length, columnWidth)}px`,
+      `contain-intrinsic-size:auto ${intrinsicHeightEstimate(doc.text.text.length, columnWidth, opts.display)}px`,
     ].join(";");
     const shadow = el.attachShadow({ mode: "open" });
-    const mounted = mountFlowDocument(shadow, doc, resources);
+    const mounted = mountFlowDocument(shadow, doc, resources, opts.display);
     scroller.append(el);
     return {
       spine: doc.index,
@@ -143,6 +147,8 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
       root: mounted.root,
       overlay: mounted.overlay,
       ready: mounted.ready,
+      base: mounted.base,
+      chars: doc.text.text.length,
     };
   });
 
@@ -158,6 +164,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   let pageIndex = 0;
   let cfi: string | null = null;
   let tool: FlowTool = opts.tool;
+  let display: FlowDisplay = opts.display;
   let scrollTimer: number | null = null;
   // Where the column was sent, while it is still there: a page whose first
   // character sits mid-line is reported as that page, not as the page the
@@ -245,7 +252,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   // until a point lands on the words rather than between them.
   function firstCaretCfi(doc: Column): string | null {
     const box = viewportBox();
-    const xs = [box.left + FLOW_PAD_X + 2, box.left + box.width / 2];
+    const xs = [box.left + display.padX + 2, box.left + box.width / 2];
     for (let dy = 1; dy <= TOP_PROBE_PX; dy += TOP_PROBE_STEP) {
       const y = box.top + dy;
       for (const x of xs) {
@@ -494,16 +501,22 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   scroller.addEventListener("pointercancel", onPointerCancel);
   scroller.addEventListener("touchmove", onTouchMove, { passive: false });
 
-  // A narrower or wider column lays every document out again: the reader
-  // stays on the words they were on, and the marks are measured again.
+  // Every document laid out again: the reader stays on the words they were on,
+  // and the marks, which are measured off those words, are measured again. A
+  // narrower or wider column goes through here, and so does a change of type.
+  function relayout(): void {
+    if (destroyed) return;
+    for (const doc of docs) marks.invalidate(doc.spine);
+    if (cfi) settle(cfi);
+  }
+
   let lastWidth = columnWidth;
   const observer = new ResizeObserver(() => {
     if (destroyed) return;
     const width = scroller.clientWidth;
     if (width === lastWidth || width === 0) return;
     lastWidth = width;
-    for (const doc of docs) marks.invalidate(doc.spine);
-    if (cfi) settle(cfi);
+    relayout();
   });
   observer.observe(scroller);
 
@@ -528,6 +541,21 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     },
     goToPage,
     removeAnnotations: (ids) => marks.unsetAnnotations(ids),
+    setDisplay: (next) => {
+      if (destroyed) return;
+      display = next;
+      scroller.style.background = FLOW_PAPERS[next.paper].surface;
+      const css = flowBaselineCss(next);
+      const width = scroller.clientWidth || lastWidth;
+      for (const doc of docs) {
+        doc.base.textContent = css;
+        doc.host.style.setProperty(
+          "contain-intrinsic-size",
+          `auto ${intrinsicHeightEstimate(doc.chars, width, next)}px`,
+        );
+      }
+      relayout();
+    },
     setTool: (next) => {
       tool = next;
       marks.setTool(next);

@@ -2,8 +2,6 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  FLOW_FONT_PX,
-  FLOW_LINE_HEIGHT,
   IDLE,
   LONG_PRESS_MS,
   PRESS_SLOP_PX,
@@ -14,6 +12,7 @@ import {
   type PressEvent,
   type PressState,
 } from "../../../src/reading/epub/flow-gesture";
+import { FLOW_DISPLAY_DEFAULT } from "../../../src/reading/epub/flow-display";
 
 const down = (over: Partial<Extract<PressEvent, { kind: "down" }>> = {}): PressEvent => ({
   kind: "down",
@@ -170,15 +169,26 @@ describe("the word under a caret", () => {
 
 describe("the height a document is guessed at", () => {
   test("grows with the text and never below a screenful", () => {
-    expect(intrinsicHeightEstimate(0, 393)).toBe(120);
-    const short = intrinsicHeightEstimate(2000, 393);
-    const long = intrinsicHeightEstimate(200000, 393);
+    expect(intrinsicHeightEstimate(0, 393, FLOW_DISPLAY_DEFAULT)).toBe(120);
+    const short = intrinsicHeightEstimate(2000, 393, FLOW_DISPLAY_DEFAULT);
+    const long = intrinsicHeightEstimate(200000, 393, FLOW_DISPLAY_DEFAULT);
     expect(long).toBeGreaterThan(short * 50);
+  });
+  test("bigger type is a taller guess for the same text", () => {
+    const small = intrinsicHeightEstimate(20000, 393, { ...FLOW_DISPLAY_DEFAULT, fontPx: 14 });
+    const large = intrinsicHeightEstimate(20000, 393, { ...FLOW_DISPLAY_DEFAULT, fontPx: 21 });
+    expect(large).toBeGreaterThan(small);
+  });
+  test("and so is a wider margin, which leaves the line less room", () => {
+    const narrow = intrinsicHeightEstimate(20000, 393, { ...FLOW_DISPLAY_DEFAULT, padX: 20 });
+    const wide = intrinsicHeightEstimate(20000, 393, { ...FLOW_DISPLAY_DEFAULT, padX: 36 });
+    expect(wide).toBeGreaterThan(narrow);
   });
   test("is about the lines the text fills", () => {
     // 41 characters a line at 17px on a 393px column, 1000 characters: 25 lines.
-    const h = intrinsicHeightEstimate(1000, 393);
-    expect(h).toBeGreaterThan(25 * FLOW_FONT_PX * FLOW_LINE_HEIGHT);
-    expect(h).toBeLessThan(30 * FLOW_FONT_PX * FLOW_LINE_HEIGHT + 48);
+    const h = intrinsicHeightEstimate(1000, 393, FLOW_DISPLAY_DEFAULT);
+    const { fontPx, lineHeight } = FLOW_DISPLAY_DEFAULT;
+    expect(h).toBeGreaterThan(25 * fontPx * lineHeight);
+    expect(h).toBeLessThan(30 * fontPx * lineHeight + 48);
   });
 });

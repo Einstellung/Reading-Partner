@@ -50,5 +50,21 @@ export { remapEpubAnnotations } from "./migrate";
 export { renderEpubCover } from "./epub-cover";
 export { default as EpubReaderPane } from "./EpubReaderPane";
 export type { FlowReaderPaneProps, FlowReaderView, FlowTool } from "./flow-contract";
+export {
+  FLOW_DISPLAY_DEFAULT,
+  FLOW_FONT_STEPS,
+  FLOW_LINE_STEPS,
+  FLOW_PAD_STEPS,
+  FLOW_PAPERS,
+  FLOW_PAPER_NAMES,
+  flowFontStep,
+  flowPaperSwatch,
+  normalizeFlowDisplay,
+  readFlowDisplay,
+  stepFlowFont,
+  writeFlowDisplay,
+  type FlowDisplay,
+  type FlowPaperName,
+} from "./flow-display";
 export { createFlowReader } from "./flow-view";
 export { default as FlowReaderPane } from "./FlowReaderPane";

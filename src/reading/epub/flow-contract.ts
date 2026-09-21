@@ -8,6 +8,7 @@ import type {
   ViewState,
   ViewStats,
 } from "../../platform/app/reader-contract";
+import type { FlowDisplay } from "./flow-display";
 
 export interface FlowTool {
   type: "none" | "highlight";
@@ -20,6 +21,12 @@ export interface FlowReaderView {
   goToPage(pageIndex: number): void;
   removeAnnotations(ids: string[]): void;
   setTool(tool: FlowTool): void;
+  /**
+   * Lay the column out again at this type and this paper. The reader stays on
+   * the character that was at the top edge and the marks are measured again,
+   * the same way a change of width is handled.
+   */
+  setDisplay(display: FlowDisplay): void;
   destroy(): void;
 }
 
@@ -30,6 +37,9 @@ export interface FlowReaderPaneProps {
   authorName: string;
   viewState: ViewState | null;
   tool: FlowTool;
+  /** The type and paper the column mounts at, so it never starts at a default
+   *  the reader has already moved off. */
+  display: FlowDisplay;
   onView: (view: FlowReaderView) => void;
   onInitialized: () => void;
   onError: (e: Error) => void;
