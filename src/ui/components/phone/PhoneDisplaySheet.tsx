@@ -25,7 +25,7 @@ import {
 } from "../../../reading/epub/flow-display";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogSheetContent, DialogTitle } from "../ui/dialog";
 
 export default function PhoneDisplaySheet(props: {
   open: boolean;
@@ -37,11 +37,7 @@ export default function PhoneDisplaySheet(props: {
   const step = flowFontStep(display);
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent
-        data-reader-paper={display.paper}
-        // Bottom-pinned, the outline sheet's geometry.
-        className="top-auto bottom-0 left-0 w-full translate-x-0 translate-y-0 gap-0 rounded-b-none p-0"
-      >
+      <DialogSheetContent data-reader-paper={display.paper}>
         <DialogTitle className="border-b border-border-subtle px-4 py-3 text-[15px]">
           Display
         </DialogTitle>
@@ -114,7 +110,7 @@ export default function PhoneDisplaySheet(props: {
             })}
           </Row>
         </div>
-      </DialogContent>
+      </DialogSheetContent>
     </Dialog>
   );
 }

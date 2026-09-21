@@ -143,6 +143,7 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 
 - `centered`（Dialog / AlertDialog）= `overlay-safe` 这个 `@utility`，在 `styles.css` 里定义，同时管 `max-width`、`max-height` 和 `overflow-y: auto`。居中的盒子只能缩不能挪，所以每根轴夹的是两侧 inset 里较大的那个，另有 4 个 spacing 单位的槽宽兜底。
 - `bottom`（toast viewport）= `bottom-safe-6`。贴边的浮层只需要它贴的那根轴，横向由自己的 `max-w` 管。
+- `sheet`（手机的贴底 sheet：Outline 和 Display）= `overlay-sheet`，只夹高度：`max-height: calc(100dvh - max(inset-top, 4 个 spacing))` 加 `overflow-y: auto`。贴底 sheet 一律用 `DialogSheetContent`，不要拿 `DialogContent` 拼定位覆盖：那个变体无条件带 `overlay-safe`，它的 `max-width` 左右各留 16px，sheet 于是比屏幕窄 32px（iPhone 上右边露出一条正文），而 `overlay-safe` 是自定义 utility，调用点写 `max-w-none` tailwind-merge 不会替它让位。左右和下三条边是 sheet 要贴到的，底色铺到屏幕边缘，安全区由里面的内容留——和 `fullscreen` 同理。进出动画走 `slide-in-from-bottom` / `slide-out-to-bottom`，不是居中那套 zoom。
 - `anchored`（DropdownMenu，以后的 Popover / Select）分两半，两半都要。位置那半是 Radix 的：content 上传 `collisionPadding={useOverlaySafePadding()}`，每边取 max(inset, 8px)。JS 读不到 `env()`（坑 84），所以 inset 是从一个隐藏探针元素的计算 padding 量来的（`base/safe-area.ts` + `styles.css` 的 `safe-probe`），在挂载和 resize 时量。尺寸那半是 CSS 的：`max-w-(--radix-popper-available-width) max-h-(--radix-popper-available-height)`，这两个变量是 Radix 按同一份 collisionPadding 算出来的剩余空间，配 content 自带的 `overflow-y: auto`，把「比它能待的地方还大」变成盒子内部滚动。用 popper 级的变量而不是每个组件自己的别名，同一串对每个 popper 浮层都成立。
 
   锚定型不写 `overlay-safe`：那条夹的是居中盒，锚定盒是移动而不是收缩。也不写 `anchor-safe`：那个 `@utility` 是给自己算坐标的 `position: fixed` 浮层用的，Radix 的坐标写在 popper 包装节点的 transform 上，`left`/`top` 夹取碰不到它。

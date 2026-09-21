@@ -19,6 +19,9 @@
 //   dialogs here already carry their own Done / Close.
 // - DialogFullScreenContent is added, for a page that covers the app rather than
 //   a box floating over it. Its three departures are argued at the component.
+// - DialogSheetContent is added, for a box that sits on the bottom edge and
+//   spans the screen rather than floating in the middle of it. Its departures
+//   are argued at the component too.
 // - every wrapper that renders a DOM node is a forwardRef. The generated file is
 //   written for React 19, where `ref` is an ordinary prop; on React 18 the ref
 //   never reaches the Radix part underneath and nothing says so
@@ -152,6 +155,51 @@ const DialogFullScreenContent = React.forwardRef<
   )
 })
 
+// A dialog that sits on the bottom edge of the viewport: the phone's sheets,
+// where a list reached with a thumb belongs under the thumb (docs/70). Three
+// departures from the centred box, the rest of it unchanged — portalled,
+// backed by DialogOverlay, on the rung its surface names, registering its layer
+// from inside:
+//
+// - no `overlay-safe`. That utility keeps a centred box 16px off both sides,
+//   which is 32px the sheet does not have: it is pinned across the screen, and
+//   its background has to reach the edges the way the full-screen page's does.
+//   A caller cannot take the clamp back off either — it is a custom utility, so
+//   tailwind-merge does not let a `max-w-*` at the call site replace it, and two
+//   max-widths at equal specificity are settled by the order Tailwind emits them
+//   in. What it takes instead is OVERLAY_SAFE.sheet: a height, and only a
+//   height. The side insets pad the content inside, not the box.
+// - rounded along the top only. The two bottom corners sit on the edge of the
+//   screen, and rounding them would cut two notches of backdrop out of a sheet
+//   that is supposed to end where the screen does.
+// - it slides up from the edge it is pinned to. A box that zooms out of the
+//   middle of the screen is a box that was never on an edge.
+const DialogSheetContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentProps<typeof DialogPrimitive.Content>
+>(function DialogSheetContent({ className, children, ...props }, ref) {
+  const layer = useDialogLayer()
+  return (
+    <DialogPortal data-slot="dialog-portal">
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        ref={ref}
+        data-slot="dialog-sheet-content"
+        className={cn(
+          "fixed inset-x-0 bottom-0 grid rounded-t-lg border-t bg-background shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom",
+          layer,
+          OVERLAY_SAFE.sheet,
+          className
+        )}
+        {...props}
+      >
+        <OverlayLayer />
+        {children}
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  )
+})
+
 const DialogHeader = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>(
   function DialogHeader({ className, ...props }, ref) {
     return (
@@ -219,6 +267,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogSheetContent,
   DialogTitle,
   DialogTrigger,
 }

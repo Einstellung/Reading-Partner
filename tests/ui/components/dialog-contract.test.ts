@@ -50,20 +50,37 @@ test("every box here takes its layer from the scale, and spells none of its own"
   expect(component("DialogOverlay")).toContain("useDialogLayer()");
   expect(component("DialogContent")).toContain("useDialogLayer()");
   expect(component("DialogFullScreenContent")).toContain("OVERLAY_Z.page");
+  expect(component("DialogSheetContent")).toContain("useDialogLayer()");
   expect(source).not.toMatch(/(^|[^\w-])z-(\[|\d)/m);
 });
 
 test("max-width belongs to the safe-area utility alone", () => {
   // A second max-width at the same specificity is settled by the order Tailwind
-  // emits the two in, which is not a decision anyone made (docs/30).
+  // emits the two in, which is not a decision anyone made (docs/30). The same
+  // holds for the height the sheet is capped at, and for a max-* a call site
+  // would have to pass in: tailwind-merge replaces a Tailwind class with
+  // another Tailwind class, and neither of the two utilities here is one.
   expect(source).not.toMatch(/\bsm:max-w-|\bmax-w-\[/);
+  expect(source).not.toMatch(/\bsm:max-h-|\bmax-h-/);
 });
 
-test("both contents register an overlay layer, inside the content", () => {
+test("the sheet sits on the bottom edge and is as wide as the screen", () => {
+  // It takes the height half of the recipe and not the centred clamp: that one
+  // keeps a box 16px off either side, which on a sheet pinned across the screen
+  // is 32px of the page showing down the right-hand edge.
+  const sheet = component("DialogSheetContent");
+  expect(sheet).toContain("fixed inset-x-0 bottom-0");
+  expect(sheet).toContain("OVERLAY_SAFE.sheet");
+  expect(sheet).not.toContain("OVERLAY_SAFE.centered");
+  // And no centring left to undo at the call site.
+  expect(sheet).not.toMatch(/top-\[50%\]|left-\[50%\]|translate-/);
+});
+
+test("every content registers an overlay layer, inside the content", () => {
   // Inside the content, not at the top of the component: the component stays on
   // the React tree, and what mounts and unmounts with the dialog is the subtree
   // (docs/pitfall/80).
-  for (const name of ["DialogContent", "DialogFullScreenContent"]) {
+  for (const name of ["DialogContent", "DialogFullScreenContent", "DialogSheetContent"]) {
     expect(component(name)).toContain("<OverlayLayer />");
   }
 });

@@ -385,6 +385,17 @@
   overflow-y: auto;
 }
 
+/* A fixed overlay sitting on the bottom edge and spanning the viewport (the
+   phone's sheets). Only the vertical axis is clamped: the sheet is as wide as
+   the screen on purpose and its background reaches the left, right and bottom
+   edges, so the sides are the content's business, not the box's. One inset
+   rather than two, because only the top edge is one the sheet must not cross;
+   max() and the 4-unit gutter for the reason above. */
+@utility overlay-sheet {
+  max-height: calc(100dvh - max(env(safe-area-inset-top), var(--spacing) * 4));
+  overflow-y: auto;
+}
+
 /* The insets as a readable length. JS gets `env(safe-area-inset-*)` back
    unresolved from getComputedStyle, so an overlay that clamps itself in JS
    (Radix's popper takes its margin as a number) measures this hidden element's
