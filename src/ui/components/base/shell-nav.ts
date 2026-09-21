@@ -18,10 +18,12 @@ export type HomeScreen =
   | "briefing"
   | "article"
   | "sources"
-  | "dinner"
+  | "meals"
+  | "meals-shopping"
+  | "meals-day"
   | "settings";
 
-export type ShellNavId = "today" | "briefing" | "dinner" | "topics" | "settings";
+export type ShellNavId = "today" | "briefing" | "meals" | "topics" | "settings";
 
 // Top to bottom, in the order a day uses them: what is open now, what came in
 // overnight, everything else. Settings is a nav id but not one of these — it is
@@ -29,15 +31,15 @@ export type ShellNavId = "today" | "briefing" | "dinner" | "topics" | "settings"
 export const SHELL_NAV_ITEMS: readonly { id: ShellNavId; label: string }[] = [
   { id: "today", label: "Today" },
   { id: "briefing", label: "Briefing" },
-  { id: "dinner", label: "Dinner" },
+  { id: "meals", label: "Meals" },
   { id: "topics", label: "Topics" },
 ];
 
-// The items a sidebar actually draws. Dinner is opt-in (settings.dinner,
+// The items a sidebar actually draws. Meals is opt-in (settings.meals,
 // docs/73) and is left out entirely when it is off — not greyed, not a teaser:
 // a switch that is off means the reader has said they do not want the line.
-export function shellNavItems(opts: { dinner: boolean }): { id: ShellNavId; label: string }[] {
-  return SHELL_NAV_ITEMS.filter((item) => item.id !== "dinner" || opts.dinner);
+export function shellNavItems(opts: { meals: boolean }): { id: ShellNavId; label: string }[] {
+  return SHELL_NAV_ITEMS.filter((item) => item.id !== "meals" || opts.meals);
 }
 
 // Where an item goes. The shelf is what Topics opens; a topic that is already
@@ -48,8 +50,8 @@ export function screenForNav(id: ShellNavId): HomeScreen {
       return "vestibule";
     case "briefing":
       return "briefing";
-    case "dinner":
-      return "dinner";
+    case "meals":
+      return "meals";
     case "topics":
       return "library";
     case "settings":
@@ -69,8 +71,12 @@ export function activeNavFor(screen: HomeScreen | null): ShellNavId | null {
     case "article":
     case "sources":
       return "briefing";
-    case "dinner":
-      return "dinner";
+    // The shopping trip and one day are rooms of the meals page: reached from
+    // it, going back to it, the same as the briefing's two above.
+    case "meals":
+    case "meals-shopping":
+    case "meals-day":
+      return "meals";
     case "library":
       return "topics";
     case "settings":

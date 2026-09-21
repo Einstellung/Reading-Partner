@@ -18,8 +18,8 @@ export default function PhoneHome({
   onContinue,
   onOpenLibrary,
   settingsAlert,
-  dinner,
-  onOpenDinner,
+  meals,
+  onOpenMeals,
   lumenShown,
   onToggleLumen,
 }: {
@@ -33,10 +33,10 @@ export default function PhoneHome({
   onContinue: (book: ContinueBook) => void;
   onOpenLibrary: () => void;
   settingsAlert: boolean;
-  // Whether the dinner line is switched on (settings.dinner, docs/73). Off, and
+  // Whether the meals line is switched on (settings.meals, docs/73). Off, and
   // the row is not here at all.
-  dinner: boolean;
-  onOpenDinner: () => void;
+  meals: boolean;
+  onOpenMeals: () => void;
   // The corner companion's switch (docs/68). The phone has no sidebar, so the
   // app's own name on the home screen is what carries it.
   lumenShown: boolean;
@@ -86,12 +86,12 @@ export default function PhoneHome({
 
         {/* Under the briefing, above what is kept: it is the other thing the
             day needs deciding, and it is decided in the evening. */}
-        {dinner && (
+        {meals && (
           <Card>
-            <CardLabel>Dinner</CardLabel>
+            <CardLabel>Meals</CardLabel>
             <button
               className="flex flex-1 flex-col justify-between text-left coarse:min-h-[44px]"
-              onClick={onOpenDinner}
+              onClick={onOpenMeals}
             >
               <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">
                 This week's dinners and what to buy.

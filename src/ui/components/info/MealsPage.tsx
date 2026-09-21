@@ -1,4 +1,4 @@
-// The dinner screen (docs/73): tonight and tomorrow large, the rest of the week
+// The meals screen (docs/73): tonight and tomorrow large, the rest of the week
 // small, and the shopping list the program derived from them.
 //
 // Phone first — one column, 16px gutters, nothing that scrolls sideways at
@@ -6,7 +6,7 @@
 // only: which nights are ahead, what a mode is called, how long a thing keeps
 // and the order the list is drawn in are all in info/meals/view.ts.
 //
-// None of the bureau's vocabulary appears here. It is dinner.
+// None of the bureau's vocabulary appears here. It is meals.
 
 import { useState } from "react";
 
@@ -35,9 +35,9 @@ import {
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { IconSparkle } from "../base/icons";
-import { DishImage, IngredientThumb } from "./DinnerImages";
+import { DishImage, IngredientThumb } from "./MealsImages";
 
-export interface DinnerPageProps {
+export interface MealsHomeProps {
   // Null while info-meals.json is being read: the screen holds rather than
   // drawing an empty week that is about to be replaced by a full one.
   state: MealsState | null;
@@ -215,7 +215,7 @@ function ShoppingLine({
   );
 }
 
-export function DinnerPage(props: DinnerPageProps) {
+export function MealsHome(props: MealsHomeProps) {
   const { state, today } = props;
   const plan = state?.plan ?? null;
   const head = headlineDays(plan, today);
@@ -229,7 +229,7 @@ export function DinnerPage(props: DinnerPageProps) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
       <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
-        <span className="font-display text-[17px] font-semibold text-foreground">Dinner</span>
+        <span className="font-display text-[17px] font-semibold text-foreground">Meals</span>
         <span className="flex-1" />
         <Button variant="secondary" size="chip" onClick={props.onAsk} title="Ask about dinner">
           <IconSparkle size={14} /> Ask
@@ -349,4 +349,4 @@ function PhotoCredit() {
   );
 }
 
-export default DinnerPage;
+export default MealsHome;

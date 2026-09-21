@@ -1,4 +1,4 @@
-// The dinner screen's live state (docs/73): what is on disk, and the one thing
+// The meals screen's live state (docs/73): what is on disk, and the one thing
 // the screen writes.
 //
 // Ticking a line is the only write that is not a card: it is the reader's own
@@ -14,7 +14,7 @@ import { loadMealsPhotos } from "../../../info/meals/photo-store";
 import { loadMeals, saveShopping } from "../../../info/meals/store";
 import type { MealsState } from "../../../info/meals/types";
 
-export interface DinnerController {
+export interface MealsController {
   // Null until info-meals.json has answered. The screen holds on null rather
   // than drawing an empty week it is about to replace.
   state: MealsState | null;
@@ -26,7 +26,7 @@ export interface DinnerController {
   toggleItem: (key: string, checked: boolean) => void;
 }
 
-export function useDinner(enabled: boolean): DinnerController {
+export function useMeals(enabled: boolean): MealsController {
   const [state, setState] = useState<MealsState | null>(null);
   const [photos, setPhotos] = useState<PhotoCache>({});
   const [today, setToday] = useState(todayLocal);

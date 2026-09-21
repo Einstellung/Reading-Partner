@@ -102,7 +102,7 @@ export interface InfoCallOptions {
   // there, so the host reloads it.
   onTopicsChanged?: () => void;
   onOpenBriefing?: (date: string) => void;
-  // The dinner screen reloads. Applying a plan and recording a deviation both
+  // The meals screen reloads. Applying a plan and recording a deviation both
   // write without the screen asking, so nothing else would tell it.
   onMealsChanged?: () => void;
 }
@@ -139,7 +139,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   // A conversation anchored to a date lives in that day's file; a standing one
-  // (dinner's) names its own, so its thread outlives any day (anchors.ts).
+  // (meals's) names its own, so its thread outlives any day (anchors.ts).
   const bookId = anchor.bookKey ?? infoBookId(dateKey);
   const stickKey = infoStickKey(dateKey, anchor.threadId);
 
@@ -431,7 +431,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, noteTurn, onSourcesChanged],
   );
 
-  // The dinner charter's Apply. One household, so a second charter replaces the
+  // The meals charter's Apply. One household, so a second charter replaces the
   // first; the shape is handleApplyLab's, down to the order of the three
   // effects.
   const handleApplyMealsCharter = useCallback(
@@ -579,7 +579,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         async () =>
           buildLiveMealsTools({
             threadId: anchor.threadId,
-            onMealsCard: (payload) => insertCard("dinner", payload),
+            onMealsCard: (payload) => insertCard("meals", payload),
             today: () => todayLocal(),
             changed: () => onMealsChanged?.(),
           }),

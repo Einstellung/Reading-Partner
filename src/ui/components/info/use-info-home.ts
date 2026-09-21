@@ -172,9 +172,9 @@ export interface InfoHomeController {
   keepArticle: (itemId: string) => Promise<void>;
   dismissItem: (itemId: string, meta: BriefingItemMeta, category?: string) => void;
   askBriefing: () => Promise<void>;
-  // The dinner conversation. The state and the date are the screen's, already
-  // read (use-dinner.ts), so this only names the thread to open.
-  askDinner: (state: MealsState, today: string, kickoff?: string) => void;
+  // The meals conversation. The state and the date are the screen's, already
+  // read (use-meals.ts), so this only names the thread to open.
+  askMeals: (state: MealsState, today: string, kickoff?: string) => void;
   askLaunch: () => Promise<void>;
   askArticle: (itemId: string) => Promise<void>;
 }
@@ -415,7 +415,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     return { reader, sources, aiLanguage: settings.aiLanguage, canSignIn, collecting };
   }, [canSignIn, collecting]);
 
-  const askDinner = useCallback((state: MealsState, today: string, kickoff?: string) => {
+  const askMeals = useCallback((state: MealsState, today: string, kickoff?: string) => {
     setInfoCall(mealsAnchor(state, today, kickoff ? { kickoff } : undefined));
   }, []);
 
@@ -505,7 +505,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
     keepArticle,
     dismissItem,
     askBriefing,
-    askDinner,
+    askMeals,
     askLaunch,
     askArticle,
   };

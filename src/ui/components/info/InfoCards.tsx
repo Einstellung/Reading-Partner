@@ -317,7 +317,7 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 // The info domain's share of the card registry, merged with the other domains'
 // in ui/components/cardRegistry.ts — which is where the render layer looks a card
 // up.
-// The dinner charter: what the AI understood about the household after two or
+// The meals charter: what the AI understood about the household after two or
 // three questions (docs/73 三张卡). The paragraph in their own words is the
 // card — the counted fields are what the program sorts by, and reading them
 // back as a form is what this line exists not to be.
@@ -326,7 +326,7 @@ export function MealsCharterCard({ payload, dispatch }: CardComponentProps<Meals
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? "Saved" : "Your dinners"}
+        {applied ? "Saved" : "Your meals"}
       </div>
       <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{payload.text}</div>
       <div className="mt-2 text-[12px] leading-relaxed text-faint-foreground">
@@ -362,7 +362,7 @@ export function MealsCharterCard({ payload, dispatch }: CardComponentProps<Meals
 // the card always carries the whole week as it would stand once applied — with
 // the days this call actually changes marked, since on an adjustment those are
 // the only ones the reader has to read.
-export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<MealsPlanCardData>) {
+export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPlanCardData>) {
   const applied = payload.phase === "applied";
   const changed = new Set(payload.changedDates);
   const plan: WeekPlan = {
@@ -377,7 +377,7 @@ export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<MealsPl
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? "Planned" : payload.adjustment ? "A change to the week" : "This week's dinners"}
+        {applied ? "Planned" : payload.adjustment ? "A change to the week" : "This week's meals"}
       </div>
       <ul className="m-0 mt-2 flex list-none flex-col p-0">
         {payload.days.map((day) => {
@@ -401,7 +401,7 @@ export function DinnerPlanCard({ payload, dispatch }: CardComponentProps<MealsPl
       <div className="mt-3.5 flex items-center justify-end gap-2">
         {applied ? (
           <span className="text-[12px] text-faint-foreground">
-            It's on your dinner screen, shopping list and all.
+            It's on your Meals page, shopping list and all.
           </span>
         ) : (
           <Button
@@ -428,5 +428,5 @@ export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "lab-archive": LabArchiveCard,
   "briefing-failed": BriefingFailedCard,
   "meals-charter": MealsCharterCard,
-  "meals-plan": DinnerPlanCard,
+  "meals-plan": MealsPlanCard,
 };

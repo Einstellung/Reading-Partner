@@ -60,7 +60,7 @@ export function InfoCall({
   onTopicsChanged?: () => void;
   // Clicking the briefing-ready card: open the briefing as the main screen.
   onOpenBriefing?: (date: string) => void;
-  // The dinner screen reloads after a plan lands or a deviation is recorded.
+  // The meals screen reloads after a plan lands or a deviation is recorded.
   onMealsChanged?: () => void;
   // Whether the call keeps its corner cards, and with them the swapped layout.
   // The shell decides — no shape is detected here. False on the phone (docs/22),

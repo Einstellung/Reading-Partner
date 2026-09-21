@@ -18,7 +18,9 @@ export type ScreenKind =
   | "briefing"
   | "article"
   | "sources"
-  | "dinner"
+  | "meals"
+  | "meals-shopping"
+  | "meals-day"
   | "saved"
   | "savedArticle"
   | "library"
@@ -35,7 +37,11 @@ export type PhoneScreen =
   | { kind: "briefing" }
   | { kind: "article" }
   | { kind: "sources" }
-  | { kind: "dinner" }
+  | { kind: "meals" }
+  | { kind: "meals-shopping" }
+  // Which day is open. One of a week, so the entry carries the date the way an
+  // opened saved article carries its record.
+  | { kind: "meals-day"; date: string }
   | { kind: "saved" }
   | { kind: "savedArticle"; article: SavedArticle }
   | { kind: "library" }
@@ -43,7 +49,10 @@ export type PhoneScreen =
   | { kind: "reader"; bookId: string; name: string }
   | { kind: "settings" };
 
-export type PayloadFreeKind = Exclude<ScreenKind, "savedArticle" | "topic" | "reader">;
+export type PayloadFreeKind = Exclude<
+  ScreenKind,
+  "savedArticle" | "topic" | "reader" | "meals-day"
+>;
 
 export type NavStack = readonly PhoneScreen[];
 
