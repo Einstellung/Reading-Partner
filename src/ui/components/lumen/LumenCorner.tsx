@@ -21,6 +21,14 @@
 // second one ends it (docs/68, hold-toggle.ts). A tap on the body is still
 // wired to nothing — Lumen is not a button, the props it brings are.
 //
+// The body is also the handle it is dragged by (corner-drag.ts). One press
+// feeds both machines and the first one to claim it wins: past the slop it is a
+// drag, and the hold is cancelled on that same move, so a press that travels
+// never opens a call and a press that stays never moves the corner. Dragged to
+// the left edge the whole corner is mirrored — the case to the body's right,
+// the badge on its outer corner, the column hanging off the left — which is one
+// transform on the box the two stand in rather than a second composition.
+//
 // The session is the info screen's. What it would be about is published by
 // whichever screen holds it (voice-context.ts) and the call is built here, so
 // it outlives the screen it was opened from and can be hung up from anywhere.
@@ -37,7 +45,7 @@
 // store's own subscribe covers a write made in this process, and the sync tick
 // covers an item that arrived from the other device.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
 import { UNSEEN, appBox } from "../../../box";
 import type { BoxItem } from "../../../box/types";
@@ -67,6 +75,8 @@ import {
 	sortBoxCards,
 } from "./box-cards";
 import { useCaseMotion } from "./use-case-motion";
+import { columnAlign } from "./corner-drag";
+import { useCornerDrag } from "./use-corner-drag";
 import { planJump, type Place, type Shell } from "./box-jump";
 
 // What the body is announced as while it can talk: the two names are the two
@@ -107,6 +117,12 @@ export function LumenCorner({
 	openBookId?: string | null;
 	targets: LumenJumpTargets;
 }) {
+	// Which edge the corner is docked at and how high, from this device's own
+	// slot; `liftPx` is the composer's claim on the bottom edge and only wins
+	// where the reader has not carried the corner above it.
+	const drag = useCornerDrag(liftPx);
+	const mirrored = drag.side === "left";
+
 	const [open, setOpen] = useState(false);
 	const [count, setCount] = useState(0);
 	const [items, setItems] = useState<BoxItem[] | null>(null);
@@ -154,6 +170,30 @@ export function LumenCorner({
 	}, [live, start, stop]);
 
 	const hold = useHoldToggle(canTalk, toggle);
+
+	// One press and two machines to feed. The drag answers first: the move that
+	// carries the press past the slop is the move the hold is told to let go on,
+	// so a press ends as a drag or as a hold and never as both, and a press that
+	// never travels is the hold it always was.
+	const handlers = {
+		onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
+			drag.onPointerDown(event);
+			hold.handlers.onPointerDown(event);
+		},
+		onPointerMove: (event: PointerEvent<HTMLButtonElement>) => {
+			if (drag.onPointerMove(event)) hold.handlers.onPointerCancel(event);
+			else hold.handlers.onPointerMove(event);
+		},
+		onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
+			drag.onPointerUp(event);
+			hold.handlers.onPointerUp(event);
+		},
+		onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
+			drag.onPointerCancel(event);
+			hold.handlers.onPointerCancel(event);
+		},
+		onContextMenu: hold.handlers.onContextMenu,
+	};
 
 	// The number on the badge. Both readings land here: the store's announcement
 	// of a write this process made, and the tick that catches the other device's.
@@ -266,14 +306,19 @@ export function LumenCorner({
 
 	return (
 		<div
+			ref={drag.frameRef}
 			className={cn(
-				"pointer-events-none fixed inset-x-0 bottom-0 flex flex-col items-end gap-2 pb-safe-6 pr-safe-4",
+				"pointer-events-none fixed inset-x-0 bottom-0 flex flex-col gap-2 pb-safe-6",
+				mirrored ? "items-start pl-safe-4" : "items-end pr-safe-4",
 				OVERLAY_Z.floating,
 			)}
 			// Margin and not padding: the padding above is the corner's own margin
 			// from the edge, and a screen that wants it higher is saying where the
 			// edge is for it, not how much air the body keeps.
-			style={liftPx ? { marginBottom: `${liftPx}px` } : undefined}
+			//
+			// This is also the box a drag moves, by a transform written straight
+			// onto it — which is why the drag never touches this style.
+			style={drag.bottomPx ? { marginBottom: `${drag.bottomPx}px` } : undefined}
 		>
 			{errorLine && <ErrorLine line={errorLine} />}
 			<Popover open={open} onOpenChange={setOpen}>
@@ -290,7 +335,16 @@ export function LumenCorner({
 					    negative layer only means "under the body" inside a stacking
 					    context of its own — without one it would go under the page
 					    the corner floats over. */}
-					<div className="relative isolate">
+					<div
+						className="relative isolate"
+						// Docked at the left edge the corner is the same composition
+						// seen in a mirror: the case comes out on the body's right,
+						// away from the screen edge, and the eyes and the lean that
+						// follow it (case-motion.ts) go with it for nothing. The
+						// count is the one thing that must not read backwards, so it
+						// turns itself back over.
+						style={mirrored ? { transform: "scaleX(-1)" } : undefined}
+					>
 						<Lumen
 							ref={hold.ref}
 							handle={handle}
@@ -300,10 +354,11 @@ export function LumenCorner({
 							still={inReader}
 							reach={box.reach}
 							reaching={box.moving}
-							// A control only where a hold means something. Everywhere
-							// else it keeps what it was: no pointer events, off the tab
-							// order and out of the accessibility tree, a picture that
-							// happens to be drawn on a button.
+							// A named control only where a hold means something.
+							// Everywhere else it is off the tab order and out of the
+							// accessibility tree: a picture that happens to be drawn on
+							// a button, which a finger can now push around the screen
+							// and a keyboard still has no business in.
 							label={canTalk ? (live ? HOLD_TO_END : HOLD_TO_TALK) : "Lumen"}
 							aria-hidden={canTalk ? undefined : true}
 							tabIndex={canTalk ? undefined : -1}
@@ -311,15 +366,16 @@ export function LumenCorner({
 							// A tap is still wired to nothing: Lumen is not a button,
 							// the props it brings are (docs/68).
 							onActivate={NOTHING}
+							// Which way round the body is drawn, so the eyes still
+							// follow the real pointer through the mirror.
+							mirrored={mirrored}
 							// `touch-none`, `select-none` and the callout off: a hold on
 							// iOS otherwise raises the system callout and starts a
 							// selection over the body (docs/pitfall/49, 262).
-							className={cn(
-								"h-18 w-18",
-								canTalk &&
-									"pointer-events-auto touch-none select-none [-webkit-touch-callout:none]",
-							)}
-							{...hold.handlers}
+							// Unconditional now — the body takes a press everywhere,
+							// because everywhere it can be dragged.
+							className="h-18 w-18 pointer-events-auto touch-none select-none [-webkit-touch-callout:none]"
+							{...handlers}
 						/>
 						{box.drawn && (
 							<PopoverTrigger asChild>
@@ -348,14 +404,20 @@ export function LumenCorner({
 										<LumenCase />
 										{/* The number rides the case, it does not travel
 										    with it: it appears once the case is down. */}
-										{box.atRest && <CountBadge count={count} />}
+										{box.atRest && <CountBadge count={count} mirrored={mirrored} />}
 									</span>
 								</button>
 							</PopoverTrigger>
 						)}
 					</div>
 				</PopoverAnchor>
-				<PopoverContent side="top" className="pointer-events-auto w-[19rem]">
+				{/* The column rises from the corner and hangs off the edge the
+				    corner is docked at (docs/68). */}
+				<PopoverContent
+					side="top"
+					align={columnAlign(drag.side)}
+					className="pointer-events-auto w-[19rem]"
+				>
 					<Column
 						items={items}
 						titles={titles}
@@ -381,11 +443,18 @@ const NOTHING = () => {};
 // lower left and its top edge comes up to the eyes, so a badge on the inside
 // corner sits on Lumen's face; on the outside it has the corner of the screen
 // to itself.
-function CountBadge({ count }: { count: number }) {
+function CountBadge({ count, mirrored }: { count: number; mirrored: boolean }) {
 	const shown = badgeCount(count);
 	if (shown === null) return null;
 	return (
-		<span className="pointer-events-none absolute -left-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-line px-1 text-[10px] font-semibold leading-none text-background ring-2 ring-background">
+		<span
+			className={cn(
+				"pointer-events-none absolute -left-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-line px-1 text-[10px] font-semibold leading-none text-background ring-2 ring-background",
+				// The corner's mirror carries the badge to the case's other outer
+				// corner, which is the rule; the digits are turned back over here.
+				mirrored && "[transform:scaleX(-1)]",
+			)}
+		>
 			{shown}
 		</span>
 	);
