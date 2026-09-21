@@ -71,7 +71,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 369）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 373）。
 
 ## EmbedPDF 引擎
 
@@ -143,6 +143,7 @@
 - [28-http-scope-is-unix-glob](./28-http-scope-is-unix-glob.md) — Tauri http scope 是 UNIX glob 不是 URLPattern，"任意 https 主机"写 `https://*`
 - [29-voice-stt-fetch-and-ipc-bytes](./29-voice-stt-fetch-and-ipc-bytes.md) — 跨源请求必须走 cleanTauriFetch（CSP + CORS 双杀直连）；Rust 返回 Vec<u8> 到 JS 是数字数组
 - [30-webview-csp-coep-block-external-img](./30-webview-csp-coep-block-external-img.md) — webview 的 CSP + COEP 双杀外链图片，文章图片要走 Rust 侧 `img:` 自定义 scheme 代理并回 CORP 头；代理还得带文章自己的 URL 作 Referer，否则 CDN 防盗链回 403
+- [372-bing-images-serves-curl-a-decoy-page](./372-bing-images-serves-curl-a-decoy-page.md) — Bing 图片搜索对 curl 回 200、标题正确、`a.iusc` 结构完整，内容却是缓存里的无关结果（"mapo tofu" 出 cat memes），换个空格编码结果又不一样；解析器只能验形状，搜索本身必须在隐藏 webview 里跑，解析放页内脚本
 - [54-plugin-http-body-json-per-byte](./54-plugin-http-body-json-per-byte.md) — 交给 http 插件的 body 被逐字节 JSON 化（实测 3.54 字符/字节，一次请求 ~20 倍自身大小），26 MB 的书上传峰值 400 MB 触发 iPad jetsam；大 blob 必须分块 PUT
 - [72-arxiv-sortby-submitteddate-hangs](./72-arxiv-sortby-submitteddate-hangs.md) — arXiv 加 `sortBy=submittedDate` 25 秒不返回或 429，六个请求就把 IP 限流几分钟；"最新"要用 `submittedDate` 区间过滤，四个文献库一律"新是过滤、排序留给相关性"（OpenAlex 按日期排序会把管理学论文排到神经科学查询第一位）
 - [73-s2-citation-edges-null-and-ignored-year](./73-s2-citation-edges-null-and-ignored-year.md) — S2 的 `/references`、`/citations` 会回 `data: null`（出版商抽掉字段，照文档写就抛 TypeError），`year=` 参数静默忽略；引用图往后由 S2 领跑、往前只有 OpenAlex 能服务端过滤加排序，空结果必须能降级到下一个库
