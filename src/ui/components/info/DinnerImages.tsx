@@ -1,4 +1,4 @@
-// Pictures on the dinner screen (docs/73 图片), and what is drawn when there is
+// Pictures on the meals screen (docs/73 图片), and what is drawn when there is
 // none.
 //
 // The reader cannot tell one vegetable from another, so a line without a
@@ -7,12 +7,12 @@
 // worth one. They are deliberately crude — a glyph says "this is produce", a
 // photograph says which vegetable, and nothing in between is any use.
 //
-// Rendering only; which URL an image resolves to is in info/dinner/images.ts.
+// Rendering only; which URL an image resolves to is in info/meals/images.ts.
 
 import { useState } from "react";
 
-import { imageSrc } from "../../../info/dinner/images";
-import type { IngredientCategory } from "../../../info/dinner/types";
+import { imageSrc } from "../../../info/meals/images";
+import type { IngredientCategory } from "../../../info/meals/types";
 import { hideBrokenImage } from "../markdown/proseCss";
 
 function Glyph({ size = 20, children }: { size?: number; children: React.ReactNode }) {

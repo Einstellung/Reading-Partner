@@ -7,7 +7,7 @@
 // being wrong about which night is tonight is the one mistake this screen
 // cannot survive.
 
-import type { Deviation, DayPlan, DinnerMode, Dish, Ingredient, WeekPlan } from "./types";
+import type { Deviation, DayPlan, MealMode, Dish, Ingredient, WeekPlan } from "./types";
 
 export const WEEK_DAYS = 7;
 
@@ -183,7 +183,7 @@ export interface DishDraft {
 // exactly as the model was shown it; it never writes a date.
 export interface DayDraft {
   day: number;
-  mode: DinnerMode;
+  mode: MealMode;
   // A dish by name, from this same draft or from the week already planned.
   dish?: string;
   // The day number whose base this reheats.
@@ -268,7 +268,7 @@ export function assembleWeekPlan(draft: WeekDraft, opts: AssembleOptions): Assem
 
   const days: DayPlan[] = weekDates(startDate).map((date) => {
     const kept = previous?.days.find((d) => d.date === date);
-    return kept ? { ...kept } : { date, mode: "out" as DinnerMode };
+    return kept ? { ...kept } : { date, mode: "out" as MealMode };
   });
 
   const changedDates: string[] = [];

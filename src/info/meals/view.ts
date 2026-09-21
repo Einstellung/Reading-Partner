@@ -1,4 +1,4 @@
-// What the dinner screen reads off the state (docs/73): the words for a mode
+// What the meals screen reads off the state (docs/73): the words for a mode
 // and a shelf-life class, which day a date is, what is left of the week, and
 // the order the shopping list is drawn in.
 //
@@ -12,7 +12,7 @@ import {
   CATEGORY_ORDER,
   type DayPlan,
   type Dish,
-  type DinnerMode,
+  type MealMode,
   type IngredientCategory,
   type KeepsClass,
   type ShoppingItem,
@@ -21,7 +21,7 @@ import {
 import { addDays, dishForDay } from "./week";
 
 /** The mode as a plain word. Four nights, four words, none of them apologetic. */
-export function modeWord(mode: DinnerMode): string {
+export function modeWord(mode: MealMode): string {
   switch (mode) {
     case "cook":
       return "Cook";

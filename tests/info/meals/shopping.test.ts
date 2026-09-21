@@ -1,4 +1,4 @@
-// The shopping list derived from a week (src/info/dinner/shopping.ts).
+// The shopping list derived from a week (src/info/meals/shopping.ts).
 //
 // The list is the one product of this line the reader holds in one hand in a
 // shop, so every rule it is built on is asserted here: what a reheat day buys
@@ -12,8 +12,8 @@ import {
   reconcileShoppingList,
   setShoppingChecked,
   shoppingItemKey,
-} from "../../../src/info/dinner/shopping";
-import type { Dish, Ingredient, WeekPlan } from "../../../src/info/dinner/types";
+} from "../../../src/info/meals/shopping";
+import type { Dish, Ingredient, WeekPlan } from "../../../src/info/meals/types";
 
 const MON = "2026-09-21";
 

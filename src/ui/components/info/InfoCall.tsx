@@ -39,7 +39,7 @@ export function InfoCall({
   onSourcesChanged,
   onTopicsChanged,
   onOpenBriefing,
-  onDinnerChanged,
+  onMealsChanged,
   pipCards = true,
 }: {
   anchor: InfoCallAnchor;
@@ -61,7 +61,7 @@ export function InfoCall({
   // Clicking the briefing-ready card: open the briefing as the main screen.
   onOpenBriefing?: (date: string) => void;
   // The dinner screen reloads after a plan lands or a deviation is recorded.
-  onDinnerChanged?: () => void;
+  onMealsChanged?: () => void;
   // Whether the call keeps its corner cards, and with them the swapped layout.
   // The shell decides — no shape is detected here. False on the phone (docs/22),
   // where the chat is a screen the reader pushed and pops with a back.
@@ -77,7 +77,7 @@ export function InfoCall({
     onSourcesChanged,
     onTopicsChanged,
     onOpenBriefing,
-    onDinnerChanged,
+    onMealsChanged,
   });
   // Whether the reader has tapped the call out of the way. With no corner cards
   // there is no way to set it and no layout to set it to (call-layout.ts).

@@ -1,19 +1,19 @@
-// The dinner desk's tools (src/info/dinner/tools.ts): what the instruction
+// The dinner desk's tools (src/info/meals/tools.ts): what the instruction
 // tells the model, and what each tool does with what comes back — which is
 // draft a card and write nothing.
 // Run: scripts/t.sh tests/info/dinner
 
 import { expect, test } from "bun:test";
 import {
-  buildProposeDinnerCharterTool,
-  buildProposeDinnerPlanTool,
-  dinnerGuidance,
+  buildProposeMealsCharterTool,
+  buildProposeMealsPlanTool,
+  mealsGuidance,
   toDayDrafts,
   toDishDrafts,
-  type DinnerToolDeps,
-} from "../../../src/info/dinner/tools";
-import type { DinnerCard } from "../../../src/info/dinner/cards";
-import { EMPTY_DINNER, type DinnerState, type WeekPlan } from "../../../src/info/dinner/types";
+  type MealsToolDeps,
+} from "../../../src/info/meals/tools";
+import type { MealsCard } from "../../../src/info/meals/cards";
+import { EMPTY_MEALS, type MealsState, type WeekPlan } from "../../../src/info/meals/types";
 
 const MON = "2026-09-21";
 
@@ -48,15 +48,15 @@ function week(): WeekPlan {
   };
 }
 
-function deps(state: DinnerState = { ...EMPTY_DINNER }): DinnerToolDeps & { cards: DinnerCard[] } {
-  const cards: DinnerCard[] = [];
+function deps(state: MealsState = { ...EMPTY_MEALS }): MealsToolDeps & { cards: MealsCard[] } {
+  const cards: MealsCard[] = [];
   return {
     cards,
     threadId: "t",
     state: async () => state,
     today: () => MON,
     now: () => 500,
-    onDinnerCard: (card) => cards.push(card),
+    onMealsCard: (card) => cards.push(card),
     random: () => 0.5,
   };
 }
@@ -88,14 +88,14 @@ const fullWeek = {
 };
 
 test("with no charter the instruction says to ask two or three questions first", () => {
-  const text = dinnerGuidance({ ...EMPTY_DINNER }, MON);
+  const text = mealsGuidance({ ...EMPTY_MEALS }, MON);
   expect(text).toContain("ask two or three questions");
   expect(text).toContain("No week is planned");
   expect(text).toContain(`Today is ${MON}`);
 });
 
 test("the instruction numbers the week's days and marks today, so the model never writes a date", () => {
-  const text = dinnerGuidance({ ...EMPTY_DINNER, plan: week() }, "2026-09-22");
+  const text = mealsGuidance({ ...EMPTY_MEALS, plan: week() }, "2026-09-22");
   expect(text).toContain("- Day 1 (2026-09-21): cook Traybake");
   expect(text).toContain("- Day 2 (2026-09-22): reheat the base from day 1, plus leaves  <- today");
   expect(text).toContain("- Day 3 (2026-09-23): delivery from the noodle place");
@@ -103,7 +103,7 @@ test("the instruction numbers the week's days and marks today, so the model neve
 });
 
 test("the instruction carries the hard constraints and forbids nutrition numbers", () => {
-  const text = dinnerGuidance({ ...EMPTY_DINNER }, MON);
+  const text = mealsGuidance({ ...EMPTY_MEALS }, MON);
   expect(text).toContain("One pot");
   expect(text).toContain("15 minutes hands-on");
   expect(text).toContain("Never count calories");
@@ -113,14 +113,14 @@ test("the instruction carries the hard constraints and forbids nutrition numbers
 // Any name finds a photograph now, so the menu is not narrowed to named
 // dishes: the search name is what is typed in, not what is cooked (docs/73 图片).
 test("every dish is asked for a search name and nothing is narrowed", () => {
-  const guidance = dinnerGuidance({ ...EMPTY_DINNER }, MON);
+  const guidance = mealsGuidance({ ...EMPTY_MEALS }, MON);
   expect(guidance).toContain("Give every dish a `searchName`");
   expect(guidance).not.toContain("Prefer dishes that have a common name");
 });
 
 test("the charter tool drafts a card and writes nothing", async () => {
   const d = deps();
-  const out = await buildProposeDinnerCharterTool(d).execute({
+  const out = await buildProposeMealsCharterTool(d).execute({
     people: 2,
     stores: ["the market"],
     kitchen: "two burners",
@@ -131,17 +131,17 @@ test("the charter tool drafts a card and writes nothing", async () => {
     text: "two of us, cooking most nights",
   });
   expect(d.cards).toHaveLength(1);
-  expect(d.cards[0]?.kind).toBe("dinner-charter");
+  expect(d.cards[0]?.kind).toBe("meals-charter");
   expect(d.cards[0]).toMatchObject({ phase: "proposed", people: 2 });
   expect(String(typeof out === "string" ? out : out.text)).toContain("Nothing is saved");
 });
 
 test("a week drafts a card with every day dated and the dish id minted", async () => {
   const d = deps();
-  await buildProposeDinnerPlanTool(d).execute(fullWeek);
+  await buildProposeMealsPlanTool(d).execute(fullWeek);
   const card = d.cards[0];
-  expect(card?.kind).toBe("dinner-plan");
-  if (card?.kind !== "dinner-plan") throw new Error("expected a plan card");
+  expect(card?.kind).toBe("meals-plan");
+  if (card?.kind !== "meals-plan") throw new Error("expected a plan card");
   expect(card.days.map((x) => x.date)[0]).toBe(MON);
   expect(card.days).toHaveLength(7);
   expect(card.days[0]?.dishId).toBe("dish-88888888");
@@ -151,7 +151,7 @@ test("a week drafts a card with every day dated and the dish id minted", async (
 
 test("a short week is refused with a sentence the model can act on, and no card", async () => {
   const d = deps();
-  const out = await buildProposeDinnerPlanTool(d).execute({
+  const out = await buildProposeMealsPlanTool(d).execute({
     ...fullWeek,
     days: fullWeek.days.slice(0, 3),
   });
@@ -162,20 +162,20 @@ test("a short week is refused with a sentence the model can act on, and no card"
 test("a plan that does not hold up is refused rather than shown to the reader", async () => {
   const d = deps();
   const dishes = [{ ...fullWeek.dishes[0]!, handsOnMinutes: 45 }];
-  const out = await buildProposeDinnerPlanTool(d).execute({ ...fullWeek, dishes });
+  const out = await buildProposeMealsPlanTool(d).execute({ ...fullWeek, dishes });
   expect(d.cards).toHaveLength(0);
   expect(String(typeof out === "string" ? out : out.text)).toContain("45 minutes hands-on");
 });
 
 test("an adjustment names only the nights it changes and leaves the rest of the week alone", async () => {
-  const d = deps({ ...EMPTY_DINNER, plan: week() });
-  await buildProposeDinnerPlanTool(d).execute({
+  const d = deps({ ...EMPTY_MEALS, plan: week() });
+  await buildProposeMealsPlanTool(d).execute({
     adjustment: true,
     dishes: [],
     days: [{ day: 2, mode: "delivery", place: "the dumpling place" }],
   });
   const card = d.cards[0];
-  if (card?.kind !== "dinner-plan") throw new Error("expected a plan card");
+  if (card?.kind !== "meals-plan") throw new Error("expected a plan card");
   expect(card.adjustment).toBe(true);
   expect(card.changedDates).toEqual(["2026-09-22"]);
   expect(card.days[0]?.dishId).toBe("dish-a");
@@ -184,7 +184,7 @@ test("an adjustment names only the nights it changes and leaves the rest of the 
 
 test("an adjustment with no week to adjust is refused", async () => {
   const d = deps();
-  const out = await buildProposeDinnerPlanTool(d).execute({
+  const out = await buildProposeMealsPlanTool(d).execute({
     adjustment: true,
     dishes: [],
     days: [{ day: 2, mode: "out" }],

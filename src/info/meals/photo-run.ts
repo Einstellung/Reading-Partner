@@ -20,11 +20,11 @@ import { dishPhotoKey, ingredientPhotoKey, needsPhotoLookup, type PhotoCache } f
 import { ingredientQuery } from "./photo-search";
 import type { WeekPlan } from "./types";
 
-/** The kind dinner registers for searching out a week's photographs. */
-export const DINNER_PHOTOS_KIND = "dinner-photos";
+/** The kind meals registers for searching out a week's photographs. */
+export const MEALS_PHOTOS_KIND = "meals-photos";
 
 /** Where the ask is kept. The subtree is registered in palace as `run-brief`. */
-export const DINNER_PHOTO_ASKS_DIR = "legion/briefs";
+export const MEALS_PHOTO_ASKS_DIR = "legion/briefs";
 
 // One search is a page load in a real browser, and they are spaced out by a
 // second or two, so twenty is a couple of minutes of a machine nobody is
@@ -40,7 +40,7 @@ export interface PhotoQuery {
 }
 
 /** What one photograph run is asked for. Frozen when the run is created. */
-export interface DinnerPhotoAsk {
+export interface MealsPhotoAsk {
   /** The week these were wanted for. Kept for the line the run leaves. */
   planId: string;
   queries: PhotoQuery[];
@@ -88,22 +88,22 @@ function normalize(raw: string | undefined): string {
 }
 
 /** Write the ask for a run about to be delegated, answering its path. */
-export async function writePhotoAsk(ask: DinnerPhotoAsk): Promise<string> {
-  const path = `${DINNER_PHOTO_ASKS_DIR}/dinner-photos-${crypto.randomUUID()}.json`;
-  await appData.mkdirp(DINNER_PHOTO_ASKS_DIR);
+export async function writePhotoAsk(ask: MealsPhotoAsk): Promise<string> {
+  const path = `${MEALS_PHOTO_ASKS_DIR}/meals-photos-${crypto.randomUUID()}.json`;
+  await appData.mkdirp(MEALS_PHOTO_ASKS_DIR);
   await appData.writeAtomic(path, JSON.stringify(ask, null, 2));
   return path;
 }
 
 /** Read an ask back. A file with no query in it is not one. */
-export function parsePhotoAsk(text: string): DinnerPhotoAsk {
+export function parsePhotoAsk(text: string): MealsPhotoAsk {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
     throw new Error("the photograph ask is not readable JSON");
   }
-  const value = parsed as Partial<DinnerPhotoAsk> | null;
+  const value = parsed as Partial<MealsPhotoAsk> | null;
   const planId = typeof value?.planId === "string" ? value.planId.trim() : "";
   const queries = Array.isArray(value?.queries)
     ? value.queries
@@ -119,7 +119,7 @@ export function parsePhotoAsk(text: string): DinnerPhotoAsk {
 
 export interface StartPhotoRunDeps {
   /** Where the ask is put, answering the path. AppData unless injected. */
-  write?: (ask: DinnerPhotoAsk) => Promise<string>;
+  write?: (ask: MealsPhotoAsk) => Promise<string>;
   /** The runner. This device's own unless a test hands one in. */
   delegate?: (input: DelegateInput) => Promise<Delegated>;
 }
@@ -136,7 +136,7 @@ export interface StartPhotoRunDeps {
  * of dishes the reader has cooked before.
  */
 export async function startPhotoRun(
-  ask: DinnerPhotoAsk,
+  ask: MealsPhotoAsk,
   deps: StartPhotoRunDeps = {},
 ): Promise<string | null> {
   if (!ask.queries.length) return null;
@@ -144,8 +144,8 @@ export async function startPhotoRun(
   const send = deps.delegate ?? ((input: DelegateInput) => appRunner().delegate(input));
   const brief = await write(ask);
   const result = await send({
-    kind: DINNER_PHOTOS_KIND,
-    delegator: { kind: "program", name: "dinner" },
+    kind: MEALS_PHOTOS_KIND,
+    delegator: { kind: "program", name: "meals" },
     brief,
   });
   if (!result.ok) throw new Error(result.reason);

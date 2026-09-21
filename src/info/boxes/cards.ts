@@ -9,9 +9,9 @@
 // to be given and only some have an article in them (memory/filing, docs/21). It is
 // in the union because the info chat is where its card is drawn.
 import type { TopicProposalCardData } from "../../memory";
-// Dinner's two are defined in its own domain (info/dinner/cards.ts) and join
+// The meals line's two are defined in its own domain (info/meals/cards.ts) and join
 // the union here, because this is the set the info chat renders.
-import type { DinnerCard } from "../dinner/cards";
+import type { MealsCard } from "../meals/cards";
 import type { ProbeConfirmCardData } from "../sources/source-cards";
 import type { CollectProgress } from "./pipeline";
 
@@ -98,4 +98,4 @@ export type InfoCard =
   | LabProposalCardData
   | LabArchiveCardData
   | BriefingFailedCardData
-  | DinnerCard;
+  | MealsCard;

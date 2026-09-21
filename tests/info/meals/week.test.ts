@@ -1,4 +1,4 @@
-// The week read as a week (src/info/dinner/week.ts): which night is tonight,
+// The week read as a week (src/info/meals/week.ts): which night is tonight,
 // whether the plan has run out, what one deviation moves, and what a drafted
 // week becomes once the program has dated it.
 // Run: scripts/t.sh tests/info/dinner
@@ -15,8 +15,8 @@ import {
   todayAndTomorrow,
   weekDates,
   type WeekDraft,
-} from "../../../src/info/dinner/week";
-import type { Deviation, WeekPlan } from "../../../src/info/dinner/types";
+} from "../../../src/info/meals/week";
+import type { Deviation, WeekPlan } from "../../../src/info/meals/types";
 
 const MON = "2026-09-21";
 

@@ -1,4 +1,4 @@
-// What Apply on a dinner card actually does (docs/73), and what the AI is told
+// What Apply on a meals card actually does (docs/73), and what the AI is told
 // afterwards.
 //
 // The same shape as info/briefer/card-actions.ts: sequences over ports rather
@@ -7,19 +7,19 @@
 // filesystem. The tools that drafted these cards wrote nothing; this is the
 // only write.
 
-import type { DinnerCharterCardData, DinnerPlanCardData } from "./cards";
+import type { MealsCharterCardData, MealsPlanCardData } from "./cards";
 import { withDishPhotos, type PhotoCache } from "./dish-photos";
 import { photoQueriesForPlan, type PhotoQuery } from "./photo-run";
 import { deriveShoppingList, reconcileShoppingList } from "./shopping";
-import type { Deviation, DinnerCharter, DinnerState, ShoppingItem, WeekPlan } from "./types";
+import type { Deviation, MealsCharter, MealsState, ShoppingItem, WeekPlan } from "./types";
 import { applyDeviation, weekId } from "./week";
 
-export interface DinnerPorts {
+export interface MealsPorts {
   // The charter, the week and the list as they are NOW. A card sits in the
   // conversation for the rest of the day, and the week it adjusts may have
   // moved on since it was drafted.
-  current(): Promise<DinnerState>;
-  saveCharter(charter: DinnerCharter): Promise<unknown>;
+  current(): Promise<MealsState>;
+  saveCharter(charter: MealsCharter): Promise<unknown>;
   savePlan(plan: WeekPlan, shopping: readonly ShoppingItem[]): Promise<unknown>;
   saveDeviation(
     deviation: Deviation,
@@ -62,11 +62,11 @@ const NOTHING: Applied = { ok: false, note: "" };
  * first rather than accumulating.
  */
 export async function applyCharter(
-  card: DinnerCharterCardData,
-  ports: DinnerPorts,
+  card: MealsCharterCardData,
+  ports: MealsPorts,
 ): Promise<Applied> {
   if (card.phase === "applied") return NOTHING;
-  const charter: DinnerCharter = {
+  const charter: MealsCharter = {
     people: card.people,
     stores: card.stores,
     kitchen: card.kitchen,
@@ -97,8 +97,8 @@ export async function applyCharter(
  * back blank would send the reader round the shop twice.
  */
 export async function applyPlan(
-  card: DinnerPlanCardData,
-  ports: DinnerPorts,
+  card: MealsPlanCardData,
+  ports: MealsPorts,
 ): Promise<Applied> {
   if (card.phase === "applied") return NOTHING;
   const state = await ports.current();
@@ -152,7 +152,7 @@ export async function applyPlan(
 export async function startPhotoSearch(
   plan: WeekPlan,
   cache: PhotoCache,
-  ports: DinnerPorts,
+  ports: MealsPorts,
 ): Promise<unknown> {
   const start = ports.startPhotoRun;
   if (!start) return null;
@@ -172,7 +172,7 @@ export async function startPhotoSearch(
  * for, or zero when there is no week, no run to start, or nothing in the week
  * to search for.
  */
-export async function refreshPhotos(ports: DinnerPorts): Promise<number> {
+export async function refreshPhotos(ports: MealsPorts): Promise<number> {
   const start = ports.startPhotoRun;
   const state = await ports.current();
   if (!state.plan || !start) return 0;
@@ -200,7 +200,7 @@ export async function refreshPhotos(ports: DinnerPorts): Promise<number> {
  */
 export async function recordDeviation(
   deviation: Deviation,
-  ports: DinnerPorts,
+  ports: MealsPorts,
 ): Promise<Applied & { attention: string[] }> {
   const state = await ports.current();
   if (!state.plan) return { ...NOTHING, attention: [] };
@@ -230,12 +230,12 @@ export async function recordDeviation(
 // Said in the reader's voice, like sourceAddedNote and labFiledNote
 // (info/briefer/call.ts): it is their gesture the AI is being told about.
 
-export function charterNote(charter: DinnerCharter): string {
+export function charterNote(charter: MealsCharter): string {
   return `Saved what you understood about our dinners: ${charter.text}`;
 }
 
 export function planNote(
-  card: DinnerPlanCardData,
+  card: MealsPlanCardData,
   shopping: readonly ShoppingItem[],
 ): string {
   const freeze = shopping.filter((i) => i.freezeOnArrival).length;

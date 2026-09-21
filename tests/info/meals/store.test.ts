@@ -1,4 +1,4 @@
-// The dinner file on disk (src/info/dinner/store.ts), against the in-memory
+// The meals file on disk (src/info/meals/store.ts), against the in-memory
 // AppData from tests/support/guarded-appdata.ts.
 //
 // The guarded read matters here for the reason it matters to the lab file:
@@ -10,23 +10,23 @@
 import { beforeEach, expect, test } from "bun:test";
 import { CORRUPT_SUFFIX, createFakeAppData, type FakeAppData } from "../../support/guarded-appdata";
 import {
-  DINNER_FILE,
-  dinnerFileBody,
-  loadDinner,
-  parseDinnerFile,
+  MEALS_FILE,
+  mealsFileBody,
+  loadMeals,
+  parseMealsFile,
   saveCharter,
   saveDeviation,
   savePlan,
   saveShopping,
-} from "../../../src/info/dinner/store";
+} from "../../../src/info/meals/store";
 import {
-  EMPTY_DINNER,
-  type DinnerCharter,
+  EMPTY_MEALS,
+  type MealsCharter,
   type ShoppingItem,
   type WeekPlan,
-} from "../../../src/info/dinner/types";
+} from "../../../src/info/meals/types";
 
-const ASIDE = `${DINNER_FILE}${CORRUPT_SUFFIX}`;
+const ASIDE = `${MEALS_FILE}${CORRUPT_SUFFIX}`;
 
 let io: FakeAppData;
 
@@ -34,7 +34,7 @@ beforeEach(() => {
   io = createFakeAppData();
 });
 
-function charter(over: Partial<DinnerCharter> = {}): DinnerCharter {
+function charter(over: Partial<MealsCharter> = {}): MealsCharter {
   return {
     people: 2,
     stores: ["the market downstairs"],
@@ -75,19 +75,19 @@ function item(name: string, checked = false): ShoppingItem {
 }
 
 test("no file is an empty week, and nothing is written on the reader's behalf", async () => {
-  expect(await loadDinner(io)).toEqual(EMPTY_DINNER);
-  expect(io.files.has(DINNER_FILE)).toBe(false);
+  expect(await loadMeals(io)).toEqual(EMPTY_MEALS);
+  expect(io.files.has(MEALS_FILE)).toBe(false);
 });
 
 test("the charter lands in the file with the version on it, and reads back", async () => {
   await saveCharter(charter(), io);
-  expect((io.json(DINNER_FILE) as { version: number }).version).toBe(1);
-  expect((await loadDinner(io)).charter?.text).toContain("two of us");
+  expect((io.json(MEALS_FILE) as { version: number }).version).toBe(1);
+  expect((await loadMeals(io)).charter?.text).toContain("two of us");
 });
 
 test("the week and the list it was derived from land in one write", async () => {
   await savePlan(plan(), [item("lettuce")], io);
-  const state = await loadDinner(io);
+  const state = await loadMeals(io);
   expect(state.plan?.id).toBe("week-2026-09-21");
   expect(state.shopping.map((i) => i.name)).toEqual(["lettuce"]);
 });
@@ -95,7 +95,7 @@ test("the week and the list it was derived from land in one write", async () => 
 test("ticking a line off leaves the week alone", async () => {
   await savePlan(plan(), [item("lettuce")], io);
   await saveShopping([item("lettuce", true)], io);
-  const state = await loadDinner(io);
+  const state = await loadMeals(io);
   expect(state.shopping[0]?.checked).toBe(true);
   expect(state.plan?.revision).toBe(1);
 });
@@ -111,14 +111,14 @@ test("a deviation is appended; the ones before it stay", async () => {
   };
   await saveDeviation(said, plan({ revision: 2 }), [], io);
   await saveDeviation({ ...said, date: "2026-09-22" }, plan({ revision: 3 }), [], io);
-  const state = await loadDinner(io);
+  const state = await loadMeals(io);
   expect(state.deviations.map((d) => d.date)).toEqual(["2026-09-21", "2026-09-22"]);
   expect(state.plan?.revision).toBe(3);
 });
 
 test("bytes of the wrong shape are moved aside and reported, and the reader starts empty", async () => {
-  io.files.set(DINNER_FILE, "{ not json");
-  expect(await loadDinner(io)).toEqual(EMPTY_DINNER);
+  io.files.set(MEALS_FILE, "{ not json");
+  expect(await loadMeals(io)).toEqual(EMPTY_MEALS);
   expect(io.files.has(ASIDE)).toBe(true);
   expect(io.reports).toHaveLength(1);
 });
@@ -126,15 +126,15 @@ test("bytes of the wrong shape are moved aside and reported, and the reader star
 test("a file that cannot be read at all raises rather than being written over", async () => {
   await savePlan(plan(), [item("lettuce")], io);
   io.readFails = true;
-  await expect(loadDinner(io)).rejects.toThrow("could not be read");
+  await expect(loadMeals(io)).rejects.toThrow("could not be read");
   await expect(saveCharter(charter(), io)).rejects.toThrow("could not be read");
   io.readFails = false;
   // The week is still there: the failed save wrote nothing.
-  expect((await loadDinner(io)).shopping.map((i) => i.name)).toEqual(["lettuce"]);
+  expect((await loadMeals(io)).shopping.map((i) => i.name)).toEqual(["lettuce"]);
 });
 
 test("a half-understood file keeps what this build can read and drops what it cannot", () => {
-  const parsed = parseDinnerFile({
+  const parsed = parseMealsFile({
     charter: { people: 2, text: "ours" },
     plan: { id: "w", startDate: "2026-09-21", days: [], dishes: [], revision: 0 },
     shopping: [{ name: "lettuce", category: "produce" }, { nope: true }],
@@ -142,7 +142,7 @@ test("a half-understood file keeps what this build can read and drops what it ca
   });
   expect(parsed?.shopping).toHaveLength(1);
   expect(parsed?.deviations).toHaveLength(1);
-  expect(parseDinnerFile("not an object")).toBeNull();
+  expect(parseMealsFile("not an object")).toBeNull();
 });
 
 test("a file body round-trips through the parser", () => {
@@ -152,6 +152,6 @@ test("a file body round-trips through the parser", () => {
     shopping: [item("lettuce")],
     deviations: [],
   };
-  expect(parseDinnerFile(JSON.parse(dinnerFileBody(state)))).toEqual(state);
+  expect(parseMealsFile(JSON.parse(mealsFileBody(state)))).toEqual(state);
 });
 

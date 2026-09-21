@@ -10,7 +10,7 @@
 
 // What a night is. All four are equal — delivery is a plan, not a failure to
 // plan (docs/north-star/diet.md).
-export type DinnerMode = "cook" | "reheat" | "out" | "delivery";
+export type MealMode = "cook" | "reheat" | "out" | "delivery";
 
 // The aisle an ingredient is bought in. A shopping list is walked through a
 // store, so the grouping is the store's, not the nutritionist's.
@@ -125,7 +125,7 @@ export function isDishPhotoMiss(entry: DishPhotoEntry): entry is DishPhotoMiss {
 export interface DayPlan {
   // Local "YYYY-MM-DD". Local because dinner is a local-evening ritual.
   date: string;
-  mode: DinnerMode;
+  mode: MealMode;
   // The dish, for a cook day. A reheat day names no dish of its own: it eats
   // the base made on `reheatOf`.
   dishId?: string;
@@ -177,7 +177,7 @@ export interface ShoppingItem {
 
 // What the household is, learned in two or three questions on the first "Plan
 // this week" and corrected by talking. Never a form (diet.md 不用配置).
-export interface DinnerCharter {
+export interface MealsCharter {
   people: number;
   // The shops they actually buy in, which is what decides the possible
   // ingredients.
@@ -204,7 +204,7 @@ export interface Deviation {
   // The reader's own sentence.
   said: string;
   // What the night actually was.
-  became: DinnerMode;
+  became: MealMode;
   place?: string;
   // What the program did about it, one line, written by the program and not by
   // the model.
@@ -212,8 +212,8 @@ export interface Deviation {
   at: number;
 }
 
-export interface DinnerState {
-  charter: DinnerCharter | null;
+export interface MealsState {
+  charter: MealsCharter | null;
   // The week being eaten. One at a time: a finished week is replaced, not
   // archived, because nothing in this slice reads an old one.
   plan: WeekPlan | null;
@@ -221,9 +221,9 @@ export interface DinnerState {
   deviations: Deviation[];
 }
 
-export const DINNER_VERSION = 1 as const;
+export const MEALS_VERSION = 1 as const;
 
-export const EMPTY_DINNER: DinnerState = {
+export const EMPTY_MEALS: MealsState = {
   charter: null,
   plan: null,
   shopping: [],

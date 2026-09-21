@@ -1,29 +1,29 @@
-// The dinner tools bound to the real store and the real clock (docs/73), the
+// The meals tools bound to the real store and the real clock (docs/73), the
 // way companion-live.ts binds the briefing's.
 //
 // The pure tools take ports so they can be tested without a filesystem; this is
-// where those ports become loadDinner and the four writes. The card sink and
+// where those ports become loadMeals and the four writes. The card sink and
 // the screen's reload come from whoever is running the turn.
 
-import type { DinnerPorts } from "./apply";
-import type { DinnerCard } from "./cards";
+import type { MealsPorts } from "./apply";
+import type { MealsCard } from "./cards";
 import { ingredientImageUrl } from "./images";
 import { startPhotoRun } from "./photo-run";
-import { loadDinnerPhotos } from "./photo-store";
-import { loadDinner, saveCharter, saveDeviation, savePlan } from "./store";
+import { loadMealsPhotos } from "./photo-store";
+import { loadMeals, saveCharter, saveDeviation, savePlan } from "./store";
 import {
-  buildProposeDinnerCharterTool,
-  buildProposeDinnerPlanTool,
+  buildProposeMealsCharterTool,
+  buildProposeMealsPlanTool,
   buildRecordDeviationTool,
-  buildRefreshDinnerPhotosTool,
+  buildRefreshMealsPhotosTool,
 } from "./tools";
 import type { AgentTool } from "../../legion/execute/turn";
 
-export interface LiveDinnerOptions {
+export interface LiveMealsOptions {
   // The conversation the cards belong to.
   threadId: string;
   // Where a drafted card goes.
-  onDinnerCard(card: DinnerCard): void;
+  onMealsCard(card: MealsCard): void;
   // The host's local date, so the tools and the screen agree on which night it
   // is without either of them asking the model.
   today(): string;
@@ -32,14 +32,14 @@ export interface LiveDinnerOptions {
   changed(): void;
 }
 
-/** The ports every dinner write goes through, on the live store. */
-export function liveDinnerPorts(opts: Pick<LiveDinnerOptions, "today" | "changed">): DinnerPorts {
+/** The ports every meals write goes through, on the live store. */
+export function liveMealsPorts(opts: Pick<LiveMealsOptions, "today" | "changed">): MealsPorts {
   return {
-    current: () => loadDinner(),
+    current: () => loadMeals(),
     saveCharter: (charter) => saveCharter(charter),
     savePlan: (plan, shopping) => savePlan(plan, shopping),
     saveDeviation: (deviation, plan, shopping) => saveDeviation(deviation, plan, shopping),
-    photos: () => loadDinnerPhotos(),
+    photos: () => loadMealsPhotos(),
     startPhotoRun: (planId, queries) => startPhotoRun({ planId, queries: [...queries] }),
     bankImage: (en) => ingredientImageUrl(en),
     now: () => Date.now(),
@@ -48,20 +48,20 @@ export function liveDinnerPorts(opts: Pick<LiveDinnerOptions, "today" | "changed
   };
 }
 
-/** The tools the dinner desk mounts. */
-export function buildLiveDinnerTools(opts: LiveDinnerOptions): AgentTool[] {
-  const ports = liveDinnerPorts(opts);
+/** The tools the meals desk mounts. */
+export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
+  const ports = liveMealsPorts(opts);
   const deps = {
     threadId: opts.threadId,
-    state: () => loadDinner(),
+    state: () => loadMeals(),
     today: opts.today,
     now: () => Date.now(),
-    onDinnerCard: opts.onDinnerCard,
+    onMealsCard: opts.onMealsCard,
   };
   return [
-    buildProposeDinnerCharterTool(deps),
-    buildProposeDinnerPlanTool(deps),
+    buildProposeMealsCharterTool(deps),
+    buildProposeMealsPlanTool(deps),
     buildRecordDeviationTool({ ...deps, ports }),
-    buildRefreshDinnerPhotosTool({ ...deps, ports }),
+    buildRefreshMealsPhotosTool({ ...deps, ports }),
   ];
 }

@@ -119,7 +119,7 @@ export interface Settings {
   // the shared free rate-limit pool.
   semanticScholarApiKey: string | null;
   // The reader's own Google Programmable Search key and search engine id
-  // (docs/73 图片). Both or neither: with them the dinner screen looks a dish
+  // (docs/73 图片). Both or neither: with them the meals screen looks a dish
   // up in a general web image search, which has a picture for any name the
   // model invents; without them it falls back to Openverse, which only knows
   // dishes that have a name. An ordinary synced setting like the key above —
@@ -152,7 +152,7 @@ export interface Settings {
   // Language the AI writes its user-facing output in. "auto" mirrors the user's
   // own language; every other value pins output to that language.
   aiLanguage: AiLanguage;
-  // Whether the dinner screen is there at all (docs/73). Off by default and
+  // Whether the meals screen is there at all (docs/73). Off by default and
   // opt-in, because it is the first thing the companion does that has nothing
   // to do with reading. It hides the entry and nothing else: a reader who turns
   // it off keeps their week, their list and everything they have said, and
@@ -161,7 +161,7 @@ export interface Settings {
   // Synced, like every other field here: which lines the account uses is an
   // answer the account gives, not one each device gives (unlike
   // backgroundCollect, which moved to device.json for the opposite reason).
-  dinner: boolean;
+  meals: boolean;
   // illustrationApiBase and illustrationModel used to be here: the base URL and
   // model of the image relay the deck drew its illustrations from. The deck is
   // gone (docs/44) and nothing spends that key any more. Left in the file for
@@ -196,7 +196,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sttModel: null,
   dictationLocale: "zh-CN",
   aiLanguage: "auto",
-  dinner: false,
+  meals: false,
 };
 
 const DEFAULTS = DEFAULT_SETTINGS;

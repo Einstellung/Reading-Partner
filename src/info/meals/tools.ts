@@ -10,14 +10,14 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
-import { recordDeviation, refreshPhotos, type DinnerPorts } from "./apply";
-import type { DinnerCard, DinnerCharterCardData, DinnerPlanCardData } from "./cards";
+import { recordDeviation, refreshPhotos, type MealsPorts } from "./apply";
+import type { MealsCard, MealsCharterCardData, MealsPlanCardData } from "./cards";
 import {
   CATEGORY_ORDER,
   KEEPS_ORDER,
   type Deviation,
-  type DinnerMode,
-  type DinnerState,
+  type MealMode,
+  type MealsState,
   type Ingredient,
   type IngredientCategory,
   type KeepsClass,
@@ -34,20 +34,20 @@ import {
   type DishDraft,
 } from "./week";
 
-const MODES: readonly DinnerMode[] = ["cook", "reheat", "out", "delivery"];
+const MODES: readonly MealMode[] = ["cook", "reheat", "out", "delivery"];
 
-export interface DinnerToolDeps {
+export interface MealsToolDeps {
   // The conversation the proposal was made in. Carried on the card so one read
   // back off disk still says which it was.
   threadId: string;
   // The charter, the week and the deviations, read when the tool is called
   // rather than when the desk was laid.
-  state(): Promise<DinnerState>;
+  state(): Promise<MealsState>;
   // Today's local date, from the host clock. Never asked of the model.
   today(): string;
   now(): number;
   // Surface the card. The host owns Apply; the tool never writes.
-  onDinnerCard(card: DinnerCard): void;
+  onMealsCard(card: MealsCard): void;
   // Pinned by a test so minted dish ids are an equality assertion.
   random?: () => number;
 }
@@ -73,11 +73,11 @@ function modeLine(plan: WeekPlan, index: number): string {
 }
 
 /**
- * What the dinner desk is told before it says anything: the household, the
+ * What the meals desk is told before it says anything: the household, the
  * week as it stands with today marked, and the rules the program will hold it
  * to anyway.
  */
-export function dinnerGuidance(state: DinnerState, today: string): string {
+export function mealsGuidance(state: MealsState, today: string): string {
   const out: string[] = ["DINNER", `Today is ${today}.`, ""];
 
   if (state.charter) {
@@ -88,13 +88,13 @@ export function dinnerGuidance(state: DinnerState, today: string): string {
       `${c.people} eating. Shops: ${c.stores.join(", ") || "none named"}. Kitchen: ${c.kitchen || "not said"}.`,
       `Never cook: ${c.dislikes.join(", ") || "nothing named"}.`,
       `A normal week: ${c.nightsCooking} cooking, ${c.nightsOut} out, ${c.nightsDelivery} delivery.`,
-      "Correct any of this with propose_dinner_charter when they say something that changes it.",
+      "Correct any of this with propose_meals_charter when they say something that changes it.",
     );
   } else {
     out.push(
       "You do not know this household yet. Before planning anything, ask two or three questions",
       "in one message — how many are eating, where they shop, how many nights they want to cook,",
-      "anything they will not eat — and then call propose_dinner_charter with what they said.",
+      "anything they will not eat — and then call propose_meals_charter with what they said.",
       "Never show them a form and never ask a fourth question; the rest is learned by talking.",
     );
   }
@@ -111,12 +111,12 @@ export function dinnerGuidance(state: DinnerState, today: string): string {
     }
     out.push(
       "",
-      "Refer to a night by its day number when you call propose_dinner_plan. Never write a date",
+      "Refer to a night by its day number when you call propose_meals_plan. Never write a date",
       "yourself and never work one out — the program owns every date, the shopping list and the",
       "freeze-on-arrival marks, and it will contradict you.",
     );
   } else {
-    out.push("No week is planned. Call propose_dinner_plan when they ask what to eat this week.");
+    out.push("No week is planned. Call propose_meals_plan when they ask what to eat this week.");
   }
 
   if (state.deviations.length) {
@@ -145,7 +145,7 @@ export function dinnerGuidance(state: DinnerState, today: string): string {
     "",
     "WHEN A NIGHT GOES DIFFERENTLY",
     "They will say one sentence ('ordered in tonight'). That moves the next day or two and",
-    "nothing else: call propose_dinner_plan with adjustment set, naming only the days the",
+    "nothing else: call propose_meals_plan with adjustment set, naming only the days the",
     "program told you were left without a dinner. Never re-plan the week over one night.",
     "Boredom and 'too much hassle' are not adjustments — remember them for the next week.",
   );
@@ -154,9 +154,9 @@ export function dinnerGuidance(state: DinnerState, today: string): string {
 
 // --- the charter -------------------------------------------------------------
 
-export function buildProposeDinnerCharterTool(deps: DinnerToolDeps): AgentTool {
+export function buildProposeMealsCharterTool(deps: MealsToolDeps): AgentTool {
   return {
-    name: "propose_dinner_charter",
+    name: "propose_meals_charter",
     label: () => "Drafting what your dinners have to fit",
     effect: "write",
     gate: "card",
@@ -187,9 +187,9 @@ export function buildProposeDinnerCharterTool(deps: DinnerToolDeps): AgentTool {
     }),
     execute: async (args) => {
       const text = String(args.text ?? "").trim();
-      if (!text) throw new Error("propose_dinner_charter needs the paragraph in their words.");
-      const card: DinnerCharterCardData = {
-        kind: "dinner-charter",
+      if (!text) throw new Error("propose_meals_charter needs the paragraph in their words.");
+      const card: MealsCharterCardData = {
+        kind: "meals-charter",
         threadId: deps.threadId,
         people: toCount(args.people, 1),
         stores: toStrings(args.stores),
@@ -201,7 +201,7 @@ export function buildProposeDinnerCharterTool(deps: DinnerToolDeps): AgentTool {
         text,
         phase: "proposed",
       };
-      deps.onDinnerCard(card);
+      deps.onMealsCard(card);
       return {
         text:
           "A card now shows the user what you understood about their dinners. Nothing is saved " +
@@ -214,9 +214,9 @@ export function buildProposeDinnerCharterTool(deps: DinnerToolDeps): AgentTool {
 
 // --- the week ----------------------------------------------------------------
 
-export function buildProposeDinnerPlanTool(deps: DinnerToolDeps): AgentTool {
+export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
   return {
-    name: "propose_dinner_plan",
+    name: "propose_meals_plan",
     label: (args) => (args.adjustment ? "Reworking a night" : "Drafting this week's dinners"),
     effect: "write",
     gate: "card",
@@ -313,7 +313,7 @@ export function buildProposeDinnerPlanTool(deps: DinnerToolDeps): AgentTool {
         };
       }
       const draft = { dishes: toDishDrafts(args.dishes), days: toDayDrafts(args.days) };
-      if (draft.days.length === 0) throw new Error("propose_dinner_plan needs at least one day.");
+      if (draft.days.length === 0) throw new Error("propose_meals_plan needs at least one day.");
       if (!adjustment && draft.days.length < WEEK_DAYS) {
         return {
           receipt: null,
@@ -337,12 +337,12 @@ export function buildProposeDinnerPlanTool(deps: DinnerToolDeps): AgentTool {
           text:
             `Nothing was proposed — the plan does not hold up:\n` +
             assembled.problems.map((p) => `- ${p}`).join("\n") +
-            `\nFix those and call propose_dinner_plan again.`,
+            `\nFix those and call propose_meals_plan again.`,
         };
       }
 
-      const card: DinnerPlanCardData = {
-        kind: "dinner-plan",
+      const card: MealsPlanCardData = {
+        kind: "meals-plan",
         threadId: deps.threadId,
         startDate: assembled.plan.startDate,
         days: assembled.plan.days,
@@ -351,7 +351,7 @@ export function buildProposeDinnerPlanTool(deps: DinnerToolDeps): AgentTool {
         changedDates: adjustment ? assembled.changedDates : [],
         phase: "proposed",
       };
-      deps.onDinnerCard(card);
+      deps.onMealsCard(card);
       return {
         text:
           (adjustment
@@ -381,20 +381,20 @@ export function buildProposeDinnerPlanTool(deps: DinnerToolDeps): AgentTool {
  * instruction gate of the harness principle, and there is nothing for them to
  * approve about their own sentence. What the program did with it comes back in
  * the result, `attention` included, so the model can follow with
- * propose_dinner_plan as an adjustment for exactly those days.
+ * propose_meals_plan as an adjustment for exactly those days.
  */
 export function buildRecordDeviationTool(
-  deps: DinnerToolDeps & { ports: DinnerPorts },
+  deps: MealsToolDeps & { ports: MealsPorts },
 ): AgentTool {
   return {
-    name: "record_dinner_deviation",
+    name: "record_meals_deviation",
     label: () => "Recording what you ate instead",
     effect: "write",
     description:
       "Call this the moment they say a night went differently from the plan ('we ordered in', " +
       "'ended up at the noodle place'). It writes that night down and clears whatever depended " +
       "on it. It answers with the days that are now without a dinner: plan only those, with " +
-      "propose_dinner_plan and adjustment set. Do not call it for boredom or 'too much hassle' " +
+      "propose_meals_plan and adjustment set. Do not call it for boredom or 'too much hassle' " +
       "— that is next week's business, not tonight's.",
     parameters: Type.Object({
       day: Type.String({
@@ -429,12 +429,12 @@ export function buildRecordDeviationTool(
         };
       }
       const said = String(args.said ?? "").trim();
-      if (!said) throw new Error("record_dinner_deviation needs their sentence.");
+      if (!said) throw new Error("record_meals_deviation needs their sentence.");
       const place = String(args.place ?? "").trim();
       const deviation: Deviation = {
         date,
         said,
-        became: mode as DinnerMode,
+        became: mode as MealMode,
         ...(place ? { place } : {}),
         changed: "",
         at: deps.now(),
@@ -446,7 +446,7 @@ export function buildRecordDeviationTool(
       return {
         text: attention.length
           ? `Recorded. ${attention.join(" and ")} now has nothing planned — call ` +
-            `propose_dinner_plan with adjustment set for those days only.`
+            `propose_meals_plan with adjustment set for those days only.`
           : "Recorded. Nothing else in the week moved, so there is nothing to re-plan.",
         receipt: { label: "Recorded a change of plan", summary: `${date}: ${said}` },
       };
@@ -457,7 +457,7 @@ export function buildRecordDeviationTool(
 /**
  * The date a night's name stands for. "today" and "yesterday" are the two the
  * reader actually says out loud; a number is the day of the week exactly as
- * dinnerGuidance printed it. Null for anything outside the planned week, which
+ * mealsGuidance printed it. Null for anything outside the planned week, which
  * the tool refuses rather than guessing at.
  */
 export function resolveDeviationDate(
@@ -480,15 +480,15 @@ export function resolveDeviationDate(
  * whichever machine has a hidden webview, so this writes the ask and says so;
  * the pictures appear on the screen as they land, without another turn.
  */
-export function buildRefreshDinnerPhotosTool(
-  deps: DinnerToolDeps & { ports: DinnerPorts },
+export function buildRefreshMealsPhotosTool(
+  deps: MealsToolDeps & { ports: MealsPorts },
 ): AgentTool {
   return {
-    name: "refresh_dinner_photos",
+    name: "refresh_meals_photos",
     label: () => "Looking for better photographs",
     effect: "write",
     description:
-      "Call this when they say a picture on the dinner screen is wrong or is not the dish they " +
+      "Call this when they say a picture on the meals screen is wrong or is not the dish they " +
       "meant. It searches this week's dishes and ingredients again from scratch. There is " +
       "nothing to choose and nothing to confirm; say it is looking and move on.",
     parameters: Type.Object({}),
@@ -589,7 +589,7 @@ export function toDayDrafts(raw: unknown): DayDraft[] {
     const e = record(entry);
     const mode = String(e.mode ?? "").trim().toLowerCase();
     if (!(MODES as readonly string[]).includes(mode)) continue;
-    const day: DayDraft = { day: toCount(e.day, 0), mode: mode as DinnerMode };
+    const day: DayDraft = { day: toCount(e.day, 0), mode: mode as MealMode };
     const dish = String(e.dish ?? "").trim();
     if (dish) day.dish = dish;
     const of = Number(e.reheatOfDay);

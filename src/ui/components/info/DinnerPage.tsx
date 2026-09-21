@@ -4,18 +4,18 @@
 // Phone first — one column, 16px gutters, nothing that scrolls sideways at
 // 390px — and the same column centred on a desktop. Rendering and event binding
 // only: which nights are ahead, what a mode is called, how long a thing keeps
-// and the order the list is drawn in are all in info/dinner/view.ts.
+// and the order the list is drawn in are all in info/meals/view.ts.
 //
 // None of the bureau's vocabulary appears here. It is dinner.
 
 import { useState } from "react";
 
 import { openExternal } from "../../../platform/app/external-link";
-import type { DinnerState, ShoppingItem } from "../../../info/dinner/types";
-import type { PhotoCache } from "../../../info/dinner/dish-photos";
-import { shoppingItemKey } from "../../../info/dinner/shopping";
-import { markDishPhotoBroken } from "../../../info/dinner/photo-store";
-import { planExhausted } from "../../../info/dinner/week";
+import type { MealsState, ShoppingItem } from "../../../info/meals/types";
+import type { PhotoCache } from "../../../info/meals/dish-photos";
+import { shoppingItemKey } from "../../../info/meals/shopping";
+import { markDishPhotoBroken } from "../../../info/meals/photo-store";
+import { planExhausted } from "../../../info/meals/week";
 import {
   dishPhotoCredit,
   dishPicture,
@@ -30,16 +30,16 @@ import {
   type DayView,
   type DishPhotoCredit,
   type Picture,
-} from "../../../info/dinner/view";
+} from "../../../info/meals/view";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { IconSparkle } from "../base/icons";
 import { DishImage, IngredientThumb } from "./DinnerImages";
 
 export interface DinnerPageProps {
-  // Null while info-dinner.json is being read: the screen holds rather than
+  // Null while info-meals.json is being read: the screen holds rather than
   // drawing an empty week that is about to be replaced by a full one.
-  state: DinnerState | null;
+  state: MealsState | null;
   // What the search has found so far, keyed by what was searched for. Empty
   // until the run lands, and a week without it is drawn from its ingredients.
   photos: PhotoCache;

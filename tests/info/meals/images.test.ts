@@ -1,10 +1,10 @@
-// Which picture each ingredient gets (src/info/dinner/images.ts), and how it is
+// Which picture each ingredient gets (src/info/meals/images.ts), and how it is
 // loaded: an external one only through the img: proxy (docs/pitfall/30), an
-// app-relative one straight. Run: bash scripts/t.sh tests/info/dinner/images.test.ts
+// app-relative one straight. Run: bash scripts/t.sh tests/info/meals/images.test.ts
 
 import { expect, test } from "bun:test";
-import { imageSrc, ingredientImageUrl, MEALDB_ALIASES } from "../../../src/info/dinner/images";
-import { MEALDB_INGREDIENTS } from "../../../src/info/dinner/mealdb-ingredients";
+import { imageSrc, ingredientImageUrl, MEALDB_ALIASES } from "../../../src/info/meals/images";
+import { MEALDB_INGREDIENTS } from "../../../src/info/meals/mealdb-ingredients";
 
 test("an external picture is routed through the proxy", () => {
   expect(

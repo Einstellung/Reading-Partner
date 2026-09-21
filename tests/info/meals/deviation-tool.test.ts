@@ -1,4 +1,4 @@
-// record_dinner_deviation (src/info/dinner/tools.ts): the one dinner tool that
+// record_meals_deviation (src/info/meals/tools.ts): the one dinner tool that
 // writes, because the reader saying what they ate is itself the instruction and
 // there is nothing for them to approve. Run: scripts/t.sh tests/info/dinner
 //
@@ -9,17 +9,17 @@ import { expect, test } from "bun:test";
 import {
   buildRecordDeviationTool,
   resolveDeviationDate,
-  type DinnerToolDeps,
-} from "../../../src/info/dinner/tools";
-import type { DinnerPorts } from "../../../src/info/dinner/apply";
-import type { DinnerCard } from "../../../src/info/dinner/cards";
+  type MealsToolDeps,
+} from "../../../src/info/meals/tools";
+import type { MealsPorts } from "../../../src/info/meals/apply";
+import type { MealsCard } from "../../../src/info/meals/cards";
 import {
-  EMPTY_DINNER,
+  EMPTY_MEALS,
   type Deviation,
-  type DinnerState,
+  type MealsState,
   type ShoppingItem,
   type WeekPlan,
-} from "../../../src/info/dinner/types";
+} from "../../../src/info/meals/types";
 
 const MON = "2026-09-21";
 // Day three of the week, a delivery night to begin with.
@@ -73,10 +73,10 @@ interface Written {
   reloads: number;
 }
 
-function harness(state: DinnerState) {
+function harness(state: MealsState) {
   const written: Written = { deviations: [], plans: [], reloads: 0 };
-  const cards: DinnerCard[] = [];
-  const ports: DinnerPorts = {
+  const cards: MealsCard[] = [];
+  const ports: MealsPorts = {
     current: async () => state,
     saveCharter: async () => {},
     savePlan: async () => {},
@@ -90,12 +90,12 @@ function harness(state: DinnerState) {
       written.reloads++;
     },
   };
-  const deps: DinnerToolDeps & { ports: DinnerPorts } = {
+  const deps: MealsToolDeps & { ports: MealsPorts } = {
     threadId: "t",
     state: async () => state,
     today: () => WED,
     now: () => 500,
-    onDinnerCard: (card) => cards.push(card),
+    onMealsCard: (card) => cards.push(card),
     ports,
   };
   const tool = buildRecordDeviationTool(deps);
@@ -107,7 +107,7 @@ function harness(state: DinnerState) {
 }
 
 test("a night a day number names is written, and the day left empty comes back", async () => {
-  const { run, written, cards } = harness({ ...EMPTY_DINNER, plan: week() });
+  const { run, written, cards } = harness({ ...EMPTY_MEALS, plan: week() });
   const out = await run({
     day: "3",
     became: "delivery",
@@ -121,7 +121,7 @@ test("a night a day number names is written, and the day left empty comes back",
   // Thursday was eating Wednesday's base, so it is the day the model is sent
   // back to — and the only one.
   expect(out.text).toContain("2026-09-24");
-  expect(out.text).toContain("propose_dinner_plan");
+  expect(out.text).toContain("propose_meals_plan");
   expect(written.reloads).toBe(1);
   // No card: the reader's own sentence is the gate.
   expect(cards).toEqual([]);
@@ -135,7 +135,7 @@ test("'today' and 'yesterday' are the two words a reader actually says", () => {
 });
 
 test("a night outside the week is refused rather than guessed at", async () => {
-  const { run, written } = harness({ ...EMPTY_DINNER, plan: week() });
+  const { run, written } = harness({ ...EMPTY_MEALS, plan: week() });
   const out = await run({ day: "9", became: "out", said: "went out" });
   expect(out.text).toContain("not a night of this week");
   expect(written.deviations).toEqual([]);
@@ -144,14 +144,14 @@ test("a night outside the week is refused rather than guessed at", async () => {
 });
 
 test("a mode the program does not have is refused", async () => {
-  const { run, written } = harness({ ...EMPTY_DINNER, plan: week() });
+  const { run, written } = harness({ ...EMPTY_MEALS, plan: week() });
   const out = await run({ day: "today", became: "takeaway", said: "picked something up" });
   expect(out.text).toContain("became must be one of");
   expect(written.deviations).toEqual([]);
 });
 
 test("with no week planned there is nothing to record a change against", async () => {
-  const { run, written } = harness({ ...EMPTY_DINNER });
+  const { run, written } = harness({ ...EMPTY_MEALS });
   const out = await run({ day: "today", became: "out", said: "went out" });
   expect(out.text).toContain("no week planned");
   expect(written.deviations).toEqual([]);
@@ -159,7 +159,7 @@ test("with no week planned there is nothing to record a change against", async (
 });
 
 test("a night that leaves nothing orphaned says so instead of sending the model off", async () => {
-  const { run, written } = harness({ ...EMPTY_DINNER, plan: week() });
+  const { run, written } = harness({ ...EMPTY_MEALS, plan: week() });
   const out = await run({ day: "7", became: "delivery", said: "ordered in on Sunday" });
   expect(written.deviations).toHaveLength(1);
   expect(out.text).toContain("nothing to re-plan");

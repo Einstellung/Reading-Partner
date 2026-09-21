@@ -1,6 +1,6 @@
-// What the dinner screen reads off the state (src/info/dinner/view.ts): the
+// What the meals screen reads off the state (src/info/meals/view.ts): the
 // words, which nights are ahead, and the order the shopping list is drawn in.
-// Run: bash scripts/t.sh tests/info/dinner/view.test.ts
+// Run: bash scripts/t.sh tests/info/meals/view.test.ts
 
 import { expect, test } from "bun:test";
 import {
@@ -15,8 +15,8 @@ import {
   shoppingGroups,
   upcomingDays,
   weekdayName,
-} from "../../../src/info/dinner/view";
-import type { Dish, ShoppingItem, WeekPlan } from "../../../src/info/dinner/types";
+} from "../../../src/info/meals/view";
+import type { Dish, ShoppingItem, WeekPlan } from "../../../src/info/meals/types";
 
 function dish(id: string, name: string, names: string[] = []): Dish {
   return {

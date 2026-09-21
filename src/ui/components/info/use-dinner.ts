@@ -8,16 +8,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { todayLocal } from "../../../info/collect/store";
-import { setShoppingChecked } from "../../../info/dinner/shopping";
-import type { PhotoCache } from "../../../info/dinner/dish-photos";
-import { loadDinnerPhotos } from "../../../info/dinner/photo-store";
-import { loadDinner, saveShopping } from "../../../info/dinner/store";
-import type { DinnerState } from "../../../info/dinner/types";
+import { setShoppingChecked } from "../../../info/meals/shopping";
+import type { PhotoCache } from "../../../info/meals/dish-photos";
+import { loadMealsPhotos } from "../../../info/meals/photo-store";
+import { loadMeals, saveShopping } from "../../../info/meals/store";
+import type { MealsState } from "../../../info/meals/types";
 
 export interface DinnerController {
-  // Null until info-dinner.json has answered. The screen holds on null rather
+  // Null until info-meals.json has answered. The screen holds on null rather
   // than drawing an empty week it is about to replace.
-  state: DinnerState | null;
+  state: MealsState | null;
   // The photographs found so far, from the file the search run writes. Empty
   // until it has answered, and empty is a week drawn from its ingredients.
   photos: PhotoCache;
@@ -27,7 +27,7 @@ export interface DinnerController {
 }
 
 export function useDinner(enabled: boolean): DinnerController {
-  const [state, setState] = useState<DinnerState | null>(null);
+  const [state, setState] = useState<MealsState | null>(null);
   const [photos, setPhotos] = useState<PhotoCache>({});
   const [today, setToday] = useState(todayLocal);
   // The reader's own ticks in flight, so a reload that lands between the tick
@@ -48,13 +48,13 @@ export function useDinner(enabled: boolean): DinnerController {
     setToday(todayLocal());
     // A cache that will not read is no photographs, not a screen that holds:
     // the week is worth showing without them.
-    void loadDinnerPhotos().then(
+    void loadMealsPhotos().then(
       (next) => {
         if (live.current) setPhotos(next);
       },
       () => {},
     );
-    void loadDinner().then(
+    void loadMeals().then(
       (next) => {
         if (live.current) setState(next);
       },

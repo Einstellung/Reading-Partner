@@ -1,4 +1,4 @@
-// Chat-card payloads for the dinner line (docs/73), following the convention in
+// Chat-card payloads for the meals line (docs/73), following the convention in
 // info/boxes/cards.ts: the payload is plain data in the info layer, so the tool
 // that drafts it and the component that draws it import one definition.
 //
@@ -11,8 +11,8 @@ import type { DayPlan, Dish } from "./types";
 // The household, drafted out of two or three questions rather than a form
 // (diet.md 不用配置). `text` is the paragraph in the reader's own words; the
 // fields beside it are what the program can count.
-export interface DinnerCharterCardData {
-  kind: "dinner-charter";
+export interface MealsCharterCardData {
+  kind: "meals-charter";
   // The conversation it was proposed in, so a card read back off disk still
   // knows what it belonged to.
   threadId: string;
@@ -30,8 +30,8 @@ export interface DinnerCharterCardData {
 // A week of dinners, or the one or two days of it a deviation reopened. Either
 // way the card carries the whole week as it would stand once applied, so Apply
 // is one code path and the screen renders one shape.
-export interface DinnerPlanCardData {
-  kind: "dinner-plan";
+export interface MealsPlanCardData {
+  kind: "meals-plan";
   threadId: string;
   // Local date of day one.
   startDate: string;
@@ -47,7 +47,7 @@ export interface DinnerPlanCardData {
   phase: "proposed" | "applied";
 }
 
-export type DinnerCard = DinnerCharterCardData | DinnerPlanCardData;
+export type MealsCard = MealsCharterCardData | MealsPlanCardData;
 
 /** The kinds this domain contributes, for the registry the UI assembles. */
-export const DINNER_CARD_KINDS = ["dinner-charter", "dinner-plan"] as const;
+export const MEALS_CARD_KINDS = ["meals-charter", "meals-plan"] as const;

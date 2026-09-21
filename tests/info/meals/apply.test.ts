@@ -1,4 +1,4 @@
-// What Apply on a dinner card does (src/info/dinner/apply.ts): the only write
+// What Apply on a meals card does (src/info/meals/apply.ts): the only write
 // in the line, the guard against a second click, and the synthetic turn the AI
 // is told afterwards.
 // Run: scripts/t.sh tests/info/dinner
@@ -9,10 +9,10 @@ import {
   applyPlan,
   recordDeviation,
   refreshPhotos,
-  type DinnerPorts,
-} from "../../../src/info/dinner/apply";
-import type { DinnerCharterCardData, DinnerPlanCardData } from "../../../src/info/dinner/cards";
-import { EMPTY_DINNER, type DinnerState, type ShoppingItem, type WeekPlan } from "../../../src/info/dinner/types";
+  type MealsPorts,
+} from "../../../src/info/meals/apply";
+import type { MealsCharterCardData, MealsPlanCardData } from "../../../src/info/meals/cards";
+import { EMPTY_MEALS, type MealsState, type ShoppingItem, type WeekPlan } from "../../../src/info/meals/types";
 
 const MON = "2026-09-21";
 
@@ -60,13 +60,13 @@ function week(over: Partial<WeekPlan> = {}): WeekPlan {
 }
 
 interface Fake {
-  ports: DinnerPorts;
-  state: DinnerState;
+  ports: MealsPorts;
+  state: MealsState;
   saved: { plan: WeekPlan | null; shopping: ShoppingItem[] };
   changed: number;
 }
 
-function fake(state: DinnerState = { ...EMPTY_DINNER }, fail = false): Fake {
+function fake(state: MealsState = { ...EMPTY_MEALS }, fail = false): Fake {
   const f: Fake = {
     state,
     saved: { plan: null, shopping: [] },
@@ -102,9 +102,9 @@ function fake(state: DinnerState = { ...EMPTY_DINNER }, fail = false): Fake {
   return f;
 }
 
-function charterCard(over: Partial<DinnerCharterCardData> = {}): DinnerCharterCardData {
+function charterCard(over: Partial<MealsCharterCardData> = {}): MealsCharterCardData {
   return {
-    kind: "dinner-charter",
+    kind: "meals-charter",
     threadId: "t",
     people: 2,
     stores: ["the market"],
@@ -119,10 +119,10 @@ function charterCard(over: Partial<DinnerCharterCardData> = {}): DinnerCharterCa
   };
 }
 
-function planCard(over: Partial<DinnerPlanCardData> = {}): DinnerPlanCardData {
+function planCard(over: Partial<MealsPlanCardData> = {}): MealsPlanCardData {
   const w = week();
   return {
-    kind: "dinner-plan",
+    kind: "meals-plan",
     threadId: "t",
     startDate: w.startDate,
     days: w.days,
@@ -154,7 +154,7 @@ test("a second click on an applied card writes nothing and says nothing", async 
 });
 
 test("a failed write changes nothing on screen", async () => {
-  const f = fake({ ...EMPTY_DINNER }, true);
+  const f = fake({ ...EMPTY_MEALS }, true);
   expect((await applyPlan(planCard(), f.ports)).ok).toBe(false);
   expect(f.changed).toBe(0);
   expect(f.state.plan).toBeNull();
@@ -191,7 +191,7 @@ test("an adjustment keeps the week's own age and what was already ticked off", a
 });
 
 test("a night that went differently is recorded and names only the days left open", async () => {
-  const f = fake({ ...EMPTY_DINNER, plan: week() });
+  const f = fake({ ...EMPTY_MEALS, plan: week() });
   const { ok, note, attention } = await recordDeviation(
     { date: MON, said: "ordered in tonight", became: "delivery", changed: "", at: 0 },
     f.ports,
@@ -218,7 +218,7 @@ test("a deviation with no week to move writes nothing", async () => {
 test("Apply writes the week, then asks for the photographs it has none of", async () => {
   const f = fake();
   const started: { planId: string; queries: { key: string; q: string }[] }[] = [];
-  const ports: DinnerPorts = {
+  const ports: MealsPorts = {
     ...f.ports,
     photos: async () => ({
       "dish:chicken traybake": {
@@ -261,11 +261,11 @@ test("a host that cannot start runs still applies the week", async () => {
 
 test("asking again searches the whole week, the cache ignored", async () => {
   const f = fake(
-    { ...EMPTY_DINNER, plan: week(), shopping: [] },
+    { ...EMPTY_MEALS, plan: week(), shopping: [] },
     false,
   );
   const started: { key: string; q: string }[][] = [];
-  const ports: DinnerPorts = {
+  const ports: MealsPorts = {
     ...f.ports,
     photos: async () => ({ "dish:baked sea bass": { none: true as const, checkedAt: 499 } }),
     bankImage: () => null,

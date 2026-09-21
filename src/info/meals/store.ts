@@ -1,4 +1,4 @@
-// The dinner file on disk (docs/73): one JSON under AppData holding the
+// The meals file on disk (docs/73): one JSON under AppData holding the
 // charter, the week being eaten, its shopping list and the nights that went
 // differently.
 //
@@ -23,31 +23,31 @@ import {
 import { isObject } from "../../platform/std/json";
 import { reportStoreError } from "../../platform/app/store-errors";
 import {
-  DINNER_VERSION,
-  EMPTY_DINNER,
+  MEALS_VERSION,
+  EMPTY_MEALS,
   type Deviation,
-  type DinnerCharter,
-  type DinnerState,
+  type MealsCharter,
+  type MealsState,
   type ShoppingItem,
   type WeekPlan,
 } from "./types";
 
-export const DINNER_FILE = "info-dinner.json";
+export const MEALS_FILE = "info-meals.json";
 
 // The file access this store needs, as a parameter. A test hands it an
 // in-memory AppData instead of rewriting the module registry with mock.module,
 // which rewrites it for every other test file in the same worker (pitfall 119).
-export interface DinnerIo {
+export interface MealsIo {
   read(
     file: string,
-    validate: (raw: unknown) => DinnerState | null,
-  ): Promise<GuardedRead<DinnerState>>;
+    validate: (raw: unknown) => MealsState | null,
+  ): Promise<GuardedRead<MealsState>>;
   write(file: string, contents: string): Promise<void>;
   quarantine(file: string): Promise<string | null>;
   reportCorrupt(report: CorruptFileReport): void;
 }
 
-export const dinnerIo: DinnerIo = {
+export const mealsIo: MealsIo = {
   read: readGuardedJson,
   write: writeTextAtomic,
   quarantine: quarantineFile,
@@ -55,13 +55,13 @@ export const dinnerIo: DinnerIo = {
 };
 
 /**
- * The state out of a parsed info-dinner.json, or null when the bytes are not
+ * The state out of a parsed info-meals.json, or null when the bytes are not
  * this writer's shape at all — which is what readGuardedJson quarantines.
  *
  * Fields a newer build wrote ride through untouched: the objects are returned
  * as they were read, so a device on an older build does not delete them.
  */
-export function parseDinnerFile(raw: unknown): DinnerState | null {
+export function parseMealsFile(raw: unknown): MealsState | null {
   if (!isObject(raw)) return null;
   const plan = validatePlan(raw.plan);
   const charter = validateCharter(raw.charter);
@@ -74,11 +74,11 @@ export function parseDinnerFile(raw: unknown): DinnerState | null {
   return { charter, plan, shopping, deviations };
 }
 
-function validateCharter(raw: unknown): DinnerCharter | null {
+function validateCharter(raw: unknown): MealsCharter | null {
   if (!isObject(raw)) return null;
   if (typeof raw.text !== "string") return null;
   if (typeof raw.people !== "number") return null;
-  return raw as unknown as DinnerCharter;
+  return raw as unknown as MealsCharter;
 }
 
 function validatePlan(raw: unknown): WeekPlan | null {
@@ -98,44 +98,44 @@ function isDeviation(raw: unknown): raw is Deviation {
 }
 
 /** The file body to write for a state. */
-export function dinnerFileBody(state: DinnerState): string {
-  return JSON.stringify({ version: DINNER_VERSION, ...state }, null, 2);
+export function mealsFileBody(state: MealsState): string {
+  return JSON.stringify({ version: MEALS_VERSION, ...state }, null, 2);
 }
 
 // No file is an empty state: a reader who has never opened the screen has none.
 // A file sitting there unread is not that — it raises, so the next write cannot
 // put one drafted week over the reader's own.
-async function readDinner(io: DinnerIo): Promise<DinnerState> {
-  const read = await io.read(DINNER_FILE, parseDinnerFile);
+async function readMeals(io: MealsIo): Promise<MealsState> {
+  const read = await io.read(MEALS_FILE, parseMealsFile);
   if (read.status === "ok") return read.value;
-  if (read.status === "missing") return { ...EMPTY_DINNER };
-  if (read.savedAs === null) throw new Error(`${DINNER_FILE} could not be read`);
-  return { ...EMPTY_DINNER };
+  if (read.status === "missing") return { ...EMPTY_MEALS };
+  if (read.savedAs === null) throw new Error(`${MEALS_FILE} could not be read`);
+  return { ...EMPTY_MEALS };
 }
 
-/** Everything the dinner screen shows, as one read. */
-export async function loadDinner(io: DinnerIo = dinnerIo): Promise<DinnerState> {
-  return readDinner(io);
+/** Everything the meals screen shows, as one read. */
+export async function loadMeals(io: MealsIo = mealsIo): Promise<MealsState> {
+  return readMeals(io);
 }
 
 // Apply a change and write the file. Returns the state now on disk: the changed
 // one when it was written, the one read otherwise, so a caller that renders
 // what it gets back shows the file rather than a change that did not land.
 async function mutate(
-  io: DinnerIo,
-  change: (state: DinnerState) => DinnerState,
-): Promise<DinnerState> {
-  const current = await readDinner(io);
+  io: MealsIo,
+  change: (state: MealsState) => MealsState,
+): Promise<MealsState> {
+  const current = await readMeals(io);
   const next = change(current);
-  await io.write(DINNER_FILE, dinnerFileBody(next));
+  await io.write(MEALS_FILE, mealsFileBody(next));
   return next;
 }
 
 /** Write the charter. Applying a second one replaces the first; it is one household. */
 export async function saveCharter(
-  charter: DinnerCharter,
-  io: DinnerIo = dinnerIo,
-): Promise<DinnerState> {
+  charter: MealsCharter,
+  io: MealsIo = mealsIo,
+): Promise<MealsState> {
   return mutate(io, (s) => ({ ...s, charter }));
 }
 
@@ -149,16 +149,16 @@ export async function saveCharter(
 export async function savePlan(
   plan: WeekPlan,
   shopping: readonly ShoppingItem[],
-  io: DinnerIo = dinnerIo,
-): Promise<DinnerState> {
+  io: MealsIo = mealsIo,
+): Promise<MealsState> {
   return mutate(io, (s) => ({ ...s, plan, shopping: [...shopping] }));
 }
 
 /** Write the list alone — what ticking a line off in the shop does. */
 export async function saveShopping(
   shopping: readonly ShoppingItem[],
-  io: DinnerIo = dinnerIo,
-): Promise<DinnerState> {
+  io: MealsIo = mealsIo,
+): Promise<MealsState> {
   return mutate(io, (s) => ({ ...s, shopping: [...shopping] }));
 }
 
@@ -171,8 +171,8 @@ export async function saveDeviation(
   deviation: Deviation,
   plan: WeekPlan,
   shopping: readonly ShoppingItem[],
-  io: DinnerIo = dinnerIo,
-): Promise<DinnerState> {
+  io: MealsIo = mealsIo,
+): Promise<MealsState> {
   return mutate(io, (s) => ({
     ...s,
     plan,

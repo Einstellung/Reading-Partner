@@ -9,8 +9,8 @@
 // decidable from its inputs.
 
 import { INFO_ARTICLE_KIND, INFO_BRIEFING_KIND, type FileArticle } from "./desk";
-import { INFO_DINNER_KIND } from "../dinner/desk";
-import type { DinnerState } from "../dinner/types";
+import { INFO_MEALS_KIND } from "../meals/desk";
+import type { MealsState } from "../meals/types";
 import type { DeskRef } from "../../desk";
 import type { AiLanguage } from "../../platform/app/settings";
 import { briefingOverview } from "../boxes/briefing";
@@ -208,32 +208,32 @@ export function onboardingAnchor(aiLanguage?: AiLanguage): InfoCallAnchor {
 // day's.
 
 /** The standing dinner thread, and the file it lives in. */
-export const DINNER_THREAD_ID = "dinner";
-export const DINNER_BOOK_ID = "info-dinner";
+export const MEALS_THREAD_ID = "meals";
+export const MEALS_BOOK_ID = "info-meals";
 
 /** What the screen's button says to start a week off. */
-export const DINNER_KICKOFF = "Plan this week.";
+export const MEALS_KICKOFF = "Plan this week.";
 
-const DINNER_TITLE = "Dinner";
+const MEALS_TITLE = "Meals";
 
 /** The dinner conversation: the household, the week, and the tools for both. */
-export function dinnerAnchor(
-  state: DinnerState,
+export function mealsAnchor(
+  state: MealsState,
   today: string,
   opts?: { kickoff?: string },
 ): InfoCallAnchor {
   return {
-    threadId: DINNER_THREAD_ID,
-    bookKey: DINNER_BOOK_ID,
-    emptyTitle: DINNER_TITLE,
-    placeholder: "Ask about dinner…",
-    desk: [{ kind: INFO_DINNER_KIND, ref: { state, today } }],
-    position: { title: DINNER_TITLE, line: dinnerLine(state) },
+    threadId: MEALS_THREAD_ID,
+    bookKey: MEALS_BOOK_ID,
+    emptyTitle: MEALS_TITLE,
+    placeholder: "Ask about meals…",
+    desk: [{ kind: INFO_MEALS_KIND, ref: { state, today } }],
+    position: { title: MEALS_TITLE, line: mealsLine(state) },
     ...(opts?.kickoff ? { kickoff: opts.kickoff } : {}),
   };
 }
 
-function dinnerLine(state: DinnerState): string | null {
+function mealsLine(state: MealsState): string | null {
   if (!state.plan) return "No week planned yet";
   const left = state.shopping.filter((i) => !i.checked).length;
   return left ? `This week's dinners · ${left} still to buy` : "This week's dinners";

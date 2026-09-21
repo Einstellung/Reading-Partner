@@ -12,8 +12,8 @@ import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
-import { DINNER_KICKOFF } from "../../../info/briefer/anchors";
-import { EMPTY_DINNER } from "../../../info/dinner/types";
+import { MEALS_KICKOFF } from "../../../info/briefer/anchors";
+import { EMPTY_MEALS } from "../../../info/meals/types";
 import type { SignInSite } from "../../../info/sources/site-session";
 import { Vestibule } from "./Vestibule";
 import { BriefingPage } from "./BriefingPage";
@@ -117,7 +117,7 @@ export default function InfoHome(props: {
   // that has it and this screen keeps importing nothing from either shell —
   // the same hole renderLaunch is (docs/22).
   wrapScreen?: (screen: AskableScreen, children: React.ReactNode) => React.ReactNode;
-  // Whether the dinner line is switched on (settings.dinner, docs/73). Off, and
+  // Whether the meals line is switched on (settings.meals, docs/73). Off, and
   // there is no entry to this screen anywhere and nothing is read off disk for
   // it; the data stays where it is.
   dinnerEnabled?: boolean;
@@ -230,14 +230,14 @@ export default function InfoHome(props: {
       })()}
 
       {screen === "dinner" && props.dinnerEnabled && (() => {
-        const openChat = (kickoff?: string) => info.askDinner(dinner.state ?? EMPTY_DINNER, dinner.today, kickoff);
+        const openChat = (kickoff?: string) => info.askDinner(dinner.state ?? EMPTY_MEALS, dinner.today, kickoff);
         const page = (
           <div className="absolute inset-0 overflow-y-auto bg-background">
             <DinnerPage
               state={dinner.state}
               photos={dinner.photos}
               today={dinner.today}
-              onPlanWeek={() => openChat(DINNER_KICKOFF)}
+              onPlanWeek={() => openChat(MEALS_KICKOFF)}
               onAsk={() => openChat()}
               onToggleItem={dinner.toggleItem}
             />
@@ -319,7 +319,7 @@ export default function InfoHome(props: {
           onSourcesChanged={info.refreshSources}
           onTopicsChanged={() => void props.onTopicsChanged()}
           onOpenBriefing={() => onNavigate("briefing")}
-          onDinnerChanged={dinner.reload}
+          onMealsChanged={dinner.reload}
           pipCards={props.pipCards}
         />
       )}
