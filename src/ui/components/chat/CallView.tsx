@@ -120,6 +120,14 @@ export default function CallView({
 	// The shell's claim on the bottom edge, where this view was not handed one.
 	const slot = useComposerSlot();
 	const composerSlot = composerRef ?? slot;
+	// The two states put the composer in two places — the middle of an empty
+	// screen, the bottom edge of a full one — and whoever keeps out of its way is
+	// told where it is by a callback ref. Keyed, because the two boxes are both a
+	// <div> in the same slot of the same parent: React would reuse the one node,
+	// leave the stable ref alone and never say it had moved, and a ResizeObserver
+	// does not fire on a box that only changed position. So the first reply moved
+	// the composer to the bottom edge and Lumen went on standing on it.
+	const composerKey = empty ? "composer-centred" : "composer-edge";
 	const Scope = scalable ? ChatScaleScope : PlainScope;
 	// Held in a variable because two of the three headers below use it.
 	const hangUp = (
@@ -190,7 +198,11 @@ export default function CallView({
 					<h1 className="mb-8 max-w-[calc(48rem*var(--chat-scale,1))] text-center text-[calc(1.5rem*var(--chat-scale,1))] font-medium text-neutral-700">
 						{emptyTitle}
 					</h1>
-					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]" ref={composerSlot}>
+					<div
+						key={composerKey}
+						className="w-full max-w-[calc(48rem*var(--chat-scale,1))]"
+						ref={composerSlot}
+					>
 						{footer}
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
 						{intents && intents.length > 0 && (
@@ -218,7 +230,7 @@ export default function CallView({
 							stickKey={stickKey}
 						/>
 					</div>
-					<div className="px-4 pb-6" ref={composerSlot}>
+					<div key={composerKey} className="px-4 pb-6" ref={composerSlot}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							{footer}
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />
