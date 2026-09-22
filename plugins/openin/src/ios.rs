@@ -35,9 +35,9 @@ impl<R: Runtime> OpenIn<R> {
         Ok(true)
     }
 
-    pub async fn open(&self, path: String) -> crate::Result<()> {
+    pub async fn open(&self, path: String, name: Option<String>) -> crate::Result<()> {
         self.0
-            .run_mobile_plugin_async("open_in", OpenInArgs { path })
+            .run_mobile_plugin_async("open_in", OpenInArgs { path, name })
             .await
             .map_err(Into::into)
     }

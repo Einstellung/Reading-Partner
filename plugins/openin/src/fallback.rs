@@ -35,7 +35,7 @@ impl<R: Runtime> OpenIn<R> {
 
     /// Rejecting: a hand-over that answers "fine" and then shows nothing is a
     /// reader waiting for a sheet that will never come.
-    pub async fn open(&self, _path: String) -> crate::Result<()> {
+    pub async fn open(&self, _path: String, _name: Option<String>) -> crate::Result<()> {
         Err(Error::Unsupported(UNSUPPORTED.to_string()))
     }
 }

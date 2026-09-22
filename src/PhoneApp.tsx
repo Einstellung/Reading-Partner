@@ -15,7 +15,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType }
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID, listTopics, type Topic } from "./platform/app/topics";
 import { listLibraryEntries, type LibraryEntry } from "./platform/app/library";
-import { libraryFilePath, openIn, openInAvailable } from "./platform/app/open-in";
+import {
+  libraryFilePath,
+  openIn,
+  openInAvailable,
+  shareFileName,
+} from "./platform/app/open-in";
 import FlowReaderPane from "./reading/epub/FlowReaderPane";
 import type { FlowReaderPaneProps } from "./reading/epub/flow-contract";
 import { initSync, TICK_MS } from "./platform/sync";
@@ -327,11 +332,14 @@ export default function PhoneApp({
   // The share sheet for one book's PDF. Fails with a line rather than silently:
   // the reader pressed something, and nothing appearing is the one answer that
   // says nothing.
+  // The name travels with the file: the library's copy is stored under the
+  // book's content hash, and the reader should not meet 64 hex characters in
+  // the app they opened it in.
   const handOver = useCallback(
-    (bookId: string) => {
+    (bookId: string, name: string) => {
       void (async () => {
         try {
-          await openIn(await libraryFilePath(bookId, "pdf"));
+          await openIn(await libraryFilePath(bookId, "pdf"), shareFileName(name, "pdf"));
         } catch (e) {
           console.error("failed to open the file elsewhere", e);
           pushToast("warn", "This file could not be handed to another app.");
@@ -446,7 +454,7 @@ export default function PhoneApp({
               topicId={base.topicId}
               topicName={topics?.find((t) => t.id === base.topicId)?.name ?? ""}
               onBack={goBack}
-              {...(canOpenIn ? { onOpenIn: () => handOver(base.bookId) } : {})}
+              {...(canOpenIn ? { onOpenIn: () => handOver(base.bookId, base.name) } : {})}
             />
           )}
 
@@ -479,7 +487,7 @@ export default function PhoneApp({
           }}
           onStart={startLesson}
           {...(canOpenIn && lessonIntro
-            ? { onOpenIn: () => handOver(lessonIntro.bookId) }
+            ? { onOpenIn: () => handOver(lessonIntro.bookId, lessonIntro.name) }
             : {})}
         />
 
