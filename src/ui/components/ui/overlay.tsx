@@ -40,9 +40,15 @@ import {
   useLayoutEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
+import {
+  bottomSheetOpen,
+  pushBottomSheet,
+  subscribeBottomSheet,
+} from "@/ui/components/base/bottom-sheet";
 import { pushOverlayLayer } from "@/ui/components/base/overlay-layer";
 import {
   measureSafeAreaInsets,
@@ -202,3 +208,20 @@ export function OverlayLayer() {
   useEffect(pushOverlayLayer, []);
   return null;
 }
+
+// The same registration for a sheet pinned across the bottom edge, which is one
+// more thing than a layer: it is standing where the shell's corner companion
+// stands (base/bottom-sheet.ts). Rendered beside <OverlayLayer /> and for the
+// same reason — the component holding it stays on the React tree, and only the
+// content mounts and unmounts with the sheet (docs/pitfall/80).
+export function BottomSheetLayer() {
+  useEffect(pushBottomSheet, []);
+  return null;
+}
+
+/** Whether any such sheet is up, as a render. */
+export function useBottomSheetOpen(): boolean {
+  return useSyncExternalStore(subscribeBottomSheet, bottomSheetOpen, NO_SHEET);
+}
+
+const NO_SHEET = () => false;

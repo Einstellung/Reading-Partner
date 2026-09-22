@@ -72,8 +72,9 @@
 | 无头截图核对渲染 | 开发环境 |
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
+| 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 386）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 387）。
 
 ## EmbedPDF 引擎
 
@@ -290,6 +291,7 @@
 
 ## 浮层与 shadcn 原语
 
+- [386-a-moved-box-reports-nothing](./386-a-moved-box-reports-nothing.md) — `CallView` 的 composer 在空态和非空态里是同一个下标上的 `<div>`，React 复用同一个 DOM 节点：callback ref 不再调一次，`ResizeObserver` 只管尺寸不管位置，于是量到的还是它居中时的盒子，Lumen 一直压着发送键。两个分支各给一个 key
 - [68-overflow-x-auto-clips-the-other-axis](./68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
 - [80-portalled-overlay-trips-the-host-outside-press](./80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路
 - [81-shadcn-add-rewrites-the-components-it-depends-on](./81-shadcn-add-rewrites-the-components-it-depends-on.md) — `shadcn add alert-dialog` 顺手把手写过的 `button.tsx` 换成默认那份（紫色、44px、`can-hover:` 全没），输出里只有一行 "Updated"；add 完先看 `git status`

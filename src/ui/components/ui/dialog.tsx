@@ -31,7 +31,13 @@ import * as React from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/ui/components/lib/utils"
-import { OVERLAY_SAFE, OVERLAY_Z, OverlayLayer, useDialogLayer } from "@/ui/components/ui/overlay"
+import {
+  BottomSheetLayer,
+  OVERLAY_SAFE,
+  OVERLAY_Z,
+  OverlayLayer,
+  useDialogLayer,
+} from "@/ui/components/ui/overlay"
 
 function Dialog({
   ...props
@@ -194,6 +200,9 @@ const DialogSheetContent = React.forwardRef<
         {...props}
       >
         <OverlayLayer />
+        {/* And it is on the bottom edge, where the shell's corner companion
+            stands (base/bottom-sheet.ts). */}
+        <BottomSheetLayer />
         {children}
       </DialogPrimitive.Content>
     </DialogPortal>

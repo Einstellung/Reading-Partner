@@ -78,6 +78,7 @@ const MODULES: Record<string, Record<string, unknown>> = {
 const NO_DOM = new Set([
   "AlertDialog",
   "AlertDialogPortal",
+  "BottomSheetLayer",
   "Dialog",
   "DialogPortal",
   "DropdownMenu",

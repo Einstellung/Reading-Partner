@@ -60,10 +60,17 @@ export interface LessonBook {
   topicId: string;
   topicName: string;
   // The conversation to run, when it is not the book's own: an aside off the
-  // lesson (use-lesson-aside.ts). The record has to exist already — the desk
-  // reads what kind of conversation this is off it, and what it says decides
-  // the prompt. Absent = the lesson itself, which is the book-level thread.
+  // lesson (use-lesson-aside.ts). Absent = the lesson itself, which is the
+  // book-level thread.
   threadId?: string;
+  // How that conversation is written down, for one that is not yet: an aside is
+  // a view before it is a record, and the record arrives with its first question
+  // (use-lesson-aside.ts ensure). Called here because this is where the first
+  // question is, and before the line is appended — the desk reads what kind of
+  // conversation this is off the record, and without one it would read the aside
+  // as the lesson itself and answer with the lesson's prompt.
+  // Absent = the record exists already.
+  ensureThread?: () => void;
 }
 
 export interface LessonCall {
@@ -86,6 +93,10 @@ export interface LessonCall {
 
 export function useLessonCall(book: LessonBook): LessonCall {
   const { bookId, title, topicId, topicName, threadId: asideThreadId } = book;
+  // Read rather than closed over: it is rebuilt on every render of the screen
+  // that owns the aside, and the effect below must not re-run for it.
+  const ensureRef = useRef(book.ensureThread);
+  ensureRef.current = book.ensureThread;
 
   const [threadId, setThreadId] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -242,6 +253,8 @@ export function useLessonCall(book: LessonBook): LessonCall {
       const trimmed = text.trim();
       const id = threadIdRef.current;
       if (!trimmed || !id || !fulltextRef.current || running()) return;
+      // The first question is what writes an aside down (LessonBook).
+      ensureRef.current?.();
       const ts = Date.now();
       appendMessage(bookId, id, { role: "user", text: trimmed, ts });
       setMessages((rows) => [...rows, { role: "user", text: trimmed, ts }]);
@@ -279,7 +292,11 @@ export function useLessonCall(book: LessonBook): LessonCall {
         await loadThreads(bookId).catch(() => {});
         if (cancelled) return;
         thread = getThread(bookId, asideThreadId);
-        if (!thread) {
+        // Not written down yet: an aside the reader has asked nothing in, which
+        // is a conversation with an id and no rows until they do (LessonBook).
+        // Without an ensureThread there is no such state, and a named thread
+        // that is not there is one this device cannot read.
+        if (!thread && !ensureRef.current) {
           setStatus(NO_THREAD);
           return;
         }
@@ -293,13 +310,14 @@ export function useLessonCall(book: LessonBook): LessonCall {
         }
         thread = found.thread;
       }
-      threadIdRef.current = thread.id;
-      setThreadId(thread.id);
-      setMessages(thread.messages.map(rehydrateMessage));
+      const id = thread?.id ?? (asideThreadId as string);
+      threadIdRef.current = id;
+      setThreadId(id);
+      setMessages(thread ? thread.messages.map(rehydrateMessage) : []);
       // The lecture state is the lesson's. An aside reads its parent's focus at
       // turn time (reading/desk.ts) and draws neither the focus line nor the
       // chapter sheet, so there is nothing here for it to hold.
-      if (!asideThreadId) {
+      if (!asideThreadId && thread) {
         taughtRef.current = taughtChapters(thread);
         setTaught(taughtRef.current);
         setFocusChapter(thread.focusChapter ?? null);
@@ -331,7 +349,9 @@ export function useLessonCall(book: LessonBook): LessonCall {
       // message is written for them (reading/lesson/opening.ts). An aside opens
       // on nothing and waits — the reader already said what it is about by
       // holding the words.
-      if (!asideThreadId && thread.messages.length === 0) sendRef.current(lessonOpening());
+      if (!asideThreadId && thread && thread.messages.length === 0) {
+        sendRef.current(lessonOpening());
+      }
     })();
 
     return () => {

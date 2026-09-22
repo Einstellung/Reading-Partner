@@ -56,7 +56,7 @@ import { TICK_MS } from "../../../platform/sync";
 import { displayFileTitle } from "../shelf/file-title";
 import { cn } from "../lib/utils";
 import { orbErrorLine } from "../orb/orb";
-import { OVERLAY_Z } from "../ui/overlay";
+import { OVERLAY_Z, useBottomSheetOpen } from "../ui/overlay";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { ErrorLine } from "./ErrorLine";
 import { Lumen, LumenCase } from "./Lumen";
@@ -121,6 +121,9 @@ export function LumenCorner({
 	// slot; `liftPx` is the composer's claim on the bottom edge and only wins
 	// where the reader has not carried the corner above it.
 	const drag = useCornerDrag(liftPx);
+	// A sheet comes up across that same edge, and this corner paints over it
+	// (base/bottom-sheet.ts). It stands down while one is up.
+	const sheet = useBottomSheetOpen();
 	const mirrored = drag.side === "left";
 
 	const [open, setOpen] = useState(false);
@@ -310,6 +313,10 @@ export function LumenCorner({
 			className={cn(
 				"pointer-events-none fixed inset-x-0 bottom-0 flex flex-col gap-2 pb-safe-6",
 				mirrored ? "items-start pl-safe-4" : "items-end pr-safe-4",
+				// `invisible` and not unmounted: the case's animation is state in the
+				// tree, and a sheet opened and closed would replay the whole pull-out.
+				// Nothing hidden this way takes a press either.
+				sheet && "invisible",
 				OVERLAY_Z.floating,
 			)}
 			// Margin and not padding: the padding above is the corner's own margin

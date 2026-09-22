@@ -8,6 +8,7 @@ import { afterEach, expect, test } from "bun:test";
 import { createElement } from "react";
 import type { TableChapter } from "../../../../src/reading/chapters/table";
 import type { LessonViewProps } from "../../../../src/ui/components/phone/lesson-view";
+import { bottomSheetOpen } from "../../../../src/ui/components/base/bottom-sheet";
 import { useDom } from "../../../support/dom";
 
 // The window first: the screen pulls in Radix, and react-dom decides once at
@@ -91,7 +92,11 @@ test("a chip sends the reader's own line", () => {
 
 test("the chapter sheet opens on the bar, and a tap on a chapter is not navigation", () => {
   const { root, picked } = draw();
+  expect(bottomSheetOpen()).toBe(false);
   fireEvent.click(button(root, "Chapters")!);
+  // And it says it is standing on the bottom edge, which is what takes the
+  // shell's corner companion off it (base/bottom-sheet.ts).
+  expect(bottomSheetOpen()).toBe(true);
   // Portalled to <body>, so the sheet is not under the screen's own root.
   const sheet = document.body;
   expect(sheet.textContent).toContain("Related Work");
@@ -101,4 +106,22 @@ test("the chapter sheet opens on the bar, and a tap on a chapter is not navigati
   fireEvent.click(row!);
   expect(picked.map((c) => c.number)).toEqual([1]);
   expect(root.textContent).toContain("Now: BERT · p.4");
+});
+
+test("an empty aside opens on the passage it was pulled out of", () => {
+  const span = "Self-attention relates every position of one sequence to every other.";
+  const { root } = draw({ messages: [], aside: { span, onBack: () => {} } });
+  // Twice over: the strip naming the aside, which truncates it to one line, and
+  // the empty state, which sets the whole of it as a quotation.
+  expect(root.textContent).toContain(span);
+  // CallView's own wording, not "Ask again…": nothing has been asked here yet.
+  const composer = root.querySelector("textarea, input");
+  expect(composer?.getAttribute("placeholder")).toBe("Ask about this passage…");
+});
+
+test("the lesson's own empty state is the paper and its ask", () => {
+  const { root } = draw({ messages: [] });
+  expect(root.textContent).toContain("BERT");
+  const composer = root.querySelector("textarea, input");
+  expect(composer?.getAttribute("placeholder")).toBe("Ask about the paper…");
 });

@@ -10,6 +10,7 @@
 import type { ReactNode } from 'react';
 import type { ReadingIntent } from '../../../reading/intents';
 import ChatScaleScope from '../base/ChatScaleScope';
+import { useComposerSlot } from './composer-slot';
 import { IconClose } from '../base/icons';
 import ChapterFocusBar, { type ChapterFocusBarProps } from './ChapterFocusBar';
 import { Composer, MessageList, type ChatMarkHost, type ComposerVoice } from './chat';
@@ -33,6 +34,8 @@ interface CallViewProps {
 	// on the bottom edge — Lumen's corner (ui/components/lumen/corner-placement).
 	// Both states report it: the empty conversation's composer is in the middle
 	// of the screen, and the rule reads that off the box it measures.
+	// Absent = whatever the shell hung over this screen (composer-slot.ts), which
+	// is how the phone reaches every conversation it draws without a prop.
 	composerRef?: (el: HTMLElement | null) => void;
 	hint?: string;
 	streaming?: boolean;
@@ -42,8 +45,10 @@ interface CallViewProps {
 	chapterFocus?: ChapterFocusBarProps | null;
 	// The empty-state heading and composer placeholder. Default to the passage
 	// wording; the book-level thread (docs/03: the blackboard button) passes the
-	// book's title and the ask that opens a lesson.
-	emptyTitle?: string;
+	// book's title and the ask that opens a lesson. A node rather than a string,
+	// because an aside opens on the words it was pulled out of and shows them
+	// (phone/PhoneLesson.tsx).
+	emptyTitle?: ReactNode;
 	placeholder?: string;
 	// What an empty conversation offers under the composer (reading/intents.ts).
 	// Absent on a surface that has no opening intents — info's chat is one, and
@@ -112,6 +117,17 @@ export default function CallView({
 	footer,
 }: CallViewProps) {
 	const empty = messages.length === 0;
+	// The shell's claim on the bottom edge, where this view was not handed one.
+	const slot = useComposerSlot();
+	const composerSlot = composerRef ?? slot;
+	// The two states put the composer in two places — the middle of an empty
+	// screen, the bottom edge of a full one — and whoever keeps out of its way is
+	// told where it is by a callback ref. Keyed, because the two boxes are both a
+	// <div> in the same slot of the same parent: React would reuse the one node,
+	// leave the stable ref alone and never say it had moved, and a ResizeObserver
+	// does not fire on a box that only changed position. So the first reply moved
+	// the composer to the bottom edge and Lumen went on standing on it.
+	const composerKey = empty ? "composer-centred" : "composer-edge";
 	const Scope = scalable ? ChatScaleScope : PlainScope;
 	// Held in a variable because two of the three headers below use it.
 	const hangUp = (
@@ -182,7 +198,11 @@ export default function CallView({
 					<h1 className="mb-8 max-w-[calc(48rem*var(--chat-scale,1))] text-center text-[calc(1.5rem*var(--chat-scale,1))] font-medium text-neutral-700">
 						{emptyTitle}
 					</h1>
-					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]" ref={composerRef}>
+					<div
+						key={composerKey}
+						className="w-full max-w-[calc(48rem*var(--chat-scale,1))]"
+						ref={composerSlot}
+					>
 						{footer}
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
 						{intents && intents.length > 0 && (
@@ -210,7 +230,7 @@ export default function CallView({
 							stickKey={stickKey}
 						/>
 					</div>
-					<div className="px-4 pb-6" ref={composerRef}>
+					<div key={composerKey} className="px-4 pb-6" ref={composerSlot}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							{footer}
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />

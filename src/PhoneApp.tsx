@@ -40,6 +40,8 @@ import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
+import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
+import { ComposerSlotContext } from "./ui/components/chat/composer-slot";
 import {
   readLumenCornerShown,
   writeLumenCornerShown,
@@ -114,6 +116,12 @@ export default function PhoneApp({
   const [lumenShown, setLumenShown] = useState(() =>
     readLumenCornerShown(browserPrefStore(window)),
   );
+  // Where it stands. Every conversation on this shell is the whole screen, so
+  // any composer that reports itself is one sitting on the bottom edge, and the
+  // corner rises above it (lumen/corner-placement.ts) — the briefing's call, the
+  // lesson and the lesson's aside alike. On the screens that hold no
+  // conversation nothing is measured and the corner keeps the corner.
+  const { composerRef: composerSlot, placement: lumen } = useCornerLift(lumenShown, true);
   const toggleLumen = useCallback(() => {
     setLumenShown((shown) => {
       writeLumenCornerShown(browserPrefStore(window), !shown);
@@ -374,6 +382,7 @@ export default function PhoneApp({
               chat/ reads it from a context, so it never imports the domains that
               fill it, and a shell that leaves this out renders no card at all. */}
           <CardRegistryProvider>
+          <ComposerSlotContext.Provider value={composerSlot}>
           <InfoHome
             screen={infoScreenFor(base)}
             onNavigate={onNavigate}
@@ -469,6 +478,7 @@ export default function PhoneApp({
               onBack={goBack}
             />
           )}
+          </ComposerSlotContext.Provider>
           </CardRegistryProvider>
         </main>
 
@@ -509,7 +519,8 @@ export default function PhoneApp({
           (lumen/box-jump.ts). */}
       <LumenCorner
         shell="phone"
-        shown={lumenShown}
+        shown={lumen.shown}
+        liftPx={lumen.liftPx}
         targets={{
           goToDoor: () => onNavigate("vestibule"),
           goToBriefing: () => onNavigate("briefing"),
