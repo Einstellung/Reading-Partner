@@ -121,10 +121,120 @@ pub const QUIET_SAMPLES: u32 = 24;
 /// two rows, one write, loaded in 3.6 seconds.
 pub const CHANGES_MIN: u32 = 2;
 
+/// What a reading of the jar looks like to the warm-up: its rows as Netscape
+/// text, or `None` when this platform's store could not be read this time
+/// round. `None` is not an empty jar — an empty jar is a real answer a cold
+/// profile gives — and the warm-up skips it rather than counting it as a
+/// change.
+pub type Sampler<'a> = &'a dyn Fn() -> Option<String>;
+
 /// The jar as text, or empty when there is none yet — a cold profile has no
 /// file until the first cookie is written.
+///
+/// WebKitGTK only. macOS has no such file (docs/pitfall/385) and answers
+/// through `read_store` below.
 pub fn read(profile: &Path) -> String {
     std::fs::read_to_string(profile.join("cookies")).unwrap_or_default()
+}
+
+/// How long one macOS sample may take before it counts as no reading at all.
+///
+/// Generous beside a `getAllCookies:` round trip and short beside the warm-up
+/// it sits inside. A sample that does not come back is skipped, so the cost of
+/// being wrong here is a slower warm-up and never a wrong verdict.
+#[cfg(target_os = "macos")]
+const STORE_READ_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// macOS: the same jar, read out of the webview's own `WKHTTPCookieStore`.
+///
+/// There is no file to read on this platform. wry ignores `data_directory` and
+/// WKWebView keeps its cookies in the website data store's private format, so
+/// the store's own asynchronous accessor is the only way to see them
+/// (docs/pitfall/385). Which store: the one behind this window's configuration,
+/// i.e. the fetcher's own (`PROFILE_DATA_STORE` in mod.rs) and not the app's.
+///
+/// Same shape as `eval_string` in mod.rs and for the same reason — the call is
+/// made on the main thread, the completion runs on the main thread, and the
+/// wait happens on the worker thread that asked.
+///
+/// The rows come back as the Netscape lines `fingerprint` already reads, so the
+/// rule above and every test behind it is one piece of code on both platforms.
+/// Only the first column is ever parsed; the rest is there so that a rewritten
+/// cookie changes its line, and so a dump of a sample reads like the Linux jar
+/// it stands in for.
+#[cfg(target_os = "macos")]
+pub(crate) fn read_store<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Option<String> {
+    use std::ptr::NonNull;
+
+    use objc2_foundation::{NSArray, NSHTTPCookie};
+    use objc2_web_kit::WKWebView;
+
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    window
+        .with_webview(move |platform| {
+            // Safety: `with_webview` runs this on the main thread, the only
+            // place a WKWebView may be touched, and `inner()` is the pointer
+            // tauri-runtime-wry holds to this window's webview.
+            let view: Option<&WKWebView> = unsafe { (platform.inner() as *mut WKWebView).as_ref() };
+            let Some(view) = view else {
+                // The sender is dropped without an answer, which the receiver
+                // below reads as "no reading", not as an empty jar.
+                return;
+            };
+            // Safety: the window owns its configuration for as long as it is
+            // alive, which the caller holds it for.
+            let store = unsafe { view.configuration().websiteDataStore().httpCookieStore() };
+            let handler = block2::RcBlock::new(move |cookies: NonNull<NSArray<NSHTTPCookie>>| {
+                // Safety: WebKit passes a live array and nothing here keeps it
+                // past this block.
+                let cookies = unsafe { cookies.as_ref() };
+                let mut jar = String::new();
+                for cookie in cookies {
+                    jar.push_str(&row(&cookie));
+                    jar.push('\n');
+                }
+                let _ = tx.send(jar);
+            });
+            // Safety: WebKit copies the handler, so it outliving this borrow is
+            // WebKit's business and not ours.
+            unsafe { store.getAllCookies(&handler) };
+        })
+        .ok()?;
+    rx.recv_timeout(STORE_READ_TIMEOUT).ok()
+}
+
+/// One cookie as a jar row: domain, whether it covers subdomains, path, secure,
+/// expiry, name, value — the Netscape column order, with the `#HttpOnly_`
+/// marker back on the front the way WebKitGTK writes one (docs/pitfall/110).
+///
+/// The marker earns its place twice over: a sample printed while debugging
+/// reads like the Linux jar, and `row_domain` has exactly the same job on both
+/// platforms rather than a simpler one here that could drift from it.
+#[cfg(target_os = "macos")]
+fn row(cookie: &objc2_foundation::NSHTTPCookie) -> String {
+    fn flag(yes: bool) -> &'static str {
+        if yes {
+            "TRUE"
+        } else {
+            "FALSE"
+        }
+    }
+    let domain = cookie.domain().to_string();
+    format!(
+        "{}{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        if cookie.isHTTPOnly() { "#HttpOnly_" } else { "" },
+        domain,
+        // A leading dot is WebKit's way of saying the cookie covers subdomains,
+        // which is the Netscape file's second column.
+        flag(domain.starts_with('.')),
+        cookie.path(),
+        flag(cookie.isSecure()),
+        cookie
+            .expiresDate()
+            .map_or(0, |date| date.timeIntervalSince1970() as i64),
+        cookie.name(),
+        cookie.value(),
+    )
 }
 
 /// The site a host belongs to: lower case, one `www.` off the front. Cookies
@@ -313,9 +423,13 @@ impl fmt::Display for Report {
 ///   catches a load that never stops writing.
 /// - The load fails outright, or the timeout runs out with no row for the site
 ///   at all. Nothing was collected, so nothing was warmed.
+/// `sample` is how this platform reads its jar, because the two platforms do not
+/// keep one in the same place: Linux reads a file, macOS asks the webview's own
+/// cookie store (docs/pitfall/385). Everything above this line is the same code
+/// on both.
 pub fn wait_for_warm_jar(
     rx: &Receiver<LoadEvent>,
-    profile: &Path,
+    sample: Sampler<'_>,
     home: &Url,
     started: Instant,
 ) -> Result<Warm, PageOutcome> {
@@ -325,6 +439,12 @@ pub fn wait_for_warm_jar(
     let deadline = opened + trace.map_or(policy::WARMUP_LOAD_TIMEOUT, |(window, _)| window);
     let mut watch = Watch::new(home.host_str().unwrap_or_default());
     let mut finished = false;
+    // What is left of this round's `poll` once the last sample has been paid
+    // for. Reading a file costs nothing and this is the whole interval every
+    // time on Linux; a macOS sample is a round trip to the main thread, and
+    // charging it to the wait keeps `QUIET_SAMPLES` worth the six seconds it
+    // was measured as instead of six seconds plus twenty-four round trips.
+    let mut wait = poll;
     loop {
         if started.elapsed() > policy::OVERALL_TIMEOUT {
             return Err(PageOutcome::failed(
@@ -332,7 +452,7 @@ pub fn wait_for_warm_jar(
                 "overall fetch budget exhausted",
             ));
         }
-        match rx.recv_timeout(poll) {
+        match rx.recv_timeout(wait) {
             Ok(LoadEvent::Finished) => {
                 finished = true;
                 if trace.is_none() {
@@ -351,12 +471,17 @@ pub fn wait_for_warm_jar(
             Err(RecvTimeoutError::Timeout) => {}
         }
 
-        watch.observe(&read(profile));
-        if trace.is_some() {
-            print_sample(&watch, opened.elapsed(), finished);
-        } else if watch.is_settled() {
-            return Ok(Warm::Jar(watch.report(true, opened.elapsed())));
+        let sampling = Instant::now();
+        if let Some(jar) = sample() {
+            watch.observe(&jar);
+            if trace.is_some() {
+                print_sample(&watch, opened.elapsed(), finished);
+            } else if watch.is_settled() {
+                return Ok(Warm::Jar(watch.report(true, opened.elapsed())));
+            }
         }
+        wait = poll.saturating_sub(sampling.elapsed());
+
         if Instant::now() >= deadline {
             if finished {
                 return Ok(Warm::Loaded);

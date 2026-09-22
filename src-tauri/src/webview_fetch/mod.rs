@@ -38,7 +38,7 @@
 // extracted, once sync carries article bodies.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Mutex;
@@ -431,14 +431,17 @@ pub(crate) fn with_page<R: Runtime, T>(
     // that ended on the jar never got one, and jar.rs traces that path itself.
     let navigated = Instant::now();
     let outcome = match phase {
-        Phase::Warmup => match jar::wait_for_warm_jar(&rx, profile, target, started) {
-            Ok(jar::Warm::Loaded) => {
-                trace_load(phase, target, navigated);
-                settle_and_extract(&window, &rx, phase, started, budget)
+        Phase::Warmup => {
+            let sample = || jar_sample(&window, profile);
+            match jar::wait_for_warm_jar(&rx, &sample, target, started) {
+                Ok(jar::Warm::Loaded) => {
+                    trace_load(phase, target, navigated);
+                    settle_and_extract(&window, &rx, phase, started, budget)
+                }
+                Ok(jar::Warm::Jar(report)) => warmed_by_jar(&window, target, report),
+                Err(outcome) => outcome,
             }
-            Ok(jar::Warm::Jar(report)) => warmed_by_jar(&window, target, report),
-            Err(outcome) => outcome,
-        },
+        }
         // A plain page waits for the same event as an article; what differs is
         // what counts as settled, which is `phase`'s business (policy.rs).
         Phase::Article | Phase::Page => {
@@ -619,6 +622,24 @@ pub(crate) fn build_window<R: Runtime>(
     let builder = builder.data_store_identifier(PROFILE_DATA_STORE);
 
     builder.build()
+}
+
+/// One reading of the cookie jar the warm-up is waiting on.
+///
+/// The two engines do not keep one in the same place. WebKitGTK writes the
+/// profile's `cookies` file as it goes, so Linux reads a path and the window is
+/// beside the point. WKWebView keeps its cookies inside the website data store
+/// and ignores the profile path entirely (docs/pitfall/385), so macOS has to
+/// ask this window's own store, and there `None` means the store did not answer
+/// in time — a sample to skip, not an empty jar.
+#[cfg(target_os = "macos")]
+fn jar_sample<R: Runtime>(window: &WebviewWindow<R>, _profile: &Path) -> Option<String> {
+    jar::read_store(window)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn jar_sample<R: Runtime>(_window: &WebviewWindow<R>, profile: &Path) -> Option<String> {
+    Some(jar::read(profile))
 }
 
 /// Wire up the two things the window needs from the engine itself: a report

@@ -31,7 +31,7 @@ use super::jar;
 use super::policy::{self, Status};
 use super::{
     build_window, connect_engine_signals, extract, profile_dir, wait_for_load, Chrome, LiveGuard,
-    WebviewFetchState,
+    WebviewFetchState, HAS_DOM_BRIDGE,
 };
 
 /// How long the sign-in window may stay open before the fetcher stops waiting on
@@ -224,13 +224,13 @@ impl SignInWatch {
 }
 
 /// Ask the page in the sign-in window what it currently offers.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_sign_in<R: Runtime>(window: &tauri::WebviewWindow<R>) -> Result<SignInProbe, String> {
     let json = super::eval_string(window, include_str!("sign-in.js"), SIGN_IN_PROBE_TIMEOUT)?;
     serde_json::from_str(&json).map_err(|e| format!("the probe returned unusable JSON: {e}"))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn read_sign_in<R: Runtime>(_window: &tauri::WebviewWindow<R>) -> Result<SignInProbe, String> {
     Err("no DOM bridge on this platform".to_string())
 }
@@ -380,7 +380,9 @@ pub async fn check_site_session(app: AppHandle, url: String) -> Result<SessionSt
     tauri::async_runtime::spawn_blocking(move || {
         let started = Instant::now();
         let checked_url = target.to_string();
-        if !cfg!(target_os = "linux") {
+        // The answer is read off the rendered page, so a build without the DOM
+        // bridge has no way to give one.
+        if !HAS_DOM_BRIDGE {
             return Ok(unsupported(&checked_url, started));
         }
         let state = match app.try_state::<WebviewFetchState>() {
@@ -488,16 +490,19 @@ pub async fn clear_site_cookies(app: AppHandle, host: String) -> Result<Vec<Stri
         let (tx, _rx) = mpsc::channel();
         let window = build_window(&app, &label, &profile, tx, Chrome::hidden())
             .map_err(|e| format!("could not open the cookie window: {e}"))?;
-        delete_cookies(&window, &host, &domains)?;
+        // What came back is what was removed, which on macOS is more than the
+        // spellings above could name and on Linux is exactly them.
+        let removed = delete_cookies(&window, &host, &domains)?;
         // WebKit's own persistence is on its own schedule, and a sign-out that
         // only holds in memory is not a sign-out: the next launch reads the file
         // and the reader is signed in again. Measured — after the deletes had
         // gone through, the jar on disk still had 13 of the site's rows
         // (docs/pitfall/111). The deletes above leave the network process with
         // nothing for this site, so rewriting the file here can only agree with
-        // it, whenever it next writes.
+        // it, whenever it next writes. On macOS there is no such file
+        // (docs/pitfall/385) and this finds nothing to do.
         prune_jar(&profile, &host)?;
-        Ok(domains)
+        Ok(removed)
     })
     .await
     .map_err(|e| format!("sign-out task failed: {e}"))?
@@ -600,12 +605,15 @@ pub fn jar_without(jar: &str, host: &str) -> (String, usize) {
     (out, dropped)
 }
 
+/// Delete a site's cookies from the fetcher's profile, and report the domains
+/// that went.
 #[cfg(target_os = "linux")]
 fn delete_cookies<R: Runtime>(
     window: &tauri::WebviewWindow<R>,
     host: &str,
     domains: &[String],
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
+    let asked = domains.to_vec();
     let domains = domains.to_vec();
     let probe_uri = format!("https://{host}/");
     let (tx, rx) = mpsc::channel::<Result<(), String>>();
@@ -640,18 +648,124 @@ fn delete_cookies<R: Runtime>(
         })
         .map_err(|e| format!("cannot reach the webview: {e}"))?;
     match rx.recv_timeout(policy::EVAL_TIMEOUT) {
-        Ok(result) => result,
+        // Delete-by-domain says nothing about what it found, so what is
+        // reported is what was asked for.
+        Ok(result) => result.map(|()| asked),
         Err(RecvTimeoutError::Timeout) => Err("the cookie manager did not answer".to_string()),
         Err(RecvTimeoutError::Disconnected) => Err("the webview closed".to_string()),
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+/// macOS: the same sign-out through `WKHTTPCookieStore`.
+///
+/// Two things follow from this side holding the cookies themselves rather than
+/// a domain string to match.
+///
+/// It does not depend on the guessed spellings. `domains` is what the caller
+/// worked out from the host plus whatever the jar file held, and on this
+/// platform there is no jar file (docs/pitfall/385) — so the reading that found
+/// `login.bloomberg.com` on Linux (docs/pitfall/110) comes back empty here and
+/// the list would be short. What is matched instead is `jar::belongs_to`:
+/// everything under the site, never anything above it. The spellings are still
+/// honoured on top of that, so neither platform removes less than the other.
+///
+/// And it reports what it removed rather than what it tried.
+///
+/// All of it runs on the main thread — `getAllCookies:` is answered there and
+/// so is every delete's completion — which is why the outstanding count is a
+/// plain cell with no lock around it.
+#[cfg(target_os = "macos")]
+fn delete_cookies<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    host: &str,
+    domains: &[String],
+) -> Result<Vec<String>, String> {
+    use std::cell::{Cell, RefCell};
+    use std::ptr::NonNull;
+    use std::rc::Rc;
+
+    use objc2_foundation::{NSArray, NSHTTPCookie};
+    use objc2_web_kit::WKWebView;
+
+    /// A cookie domain as the site rule reads it: leading dot off, lower case.
+    fn plain(domain: &str) -> String {
+        domain.trim_start_matches('.').to_ascii_lowercase()
+    }
+
+    let site = jar::site_of(host);
+    let named: Vec<String> = domains.iter().map(|d| plain(d)).collect();
+    let (tx, rx) = mpsc::channel::<Result<Vec<String>, String>>();
+    window
+        .with_webview(move |platform| {
+            // Safety: `with_webview` runs this on the main thread, and
+            // `inner()` is tauri-runtime-wry's pointer to this window's webview.
+            let view: Option<&WKWebView> = unsafe { (platform.inner() as *mut WKWebView).as_ref() };
+            let Some(view) = view else {
+                let _ = tx.send(Err("the window has no WKWebView".to_string()));
+                return;
+            };
+            // Safety: the window owns its configuration for as long as it is
+            // alive, which is the whole of this call.
+            let store = unsafe { view.configuration().websiteDataStore().httpCookieStore() };
+            let deleting = store.clone();
+            let handler = block2::RcBlock::new(move |cookies: NonNull<NSArray<NSHTTPCookie>>| {
+                // Safety: WebKit passes a live array and nothing here keeps it
+                // past this block.
+                let cookies = unsafe { cookies.as_ref() };
+                let doomed: Vec<_> = cookies
+                    .iter()
+                    .filter(|cookie| {
+                        let domain = plain(&cookie.domain().to_string());
+                        jar::belongs_to(&domain, &site) || named.contains(&domain)
+                    })
+                    .collect();
+                let mut removed: Vec<String> =
+                    doomed.iter().map(|c| plain(&c.domain().to_string())).collect();
+                removed.sort();
+                removed.dedup();
+                if doomed.is_empty() {
+                    let _ = tx.send(Ok(removed));
+                    return;
+                }
+                // One completion per delete, and the last one back is the
+                // barrier that says the store has finished with all of them.
+                let left = Rc::new(Cell::new(doomed.len()));
+                let answer = Rc::new(RefCell::new(Some((tx, removed))));
+                for cookie in doomed {
+                    let left = left.clone();
+                    let answer = answer.clone();
+                    let done = block2::RcBlock::new(move || {
+                        left.set(left.get().saturating_sub(1));
+                        if left.get() > 0 {
+                            return;
+                        }
+                        if let Some((tx, removed)) = answer.borrow_mut().take() {
+                            let _ = tx.send(Ok(removed));
+                        }
+                    });
+                    // Safety: WebKit copies the handler; the cookie is one it
+                    // handed over a moment ago and is not kept.
+                    unsafe { deleting.deleteCookie_completionHandler(&cookie, Some(&done)) };
+                }
+            });
+            // Safety: WebKit copies the handler, so it outliving this borrow is
+            // WebKit's business and not ours.
+            unsafe { store.getAllCookies(&handler) };
+        })
+        .map_err(|e| format!("cannot reach the webview: {e}"))?;
+    match rx.recv_timeout(policy::EVAL_TIMEOUT) {
+        Ok(result) => result,
+        Err(RecvTimeoutError::Timeout) => Err("the cookie store did not answer".to_string()),
+        Err(RecvTimeoutError::Disconnected) => Err("the webview closed".to_string()),
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn delete_cookies<R: Runtime>(
     _window: &tauri::WebviewWindow<R>,
     _host: &str,
     _domains: &[String],
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     Err("no cookie bridge on this platform".to_string())
 }
 
@@ -724,12 +838,40 @@ fn sweep_orphan_windows(app: &AppHandle, before: Vec<usize>) {
     });
 }
 
-#[cfg(not(target_os = "linux"))]
+/// macOS: nothing to sweep, and what wry does instead is worth writing down.
+///
+/// The GTK problem is a window whose webview has been destroyed and whose
+/// handle is nowhere (docs/pitfall/112). wry's macOS popup is not that one. Read
+/// out of wry 0.55.1's `wkwebview/class/wry_web_view_ui_delegate.rs`:
+/// `createWebViewWithConfiguration` builds a titled, closable, miniaturisable
+/// `NSWindow` with `setReleasedWhenClosed(false)`, keeps it in the UI delegate's
+/// own `new_windows` list, and hangs a window delegate on it whose
+/// `windowWillClose:` drops it from that list — which drops the webview with it.
+/// So the popup is a window the user can see, title, move and close, and
+/// closing it cleans up after itself. A sweep would have nothing to find, and
+/// the only way to look would be to walk `NSApp.windows`, which also holds the
+/// app's own windows, its panels and its sheets.
+///
+/// The real difference runs the other way. wry implements no `webViewDidClose:`
+/// on either platform, and on macOS that is the method WKWebView calls for a
+/// page's own `window.close()` — which is how an OAuth popup ends. So the
+/// popup is not closed for the user; they close it by hand. Untidy, not
+/// orphaned. Like the GTK path, never run against a real identity provider
+/// here.
+#[cfg(target_os = "macos")]
 fn toplevel_addresses(_app: &AppHandle) -> Vec<usize> {
     Vec::new()
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+fn sweep_orphan_windows(_app: &AppHandle, _before: Vec<usize>) {}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn toplevel_addresses(_app: &AppHandle) -> Vec<usize> {
+    Vec::new()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn sweep_orphan_windows(_app: &AppHandle, _before: Vec<usize>) {}
 
 /// Dev-only end-to-end check for the three commands above, in the same shape as

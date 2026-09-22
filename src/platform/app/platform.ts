@@ -82,13 +82,14 @@ export function hasWebviewFetch(): boolean {
 
 // Whether the host can also hold the user's own session with a site: open its
 // login page, say whether the profile is signed in, and sign out again
-// (src-tauri/src/webview_fetch/session.rs). A narrower question than
-// hasWebviewFetch, and the difference is the cookie jar: signing out means
-// deleting one site's cookies, which on Linux goes through WebKitGTK's cookie
-// manager and on macOS would have to go through WKHTTPCookieStore — not
-// written yet. Offering a sign-in whose sign-out does nothing is worse than not
-// offering it, so macOS reads sites as an anonymous reader for now.
-const WEBVIEW_SIGN_IN_PLATFORMS = new Set(["linux"]);
+// (src-tauri/src/webview_fetch/session.rs). The same two desktops as
+// hasWebviewFetch, and it stays a question of its own because the two are
+// answered by different machinery: fetching needs the DOM bridge, holding a
+// session needs the engine's cookie store as well — WebKitGTK's cookie manager
+// on Linux, WKHTTPCookieStore on macOS. A host that reads pages but cannot
+// delete one site's cookies would be offering a sign-in with no way out of it,
+// which is worse than offering none.
+const WEBVIEW_SIGN_IN_PLATFORMS = new Set(["linux", "macos"]);
 
 export function hasWebviewSignIn(): boolean {
 	try {
