@@ -197,15 +197,19 @@ function WeekRow({
         className="flex min-h-[44px] w-full items-center gap-3 py-2 text-left"
       >
         <span className="w-[76px] flex-none text-[13px] text-faint-foreground">{view.weekday}</span>
-        <DishImage
-          image={picture?.url}
-          imagePageUrl={picture?.pageUrl}
-          thumbnails={thumbnails}
-          alt={view.dish?.name ?? view.weekday}
-          size="row"
-          photoClassName="size-8 flex-none"
-          stripClassName="flex-none"
-        />
+        {/* The slot is kept whether or not there is anything to put in it: a
+            night with no picture would otherwise start its text a square to
+            the left of the nights above and below it. */}
+        <span className="size-8 flex-none">
+          <DishImage
+            image={picture?.url}
+            imagePageUrl={picture?.pageUrl}
+            thumbnails={thumbnails}
+            alt={view.dish?.name ?? view.weekday}
+            size="row"
+            photoClassName="size-full"
+          />
+        </span>
         <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">
           {lunch ? mealName(lunch) : ""} · {dinner ? mealName(dinner) : ""}
         </span>
