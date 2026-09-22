@@ -45,6 +45,7 @@
 | 确认框、删除之类的破坏性操作 | WebKit / webview + 浮层与 shadcn 原语 |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
 | 给 soul、角色或 desk item 挂工具 | AI 调用与上下文窗口 |
+| 给工具写 TypeBox 参数 schema | AI 调用与上下文窗口 |
 | 给回合加埋点、读 AI 埋点日志对账 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
@@ -71,7 +72,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 379）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 380）。
 
 ## EmbedPDF 引擎
 
@@ -336,6 +337,7 @@
 - [324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness](./324-a-duplicate-tool-name-passes-the-desk-and-dies-in-the-harness.md) — soul 每个回合挂一份 `statement_write`，简报的 desk item 又挂一份，回合组装照过、harness 的 `validateToolNames` 才抛 `Duplicate tool name`，而且说不出两边是谁；`assembleTurn` 的重名检查当时只比角色和 item，漏了 soul 自己那套基础工具。工具只挂在一处，检查改成走一遍最终清单、按 name 记 owner
 - [360-a-steer-queued-before-drive-lands-in-the-first-round](./360-a-steer-queued-before-drive-lands-in-the-first-round.md) — `accept` 之后 `drive` 之前塞的 steer 在第一次请求前就被 drain 进 transcript（run 自己的起始边界也是边界）；界面上那一刻 AI 行还是空的，切行会留空行，所以按「行里有没有字」决定切不切
 - [335-accepting-a-prompt-announces-every-replayed-message](./335-accepting-a-prompt-announces-every-replayed-message.md) — harness 为它写进 session 的每条消息发 `message_end`，`lane.accept` 把整段重放历史逐条播出来，埋点把里面的 assistant 消息当成一轮，记出一串 `round: 0`、用量全 null、`ms` 等于 Unix 时间戳的幽灵行。按 `runId` 等于本回合的 `operationId` 分辨，不按 role；另记 `model-calls-*.jsonl` 是读改整体写回加 fire-and-forget，并发写只留最后一个
+- [379-typebox-object-makes-every-property-required](./379-typebox-object-makes-every-property-required.md) — `Type.Object` 把每个属性都写进 `required`，可选只能 `Type.Optional`；只对某些情况有意义的嵌套对象/数组留成必填，模型发 `null` 报 `must be object`、发 `{}` 报 `must have required properties`，工具循环两句之间来回重试永远到不了 execute。pi-ai 的 `validateToolCall` 只把 `null` 转成基本类型的零值（string 转 `""`、number 转 `0`、boolean 转 `false`），object 和 array 不在里面；`normalizeOptionalNulls` 也只删非必填的 `null`。漏掉不发对所有类型都是硬失败，所以描述里写着「哪种模式才有」「可以为空」的字段一律可选，缺了让 execute 用模型看得懂的话拒绝一次
 
 ## 开发环境
 
