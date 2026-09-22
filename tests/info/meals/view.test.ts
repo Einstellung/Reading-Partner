@@ -20,6 +20,7 @@ import {
   upcomingDays,
   weekdayName,
 } from "../../../src/info/meals/view";
+import type { Dish, Ingredient } from "../../../src/info/meals/types";
 import { deriveShoppingList, setShoppingChecked, shoppingItemKey } from "../../../src/info/meals/shopping";
 import { MON, shopping, week } from "./fixtures/week";
 
@@ -65,10 +66,44 @@ test("a day already eaten leaves the screen", () => {
   expect(upcomingDays(null, MON)).toEqual([]);
 });
 
-test("a dish with no photograph is drawn from up to three ingredient pictures", () => {
+test("a dish with no photograph is drawn from its ingredients, greens before jars", () => {
   const stew = week().dishes[1]!;
+  // chickpeas are written first and are a pantry tin; the kale comes first.
+  expect(dishThumbnails(stew, (en) => `${en}.png`)).toEqual(["kale.png", "chickpeas.png"]);
+  // An ingredient no source has a picture of is skipped, not drawn as a gap.
   expect(dishThumbnails(stew, (en) => (en === "kale" ? "kale.png" : null))).toEqual(["kale.png"]);
   expect(dishThumbnails(null)).toEqual([]);
+});
+
+test("a strip is four cut-outs at most, the packshots last and the repeats gone", () => {
+  const ing = (en: string, category: Ingredient["category"]): Ingredient => ({
+    name: en,
+    en,
+    qty: "some",
+    category,
+    keeps: "w1",
+  });
+  const dish: Dish = {
+    ...week().dishes[2]!,
+    ingredients: [
+      ing("gochujang", "pantry"),
+      ing("stock", "pantry"),
+      ing("salmon", "protein"),
+      ing("kale", "produce"),
+      ing("scallion", "produce"),
+      // The same cut-out as the scallion, under the other name.
+      ing("spring onion", "produce"),
+      ing("carrot", "produce"),
+      ing("leek", "produce"),
+    ],
+  };
+  const resolve = (en: string) => (en === "spring onion" ? "scallion.png" : `${en}.png`);
+  expect(dishThumbnails(dish, resolve)).toEqual([
+    "salmon.png",
+    "kale.png",
+    "scallion.png",
+    "carrot.png",
+  ]);
 });
 
 test("the list is drawn in aisle order, ticked lines sunk, and counted once", () => {

@@ -46,7 +46,12 @@ export interface MealsHomeProps {
   onOpenDay: (date: string) => void;
 }
 
-/** The picture a day leads with, at the size the card gives it. */
+/**
+ * The picture a day leads with: the dish's photograph in a 16:9 band, or the
+ * row of its ingredients' cut-outs, or nothing. The band is the photograph's
+ * and not the day's — a card with no photograph shows a row of small squares
+ * and is no taller for it (docs/73 图片).
+ */
 function DayPicture({
   view,
   photos,
@@ -59,15 +64,16 @@ function DayPicture({
   const picture = dishPicture(view.dish, photos);
   const thumbnails = dishThumbnails(view.dish, (en) => ingredientPicture(en, photos)?.url ?? null);
   return (
-    <div className={big ? "mt-3 aspect-[16/9] max-h-40 w-full" : "mt-2.5 aspect-[16/9] max-h-24 w-full"}>
-      <DishImage
-        image={picture?.url}
-        imagePageUrl={picture?.pageUrl}
-        thumbnails={thumbnails}
-        alt={view.dish?.name ?? view.word}
-        className="size-full"
-      />
-    </div>
+    <DishImage
+      image={picture?.url}
+      imagePageUrl={picture?.pageUrl}
+      thumbnails={thumbnails}
+      alt={view.dish?.name ?? view.word}
+      photoClassName={
+        big ? "mt-3 aspect-[16/9] max-h-40 w-full" : "mt-2.5 aspect-[16/9] max-h-24 w-full"
+      }
+      stripClassName={big ? "mt-3" : "mt-2.5"}
+    />
   );
 }
 
@@ -191,17 +197,15 @@ function WeekRow({
         className="flex min-h-[44px] w-full items-center gap-3 py-2 text-left"
       >
         <span className="w-[76px] flex-none text-[13px] text-faint-foreground">{view.weekday}</span>
-        {(picture || thumbnails.length > 0) && (
-          <span className="size-8 flex-none">
-            <DishImage
-              image={picture?.url}
-              imagePageUrl={picture?.pageUrl}
-              thumbnails={thumbnails}
-              alt={view.dish?.name ?? view.weekday}
-              className="size-full"
-            />
-          </span>
-        )}
+        <DishImage
+          image={picture?.url}
+          imagePageUrl={picture?.pageUrl}
+          thumbnails={thumbnails}
+          alt={view.dish?.name ?? view.weekday}
+          size="row"
+          photoClassName="size-8 flex-none"
+          stripClassName="flex-none"
+        />
         <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">
           {lunch ? mealName(lunch) : ""} · {dinner ? mealName(dinner) : ""}
         </span>

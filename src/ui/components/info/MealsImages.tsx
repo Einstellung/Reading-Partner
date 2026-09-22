@@ -11,9 +11,8 @@
 
 import { useState } from "react";
 
-import { imageSrc } from "../../../info/meals/images";
+import { imageSrc, stripSources } from "../../../info/meals/images";
 import type { IngredientCategory } from "../../../info/meals/types";
-import { hideBrokenImage } from "../markdown/proseCss";
 
 function Glyph({ size = 20, children }: { size?: number; children: React.ReactNode }) {
   return (
@@ -134,17 +133,83 @@ export function IngredientThumb({
 }
 
 /**
- * The picture for a night: the dish's own photograph, or a strip of up to three
- * of its ingredients', or a neutral block. The block is a block and not an
- * apology — a night with nothing to show still has to hold its place in the
- * layout.
+ * How big the cut-outs of a strip are drawn, and how many of them there is room
+ * for. `card` is what a day's card and a meal box show: a touch-sized square on
+ * a phone, one notch down on a desktop, four of them at most. `row` is the one
+ * square a line in the rest of the week has space for.
+ */
+export type StripSize = "card" | "row";
+
+const STRIP_TILE: Record<StripSize, string> = {
+  card: "size-10 rounded-md p-1 coarse:size-11",
+  row: "size-8 rounded-md p-0.5",
+};
+
+const STRIP_MAX: Record<StripSize, number> = { card: 4, row: 1 };
+
+/**
+ * The cut-outs of a dish's ingredients, as a row of small squares.
+ *
+ * Contained and not covered: TheMealDB's artwork is a cut-out on a plain
+ * ground, and a square of it stretched across a banner is a slab of raw meat
+ * rather than a picture of dinner. The square is small on purpose — the row
+ * stands in for a photograph, so it must not out-weigh the three lines of the
+ * card it sits in.
+ *
+ * A picture that 404s, or that cannot be reached at all, takes its square with
+ * it and the next one moves up; a row with nothing left to draw draws nothing,
+ * rather than a line of empty boxes.
+ */
+export function IngredientStrip({
+  urls,
+  size = "card",
+  className,
+}: {
+  urls: string[];
+  size?: StripSize;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState<string[]>([]);
+  const srcs = stripSources(urls, failed).slice(0, STRIP_MAX[size]);
+  if (!srcs.length) return null;
+  return (
+    <span className={`flex items-center gap-2 ${className ?? ""}`}>
+      {srcs.map((src) => (
+        <span
+          key={src}
+          className={`flex flex-none items-center justify-center overflow-hidden bg-muted-soft ${STRIP_TILE[size]}`}
+        >
+          <img
+            src={src}
+            alt=""
+            className="size-full object-contain"
+            loading="lazy"
+            onError={() => setFailed((prev) => (prev.includes(src) ? prev : [...prev, src]))}
+          />
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * The picture for a night: the dish's own photograph in the box the caller
+ * gives it, or the strip of its ingredients' cut-outs, or nothing at all.
+ *
+ * The two answers are different shapes, so the box belongs to the branch and
+ * not to the caller — a 16:9 band is right for a photograph and wrong for
+ * everything else, and a caller that wraps both in one is what put a stretched
+ * cut-out of beef across the top of a card. Nothing to draw draws nothing: a
+ * neutral block holds a place that no longer needs holding.
  */
 export function DishImage({
   image,
   imagePageUrl,
   thumbnails,
   alt,
-  className,
+  size = "card",
+  photoClassName,
+  stripClassName,
   onPhotoFailed,
 }: {
   image?: string;
@@ -153,7 +218,11 @@ export function DishImage({
   imagePageUrl?: string | null;
   thumbnails: string[];
   alt: string;
-  className?: string;
+  size?: StripSize;
+  // The photograph's own box: its aspect and how tall it may get.
+  photoClassName?: string;
+  // The strip's, which is only ever its spacing — the squares size themselves.
+  stripClassName?: string;
   // Told when the dish's own photograph fails to load, so a caller drawing its
   // credit line can take the line down with the picture.
   onPhotoFailed?: () => void;
@@ -161,14 +230,13 @@ export function DishImage({
   const [failed, setFailed] = useState<string | null>(null);
   const wanted = imageSrc(image, imagePageUrl);
   const src = wanted && wanted !== failed ? wanted : null;
-  const box = `block overflow-hidden rounded-lg border border-border-subtle bg-muted-soft ${className ?? ""}`;
   // The dish's own photograph failing falls back to the strip, not to a gap.
   if (src) {
     return (
       <img
         src={src}
         alt={alt}
-        className={`${box} size-full object-cover`}
+        className={`block overflow-hidden rounded-lg border border-border-subtle bg-muted-soft object-cover ${photoClassName ?? ""}`}
         loading="lazy"
         onError={() => {
           setFailed(wanted);
@@ -177,20 +245,5 @@ export function DishImage({
       />
     );
   }
-  if (thumbnails.length) {
-    return (
-      <span className={`${box} flex`} onErrorCapture={(e) => hideBrokenImage(e.target)}>
-        {thumbnails.map((url, i) => (
-          <img
-            key={i}
-            src={imageSrc(url) ?? undefined}
-            alt=""
-            className="min-w-0 flex-1 object-cover"
-            loading="lazy"
-          />
-        ))}
-      </span>
-    );
-  }
-  return <span className={box} aria-hidden="true" />;
+  return <IngredientStrip urls={thumbnails} size={size} className={stripClassName} />;
 }
