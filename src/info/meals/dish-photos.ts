@@ -34,9 +34,27 @@ export function ingredientPhotoKey(en: string): string {
 /** The whole cache, as everything that reads it takes it. */
 export type PhotoCache = Readonly<Record<string, DishPhotoEntry>>;
 
-/** Whether a key still has to be searched for: never asked, or a stale miss. */
-export function needsPhotoLookup(entry: DishPhotoEntry | undefined, now: number): boolean {
+/** When one entry was written: found or looked for and not found. */
+export function photoEntryAt(entry: DishPhotoEntry): number {
+  return isDishPhotoMiss(entry) ? entry.checkedAt : entry.foundAt;
+}
+
+/**
+ * Whether a key still has to be searched for: never asked, asked again since
+ * this answer was written, or a miss old enough to be worth another look.
+ *
+ * `askedAt` is the reader saying the pictures are wrong (MealsState.
+ * photosAskedAt). It is a time rather than a flag because the reader and the
+ * machine that searches are usually not the same machine: the ask travels over
+ * sync, and every entry older than it is what "search the week again" means.
+ */
+export function needsPhotoLookup(
+  entry: DishPhotoEntry | undefined,
+  now: number,
+  askedAt = 0,
+): boolean {
   if (!entry) return true;
+  if (photoEntryAt(entry) < askedAt) return true;
   if (!isDishPhotoMiss(entry)) return false;
   return now - entry.checkedAt >= PHOTO_MISS_RETRY_MS;
 }

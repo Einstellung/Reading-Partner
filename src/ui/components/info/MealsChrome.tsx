@@ -11,8 +11,11 @@ import { IconSparkle } from "../base/icons";
 
 /** The one column all three screens are drawn in: phone width, centred wider. */
 export function MealsColumn({ children }: { children: React.ReactNode }) {
+  // No padding above: the bar below is sticky, and a band of page above it is a
+  // band the cards scroll through in full view before the blur catches them.
+  // The bar carries that space itself instead.
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
+    <div className="mx-auto flex w-full max-w-3xl flex-col px-4 pb-5 sm:px-6 sm:pb-8">
       {children}
     </div>
   );
@@ -59,7 +62,7 @@ export function MealsHeader({
   onBack?: () => void;
 }) {
   return (
-    <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-1.5 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-2">
+    <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 pb-1.5 pt-3 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:pb-2 sm:pt-5">
       {onBack && (
         <button
           type="button"

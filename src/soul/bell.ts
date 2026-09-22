@@ -36,6 +36,7 @@ import type { SteerPort } from "../legion/execute/contract";
 import type { HeldHarness } from "../legion/execute/held";
 import type { DeskMessage } from "../desk";
 import type { ProviderId } from "../ai";
+import { modelIdFor, tierForThread } from "../ai/model-tier";
 import { createBookThread, getBookThread, loadThreads } from "../platform/app/threads";
 import { toReasoning, type Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
@@ -57,6 +58,12 @@ export interface BellTurn {
   messages: DeskMessage[];
   tools: AgentTool[];
   harness: HeldHarness;
+  /**
+   * The thread store's key for the conversation this lands in (threads.ts).
+   * Which of the two models the turn runs on is read off it (ai/model-tier.ts):
+   * a bell answered in an everyday conversation is answered on that tier.
+   */
+  bookKey: string;
   threadId: string;
   signal?: AbortSignal;
   /**
@@ -227,7 +234,7 @@ const appSend: SendBellTurn = (turn) =>
   new Promise<string>((resolve, reject) => {
     void runAgentTurn({
       providerId: turn.settings.defaultProviderId as ProviderId,
-      modelId: turn.settings.defaultModelId as string,
+      modelId: modelIdFor(turn.settings, tierForThread(turn.bookKey)) as string,
       systemPrompt: turn.systemPrompt,
       messages: turn.messages,
       tools: turn.tools,
@@ -436,6 +443,7 @@ async function runPass(deps: AnswerBellDeps): Promise<number> {
         messages: turn.messages,
         tools: turn.tools,
         harness,
+        bookKey: key,
         threadId,
         ...(hold ? { signal: hold.signal, onSteerable: hold.steerable } : {}),
         ...(!hold && deps.signal ? { signal: deps.signal } : {}),

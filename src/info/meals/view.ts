@@ -265,10 +265,20 @@ export function dishPhotoCredit(
   return { text: `Photo: ${site}`, url };
 }
 
+// How many cut-outs a strip has room for, and which aisles are worth showing.
+//
+// A vegetable or a cut of meat is a picture of what is being cooked; a jar of
+// paste or a box of stock is a picture of a label, and a shelf of packshots
+// says nothing about the dish. So the pantry lines go last rather than out —
+// a dish that is all pantry still gets a strip.
+const THUMBNAIL_LIMIT = 4;
+const PICTURES_THE_DISH: readonly IngredientCategory[] = ["produce", "protein"];
+
 /**
- * Up to three ingredient photographs standing in for a dish that has no picture
- * of its own. Three is what fits in a strip the width of one card; ingredients
- * no source has a photograph of are skipped rather than drawn as a gap.
+ * Up to four ingredient photographs standing in for a dish that has no picture
+ * of its own. Ingredients no source has a photograph of are skipped rather than
+ * drawn as a gap, and the strip that draws these caps and de-duplicates them
+ * again (images.ts) — what is returned here is the order, not the row.
  *
  * Resolved by the English name, never the reader's — images.ts is one table in
  * one language.
@@ -278,13 +288,28 @@ export function dishThumbnails(
   resolve: (name: string) => string | null = ingredientImageUrl,
 ): string[] {
   if (!dish) return [];
-  const urls: string[] = [];
+  const front: string[] = [];
+  const back: string[] = [];
+  const seen = new Set<string>();
   for (const ing of dish.ingredients) {
     const url = resolve(ing.en);
-    if (url) urls.push(url);
-    if (urls.length === 3) break;
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    (PICTURES_THE_DISH.includes(ing.category) ? front : back).push(url);
   }
-  return urls;
+  return [...front, ...back].slice(0, THUMBNAIL_LIMIT);
+}
+
+/**
+ * The second line of a shopping row: how long the thing keeps, and the one
+ * instruction a line can carry.
+ *
+ * The quantity is not in it. It is set on the right of the row instead, where a
+ * column of quantities can be read down in a shop — which is the only place
+ * this screen is ever read.
+ */
+export function shoppingNote(item: ShoppingItem): string {
+  return keepsLabel(item.keeps) + (item.freezeOnArrival ? " · freeze on arrival" : "");
 }
 
 /** How many lines are still to be bought. The only count the list shows. */

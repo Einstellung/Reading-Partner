@@ -72,7 +72,14 @@ export function parseMealsFile(raw: unknown): MealsState | null {
   const deviations = Array.isArray(raw.deviations)
     ? raw.deviations.filter(isDeviation)
     : [];
-  return { charter, plan, shopping, deviations };
+  const asked = typeof raw.photosAskedAt === "number" ? raw.photosAskedAt : undefined;
+  return {
+    charter,
+    plan,
+    shopping,
+    deviations,
+    ...(asked === undefined ? {} : { photosAskedAt: asked }),
+  };
 }
 
 function validateCharter(raw: unknown): MealsCharter | null {
@@ -198,6 +205,21 @@ export async function saveDeviation(
     shopping,
     deviations: [...s.deviations, deviation],
   }));
+}
+
+/**
+ * Write down that the reader asked for the photographs again (docs/73 图片).
+ *
+ * A timestamp in the week's own file rather than a run, because the machine
+ * that can search is usually not the machine being held: the ask travels over
+ * sync like everything else here, and the searching machine finds it the next
+ * time it looks at the week.
+ */
+export async function savePhotosAsked(
+  at: number,
+  io: MealsIo = mealsIo,
+): Promise<MealsState> {
+  return mutate(io, (s) => ({ ...s, photosAskedAt: at }));
 }
 
 /**

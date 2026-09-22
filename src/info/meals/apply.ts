@@ -45,10 +45,16 @@ export interface MealsPorts {
   ): Promise<unknown>;
   // The photographs found so far, by cache key.
   photos?(): Promise<PhotoCache>;
-  // Start the run that searches for what the week still has no picture of, on
-  // whichever machine has a hidden webview. Optional: a host that cannot start
-  // runs still applies plans, and the week is drawn from its ingredients.
+  // Search for what the week still has no picture of. Present only on a machine
+  // that has the hidden webview the search needs (docs/73 图片): a run of this
+  // kind is executed by whoever starts it, so a phone that started one would
+  // search with nothing to search in. Absent is the ordinary case — the week is
+  // drawn from its ingredients until the pictures arrive over sync.
   startPhotoRun?(planId: string, queries: readonly PhotoQuery[]): Promise<unknown>;
+  // Write down that the reader asked for the pictures again. The request has to
+  // travel as data, because the machine that can search is usually not the one
+  // being held (docs/73 图片).
+  markPhotosAsked?(at: number): Promise<unknown>;
   // Whether a name already has a picture from a bank, which is what decides
   // that an ingredient has to be searched for at all.
   bankImage?(en: string): string | null;
@@ -147,9 +153,11 @@ export async function applyPlan(
   }
   ports.changed();
   // The photographs are asked for after the week is on disk and after the note
-  // is handed back: the search is a run on another machine and the screen is
-  // usable without it, drawn from the ingredients' pictures until it lands.
-  const pending = startPhotoSearch(plan, cache, ports).then(
+  // is handed back: the search takes minutes and the screen is usable without
+  // it, drawn from the ingredients' pictures until it lands. On a machine that
+  // cannot search this does nothing at all, and the machine that can picks the
+  // week up when this write reaches it (photo-sweep.ts).
+  const pending = startPhotoSearch(plan, cache, ports, state.photosAskedAt ?? 0).then(
     () => {},
     () => {},
   );
@@ -160,48 +168,72 @@ export async function applyPlan(
  * Ask for the photographs a week has none of: the dishes by name, then the
  * ingredients no picture bank has artwork for.
  *
- * One run, on whichever machine can search (photo-run.ts). Nothing is waited
- * for and nothing is written here — the run writes the cache itself, entry by
- * entry, and the plan picks the pictures up as it renders.
+ * Only on the machine that can search — everywhere else the port is absent and
+ * this does nothing. Nothing is waited for and nothing is written here: the run
+ * writes the cache itself, entry by entry, and the plan picks the pictures up
+ * as it renders.
  *
- * The run's id, or null when the week wants nothing or this host cannot ask.
- * Never throws: every failure is a week drawn from its ingredients.
+ * The run's id, or null when the week wants nothing or this machine cannot
+ * search. Never throws: every failure is a week drawn from its ingredients.
  */
 export async function startPhotoSearch(
   plan: WeekPlan,
   cache: PhotoCache,
   ports: MealsPorts,
+  askedAt = 0,
 ): Promise<unknown> {
   const start = ports.startPhotoRun;
   if (!start) return null;
   const queries = photoQueriesForPlan(plan, cache, ports.now(), {
     bankImage: ports.bankImage ?? (() => null),
+    askedAt,
   });
   if (!queries.length) return null;
   return start(plan.id, queries);
 }
 
+/** What the reader asking for better pictures came to. */
+export interface PhotoRefresh {
+  // How many names the week will be searched for. Zero when there is no week,
+  // nothing in it to search for, or the ask could not be written down.
+  queries: number;
+  // Whether the search started here. False on the machine the reader is
+  // usually holding: the ask was written down and travels to the one that can.
+  searching: boolean;
+}
+
 /**
- * Search the whole week again, the cache ignored: the reader looked at a
- * picture and said it is not the dish.
+ * Search the whole week again: the reader looked at a picture and said it is
+ * not the dish.
  *
- * Every query of the plan, including the names already answered and the ones
- * answered with nothing — that is what asking again means. How many were asked
- * for, or zero when there is no week, no run to start, or nothing in the week
- * to search for.
+ * The ask is a timestamp on the week (photosAskedAt), not a run. The machine
+ * that can search is usually not the one being held, and a run started here
+ * would be executed here — so what travels is the fact that they asked, and
+ * every cache entry older than it is looked up again wherever the searching
+ * happens. On the searching machine the pass also starts at once.
  */
-export async function refreshPhotos(ports: MealsPorts): Promise<number> {
-  const start = ports.startPhotoRun;
+export async function refreshPhotos(ports: MealsPorts): Promise<PhotoRefresh> {
   const state = await ports.current();
-  if (!state.plan || !start) return 0;
+  if (!state.plan) return { queries: 0, searching: false };
+  const at = ports.now();
+  try {
+    if (!ports.markPhotosAsked) return { queries: 0, searching: false };
+    await ports.markPhotosAsked(at);
+  } catch {
+    // Nothing was written down, so nothing travels: say so rather than let the
+    // reader wait for a search nobody will run.
+    return { queries: 0, searching: false };
+  }
   const cache = ports.photos ? await ports.photos().catch(() => ({})) : {};
-  const queries = photoQueriesForPlan(state.plan, cache, ports.now(), {
+  const queries = photoQueriesForPlan(state.plan, cache, at, {
     bankImage: ports.bankImage ?? (() => null),
-    ignoreCache: true,
+    askedAt: at,
   });
-  if (!queries.length) return 0;
+  if (!queries.length) return { queries: 0, searching: false };
+  const start = ports.startPhotoRun;
+  if (!start) return { queries: queries.length, searching: false };
   await start(state.plan.id, queries);
-  return queries.length;
+  return { queries: queries.length, searching: true };
 }
 
 /**

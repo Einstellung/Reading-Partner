@@ -17,6 +17,7 @@ import { expect, test } from "bun:test";
 import { PALACE } from "../../../src/palace";
 import { ASK_PULL_ROUTE } from "../../../src/info/briefer/handoff";
 import { READER_PULL_ROUTE } from "../../../src/info/briefer/reader";
+import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/info/meals/photo-sweep";
 import { SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
 import {
   BOOK_CACHE_PULL_ROUTE,
@@ -41,6 +42,7 @@ const ROUTES: PullMatcher[] = [
   READER_PULL_ROUTE,
   SOURCES_PULL_ROUTE,
   ASK_PULL_ROUTE,
+  MEALS_PHOTOS_PULL_ROUTE,
 ];
 
 // Synced files that no route needs, and why. Each is read when the screen or the
@@ -52,14 +54,6 @@ const NO_IN_MEMORY_STATE: Record<string, string> = {
   "info-feedback.jsonl": "append-only, and read in full when it is read at all",
   "info-pool-marks.json": "read at the start of a collection run, not held between them",
   "info-labs.json": "the roster is read from disk each time it is wanted — a run, a prompt, a card",
-  "info-meals.json":
-    "the week, the list and the charter are read from disk each time they are wanted — the " +
-    "screen when it is drawn, the desk when it is laid, a card when it is applied — and the " +
-    "store holds nothing between calls (docs/73)",
-  "info-meals-photos.json":
-    "the photograph cache is read from disk each time it is wanted — the screen when it is " +
-    "drawn, the Apply when it works out what is still missing — and the store holds nothing " +
-    "between calls (docs/73 图片)",
   "info-picture-":
     "a room's picture is read at the start of its analysis run and written by the collector alone",
   "info-cables-":
@@ -183,6 +177,15 @@ test("the routes claim the files their subscribers used to", () => {
   expect(claim("legion/claim/device1.json")).toBe("reader");
   expect(claim("info-sources.json")).toBe("sources");
   expect(claim("info-ask-device1.json")).toBe("ask");
+});
+
+// Not a cache to drop: neither store holds anything between calls. The route is
+// what tells the machine with the hidden webview that a week applied on the
+// phone has arrived and wants its photographs searched for (docs/73 图片).
+test("the week and its photograph cache reach the machine that searches", () => {
+  expect(claim("info-meals.json")).toBe("meals");
+  expect(claim("info-meals-photos.json")).toBe("meals");
+  expect(MEALS_PHOTOS_PULL_ROUTE.matches("info-labs.json")).toBe(false);
 });
 
 // The bodies are the point of the split (docs/21): the index stays hot and

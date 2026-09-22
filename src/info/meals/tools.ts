@@ -923,9 +923,11 @@ export function buildWriteMethodTool(
 /**
  * Search this week's photographs again (docs/73 图片).
  *
- * The one thing the reader can ask about the pictures. The search is a run on
- * whichever machine has a hidden webview, so this writes the ask and says so;
- * the pictures appear on the screen as they land, without another turn.
+ * The one thing the reader can ask about the pictures. The searching happens on
+ * the machine with a hidden webview, which is usually not the one they are
+ * holding, so what this writes is the moment they asked: every picture older
+ * than it is looked up again wherever the search runs. The pictures appear on
+ * the screen as they land, without another turn.
  */
 export function buildRefreshMealsPhotosTool(
   deps: MealsToolDeps & { ports: MealsPorts },
@@ -947,20 +949,21 @@ export function buildRefreshMealsPhotosTool(
           text: "There is no week planned, so there are no photographs to look for.",
         };
       }
-      const asked = await refreshPhotos(deps.ports);
-      if (!asked) {
+      const { queries, searching } = await refreshPhotos(deps.ports);
+      if (!queries) {
         return {
           receipt: null,
-          text:
-            "Nothing could be searched for: this device cannot run the image search and no " +
-            "other one is about.",
+          text: "Nothing could be asked for: the request could not be written down.",
         };
       }
+      const many = `${queries} ${queries === 1 ? "photograph" : "photographs"}`;
       return {
         receipt: null,
-        text:
-          `Searching again for ${asked} ${asked === 1 ? "photograph" : "photographs"}. They ` +
-          "appear on their screen as they are found; nothing else has to be done.",
+        text: searching
+          ? `Searching again for ${many}. They appear on their screen as they are found; ` +
+            "nothing else has to be done."
+          : `Asked for ${many} to be looked for again. The search runs on the computer, which ` +
+            "may be asleep; they appear on their screen as they arrive.",
       };
     },
   };

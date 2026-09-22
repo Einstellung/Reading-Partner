@@ -3,7 +3,12 @@
 // app-relative one straight. Run: bash scripts/t.sh tests/info/meals/images.test.ts
 
 import { expect, test } from "bun:test";
-import { imageSrc, ingredientImageUrl, MEALDB_ALIASES } from "../../../src/info/meals/images";
+import {
+  imageSrc,
+  ingredientImageUrl,
+  MEALDB_ALIASES,
+  stripSources,
+} from "../../../src/info/meals/images";
 import { MEALDB_INGREDIENTS } from "../../../src/info/meals/mealdb-ingredients";
 
 test("an external picture is routed through the proxy", () => {
@@ -155,4 +160,20 @@ test("every picture a name resolves to is proxyable", () => {
       `img://localhost/${encodeURIComponent(url)}`,
     );
   }
+});
+
+// The strip of cut-outs a dish without a photograph shows (docs/73 图片). It
+// draws what is left after the failures and the repeats come out, and a strip
+// with nothing left draws nothing rather than a row of empty squares.
+test("a strip draws each cut-out once, minus the ones that failed", () => {
+  const keep = (u: string) => u;
+  expect(stripSources(["a.png", "b.png", "a.png"], [], keep)).toEqual(["a.png", "b.png"]);
+  expect(stripSources(["a.png", "b.png"], ["a.png"], keep)).toEqual(["b.png"]);
+  expect(stripSources(["a.png"], ["a.png"], keep)).toEqual([]);
+  expect(stripSources([], [], keep)).toEqual([]);
+});
+
+test("a strip drops what has no source at all", () => {
+  expect(stripSources(["", "b.png"], [], (u) => (u ? u : null))).toEqual(["b.png"]);
+  expect(stripSources(["/local/leek.png"])).toEqual(["/local/leek.png"]);
 });

@@ -17,6 +17,7 @@
 | 读写 AppData | 存储与数据目录 |
 | 往 jsonl 日志追加行、写不 await 的埋点 | 存储与数据目录 |
 | 加自动跑的后台/夜间任务、写数据迁移 | 存储与数据目录 |
+| 派 legion run、按设备能力挑跑它的机器 | 存储与数据目录 |
 | 导入外部文件、拿文件选择器给的路径 | 存储与数据目录 |
 | 造一个字节要可复现的文件（zip、EPUB） | 存储与数据目录 |
 | 同步引擎、Drive 后端 | 存储与数据目录 + 网络与 CSP + WebKit / webview |
@@ -72,7 +73,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 380）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 382）。
 
 ## EmbedPDF 引擎
 
@@ -181,6 +182,7 @@
 - [331-a-seeded-library-json-of-the-wrong-shape-is-renamed-away](./331-a-seeded-library-json-of-the-wrong-shape-is-renamed-away.md) — `library.json` 是 `{"books":{…}}` 不是扁平表；形状不对的守卫会把它改名成 `library.json.corrupt-<时间戳>` 再当空库跑，界面上只看到一个每张卡都当 PDF、没有续读的书架。喂完种子先查容器里有没有 `*.corrupt-*`
 - [336-home-glob-scope-does-not-cross-a-dotted-directory](./336-home-glob-scope-does-not-cross-a-dotted-directory.md) — capability 里 `$HOME/**` 匹配不了带点的目录（比如 `.cache`），文件确实在 HOME 下也照样被 fs 插件拒绝；`$APPDATA` 下的路径不受影响，读隐藏目录下的文件要么挪去 appdata，要么显式加一条 scope
 - [377-arxiv-html-returns-a-200-shell](./377-arxiv-html-returns-a-200-shell.md) — `arxiv.org/html/<id>` 没有 HTML 版时有两种形态，404 的错误页和 200 的空壳（约 20 KB，`<title>Untitled Document</title>`，正文三千多字符）。判存在要看正文长度加 title，不看状态码
+- [380-a-local-run-ignores-requires](./380-a-local-run-ignores-requires.md) — `tier: "local"` 的 run 由派发它的那台机器当场执行，`requires` 只在同步 run 的选举里起作用，管不着谁能派；手机应用周计划后自己跑了要隐藏 webview 的 `meals-photos`，电脑上一张图都没搜。能干这活的机器读同步过来的文件自己发起，干不了的连 port 都不挂、worker 再拒一次
 
 ## 提取（壳侧 pdf.js）
 
@@ -191,6 +193,7 @@
 
 ## iOS 构建与签名
 
+- [381-a-source-sync-restarts-the-whole-ios-build](./381-a-source-sync-restarts-the-whole-ios-build.md) — Mac 上两个 session 各跑 `tauri ios dev`，第二个改了端口；`git reset --hard` 把 `tauri.conf.json` 写回去，tauri 重启整条构建，重启时 `vite.config.ts` 也已经回到被占用的 1420，`strictPort` 让 vite 当场退出。app 指着没人监听的端口，屏幕上是 Apple 那句 "did you grant local network permissions"，和权限无关。同步只 `git checkout FETCH_HEAD -- src tests`
 - [31-ios-deep-link-scheme-build-time](./31-ios-deep-link-scheme-build-time.md) — 自定义 scheme 只能构建期静态注册进 tauri.conf，不能靠 env，且要和 env client id 手工对齐
 - [157-a-cached-crate-never-replays-its-build-script](./157-a-cached-crate-never-replays-its-build-script.md) — 依赖 crate 命中 rust-cache 就不重新编译，它 build script 写进 `gen/apple/Info.plist` 的 `CFBundleURLTypes` 也就没人写；`gen/apple` 每次现生成，于是 build 48/53 发出去才发现 Google 回调回不来。CI 自己从 tauri.conf 注入（幂等），并在 ipa 的 binary plist 上断言，缺 scheme 就红
 - [34-ios-init-default-icon-alpha](./34-ios-init-default-icon-alpha.md) — tauri ios init 用内置默认图标模板，CI init 后要覆盖 appiconset；iOS 图标 strip alpha，CFBundleIconName 兜底
