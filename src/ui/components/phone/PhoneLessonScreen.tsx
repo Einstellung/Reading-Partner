@@ -80,7 +80,10 @@ export default function PhoneLessonScreen(props: {
   if (open) {
     return (
       <PhoneLessonAside
-        book={{ ...book, threadId: open.threadId }}
+        // The conversation is this id from the moment the view opens; the record
+        // behind it is written by the first question (use-lesson-aside.ts), so
+        // pressing Ask about this and changing one's mind leaves nothing.
+        book={{ ...book, threadId: open.threadId, ensureThread: aside.ensure }}
         span={open.span}
         onBack={leave}
       />

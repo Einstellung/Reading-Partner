@@ -19,6 +19,7 @@ import {
   getThread,
   patchThreadMessage,
   threadKind,
+  type AsideInit,
 } from "../../../platform/app/threads";
 import { nextCardId, toPersistedCardPart } from "../chat/chatParts";
 import type { LessonAskSpan } from "./lesson-aside";
@@ -33,6 +34,11 @@ export interface LessonAside {
   open: LessonAsideOpen | null;
   /** A paragraph of the lesson the reader asked about. */
   ask: (span: LessonAskSpan) => void;
+  /**
+   * Write the open aside down, if it is not already. Called on its first
+   * question and nowhere else: the view is free, the record is not.
+   */
+  ensure: () => void;
   /** A receipt row pressed: back into the aside it stands for. */
   reopen: (threadId: string) => void;
   /** Back to the lesson, leaving the line behind. */
@@ -47,10 +53,17 @@ export function useLessonAside(bookId: string, parentThreadId: string): LessonAs
   openRef.current = open;
   const parentRef = useRef(parentThreadId);
   parentRef.current = parentThreadId;
+  // The record the open aside would be written down as, until something is
+  // asked in it. Null once it has been written, and on one that was opened from
+  // a receipt and therefore already exists.
+  const pendingRef = useRef<{ threadId: string; init: AsideInit } | null>(null);
 
   // A lesson swapped underneath is a different book: whatever was open belonged
   // to the old one.
-  useEffect(() => setOpen(null), [bookId]);
+  useEffect(() => {
+    pendingRef.current = null;
+    setOpen(null);
+  }, [bookId]);
 
   const ask = useCallback(
     (span: LessonAskSpan) => {
@@ -59,22 +72,34 @@ export function useLessonAside(bookId: string, parentThreadId: string): LessonAs
       const anchor = asideAnchorAt(span.messageTs, span.text);
       if (!anchor) return;
       const threadId = crypto.randomUUID();
-      // Written down as it is opened, unlike the desk's, which waits for the
-      // first question (reading/session/use-call.ts). The aside's own turn is
-      // run by a second useLessonCall, and that hook assembles its turn off the
-      // record: with no record the desk would read the aside as the lesson
-      // itself and answer with the lesson's prompt.
-      createAsideThread(bookId, threadId, { parentThreadId: parent, asideAnchor: anchor });
+      // Held, not written. A reader who pressed the control and thought better
+      // of it leaves nothing behind — the same rule the desk's asides follow
+      // (reading/session/use-call.ts ensureAsideRecord). The id is settled now
+      // all the same, so the conversation the view runs on does not change
+      // under it when the first question does write it down.
+      pendingRef.current = { threadId, init: { parentThreadId: parent, asideAnchor: anchor } };
       setOpen({ threadId, span: anchor.text });
     },
     [bookId],
   );
+
+  // The record arrives with the first question. The aside's own turn is run by
+  // a second useLessonCall, and that hook assembles its turn off the record:
+  // with no record the desk would read the aside as the lesson itself and
+  // answer with the lesson's prompt.
+  const ensure = useCallback(() => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    pendingRef.current = null;
+    createAsideThread(bookId, pending.threadId, pending.init);
+  }, [bookId]);
 
   const reopen = useCallback(
     (threadId: string) => {
       const thread = getThread(bookId, threadId);
       if (!thread || threadKind(thread) !== "aside") return;
       if (thread.parentThreadId !== parentRef.current) return;
+      pendingRef.current = null;
       setOpen({ threadId, span: thread.asideAnchor?.text ?? "" });
     },
     [bookId],
@@ -87,8 +112,12 @@ export function useLessonAside(bookId: string, parentThreadId: string): LessonAs
   //
   // Idempotent, and it has to be: a reader who reopens an aside from its row
   // and steps back again must not be given the same line twice.
+  //
+  // An aside nothing was asked in was never written down (ensure), so there is
+  // no conversation for a row to point at: it leaves no line and no record.
   const back = useCallback(() => {
     const aside = openRef.current;
+    pendingRef.current = null;
     setOpen(null);
     if (!aside) return;
     const own = getThread(bookId, aside.threadId);
@@ -122,5 +151,5 @@ export function useLessonAside(bookId: string, parentThreadId: string): LessonAs
     });
   }, [bookId]);
 
-  return { open, ask, reopen, back };
+  return { open, ask, ensure, reopen, back };
 }

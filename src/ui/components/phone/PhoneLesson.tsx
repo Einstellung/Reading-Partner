@@ -23,6 +23,22 @@ import PhoneChapterSheet from "./PhoneChapterSheet";
 import PhoneLessonBar from "./PhoneLessonBar";
 import { LESSON_CHIPS, lessonFocusLine, type LessonViewProps } from "./lesson-view";
 
+// What an empty aside opens on: the passage itself, set as a quotation, so the
+// reader can see which words they took. The strip over it names the aside and
+// truncates them (the bar is one line); this is the whole span, and it is the
+// only thing on the screen besides the composer.
+//
+// Undefined where there is none — an aside reopened from its receipt whose
+// record lost its anchor — and CallView's own heading stands instead.
+function asideEpigraph(span: string) {
+  if (span === "") return undefined;
+  return (
+    <span className="block font-display text-[17px] leading-relaxed text-muted-foreground">
+      “{span}”
+    </span>
+  );
+}
+
 // The held paragraph, waiting for the reader to say yes to it, with the point
 // the control hangs off.
 interface Held {
@@ -152,8 +168,8 @@ export default function PhoneLesson(props: LessonViewProps) {
         onHangUp={props.onBack}
         streaming={props.streaming}
         onStop={props.onStop}
-        emptyTitle={props.aside ? "Ask about this" : props.title}
-        placeholder={props.aside ? "Ask again…" : "Ask about the paper…"}
+        emptyTitle={props.aside ? asideEpigraph(props.aside.span) : props.title}
+        {...(props.aside ? {} : { placeholder: "Ask about the paper…" })}
         scalable={false}
         stickKey={props.aside ? `aside-${props.bookId}` : `lesson-${props.bookId}`}
         aside={props.aside}
