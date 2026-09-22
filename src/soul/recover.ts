@@ -13,6 +13,15 @@
 // is not waiting behind it (held.ts): the reader talking right now is answered
 // on the fresh session while the old one finishes in the background.
 //
+// What lands is the whole turn and not only its ending. A turn that called
+// tools wrote a sentence or two before each of them, and those rounds are
+// committed to the session: the process died somewhere after them. The resumed
+// run only hands back what it said itself, so what the dead process had already
+// written is read off the transcript and put in front of it. Without that the
+// reader gets a closing paragraph with no argument above it, which is what a
+// turn interrupted on the reader's iPad used to leave behind
+// (docs/pitfall/391).
+//
 // Three ways a run is aborted instead, each without a request going out:
 //
 //   no stamp     the turn never said where its reply goes (turn.ts,
@@ -24,6 +33,7 @@
 //   not a run    a compaction or a navigation. Neither is anybody's answer.
 
 import { BACKGROUND_CONTEXT, type Context, type Entry } from "@earendil-works/pi-agent-core";
+import { joinRoundTexts } from "../ai/turn-rows";
 import type { HeldHarness, HeldRecovery } from "../legion/execute/held";
 import { DELIVERY_ENTRY, runAgentTurn } from "../legion/execute/turn";
 import type { BoxOrigin, BoxStore } from "../box";
@@ -185,9 +195,12 @@ async function finishRun(
     // The session is closed when the pass is done, not when this turn is.
     close: async () => {},
   };
-  let reply: string;
+  // What the dead process already said on this turn, oldest first. Read before
+  // the resume, off the snapshot the decision above was made from.
+  const already = saidBefore(snapshot.transcript);
+  let said: string;
   try {
-    reply = await (deps.send ?? appSend)({
+    said = await (deps.send ?? appSend)({
       settings,
       systemPrompt: delivery.turn.systemPrompt,
       tools: delivery.turn.tools,
@@ -203,6 +216,7 @@ async function finishRun(
     return;
   }
 
+  const reply = joinRoundTexts([...already, said]);
   const at = (deps.now ?? Date.now)();
   await landReply({
     key: delivery.key,
@@ -240,4 +254,39 @@ function stampedOrigin(transcript: Entry[]): BoxOrigin | null {
 
 function isAttempt(entry: Entry): boolean {
   return entry.type === "custom" && entry.customType === RECOVERY_ATTEMPT;
+}
+
+/**
+ * What the interrupted turn had already written, in the order it wrote it.
+ *
+ * The scan starts at this turn's stamp — every turn on the lane is a branch off
+ * the session root and stamps its own before its prompt is accepted, so
+ * everything after the newest stamp belongs to this turn and nothing before it
+ * does. Assistant text only: a tool result is fed back to the model and was
+ * never part of the reply.
+ */
+export function saidBefore(transcript: readonly Entry[]): string[] {
+  let from = 0;
+  for (let i = transcript.length - 1; i >= 0; i -= 1) {
+    const entry = transcript[i]!;
+    if (entry.type === "custom" && entry.customType === DELIVERY_ENTRY) {
+      from = i + 1;
+      break;
+    }
+  }
+  const said: string[] = [];
+  for (const entry of transcript.slice(from)) {
+    if (entry.type !== "message") continue;
+    const message = entry.message as { role?: string; content?: unknown };
+    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
+    const text = message.content
+      .filter((c): c is { type: "text"; text: string } => {
+        const part = c as { type?: string; text?: unknown };
+        return part.type === "text" && typeof part.text === "string";
+      })
+      .map((c) => c.text)
+      .join("");
+    if (text.trim() !== "") said.push(text);
+  }
+  return said;
 }

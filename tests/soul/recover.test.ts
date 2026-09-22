@@ -204,6 +204,7 @@ async function diedMidTool(
   disk: MemoryDisk,
   entered: string[],
   deliverTo?: Record<string, unknown>,
+  said?: string,
 ): Promise<void> {
   const held = holdHarness({ lane: SOUL, fileSystem: createSessionFileSystem(disk) });
   const hang: AgentTool = {
@@ -218,7 +219,13 @@ async function diedMidTool(
   void turn(
     held,
     [user("what does page 12 mean?")],
-    [{ calls: [{ name: "echo", args: { value: "x" }, id: "c1" }] }, { text: "never sent" }],
+    [
+      {
+        ...(said === undefined ? {} : { text: said }),
+        calls: [{ name: "echo", args: { value: "x" }, id: "c1" }],
+      },
+      { text: "never sent" },
+    ],
     { tools: [hang], ...(deliverTo ? { deliverTo } : {}) },
   );
   await Bun.sleep(40);
@@ -417,4 +424,77 @@ test("a compaction left open is aborted: it is nobody's answer", async () => {
   await recoverSoulSession(stub.previous, { lane: "soul", settings: async () => settings });
   expect(stub.acquired).toBe(0);
   expect(stub.aborted).toEqual(["soul"]);
+});
+
+test("what the dead process had already written is in front of what the resumed run says", async () => {
+  // The turn the reader's iPad lost: a round that wrote a paragraph and then
+  // called a tool, and a process that died before the tool came back. The
+  // resumed run only hands back its own words, so on its own it would land a
+  // closing sentence with nothing above it (docs/pitfall/391).
+  const disk = memoryAppData();
+  const entered: string[] = [];
+  createBookThread(BOOK, THREAD);
+  await diedMidTool(
+    disk,
+    entered,
+    { place: "book", bookId: BOOK, threadId: THREAD, page: 12 },
+    "Let me look at what page 12 actually says.",
+  );
+
+  const off = bookDelivery(true);
+  const { box } = boxStore();
+  const resumed = resumeSender([{ text: "So page 12 is the turning point." }]);
+  try {
+    const again = holdHarness({
+      lane: SOUL,
+      fileSystem: createSessionFileSystem(disk),
+      recover: (previous, context) =>
+        recoverSoulSession(
+          previous,
+          { lane: SOUL.name, settings: async () => settings, send: resumed.send, box, now: () => NOW },
+          context,
+        ),
+    });
+    await turn(again, [user("q2")], [{ text: "a2" }]);
+    await Bun.sleep(60);
+    await again.close(ctx);
+  } finally {
+    off();
+  }
+
+  const thread = getThread(BOOK, THREAD);
+  expect(thread?.messages).toHaveLength(1);
+  expect(thread?.messages[0]!.text).toBe(
+    "Let me look at what page 12 actually says.\n\nSo page 12 is the turning point.",
+  );
+});
+
+test("a turn that had said nothing before it died lands only what the resumed run says", async () => {
+  const disk = memoryAppData();
+  const entered: string[] = [];
+  createBookThread(BOOK, THREAD);
+  await diedMidTool(disk, entered, { place: "book", bookId: BOOK, threadId: THREAD, page: 12 });
+
+  const off = bookDelivery(true);
+  const { box } = boxStore();
+  const resumed = resumeSender([{ text: "Page 12 is the turning point." }]);
+  try {
+    const again = holdHarness({
+      lane: SOUL,
+      fileSystem: createSessionFileSystem(disk),
+      recover: (previous, context) =>
+        recoverSoulSession(
+          previous,
+          { lane: SOUL.name, settings: async () => settings, send: resumed.send, box, now: () => NOW },
+          context,
+        ),
+    });
+    await turn(again, [user("q2")], [{ text: "a2" }]);
+    await Bun.sleep(60);
+    await again.close(ctx);
+  } finally {
+    off();
+  }
+
+  expect(getThread(BOOK, THREAD)?.messages[0]!.text).toBe("Page 12 is the turning point.");
 });

@@ -45,6 +45,7 @@
 | 清洗第三方 HTML、往 innerHTML 里塞正文 | WebKit / webview |
 | 确认框、删除之类的破坏性操作 | WebKit / webview + 浮层与 shadcn 原语 |
 | 调模型、改 provider 层、组装提示词、加长上下文 | AI 调用与上下文窗口 |
+| 回合中途切走 app、流式请求断在半路、回前台接着跑 | AI 调用与上下文窗口 + 存储与数据目录 |
 | 给 soul、角色或 desk item 挂工具 | AI 调用与上下文窗口 |
 | 给工具写 TypeBox 参数 schema | AI 调用与上下文窗口 |
 | 给回合加埋点、读 AI 埋点日志对账 | AI 调用与上下文窗口 |
@@ -74,7 +75,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 390）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 392）。
 
 ## EmbedPDF 引擎
 
@@ -159,6 +160,7 @@
 
 - [368-appendcustomentry-queues-while-a-run-is-open](./368-appendcustomentry-queues-while-a-run-is-open.md) — lane 上还有 operation 开着的时候 `appendCustomEntry` 只写 pending value 进 inbox，等 run 跑到 drain 边界才落成 entry，`findEntries` 这段窗口里查不到；数「试过几次」要把 `lane.watch()` 快照里的 `queues` 一起数，否则每次都死在模型调用之前的回合永远是试过 0 次，每次启动再 resume 一遍
 - [367-a-bad-line-in-the-middle-of-a-session-file-is-fatal-forever](./367-a-bad-line-in-the-middle-of-a-session-file-is-fatal-forever.md) — pi 的 `JsonlStorage.open` 把整份 session 从头回放，只自愈没有结尾换行的最后一行，中间坏一行就永远抛（`Invalid JSONL storage …: line 67408`）；我们抛完只把 handle 清掉让下个回合重试同一份文件，于是每个 soul 回合都死在同一行，用户只能清 app 数据。打不开就 rename 成 `.corrupt-<now>`（`list` 只认 `.jsonl`）再新建一份，不删；盘读不出来（`cause` 链上有 `FileError`）照旧抛，不挪
+- [391-recover-lands-only-what-the-resumed-run-said](./391-recover-lands-only-what-the-resumed-run-said.md) — 被杀的回合 resume 回来只落最后一轮的字：`turnText` 只拼这次调用里 `after_response` 见过的轮，死前 commit 进 session 的那几轮正文不重发，读者看到一句没头没尾的收尾。resume 前先从 transcript 里 `reading-partner.delivery` 印记之后的 assistant text 读出来拼在前面，不花额外 token
 - [339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file](./339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file.md) — loader 解析失败时返回空值，下一次追加拿空值覆写整个登记表，所有条目无声消失；内容不能重建的 JSON 走 `readGuardedJson`，坏内容先隔离再兜底
 - [338-concurrent-appends-to-one-jsonl-keep-only-the-last](./338-concurrent-appends-to-one-jsonl-keep-only-the-last.md) — 一个回合 19 次 fire-and-forget 的 `recordModelCall`，`model-calls-*.jsonl` 里只剩 1 行：追加是「读整份 → 拼行 → 原子写回」，同一 tick 的调用读到同一份旧内容再互相盖。按路径把读-改-写串行化（`memory/usage/log.ts` 的 `writeInTurn`），不改走 `appendText`——同步靠 `writeTextAtomic` 的通知知道文件变了，字节上限也要读整份
 - [293-a-fixed-zip-mtime-is-not-fixed-across-time-zones](./293-a-fixed-zip-mtime-is-not-fixed-across-time-zones.md) — 给 zip 条目定死一个 UTC 瞬间做时间戳，字节仍然跨时区变：zip 存 DOS 日期，fflate 用本地时间取值器拆字段，同一瞬间在三个时区写出三种字节，构建出来的 EPUB 于是在另一台设备上哈希成第二本书。时间戳要用本地日历字段构造（`new Date(2001, 0, 1, 12, 0, 0)`），`mtime: 0` 在 DOS 日期里表示不出来
@@ -335,6 +337,7 @@
 ## AI 调用与上下文窗口
 
 - [64-replayed-assistant-timestamp-without-usage](./64-replayed-assistant-timestamp-without-usage.md) — 重放的 assistant 消息缺 `timestamp` 和 `usage` 正好绕开 pi 的估算路径；单补 `timestamp` 会让 `clampMaxTokensToContext` 在每一次 AI 调用里抛 TypeError，全 app 的 AI 当场全死
+- [390-a-frozen-ios-app-leaves-the-stream-silent-and-the-lane-held](./390-a-frozen-ios-app-leaves-the-stream-silent-and-the-lane-held.md) — iOS 冻住进程后那条流式连接不报错也不结束，pi 停在 `drive` 里，run 不结算、soul 的 lane 不交还、线程一直算 busy，用户之后说的每句话都被当成 steering 塞进死 run 的队列，谁也看不见。挂钟量沉默（90 秒，工具跑着时暂停），回前台且整个离开期间没有字节就立刻掐；只能用 `lane.requestAbort` 掐，abort 底下的请求会让 pi 抛 `SessionInvariantError`
 - [65-pi-clamps-max-tokens-to-one-and-calls-it-done](./65-pi-clamps-max-tokens-to-one-and-calls-it-done.md) — 上下文接近窗口时 pi 把允许输出夹到 1，模型吐一个 token 就停，`done` 正常发出、没有 error；聊天里是一个字的回复，解析 JSON 的地方变成"格式错误"。pi 的估算器还是 `chars/4`，中文低估 2.5–4 倍，最该收紧时放行。发请求前自己算，见 `src/budget/`
 - [66-usage-shortcut-freezes-pi-context-estimate](./66-usage-shortcut-freezes-pi-context-estimate.md) — 消息数组里一旦有带 usage 的真 assistant 消息，pi 的估算就等于那个 usage，系统提示词不再计入，压缩 usage 之前的任何东西都不改变它；重放历史里那条没 timestamp 的 assistant 消息又会把捷径整个关掉（NaN 比较），同一个调用点两套计价。判断压缩够不够只能重新量，不能拿字符估的 saving 去减
 - [131-pi-cache-retention-env-never-reaches-the-webview](./131-pi-cache-retention-env-never-reaches-the-webview.md) — `PI_CACHE_RETENTION=long` 在 dev 和打包版都读不到：webview 里没有 `process`，Vite build 又把 `process.env` 换成 `{}`，pi 每次都落回 5 分钟保留期。要换只能在发送路径上传 `cacheRetention`，并把同一个值传给埋点

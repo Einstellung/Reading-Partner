@@ -87,6 +87,13 @@ import {
   type StreamFn,
   type TurnLane,
 } from "./contract";
+import {
+  StallError,
+  STALL_MESSAGE,
+  stallWatches,
+  type StallWatch,
+  type StallWatches,
+} from "./stall";
 import { normalizeToolResult, toolLabel } from "./tool-result";
 import { createHarness, createSessionRepo, sweepSessionGroup } from "./harness";
 import type { AgentLane, HeldHarness, HeldLane } from "./held";
@@ -202,6 +209,12 @@ export interface HarnessTurnParams extends AgentCallbacks {
   // still open (src/soul/recover.ts). Only a borrowed lane is stamped: a turn
   // with a session of its own is over when the process is.
   deliverTo?: Record<string, unknown>;
+  // Where this turn registers its silence watch (stall.ts). The process's own
+  // unless a test hands one in; `null` turns the watch off, which is what every
+  // turn driven by a scripted stream wants.
+  stall?: StallWatches | null;
+  // The silence this turn is allowed. The watch's own default unless said.
+  stallMs?: number;
   // Finish the operation of this id on the borrowed lane instead of accepting a
   // prompt: `messages` is not sent, because that prompt is already in the
   // session the lane belongs to. Everything else about the turn is unchanged —
@@ -280,6 +293,11 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   // this is refused rather than swallowed, because the caller is still holding
   // the reader's sentence.
   let ended = false;
+  // The watch said this turn's stream had gone silent, and the abort below is
+  // that and not the reader's Stop. Read once the run has settled, where the
+  // two are otherwise the same thing.
+  let stalled = false;
+  let watch: StallWatch | undefined;
 
   const steer: SteerPort = async (message) => {
     const m: SteerMessage = typeof message === "string" ? { text: message } : message;
@@ -432,6 +450,21 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     void abortRun();
   };
 
+  // The stream fell silent for longer than a model ever thinks. The run is
+  // ended the one way pi supports mid-flight — the same request the reader's
+  // Stop makes — so the operation settles, the lane is handed back and the
+  // thread stops counting as busy. What told the two apart is `stalled`.
+  const registry = params.stall === undefined ? stallWatches() : params.stall;
+  if (registry) {
+    watch = registry.watch({
+      ...(params.stallMs === undefined ? {} : { stallMs: params.stallMs }),
+      onStall: () => {
+        stalled = true;
+        void abortRun();
+      },
+    });
+  }
+
   // One of the two is set: a session of this turn's own, or a borrowed lane.
   let handle: Awaited<ReturnType<typeof createHarness>> | undefined;
   let borrowed: HeldLane | undefined;
@@ -489,6 +522,9 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
 
     on("before_request", async ({ step }) => {
       if (step !== "assistant") return undefined;
+      // The clock starts at the request, not at the turn: what is measured is
+      // how long this round has been waiting for its first byte.
+      watch?.beat();
       round += 1;
       // Same exit as the budget refusal, for the same reason: every round of
       // this turn reached the model and came back. What it did with them —
@@ -523,6 +559,9 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     on("before_compaction", () => ({ decline: true }));
 
     listen("message_update", ({ event }) => {
+      // Any update at all is the provider still talking, thinking included: a
+      // long think is not a stall (watchdog.ts holds the same line).
+      watch?.beat();
       if (event.type === "text_delta") onDelta(event.delta);
       else if (event.type === "thinking_delta") onThinking?.(event.delta);
     });
@@ -544,6 +583,9 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       recordRound(message, message.stopReason !== "error" && message.stopReason !== "aborted");
     });
     listen("tool_start", ({ toolName, args }) => {
+      // Nothing is waiting on the provider while a tool runs, and a sub-agent
+      // or a page fetch can take minutes without a word.
+      watch?.hold();
       const tool = byName.get(toolName);
       const a = args as Record<string, any>;
       onToolStart({
@@ -554,6 +596,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       });
     });
     listen("tool_end", ({ toolName, result, isError }) => {
+      watch?.unhold();
       // A failure's text is the message the tool threw, which is what the reader
       // is shown in place of the line that was running; a success carries the
       // receipt the adapter parked in `details` and no text (the text is the
@@ -636,6 +679,9 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     }
     if (record.status === "aborted") {
       if (refusal) refuse(refusal.message);
+      // Nobody asked for this one. The caller is told, and told what kind of
+      // failure it was, so a surface that can ask again knows it is worth it.
+      else if (stalled) onError(STALL_MESSAGE, undefined, new StallError());
       return;
     }
     if (signal?.aborted) return;
@@ -659,6 +705,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     onError(e instanceof Error ? e.message : String(e), undefined, e);
   } finally {
     ended = true;
+    watch?.stop();
     signal?.removeEventListener("abort", onAbort);
     for (const off of subscriptions) off();
     borrowed?.release();
@@ -691,6 +738,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
     harness,
     deliverTo,
     resume,
+    stallMs,
     onDelta,
     onThinking,
     onResponse,
@@ -741,6 +789,7 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       ...(lane ? { lane } : {}),
       ...(harness ? { held: harness } : {}),
       ...(deliverTo ? { deliverTo } : {}),
+      ...(stallMs === undefined ? {} : { stallMs }),
       ...(resume === undefined ? {} : { resume }),
       onDelta,
       onThinking,

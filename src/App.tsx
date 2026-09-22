@@ -30,6 +30,7 @@ import { getThread, type ThreadMessage } from "./platform/app/threads";
 import { initSync, TICK_MS } from "./platform/sync";
 import { registerPullRoute } from "./platform/sync/pull-routes";
 import { startBellWatch } from "./soul";
+import { watchAppAwayForStalls } from "./legion/execute/stall";
 import { startRunner } from "./legion/execute/runner";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
@@ -475,6 +476,12 @@ export default function App() {
   // registered yet, and then the poll costs nothing: it looks at the table
   // before it looks at the disk.
   useEffect(() => startRunner({ intervalMs: TICK_MS }), []);
+
+  // Where the app is, for the turns that are streaming (legion/execute/stall.ts).
+  // iOS freezes the process moments after it is switched away and the stream
+  // that was being read does not survive it; coming back is when a turn still
+  // holding the lane has to be cut loose.
+  useEffect(() => watchAppAwayForStalls(window), []);
 
   // Whether a finger may mark the page. Applied alongside the tool, and again
   // whenever the setting changes, so the reader never routes a finger by a stale
