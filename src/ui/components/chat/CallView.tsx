@@ -70,6 +70,15 @@ interface CallViewProps {
 	// Identifies the conversation for the transcript's scroll memory. Absent =
 	// the list is not remembered and opens at the newest message.
 	stickKey?: string;
+	// A bar of the host's own across the top, in place of the floating controls
+	// in the corner. The phone's lesson passes one (docs/70): the screen is the
+	// conversation, so its top bar has to be the conversation's — a corner
+	// hang-up under a bar would be a second, quieter way out of a screen that
+	// already has a back. Absent = the corner controls, unchanged.
+	header?: ReactNode;
+	// A strip directly above the composer, in both the empty state and the full
+	// one: the lesson's two standing chips. Absent = nothing there.
+	footer?: ReactNode;
 }
 
 // The scope's box without the zoom, so the tree is the same shape either way.
@@ -99,6 +108,8 @@ export default function CallView({
 	aside,
 	scalable = true,
 	stickKey,
+	header,
+	footer,
 }: CallViewProps) {
 	const empty = messages.length === 0;
 	const Scope = scalable ? ChatScaleScope : PlainScope;
@@ -127,6 +138,10 @@ export default function CallView({
 			className="relative flex h-full w-full flex-col bg-chat-surface [--chat-bubble-bg:var(--chat-bubble)] [--chat-code-bg:var(--chat-code)]"
 			style={{ paddingBottom: keyboardInset || undefined }}
 		>
+			{header}
+
+			{/* The corner controls, for a call that was not given a bar of its own. */}
+			{!header && (
 			<div className="absolute left-4 top-4 z-10 flex items-center gap-1">
 				{/* An aside's one control is the way back to the lesson it came out
 				    of. What it was opened on is not quoted beside it: a reader can
@@ -156,6 +171,7 @@ export default function CallView({
 					</>
 				)}
 			</div>
+			)}
 
 			{/* An aside never carries a chapter focus of its own — it reads its
 			    parent's — so this slot is the non-aside's alone. */}
@@ -167,6 +183,7 @@ export default function CallView({
 						{emptyTitle}
 					</h1>
 					<div className="w-full max-w-[calc(48rem*var(--chat-scale,1))]" ref={composerRef}>
+						{footer}
 						<Composer onSend={onSend} placeholder={placeholder} pill {...composerProps} />
 						{intents && intents.length > 0 && (
 							<IntentChips intents={intents} onPick={onSend} className="mt-3 justify-center" />
@@ -180,8 +197,10 @@ export default function CallView({
 				<Scope className="flex min-h-0 flex-1 flex-col">
 					{/* pt-36 clears the reading card in the top-right corner (120px tall,
 					    top-3), not just the hang-up button — below that the first message
-					    renders under the card. */}
-					<div className="min-h-0 flex-1 overflow-y-auto px-4 pt-36">
+					    renders under the card. A call with a bar of its own has neither,
+					    and reserving that band under a bar would open the transcript a
+					    third of a phone screen down. */}
+					<div className={`min-h-0 flex-1 overflow-y-auto px-4 ${header ? 'pt-4' : 'pt-36'}`}>
 						<MessageList
 							messages={messages}
 							size="lg"
@@ -193,6 +212,7 @@ export default function CallView({
 					</div>
 					<div className="px-4 pb-6" ref={composerRef}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
+							{footer}
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />
 						</div>
 					</div>

@@ -5,14 +5,16 @@
 import { expect, test } from "bun:test";
 import type { LibraryEntry } from "../../../../src/platform/app/library";
 import type { FileRef, Topic } from "../../../../src/platform/app/topics";
+import type { TableChapter } from "../../../../src/reading/chapters/table";
+import type { Thread } from "../../../../src/platform/app/threads";
 import {
   continueReading,
+  lessonNote,
   materialNote,
   materialTap,
   shelfMaterials,
   NOT_FILED_YET,
   NOT_IMPORTED,
-  PDF_ELSEWHERE,
 } from "../../../../src/ui/components/phone/shelf-list";
 
 const SIGNED_IN = { configured: true, signedIn: true };
@@ -87,10 +89,10 @@ test("a file nothing describes and whose name says nothing is not opened", () =>
   expect(materialTap(here, SIGNED_IN).kind).toBe("unavailable");
 });
 
-test("a PDF the desk has not imported is still read elsewhere", () => {
+test("a PDF the desk has not imported has no bytes to teach from", () => {
   const [m] = shelfMaterials([file("paper.pdf")], {}, new Set());
-  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "pdf" });
-  expect(materialNote(m, false)).toBe("PDF");
+  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "unavailable", why: NOT_IMPORTED });
+  expect(materialNote(m, false)).toBe("Not imported");
 });
 
 test("an extension is read whatever its case", () => {
@@ -109,13 +111,24 @@ test("an article is an EPUB and opens as one", () => {
   expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "open" });
 });
 
-test("a PDF says where it is read instead of opening", () => {
+test("a PDF that is here opens as a lesson", () => {
   const entries = { h1: entry("h1", { format: "pdf" }) };
   const [m] = shelfMaterials([file("book.pdf", "h1")], entries, new Set(["h1"]));
-  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "pdf" });
-  expect(PDF_ELSEWHERE).toBe("PDFs open on iPad and desktop");
-  // The cover is drawn either way; only the label says what it is.
-  expect(materialNote(m, false)).toBe("PDF");
+  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "lesson", bookId: "h1" });
+  // The strip says how far the lesson has got (lessonNote); nothing here has to
+  // name the format, because the card carries the Lesson mark.
+  expect(materialNote(m, false)).toBeNull();
+});
+
+test("a PDF that is not on this device is fetched first, and still ends in the lesson", () => {
+  const entries = { h1: entry("h1", { format: "pdf" }) };
+  const [m] = shelfMaterials([file("book.pdf", "h1")], entries, new Set());
+  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "download", bookId: "h1", then: "lesson" });
+  expect(materialNote(m, false)).toBe("In the cloud");
+  expect(materialNote(m, true)).toBe("Downloading…");
+  // The lesson reads the paper on this device, so it waits for the bytes the
+  // same way the reader does: no account, no lesson.
+  expect(materialTap(m, { configured: false, signedIn: false }).kind).toBe("unavailable");
 });
 
 test("a book that is not on this device is fetched by the tap", () => {
@@ -123,7 +136,7 @@ test("a book that is not on this device is fetched by the tap", () => {
   const [m] = shelfMaterials([file("a.epub", "h1")], entries, new Set());
   expect(materialNote(m, false)).toBe("In the cloud");
   expect(materialNote(m, true)).toBe("Downloading…");
-  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "download", bookId: "h1" });
+  expect(materialTap(m, SIGNED_IN)).toEqual({ kind: "download", bookId: "h1", then: "open" });
 });
 
 test("a device with no account says so rather than trying", () => {
@@ -161,6 +174,46 @@ test("Continue reading skips the PDF that was opened more recently", () => {
     path: "/books/book.epub",
     title: "book",
   });
+});
+
+// --- the lesson line on a PDF card ------------------------------------------
+
+function chapter(number: number, title: string, startPage: number): TableChapter {
+  return { index: number, number, title, startPage, endPage: startPage + 5 };
+}
+
+function lesson(over: Partial<Thread> = {}): Thread {
+  return {
+    id: "t1",
+    annotationId: "",
+    book: true,
+    path: "h1",
+    createdAt: 1,
+    messages: [{ role: "ai", text: "Six stops.", ts: 2 }],
+    ...over,
+  };
+}
+
+const CHAPTERS = [chapter(1, "Introduction", 1), chapter(4, "Experiments", 6)];
+
+test("a PDF nothing has been said about has not started", () => {
+  expect(lessonNote(null, CHAPTERS)).toBe("Not started");
+  expect(lessonNote(undefined, CHAPTERS)).toBe("Not started");
+  // The thread is made when the screen opens, so an empty one is the same thing.
+  expect(lessonNote(lesson({ messages: [] }), CHAPTERS)).toBe("Not started");
+});
+
+test("a lesson parked on a chapter this device can name says which", () => {
+  expect(lessonNote(lesson({ focusChapter: 4 }), CHAPTERS)).toBe("On Experiments");
+});
+
+test("a lesson whose chapter cannot be named here says only that it is one", () => {
+  // Taught on the iPad: the thread synced, the chapter table did not — it is
+  // derived from the full text, which is local (palace/kinds.ts).
+  expect(lessonNote(lesson({ focusChapter: 4 }), null)).toBe("In a lesson");
+  // A focus on a chapter this device's table does not have, and no focus at all.
+  expect(lessonNote(lesson({ focusChapter: 9 }), CHAPTERS)).toBe("In a lesson");
+  expect(lessonNote(lesson(), CHAPTERS)).toBe("In a lesson");
 });
 
 test("Continue reading is nothing until an EPUB has actually been opened", () => {

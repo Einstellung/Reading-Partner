@@ -1,0 +1,104 @@
+// The phone's lesson screen on a real DOM (docs/70): the bar over the
+// conversation, the focus row under it, the two standing chips, and the chapter
+// sheet. The conversation itself is CallView's and is tested there; what is
+// pinned here is the shell it is handed, and that the turn arrives entirely
+// from outside. Run: bun test.
+
+import { afterEach, expect, test } from "bun:test";
+import { createElement } from "react";
+import type { TableChapter } from "../../../../src/reading/chapters/table";
+import type { LessonViewProps } from "../../../../src/ui/components/phone/lesson-view";
+import { useDom } from "../../../support/dom";
+
+// The window first: the screen pulls in Radix, and react-dom decides once at
+// evaluation whether it is in a browser (support/dom.ts).
+const { render, cleanup, fireEvent } = await useDom();
+const { default: PhoneLesson } = await import(
+  "../../../../src/ui/components/phone/PhoneLesson"
+);
+
+afterEach(cleanup);
+
+const CHAPTERS: TableChapter[] = [
+  { index: 1, number: 1, title: "Introduction", startPage: 1, endPage: 2 },
+  { index: 2, number: 2, title: "Related Work", startPage: 2, endPage: 3 },
+  { index: 3, number: 3, title: "BERT", startPage: 3, endPage: 6 },
+];
+
+function draw(over: Partial<LessonViewProps> = {}): {
+  root: HTMLElement;
+  sent: string[];
+  picked: TableChapter[];
+} {
+  const sent: string[] = [];
+  const picked: TableChapter[] = [];
+  const props: LessonViewProps = {
+    bookId: "h1",
+    title: "BERT",
+    onBack: () => {},
+    messages: [{ role: "ai", text: "Six stops.", ts: 1 }],
+    streaming: false,
+    onSend: (text) => sent.push(text),
+    status: null,
+    chapters: CHAPTERS,
+    focus: { chapter: 3, page: 4, resumed: false },
+    taught: new Set([1, 3]),
+    onPickChapter: (c) => picked.push(c),
+    ...over,
+  };
+  const { container } = render(createElement(PhoneLesson, props));
+  return { root: container, sent, picked };
+}
+
+function button(root: ParentNode, label: string): HTMLButtonElement | null {
+  return (
+    [...root.querySelectorAll("button")].find(
+      (b) => (b.textContent ?? "").trim() === label || b.getAttribute("aria-label") === label,
+    ) ?? null
+  );
+}
+
+test("the bar carries the paper, and the door to another app only when there is one", () => {
+  const { root } = draw();
+  expect(root.textContent).toContain("BERT");
+  expect(button(root, "Back to the shelf")).not.toBeNull();
+  expect(button(root, "Chapters")).not.toBeNull();
+  // No plugin on this build: no icon for a door that does not open.
+  expect(button(root, "Open in…")).toBeNull();
+
+  cleanup();
+  const opened: true[] = [];
+  const { root: withDoor } = draw({ onOpenIn: () => opened.push(true) });
+  fireEvent.click(button(withDoor, "Open in…")!);
+  expect(opened).toEqual([true]);
+});
+
+test("the row under the bar says where the lesson is, and gives it up to a status", () => {
+  expect(draw().root.textContent).toContain("Now: BERT · p.4");
+  cleanup();
+  // While the paper is being fetched and read there is no focus to state.
+  const loading = draw({ focus: null, status: "Reading the paper…" });
+  expect(loading.root.textContent).toContain("Reading the paper…");
+  expect(loading.root.textContent).not.toContain("Now:");
+});
+
+test("a chip sends the reader's own line", () => {
+  const { root, sent } = draw();
+  fireEvent.click(button(root, "I don't follow")!);
+  fireEvent.click(button(root, "Skip")!);
+  expect(sent).toEqual(["I don't follow.", "Skip this one."]);
+});
+
+test("the chapter sheet opens on the bar, and a tap on a chapter is not navigation", () => {
+  const { root, picked } = draw();
+  fireEvent.click(button(root, "Chapters")!);
+  // Portalled to <body>, so the sheet is not under the screen's own root.
+  const sheet = document.body;
+  expect(sheet.textContent).toContain("Related Work");
+  const row = [...sheet.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Introduction"),
+  );
+  fireEvent.click(row!);
+  expect(picked.map((c) => c.number)).toEqual([1]);
+  expect(root.textContent).toContain("Now: BERT · p.4");
+});

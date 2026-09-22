@@ -41,6 +41,8 @@ import {
 import { browserPrefStore } from "./ui/components/base/pref-store";
 import { PullToAsk } from "./ui/components/phone/PullToAsk";
 import PhoneReader from "./ui/components/phone/PhoneReader";
+import PhoneLesson from "./ui/components/phone/PhoneLesson";
+import PhoneLessonIntroSheet from "./ui/components/phone/PhoneLessonIntroSheet";
 import PhoneShelf, { type PhoneBookOpen } from "./ui/components/phone/PhoneShelf";
 import { continueReading } from "./ui/components/phone/shelf-list";
 import SavedList from "./ui/components/phone/SavedList";
@@ -91,6 +93,10 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
 // The reflow reading area (docs/70). Written against the same contract as the
 // screen that mounts it, so the two were built apart and meet here.
 const FLOW_PANE: ComponentType<FlowReaderPaneProps> | null = FlowReaderPane;
+
+// A lesson that has taught no chapter yet. Held still so the screen is not
+// handed a new set on every render.
+const EMPTY_CHAPTERS: ReadonlySet<number> = new Set();
 
 export default function PhoneApp({
   // The pane, injectable so a smoke test can mount the reader screen against a
@@ -286,6 +292,28 @@ export default function PhoneApp({
     setStack((s) => push(s, { kind: "reader", bookId: book.bookId, name: book.name }));
   }, []);
 
+  // Into a lesson (docs/70). The first one on this phone is explained before it
+  // opens: the tap the reader made was on a book cover, and what comes up is a
+  // conversation. The sheet holds the book it was opened on until the reader
+  // says go, and this machine remembers that it was said.
+  const [lessonIntro, setLessonIntro] = useState<PhoneBookOpen | null>(null);
+  const enterLesson = useCallback((book: PhoneBookOpen) => {
+    setStack((s) => push(s, { kind: "lesson", ...book }));
+  }, []);
+  const openLesson = useCallback(
+    (book: PhoneBookOpen) => {
+      if (device?.lessonIntroSeen) return enterLesson(book);
+      setLessonIntro(book);
+    },
+    [device?.lessonIntroSeen, enterLesson],
+  );
+  const startLesson = useCallback(() => {
+    const book = lessonIntro;
+    setLessonIntro(null);
+    if (device) applyDevice({ ...device, lessonIntroSeen: true });
+    if (book) enterLesson(book);
+  }, [applyDevice, device, enterLesson, lessonIntro]);
+
   const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
 
   // Where the soul may take the reader (docs/71). The same places the other
@@ -377,9 +405,30 @@ export default function PhoneApp({
               entries={entries}
               onOpenTopic={(topicId) => setStack((s) => push(s, { kind: "topic", topicId }))}
               onOpenBook={openReader}
+              onOpenLesson={openLesson}
               onBack={goBack}
               onSay={(line) => pushToast("warn", line)}
               onImported={refreshShelf}
+            />
+          )}
+
+          {base.kind === "lesson" && (
+            <PhoneLesson
+              bookId={base.bookId}
+              title={base.name}
+              onBack={goBack}
+              // The turn is not wired here yet: the conversation, what a send
+              // does and the chapter table all come from the lesson's own hook,
+              // which is the next slice. Until it lands the screen draws the
+              // lesson with nothing in it.
+              messages={[]}
+              streaming={false}
+              onSend={() => {}}
+              status={null}
+              chapters={null}
+              focus={null}
+              taught={EMPTY_CHAPTERS}
+              onPickChapter={() => {}}
             />
           )}
 
@@ -401,6 +450,18 @@ export default function PhoneApp({
         {/* The count only. The phone shell has no open-a-file door of its own,
             so the reader goes back to the shelf and finds the translation there. */}
         <TranslateStatus openDocId={() => null} />
+
+        {/* Said once per phone, over the shelf the tap came from (docs/70).
+            Open in… is not offered yet: the plugin that hands a file to another
+            app is its own slice, and an offer that does nothing is worse than
+            none. */}
+        <PhoneLessonIntroSheet
+          open={lessonIntro !== null}
+          onOpenChange={(open) => {
+            if (!open) setLessonIntro(null);
+          }}
+          onStart={startLesson}
+        />
 
         {showSettings && (
           <SettingsDialog

@@ -45,6 +45,12 @@ export interface DeviceSettings {
   // fingerDraw is: a 4K desktop and an iPad held at arm's length do not have the
   // same answer, and a synced one would carry the wrong answer onto the other.
   chatScale: number;
+  // Whether this phone has already been told that a PDF here opens as a lesson
+  // rather than as pages (docs/70). Per-device because the sentence is about
+  // what a tap does on this machine: an iPad, which does draw the pages, has
+  // nothing to learn from it, and a synced "seen" would swallow the one
+  // explanation the phone owes a reader.
+  lessonIntroSeen: boolean;
 }
 
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
@@ -54,6 +60,7 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   backgroundCollect: true,
   fingerDraw: false,
   chatScale: 1,
+  lessonIntroSeen: false,
 };
 
 // The role this device actually has, whatever the file says. iOS and Android are
