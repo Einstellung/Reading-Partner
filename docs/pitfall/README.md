@@ -75,7 +75,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 396）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 398）。
 
 ## EmbedPDF 引擎
 
@@ -188,6 +188,7 @@
 - [336-home-glob-scope-does-not-cross-a-dotted-directory](./336-home-glob-scope-does-not-cross-a-dotted-directory.md) — capability 里 `$HOME/**` 匹配不了带点的目录（比如 `.cache`），文件确实在 HOME 下也照样被 fs 插件拒绝；`$APPDATA` 下的路径不受影响，读隐藏目录下的文件要么挪去 appdata，要么显式加一条 scope
 - [377-arxiv-html-returns-a-200-shell](./377-arxiv-html-returns-a-200-shell.md) — `arxiv.org/html/<id>` 没有 HTML 版时有两种形态，404 的错误页和 200 的空壳（约 20 KB，`<title>Untitled Document</title>`，正文三千多字符）。判存在要看正文长度加 title，不看状态码
 - [380-a-local-run-ignores-requires](./380-a-local-run-ignores-requires.md) — `tier: "local"` 的 run 由派发它的那台机器当场执行，`requires` 只在同步 run 的选举里起作用，管不着谁能派；手机应用周计划后自己跑了要隐藏 webview 的 `meals-photos`，电脑上一张图都没搜。能干这活的机器读同步过来的文件自己发起，干不了的连 port 都不挂、worker 再拒一次
+- [396-the-fork-create-id-race-swapped-sides](./396-the-fork-create-id-race-swapped-sides.md) — pi 一致性套件里 fork/create 抢同一个 destination id 的两条用例，0.87 换了赢家：先调的 create 反而被拒。预订是 repo 的内存集合，赢家由两条路径各自 await 了几次文件系统调用决定，与文件系统实现无关；文件系统背书的 repo 两个方向只能过一个，`NOT_FOR_A_FILESYSTEM` 里排除的名字跟着翻面
 
 ## 提取（壳侧 pdf.js）
 
@@ -354,6 +355,7 @@
 - [360-a-steer-queued-before-drive-lands-in-the-first-round](./360-a-steer-queued-before-drive-lands-in-the-first-round.md) — `accept` 之后 `drive` 之前塞的 steer 在第一次请求前就被 drain 进 transcript（run 自己的起始边界也是边界）；界面上那一刻 AI 行还是空的，切行会留空行，所以按「行里有没有字」决定切不切
 - [335-accepting-a-prompt-announces-every-replayed-message](./335-accepting-a-prompt-announces-every-replayed-message.md) — harness 为它写进 session 的每条消息发 `message_end`，`lane.accept` 把整段重放历史逐条播出来，埋点把里面的 assistant 消息当成一轮，记出一串 `round: 0`、用量全 null、`ms` 等于 Unix 时间戳的幽灵行。按 `runId` 等于本回合的 `operationId` 分辨，不按 role；另记 `model-calls-*.jsonl` 是读改整体写回加 fire-and-forget，并发写只留最后一个
 - [379-typebox-object-makes-every-property-required](./379-typebox-object-makes-every-property-required.md) — `Type.Object` 把每个属性都写进 `required`，可选只能 `Type.Optional`；只对某些情况有意义的嵌套对象/数组留成必填，模型发 `null` 报 `must be object`、发 `{}` 报 `must have required properties`，工具循环两句之间来回重试永远到不了 execute。pi-ai 的 `validateToolCall` 只把 `null` 转成基本类型的零值（string 转 `""`、number 转 `0`、boolean 转 `false`），object 和 array 不在里面；`normalizeOptionalNulls` 也只删非必填的 `null`。漏掉不发对所有类型都是硬失败，所以描述里写着「哪种模式才有」「可以为空」的字段一律可选，缺了让 execute 用模型看得懂的话拒绝一次
+- [397-the-system-prompt-moved-into-the-transcript](./397-the-system-prompt-moved-into-the-transcript.md) — pi 0.87 的 `normalizeContext()` 把 `systemPrompt` 和 `tools` 折进一条打头的 system 消息，provider 面只收带 brand 的 `TranscriptContext`；`Context` 的三个字段还在类型里但到 provider 手上全空，读它们编得过、跑不对，`messages[0]` 也不再是调用方的第一条消息。发送路径进 provider 前 normalize 一次，读 transcript 用 `withoutInitialSystemMessage` / `getCurrentSystemPrompt` / `getCurrentTools`
 
 ## 开发环境
 
