@@ -58,6 +58,11 @@ export interface ReadingContext {
   // the page while the lesson ran. The span itself rides `selectionText`, in the
   // slot a marked passage goes in — tier 0, never dropped (reading/ladder.ts).
   aside?: { from: "chat" | "mark" };
+  // Which shell the turn was taken in. Absent is the desk and the iPad, where
+  // the reader has the pages in front of them; "phone" is the lesson (docs/74),
+  // where there is no page on screen at all. It changes the teaching discipline
+  // and nothing else about the assembly.
+  form?: "phone";
   aiLanguage?: AiLanguage;
 
   // --- the stable half, in cache order (docs/09) ---
@@ -146,7 +151,11 @@ function booklistLine(m: BooklistItem): string {
 // entry decides is the range of the question, never the shape of the answer:
 // "what is an attention head" deserves the long answer inside a marked passage,
 // and "how many pages is chapter 3" deserves one line at book level.
-function teachingRules(bookLevel: boolean): string[] {
+//
+// `phone` is the lesson on a phone (docs/74): the reader opened a PDF that the
+// phone will not render, so there is no page beside the answer — the words are
+// the whole of it. Two things follow, and they follow only here.
+function teachingRules(bookLevel: boolean, phone: boolean): string[] {
   const lines = [
     "How to answer:",
     bookLevel
@@ -171,7 +180,26 @@ function teachingRules(bookLevel: boolean): string[] {
       "- They have not read this book. Say what a page says instead of pointing at",
       '  it: never "the diagram you saw on p.64" or "remember X from chapter 2". A',
       "  concept you need again gets restated in one line before you build on it.",
-      "- Don't ask them what they made of a passage, or whether they remember one.",
+    );
+    // The lesson quizzes and the desk does not (docs/09 2026-09-22, docs/74).
+    // These two lines are the same discipline stated twice, because the half
+    // that matters is the second: a question the reader gets wrong is answered,
+    // not repeated. Asked twice it stops being teaching and becomes an exam,
+    // which is what was dropped in 2026-08-19 and is still dropped everywhere
+    // the reader has the book in front of them.
+    lines.push(
+      ...(phone
+        ? [
+            "- End each stop with one real question about what you just taught — one that",
+            "  they can only answer if they followed it. Ask it and stop; wait for the",
+            "  answer.",
+            "- When they get it wrong, or say they don't follow: put the passage in front",
+            "  of them, explain it, and finish the point yourself. Don't ask again and",
+            "  don't rephrase the question — you teach the answer and move on.",
+          ]
+        : ["- Don't ask them what they made of a passage, or whether they remember one."]),
+    );
+    lines.push(
       "- Asked to teach a stretch of the book: compress it, go heavier where an",
       "  observation says they got stuck, say plainly which parts they can skip, and",
       "  end by pointing them at one passage or figure worth their own eyes.",
@@ -180,6 +208,17 @@ function teachingRules(bookLevel: boolean): string[] {
     lines.push(
       "- You can see the passage below, so refer to it naturally rather than",
       "  quoting it in full.",
+    );
+  }
+  if (phone) {
+    lines.push(
+      "- There is no page on this screen and no way to show one: this reader is on a",
+      "  phone, and the lesson is text. A figure or a table gets its name and its",
+      "  page — `Figure 2 on p.5` — carried in the sentence that needs it. You may",
+      "  relay what its caption says, as the caption's words; don't describe what",
+      "  one depicts beyond that, and don't write as though you had looked at it.",
+      "  If the point cannot be made in words, say so and name the page to open",
+      "  elsewhere.",
     );
   }
   return lines;
@@ -223,6 +262,7 @@ function citationRules(citePaperSlugs: boolean): string[] {
 
 export function buildSystemPrompt(ctx: ReadingContext): string {
   const bookLevel = ctx.bookLevel === true;
+  const phone = ctx.form === "phone";
   const blocks: string[] = [];
   const push = (text: string | null | undefined): void => {
     const t = (text ?? "").trim();
@@ -261,7 +301,9 @@ export function buildSystemPrompt(ctx: ReadingContext): string {
         ]
     ).join("\n"),
   );
-  push([...teachingRules(bookLevel), ...citationRules(ctx.citePaperSlugs === true)].join("\n"));
+  push(
+    [...teachingRules(bookLevel, phone), ...citationRules(ctx.citePaperSlugs === true)].join("\n"),
+  );
 
   const toolList = toolLines(ctx.toolNames ?? []);
   if (toolList.length > 0) {

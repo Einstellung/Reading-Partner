@@ -377,7 +377,8 @@ test("the book-level thread still carries nothing selection-derived", () => {
 });
 
 // The entry leads the reader through a chapter; it does not examine them
-// (docs/09, dropped 2026-08-19). Pinned so a quiz cannot come back by accident.
+// (docs/09, dropped 2026-08-19). Pinned so a quiz cannot come back by accident
+// where the reader has the book in front of them.
 test("nothing in the prompt examines the reader", () => {
   for (const bookLevel of [true, false]) {
     const out = buildSystemPrompt({ ...base, bookLevel });
@@ -386,10 +387,50 @@ test("nothing in the prompt examines the reader", () => {
       "One question, never two",
       "checks whether it landed",
       "in their own words",
+      "End each stop with one real question",
     ]) {
       expect(`${phrase}: ${out.includes(phrase)}`).toBe(`${phrase}: false`);
     }
+    expect(out).not.toContain("There is no page on this screen");
   }
+});
+
+// --- the lesson on a phone (docs/74) ---
+//
+// The phone never renders the PDF, so the discipline written for a reader with
+// the pages beside them is wrong here in both directions: the lesson asks a
+// question at every stop (docs/09 2026-09-22 reverses the 2026-08-19 drop, for
+// this form only), and it cannot show a figure at all.
+test("the phone lesson ends each stop with a question", () => {
+  const out = buildSystemPrompt({ ...base, bookLevel: true, form: "phone" });
+  expect(out).toContain("End each stop with one real question about what you just taught");
+  expect(out).toContain("wait for the");
+  // Wrong once is answered, not asked again: that half is what keeps it teaching.
+  expect(out).toContain("put the passage in front");
+  expect(out).toContain("Don't ask again and");
+  // The line it replaces cannot ride alongside it — it forbids the question.
+  expect(out).not.toContain("Don't ask them what they made of a passage");
+});
+
+test("the phone lesson names figures and does not describe them", () => {
+  const out = buildSystemPrompt({ ...base, bookLevel: true, form: "phone" });
+  expect(out).toContain("There is no page on this screen");
+  expect(out).toContain("`Figure 2 on p.5`");
+  expect(out).toContain("relay what its caption says");
+  expect(out).toContain("don't write as though you had looked at it");
+  expect(out).toContain("as though you had looked at it");
+});
+
+// Everything else about the prompt is the same prompt.
+test("the phone form changes nothing but the teaching rules", () => {
+  const desk = buildSystemPrompt({ ...base, bookLevel: true });
+  const phone = buildSystemPrompt({ ...base, bookLevel: true, form: "phone" });
+  expect(phone).toContain("Assume they have read none of it");
+  expect(phone).toContain("- They have not read this book.");
+  expect(phone).toContain("Asked to teach a stretch of the book: compress it");
+  expect(phone).toContain("Ground every claim in the text");
+  expect(phone).toContain("- Topic: what makes JITs fast");
+  expect(phone.length).toBeGreaterThan(desk.length);
 });
 
 // --- the classroom's premise (docs/09, 2026-08-20) ---
