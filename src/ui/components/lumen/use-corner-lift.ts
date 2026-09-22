@@ -14,10 +14,32 @@ export function useHolding(): boolean {
   return holding;
 }
 
+/** The two heights the placement rule asks for (corner-placement.ts). */
+interface Frame {
+  height: number;
+  visibleBottom: number;
+}
+
+function readFrame(): Frame {
+  if (typeof window === "undefined") return { height: 0, visibleBottom: 0 };
+  const vv = window.visualViewport;
+  return {
+    height: window.innerHeight,
+    visibleBottom: vv ? vv.offsetTop + vv.height : window.innerHeight,
+  };
+}
+
 /**
  * Where Lumen stands right now. The ref goes on the element that wraps the
  * composer; it is re-measured when that element resizes (the bar grows with the
  * text in it) and when the window does (rotation, the soft keyboard).
+ *
+ * The soft keyboard is two different events depending on what the webview did
+ * about it. Shrink the webview and `window` resizes; leave it full height and
+ * only the visual viewport does, and nothing on `window` fires at all — which
+ * is the state an iPad comes back in after the reader switches away and
+ * returns (docs/pitfall/392). Both are subscribed to, and both are read, or the
+ * corner keeps standing where a keyboard-less window put it.
  *
  * Handing back a callback ref rather than an object one: the wrapper comes and
  * goes with the view, and this has to measure the moment it arrives.
@@ -28,9 +50,7 @@ export function useCornerLift(shown: boolean, chatMain: boolean): {
 } {
   const [composer, setComposer] = useState<ComposerBox | null>(null);
   const [element, setElement] = useState<HTMLElement | null>(null);
-  const [viewportHeight, setViewportHeight] = useState(() =>
-    typeof window === "undefined" ? 0 : window.innerHeight,
-  );
+  const [frame, setFrame] = useState<Frame>(readFrame);
   const holding = useHolding();
 
   const composerRef = useCallback((el: HTMLElement | null) => setElement(el), []);
@@ -40,27 +60,61 @@ export function useCornerLift(shown: boolean, chatMain: boolean): {
       setComposer(null);
       return;
     }
-    const measure = () => {
+    // The composer moves in two steps when the keyboard opens without the
+    // webview being resized: the viewport event fires, and only the render it
+    // causes pads the column and lifts the bar. A box read on the event alone is
+    // the one from before the padding, so every measurement is taken twice —
+    // now, and on the next frame, once that render has landed. Both reads hand
+    // back the same object when nothing moved, so the second one is free.
+    let pending = 0;
+    const read = () => {
       const box = element.getBoundingClientRect();
-      setViewportHeight(window.innerHeight);
+      // Same numbers, same object, on both of these: a keyboard-induced scroll
+      // that moves nothing must not re-run the placement (useViewportSize.ts).
+      setFrame((was) => {
+        const next = readFrame();
+        return was.height === next.height && was.visibleBottom === next.visibleBottom
+          ? was
+          : next;
+      });
       setComposer((was) =>
         was && was.top === box.top && was.bottom === box.bottom
           ? was
           : { top: box.top, bottom: box.bottom },
       );
     };
+    const measure = () => {
+      read();
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(read);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     window.addEventListener("resize", measure);
+    const vv = window.visualViewport;
+    // iOS pairs the keyboard's resize with a scroll, and a pinch-zoomed viewport
+    // only ever scrolls.
+    vv?.addEventListener("resize", measure);
+    vv?.addEventListener("scroll", measure);
     return () => {
+      cancelAnimationFrame(pending);
       observer.disconnect();
       window.removeEventListener("resize", measure);
+      vv?.removeEventListener("resize", measure);
+      vv?.removeEventListener("scroll", measure);
     };
   }, [element]);
 
   return {
     composerRef,
-    placement: cornerPlacement({ shown, chatMain, holding, viewportHeight, composer }),
+    placement: cornerPlacement({
+      shown,
+      chatMain,
+      holding,
+      viewportHeight: frame.height,
+      visibleBottom: frame.visibleBottom,
+      composer,
+    }),
   };
 }

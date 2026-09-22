@@ -74,7 +74,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 390）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 393）。
 
 ## EmbedPDF 引擎
 
@@ -291,6 +291,7 @@
 
 ## 浮层与 shadcn 原语
 
+- [392-the-keyboard-stops-resizing-the-window-after-an-app-switch](./392-the-keyboard-stops-resizing-the-window-after-an-app-switch.md) — iPad 切走再回来之后，软键盘不再改 `window.innerHeight`，只改 visual viewport，`window` 上一个事件都不发；只听 `window` resize 的测量就停在没有键盘那会儿的盒子上（实测 Lumen 的角落差 250px）。判断「离底边多远」要用可见区域的底边，算 `fixed` 元素升多少仍用 layout viewport 的高度，而且事件当场读到的还是 React 上 padding 之前的位置，要在 `requestAnimationFrame` 里补一遍
 - [386-a-moved-box-reports-nothing](./386-a-moved-box-reports-nothing.md) — `CallView` 的 composer 在空态和非空态里是同一个下标上的 `<div>`，React 复用同一个 DOM 节点：callback ref 不再调一次，`ResizeObserver` 只管尺寸不管位置，于是量到的还是它居中时的盒子，Lumen 一直压着发送键。两个分支各给一个 key
 - [68-overflow-x-auto-clips-the-other-axis](./68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
 - [80-portalled-overlay-trips-the-host-outside-press](./80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路
