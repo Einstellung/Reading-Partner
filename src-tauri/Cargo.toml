@@ -103,6 +103,20 @@ javascriptcore-rs = "=1.1.2"
 # wry link against.
 gtk = "0.18"
 
+# The same readout on macOS, where the engine is WKWebView and the call is
+# `evaluateJavaScript:completionHandler:` (src/webview_fetch/mod.rs). Pinned for
+# the same reason webkit2gtk is above: `with_webview` hands out a pointer to
+# wry's own WKWebView subclass, so these have to be the exact Objective-C
+# bindings wry 0.55 links against — a different minor would be a second,
+# incompatible set of class definitions for the same classes. They are already
+# in the tree as wry's own dependencies; naming them here only makes them ours
+# to call.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "=0.6.4"
+objc2-foundation = "=0.3.2"
+objc2-web-kit = { version = "=0.3.2", features = ["WKWebView", "block2"] }
+block2 = "=0.6.2"
+
 [dev-dependencies]
 # Only for the ignored microphone measurements in voice.rs: a `tauri::State` can
 # only be handed out by a running App, so they drive the recording commands

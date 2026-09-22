@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Runtime, Url, WebviewWindow};
 
 use super::policy::{self, Phase, Status};
-use super::{profile_dir, with_page, PageOutcome, WebviewFetchState};
+use super::{profile_dir, with_page, PageOutcome, WebviewFetchState, HAS_DOM_BRIDGE};
 
 /// What one page load comes back with.
 ///
@@ -104,11 +104,11 @@ fn fetch_blocking<R: Runtime>(
     let started = Instant::now();
     let requested = target.to_string();
 
-    if !cfg!(target_os = "linux") {
+    if !HAS_DOM_BRIDGE {
         return WebviewPage::failed(
             Status::Unsupported,
             &requested,
-            "the webview fetcher only has a DOM bridge on Linux so far",
+            "the webview fetcher has no DOM bridge on this platform",
             started,
         );
     }
@@ -244,20 +244,20 @@ struct ScriptOutcome {
     error: Option<String>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_document<R: Runtime>(window: &WebviewWindow<R>) -> Result<Document, String> {
     let json = super::eval_string(window, include_str!("page.js"), policy::EVAL_TIMEOUT)?;
     serde_json::from_str(&json).map_err(|e| format!("unusable JSON: {e}"))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn read_document<R: Runtime>(_window: &WebviewWindow<R>) -> Result<Document, String> {
     Err("no DOM bridge on this platform".to_string())
 }
 
 /// Run the caller's script and parse its value. `Ok(None)` means the script ran
 /// and had nothing to give; `Err` is a sentence for `detail`.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn run_script<R: Runtime>(
     window: &WebviewWindow<R>,
     script: &str,
@@ -276,7 +276,7 @@ fn run_script<R: Runtime>(
     Ok(outcome.value.filter(|v| !v.is_null()))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn run_script<R: Runtime>(
     _window: &WebviewWindow<R>,
     _script: &str,
@@ -308,8 +308,9 @@ mod tests {
 /// `webview_fetch::run_probe_from_env`. `RP_WEBVIEW_PAGE_PROBE=<url>` fetches
 /// that page at startup, prints what came back to stderr and exits; with
 /// `RP_WEBVIEW_PAGE_SCRIPT=<js>` it runs that script in the page too, and
-/// `RP_WEBVIEW_PAGE_TIMEOUT_MS` sets the budget. Run it under Xvfb so no window
-/// can reach a screen:
+/// `RP_WEBVIEW_PAGE_TIMEOUT_MS` sets the budget. On Linux run it under Xvfb so
+/// no window can reach a screen; on macOS the fetch window is created hidden
+/// and there is nothing to hide it from:
 ///
 ///   RP_WEBVIEW_PAGE_PROBE=https://example.com/ \
 ///     RP_WEBVIEW_PAGE_SCRIPT='document.querySelectorAll("a").length' \

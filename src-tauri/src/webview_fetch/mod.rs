@@ -17,14 +17,18 @@
 // in policy.rs with unit tests; this file is the windows, the timers and the
 // platform glue.
 //
-// Scope: desktop, and in practice Linux. The DOM comes back through
-// WebKitGTK's own `run_javascript` callback, because Tauri's `eval` is
+// Scope: desktop. The DOM comes back through the engine's own script-evaluation
+// callback — WebKitGTK's `run_javascript` on Linux, WKWebView's
+// `evaluateJavaScript:completionHandler:` on macOS — because Tauri's `eval` is
 // fire-and-forget and the alternative — letting the remote page talk to us over
 // Tauri's IPC — would mean putting bloomberg.com in a capability's `remote`
 // list, i.e. handing a page we do not control a door into the app's commands.
-// macOS and Windows build and return `unsupported` until someone writes the
-// equivalent bridge (WKWebView `evaluateJavaScript`, WebView2
-// `ExecuteScriptAsync`).
+// Windows builds and returns `unsupported` until someone writes the equivalent
+// bridge (WebView2 `ExecuteScriptAsync`).
+//
+// The two engines are not the same host, and `eval_string` is not the whole of
+// the difference: see `connect_engine_signals` for what macOS does not report
+// and `build_window` for where its cookies live.
 //
 // iOS: not attempted, not compiled. It is a different network stack (WKWebView
 // with ITP, which partitions and expires third-party cookie state far more
@@ -61,6 +65,29 @@ const LABEL_PREFIX: &str = "webview-fetch-";
 /// the app does not control, so it has no business sitting in the same store as
 /// the app's own origin.
 const PROFILE_DIR: &str = "webview-fetch-profile";
+
+/// Whether this build can read a hidden page's DOM back out at all. Every
+/// entry point checks it first, because without the bridge a fetch is not a
+/// slow answer, it is no answer: the window would load the page and nothing
+/// would ever ask it what it holds.
+pub(crate) const HAS_DOM_BRIDGE: bool = cfg!(any(target_os = "linux", target_os = "macos"));
+
+/// macOS: the identifier of the fetcher's own website data store.
+///
+/// `data_directory` below is a WebKitGTK and WebView2 notion; wry ignores it on
+/// macOS and would otherwise put these windows on the app's own default store —
+/// the one holding the app's origin, the very mixing PROFILE_DIR exists to
+/// prevent. A store identifier is the WKWebView equivalent: a fixed UUID names a
+/// persistent store of its own, kept across restarts, separate from the app's.
+/// Requires macOS 14; on anything older wry falls back to the default store, so
+/// the fetch still works and the separation is the thing that is lost.
+///
+/// A constant and not something derived from the profile path: the path is
+/// per-install and this has to name the same store every launch.
+#[cfg(target_os = "macos")]
+const PROFILE_DATA_STORE: [u8; 16] = [
+    0x52, 0x65, 0x61, 0x64, 0x69, 0x6e, 0x67, 0x50, 0x61, 0x72, 0x74, 0x6e, 0x65, 0x72, 0x00, 0x01,
+];
 
 /// Everything the fetcher keeps between calls.
 #[derive(Default)]
@@ -190,11 +217,11 @@ fn fetch_blocking<R: Runtime>(app: &AppHandle<R>, target: Url) -> FetchResult {
     let started = Instant::now();
     let requested = target.to_string();
 
-    if !cfg!(target_os = "linux") {
+    if !HAS_DOM_BRIDGE {
         return FetchResult::failed(
             Status::Unsupported,
             &requested,
-            "the webview fetcher only has a DOM bridge on Linux so far",
+            "the webview fetcher has no DOM bridge on this platform",
             started,
         );
     }
@@ -534,7 +561,7 @@ pub(crate) fn build_window<R: Runtime>(
     // as "no initial URL"; the real navigation happens once the failure signal
     // is connected.
     let blank = Url::parse("about:blank").expect("about:blank parses");
-    WebviewWindowBuilder::new(app, label, WebviewUrl::External(blank))
+    let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(blank))
         // A fetch window is created hidden and never shown; nothing in this
         // module calls show() on one. The sign-in window is the exception, and
         // it is one the user asked for.
@@ -573,13 +600,18 @@ pub(crate) fn build_window<R: Runtime>(
             if let Ok(tx) = sender.lock() {
                 let _ = tx.send(LoadEvent::Finished);
             }
-        })
-        .build()
+        });
+
+    // The same jar, named the way this platform names one (PROFILE_DATA_STORE).
+    #[cfg(target_os = "macos")]
+    let builder = builder.data_store_identifier(PROFILE_DATA_STORE);
+
+    builder.build()
 }
 
 /// Wire up the two things the window needs from the engine itself: a report
-/// when a load fails, and a lid on everything WebKitGTK would otherwise put on
-/// the screen.
+/// when a load fails, and a lid on everything the engine would otherwise put on
+/// the screen. Both are WebKitGTK's; what macOS does instead is the twin below.
 ///
 /// Failures first. WebKit tells us about TLS, connection and cancelled-policy
 /// failures; Tauri's page-load hook does not, so without this a broken host
@@ -645,7 +677,47 @@ pub(crate) fn connect_engine_signals<R: Runtime>(window: &WebviewWindow<R>, tx: 
     });
 }
 
-#[cfg(not(target_os = "linux"))]
+/// macOS: nothing to connect, and the reasons are worth writing down because
+/// they are the ones that make the Linux twin above necessary.
+///
+/// wry owns both delegates on this platform and neither may be replaced: the
+/// navigation delegate is what carries Tauri's own page-load events and the
+/// navigation guard, and the UI delegate is what answers a `window.open()`.
+/// Swapping either out to add a signal would take those with it. So what is
+/// left is what wry's delegates already do (read out of wry 0.55.1's
+/// `wkwebview/class/`, and measured through the probes):
+///
+/// - Failures are not reported at all. `WryNavigationDelegate` implements
+///   `didFinishNavigation` and `didCommitNavigation` and neither of the two
+///   `didFail…` methods, so a TLS error, a refused connection and a hostname
+///   that does not resolve all look like a page that is still loading. The
+///   timeouts in policy.rs are the failure path here, and a macOS fetch of a
+///   dead host costs `LOAD_TIMEOUT` where a Linux one costs a round trip. Same
+///   end, different bill.
+/// - `alert()`, `confirm()` and `prompt()` show nothing. WKWebView runs them
+///   only through the UI delegate's `runJavaScript…Panel` methods, which wry
+///   does not implement, so WebKit skips them: `alert()` returns, `confirm()`
+///   is false, `prompt()` is null. No window reaches the screen, which is the
+///   whole requirement.
+/// - `window.print()` and `Notification` likewise have no delegate and no
+///   default of their own on this platform.
+/// - An HTTP 401 is answered by WebKit's default handling rather than by a
+///   panel, because `didReceiveAuthenticationChallenge` is not implemented
+///   either. The load fails; nothing is asked of the user.
+/// - A file input would open a real `NSOpenPanel`: wry *does* implement
+///   `runOpenPanelWithParameters`. WebKit only calls it for a picker a user
+///   activated, and nothing ever clicks in a window that is never shown, so it
+///   cannot fire here — but it is the one lid Linux has that macOS does not,
+///   and it is the thing to check first if a fetch ever puts a panel on screen.
+/// - `requestMediaCapturePermission` is answered `Grant` by wry, where the
+///   Linux twin denies every permission request. A hidden page that calls
+///   `getUserMedia` would be granted by the delegate and then still stopped by
+///   the system's own camera and microphone consent, which is per app and not
+///   per page. Worth knowing; not worth replacing a delegate over.
+#[cfg(target_os = "macos")]
+pub(crate) fn connect_engine_signals<R: Runtime>(_window: &WebviewWindow<R>, _tx: Sender<LoadEvent>) {}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub(crate) fn connect_engine_signals<R: Runtime>(_window: &WebviewWindow<R>, _tx: Sender<LoadEvent>) {}
 
 /// Wait for the page to reach `finished`, or for a reason it never will.
@@ -862,18 +934,24 @@ fn settle_and_extract<R: Runtime>(
 }
 
 /// Run the extractor in the page and parse what it returns.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) fn extract<R: Runtime>(window: &WebviewWindow<R>) -> Result<Readout, String> {
     let json = eval_string(window, include_str!("extract.js"), policy::EVAL_TIMEOUT)?;
     serde_json::from_str(&json).map_err(|e| format!("extractor returned unusable JSON: {e}"))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub(crate) fn extract<R: Runtime>(_window: &WebviewWindow<R>) -> Result<Readout, String> {
     Err("no DOM bridge on this platform".to_string())
 }
 
 /// Evaluate `js` in the page and return its completion value as a string.
+///
+/// One function per engine, same contract: the script is an IIFE whose value is
+/// a JSON string, the call is made on the main thread, and the answer comes back
+/// over a channel to whichever worker thread asked. Nothing waits on the main
+/// thread — the engines both answer from it, so blocking it would deadlock the
+/// call it is waiting for.
 ///
 /// Tauri's own `eval` is one-way, so this goes to WebKitGTK directly.
 /// `run_javascript` is deprecated in favour of `evaluate_javascript` (WebKitGTK
@@ -904,6 +982,73 @@ fn eval_string<R: Runtime>(
                         .map(|v| v.to_str().to_string());
                     let _ = tx.send(value);
                 });
+            }
+        })
+        .map_err(|e| format!("cannot reach the webview: {e}"))?;
+    match rx.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(RecvTimeoutError::Timeout) => Err("the page did not answer the extractor".to_string()),
+        Err(RecvTimeoutError::Disconnected) => Err("the webview closed mid-extraction".to_string()),
+    }
+}
+
+/// macOS: the same bridge through WKWebView's own
+/// `evaluateJavaScript:completionHandler:`.
+///
+/// Tauri hands out the webview as a raw pointer here rather than as a typed
+/// handle the way it does on Linux, so the cast is ours; the object behind it is
+/// wry's `WryWebView`, a WKWebView subclass, and it is alive for as long as the
+/// window is — which `with_page` guarantees for the whole of this call.
+///
+/// The completion handler runs on the main thread too, one call later. It must
+/// not be waited on there: `with_webview` returns as soon as the call is made
+/// and the wait happens on the worker thread that asked, which is the same shape
+/// as the Linux twin and for the same reason.
+///
+/// Only a string is accepted back. WKWebView will hand over any property-list
+/// value, and a script of ours that came back as something else would mean the
+/// script is not the one we think it is.
+#[cfg(target_os = "macos")]
+fn eval_string<R: Runtime>(
+    window: &WebviewWindow<R>,
+    js: &str,
+    timeout: Duration,
+) -> Result<String, String> {
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::{NSError, NSString};
+    use objc2_web_kit::WKWebView;
+
+    let (tx, rx) = mpsc::channel::<Result<String, String>>();
+    let script = js.to_string();
+    window
+        .with_webview(move |platform| {
+            // Safety: `with_webview` runs this on the main thread, the only
+            // place a WKWebView may be touched, and `inner()` is the pointer
+            // tauri-runtime-wry holds to the webview this window owns.
+            let view: Option<&WKWebView> = unsafe { (platform.inner() as *mut WKWebView).as_ref() };
+            let Some(view) = view else {
+                let _ = tx.send(Err("the window has no WKWebView".to_string()));
+                return;
+            };
+            let handler = block2::RcBlock::new(move |value: *mut AnyObject, error: *mut NSError| {
+                // Safety: both arguments are the ones WebKit passes, either of
+                // which may be null; neither is kept past this block.
+                let answer = match unsafe { error.as_ref() } {
+                    Some(error) => Err(error.localizedDescription().to_string()),
+                    None => match unsafe { value.as_ref() } {
+                        None => Err("no value returned".to_string()),
+                        Some(value) => match value.downcast_ref::<NSString>() {
+                            Some(text) => Ok(text.to_string()),
+                            None => Err("the script's value is not a string".to_string()),
+                        },
+                    },
+                };
+                let _ = tx.send(answer);
+            });
+            // Safety: the handler is copied by WebKit, so it outliving this
+            // borrow is WebKit's business and not ours.
+            unsafe {
+                view.evaluateJavaScript_completionHandler(&NSString::from_str(&script), Some(&handler));
             }
         })
         .map_err(|e| format!("cannot reach the webview: {e}"))?;
