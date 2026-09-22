@@ -16,3 +16,6 @@
 - [端侧ASR调研](./端侧ASR调研.md)：桌面按住说话换成本机 sherpa-onnx 跑 SenseVoiceSmall 的资料调研。2026-09-12。
 - [食材与菜品图片源调研](./食材与菜品图片源调研.md)：给购物清单每行和每道菜配公开图，TheMealDB 加 Spoonacular 兜底的覆盖实测、条款与落空链条，给 [north-star/diet](../north-star/diet.md) 用。2026-09-20。
 - [Jev开源生态调研](./Jev开源生态调研.md)：Jev 发布后五天的开源复刻、独立评测和 TypeSafe 官方口径，供 [north-star/system-one](../north-star/system-one.md) 定接入时机用。2026-09-20。
+- [pdfium-on-iphone](./pdfium-on-iphone.md)：现有阅读引擎（EmbedPDF + PDFium WASM）在 iPhone 17 模拟器上的实测，启动、翻页、内存、帧率、字号和渲染正确性。2026-09-22。
+- [pdfkit-plugin-route](./pdfkit-plugin-route.md)：手机 PDF 走 iOS 原生 PDFKit 经 Tauri 插件的代价评估，能力表、坐标互认、插件文件清单和两条路对照；路线已关。2026-09-22。
+- [pdf-reflow-on-phone](./pdf-reflow-on-phone.md)：把论文正文抽出来在 393pt 屏上重排的可行性探针，四篇样例的对错、映射表代价、arXiv HTML 覆盖率。2026-09-22。

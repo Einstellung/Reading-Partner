@@ -71,7 +71,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 377）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 379）。
 
 ## EmbedPDF 引擎
 
@@ -179,12 +179,14 @@
 - [106-ios-hands-over-a-percent-encoded-file-url](./106-ios-hands-over-a-percent-encoded-file-url.md) — iOS 文件选择器返回 percent-encoded 的 `file://` URL，`basename` 切出来的书名是 `%E5%85%A8...`；归一化收在 `addFileToTopic` 一道门，脏数据按"不变就不写"的纯函数读取时自愈
 - [331-a-seeded-library-json-of-the-wrong-shape-is-renamed-away](./331-a-seeded-library-json-of-the-wrong-shape-is-renamed-away.md) — `library.json` 是 `{"books":{…}}` 不是扁平表；形状不对的守卫会把它改名成 `library.json.corrupt-<时间戳>` 再当空库跑，界面上只看到一个每张卡都当 PDF、没有续读的书架。喂完种子先查容器里有没有 `*.corrupt-*`
 - [336-home-glob-scope-does-not-cross-a-dotted-directory](./336-home-glob-scope-does-not-cross-a-dotted-directory.md) — capability 里 `$HOME/**` 匹配不了带点的目录（比如 `.cache`），文件确实在 HOME 下也照样被 fs 插件拒绝；`$APPDATA` 下的路径不受影响，读隐藏目录下的文件要么挪去 appdata，要么显式加一条 scope
+- [377-arxiv-html-returns-a-200-shell](./377-arxiv-html-returns-a-200-shell.md) — `arxiv.org/html/<id>` 没有 HTML 版时有两种形态，404 的错误页和 200 的空壳（约 20 KB，`<title>Untitled Document</title>`，正文三千多字符）。判存在要看正文长度加 title，不看状态码
 
 ## 提取（壳侧 pdf.js）
 
 - [24-pdfjs-operatorlist-needs-dom](./24-pdfjs-operatorlist-needs-dom.md) — getOperatorList/render 要 DOMMatrix，只能在 webview 跑，bun 测试只覆盖纯函数；另附矢量图 bbox 的算子解析细节
 - [25-embedpdf-no-region-raster](./25-embedpdf-no-region-raster.md) — EmbedPDF 适配层没有区域截图，图片裁剪改用自带 pdf.js 渲染
 - [263-createimagebitmap-refuses-every-svg](./263-createimagebitmap-refuses-every-svg.md) — WebKitGTK 的 `createImageBitmap` 对任何 SVG blob 都抛 `InvalidStateError`，画 SVG 只能走 `<img>` + object URL；`<img>` 的自然尺寸只有 `viewBox` 时按 box 报，三样都没有才报 300x150，所以尺寸自己从 SVG 文本算并写回根节点
+- [378-a-full-page-bitmap-watermark-derails-graphic-detection](./378-a-full-page-bitmap-watermark-derails-graphic-detection.md) — 中文期刊 PDF 每页铺一张覆盖整页的位图水印：按图像绘制算子找图会整页当图、吞掉全部文本（23 页抽出 0 字符），按渲染后的墨找矢量图会把淡灰水印判成墨（切出 63 张假图）。面积超页面 62% 或含超过 45% 页面文本项的区域丢掉，墨阈值从 232 压到 200
 
 ## iOS 构建与签名
 
