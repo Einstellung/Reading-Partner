@@ -15,6 +15,7 @@ import type { DeskItem, DeskMemory, DeskMessage, OpenedDesk } from "../desk";
 import type { Settings } from "../platform/app/settings";
 import type { ProviderId } from "../ai/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
+import { modelIdFor, tierForThread, type ModelTier } from "../ai/model-tier";
 import type { AgentTool } from "../legion/execute/turn";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
 import type { BoxOrigin, BoxStore } from "../box";
@@ -82,11 +83,16 @@ export interface AssembledTurn {
  * synchronous catalog lookup — no credentials, no network. Null when settings
  * name a provider or model pi doesn't know, in which case the turn is assembled
  * without a budget rather than blocked on one.
+ *
+ * `tier` is which of the two models this turn will be sent to (ai/model-tier.ts).
+ * It has to be the one that is really called: the window a turn is fitted to is
+ * the window it is about to be sent into.
  */
-export function configuredModel(s: Settings): Model<Api> | null {
+export function configuredModel(s: Settings, tier: ModelTier = "talk"): Model<Api> | null {
   const provider = providers[s.defaultProviderId as ProviderId];
   if (!provider) return null;
-  return provider.getModels().find((m) => m.id === s.defaultModelId) ?? null;
+  const modelId = modelIdFor(s, tier);
+  return provider.getModels().find((m) => m.id === modelId) ?? null;
 }
 
 /**
@@ -219,7 +225,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // Fit the call to the model's context window before it is sent. Left
   // unchecked, an over-full request comes back one token long with a normal
   // `done` and no error (docs/pitfall/65).
-  const model = configuredModel(env.settings);
+  const model = configuredModel(env.settings, tierForThread(env.thread.key));
   if (!model) {
     afterFit(items, new Set());
     return {

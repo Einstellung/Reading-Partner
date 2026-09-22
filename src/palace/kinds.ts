@@ -262,10 +262,12 @@ export const PALACE = [
     refs: [],
     sync: "data",
     merge: "fields",
-    fieldGroups: [["defaultProviderId", "defaultModelId", "briefingModelId"]],
+    fieldGroups: [
+      ["defaultProviderId", "defaultModelId", "everydayModelId", "briefingModelId"],
+    ],
     deleteWith: "never",
     gc: "never",
-    note: "a model id only means anything under its own provider, so the fields strategy settles the provider and both model ids together (pitfall 237)",
+    note: "a model id only means anything under its own provider, so the fields strategy settles the provider and every model id together (pitfall 237). briefingModelId is the name everydayModelId had before docs/75 and is still in older devices' files",
   },
   {
     kind: "topics",

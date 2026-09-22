@@ -106,15 +106,19 @@ export function aiLanguageName(aiLanguage: AiLanguage): string | null {
 export interface Settings {
   defaultProviderId: string | null;
   defaultModelId: string | null;
-  // What the nightly briefing runs on. A model id only, under defaultProviderId:
-  // the credential layer keeps one provider signed in at a time (credentials.ts
-  // is single-active), so a second provider named here would have no key to call
-  // with. null follows defaultModelId.
+  // What the app's everyday work runs on: the routine turns nobody is waiting
+  // for, as against the conversations the reader is having (docs/75). A model id
+  // only, under defaultProviderId: the credential layer keeps one provider
+  // signed in at a time (credentials.ts is single-active), so a second provider
+  // named here would have no key to call with. null follows defaultModelId.
   //
-  // It exists because the briefing is the one thing in the app that spends money
-  // while nobody is watching — every source, every night — and the model the
-  // reader wants to talk to is not the model that stage is worth.
-  briefingModelId: string | null;
+  // Which work is everyday is decided in code and never here (src/ai/model-tier.ts):
+  // this field says what that tier runs on, not what is in it.
+  //
+  // It used to be briefingModelId, and an older file's value is read as this one
+  // (migrateSettings below). The briefing was the first thing in the app that
+  // spent money with nobody watching; it is no longer the only one.
+  everydayModelId: string | null;
   // Optional Semantic Scholar API key. When set, prep fetches use it instead of
   // the shared free rate-limit pool.
   semanticScholarApiKey: string | null;
@@ -186,7 +190,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   defaultProviderId: null,
   defaultModelId: null,
-  briefingModelId: null,
+  everydayModelId: null,
   semanticScholarApiKey: null,
   chatThinking: "low",
   prepThinking: "medium",
@@ -200,6 +204,28 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const DEFAULTS = DEFAULT_SETTINGS;
+
+// The key everydayModelId was called before the everyday tier had more than the
+// briefing in it (docs/75).
+const LEGACY_BRIEFING_MODEL = "briefingModelId";
+
+// What a file on disk loads as. The defaults under it, then the file over them,
+// then the one rename: a file that names a briefing model and no everyday model
+// is a file written before the rename, and that model is what the everyday tier
+// runs on. A reader who picked a cheaper model for the night keeps it instead of
+// being moved back onto the model they talk to.
+//
+// The old key is not deleted from the object, so the next save writes it back
+// out. A device still on the old build reads its own copy of settings.json, and
+// the fields merge a sync does (sync/merge/fields.ts) would carry a dropped key
+// to it as a deletion — the same reason autoNotes and backgroundCollect are
+// still in the file.
+export function migrateSettings(raw: Partial<Settings>): Settings {
+  const merged = { ...DEFAULTS, ...raw };
+  if (raw.everydayModelId !== undefined) return merged;
+  const legacy = (raw as Record<string, unknown>)[LEGACY_BRIEFING_MODEL];
+  return typeof legacy === "string" ? { ...merged, everydayModelId: legacy } : merged;
+}
 
 // Everything the store reaches outside itself: the file, the clock, and the way
 // out of the app. Passed in rather than imported, so a test can run the real
@@ -276,7 +302,7 @@ export function createSettingsStore(io: SettingsIo): SettingsStore {
   // provider and a language they have not got.
   async function load(): Promise<Settings> {
     const read = await io.read();
-    if (read.status === "ok") return { ...DEFAULTS, ...read.value };
+    if (read.status === "ok") return migrateSettings(read.value);
     if (read.status === "corrupt" && read.savedAs === null) {
       throw new Error(`${SETTINGS_FILE} could not be read`);
     }

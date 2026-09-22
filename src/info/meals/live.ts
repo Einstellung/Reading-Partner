@@ -111,7 +111,7 @@ export function liveMethodPorts(): MethodPorts {
     plan: async () => (await loadMeals()).plan,
     charter: async () => (await loadMeals()).charter,
     ask: (system, user) =>
-      callModel("prep", "chapter-note", system, user, {
+      callModel("meals", "chapter-note", system, user, {
         onProgress: () => {},
         signal: new AbortController().signal,
       }),

@@ -29,6 +29,7 @@ import { DELIVERY_ENTRY, runAgentTurn } from "../legion/execute/turn";
 import type { BoxOrigin, BoxStore } from "../box";
 import { loadSettings, toReasoning, type Settings } from "../platform/app/settings";
 import type { ProviderId } from "../ai";
+import { modelIdFor, tierForThread } from "../ai/model-tier";
 import { coverOf } from "./bell";
 import { deliveryOpener, originOf, type Delivery } from "./delivery";
 import { landReply } from "./landing";
@@ -61,6 +62,11 @@ export interface ResumedTurn {
   harness: HeldHarness;
   /** The run to finish. */
   operationId: string;
+  /**
+   * The thread store's key for the conversation the reply lands in. Which of
+   * the two models the turn resumes on is read off it (ai/model-tier.ts).
+   */
+  bookKey: string;
   threadId: string;
   signal?: AbortSignal;
 }
@@ -75,7 +81,7 @@ const appSend: SendResumedTurn = (turn) =>
   new Promise<string>((resolve, reject) => {
     void runAgentTurn({
       providerId: turn.settings.defaultProviderId as ProviderId,
-      modelId: turn.settings.defaultModelId as string,
+      modelId: modelIdFor(turn.settings, tierForThread(turn.bookKey)) as string,
       systemPrompt: turn.systemPrompt,
       messages: [],
       tools: turn.tools,
@@ -187,6 +193,7 @@ async function finishRun(
       tools: delivery.turn.tools,
       harness: borrowed,
       operationId,
+      bookKey: delivery.key,
       threadId: delivery.threadId,
       ...(hold ? { signal: hold.signal } : {}),
     });

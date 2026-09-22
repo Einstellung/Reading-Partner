@@ -1,9 +1,11 @@
-// The default-model lookup and the one plain streaming call every unattended
-// feature makes (lesson prep, book notes, slides, news triage, observation
-// distillation). `thinking` picks which effort setting applies, and — for the
-// two briefing stages — which model: "chat" for the conversational path, "prep"
-// for the background pipelines, "briefing" and "briefing-screen" for the two
-// stages of the nightly briefing, which have their own model setting.
+// The model lookup and the one plain streaming call every unattended feature
+// makes (lesson prep, book notes, slides, news triage, observation
+// distillation). `thinking` picks which effort setting applies and, through the
+// tier table in model-tier.ts, which of the two models it runs on: "chat" for
+// the conversational path, "prep" for the background pipelines, "briefing" and
+// "briefing-screen" for the two stages of the nightly briefing, "meals" for the
+// dinner line's own headless turn. Which of those are everyday work is written
+// in model-tier.ts, not here.
 
 import type { Api, Context, Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import { contextBudget, fitsBudget, OUTPUT_FLOOR, REFUSE_FLOOR_OVER, type BudgetPurpose } from "../budget";
@@ -25,25 +27,20 @@ import {
 	type ResponseHead,
 	type StreamOutcome,
 } from "./providers";
+import { modelIdFor, tierForKind, type ThinkingKind } from "./model-tier";
 import type { AiCallOptions } from "./call-options";
 import type { ModelCallContext, ModelCaller } from "./model-usage";
 
-export type ThinkingKind = "chat" | "prep" | "briefing" | "briefing-screen";
+export type { ThinkingKind };
 
-// Which effort setting a kind reads.
+// Which effort setting a kind reads. "meals" borrows the conversational one
+// rather than adding a setting of its own: writing the steps for a dish that has
+// already been agreed to is not deep work, and it is the same effort every other
+// turn of that line runs at.
 function thinkingFor(s: Settings, kind: ThinkingKind): ThinkingSetting {
-	if (kind === "chat") return s.chatThinking;
+	if (kind === "chat" || kind === "meals") return s.chatThinking;
 	if (kind === "prep") return s.prepThinking;
 	return kind === "briefing" ? s.briefingThinking : s.briefingScreenThinking;
-}
-
-// Which model a kind runs on, given the default conversation's. Only the
-// briefing has one of its own, and only a model id: the provider is always the
-// default one, because credentials are single-active (settings.ts). Unset falls
-// back, so the briefing keeps working for everyone who never opens the setting.
-function modelIdFor(s: Settings, kind: ThinkingKind, fallback: string): string {
-	const briefing = kind === "briefing" || kind === "briefing-screen";
-	return (briefing ? s.briefingModelId : null) ?? fallback;
 }
 
 // Settings read off disk with a default model the provider's catalog no longer
@@ -76,14 +73,16 @@ export function enforceKnownModel(settings: Settings): { settings: Settings; not
 		);
 	}
 
-	// The briefing's model is repaired by clearing it, not by picking a
+	// The everyday model is repaired by clearing it, not by picking a
 	// replacement: unset means it follows the default conversation, which the
 	// branch above has just made sure is callable. Picking the widest window here
 	// would be the opposite of what this setting is for.
-	if (next.briefingModelId && !isSelectableModel(id, next.briefingModelId)) {
-		const stale = next.briefingModelId;
-		next = { ...next, briefingModelId: null };
-		notices.push(`${name} no longer offers ${stale}; the briefing follows your chat model again.`);
+	if (next.everydayModelId && !isSelectableModel(id, next.everydayModelId)) {
+		const stale = next.everydayModelId;
+		next = { ...next, everydayModelId: null };
+		notices.push(
+			`${name} no longer offers ${stale}; everyday work follows your chat model again.`,
+		);
 	}
 
 	return { settings: next, notice: notices.length > 0 ? notices.join(" ") : null };
@@ -106,7 +105,7 @@ export async function resolveModel(thinking: ThinkingKind): Promise<ResolvedMode
 	}
 	return {
 		providerId: s.defaultProviderId as ProviderId,
-		modelId: modelIdFor(s, thinking, s.defaultModelId),
+		modelId: modelIdFor(s, tierForKind(thinking)) ?? s.defaultModelId,
 		reasoning: toReasoning(thinkingFor(s, thinking)),
 		aiLanguage: s.aiLanguage,
 	};

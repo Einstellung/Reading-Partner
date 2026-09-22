@@ -84,7 +84,7 @@ test("loadSettings round-trips a fully persisted object", async () => {
   const saved: Settings = {
     defaultProviderId: "anthropic",
     defaultModelId: "claude",
-    briefingModelId: "haiku",
+    everydayModelId: "haiku",
     semanticScholarApiKey: "k",
     chatThinking: "high",
     prepThinking: "off",
@@ -118,15 +118,57 @@ test("loadSettings fills the thinking defaults for an old file missing them", as
 // prepThinking for analysis), so an old file loads into the work it was already
 // doing rather than into a quietly cheaper or dearer night.
 test("an old file without the briefing keys loads into the briefing it already had", async () => {
-  expect(DEFAULT_SETTINGS.briefingModelId).toBeNull();
+  expect(DEFAULT_SETTINGS.everydayModelId).toBeNull();
   expect(DEFAULT_SETTINGS.briefingScreenThinking).toBe(DEFAULT_SETTINGS.chatThinking);
   expect(DEFAULT_SETTINGS.briefingThinking).toBe(DEFAULT_SETTINGS.prepThinking);
 
   persist({ defaultProviderId: "openai", defaultModelId: "gpt" });
   const s = await loadSettings();
-  expect(s.briefingModelId).toBeNull();
+  expect(s.everydayModelId).toBeNull();
   expect(s.briefingScreenThinking).toBe("low");
   expect(s.briefingThinking).toBe("medium");
+});
+
+// --- briefingModelId -> everydayModelId (docs/75) -----------------------------
+//
+// The field was the briefing's alone and is now the whole everyday tier's. A
+// reader who picked a cheaper model for the night picked it for exactly the
+// reason the tier exists, so the value is read across rather than dropped — and
+// dropping it would put the briefing back on the talk model without telling
+// anyone, which is the one outcome this rename may not produce.
+
+test("an old file's briefing model becomes the everyday model", async () => {
+  persist({ defaultProviderId: "anthropic", defaultModelId: "opus", briefingModelId: "haiku" });
+  const s = await loadSettings();
+  expect(s.everydayModelId).toBe("haiku");
+  expect(s.defaultModelId).toBe("opus");
+});
+
+test("an old file that never set a briefing model still follows the talk model", async () => {
+  persist({ defaultProviderId: "anthropic", defaultModelId: "opus", briefingModelId: null });
+  expect((await loadSettings()).everydayModelId).toBeNull();
+});
+
+// Both keys present means the file was written by this build or later: the new
+// one is the answer, whatever the old one still says.
+test("a file carrying both keys is read as the new one", async () => {
+  persist({
+    defaultProviderId: "anthropic",
+    defaultModelId: "opus",
+    briefingModelId: "haiku",
+    everydayModelId: "flash",
+  });
+  expect((await loadSettings()).everydayModelId).toBe("flash");
+});
+
+// The old key is left in the file. A device on an older build reads its own copy
+// of settings.json, and the fields merge a sync does would carry a dropped key
+// to it as a deletion — the same reason autoNotes is still there.
+test("the old briefing key is carried through a load untouched", async () => {
+  persist({ defaultProviderId: "anthropic", defaultModelId: "opus", briefingModelId: "haiku" });
+  const s = (await loadSettings()) as unknown as Record<string, unknown>;
+  expect(s.briefingModelId).toBe("haiku");
+  expect("briefingModelId" in DEFAULT_SETTINGS).toBe(false);
 });
 
 test("aiLanguage defaults to auto and an old file without it loads as auto", async () => {
