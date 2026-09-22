@@ -42,6 +42,33 @@ use tauri::Url;
 /// measured, not a cleanup.
 pub const USER_AGENT: &str = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15";
 
+/// What to present as, if anything, on the engine this build runs on.
+///
+/// Linux gets the string above. macOS gets nothing, and that is the same rule
+/// reached again rather than a different one: the string above is WebKitGTK's
+/// own default, and on WKWebView it is somebody else's. Measured 2026-09-22,
+/// bloomberg.com homepage, the fetcher's own store emptied before each run:
+///
+/// | User-Agent on macOS                                  | result |
+/// |------------------------------------------------------|--------|
+/// | the string above (WebKitGTK's default)                | bot wall in 1.3s |
+/// | not set at all — WKWebView's own                      | 8.1 MB homepage, "Bloomberg Asia" |
+/// | a current Safari-on-macOS string, set explicitly      | bot wall in 1.6s |
+///
+/// The third row is the one that decides the shape of this function. Writing
+/// down what the engine would have sent anyway is not the same as letting it
+/// send it: PerimeterX reads the string against everything else it can measure
+/// about the client, and a `customUserAgent` that is right to the character is
+/// still not the client WebKit describes itself as. So macOS pins nothing, and
+/// there is no constant here to keep in step with Safari's version.
+pub fn user_agent() -> Option<&'static str> {
+    if cfg!(target_os = "macos") {
+        None
+    } else {
+        Some(USER_AGENT)
+    }
+}
+
 /// Viewport for the hidden window. The spike ran 1440x900 and got the desktop
 /// layout; a tiny window would invite the mobile or "unsupported browser" page.
 pub const VIEWPORT: (f64, f64) = (1440.0, 900.0);

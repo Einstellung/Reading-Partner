@@ -78,7 +78,7 @@ import {
   clearSiteCookies,
   openSiteSignIn,
 } from "../../../info/extract/webview-session";
-import { hasWebviewFetch } from "../../../platform/app/platform";
+import { hasWebviewSignIn } from "../../../platform/app/platform";
 import type { CollectorSites } from "../../../info/briefer/reader";
 import type { ComposerVoice } from "../chat/chat";
 import type { HomeScreen } from "./InfoHome";
@@ -255,7 +255,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
   // this machine fetching article bodies. On a machine that does not collect,
   // the cookie would go into a jar nothing reads (docs/36), so the buttons, the
   // tool and the sentence about them all go together.
-  const canSignIn = hasWebviewFetch() && collecting;
+  const canSignIn = hasWebviewSignIn() && collecting;
   // Recomputed with the snapshot: all of it comes from the same read.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const notices = useMemo(() => viewRef.current?.notices() ?? [], [infoSnap]);

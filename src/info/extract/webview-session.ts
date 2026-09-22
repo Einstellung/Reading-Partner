@@ -8,7 +8,7 @@
 // fetcher's own profile.
 
 import { invoke } from "@tauri-apps/api/core";
-import { hasWebviewFetch } from "../../platform/app/platform";
+import { hasWebviewSignIn } from "../../platform/app/platform";
 import type { WebviewFetchStatus } from "./webview-article";
 
 export interface SignInOutcome {
@@ -36,13 +36,13 @@ export interface SessionStatus {
  * from the DOM guesses wrong.
  */
 export async function openSiteSignIn(url: string): Promise<SignInOutcome> {
-	if (!hasWebviewFetch()) return { closed: false, elapsedMs: 0 };
+	if (!hasWebviewSignIn()) return { closed: false, elapsedMs: 0 };
 	return invoke<SignInOutcome>("open_site_sign_in", { url });
 }
 
 /** Load a page in the hidden window and report whether the site still offers a sign-in. */
 export async function checkSiteSession(url: string): Promise<SessionStatus> {
-	if (!hasWebviewFetch()) {
+	if (!hasWebviewSignIn()) {
 		return {
 			status: "unsupported",
 			signedIn: false,
@@ -58,6 +58,6 @@ export async function checkSiteSession(url: string): Promise<SessionStatus> {
 
 /** Sign out of a site: delete its cookies from the fetcher's profile. */
 export async function clearSiteCookies(host: string): Promise<string[]> {
-	if (!hasWebviewFetch()) return [];
+	if (!hasWebviewSignIn()) return [];
 	return invoke<string[]>("clear_site_cookies", { host });
 }

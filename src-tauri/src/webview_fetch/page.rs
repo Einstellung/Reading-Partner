@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Runtime, Url, WebviewWindow};
 
 use super::policy::{self, Phase, Status};
-use super::{profile_dir, with_page, PageOutcome, WebviewFetchState};
+use super::{profile_dir, with_page, PageOutcome, WebviewFetchState, HAS_DOM_BRIDGE};
 
 /// What one page load comes back with.
 ///
@@ -104,11 +104,11 @@ fn fetch_blocking<R: Runtime>(
     let started = Instant::now();
     let requested = target.to_string();
 
-    if !cfg!(target_os = "linux") {
+    if !HAS_DOM_BRIDGE {
         return WebviewPage::failed(
             Status::Unsupported,
             &requested,
-            "the webview fetcher only has a DOM bridge on Linux so far",
+            "the webview fetcher has no DOM bridge on this platform",
             started,
         );
     }
@@ -244,20 +244,20 @@ struct ScriptOutcome {
     error: Option<String>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_document<R: Runtime>(window: &WebviewWindow<R>) -> Result<Document, String> {
     let json = super::eval_string(window, include_str!("page.js"), policy::EVAL_TIMEOUT)?;
     serde_json::from_str(&json).map_err(|e| format!("unusable JSON: {e}"))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn read_document<R: Runtime>(_window: &WebviewWindow<R>) -> Result<Document, String> {
     Err("no DOM bridge on this platform".to_string())
 }
 
 /// Run the caller's script and parse its value. `Ok(None)` means the script ran
 /// and had nothing to give; `Err` is a sentence for `detail`.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn run_script<R: Runtime>(
     window: &WebviewWindow<R>,
     script: &str,
@@ -276,7 +276,7 @@ fn run_script<R: Runtime>(
     Ok(outcome.value.filter(|v| !v.is_null()))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn run_script<R: Runtime>(
     _window: &WebviewWindow<R>,
     _script: &str,
@@ -302,14 +302,40 @@ mod tests {
         assert!(wrapped.contains("const value = (1 + 1);"));
         assert!(!wrapped.contains("__RP_SCRIPT__"));
     }
+
+    /// The template may mention the placeholder once, in the one place the
+    /// script goes. A second mention — a comment naming it, which is the
+    /// natural thing to write — gets its own copy of the caller's script, and
+    /// the copy in a `//` comment holds only until the script's first newline.
+    /// Every multi-line script then runs its second line at the top level of
+    /// the page: `document.querySelectorAll(…)` for the meals photo search came
+    /// back as "Return statements are only valid inside functions".
+    #[test]
+    fn the_wrapper_names_the_placeholder_once() {
+        assert_eq!(include_str!("script.js").matches("__RP_SCRIPT__").count(), 1);
+    }
+
+    #[test]
+    fn the_wrapper_keeps_a_multi_line_script_in_one_piece() {
+        let script = "(function () {\n  return 42;\n})()";
+        let wrapped = include_str!("script.js").replace("__RP_SCRIPT__", script);
+        assert_eq!(wrapped.matches("return 42;").count(), 1);
+        // Nothing of the script may end up on a line that starts a comment.
+        for line in wrapped.lines() {
+            if line.trim_start().starts_with("//") {
+                assert!(!line.contains("return 42;"), "script spilled into a comment");
+            }
+        }
+    }
 }
 
 /// Dev-only end-to-end check, the page fetch's own version of
 /// `webview_fetch::run_probe_from_env`. `RP_WEBVIEW_PAGE_PROBE=<url>` fetches
 /// that page at startup, prints what came back to stderr and exits; with
 /// `RP_WEBVIEW_PAGE_SCRIPT=<js>` it runs that script in the page too, and
-/// `RP_WEBVIEW_PAGE_TIMEOUT_MS` sets the budget. Run it under Xvfb so no window
-/// can reach a screen:
+/// `RP_WEBVIEW_PAGE_TIMEOUT_MS` sets the budget. On Linux run it under Xvfb so
+/// no window can reach a screen; on macOS the fetch window is created hidden
+/// and there is nothing to hide it from:
 ///
 ///   RP_WEBVIEW_PAGE_PROBE=https://example.com/ \
 ///     RP_WEBVIEW_PAGE_SCRIPT='document.querySelectorAll("a").length' \
