@@ -73,7 +73,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 386）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 389）。
 
 ## EmbedPDF 引擎
 
@@ -306,6 +306,8 @@
 - [383-a-template-that-names-its-own-placeholder-twice](./383-a-template-that-names-its-own-placeholder-twice.md) — `script.js` 的注释里又写了一遍 `__RP_SCRIPT__`，`replace` 换全部出现处，调用方的脚本于是也被复制进 `//` 注释；注释只管到行尾，多行脚本的第二行落到页面顶层，`SyntaxError: Return statements are only valid inside functions`。meals 的 Bing 搜索一直在走解析 html 的兜底。单测只传过一行的脚本所以从没红过
 - [384-a-pinned-user-agent-is-per-engine](./384-a-pinned-user-agent-is-per-engine.md) — 坑 108 钉的那串是 WebKitGTK 的默认值，搬到 WKWebView 上是个不存在的客户端：彭博首页 1.3s 回验证码，手写一条正确的 Safari 串也回验证码，什么都不设才给 8.1 MB 首页。结论是「让引擎自己发」而不是「写对字符串」，macOS 因此没有要跟版本的 UA 常量
 - [385-data-directory-does-nothing-on-macos](./385-data-directory-does-nothing-on-macos.md) — wry 的 macOS 后端不看 `data_directory`，抓取窗口默认和 app 共用 cookie 罐；换成 `data_store_identifier` 才分得开（macOS 14+，落在 `~/Library/WebKit/<app>/WebsiteDataStore/<uuid>`）。WKWebView 的 cookie 也不在盘上的文本文件里，`jar.rs` 的暖机判据在 macOS 上因此是瞎的
+- [387-a-cold-website-data-store-reports-no-cookies](./387-a-cold-website-data-store-reports-no-cookies.md) — 这个进程里还没人用过的 `WKWebsiteDataStore`，`getAllCookies:` 回答空：盘上 41 条，退出登录那个只停在 `about:blank` 的窗口 2.6 秒里问了六次都是 0，而 `identifier` 和 `isPersistent` 都对。建窗后发一次 `fetchDataRecordsOfTypes:` 唤醒它（`jar::wake_store`）
+- [388-a-bloomberg-article-never-completes-on-wkwebview](./388-a-bloomberg-article-never-completes-on-wkwebview.md) — 同一篇文章同一小时：WebKitGTK 18.9s 到 `complete`，WKWebView 45s 还停在 `interactive`，`didFinishNavigation` 不来所以取正文超时；页面其实是全的（679 KB、有 `<article>`、2252 字预览）。文章那半还没像暖机那样改掉对加载事件的依赖
 
 ## 排版基线与 Tailwind
 

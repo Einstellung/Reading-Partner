@@ -145,6 +145,49 @@ pub fn read(profile: &Path) -> String {
 #[cfg(target_os = "macos")]
 const STORE_READ_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// macOS: make a window's cookie store read what is already on disk.
+///
+/// A persistent `WKWebsiteDataStore` that nothing in this process has used yet
+/// answers `getAllCookies:` out of an empty session. Measured 2026-09-22 on a
+/// store holding 41 bloomberg.com cookies: a window that had only ever been at
+/// `about:blank` reported none of them, six times over 2.6 seconds, with the
+/// store's own `identifier` and `isPersistent` confirming it was the right
+/// store. One `fetchDataRecordsOfTypes:` ahead of the read and the same window
+/// saw all 41 (docs/pitfall/387).
+///
+/// The fetch windows never met this because loading a page wakes the store
+/// anyway; the sign-out's window, which exists only to reach the cookie store
+/// and navigates nowhere, met nothing else. So the waking belongs here, beside
+/// the window, rather than in either reader.
+///
+/// The records themselves are not wanted and not waited for. Asking is what
+/// does the work, and ordering is all this needs: this call and every later
+/// read are queued on the main thread in turn.
+#[cfg(target_os = "macos")]
+pub(crate) fn wake_store<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    use std::ptr::NonNull;
+
+    use objc2_foundation::{NSArray, NSSet};
+    use objc2_web_kit::{WKWebView, WKWebsiteDataRecord, WKWebsiteDataTypeCookies};
+
+    let _ = window.with_webview(|platform| {
+        // Safety: `with_webview` runs this on the main thread, and `inner()` is
+        // tauri-runtime-wry's pointer to this window's webview.
+        let view: Option<&WKWebView> = unsafe { (platform.inner() as *mut WKWebView).as_ref() };
+        let Some(view) = view else {
+            return;
+        };
+        // Safety: the window owns its configuration for as long as it is alive.
+        let store = unsafe { view.configuration().websiteDataStore() };
+        // Safety: the constant is WebKit's own static NSString.
+        let types = NSSet::from_slice(&[unsafe { WKWebsiteDataTypeCookies }]);
+        let ignored =
+            block2::RcBlock::new(|_records: NonNull<NSArray<WKWebsiteDataRecord>>| {});
+        // Safety: WebKit copies the handler; the set is borrowed for the call.
+        unsafe { store.fetchDataRecordsOfTypes_completionHandler(&types, &ignored) };
+    });
+}
+
 /// macOS: the same jar, read out of the webview's own `WKHTTPCookieStore`.
 ///
 /// There is no file to read on this platform. wry ignores `data_directory` and

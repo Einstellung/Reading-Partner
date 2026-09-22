@@ -621,7 +621,12 @@ pub(crate) fn build_window<R: Runtime>(
     #[cfg(target_os = "macos")]
     let builder = builder.data_store_identifier(PROFILE_DATA_STORE);
 
-    builder.build()
+    let window = builder.build()?;
+    // A store nobody has used yet has nothing to say about its own cookies, and
+    // a window that navigates nowhere would never find out (docs/pitfall/387).
+    #[cfg(target_os = "macos")]
+    jar::wake_store(&window);
+    Ok(window)
 }
 
 /// One reading of the cookie jar the warm-up is waiting on.

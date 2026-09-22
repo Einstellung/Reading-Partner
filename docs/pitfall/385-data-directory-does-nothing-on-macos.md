@@ -26,6 +26,7 @@ WebKit 私有格式中，只能通过 `WKHTTPCookieStore` 异步读。
 和 app 自己的 `WebsiteData/` 分开，重启后还在。清空它就是清空抓取用的 profile，
 测反爬时按这个路径 `rm -rf`。
 
-暖机那半还没接：`jar.rs` 读文件的地方要换成读 `WKHTTPCookieStore`，
-在这之前 macOS 上首页不报 `finished` 的站（彭博、TechCrunch）暖不起来。
-首页会报 `finished` 的站不受影响。
+暖机那半后来接上了：`wait_for_warm_jar` 改成收一个取样闭包，Linux 传读文件的，
+macOS 传读 `WKHTTPCookieStore` 的，每条 cookie 拼成 `fingerprint` 本来就在解析的
+那种行。彭博首页实测 0 → 44 行、22 次变化、19.5 秒安静。
+那个 store 还有一条自己的坑，见 387。
