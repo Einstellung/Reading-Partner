@@ -1,18 +1,26 @@
 // The phone's shelf, minus React (docs/70): what each of a topic's files is,
 // whether this device has it, and what tapping it does.
 //
-// The phone opens EPUBs and nothing else, and its books channel is off, so a
+// The phone draws EPUBs and nothing else, and its books channel is off, so a
 // card here answers two questions the desk's shelf never has to ask: is this a
 // format this shell can draw, and are the bytes even on this device. Both are
 // decided here so the grid only renders the answer.
+//
+// The first question no longer has "no" for an answer. A PDF is not turned page
+// by page on a phone; it is taught, and a tap on one opens the lesson instead of
+// the reader. So the two formats part at the destination rather than at the
+// door, and everything before it — the bytes, the fetch, the reasons there is
+// nothing to fetch — is one path.
 //
 // Neither question has an answer for a file the library has never described.
 // Every door imports the book as it writes the row, so such a row was written
 // before that was true, or its library revision has not arrived yet — the two
 // files a card is made of (topics.json, library.json) sync apart. Such a card
 // says it was not imported rather than guessing PDF, which is what it used to
-// do — and a PDF is the one card this shell refuses to open.
+// do.
 
+import type { Thread } from "../../../platform/app/threads";
+import type { TableChapter } from "../../../reading/chapters/table";
 import {
   bookFormatOfPath,
   isArticleEntry,
@@ -23,9 +31,9 @@ import { articleRowLine } from "../shelf/article-row";
 import { displayFileTitle } from "../shelf/file-title";
 
 // What the phone can do with a file. "pdf" is drawn like any other book — its
-// cover renders — and says so only when it is tapped. "unknown" is a file no
-// library entry describes and whose name says neither: the shelf says it does
-// not know rather than calling it a PDF.
+// cover renders — and opens as a lesson. "unknown" is a file no library entry
+// describes and whose name says neither: the shelf says it does not know rather
+// than calling it a PDF.
 export type MaterialFormat = "epub" | "pdf" | "unknown";
 
 export interface ShelfMaterial {
@@ -128,17 +136,19 @@ export interface FetchAbility {
   signedIn: boolean;
 }
 
+// Which door a book opens: the reflow reader, or the lesson.
+export type MaterialDoor = "open" | "lesson";
+
 export type MaterialTap =
   // Open it in the phone's reader.
   | { kind: "open" }
-  // Say that PDFs are read elsewhere.
-  | { kind: "pdf" }
-  // Pull this one book out of the account, then open it.
-  | { kind: "download"; bookId: string }
+  // Teach it instead of drawing it (docs/70): every PDF on this shell.
+  | { kind: "lesson"; bookId: string }
+  // Pull this one book out of the account, then go through `then`'s door.
+  | { kind: "download"; bookId: string; then: MaterialDoor }
   // There is nothing here to open, and no copy this device can go and get.
   | { kind: "unavailable"; why: string };
 
-export const PDF_ELSEWHERE = "PDFs open on iPad and desktop";
 const NOT_CONFIGURED = "This build has no Google account set up, so it cannot download the book";
 const SIGNED_OUT = "Sign in to your account in Settings to download this book";
 // No entry and no book id: the desk filed the path and nothing has read the
@@ -147,29 +157,58 @@ export const NOT_IMPORTED = "The desk has not imported this file yet, so there i
 // A book id but no entry: the topics row got here before library.json did.
 export const NOT_FILED_YET = "This book has not finished syncing to this device yet";
 
-/** What a tap on one card does. */
+/**
+ * What a tap on one card does. A PDF ends at the lesson and an EPUB at the
+ * reader; everything in front of that is the same walk, because a lesson needs
+ * the bytes on this device exactly as the reader does — it reads the paper here
+ * (reading/lesson/open-pdf.ts).
+ */
 export function materialTap(m: ShelfMaterial, can: FetchAbility): MaterialTap {
-  if (m.format === "pdf") return { kind: "pdf" };
   // A file nothing has described, whatever bytes may be beside it: opening it
-  // would hand the reflow view something it may not be able to draw.
+  // would hand the reflow view something it may not be able to draw, and the
+  // lesson a file that may not be a paper.
   if (m.format === "unknown") return { kind: "unavailable", why: NOT_IMPORTED };
-  if (m.onDevice) return { kind: "open" };
+  const door: MaterialDoor = m.format === "pdf" ? "lesson" : "open";
+  if (m.onDevice) {
+    return door === "lesson" ? { kind: "lesson", bookId: m.bookId as string } : { kind: "open" };
+  }
   if (!m.bookId) return { kind: "unavailable", why: NOT_IMPORTED };
   if (!m.filed) return { kind: "unavailable", why: NOT_FILED_YET };
   if (!can.configured) return { kind: "unavailable", why: NOT_CONFIGURED };
   if (!can.signedIn) return { kind: "unavailable", why: SIGNED_OUT };
-  return { kind: "download", bookId: m.bookId };
+  return { kind: "download", bookId: m.bookId, then: door };
 }
 
 /**
- * The line over a card that is not a plain openable book: where the bytes are,
- * or which format it is. Null on a book that is here and openable — that card
- * says what every shelf card says.
+ * The line over a card that is not a plain openable book: where the bytes are.
+ * Null on a book that is here and openable — that card says what every shelf
+ * card says, and for a PDF that is the lesson's own line (lessonNote).
  */
 export function materialNote(m: ShelfMaterial, downloading: boolean): string | null {
-  if (m.format === "pdf") return "PDF";
   if (downloading) return "Downloading…";
   if (m.format === "unknown" || !m.bookId) return "Not imported";
   if (m.onDevice) return null;
   return m.filed ? "In the cloud" : "Not synced yet";
+}
+
+/**
+ * How far the lesson on this card has got, for the line beside the Lesson mark.
+ * Three answers, because that is all a phone can know:
+ *
+ * - nothing has been said in this book yet;
+ * - the lesson is parked on a chapter this device can name;
+ * - it is parked on one this device cannot name, or on none at all. The focus
+ *   is a chapter number and not a title (platform/app/threads.ts), and the
+ *   table that turns one into the other is read out of the full text, which is
+ *   local and derived and is not written until the first lesson runs
+ *   (palace/kinds.ts). So a book taught on the iPad and not yet here says it is
+ *   in a lesson without saying where.
+ */
+export function lessonNote(
+  thread: Pick<Thread, "messages" | "focusChapter"> | null | undefined,
+  chapters: readonly TableChapter[] | null,
+): string {
+  if (!thread || thread.messages.length === 0) return "Not started";
+  const title = chapters?.find((c) => c.number === thread.focusChapter)?.title.trim();
+  return title ? `On ${title}` : "In a lesson";
 }

@@ -26,6 +26,7 @@ export type ScreenKind =
   | "library"
   | "topic"
   | "reader"
+  | "lesson"
   | "settings";
 
 // Only the screens that stand for one thing carry anything: the opened saved
@@ -47,11 +48,17 @@ export type PhoneScreen =
   | { kind: "library" }
   | { kind: "topic"; topicId: string }
   | { kind: "reader"; bookId: string; name: string }
+  // A PDF, which this shell teaches rather than draws (docs/70). It carries what
+  // the reader's entry carries plus the two the reading screen keeps beside the
+  // stack: the lesson is opened from the shelf and from nowhere else, so the
+  // entry holds the whole of what the screen needs and nothing has to be
+  // remembered alongside it.
+  | { kind: "lesson"; bookId: string; name: string; topicId: string; path: string }
   | { kind: "settings" };
 
 export type PayloadFreeKind = Exclude<
   ScreenKind,
-  "savedArticle" | "topic" | "reader" | "meals-day"
+  "savedArticle" | "topic" | "reader" | "lesson" | "meals-day"
 >;
 
 export type NavStack = readonly PhoneScreen[];

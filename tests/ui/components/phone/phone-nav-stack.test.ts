@@ -43,6 +43,23 @@ test("push then back returns the stack it came from", () => {
   expect(back(back(back(s2)))).toEqual(INITIAL_STACK);
 });
 
+test("a lesson is an entry like any other and back leaves it", () => {
+  const lesson: PhoneScreen = {
+    kind: "lesson",
+    bookId: "h1",
+    name: "BERT",
+    topicId: "t1",
+    path: "/books/bert.pdf",
+  };
+  const s = push(push(INITIAL_STACK, { kind: "topic", topicId: "t1" }), lesson);
+  expect(top(s)).toBe(lesson);
+  expect(backIsAvailable(s, false)).toBe(true);
+  expect(kinds(back(s))).toEqual(["home", "topic"]);
+  // Settings over a lesson keeps the lesson underneath it, the way it does the
+  // reader: the conversation is not unmounted to show a panel.
+  expect(baseScreen(push(s, screen("settings")))).toBe(lesson);
+});
+
 test("goTo pushes a destination that is not on the stack", () => {
   const s = goTo(INITIAL_STACK, screen("briefing"));
   expect(kinds(s)).toEqual(["home", "briefing"]);

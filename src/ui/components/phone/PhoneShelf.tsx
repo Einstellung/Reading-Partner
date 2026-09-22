@@ -4,15 +4,18 @@
 // off: no renaming, no deleting, no retell, no rehearsal, no observations.
 // Adding is one button, and it takes EPUBs only (reading/session/import-book.ts).
 //
-// What it adds instead is the answers only this shell needs: a PDF is drawn but
-// not opened, a book that is not on this device says so and is fetched when it
-// is tapped, and a file the desk has not imported yet says that instead of
-// pretending to be either (shelf-list.ts).
+// What it adds instead is the answers only this shell needs: a PDF opens as a
+// lesson rather than as pages, a book that is not on this device says so and is
+// fetched when it is tapped, and a file the desk has not imported yet says that
+// instead of pretending to be either (shelf-list.ts).
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { libraryHas, type LibraryEntry } from "../../../platform/app/library";
+import { getBookThread, loadThreads } from "../../../platform/app/threads";
 import { fetchBook, subscribeSyncStatus } from "../../../platform/sync";
 import { sortedFiles, type Topic } from "../../../platform/app/topics";
+import { getFulltext } from "../../../fulltext/store";
+import { loadChapterTable } from "../../../reading/lecture/live";
 import { importEpub, uploadImported } from "../../../reading/session/import-book";
 import CoverBand from "../shelf/CoverBand";
 import {
@@ -31,13 +34,21 @@ import {
 import { coverTiles, fileCountLabel, singleCoverTile } from "../shelf/topic-shelf";
 import { Button } from "../ui/button";
 import {
+  lessonNote,
   materialNote,
   materialTap,
   shelfMaterials,
-  PDF_ELSEWHERE,
   type FetchAbility,
   type ShelfMaterial,
 } from "./shelf-list";
+
+// The label strip's bottom line on a card that carries the Lesson mark. The
+// desk's BOOK_READ is one truncating line of text; this one holds a mark beside
+// the text, so it is a row. Spelled out rather than appended to BOOK_READ: the
+// two would set `display` twice and which one won would be Tailwind's emission
+// order (docs/pitfall/78).
+const LESSON_READ =
+  "mt-1 flex items-center gap-1.5 overflow-hidden text-[12px] leading-[14px] whitespace-nowrap text-faint-foreground";
 
 export interface PhoneBookOpen {
   bookId: string;
@@ -57,6 +68,9 @@ export default function PhoneShelf(props: {
   entries: Record<string, LibraryEntry>;
   onOpenTopic: (topicId: string) => void;
   onOpenBook: (book: PhoneBookOpen) => void;
+  // Into the lesson: a PDF, which this shell teaches rather than draws
+  // (docs/70). Same payload as a book — the screen needs the same four things.
+  onOpenLesson: (book: PhoneBookOpen) => void;
   onBack: () => void;
   // One line, said out loud: a PDF, or a book this device cannot go and get.
   onSay: (line: string) => void;
@@ -69,6 +83,7 @@ export default function PhoneShelf(props: {
         topic={props.topic}
         entries={props.entries}
         onOpenBook={props.onOpenBook}
+        onOpenLesson={props.onOpenLesson}
         onBack={props.onBack}
         onSay={props.onSay}
         onImported={props.onImported}
@@ -152,6 +167,7 @@ function TopicShelf(props: {
   topic: Topic;
   entries: Record<string, LibraryEntry>;
   onOpenBook: (book: PhoneBookOpen) => void;
+  onOpenLesson: (book: PhoneBookOpen) => void;
   onBack: () => void;
   onSay: (line: string) => void;
   onImported: () => Promise<void>;
@@ -197,6 +213,35 @@ function TopicShelf(props: {
   const materials = shelfMaterials(files, entries, onDevice ?? new Set());
   const books = materials.filter((m) => !m.article);
   const articles = materials.filter((m) => m.article);
+  const pdfIds = books
+    .filter((m) => m.format === "pdf" && m.bookId)
+    .map((m) => m.bookId as string)
+    .join(" ");
+
+  // How far each lesson has got, one card at a time. Two local reads per PDF:
+  // the book's conversations, and the chapter table, which is derived from the
+  // full text and so exists only for a paper a lesson has already read here
+  // (shelf-list.ts lessonNote says what is left when it does not).
+  const [lessonNotes, setLessonNotes] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const ids = pdfIds ? pdfIds.split(" ") : [];
+    if (ids.length === 0) return;
+    let live = true;
+    void (async () => {
+      const lines = await Promise.all(
+        ids.map(async (id): Promise<[string, string]> => {
+          await loadThreads(id).catch(() => ({}));
+          const ft = await getFulltext(id).catch(() => null);
+          const chapters = await loadChapterTable(id, ft, []).catch(() => null);
+          return [id, lessonNote(getBookThread(id), chapters)];
+        }),
+      );
+      if (live) setLessonNotes(Object.fromEntries(lines));
+    })();
+    return () => {
+      live = false;
+    };
+  }, [pdfIds]);
 
   const tap = useCallback(
     async (m: ShelfMaterial): Promise<void> => {
@@ -204,27 +249,22 @@ function TopicShelf(props: {
       // then would download a book that is already here.
       if (onDevice === null) return;
       const action = materialTap(m, can);
-      if (action.kind === "pdf") return props.onSay(PDF_ELSEWHERE);
       if (action.kind === "unavailable") return props.onSay(action.why);
-      if (action.kind === "open") {
-        return props.onOpenBook({
-          bookId: m.bookId as string,
-          name: m.title,
-          topicId: topic.id,
-          path: m.file.path,
-        });
-      }
+      const opened: PhoneBookOpen = {
+        bookId: (m.bookId ?? "") as string,
+        name: m.title,
+        topicId: topic.id,
+        path: m.file.path,
+      };
+      if (action.kind === "open") return props.onOpenBook(opened);
+      if (action.kind === "lesson") return props.onOpenLesson(opened);
       setDownloading(action.bookId);
       try {
         await fetchBook(action.bookId);
         await readOnDevice();
         setCoverRevision((n) => n + 1);
-        props.onOpenBook({
-          bookId: action.bookId,
-          name: m.title,
-          topicId: topic.id,
-          path: m.file.path,
-        });
+        const door = action.then === "lesson" ? props.onOpenLesson : props.onOpenBook;
+        door({ ...opened, bookId: action.bookId });
       } catch (e) {
         console.warn("failed to download the book", e);
         props.onSay(e instanceof Error ? e.message : "This book could not be downloaded");
@@ -286,8 +326,20 @@ function TopicShelf(props: {
                       <span className={BOOK_TITLE} title={m.file.name}>
                         {m.title}
                       </span>
-                      <span className={BOOK_READ}>
-                        {materialNote(m, downloading === m.bookId) ?? ""}
+                      <span className={m.format === "pdf" ? LESSON_READ : BOOK_READ}>
+                        {/* The mark that says this one is taught, not read. A
+                            word in the label strip rather than a ribbon on the
+                            cover: the cover is artwork to all four edges
+                            (shelf/cardStyles.ts). */}
+                        {m.format === "pdf" && (
+                          <span className="flex-none rounded-sm border border-accent-line px-[5px] text-[10px] leading-[14px] font-medium tracking-[0.08em] text-accent-line uppercase">
+                            Lesson
+                          </span>
+                        )}
+                        <span className="truncate">
+                          {materialNote(m, downloading === m.bookId) ??
+                            (m.format === "pdf" ? (lessonNotes[m.bookId as string] ?? "") : "")}
+                        </span>
                       </span>
                     </span>
                   </button>

@@ -699,3 +699,21 @@ export function IconRestart({ size = 20 }: IconProps) {
 		</svg>
 	);
 }
+
+// Handing the open file to another app (docs/70: the phone lesson's "Open in…").
+// A page with an arrow leaving it, which is the gesture the system panel makes.
+export function IconShareOut({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M10 2.6V11" />
+			<path d="M7.2 5.4L10 2.6L12.8 5.4" />
+			<path d="M5.5 8.2H4.2C3.54 8.2 3 8.74 3 9.4V16.2C3 16.86 3.54 17.4 4.2 17.4H15.8C16.46 17.4 17 16.86 17 16.2V9.4C17 8.74 16.46 8.2 15.8 8.2H14.5" />
+		</svg>
+	);
+}

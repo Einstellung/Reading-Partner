@@ -67,6 +67,7 @@ test("a device that already answered keeps its answer and is not rewritten", () 
     backgroundCollect: false,
     fingerDraw: true,
     chatScale: 1.4,
+    lessonIntroSeen: true,
   };
   const { settings, changed } = initialDeviceSettings(
     stored,
