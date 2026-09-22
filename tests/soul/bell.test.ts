@@ -4,7 +4,7 @@
 // Run: scripts/t.sh tests/soul/bell.test.ts
 
 import { beforeEach, expect, test } from "bun:test";
-import type { Message } from "@earendil-works/pi-ai";
+import { withoutInitialSystemMessage, type Message } from "@earendil-works/pi-ai";
 import { answerBell, renderBell, OUTPUT_MAX, type SendBellTurn } from "../../src/soul";
 import { createBellStore, BRIEF_MAX, type Bell, type BellStore } from "../../src/legion/bell";
 import { createRunStore } from "../../src/legion/run/store";
@@ -45,7 +45,7 @@ function bellStore(): { bells: BellStore; files: Map<string, string> } {
 function sender(turns: Turn[]): { send: SendBellTurn; rounds: Message[][] } {
   const rounds: Message[][] = [];
   const send = scriptedBellSender(turns, {
-    onContext: (context) => void rounds.push(context.messages),
+    onContext: (context) => void rounds.push(withoutInitialSystemMessage(context.messages)),
   });
   return { send, rounds };
 }

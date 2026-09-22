@@ -567,7 +567,7 @@ test("one setting changed on both sides is settled by content and journalled", (
 // pair neither device ever held, and one no call can resolve (pitfall 237).
 // settings.json therefore declares them as a group and the merge decides them
 // as one value.
-const PAIR = { deepseek: "deepseek-v4-flash", cerebras: "qwen-3-235b-a22b" };
+const PAIR = { deepseek: "deepseek-flash", cerebras: "qwen-3-235b-a22b" };
 
 const pairOf = (b: Uint8Array): [string | undefined, string | undefined] => {
   const out = JSON.parse(text(b)) as Record<string, string | undefined>;

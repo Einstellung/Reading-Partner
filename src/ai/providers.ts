@@ -44,7 +44,6 @@ import type {
 	Api,
 	AssistantMessage,
 	AssistantMessageEventStream,
-	Context,
 	Message,
 	Model,
 	Provider,
@@ -52,8 +51,10 @@ import type {
 	ProviderResponse,
 	SimpleStreamOptions,
 	ThinkingLevel,
+	TranscriptContext,
 	Transport,
 } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import { getValidAnthropicAuth } from "./anthropic-oauth";
 import { getValidOpenAIAuth } from "./openai-oauth";
 import { activeProviderId, loadCredentials, setActiveCredential } from "./credentials";
@@ -400,7 +401,7 @@ export function toPiMessages(messages: ChatMessage[]): Message[] {
 // fake in tests. Injected so the streaming core runs without a real provider.
 export type SimpleStreamFn = (
 	model: Model<Api>,
-	context: Context,
+	context: TranscriptContext,
 	options: SimpleStreamOptions,
 ) => AssistantMessageEventStream;
 
@@ -477,7 +478,7 @@ export async function streamChatCore(params: StreamChatCoreParams): Promise<void
 	try {
 		const s = stream(
 			model,
-			{ systemPrompt, messages },
+			normalizeContext({ systemPrompt, messages }),
 			{ apiKey, signal, reasoning, transport, maxRetries, headers, sessionId, onResponse },
 		);
 		let full = "";

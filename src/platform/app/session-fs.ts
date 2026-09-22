@@ -3,7 +3,7 @@
 //
 // The harness stores a session as one append-only JSONL file per session, and
 // JsonlSessionRepo takes the filesystem as a constructor argument rather than
-// reaching for node: it calls twelve methods, all of which appdata.ts already
+// reaching for node: it calls thirteen methods, all of which appdata.ts already
 // has. That is the whole reason the harness runs in a WebView at all, so this
 // module is the seam — nothing above it knows the harness is writing files, and
 // nothing below it knows the files are a session.
@@ -126,7 +126,7 @@ export function createSessionFileSystem(fs: AppDataFs = appData): FileSystem {
     return { path: full };
   }
 
-  // One shape for the twelve: resolve, confine, run, and turn anything thrown
+  // One shape for the thirteen: resolve, confine, run, and turn anything thrown
   // into a Result. `missing` maps a throw to not_found when the file is gone,
   // which is the one failure every caller tells apart from the rest.
   async function guarded<T>(
@@ -174,12 +174,36 @@ export function createSessionFileSystem(fs: AppDataFs = appData): FileSystem {
       return ok(resolve(parts.filter((p) => p !== "").join("/"), cwd));
     },
 
-    // --- the twelve the session repo calls ---------------------------------
+    // --- the thirteen the session repo calls ---------------------------------
 
     readTextFile(path) {
       return guarded("read", path, async (full, relative) => {
         if (!(await fs.exists(relative))) return err(notFound(full));
         return ok(await fs.readText(relative));
+      });
+    },
+
+    // pi's JSONL session storage opens a session file through this to read its
+    // header before deciding which format it is. AppData has no streaming read —
+    // one host call hands back the whole file — so the reader walks a string
+    // already in memory. `terminated` is what the repo uses to spot a torn final
+    // record and rewrite the file without it, so the last line's missing newline
+    // has to be reported rather than smoothed over.
+    openTextLineReader(path) {
+      return guarded("read", path, async (full, relative) => {
+        if (!(await fs.exists(relative))) return err(notFound(full));
+        const text = await fs.readText(relative);
+        let at = 0;
+        return ok({
+          async readLine() {
+            if (at >= text.length) return ok(undefined);
+            const nl = text.indexOf("\n", at);
+            const line = nl === -1 ? text.slice(at) : text.slice(at, nl);
+            at = nl === -1 ? text.length : nl + 1;
+            return ok({ text: line, terminated: nl !== -1 });
+          },
+          async close() {},
+        });
       });
     },
 

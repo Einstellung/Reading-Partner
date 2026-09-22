@@ -12,6 +12,7 @@ import { BACKGROUND_CONTEXT, type OpenOperation } from "@earendil-works/pi-agent
 import {
   Type,
   createAssistantMessageEventStream,
+  withoutInitialSystemMessage,
   type Api,
   type Context,
   type Message,
@@ -34,12 +35,14 @@ const OTHER = { id: "m2", provider: "faux" } as unknown as Model<Api>;
 const SOUL = { name: "soul", sessions: "soul" };
 
 // One scripted stream per turn, recording the messages each round was sent.
+// pi carries the system prompt as a leading system message; this file is about
+// which turn's messages a round sees, so that message is dropped here.
 function scriptStream(turns: Turn[]): { fn: StreamFn; rounds: Message[][] } {
   let round = 0;
   const rounds: Message[][] = [];
   const fn: StreamFn = (_model, context: Context) => {
     const i = round++;
-    rounds.push(context.messages);
+    rounds.push(withoutInitialSystemMessage(context.messages));
     const stream = createAssistantMessageEventStream();
     const events = turnEvents(turns[i] ?? { error: "no scripted turn" });
     (async () => {

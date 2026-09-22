@@ -19,6 +19,7 @@
 //     back. estimateTextTokens charges dense scripts by the character.
 
 import { clampMaxTokensToContext } from "@earendil-works/pi-ai/api/simple-options";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import type { Api, Context, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
 
 // The window pi reserves on every request (its CONTEXT_SAFETY_TOKENS). Mirrored
@@ -91,6 +92,14 @@ function contentTokens(content: string | (TextContent | ImageContent)[]): number
 
 export function estimateMessageTokens(message: Message): number {
   if (message.role === "user" || message.role === "toolResult") return contentTokens(message.content);
+  // A system message carries instructions plus, from pi 0.87, the tool
+  // declarations that become available at that point in the transcript.
+  if (message.role === "system") {
+    let n = contentTokens(message.content);
+    if (message.sections) n += estimateTextTokens(safeJson(message.sections));
+    if (message.toolsAdded?.length) n += estimateTextTokens(safeJson(message.toolsAdded));
+    return n;
+  }
   let n = 0;
   for (const block of message.content) {
     if (block.type === "text") n += estimateTextTokens(block.text);
@@ -133,7 +142,7 @@ export function piBudget(model: Model<Api>, ctx: Context): PiBudget {
   if (!(model.contextWindow > 0)) {
     return { tokens: 0, allowedOutput: Number.MAX_SAFE_INTEGER, saturated: false };
   }
-  const allowedOutput = clampMaxTokensToContext(model, ctx, Number.MAX_SAFE_INTEGER);
+  const allowedOutput = clampMaxTokensToContext(model, normalizeContext(ctx), Number.MAX_SAFE_INTEGER);
   return {
     tokens: model.contextWindow - allowedOutput - PI_CONTEXT_SAFETY_TOKENS,
     allowedOutput,

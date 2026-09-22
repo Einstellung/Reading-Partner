@@ -4,6 +4,7 @@
 // Run: scripts/t.sh tests/info/briefer/deliver.test.ts
 
 import { beforeEach, expect, test } from "bun:test";
+import { getCurrentSystemPrompt } from "@earendil-works/pi-ai";
 import { answerBell, doorDate, doorKey, type SendBellTurn } from "../../../src/soul";
 import { createBellStore, type BellStore } from "../../../src/legion/bell";
 import { createBoxStore, type BoxStore } from "../../../src/box";
@@ -56,7 +57,7 @@ function boxStore(): { box: BoxStore; files: Map<string, string> } {
 function sender(turns: Turn[]): { send: SendBellTurn; prompts: string[] } {
   const prompts: string[] = [];
   const send = scriptedBellSender(turns, {
-    onContext: (context) => void prompts.push(String(context.systemPrompt ?? "")),
+    onContext: (context) => void prompts.push(getCurrentSystemPrompt(context.messages)),
   });
   return { send, prompts };
 }

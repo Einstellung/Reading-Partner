@@ -6,7 +6,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { Type, type Api, type Model } from "@earendil-works/pi-ai";
+import { Type, withoutInitialSystemMessage, type Api, type Model } from "@earendil-works/pi-ai";
 import { runHarnessTurn, type AgentTool, type StreamFn } from "../../../src/legion/execute/turn";
 import { createSessionFileSystem } from "../../../src/platform/app/session-fs";
 import { memoryAppData } from "../../support/memory-appdata";
@@ -106,7 +106,7 @@ test("the run starts from one user message: no caller history is replayed", asyn
   );
 
   expect(runner.requests[0].task).toBe("find work on X");
-  const sent = runner.contexts[0].messages;
+  const sent = withoutInitialSystemMessage(runner.contexts[0].messages);
   expect(sent.length).toBe(1);
   expect(sent[0]).toMatchObject({ role: "user", content: "find work on X" });
   // The definition's prompt, plus the contract that tells the run its work is
