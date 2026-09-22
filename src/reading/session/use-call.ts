@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ProviderId } from "../../ai";
 import { runAgentTurn } from "../../legion/execute/turn";
+import { isStall } from "../../legion/execute/stall";
 import { soulHarness } from "../../soul";
 import type { CompressedImage } from "../../ai/image-utils";
 import { logEvent } from "../../platform/app/events";
@@ -498,9 +499,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // runTurn calls itself: a turn that answered before the model was handed
   // what the reader said next opens the turn that answers it. Through a ref
   // rather than the binding, which does not exist yet inside its own body.
-  const runTurnRef = useRef<((threadId: string, annotationId: string, home: string) => void) | null>(
-    null,
-  );
+  const runTurnRef = useRef<
+    ((threadId: string, annotationId: string, home: string, attempt?: number) => void) | null
+  >(null);
 
   // Run one assistant turn for a thread: assemble the reading context, stream the
   // reply into the bubble, persist on done. Stable (reads refs). No-ops when no
@@ -510,7 +511,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   // The turn belongs to its thread, not to the view: closing the bubble leaves it
   // running (docs/03) and every callback below writes through liveTurns, so the
   // row survives a bubble that stopped re-rendering.
-  const runTurn = useCallback((threadId: string, annotationId: string, home: string) => {
+  const runTurn = useCallback((threadId: string, annotationId: string, home: string, attempt = 0) => {
     const bookId = bookIdRef.current;
     const docId = docIdRef.current;
     const s = settingsRef.current;
@@ -860,7 +861,35 @@ export function useCall<M extends CallRow, I extends StagedImage>(
             runTurnRef.current?.(threadId, annotationId, home);
           }
         },
-        onError: (message: string) => {
+        onError: (message: string, _assistant?: unknown, thrown?: unknown) => {
+          // The stream went silent and the watch cut it (legion/execute/stall.ts)
+          // — the app was switched away mid-answer and the connection did not
+          // survive being frozen. Nothing is shown for it: the question is in
+          // the thread file, so the turn is simply asked again, and what the
+          // reader gets is a reply that arrived late.
+          //
+          // Asked again rather than resumed, and the half-written row thrown
+          // away with it. pi will keep an interrupted run open for its own
+          // retry, but only for a failure its classifier calls retryable, and
+          // that classifier reads provider wording (execute/watchdog.ts) — a
+          // stall reaches it as an abort with no verdict attached. A second
+          // ask costs the turn's tool rounds over again and answers the whole
+          // question; a resume would cost nothing and answer half of it
+          // (docs/pitfall/390).
+          //
+          // Once. A second stall is a failure like any other, and the reader is
+          // shown it rather than left watching the same turn go around.
+          if (isStall(thrown) && attempt === 0 && !controller.signal.aborted) {
+            const dead = liveTurns.settle(threadId, controller);
+            delivered.close();
+            dispatch({ type: "row-dropped", threadId, ts: rowTs });
+            // Anything said into the dead turn goes into the file first, so the
+            // turn that follows is assembled with it and answers it too.
+            flushSteering(threadId, home, steering);
+            dead?.onSettled?.();
+            runTurnRef.current?.(threadId, annotationId, home, attempt + 1);
+            return;
+          }
           if (!controller.signal.aborted) console.error("agent turn failed", message);
           showFailure("error", message, rowTs);
         },

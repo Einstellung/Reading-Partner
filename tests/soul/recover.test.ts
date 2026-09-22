@@ -204,6 +204,7 @@ async function diedMidTool(
   disk: MemoryDisk,
   entered: string[],
   deliverTo?: Record<string, unknown>,
+  said?: string,
 ): Promise<void> {
   const held = holdHarness({ lane: SOUL, fileSystem: createSessionFileSystem(disk) });
   const hang: AgentTool = {
@@ -218,7 +219,13 @@ async function diedMidTool(
   void turn(
     held,
     [user("what does page 12 mean?")],
-    [{ calls: [{ name: "echo", args: { value: "x" }, id: "c1" }] }, { text: "never sent" }],
+    [
+      {
+        ...(said === undefined ? {} : { text: said }),
+        calls: [{ name: "echo", args: { value: "x" }, id: "c1" }],
+      },
+      { text: "never sent" },
+    ],
     { tools: [hang], ...(deliverTo ? { deliverTo } : {}) },
   );
   await Bun.sleep(40);
@@ -336,7 +343,15 @@ interface Stub {
   notes: string[];
 }
 
-function stubRecovery(snapshot: Partial<LaneSnapshot>, open: OpenOperation[]): Stub {
+// `later` is what the branch reads as on the second look and after: the resume
+// writes to it, so what was there before the model was called is not what is
+// there once it has settled.
+function stubRecovery(
+  snapshot: Partial<LaneSnapshot>,
+  open: OpenOperation[],
+  later: Partial<LaneSnapshot>[] = [],
+): Stub {
+  let seen = 0;
   const stub: Stub = {
     acquired: 0,
     aborted: [],
@@ -347,8 +362,11 @@ function stubRecovery(snapshot: Partial<LaneSnapshot>, open: OpenOperation[]): S
         stub.acquired += 1;
         throw new Error("the lane should not have been borrowed");
       },
-      inspect: async () =>
-        ({ transcript: [], queues: [], ...snapshot }) as unknown as LaneSnapshot,
+      inspect: async () => {
+        const reading = seen < later.length ? later[seen]! : snapshot;
+        seen += 1;
+        return ({ transcript: [], queues: [], ...reading }) as unknown as LaneSnapshot;
+      },
       note: async (_lane, customType) => void stub.notes.push(customType),
       abort: async (lane) => void stub.aborted.push(lane),
       settle: async () => {},
@@ -417,4 +435,143 @@ test("a compaction left open is aborted: it is nobody's answer", async () => {
   await recoverSoulSession(stub.previous, { lane: "soul", settings: async () => settings });
   expect(stub.acquired).toBe(0);
   expect(stub.aborted).toEqual(["soul"]);
+});
+
+test("what the dead process had already written is in front of what the resumed run says", async () => {
+  // The turn the reader's iPad lost: a round that wrote a paragraph and then
+  // called a tool, and a process that died before the tool came back. The
+  // resumed run only hands back its own words, so on its own it would land a
+  // closing sentence with nothing above it (docs/pitfall/391).
+  const disk = memoryAppData();
+  const entered: string[] = [];
+  createBookThread(BOOK, THREAD);
+  await diedMidTool(
+    disk,
+    entered,
+    { place: "book", bookId: BOOK, threadId: THREAD, page: 12 },
+    "Let me look at what page 12 actually says.",
+  );
+
+  const off = bookDelivery(true);
+  const { box } = boxStore();
+  const resumed = resumeSender([{ text: "So page 12 is the turning point." }]);
+  try {
+    const again = holdHarness({
+      lane: SOUL,
+      fileSystem: createSessionFileSystem(disk),
+      recover: (previous, context) =>
+        recoverSoulSession(
+          previous,
+          { lane: SOUL.name, settings: async () => settings, send: resumed.send, box, now: () => NOW },
+          context,
+        ),
+    });
+    await turn(again, [user("q2")], [{ text: "a2" }]);
+    await Bun.sleep(60);
+    await again.close(ctx);
+  } finally {
+    off();
+  }
+
+  const thread = getThread(BOOK, THREAD);
+  expect(thread?.messages).toHaveLength(1);
+  expect(thread?.messages[0]!.text).toBe(
+    "Let me look at what page 12 actually says.\n\nSo page 12 is the turning point.",
+  );
+});
+
+test("a turn that had said nothing before it died lands only what the resumed run says", async () => {
+  const disk = memoryAppData();
+  const entered: string[] = [];
+  createBookThread(BOOK, THREAD);
+  await diedMidTool(disk, entered, { place: "book", bookId: BOOK, threadId: THREAD, page: 12 });
+
+  const off = bookDelivery(true);
+  const { box } = boxStore();
+  const resumed = resumeSender([{ text: "Page 12 is the turning point." }]);
+  try {
+    const again = holdHarness({
+      lane: SOUL,
+      fileSystem: createSessionFileSystem(disk),
+      recover: (previous, context) =>
+        recoverSoulSession(
+          previous,
+          { lane: SOUL.name, settings: async () => settings, send: resumed.send, box, now: () => NOW },
+          context,
+        ),
+    });
+    await turn(again, [user("q2")], [{ text: "a2" }]);
+    await Bun.sleep(60);
+    await again.close(ctx);
+  } finally {
+    off();
+  }
+
+  expect(getThread(BOOK, THREAD)?.messages[0]!.text).toBe("Page 12 is the turning point.");
+});
+
+// A process killed mid-sentence, which is the ordinary way one dies: a turn
+// spends most of itself writing. Resuming continues a turn that was inside a
+// tool call and nothing else, so pi commits the frames it has as an assistant
+// message and ends the run as an error. The words are on the branch and they
+// are the reply (docs/pitfall/395).
+test("a turn interrupted mid-sentence lands what the resume settled onto the branch", async () => {
+  const off = bookDelivery();
+  createBookThread(BOOK, THREAD);
+  const settled = {
+    ...stamp,
+    id: "m1",
+    type: "message" as const,
+    message: {
+      role: "assistant",
+      content: [{ type: "text", text: "Chapter I is one conversation, and everything is in" }],
+      stopReason: "error",
+      errorMessage: "Assistant request was interrupted.",
+    },
+  };
+  try {
+    const stub = stubRecovery(
+      { transcript: [stamp] as LaneSnapshot["transcript"] },
+      [{ lane: "soul", operationId: "op-1", kind: "run", startedAt: NOW }],
+      // Before the model call, and again after the resume has settled it.
+      [
+        { transcript: [stamp] as LaneSnapshot["transcript"] },
+        { transcript: [stamp, settled] as unknown as LaneSnapshot["transcript"] },
+      ],
+    );
+    await recoverSoulSession(stub.previous, {
+      lane: "soul",
+      settings: async () => settings,
+      send: async () => {
+        throw new Error("Assistant request was interrupted. The preceding content …");
+      },
+    });
+    expect(stub.notes).toEqual([RECOVERY_ATTEMPT]);
+    expect(getThread(BOOK, THREAD)?.messages.map((m) => m.text)).toEqual([
+      "Chapter I is one conversation, and everything is in",
+    ]);
+  } finally {
+    off();
+  }
+});
+
+test("a turn that was killed before it said anything lands nothing at all", async () => {
+  const off = bookDelivery();
+  createBookThread(BOOK, THREAD);
+  try {
+    const stub = stubRecovery({ transcript: [stamp] as LaneSnapshot["transcript"] }, [
+      { lane: "soul", operationId: "op-1", kind: "run", startedAt: NOW },
+    ]);
+    await recoverSoulSession(stub.previous, {
+      lane: "soul",
+      settings: async () => settings,
+      send: async () => {
+        throw new Error("Assistant request was interrupted. The preceding content …");
+      },
+    });
+    expect(stub.notes).toEqual([RECOVERY_ATTEMPT]);
+    expect(getThread(BOOK, THREAD)?.messages ?? []).toEqual([]);
+  } finally {
+    off();
+  }
 });

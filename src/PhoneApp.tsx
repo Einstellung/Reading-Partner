@@ -27,8 +27,9 @@ import { initSync, TICK_MS } from "./platform/sync";
 import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { registerPullRoute } from "./platform/sync/pull-routes";
 import { KEPT_ARTICLES_PULL_ROUTE, SHELF_PULL_ROUTE } from "./reading/pull-routes";
-import { startBellWatch } from "./soul";
+import { startBellWatch, startSoulSession } from "./soul";
 import { startRunner } from "./legion/execute/runner";
+import { watchAppAwayForStalls } from "./legion/execute/stall";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
@@ -259,6 +260,20 @@ export default function PhoneApp({
   // nothing heavy, so this is how a run it delegated is seen to finish, and how
   // a local run of its own is picked up at all.
   useEffect(() => startRunner({ intervalMs: TICK_MS }), []);
+
+  // Where the app is, for the turns that are streaming (legion/execute/stall.ts).
+  // The same watch the desktop shell keeps, and the phone is the shell that is
+  // switched away from: iOS freezes the process moments after, and the stream
+  // being read does not survive it.
+  useEffect(() => watchAppAwayForStalls(window), []);
+
+  // A turn the last process was killed in the middle of is finished now, on the
+  // session it was killed on (src/soul/recover.ts). It runs at start and not on
+  // the first turn, because the reader who lost an answer has no reason to ask
+  // for another one before they see it (docs/pitfall/394).
+  useEffect(() => {
+    void startSoulSession();
+  }, []);
 
   // The Android button, bound only while back has somewhere to go: with nothing
   // to close and nothing to pop it belongs to the system, which leaves the app

@@ -8,7 +8,7 @@
 // Run: scripts/t.sh tests/legion/execute/held.test.ts
 
 import { expect, test } from "bun:test";
-import { BACKGROUND_CONTEXT } from "@earendil-works/pi-agent-core";
+import { BACKGROUND_CONTEXT, type OpenOperation } from "@earendil-works/pi-agent-core";
 import {
   Type,
   createAssistantMessageEventStream,
@@ -17,7 +17,7 @@ import {
   type Message,
   type Model,
 } from "@earendil-works/pi-ai";
-import { holdHarness, type HeldHarness } from "../../../src/legion/execute/held";
+import { holdHarness, type HeldHarness, type HeldTurn } from "../../../src/legion/execute/held";
 import {
   runHarnessTurn,
   type AgentTool,
@@ -127,6 +127,21 @@ function written(disk: MemoryDisk, path: string): string {
 
 function hold(disk: MemoryDisk): HeldHarness {
   return holdHarness({ lane: SOUL, fileSystem: createSessionFileSystem(disk) });
+}
+
+// What a session opened without a turn is created with (src/soul/harness.ts).
+// Nothing streams through it: a round that reached this one would be a round on
+// a turn nobody assembled.
+function seed(): HeldTurn {
+  return {
+    model: MODEL,
+    streamFn: () => {
+      throw new Error("the seed turn was streamed");
+    },
+    tools: [],
+    systemPrompt: "",
+    toProviderMessages: (messages) => messages as Message[],
+  };
 }
 
 test("three turns on one harness: each provider round sees its own turn only", async () => {
@@ -289,5 +304,83 @@ test("a turn's hooks do not outlive it on the held harness", async () => {
   // Each turn heard its own tool end once, not the other turn's as well.
   expect(first.toolEnds).toEqual(["echo"]);
   expect(second.toolEnds).toEqual(["echo"]);
+  await held.close(ctx);
+});
+
+// A process that is killed mid-answer leaves a run open, and the reader who
+// lost that answer has no reason to ask a second question. So the session is
+// opened at start rather than by the first turn: recovery has to run with
+// nobody asking for anything (src/soul/harness.ts, docs/pitfall/394).
+test("opening the session at start hands the previous process's open run to recover", async () => {
+  const disk = memoryAppData();
+  const held = hold(disk);
+  const hang: AgentTool = {
+    name: "echo",
+    label: () => "Running the fake tool",
+    effect: "read" as const,
+    description: "never returns",
+    parameters: Type.Object({ value: Type.String() }),
+    execute: async () => {
+      await new Promise<void>(() => {});
+      return "unreachable";
+    },
+  };
+  void turn(
+    held,
+    [user("hang")],
+    [{ calls: [{ name: "echo", args: { value: "x" }, id: "c1" }] }, { text: "never sent" }],
+    { tools: [hang] },
+  );
+  // Long enough for the round to be written and the tool to be entered.
+  await Bun.sleep(50);
+
+  // --- second process, same files, and nobody asks it anything ---
+  const taken: OpenOperation[][] = [];
+  const again = holdHarness({
+    lane: SOUL,
+    fileSystem: createSessionFileSystem(disk),
+    recover: async (previous) => {
+      taken.push(previous.open);
+      await previous.settle(ctx);
+      await previous.close(ctx);
+    },
+  });
+  await again.open?.(seed(), ctx);
+  // The recovery is started by the open and not awaited by it.
+  await Bun.sleep(50);
+
+  expect(taken).toHaveLength(1);
+  expect(taken[0]!.map((o) => o.kind)).toEqual(["run"]);
+  // The session was opened by `open` and not by a turn: a fresh file is there
+  // beside the dead one, with nothing of anybody's in it.
+  const files = sessionFiles(disk, "soul");
+  expect(files).toHaveLength(2);
+  expect(written(disk, files[1]!)).not.toContain("hang");
+  await again.close(ctx);
+});
+
+test("the first turn opens the session when nothing opened it at start", async () => {
+  const disk = memoryAppData();
+  const opens: number[] = [];
+  const held = holdHarness({
+    lane: SOUL,
+    fileSystem: createSessionFileSystem(disk),
+    recover: (previous) => {
+      opens.push(previous.open.length);
+    },
+  });
+  // No `open` call: the turn pays for it, the way every turn did before.
+  expect(await turn(held, [user("q1")], [{ text: "a1" }])).toMatchObject({ done: "a1" });
+  expect(opens).toEqual([]); // nothing was there to recover
+  await held.close(ctx);
+});
+
+test("opening twice opens one session", async () => {
+  const disk = memoryAppData();
+  const held = hold(disk);
+  await held.open?.(seed(), ctx);
+  await held.open?.(seed(), ctx);
+  await turn(held, [user("q1")], [{ text: "a1" }]);
+  expect(sessionFiles(disk, "soul")).toHaveLength(1);
   await held.close(ctx);
 });

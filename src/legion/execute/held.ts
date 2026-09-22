@@ -82,6 +82,15 @@ export interface HeldHarness {
   readonly lane: TurnLane;
   /** Borrow the lane, configured for `turn` and standing on the session root. */
   acquire(turn: HeldTurn, context: Context): Promise<HeldLane>;
+  /**
+   * Open the session without taking the lane, so `recover` runs before anybody
+   * asks for a turn. `turn` is only the seed the harness is created with — its
+   * model registry has to be able to answer at all — and the turn that resumes
+   * brings its own. Absent on a harness that is already standing on a session
+   * (the recovery's borrowed one, src/soul/recover.ts), where there is nothing
+   * left to open.
+   */
+  open?(turn: HeldTurn, context: Context): Promise<void>;
   /** Close the harness and its session; a later acquire reopens them. */
   close(context: Context): Promise<void>;
 }
@@ -118,8 +127,9 @@ export interface HoldOptions {
   now?: () => number;
   /**
    * Finish what the previous process left open instead of aborting it. Called
-   * once, on the first acquire of this process, and not awaited — the turn that
-   * paid for the open goes on without it.
+   * once, when this process's session is opened — by `open` at start, or by the
+   * first acquire — and not awaited: whoever paid for the open goes on without
+   * it.
    */
   recover?: (previous: HeldRecovery, context: Context) => void | Promise<void>;
 }
@@ -316,6 +326,10 @@ export function holdHarness(options: HoldOptions): HeldHarness {
 
   return {
     lane: laneId,
+
+    async open(turn, context) {
+      await open(turn, context);
+    },
 
     async acquire(turn, context) {
       const previous = tail;

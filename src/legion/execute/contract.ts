@@ -251,6 +251,10 @@ export interface RunAgentTurnOptions extends AgentCallbacks {
   // dead process's, standing where its run stopped, and `messages` is not sent
   // because the prompt is already in that session (src/soul/recover.ts).
   resume?: string;
+  // The silence this turn is allowed before its stream is taken as dead
+  // (execute/stall.ts). The watch's own window unless a caller says otherwise;
+  // `stall: null` turns the watch off, which is what a scripted stream wants.
+  stallMs?: number;
 }
 
 // The two things the turn says when it gives up. Both are refusals rather than
