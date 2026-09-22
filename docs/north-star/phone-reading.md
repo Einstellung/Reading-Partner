@@ -30,7 +30,15 @@
 
 ### PDF 上手机
 
-论文全是 PDF。[22](../22-手机形态.md) 不做的理由是 PDFium WASM 在 iPhone 上没验过，这是没试不是不行；另一条路是 iOS 原生 PDFKit 走 Tauri 插件，手机上比 WASM 顺。两条路都没探。
+2026-09-22 定：手机上不给读 PDF，纸页视图和重排视图都不给。渲染不完美时用户会归咎于软件，不会归咎于 PDF。
+
+手机上打开 PDF 直接进课堂（lesson）：Lumen 语音带读和提问，吃的是 pdf.js 抽出来的正文，不碰 PDFium，不显示版面。用户想自己看页面，用系统预览或分享到别的 app。第一次打开时提醒一句。
+
+PDFKit 插件路线关掉。
+
+交互待设计，先出 HTML 原型。带读和拷问两种状态怎么切、正文从哪来（手机上 pdf.js 提取还是从桌面同步 fulltext）都还没定。
+
+依据：[pdfium-on-iphone](../research/pdfium-on-iphone.md)（引擎跑得动，但 fit-width 下正文 1.1mm 高、WebContent 峰值 700-760MB、不嵌字体的中文不出字）、[pdfkit-plugin-route](../research/pdfkit-plugin-route.md)（15-20 个新文件跨三种语言，原生视图叠 webview 的 hit-test 无先例，不解决字号问题，Android 分叉）、[pdf-reflow-on-phone](../research/pdf-reflow-on-phone.md)（重排正文能读，公式、无框线表格、标题页三处错法）。
 
 ### 小件
 
