@@ -1033,10 +1033,15 @@ fn eval_string<R: Runtime>(
             let Some(value) = info.objectForKey(&NSString::from_str(key)) else {
                 continue;
             };
-            let text = value
-                .downcast_ref::<NSString>()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| format!("{value:?}"));
+            // The message is an NSString and the line number an NSNumber;
+            // anything else is not worth a guess.
+            let text = match value.downcast_ref::<NSString>() {
+                Some(text) => text.to_string(),
+                None => match value.downcast_ref::<objc2_foundation::NSNumber>() {
+                    Some(number) => number.stringValue().to_string(),
+                    None => continue,
+                },
+            };
             out.push_str(&format!(" [{key}: {text}]"));
         }
         out

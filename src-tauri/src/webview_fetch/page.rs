@@ -302,6 +302,31 @@ mod tests {
         assert!(wrapped.contains("const value = (1 + 1);"));
         assert!(!wrapped.contains("__RP_SCRIPT__"));
     }
+
+    /// The template may mention the placeholder once, in the one place the
+    /// script goes. A second mention — a comment naming it, which is the
+    /// natural thing to write — gets its own copy of the caller's script, and
+    /// the copy in a `//` comment holds only until the script's first newline.
+    /// Every multi-line script then runs its second line at the top level of
+    /// the page: `document.querySelectorAll(…)` for the meals photo search came
+    /// back as "Return statements are only valid inside functions".
+    #[test]
+    fn the_wrapper_names_the_placeholder_once() {
+        assert_eq!(include_str!("script.js").matches("__RP_SCRIPT__").count(), 1);
+    }
+
+    #[test]
+    fn the_wrapper_keeps_a_multi_line_script_in_one_piece() {
+        let script = "(function () {\n  return 42;\n})()";
+        let wrapped = include_str!("script.js").replace("__RP_SCRIPT__", script);
+        assert_eq!(wrapped.matches("return 42;").count(), 1);
+        // Nothing of the script may end up on a line that starts a comment.
+        for line in wrapped.lines() {
+            if line.trim_start().starts_with("//") {
+                assert!(!line.contains("return 42;"), "script spilled into a comment");
+            }
+        }
+    }
 }
 
 /// Dev-only end-to-end check, the page fetch's own version of
