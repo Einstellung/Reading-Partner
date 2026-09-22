@@ -21,7 +21,7 @@ import {
 } from "../../../info/meals/list-order";
 import { isChecked, shoppingItemKey } from "../../../info/meals/shopping";
 import { EMPTY_SHOPPING } from "../../../info/meals/types";
-import { ingredientPicture, keepsLabel, weekdayName } from "../../../info/meals/view";
+import { ingredientPicture, shoppingNote, weekdayName } from "../../../info/meals/view";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
@@ -59,15 +59,6 @@ function Mark({ on }: { on: boolean }) {
   );
 }
 
-function subLine(item: ShoppingItem): string {
-  return (
-    item.qty +
-    (item.qty ? " · " : "") +
-    keepsLabel(item.keeps) +
-    (item.freezeOnArrival ? " · freeze on arrival" : "")
-  );
-}
-
 function Line({
   item,
   checked,
@@ -85,7 +76,7 @@ function Line({
   const picture = ingredientPicture(item.en, photos);
   const id = `shop-${item.category}-${item.name}`;
   return (
-    <li className={`flex items-center gap-3 py-1 ${checked && !mark ? "opacity-45" : ""}`}>
+    <li className={`flex items-center gap-3 py-1.5 ${checked && !mark ? "opacity-45" : ""}`}>
       {mark ? (
         <Mark on={checked} />
       ) : (
@@ -111,8 +102,13 @@ function Line({
             </span>
           )}
         </span>
-        <span className="mt-px block text-[12px] text-faint-foreground">{subLine(item)}</span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-faint-foreground">
+          {shoppingNote(item)}
+        </span>
       </label>
+      {/* The quantity, on the right and in the one place it can be read down a
+          column: the reader is standing in a shop holding a basket. */}
+      <span className="flex-none text-[13px] tabular-nums text-faint-foreground">{item.qty}</span>
     </li>
   );
 }
@@ -134,7 +130,7 @@ function Aisles({
     <div className="flex flex-col gap-4">
       {aislesOf(items).map((aisle) => (
         <div key={aisle.category}>
-          <h3 className="m-0 mb-1 text-[12px] font-medium uppercase tracking-wider text-faint-foreground">
+          <h3 className="m-0 mb-1.5 text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
             {aisle.label}
           </h3>
           <ul className="m-0 flex list-none flex-col p-0">
@@ -174,7 +170,7 @@ function FlatGroup({
 }) {
   return (
     <div className="mt-5">
-      <h3 className="m-0 mb-1 text-[12px] font-medium uppercase tracking-wider text-faint-foreground">
+      <h3 className="m-0 mb-1.5 text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
         {title}
       </h3>
       {hint && <p className="m-0 mb-1.5 text-[12px] leading-normal text-faint-foreground">{hint}</p>}

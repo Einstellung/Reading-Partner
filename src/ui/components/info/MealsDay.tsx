@@ -45,8 +45,8 @@ export interface MealsDayProps {
 function BasePlus({ label, text }: { label: string; text: string }) {
   if (!text) return null;
   return (
-    <div className="mt-1 flex gap-2 text-[13px] leading-snug">
-      <span className="w-14 flex-none text-faint-foreground">{label}</span>
+    <div className="mt-1.5 flex gap-3 text-[13px] leading-relaxed">
+      <span className="w-[44px] flex-none text-faint-foreground">{label}</span>
       <span className="min-w-0 flex-1 text-muted-foreground">{text}</span>
     </div>
   );
@@ -54,30 +54,42 @@ function BasePlus({ label, text }: { label: string; text: string }) {
 
 function Method({ method }: { method: DishMethod | null }) {
   return (
-    <div className="mt-3.5 border-t border-border-subtle pt-3">
-      <h3 className="m-0 text-[12px] font-semibold uppercase tracking-wider text-faint-foreground">
+    <div className="mt-4 border-t border-border-subtle pt-3.5">
+      <h3 className="m-0 text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
         Method
       </h3>
       {method ? (
         <>
-          <ol className="m-0 mt-2 flex list-none flex-col gap-[7px] p-0">
+          <ol className="m-0 mt-2.5 flex list-none flex-col gap-2 p-0">
             {method.steps.map((step, i) => (
-              <li key={i} className="flex gap-2.5 text-[14px] leading-relaxed text-foreground">
-                <span className="w-[18px] flex-none text-[12px] leading-[1.9] tabular-nums text-faint-foreground">
+              <li key={i} className="flex gap-3 text-[14px] leading-relaxed text-foreground">
+                <span className="w-[16px] flex-none text-[12px] leading-[1.9] tabular-nums text-faint-foreground">
                   {i + 1}
                 </span>
                 <span className="min-w-0 flex-1">{step}</span>
               </li>
             ))}
           </ol>
+          {/* The note is the cook's aside, not a sixth step: it is set apart
+              from the numbers rather than running straight on from them. */}
           {method.note && (
-            <p className="m-0 mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
+            <p className="m-0 mt-3.5 border-t border-border-subtle pt-3 text-[13px] leading-relaxed text-muted-foreground">
               {method.note}
             </p>
           )}
         </>
       ) : (
-        <p className="m-0 mt-2.5 text-[13px] text-faint-foreground">Writing the steps…</p>
+        // Two bars where the steps will go, so the box is the height it will
+        // settle at and the sentence is not left alone on a white field.
+        <div className="mt-2.5">
+          <p className="m-0 text-[13px] leading-relaxed text-faint-foreground">
+            Writing the steps…
+          </p>
+          <div className="mt-3 flex flex-col gap-2" aria-hidden="true">
+            <div className="h-3 w-11/12 rounded bg-muted" />
+            <div className="h-3 w-3/5 rounded bg-muted" />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -102,13 +114,17 @@ function MealCard({
   const fresh = meal.mode === "reheat" ? (meal.freshAdd ?? dish?.fresh ?? "") : (dish?.fresh ?? "");
 
   return (
-    <section className="rounded-xl border border-border-soft bg-card p-4">
+    <section className="rounded-2xl border border-border-soft bg-card p-5">
       <div className="flex items-baseline gap-2">
-        <span className="text-[12px] font-semibold uppercase tracking-wider text-faint-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
           {view.label}
         </span>
         <span className="flex-1" />
-        <span className="text-[13px] font-medium text-accent-line">{modeWord(meal.mode)}</span>
+        {/* The pair reads as one line of label: the meal on the left and how it
+            is made on the right, neither of them at the dish's weight. */}
+        <span className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
+          {modeWord(meal.mode)}
+        </span>
       </div>
 
       {cooked && dish ? (
@@ -137,17 +153,27 @@ function MealCard({
               {credit.text}
             </button>
           )}
-          <div className="mt-3 text-[17px] font-medium leading-snug text-foreground">{dish.name}</div>
+          <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
+            {dish.name}
+          </div>
           {dish.oneLine && (
-            <p className="m-0 mt-1 text-[14px] leading-relaxed text-muted-foreground">{dish.oneLine}</p>
+            <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-muted-foreground">
+              {dish.oneLine}
+            </p>
           )}
           {meal.note && (
-            <p className="m-0 mt-1 text-[14px] leading-relaxed text-muted-foreground">{meal.note}</p>
+            <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-muted-foreground">
+              {meal.note}
+            </p>
           )}
-          <BasePlus label="Base" text={dish.base} />
-          <BasePlus label="Fresh" text={fresh} />
+          <div className="mt-2.5">
+            <BasePlus label="Base" text={dish.base} />
+            <BasePlus label="Fresh" text={fresh} />
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-[13px] text-faint-foreground">{dish.handsOnMinutes} min hands-on</span>
+            <span className="text-[12px] text-faint-foreground">
+              {dish.handsOnMinutes} min hands-on
+            </span>
             {dish.keepsADay && (
               <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[12px] text-faint-foreground">
                 keeps a day
@@ -160,11 +186,13 @@ function MealCard({
         </>
       ) : (
         <>
-          <div className="mt-3 text-[17px] font-medium leading-snug text-foreground">
+          <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
             {meal.place || modeWord(meal.mode)}
           </div>
           {meal.note && (
-            <p className="m-0 mt-1 text-[14px] leading-relaxed text-muted-foreground">{meal.note}</p>
+            <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-muted-foreground">
+              {meal.note}
+            </p>
           )}
         </>
       )}

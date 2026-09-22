@@ -17,10 +17,11 @@ import {
   mealViews,
   modeWord,
   shoppingGroups,
+  shoppingNote,
   upcomingDays,
   weekdayName,
 } from "../../../src/info/meals/view";
-import type { Dish, Ingredient } from "../../../src/info/meals/types";
+import type { Dish, Ingredient, ShoppingItem } from "../../../src/info/meals/types";
 import { deriveShoppingList, setShoppingChecked, shoppingItemKey } from "../../../src/info/meals/shopping";
 import { MON, shopping, week } from "./fixtures/week";
 
@@ -32,6 +33,23 @@ test("every mode has a plain word and none of them apologises", () => {
   expect(mealLabel("breakfast")).toBe("Breakfast");
   expect(keepsLabel("d1-2")).toBe("1–2 days");
   expect(categoryLabel("produce")).toBe("Produce");
+});
+
+test("a shopping row's second line is how it keeps, never its quantity", () => {
+  const item: ShoppingItem = {
+    name: "鸡胸肉",
+    en: "Chicken Breast",
+    qty: "500g",
+    category: "protein",
+    keeps: "d1-2",
+    freezeOnArrival: true,
+    neededBy: MON,
+  };
+  expect(shoppingNote(item)).toBe("1–2 days · freeze on arrival");
+  expect(shoppingNote({ ...item, freezeOnArrival: false })).toBe("1–2 days");
+  // The quantity is set on the right of the row instead, so it must not also
+  // be in the line under the name.
+  expect(shoppingNote(item)).not.toContain("500g");
 });
 
 test("a date is Today, Tomorrow, or its weekday", () => {

@@ -300,6 +300,18 @@ export function dishThumbnails(
   return [...front, ...back].slice(0, THUMBNAIL_LIMIT);
 }
 
+/**
+ * The second line of a shopping row: how long the thing keeps, and the one
+ * instruction a line can carry.
+ *
+ * The quantity is not in it. It is set on the right of the row instead, where a
+ * column of quantities can be read down in a shop — which is the only place
+ * this screen is ever read.
+ */
+export function shoppingNote(item: ShoppingItem): string {
+  return keepsLabel(item.keeps) + (item.freezeOnArrival ? " · freeze on arrival" : "");
+}
+
 /** How many lines are still to be bought. The only count the list shows. */
 export function leftToBuy(shopping: ShoppingState): number {
   return currentList(shopping).filter((i) => !isChecked(shopping, i)).length;
