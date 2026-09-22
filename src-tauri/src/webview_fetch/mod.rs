@@ -351,6 +351,21 @@ pub(crate) enum LoadEvent {
     Failed(String),
 }
 
+/// How a wait for a page ended.
+pub(crate) enum Load {
+    /// The engine reported the document finished.
+    Finished,
+    /// No load event, but the document itself says it is far enough along to
+    /// read (`policy::has_begun`). Only macOS ends here: it is the platform
+    /// whose navigation delegate waits for a whole document that some pages
+    /// never finish (docs/pitfall/388).
+    Begun(policy::Ready),
+}
+
+/// Asked once per `READY_POLL` for as long as no load event has arrived. `None`
+/// means "do not ask the document", which is every platform but macOS.
+pub(crate) type ReadyProbe<'a> = &'a dyn Fn() -> Option<policy::Ready>;
+
 fn run_page<R: Runtime>(
     app: &AppHandle<R>,
     state: &tauri::State<'_, WebviewFetchState>,
@@ -427,6 +442,11 @@ pub(crate) fn with_page<R: Runtime, T>(
     // those land in the jar long before the homepage reports itself loaded —
     // often when it never reports at all (jar.rs).
     //
+    // Both waits therefore have a way out that is not a load event, and for the
+    // same reason: on macOS that event is the end of a whole document, and some
+    // pages never get there. The warm-up watches the jar; the article and the
+    // page watch the document (`ready_sample`).
+    //
     // RP-LOAD is only printed where a load event actually arrived. A warm-up
     // that ended on the jar never got one, and jar.rs traces that path itself.
     let navigated = Instant::now();
@@ -445,9 +465,14 @@ pub(crate) fn with_page<R: Runtime, T>(
         // A plain page waits for the same event as an article; what differs is
         // what counts as settled, which is `phase`'s business (policy.rs).
         Phase::Article | Phase::Page => {
-            match wait_for_load(&rx, budget.min(policy::LOAD_TIMEOUT), started) {
-                Ok(()) => {
+            let ready = || ready_sample(&window);
+            match wait_for_load(&rx, &ready, budget.min(policy::LOAD_TIMEOUT), started) {
+                Ok(Load::Finished) => {
                     trace_load(phase, target, navigated);
+                    settle_and_extract(&window, &rx, phase, started, budget)
+                }
+                Ok(Load::Begun(ready)) => {
+                    trace_begun(phase, target, navigated, &ready);
                     settle_and_extract(&window, &rx, phase, started, budget)
                 }
                 Err(outcome) => outcome,
@@ -484,6 +509,20 @@ fn trace_load(phase: Phase, target: &Url, navigated: Instant) {
             "loadMs": navigated.elapsed().as_millis() as u64,
             "at": unix_millis(),
         })
+    );
+}
+
+/// Note a page the settle loop started reading without a load event, the way
+/// `warmed_by_jar` notes a warm-up the cookie jar answered for. Deliberately
+/// not an RP-LOAD line: that one means an event really arrived
+/// (docs/pitfall/114).
+fn trace_begun(phase: Phase, target: &Url, navigated: Instant, ready: &policy::Ready) {
+    eprintln!(
+        "webview-fetch: {target} ({}) is readable without a load event — {} with {} chars at {:.1}s",
+        phase.label(),
+        ready.state,
+        ready.chars,
+        navigated.elapsed().as_secs_f64(),
     );
 }
 
@@ -758,12 +797,24 @@ pub(crate) fn connect_engine_signals<R: Runtime>(_window: &WebviewWindow<R>, _tx
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub(crate) fn connect_engine_signals<R: Runtime>(_window: &WebviewWindow<R>, _tx: Sender<LoadEvent>) {}
 
-/// Wait for the page to reach `finished`, or for a reason it never will.
+/// Wait for the page to reach `finished`, for the document to say it is worth
+/// reading anyway, or for a reason neither will ever happen.
+///
+/// The middle one is macOS's, and `ready` is how it is asked: between load
+/// events the document is probed, and one that is parsed and rendered ends the
+/// wait the way an event would (`policy::has_begun`). Without it a page that
+/// never finishes costs the whole `timeout` and returns nothing, which is what
+/// Bloomberg's articles do on WKWebView (docs/pitfall/388).
+///
+/// On Linux `ready` answers `None` every time and this is the same event-driven
+/// wait it has always been: WebKitGTK reports both a finish and a failure, and
+/// a probe has nothing to add to that.
 pub(crate) fn wait_for_load(
     rx: &Receiver<LoadEvent>,
+    ready: ReadyProbe<'_>,
     timeout: Duration,
     started: Instant,
-) -> Result<(), PageOutcome> {
+) -> Result<Load, PageOutcome> {
     let deadline = Instant::now() + timeout;
     loop {
         if started.elapsed() > policy::OVERALL_TIMEOUT {
@@ -779,12 +830,12 @@ pub(crate) fn wait_for_load(
                 format!("no load event within {}s", timeout.as_secs()),
             ));
         }
-        match rx.recv_timeout(remaining.min(Duration::from_secs(1))) {
-            Ok(LoadEvent::Finished) => return Ok(()),
+        match rx.recv_timeout(remaining.min(policy::READY_POLL)) {
+            Ok(LoadEvent::Finished) => return Ok(Load::Finished),
             Ok(LoadEvent::Failed(detail)) => {
                 return Err(PageOutcome::failed(Status::Network, detail))
             }
-            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
                 return Err(PageOutcome::failed(
                     Status::Network,
@@ -792,7 +843,33 @@ pub(crate) fn wait_for_load(
                 ))
             }
         }
+        if let Some(state) = ready() {
+            if policy::has_begun(&state) {
+                return Ok(Load::Begun(state));
+            }
+        }
     }
+}
+
+/// Ask the document how far it has got, for the wait above.
+///
+/// macOS only, and the reason is the whole of `connect_engine_signals`'s macOS
+/// half: there, `LoadEvent::Finished` comes from `didFinishNavigation`, which
+/// waits for the document and everything it pulled in, and a failed load is not
+/// reported at all. The document is the only witness. One probe is a round trip
+/// to the main thread over a script much smaller than the extractor's
+/// (ready.js).
+#[cfg(target_os = "macos")]
+pub(crate) fn ready_sample<R: Runtime>(window: &WebviewWindow<R>) -> Option<policy::Ready> {
+    let json = eval_string(window, include_str!("ready.js"), policy::EVAL_TIMEOUT).ok()?;
+    serde_json::from_str(&json).ok()
+}
+
+/// Everywhere else the engine's own events are the answer, and probing would
+/// charge a wait that works a round trip per poll for nothing.
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn ready_sample<R: Runtime>(_window: &WebviewWindow<R>) -> Option<policy::Ready> {
+    None
 }
 
 /// Dev-only measurement mode: `RP_WEBVIEW_FETCH_TRACE=<seconds>[:<poll_ms>]`.

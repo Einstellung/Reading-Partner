@@ -74,7 +74,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 389）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 390）。
 
 ## EmbedPDF 引擎
 
@@ -309,7 +309,7 @@
 - [384-a-pinned-user-agent-is-per-engine](./384-a-pinned-user-agent-is-per-engine.md) — 坑 108 钉的那串是 WebKitGTK 的默认值，搬到 WKWebView 上是个不存在的客户端：彭博首页 1.3s 回验证码，手写一条正确的 Safari 串也回验证码，什么都不设才给 8.1 MB 首页。结论是「让引擎自己发」而不是「写对字符串」，macOS 因此没有要跟版本的 UA 常量
 - [385-data-directory-does-nothing-on-macos](./385-data-directory-does-nothing-on-macos.md) — wry 的 macOS 后端不看 `data_directory`，抓取窗口默认和 app 共用 cookie 罐；换成 `data_store_identifier` 才分得开（macOS 14+，落在 `~/Library/WebKit/<app>/WebsiteDataStore/<uuid>`）。WKWebView 的 cookie 也不在盘上的文本文件里，`jar.rs` 的暖机判据在 macOS 上因此是瞎的
 - [387-a-cold-website-data-store-reports-no-cookies](./387-a-cold-website-data-store-reports-no-cookies.md) — 这个进程里还没人用过的 `WKWebsiteDataStore`，`getAllCookies:` 回答空：盘上 41 条，退出登录那个只停在 `about:blank` 的窗口 2.6 秒里问了六次都是 0，而 `identifier` 和 `isPersistent` 都对。建窗后发一次 `fetchDataRecordsOfTypes:` 唤醒它（`jar::wake_store`）
-- [388-a-bloomberg-article-never-completes-on-wkwebview](./388-a-bloomberg-article-never-completes-on-wkwebview.md) — 同一篇文章同一小时：WebKitGTK 18.9s 到 `complete`，WKWebView 45s 还停在 `interactive`，`didFinishNavigation` 不来所以取正文超时；页面其实是全的（679 KB、有 `<article>`、2252 字预览）。文章那半还没像暖机那样改掉对加载事件的依赖
+- [388-a-bloomberg-article-never-completes-on-wkwebview](./388-a-bloomberg-article-never-completes-on-wkwebview.md) — 同一篇文章同一小时：WebKitGTK 18.9s 到 `complete`，WKWebView 45s 还停在 `interactive`，`didFinishNavigation` 不来所以取正文超时；页面其实是全的（679 KB、有 `<article>`、2252 字预览）。文章和 page 改成每 500ms 问一次文档自己，`readyState` 到 `interactive` 且已渲染正文够 200 字就进 settle 循环；Linux 照旧只等事件
 
 ## 排版基线与 Tailwind
 
@@ -353,6 +353,7 @@
 
 - [365-a-local-run-outlives-the-test-file-that-started-it](./365-a-local-run-outlives-the-test-file-that-started-it.md) — `tier: "local"` 的 run 在 `runner.ts` 的模块级 Map 里跨文件活着，永不 settle 的假 worker 就是「这条线程还有活在跑」永远为真，soul 的提示词快照在别的文件里红；`cancel()` 只写下请停，worker 的 `done` 不 settle 状态就不动，假 worker 的 `cancel` 要解掉自己那个 promise
 - [359-a-streaming-turn-outlives-its-test-file](./359-a-streaming-turn-outlives-its-test-file.md) — `readingTurns()` 是模块单例，一个 mock 成永不 resolve 的回合会留在 `"t1"` 上，下个测试文件的 `send` 就走 steer 不起新回合；会调 `send` 的文件都要 `afterEach(resetReadingTurns)`
+- [389-cargo-fmt-rewrites-the-whole-crate](./389-cargo-fmt-rewrites-the-whole-crate.md) — `cargo fmt` 按 crate 走一遍所有 `mod`，而 `src-tauri` 从来没在 rustfmt 下跑过：改三个文件跑一次，十个文件进了 diff，五个是没打开过的。别在这个仓库跑它，要格式化就 `rustfmt <file>`
 - [14-dev-build-oomd-session-kill](./14-dev-build-oomd-session-kill.md) — 全量 Rust 编译触发 systemd-oomd 杀整个桌面会话；日常用 `bun run dev:capped`
 - [334-a-second-page-on-the-dev-server-shares-the-sim-bridge](./334-a-second-page-on-the-dev-server-shares-the-sim-bridge.md) — 模拟器的 Safari 里留着一个 `localhost:1420` 标签，它也连着 sim bridge，`eval` 在 app 和它之间轮流执行：触摸落在 app 上，读数一半来自那个标签，于是"截图有高亮、`saved` 是 0"。先连问 `!!window.__TAURI_INTERNALS__`，答 false 的页面送去 `about:blank`
 - [286-vite-started-outside-the-worktree-root-kills-the-sim-bridge](./286-vite-started-outside-the-worktree-root-kills-the-sim-bridge.md) — 验证脚本把 vite 起在 scratchpad 而不是 worktree 根，vite 报 ready 但 `/` 是 404，webview 白屏；sim bridge 是 vite 插件、eval 要页面自己连上来，没加载就没人接，`drive.py` 一律 `page never answered`，连 reload 都送不进去。起完先 curl 断言 200，白屏了只能按 PID 重启 app

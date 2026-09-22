@@ -81,6 +81,20 @@ pub const LOAD_TIMEOUT: Duration = Duration::from_secs(45);
 /// Same, for the warm-up load of a site's homepage, which is the heavier page.
 pub const WARMUP_LOAD_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Gap between two readiness probes while waiting for a document that has not
+/// reported itself loaded (macOS; see `has_begun`). Two thirds of the settle
+/// interval, because this wait is what stands between a working page and a
+/// 45-second timeout, and one probe is a round trip to the main thread.
+pub const READY_POLL: Duration = Duration::from_millis(500);
+/// How much rendered text a document must hold before it counts as begun.
+///
+/// Not zero: an empty body is what a page shows for the whole of its first
+/// second, and a phase that settles on stability alone (`Phase::Page`) would
+/// take that emptiness for the answer. Not `MIN_ARTICLE_CHARS` either — this is
+/// not a judgement about what the page is worth, only about whether there is a
+/// document there to watch. 200 characters is a headline and a paragraph.
+pub const READY_MIN_CHARS: usize = 200;
+
 // What ends the wait after `finished` is a property of the document — it stopped
 // changing, and what it holds is an article — not an amount of time.
 //
@@ -409,6 +423,34 @@ pub fn looks_blocked(readout: &Readout) -> bool {
     BLOCK_MARKERS.iter().any(|m| haystack.contains(m))
 }
 
+/// What a document says about itself before it reports a load event.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct Ready {
+    /// `document.readyState`: `loading`, `interactive` or `complete`.
+    pub state: String,
+    /// Length of `document.body.innerText`.
+    pub chars: usize,
+}
+
+/// Whether a document that never reported `finished` is nonetheless far enough
+/// along to start reading it.
+///
+/// Two conditions, both about the document and neither about a clock. The
+/// parser is past the markup (`interactive` or better), so whatever the server
+/// sent is in the DOM; and something is rendered, so the settle loop has a
+/// length to watch rather than an emptiness it would mistake for an answer.
+///
+/// This is macOS's way into the settle loop. `didFinishNavigation` — the only
+/// thing that becomes a `LoadEvent::Finished` there — waits for the whole
+/// document, subresources included, and an article page can sit at
+/// `interactive` for as long as it is watched while already holding its body:
+/// the same Bloomberg article, same hour, was complete at 18.9s on WebKitGTK
+/// and still `interactive` at 45s on WKWebView, with the body present either
+/// way (docs/pitfall/388).
+pub fn has_begun(ready: &Ready) -> bool {
+    matches!(ready.state.as_str(), "interactive" | "complete") && ready.chars >= READY_MIN_CHARS
+}
+
 /// Which page a fetch is on. They ask different things of the same wait: the
 /// warm-up wants the site's cookies and any document at all will do, the article
 /// wants a body, a plain page wants neither and only has to stop changing.
@@ -684,6 +726,25 @@ mod tests {
             assert!(!settle_is_done(Phase::Article, stable, &article), "{stable}");
             assert!(!settle_is_done(Phase::Warmup, stable, &article), "{stable}");
         }
+    }
+
+    #[test]
+    fn a_document_has_begun_once_it_is_parsed_and_has_something_in_it() {
+        let begun = Ready { state: "interactive".into(), chars: 2252 };
+        assert!(has_begun(&begun));
+        assert!(has_begun(&Ready { state: "complete".into(), chars: READY_MIN_CHARS }));
+
+        // Still parsing: what is in the DOM now is not what the server sent.
+        assert!(!has_begun(&Ready { state: "loading".into(), chars: 5000 }));
+        // Parsed but blank. A page one poll from filling looks exactly like
+        // this, so it is not an answer — the wait keeps asking.
+        assert!(!has_begun(&Ready { state: "interactive".into(), chars: 0 }));
+        assert!(!has_begun(&Ready {
+            state: "interactive".into(),
+            chars: READY_MIN_CHARS - 1,
+        }));
+        // An engine that says something else says nothing.
+        assert!(!has_begun(&Ready { state: String::new(), chars: 5000 }));
     }
 
     #[test]
