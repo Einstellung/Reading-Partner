@@ -22,6 +22,16 @@ app 没有 `UIBackgroundModes`。切走几秒后进程被冻结，那条流式 H
 - 判据读 `Date.now()` 的差值，不靠「定时器到点」。冻住的 webview 定时器不跑，解冻后怎么补跑是平台的事；挂钟无论如何已经跳过去了，解冻后落下的第一个 tick 就能判出来。
 - 工具跑着的时候暂停（`hold` / `unhold`）。子 agent 和取页动辄几分钟不出声，要量的是供应商的沉默，不是回合的长度。
 - 窗口 90 秒：比无人值守那档的 60 秒长，因为误杀一个读者在等的回合代价是整轮重来。
+
+  量过：iPad Air 11 英寸模拟器 / iOS 26.5，Fable 5.1，三个带 `read_pages` 和思考的真回合（每个都要求引原文、跨六到十页），每回合最长的一段供应商沉默是
+
+  | 回合 | 最长沉默 |
+  | --- | --- |
+  | 1 | 7.5 秒 |
+  | 2 | 10.8 秒 |
+  | 3 | 15.0 秒 |
+
+  90 秒是最坏那次的六倍，站得住。量法：`StallWatch.longestSilence()`（工具跑着的那段不计），`turn.ts` 在回合结束时 `import.meta.env.DEV` 下打一行并推进 `window.__stallSilences`，从模拟器 webview 里读回来。这三轮 `chatThinking` 是关的；打开推理档之后首字节前的那段会更长，换模型或改提示词之后要重量。`message_update` 里 thinking delta 也算活动，所以长思考不会被判成停摆。
 - 回前台那条边（`src/App.tsx` 里 `watchAppAwayForStalls(window)`）：离开超过 20 秒、且整个离开期间这条流一个字节都没来，回来立刻掐，不等满 90 秒。短暂切出去不算——切一下 app 不会弄死一条流。
 
 掐的方式只能是 `lane.requestAbort(operationId)`，也就是用户按停止走的那条路。不能只 abort 底下那个 HTTP 请求：pi 的 `publishResponse` 见到 `stopReason: "aborted"` 而 durable control 不是 `cancel_requested`，会抛 `SessionInvariantError`。也不能让流自己 throw：`performGeneration` 没有兜它，异常会穿过 `drive` 出去。`requestAbort` 之后 run 正常结算、lane 交还、线程不再算 busy。
