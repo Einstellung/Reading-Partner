@@ -1018,6 +1018,30 @@ fn eval_string<R: Runtime>(
     use objc2_foundation::{NSError, NSString};
     use objc2_web_kit::WKWebView;
 
+    /// What WKWebView says went wrong, with the page's own message if there is
+    /// one. `localizedDescription` alone is a category — "A JavaScript
+    /// exception occurred" — and the exception's text, line and source live in
+    /// `userInfo` under WebKit's own keys. Without them a script that throws in
+    /// the page is indistinguishable from a bridge that is broken.
+    fn describe(error: &NSError) -> String {
+        let mut out = error.localizedDescription().to_string();
+        let info = error.userInfo();
+        for key in [
+            "WKJavaScriptExceptionMessage",
+            "WKJavaScriptExceptionLineNumber",
+        ] {
+            let Some(value) = info.objectForKey(&NSString::from_str(key)) else {
+                continue;
+            };
+            let text = value
+                .downcast_ref::<NSString>()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("{value:?}"));
+            out.push_str(&format!(" [{key}: {text}]"));
+        }
+        out
+    }
+
     let (tx, rx) = mpsc::channel::<Result<String, String>>();
     let script = js.to_string();
     window
@@ -1034,7 +1058,7 @@ fn eval_string<R: Runtime>(
                 // Safety: both arguments are the ones WebKit passes, either of
                 // which may be null; neither is kept past this block.
                 let answer = match unsafe { error.as_ref() } {
-                    Some(error) => Err(error.localizedDescription().to_string()),
+                    Some(error) => Err(describe(error)),
                     None => match unsafe { value.as_ref() } {
                         None => Err("no value returned".to_string()),
                         Some(value) => match value.downcast_ref::<NSString>() {
