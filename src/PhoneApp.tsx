@@ -446,6 +446,7 @@ export default function PhoneApp({
               topicId={base.topicId}
               topicName={topics?.find((t) => t.id === base.topicId)?.name ?? ""}
               onBack={goBack}
+              onOverlayChange={onOverlayChange}
               {...(canOpenIn ? { onOpenIn: () => handOver(base.bookId) } : {})}
             />
           )}
