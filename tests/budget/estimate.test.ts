@@ -3,6 +3,7 @@
 
 import { expect, test } from "bun:test";
 import { clampMaxTokensToContext } from "@earendil-works/pi-ai/api/simple-options";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import {
   contextBudget,
@@ -39,7 +40,7 @@ test("pi's context estimate is exactly recoverable from clampMaxTokensToContext"
   // so 10,000 + 100 tokens.
   const c = ctx({ systemPrompt: "x".repeat(40_000), messages: [user("y".repeat(400))] });
 
-  const allowed = clampMaxTokensToContext(m, c, Number.MAX_SAFE_INTEGER);
+  const allowed = clampMaxTokensToContext(m, normalizeContext(c), Number.MAX_SAFE_INTEGER);
   expect(allowed).toBe(200_000 - 10_100 - PI_CONTEXT_SAFETY_TOKENS);
 
   const pi = piBudget(m, c);

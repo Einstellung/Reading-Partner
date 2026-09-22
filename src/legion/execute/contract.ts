@@ -8,10 +8,10 @@
 import type {
   Api,
   AssistantMessageEventStream,
-  Context,
   Model,
   SimpleStreamOptions,
   ThinkingLevel,
+  TranscriptContext,
   TSchema,
 } from "@earendil-works/pi-ai";
 import type { BudgetPurpose } from "../../budget";
@@ -284,6 +284,6 @@ export const REFUSE_ROUNDS =
 // an optional one. The harness always passes an object.
 export type StreamFn = (
   model: Model<Api>,
-  context: Context,
+  context: TranscriptContext,
   options?: SimpleStreamOptions,
 ) => AssistantMessageEventStream;

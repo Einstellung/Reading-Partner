@@ -12,6 +12,9 @@ import {
 	fauxAssistantMessage,
 	fauxText,
 	fauxToolCall,
+	getCurrentSystemPrompt,
+	getCurrentTools,
+	withoutInitialSystemMessage,
 	type AssistantMessage,
 	type Context,
 	type Message,
@@ -967,9 +970,12 @@ test("the provider is sent the caller's messages exactly as toPiMessages shapes 
 	});
 
 	expect(c.done).toBe("a figure");
-	expect(script.contexts[0].messages).toEqual(messages);
-	expect(script.contexts[0].systemPrompt).toBe("be brief");
-	expect(script.contexts[0].tools?.map((t) => t.name)).toEqual(["echo"]);
+	// pi folds the prompt and the tool declarations into a leading system
+	// message, so the caller's messages are what follows it.
+	const sent = script.contexts[0]!.messages;
+	expect(withoutInitialSystemMessage(sent)).toEqual(messages);
+	expect(getCurrentSystemPrompt(sent)).toBe("be brief");
+	expect(getCurrentTools(sent).map((t) => t.name)).toEqual(["echo"]);
 });
 
 test("two turns on one store do not see each other's messages", async () => {

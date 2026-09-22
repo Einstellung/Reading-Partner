@@ -190,16 +190,17 @@ test("the four AppData has no answer for say so", async () => {
 // --- pi's own conformance suite ---------------------------------------------
 
 // The one case that is not about us. It starts a fork and a create racing for
-// the same destination id and requires the fork to win, and the winner is
-// whichever reaches the repo's in-memory reservation set first — a question of
-// how many microtask ticks the backend spends before it gets there, not of the
-// filesystem contract. pi's own NodeExecutionEnv filesystem loses it the same
-// way this one does (measured, docs/pitfall/305), so a filesystem-backed repo
-// cannot pass it at all; it is there for a repository whose reservation is a
-// transaction. Left out by name rather than by group, so a case pi adds later
-// runs without anyone having to remember to add it.
+// the same destination id and requires the one called first to win, and the
+// winner is whichever reaches the repo's in-memory reservation set first — a
+// question of how many microtask ticks each path spends before it gets there,
+// not of the filesystem contract. A filesystem-backed repo cannot pass both
+// orderings; they are there for a repository whose reservation is a
+// transaction. Which of the two is lost moved in pi 0.87 — fork now reaches the
+// reservation first either way, so the case that expects create to win is the
+// one left out (docs/pitfall/396). Left out by name rather than by group, so a
+// case pi adds later runs without anyone having to remember to add it.
 const NOT_FOR_A_FILESYSTEM = new Set([
-  "publishes fork when it reserves a shared destination id first",
+  "publishes create when it reserves a shared destination id first",
 ]);
 
 describe("JsonlSessionRepo conformance on AppData", () => {
