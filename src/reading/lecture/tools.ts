@@ -54,13 +54,33 @@ export interface ReadChapterDeps {
   onFocus?: (chapter: TableChapter) => void;
 }
 
+/**
+ * The row a read_chapter call draws while it runs, and the only place its
+ * wording is decided.
+ *
+ * It is wording with a second reader: a thread file keeps a settled call's name
+ * and label and not its arguments (platform/app/threads.ts, PersistedToolStatus),
+ * so the label is where a reopened lesson reads back which chapters have been
+ * taught (reading/lesson/thread-state.ts). Change the sentence and change the
+ * parser with it.
+ */
+export function readChapterLabel(chapter: unknown): string {
+  return chapter === undefined ? "Reading a chapter" : `Reading chapter ${chapter}`;
+}
+
+/** The printed chapter number in one of those labels, or null for anything else. */
+export function chapterOfReadChapterLabel(label: string): number | null {
+  const m = /^Reading chapter (\d+)$/.exec(label.trim());
+  return m ? Number(m[1]) : null;
+}
+
 export function buildReadChapterTool(deps: ReadChapterDeps): AgentTool {
   const { fulltext: ft, chapters } = deps;
 
   if (chapters && chapters.length > 0) {
     return {
       name: "read_chapter",
-      label: (args) => args.chapter === undefined ? "Reading a chapter" : `Reading chapter ${args.chapter}`,
+      label: (args) => readChapterLabel(args.chapter),
       effect: "read",
       description:
         "Read one whole chapter of the book the reader is in, by the chapter number " +

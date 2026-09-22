@@ -199,9 +199,13 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "ui/components/info/saveArticle.ts",
   // The phone's shelf and reader carry the topic a book was opened from, so
   // leaving it can mark that file as read (docs/70). Nothing here is a record.
+  // The lesson carries it for the same reason and one more: the prompt's
+  // position block names the topic the paper is filed under (docs/74).
+  "ui/components/phone/PhoneLessonScreen.tsx",
   "ui/components/phone/PhoneReader.tsx",
   "ui/components/phone/PhoneShelf.tsx",
   "ui/components/phone/shelf-list.ts",
+  "ui/components/phone/use-lesson-call.ts",
 ];
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../src");
