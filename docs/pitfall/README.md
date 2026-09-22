@@ -72,7 +72,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 380）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 381）。
 
 ## EmbedPDF 引擎
 
@@ -396,3 +396,4 @@
 - [299-negated-class-spans-lines-in-a-grep-guard](./299-negated-class-spans-lines-in-a-grep-guard.md) — 扫源码的守卫正则里 `[^;]*` 会跨行，命中比 grep 多；否定类要排掉 `\n`
 - [332-copying-any-file-into-the-mac-checkout-resets-the-nav-stack](./332-copying-any-file-into-the-mac-checkout-resets-the-nav-stack.md) — vite 监听整个项目根，`scp` 一个驱动脚本进去也整页 reload，手机壳的导航栈回到首页，接着按记下的坐标点下去点的全是别的屏。驱动界面的过程中不往 Mac 的 checkout 里写文件
 - [337-sim-bridge-eval-error-with-no-message-prints-as-at-sign](./337-sim-bridge-eval-error-with-no-message-prints-as-at-sign.md) — WebKit 里没带 message 的错误（`TypeError` 之类）的 `stack` 不带消息行，sim bridge 的 client 原样 `String(e.stack)` 送回来，看着就是一个孤零零的 `@`；查了半天才发现是自己写的选择器/断言没命中。别去改 bridge 的错误传递，eval 脚本里每处 DOM 查找自己 `throw new Error("说清楚的话")`
+- [380-ios-sim-port-is-only-where-the-script-looks](./380-ios-sim-port-is-only-where-the-script-looks.md) — `IOS_SIM_PORT` 只改 bridge 往哪敲 `eval`，vite 的端口在 `vite.config.ts` 的 `strictPort` 里；设了它 app 起来也永远 `waiting for the app to answer the bridge`。附：`cmd_up` 会 `pkill -f "tauri ios dev"`，并行会话互相收掉对方的 dev server
