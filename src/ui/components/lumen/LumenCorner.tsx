@@ -101,6 +101,7 @@ export function LumenCorner({
 	shown,
 	liftPx = 0,
 	inReader = false,
+	stoodDown = false,
 	openBookId = null,
 	targets,
 }: {
@@ -113,6 +114,13 @@ export function LumenCorner({
 	 * The column rises from the corner, so lifting the corner lifts it too.
 	 */
 	liftPx?: number;
+	/**
+	 * A screen that wants the corner out of the way for as long as it is up:
+	 * the phone's lesson, whose replies are read and held right where the
+	 * lifted corner would stand (docs/74). Same treatment as an open sheet,
+	 * invisible and not unmounted, so nothing replays.
+	 */
+	stoodDown?: boolean;
 	inReader?: boolean;
 	openBookId?: string | null;
 	targets: LumenJumpTargets;
@@ -316,7 +324,7 @@ export function LumenCorner({
 				// `invisible` and not unmounted: the case's animation is state in the
 				// tree, and a sheet opened and closed would replay the whole pull-out.
 				// Nothing hidden this way takes a press either.
-				sheet && "invisible",
+				(sheet || stoodDown) && "invisible",
 				OVERLAY_Z.floating,
 			)}
 			// Margin and not padding: the padding above is the corner's own margin

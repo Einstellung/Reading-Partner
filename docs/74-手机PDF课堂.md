@@ -24,7 +24,7 @@
 
 正文区是纯文字聊天，复用 `CallView` / `MessageList` / `Composer`。引文渲染走现成的 `[p.N "…"]` 引文块。图不出图。
 
-输入区一个输入框、一个发送，外加两个常驻 chip：`I don't follow` / `Skip`。chip 发出去的是读者手打的原话，不是指令。不放麦克风。
+输入区一个输入框、一个发送，外加两个常驻 chip：`I don't follow` / `Skip`。chip 发出去的是读者手打的原话，不是指令。不放麦克风。Lumen 在课堂屏上不画：抬到输入框上方后正好停在正文上，挡字也挡长按。
 
 ## 开场和每站的节奏
 
@@ -38,7 +38,7 @@
 
 ## aside
 
-长按一段 AI 回答 →「Ask about this」→ aside 视图。复用 `CallView` 已有的 aside 形态和「Back to the lesson」。回主线时在被打断的那条消息底下留一行回执，点回执回 aside。只有一层，aside 里不再开 aside。
+长按一段 AI 回答 →「Ask about this」→ aside 视图。复用 `CallView` 已有的 aside 形态和「Back to the lesson」。回主线时在课堂末尾留一行回执（和桌面同一条规则；长按的通常就是最后一条，两者重合），点回执回 aside。只有一层，aside 里不再开 aside。
 
 ## 章节 sheet
 

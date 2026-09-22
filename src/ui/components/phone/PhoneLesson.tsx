@@ -170,6 +170,8 @@ export default function PhoneLesson(props: LessonViewProps) {
       <CallView
         messages={props.messages}
         onSend={props.onSend}
+        // Text only: no dictation control in the lesson (docs/74).
+        voice={false}
         // The lesson is left by the bar's back and by the edge swipe, both of
         // which are the shell's one back (nav-stack.ts). There is no hang-up on
         // this screen to route anywhere.

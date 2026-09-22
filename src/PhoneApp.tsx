@@ -521,6 +521,9 @@ export default function PhoneApp({
         shell="phone"
         shown={lumen.shown}
         liftPx={lumen.liftPx}
+        // The lesson's replies are read and held where the lifted corner
+        // would stand, so Lumen stands down for that screen (docs/74).
+        stoodDown={base.kind === "lesson"}
         targets={{
           goToDoor: () => onNavigate("vestibule"),
           goToBriefing: () => onNavigate("briefing"),
