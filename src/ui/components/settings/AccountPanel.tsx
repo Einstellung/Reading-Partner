@@ -1,6 +1,6 @@
 // Settings, first tab: who the app talks to as you. Signing in, what the
-// default conversation runs on, what the nightly briefing runs on, how hard each
-// thinks, and the Google account the data syncs through.
+// conversations run on, what the everyday work runs on, how hard each thinks,
+// and the Google account the data syncs through.
 //
 // The model and thinking choices sit here rather than under Features because
 // they are the next thing asked for after a sign-in, and a tab hop in the middle
@@ -34,7 +34,7 @@ import OAuthCard from "./OAuthCard";
 import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
 import SyncCard from "./SyncCard";
 
-// The briefing model dropdown's "unset" row. Radix reserves the empty string, so
+// The everyday model dropdown's "unset" row. Radix reserves the empty string, so
 // following the chat model needs a value of its own; no provider id looks like
 // this one (ai/provider-ids.ts).
 const SAME_AS_CHAT = "same-as-chat";
@@ -69,9 +69,9 @@ export default function AccountPanel({
       ...settings,
       ...nextDefaultsForActive(settings.defaultProviderId, settings.defaultModelId, id),
       // A model id means nothing under another provider, so a provider change
-      // drops the briefing back to following chat. Re-signing in to the one
+      // drops the everyday work back to following chat. Re-signing in to the one
       // already chosen keeps it, like the default model does.
-      briefingModelId: settings.defaultProviderId === id ? settings.briefingModelId : null,
+      everydayModelId: settings.defaultProviderId === id ? settings.everydayModelId : null,
     });
   };
 
@@ -132,7 +132,7 @@ export default function AccountPanel({
                       ...settings,
                       defaultProviderId,
                       defaultModelId: null,
-                      briefingModelId: null,
+                      everydayModelId: null,
                     })
                   }
                 />
@@ -155,12 +155,12 @@ export default function AccountPanel({
       </SettingsSection>
 
       {connectedProviders.length > 0 && (
-        <SettingsSection title="Briefing">
+        <SettingsSection title="Everyday model">
           <div className={CARD}>
             <FieldGrid>
               <ChoiceField
                 label="Model"
-                value={settings.briefingModelId ?? SAME_AS_CHAT}
+                value={settings.everydayModelId ?? SAME_AS_CHAT}
                 disabled={!settings.defaultProviderId || models.length === 0}
                 choices={[
                   { value: SAME_AS_CHAT, label: "Same as chat" },
@@ -169,10 +169,24 @@ export default function AccountPanel({
                 onChange={(v) =>
                   onSettingsChange({
                     ...settings,
-                    briefingModelId: v === SAME_AS_CHAT ? null : v,
+                    everydayModelId: v === SAME_AS_CHAT ? null : v,
                   })
                 }
               />
+            </FieldGrid>
+            <p className="m-0 text-xs text-faint-foreground">
+              The routine work runs here instead of on the model above: meals, and the nightly
+              briefing. It is work nobody is waiting for, so a cheaper model costs you nothing;
+              which tasks belong to it is decided by the app, not here. It uses the provider above.
+            </p>
+          </div>
+        </SettingsSection>
+      )}
+
+      {connectedProviders.length > 0 && (
+        <SettingsSection title="Briefing">
+          <div className={CARD}>
+            <FieldGrid>
               <ThinkingField
                 label="Screening"
                 value={settings.briefingScreenThinking}
@@ -187,10 +201,9 @@ export default function AccountPanel({
               />
             </FieldGrid>
             <p className="m-0 text-xs text-faint-foreground">
-              The briefing is built overnight, from every source, whether or not you read it. It
-              runs on the provider above; pick a cheaper model here and it stops spending the chat
-              model on that. Screening reads the day's headlines to decide which articles are worth
-              fetching, so it is the stage to keep low; analysis reads the ones that got through.
+              The briefing is built overnight, from every source, whether or not you read it.
+              Screening reads the day's headlines to decide which articles are worth fetching, so it
+              is the stage to keep low; analysis reads the ones that got through.
             </p>
           </div>
         </SettingsSection>

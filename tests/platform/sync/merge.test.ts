@@ -672,7 +672,7 @@ test("a settled pair merged against itself again changes nothing", () => {
 // every fields file was before.
 test("a file that declares no group is merged key by key as before", () => {
   expect(fieldGroupsFor("settings.json")).toEqual([
-    ["defaultProviderId", "defaultModelId", "briefingModelId"],
+    ["defaultProviderId", "defaultModelId", "everydayModelId", "briefingModelId"],
   ]);
   expect(fieldGroupsFor("prep-abc/state.json")).toEqual([]);
 
