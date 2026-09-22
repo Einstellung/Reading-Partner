@@ -75,7 +75,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 395）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 396）。
 
 ## EmbedPDF 引擎
 
@@ -162,6 +162,7 @@
 - [367-a-bad-line-in-the-middle-of-a-session-file-is-fatal-forever](./367-a-bad-line-in-the-middle-of-a-session-file-is-fatal-forever.md) — pi 的 `JsonlStorage.open` 把整份 session 从头回放，只自愈没有结尾换行的最后一行，中间坏一行就永远抛（`Invalid JSONL storage …: line 67408`）；我们抛完只把 handle 清掉让下个回合重试同一份文件，于是每个 soul 回合都死在同一行，用户只能清 app 数据。打不开就 rename 成 `.corrupt-<now>`（`list` 只认 `.jsonl`）再新建一份，不删；盘读不出来（`cause` 链上有 `FileError`）照旧抛，不挪
 - [391-recover-lands-only-what-the-resumed-run-said](./391-recover-lands-only-what-the-resumed-run-said.md) — 被杀的回合 resume 回来只落最后一轮的字：`turnText` 只拼这次调用里 `after_response` 见过的轮，死前 commit 进 session 的那几轮正文不重发，读者看到一句没头没尾的收尾。resume 前先从 transcript 里 `reading-partner.delivery` 印记之后的 assistant text 读出来拼在前面，不花额外 token
 - [394-the-soul-session-opens-on-the-first-turn-so-recovery-waits-for-a-reader-who-will-not-ask](./394-the-soul-session-opens-on-the-first-turn-so-recovery-waits-for-a-reader-who-will-not-ask.md) — `holdHarness` 的 `recover` 只有 `acquire` 会触发，而 `acquire` 只有真回合会调；被杀重启后读者看到的是一个空线程，最没有理由再问一句，于是恢复永远等不到触发，写在盘上的半篇回复留在那儿。进程起来就 `open` session（不借 lane），种子回合只为定住 model registry，`streamFn` 直接抛
+- [395-pi-cannot-resume-a-run-killed-mid-sentence-it-only-settles-it](./395-pi-cannot-resume-a-run-killed-mid-sentence-it-only-settles-it.md) — pi 的 resume 只能从被打断的**工具调用**接着跑；死在正文中间时它把已 commit 的帧拼成一条 `stopReason: "error"` 的 assistant 消息就把 run 结算掉，不再发第二次请求。那条 error 就是回合本身，而且结算这一下才把正文写成分支上的 entry——`send` 抛了要重新 `inspect` 一次再 `saidBefore`，别直接 return
 - [339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file](./339-a-loader-that-answers-empty-lets-the-next-write-erase-the-file.md) — loader 解析失败时返回空值，下一次追加拿空值覆写整个登记表，所有条目无声消失；内容不能重建的 JSON 走 `readGuardedJson`，坏内容先隔离再兜底
 - [338-concurrent-appends-to-one-jsonl-keep-only-the-last](./338-concurrent-appends-to-one-jsonl-keep-only-the-last.md) — 一个回合 19 次 fire-and-forget 的 `recordModelCall`，`model-calls-*.jsonl` 里只剩 1 行：追加是「读整份 → 拼行 → 原子写回」，同一 tick 的调用读到同一份旧内容再互相盖。按路径把读-改-写串行化（`memory/usage/log.ts` 的 `writeInTurn`），不改走 `appendText`——同步靠 `writeTextAtomic` 的通知知道文件变了，字节上限也要读整份
 - [293-a-fixed-zip-mtime-is-not-fixed-across-time-zones](./293-a-fixed-zip-mtime-is-not-fixed-across-time-zones.md) — 给 zip 条目定死一个 UTC 瞬间做时间戳，字节仍然跨时区变：zip 存 DOS 日期，fflate 用本地时间取值器拆字段，同一瞬间在三个时区写出三种字节，构建出来的 EPUB 于是在另一台设备上哈希成第二本书。时间戳要用本地日历字段构造（`new Date(2001, 0, 1, 12, 0, 0)`），`mtime: 0` 在 DOS 日期里表示不出来

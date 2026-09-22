@@ -22,6 +22,14 @@
 // turn interrupted on the reader's iPad used to leave behind
 // (docs/pitfall/391).
 //
+// Resuming only ever continues a turn that was inside a tool call. A process
+// killed mid-sentence — the ordinary case, since a sentence is what a turn
+// spends most of its time on — cannot be continued at all: pi commits the
+// frames it has as an assistant message and ends the run as an error. The turn
+// still said something, and that something is on the branch once the resume has
+// settled it, so the branch is read back and what it says is the reply
+// (docs/pitfall/395).
+//
 // Three ways a run is aborted instead, each without a request going out:
 //
 //   no stamp     the turn never said where its reply goes (turn.ts,
@@ -198,7 +206,7 @@ async function finishRun(
   // What the dead process already said on this turn, oldest first. Read before
   // the resume, off the snapshot the decision above was made from.
   const already = saidBefore(snapshot.transcript);
-  let said: string;
+  let said: string | null = null;
   try {
     said = await (deps.send ?? appSend)({
       settings,
@@ -211,12 +219,32 @@ async function finishRun(
       ...(hold ? { signal: hold.signal } : {}),
     });
   } catch (e) {
-    hold?.release();
-    console.warn("an interrupted turn could not be finished", e);
-    return;
+    // The usual one is the process dying mid-sentence rather than mid-tool.
+    // There is no continuing from inside an assistant request the way there is
+    // from inside a tool call, so pi settles it instead: it commits the frames
+    // it had as an assistant message and ends the run as an error
+    // ("Assistant request was interrupted…"). That is not a reason to give up
+    // on the turn — it is the turn, written as far as it got, and it is on the
+    // branch now where it was not before. So the branch is read again rather
+    // than the pre-resume snapshot, and what comes back is the whole of it.
+    console.warn("an interrupted turn was settled rather than finished", e);
   }
 
-  const reply = joinRoundTexts([...already, said]);
+  // On the way through, `said` is what the resumed run added and `already` is
+  // what the dead process had committed before it. On the settled path there is
+  // no run to have added anything, and re-reading the branch is the only way to
+  // see the partial pi just wrote there.
+  const rounds =
+    said === null
+      ? saidBefore((await previous.inspect(lane, context)).transcript)
+      : [...already, said];
+  const reply = joinRoundTexts(rounds);
+  // Nothing was ever written: no message start, or a partial with no text in
+  // it. There is no reply to land and no card worth putting.
+  if (!reply.trim()) {
+    hold?.release();
+    return;
+  }
   const at = (deps.now ?? Date.now)();
   await landReply({
     key: delivery.key,
