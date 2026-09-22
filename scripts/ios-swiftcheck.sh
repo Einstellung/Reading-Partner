@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Compile the iOS voice plugin's Swift on the Mac and bring the errors back.
+# Compile an iOS plugin's Swift on the Mac and bring the errors back.
 #
-# This machine has no Swift toolchain, so every line under plugins/voice/ios is
+# This machine has no Swift toolchain, so every line under plugins/*/ios is
 # written blind. The only check that existed before this script was a full
 # `tauri ios build` — a quarter of an hour, and it wants the phone. This one
 # compiles the same sources against the same iPhoneOS SDK and answers in
@@ -13,6 +13,14 @@
 #   scripts/ios-swiftcheck.sh --dirty         # HEAD plus uncommitted edits
 #   scripts/ios-swiftcheck.sh --warnings      # the warnings too, not just errors
 #   scripts/ios-swiftcheck.sh --verbose       # the whole xcodebuild log
+#
+# One package per run, plugins/voice/ios unless told otherwise:
+#
+#   scripts/ios-swiftcheck.sh --pkg plugins/openin/ios --dirty
+#   RP_PKG=plugins/openin/ios scripts/ios-swiftcheck.sh
+#
+# The scheme is the package name, which by repository convention is
+# tauri-plugin-<the directory under plugins/>.
 #
 # The Mac cannot reach this machine, so the commits travel as a git bundle over
 # scp. Only what the Mac is missing goes into the bundle, which is normally tens
@@ -31,7 +39,7 @@ set -euo pipefail
 
 MAC="${RP_MAC:-macmini}"
 REMOTE_ROOT="rp-swiftcheck"   # relative to the Mac's home directory
-PKG="plugins/voice/ios"
+PKG="${RP_PKG:-plugins/voice/ios}"
 
 ref=""
 dirty=0
@@ -45,8 +53,13 @@ while [ $# -gt 0 ]; do
         --verbose | -v) verbose=1 ;;
         --warnings | -w) warnings=1 ;;
         --clean) clean=1 ;;
+        --pkg)
+            shift
+            [ $# -gt 0 ] || { echo "--pkg wants a path like plugins/openin/ios" >&2; exit 2; }
+            PKG="$1"
+            ;;
         -h | --help)
-            sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         -*)
@@ -68,6 +81,16 @@ repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 ref="${ref:-HEAD}"
 
+# plugins/<name>/ios → plugins/<name> (where .tauri/tauri-api has to land) and
+# tauri-plugin-<name> (the scheme, which is the Swift package's name).
+PKG="${PKG%/}"
+PKG_DIR="${PKG%/ios}"
+SCHEME="tauri-plugin-${PKG_DIR##*/}"
+if [ ! -f "$repo_root/$PKG/Package.swift" ]; then
+    echo "no Swift package at $PKG" >&2
+    exit 2
+fi
+
 if ! sha=$(git rev-parse --verify --quiet "${ref}^{commit}"); then
     echo "not a commit in this worktree: $ref" >&2
     exit 2
@@ -83,8 +106,8 @@ say() { printf '%s\n' "$*" >&2; }
 # from a checkout an earlier build already made and the generated manifest is
 # pointed at that copy. Every step below is a no-op the second time.
 
-say "==> preparing $MAC:~/$REMOTE_ROOT"
-ssh "$MAC" REMOTE_ROOT="$REMOTE_ROOT" 'bash -s' <<'REMOTE_SETUP'
+say "==> preparing $MAC:~/$REMOTE_ROOT for $SCHEME"
+ssh "$MAC" REMOTE_ROOT="$REMOTE_ROOT" PKG_DIR="$PKG_DIR" 'bash -s' <<'REMOTE_SETUP'
 set -euo pipefail
 root="$HOME/$REMOTE_ROOT"
 deps="$root-deps"
@@ -102,18 +125,26 @@ if [ ! -d "$root/.git" ]; then
     fi
 fi
 
-api="$root/plugins/voice/.tauri/tauri-api"
+# Every plugin package asks for Tauri at ../.tauri/tauri-api, so each one needs
+# its own copy. The generated API is the same for all of them, so any plugin's
+# copy in the real checkout will do as the source.
+api="$root/$PKG_DIR/.tauri/tauri-api"
 if [ ! -f "$api/Package.swift" ]; then
-    src="$HOME/Reading-Partner/plugins/voice/.tauri/tauri-api"
-    if [ ! -f "$src/Package.swift" ]; then
+    src=""
+    for candidate in \
+        "$HOME/Reading-Partner/$PKG_DIR/.tauri/tauri-api" \
+        "$HOME"/Reading-Partner/plugins/*/.tauri/tauri-api; do
+        if [ -f "$candidate/Package.swift" ]; then src="$candidate"; break; fi
+    done
+    if [ -z "$src" ]; then
         echo "no Tauri Swift API to copy from." >&2
         echo "Run a tauri ios build once in ~/Reading-Partner so that" >&2
-        echo "plugins/voice/.tauri/tauri-api exists, then try again." >&2
+        echo "plugins/<name>/.tauri/tauri-api exists, then try again." >&2
         exit 1
     fi
-    mkdir -p "$root/plugins/voice/.tauri"
+    mkdir -p "$root/$PKG_DIR/.tauri"
     cp -R "$src" "$api"
-    echo "copied the generated Tauri Swift API"
+    echo "copied the generated Tauri Swift API from $src"
 fi
 
 if [ ! -f "$deps/swift-rs/Package.swift" ]; then
@@ -220,9 +251,9 @@ if [ "$clean" -eq 1 ]; then
     ssh "$MAC" "rm -rf ~/$REMOTE_ROOT-dd"
 fi
 
-say "==> compiling for iOS"
+say "==> compiling $PKG for iOS"
 set +e
-ssh "$MAC" REMOTE_ROOT="$REMOTE_ROOT" PKG="$PKG" VERBOSE="$verbose" \
+ssh "$MAC" REMOTE_ROOT="$REMOTE_ROOT" PKG="$PKG" SCHEME="$SCHEME" VERBOSE="$verbose" \
     WARNINGS="$warnings" 'bash -s' <<'REMOTE_BUILD'
 set -uo pipefail
 root="$HOME/$REMOTE_ROOT"
@@ -230,7 +261,7 @@ log="$root.log"
 
 cd "$root/$PKG"
 xcodebuild \
-    -scheme tauri-plugin-voice \
+    -scheme "$SCHEME" \
     -destination 'generic/platform=iOS' \
     -derivedDataPath "$root-dd" \
     -clonedSourcePackagesDirPath "$root-spm" \

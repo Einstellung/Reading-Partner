@@ -3474,6 +3474,7 @@ dependencies = [
  "tauri-plugin-haptics",
  "tauri-plugin-http",
  "tauri-plugin-opener",
+ "tauri-plugin-openin",
  "tauri-plugin-os",
  "tauri-plugin-process",
  "tauri-plugin-updater",
@@ -4717,6 +4718,16 @@ dependencies = [
  "url",
  "windows 0.61.3",
  "zbus",
+]
+
+[[package]]
+name = "tauri-plugin-openin"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

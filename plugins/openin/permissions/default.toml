@@ -1,0 +1,3 @@
+[default]
+description = "Ask whether this host can hand a file to another app, and hand one over to the share sheet."
+permissions = ["allow-is-available", "allow-open-in"]

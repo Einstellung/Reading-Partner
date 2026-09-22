@@ -64,6 +64,11 @@ hound = "3.5"
 # docs/33). Registered on every platform — off iOS it rejects the start with a
 # sentence rather than not existing, so the desktop build loads.
 tauri-plugin-voice = { path = "../plugins/voice" }
+# Ours (plugins/openin): hand a file in the container to the iOS share sheet, so
+# a phone reader can open a PDF in another app. Registered on every platform for
+# the same reason voice is — off iOS `is_available` answers false, which is what
+# hides the control instead of leaving a command that does not exist.
+tauri-plugin-openin = { path = "../plugins/openin" }
 
 # The two taps the hand feels when a hold on Lumen opens or ends the voice
 # session (docs/68). The mirror image of autostart below: a motor exists only on
