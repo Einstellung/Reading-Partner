@@ -6,7 +6,7 @@
 // included: the substitution is a plain string replace over the whole template,
 // so a second mention would take a copy of the caller's script as well — and a
 // script of more than one line would then spill its second line out of the
-// comment and into the page (docs/pitfall/382).
+// comment and into the page (docs/pitfall/383).
 //
 // A script that throws is not a failed fetch: the page loaded, its markup is
 // already captured, and the only thing missing is what the script wanted to
