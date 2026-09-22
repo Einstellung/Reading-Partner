@@ -93,7 +93,13 @@ export type EventType =
   // is the number that decides whether the gate is drawn in the right place;
   // `sent` is false when the budget ladder took the window back off the call
   // after it was rendered.
-  | "page-window"; // { thread, gate, anchor, from, to, pages, tokens, px, sent }
+  | "page-window" // { thread, gate, anchor, from, to, pages, tokens, px, sent }
+  // A PDF opened as a lesson on the phone (docs/71), in events-ai.jsonl for the
+  // same reason: it belongs to a face of the app, not to a book. `ms` is the
+  // whole sequence and `extractMs` the pdf.js pass inside it (null when the
+  // full text was already cached) — read against `pages`, that pair is what
+  // says whether reading a paper on a phone is a wait or a stall.
+  | "lesson-open"; // { cached, downloaded, pages, status, chapters, ms, extractMs }
 
 // The reserved topic id the briefing's timing lines are filed under:
 // events-info.jsonl. Topic ids are UUIDs, so this cannot collide with one —

@@ -195,6 +195,12 @@ const LAYER: Record<string, Layer> = {
   // reading/epub reaches for none of them.
   "reading/ingest": "domain",
   "reading/lecture": "domain",
+  // The phone's lesson (docs/71): a PDF taught in text, with no reader under
+  // it. A domain of its own rather than a corner of reading/lecture — that
+  // directory is the pure judgements one lecture turn makes, shared by both
+  // machines, and this is the phone's own opening sequence and progress
+  // derivation on top of them.
+  "reading/lesson": "domain",
   "reading/papers": "domain",
   "reading/prep": "domain",
   "reading/prep/chapters": "domain",
