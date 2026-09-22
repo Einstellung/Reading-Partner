@@ -4,10 +4,13 @@
 // Run: scripts/t.sh tests/info/meals
 
 import { expect, test } from "bun:test";
+import { validateToolCall } from "@earendil-works/pi-ai";
+import type { AgentTool } from "../../../src/legion/execute/contract";
 import {
   buildAddShoppingItemsTool,
   buildProposeMealsCharterTool,
   buildProposeMealsPlanTool,
+  buildRecordDeviationTool,
   buildRemoveShoppingItemTool,
   buildReplaceShoppingItemTool,
   buildWriteMethodTool,
@@ -266,4 +269,105 @@ test("what the model sent is read defensively", () => {
   expect(days[0]!.lunch).toBeUndefined();
   expect(days[0]!.dinner!.reheatOf).toEqual({ day: 1, meal: "dinner" });
   expect(days[0]!.dinner!.note).toBe("box");
+});
+
+/**
+ * The arguments the tool is actually handed: pi validates and coerces a call
+ * against the tool's schema before execute sees it (src/legion/execute/turn.ts),
+ * and a tool whose schema says a field is required that the model has nothing
+ * to put in never gets that far (docs/pitfall/379).
+ */
+function validated(tool: AgentTool, args: Record<string, unknown>): Record<string, any> {
+  const { name, description, parameters } = tool;
+  return validateToolCall(
+    [{ name, description, parameters }],
+    { type: "toolCall", id: "call-1", name, arguments: args as Record<string, any> },
+  );
+}
+
+test("a meal validates without the fields its mode has no use for", () => {
+  const tool = buildProposeMealsPlanTool(deps({ ...EMPTY_MEALS, shopping: shopping() }));
+  const args = validated(tool, {
+    adjustment: true,
+    days: [
+      {
+        day: 1,
+        // What the model sends for a cook meal: null where reheat would point.
+        breakfast: { mode: "cook", dish: "Oats", reheatOf: null },
+        dinner: { mode: "out", place: "noodle shop" },
+      },
+      { day: 2, lunch: { mode: "packed", reheatOf: { day: 1, meal: "dinner" } } },
+    ],
+  });
+
+  expect("reheatOf" in args.days[0].breakfast).toBe(false);
+  expect(args.days[0].dinner).toEqual({ mode: "out", place: "noodle shop" });
+  expect(args.days[1].lunch.reheatOf).toEqual({ day: 1, meal: "dinner" });
+
+  const drafts = toDayDrafts(args.days);
+  expect(drafts[0]!.breakfast).toEqual({ mode: "cook", dish: "Oats" });
+  expect(drafts[0]!.lunch).toBeUndefined();
+  expect(drafts[1]!.lunch!.reheatOf).toEqual({ day: 1, meal: "dinner" });
+});
+
+test("a fresh week validates without adjustment and without dishes, and drafts its card", async () => {
+  const d = deps({ ...EMPTY_MEALS, shopping: shopping() });
+  const tool = buildProposeMealsPlanTool(d);
+  const args = validated(tool, {
+    breakfastLine: "Oats",
+    dishes: null,
+    days: Array.from({ length: 7 }, (_, i) => ({
+      day: i + 1,
+      breakfast: { mode: "out", place: "cafe" },
+      lunch: { mode: "out", place: "canteen" },
+      dinner: { mode: "delivery", place: "the usual place" },
+    })),
+  });
+  expect("adjustment" in args).toBe(false);
+  expect("dishes" in args).toBe(false);
+
+  const out = await tool.execute(args);
+  expect(said(out)).toContain("Proposed the week's meals");
+  expect((d.cards[0] as MealsPlanCardData).days[0]!.dinner.mode).toBe("delivery");
+});
+
+test("the other tools validate the calls that leave a conditional field out", () => {
+  const current = state();
+  const d = { ...deps(current), ports: ports(current) };
+
+  expect(validated(buildProposeMealsCharterTool(d), {
+    people: 2,
+    kitchen: "one pan",
+    stores: null,
+    dislikes: null,
+    nightsCooking: 4,
+    nightsOut: 1,
+    nightsDelivery: 1,
+    text: "Two of us.",
+  })).toEqual({
+    people: 2,
+    kitchen: "one pan",
+    nightsCooking: 4,
+    nightsOut: 1,
+    nightsDelivery: 1,
+    text: "Two of us.",
+  });
+
+  expect(validated(buildRecordDeviationTool(d), {
+    day: "today",
+    meal: "lunch",
+    became: "skip",
+    said: "Skipped it.",
+  }).place).toBeUndefined();
+
+  expect(validated(buildAddShoppingItemsTool(d), { items: [LINE] }).today).toBeUndefined();
+  expect(validated(buildReplaceShoppingItemTool(d), {
+    from: "kale",
+    to: "spring onions",
+    en: "spring onion",
+  }).qty).toBeUndefined();
+  expect(validated(buildWriteMethodTool(d), {
+    dishId: "dish-stew",
+    steps: ["Simmer."],
+  }).note).toBeUndefined();
 });

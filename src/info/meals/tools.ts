@@ -273,15 +273,21 @@ export function buildProposeMealsCharterTool(deps: MealsToolDeps): AgentTool {
       "It files nothing: the user sees a card and applies it.",
     parameters: Type.Object({
       people: Type.Number({ description: "How many people eat." }),
-      stores: Type.Array(Type.String(), {
-        description: "The shops they actually buy food in, as they name them.",
-      }),
+      // Optional: a household that names no shop has nothing to send, and a
+      // required array rejects both null and an omission (docs/pitfall/379).
+      stores: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "The shops they actually buy food in, as they name them.",
+        }),
+      ),
       kitchen: Type.String({
         description: "One line: what there is to cook with, and what there is not.",
       }),
-      dislikes: Type.Array(Type.String(), {
-        description: "What they will not eat, allergies included.",
-      }),
+      dislikes: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "What they will not eat, allergies included. Left out when there are none.",
+        }),
+      ),
       nightsCooking: Type.Number({ description: "Dinners a normal week cooks." }),
       nightsOut: Type.Number({ description: "Dinners a normal week eats out." }),
       nightsDelivery: Type.Number({ description: "Dinners a normal week orders delivery." }),
@@ -320,30 +326,45 @@ export function buildProposeMealsCharterTool(deps: MealsToolDeps): AgentTool {
 
 // --- the week ----------------------------------------------------------------
 
+// Only `mode` is on every meal. The rest belong to some modes and not others,
+// so they are optional: TypeBox makes every property of a Type.Object
+// required, and a required object the model has nothing to put in fails
+// validation whether it sends null or {} — the loop then retries for ever
+// (docs/pitfall/379).
 const mealSchema = (which: MealKey) =>
   Type.Object({
     mode: Type.String({
       description: `What this ${which} is: ${MODES.join(", ")}.`,
     }),
-    dish: Type.String({ description: "For a cook meal: the dish's name." }),
-    reheatOf: Type.Object(
-      {
-        day: Type.Number({ description: "1 to 7: the day whose meal cooked the base." }),
-        meal: Type.String({ description: "breakfast, lunch or dinner." }),
-      },
-      {
-        description:
-          "For reheat and packed: which meal cooked the base this one eats. Leave it out " +
-          "only for a box cooked before this week, and then say so in `note`.",
-      },
+    dish: Type.Optional(Type.String({ description: "For a cook meal: the dish's name." })),
+    reheatOf: Type.Optional(
+      Type.Object(
+        {
+          day: Type.Number({ description: "1 to 7: the day whose meal cooked the base." }),
+          meal: Type.String({ description: "breakfast, lunch or dinner." }),
+        },
+        {
+          description:
+            "For reheat and packed: which meal cooked the base this one eats. The other modes " +
+            "do not have one and leave it out, and so does a box cooked before this week — " +
+            "then say so in `note`.",
+        },
+      ),
     ),
-    freshAdd: Type.String({ description: "What is added to the base at serving." }),
-    place: Type.String({
-      description: "For out, delivery and bought: where, in the user's own words.",
-    }),
-    note: Type.String({
-      description: "One short line of theirs about this meal. Not a second description of the dish.",
-    }),
+    freshAdd: Type.Optional(
+      Type.String({ description: "What is added to the base at serving." }),
+    ),
+    place: Type.Optional(
+      Type.String({
+        description: "For out, delivery and bought: where, in the user's own words.",
+      }),
+    ),
+    note: Type.Optional(
+      Type.String({
+        description:
+          "One short line of theirs about this meal. Not a second description of the dish.",
+      }),
+    ),
   });
 
 export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
@@ -365,72 +386,87 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
       "the shopping list; do not write either. It files nothing: the user sees a card and " +
       "applies it.",
     parameters: Type.Object({
-      adjustment: Type.Boolean({
-        description: "True when this reworks meals of the week already planned.",
-      }),
-      breakfastLine: Type.String({
-        description:
-          "The week's breakfasts as one line in their own words ('oats and egg on toast, " +
-          "Friday I buy something on the way'). Required on a fresh week.",
-      }),
-      dishes: Type.Array(
-        Type.Object({
-          name: Type.String({ description: "The dish, named the way it would be said." }),
-          searchName: Type.String({
-            description:
-              "The dish's common English name as people search for it, singular and lower " +
-              "case: 'mapo tofu', 'shakshuka', 'overnight oats', 'dal', 'sheet pan salmon'. " +
-              "Not a description of your own invention — it is what finds the dish's " +
-              "photograph, and a name nobody else uses finds nothing.",
-          }),
-          oneLine: Type.String({ description: "One line: what it is and why this meal." }),
-          base: Type.String({
-            description: "The part cooked ahead that keeps a day. Empty if there is none.",
-          }),
-          fresh: Type.String({
-            description: "The part added at serving and not kept. Empty if there is none.",
-          }),
-          keepsADay: Type.Boolean({
-            description:
-              "Whether the base is as good the next day. Stews and grains yes; stir-fried " +
-              "greens, fried food, noodles and dressed salad no.",
-          }),
-          handsOnMinutes: Type.Number({
-            description:
-              `Minutes of hands-on work. ${HANDS_ON_LIMITS.dinner} at the very most for a ` +
-              `lunch or a dinner, ${HANDS_ON_LIMITS.breakfast} for a breakfast.`,
-          }),
-          ingredients: Type.Array(
-            Type.Object({
-              name: Type.String(),
-              en: Type.String({
-                description:
-                  "The same thing's English common name, singular and lower case " +
-                  "('bok choy', 'eggplant', 'ground pork'). It is what finds its photograph.",
-              }),
-              qty: Type.String({ description: "Free text, e.g. '2 handfuls', '400g'." }),
-              category: Type.String({
-                description: `One of: ${CATEGORY_ORDER.join(", ")}.`,
-              }),
-              keeps: Type.String({
-                description:
-                  "How long it keeps refrigerated, one of: d1-2 (raw poultry, mince, fish), " +
-                  "d3-5 (whole cuts, leafy greens, mushrooms, berries, herbs), w1 (broccoli, " +
-                  "peppers, cucumber, tomato), w2plus (roots, cabbage, onion, potato, apples, " +
-                  "citrus), pantry (dry goods, tins, oil).",
-              }),
-            }),
-            { description: "Everything to buy for every meal this dish is planned for." },
-          ),
+      // Optional, like every field below that only some calls have something to
+      // put in: a required property the model leaves out fails validation, and
+      // the tool would rather answer in words than have the loop retry
+      // (docs/pitfall/379).
+      adjustment: Type.Optional(
+        Type.Boolean({
+          description: "True when this reworks meals of the week already planned.",
         }),
-        { description: "The dishes this call introduces. Empty when nothing new is cooked." },
+      ),
+      breakfastLine: Type.Optional(
+        Type.String({
+          description:
+            "The week's breakfasts as one line in their own words ('oats and egg on toast, " +
+            "Friday I buy something on the way'). Required on a fresh week.",
+        }),
+      ),
+      // Optional for the same reason as the meals below: an adjustment that
+      // cooks nothing new has no dishes to send.
+      dishes: Type.Optional(
+        Type.Array(
+          Type.Object({
+            name: Type.String({ description: "The dish, named the way it would be said." }),
+            searchName: Type.String({
+              description:
+                "The dish's common English name as people search for it, singular and lower " +
+                "case: 'mapo tofu', 'shakshuka', 'overnight oats', 'dal', 'sheet pan salmon'. " +
+                "Not a description of your own invention — it is what finds the dish's " +
+                "photograph, and a name nobody else uses finds nothing.",
+            }),
+            oneLine: Type.String({ description: "One line: what it is and why this meal." }),
+            base: Type.String({
+              description: "The part cooked ahead that keeps a day. Empty if there is none.",
+            }),
+            fresh: Type.String({
+              description: "The part added at serving and not kept. Empty if there is none.",
+            }),
+            keepsADay: Type.Boolean({
+              description:
+                "Whether the base is as good the next day. Stews and grains yes; stir-fried " +
+                "greens, fried food, noodles and dressed salad no.",
+            }),
+            handsOnMinutes: Type.Number({
+              description:
+                `Minutes of hands-on work. ${HANDS_ON_LIMITS.dinner} at the very most for a ` +
+                `lunch or a dinner, ${HANDS_ON_LIMITS.breakfast} for a breakfast.`,
+            }),
+            ingredients: Type.Array(
+              Type.Object({
+                name: Type.String(),
+                en: Type.String({
+                  description:
+                    "The same thing's English common name, singular and lower case " +
+                    "('bok choy', 'eggplant', 'ground pork'). It is what finds its photograph.",
+                }),
+                qty: Type.String({ description: "Free text, e.g. '2 handfuls', '400g'." }),
+                category: Type.String({
+                  description: `One of: ${CATEGORY_ORDER.join(", ")}.`,
+                }),
+                keeps: Type.String({
+                  description:
+                    "How long it keeps refrigerated, one of: d1-2 (raw poultry, mince, fish), " +
+                    "d3-5 (whole cuts, leafy greens, mushrooms, berries, herbs), w1 (broccoli, " +
+                    "peppers, cucumber, tomato), w2plus (roots, cabbage, onion, potato, apples, " +
+                    "citrus), pantry (dry goods, tins, oil).",
+                }),
+              }),
+              { description: "Everything to buy for every meal this dish is planned for." },
+            ),
+          }),
+          { description: "The dishes this call introduces. Empty when nothing new is cooked." },
+        ),
       ),
       days: Type.Array(
         Type.Object({
           day: Type.Number({ description: "1 to 7, the day number from your instructions." }),
-          breakfast: mealSchema("breakfast"),
-          lunch: mealSchema("lunch"),
-          dinner: mealSchema("dinner"),
+          // Optional because an adjustment sends only the meals that change; a
+          // fresh week that leaves one out is refused by execute, in words the
+          // model can act on, rather than by the validator.
+          breakfast: Type.Optional(mealSchema("breakfast")),
+          lunch: Type.Optional(mealSchema("lunch")),
+          dinner: Type.Optional(mealSchema("dinner")),
         }),
         { description: "The days this call plans." },
       ),
@@ -563,7 +599,9 @@ export function buildRecordDeviationTool(
       became: Type.String({
         description: `What the meal actually was: ${MODES.join(", ")}.`,
       }),
-      place: Type.String({ description: "Where, for out, delivery or bought, in their words." }),
+      place: Type.Optional(
+        Type.String({ description: "Where, for out, delivery or bought, in their words." }),
+      ),
       said: Type.String({ description: "Their own sentence, as they said it." }),
     }),
     execute: async (args) => {
@@ -670,10 +708,12 @@ export function buildAddShoppingItemsTool(
         }),
         { description: "The lines to add." },
       ),
-      today: Type.Boolean({
-        description:
-          "True only when the shop is done and they said they are passing a shop today anyway.",
-      }),
+      today: Type.Optional(
+        Type.Boolean({
+          description:
+            "True only when the shop is done and they said they are passing a shop today anyway.",
+        }),
+      ),
     }),
     execute: async (args) => {
       const state = await deps.state();
@@ -770,7 +810,9 @@ export function buildReplaceShoppingItemTool(
       en: Type.String({
         description: "The new thing's English common name, singular and lower case.",
       }),
-      qty: Type.String({ description: "How much, if it changes. May be empty." }),
+      qty: Type.Optional(
+        Type.String({ description: "How much, if it changes. May be empty." }),
+      ),
     }),
     execute: async (args) => {
       const state = await deps.state();
@@ -831,9 +873,11 @@ export function buildWriteMethodTool(
       steps: Type.Array(Type.String(), {
         description: `One line each, in order. Between 1 and ${MAX_STEPS}.`,
       }),
-      note: Type.String({
-        description: "The one thing worth knowing that is not a step. May be empty.",
-      }),
+      note: Type.Optional(
+        Type.String({
+          description: "The one thing worth knowing that is not a step. May be empty.",
+        }),
+      ),
     }),
     execute: async (args) => {
       const state = await deps.state();
