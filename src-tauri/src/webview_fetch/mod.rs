@@ -608,7 +608,10 @@ pub(crate) fn build_window<R: Runtime>(
     let builder = match std::env::var("RP_WEBVIEW_FETCH_UA").ok().as_deref() {
         Some("default") => builder,
         Some(custom) => builder.user_agent(custom),
-        None => builder.user_agent(policy::USER_AGENT),
+        None => match policy::user_agent() {
+            Some(ua) => builder.user_agent(ua),
+            None => builder,
+        },
     };
 
     // The same jar, named the way this platform names one (PROFILE_DATA_STORE).
