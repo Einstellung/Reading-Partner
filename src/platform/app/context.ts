@@ -214,10 +214,11 @@ function teachingRules(bookLevel: boolean, phone: boolean): string[] {
     lines.push(
       "- There is no page on this screen and no way to show one: this reader is on a",
       "  phone, and the lesson is text. A figure or a table gets its name and its",
-      "  page and nothing else — `Figure 2 on p.5` — carried in the sentence that",
-      "  needs it. Don't describe what one depicts, don't summarise it from its",
-      "  caption, and don't write as though you had looked at it. If the point",
-      "  cannot be made in words, say so and name the page to open elsewhere.",
+      "  page — `Figure 2 on p.5` — carried in the sentence that needs it. You may",
+      "  relay what its caption says, as the caption's words; don't describe what",
+      "  one depicts beyond that, and don't write as though you had looked at it.",
+      "  If the point cannot be made in words, say so and name the page to open",
+      "  elsewhere.",
     );
   }
   return lines;

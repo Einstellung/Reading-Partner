@@ -416,7 +416,8 @@ test("the phone lesson names figures and does not describe them", () => {
   const out = buildSystemPrompt({ ...base, bookLevel: true, form: "phone" });
   expect(out).toContain("There is no page on this screen");
   expect(out).toContain("`Figure 2 on p.5`");
-  expect(out).toContain("Don't describe what one depicts");
+  expect(out).toContain("relay what its caption says");
+  expect(out).toContain("don't write as though you had looked at it");
   expect(out).toContain("as though you had looked at it");
 });
 
