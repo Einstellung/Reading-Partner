@@ -73,7 +73,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 382）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 385）。
 
 ## EmbedPDF 引擎
 
@@ -303,6 +303,9 @@
 - [95-button-swallows-the-ref](./95-button-swallows-the-ref.md) — shadcn 生成的是 React 19 风格的函数组件，React 18 下 `<Button ref>` 恒为 `null`，类型全绿、生产构建无警告；已全部改成 `forwardRef`，护栏是 `tests/ui/components/ui/forward-ref-contract.test.ts`，一次 `shadcn add` 就会写回来
 - [103-anchored-overlay-paints-under-the-surface-that-opened-it](./103-anchored-overlay-paints-under-the-surface-that-opened-it.md) — 全屏设置页是 `z-[70]` 的不透明白底，锚定浮层停在生成的 `z-50`，下拉全部画在开它的页面底下；Select 开着时页面外一切 `pointer-events: none`，手指照样落在看不见的列表上，于是报成「点不动」。`elementFromPoint` 打得中而屏幕上没有 = 画的顺序不对。一条命名 z 阶梯收进 `ui/overlay.tsx` 的 `OVERLAY_Z`，锚定层排在整条阶梯之上
 - [211-confirm-opens-under-the-floater-that-asked-for-it](./211-confirm-opens-under-the-floater-that-asked-for-it.md) — 从 `z-[1000]` 的阅读弹层里开的删除确认框停在 dialog 那格（50），被弹层盖掉一半，Cancel 在后面按不到；AlertDialog 又是 Radix 写死不给点外面关的，iPad 没有 Escape，只剩 Delete 一个出口。阶梯加 `floatingDialog: z-[1050]`，选哪一格由面声明（`OverlaySurface`）而不是由对话框猜，backdrop 跟着抬
+- [382-a-template-that-names-its-own-placeholder-twice](./382-a-template-that-names-its-own-placeholder-twice.md) — `script.js` 的注释里又写了一遍 `__RP_SCRIPT__`，`replace` 换全部出现处，调用方的脚本于是也被复制进 `//` 注释；注释只管到行尾，多行脚本的第二行落到页面顶层，`SyntaxError: Return statements are only valid inside functions`。meals 的 Bing 搜索一直在走解析 html 的兜底。单测只传过一行的脚本所以从没红过
+- [383-a-pinned-user-agent-is-per-engine](./383-a-pinned-user-agent-is-per-engine.md) — 坑 108 钉的那串是 WebKitGTK 的默认值，搬到 WKWebView 上是个不存在的客户端：彭博首页 1.3s 回验证码，手写一条正确的 Safari 串也回验证码，什么都不设才给 8.1 MB 首页。结论是「让引擎自己发」而不是「写对字符串」，macOS 因此没有要跟版本的 UA 常量
+- [384-data-directory-does-nothing-on-macos](./384-data-directory-does-nothing-on-macos.md) — wry 的 macOS 后端不看 `data_directory`，抓取窗口默认和 app 共用 cookie 罐；换成 `data_store_identifier` 才分得开（macOS 14+，落在 `~/Library/WebKit/<app>/WebsiteDataStore/<uuid>`）。WKWebView 的 cookie 也不在盘上的文本文件里，`jar.rs` 的暖机判据在 macOS 上因此是瞎的
 
 ## 排版基线与 Tailwind
 

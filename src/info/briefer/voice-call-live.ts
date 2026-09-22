@@ -16,7 +16,7 @@ import { replayableHistory } from "../../ai/turn-rows";
 import { glossaryTerms } from "../../ai/voice/cleanup";
 import { openDesk } from "../../desk";
 import { loadDeviceSettings } from "../../platform/app/device";
-import { hasWebviewFetch } from "../../platform/app/platform";
+import { hasWebviewSignIn } from "../../platform/app/platform";
 import { loadSettings, toReasoning } from "../../platform/app/settings";
 import {
   appendMessage,
@@ -240,7 +240,7 @@ export async function createLiveVoiceCall(opts: LiveVoiceCallOptions): Promise<V
     reader,
     sources,
     aiLanguage: settings.aiLanguage,
-    canSignIn: hasWebviewFetch() && collecting,
+    canSignIn: hasWebviewSignIn() && collecting,
     collecting,
   };
   // The same two anchors the briefing page's Ask opens, and the same thread:

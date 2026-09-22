@@ -65,16 +65,35 @@ export function hasNativeSpeech(): boolean {
 
 // Whether the host can render an article in a hidden webview
 // (src-tauri/src/webview_fetch, docs/17). Same shape as hasNativeRecorder: the
-// command is compiled `#[cfg(desktop)]`, and the DOM bridge behind it is
-// WebKitGTK's, so only Linux answers today. macOS and Windows are registered but
-// return `unsupported`; iOS has no command at all.
-const WEBVIEW_FETCH_PLATFORMS = new Set(["linux"]);
+// command is compiled `#[cfg(desktop)]`, and behind it is a bridge into the
+// hidden page's DOM, which exists for WebKitGTK on Linux and for WKWebView on
+// macOS. Windows is registered but returns `unsupported`; iOS has no command at
+// all.
+const WEBVIEW_FETCH_PLATFORMS = new Set(["linux", "macos"]);
 
 export function hasWebviewFetch(): boolean {
 	try {
 		return WEBVIEW_FETCH_PLATFORMS.has(platform());
 	} catch {
 		// Not running under Tauri (unit tests, plain-browser dev).
+		return false;
+	}
+}
+
+// Whether the host can also hold the user's own session with a site: open its
+// login page, say whether the profile is signed in, and sign out again
+// (src-tauri/src/webview_fetch/session.rs). A narrower question than
+// hasWebviewFetch, and the difference is the cookie jar: signing out means
+// deleting one site's cookies, which on Linux goes through WebKitGTK's cookie
+// manager and on macOS would have to go through WKHTTPCookieStore — not
+// written yet. Offering a sign-in whose sign-out does nothing is worse than not
+// offering it, so macOS reads sites as an anonymous reader for now.
+const WEBVIEW_SIGN_IN_PLATFORMS = new Set(["linux"]);
+
+export function hasWebviewSignIn(): boolean {
+	try {
+		return WEBVIEW_SIGN_IN_PLATFORMS.has(platform());
+	} catch {
 		return false;
 	}
 }

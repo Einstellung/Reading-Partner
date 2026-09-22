@@ -8,7 +8,7 @@
 import { infoFetch } from "../extract/http";
 import { loadExtractReadable } from "../extract/readable-lazy";
 import { checkSiteSession, openSiteSignIn } from "../extract/webview-session";
-import { hasWebviewFetch } from "../../platform/app/platform";
+import { hasWebviewSignIn } from "../../platform/app/platform";
 import {
   addSource,
   loadSiteSessions,
@@ -145,7 +145,7 @@ export async function buildLiveCompanionTools(
     // it would leave a cookie in a jar nobody reads. Not an error, just an
     // operation with no point, and a pointless tool in the list is one the model
     // will eventually reach for.
-    siteSignIn: hasWebviewFetch() && opts.collecting !== false ? liveSiteSignIn() : undefined,
+    siteSignIn: hasWebviewSignIn() && opts.collecting !== false ? liveSiteSignIn() : undefined,
     // A reader does not get the add-source tools either (docs/36).
     // generate_briefing stays: on a reader the host turns it into a request for
     // the collector, and says so.
