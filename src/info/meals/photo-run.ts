@@ -1,11 +1,12 @@
 // The photograph search as a run (docs/55, docs/73 图片): what is asked for,
 // who asks, and what the run leaves behind.
 //
-// Planning belongs to the PC. The search needs a hidden webview with a real
-// browser session in it (photo-search.ts), which is one capability tag and one
-// kind of machine, so the phone applies a plan and shows it at once from the
-// ingredient pictures while the pictures of the dishes arrive later over the
-// synced file.
+// The search needs a hidden webview with a real browser session in it
+// (photo-search.ts), which is one capability tag and one kind of machine. The
+// run is `local`, so whoever delegates it runs it themselves — which is why
+// nobody delegates it but the machine that can search (photo-sweep.ts). The
+// phone applies a plan and shows it at once from the ingredient pictures, and
+// the pictures of the dishes arrive later over the synced cache file.
 //
 // The ask is a file, like the ingest run's: a run record carries references and
 // never content (docs/55), and this ask is a plan and a list of queries.
@@ -55,20 +56,20 @@ export interface MealsPhotoAsk {
  * ingredient: a white-background cut-out of a bok choy identifies the vegetable
  * in the shop better than a photograph of a dish it is in.
  *
- * `ignoreCache` is the reader asking for another look: every query of the week,
- * whatever is remembered about it.
+ * `askedAt` is the reader saying the pictures are wrong (MealsState.
+ * photosAskedAt): everything answered before that moment is asked again.
  */
 export function photoQueriesForPlan(
   plan: WeekPlan,
   cache: PhotoCache,
   now: number,
-  opts: { bankImage: (en: string) => string | null; ignoreCache?: boolean },
+  opts: { bankImage: (en: string) => string | null; askedAt?: number },
 ): PhotoQuery[] {
   const out: PhotoQuery[] = [];
   const seen = new Set<string>();
   const want = (key: string, q: string) => {
     if (!key || !q || seen.has(key)) return;
-    if (!opts.ignoreCache && !needsPhotoLookup(cache[key], now)) return;
+    if (!needsPhotoLookup(cache[key], now, opts.askedAt ?? 0)) return;
     seen.add(key);
     out.push({ key, q });
   };
@@ -124,8 +125,19 @@ export interface StartPhotoRunDeps {
   delegate?: (input: DelegateInput) => Promise<Delegated>;
 }
 
+/** A run that was started: what it is called, and when it is over. */
+export interface StartedPhotoRun {
+  id: string;
+  /**
+   * Settles when the searching is over, however it ended. What keeps a second
+   * run from being started on top of this one (photo-sweep.ts); the caller that
+   * only wanted the id ignores it.
+   */
+  done: Promise<unknown>;
+}
+
 /**
- * Write the ask, hand legion the run, and answer its id without waiting.
+ * Write the ask, hand legion the run, and answer without waiting for it.
  *
  * The delegator is the program: nobody is owed a sentence about it. The
  * photographs appear on the screen when the file says so, and a run that failed
@@ -138,7 +150,7 @@ export interface StartPhotoRunDeps {
 export async function startPhotoRun(
   ask: MealsPhotoAsk,
   deps: StartPhotoRunDeps = {},
-): Promise<string | null> {
+): Promise<StartedPhotoRun | null> {
   if (!ask.queries.length) return null;
   const write = deps.write ?? writePhotoAsk;
   const send = deps.delegate ?? ((input: DelegateInput) => appRunner().delegate(input));
@@ -149,7 +161,9 @@ export async function startPhotoRun(
     brief,
   });
   if (!result.ok) throw new Error(result.reason);
-  return result.run.id;
+  // `done` is absent when the run is waiting for another device to take it,
+  // which this kind never is: it is local, so the delegator is the executor.
+  return { id: result.run.id, done: result.done ?? Promise.resolve() };
 }
 
 /** The one line the run leaves behind (docs/55 「无产出的 run 是失败」). */

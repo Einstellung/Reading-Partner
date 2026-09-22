@@ -338,6 +338,12 @@ export interface MealsState {
   plan: WeekPlan | null;
   shopping: ShoppingState;
   deviations: Deviation[];
+  // When the reader last said the pictures are wrong (docs/73 图片). The search
+  // runs on the machine with a hidden webview, which is not the machine the
+  // reader is usually holding, so the request travels as data rather than as a
+  // run: a cache entry written before this is stale, and the next pass on the
+  // searching machine looks the whole week up again. Absent means never asked.
+  photosAskedAt?: number;
 }
 
 export const MEALS_VERSION = 1 as const;

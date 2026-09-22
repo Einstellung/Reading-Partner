@@ -21,6 +21,7 @@ import { writeRunOutput } from "../../legion/execute/outputs";
 import { WEBVIEW_FETCH } from "../../legion/claim";
 import { StoppedError } from "../../legion/stop";
 import { appData } from "../../platform/app/appdata";
+import { hasWebviewFetch } from "../../platform/app/platform";
 import { fetchPageViaWebview, type WebviewPage } from "../extract/webview-page";
 import { BING_RESULTS_SCRIPT, bingImageQuery, parseBingImages, pickPhoto } from "./photo-search";
 import { savePhotoEntries } from "./photo-store";
@@ -41,6 +42,8 @@ const BETWEEN_MS = 1_500;
 export interface MealsPhotosWorkerDeps {
   /** The ask, read back off its path. */
   readAsk?: (path: string) => Promise<string>;
+  /** Whether this machine has a hidden webview at all. */
+  canSearch?: () => boolean;
   /** One page in the hidden webview. */
   fetchPage?: (url: string, opts: { script?: string; timeoutMs?: number }) => Promise<WebviewPage>;
   /** Write what one search found. */
@@ -60,6 +63,7 @@ function said(query: PhotoQuery): string {
 /** Build the worker legion runs for one meals-photos run. */
 export function mealsPhotosWorker(deps: MealsPhotosWorkerDeps = {}) {
   const readAsk = deps.readAsk ?? ((path: string) => appData.readText(path));
+  const canSearch = deps.canSearch ?? hasWebviewFetch;
   const fetchPage = deps.fetchPage ?? fetchPageViaWebview;
   const savePhotos = deps.savePhotos ?? ((entries: Record<string, DishPhotoEntry>) => savePhotoEntries(entries));
   const writeOutput = deps.writeOutput ?? writeRunOutput;
@@ -75,6 +79,13 @@ export function mealsPhotosWorker(deps: MealsPhotosWorkerDeps = {}) {
       if (cancelled) throw new StoppedError();
     };
     const done = (async () => {
+      // Refused before the ask is even read, and the first thing in the run:
+      // the cache is synced, so a phone that ran this would answer every query
+      // with nothing and write twenty misses that take those dishes off the
+      // PC's screen for a month. Nothing should hand this device the run in the
+      // first place (photo-sweep.ts); this is the half that cannot be got wrong
+      // by a caller.
+      if (!canSearch()) throw new Error("this machine has no hidden webview to search in");
       const ask = parsePhotoAsk(await readAsk(brief));
       let found = 0;
       for (let i = 0; i < ask.queries.length; i++) {
@@ -121,11 +132,15 @@ export function mealsPhotosWorker(deps: MealsPhotosWorkerDeps = {}) {
 /**
  * Hand legion the meals-photos kind. Called once at startup; deps are for tests.
  *
- * `local`, so the run never reaches the synced folder, and `webview-fetch`,
- * which is what picks the machine: the phone has no hidden webview to search in
- * and would claim a run it cannot do. Not `delegable` — the ask is a plan and a
- * list of queries, which is not something the model could write as a brief; the
- * Apply and the refresh tool write it themselves.
+ * `local`, which means the machine that delegates the run is the machine that
+ * executes it, at once and without an election. `requires` is therefore not
+ * what picks the machine — a local run never goes to the vote — it is the
+ * statement of which machine may start one, and the only thing that reads it
+ * for this kind is photo-sweep.ts, which starts the run on the machine whose
+ * own claim carries the tag. The worker refuses to run without it anyway.
+ *
+ * Not `delegable` — the ask is a plan and a list of queries, which is not
+ * something the model could write as a brief; the sweep writes it itself.
  */
 export function registerMealsPhotosWorker(deps: MealsPhotosWorkerDeps = {}): void {
   registerWorker({

@@ -76,9 +76,18 @@ test("what the cache already answered is not asked again, and the reader can ask
   expect(photoQueriesForPlan(week([dish()]), cache, NOW, { bankImage: noBank })).toEqual([
     { key: "ingredient:firm tofu", q: "firm tofu food" },
   ]);
+  // The reader said a picture is wrong: everything answered before that moment
+  // is asked again, wherever the searching happens.
   expect(
-    photoQueriesForPlan(week([dish()]), cache, NOW, { bankImage: noBank, ignoreCache: true }).length,
+    photoQueriesForPlan(week([dish()]), cache, NOW, { bankImage: noBank, askedAt: NOW }).length,
   ).toBe(3);
+  // An answer written since they asked stands: the dish was found before it and
+  // is asked again, the kale was looked for after it and is not.
+  expect(
+    photoQueriesForPlan(week([dish()]), cache, NOW, { bankImage: noBank, askedAt: 2 }).map(
+      (q) => q.key,
+    ),
+  ).toEqual(["dish:mapo tofu", "ingredient:firm tofu"]);
 });
 
 test("a name is asked for once however many nights eat it, and a run is capped", () => {
@@ -106,14 +115,22 @@ test("the ask is written, handed to legion, and read back", async () => {
     queries: [{ key: "dish:mapo tofu", q: "mapo tofu" }],
   };
   let sent: { kind: string; brief: string; delegator: unknown } | null = null;
-  const id = await startPhotoRun(ask, {
+  const started = await startPhotoRun(ask, {
     write: async () => "legion/briefs/meals-photos-1.json",
     delegate: async (input) => {
       sent = { kind: input.kind, brief: input.brief, delegator: input.delegator };
-      return { ok: true, run: { id: "run-1" } as Run, existing: false };
+      return {
+        ok: true,
+        run: { id: "run-1" } as Run,
+        existing: false,
+        done: Promise.resolve({ id: "run-1" } as Run),
+      };
     },
   });
-  expect(id).toBe("run-1");
+  expect(started?.id).toBe("run-1");
+  // The run is local, so what comes back settles when the searching is over —
+  // which is what keeps a second run from being started on top of it.
+  expect(await started!.done).toEqual({ id: "run-1" } as Run);
   expect(sent!.kind).toBe(MEALS_PHOTOS_KIND);
   expect(sent!.brief).toBe("legion/briefs/meals-photos-1.json");
   // Nobody is owed a sentence about it: the pictures appear, that is all.
@@ -180,6 +197,7 @@ test("each search is written as it lands, and the run says how it went", async (
   const written: Record<string, DishPhotoEntry>[] = [];
   const asked: string[] = [];
   const worker = mealsPhotosWorker({
+    canSearch: () => true,
     readAsk: async () => ASK,
     fetchPage: async (url, opts) => {
       asked.push(url);
@@ -217,6 +235,7 @@ test("each search is written as it lands, and the run says how it went", async (
 test("a blocked page fails the run and writes nothing after it", async () => {
   const written: Record<string, DishPhotoEntry>[] = [];
   const worker = mealsPhotosWorker({
+    canSearch: () => true,
     readAsk: async () => ASK,
     fetchPage: async () => page({ status: "blocked" }),
     savePhotos: async (entries) => {
@@ -230,9 +249,32 @@ test("a blocked page fails the run and writes nothing after it", async () => {
   expect(written).toEqual([]);
 });
 
+// The phone. Nothing should hand it this run (photo-sweep.ts), and if anything
+// did, it must not write twenty misses into a cache the PC shares.
+test("a machine with no webview refuses the run before it reads the ask", async () => {
+  let read = 0;
+  const worker = mealsPhotosWorker({
+    canSearch: () => false,
+    readAsk: async () => {
+      read += 1;
+      return ASK;
+    },
+    fetchPage: async () => page({ result: RESULT }),
+    savePhotos: async () => {
+      throw new Error("nothing may be written");
+    },
+    writeOutput: async () => "out",
+    now: () => NOW,
+    wait: async () => {},
+  });
+  await expect(worker("brief", ctx()).done).rejects.toThrow("hidden webview");
+  expect(read).toBe(0);
+});
+
 test("a cancelled run stops between two searches", async () => {
   let n = 0;
   const worker = mealsPhotosWorker({
+    canSearch: () => true,
     readAsk: async () => ASK,
     fetchPage: async () => {
       n += 1;
