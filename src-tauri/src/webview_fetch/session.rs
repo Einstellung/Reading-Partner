@@ -30,7 +30,8 @@ use tauri::{AppHandle, Manager, Runtime, Url, WindowEvent};
 use super::jar;
 use super::policy::{self, Status};
 use super::{
-    build_window, connect_engine_signals, extract, profile_dir, wait_for_load, Chrome, LiveGuard,
+    build_window, connect_engine_signals, extract, profile_dir, ready_sample, wait_for_load, Chrome,
+    LiveGuard,
     WebviewFetchState, HAS_DOM_BRIDGE,
 };
 
@@ -408,7 +409,10 @@ pub async fn check_site_session(app: AppHandle, url: String) -> Result<SessionSt
             .navigate(target)
             .map_err(|e| format!("could not load {checked_url}: {e}"))?;
 
-        if let Err(outcome) = wait_for_load(&rx, policy::LOAD_TIMEOUT, started) {
+        // The same wait a fetch runs, probe included: a sign-in check reads a
+        // page that may never report itself loaded either.
+        let ready = || ready_sample(&window);
+        if let Err(outcome) = wait_for_load(&rx, &ready, policy::LOAD_TIMEOUT, started) {
             return Ok(SessionStatus {
                 status: outcome.status,
                 signed_in: false,
