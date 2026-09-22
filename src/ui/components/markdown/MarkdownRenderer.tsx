@@ -17,10 +17,16 @@ import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
-import { linkifyCitations, linkifyFigureCitations, parseCitationHref } from '../../../reading/prep/anchors';
+import {
+	linkifyCitations,
+	linkifyFigureCitations,
+	linkifyPageCitations,
+	parseCitationHref,
+} from '../../../reading/prep/anchors';
 import { linkActionFor, openExternal } from '../../../platform/app/external-link';
 import {
 	CitationContext,
+	CitationModeContext,
 	FigureContext,
 	PrepSlugContext,
 	QuoteCheckContext,
@@ -77,6 +83,39 @@ function QuoteBlock({ quoted, onCitation }: { quoted: QuotedCitation; onCitation
 	);
 }
 
+// The same quotation where there is no page to open (CitationMode "quote", the
+// phone's lesson). It is the block above with the control taken out: a rule, the
+// paper's words in the display face because they are the paper's and not the
+// reply's, and the page under them. Nothing here is pressable, so nothing needs
+// a touch target.
+//
+// The fill is the one the pressable block rests on, so the two quotations are
+// the same object on either kind of screen; only the rule changes, from the
+// green that means "there is somewhere to go" to a neutral.
+//
+// `data-page-quote` is the block's own name in the DOM — the streaming test
+// counts it, and it costs nothing at runtime. Sizes stay in em like the rest of
+// this file, so the block is measured against the row that holds it.
+const PAGE_QUOTE =
+	'my-[0.5em] rounded-r border-l-2 border-muted-strong bg-muted-faint px-[0.875em] py-[0.625em]';
+
+function PageQuote({ quoted }: { quoted: QuotedCitation }) {
+	return (
+		<div data-page-quote="" className={PAGE_QUOTE}>
+			<span className="block font-display leading-[1.55]">{quoted.quote}</span>
+			{quoted.label ? (
+				<span className="mt-[0.375em] block text-[0.8em] tabular-nums text-faint-foreground">
+					{quoted.label}
+				</span>
+			) : null}
+		</div>
+	);
+}
+
+// A page citation with no words in it, in the same mode: the page number, said
+// quietly. Not a chip — a chip is a control, and there is nothing to press.
+const PAGE_MARK = 'text-[0.85em] tabular-nums text-faint-foreground';
+
 // Paragraphs. Nearly all of them are just <p>; the exception is a paragraph
 // holding nothing but one quoted citation, which becomes the block above.
 //
@@ -84,10 +123,10 @@ function QuoteBlock({ quoted, onCitation }: { quoted: QuotedCitation; onCitation
 // chip. That is not a gap to fill later: the block wants the full content width
 // and a list already owns an indent and a marker, and the prompt asks for a
 // quoted citation to stand as its own paragraph.
-function makeParagraph(onCitation: CitationHandler | null) {
+function makeParagraph(onCitation: CitationHandler | null, quoteMode: boolean) {
 	return function Paragraph({ children, node, ...rest }: HTMLAttributes<HTMLParagraphElement> & ExtraProps) {
 		const verifyQuote = useContext(QuoteCheckContext);
-		const quoted = onCitation ? quotedCitationParagraph(node) : null;
+		const quoted = onCitation || quoteMode ? quotedCitationParagraph(node) : null;
 		// A paper citation has no full text on this side to check against, so it
 		// is shown as written; a page citation is checked when there is anything
 		// to check with, and a quote that isn't on its page keeps the chip.
@@ -95,6 +134,7 @@ function makeParagraph(onCitation: CitationHandler | null) {
 			quoted !== null &&
 			(quoted.citation.kind !== 'page' || !verifyQuote || verifyQuote(quoted.citation.page, quoted.quote));
 		if (quoted && trusted && onCitation) return <QuoteBlock quoted={quoted} onCitation={onCitation} />;
+		if (quoted && trusted && quoteMode) return <PageQuote quoted={quoted} />;
 		return <p {...rest}>{children}</p>;
 	};
 }
@@ -114,10 +154,10 @@ function makeParagraph(onCitation: CitationHandler | null) {
 //
 // `node` is the hast node react-markdown hands every custom component; it is
 // named here so the spreads below drop it instead of writing it to the DOM.
-function makeAnchor(onCitation: CitationHandler | null) {
+function makeAnchor(onCitation: CitationHandler | null, quoteMode: boolean) {
 	return function Anchor({ href, children, node, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & ExtraProps) {
 		const figureHost = useContext(FigureContext);
-		const citation = onCitation || figureHost ? parseCitationHref(href) : null;
+		const citation = onCitation || figureHost || quoteMode ? parseCitationHref(href) : null;
 		// A [fig:N] citation renders as an inline card when a figure host is
 		// available; otherwise it falls through to the quiet chip below (which
 		// still jumps via onCitation).
@@ -140,6 +180,11 @@ function makeAnchor(onCitation: CitationHandler | null) {
 				</a>
 			);
 		}
+		// In quote mode the citation is not a jump. One that stands as its own
+		// paragraph was already drawn as the block above, so what reaches here is
+		// a citation inside a sentence: the page number, quietly, with any quote
+		// left in the href where a sentence cannot be broken open for it.
+		if (quoteMode) return <span className={PAGE_MARK}>{children}</span>;
 		if (!onCitation) return <>{children}</>;
 		return (
 			<a
@@ -212,6 +257,11 @@ export default function MarkdownRenderer({ text }: { text: string }) {
 	const onCitation = useContext(CitationContext);
 	const prepSlugs = useContext(PrepSlugContext);
 	const figureHost = useContext(FigureContext);
+	// Quotation mode is what a screen with no pages asks for; a handler says
+	// there are pages after all, and then the chips and the block that jumps are
+	// strictly the better answer, so the mode stands down (see CitationMode).
+	const citationMode = useContext(CitationModeContext);
+	const quoteMode = !onCitation && citationMode === 'quote';
 	// The fences are canonicalized whether or not there is a citation host, and
 	// before linkify: the scanner should see the model's own bytes. The order is
 	// free either way — linkify inserts no `$`, no backtick and no newline, and
@@ -224,13 +274,17 @@ export default function MarkdownRenderer({ text }: { text: string }) {
 	const source = useMemo(() => {
 		const math = canonicalizeMathFences(text);
 		if (onCitation) return linkifyCitations(math, prepSlugs);
+		// Quote mode rewrites the page and paper brackets and nothing else: a
+		// figure has no card to open on that screen, so [fig:2] stays the text
+		// the model wrote (docs/74 — the lesson names a figure and its page).
+		if (quoteMode) return linkifyPageCitations(math);
 		return figureHost ? linkifyFigureCitations(math) : math;
-	}, [text, onCitation, prepSlugs, figureHost]);
+	}, [text, onCitation, prepSlugs, figureHost, quoteMode]);
 	// The anchor override is installed whether or not there is a citation host:
 	// without it, a plain link in a reply navigates the webview away from the app.
 	const components = useMemo<Components>(
-		() => ({ a: makeAnchor(onCitation), p: makeParagraph(onCitation) }),
-		[onCitation],
+		() => ({ a: makeAnchor(onCitation, quoteMode), p: makeParagraph(onCitation, quoteMode) }),
+		[onCitation, quoteMode],
 	);
 	return (
 		<div className={MD}>
