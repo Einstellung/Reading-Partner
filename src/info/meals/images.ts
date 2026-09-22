@@ -161,6 +161,32 @@ export const MEALDB_ALIASES = ALIASES;
  * Tauri the live one answers null and the plain https URL is used, which is
  * what `bun dev` renders.
  */
+/**
+ * The <img> sources a strip of ingredient cut-outs actually draws: every URL
+ * resolved for the webview, the repeats dropped, and the ones already known to
+ * fail left out.
+ *
+ * Repeats are real — two ingredients of one dish can share a cut-out, spring
+ * onions written once as "scallion" and once as "spring onion" — and two of the
+ * same square in a row of four reads as a mistake. An empty answer means the
+ * strip draws nothing at all rather than a row of empty squares.
+ *
+ * `resolve` is injected for the tests, which have no webview to ask.
+ */
+export function stripSources(
+  urls: readonly string[],
+  failed: readonly string[] = [],
+  resolve: (url: string) => string | null = (url) => imageSrc(url),
+): string[] {
+  const out: string[] = [];
+  for (const url of urls) {
+    const src = resolve(url);
+    if (!src || failed.includes(src) || out.includes(src)) continue;
+    out.push(src);
+  }
+  return out;
+}
+
 export function imageSrc(
   url: string | undefined | null,
   pageUrl?: string | null,

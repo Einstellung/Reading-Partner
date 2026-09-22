@@ -113,22 +113,21 @@ function MealCard({
 
       {cooked && dish ? (
         <>
-          <div className="mt-3 aspect-[16/9] max-h-40 w-full">
-            <DishImage
-              image={picture?.url}
-              imagePageUrl={picture?.pageUrl}
-              thumbnails={dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null)}
-              alt={dish.name}
-              className="size-full"
-              onPhotoFailed={() => {
-                setPhotoFailed(true);
-                // A picture the search found and this app cannot load is dropped
-                // from the cache, so the next Apply looks the dish up again
-                // rather than loading the same dead URL every week.
-                if (dish.searchName) void markDishPhotoBroken(dish.searchName);
-              }}
-            />
-          </div>
+          <DishImage
+            image={picture?.url}
+            imagePageUrl={picture?.pageUrl}
+            thumbnails={dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null)}
+            alt={dish.name}
+            photoClassName="mt-3 aspect-[16/9] max-h-40 w-full"
+            stripClassName="mt-3"
+            onPhotoFailed={() => {
+              setPhotoFailed(true);
+              // A picture the search found and this app cannot load is dropped
+              // from the cache, so the next Apply looks the dish up again
+              // rather than loading the same dead URL every week.
+              if (dish.searchName) void markDishPhotoBroken(dish.searchName);
+            }}
+          />
           {credit && !photoFailed && (
             <button
               type="button"
