@@ -50,7 +50,11 @@ pub fn run() {
         // Ours, out of plugins/voice: the native half of hold-to-talk dictation
         // (docs/15). Everything it does is in Swift and only on iOS; elsewhere
         // it registers and rejects the start with a sentence.
-        .plugin(tauri_plugin_voice::init());
+        .plugin(tauri_plugin_voice::init())
+        // Ours, out of plugins/openin: the iOS share sheet for one file, so a
+        // reader can open a book in another app. Off iOS it answers the
+        // availability probe with false and the control is never drawn.
+        .plugin(tauri_plugin_openin::init());
 
     // The voice commands and their state only exist on desktop (see the module
     // note above); everything else is registered on both.
