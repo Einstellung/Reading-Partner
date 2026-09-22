@@ -174,3 +174,38 @@ test("a stall is told apart from every other failure", () => {
   expect(isStall(new Error("Couldn't reach the model"))).toBe(false);
   expect(isStall(undefined)).toBe(false);
 });
+
+// How TURN_STALL_MS is re-checked: the worst gap a real turn produces has to
+// sit under the window, and a gap is only visible from inside the watch
+// (turn.ts logs it in development builds).
+test("the watch keeps the longest silence it saw, and tool time is not in it", () => {
+  const timers = clock();
+  const watches = createStallWatches({ timers });
+  const watch = watches.watch({ stallMs: 900_000, onStall: () => {} });
+
+  timers.advance(3_000);
+  watch.beat();
+  timers.advance(12_000);
+  watch.beat();
+  expect(watch.longestSilence()).toBe(12_000);
+
+  // The wait before a tool starts is the provider's, and counts.
+  timers.advance(7_000);
+  watch.hold();
+  expect(watch.longestSilence()).toBe(12_000);
+
+  // The tool itself does not, however long it runs.
+  timers.advance(300_000);
+  watch.unhold();
+  expect(watch.longestSilence()).toBe(12_000);
+
+  timers.advance(4_000);
+  watch.beat();
+  expect(watch.longestSilence()).toBe(12_000);
+
+  // Silence that has not ended yet still counts: a turn read at the moment it
+  // is cut has its worst gap running.
+  timers.advance(20_000);
+  expect(watch.longestSilence()).toBe(20_000);
+  watch.stop();
+});

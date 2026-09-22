@@ -88,6 +88,7 @@ import {
   type TurnLane,
 } from "./contract";
 import {
+  recordLongestSilence,
   StallError,
   STALL_MESSAGE,
   stallWatches,
@@ -705,6 +706,14 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
     onError(e instanceof Error ? e.message : String(e), undefined, e);
   } finally {
     ended = true;
+    // What the stall window has to clear, measured on a real turn. Development
+    // only: nothing in a release build reads it, and the point of it is to be
+    // read back off a device that has just been made to think for a while.
+    if (watch && import.meta.env?.DEV) {
+      const ms = watch.longestSilence();
+      recordLongestSilence({ surface: telemetry?.surface ?? "turn", ms, at: Date.now() });
+      console.log(`[stall] ${telemetry?.surface ?? "turn"} longest silence ${ms}ms`);
+    }
     watch?.stop();
     signal?.removeEventListener("abort", onAbort);
     for (const off of subscriptions) off();

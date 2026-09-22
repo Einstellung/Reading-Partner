@@ -100,6 +100,12 @@ export interface StallWatch {
   unhold(): void;
   /** The turn is over, one way or another. Idempotent. */
   stop(): void;
+  /**
+   * The longest this turn's provider has gone without saying anything, in
+   * milliseconds. What the window has to clear: a turn cut at less than its own
+   * longest silence would have been cut mid-answer. Tool time is not in it.
+   */
+  longestSilence(): number;
 }
 
 /**
@@ -116,6 +122,7 @@ export interface StallWatches {
 
 interface Entry {
   lastBeat: number;
+  longest: number;
   held: number;
   /** The absence this watch is cut by, kept per watch rather than per registry. */
   awayMs: number;
@@ -135,6 +142,7 @@ export function createStallWatches(defaults: { timers?: StallTimers } = {}): Sta
       let done = false;
       const entry: Entry = {
         lastBeat: timers.now(),
+        longest: 0,
         held: 0,
         awayMs,
         fire: () => {},
@@ -158,19 +166,26 @@ export function createStallWatches(defaults: { timers?: StallTimers } = {}): Sta
       });
       live.add(entry);
 
+      // The silence that just ended goes on the record before the clock moves.
+      // Not on the way out of a tool: what was quiet there was the tool.
+      const mark = (): void => {
+        const at = timers.now();
+        entry.longest = Math.max(entry.longest, at - entry.lastBeat);
+        entry.lastBeat = at;
+      };
+
       return {
-        beat() {
-          entry.lastBeat = timers.now();
-        },
+        beat: mark,
         hold() {
+          mark();
           entry.held += 1;
-          entry.lastBeat = timers.now();
         },
         unhold() {
           entry.held = Math.max(0, entry.held - 1);
           entry.lastBeat = timers.now();
         },
         stop: end,
+        longestSilence: () => Math.max(entry.longest, entry.held > 0 ? 0 : timers.now() - entry.lastBeat),
       };
     },
 
@@ -225,4 +240,28 @@ export function watchAppAwayForStalls(
     onBackground: () => watches.away(now()),
     onForeground: () => watches.back(now()),
   });
+}
+
+/**
+ * How long each finished turn's worst silence was, kept where a development
+ * build can read it back. This is how TURN_STALL_MS was measured and how it is
+ * re-checked when a model or a prompt changes: the window has to clear the
+ * worst gap a real turn produces, and a gap is only visible from inside the
+ * watch. The array is capped so a long session does not grow it without bound.
+ *
+ * Only a development build fills it (turn.ts, behind `import.meta.env.DEV`).
+ */
+export interface SilenceRecord {
+  surface: string;
+  ms: number;
+  at: number;
+}
+
+const SILENCE_KEPT = 200;
+
+export function recordLongestSilence(record: SilenceRecord): void {
+  const host = globalThis as { __stallSilences?: SilenceRecord[] };
+  const kept = (host.__stallSilences ??= []);
+  kept.push(record);
+  if (kept.length > SILENCE_KEPT) kept.splice(0, kept.length - SILENCE_KEPT);
 }
