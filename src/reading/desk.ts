@@ -206,6 +206,11 @@ export interface BookDeskRef {
   // this is what puts them back in the book before its bytes go; the shell
   // knows the reader, this file does not.
   onSupplementGone?: (hash: string) => void;
+  // Which shell this turn was taken in. Absent — the desk and the iPad — is
+  // today's behaviour, unchanged: the reader has the pages in front of them.
+  // "phone" is the lesson (docs/74), where the PDF is never rendered and the
+  // words are all there is. It reaches the prompt and nothing else.
+  form?: "phone";
   threadId: string;
   // The AI-pen mark hosting this thread; empty string for the book-level thread
   // and for an aside pulled out of a chat message. Which of the three this is
@@ -276,6 +281,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     docId = bookId,
     viewing = null,
     supplements = [],
+    form,
     onSupplement,
     onSupplementGone,
     threadId,
@@ -755,6 +761,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       // volatile half — the anchor line below, and the load statement last.
       bookLevel,
       ...(aside ? { aside } : {}),
+      ...(form ? { form } : {}),
       aiLanguage: s.aiLanguage,
       citePaperSlugs: notes.length > 0,
       chapterTable: chapterTable ? chapterTableSection(chapterTable) : "",
