@@ -20,13 +20,18 @@ interface Frame {
   visibleBottom: number;
 }
 
+// The shorter of the two heights is the bottom of what the reader can see, in
+// the client coordinates a bounding box comes back in. Not `offsetTop + height`,
+// which is what the spec's visual viewport says: WebKit hands back the page
+// scroll in `offsetTop` rather than the visual viewport's offset inside the
+// layout one, and with the keyboard up and the page scrolled 403px that reads
+// as a visible area ending half a screen below the window. Whichever viewport
+// is short, is the one covering the bottom.
 function readFrame(): Frame {
   if (typeof window === "undefined") return { height: 0, visibleBottom: 0 };
+  const height = window.innerHeight;
   const vv = window.visualViewport;
-  return {
-    height: window.innerHeight,
-    visibleBottom: vv ? vv.offsetTop + vv.height : window.innerHeight,
-  };
+  return { height, visibleBottom: vv ? Math.min(height, vv.height) : height };
 }
 
 /**

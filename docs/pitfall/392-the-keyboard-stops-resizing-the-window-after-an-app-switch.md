@@ -40,9 +40,17 @@ padding 渲染上去，`getBoundingClientRect()` 读回来的还是旧位置。
 `useCornerLift` 三件一起做：
 
 - `window` 的 resize 和 `visualViewport` 的 resize / scroll 都订阅。
-- 量两个高度而不是一个。判断"输入框在不在底边"用**可见**区域的底边
-  （`visualViewport.offsetTop + visualViewport.height`）；算升多少用 **layout
-  viewport** 的高度，因为角落是 `fixed`，它的 `bottom` 偏移是从那条边数的。
+- 量两个高度而不是一个。判断"输入框在不在底边"用**可见**区域的底边，
+  `Math.min(window.innerHeight, visualViewport.height)`——哪个视口矮，挡住底边的
+  就是哪个；算升多少用 **layout viewport** 的高度，因为角落是 `fixed`，它的
+  `bottom` 偏移是从那条边数的。
+
+  可见底边**不能**写成规范里的 `offsetTop + height`。WebKit 的 `offsetTop` 交回
+  的是页面滚动量，不是 visual viewport 在 layout viewport 里的偏移：第一种状态
+  下实测 `innerHeight` 963、`visualViewport.height` 963、`offsetTop` 403、
+  `scrollY` 403，按规范算出的可见底边是 1366，比窗口本身还低一截，输入框于是被
+  判成"不在底边"，角落照样落到它身上。`useKeyboardInset` 里那句
+  `innerHeight - vv.height - vv.offsetTop` 夹在 0 上，躲过的是同一件事。
 - 每次测量做两遍：事件里一遍，`requestAnimationFrame` 里再一遍，等那次渲染把
   padding 落上去。两遍都在值没变时交回同一个对象，所以第二遍不要钱。
 
