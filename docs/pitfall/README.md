@@ -71,7 +71,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 374）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 377）。
 
 ## EmbedPDF 引擎
 
@@ -102,6 +102,7 @@
 - [140-buffersize-widens-the-window-it-does-not-move-it](./140-buffersize-widens-the-window-it-does-not-move-it.md) — `bufferSize` 只决定预取窗口多宽，`endIndex + bufferSize - 1` 在 1 时已经提前一页；调大只多常驻几张光栅，停顿时刻分毫不动。小 fixture 上调到 ≥ 页数会整本预渲染完，量出一组假数字
 - [150-restoring-a-scale-nobody-saved-overrides-fit-width](./150-restoring-a-scale-nobody-saved-overrides-fit-width.md) — 没开过的书也带着一个合成的 viewState 进来，`scale: "auto"` 这个哨兵在壳里被折成数字 1，`requestZoom(1)` 当场作废注册时的 `FitWidth`，第一次开书停在 100%、改窗口也不再重新适配；"没存过的缩放"要一路保持"没有"，还原判据收进纯函数 `openingZoom`
 - [213-fit-width-in-paged-mode-turns-the-swipe-into-a-pan](./213-fit-width-in-paged-mode-turns-the-swipe-into-a-pan.md) — 翻页模式下点 "Fit page width" 之后就翻不动页：`zoomReset` 写死 fit-width，竖屏下它比 fit-page 大，`refreshZoomedIn` 判定放大、横滑归平移；重置要问布局自己锁的那个 fit（`resetZoom`），翻页还得重新居中并复位 `zoomedIn`
+- [376-a-cjk-font-that-is-not-embedded-renders-nothing](./376-a-cjk-font-that-is-not-embedded-renders-nothing.md) — 没嵌字体的中文 PDF 汉字全部不画，ASCII 照出、不报错；引擎传的是 `fontFallback: null`，而 pdfium.wasm 不带 CJK 字体，字体清单要宿主自己备
 
 ## 触摸与手势
 
@@ -212,6 +213,8 @@
 - [206-xcodebuild-buffers-its-output-until-the-build-ends](./206-xcodebuild-buffers-its-output-until-the-build-ends.md) — `xcodebuild ... | tail -n 20` 整个构建期间不打印一行，结束才一次性吐出来；重定向到文件再另开 `tail -f` 看实时进度
 - [207-a-no-op-incremental-build-emits-no-diagnostics](./207-a-no-op-incremental-build-emits-no-diagnostics.md) — 同一个 commit 连编两次，第二次零 warning 零 error；没有文件变化就没有重新编译也就没有诊断，绿跑不是警告已修的证据，要看全部诊断得 `--clean`
 - [294-simctl-openurl-picks-the-handler-not-you](./294-simctl-openurl-picks-the-handler-not-you.md) — `xcrun simctl openurl` 投 `file://` 是交给 LaunchServices 按 UTI 挑 app，PDF/EPUB 在模拟器上归系统「预览」，把 `LSHandlerRank` 改成 `Owner` 也抢不过，系统 app 又卸不掉；要验 `application:openURL:` 得驱动真的分享面板——XCUITest 附着 Safari，点分享按钮再点 `shareCell`，不需要 idb
+- [374-the-idb-venv-does-not-survive-tmp](./374-the-idb-venv-does-not-survive-tmp.md) — `/tmp/idbvenv` 会被系统清掉一半，`bin/idb` 还在但 import 不到 idb；触摸静默失效、滚动位置读成 0，venv 要建在家目录并用 `IDB` 指过去
+- [375-pinch-in-needs-a-scale-below-one](./375-pinch-in-needs-a-scale-below-one.md) — `ios-sim.sh pinch in` 的默认 scale 2.0 被 UIKit 拒绝，缩小要传小于 1 的数；顺带 `handle` 上的方法叫 `zoomReset` 不是 `resetZoom`
 
 ## Android 构建与签名
 
