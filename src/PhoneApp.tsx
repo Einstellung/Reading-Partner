@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType }
 import { bindSystemBack } from "./platform/app/back-button";
 import { BRIEF_TOPIC_ID, listTopics, type Topic } from "./platform/app/topics";
 import { listLibraryEntries, type LibraryEntry } from "./platform/app/library";
+import { libraryFilePath, openIn, openInAvailable } from "./platform/app/open-in";
 import FlowReaderPane from "./reading/epub/FlowReaderPane";
 import type { FlowReaderPaneProps } from "./reading/epub/flow-contract";
 import { initSync, TICK_MS } from "./platform/sync";
@@ -41,7 +42,7 @@ import {
 import { browserPrefStore } from "./ui/components/base/pref-store";
 import { PullToAsk } from "./ui/components/phone/PullToAsk";
 import PhoneReader from "./ui/components/phone/PhoneReader";
-import PhoneLesson from "./ui/components/phone/PhoneLesson";
+import PhoneLessonScreen from "./ui/components/phone/PhoneLessonScreen";
 import PhoneLessonIntroSheet from "./ui/components/phone/PhoneLessonIntroSheet";
 import PhoneShelf, { type PhoneBookOpen } from "./ui/components/phone/PhoneShelf";
 import { continueReading } from "./ui/components/phone/shelf-list";
@@ -93,10 +94,6 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
 // The reflow reading area (docs/70). Written against the same contract as the
 // screen that mounts it, so the two were built apart and meet here.
 const FLOW_PANE: ComponentType<FlowReaderPaneProps> | null = FlowReaderPane;
-
-// A lesson that has taught no chapter yet. Held still so the screen is not
-// handed a new set on every render.
-const EMPTY_CHAPTERS: ReadonlySet<number> = new Set();
 
 export default function PhoneApp({
   // The pane, injectable so a smoke test can mount the reader screen against a
@@ -314,6 +311,36 @@ export default function PhoneApp({
     if (book) enterLesson(book);
   }, [applyDevice, device, enterLesson, lessonIntro]);
 
+  // Whether this build can hand a file to another app (platform/app/open-in.ts).
+  // Asked once per launch: it is a property of the host, and a control that
+  // appeared halfway through a lesson would be a control nobody trusts.
+  const [canOpenIn, setCanOpenIn] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void openInAvailable().then((ok) => {
+      if (live) setCanOpenIn(ok);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  // The share sheet for one book's PDF. Fails with a line rather than silently:
+  // the reader pressed something, and nothing appearing is the one answer that
+  // says nothing.
+  const handOver = useCallback(
+    (bookId: string) => {
+      void (async () => {
+        try {
+          await openIn(await libraryFilePath(bookId, "pdf"));
+        } catch (e) {
+          console.error("failed to open the file elsewhere", e);
+          pushToast("warn", "This file could not be handed to another app.");
+        }
+      })();
+    },
+    [pushToast],
+  );
+
   const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
 
   // Where the soul may take the reader (docs/71). The same places the other
@@ -413,22 +440,13 @@ export default function PhoneApp({
           )}
 
           {base.kind === "lesson" && (
-            <PhoneLesson
+            <PhoneLessonScreen
               bookId={base.bookId}
               title={base.name}
+              topicId={base.topicId}
+              topicName={topics?.find((t) => t.id === base.topicId)?.name ?? ""}
               onBack={goBack}
-              // The turn is not wired here yet: the conversation, what a send
-              // does and the chapter table all come from the lesson's own hook,
-              // which is the next slice. Until it lands the screen draws the
-              // lesson with nothing in it.
-              messages={[]}
-              streaming={false}
-              onSend={() => {}}
-              status={null}
-              chapters={null}
-              focus={null}
-              taught={EMPTY_CHAPTERS}
-              onPickChapter={() => {}}
+              {...(canOpenIn ? { onOpenIn: () => handOver(base.bookId) } : {})}
             />
           )}
 
@@ -451,16 +469,18 @@ export default function PhoneApp({
             so the reader goes back to the shelf and finds the translation there. */}
         <TranslateStatus openDocId={() => null} />
 
-        {/* Said once per phone, over the shelf the tap came from (docs/70).
-            Open in… is not offered yet: the plugin that hands a file to another
-            app is its own slice, and an offer that does nothing is worse than
-            none. */}
+        {/* Said once per phone, over the shelf the tap came from (docs/70). The
+            second button is the same door the lesson's top bar has, offered
+            before the lesson to the reader who wanted the pages themselves. */}
         <PhoneLessonIntroSheet
           open={lessonIntro !== null}
           onOpenChange={(open) => {
             if (!open) setLessonIntro(null);
           }}
           onStart={startLesson}
+          {...(canOpenIn && lessonIntro
+            ? { onOpenIn: () => handOver(lessonIntro.bookId) }
+            : {})}
         />
 
         {showSettings && (
