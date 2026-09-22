@@ -221,7 +221,7 @@ export function MealsShopping(props: MealsShoppingProps) {
         <div className="h-24" />
       ) : done ? (
         <>
-          <div className="mb-2 flex items-baseline gap-2">
+          <div className="mb-3 flex items-baseline gap-2">
             <h2 className="m-0 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
               Bought
             </h2>
@@ -261,7 +261,7 @@ export function MealsShopping(props: MealsShoppingProps) {
         </>
       ) : (
         <>
-          <div className="mb-2 flex items-baseline gap-2">
+          <div className="mb-3 flex items-baseline gap-2">
             <h2 className="m-0 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
               Still to buy
             </h2>
