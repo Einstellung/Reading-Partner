@@ -17,8 +17,14 @@ import UIKit
 /// Arguments of `open_in`. An absolute path inside the container; the frontend
 /// builds it from appDataDir. Decodable with no key strategy, so the property
 /// name has to be literally what Rust serialises.
+///
+/// `name` is the display file name, extension included, the reader should see.
+/// The library stores a book under its content hash, so handing the file over
+/// where it lies names it with 64 hex characters in every app it reaches.
+/// Absent, the file is handed over as it is.
 class OpenInArgs: Decodable {
     let path: String
+    let name: String?
 }
 
 class OpenInPlugin: Plugin {
@@ -35,7 +41,15 @@ class OpenInPlugin: Plugin {
         // fileURLWithPath rather than URL(string:): the path is a filesystem
         // path, and a container path holds spaces and the occasional character
         // a URL parser would refuse.
-        let url = URL(fileURLWithPath: args.path)
+        let source = URL(fileURLWithPath: args.path)
+
+        // The copy that carries the reader's name, when there is one to make.
+        // Held apart from the URL handed over so that only a file this call
+        // created is ever deleted.
+        let temporary = OpenInPlugin.component(args.name).flatMap {
+            OpenInPlugin.copyToTemporary(source, as: $0)
+        }
+        let url = temporary ?? source
 
         DispatchQueue.main.async {
             guard let presenter = OpenInPlugin.topViewController() else {
@@ -58,6 +72,15 @@ class OpenInPlugin: Plugin {
                 popover.permittedArrowDirections = []
             }
 
+            // The copy lives as long as the sheet does. The handler runs on
+            // dismissal whether or not the reader picked anything, and by then
+            // whoever received the file has taken its own copy.
+            if let temporary {
+                sheet.completionWithItemsHandler = { _, _, _, _ in
+                    try? FileManager.default.removeItem(at: temporary)
+                }
+            }
+
             // Resolved when the sheet is up, not when the reader has chosen
             // something: what they pick, and whether they dismiss it, is never
             // reported back.
@@ -65,6 +88,42 @@ class OpenInPlugin: Plugin {
                 invoke.resolve()
             }
         }
+    }
+
+    /// One path component, or nil when there is nothing usable. The frontend
+    /// already folds and shortens the name, but this is what turns it into a
+    /// filesystem path, and a separator or a control character here would write
+    /// somewhere other than where the name reads.
+    private static func component(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let illegal = CharacterSet(charactersIn: "/\\:").union(.controlCharacters)
+        let cleaned = raw.components(separatedBy: illegal).joined(separator: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // "." and ".." name a directory, not a file in it.
+        guard !cleaned.isEmpty, !cleaned.allSatisfy({ $0 == "." }) else { return nil }
+        return cleaned
+    }
+
+    /// `source` copied into a temporary directory under `name`, or nil when the
+    /// copy did not happen. Nil is not an error: the caller hands the original
+    /// over instead, and a file under an ugly name beats no file at all.
+    private static func copyToTemporary(_ source: URL, as name: String) -> URL? {
+        let fm = FileManager.default
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("openin", isDirectory: true)
+        let destination = dir.appendingPathComponent(name)
+        do {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            // copyItem onto an existing file throws, and the same book handed
+            // over twice lands on the same name.
+            if fm.fileExists(atPath: destination.path) {
+                try fm.removeItem(at: destination)
+            }
+            try fm.copyItem(at: source, to: destination)
+        } catch {
+            return nil
+        }
+        return destination
     }
 
     /// The view controller a modal can actually be presented from: the deepest
