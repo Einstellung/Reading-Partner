@@ -73,7 +73,7 @@
 | 照着用户拍的屏幕照片查显示问题 | 开发环境 |
 | 开机自启、托盘、常驻 | 开发环境 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 381）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 382）。
 
 ## EmbedPDF 引擎
 
@@ -193,6 +193,7 @@
 
 ## iOS 构建与签名
 
+- [381-a-source-sync-restarts-the-whole-ios-build](./381-a-source-sync-restarts-the-whole-ios-build.md) — Mac 上两个 session 各跑 `tauri ios dev`，第二个改了端口；`git reset --hard` 把 `tauri.conf.json` 写回去，tauri 重启整条构建，重启时 `vite.config.ts` 也已经回到被占用的 1420，`strictPort` 让 vite 当场退出。app 指着没人监听的端口，屏幕上是 Apple 那句 "did you grant local network permissions"，和权限无关。同步只 `git checkout FETCH_HEAD -- src tests`
 - [31-ios-deep-link-scheme-build-time](./31-ios-deep-link-scheme-build-time.md) — 自定义 scheme 只能构建期静态注册进 tauri.conf，不能靠 env，且要和 env client id 手工对齐
 - [157-a-cached-crate-never-replays-its-build-script](./157-a-cached-crate-never-replays-its-build-script.md) — 依赖 crate 命中 rust-cache 就不重新编译，它 build script 写进 `gen/apple/Info.plist` 的 `CFBundleURLTypes` 也就没人写；`gen/apple` 每次现生成，于是 build 48/53 发出去才发现 Google 回调回不来。CI 自己从 tauri.conf 注入（幂等），并在 ipa 的 binary plist 上断言，缺 scheme 就红
 - [34-ios-init-default-icon-alpha](./34-ios-init-default-icon-alpha.md) — tauri ios init 用内置默认图标模板，CI init 后要覆盖 appiconset；iOS 图标 strip alpha，CFBundleIconName 兜底
