@@ -1,6 +1,6 @@
-// The two taps the hand feels, for the one gesture that has no other
-// confirmation on a phone: a hold on Lumen opening the voice session, and a
-// hold ending it (docs/68).
+// The taps the hand feels, for the gestures that have no other confirmation on
+// a phone: a hold on Lumen opening the voice session and a hold ending it
+// (docs/68), and a hold on the lesson's reply landing (docs/74).
 //
 // One medium impact to start, two light ones to end. Two directions that must
 // not feel alike, and the pair reads as a hang-up the way a double click reads
@@ -29,6 +29,15 @@ export async function voiceStopFeedback(): Promise<void> {
   // would otherwise sit through the gap for a vibration nobody can feel.
   if (!(await impact("light"))) return;
   await wait(STOP_GAP_MS);
+  await impact("light");
+}
+
+/**
+ * A hold landed. One light tap, because what it confirms is small — a control
+ * has appeared under the finger, which is the one place the reader is not
+ * looking (ui/components/phone/long-press.ts).
+ */
+export async function longPressFeedback(): Promise<void> {
   await impact("light");
 }
 

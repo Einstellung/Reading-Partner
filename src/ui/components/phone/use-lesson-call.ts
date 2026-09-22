@@ -22,6 +22,8 @@ import { runAgentTurn } from "../../../legion/execute/turn";
 import {
   appendMessage,
   getBookThread,
+  getThread,
+  loadThreads,
   patchThreadMessage,
 } from "../../../platform/app/threads";
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
@@ -57,6 +59,11 @@ export interface LessonBook {
   title: string;
   topicId: string;
   topicName: string;
+  // The conversation to run, when it is not the book's own: an aside off the
+  // lesson (use-lesson-aside.ts). The record has to exist already — the desk
+  // reads what kind of conversation this is off it, and what it says decides
+  // the prompt. Absent = the lesson itself, which is the book-level thread.
+  threadId?: string;
 }
 
 export interface LessonCall {
@@ -68,13 +75,17 @@ export interface LessonCall {
   taught: ReadonlySet<number>;
   send: (text: string) => void;
   stop: () => void;
+  // Re-read the rows off the thread file. What this view missed while it was
+  // not on screen: the line an aside left on the lesson (use-lesson-aside.ts).
+  // The paper, the chapters and the focus are already held and are not touched.
+  reload: () => void;
   // The conversation this lesson is: what an aside off it branches from
   // (reading/aside.ts). Empty until the thread has been resolved.
   threadId: string;
 }
 
 export function useLessonCall(book: LessonBook): LessonCall {
-  const { bookId, title, topicId, topicName } = book;
+  const { bookId, title, topicId, topicName, threadId: asideThreadId } = book;
 
   const [threadId, setThreadId] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -259,21 +270,41 @@ export function useLessonCall(book: LessonBook): LessonCall {
 
     void (async () => {
       settingsRef.current = await loadSettings().catch(() => null);
-      const found = await resolveBookThread(bookId, () => cancelled);
-      if (cancelled) return;
-      if (found.status === "cancelled") return;
-      if (found.status !== "ok") {
-        setStatus(NO_THREAD);
-        return;
+      // An aside names its own conversation; the lesson has to find the book's.
+      // Either way the file is read first, because the store's cache answers
+      // "not here" for a book nobody has opened yet just as convincingly as for
+      // one that has no such thread (reading/session/book-thread.ts).
+      let thread;
+      if (asideThreadId) {
+        await loadThreads(bookId).catch(() => {});
+        if (cancelled) return;
+        thread = getThread(bookId, asideThreadId);
+        if (!thread) {
+          setStatus(NO_THREAD);
+          return;
+        }
+      } else {
+        const found = await resolveBookThread(bookId, () => cancelled);
+        if (cancelled) return;
+        if (found.status === "cancelled") return;
+        if (found.status !== "ok") {
+          setStatus(NO_THREAD);
+          return;
+        }
+        thread = found.thread;
       }
-      const thread = found.thread;
       threadIdRef.current = thread.id;
       setThreadId(thread.id);
       setMessages(thread.messages.map(rehydrateMessage));
-      taughtRef.current = taughtChapters(thread);
-      setTaught(taughtRef.current);
-      setFocusChapter(thread.focusChapter ?? null);
-      setResumed(lessonResumed(thread, 0));
+      // The lecture state is the lesson's. An aside reads its parent's focus at
+      // turn time (reading/desk.ts) and draws neither the focus line nor the
+      // chapter sheet, so there is nothing here for it to hold.
+      if (!asideThreadId) {
+        taughtRef.current = taughtChapters(thread);
+        setTaught(taughtRef.current);
+        setFocusChapter(thread.focusChapter ?? null);
+        setResumed(lessonResumed(thread, 0));
+      }
 
       let opened;
       try {
@@ -297,18 +328,27 @@ export function useLessonCall(book: LessonBook): LessonCall {
       fulltextRef.current = opened.fulltext;
       setStatus(null);
       // A paper nobody has been taught yet opens itself: the reader's first
-      // message is written for them (reading/lesson/opening.ts).
-      if (thread.messages.length === 0) sendRef.current(lessonOpening());
+      // message is written for them (reading/lesson/opening.ts). An aside opens
+      // on nothing and waits — the reader already said what it is about by
+      // holding the words.
+      if (!asideThreadId && thread.messages.length === 0) sendRef.current(lessonOpening());
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [bookId, setMessages]);
+  }, [asideThreadId, bookId, setMessages]);
 
   // Leaving stops the turn. Nothing is distilled on the way out: what a lesson
   // leaves behind has not been decided (docs/74).
   useEffect(() => () => abort(), [bookId, abort]);
+
+  const reload = useCallback(() => {
+    const id = threadIdRef.current;
+    if (!id) return;
+    const thread = getThread(bookId, id);
+    if (thread) setMessages(thread.messages.map(rehydrateMessage));
+  }, [bookId, setMessages]);
 
   const page = useMemo(() => lastCitedPage(messages), [messages]);
   const focus: LessonFocus | null =
@@ -323,6 +363,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
     taught,
     send,
     stop,
+    reload,
     threadId,
   };
 }

@@ -3,39 +3,101 @@
 //
 // It is the book-level conversation with a bar over it. Everything about the
 // turn arrives as props (lesson-view.ts) — this file binds the bar, the focus
-// line, the two standing chips and the chapter sheet to it, and nothing else.
-// The conversation itself is the same CallView the desk and the briefing use,
-// so a quotation block, an aside and a card render here exactly as they do
-// there.
+// line, the two standing chips, the chapter sheet and the hold that opens an
+// aside to it, and nothing else. The conversation itself is the same CallView
+// the desk and the briefing use, so a quotation block, an aside and a card
+// render here exactly as they do there.
+//
+// The same component draws the aside (docs/74). What changes is the ground it
+// stands on, the strip naming what it was pulled out of, and the three things
+// an aside has none of: the chapter sheet, the standing chips and the hold.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CallView from "../chat/CallView";
 import { Button } from "../ui/button";
+import { Popover, PopoverAnchor, PopoverContent } from "../ui/popover";
+import { longPressFeedback } from "../../../platform/app/haptics";
+import { replySpanAt, type LessonAskSpan } from "./lesson-aside";
+import { bindLongPress } from "./long-press";
 import PhoneChapterSheet from "./PhoneChapterSheet";
 import PhoneLessonBar from "./PhoneLessonBar";
 import { LESSON_CHIPS, lessonFocusLine, type LessonViewProps } from "./lesson-view";
 
+// The held paragraph, waiting for the reader to say yes to it, with the point
+// the control hangs off.
+interface Held {
+  span: LessonAskSpan;
+  x: number;
+  y: number;
+}
+
 export default function PhoneLesson(props: LessonViewProps) {
   const [chaptersOpen, setChaptersOpen] = useState(false);
+  const [held, setHeld] = useState<Held | null>(null);
 
   // One row under the bar. While the paper is being fetched and read there is
   // no focus to state and the status line has the row instead; after that the
   // status is null and the focus has it back.
   const line = props.status ?? lessonFocusLine(props.chapters, props.focus);
 
+  const surface = useRef<HTMLDivElement | null>(null);
+  const { onAsk, aside } = props;
+  useEffect(() => {
+    const host = surface.current;
+    // Not in an aside: one level deep, so the gesture is simply not bound
+    // there (reading/aside.ts).
+    if (!host || !onAsk || aside) return;
+    return bindLongPress(host, {
+      // Armed only over a reply. Everywhere else on the screen the timer never
+      // starts, so a finger resting on the composer or the bar is a finger
+      // resting on the composer or the bar.
+      accepts: (target) => replySpanAt(target as Node | null) !== null,
+      feedback: () => void longPressFeedback(),
+      onLongPress: (press) => {
+        const span = replySpanAt(press.target as Node | null);
+        if (span) setHeld({ span, x: press.x, y: press.y });
+      },
+    });
+  }, [onAsk, aside]);
+
+  // A lesson that moved on is a lesson the held paragraph may no longer be in.
+  useEffect(() => setHeld(null), [props.messages]);
+
   const header = props.aside ? (
-    <div className="flex flex-none items-center border-b border-border-subtle px-1 py-1">
-      {props.aside.onBack && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground"
-          onClick={props.aside.onBack}
-        >
-          ‹ Back to the lesson
-        </Button>
+    <>
+      <div className="flex flex-none items-center border-b border-border-subtle bg-background px-1 py-0.5">
+        {props.aside.onBack && (
+          <Button
+            variant="ghost"
+            size="lg"
+            className="px-2 text-[15px] font-normal text-muted-foreground"
+            onClick={props.aside.onBack}
+          >
+            ‹ Back to the lesson
+          </Button>
+        )}
+      </div>
+      {/* What this conversation is about. The one thing on the screen that says
+          it is not the lesson, besides the ground under it. */}
+      <div className="flex flex-none items-baseline gap-2 border-b border-border-subtle bg-background px-4 py-2 text-[12px]">
+        <span className="flex-none font-medium uppercase tracking-[0.08em] text-accent-line">
+          Aside
+        </span>
+        <span className="min-w-0 flex-1 truncate font-display text-[13px] text-muted-foreground">
+          {props.aside.span === "" ? "" : `“${props.aside.span}”`}
+        </span>
+      </div>
+      {/* The same row the lesson gives the status line. An aside has no focus
+          to state, but it has the same ways of going wrong — no provider, a
+          conversation that could not be read — and without this they happen in
+          silence. */}
+      {props.status && (
+        <div className="flex flex-none items-center gap-1.5 px-4 py-1.5 text-[12px] text-muted-foreground">
+          <span className="h-1.5 w-1.5 flex-none rounded-full bg-accent-line" />
+          <span className="min-w-0 truncate">{props.status}</span>
+        </div>
       )}
-    </div>
+    </>
   ) : (
     <>
       <PhoneLessonBar
@@ -54,8 +116,9 @@ export default function PhoneLesson(props: LessonViewProps) {
   );
 
   // The two the reader never has to type. A chip says what a reader would have
-  // said, so it sends a line and not a command (docs/09).
-  const chips = (
+  // said, so it sends a line and not a command (docs/09). An aside has none:
+  // the reader is there about one sentence, and the chips are about the lesson.
+  const chips = props.aside ? undefined : (
     <div className="mb-2 flex flex-wrap gap-2">
       {LESSON_CHIPS.map((chip) => (
         <Button
@@ -72,7 +135,14 @@ export default function PhoneLesson(props: LessonViewProps) {
   );
 
   return (
-    <div className="absolute inset-0 flex flex-col bg-chat-surface">
+    <div
+      ref={surface}
+      // The marker the reply's own selection is turned off by (styles.css). On
+      // the lesson only: the aside draws no hold, and its replies stay the
+      // ordinary selectable text every other conversation in the app is.
+      {...(props.aside ? {} : { "data-lesson-press": "" })}
+      className={`absolute inset-0 flex flex-col ${props.aside ? "bg-muted" : "bg-chat-surface"}`}
+    >
       <CallView
         messages={props.messages}
         onSend={props.onSend}
@@ -82,14 +152,41 @@ export default function PhoneLesson(props: LessonViewProps) {
         onHangUp={props.onBack}
         streaming={props.streaming}
         onStop={props.onStop}
-        emptyTitle={props.title}
-        placeholder="Ask about the paper…"
+        emptyTitle={props.aside ? "Ask about this" : props.title}
+        placeholder={props.aside ? "Ask again…" : "Ask about the paper…"}
         scalable={false}
-        stickKey={`lesson-${props.bookId}`}
+        stickKey={props.aside ? `aside-${props.bookId}` : `lesson-${props.bookId}`}
         aside={props.aside}
         header={header}
-        footer={chips}
+        {...(chips ? { footer: chips } : {})}
+        {...(props.onCardAction ? { onCardAction: props.onCardAction } : {})}
       />
+      {/* What a hold offers. Anchored on the point the finger was on rather
+          than on a trigger — there is no trigger, the gesture is the trigger —
+          so the anchor is a zero-size fixed box at that point and Radix keeps
+          the box it opens inside the viewport from there. */}
+      <Popover open={held !== null} onOpenChange={(open) => !open && setHeld(null)}>
+        <PopoverAnchor asChild>
+          <span
+            aria-hidden
+            className="pointer-events-none fixed"
+            style={{ left: held?.x ?? 0, top: held?.y ?? 0, width: 1, height: 1 }}
+          />
+        </PopoverAnchor>
+        <PopoverContent side="top" align="center" className="w-auto p-1">
+          <Button
+            variant="ghost"
+            size="lg"
+            onClick={() => {
+              const span = held?.span;
+              setHeld(null);
+              if (span) props.onAsk?.(span);
+            }}
+          >
+            Ask about this
+          </Button>
+        </PopoverContent>
+      </Popover>
       <PhoneChapterSheet
         open={chaptersOpen}
         chapters={props.chapters}

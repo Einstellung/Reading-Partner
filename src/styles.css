@@ -521,3 +521,17 @@ body {
   user-select: none;
   -webkit-touch-callout: none;
 }
+
+/* The same thing, for the phone lesson's replies (docs/74). A hold on a
+   paragraph there means "Ask about this"
+   (ui/components/phone/long-press.ts), and iOS answers a hold on selectable
+   text with the callout and the magnifier — two gestures on one press, and the
+   system's wins. Scoped to the reply prose (`data-reply-ts`, written by
+   chat.tsx), so the reader's own messages, the composer and the aside's
+   conversation stay ordinary selectable text. Inherited into everything the
+   reply renders, which is what WebKit reads (docs/pitfall/49, 262). */
+[data-lesson-press] [data-reply-ts] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}

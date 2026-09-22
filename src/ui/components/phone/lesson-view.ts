@@ -14,7 +14,9 @@
 // TableChapter.number; `index` is only ever a key.
 
 import type { TableChapter } from "../../../reading/chapters/table";
+import type { CardActionHandler } from "../chat/chatParts";
 import type { ThreadMessage } from "../chat/types";
+import type { LessonAskSpan } from "./lesson-aside";
 
 // Where a chapter stands in this lesson. "done" is a chapter this thread has
 // been taught and left; "now" is the one the focus is on; "none" is one the
@@ -96,9 +98,18 @@ export interface LessonViewProps {
   // focus is the tool's to write (docs/09).
   onPickChapter: (chapter: TableChapter) => void;
 
+  // A paragraph of a reply the reader held (docs/74). Absent = no way into an
+  // aside from this screen, which is what the aside view itself is drawn with:
+  // one level deep, so there is no gesture inside one.
+  onAsk?: (span: LessonAskSpan) => void;
+  // What a card in the conversation raises. One does: an aside's receipt row,
+  // which asks to be taken back into the side conversation it stands for.
+  onCardAction?: CardActionHandler;
+
   // This screen is itself an aside off the lesson (reading/aside.ts). Absent =
-  // it is the lesson.
-  aside?: { onBack?: () => void };
+  // it is the lesson. `span` is the words it was pulled out of, named in the
+  // strip over it.
+  aside?: { onBack?: () => void; span: string };
 }
 
 /**
