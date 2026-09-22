@@ -29,11 +29,28 @@ wry 的导航代理又没实现 `didFail…` 那一系列，所以失败和"还�
 
 ## 解法
 
-还没做。暖机那半已经不看加载事件了（`jar.rs`：看 cookie 罐不再变化），文章那半
-还在 `wait_for_load` 上等一个不会来的事件。要修就是同一个办法：
-`Phase::Article` 在 macOS 上也得有个不靠加载事件的判据（`policy.rs` 的
-`Readout`/`settle` 已经能回答"正文不再变化了"，缺的是允许它在没有 `finished`
-的情况下开始问）。
+文章页和 page 不再只等加载事件。等待里每 500ms 问一次文档自己（`ready.js`：
+`document.readyState` 加 `document.body.innerText.length`），`readyState` 到
+`interactive` 且已渲染的正文不少于 200 字就进 settle 循环，和收到 `finished`
+一样（`policy::has_begun`，`mod.rs` 的 `wait_for_load`）。settle 判据一个字没改：
+正文长度连续四次不变才停。
 
-在那之前，macOS 上取正文只对首页会报 `finished` 的站管用；`RP_WEBVIEW_PAGE_PROBE`
-不受影响，它到点就读。
+两个条件都要，因为两种误判都真会发生：只看 `readyState` 会在空文档上开读，
+`Phase::Page` 只要"不再变化"，空的也算不再变化；只看正文长度会在还在解析的
+文档上开读。
+
+Linux 照旧只等事件——探针在那边永远返回 `None`，一次求值都不发。WebKitGTK
+两种事件都报，加探针只会给一条本来就好使的路子加钱。
+
+实测（2026-09-22，Mac mini，macOS 26.5，彭博 `fed-s-collins-says-rate-hike…`）：
+文章页 1.0s 就 `interactive` 带 1714 字，整条 42.5s 返回 `ok`、正文 525 字符，
+其中 38.4s 是冷罐首页暖机。改之前是 45s 超时，零字。第二篇（暖机 17.4s）整条
+22.1s、正文 500 字符。
+
+Linux 对照（同一台机器，同一个二进制的前后两版，各自冷 profile，xvfb）：
+
+| URL | 改之前 | 改之后 |
+|---|---|---|
+| en.wikipedia.org/wiki/Portable_Document_Format | 12.86s，ok，35169 字符 | 12.92s，ok，35169 字符 |
+| example.com | 30.91s，empty | 30.98s，empty |
+| bing.com/images/search?q=cat | 37.68s，empty | 37.45s，empty |
