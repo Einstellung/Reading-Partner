@@ -708,6 +708,10 @@ fn delete_cookies<R: Runtime>(
             // alive, which is the whole of this call.
             let store = unsafe { view.configuration().websiteDataStore().httpCookieStore() };
             let deleting = store.clone();
+            // The completion is a `Fn` block — WebKit reserves the right to
+            // call it more than once — so the one answer this call may send
+            // sits behind a cell the block borrows rather than consumes.
+            let answer = Rc::new(RefCell::new(Some(tx)));
             let handler = block2::RcBlock::new(move |cookies: NonNull<NSArray<NSHTTPCookie>>| {
                 // Safety: WebKit passes a live array and nothing here keeps it
                 // past this block.
@@ -724,23 +728,26 @@ fn delete_cookies<R: Runtime>(
                 removed.sort();
                 removed.dedup();
                 if doomed.is_empty() {
-                    let _ = tx.send(Ok(removed));
+                    if let Some(tx) = answer.borrow_mut().take() {
+                        let _ = tx.send(Ok(removed));
+                    }
                     return;
                 }
                 // One completion per delete, and the last one back is the
                 // barrier that says the store has finished with all of them.
                 let left = Rc::new(Cell::new(doomed.len()));
-                let answer = Rc::new(RefCell::new(Some((tx, removed))));
+                let removed = Rc::new(removed);
                 for cookie in doomed {
                     let left = left.clone();
                     let answer = answer.clone();
+                    let removed = removed.clone();
                     let done = block2::RcBlock::new(move || {
                         left.set(left.get().saturating_sub(1));
                         if left.get() > 0 {
                             return;
                         }
-                        if let Some((tx, removed)) = answer.borrow_mut().take() {
-                            let _ = tx.send(Ok(removed));
+                        if let Some(tx) = answer.borrow_mut().take() {
+                            let _ = tx.send(Ok(removed.as_ref().clone()));
                         }
                     });
                     // Safety: WebKit copies the handler; the cookie is one it
