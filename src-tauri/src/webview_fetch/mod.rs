@@ -570,7 +570,6 @@ pub(crate) fn build_window<R: Runtime>(
         .skip_taskbar(!visible)
         .title(chrome.title)
         .inner_size(policy::VIEWPORT.0, policy::VIEWPORT.1)
-        .user_agent(policy::USER_AGENT)
         // The point of the exercise: one jar, on disk, shared by every window
         // the fetcher opens. tauri-runtime-wry keys its WebContext by this path
         // and wry points WebKit's cookie manager at `<dir>/cookies` with
@@ -601,6 +600,16 @@ pub(crate) fn build_window<R: Runtime>(
                 let _ = tx.send(LoadEvent::Finished);
             }
         });
+
+    // Dev-only: try another identity without a rebuild.
+    // `RP_WEBVIEW_FETCH_UA=default` leaves the engine's own string in place and
+    // anything else is sent verbatim. The table in policy.rs above USER_AGENT
+    // was measured one rebuild at a time; this is so the next one is not.
+    let builder = match std::env::var("RP_WEBVIEW_FETCH_UA").ok().as_deref() {
+        Some("default") => builder,
+        Some(custom) => builder.user_agent(custom),
+        None => builder.user_agent(policy::USER_AGENT),
+    };
 
     // The same jar, named the way this platform names one (PROFILE_DATA_STORE).
     #[cfg(target_os = "macos")]
