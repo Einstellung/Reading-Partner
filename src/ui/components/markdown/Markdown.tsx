@@ -30,6 +30,25 @@ export const CitationContext = createContext<CitationHandler | null>(null);
 // shell has for the moment before prep state loads.
 export const PrepSlugContext = createContext<KnownSlugs | AnchorSources>(null);
 
+// How citation shorthands are drawn where there is no page to jump to. Sits
+// alongside CitationContext rather than inside it, and for the same reason it
+// is a context at all: a message row must not have to carry it, so a screen
+// declares it once over the whole conversation.
+//
+// "quote" is the phone lesson (docs/74). That screen never draws the paper, so
+// a chip leading to a page is a promise it cannot keep — but the words in
+// [p.3 "…"] are the only lines of the paper the reader will see, so they are
+// printed as a quotation block with the page under them, and a bare [p.3] is
+// printed as the page number alone. Neither is a control.
+//
+// Null (the default, and every desktop surface) leaves today's behaviour
+// untouched: with a handler the shorthands are chips, without one they are the
+// text the model wrote. A handler wins over this mode where both are present —
+// a block that jumps says everything this one does and more.
+export type CitationMode = 'quote';
+
+export const CitationModeContext = createContext<CitationMode | null>(null);
+
 // Whether a page citation's quote is really the text on that page. A citation
 // that stands alone as a paragraph is drawn as a block printing its quote (see
 // citationBlock.ts), and that block asserts to a reader who has not opened the

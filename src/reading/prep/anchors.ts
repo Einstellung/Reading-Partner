@@ -410,6 +410,16 @@ export function linkifyFigureCitations(text: string): string {
   return scanAnchors(text, (a) => (a.kind === "figure" ? renderAnchor(a) : null));
 }
 
+// Rewrite the page and paper shorthands only, leaving [fig:N] byte for byte as
+// the model wrote it. For the surface that has the book's words but not its
+// pages — the phone's lesson (docs/74), where the reply is all the reader has —
+// so [p.3 "…"] can be drawn as the quotation it is rather than as a jump. The
+// figure shorthand is left alone there because nothing on that screen can show
+// a figure, so its own text is the most honest thing to print.
+export function linkifyPageCitations(text: string): string {
+  return scanAnchors(text, (a) => (a.kind === "figure" ? null : renderAnchor(a)));
+}
+
 // A prep note's page anchors mean pages of *that* paper, but they are written
 // bare — [p.3], the same shape a survey citation has. Copied into a reply or a
 // prompt they land in the survey's namespace and jump to the wrong book; one

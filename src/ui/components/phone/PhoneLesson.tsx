@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import CallView from "../chat/CallView";
+import { CitationModeContext } from "../markdown/Markdown";
 import { Button } from "../ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "../ui/popover";
 import { longPressFeedback } from "../../../platform/app/haptics";
@@ -135,6 +136,13 @@ export default function PhoneLesson(props: LessonViewProps) {
   );
 
   return (
+    // Citations in this shell are quotations, not jumps: the phone never draws
+    // the paper, so [p.3 "…"] prints the words with the page under them
+    // (docs/74). Declared once over the screen rather than handed down the
+    // conversation, so no message row carries it — the same reason the citation
+    // handler is a context. The aside is this component too, so it is covered
+    // by the same line.
+    <CitationModeContext.Provider value="quote">
     <div
       ref={surface}
       // The marker the reply's own selection is turned off by (styles.css). On
@@ -196,5 +204,6 @@ export default function PhoneLesson(props: LessonViewProps) {
         onPick={props.onPickChapter}
       />
     </div>
+    </CitationModeContext.Provider>
   );
 }

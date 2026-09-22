@@ -18,6 +18,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import { linkifyCitations } from '../../../reading/prep/anchors';
 import { remarkPlugins } from './remarkPlugins';
+import MarkdownRenderer from './MarkdownRenderer';
+import { CitationModeContext } from './Markdown';
 
 // The block elements our chat CSS gives borders to (see Markdown.tsx MD):
 //   table/th/td -> vertical column rules, hr -> horizontal rule,
@@ -91,4 +93,47 @@ test('classroom (citation-linkified) streaming produces no transient bordered el
 	const hits = flickers(linkifyCitations);
 	if (hits.length) console.log('LINKIFIED flickers:', hits);
 	expect(hits).toEqual([]);
+});
+
+// The lesson's quotation block (CitationMode "quote") streams under the same
+// rule. It is not a border-bearing tag the scan above can see, and it is drawn
+// by our own paragraph override rather than by the markdown parse, so it is
+// counted here by its own marker through the real renderer.
+//
+// The state to fear is the half-written bracket: `[p.3 "The inp` is a quote
+// whose closing mark has not arrived. It must not draw a block that the next
+// character takes away again — and it does not, because a bracket the scanner
+// has not seen closed is not a candidate at all.
+function quoteBlocks(markdown: string): number {
+	const html = renderToStaticMarkup(
+		createElement(
+			CitationModeContext.Provider,
+			{ value: 'quote' as const },
+			createElement(MarkdownRenderer, { text: markdown }),
+		),
+	);
+	return html.split('data-page-quote').length - 1;
+}
+
+const LESSON = [
+	'Section 3.1 is where the embeddings are defined.',
+	'',
+	'[p.3 "The input embeddings are the sum of the token and the position embeddings."]',
+	'',
+	'So position is added, not concatenated. Why would that be cheaper?',
+].join('\n');
+
+test('a quotation block never appears and then vanishes mid-stream', () => {
+	let prev = 0;
+	const hits: { at: number; from: number; tail: string }[] = [];
+	for (let i = 1; i <= LESSON.length; i++) {
+		const n = quoteBlocks(LESSON.slice(0, i));
+		if (n < prev) hits.push({ at: i, from: prev, tail: JSON.stringify(LESSON.slice(Math.max(0, i - 20), i)) });
+		prev = n;
+	}
+	if (hits.length) console.log('QUOTE flickers:', hits);
+	expect(hits).toEqual([]);
+	// And the finished reply does draw one, so the scan above was not counting
+	// nothing all the way through.
+	expect(quoteBlocks(LESSON)).toBe(1);
 });
