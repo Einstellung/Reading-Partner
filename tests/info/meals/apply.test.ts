@@ -9,16 +9,19 @@ import {
   deviationNote,
   planNote,
   recordDeviation,
+  refreshPhotos,
   type MealsPorts,
 } from "../../../src/info/meals/apply";
 import type {
   MealsCharterCardData,
   MealsPlanCardData,
 } from "../../../src/info/meals/cards";
+import type { PhotoQuery } from "../../../src/info/meals/photo-run";
 import { currentList, shoppingItemKey } from "../../../src/info/meals/shopping";
 import type {
   Deviation,
   DishMethod,
+  DishPhotoEntry,
   MealsState,
   ShoppingState,
   WeekPlan,
@@ -219,4 +222,103 @@ test("the notes are said in the reader's voice and never read the list back", ()
       [],
     ),
   ).toContain("Nothing else needs to change");
+});
+
+// --- the photographs ----------------------------------------------------------
+//
+// The search runs on the machine with a hidden webview, which is usually not
+// the one the reader is holding (docs/73 图片, pitfall 380). So the port that
+// starts a run is present only there, and what the reader asks for travels as a
+// time written on the week.
+
+function found(at: number): DishPhotoEntry {
+  return {
+    url: "https://cdn.example/a.jpg",
+    thumb: "",
+    pageUrl: "https://example.com/a",
+    site: "example.com",
+    foundAt: at,
+  };
+}
+
+// A harness that can search, and the names it was asked to search for.
+function searching(h: Harness): string[][] {
+  const asked: string[][] = [];
+  h.ports.startPhotoRun = async (_planId: string, queries: readonly PhotoQuery[]) => {
+    asked.push(queries.map((q) => q.key));
+  };
+  return asked;
+}
+
+test("the machine the reader is holding starts no search and still applies the week", async () => {
+  const h = harness({ plan: null });
+  const applied = await applyPlan(planCard(), h.ports);
+  await applied.pending;
+  expect(applied.ok).toBe(true);
+  expect(h.saved.plan).not.toBeNull();
+});
+
+test("applying a week on the machine that searches asks for what it is missing", async () => {
+  const h = harness({ plan: null });
+  const asked = searching(h);
+  await (await applyPlan(planCard(), h.ports)).pending;
+  expect(asked[0]).toContain("dish:chickpea stew");
+});
+
+// The reader said a picture is wrong before this week was applied: a picture
+// found before they said so is looked for again.
+test("a week applied after the reader asked is searched from before their ask", async () => {
+  const h = harness({ plan: null, photosAskedAt: 500 });
+  h.ports.photos = async () => ({ "dish:chickpea stew": found(400) });
+  const asked = searching(h);
+  await (await applyPlan(planCard(), h.ports)).pending;
+  expect(asked[0]).toContain("dish:chickpea stew");
+
+  const after = harness({ plan: null, photosAskedAt: 300 });
+  after.ports.photos = async () => ({ "dish:chickpea stew": found(400) });
+  const later = searching(after);
+  await (await applyPlan(planCard(), after.ports)).pending;
+  expect(later[0]).not.toContain("dish:chickpea stew");
+});
+
+test("asking for better pictures writes down when they asked, wherever they are", async () => {
+  const h = harness();
+  const at: number[] = [];
+  h.ports.markPhotosAsked = async (when) => {
+    at.push(when);
+  };
+  const result = await refreshPhotos(h.ports);
+  expect(at).toEqual([100]);
+  // Nothing was started here: this machine cannot search, and the time it just
+  // wrote down is what reaches the machine that can.
+  expect(result.searching).toBe(false);
+  expect(result.queries).toBeGreaterThan(0);
+});
+
+test("on the machine that searches, asking again starts the run itself", async () => {
+  const h = harness();
+  h.ports.markPhotosAsked = async () => {};
+  const asked = searching(h);
+  const result = await refreshPhotos(h.ports);
+  expect(result.searching).toBe(true);
+  expect(asked[0]?.length).toBe(result.queries);
+});
+
+test("an ask that could not be written down is not reported as asked", async () => {
+  const h = harness();
+  h.ports.markPhotosAsked = async () => {
+    throw new Error("no");
+  };
+  const asked = searching(h);
+  expect(await refreshPhotos(h.ports)).toEqual({ queries: 0, searching: false });
+  expect(asked).toEqual([]);
+
+  // No week is nothing to search for either, and nothing is written down.
+  const none = harness({ plan: null });
+  let wrote = false;
+  none.ports.markPhotosAsked = async () => {
+    wrote = true;
+  };
+  expect(await refreshPhotos(none.ports)).toEqual({ queries: 0, searching: false });
+  expect(wrote).toBe(false);
 });

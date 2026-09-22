@@ -42,6 +42,7 @@ import { registerBookDelivery } from "../../../reading/deliver";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
 import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerMealsPhotosWorker } from "../../../info/meals/photo-worker";
+import { startMealsPhotoHousekeeping } from "../../../info/meals/photo-sweep";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerInfoCollectWorker } from "../../../info/program/live";
 import { registerBriefingDelivery } from "../../../info/briefer/deliver";
@@ -195,8 +196,9 @@ export function bootDomains(): void {
   // writes it (reading/ingest/url-worker.ts).
   registerIngestUrlWorker();
   // The week's photographs, searched in the hidden webview on whichever device
-  // has one (docs/73 图片). Registered on every device: which one searches is
-  // the election's answer over the webview-fetch tag.
+  // has one (docs/73 图片). Registered on every device, and refused at once on
+  // one that has no webview: the run is `local`, so the only device that may
+  // start one is the device that can do it (photo-sweep.ts, pitfall 380).
   registerMealsPhotosWorker();
   registerBookDelivery();
   // The same pair on the info side: a question the briefing did not answer, and
@@ -327,6 +329,15 @@ export function useShellBootstrap({
     pendingPullRef.current = false;
     adoptPulledSettings();
   }, [settingsOpen, adoptPulledSettings]);
+
+  // The week's photographs are looked for here, from the synced week, on the
+  // machine that can search (docs/73 图片). Started when the meals screen is
+  // switched on rather than at boot: a household not using it should not have a
+  // pass reading two files on every pull. Idempotent, so turning the setting on
+  // mid-session starts it and nothing starts it twice.
+  useEffect(() => {
+    if (settings.meals) startMealsPhotoHousekeeping();
+  }, [settings.meals]);
 
   const syncReport = useSyncHealth();
   const syncToastedRef = useRef(false);

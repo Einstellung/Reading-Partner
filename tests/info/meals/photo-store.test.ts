@@ -105,6 +105,17 @@ test("a hit stands for good and a miss for thirty days", () => {
   expect(needsPhotoLookup({ none: true, checkedAt: now - PHOTO_MISS_RETRY_MS }, now)).toBe(true);
 });
 
+// The reader saying a picture is wrong (MealsState.photosAskedAt): it travels
+// as a time, because the machine that searches is not the one they said it on.
+test("an answer older than the reader's ask is asked again, and a newer one is not", () => {
+  const now = 10 * PHOTO_MISS_RETRY_MS;
+  expect(needsPhotoLookup(PHOTO, now, PHOTO.foundAt + 1)).toBe(true);
+  expect(needsPhotoLookup(PHOTO, now, PHOTO.foundAt)).toBe(false);
+  expect(needsPhotoLookup({ none: true, checkedAt: now - 1000 }, now, now)).toBe(true);
+  // Never asked is the ordinary case, and it changes nothing.
+  expect(needsPhotoLookup(PHOTO, now, 0)).toBe(false);
+});
+
 test("a dish and an ingredient read their own keys, and a miss is nothing", () => {
   const cache = { "dish:mapo tofu": PHOTO, "ingredient:kale": { none: true as const, checkedAt: 1 } };
   expect(photoForDish(dish(), cache)).toEqual(PHOTO);

@@ -8,16 +8,18 @@
 import type { MealsPorts } from "./apply";
 import type { MealsCard } from "./cards";
 import { ingredientImageUrl } from "./images";
-import { startPhotoRun } from "./photo-run";
+import { mealsPhotoSearcher } from "./photo-sweep";
 import { loadMealsPhotos } from "./photo-store";
 import {
   loadMeals,
   saveCharter,
   saveDeviation,
   saveDishMethod,
+  savePhotosAsked,
   savePlan,
   saveShopping,
 } from "./store";
+import { hasWebviewFetch } from "../../platform/app/platform";
 import {
   buildAddShoppingItemsTool,
   buildProposeMealsCharterTool,
@@ -45,8 +47,17 @@ export interface LiveMealsOptions {
   changed(): void;
 }
 
-/** The ports every meals write goes through, on the live store. */
+/**
+ * The ports every meals write goes through, on the live store.
+ *
+ * `startPhotoRun` is here only on a machine with the hidden webview: the run is
+ * `local`, so whoever starts one executes it, and a phone starting one would be
+ * searching with nothing to search in (docs/73 图片, pitfall 380). Where it is
+ * here, it goes through the one searcher, so an Apply cannot start a second run
+ * on top of the pass that watches the synced week.
+ */
 export function liveMealsPorts(opts: Pick<LiveMealsOptions, "today" | "changed">): MealsPorts {
+  const searcher = mealsPhotoSearcher();
   return {
     current: () => loadMeals(),
     saveCharter: (charter) => saveCharter(charter),
@@ -55,7 +66,10 @@ export function liveMealsPorts(opts: Pick<LiveMealsOptions, "today" | "changed">
     saveShopping: (shopping) => saveShopping(shopping),
     saveDishMethod: (dishId, method) => saveDishMethod(dishId, method),
     photos: () => loadMealsPhotos(),
-    startPhotoRun: (planId, queries) => startPhotoRun({ planId, queries: [...queries] }),
+    ...(hasWebviewFetch()
+      ? { startPhotoRun: (planId, queries) => searcher.start(planId, queries) }
+      : {}),
+    markPhotosAsked: (at) => savePhotosAsked(at),
     bankImage: (en) => ingredientImageUrl(en),
     now: () => Date.now(),
     today: opts.today,
