@@ -101,7 +101,7 @@ export function buildLiveMealsTools(opts: LiveMealsOptions): AgentTool[] {
 
 /**
  * The ports ensureDishMethod runs on: the week off disk and one headless model
- * turn, on the same background model the other unattended pipelines use.
+ * turn, on the everyday model the rest of the meals line runs on (model-tier.ts).
  *
  * No thread and no card — the steps are the dish the reader already agreed to,
  * said in order (method.ts).
