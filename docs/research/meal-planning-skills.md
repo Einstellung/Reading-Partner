@@ -99,7 +99,7 @@ https://github.com/worryzyy/HowToCook-mcp 。MIT，773 star，npm `howtocook-mcp
 
 排菜逻辑写在代码里（`src/tools/recommendMeals.ts`）：午晚饭从 `['主食', '水产', '荤菜', '素菜', '甜品']` 里随机取，荤素没有固定比例；工作日每顿 `Math.max(2, Math.ceil(peopleCount / 3))` 道菜，周末"比工作日多1-2个菜"（≤4 人多 1，更多人多 2）。采购单那半：累计每种食材的数量、单位、出现次数和用到它的菜，"对食材按使用频率排序"，再 `categorizeIngredients()` 分成 fresh / pantry / spices / others。
 
-README 没写菜谱数据怎么打包（未能确认是否内置 JSON）。同源的 https://github.com/HZZY2019/Cook-MCP 是同一套东西的另一个实现，MIT，0 star。搜索结果提到另有 npm 包 `how-to-cook`（1.5.0，101 MB）把 HowToCook 的 markdown 解析成结构化 JSON，含 schema.org Recipe JSON-LD、难度和卡路里解析、烹饪方式关键词归类、无法结构化的配料保留原文，并支持拼音模糊搜索——npmjs 页面 403 未能打开，这些字段是搜索摘要转述的，用之前要自己扒包验。
+README 没写菜谱数据怎么打包（未能确认是否内置 JSON）。同源的 https://github.com/HZZY2019/Cook-MCP 是同一套东西的另一个实现，MIT，0 star。npm 包 `how-to-cook`（1.6.0，Unlicense）只是 HowToCook 仓库原样发布，381 个 markdown 加图片，没有结构化 JSON、JSON-LD 和拼音搜索（2026-09-23 第二轮扒包确认，见 [健身饮食与快手三餐调研](./健身饮食与快手三餐调研.md)）；要结构化得自己解析，或参考 HowToCook-Web 的 `scripts/indexer.py`。
 
 ### 下厨房 / XiaChuFang Recipe Corpus
 
@@ -162,6 +162,5 @@ Plan to Eat 是闭源商业产品，没有可看的知识结构，未查。
 
 - LangChain / CrewAI 官方示例里的 meal planning agent，Hugging Face 上的同类 Space 和数据集，完全没查。
 - OpenClaw 的 skill 正文全部没拿到（仓库 404），只有目录页的描述。
-- `how-to-cook` npm 包（HowToCook 的结构化 JSON 导出）的真实字段没验（npmjs 403），只有搜索摘要。
 - Tandoor 的数据库模型细节（Food / Unit / Supermarket Category 的表结构）只看了官网功能页，没读源码。
 - 中文的结构化菜谱数据集除下厨房语料外没有再找。

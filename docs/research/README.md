@@ -21,3 +21,4 @@
 - [pdf-reflow-on-phone](./pdf-reflow-on-phone.md)：把论文正文抽出来在 393pt 屏上重排的可行性探针，四篇样例的对错、映射表代价、arXiv HTML 覆盖率。2026-09-22。
 - [pdf-text-extraction-on-iphone](./pdf-text-extraction-on-iphone.md)：`src/fulltext/extract.ts` 的 pdf.js 抽全文在 iPhone 17 模拟器上的实测，15/214/548 页三档的耗时、帧率、worker 和内存峰值；手机课堂正文地基的生死判据。2026-09-22。
 - [meal-planning-skills](./meal-planning-skills.md)：互联网上现成的做饭 / 三餐计划 / 采购单类 agent skill、MCP 工具包和菜谱数据资产，按 SKILL.md 生态、其他生态、中文社区、开源备餐软件、数据源五类，末尾列可以拿走的候选。2026-09-22。
+- [健身饮食与快手三餐调研](./健身饮食与快手三餐调研.md)：三餐线转向十分钟组装加健身目标后的依据，热量蛋白算法（输入、公式、默认值、回调）、食物数字来源、开场问答、备餐防腻规则、《健身营养全书》的取舍和上架合规。2026-09-23。
