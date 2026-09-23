@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop",
-  "description": "What only a desktop build has. Autostart is a machine's own choice (docs/36) and self-update is how a desktop build stays current (docs/72); both plugins are desktop-only dependencies, so the permissions cannot live in the shared capability — an iOS build would fail to resolve them.",
+  "description": "What only a desktop build has. Autostart is a machine's own choice (docs/36) and self-update is how a desktop build stays current (docs/76); both plugins are desktop-only dependencies, so the permissions cannot live in the shared capability — an iOS build would fail to resolve them.",
   "platforms": ["linux", "macOS", "windows"],
   "windows": ["main"],
   "permissions": [

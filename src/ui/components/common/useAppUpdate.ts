@@ -1,4 +1,4 @@
-// The self-update state for the shell to draw (docs/72): "none" until a new
+// The self-update state for the shell to draw (docs/76): "none" until a new
 // desktop version has been downloaded, then the version waiting for a restart.
 // The schedule and the host calls are in platform/app; this only subscribes.
 

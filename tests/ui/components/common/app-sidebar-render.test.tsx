@@ -117,7 +117,7 @@ test("the sync alert rides on Settings and says so in the name", () => {
 });
 
 // A downloaded desktop update is one row above Settings, named with the version
-// it restarts into, and absent otherwise (docs/72).
+// it restarts into, and absent otherwise (docs/76).
 test("the restart-to-update row appears only with an update waiting", () => {
   const withUpdate = (update: Parameters<typeof AppSidebar>[0]["update"]) =>
     renderToStaticMarkup(

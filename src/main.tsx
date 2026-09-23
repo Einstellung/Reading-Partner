@@ -127,7 +127,7 @@ if (import.meta.env.VITE_SMOKE === "1") {
     .catch(() => {})
     .then(() => applyStoredAutostart());
 
-  // Look for a new desktop version now and every six hours after (docs/72).
+  // Look for a new desktop version now and every six hours after (docs/76).
   // Here for the same reason as autostart: the installed bundle is the
   // machine's, whichever shell is showing. A no-op on mobile and in dev.
   startUpdateChecks();

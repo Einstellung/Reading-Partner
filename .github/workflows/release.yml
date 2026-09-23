@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: bun run wasm
 
-      # Developer ID signing and notarization for the macOS bundle (docs/72).
+      # Developer ID signing and notarization for the macOS bundle (docs/76).
       # Exported to the job only when the certificate secret exists: tauri
       # treats a set-but-empty APPLE_CERTIFICATE as a certificate to import and
       # fails, so without it the build stays unsigned, as before. Notarization
@@ -98,7 +98,7 @@ jobs:
           VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
           # Signs every update bundle (.app.tar.gz, AppImage, deb, rpm, msi,
           # setup.exe) with the updater key, whose public half is in
-          # tauri.conf.json (docs/72). The key has no password.
+          # tauri.conf.json (docs/76). The key has no password.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:

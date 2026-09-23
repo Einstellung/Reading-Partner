@@ -82,7 +82,7 @@ tauri-plugin-haptics = "2"
 # guarded at the use site; on mobile it is not a dependency at all.
 [target.'cfg(any(target_os = "linux", target_os = "macos", windows))'.dependencies]
 tauri-plugin-autostart = "2"
-# Keep the installed app current from GitHub Releases (docs/72). Desktop only,
+# Keep the installed app current from GitHub Releases (docs/76). Desktop only,
 # for the same reason as autostart: a phone updates through its store.
 tauri-plugin-updater = "2"
 # relaunch() after an update has been installed. Only the updater needs it.

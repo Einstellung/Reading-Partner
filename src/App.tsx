@@ -334,7 +334,7 @@ export default function App() {
     ready: bootstrapped,
     syncReport,
   } = useShellBootstrap({ settingsOpen: settingsShowing || readerSettings, pushToast });
-  // A downloaded desktop update, drawn as a row in the sidebar (docs/72).
+  // A downloaded desktop update, drawn as a row in the sidebar (docs/76).
   const appUpdateState = useAppUpdate();
   const fingerDraw = !!device?.fingerDraw;
 

@@ -1,5 +1,5 @@
 // When the desktop app looks for a new version and what it does with one
-// (docs/72). The host calls are in updater.ts; this file is the schedule and
+// (docs/76). The host calls are in updater.ts; this file is the schedule and
 // the state, with the host and the clock passed in so it can be tested.
 //
 // The desktop app is resident — it starts with the machine and closes to the

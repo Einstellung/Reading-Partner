@@ -683,7 +683,7 @@ export function IconChevronRight({ size = 20 }: IconProps) {
 	);
 }
 
-// The shell sidebar's "Restart to update" (docs/72): an arrow coming round to
+// The shell sidebar's "Restart to update" (docs/76): an arrow coming round to
 // where it started.
 export function IconRestart({ size = 20 }: IconProps) {
 	return (

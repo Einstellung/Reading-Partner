@@ -67,7 +67,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        // Self-update from GitHub Releases (docs/72): the frontend checks,
+        // Self-update from GitHub Releases (docs/76): the frontend checks,
         // downloads in the background and installs when the user says so;
         // process is only for the relaunch that follows.
         .plugin(tauri_plugin_updater::Builder::new().build())

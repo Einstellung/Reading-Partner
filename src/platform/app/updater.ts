@@ -1,4 +1,4 @@
-// Self-update of the desktop app from GitHub Releases (docs/72): the host half.
+// Self-update of the desktop app from GitHub Releases (docs/76): the host half.
 // The schedule and the state are in update-policy.ts; this file binds them to
 // the updater and process plugins and holds the one runner the app uses.
 //

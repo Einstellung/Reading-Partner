@@ -92,7 +92,7 @@ export default function AppSidebar(props: {
   // hangs off them rather than off a control of its own.
   lumenShown: boolean;
   onToggleLumen: () => void;
-  // A new desktop version downloaded and waiting (docs/72). The row appears
+  // A new desktop version downloaded and waiting (docs/76). The row appears
   // only then, above Settings, and restarts into it on a click. Omitted, or
   // "none", draws nothing — which is every phone and every check that found
   // nothing.
