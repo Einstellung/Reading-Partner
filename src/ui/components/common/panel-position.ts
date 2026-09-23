@@ -1,7 +1,7 @@
 // Where a floating panel goes: given an anchor, the panel's measured size and
 // the usable viewport, this returns the viewport coordinates of its top-left
 // corner. Every floating panel that escapes its container (see
-// docs/pitfall/68-overflow-x-auto-clips-the-other-axis.md) is `position: fixed`
+// docs/pitfall/overlay/68-overflow-x-auto-clips-the-other-axis.md) is `position: fixed`
 // and has to place itself, so the arithmetic lives here instead of once per
 // component.
 //

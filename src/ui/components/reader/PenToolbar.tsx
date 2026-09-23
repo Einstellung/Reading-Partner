@@ -95,7 +95,7 @@ export default function PenToolbar({
 	}, [paletteOpen, horizontal, viewport, margin]);
 
 	// A press outside shuts the palette. pointerdown, not mousedown, and capture:
-	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
+	// docs/pitfall/webview/67-webkit-tap-does-not-focus-a-button.md.
 	useEffect(() => {
 		if (!paletteOpen) return;
 		function onDown(e: PointerEvent) {

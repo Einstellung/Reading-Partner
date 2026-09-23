@@ -90,7 +90,7 @@ jobs:
       # the placeholder icon, not ours. Overwrite those PNGs with our own set;
       # the filenames match the template's Contents.json, so it still resolves.
       # Our committed set is RGB with no alpha (App-Store-valid, including the
-      # 1024 marketing icon). See docs/pitfall/34-ios-init-default-icon-alpha.md.
+      # 1024 marketing icon). See docs/pitfall/ios-build/34-ios-init-default-icon-alpha.md.
       - name: Apply our app icon to the iOS project
         run: |
           set -euo pipefail
@@ -117,7 +117,7 @@ jobs:
       # script reads the schemes from tauri.conf.json (the same source the
       # build script reads) and is idempotent, so a cold cache that does run
       # the build script is fine. See
-      # docs/pitfall/157-a-cached-crate-never-replays-its-build-script.md.
+      # docs/pitfall/ios-build/157-a-cached-crate-never-replays-its-build-script.md.
       - name: Register the deep-link schemes in Info.plist
         run: bun scripts/ios-deep-link-plist.ts inject
 
@@ -138,7 +138,7 @@ jobs:
       # (vmsize >= filesize); the re-signers' replace-an-existing-signature path
       # rewrites the layout correctly, unlike their add-from-nothing path. No
       # entitlements are needed (the deep-link scheme is a CFBundleURLTypes
-      # entry, not an entitlement). See docs/pitfall/35-ios-unsigned-linkedit-vmsize.md.
+      # entry, not an entitlement). See docs/pitfall/ios-build/35-ios-unsigned-linkedit-vmsize.md.
       - name: Ad-hoc sign the app so re-signing keeps a valid __LINKEDIT
         run: |
           set -euo pipefail

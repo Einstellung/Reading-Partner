@@ -95,7 +95,7 @@ dream 按同一份契约也是蒸馏器：源是 observation，产出是 stateme
 
 一个单元可回收，当且仅当水位到末尾、pass 成功、宽限期过了。动作由源登记表那一行给：删；截到尾部（`info-feedback.jsonl` 留 `FEEDBACK_TAIL` 那 30 行）；降到不同步的本地冷层。
 
-同步安全：同步范围内的文件不许直接删，对端会把它原样推回来（坑 [208](../pitfall/208-file-deletion-does-not-survive-sync.md)）。两条路——走 `records` / `lines` 合并的文件加一行墓碑，就是 `deleted-observations.jsonl` 的形状；或者整文件退役走 `requestRemotePurge()`，远端删掉了才删本地。范围外的路径直接删。
+同步安全：同步范围内的文件不许直接删，对端会把它原样推回来（坑 [208](../pitfall/storage/208-file-deletion-does-not-survive-sync.md)）。两条路——走 `records` / `lines` 合并的文件加一行墓碑，就是 `deleted-observations.jsonl` 的形状；或者整文件退役走 `requestRemotePurge()`，远端删掉了才删本地。范围外的路径直接删。
 
 代价按请求算不按字节：Drive 上一文件一请求，所以"合并成更少的文件"优先于"删掉更多的文件"。每晚给回收一个请求预算，超了等下一晚；脏比例不到阈值就整晚不扫，判据形状取自 Kafka 的 `min.cleanable.dirty.ratio`。
 

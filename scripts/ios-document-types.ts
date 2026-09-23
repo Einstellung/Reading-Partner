@@ -65,7 +65,7 @@ function verify(target: string): void {
   if (missing.length > 0) {
     fail(
       `${target} does not claim ${missing.join(", ")} — the share sheet and Files would not ` +
-        "offer this app for one. See docs/pitfall/184-info-ios-plist-merges-at-build-time.md.",
+        "offer this app for one. See docs/pitfall/ios-build/184-info-ios-plist-merges-at-build-time.md.",
     );
   }
   console.log(`document types present: ${required.join(", ")}`);

@@ -22,7 +22,7 @@
 
 ## gen/apple 接线清单
 
-`src-tauri/gen/apple` 不入库，CI 里 `tauri ios init --ci` 生成，`tauri ios build` 构建。deep-link 插件的 build.rs 用 `update_info_plist` 从 `tauri.conf.json` 的 `plugins.deep-link.mobile[].scheme` 写 Info.plist 的 `CFBundleURLTypes`，但这是编译那个 crate 的副作用：CI 的 rust-cache 一命中就不跑，`gen/apple` 又每次现生成，键会整个消失（坑 [157](../pitfall/157-a-cached-crate-never-replays-its-build-script.md)）。所以 iOS 两条 workflow 在 init 之后自己跑 `bun scripts/ios-deep-link-plist.ts inject` 注入（源头仍是 `tauri.conf.json`），并在 ipa 上跑同一个脚本的 `verify` 断言，缺 scheme 就让构建失败。
+`src-tauri/gen/apple` 不入库，CI 里 `tauri ios init --ci` 生成，`tauri ios build` 构建。deep-link 插件的 build.rs 用 `update_info_plist` 从 `tauri.conf.json` 的 `plugins.deep-link.mobile[].scheme` 写 Info.plist 的 `CFBundleURLTypes`，但这是编译那个 crate 的副作用：CI 的 rust-cache 一命中就不跑，`gen/apple` 又每次现生成，键会整个消失（坑 [157](../pitfall/ios-build/157-a-cached-crate-never-replays-its-build-script.md)）。所以 iOS 两条 workflow 在 init 之后自己跑 `bun scripts/ios-deep-link-plist.ts inject` 注入（源头仍是 `tauri.conf.json`），并在 ipa 上跑同一个脚本的 `verify` 断言，缺 scheme 就让构建失败。
 
 必须落地的配置（已在本分支完成，除占位符替换）：
 
@@ -48,7 +48,7 @@ gen/apple 落地后要核对（后续批次接上时验一遍）：
 
 ## 真机待验项
 
-以下只能上真机确认。0.9.2 build 48 和 0.10.1 build 53 授权完 Safari 报「网址无效」不属于这里的任何一条：那是包里 `CFBundleURLTypes` 丢了（坑 [157](../pitfall/157-a-cached-crate-never-replays-its-build-script.md)），CI 已经加了注入和断言。
+以下只能上真机确认。0.9.2 build 48 和 0.10.1 build 53 授权完 Safari 报「网址无效」不属于这里的任何一条：那是包里 `CFBundleURLTypes` 丢了（坑 [157](../pitfall/ios-build/157-a-cached-crate-never-replays-its-build-script.md)），CI 已经加了注入和断言。
 
 - Safari 授权后经自定义 scheme 跳回 app，`onOpenUrl` 能收到完整回调 URL 且 state 比对通过。
 - 自定义 scheme 跳回前 Safari 会弹一次"用 App 打开?"插页，是固有体验；要去掉得上 ASWebAuthenticationSession（需原生插件），本轮不做。

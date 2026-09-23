@@ -31,7 +31,7 @@ The audio half of this feature is mostly already paid for: `plugins/voice` is a 
 
 Measured in-repo on iPhone 16 / iOS 26.6, 28 real holds: press-to-first-audio-buffer median 1082 ms (range 490–1277) when the stack is rebuilt per press vs 304 ms (120–316) when inherited; sentence-head survival 2/13 vs 9/9. Step breakdown from one cold press: permission +0 ms, session configure+activate +75 ms, `setVoiceProcessingEnabled(true)` returns +769 ms, installTap+`engine.start()` +950 ms, first buffer +1063 ms. The recognizer half (locale, model, `bestAvailableAudioFormat`, `prepareToAnalyze`, `analyzer.start`) is only 80–180 ms. A pre-roll queue between the two halves recovered nothing (4 of 5 presses buffered 0 frames). For a companion you barge into, the only way to hit sub-300 ms is to keep the engine alive with `pause()`, never `stop()`.
 
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/166-the-microphone-opens-after-the-user-has-started-talking.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/native-audio/166-the-microphone-opens-after-the-user-has-started-talking.md
 - Date: 2026-08-22
 - Confidence: high
 - Runs on device: ios-yes
@@ -41,7 +41,7 @@ Measured in-repo on iPhone 16 / iOS 26.6, 28 real holds: press-to-first-audio-bu
 
 Measured in-repo with a four-stage probe (off / session / engine / tap / recording), because Apple documents what the indicator means but never what triggers it. VPIO cannot be built until the engine runs, so the 690 ms cannot be paid in advance without lighting the dot. Only two shapes exist: light it on entering voice mode (dot on before the user speaks), or build on first hold and `pause()` after (dot on from the user's first word until voice mode ends). The repo took the second. A persistent "talk to me any time" companion collapses these into one: the dot is lit for the whole reading session. That is also exactly what App Store guideline 2.5.14 wants (visible indication while recording), so it is a UX cost, not a review risk.
 
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/167-the-microphone-indicator-lights-at-engine-start.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/native-audio/167-the-microphone-indicator-lights-at-engine-start.md
 - Date: 2026-08-22
 - Confidence: high
 - Runs on device: ios-yes
@@ -81,7 +81,7 @@ Apple DTS (Quinn): "we allow apps that start an audio recording session in the f
 
 Measured in-repo: on auto-lock the app is backgrounded, the input route becomes `in=[]`, the tap stops delivering buffers entirely, yet `interruptionNotification` never fires and `engine.isRunning` is still true. The stack looks healthy and is dead. The plugin now watches three separate signals — interruption began, input route went empty, and app left screen — and tears down on any of them between holds. Also relevant: `engine.start()` throws OSStatus 561145187 ('!rec') because iOS has refused to start recording from the background since 12.4, so a stream that breaks in the background cannot be restarted there.
 
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/162-a-locked-screen-takes-the-microphone-without-an-interruption.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/native-audio/162-a-locked-screen-takes-the-microphone-without-an-interruption.md
 - Date: 2026-08
 - Confidence: high
 - Runs on device: ios-yes
@@ -130,7 +130,7 @@ Apple engineer, Developer Forums thread 770862, June 2025: "These feature flags 
 
 Measured in-repo on the iPad simulator running the real WKWebView with the app's `tauri://` custom protocol, despite `app.security.headers` setting COOP=same-origin and COEP=require-corp in tauri.conf.json (which does work on desktop WebKitGTK). Consequences for a companion: no SharedArrayBuffer ring buffer between an AudioWorklet and the main thread, and no multi-threaded WASM — so an in-webview whisper.cpp / sherpa-onnx / VAD build gets one thread. PDFium still rendered fine in the same run (engineReady 256 ms, open 12 ms, render 730 ms) because that wasm is not a pthread build. COEP=require-corp does still block cross-origin subresources, which is why external images route through a Rust `img:` scheme.
 
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/21-embedpdf-worker-engine-hangs.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/embedpdf/21-embedpdf-worker-engine-hangs.md
 - Date: 2026-06
 - Confidence: high
 - Runs on device: ios-yes
@@ -140,7 +140,7 @@ Measured in-repo on the iPad simulator running the real WKWebView with the app's
 
 Measured in-repo on a real iPad: the `Copy | Look Up | Translate` bar is 44 px tall, sits 15 px from the selection, flips above/below depending on whether the selection centre is above the safe-area vertical midpoint, and is clamped horizontally into the screen. It is absent from the DOM, invisible to `elementFromPoint`, and touches landing on it never reach the page. The repo already deleted one floating control for this reason (2026-08-20). A draggable companion has to either avoid the selection neighbourhood or be re-measured against both placements.
 
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/143-ios-puts-its-selection-callout-below-the-selection.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/touch/143-ios-puts-its-selection-callout-below-the-selection.md
 - Date: 2026-08-20
 - Confidence: high
 - Runs on device: ios-yes
@@ -150,7 +150,7 @@ Measured in-repo on a real iPad: the `Copy | Look Up | Translate` bar is 44 px t
 
 WKWebView's long-standing `position: fixed` behavior is flicker and detachment during inertial scroll; the standard fix is `transform: translateZ(0)` or `will-change: transform` to force a separate compositor layer, plus keeping fixed elements at body level rather than inside scroll containers. The repo measured the cost directly: Radix's popper uses `transform: translate(x,y)`, which makes the overlay a composited layer, and the engine drops LCD subpixel antialiasing for grayscale — edge pixels went from (133,204,242) to (212,212,212) on identical glyphs at identical positions. `filter: blur()` / `backdrop-filter: blur(20px)` are separately called out as frame-droppers on older devices.
 
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/86-transformed-popper-drops-subpixel-text.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/overlay/86-transformed-popper-drops-subpixel-text.md
 - Date: 2026-05
 - Confidence: high
 - Runs on device: ios-yes
@@ -209,22 +209,22 @@ Live2D's SDK page: "Individuals and small-scale businesses are exempt from the l
 ### Press to first audio buffer, microphone stack rebuilt each press (iPhone 16, iOS 26.6, n=13)
 
 - Value: 1082 ms median, range 490–1277 ms; transcript head intact 2/13
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/166-the-microphone-opens-after-the-user-has-started-talking.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/native-audio/166-the-microphone-opens-after-the-user-has-started-talking.md
 
 ### Press to first audio buffer, microphone stack inherited (iPhone 16, iOS 26.6, n=9)
 
 - Value: 304 ms median, range 120–316 ms; transcript head intact 9/9
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/166-the-microphone-opens-after-the-user-has-started-talking.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/native-audio/166-the-microphone-opens-after-the-user-has-started-talking.md
 
 ### Cost of setVoiceProcessingEnabled(true) alone (rebuilds the VPIO unit)
 
 - Value: ~690 ms
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/166-the-microphone-opens-after-the-user-has-started-talking.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/native-audio/166-the-microphone-opens-after-the-user-has-started-talking.md
 
 ### Recognizer half of startup (locale, model, bestAvailableAudioFormat, prepareToAnalyze, analyzer.start)
 
 - Value: 80–180 ms
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/166-the-microphone-opens-after-the-user-has-started-talking.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/native-audio/166-the-microphone-opens-after-the-user-has-started-talking.md
 
 ### Tauri Channel: raw-bytes payload size above which an extra IPC round trip is added
 
@@ -259,7 +259,7 @@ Live2D's SDK page: "Individuals and small-scale businesses are exempt from the l
 ### Volatile ASR result throttling needed (results arrive in bursts, six in one millisecond)
 
 - Value: throttled to 10 Hz outbound; finals never throttled
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/160-volatile-results-arrive-in-bursts.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/native-audio/160-volatile-results-arrive-in-bursts.md
 
 ### Maximum uncompressed iOS app size (deployment target iOS 9.0+)
 
@@ -294,12 +294,12 @@ Live2D's SDK page: "Individuals and small-scale businesses are exempt from the l
 ### iPad system selection callout dimensions (invisible to the DOM, eats touches)
 
 - Value: 44 px tall, 15 px from the selection, flips above/below at the safe-area vertical midpoint
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/143-ios-puts-its-selection-callout-below-the-selection.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/touch/143-ios-puts-its-selection-callout-below-the-selection.md
 
 ### PDFium render timings measured in the real iPad WKWebView under tauri://
 
 - Value: engineReady 256 ms, open 12 ms, render 730 ms (200×200)
-- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/21-embedpdf-worker-engine-hangs.md
+- Source: file:///home/xinyuan/Documents/Github/Reading-Partner/docs/pitfall/embedpdf/21-embedpdf-worker-engine-hangs.md
 
 ### OSStatus returned when AVAudioEngine.start() is called from the background
 

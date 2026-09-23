@@ -11,7 +11,7 @@
 ## 将来做时已知的事实
 
 - `src/memory/gc` 不存在。规则在 58「回收：memory/gc」：水位到末尾、pass 成功、宽限期过了三条判据，动作由源登记表那一行给（删 / 截到尾部 / 降到本地冷层）。palace 每行的 `gc` 字段和 `DistillSource.afterEnd`（`src/memory/distill/sources.ts`）已经登记，只记录不动作。
-- 同步范围内的文件不许直接删，对端会原样推回来（坑 [208](../pitfall/208-file-deletion-does-not-survive-sync.md)）。两条路：走 `records` / `lines` 合并的加一行墓碑，或整文件退役走 `requestRemotePurge()`。永久豁免名单写在 58，要由测试盯着。
+- 同步范围内的文件不许直接删，对端会原样推回来（坑 [208](../pitfall/storage/208-file-deletion-does-not-survive-sync.md)）。两条路：走 `records` / `lines` 合并的加一行墓碑，或整文件退役走 `requestRemotePurge()`。永久豁免名单写在 58，要由测试盯着。
 - dream 只做三阶段的第 2 步，`src/memory/dream/run.ts` 头注释写明。第 1 步付清蒸馏欠账（含 `threads-info-<date>.json` 这类读者不会「挂断」的源）和第 3 步回收都没有。
 - pass 运行器还是 `arrears.ts` 那个 30 分钟扫描器。58 定它变成一种 legion run kind，挂进 `legion/schedule`，门槛常数不变。
 - 蒸馏源已登记六种：`src/reading/distill/source.ts` 五种（`reading-thread`、`annotations`、`retell-thread`、`talk-thread`、`rehearsal-run`），加 `src/info/briefer/distill-source.ts` 一种。

@@ -2,7 +2,7 @@
 
 2026-09-22。回答一个问题：现有阅读引擎（EmbedPDF + PDFium WASM）能不能在 iPhone 的 WKWebView 里跑。
 
-能用，有一处硬伤：不嵌字体的中文 PDF 一个汉字都不画（[坑 376](../pitfall/376-a-cjk-font-that-is-not-embedded-renders-nothing.md)）。
+能用，有一处硬伤：不嵌字体的中文 PDF 一个汉字都不画（[坑 376](../pitfall/embedpdf/376-a-cjk-font-that-is-not-embedded-renders-nothing.md)）。
 
 引擎本身在 iPhone 17 模拟器的 WKWebView 里没有任何异常：worker 引擎起得来、不走回退，40MB / 45 页的论文 0.4 秒出第一页，翻页一两百毫秒，真手指滚动中位帧 17ms，pinch 放大到 3.5 倍正常。两个真正的问题不在引擎：fit-width 下正文只有 1.1mm 高，是手机正文字号的四成，不放大读不了；单开一本论文 WebContent 进程的 phys_footprint 峰值 700-760MB，模拟器不管，真机 jetsam 管。
 
@@ -85,7 +85,7 @@
 
 pinch 放大：`pinch out 2.0` 把 zoom 从 0.656 带到 2.32（3.5 倍）。放大后横向平移正常，scrollLeft 从 0 拖到 795（上限 1018），文字锐利、公式完整。但 DOM 里光栅是混着的：手势前就在屏上的页仍挂着旧位图（naturalWidth 1204 对 CSS 宽 1420，每 CSS 像素 0.85 个设备像素），新进视野的页按 dpr 3 重新出图，刚放大的那一页会软一下。
 
-pinch 缩小走驱动脚本的坑，见 [坑 375](../pitfall/375-pinch-in-needs-a-scale-below-one.md)；`pinch in 0.5` 不抛但 zoom 停在 2.32 回不来。驱动环境本身的坑见 [坑 374](../pitfall/374-the-idb-venv-does-not-survive-tmp.md)。
+pinch 缩小走驱动脚本的坑，见 [坑 375](../pitfall/ios-build/375-pinch-in-needs-a-scale-below-one.md)；`pinch in 0.5` 不抛但 zoom 停在 2.32 回不来。驱动环境本身的坑见 [坑 374](../pitfall/ios-build/374-the-idb-venv-does-not-survive-tmp.md)。
 
 ## 5 长按选文字
 
@@ -108,7 +108,7 @@ Letter 页宽压进 2.62 英寸的屏，线性缩到 30.8%。fit-width 下论文
 
 嵌了字体的中文（Noto Serif CJK 子集，CIDFontType0）简繁全对、无豆腐块，和 poppler 参考图逐行一致。矢量图（Transformer 结构图）、位图插图、公式与希腊字母全部正确锐利。
 
-没嵌字体的中文汉字全部消失，同一行的 ASCII 照常画出，`openDocumentBuffer` 正常 resolve、pageCount 对、error 是 null、控制台一行都没有。归因：引擎以 `fontFallback: null` 创建，而 pdfium.wasm 不带 CJK 字体；`fontFallback` 是一份字体清单不是开关，字体要宿主自己备自己喂。完整归因和摄入期的提前判据在 [坑 376](../pitfall/376-a-cjk-font-that-is-not-embedded-renders-nothing.md)。
+没嵌字体的中文汉字全部消失，同一行的 ASCII 照常画出，`openDocumentBuffer` 正常 resolve、pageCount 对、error 是 null、控制台一行都没有。归因：引擎以 `fontFallback: null` 创建，而 pdfium.wasm 不带 CJK 字体；`fontFallback` 是一份字体清单不是开关，字体要宿主自己备自己喂。完整归因和摄入期的提前判据在 [坑 376](../pitfall/embedpdf/376-a-cjk-font-that-is-not-embedded-renders-nothing.md)。
 
 ![没嵌字体的中文 PDF 在 iPhone 模拟器上一个汉字都不画](../assets/research/pdfium-cjk-not-embedded.jpg)
 

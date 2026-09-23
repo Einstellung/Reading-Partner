@@ -59,7 +59,7 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
 
   // A press outside shuts the panel. Not blur: WebKit does not focus a button
   // when it is tapped, so on a touch device the dot never holds focus and a blur
-  // never comes — docs/pitfall/67-webkit-tap-does-not-focus-a-button.md.
+  // never comes — docs/pitfall/webview/67-webkit-tap-does-not-focus-a-button.md.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {

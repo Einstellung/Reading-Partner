@@ -72,7 +72,7 @@ WebKit's Safari 26.0 features post states "WebGPU has been enabled in Safari Tec
 
 ONNX Runtime Web's own docs: "Only when the browser supports WebAssembly multi-threading and `crossOriginIsolated` mode is enabled, multi-threading will be enabled"; everything else falls back to single-threaded wasm. The repo measured `crossOriginIsolated === false` and `SharedArrayBuffer === undefined` on the real iPad WKWebView under `tauri://` despite COOP=same-origin and COEP=require-corp being set in `tauri.conf.json`, so ORT Web would run one thread here. Two further ORT constraints bite this repo specifically: the proxy worker "cannot work in a Content Security Policy (CSP) restricted environment. This is because the proxy worker uses `Blob` to create a Web Worker" — and this app's CSP is `default-src 'self'` — and "the proxy worker cannot work with WebGPU EP" anyway. wasm SIMD does not require cross-origin isolation and has been in Safari since 16.4, so it survives. The arithmetic says one thread suffices: a dense MLP costs about 2 FLOP per parameter per inference, so 1M parameters at 60 Hz is 0.12 GFLOP/s and 5M at 60 Hz is 0.6 GFLOP/s, one to a few percent of a single modern Arm core running fp32 SIMD.
 
-- Source: https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html ; `docs/pitfall/21-embedpdf-worker-engine-hangs.md` (repo, measured); `src-tauri/tauri.conf.json`
+- Source: https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html ; `docs/pitfall/embedpdf/21-embedpdf-worker-engine-hangs.md` (repo, measured); `src-tauri/tauri.conf.json`
 - Date: 2026-09-10 (ORT docs fetched); repo measurement 2026-06
 - Confidence: high for the constraints; the GFLOP/s figures are derived, not measured
 - Runs on device: ios-yes (the isolation measurement); ios-untested (the inference)
@@ -153,7 +153,7 @@ three.js creates `Skeleton.boneTexture` automatically when the bone count exceed
 
 From the code: `VoicePlugin.emitSpeech`'s comment states the rule outright — the dictation reducer's union "has no default branch (src/ai/voice/dictation.ts)", so a fifth `kind` on `dictation` breaks it, while "a second name costs nothing on either side — Swift's `trigger` fans out by name and the listener registry is keyed by the name the webview passed". So a pose stream is a third event name beside `dictation`, `speech` and `conversation`. Shape it as `{t0, dt, frames: [[…]]}`: one event carrying N frames with a base timestamp and an interval, replayed against the local clock, exactly the way `docs/45` already specifies for the v2 TTS RMS envelope ("随句子开始一次性发过去，TS 侧按本地时钟回放"). The consumer needs no new machinery — `smoothLevel` in `src/ui/components/orb/orb.ts` already applies its per-frame constant over an arbitrary gap via `1 - (1-k)^(dt/FRAME_MS)`, which is the interpolation a batched stream needs, and `docs/45` already forbids React state on this path: "走 ref + rAF 写 CSS 自定义属性，一次 re-render 都不要". Pitfall 160 is the standing warning about the opposite: volatile results arriving six-per-millisecond, each one "一次 IPC 加一次整棵重渲染", fixed by throttling emission rather than by making the consumer faster.
 
-- Source: `plugins/voice/ios/Sources/VoicePlugin.swift:596-611`; `src/ui/components/orb/orb.ts`; `docs/companion/45-陪伴的形态.md`; `docs/pitfall/160-volatile-results-arrive-in-bursts.md`
+- Source: `plugins/voice/ios/Sources/VoicePlugin.swift:596-611`; `src/ui/components/orb/orb.ts`; `docs/companion/45-陪伴的形态.md`; `docs/pitfall/native-audio/160-volatile-results-arrive-in-bursts.md`
 - Date: 2026-09-10
 - Confidence: high
 - Runs on device: ios-yes (the carrier is the shipping one)
@@ -162,7 +162,7 @@ From the code: `VoicePlugin.emitSpeech`'s comment states the rule outright — t
 
 `VoicePlugin.emit` wraps every `trigger` in `DispatchQueue.main.async`, and the comment gives the reason: "The listener table inside Tauri's Plugin is a plain dictionary written by registerListener on the IPC queue and read by trigger; funnelling every emission through one queue keeps the reads serialised among themselves." That serialisation requirement is real, but it means a per-frame stream puts 60 JSON-serialise-plus-eval jobs per second on the main queue. Because `send_user_message` takes its same-thread fast path when already on the main thread, there is no extra event-loop hop — the `evaluateJavaScript` happens inline in that main-queue block. Pitfall 141 is the standing measurement of what main-thread occupancy does here: 90 ms of block froze the screen for 82–119 ms. Nothing suggests one small eval per frame approaches that, but the budget is shared with the reader, the compositor and the audio graph's own main-thread work, and it is the argument for batching several frames per event rather than one event per frame.
 
-- Source: `plugins/voice/ios/Sources/VoicePlugin.swift:561-569`; `tauri-runtime-wry-2.11.4/src/lib.rs:235-255`; `docs/pitfall/141-a-blocked-main-thread-stops-the-scroll-outright.md`
+- Source: `plugins/voice/ios/Sources/VoicePlugin.swift:561-569`; `tauri-runtime-wry-2.11.4/src/lib.rs:235-255`; `docs/pitfall/webview/141-a-blocked-main-thread-stops-the-scroll-outright.md`
 - Date: 2026-09-10
 - Confidence: high for the mechanism, unmeasured for the cost
 - Runs on device: ios-untested (cost not measured)
@@ -227,7 +227,7 @@ From the code: `VoicePlugin.emitSpeech`'s comment states the rule outright — t
 ### Existing level-event rate from `plugins/voice` (repo, measured)
 
 - Value: 9.6–10.0 Hz over twelve holds; the 15 Hz throttle in `DictationRun.levelInterval` has never fired because the tap buffer arrives slower than the threshold
-- Source: `docs/pitfall/161-the-tap-buffer-decides-the-level-rate.md`; `plugins/voice/ios/Sources/DictationRun.swift:252`
+- Source: `docs/pitfall/native-audio/161-the-tap-buffer-decides-the-level-rate.md`; `plugins/voice/ios/Sources/DictationRun.swift:252`
 
 ## Rejected
 

@@ -77,7 +77,7 @@ jobs:
       # logo) template and ignores src-tauri/icons/ios/. Overwrite those PNGs
       # with our own set (identical filenames, so the template's Contents.json
       # still resolves) so the simulator screenshot shows our logo, matching the
-      # sideload line. See docs/pitfall/34-ios-init-default-icon-alpha.md.
+      # sideload line. See docs/pitfall/ios-build/34-ios-init-default-icon-alpha.md.
       - name: Apply our app icon to the iOS project
         run: |
           set -euo pipefail

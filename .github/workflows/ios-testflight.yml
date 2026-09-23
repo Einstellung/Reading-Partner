@@ -28,7 +28,7 @@
 # cloud-managed distribution certificates to App Manager and Developer keys,
 # and the export step then dies with "Cloud signing permission error" after a
 # successful archive. A key's access level cannot be edited after generation.
-# See docs/pitfall/47-asc-key-role-cloud-signing.md.
+# See docs/pitfall/ios-build/47-asc-key-role-cloud-signing.md.
 
 name: iOS TestFlight
 
@@ -119,7 +119,7 @@ jobs:
       # template's 1024 marketing icon carries an alpha channel, which App Store
       # ingestion rejects outright. Our committed set is RGB with no alpha and
       # the filenames match the template's Contents.json, so it still resolves.
-      # See docs/pitfall/34-ios-init-default-icon-alpha.md.
+      # See docs/pitfall/ios-build/34-ios-init-default-icon-alpha.md.
       - name: Apply our app icon to the iOS project
         run: |
           set -euo pipefail
@@ -147,7 +147,7 @@ jobs:
       # TestFlight with nothing red anywhere. The script reads the schemes from
       # tauri.conf.json (the same source the build script reads) and is
       # idempotent, so a cold cache that does run the build script is fine.
-      # See docs/pitfall/157-a-cached-crate-never-replays-its-build-script.md.
+      # See docs/pitfall/ios-build/157-a-cached-crate-never-replays-its-build-script.md.
       - name: Register the deep-link schemes in Info.plist
         run: bun scripts/ios-deep-link-plist.ts inject
 

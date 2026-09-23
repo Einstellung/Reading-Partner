@@ -123,7 +123,7 @@ HTML 版存在时质量胜过启发式重排一大截，但 2024 年以后也有
 
 ## 5 坑
 
-两条已编号：[377](../pitfall/377-arxiv-html-returns-a-200-shell.md)（`arxiv.org/html/<id>` 没有 HTML 版时可能返回 200）、[378](../pitfall/378-a-full-page-bitmap-watermark-derails-graphic-detection.md)（中文期刊 PDF 的整页位图水印把图形检测带偏）。
+两条已编号：[377](../pitfall/storage/377-arxiv-html-returns-a-200-shell.md)（`arxiv.org/html/<id>` 没有 HTML 版时可能返回 200）、[378](../pitfall/pdfjs-extract/378-a-full-page-bitmap-watermark-derails-graphic-detection.md)（中文期刊 PDF 的整页位图水印把图形检测带偏）。
 
 其它实测行为，没给编号：
 

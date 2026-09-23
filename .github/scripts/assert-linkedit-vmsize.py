@@ -7,7 +7,7 @@ LC_CODE_SIGNATURE and grow __LINKEDIT's filesize without growing its vmsize, so
 dyld aborts at launch with "segment __LINKEDIT filesize exceeds vmsize". Ad-hoc
 signing in CI leaves a page-aligned __LINKEDIT (vmsize >= filesize); this guard
 fails the build if that invariant is ever violated. See
-docs/pitfall/35-ios-unsigned-linkedit-vmsize.md.
+docs/pitfall/ios-build/35-ios-unsigned-linkedit-vmsize.md.
 
 Handles a thin little-endian arm64 Mach-O (MH_MAGIC_64), which is what
 `tauri ios build --target aarch64` emits. Exits non-zero on any problem.

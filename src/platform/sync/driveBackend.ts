@@ -2,7 +2,7 @@
 // Tauri http plugin (cleanTauriFetch) to bypass the webview's CORS, with the
 // access token in the Authorization header and an empty Origin so the plugin
 // drops the webview origin (pitfall 15). The capability http scope already
-// allows any https host (docs/pitfall/28-http-scope-is-unix-glob.md), so googleapis.com needs no new entry.
+// allows any https host (docs/pitfall/network/28-http-scope-is-unix-glob.md), so googleapis.com needs no new entry.
 //
 // Layout (docs/13): a visible "Reading Partner" folder holding books/ and data/
 // subfolders. Every tracked file is followed by Drive file id (stored in

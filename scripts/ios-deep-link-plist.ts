@@ -14,7 +14,7 @@
 // Info.plist keeps no URL types at all. Nothing fails: the ipa builds, uploads
 // and installs, and Google's OAuth callback then hits a scheme no app claims —
 // Safari says the address is invalid and sign-in is dead. Builds 48 and 53
-// shipped that way. See docs/pitfall/157-a-cached-crate-never-replays-its-build-script.md.
+// shipped that way. See docs/pitfall/ios-build/157-a-cached-crate-never-replays-its-build-script.md.
 //
 // The injection mirrors what the build script writes (same key layout, one dict
 // per mobile entry), so a cold cache that does run the build script produces the
@@ -505,7 +505,7 @@ function verify(target: string): void {
   if (missing.length > 0) {
     fail(
       `${target} does not claim ${missing.join(", ")} — OAuth callbacks would land nowhere. ` +
-        "See docs/pitfall/157-a-cached-crate-never-replays-its-build-script.md.",
+        "See docs/pitfall/ios-build/157-a-cached-crate-never-replays-its-build-script.md.",
     );
   }
   console.log(`deep-link schemes present: ${required.join(", ")}`);

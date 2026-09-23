@@ -80,8 +80,8 @@ python3 scripts/sideload-ios.py --dev   # 开发者账号，证书 1 年，不�
 
 ## 7. 两个已在产线修掉的坑
 
-- **启动秒崩（__LINKEDIT）**：完全无签名的二进制被 Sideloadly / Dadoum Sideloader 重签时会漏更新 `__LINKEDIT` 段的 vmsize，真机启动即被 dyld 杀掉。产线在出包后先做 ad-hoc 签名，重签名器走「替换签名」的正确路径，规避了这个崩溃。详见 `docs/pitfall/35-ios-unsigned-linkedit-vmsize.md`。
-- **主屏没有我们的图标**：`tauri ios init` 默认塞的是 Tauri 占位图标，产线在 init 后把我们的图标覆盖进去，装完主屏显示的是 Reading Partner 自己的 logo。详见 `docs/pitfall/34-ios-init-default-icon-alpha.md`。
+- **启动秒崩（__LINKEDIT）**：完全无签名的二进制被 Sideloadly / Dadoum Sideloader 重签时会漏更新 `__LINKEDIT` 段的 vmsize，真机启动即被 dyld 杀掉。产线在出包后先做 ad-hoc 签名，重签名器走「替换签名」的正确路径，规避了这个崩溃。详见 `docs/pitfall/ios-build/35-ios-unsigned-linkedit-vmsize.md`。
+- **主屏没有我们的图标**：`tauri ios init` 默认塞的是 Tauri 占位图标，产线在 init 后把我们的图标覆盖进去，装完主屏显示的是 Reading Partner 自己的 logo。详见 `docs/pitfall/ios-build/34-ios-init-default-icon-alpha.md`。
 
 ## 参考
 

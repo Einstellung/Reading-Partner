@@ -96,7 +96,7 @@ export default function CallBubble({
 	}, [anchor.x, anchor.y, messages.length, width, viewport, margin]);
 
 	// A press outside closes the bubble. pointerdown, not mousedown, and capture:
-	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md — on touch the mouse
+	// docs/pitfall/webview/67-webkit-tap-does-not-focus-a-button.md — on touch the mouse
 	// events are compatibility events and the reader's taps on the top bar and the
 	// sidebar never reached this.
 	//

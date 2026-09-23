@@ -67,7 +67,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 	}, [anchor.x, anchor.y, annotation.id, viewport, margin]);
 
 	// A press outside closes the popup. pointerdown, not mousedown, and capture:
-	// docs/pitfall/67-webkit-tap-does-not-focus-a-button.md. A press while an
+	// docs/pitfall/webview/67-webkit-tap-does-not-focus-a-button.md. A press while an
 	// overlay layer is up belongs to that layer, which is portalled under <body>
 	// and so is never inside this ref (base/overlay-layer).
 	useEffect(() => {
