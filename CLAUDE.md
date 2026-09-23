@@ -19,6 +19,8 @@
 
 AI 陪读软件。设计共识在 `docs/`。阅读引擎用 EmbedPDF（PDFium WASM，`src/reading/engine/` 适配层；pdfium.wasm 自托管，`bun run wasm` 从 npm 包拷出）。
 
+设计文档按领域放在 `docs/<domain>/`，索引在 `docs/README.md`。编号全局唯一，新文档取下一个空号。
+
 ## 代码组织
 
 - src 下一个文件夹到十几个文件就去看一眼要不要切子域，不是硬阈值：`platform/app` 是宿主接口面，一个文件一件宿主能力，不切。搬家 commit 纯移动（`git mv` 保历史）加改 import，零逻辑改动。
