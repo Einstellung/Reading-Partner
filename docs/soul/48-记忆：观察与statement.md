@@ -224,7 +224,7 @@ statement 层的检索用同一套方法在 statement 上重新量，量出不�
 
 ## 地基四件
 
-有数据之前先做这四件，检索入口等量过再定。
+已落地（`src/memory/statements/`、`src/memory/observations/tools.ts` 的三种 relation、`src/memory/usage/`）。检索入口等量过再定。
 
 1. statement 存储、字段、`records` 合并。
 2. statement → 观察的边与反向索引，扩 `links.ts`。

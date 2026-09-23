@@ -58,15 +58,14 @@ session 不同步。它是本机的运行时——soul 和它派出的 worker �
 
 ## 顺序
 
-做完的：palace 登记表落地，五张表改成派生，守卫测试上（纯搬运，不改行为）；info 接记忆——读 statement 和观察，五处 `loadProfile()` 全部改读 statement（`assembleReaderSection`），`update_profile` 换成阅读侧那个 `statement_write`（2026-09-13；`threads-info-<date>.json` 进蒸馏源未做）；desk 登记表加那一次装配，五个 AI 入口收成上桌的登记；topic 确认卡（现在归记忆）；门口对话加 sequence 加双段回放。
+做完的：palace 登记表落地，五张表改成派生，守卫测试上（纯搬运，不改行为）；info 接记忆——读 statement 和观察，五处 `loadProfile()` 全部改读 statement（`assembleReaderSection`），`update_profile` 换成阅读侧那个 `statement_write`（2026-09-13；`threads-info-<date>.json` 进蒸馏源已做，见 `src/info/briefer/distill-source.ts`）；desk 登记表加那一次装配，五个 AI 入口收成上桌的登记；topic 确认卡（现在归记忆）；门口对话加 sequence 加双段回放。
 
 2026-09-11 又做完的：登记表的工具（`soul/catalogue.ts`，`list_palace` 和 `list_kind`）、places 和 `go_to`、秘书角色登记进 soul、语音从 `info/briefer` 搬到 `soul/voice`（`voice-call-live.ts` 是 info 桌的接线，留在 info）。
 
 接着：
 
 1. 第一屏的交互，待议。
-2. 存储标识符从 thread 改名 conversation。
-3. Red Box 和 cable 作为第一个生在 palace 里的新东西落地，不再另起私有存储。盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方，见 [68](../companion/68-Lumen与盒子的交互.md)。
-4. 记忆与检索重做。
+2. 存储标识符从 thread 改名 conversation：还没做，代码里仍是 `threadId`（`src/soul/sequence.ts`）。
+3. 记忆与检索重做。
 
-这四条之外，下一步是 soul 搬上 pi harness：soul 一条 lane，本地 worker 各一条，见 [55](./55-legion.md)。
+已落地：Red Box 和 cable 作为第一个生在 palace 里的新东西——盒泛化成 `src/box/`、Lumen 全局常驻当入口、run 结果按 `deliverTo` 写回提问的地方（2026-09-15，见 [68](../companion/68-Lumen与盒子的交互.md)）；soul 搬上 pi harness——soul 一条常驻 lane（`legion/execute/held.ts`），本地 worker 各一条，见 [55](./55-legion.md)。
