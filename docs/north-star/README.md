@@ -7,7 +7,7 @@
 基础设施里设计文档定了、代码还没做的也记在这里。
 
 - [epub](./epub.md) — EPUB 支持,方案见 [39](../reading/39-epub支持调研.md)
-- [phone-reading](./phone-reading.md) — 手机阅读：碎片时间的续读；翻页、Marks 列表、AI、听在这里，显示设置随 docs/70 在做；PDF 不给读，打开直接进课堂（2026-09-22 定）
+- [phone-reading](./phone-reading.md) — 手机阅读：碎片时间的续读；翻页、Marks 列表、AI（EPUB 续读线）、听在这里；显示设置（docs/70）随 v0.21.0 发出；PDF 不给读，打开直接进课堂，随 v0.21.3 发出（[74](../reading/74-手机PDF课堂.md)，AI 真回合与真机未验）
 - [observations](./observations.md) — 仍留在北极星的只有主动联想,其余四项已随 M8 转正
 - [companion](./companion.md) — 形象与养成:形象是 Lumen([66](../companion/66-Lumen.md)),已落地,长按开语音会话([68](../companion/68-Lumen与盒子的交互.md));逗弄、养成推后;主动说话不推后
 - [podcast-video](./podcast-video.md) — 访谈视频:只接 YouTube,播客不做,接法定在 [56](../info/56-YouTube访谈接入.md)
