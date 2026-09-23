@@ -80,15 +80,15 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - 保存那一刻的编排。工具形状现成（`AgentTool`：name / description / TypeBox schema / execute），`src/ai/` 只有机器、零领域工具，收藏工具属于领域。卡片这边已经动过：联合类型已拆成 `CardPayload = InfoCard | ReadingCard | AsideCard`（`src/ui/components/chat/chatParts.ts`），白名单里也已经有 reading 侧的项（`retell-decision`、`aside`），reading 侧的聊天现在会落卡片（`src/reading/session/use-call.ts` 写 `PersistedCardPayload`）。只剩收藏卡这一种还没做。工具名要避开 `add_source`——info 的"订阅源"和 prep 的"摄入 URL"已经各占一次。
 
-  分层上这件事落在 reading：材料进的是 reading 的上下文，编排代码放 `src/reading/` 下。现在已有两条 reading → info 的边（`src/reading/saved-articles.ts`、`src/reading/sources/article.ts`，都只 import `info/extract/sanitize` 这个纯函数模块）；星标在 info 的卡片上、写路径在 reading，由 `App.tsx` 接线，聊天里的保存工具由 `ui/components/info` 装配（ui 可以 import 任何领域）。`info` 的四个子目录（`briefing`、`briefing/speech`、`companion`、`extract`、`sources`）在 `tests/layering.test.ts` 的 LAYER 表里已按真实粒度登记，全图无环，不必再顾虑升级到分组目录。
+  分层上这件事落在 reading：材料进的是 reading 的上下文，编排代码放 `src/reading/` 下。现在已有两条 reading → info 的边（`src/reading/saved-articles.ts`、`src/reading/sources/article.ts`，都只 import `info/extract/sanitize` 这个纯函数模块）；星标在 info 的卡片上、写路径在 reading，由 `App.tsx` 接线，聊天里的保存工具由 `ui/components/info` 装配（ui 可以 import 任何领域）。`info` 现在拆到十余个子目录（`analysis`、`boxes`、`briefer`、`cable`、`collect`、`extract`、`labs`、`meals`、`picture`、`program`、`sources`、`tasking` 等），都在 `tests/layering.test.ts` 的 LAYER 表里按真实粒度登记，全图无环，不必再顾虑升级到分组目录。
 
 - reading 的根聊天。现在没有。所有阅读对话都在 `threads-<bookId>.json` 里，只能从打开的书里进（划线气泡、标记列表、顶栏 AI 按钮的书级 thread）；`LibraryScreen` 一个聊天入口都没有。要新加一个不属于任何书的 thread key 和一个进得去的屏，新收下的材料在那儿浮现。
 
 - info 的根聊天跨天。现在按天分文件：`infoBookId(date)` 返回 `info-<date>`，落成 `threads-info-<date>.json`，thread id 只有 `briefing` / `onboarding` / itemId 三种（`src/info/briefer/call.ts`、`use-info-call.ts`）。"info 有一个根聊天"要一个跨天不变的 key，否则每天换一个根。
 
-- 共用的记忆作用域。AI observations 只有按 topic 一种形态：`ObservationFileStore` 的构造参数就是 topicId，目录是 `memory-<topicId>/`（历史名）。info 侧一条观察也不写，只读画像和反馈日志。跨场景共用的今天只有 `user-profile.md` 一份文件。两个根共用记忆要一个不属于任何 topic 的记忆作用域，且从第一天就是它——先按 topic 建再合并就是那次要避免的迁移。
+- 共用的记忆作用域。已解决：`ObservationFileStore` 2026-09-06 改成全库一份目录（`observations/`，`src/memory/observations/store.ts`），topic 只是索引维度不再是目录边界，两个根天然共用同一份 observation 仓。info 侧仍然一条观察也不写，只读画像和反馈日志——写观察走 dream，见 [60](./60-info：白宫与Red Boxes.md) 的记忆回路。
 
-- 引用时的三件事。时效、证据不全两条已落地，见 `src/reading/saved-article-tools.ts`：`publishedAt` 进了引用路径（`publishedDay`），`summaryOnly` 跟着材料进了 reading 的 prompt，工具由 `src/reading/turn.ts` 装配（`buildSavedArticleTools`、`SAVED_ARTICLES_PROMPT`）。只剩第三条：用了哪几条材料的可见性。现在没有落点：工具痕迹是瞬时的，成功即从行里消失，从不落盘（`src/ai/tool-status.ts`）。可见性既然是闸的一部分，就不能靠一个成功就消失的东西。
+- 引用时的三件事。时效、证据不全两条已落地，见 `src/reading/saved-article-tools.ts`：`publishedAt` 进了引用路径（`publishedDay`），`summaryOnly` 跟着材料进了 reading 的 prompt，工具由 `src/reading/turn.ts` 装配（`buildSavedArticleTools`、`SAVED_ARTICLES_PROMPT`）。第三条已有落点：`src/ai/tool-status.ts` 的 `persistedTrace` 把结算后的工具轨迹写进 thread 文件（2026-09-19），`read_paper` 这类调用作为一行落在回复下方并跟着存盘，不再是成功即消失。
 
 反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/memory/live/assemble.ts` → `src/info/program/live.ts`）。reading→info 通了，info→reading 一条都没有。
 
