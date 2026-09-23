@@ -1,6 +1,6 @@
 # Lumen 参考图留档
 
-定案见 [66](../../66-Lumen.md)。这些是形象的参考，不是最终资产：切层和动画照它们做，颜色和比例以它们为准。
+定案见 [66](../../companion/66-Lumen.md)。这些是形象的参考，不是最终资产：切层和动画照它们做，颜色和比例以它们为准。
 
 - `lumen-front.png` — 正面主图，其余几张的参考图。
 - `lumen-three-quarter-left.png` / `lumen-three-quarter-right.png` — 左右 3/4，只转眼睛加身体侧倾。

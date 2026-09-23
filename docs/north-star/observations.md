@@ -1,6 +1,6 @@
 # 主动联想
 
-对读者的观察和画像已经转正，现行设计是 memory 的观察与 statement 两个仓，见 [48](../48-记忆：观察与statement.md)；它们属于 soul，坐在桌前的那一个，见 [61](../61-palace与desk.md)。本文只留还没做的部分。
+对读者的观察和画像已经转正，现行设计是 memory 的观察与 statement 两个仓，见 [48](../soul/48-记忆：观察与statement.md)；它们属于 soul，坐在桌前的那一个，见 [61](../soul/61-palace与desk.md)。本文只留还没做的部分。
 
 ## 仍留在北极星的：主动联想
 

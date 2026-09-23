@@ -2,7 +2,7 @@
 
 ## 愿景
 
-同步今天停在档 1：整棵树对拉，不推断删除。[59](../59-同步：持有清单与裁决.md) 定了往上三档——档 2 按持有清单推断删除，档 3 线程按消息合并，档 4 冲突交给一个 agent 裁决。
+同步今天停在档 1：整棵树对拉，不推断删除。[59](../platform/59-同步：持有清单与裁决.md) 定了往上三档——档 2 按持有清单推断删除，档 3 线程按消息合并，档 4 冲突交给一个 agent 裁决。
 
 ## 为什么现在不做
 
@@ -16,8 +16,8 @@
 - 档 3：`src/palace/kinds.ts` 里四种 threads 行都用 `MAP_THREADS`，合并停在 records 级。59 §5 的 `messages` 策略、消息身份、前缀取长、journal 都没有。
 - 档 4 裁决层没做。59 §6 定了只对 prose、管线形状、以及两台设备抢在 run 文件同步之前怎么收场。
 - 59 §4 说的迁移闸门改成自己设备的树差分没做。
-- [13](../13-账户同步.md) 的「按需与分批」整节没做。
-- [18](../18-iOS-Google登录.md) 的 iOS 登录冷启动续跑没做，PKCE 的 verifier 和 state 只在内存（`src/platform/sync/auth.ts`）。
+- [13](../platform/13-账户同步.md) 的「按需与分批」整节没做。
+- [18](../platform/18-iOS-Google登录.md) 的 iOS 登录冷启动续跑没做，PKCE 的 verifier 和 state 只在内存（`src/platform/sync/auth.ts`）。
 
 ## 待定
 

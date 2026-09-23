@@ -153,7 +153,7 @@ three.js creates `Skeleton.boneTexture` automatically when the bone count exceed
 
 From the code: `VoicePlugin.emitSpeech`'s comment states the rule outright — the dictation reducer's union "has no default branch (src/ai/voice/dictation.ts)", so a fifth `kind` on `dictation` breaks it, while "a second name costs nothing on either side — Swift's `trigger` fans out by name and the listener registry is keyed by the name the webview passed". So a pose stream is a third event name beside `dictation`, `speech` and `conversation`. Shape it as `{t0, dt, frames: [[…]]}`: one event carrying N frames with a base timestamp and an interval, replayed against the local clock, exactly the way `docs/45` already specifies for the v2 TTS RMS envelope ("随句子开始一次性发过去，TS 侧按本地时钟回放"). The consumer needs no new machinery — `smoothLevel` in `src/ui/components/orb/orb.ts` already applies its per-frame constant over an arbitrary gap via `1 - (1-k)^(dt/FRAME_MS)`, which is the interpolation a batched stream needs, and `docs/45` already forbids React state on this path: "走 ref + rAF 写 CSS 自定义属性，一次 re-render 都不要". Pitfall 160 is the standing warning about the opposite: volatile results arriving six-per-millisecond, each one "一次 IPC 加一次整棵重渲染", fixed by throttling emission rather than by making the consumer faster.
 
-- Source: `plugins/voice/ios/Sources/VoicePlugin.swift:596-611`; `src/ui/components/orb/orb.ts`; `docs/45-陪伴的形态.md`; `docs/pitfall/160-volatile-results-arrive-in-bursts.md`
+- Source: `plugins/voice/ios/Sources/VoicePlugin.swift:596-611`; `src/ui/components/orb/orb.ts`; `docs/companion/45-陪伴的形态.md`; `docs/pitfall/160-volatile-results-arrive-in-bursts.md`
 - Date: 2026-09-10
 - Confidence: high
 - Runs on device: ios-yes (the carrier is the shipping one)

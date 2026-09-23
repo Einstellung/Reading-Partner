@@ -29,11 +29,11 @@
 两条落在前提上的事实：
 
 - 全文、大纲、图片提取全部不经阅读引擎，用壳里另一份钉住的 pdf.js。换不换引擎都一样，手机上要不要它们只由「AI 上不上手机」决定，和 PDFKit 无关。
-- 封面经 PDFium。`PhoneShelf` 的 `CoverBand` → `useCovers` → `covers.ts` → `raster.ts`，所以 PDFium WASM 今天已经在 iPhone 上被初始化（书架上有 PDF 时），[70](../70-手机读EPUB.md) 的「PDF 的封面照常渲染」就是这条路。「WASM 在 iPhone 上没验过」只对阅读器成立，对引擎启动不成立。
+- 封面经 PDFium。`PhoneShelf` 的 `CoverBand` → `useCovers` → `covers.ts` → `raster.ts`，所以 PDFium WASM 今天已经在 iPhone 上被初始化（书架上有 PDF 时），[70](../reading/70-手机读EPUB.md) 的「PDF 的封面照常渲染」就是这条路。「WASM 在 iPhone 上没验过」只对阅读器成立，对引擎启动不成立。
 
 ## 2 标注文件和坐标互认
 
-盘上形状（`convert.ts:26` 的 `ZoteroAnnotation`，[64](../64-epub纸页.md)「标注」）：
+盘上形状（`convert.ts:26` 的 `ZoteroAnnotation`，[64](../reading/64-epub纸页.md)「标注」）：
 
 | 字段 | 内容 |
 | --- | --- |

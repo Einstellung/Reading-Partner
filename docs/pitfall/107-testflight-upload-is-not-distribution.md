@@ -4,7 +4,7 @@
 
 原因：altool 只做 ingest。App Store Connect 收下包、处理到 `processingState: VALID` 之后就停在那里，build 和测试者之间的那条边要另外建——build 必须被加进某个 beta 组才对该组的测试者可见。内测组只有在组本身开了「自动分发新 build」（API 上是 `hasAccessToAllBuilds`）时才自动收，没开就得逐个 build 手动加；外测组还多两道：这个 build 要有 What's New 文本（`betaBuildLocalizations`），而且要提交并通过 beta 审核（`betaAppReviewSubmissions`）。上传成功和分发是两件事，workflow 只做了第一件。
 
-解法：上传后跑 `scripts/testflight-distribute.py`（`.github/workflows/ios-testflight-distribute.yml`，构建 workflow 的 `distribute` job 也调它）。它等 build 出现、等处理到 VALID，把 build 加进全部内测组和全部外测组，外测再补 What's New 和 beta 审核提交；每一步都幂等，同一个 build 重复跑不会出错。已经传上去没分发的包，手动跑那个 workflow 填 run number 就能救回来，不用重新构建。做法和限制见 `docs/11-iOS-TestFlight发布.md` 的分发一节。
+解法：上传后跑 `scripts/testflight-distribute.py`（`.github/workflows/ios-testflight-distribute.yml`，构建 workflow 的 `distribute` job 也调它）。它等 build 出现、等处理到 VALID，把 build 加进全部内测组和全部外测组，外测再补 What's New 和 beta 审核提交；每一步都幂等，同一个 build 重复跑不会出错。已经传上去没分发的包，手动跑那个 workflow 填 run number 就能救回来，不用重新构建。做法和限制见 `docs/platform/11-iOS-TestFlight发布.md` 的分发一节。
 
 ## 上传返回不等于 build 已经存在，等待是两段
 

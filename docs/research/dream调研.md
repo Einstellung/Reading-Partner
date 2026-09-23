@@ -1,6 +1,6 @@
 # dream 调研
 
-> 2026-09-01。夜间批处理的先例底账，配 [48](../48-记忆：观察与statement.md) 的设计。记忆与画像那一半的证据在 [记忆与画像调研](./记忆与画像调研.md)。只记查到的东西和结论，不排期。
+> 2026-09-01。夜间批处理的先例底账，配 [48](../soul/48-记忆：观察与statement.md) 的设计。记忆与画像那一半的证据在 [记忆与画像调研](./记忆与画像调研.md)。只记查到的东西和结论，不排期。
 >
 > 查过的：Codex、deepseek-harness、Letta sleep-time、Generative Agents 的 reflection、Mem0、Zep/Graphiti、OpenClaw memory-core、LangMem/Cognee、A-MEM/MemoryBank、LightMem。
 

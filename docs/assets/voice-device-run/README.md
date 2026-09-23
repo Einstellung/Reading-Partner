@@ -1,6 +1,6 @@
 # 语音真机留档
 
-出声和轮次那几轮在 iPhone 16 上跑出来的原始数据。结论在 [33](../../33-语音简报.md) 的「实测」，这里是判读的依据。
+出声和轮次那几轮在 iPhone 16 上跑出来的原始数据。结论在 [33](../../info/33-语音简报.md) 的「实测」，这里是判读的依据。
 
 - `speech-result-2026-08-28.json` — 探针写在设备容器里的结果，三条夹具腿逐句的 `startFrame` / `frames` / `completionFrame` / `latencyMs` / `enqueuedAtMs` / `completedAtMs`，加整条 level 包络流。
 - `route-survey-2026-08-28.json` — 六组 category options 的运行时路由真值，REDMI Buds 6 Pro 连着时量的。蓝牙那个决定就是按它定的。

@@ -3,7 +3,7 @@
 iPhone 16、iOS 26.6、全程 WiFi，云签名 `.dev` 包，从 main `90b407dc`（0.12.0）在 Mac mini 上构建。
 三条腿各是一次 smoke 构建（`VITE_SMOKE=turn-replay` / `speech-live` / `turn`），三个 ipa 都读回
 `com.xinyuan.readingpartner.dev`。原始数据在同目录的 `turn-replay-2026-09-05.json`、
-`speech-result-2026-09-05.json`、`turn-result-2026-09-05.json`。结论在 [33](../../33-语音简报.md)。
+`speech-result-2026-09-05.json`、`turn-result-2026-09-05.json`。结论在 [33](../../info/33-语音简报.md)。
 
 ## B 腿 turn-replay：Swift 和 TS 逐位相同
 

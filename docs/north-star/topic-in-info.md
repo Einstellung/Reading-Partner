@@ -2,7 +2,7 @@
 
 ## 愿景
 
-视野就是 topic，一个实体，不是 statement 的一种也不是 info 自己的配置。cable 在 `saved` / `promoted` / `folded` 三个出口带上 topic，由 AI 提议、用户点头，确认卡是 [21](../21-info收藏与reading打通.md) 已定的那张。见 [61](../61-palace与desk.md)「定下的」。
+视野就是 topic，一个实体，不是 statement 的一种也不是 info 自己的配置。cable 在 `saved` / `promoted` / `folded` 三个出口带上 topic，由 AI 提议、用户点头，确认卡是 [21](../info/21-info收藏与reading打通.md) 已定的那张。见 [61](../soul/61-palace与desk.md)「定下的」。
 
 ## 为什么现在不做
 

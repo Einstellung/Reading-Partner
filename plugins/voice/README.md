@@ -1,7 +1,7 @@
 # tauri-plugin-voice
 
-The native half of hold-to-talk dictation (`docs/15-语音输入.md`) and of the
-full-duplex call (`docs/33-语音简报.md`, where the probe this grew out of also
+The native half of hold-to-talk dictation (`docs/companion/15-语音输入.md`) and of the
+full-duplex call (`docs/info/33-语音简报.md`, where the probe this grew out of also
 lives). iOS only: `ios/Sources` captures the
 microphone through `AVAudioEngine` with the voice-processing (echo cancelling)
 unit on, and transcribes it on device with `SpeechAnalyzer` +

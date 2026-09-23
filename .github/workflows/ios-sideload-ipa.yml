@@ -2,7 +2,7 @@
 # account and no signing material in the repo. The .ipa is ad-hoc signed (not
 # team-signed): a free-signing sideload tool (Sideloadly, AltStore) re-signs it
 # on the user's own machine with a free Apple ID and installs it on their iPad.
-# See docs/19-iOS侧载安装.md for the user-side flow.
+# See docs/platform/19-iOS侧载安装.md for the user-side flow.
 #
 # How the ipa is produced: `tauri ios build --target aarch64 --no-sign` archives
 # the device build with codesigning disabled (cargo-mobile2 passes

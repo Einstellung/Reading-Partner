@@ -12,7 +12,7 @@
 # generated gen/android (gitignored, re-initialized each run) untouched — no
 # build.gradle.kts patching — and makes the signing step explicit and verifiable.
 # The keystore is the app's UPGRADE IDENTITY: replacing it makes a phone refuse to
-# install the update over an existing install. Back it up (docs/23-Android落地调研.md).
+# install the update over an existing install. Back it up (docs/platform/23-Android落地调研.md).
 #
 # Google sign-in: only VITE_GOOGLE_ANDROID_CLIENT_ID is injected, and its value is
 # written here in the clear. An Android OAuth client has no secret — it is a public
@@ -54,7 +54,7 @@ env:
   # with a 16 KB kernel refuses to load a 4 KB-aligned .so. The ubuntu-24.04
   # image preinstalls 27.3.13750724, 28.2.13676358 and 29.0.14206865, so this
   # pin costs no download while stopping an image bump from moving the toolchain
-  # under us. See docs/23-Android落地调研.md.
+  # under us. See docs/platform/23-Android落地调研.md.
   NDK_VERSION: "28.2.13676358"
   # 36.0.0 rather than the spike's 34.0.0: zipalign only grew -P (page size in
   # KB) in build-tools 35, and 34's zipalign dies on the flag.

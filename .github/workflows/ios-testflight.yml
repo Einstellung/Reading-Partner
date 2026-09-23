@@ -21,7 +21,7 @@
 # The API key does everything: Xcode cloud-managed signing creates the
 # distribution certificate and provisioning profile on the fly, and the same
 # key authenticates the TestFlight upload. No certificates or profiles are
-# stored in the repository. See docs/11-iOS-TestFlight发布.md for the
+# stored in the repository. See docs/platform/11-iOS-TestFlight发布.md for the
 # one-time Apple-side setup.
 #
 # The key must have been generated with Admin access. Apple refuses
