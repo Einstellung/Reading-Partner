@@ -35,4 +35,4 @@ export function currentAppVersion(): string {
 
 // The licence this app ships under, shown beside the version. One string, so the
 // UI and package.json cannot drift into naming two different licences.
-export const LICENSE_NAME = "PolyForm Noncommercial 1.0.0";
+export const LICENSE_NAME = "PolyForm Strict 1.0.0";
