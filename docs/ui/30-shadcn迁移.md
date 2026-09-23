@@ -14,7 +14,7 @@
 >
 > 五：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期的常量清干净。Tabs / Tooltip 没引，理由见「没引的」。
 >
-> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「各版改了什么」）。2026-09-17 删掉 collapsible 和 textarea，两个都没有调用点。
+> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「各版改了什么」）。2026-09-17 删掉 collapsible 和 textarea，两个都没有调用点。之后加了 popover（`23eeb7cc`，见「没引的」），现在 15 个：alert-dialog、badge、button、checkbox、dialog、dropdown-menu、input、label、overlay、popover、select、separator、switch、tabs、toast。
 
 ---
 
@@ -256,7 +256,7 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 
 **Tooltip**。全项目 32 个 `title=`，都是图标按钮的悬停提示。触摸上不触发，所以每个需要说明的控件本来就有 `aria-label`，激活态还会把文字显出来（侧栏标签、MoreMenu 的行）。加一层 Radix Tooltip 只对鼠标有用，且要处理它自己的 Portal 和安全区。
 
-**Popover**。第三版就说了没用上，第五版也没有新的锚定型浮层。现存的 `CallBubble` / `AnnotationPopup` 在不迁清单里。
+**Popover**。第三版说了没用上，第五版也没有新的锚定型浮层，之后引了（`23eeb7cc`），`LumenCorner.tsx` 和 `PhoneLesson.tsx` 在用。现存的 `CallBubble` / `AnnotationPopup` 仍在不迁清单里，没有换过去。
 
 ## 最终还剩的手写控件
 
