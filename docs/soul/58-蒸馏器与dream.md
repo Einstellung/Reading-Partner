@@ -53,7 +53,7 @@ memory 不 import 领域，领域在启动时登记。方向和今天 retell 把
 划线两种形状。扫描一侧不再自己走书架：`memory/live` 的 `collectArrears` 只问登记表，
 job 只剩一种，跑哪个 pass 由单元自己说（划线走标记 pass，带 `retell` 的走复述 pass）。
 
-落点 `memory/distill/`：`arrears.ts`、游标读写和运行器搬过去，`distill.ts` 和 `retell.ts` 留在 `observations/` 作 pass 实现。
+落点：源登记表 `sources.ts` 和跨源合并 `collect.ts` 落在 `memory/distill/`；`arrears.ts`、游标读写、运行器（`memory/live/sweeps.ts`）、`distill.ts`、`retell.ts` 仍留在 `observations/` 和 `live/` 原地，没有搬。
 
 ### 水位账本
 

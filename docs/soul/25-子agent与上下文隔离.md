@@ -12,7 +12,7 @@
 
 子 agent 拿到自己的 message 列表（只有一条 user 消息，就是任务）、自己那一小组工具、自己的轮数上限，自己跑到底，只把一份 brief 交回来。它跑过的轮次活在调用方永远看不到的数组里，中间产物随运行结束一起消失。
 
-签名层面（`src/legion/subagent/types.ts`）：定义是 `SubagentDefinition`（name / description / label / systemPrompt / tools / maxRounds / purpose / model / evidence / briefTokenCap），一次运行是 `runSubagent({definition, task, signal, onProgress}, {run, ledger})`，回来的是 `SubagentBrief`（brief / outcome / usable / rounds / roundsAllowed / toolCalls / toolSuccesses / toolFailures / clipped）。工具全部由调用方注入，这个目录不知道文献检索、简报和书的存在。
+签名层面（`src/legion/subagent/types.ts`）：定义是 `SubagentDefinition`（name / description / label / systemPrompt / tools / maxRounds / purpose / model / evidence / briefTokenCap），一次运行是 `runSubagent({definition, task, signal, onProgress}, {run, quota})`，回来的是 `SubagentBrief`（brief / outcome / usable / rounds / roundsAllowed / toolCalls / toolSuccesses / toolFailures / clipped）。工具全部由调用方注入，这个目录不知道文献检索、简报和书的存在。
 
 隔离不是靠约定，是靠没有出口：`turn.ts` 把 loop 的 `onDelta`、`onThinking`、`onToolStart`、`onToolEnd` 全部接到空函数上，只有 `onDone` 的最终文本能出来。
 
@@ -32,7 +32,7 @@
 
 每一轮的尺寸照常走 `src/budget`：轮次通过 `runAgentTurn` 的 `purpose` 交给 agent loop，loop 逐轮量、量不下就拒绝，和一次普通对话轮完全一样。回程也用它算：brief 按 `estimateTextTokens` 定价，超过 `briefTokenCap`（默认 1200 token，远低于 `OUTPUT_FLOOR.chat`）就截断并说明截断了——嵌套运行唯一能推爆调用方上下文的东西就是这段文本。
 
-`src/budget` 表达不了的是"一次嵌套运行"。那个模块给一次组装好的调用定价，没有跨调用累计花费的概念，所以"这一整轮最多花 N 个模型轮次，嵌套运行从同一个池子里取"只能另记：`ledger.ts` 里一个计数器，`grant` 预留、`settle` 退还没花掉的。它拦住的是父模型连叫同一个子 agent 九次，每次单看都合法，加起来把读者这一轮全花在没人要求的查找上。
+`src/budget` 表达不了的是"一次嵌套运行"。那个模块给一次组装好的调用定价，没有跨调用累计花费的概念，所以"这一整轮最多花 N 个模型轮次，嵌套运行从同一个池子里取"只能另记：`quota.ts`（2026-09-15 前叫 `ledger.ts`）里一个计数器，`grant` 预留、`settle` 退还没花掉的。它拦住的是父模型连叫同一个子 agent 九次，每次单看都合法，加起来把读者这一轮全花在没人要求的查找上。
 
 取消复用现有那条路：调用方自己的 `AbortController`，加 watchdog 的 `StoppedError`。agent loop 在 abort 时静默返回（不 `onDone` 不 `onError`），所以 `turn.ts` 的 abort 监听负责把它变成 reject。取消是唯一一种 reject 而不产出 brief 的结局——读者挂断之后的 brief 没有人要。
 
@@ -58,7 +58,7 @@ brief 的形状写死在提示词里：最多五条，每条标题（作者、�
 
 brief 的文本只在失败时有用（那句诚实失败的句子进日志）。成功的运行按 prompt 以 "done" 结尾，产物是观察文件的写入，文本照旧丢掉——`briefTokenCap` 压到 200，是给"能交回来的东西"设个上限，不是因为要读它。
 
-不给 ledger：ledger 拦的是父模型一轮里连叫同一个子 agent 九次，而蒸馏没有模型来调它，是 app 在挂断和历史裁剪时各起一次，同一 thread 一次只跑一个。
+不给 quota：quota 拦的是父模型一轮里连叫同一个子 agent 九次，而蒸馏没有模型来调它，是 app 在挂断和历史裁剪时各起一次，同一 thread 一次只跑一个。
 
 取消：两个触发点都没有能取消它的主人，`signal` 是通的但今天没人传。挂断（`captureHangup`）先起蒸馏再 abort 聊天轮的 controller，把那个 signal 交过去等于每次一起跑就被杀；裁剪兜底跑在读者那一轮里，那一轮的 signal 会被 Stop 和挂断 abort，而挂断正是最需要这次蒸馏跑完的时刻。一次 pass 必须活得比起它的那个东西久。
 
