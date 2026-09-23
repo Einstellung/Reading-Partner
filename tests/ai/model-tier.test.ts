@@ -33,8 +33,8 @@ function persist(over: Partial<Settings>): void {
   );
 }
 
-const EVERYDAY: ThinkingKind[] = ["briefing", "briefing-screen", "meals"];
-const TALK: ThinkingKind[] = ["chat", "prep"];
+const EVERYDAY: ThinkingKind[] = ["prep", "distill", "briefing", "briefing-screen", "meals"];
+const TALK: ThinkingKind[] = ["chat"];
 
 // The table itself, read straight. Which work is everyday is a decision made in
 // code, in one place; a task that wants to be cheap is a line there and nothing
@@ -44,10 +44,29 @@ test("every kind of headless work is classified, and the classification is the t
   for (const kind of TALK) expect(tierForKind(kind)).toBe("talk");
 });
 
-// Lesson prep and the distillation passes stay on the talk model for now. Named
-// here so moving them is a deliberate edit to this file rather than a drift.
-test("lesson prep is not everyday work", () => {
-  expect(tierForKind("prep")).toBe("talk");
+// Lesson prep, the sub-agent runs, the nightly dream and the distillation passes
+// are background work nobody waits on. Named here so moving any of them back is
+// a deliberate edit to this file rather than a drift.
+test("lesson prep and distillation are everyday work", () => {
+  expect(tierForKind("prep")).toBe("everyday");
+  expect(tierForKind("distill")).toBe("everyday");
+});
+
+// Moving distillation to the everyday model must not move its effort: it keeps
+// thinking at the chat setting, not at the pipelines' one.
+test("distillation runs on the everyday model at the chat effort", async () => {
+  persist({
+    defaultModelId: "chat-model",
+    everydayModelId: "cheap-model",
+    chatThinking: "high",
+    prepThinking: "low",
+  });
+  const distill = await resolveModel("distill");
+  expect(distill.modelId).toBe("cheap-model");
+  expect(distill.reasoning).toBe("high");
+  const prep = await resolveModel("prep");
+  expect(prep.modelId).toBe("cheap-model");
+  expect(prep.reasoning).toBe("low");
 });
 
 test("with no everyday model set, every kind runs on the default model", async () => {
@@ -86,6 +105,7 @@ test("each kind reads its own effort setting", async () => {
   });
   expect((await resolveModel("chat")).reasoning).toBe("high");
   expect((await resolveModel("prep")).reasoning).toBe("medium");
+  expect((await resolveModel("distill")).reasoning).toBe("high");
   // "off" means no reasoning is passed at all, not a level named off.
   expect((await resolveModel("briefing-screen")).reasoning).toBeUndefined();
   expect((await resolveModel("briefing")).reasoning).toBe("low");

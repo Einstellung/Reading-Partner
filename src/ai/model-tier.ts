@@ -1,9 +1,9 @@
 // The two models the app runs on, and the one table that says which work runs
 // on which (docs/75).
 //
-//   talk      the conversations the reader is actually having — reading chat,
-//             Lumen, the info companion. settings.defaultModelId.
-//   everyday  the routine work nobody is waiting for. settings.everydayModelId,
+//   talk      calls the reader is waiting on, watching the reply come in —
+//             reading chat, Lumen, the info companion. settings.defaultModelId.
+//   everyday  background calls nobody is waiting on. settings.everydayModelId,
 //             which follows the talk model until the reader picks one.
 //
 // Both tiers are always the default provider's: credentials are single-active
@@ -12,9 +12,12 @@
 //
 // Classification lives here and nowhere else. There is no model picker per
 // screen and no setting that says which tasks are everyday: a new task that
-// should run cheap is one line in one of the two tables below. The everyday set
-// for this release is the meals line and the two briefing stages; lesson prep,
-// distillation and everything on the reading side are talk work.
+// should run cheap is one line in one of the two tables below. Every headless
+// kind in use today is background work and runs everyday: lesson prep, the
+// sub-agent runs, the observation distillation passes, the nightly dream, the
+// two briefing stages and the meals line. "chat" is the talk kind, for a
+// headless call the reader is waiting on. Conversations are talk, except the
+// meals thread.
 
 import type { Settings } from "../platform/app/settings";
 
@@ -22,12 +25,19 @@ export type ModelTier = "talk" | "everyday";
 
 // Which effort setting a headless call reads, and — through the table below —
 // which model it runs on.
-export type ThinkingKind = "chat" | "prep" | "briefing" | "briefing-screen" | "meals";
+export type ThinkingKind =
+	| "chat"
+	| "prep"
+	| "distill"
+	| "briefing"
+	| "briefing-screen"
+	| "meals";
 
 // Purpose to tier, for the headless calls (ai/model-call.ts).
 const TIER_FOR_KIND: Record<ThinkingKind, ModelTier> = {
 	chat: "talk",
-	prep: "talk",
+	prep: "everyday",
+	distill: "everyday",
 	briefing: "everyday",
 	"briefing-screen": "everyday",
 	meals: "everyday",

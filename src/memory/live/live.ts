@@ -270,10 +270,11 @@ export function distillThread(
   const { threadId, messages } = opts;
   return gate.run(threadId, async () => {
     try {
-      // Distillation runs on the chat model config, not the pipelines' — it is a
+      // Distillation thinks at the chat setting, not the pipelines' — it is a
       // silent turn of the same conversation, so the sub-agent's own default
-      // (the background-pipeline thinking setting) is overridden here.
-      const model = await resolveModel("chat");
+      // (the background-pipeline thinking setting) is overridden here. Nobody
+      // waits on it, so it runs on the everyday model (ai/model-tier.ts).
+      const model = await resolveModel("distill");
       const result = await runDistillPass(
         {
           topicName: opts.topicName,
@@ -346,7 +347,7 @@ export function distillMarks(opts: DistillMarksOptions): Promise<void> {
   const key = `marks:${opts.bookId}`;
   return gate.run(key, async () => {
     try {
-      const model = await resolveModel("chat");
+      const model = await resolveModel("distill");
       const result = await runMarksDistillPass(
         {
           topicName: opts.topicName,
@@ -591,9 +592,8 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
   const { threadId, topicId } = opts;
   return gate.run(threadId, async () => {
     try {
-      // The chat model config, like the reading pass: this is a silent turn of the
-      // reader's own conversation, not a background pipeline.
-      const model = await resolveModel("chat");
+      // The chat thinking setting on the everyday model, like the reading pass.
+      const model = await resolveModel("distill");
       const result = await runRetellDistillPass(
         {
           topicName: opts.topicName,

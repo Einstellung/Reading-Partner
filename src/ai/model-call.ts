@@ -36,9 +36,11 @@ export type { ThinkingKind };
 // Which effort setting a kind reads. "meals" borrows the conversational one
 // rather than adding a setting of its own: writing the steps for a dish that has
 // already been agreed to is not deep work, and it is the same effort every other
-// turn of that line runs at.
+// turn of that line runs at. "distill" reads it too: a distillation pass is a
+// silent turn of the reader's conversation and thinks like one; only its model
+// is the everyday one.
 function thinkingFor(s: Settings, kind: ThinkingKind): ThinkingSetting {
-	if (kind === "chat" || kind === "meals") return s.chatThinking;
+	if (kind === "chat" || kind === "meals" || kind === "distill") return s.chatThinking;
 	if (kind === "prep") return s.prepThinking;
 	return kind === "briefing" ? s.briefingThinking : s.briefingScreenThinking;
 }
