@@ -58,7 +58,7 @@ import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
 import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
-import { modelIdFor, tierForThread } from "../../../ai/model-tier";
+import { modelIdFor } from "../../../ai/model-tier";
 import type { ToolStatus } from "../../../ai/tool-status";
 import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { navigateAway } from "../chat/call-layout";
@@ -629,7 +629,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       providerId: settings.defaultProviderId as ProviderId,
       // Which of the two models this thread runs on (ai/model-tier.ts): the
       // meals conversation is everyday work, the day's briefing chat is not.
-      modelId: modelIdFor(settings, tierForThread(bookId)) as string,
+      modelId: modelIdFor(settings, "talk") as string,
       systemPrompt: turn.systemPrompt,
       messages: turn.messages,
       tools: turn.tools,

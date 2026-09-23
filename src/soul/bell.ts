@@ -36,7 +36,7 @@ import type { SteerPort } from "../legion/execute/contract";
 import type { HeldHarness } from "../legion/execute/held";
 import type { DeskMessage } from "../desk";
 import type { ProviderId } from "../ai";
-import { modelIdFor, tierForThread } from "../ai/model-tier";
+import { modelIdFor } from "../ai/model-tier";
 import { createBookThread, getBookThread, loadThreads } from "../platform/app/threads";
 import { toReasoning, type Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
@@ -234,7 +234,7 @@ const appSend: SendBellTurn = (turn) =>
   new Promise<string>((resolve, reject) => {
     void runAgentTurn({
       providerId: turn.settings.defaultProviderId as ProviderId,
-      modelId: modelIdFor(turn.settings, tierForThread(turn.bookKey)) as string,
+      modelId: modelIdFor(turn.settings, "talk") as string,
       systemPrompt: turn.systemPrompt,
       messages: turn.messages,
       tools: turn.tools,

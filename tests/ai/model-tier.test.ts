@@ -8,9 +8,8 @@
 
 import { beforeEach, expect, test } from "bun:test";
 import { enforceKnownModel, resolveModel, type ThinkingKind } from "../../src/ai/model-call";
-import { modelIdFor, tierForKind, tierForThread } from "../../src/ai/model-tier";
+import { tierForKind } from "../../src/ai/model-tier";
 import { defaultModelFor, providers, type ProviderId } from "../../src/ai/providers";
-import { MEALS_BOOK_ID } from "../../src/info/briefer/anchors";
 import {
   DEFAULT_SETTINGS,
   rebuildSettingsStoreForTests,
@@ -112,39 +111,6 @@ test("each kind reads its own effort setting", async () => {
   // The meals turn borrows the conversational effort rather than adding a
   // setting of its own.
   expect((await resolveModel("meals")).reasoning).toBe("high");
-});
-
-// --- conversations -----------------------------------------------------------
-
-// A whole thread is one tier, decided by the key its file is kept under. The
-// meals conversation is the everyday one; a book, the door and the day's
-// briefing chat are all talk.
-test("the meals thread is everyday work and every other conversation is talk", () => {
-  expect(tierForThread(MEALS_BOOK_ID)).toBe("everyday");
-  expect(tierForThread("info-2026-09-22")).toBe("talk");
-  expect(tierForThread("door-2026-09-22")).toBe("talk");
-  expect(tierForThread("9f2c1ab4")).toBe("talk");
-  expect(tierForThread(undefined)).toBe("talk");
-});
-
-// src/ai may not import src/info (tests/layering.test.ts), so the thread key is
-// spelled out in the tier table. This is the seam where the two have to agree.
-test("the thread key the tier table carries is the one the meals anchor uses", () => {
-  expect(MEALS_BOOK_ID).toBe("info-meals");
-});
-
-test("a turn on the meals thread resolves to the everyday model, a reading turn to the talk one", () => {
-  const settings: Settings = {
-    ...DEFAULT_SETTINGS,
-    defaultProviderId: "anthropic",
-    defaultModelId: "talk-model",
-    everydayModelId: "cheap-model",
-  };
-  expect(modelIdFor(settings, tierForThread(MEALS_BOOK_ID))).toBe("cheap-model");
-  expect(modelIdFor(settings, tierForThread("9f2c1ab4"))).toBe("talk-model");
-  // Unset, both threads run on the one model.
-  const unset: Settings = { ...settings, everydayModelId: null };
-  expect(modelIdFor(unset, tierForThread(MEALS_BOOK_ID))).toBe("talk-model");
 });
 
 // --- a model the provider has dropped ----------------------------------------

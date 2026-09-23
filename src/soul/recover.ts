@@ -47,7 +47,7 @@ import { DELIVERY_ENTRY, runAgentTurn } from "../legion/execute/turn";
 import type { BoxOrigin, BoxStore } from "../box";
 import { loadSettings, toReasoning, type Settings } from "../platform/app/settings";
 import type { ProviderId } from "../ai";
-import { modelIdFor, tierForThread } from "../ai/model-tier";
+import { modelIdFor } from "../ai/model-tier";
 import { coverOf } from "./bell";
 import { deliveryOpener, originOf, type Delivery } from "./delivery";
 import { landReply } from "./landing";
@@ -99,7 +99,7 @@ const appSend: SendResumedTurn = (turn) =>
   new Promise<string>((resolve, reject) => {
     void runAgentTurn({
       providerId: turn.settings.defaultProviderId as ProviderId,
-      modelId: modelIdFor(turn.settings, tierForThread(turn.bookKey)) as string,
+      modelId: modelIdFor(turn.settings, "talk") as string,
       systemPrompt: turn.systemPrompt,
       messages: [],
       tools: turn.tools,

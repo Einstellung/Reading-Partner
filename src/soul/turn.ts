@@ -15,7 +15,7 @@ import type { DeskItem, DeskMemory, DeskMessage, OpenedDesk } from "../desk";
 import type { Settings } from "../platform/app/settings";
 import type { ProviderId } from "../ai/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
-import { modelIdFor, tierForThread, type ModelTier } from "../ai/model-tier";
+import { modelIdFor, type ModelTier } from "../ai/model-tier";
 import type { AgentTool } from "../legion/execute/turn";
 import { soulMemorySection, soulShownIds, openSoul, type Soul } from "./self";
 import type { BoxOrigin, BoxStore } from "../box";
@@ -225,7 +225,7 @@ export async function assembleTurn(input: AssembleInput): Promise<AssembledTurn 
   // Fit the call to the model's context window before it is sent. Left
   // unchecked, an over-full request comes back one token long with a normal
   // `done` and no error (docs/pitfall/65).
-  const model = configuredModel(env.settings, tierForThread(env.thread.key));
+  const model = configuredModel(env.settings);
   if (!model) {
     afterFit(items, new Set());
     return {

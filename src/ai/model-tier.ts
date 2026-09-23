@@ -12,12 +12,13 @@
 //
 // Classification lives here and nowhere else. There is no model picker per
 // screen and no setting that says which tasks are everyday: a new task that
-// should run cheap is one line in one of the two tables below. Every headless
-// kind in use today is background work and runs everyday: lesson prep, the
-// sub-agent runs, the observation distillation passes, the nightly dream, the
-// two briefing stages and the meals line. "chat" is the talk kind, for a
-// headless call the reader is waiting on. Conversations are talk, except the
-// meals thread.
+// should run cheap is one line in the table below. Every headless kind in use
+// today is background work and runs everyday: lesson prep, the sub-agent
+// runs, the observation distillation passes, the nightly dream, the two
+// briefing stages, and the meals line's headless write-the-recipe pass.
+// "chat" is the talk kind, for a headless call the reader is waiting on.
+// Conversations are always talk: the reader is watching the reply come in,
+// meals thread included.
 
 import type { Settings } from "../platform/app/settings";
 
@@ -45,20 +46,6 @@ const TIER_FOR_KIND: Record<ThinkingKind, ModelTier> = {
 
 export function tierForKind(kind: ThinkingKind): ModelTier {
 	return TIER_FOR_KIND[kind];
-}
-
-// Purpose to tier, for a conversation: the key its thread file is kept under
-// (platform/app/threads.ts). A whole thread is one tier — a turn of the meals
-// conversation is everyday work whatever it happens to be about.
-//
-// The key is spelled out rather than imported from src/info, because this is a
-// capability and may not import a domain (tests/layering.test.ts). The constant
-// it has to agree with is MEALS_BOOK_ID in info/briefer/anchors.ts, and a test
-// holds the two together.
-const EVERYDAY_THREADS: readonly string[] = ["info-meals"];
-
-export function tierForThread(bookKey: string | null | undefined): ModelTier {
-	return bookKey != null && EVERYDAY_THREADS.includes(bookKey) ? "everyday" : "talk";
 }
 
 // Which model a tier runs on. Null only when no default model is set at all,
