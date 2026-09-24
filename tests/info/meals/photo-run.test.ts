@@ -1,6 +1,6 @@
 // The photograph run: what a week asks for (src/info/meals/photo-run.ts) and
 // what the worker does with it (src/info/meals/photo-worker.ts).
-// Run: scripts/t.sh tests/info/dinner
+// Run: scripts/t.sh tests/info/meals
 
 import { expect, test } from "bun:test";
 import {
@@ -14,36 +14,39 @@ import {
 } from "../../../src/info/meals/photo-run";
 import { mealsPhotosWorker } from "../../../src/info/meals/photo-worker";
 import type { WebviewPage } from "../../../src/info/extract/webview-page";
-import type { Dish, DishPhotoEntry, Ingredient, WeekPlan } from "../../../src/info/meals/types";
+import type { DishPhotoEntry, Meal, WeekPlan } from "../../../src/info/meals/types";
 import type { Run } from "../../../src/legion/run/types";
 import type { WorkerContext } from "../../../src/legion/execute/worker";
 
-function ingredient(en: string, category: Ingredient["category"] = "produce"): Ingredient {
-  return { name: en, en, qty: "1", category, keeps: "d3-5" };
-}
-
-function dish(over: Partial<Dish> = {}): Dish {
+// Tofu (en "firm tofu", protein aisle) and bok choy (en "bok choy", produce).
+function meal(over: Partial<Meal> = {}): Meal {
   return {
-    id: "dish-a",
-    name: "Mapo tofu",
+    mode: "make",
+    name: "麻婆豆腐饭",
     searchName: "mapo tofu",
-    oneLine: "",
-    base: "",
-    fresh: "",
-    keepsADay: false,
-    handsOnMinutes: 10,
-    ingredients: [ingredient("kale"), ingredient("firm tofu", "protein")],
+    flavour: "spicy-sichuan",
+    minutes: 10,
+    items: [
+      { foodId: "bok_choy", role: "fixed", grams: 150 },
+      { foodId: "firm_tofu", role: "protein" },
+    ],
     ...over,
   };
 }
 
-function week(dishes: Dish[]): WeekPlan {
+const SKIP: Meal = { mode: "skip" };
+
+function week(meals: Meal[]): WeekPlan {
   return {
-    breakfastLine: "",
     id: "week-2026-09-21",
     startDate: "2026-09-21",
-    days: [],
-    dishes,
+    days: meals.map((m, i) => ({
+      date: `2026-09-${String(21 + (i % 7)).padStart(2, "0")}`,
+      breakfast: SKIP,
+      lunch: SKIP,
+      dinner: m,
+      snack: SKIP,
+    })),
     createdAt: 0,
     revision: 1,
   };
@@ -52,14 +55,24 @@ function week(dishes: Dish[]): WeekPlan {
 const NOW = 1_000_000;
 const noBank = () => null;
 
-test("a week asks for its dishes first, then the ingredients no bank has", () => {
-  const queries = photoQueriesForPlan(week([dish()]), {}, NOW, {
+test("a week asks for its meals by searchName first, then the foods no bank has", () => {
+  const queries = photoQueriesForPlan(week([meal()]), {}, NOW, {
     bankImage: (en) => (en === "firm tofu" ? "https://themealdb/tofu.png" : null),
   });
   expect(queries).toEqual([
     { key: "dish:mapo tofu", q: "mapo tofu" },
-    { key: "ingredient:kale", q: "kale vegetable" },
+    { key: "ingredient:bok choy", q: "bok choy vegetable" },
   ]);
+});
+
+test("only made meals ask: a delivery with a searchName asks nothing", () => {
+  const queries = photoQueriesForPlan(
+    week([{ mode: "delivery", place: "downstairs", searchName: "pizza" }]),
+    {},
+    NOW,
+    { bankImage: noBank },
+  );
+  expect(queries).toEqual([]);
 });
 
 test("what the cache already answered is not asked again, and the reader can ask anyway", () => {
@@ -71,42 +84,52 @@ test("what the cache already answered is not asked again, and the reader can ask
       site: "example.com",
       foundAt: 1,
     },
-    "ingredient:kale": { none: true, checkedAt: NOW - 1000 },
+    "ingredient:bok choy": { none: true, checkedAt: NOW - 1000 },
   };
-  expect(photoQueriesForPlan(week([dish()]), cache, NOW, { bankImage: noBank })).toEqual([
+  expect(photoQueriesForPlan(week([meal()]), cache, NOW, { bankImage: noBank })).toEqual([
     { key: "ingredient:firm tofu", q: "firm tofu food" },
   ]);
   // The reader said a picture is wrong: everything answered before that moment
   // is asked again, wherever the searching happens.
   expect(
-    photoQueriesForPlan(week([dish()]), cache, NOW, { bankImage: noBank, askedAt: NOW }).length,
+    photoQueriesForPlan(week([meal()]), cache, NOW, { bankImage: noBank, askedAt: NOW }).length,
   ).toBe(3);
   // An answer written since they asked stands: the dish was found before it and
-  // is asked again, the kale was looked for after it and is not.
+  // is asked again, the bok choy was looked for after it and is not.
   expect(
-    photoQueriesForPlan(week([dish()]), cache, NOW, { bankImage: noBank, askedAt: 2 }).map(
+    photoQueriesForPlan(week([meal()]), cache, NOW, { bankImage: noBank, askedAt: 2 }).map(
       (q) => q.key,
     ),
   ).toEqual(["dish:mapo tofu", "ingredient:firm tofu"]);
 });
 
-test("a name is asked for once however many nights eat it, and a run is capped", () => {
+test("a name is asked for once however many days eat it, and a run is capped", () => {
   const many = Array.from({ length: 30 }, (_, i) =>
-    dish({ id: `dish-${i}`, searchName: `dish ${i}`, ingredients: [ingredient("kale")] }),
+    meal({ searchName: `dish ${i}`, items: [{ foodId: "bok_choy", role: "fixed", grams: 150 }] }),
   );
   const queries = photoQueriesForPlan(week(many), {}, NOW, { bankImage: noBank });
   expect(queries.length).toBe(MAX_PHOTO_QUERIES);
-  expect(queries.filter((q) => q.key === "ingredient:kale").length).toBeLessThan(2);
+  expect(queries.filter((q) => q.key === "ingredient:bok choy").length).toBeLessThan(2);
 });
 
-test("a dish with no search name and an ingredient with no English name ask nothing", () => {
+test("a meal with no searchName and a food with no English name ask nothing", () => {
   const queries = photoQueriesForPlan(
-    week([dish({ searchName: "", ingredients: [ingredient(""), ingredient("kale")] })]),
+    week([
+      meal({
+        searchName: "",
+        items: [
+          // Frozen mixed veg has no English name in the food table.
+          { foodId: "frozen_mixed_veg", role: "fixed", grams: 150 },
+          { foodId: "bok_choy", role: "fixed", grams: 150 },
+          { foodId: "no_such_food", role: "protein" },
+        ],
+      }),
+    ]),
     {},
     NOW,
     { bankImage: noBank },
   );
-  expect(queries).toEqual([{ key: "ingredient:kale", q: "kale vegetable" }]);
+  expect(queries).toEqual([{ key: "ingredient:bok choy", q: "bok choy vegetable" }]);
 });
 
 test("the ask is written, handed to legion, and read back", async () => {

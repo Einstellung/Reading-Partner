@@ -1,6 +1,6 @@
 // The photograph cache: the file (src/info/meals/photo-store.ts) and the pure
 // half that reads it (src/info/meals/dish-photos.ts).
-// Run: scripts/t.sh tests/info/dinner
+// Run: scripts/t.sh tests/info/meals
 
 import { beforeEach, expect, test } from "bun:test";
 import { createFakeAppData, type FakeAppData } from "../../support/guarded-appdata";
@@ -19,9 +19,8 @@ import {
   needsPhotoLookup,
   photoForDish,
   photoForIngredient,
-  withDishPhotos,
 } from "../../../src/info/meals/dish-photos";
-import type { Dish, DishPhoto, WeekPlan } from "../../../src/info/meals/types";
+import type { DishPhoto } from "../../../src/info/meals/types";
 
 let io: FakeAppData;
 
@@ -37,19 +36,8 @@ const PHOTO: DishPhoto = {
   foundAt: 1000,
 };
 
-function dish(over: Partial<Dish> = {}): Dish {
-  return {
-    id: "dish-a",
-    name: "Mapo tofu",
-    searchName: "mapo tofu",
-    oneLine: "",
-    base: "",
-    fresh: "",
-    keepsADay: false,
-    handsOnMinutes: 10,
-    ingredients: [],
-    ...over,
-  };
+function meal(searchName = "mapo tofu") {
+  return { searchName };
 }
 
 test("the keys say what was searched for", () => {
@@ -116,29 +104,12 @@ test("an answer older than the reader's ask is asked again, and a newer one is n
   expect(needsPhotoLookup(PHOTO, now, 0)).toBe(false);
 });
 
-test("a dish and an ingredient read their own keys, and a miss is nothing", () => {
+test("a meal and an ingredient read their own keys, and a miss is nothing", () => {
   const cache = { "dish:mapo tofu": PHOTO, "ingredient:kale": { none: true as const, checkedAt: 1 } };
-  expect(photoForDish(dish(), cache)).toEqual(PHOTO);
-  expect(photoForDish(dish({ searchName: "shakshuka" }), cache)).toBeNull();
+  expect(photoForDish(meal(), cache)).toEqual(PHOTO);
+  expect(photoForDish(meal("shakshuka"), cache)).toBeNull();
+  expect(photoForDish({}, cache)).toBeNull();
   expect(photoForDish(null, cache)).toBeNull();
   expect(photoForIngredient("Kale", cache)).toBeNull();
   expect(photoForIngredient("bok choy", cache)).toBeNull();
-});
-
-test("a week takes the pictures the cache has and keeps the ones it has not", () => {
-  const plan = {
-    id: "week-2026-09-21",
-    startDate: "2026-09-21",
-    days: [],
-    breakfastLine: "",
-    dishes: [dish(), dish({ id: "dish-b", searchName: "shakshuka", image: "app/old.png" })],
-    createdAt: 0,
-    revision: 1,
-  } satisfies WeekPlan;
-  const after = withDishPhotos(plan, { "dish:mapo tofu": PHOTO });
-  expect(after.dishes[0]?.image).toBe(PHOTO.url);
-  expect(after.dishes[1]?.image).toBe("app/old.png");
-  // Nothing to change is the same object, so nothing writes.
-  expect(withDishPhotos(after, { "dish:mapo tofu": PHOTO })).toBe(after);
-  expect(withDishPhotos(plan, {})).toBe(plan);
 });

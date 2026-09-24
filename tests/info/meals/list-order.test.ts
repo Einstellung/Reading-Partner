@@ -39,20 +39,20 @@ function reader(name: string): ShoppingItem {
 test("a fresh order walks the aisles and sinks the ticked lines", () => {
   const state = listed();
   const first = orderShoppingLines(state);
-  const kale = shoppingItemKey({ name: "kale", category: "produce" });
-  expect(first).toContain(kale);
+  const bokChoy = shoppingItemKey({ name: "上海青", category: "produce" });
+  expect(first).toContain(bokChoy);
 
-  const ticked = setShoppingChecked(state, kale, true);
+  const ticked = setShoppingChecked(state, bokChoy, true);
   const next = orderShoppingLines(ticked);
   const produce = next.filter((k) => k.startsWith("produce"));
-  expect(produce[produce.length - 1]).toBe(kale);
+  expect(produce[produce.length - 1]).toBe(bokChoy);
 });
 
 test("a line does not move while the screen is open", () => {
   const state = listed();
   const open = orderShoppingLines(state);
-  const kale = shoppingItemKey({ name: "kale", category: "produce" });
-  const ticked = setShoppingChecked(state, kale, true);
+  const bokChoy = shoppingItemKey({ name: "上海青", category: "produce" });
+  const ticked = setShoppingChecked(state, bokChoy, true);
   // The screen hands back the order it opened with, so the tick changes the box
   // and the count and nothing else.
   expect(orderShoppingLines(ticked, open)).toEqual(open);
