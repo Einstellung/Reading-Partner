@@ -1,38 +1,37 @@
-// What Apply on a meals card writes (src/info/meals/apply.ts), and what the AI
-// is told afterwards.
+// The meals writes (src/info/meals/apply.ts): Apply on a plan card, a profile
+// written straight through, a deviation, and what the AI is told afterwards.
 // Run: scripts/t.sh tests/info/meals
 
 import { expect, test } from "bun:test";
 import {
-  applyCharter,
   applyPlan,
   deviationNote,
   planNote,
   recordDeviation,
   refreshPhotos,
+  saveProfile,
   type MealsPorts,
 } from "../../../src/info/meals/apply";
-import type {
-  MealsCharterCardData,
-  MealsPlanCardData,
-} from "../../../src/info/meals/cards";
+import type { MealsPlanCardData } from "../../../src/info/meals/cards";
 import type { PhotoQuery } from "../../../src/info/meals/photo-run";
-import { currentList, shoppingItemKey } from "../../../src/info/meals/shopping";
+import { currentList, deriveShoppingList, shoppingItemKey } from "../../../src/info/meals/shopping";
+import { solvePlan, targetsOf } from "../../../src/info/meals/solve-week";
 import type {
   Deviation,
-  DishMethod,
   DishPhotoEntry,
+  MealsCharter,
   MealsState,
   ShoppingState,
   WeekPlan,
 } from "../../../src/info/meals/types";
-import { MON, shopping, state, week } from "./fixtures/week";
+import { mealOn } from "../../../src/info/meals/week";
+import { MON, charter, draftWeek, profile, shopping, state, week } from "./fixtures/week";
 
 interface Harness {
   ports: MealsPorts;
   saved: { plan: WeekPlan | null; shopping: ShoppingState | null };
+  charters: { charter: MealsCharter; week: { plan: WeekPlan; shopping: ShoppingState } | null }[];
   deviations: Deviation[];
-  methods: { dishId: string; method: DishMethod }[];
   reloads: number;
 }
 
@@ -40,15 +39,16 @@ function harness(over: Partial<MealsState> = {}, fail = false): Harness {
   const current = state(over);
   const h: Harness = {
     saved: { plan: null, shopping: null },
+    charters: [],
     deviations: [],
-    methods: [],
     reloads: 0,
     ports: null as unknown as MealsPorts,
   };
   h.ports = {
     current: async () => current,
-    saveCharter: async () => {
+    saveCharter: async (c, w) => {
       if (fail) throw new Error("no");
+      h.charters.push({ charter: c, week: w });
     },
     savePlan: async (plan, list) => {
       if (fail) throw new Error("no");
@@ -57,14 +57,13 @@ function harness(over: Partial<MealsState> = {}, fail = false): Harness {
     saveShopping: async (list) => {
       h.saved.shopping = list;
     },
+    saveMealMethod: async () => {},
     saveDeviation: async (deviation, plan, list) => {
       if (fail) throw new Error("no");
       h.deviations.push(deviation);
       h.saved = { plan, shopping: list };
     },
-    saveDishMethod: async (dishId, method) => {
-      h.methods.push({ dishId, method });
-    },
+    region: () => "other",
     now: () => 100,
     today: () => MON,
     changed: () => {
@@ -75,14 +74,12 @@ function harness(over: Partial<MealsState> = {}, fail = false): Harness {
 }
 
 function planCard(over: Partial<MealsPlanCardData> = {}): MealsPlanCardData {
-  const plan = week();
+  const plan = draftWeek();
   return {
     kind: "meals-plan",
     threadId: "meals",
     startDate: plan.startDate,
     days: plan.days,
-    dishes: plan.dishes,
-    breakfastLine: plan.breakfastLine,
     adjustment: false,
     changed: [],
     changedDates: [],
@@ -91,24 +88,41 @@ function planCard(over: Partial<MealsPlanCardData> = {}): MealsPlanCardData {
   };
 }
 
-test("applying a plan writes the week and the list derived from three meals a day", async () => {
+// The week as the program solves it for a profile.
+function solvedFor(over: Parameters<typeof profile>[0]): WeekPlan {
+  const c = charter(over);
+  return solvePlan(draftWeek(), targetsOf(c, "other")!, c.profile);
+}
+
+test("applying a plan writes the week with its grams solved and the list derived from them", async () => {
   const h = harness({ plan: null });
   const applied = await applyPlan(planCard(), h.ports);
   await applied.pending;
   expect(applied.ok).toBe(true);
-  expect(h.saved.plan?.breakfastLine).toBe("Oats most days, something on the way on Friday");
-  expect(currentList(h.saved.shopping!).map((i) => i.name).sort()).toEqual([
-    "chickpeas",
-    "kale",
-    "oats",
-    "salmon",
-    "yogurt",
-  ]);
+  expect(h.saved.plan!.days).toEqual(week().days);
+  expect(h.saved.plan!.revision).toBe(1);
+  expect(mealOn(h.saved.plan, MON, "lunch")!.solved!.length).toBe(5);
+  const list = currentList(h.saved.shopping!);
+  expect(list).toEqual(deriveShoppingList(week(), MON, 1));
+  expect(list.find((i) => i.foodId === "salmon")?.qty).toBe("240 g");
   expect(h.reloads).toBe(1);
-  expect(applied.note).toContain("5 things");
+  expect(applied.note).toContain(`${list.length} things`);
+});
+
+test("Apply re-solves against the profile as it is now, not the one the card was drafted for", async () => {
+  // The card carries grams solved for 60 kg; the reader has since said 80.
+  const h = harness({ charter: charter({ weightKg: 80 }) });
+  await (await applyPlan(planCard({ days: week().days, adjustment: true }), h.ports)).pending;
+  const heavier = solvedFor({ weightKg: 80 });
+  expect(h.saved.plan!.days).toEqual(heavier.days);
+  expect(h.saved.plan!.days).not.toEqual(week().days);
+  expect(currentList(h.saved.shopping!)).toEqual(deriveShoppingList(heavier, MON, 1));
+  // An adjustment keeps the week's identity and counts one more revision.
+  expect(h.saved.plan!.revision).toBe(2);
 });
 
 test("a re-derive keeps the ticks and the reader's own lines", async () => {
+  const salmon = deriveShoppingList(week(), MON, 1).find((i) => i.foodId === "salmon")!;
   const before = shopping({
     items: [],
     reader: [
@@ -123,7 +137,7 @@ test("a re-derive keeps the ticks and the reader's own lines", async () => {
         source: "reader",
       },
     ],
-    checked: { [shoppingItemKey({ name: "kale", category: "produce" })]: true },
+    checked: { [shoppingItemKey(salmon)]: true },
   });
   const h = harness({ shopping: before });
   await (await applyPlan(planCard({ adjustment: true }), h.ports)).pending;
@@ -146,27 +160,54 @@ test("a failed write changes nothing on screen", async () => {
   expect(h.reloads).toBe(0);
 });
 
-test("the charter card replaces the household", async () => {
-  const h = harness();
-  const card: MealsCharterCardData = {
-    kind: "meals-charter",
-    threadId: "meals",
-    people: 2,
-    stores: ["the market"],
-    kitchen: "one pan",
-    dislikes: ["celery"],
-    nightsCooking: 4,
-    nightsOut: 1,
-    nightsDelivery: 1,
-    text: "Two of us. Breakfast at home.",
-    phase: "proposed",
-  };
-  const applied = await applyCharter(card, h.ports);
-  expect(applied.ok).toBe(true);
-  expect(applied.note).toContain("Two of us");
+// --- the profile --------------------------------------------------------------
+
+test("a new profile re-solves the week and re-derives the list in the same write", async () => {
+  const salmon = deriveShoppingList(week(), MON, 1).find((i) => i.foodId === "salmon")!;
+  const h = harness({ shopping: shopping({ items: deriveShoppingList(week(), MON, 1), checked: { [shoppingItemKey(salmon)]: true } }) });
+  const out = await saveProfile(profile({ weightKg: 80 }), h.ports);
+  expect(out.ok).toBe(true);
+  expect(out.targets).toEqual(targetsOf(charter({ weightKg: 80 }), "other"));
+
+  expect(h.charters).toHaveLength(1);
+  const written = h.charters[0]!;
+  expect(written.charter.profile.weightKg).toBe(80);
+  expect(written.charter.updatedAt).toBe(100);
+  // No new words: what they said before is kept.
+  expect(written.charter.text).toBe(charter().text);
+
+  const heavier = solvedFor({ weightKg: 80 });
+  expect(written.week!.plan.days).toEqual(heavier.days);
+  expect(written.week!.plan.revision).toBe(week().revision + 1);
+  expect(written.week!.shopping.items).toEqual(deriveShoppingList(heavier, MON, 1));
+  expect(written.week!.shopping.checked).toEqual({ [shoppingItemKey(salmon)]: true });
+  expect(h.reloads).toBe(1);
 });
 
-test("a recorded deviation names the meal, not the day", async () => {
+test("onboarding with no week writes the profile alone, with the reader's words", async () => {
+  const h = harness({ charter: null, plan: null });
+  const out = await saveProfile(profile({ goal: "cut" }), h.ports, "Two of us on weekends.");
+  expect(out.ok).toBe(true);
+  expect(out.targets).not.toBeNull();
+  expect(h.charters[0]!.week).toBeNull();
+  expect(h.charters[0]!.charter.text).toBe("Two of us on weekends.");
+});
+
+test("a reader who withholds body data gets no targets", async () => {
+  const h = harness();
+  const out = await saveProfile(profile({ consent: "no" }), h.ports);
+  expect(out).toEqual({ ok: true, targets: null });
+});
+
+test("a profile that could not be written reports no targets and does not reload", async () => {
+  const h = harness({}, true);
+  expect(await saveProfile(profile({ weightKg: 80 }), h.ports)).toEqual({ ok: false, targets: null });
+  expect(h.reloads).toBe(0);
+});
+
+// --- a deviation ----------------------------------------------------------------
+
+test("a recorded deviation names the meal, re-solves the week and re-derives the list", async () => {
   const h = harness();
   const { ok, attention, note } = await recordDeviation(
     {
@@ -181,10 +222,26 @@ test("a recorded deviation names the meal, not the day", async () => {
     h.ports,
   );
   expect(ok).toBe(true);
-  expect(attention).toEqual([{ date: "2026-09-22", meal: "lunch" }]);
-  expect(h.deviations[0]!.changed).toBe("2026-09-22 lunch now needs another look.");
+  expect(attention).toEqual([{ date: "2026-09-22", meal: "breakfast" }]);
+  expect(h.deviations[0]!.changed).toBe("2026-09-22 breakfast now needs another look.");
   expect(h.deviations[0]!.at).toBe(100);
-  expect(note).toContain("2026-09-22 lunch");
+  expect(note).toContain("2026-09-22 breakfast");
+
+  const plan = h.saved.plan!;
+  expect(mealOn(plan, MON, "dinner")).toEqual({ mode: "delivery", place: "the usual place" });
+  // Monday's salmon is no longer bought.
+  const salmon = (s: ShoppingState) => currentList(s).find((i) => i.foodId === "salmon")!.grams!;
+  expect(salmon(h.saved.shopping!)).toBeLessThan(salmon(shopping({ items: deriveShoppingList(week(), MON, 1) })));
+  expect(currentList(h.saved.shopping!)).toEqual(deriveShoppingList(plan, MON, 1));
+});
+
+test("a skipped snack hands back the next main meal the reader's day eats", async () => {
+  const h = harness();
+  const { attention } = await recordDeviation(
+    { date: "2026-09-22", meal: "snack", said: "not hungry", became: "skip", changed: "", at: 0 },
+    h.ports,
+  );
+  expect(attention).toEqual([{ date: "2026-09-22", meal: "dinner" }]);
 });
 
 test("nothing is recorded against a week that does not exist", async () => {
@@ -201,9 +258,9 @@ test("the notes are said in the reader's voice and never read the list back", ()
   const list = shopping({
     items: [
       {
-        name: "salmon",
+        name: "三文鱼",
         en: "salmon",
-        qty: "2",
+        qty: "240 g",
         category: "protein",
         keeps: "d1-2",
         freezeOnArrival: true,
@@ -262,23 +319,23 @@ test("applying a week on the machine that searches asks for what it is missing",
   const h = harness({ plan: null });
   const asked = searching(h);
   await (await applyPlan(planCard(), h.ports)).pending;
-  expect(asked[0]).toContain("dish:chickpea stew");
+  expect(asked[0]).toContain("dish:shrimp rice bowl");
 });
 
 // The reader said a picture is wrong before this week was applied: a picture
 // found before they said so is looked for again.
 test("a week applied after the reader asked is searched from before their ask", async () => {
   const h = harness({ plan: null, photosAskedAt: 500 });
-  h.ports.photos = async () => ({ "dish:chickpea stew": found(400) });
+  h.ports.photos = async () => ({ "dish:shrimp rice bowl": found(400) });
   const asked = searching(h);
   await (await applyPlan(planCard(), h.ports)).pending;
-  expect(asked[0]).toContain("dish:chickpea stew");
+  expect(asked[0]).toContain("dish:shrimp rice bowl");
 
   const after = harness({ plan: null, photosAskedAt: 300 });
-  after.ports.photos = async () => ({ "dish:chickpea stew": found(400) });
+  after.ports.photos = async () => ({ "dish:shrimp rice bowl": found(400) });
   const later = searching(after);
   await (await applyPlan(planCard(), after.ports)).pending;
-  expect(later[0]).not.toContain("dish:chickpea stew");
+  expect(later[0]).not.toContain("dish:shrimp rice bowl");
 });
 
 test("asking for better pictures writes down when they asked, wherever they are", async () => {

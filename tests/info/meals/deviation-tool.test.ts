@@ -10,22 +10,24 @@ import {
   type MealsToolDeps,
 } from "../../../src/info/meals/tools";
 import type { MealsPorts } from "../../../src/info/meals/apply";
-import type { Deviation, MealsState, WeekPlan } from "../../../src/info/meals/types";
+import type { Deviation, MealsState, ShoppingState, WeekPlan } from "../../../src/info/meals/types";
 import { EMPTY_MEALS } from "../../../src/info/meals/types";
+import { mealOn } from "../../../src/info/meals/week";
 import { MON, shopping, state } from "./fixtures/week";
 
 function tool(current: MealsState) {
-  const written: { deviation: Deviation; plan: WeekPlan }[] = [];
+  const written: { deviation: Deviation; plan: WeekPlan; shopping: ShoppingState }[] = [];
   let reloads = 0;
   const ports: MealsPorts = {
     current: async () => current,
     saveCharter: async () => {},
     savePlan: async () => {},
     saveShopping: async () => {},
-    saveDeviation: async (deviation, plan) => {
-      written.push({ deviation, plan });
+    saveMealMethod: async () => {},
+    saveDeviation: async (deviation, plan, list) => {
+      written.push({ deviation, plan, shopping: list });
     },
-    saveDishMethod: async () => {},
+    region: () => "other",
     now: () => 9,
     today: () => MON,
     changed: () => {
@@ -37,6 +39,7 @@ function tool(current: MealsState) {
     state: async () => current,
     today: () => MON,
     now: () => 9,
+    region: () => "other",
     onMealsCard: () => {},
   };
   return {
@@ -49,14 +52,14 @@ function tool(current: MealsState) {
   };
 }
 
-test("a lunch that was not carried is recorded, and the next cooked meal is handed back", async () => {
+test("a lunch that was not made is recorded, and the next made meal is handed back", async () => {
   const t = tool(state());
   const out = await t.run({
     day: "today",
     meal: "lunch",
     became: "out",
     place: "the canteen",
-    said: "didn't take lunch, ate at the canteen",
+    said: "didn't make lunch, ate at the canteen",
   });
   expect(t.written[0]!.deviation).toMatchObject({
     date: MON,
@@ -65,26 +68,41 @@ test("a lunch that was not carried is recorded, and the next cooked meal is hand
     place: "the canteen",
     at: 9,
   });
-  expect(out).toContain("2026-09-21 dinner now needs another look");
+  expect(out).toContain("2026-09-21 dinner needs its foods picked again");
   expect(out).toContain("adjustment set");
   expect(t.reloads()).toBe(1);
 });
 
-test("a dinner that became delivery hands back the packed lunch it fed", async () => {
+test("a dinner that became delivery hands back tomorrow's breakfast", async () => {
   const t = tool(state());
-  const out = await t.run({ day: "today", meal: "dinner", became: "delivery", said: "ordered in" });
-  expect(out).toContain("2026-09-22 lunch");
-  const lunch = t.written[0]!.plan.days[1]!.lunch;
-  expect(lunch.reheatOf).toBeUndefined();
+  const out = await t.run({ day: "1", meal: "dinner", became: "delivery", said: "ordered in" });
+  expect(out).toContain("2026-09-22 breakfast");
+  expect(mealOn(t.written[0]!.plan, MON, "dinner")).toEqual({ mode: "delivery" });
 });
 
-test("a breakfast that was bought moves nothing", async () => {
+// Tuesday is a rest day: the snack sits between lunch and dinner.
+test("a snack not eaten hands back that evening's dinner", async () => {
   const t = tool(state());
-  const out = await t.run({ day: "2", meal: "breakfast", became: "bought", said: "grabbed a coffee" });
+  const out = await t.run({ day: "2", meal: "Snack", became: "skip", said: "wasn't hungry" });
+  expect(t.written[0]!.deviation).toMatchObject({ date: "2026-09-22", meal: "snack", became: "skip" });
+  expect(out).toContain("2026-09-22 dinner needs its foods picked again");
+  expect(mealOn(t.written[0]!.plan, "2026-09-22", "snack")).toEqual({ mode: "skip" });
+});
+
+test("a meal that becomes made hands back that meal itself", async () => {
+  const t = tool(state());
+  const out = await t.run({ day: "3", meal: "dinner", became: "make", said: "I'll cook tonight" });
+  expect(out).toContain("2026-09-23 dinner needs its foods picked again");
+});
+
+test("a meal that was never made moves nothing else", async () => {
+  const t = tool(state());
+  const out = await t.run({ day: "6", meal: "breakfast", became: "out", place: "a cafe", said: "sat down for it" });
   expect(out).toContain("Nothing else in the week moved");
+  expect(mealOn(t.written[0]!.plan, "2026-09-26", "breakfast")).toEqual({ mode: "out", place: "a cafe" });
 });
 
-test("the refusals: no week, a day off the week, a meal that is not one of three, a mode that is not a mode", async () => {
+test("the refusals: no week, a day off the week, a meal that is not one of four, a mode that is not a mode", async () => {
   const none = tool({ ...EMPTY_MEALS, shopping: shopping() });
   expect(await none.run({ day: "today", meal: "lunch", became: "out", said: "x" })).toContain(
     "no week planned",
@@ -97,7 +115,11 @@ test("the refusals: no week, a day off the week, a meal that is not one of three
   expect(await t.run({ day: "1", meal: "brunch", became: "out", said: "x" })).toContain(
     "meal must be one of",
   );
-  expect(await t.run({ day: "1", meal: "lunch", became: "grazed", said: "x" })).toContain(
+  // The old modes are gone.
+  expect(await t.run({ day: "1", meal: "lunch", became: "packed", said: "x" })).toContain(
+    "became must be one of",
+  );
+  expect(await t.run({ day: "1", meal: "lunch", became: "cook", said: "x" })).toContain(
     "became must be one of",
   );
   expect(t.written).toEqual([]);
@@ -106,13 +128,15 @@ test("the refusals: no week, a day off the week, a meal that is not one of three
 test("a day is named the way the reader says it, or refused", () => {
   expect(resolveDeviationDate("today", MON, "2026-09-23")).toBe("2026-09-23");
   expect(resolveDeviationDate("yesterday", MON, "2026-09-23")).toBe("2026-09-22");
+  expect(resolveDeviationDate("tomorrow", MON, "2026-09-23")).toBe("2026-09-24");
   expect(resolveDeviationDate("3", MON, "2026-09-23")).toBe("2026-09-23");
   expect(resolveDeviationDate("last Tuesday", MON, MON)).toBeNull();
   expect(resolveDeviationDate("0", MON, MON)).toBeNull();
 });
 
-test("a meal key is one of three, whatever case it arrives in", () => {
+test("a meal key is one of four, whatever case it arrives in", () => {
   expect(toMealKey("Lunch")).toBe("lunch");
   expect(toMealKey(" dinner ")).toBe("dinner");
+  expect(toMealKey("SNACK")).toBe("snack");
   expect(toMealKey("supper")).toBeNull();
 });
