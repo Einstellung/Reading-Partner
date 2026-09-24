@@ -38,16 +38,11 @@ Almeida 09-17 称 36 小时内放了 14 万人出等待名单；TechCrunch 09-18
 
 ## 架构共识与在先技术争议
 
-[archerhume《Jev's Architecture Unmasked》](https://archerhume.com/posts/jevs-architecture-unmasked/) 用约 1 万次 API 调用探测，证据强的四条：概率是直接读出来的不是生成文本；state 编码一次共享，多问题并行建表示、分支之间无串扰（信息流实验验证）；选项之间有 listwise 交互，加一个无关的第五选项能把原有两项的 log-odds 差从 +0.38 压到 +0.11；1,200 道 MMLU 上 ECE 0.031。作者自标为推测的：可能是稀疏 MoE 的 causal decoder（从 3 万 token 约 160ms 推出来），并明说实验区分不了 causal decoder 和 bidirectional encoder。415 次探测比对 192 个公开 tokenizer 一个都对不上。
+[archerhume《Jev's Architecture Unmasked》](https://archerhume.com/posts/jevs-architecture-unmasked/) 用约 1 万次 API 调用探测，证据强的四条：概率是直接读出来的不是生成文本；state 编码一次共享，多问题并行建表示、分支之间无串扰（信息流实验验证）；选项之间有 listwise 交互，加一个无关的第五选项能把原有两项的 log-odds 差从 +0.38 压到 +0.11；1,200 道 MMLU 上 ECE 0.031。延迟实测（服务端计时，每档 8 次）：一个问题、state 从 360 到 29,835 token，中位 57.5ms → 218ms；短 state、问题从 1 到 1,500 个，中位 86.5ms → 610ms，100 题以内几乎不变。作者自标为推测的：可能是稀疏 MoE 的 causal decoder（依据是「3 万 token 约 160ms」，但文中自己的数据是 211-237ms，160ms 没有出处），并明说实验区分不了 causal decoder 和 bidirectional encoder。415 次探测比对 192 个公开 tokenizer 一个都对不上。
 
 [kuhung/understanding-jev](https://github.com/kuhung/understanding-jev) 定位 Jev 为有状态的离散 token 分类器，靠 KV Cache 前缀共享让几十个问题复用一次 prefill：
 
-| 项目 | 结果 |
-|---|---|
-| 输入 360 → 29,835 token（80 倍） | 延迟 57.5ms → 218ms（3.8 倍） |
-| 100 个并发问题 | 约 100ms |
-| 1,500 个并发问题 | 610ms |
-| Qwen-2.5-0.5B 读 logits 复现 | <30ms，与官方一致率 73.8% |
+Qwen-2.5-0.5B 读 logits 复现：<30ms，与官方一致率 73.8%。它 README 里的延迟数据和上面 archerhume 图 2 的中位数逐一相同，是转引。
 
 两条实现路径：末位 logits 掩码投影（过滤候选 token ID 后 softmax），或 NLI cross-encoder（context 当前提、候选当假设）。失败模式：无思维链、选项顺序敏感、无关选项拉低正确答案置信、未标定时错误预测也给 ≥0.90。
 
@@ -154,7 +149,7 @@ Jev 与 Cohere 的差是 +0.001（95% 区间 -0.009 到 +0.012），作者结论
 
 ## 空壳与存疑
 
-- Archer Hume 承诺的 open-weight Jev：架构拆解博客 29.7 万浏览、1982 赞，模型到今天没放出来，tracker 单独标成 promised 排在最后。
+- Archer Hume 承诺的 open-weight Jev：tracker 单独标成 promised 排在最后。2026-09-24 核对博客现行版本，正文里没有放权重的承诺，只有 "TypeSafe refuses to share their research… So I will (try my best)"，指的是分享研究；承诺可能出自 X 帖或更早版本，未核实。
 - harshatheg/Qwen-2.5-1B-RLCD：427 个 HF like 很显眼，但仓库里没有权重文件，只有 Space 的 app.py 和 engine 代码。like 数在这里会误导。
 - 09-19 到 09-20 刚传、0 下载、0-2 stars 的一批：dwidlee/systemone-lite-0.5b、shreyanbr 的三个、lafalce/system-one-model、Meanblock/JEV-CPU、us/jev-local、intikhab49/open-jev-typed-decision-engine（0 star 但 README 声称 150M encoder 0.697 对 Jev 0.727、校准好 2.5 倍）、BILLKISHORE/opensysone、jaswanthsanjay88/rev、akash-kamat/system-one-gemma。都有卡片有权重，无人验证，数字不要引用。
 - Laya 对 Jev 的全部比较都是引用第三方数字、非自测，样本和 prompt 不同。
