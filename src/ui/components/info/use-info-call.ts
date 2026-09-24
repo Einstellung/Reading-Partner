@@ -49,8 +49,8 @@ import {
   applyLabProposal,
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
-import { applyCharter, applyPlan } from "../../../info/meals/apply";
-import type { MealsCard, MealsCharterCardData, MealsPlanCardData } from "../../../info/meals/cards";
+import { applyPlan } from "../../../info/meals/apply";
+import type { MealsCard, MealsPlanCardData } from "../../../info/meals/cards";
 import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
 import { withMealsTools } from "../../../info/meals/desk";
 import { todayLocal } from "../../../info/collect/store";
@@ -432,29 +432,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     [bookId, anchor.threadId, noteTurn, onSourcesChanged],
   );
 
-  // The meals charter's Apply. One household, so a second charter replaces the
-  // first; the shape is handleApplyLab's, down to the order of the three
-  // effects.
-  const handleApplyMealsCharter = useCallback(
-    async (cardId: string) => {
-      const found = findCardPart(messagesRef.current, cardId);
-      if (!found || found.payload.kind !== "meals-charter") return;
-      const card = found.payload;
-      const { ok, note } = await applyCharter(
-        card,
-        liveMealsPorts({ today: () => todayLocal(), changed: () => onMealsChanged?.() }),
-      );
-      if (!ok) return;
-      const applied: MealsCharterCardData = { ...card, phase: "applied" };
-      setMessages((prev) => patchCardPayload(prev, cardId, { phase: "applied" }));
-      patchThreadMessage(bookId, anchor.threadId, found.ts, {
-        parts: [toPersistedCardPart(cardId, applied)],
-      });
-      noteTurn(note);
-    },
-    [bookId, anchor.threadId, noteTurn, onMealsChanged],
-  );
-
   // The week's Apply: the plan and the shopping list derived from it, in one
   // write, and the screen reloaded through the ports' `changed`.
   const handleApplyMealsPlan = useCallback(
@@ -488,7 +465,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
           else if (action.op === "apply-topic") void handleApplyTopic(cardId);
           else if (action.op === "apply-lab") void handleApplyLab(cardId);
           else if (action.op === "apply-lab-archive") void handleArchiveLab(cardId);
-          else if (action.op === "apply-meals-charter") void handleApplyMealsCharter(cardId);
           else if (action.op === "apply-meals-plan") void handleApplyMealsPlan(cardId);
           else if (action.op === "retriage") runBriefingJob("retriage");
           else if (action.op === "retry-briefing") runBriefingJob(lastJobRef.current);
@@ -521,7 +497,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       handleApplyTopic,
       handleApplyLab,
       handleArchiveLab,
-      handleApplyMealsCharter,
       handleApplyMealsPlan,
       onOpenBriefing,
       onHangUp,

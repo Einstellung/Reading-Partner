@@ -19,10 +19,8 @@ import type {
   LabArchiveCardData,
   LabProposalCardData,
 } from "../../../info/boxes/cards";
-import type { MealsCharterCardData, MealsPlanCardData } from "../../../info/meals/cards";
-import type { WeekPlan } from "../../../info/meals/types";
+import type { MealsPlanCardData } from "../../../info/meals/cards";
 import { modeWord, weekdayName } from "../../../info/meals/view";
-import { dishForMeal } from "../../../info/meals/week";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
@@ -317,47 +315,6 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 // The info domain's share of the card registry, merged with the other domains'
 // in ui/components/cardRegistry.ts — which is where the render layer looks a card
 // up.
-// The meals charter: what the AI understood about the household after two or
-// three questions (docs/73 三张卡). The paragraph in their own words is the
-// card — the counted fields are what the program sorts by, and reading them
-// back as a form is what this line exists not to be.
-export function MealsCharterCard({ payload, dispatch }: CardComponentProps<MealsCharterCardData>) {
-  const applied = payload.phase === "applied";
-  return (
-    <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? "Saved" : "Your meals"}
-      </div>
-      <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{payload.text}</div>
-      <div className="mt-2 text-[12px] leading-relaxed text-faint-foreground">
-        {payload.people} eating · {payload.nightsCooking} cooking, {payload.nightsOut} out,{" "}
-        {payload.nightsDelivery} delivery
-        {payload.stores.length ? ` · ${payload.stores.join(", ")}` : ""}
-      </div>
-      {payload.dislikes.length > 0 && (
-        <div className="mt-1 text-[12px] text-faint-foreground">
-          Never: {payload.dislikes.join(", ")}
-        </div>
-      )}
-      <div className="mt-3.5 flex items-center justify-end gap-2">
-        {applied ? (
-          <span className="text-[12px] text-faint-foreground">Saved. Change it by saying so.</span>
-        ) : (
-          <Button
-            type="button"
-            variant="cta"
-            size="chip"
-            className="px-3.5 py-1.5"
-            onClick={() => dispatch({ kind: "mutate", op: "apply-meals-charter" })}
-          >
-            That's right
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // The week, or the night or two a deviation reopened. Seven rows either way —
 // the card always carries the whole week as it would stand once applied — with
 // the days this call actually changes marked, since on an adjustment those are
@@ -365,39 +322,21 @@ export function MealsCharterCard({ payload, dispatch }: CardComponentProps<Meals
 export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPlanCardData>) {
   const applied = payload.phase === "applied";
   const changed = new Set(payload.changedDates);
-  const plan: WeekPlan = {
-    id: "",
-    startDate: payload.startDate,
-    days: payload.days,
-    dishes: payload.dishes,
-    breakfastLine: payload.breakfastLine,
-    createdAt: 0,
-    revision: 0,
-  };
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
         {applied ? "Planned" : payload.adjustment ? "A change to the week" : "This week's meals"}
       </div>
-      {/* Breakfast is a pattern, not seven decisions (docs/73), so it is one
-          line above the week rather than a third column in it. */}
-      {payload.breakfastLine && (
-        <div className="mt-2.5 flex gap-2 border-b border-secondary-border pb-2 text-[13px] leading-snug text-muted-foreground">
-          <span className="w-16 flex-none text-faint-foreground">Breakfast</span>
-          <span className="min-w-0 flex-1">{payload.breakfastLine}</span>
-        </div>
-      )}
       <ul className="m-0 mt-1.5 flex list-none flex-col p-0">
         {payload.days.map((day) => {
           const mark = changed.has(day.date);
           const cell = (meal: (typeof day)["lunch"]) => {
-            const dish = dishForMeal(plan, meal);
             return (
               <span className="min-w-0 flex-1 truncate">
                 <span className={mark ? "text-muted-foreground" : "text-faint-foreground"}>
                   {modeWord(meal.mode)}
                 </span>{" "}
-                {dish?.name ?? meal.place ?? ""}
+                {meal.name ?? meal.place ?? ""}
               </span>
             );
           };
@@ -447,6 +386,5 @@ export const INFO_CARD_REGISTRY: CardRegistryFor<InfoCard["kind"]> = {
   "lab-proposal": LabProposalCard,
   "lab-archive": LabArchiveCard,
   "briefing-failed": BriefingFailedCard,
-  "meals-charter": MealsCharterCard,
   "meals-plan": MealsPlanCard,
 };

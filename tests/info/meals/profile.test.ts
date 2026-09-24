@@ -67,7 +67,7 @@ test("the profile tool writes only the fields stated and answers with the new ta
     onMealsCard: () => {},
     ports: p,
   });
-  const res = await tool.execute({ weightKg: 71, trainingDays: [2, 1, 1, 9] } as never, {} as never);
+  const res = await tool.execute({ weightKg: 71, trainingDays: [2, 1, 1, 9] } as never);
   expect(now().charter?.profile.weightKg).toBe(71);
   expect(now().charter?.profile.trainingDays).toEqual([1, 2]);
   expect(now().charter?.profile.goal).toBe("steady");
