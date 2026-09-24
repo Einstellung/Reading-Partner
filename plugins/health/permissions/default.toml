@@ -1,0 +1,3 @@
+[default]
+description = "Read the reader's body measurements from Apple Health, after asking for them."
+permissions = ["allow-read-body"]

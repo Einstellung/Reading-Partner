@@ -1,6 +1,6 @@
-// The meals page (docs/73): the shopping trip at the top, today and tomorrow
-// under it, and the rest of the week below that. Every card is a button into
-// its own screen — the trip, or one day's three meals.
+// The meals page (docs/73): the daily targets at the top, the shopping trip,
+// today and tomorrow under it, and the rest of the week below that. Every card
+// is a button into its own screen — the method, the trip, or one day's meals.
 //
 // Phone first — one column, 16px gutters, nothing that scrolls sideways at
 // 390px — and the same column centred on a desktop. Rendering and event binding
@@ -10,6 +10,8 @@
 // None of the bureau's vocabulary appears here. It is what they eat.
 
 import type { Meal, MealsState, ShoppingItem } from "../../../info/meals/types";
+import { FOOT_NOTE } from "../../../info/meals/method-screen";
+import { dayTotalsLine, mealNumbersLine, weekRowNumbers } from "../../../info/meals/screen-lines";
 import { hostRegion } from "../../../info/meals/region";
 import type { PhotoCache } from "../../../info/meals/dish-photos";
 import {
@@ -29,7 +31,15 @@ import {
   type DayView,
 } from "../../../info/meals/view";
 import { Button } from "../ui/button";
-import { Chevron, MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
+import {
+  Cells,
+  Chevron,
+  DayKindTag,
+  MealsColumn,
+  MealsHeader,
+  PhotoCredit,
+  TargetsCard,
+} from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
 
 export interface MealsHomeProps {
@@ -44,6 +54,8 @@ export interface MealsHomeProps {
   onAsk: () => void;
   onOpenShopping: () => void;
   onOpenDay: (date: string) => void;
+  onOpenMethod: () => void;
+  onReplayOnboarding: () => void;
 }
 
 // The meal a day's picture comes from: the latest made main meal.
@@ -105,7 +117,7 @@ function DayCard({
       onClick={onOpen}
       className="block w-full rounded-2xl border border-border-soft bg-card p-5 text-left can-hover:hover:bg-secondary-faint coarse:min-h-[44px]"
     >
-      <div className="flex items-baseline gap-2">
+      <div className="flex items-center gap-2">
         <span
           className={
             big
@@ -119,28 +131,36 @@ function DayCard({
           <span className="text-[13px] text-faint-foreground">{view.weekday}</span>
         )}
         <span className="flex-1" />
+        {view.targets && <DayKindTag training={view.training} />}
         <Chevron />
       </div>
+      {dayTotalsLine(view) && (
+        <div className="mt-1 text-[13px] tabular-nums text-faint-foreground">{dayTotalsLine(view)}</div>
+      )}
       <DayPicture view={view} photos={photos} big={big} />
-      {/* Label, then the dish, then how it is made. The dish is the only thing
-          on the row worth reading first, so it sits next to its label and takes
-          the width; the mode is a quiet note at the end rather than a green
-          column between the two. A long name wraps rather than truncating — a
-          Chinese name cut mid-word says less than a second line costs. */}
+      {/* Label and dish on the first line, the numbers and the three squares
+          under it. A long name wraps rather than truncating — a Chinese name
+          cut mid-word says less than a second line costs. */}
       <ul className="m-0 mt-3 flex list-none flex-col p-0">
-        {view.meals.map((m) => (
-          <li key={m.key} className="flex items-start gap-3 py-1">
-            <span className="w-[62px] flex-none pt-px text-[12px] leading-[20px] text-faint-foreground">
-              {m.label}
-            </span>
-            <span className="min-w-0 flex-1 text-[15px] leading-[20px] text-foreground">
-              {mealName(m)}
-            </span>
-            <span className="flex-none pt-px text-[12px] leading-[20px] text-faint-foreground">
-              {m.word}
-            </span>
-          </li>
-        ))}
+        {view.meals.map((m) => {
+          const numbers = mealNumbersLine(m);
+          return (
+            <li key={m.key} className="border-t border-border-subtle py-2 first:border-t-0">
+              <div className="flex items-start gap-3">
+                <span className="w-[62px] flex-none pt-px text-[12px] leading-[20px] text-faint-foreground">
+                  {m.label}
+                </span>
+                <span className="min-w-0 flex-1 text-[15px] leading-[20px] text-foreground">
+                  {mealName(m) || m.word}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-2 pl-[74px] text-[12px] tabular-nums text-faint-foreground">
+                <span className="min-w-0 flex-1">{numbers ?? m.word}</span>
+                {m.cells && <Cells cells={m.cells} />}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </button>
   );
@@ -215,6 +235,7 @@ function WeekRow({
   const thumbnails = dishThumbnails(lead?.items, (en) => ingredientPicture(en, photos)?.url ?? null);
   const lunch = view.meals.find((m) => m.key === "lunch");
   const dinner = view.meals.find((m) => m.key === "dinner");
+  const numbers = weekRowNumbers(view);
   return (
     <li className="border-t border-border-subtle first:border-t-0">
       <button
@@ -222,7 +243,14 @@ function WeekRow({
         onClick={onOpen}
         className="flex min-h-[44px] w-full items-center gap-3 py-2.5 text-left"
       >
-        <span className="w-[76px] flex-none text-[13px] text-faint-foreground">{view.weekday}</span>
+        <span className="w-[76px] flex-none text-[13px] text-faint-foreground">
+          {view.weekday}
+          {view.targets && (
+            <small className={view.training ? "block text-[11px] text-accent-line" : "block text-[11px]"}>
+              {view.training ? "Training" : "Rest"}
+            </small>
+          )}
+        </span>
         {/* The slot is kept whether or not there is anything to put in it: a
             night with no picture would otherwise start its text a square to
             the left of the nights above and below it. */}
@@ -240,10 +268,17 @@ function WeekRow({
             an ellipsis: the name that gets cut is the one the reader does not
             already know. */}
         <span className="min-w-0 flex-1 text-[15px] leading-snug text-foreground">
-          {lunch ? mealName(lunch) : ""}
+          {lunch ? lunch.name || lunch.word : ""}
           <span className="text-faint-foreground"> · </span>
-          {dinner ? mealName(dinner) : ""}
+          {dinner ? dinner.name || dinner.word : ""}
         </span>
+        {numbers && (
+          <span className="flex-none text-right text-[12px] leading-snug tabular-nums text-faint-foreground">
+            {numbers[0]}
+            <br />
+            {numbers[1]}
+          </span>
+        )}
         <Chevron />
       </button>
     </li>
@@ -267,14 +302,31 @@ export function MealsHome(props: MealsHomeProps) {
   return (
     <MealsColumn>
       <MealsHeader title="Meals" askLabel="Ask about this week" onAsk={props.onAsk} />
+      {state !== null && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          <Button variant="outline" size="chip" onClick={props.onReplayOnboarding}>
+            Replay onboarding
+          </Button>
+          {view?.targets && (
+            <Button variant="outline" size="chip" onClick={props.onOpenMethod}>
+              Method &amp; sources
+            </Button>
+          )}
+        </div>
+      )}
+      {view?.summary && (
+        <div className="mb-4">
+          <TargetsCard summary={view.summary} onMethod={props.onOpenMethod} />
+        </div>
+      )}
 
       {state === null ? (
         <div className="h-24" />
       ) : !plan || head.length === 0 ? (
         <div className="rounded-2xl border border-border-soft bg-card p-5">
           <p className="m-0 font-display text-[17px] leading-relaxed text-foreground">
-            Nothing is planned. Three meals a day for seven days, the shopping list that goes with
-            them, and you only have to say something when a meal goes differently.
+            Nothing is planned. Four meals a day for seven days, each about ten minutes, and the
+            shopping list that goes with them.
           </p>
           <div className="mt-4">
             <Button variant="cta" onClick={props.onPlanWeek}>
@@ -344,6 +396,7 @@ export function MealsHome(props: MealsHomeProps) {
           )}
         </>
       )}
+      <p className="m-0 mt-7 text-[11px] leading-snug text-faint-foreground">{FOOT_NOTE}</p>
       <PhotoCredit />
     </MealsColumn>
   );

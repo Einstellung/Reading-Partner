@@ -94,6 +94,10 @@ function infoScreenFor(base: PhoneScreen): HomeScreen | null {
       return "meals-shopping";
     case "meals-day":
       return "meals-day";
+    case "meals-method":
+      return "meals-method";
+    case "meals-onboarding":
+      return "meals-onboarding";
     default:
       return null;
   }
@@ -419,6 +423,9 @@ export default function PhoneApp({
             // it leaves anything else.
             mealsDay={base.kind === "meals-day" ? base.date : null}
             onOpenMealsDay={(date) => setStack((s) => push(s, { kind: "meals-day", date }))}
+            // Method & sources and a replayed onboarding are opened from more
+            // than one screen, so their back is the stack's own.
+            onMealsBack={goBack}
             // No corner cards over the chat. The reader pulled it down or
             // pressed Ask and pops it with a back, so the chat is a screen like
             // any other; a card that shrank it away would be a second way out,
