@@ -23,6 +23,11 @@
        them. -->
   <key>NSMicrophoneUsageDescription</key>
   <string>Reading Partner uses the microphone when you hold the bar to talk. Your speech is transcribed on this iPhone and never uploaded.</string>
+  <!-- Apple Health, read-only (plugins/health): prefills the body questions of
+       the meal plan. Read access only, so there is no
+       NSHealthUpdateUsageDescription. -->
+  <key>NSHealthShareUsageDescription</key>
+  <string>Reading Partner reads your height, weight, body fat, waist, sex and date of birth from Apple Health. They are only used to calculate your daily meal targets. Nothing is written to Health.</string>
   <!-- The formats the reader can open, so Files and the share sheet offer this
        app for one. Both UTIs are declared by the system, so there is no
        UTImportedTypeDeclarations to go with them: importing a type the system

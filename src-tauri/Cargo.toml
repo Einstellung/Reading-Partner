@@ -69,6 +69,10 @@ tauri-plugin-voice = { path = "../plugins/voice" }
 # the same reason voice is — off iOS `is_available` answers false, which is what
 # hides the control instead of leaving a command that does not exist.
 tauri-plugin-openin = { path = "../plugins/openin" }
+# Ours (plugins/health): read body measurements from Apple Health, read-only, to
+# prefill the meal targets. Registered on every platform; off iOS it answers
+# null.
+tauri-plugin-health = { path = "../plugins/health" }
 
 # The two taps the hand feels when a hold on Lumen opens or ends the voice
 # session (docs/68). The mirror image of autostart below: a motor exists only on
