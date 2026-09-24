@@ -215,7 +215,7 @@ export async function recordDeviation(
 ): Promise<Applied & { attention: MealRef[] }> {
   const state = await ports.current();
   if (!state.plan) return { ...NOTHING, attention: [] };
-  const moved = applyDeviation(state.plan, deviation);
+  const moved = applyDeviation(state.plan, deviation, state.charter?.profile ?? null);
   const { plan, shopping } = resolvedWeek(moved.plan, state.shopping, state.charter, ports.region(), ports.today());
   const attention = moved.attention;
   const said: Deviation = {

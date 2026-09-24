@@ -6,6 +6,7 @@
 // the model: a model that is told today's date still counts days wrong.
 
 import type { TemplateItem } from "./nutrition/solve";
+import { dayPlan, isTrainingDay, type Profile } from "./nutrition/targets";
 import {
   MAIN_MEAL_KEYS,
   MEAL_KEYS,
@@ -20,6 +21,9 @@ import {
 } from "./types";
 
 export const WEEK_DAYS = 7;
+
+// What decides the order a day's meals are eaten in.
+type DayOrderProfile = Pick<Profile, "trainingDays" | "trainTime">;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -142,6 +146,7 @@ function settle(meal: Meal, became: MealMode, place: string | undefined): Meal {
 export function applyDeviation(
   plan: WeekPlan,
   deviation: Deviation,
+  profile: DayOrderProfile | null = null,
 ): { plan: WeekPlan; attention: MealRef[] } {
   const target = dayOn(plan, deviation.date);
   const before = target?.[deviation.meal];
@@ -155,16 +160,21 @@ export function applyDeviation(
   const attention: MealRef[] = [];
   if (settled.mode === "make" && !settled.items?.length) attention.push(ref);
   if (before.mode === "make" && settled.mode !== "make") {
-    const after = nextMadeMainMeal(next, ref);
+    const after = nextMadeMainMeal(next, ref, profile);
     if (after) attention.push(after);
   }
   return { plan: next, attention: attention.slice(0, 2) };
 }
 
-// The first made main meal after `ref`, within that day and the next.
-function nextMadeMainMeal(plan: WeekPlan, ref: MealRef): MealRef | null {
+// The first made main meal after `ref`, within that day and the next. "After"
+// is the order the day is eaten in, which puts the snack after training on a
+// training day (nutrition/targets.ts dayPlan); without a profile it is a rest
+// day's order.
+function nextMadeMainMeal(plan: WeekPlan, ref: MealRef, profile: DayOrderProfile | null): MealRef | null {
   const limit = addDays(ref.date, 1);
-  const order = (key: MealKey) => (key === "snack" ? -1 : MAIN_MEAL_KEYS.indexOf(key));
+  const training = profile ? isTrainingDay(profile, isoWeekday(ref.date)) : false;
+  const eaten = dayPlan(training, profile?.trainTime ?? "evening").order;
+  const order = (key: MealKey) => eaten.indexOf(key);
   for (const day of plan.days) {
     if (day.date < ref.date || day.date > limit) continue;
     for (const key of MAIN_MEAL_KEYS) {
