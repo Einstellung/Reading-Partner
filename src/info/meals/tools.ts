@@ -1,22 +1,25 @@
 // The meals desk's tools and the standing instruction that goes with them
-// (docs/73), modelled on info/briefer/lab-tool.ts: the two planning tools draft
-// a card and write nothing, the card's Apply performs the write, and a
+// (docs/73), modelled on info/briefer/lab-tool.ts: the planning tool drafts a
+// card and writes nothing, the card's Apply performs the write, and a
 // synthetic user turn afterwards tells the model what landed.
 //
-// The other five write straight through. That is the harness principle, not an
-// exception to it: a deviation, a line on the shopping list and a method are
-// the reader's own instruction carried out, and there is nothing for them to
-// approve about a sentence they just said (docs/AI harness principle).
+// The others write straight through. That is the harness principle, not an
+// exception to it: a profile change, a deviation, a line on the shopping list
+// and a method line are the reader's own instruction carried out.
 //
-// The model supplies dishes, ingredients, modes and prose. It supplies no
-// dates, no shopping list and no arithmetic: a day is a number from one to
-// seven exactly as the instruction printed it, and the program turns it into a
-// date (docs/73 事实不经模型).
+// The model chooses foods from the food table by id, their roles, a flavour, a
+// one-line method and the minutes. It supplies no dates, no grams for the
+// solved roles, no nutrition numbers and no shopping list: the program solves,
+// checks and derives them (docs/73 事实不经模型).
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
-import { mealWords, recordDeviation, refreshPhotos, type MealsPorts } from "./apply";
-import type { MealsCard, MealsCharterCardData, MealsPlanCardData } from "./cards";
+import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
+import type { MealsCard, MealsPlanCardData } from "./cards";
+import { checkPlan } from "./checks";
+import { FOODS, foodAllowed } from "./nutrition/foods";
+import type { TemplateItem, TemplateRole } from "./nutrition/solve";
+import type { Goal, Profile, Region, Targets, TrainTime, Work } from "./nutrition/targets";
 import {
   addReaderItem,
   currentList,
@@ -25,14 +28,15 @@ import {
   removeShoppingItem,
   replaceShoppingItem,
 } from "./shopping";
+import { targetsOf } from "./solve-week";
 import {
   CATEGORY_ORDER,
+  FLAVOURS,
   KEEPS_ORDER,
   MEAL_KEYS,
+  MEAL_MODES,
+  flavourOf,
   type Deviation,
-  type Dish,
-  type DishMethod,
-  type Ingredient,
   type IngredientCategory,
   type KeepsClass,
   type Meal,
@@ -42,27 +46,7 @@ import {
   type ShoppingItem,
   type WeekPlan,
 } from "./types";
-import { MAX_STEPS, MAX_STEP_CHARS } from "./method";
-import {
-  HANDS_ON_LIMITS,
-  WEEK_DAYS,
-  addDays,
-  assembleWeekPlan,
-  dishForMeal,
-  type DayDraft,
-  type DishDraft,
-  type MealDraft,
-} from "./week";
-
-const MODES: readonly MealMode[] = [
-  "cook",
-  "reheat",
-  "packed",
-  "out",
-  "delivery",
-  "bought",
-  "skip",
-];
+import { WEEK_DAYS, addDays, assembleWeekPlan, dayOn, isoWeekday, type DayDraft, type MealDraft } from "./week";
 
 /** What the reader has in front of them when they open the conversation. */
 export type MealsFocus =
@@ -71,38 +55,36 @@ export type MealsFocus =
   | { kind: "day"; date: string };
 
 export interface MealsToolDeps {
-  // The conversation the proposal was made in. Carried on the card so one read
-  // back off disk still says which it was.
+  // The conversation the proposal was made in.
   threadId: string;
-  // The charter, the week, the trip and the deviations, read when the tool is
+  // The profile, the week, the trip and the deviations, read when the tool is
   // called rather than when the desk was laid.
   state(): Promise<MealsState>;
   // Today's local date, from the host clock. Never asked of the model.
   today(): string;
   now(): number;
-  // Surface the card. The host owns Apply; the planning tools never write.
+  // Which BMI cut points and fat range apply (region.ts).
+  region(): Region;
+  // Surface the card. The host owns Apply; the planning tool never writes.
   onMealsCard(card: MealsCard): void;
-  // Pinned by a test so minted dish ids are an equality assertion.
-  random?: () => number;
 }
 
 // --- the instruction ---------------------------------------------------------
 
-function mealLine(plan: WeekPlan, meal: Meal): string {
-  const dish = dishForMeal(plan, meal);
+const WEEKDAY_SHORT = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function templateLine(items: readonly TemplateItem[] | undefined): string {
+  return (items ?? [])
+    .map((i) => (i.role === "fixed" ? `${i.foodId} ${i.grams ?? "?"} g` : `${i.foodId} (${i.role})`))
+    .join(", ");
+}
+
+function mealLine(meal: Meal): string {
   switch (meal.mode) {
-    case "cook":
-      return dish ? `cook ${dish.name}` : "cook — no dish";
-    case "reheat":
-    case "packed": {
-      const word = meal.mode === "packed" ? "carry" : "reheat";
-      const what = dish ? ` ${dish.name}` : "";
-      const of = meal.reheatOf
-        ? ` (the base from ${meal.reheatOf.date} ${meal.reheatOf.meal})`
-        : meal.note
-          ? ` (${meal.note})`
-          : " — nothing to eat, this meal needs a plan";
-      return `${word}${what}${of}${meal.freshAdd ? `, plus ${meal.freshAdd}` : ""}`;
+    case "make": {
+      const head = `${meal.name ?? "no foods yet"}${meal.flavour ? ` [${meal.flavour}]` : ""}`;
+      const mins = meal.minutes ? `, ${meal.minutes} min` : "";
+      return meal.items?.length ? `${head}${mins}: ${templateLine(meal.items)}` : `${head} — needs foods`;
     }
     case "out":
       return meal.place ? `out at ${meal.place}` : "out";
@@ -111,12 +93,19 @@ function mealLine(plan: WeekPlan, meal: Meal): string {
     case "bought":
       return meal.place ? `bought on the way: ${meal.place}` : "bought on the way";
     case "skip":
-      return meal.note || meal.place || "not eating";
+      return meal.note || "not eating";
   }
 }
 
+function dayHeading(plan: WeekPlan, index: number, profile: Profile | null, today: string): string {
+  const day = plan.days[index];
+  if (!day) return "";
+  const wd = isoWeekday(day.date);
+  const training = profile?.trainingDays.includes(wd) ? ", training" : profile ? ", rest" : "";
+  return `- Day ${index + 1} (${day.date}, ${WEEKDAY_SHORT[wd] ?? ""}${training})${day.date === today ? "  <- today" : ""}`;
+}
+
 function focusLines(state: MealsState, focus: MealsFocus): string[] {
-  const plan = state.plan;
   if (focus.kind === "shopping") {
     const list = currentList(state.shopping);
     const left = list.filter((i) => !isChecked(state.shopping, i)).length;
@@ -130,78 +119,108 @@ function focusLines(state: MealsState, focus: MealsFocus): string[] {
     ];
   }
   if (focus.kind === "day") {
-    if (!plan) return ["They are looking at a day, but no week is planned."];
-    const day = plan.days.find((d) => d.date === focus.date);
+    const day = dayOn(state.plan, focus.date);
     if (!day) return [`They are looking at ${focus.date}, which this week does not cover.`];
-    const out = [`They are looking at ${focus.date}:`];
-    for (const key of MEAL_KEYS) out.push(`- ${key}: ${mealLine(plan, day[key])}`);
-    const written = [
-      ...new Set(
-        MEAL_KEYS.map((k) => dishForMeal(plan, day[k]))
-          .filter((d): d is Dish => Boolean(d?.method))
-          .map((d) => d.name),
-      ),
+    return [
+      `They are looking at ${focus.date}. Its method lines are on their screen; do not read them back. ` +
+        "Call write_meals_method only if they want one made another way.",
     ];
-    if (written.length) {
-      out.push(
-        `The steps for ${written.join(" and ")} are already written and on their screen. ` +
-          "Do not read them back; call write_meals_method only if they want them changed.",
-      );
-    }
-    return out;
   }
   return ["They are looking at the week."];
 }
 
+function targetsLine(label: string, t: Targets["training"]): string {
+  return `${label}: ${t.kcal} kcal, protein ${t.protein} g, fat ${t.fat} g, carbs ${t.carbs} g`;
+}
+
+const GOAL_WORDS: Record<Goal, string> = {
+  cut: "lose fat",
+  gain: "build muscle",
+  steady: "steady energy",
+};
+
+const GOAL_ADVICE: Record<Goal, string> = {
+  cut:
+    "Losing fat: lean protein foods (chicken breast, shrimp, white fish, egg whites, tofu, Greek " +
+    "yogurt), plenty of vegetables, whole-grain or root staples, one spoon of oil.",
+  gain:
+    "Building muscle: a protein food at every meal including the snack, denser staples (rice, " +
+    "oats, noodles, bread), fattier fish and nuts are fine.",
+  steady:
+    "Steady energy: slow staples (whole grains, oats, sweet potato), a protein food at every " +
+    "meal, vegetables at lunch and dinner.",
+};
+
+/** The food table as the model chooses from it: id, name, roles, tags. */
+export function foodListing(dislikes: readonly string[]): string[] {
+  return FOODS.filter((f) => foodAllowed(f, dislikes)).map(
+    (f) => `${f.id} ${f.zh} ${f.roles.join("/")}${f.tags.length ? ` [${f.tags.join(",")}]` : ""}`,
+  );
+}
+
 /**
- * What the meals desk is told before it says anything: the household, the week
- * as it stands with today marked, what the reader is looking at, and the rules
- * the program will hold it to anyway.
+ * What the meals desk is told before it says anything: the reader's profile
+ * and the program's targets, the week as it stands with today marked, what
+ * they are looking at, and the rules the program will hold a plan to anyway.
  */
 export function mealsGuidance(
   state: MealsState,
   today: string,
-  opts: { focus?: MealsFocus } = {},
+  opts: { focus?: MealsFocus; region?: Region } = {},
 ): string {
   const out: string[] = ["MEALS", `Today is ${today}.`, ""];
+  const charter = state.charter;
+  const profile = charter?.profile ?? null;
+  const targets = targetsOf(charter, opts.region ?? "other");
 
-  if (state.charter) {
-    const c = state.charter;
+  if (!profile) {
     out.push(
-      "The household, in their words:",
-      c.text,
-      `${c.people} eating. Shops: ${c.stores.join(", ") || "none named"}. Kitchen: ${c.kitchen || "not said"}.`,
-      `Never cook: ${c.dislikes.join(", ") || "nothing named"}.`,
-      `A normal week: ${c.nightsCooking} cooking, ${c.nightsOut} out, ${c.nightsDelivery} delivery.`,
-      "Correct any of this with propose_meals_charter when they say something that changes it.",
+      "They have not answered the opening questions yet. Nothing can be planned until they do:",
+      "ask them to go through them on the Meals screen. Do not ask the questions yourself.",
     );
   } else {
+    const days = profile.trainingDays.map((d) => WEEKDAY_SHORT[d]).join(", ");
     out.push(
-      "You do not know this household yet. Before planning anything, ask two or three questions",
-      "in one message — how many are eating, where they shop, what breakfast and lunch normally",
-      "are, how many dinners they want to cook, anything they will not eat — and then call",
-      "propose_meals_charter with what they said. Never show them a form and never ask a fourth",
-      "question; the rest is learned by talking.",
+      `Goal: ${GOAL_WORDS[profile.goal]}. ${days ? `Trains ${days} (${profile.trainTime}).` : "Does not train."}`,
+      `At most ${profile.minutesPerMeal} minutes hands-on a meal. ${profile.people} eating.`,
+      `Shops: ${profile.shops.join(", ") || "none named"}. Kitchen: ${profile.kitchen.join(", ") || "not said"}.`,
+      `Never use: ${profile.dislikes.join(", ") || "nothing named"}.`,
+    );
+    if (charter?.text) out.push(`In their words: ${charter.text}`);
+    if (targets) {
+      out.push(
+        "Daily targets, computed by the program from their body data. Never restate, round or " +
+          "recompute them; the screen shows them.",
+        targetsLine("Training day", targets.training),
+        targetsLine("Rest day", targets.rest),
+      );
+    } else {
+      out.push(
+        "They chose not to share body data, so there are no targets and the program cannot solve " +
+          "portions. A plan needs them: if they want one, ask them to replay the opening questions.",
+      );
+    }
+    out.push(
+      "When they state a change — a new weight ('称了 71'), another goal, other training days, a " +
+        "new dislike — call update_meals_profile with just that. It writes at once and re-solves " +
+        "the week; say one line.",
     );
   }
   out.push("");
 
   if (state.plan) {
     const plan = state.plan;
-    if (plan.breakfastLine) out.push(`Breakfasts this week: ${plan.breakfastLine}`, "");
     out.push("This week:");
     for (let i = 0; i < plan.days.length; i++) {
       const day = plan.days[i];
       if (!day) continue;
-      const mark = day.date === today ? "  <- today" : "";
-      out.push(`- Day ${i + 1} (${day.date})${mark}`);
-      for (const key of MEAL_KEYS) out.push(`    ${key}: ${mealLine(plan, day[key])}`);
+      out.push(dayHeading(plan, i, profile, today));
+      for (const key of MEAL_KEYS) out.push(`    ${key}: ${mealLine(day[key])}`);
     }
     out.push(
       "",
-      "Refer to a meal by its day number and which meal it is when you call propose_meals_plan.",
-      "Never write a date yourself and never work one out — the program owns every date, the",
-      "shopping list and the freeze-on-arrival marks, and it will contradict you.",
+      "Refer to a meal by its day number and which meal it is. Never write a date yourself — the",
+      "program owns every date, every gram and the shopping list, and it will contradict you.",
     );
   } else {
     out.push("No week is planned. Call propose_meals_plan when they ask what to eat this week.");
@@ -210,161 +229,95 @@ export function mealsGuidance(
   out.push("", ...focusLines(state, opts.focus ?? { kind: "week" }));
 
   if (state.deviations.length) {
-    const recent = state.deviations.slice(-3);
     out.push("", "What they have told you went differently:");
-    for (const d of recent) out.push(`- ${d.date} ${d.meal}: ${d.said}`);
+    for (const d of state.deviations.slice(-3)) out.push(`- ${d.date} ${d.meal}: ${d.said}`);
   }
 
+  const limit = profile?.minutesPerMeal ?? 10;
   out.push(
     "",
     "HOW TO PLAN",
-    "Seven days, three meals each. Breakfast is a habit rather than seven decisions: give the",
-    "week one breakfast line in their own words and then repeat the two or three breakfasts it",
-    "names across the days, as real dishes, so their oats are on the shopping list.",
-    `One pot, hands-on at most ${HANDS_ON_LIMITS.dinner} minutes for lunch and dinner and`,
-    `${HANDS_ON_LIMITS.breakfast} for breakfast, and no more washing up than a single meal.`,
-    "Cook once, eat twice: a cooked dish is a base that keeps a day plus a fresh part added at",
-    "serving, so a cooked dinner can be followed by the next day's packed lunch out of the same",
-    "pot, or by a reheat with something fresh on it. A dish that does not keep a day feeds one",
-    "meal only.",
-    "A packed lunch must point at the meal that cooked its base, or say in `note` where the box",
-    "came from when it was cooked before this week.",
-    "List a dish's ingredients for every serving it is planned for, the packed lunch included.",
-    "Give every ingredient its English common name in `en` beside the name in their own language,",
-    "singular and lower case — it is what puts a photograph on their shopping list.",
-    "Give every dish a `searchName`: the English name someone would type into an image search.",
-    "Vegetables heavy, whole grains, lean protein, little oil, salt and refined carbohydrate.",
-    "Never count calories, never give grams of anything nutritional, never talk about nutrition",
-    "numbers at all — health is a filter on what you propose, not a subject.",
-    "Out, delivery, bought and skip are ordinary plans, from the places they actually go. Do not",
-    "apologise for them and do not dress them up as the healthy option.",
-    "Do not repeat a dish from the week already planned unless they asked for it.",
+    "Seven days, four meals each: breakfast, lunch, dinner and a snack. A made meal is about ten",
+    `minutes of hands-on work, never more than ${limit}, assembled mostly from ready foods —`,
+    "ready-to-eat chicken breast, frozen shrimp, eggs, tofu, Greek yogurt, frozen vegetables,",
+    "microwave grain rice, oats. Not cooked dishes.",
+    "A made meal is a list of foods from FOODS by id, each with a role: exactly one `protein` and",
+    "exactly one `staple`, whose grams the program solves (a fruit can be the staple of a snack or a",
+    "breakfast); at most one `fat` (an oil, nuts, a fatty spread), which the program moves; and any",
+    "number of `fixed` items with grams you give — vegetables (150–250 g at lunch and dinner, 80 g",
+    "or more at breakfast), a sauce (10–30 g), a second protein. Give no grams for the solved roles",
+    "and never a calorie or protein number: the program computes every one.",
+    profile ? GOAL_ADVICE[profile.goal] : "",
+    "Each made meal has a `flavour` from FLAVOURS. Two main meals in a row — dinner and the next",
+    "breakfast included — never share one; rotate through the list over the week.",
+    "Fish or seafood in at least two meals a week. Nothing they do not eat. Only what their kitchen",
+    "can do and their shops sell.",
+    "The snack is small: yogurt, milk, fruit, a few nuts. On a training day it is eaten right after",
+    "training.",
+    "Out, delivery, bought and skip are ordinary plans, from the places they actually go. They have",
+    "no foods and no grams. Do not apologise for them.",
+    "Give each made meal a `name` in their language, a `searchName` (the dish's common English",
+    "name, what an image search would find), a one-line `method` in their language and `minutes`.",
+    "The program solves the grams and checks the week: foods in the table, roles, minutes,",
+    "dislikes, flavours in a row, fish twice, and whether the protein reaches the meal's target.",
+    "What fails comes back to you: fix only those meals and call again.",
+    "",
+    "FLAVOURS",
+    FLAVOURS.map((f) => `${f.id} (${f.zh})`).join(", "),
+    "",
+    "FOODS (id, name, roles, [tags])",
+    ...foodListing(profile?.dislikes ?? []),
     "",
     "WHEN A MEAL GOES DIFFERENTLY",
-    "They will say one sentence ('didn't take lunch, ate at the canteen'). That moves the next",
-    "meal or two and nothing else: call record_meals_deviation, then propose_meals_plan with",
-    "adjustment set, naming only the meals the program told you to look at. Never re-plan the",
-    "week over one meal.",
-    "Boredom and 'too much hassle' are not adjustments — remember them for the next week.",
+    "They will say one sentence ('中午没带饭，食堂吃的'). Call record_meals_deviation. It answers",
+    "with at most two meals to re-pick; call propose_meals_plan with adjustment set for those",
+    "meals only. Never re-plan the week over one meal. Boredom and 'too much hassle' are not",
+    "adjustments — remember them for the next week.",
     "",
     "THE SHOPPING LIST",
-    "One trip a week. Before it is done, add, remove and swap lines as they ask. Once it is",
-    "done, the list is what is in the fridge: something new is next week's business, unless they",
-    "say they are passing a shop today, and then add_shopping_items with today set puts it in",
-    "their 'still to get'. Never read the list back to them — it is on their screen.",
+    "Derived by the program from the solved grams, one trip a week. Before it is done, add,",
+    "remove and swap lines as they ask. Once it is done, the list is what is in the fridge:",
+    "something new is next week's business, unless they say they are passing a shop today, and",
+    "then add_shopping_items with today set. Never read the list back to them.",
   );
-  return out.join("\n");
-}
-
-// --- the charter -------------------------------------------------------------
-
-export function buildProposeMealsCharterTool(deps: MealsToolDeps): AgentTool {
-  return {
-    name: "propose_meals_charter",
-    label: () => "Drafting what your meals have to fit",
-    effect: "write",
-    gate: "card",
-    description:
-      "Record what the household is, after they have answered your two or three questions: how " +
-      "many are eating, where they shop, what the kitchen is, what they will not eat, what " +
-      "breakfast and lunch normally are, and how a normal week splits between cooking, eating " +
-      "out and delivery. `text` is one paragraph in their own words — it is what you will read " +
-      "next week, so keep their phrasing. Call it again whenever something they say changes it. " +
-      "It files nothing: the user sees a card and applies it.",
-    parameters: Type.Object({
-      people: Type.Number({ description: "How many people eat." }),
-      // Optional: a household that names no shop has nothing to send, and a
-      // required array rejects both null and an omission (docs/pitfall/379).
-      stores: Type.Optional(
-        Type.Array(Type.String(), {
-          description: "The shops they actually buy food in, as they name them.",
-        }),
-      ),
-      kitchen: Type.String({
-        description: "One line: what there is to cook with, and what there is not.",
-      }),
-      dislikes: Type.Optional(
-        Type.Array(Type.String(), {
-          description: "What they will not eat, allergies included. Left out when there are none.",
-        }),
-      ),
-      nightsCooking: Type.Number({ description: "Dinners a normal week cooks." }),
-      nightsOut: Type.Number({ description: "Dinners a normal week eats out." }),
-      nightsDelivery: Type.Number({ description: "Dinners a normal week orders delivery." }),
-      text: Type.String({
-        description:
-          "One paragraph in the user's own words: what breakfast, lunch and dinner have to " +
-          "fit around.",
-      }),
-    }),
-    execute: async (args) => {
-      const text = String(args.text ?? "").trim();
-      if (!text) throw new Error("propose_meals_charter needs the paragraph in their words.");
-      const card: MealsCharterCardData = {
-        kind: "meals-charter",
-        threadId: deps.threadId,
-        people: toCount(args.people, 1),
-        stores: toStrings(args.stores),
-        kitchen: String(args.kitchen ?? "").trim(),
-        dislikes: toStrings(args.dislikes),
-        nightsCooking: toCount(args.nightsCooking, 0),
-        nightsOut: toCount(args.nightsOut, 0),
-        nightsDelivery: toCount(args.nightsDelivery, 0),
-        text,
-        phase: "proposed",
-      };
-      deps.onMealsCard(card);
-      return {
-        text:
-          "A card now shows the user what you understood about their meals. Nothing is saved " +
-          "until they apply it, and they can have you change any of it first.",
-        receipt: { label: "Drafted the meals basics", summary: text },
-      };
-    },
-  };
+  return out.filter((l, i, all) => l !== "" || all[i - 1] !== "").join("\n");
 }
 
 // --- the week ----------------------------------------------------------------
 
-// Only `mode` is on every meal. The rest belong to some modes and not others,
-// so they are optional: TypeBox makes every property of a Type.Object
-// required, and a required object the model has nothing to put in fails
-// validation whether it sends null or {} — the loop then retries for ever
-// (docs/pitfall/379).
+// Only `mode` is on every meal. The rest belong to made meals or to the other
+// modes, so they are optional: a required property the model has nothing to
+// put in fails validation and the loop retries for ever (docs/pitfall/379).
 const mealSchema = (which: MealKey) =>
   Type.Object({
-    mode: Type.String({
-      description: `What this ${which} is: ${MODES.join(", ")}.`,
-    }),
-    dish: Type.Optional(Type.String({ description: "For a cook meal: the dish's name." })),
-    reheatOf: Type.Optional(
-      Type.Object(
-        {
-          day: Type.Number({ description: "1 to 7: the day whose meal cooked the base." }),
-          meal: Type.String({ description: "breakfast, lunch or dinner." }),
-        },
-        {
-          description:
-            "For reheat and packed: which meal cooked the base this one eats. The other modes " +
-            "do not have one and leave it out, and so does a box cooked before this week — " +
-            "then say so in `note`.",
-        },
-      ),
-    ),
-    freshAdd: Type.Optional(
-      Type.String({ description: "What is added to the base at serving." }),
-    ),
-    place: Type.Optional(
-      Type.String({
-        description: "For out, delivery and bought: where, in the user's own words.",
-      }),
-    ),
-    note: Type.Optional(
+    mode: Type.String({ description: `What this ${which} is: ${MEAL_MODES.join(", ")}.` }),
+    name: Type.Optional(Type.String({ description: "For make: the meal's name in their language." })),
+    searchName: Type.Optional(
       Type.String({
         description:
-          "One short line of theirs about this meal. Not a second description of the dish.",
+          "For make: the dish's common English name as people search for it, lower case " +
+          "('shrimp fried rice', 'greek yogurt bowl'). It finds the photograph.",
       }),
     ),
+    flavour: Type.Optional(Type.String({ description: "For make: one id from FLAVOURS." })),
+    method: Type.Optional(
+      Type.String({ description: "For make: one line on how it is put together, in their language." }),
+    ),
+    minutes: Type.Optional(Type.Number({ description: "For make: hands-on minutes." })),
+    items: Type.Optional(
+      Type.Array(
+        Type.Object({
+          food: Type.String({ description: "A food id from FOODS." }),
+          role: Type.String({ description: "protein, staple, fat or fixed." }),
+          grams: Type.Optional(Type.Number({ description: "For fixed items only: the grams." })),
+        }),
+        { description: "For make: the foods, one protein, one staple, at most one fat, any fixed." },
+      ),
+    ),
+    place: Type.Optional(
+      Type.String({ description: "For out, delivery and bought: where, in their own words." }),
+    ),
+    note: Type.Optional(Type.String({ description: "One short line of theirs about this meal." })),
   });
 
 export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
@@ -374,173 +327,100 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
     effect: "write",
     gate: "card",
     description:
-      "Propose the week's meals, or rework the one or two meals a change left open. `days` " +
-      "gives a day per entry, `day` being its number from 1 to 7 exactly as your instructions " +
-      "print them — never a date — and each day carrying `breakfast`, `lunch` and `dinner`. A " +
-      "`cook` meal names a dish from `dishes`; `reheat` and `packed` give `reheatOf`, the meal " +
-      "whose base they eat; `out`, `delivery` and `bought` give `place` in the user's own " +
-      "words. `breakfastLine` is the week's breakfast pattern in their words. Set `adjustment` " +
-      "when you are reworking meals of the week they already have — then send only those days, " +
-      "and only the meals on them that change; every other meal stays exactly as it is. A fresh " +
-      "week sends all seven days with all three meals. The program dates the days and derives " +
-      "the shopping list; do not write either. It files nothing: the user sees a card and " +
-      "applies it.",
+      "Propose the week's meals, or re-pick the one or two meals a change left open. `days` gives " +
+      "a day per entry, `day` being its number from 1 to 7 exactly as your instructions print " +
+      "them — never a date — each with `breakfast`, `lunch`, `dinner` and `snack`. A `make` meal " +
+      "lists its foods by id with roles, plus name, searchName, flavour, method and minutes; " +
+      "`out`, `delivery` and `bought` give `place`. Set `adjustment` to rework meals of the week " +
+      "they already have — then send only those meals. The program solves every gram, checks the " +
+      "week and derives the shopping list; anything that fails comes back to you. It files " +
+      "nothing: the user sees a card and applies it.",
     parameters: Type.Object({
-      // Optional, like every field below that only some calls have something to
-      // put in: a required property the model leaves out fails validation, and
-      // the tool would rather answer in words than have the loop retry
-      // (docs/pitfall/379).
       adjustment: Type.Optional(
-        Type.Boolean({
-          description: "True when this reworks meals of the week already planned.",
-        }),
-      ),
-      breakfastLine: Type.Optional(
-        Type.String({
-          description:
-            "The week's breakfasts as one line in their own words ('oats and egg on toast, " +
-            "Friday I buy something on the way'). Required on a fresh week.",
-        }),
-      ),
-      // Optional for the same reason as the meals below: an adjustment that
-      // cooks nothing new has no dishes to send.
-      dishes: Type.Optional(
-        Type.Array(
-          Type.Object({
-            name: Type.String({ description: "The dish, named the way it would be said." }),
-            searchName: Type.String({
-              description:
-                "The dish's common English name as people search for it, singular and lower " +
-                "case: 'mapo tofu', 'shakshuka', 'overnight oats', 'dal', 'sheet pan salmon'. " +
-                "Not a description of your own invention — it is what finds the dish's " +
-                "photograph, and a name nobody else uses finds nothing.",
-            }),
-            oneLine: Type.String({ description: "One line: what it is and why this meal." }),
-            base: Type.String({
-              description: "The part cooked ahead that keeps a day. Empty if there is none.",
-            }),
-            fresh: Type.String({
-              description: "The part added at serving and not kept. Empty if there is none.",
-            }),
-            keepsADay: Type.Boolean({
-              description:
-                "Whether the base is as good the next day. Stews and grains yes; stir-fried " +
-                "greens, fried food, noodles and dressed salad no.",
-            }),
-            handsOnMinutes: Type.Number({
-              description:
-                `Minutes of hands-on work. ${HANDS_ON_LIMITS.dinner} at the very most for a ` +
-                `lunch or a dinner, ${HANDS_ON_LIMITS.breakfast} for a breakfast.`,
-            }),
-            ingredients: Type.Array(
-              Type.Object({
-                name: Type.String(),
-                en: Type.String({
-                  description:
-                    "The same thing's English common name, singular and lower case " +
-                    "('bok choy', 'eggplant', 'ground pork'). It is what finds its photograph.",
-                }),
-                qty: Type.String({ description: "Free text, e.g. '2 handfuls', '400g'." }),
-                category: Type.String({
-                  description: `One of: ${CATEGORY_ORDER.join(", ")}.`,
-                }),
-                keeps: Type.String({
-                  description:
-                    "How long it keeps refrigerated, one of: d1-2 (raw poultry, mince, fish), " +
-                    "d3-5 (whole cuts, leafy greens, mushrooms, berries, herbs), w1 (broccoli, " +
-                    "peppers, cucumber, tomato), w2plus (roots, cabbage, onion, potato, apples, " +
-                    "citrus), pantry (dry goods, tins, oil).",
-                }),
-              }),
-              { description: "Everything to buy for every meal this dish is planned for." },
-            ),
-          }),
-          { description: "The dishes this call introduces. Empty when nothing new is cooked." },
-        ),
+        Type.Boolean({ description: "True when this reworks meals of the week already planned." }),
       ),
       days: Type.Array(
         Type.Object({
           day: Type.Number({ description: "1 to 7, the day number from your instructions." }),
-          // Optional because an adjustment sends only the meals that change; a
-          // fresh week that leaves one out is refused by execute, in words the
-          // model can act on, rather than by the validator.
           breakfast: Type.Optional(mealSchema("breakfast")),
           lunch: Type.Optional(mealSchema("lunch")),
           dinner: Type.Optional(mealSchema("dinner")),
+          snack: Type.Optional(mealSchema("snack")),
         }),
         { description: "The days this call plans." },
       ),
     }),
     execute: async (args) => {
       const state = await deps.state();
+      const charter = state.charter;
+      const targets = targetsOf(charter, deps.region());
+      if (!charter || !targets) {
+        return {
+          receipt: null,
+          text: charter
+            ? "They withheld body data, so nothing can be solved. Ask them to replay the opening questions if they want a plan."
+            : "They have not answered the opening questions, so there is nothing to plan against. Ask them to go through them on the Meals screen.",
+        };
+      }
       const adjustment = args.adjustment === true;
       if (adjustment && !state.plan) {
         return {
           receipt: null,
-          text:
-            "There is no week planned yet, so there is nothing to adjust. Propose a whole week " +
-            "instead, with all seven days.",
+          text: "There is no week planned yet, so there is nothing to adjust. Propose a whole week instead.",
         };
       }
-      const draft = {
-        dishes: toDishDrafts(args.dishes),
-        days: toDayDrafts(args.days),
-        breakfastLine: String(args.breakfastLine ?? "").trim(),
-      };
-      if (draft.days.length === 0) throw new Error("propose_meals_plan needs at least one day.");
+      const days = toDayDrafts(args.days);
+      if (days.length === 0) throw new Error("propose_meals_plan needs at least one day.");
       if (!adjustment) {
-        if (draft.days.length < WEEK_DAYS) {
+        if (days.length < WEEK_DAYS) {
           return {
             receipt: null,
             text:
-              `A fresh week needs all ${WEEK_DAYS} days; you sent ${draft.days.length}. Send the ` +
-              `whole week, or set adjustment if you meant to rework meals of the week they have.`,
+              `A fresh week needs all ${WEEK_DAYS} days; you sent ${days.length}. Send the whole ` +
+              "week, or set adjustment if you meant to rework meals of the week they have.",
           };
         }
-        const thin = draft.days.filter((d) => !d.breakfast || !d.lunch || !d.dinner);
+        const thin = days.filter((d) => MEAL_KEYS.some((k) => !d[k]));
         if (thin.length) {
           return {
             receipt: null,
             text:
-              `A fresh week needs breakfast, lunch and dinner on every day; day ` +
-              `${thin.map((d) => d.day).join(", ")} is missing one. Send all three.`,
-          };
-        }
-        if (!draft.breakfastLine) {
-          return {
-            receipt: null,
-            text:
-              "A fresh week needs breakfastLine: the week's breakfasts in their own words. Say " +
-              "it the way they said it and call propose_meals_plan again.",
+              `A fresh week needs breakfast, lunch, dinner and snack on every day; day ` +
+              `${thin.map((d) => d.day).join(", ")} is missing one. Send all four.`,
           };
         }
       }
 
-      const assembled = assembleWeekPlan(draft, {
-        startDate: deps.today(),
-        createdAt: deps.now(),
-        previous: adjustment ? state.plan : null,
-        random: deps.random,
-      });
+      const assembled = assembleWeekPlan(
+        { days },
+        { startDate: deps.today(), createdAt: deps.now(), previous: adjustment ? state.plan : null },
+      );
+      const checked = assembled.problems.length
+        ? { plan: assembled.plan, problems: assembled.problems }
+        : checkPlan({
+            plan: assembled.plan,
+            profile: charter.profile,
+            targets,
+            changed: adjustment ? assembled.changed : null,
+            previous: adjustment ? state.plan : null,
+          });
       // A refusal, not a thrown error: the model can fix every one of these in
       // the same turn, and the user should never see the attempt.
-      if (assembled.problems.length) {
+      if (checked.problems.length) {
         return {
           receipt: null,
           text:
-            `Nothing was proposed — the plan does not hold up:\n` +
-            assembled.problems.map((p) => `- ${p}`).join("\n") +
-            `\nFix those and call propose_meals_plan again.`,
+            "Nothing was proposed — the plan does not hold up:\n" +
+            checked.problems.map((p) => `- ${p}`).join("\n") +
+            "\nFix only those meals and call propose_meals_plan again.",
         };
       }
 
       const card: MealsPlanCardData = {
         kind: "meals-plan",
         threadId: deps.threadId,
-        startDate: assembled.plan.startDate,
-        days: assembled.plan.days,
-        dishes: assembled.plan.dishes,
-        breakfastLine: assembled.plan.breakfastLine,
+        startDate: checked.plan.startDate,
+        days: checked.plan.days,
         adjustment,
         changed: adjustment ? assembled.changed : [],
         changedDates: adjustment ? assembled.changedDates : [],
@@ -552,15 +432,128 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
           (adjustment
             ? `Proposed a change to ${assembled.changed.length} meal(s).`
             : "Proposed the week's meals.") +
-          " A card now shows the user the days and the shopping list the program derived from " +
-          "them. Nothing is saved until they apply it. Do not tell them what to buy — the list " +
-          "is on the card.",
+          " A card now shows the user the days with the grams the program solved. Nothing is " +
+          "saved until they apply it. Do not recite amounts or the shopping list — they are on the card.",
         receipt: {
           label: adjustment ? "Reworked a meal" : "Drafted the week",
           summary: adjustment
             ? assembled.changed.map(mealWords).join("; ")
-            : assembled.plan.days.map((d) => `${d.date}: ${d.dinner.mode}`).join("; "),
+            : checked.plan.days.map((d) => `${d.date}: ${d.dinner.name ?? d.dinner.mode}`).join("; "),
         },
+      };
+    },
+  };
+}
+
+// --- the profile -------------------------------------------------------------
+
+const GOALS: readonly Goal[] = ["cut", "gain", "steady"];
+const TRAIN_TIMES: readonly TrainTime[] = ["morning", "midday", "evening"];
+const WORKS: readonly Work[] = ["sit", "stand", "labor"];
+
+function positive(raw: unknown, max: number): number | null {
+  const n = Number(raw);
+  return raw !== undefined && raw !== null && Number.isFinite(n) && n > 0 && n <= max ? n : null;
+}
+
+function oneOf<T extends string>(raw: unknown, list: readonly T[]): T | null {
+  const v = String(raw ?? "").trim().toLowerCase();
+  return (list as readonly string[]).includes(v) ? (v as T) : null;
+}
+
+/**
+ * The profile with the fields the reader just stated, or null when none of
+ * them was usable. Pure; the tool below writes it.
+ */
+export function patchProfile(profile: Profile, args: Record<string, unknown>): Profile | null {
+  const next: Profile = { ...profile };
+  let touched = false;
+  const set = <K extends keyof Profile>(key: K, value: Profile[K] | null) => {
+    if (value === null) return;
+    next[key] = value;
+    touched = true;
+  };
+  set("weightKg", positive(args.weightKg, 400));
+  set("heightCm", positive(args.heightCm, 260));
+  set("bodyFatPct", positive(args.bodyFatPct, 70));
+  set("waistCm", positive(args.waistCm, 250));
+  set("goal", oneOf(args.goal, GOALS));
+  set("trainTime", oneOf(args.trainTime, TRAIN_TIMES));
+  set("work", oneOf(args.work, WORKS));
+  const minutes = positive(args.minutesPerMeal, 120);
+  set("minutesPerMeal", minutes === null ? null : Math.round(minutes));
+  const people = positive(args.people, 20);
+  set("people", people === null ? null : Math.round(people));
+  if (Array.isArray(args.trainingDays)) {
+    const days = [...new Set(args.trainingDays.map((d) => Math.round(Number(d))))]
+      .filter((d) => d >= 1 && d <= 7)
+      .sort();
+    set("trainingDays", days);
+  }
+  if (Array.isArray(args.dislikes)) set("dislikes", toStrings(args.dislikes));
+  if (Array.isArray(args.shops)) set("shops", toStrings(args.shops));
+  if (Array.isArray(args.kitchen)) set("kitchen", toStrings(args.kitchen));
+  return touched ? next : null;
+}
+
+/**
+ * Change the profile because the reader said so (docs/73 体重变化). Direct
+ * write, no card: the program re-solves the week against the new targets and
+ * the model says one line.
+ */
+export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
+  return {
+    name: "update_meals_profile",
+    label: () => "Updating your meal targets",
+    effect: "write",
+    description:
+      "Call this the moment they state a change to what the plan is built on: a new weight " +
+      "('这周称了 71'), another goal ('改成增肌'), other training days ('周二也练'), a new dislike, " +
+      "more people eating. Send only the fields that changed. Lists (trainingDays, dislikes, " +
+      "shops, kitchen) replace the whole list, so send the full list as it now stands. `notes` " +
+      "replaces what they have said about their meals in their own words. It writes at once and " +
+      "re-solves the week.",
+    parameters: Type.Object({
+      weightKg: Type.Optional(Type.Number()),
+      heightCm: Type.Optional(Type.Number()),
+      bodyFatPct: Type.Optional(Type.Number({ description: "Percent, e.g. 18." })),
+      waistCm: Type.Optional(Type.Number()),
+      goal: Type.Optional(Type.String({ description: `One of: ${GOALS.join(", ")}.` })),
+      trainingDays: Type.Optional(
+        Type.Array(Type.Number(), { description: "ISO weekdays, Monday 1 to Sunday 7. Empty when they stop training." }),
+      ),
+      trainTime: Type.Optional(Type.String({ description: `One of: ${TRAIN_TIMES.join(", ")}.` })),
+      work: Type.Optional(Type.String({ description: `One of: ${WORKS.join(", ")}.` })),
+      minutesPerMeal: Type.Optional(Type.Number()),
+      people: Type.Optional(Type.Number()),
+      dislikes: Type.Optional(Type.Array(Type.String())),
+      shops: Type.Optional(Type.Array(Type.String())),
+      kitchen: Type.Optional(Type.Array(Type.String())),
+      notes: Type.Optional(Type.String({ description: "Their meals in their own words, one paragraph." })),
+    }),
+    execute: async (args) => {
+      const state = await deps.state();
+      if (!state.charter) {
+        return {
+          receipt: null,
+          text: "They have not answered the opening questions, so there is no profile to change.",
+        };
+      }
+      const notes = typeof args.notes === "string" ? args.notes.trim() : undefined;
+      const profile = patchProfile(state.charter.profile, args as Record<string, unknown>);
+      if (!profile && notes === undefined) {
+        return { receipt: null, text: "None of those fields was usable, so nothing changed." };
+      }
+      const { ok, targets } = await saveProfile(profile ?? state.charter.profile, deps.ports, notes);
+      if (!ok) return { receipt: null, text: "The change could not be written. Nothing changed." };
+      const numbers = targets
+        ? ` Daily targets now — ${targetsLine("training day", targets.training)}; ${targetsLine("rest day", targets.rest)}.`
+        : "";
+      return {
+        text:
+          `Saved.${numbers}${state.plan ? " The week's grams are re-solved and the list follows." : ""}` +
+          " Say it in one line; the numbers are on their screen.",
+        receipt: { label: "Updated your profile", summary: Object.keys(args).join(", ") },
       };
     },
   };
@@ -569,48 +562,33 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
 // --- a meal that went differently --------------------------------------------
 
 /**
- * Record what actually happened at a meal, from the reader's own sentence.
- *
- * It writes: a deviation is the reader saying what they did, which is the
- * explicit instruction gate of the harness principle, and there is nothing for
- * them to approve about their own sentence. What the program did with it comes
- * back in the result, `attention` included, so the model can follow with
- * propose_meals_plan as an adjustment for exactly those meals.
+ * Record what actually happened at a meal, from the reader's own sentence. It
+ * writes; what the program did with it comes back in the result, so the model
+ * can follow with propose_meals_plan for exactly the meals named.
  */
-export function buildRecordDeviationTool(
-  deps: MealsToolDeps & { ports: MealsPorts },
-): AgentTool {
+export function buildRecordDeviationTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
   return {
     name: "record_meals_deviation",
     label: () => "Recording what you ate instead",
     effect: "write",
     description:
       "Call this the moment they say a meal went differently from the plan ('we ordered in', " +
-      "'didn't take lunch'). It writes that meal down and clears whatever depended on it. It " +
-      "answers with the meals to look at next: plan only those, with propose_meals_plan and " +
-      "adjustment set. Do not call it for boredom or 'too much hassle' — that is next week's " +
-      "business.",
+      "'didn't take lunch'). It writes that meal down and re-solves the week. It answers with the " +
+      "meals whose foods to pick again: plan only those, with propose_meals_plan and adjustment " +
+      "set. Do not call it for boredom or 'too much hassle' — that is next week's business.",
     parameters: Type.Object({
       day: Type.String({
-        description:
-          "Which day: 'today', 'yesterday', or the day number 1 to 7 from your instructions.",
+        description: "Which day: 'today', 'yesterday', or the day number 1 to 7 from your instructions.",
       }),
-      meal: Type.String({ description: "breakfast, lunch or dinner." }),
-      became: Type.String({
-        description: `What the meal actually was: ${MODES.join(", ")}.`,
-      }),
-      place: Type.Optional(
-        Type.String({ description: "Where, for out, delivery or bought, in their words." }),
-      ),
+      meal: Type.String({ description: `${MEAL_KEYS.join(", ")}.` }),
+      became: Type.String({ description: `What the meal actually was: ${MEAL_MODES.join(", ")}.` }),
+      place: Type.Optional(Type.String({ description: "Where, for out, delivery or bought, in their words." })),
       said: Type.String({ description: "Their own sentence, as they said it." }),
     }),
     execute: async (args) => {
       const state = await deps.state();
       if (!state.plan) {
-        return {
-          receipt: null,
-          text: "There is no week planned, so there is nothing to record a change against.",
-        };
+        return { receipt: null, text: "There is no week planned, so there is nothing to record a change against." };
       }
       const date = resolveDeviationDate(String(args.day ?? ""), state.plan.startDate, deps.today());
       if (!date) {
@@ -620,13 +598,9 @@ export function buildRecordDeviationTool(
         };
       }
       const meal = toMealKey(args.meal);
-      if (!meal) {
-        return { receipt: null, text: `meal must be one of: ${MEAL_KEYS.join(", ")}.` };
-      }
-      const mode = String(args.became ?? "").trim().toLowerCase();
-      if (!(MODES as readonly string[]).includes(mode)) {
-        return { receipt: null, text: `became must be one of: ${MODES.join(", ")}.` };
-      }
+      if (!meal) return { receipt: null, text: `meal must be one of: ${MEAL_KEYS.join(", ")}.` };
+      const mode = oneOf<MealMode>(args.became, MEAL_MODES);
+      if (!mode) return { receipt: null, text: `became must be one of: ${MEAL_MODES.join(", ")}.` };
       const said = String(args.said ?? "").trim();
       if (!said) throw new Error("record_meals_deviation needs their sentence.");
       const place = String(args.place ?? "").trim();
@@ -634,19 +608,17 @@ export function buildRecordDeviationTool(
         date,
         meal,
         said,
-        became: mode as MealMode,
+        became: mode,
         ...(place ? { place } : {}),
         changed: "",
         at: deps.now(),
       };
       const { ok, attention } = await recordDeviation(deviation, deps.ports);
-      if (!ok) {
-        return { receipt: null, text: "The change could not be written. Nothing was recorded." };
-      }
+      if (!ok) return { receipt: null, text: "The change could not be written. Nothing was recorded." };
       return {
         text: attention.length
-          ? `Recorded. ${attention.map(mealWords).join(" and ")} now needs another look — call ` +
-            `propose_meals_plan with adjustment set for those meals only.`
+          ? `Recorded. ${attention.map(mealWords).join(" and ")} needs its foods picked again — call ` +
+            "propose_meals_plan with adjustment set for those meals only."
           : "Recorded. Nothing else in the week moved, so there is nothing to re-plan.",
         receipt: { label: "Recorded a change of plan", summary: `${date} ${meal}: ${said}` },
       };
@@ -655,19 +627,15 @@ export function buildRecordDeviationTool(
 }
 
 /**
- * The date a day's name stands for. "today" and "yesterday" are the two the
- * reader actually says out loud; a number is the day of the week exactly as
- * mealsGuidance printed it. Null for anything outside the planned week, which
- * the tool refuses rather than guessing at.
+ * The date a day's name stands for: "today", "yesterday", "tomorrow", or the
+ * day of the week exactly as mealsGuidance printed it. Null for anything
+ * outside the planned week.
  */
-export function resolveDeviationDate(
-  raw: string,
-  startDate: string,
-  today: string,
-): string | null {
+export function resolveDeviationDate(raw: string, startDate: string, today: string): string | null {
   const word = raw.trim().toLowerCase();
   if (word === "today") return today;
   if (word === "yesterday") return addDays(today, -1);
+  if (word === "tomorrow") return addDays(today, 1);
   const n = Number(word);
   if (!Number.isFinite(n) || n < 1 || n > WEEK_DAYS) return null;
   return addDays(startDate, Math.round(n) - 1);
@@ -844,77 +812,56 @@ export function buildReplaceShoppingItemTool(
   };
 }
 
-// --- how a dish is made ------------------------------------------------------
+
+// --- how a meal is made ------------------------------------------------------
+
+/** The longest a method line may be. It is a line, not a recipe. */
+export const MAX_METHOD_CHARS = 160;
 
 /**
- * Rewrite a dish's steps, because the reader wants them different ("do it
- * without the oven").
- *
- * The steps are normally written by method.ts on their own, headless, the first
- * time a day is opened. This is the one place the model writes them, and it
- * writes straight through for the same reason the shopping tools do.
+ * Rewrite one made meal's method line, because the reader wants it made
+ * another way ("没有微波炉"). The line normally comes with the plan; this is
+ * the one place it changes afterwards, and it writes straight through.
  */
-export function buildWriteMethodTool(
-  deps: MealsToolDeps & { ports: MealsPorts },
-): AgentTool {
+export function buildWriteMethodTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
   return {
     name: "write_meals_method",
-    label: () => "Rewriting the steps",
+    label: () => "Rewriting how it's made",
     effect: "write",
     description:
-      "Write the steps for one dish, when they want them different from what is on the screen " +
-      "('do it without the oven', 'I only have one pan'). One pot, hands-on inside the limit, " +
-      "no more washing up than one meal, no quantities and no nutrition numbers. It replaces " +
-      "whatever was there.",
+      "Rewrite the one-line method of one made meal, when they want it done another way ('no " +
+      "microwave', 'I only have one pan'). Same foods, same minutes or fewer, no amounts and no " +
+      "nutrition numbers. It replaces whatever was there.",
     parameters: Type.Object({
-      dishId: Type.String({
-        description: "The dish, by the id your instructions gave for the day they are looking at.",
-      }),
-      steps: Type.Array(Type.String(), {
-        description: `One line each, in order. Between 1 and ${MAX_STEPS}.`,
-      }),
-      note: Type.Optional(
-        Type.String({
-          description: "The one thing worth knowing that is not a step. May be empty.",
-        }),
-      ),
+      day: Type.String({ description: "'today', 'tomorrow', or the day number 1 to 7 from your instructions." }),
+      meal: Type.String({ description: `${MEAL_KEYS.join(", ")}.` }),
+      method: Type.String({ description: "One line, in their language." }),
     }),
     execute: async (args) => {
       const state = await deps.state();
-      const dishId = String(args.dishId ?? "").trim();
-      const dish = state.plan?.dishes.find((d) => d.id === dishId) ?? null;
-      if (!dish) {
+      const plan = state.plan;
+      const date = plan ? resolveDeviationDate(String(args.day ?? ""), plan.startDate, deps.today()) : null;
+      const key = toMealKey(args.meal);
+      const meal = date && key ? dayOn(plan, date)?.[key] : null;
+      if (!date || !key || !meal || meal.mode !== "make") {
+        return { receipt: null, text: "That is not a made meal of the week they have. Nothing was written." };
+      }
+      const method = String(args.method ?? "").trim();
+      if (!method || method.length > MAX_METHOD_CHARS) {
         return {
           receipt: null,
-          text: "That dish is not in the week they have. Nothing was written.",
+          text: `The method is one line of at most ${MAX_METHOD_CHARS} characters. Nothing was written.`,
         };
       }
-      const steps = toStrings(args.steps);
-      if (!steps.length || steps.length > MAX_STEPS) {
-        return {
-          receipt: null,
-          text: `The steps have to be between 1 and ${MAX_STEPS} lines. Nothing was written.`,
-        };
-      }
-      if (steps.some((s) => s.length > MAX_STEP_CHARS)) {
-        return {
-          receipt: null,
-          text: `A step is a line, not a paragraph: ${MAX_STEP_CHARS} characters at most.`,
-        };
-      }
-      const note = String(args.note ?? "").trim();
-      const method: DishMethod = { steps, writtenAt: deps.now(), ...(note ? { note } : {}) };
       try {
-        await deps.ports.saveDishMethod(dish.id, method);
+        await deps.ports.saveMealMethod(date, key, method);
       } catch {
-        return { receipt: null, text: "The steps could not be written. Nothing changed." };
+        return { receipt: null, text: "The method could not be written. Nothing changed." };
       }
       deps.ports.changed();
       return {
-        text:
-          `The steps for ${dish.name} are rewritten and on their screen. Say what changed in a ` +
-          "line; do not read the steps back.",
-        receipt: { label: "Rewrote the steps", summary: dish.name },
+        text: `The method for ${meal.name ?? key} is rewritten and on their screen. Do not read it back.`,
+        receipt: { label: "Rewrote how it's made", summary: `${date} ${key}` },
       };
     },
   };
@@ -984,6 +931,7 @@ export async function markShoppingTripDone(
   return true;
 }
 
+
 // --- reading what the model sent ---------------------------------------------
 
 function toStrings(raw: unknown): string[] {
@@ -991,47 +939,21 @@ function toStrings(raw: unknown): string[] {
   return raw.map((v) => String(v ?? "").trim()).filter((v) => v !== "");
 }
 
-function toCount(raw: unknown, min: number): number {
-  const n = Number(raw);
-  return Number.isFinite(n) ? Math.max(min, Math.round(n)) : min;
-}
-
 function record(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
 }
 
 function toCategory(raw: unknown): IngredientCategory {
-  const v = String(raw ?? "").trim().toLowerCase();
-  return (CATEGORY_ORDER as readonly string[]).includes(v)
-    ? (v as IngredientCategory)
-    : "other";
+  return oneOf(raw, CATEGORY_ORDER) ?? "other";
 }
 
 function toKeeps(raw: unknown): KeepsClass {
-  const v = String(raw ?? "").trim().toLowerCase();
-  return (KEEPS_ORDER as readonly string[]).includes(v) ? (v as KeepsClass) : "d3-5";
+  return oneOf(raw, KEEPS_ORDER) ?? "d3-5";
 }
 
-/** breakfast, lunch or dinner, or null for anything else. */
+/** A meal key, or null for anything else. */
 export function toMealKey(raw: unknown): MealKey | null {
-  const v = String(raw ?? "").trim().toLowerCase();
-  return (MEAL_KEYS as readonly string[]).includes(v) ? (v as MealKey) : null;
-}
-
-function toIngredients(raw: unknown): Ingredient[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((entry) => {
-      const e = record(entry);
-      return {
-        name: String(e.name ?? "").trim(),
-        en: String(e.en ?? "").trim().toLowerCase(),
-        qty: String(e.qty ?? "").trim(),
-        category: toCategory(e.category),
-        keeps: toKeeps(e.keeps),
-      };
-    })
-    .filter((i) => i.name !== "");
+  return oneOf(raw, MEAL_KEYS);
 }
 
 function toReaderItems(raw: unknown): ShoppingItem[] {
@@ -1052,42 +974,44 @@ function toReaderItems(raw: unknown): ShoppingItem[] {
     .filter((i) => i.name !== "");
 }
 
-export function toDishDrafts(raw: unknown): DishDraft[] {
+const ROLES: readonly TemplateRole[] = ["protein", "staple", "fat", "fixed"];
+
+// The foods as the model sent them. An id the table does not know is kept as
+// written, so the check can name it back; a role off the list becomes fixed
+// with no grams, which the check also names.
+function toItems(raw: unknown): TemplateItem[] {
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map((entry) => {
-      const e = record(entry);
-      return {
-        name: String(e.name ?? "").trim(),
-        searchName: String(e.searchName ?? "").trim().toLowerCase(),
-        oneLine: String(e.oneLine ?? "").trim(),
-        base: String(e.base ?? "").trim(),
-        fresh: String(e.fresh ?? "").trim(),
-        keepsADay: e.keepsADay === true,
-        handsOnMinutes: toCount(e.handsOnMinutes, 0),
-        ingredients: toIngredients(e.ingredients),
-      };
-    })
-    .filter((d) => d.name !== "");
+  const out: TemplateItem[] = [];
+  for (const entry of raw) {
+    const e = record(entry);
+    const foodId = String(e.food ?? e.foodId ?? "").trim();
+    if (!foodId) continue;
+    const role = oneOf(e.role, ROLES) ?? "fixed";
+    const grams = Number(e.grams);
+    out.push(role === "fixed" && Number.isFinite(grams) && grams > 0 ? { foodId, role, grams: Math.round(grams) } : { foodId, role });
+  }
+  return out;
 }
 
 function toMealDraft(raw: unknown): MealDraft | null {
   const e = record(raw);
-  const mode = String(e.mode ?? "").trim().toLowerCase();
-  if (!(MODES as readonly string[]).includes(mode)) return null;
-  const draft: MealDraft = { mode: mode as MealMode };
-  const dish = String(e.dish ?? "").trim();
-  if (dish) draft.dish = dish;
-  const of = record(e.reheatOf);
-  const day = Number(of.day);
-  const meal = toMealKey(of.meal);
-  if (Number.isFinite(day) && day > 0 && meal) draft.reheatOf = { day: Math.round(day), meal };
-  const fresh = String(e.freshAdd ?? "").trim();
-  if (fresh) draft.freshAdd = fresh;
-  const place = String(e.place ?? "").trim();
-  if (place) draft.place = place;
-  const note = String(e.note ?? "").trim();
-  if (note) draft.note = note;
+  const mode = oneOf(e.mode, MEAL_MODES);
+  if (!mode) return null;
+  const draft: MealDraft = { mode };
+  const text = (k: string) => String(e[k] ?? "").trim();
+  if (mode === "make") {
+    draft.items = toItems(e.items);
+    if (text("name")) draft.name = text("name");
+    if (text("searchName")) draft.searchName = text("searchName").toLowerCase();
+    const flavour = flavourOf(e.flavour);
+    if (flavour) draft.flavour = flavour;
+    if (text("method")) draft.method = text("method");
+    const minutes = Number(e.minutes);
+    if (Number.isFinite(minutes) && minutes > 0) draft.minutes = Math.round(minutes);
+  } else if (text("place")) {
+    draft.place = text("place");
+  }
+  if (text("note")) draft.note = text("note");
   return draft;
 }
 
@@ -1096,7 +1020,8 @@ export function toDayDrafts(raw: unknown): DayDraft[] {
   const out: DayDraft[] = [];
   for (const entry of raw) {
     const e = record(entry);
-    const day: DayDraft = { day: toCount(e.day, 0) };
+    const n = Number(e.day);
+    const day: DayDraft = { day: Number.isFinite(n) ? Math.round(n) : 0 };
     for (const key of MEAL_KEYS) {
       const meal = toMealDraft(e[key]);
       if (meal) day[key] = meal;

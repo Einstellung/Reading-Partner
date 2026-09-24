@@ -8,12 +8,13 @@
 // the ticks. `currentList` is the only thing that puts them together, and it is
 // pure.
 
+
+import { foodById, type Food } from "./nutrition/foods";
 import {
   CATEGORY_ORDER,
   EMPTY_SHOPPING,
   KEEPS_ORDER,
   MEAL_KEYS,
-  type Ingredient,
   type ShoppingItem,
   type ShoppingState,
   type WeekPlan,
@@ -23,7 +24,7 @@ import { daysBetween } from "./week";
 // How many days ahead a thing that keeps a day or two has to be needed before
 // it is bought frozen rather than fresh. Two: bought today, cooked the day
 // after tomorrow, which is already past the FoodKeeper window for raw meat and
-// fish (diet.md 1–2 天：生鸡肉、肉糜、鱼虾).
+// fish.
 const FREEZE_AFTER_DAYS = 2;
 
 /** One line of the list. Identity is the aisle and the name, never the index. */
@@ -31,79 +32,63 @@ export function shoppingItemKey(item: { name: string; category: string }): strin
   return `${item.category}\u0000${item.name.trim().toLowerCase()}`;
 }
 
-function shorterKeeps(a: Ingredient["keeps"], b: Ingredient["keeps"]): Ingredient["keeps"] {
-  return KEEPS_ORDER.indexOf(a) <= KEEPS_ORDER.indexOf(b) ? a : b;
-}
-
-function mergeQty(existing: string, next: string): string {
-  const add = next.trim();
-  if (!add) return existing;
-  if (!existing) return add;
-  // Identical quantities are not summed — nothing here does arithmetic on a
-  // model's "2 handfuls" — but they are not repeated either.
-  const parts = existing.split(" + ");
-  return parts.includes(add) ? existing : [...parts, add].join(" + ");
+/** "600 g", or "12 个" for a food counted in units. */
+export function quantityText(food: Food, grams: number): string {
+  if (food.unit) return `${Math.max(1, Math.round(grams / food.unit.grams))} ${food.unit.label}`;
+  return `${Math.round(grams)} g`;
 }
 
 /**
- * The week's shopping, merged, grouped and ordered.
+ * The week's shopping: every made meal's solved grams, times the people
+ * eating, merged per food. Name, aisle and shelf life come from the food
+ * table, so nothing on the list is the model's.
  *
- * Only a meal that cooks buys anything, and any of the three may: breakfast,
- * lunch and dinner are read the same way. A reheat and a packed box eat a base
- * that is already bought, and their fresh part is listed among that dish's
- * ingredients (docs/73); out, delivery, bought and skip buy nothing at all.
- *
- * The order is the walk through a shop — categories in aisle order — and inside
- * a category the shortest shelf life first, so what has to be eaten early is
- * also what is reached for first when the bags are unpacked.
+ * The order is the walk through a shop — categories in aisle order — and
+ * inside a category the shortest shelf life first.
  */
-export function deriveShoppingList(plan: WeekPlan, today: string): ShoppingItem[] {
-  const byKey = new Map<string, ShoppingItem>();
+export function deriveShoppingList(plan: WeekPlan, today: string, people = 1): ShoppingItem[] {
+  const byFood = new Map<string, ShoppingItem & { food: Food }>();
+  const times = Math.max(1, Math.round(people));
 
   for (const day of plan.days) {
     for (const key of MEAL_KEYS) {
       const meal = day[key];
-      if (meal.mode !== "cook" || !meal.dishId) continue;
-      const dish = plan.dishes.find((d) => d.id === meal.dishId);
-      if (!dish) continue;
-      for (const ing of dish.ingredients) {
-        const name = ing.name.trim();
-        if (!name) continue;
-        const itemKey = shoppingItemKey({ name, category: ing.category });
-        const seen = byKey.get(itemKey);
+      if (meal.mode !== "make") continue;
+      for (const row of meal.solved ?? []) {
+        const food = foodById(row.foodId);
+        if (!food || row.grams <= 0) continue;
+        const seen = byFood.get(food.id);
         if (!seen) {
-          byKey.set(itemKey, {
-            name,
-            en: ing.en.trim(),
-            qty: ing.qty.trim(),
-            category: ing.category,
-            keeps: ing.keeps,
+          byFood.set(food.id, {
+            food,
+            name: food.zh,
+            en: food.en,
+            qty: "",
+            category: food.category,
+            keeps: food.keeps,
+            foodId: food.id,
+            grams: row.grams * times,
             freezeOnArrival: false,
             neededBy: day.date,
           });
           continue;
         }
-        seen.qty = mergeQty(seen.qty, ing.qty);
-        // Only fills a gap: the first English name this line was given stands.
-        if (!seen.en) seen.en = ing.en.trim();
-        // The shorter of the two windows, because the list is eaten in this
-        // order and the earlier deadline is the one that bites.
-        seen.keeps = shorterKeeps(seen.keeps, ing.keeps);
+        seen.grams = (seen.grams ?? 0) + row.grams * times;
         if (day.date < seen.neededBy) seen.neededBy = day.date;
       }
     }
   }
 
-  const items = [...byKey.values()];
-  for (const item of items) {
+  const items: ShoppingItem[] = [];
+  for (const { food, ...item } of byFood.values()) {
     const ahead = daysBetween(today, item.neededBy);
-    item.freezeOnArrival =
-      item.category === "protein" &&
-      item.keeps === "d1-2" &&
-      ahead !== null &&
-      ahead >= FREEZE_AFTER_DAYS;
+    items.push({
+      ...item,
+      qty: quantityText(food, item.grams ?? 0),
+      freezeOnArrival:
+        item.category === "protein" && item.keeps === "d1-2" && ahead !== null && ahead >= FREEZE_AFTER_DAYS,
+    });
   }
-
   return items.sort(compareItems);
 }
 

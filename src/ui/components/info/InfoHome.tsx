@@ -290,7 +290,6 @@ export default function InfoHome(props: {
               date={day}
               onBack={back}
               onAsk={ask.onAsk}
-              onWriteMethod={meals.writeMethod}
             />
           );
         } else {

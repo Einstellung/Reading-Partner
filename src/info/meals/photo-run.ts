@@ -19,7 +19,8 @@ import { appRunner } from "../../legion/execute/runner";
 import type { Delegated, DelegateInput } from "../../legion/execute/worker";
 import { dishPhotoKey, ingredientPhotoKey, needsPhotoLookup, type PhotoCache } from "./dish-photos";
 import { ingredientQuery } from "./photo-search";
-import type { WeekPlan } from "./types";
+import { foodById } from "./nutrition/foods";
+import { MEAL_KEYS, type WeekPlan } from "./types";
 
 /** The kind meals registers for searching out a week's photographs. */
 export const MEALS_PHOTOS_KIND = "meals-photos";
@@ -73,12 +74,14 @@ export function photoQueriesForPlan(
     seen.add(key);
     out.push({ key, q });
   };
-  for (const dish of plan.dishes) want(dishPhotoKey(dish.searchName ?? ""), normalize(dish.searchName));
-  for (const dish of plan.dishes) {
-    for (const ingredient of dish.ingredients) {
-      const en = normalize(ingredient.en);
-      if (!en || opts.bankImage(en)) continue;
-      want(ingredientPhotoKey(en), ingredientQuery(en, ingredient.category));
+  const made = plan.days.flatMap((d) => MEAL_KEYS.map((k) => d[k])).filter((m) => m.mode === "make");
+  for (const meal of made) want(dishPhotoKey(meal.searchName ?? ""), normalize(meal.searchName));
+  for (const meal of made) {
+    for (const item of meal.items ?? []) {
+      const food = foodById(item.foodId);
+      const en = normalize(food?.en);
+      if (!food || !en || opts.bankImage(en)) continue;
+      want(ingredientPhotoKey(en), ingredientQuery(en, food.category));
     }
   }
   return out.slice(0, MAX_PHOTO_QUERIES);

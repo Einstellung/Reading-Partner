@@ -1,39 +1,42 @@
-// What the meals screen reads off the state (docs/73): the words for a mode
-// and a shelf-life class, which day a date is, what is left of the week, and
-// the order the shopping list is drawn in.
+// What the meals screen reads off the state (docs/73 屏幕): the targets card,
+// each day with its meals in eating order and every food at its solved grams,
+// the week in one line, and the shopping list in aisle order.
 //
 // All of it here rather than in the .tsx, so the screen's decisions are tested
-// without React (CLAUDE.md). Nothing here formats a nutrition number, because
-// there is none anywhere in this line.
+// without React (CLAUDE.md). Every number is computed by the program from the
+// profile and the stored grams; the .tsx formats nothing but what it is given.
 
+import { fishMeals } from "./checks";
 import { photoForDish, photoForIngredient, type PhotoCache } from "./dish-photos";
 import { ingredientImageUrl } from "./images";
+import { foodById, isProduce } from "./nutrition/foods";
+import type { MealCells, Nutrition, TemplateItem, TemplateRole } from "./nutrition/solve";
+import type { DayTargets, Goal, MealTarget, Profile, Region, Targets } from "./nutrition/targets";
+import { currentList, isChecked } from "./shopping";
+import { dayTargetsOn, mealNumbers, sumNutrition, targetsOf } from "./solve-week";
 import {
   CATEGORY_ORDER,
+  FLAVOURS,
   MEAL_KEYS,
   type DayPlan,
-  type Dish,
+  type Flavour,
+  type IngredientCategory,
+  type KeepsClass,
   type Meal,
   type MealKey,
   type MealMode,
-  type IngredientCategory,
-  type KeepsClass,
+  type MealsState,
   type ShoppingItem,
   type ShoppingState,
   type WeekPlan,
 } from "./types";
-import { currentList, isChecked } from "./shopping";
-import { addDays, dishForDay, dishForMeal } from "./week";
+import { addDays, isoWeekday, planExhausted } from "./week";
 
-/** The mode as a plain word. Seven modes, seven words, none of them apologetic. */
+/** The mode as a plain word. None of them apologetic. */
 export function modeWord(mode: MealMode): string {
   switch (mode) {
-    case "cook":
-      return "Cook";
-    case "reheat":
-      return "Reheat";
-    case "packed":
-      return "Packed";
+    case "make":
+      return "Make";
     case "out":
       return "Eat out";
     case "delivery":
@@ -54,10 +57,21 @@ export function mealLabel(meal: MealKey): string {
       return "Lunch";
     case "dinner":
       return "Dinner";
+    case "snack":
+      return "Snack";
   }
 }
 
-/** How long a thing keeps, in words rather than in the class's own spelling. */
+/** A flavour's label in Chinese, the language the meal names are in. */
+export function flavourLabel(flavour: Flavour | null | undefined): string {
+  return FLAVOURS.find((f) => f.id === flavour)?.zh ?? "";
+}
+
+export function goalLabel(goal: Goal): string {
+  return goal === "cut" ? "Lose fat" : goal === "gain" ? "Build muscle" : "Steady energy";
+}
+
+/** How long a thing keeps, in words. */
 export function keepsLabel(keeps: KeepsClass): string {
   switch (keeps) {
     case "d1-2":
@@ -75,128 +89,274 @@ export function keepsLabel(keeps: KeepsClass): string {
 
 /** The aisle's heading. */
 export function categoryLabel(category: IngredientCategory): string {
-  switch (category) {
-    case "produce":
-      return "Produce";
-    case "protein":
-      return "Protein";
-    case "dairy":
-      return "Dairy";
-    case "frozen":
-      return "Frozen";
-    case "grains":
-      return "Grains";
-    case "pantry":
-      return "Pantry";
-    case "other":
-      return "Other";
-  }
+  return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-/**
- * The weekday a local "YYYY-MM-DD" falls on. Read as UTC on purpose: the string
- * is already local, and letting the host's zone re-interpret it moves the day
- * either side of midnight.
- */
+/** The weekday a local "YYYY-MM-DD" falls on, read as UTC so the host zone cannot move it. */
 export function weekdayName(date: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!m) return "";
-  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-  return WEEKDAYS[d.getUTCDay()] ?? "";
+  const wd = isoWeekday(date);
+  return wd ? (WEEKDAYS[wd % 7] ?? "") : "";
 }
 
-/**
- * What to call a date on the screen: Today and Tomorrow by name, everything
- * else by its weekday. The weekday rides along either way, because "Today" on
- * its own does not say which night the card is about.
- */
+/** Today and Tomorrow by name, everything else by its weekday. */
 export function dayWord(date: string, today: string): string {
   if (date === today) return "Today";
   if (date === addDays(today, 1)) return "Tomorrow";
   return weekdayName(date);
 }
 
-/** One meal of a day, with the dish it eats and the words for both. */
+// --- the targets card --------------------------------------------------------
+
+export interface TargetsColumn {
+  kind: "training" | "rest";
+  label: string;
+  kcal: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+}
+
+export interface TargetsSummary {
+  goal: string;
+  // Training day and rest day; one of them when the reader only trains or never does.
+  columns: TargetsColumn[];
+  // The week against maintenance, one sentence.
+  line: string;
+  // Building muscle at an overweight BMI.
+  warning: string | null;
+}
+
+export function targetsSummary(targets: Targets, profile: Profile): TargetsSummary {
+  const col = (kind: "training" | "rest", t: DayTargets): TargetsColumn => ({
+    kind,
+    label: kind === "training" ? "Training day" : "Rest day",
+    kcal: t.kcal,
+    protein: t.protein,
+    fat: t.fat,
+    carbs: t.carbs,
+  });
+  const columns: TargetsColumn[] = [];
+  if (targets.trainingDaysPerWeek > 0) columns.push(col("training", targets.training));
+  if (targets.trainingDaysPerWeek < 7) columns.push(col("rest", targets.rest));
+  const avg = Math.round(targets.weekAverageKcal);
+  const gap = Math.round(Math.abs(targets.tdeeAverage - targets.weekAverageKcal));
+  const line =
+    profile.goal === "cut"
+      ? `Weekly average ${avg} kcal a day, about ${gap} under maintenance: roughly ${Math.abs(targets.weightChangeKgPerWeek).toFixed(2)} kg a week.`
+      : profile.goal === "gain"
+        ? `Weekly average ${avg} kcal a day, about ${gap} over maintenance.`
+        : `Weekly average ${avg} kcal a day, at maintenance.`;
+  const warning =
+    profile.goal === "gain" && targets.bmi >= targets.bmiCuts.overweight
+      ? `BMI ${targets.bmi.toFixed(1)} is in the overweight range. Losing fat or holding weight first usually works better.`
+      : null;
+  return { goal: goalLabel(profile.goal), columns, line, warning };
+}
+
+// --- days and meals ----------------------------------------------------------
+
+/** One food of a meal at its solved weight. */
+export interface IngredientRow {
+  foodId: string;
+  // The food table's Chinese name.
+  name: string;
+  // The English name the photograph resolves by.
+  en: string;
+  role: TemplateRole;
+  category: IngredientCategory;
+  grams: number;
+  // "2 个" for a food counted in units, else null.
+  units: string | null;
+  kcal: number;
+  protein: number;
+}
+
 export interface MealView {
   key: MealKey;
   label: string;
-  meal: Meal;
-  dish: Dish | null;
+  mode: MealMode;
+  // The mode as a word, for the meals that are not made.
   word: string;
+  // The meal's name, or the place for out, delivery and bought. Empty for a skip.
+  name: string;
+  flavour: Flavour | null;
+  flavourLabel: string;
+  minutes: number | null;
+  method: string;
+  // What the dish photograph is looked up by.
+  searchName: string;
+  // The main meal eaten right after training.
+  postWorkout: boolean;
+  target: MealTarget | null;
+  // Null for a meal with no grams: not made, or not yet solved.
+  totals: Nutrition | null;
+  cells: MealCells | null;
+  rows: IngredientRow[];
+  note: string;
+  meal: Meal;
 }
 
 export interface DayView {
-  day: DayPlan;
-  // The three, in the order they are eaten.
-  meals: MealView[];
-  // The dish the day leads with: the cooked meal latest in the day. Breakfast
-  // is a pattern rather than what the day is about, so it only supplies the
-  // picture on a day that cooks nothing else.
-  dish: Dish | null;
+  date: string;
   word: string;
   weekday: string;
+  training: boolean;
+  kindLabel: string;
+  targets: DayTargets | null;
+  // The day's made meals added up.
+  totals: Nutrition;
+  // In the order they are eaten.
+  meals: MealView[];
+  // How the day is arranged, one sentence.
+  arrangement: string;
+  day: DayPlan;
 }
 
-/**
- * What a meal is called on a row: the dish where there is one, and otherwise
- * the place the reader named. Empty for a mode that names neither, which draws
- * as an empty cell rather than as the word "Skip" twice over.
- */
-export function mealName(view: MealView): string {
-  return view.dish?.name ?? view.meal.place ?? "";
+function ingredientRows(meal: Meal, key: MealKey, dayT: DayTargets | null): {
+  rows: IngredientRow[];
+  totals: Nutrition | null;
+  cells: MealCells | null;
+} {
+  const numbers = dayT ? mealNumbers(meal, key, dayT) : null;
+  if (!numbers) return { rows: [], totals: null, cells: null };
+  const rows = numbers.rows.map((r) => ({
+    foodId: r.foodId,
+    name: r.food.zh,
+    en: r.food.en,
+    role: r.role,
+    category: r.food.category,
+    grams: r.grams,
+    units: r.food.unit ? `${Math.round(r.grams / r.food.unit.grams)} ${r.food.unit.label}` : null,
+    kcal: r.kcal,
+    protein: r.protein,
+  }));
+  return { rows, totals: numbers.totals, cells: numbers.cells };
 }
 
-/** The three meals of a day, in order. */
-export function mealViews(plan: WeekPlan, day: DayPlan): MealView[] {
-  return MEAL_KEYS.map((key) => ({
+export function mealView(meal: Meal, key: MealKey, dayT: DayTargets | null): MealView {
+  const made = meal.mode === "make";
+  const { rows, totals, cells } = made ? ingredientRows(meal, key, dayT) : { rows: [], totals: null, cells: null };
+  return {
     key,
     label: mealLabel(key),
-    meal: day[key],
-    dish: dishForMeal(plan, day[key]),
-    word: modeWord(day[key].mode),
-  }));
-}
-
-function dayView(plan: WeekPlan, day: DayPlan, today: string): DayView {
-  return {
-    day,
-    meals: mealViews(plan, day),
-    dish: dishForDay(plan, day),
-    word: dayWord(day.date, today),
-    weekday: weekdayName(day.date),
+    mode: meal.mode,
+    word: modeWord(meal.mode),
+    name: (made ? meal.name : meal.place) ?? "",
+    flavour: made ? (meal.flavour ?? null) : null,
+    flavourLabel: made ? flavourLabel(meal.flavour) : "",
+    minutes: made ? (meal.minutes ?? null) : null,
+    method: made ? (meal.method ?? "") : "",
+    searchName: made ? (meal.searchName ?? "") : "",
+    postWorkout: dayT?.postWorkout === key,
+    target: dayT ? dayT.meals[key] : null,
+    totals,
+    cells,
+    rows,
+    note: meal.note ?? "",
+    meal,
   };
 }
 
-/** One day of the week by its date, or null when the plan does not cover it. */
-export function dayViewOn(
-  plan: WeekPlan | null,
-  date: string,
-  today: string,
-): DayView | null {
-  const day = plan?.days.find((d) => d.date === date);
-  return plan && day ? dayView(plan, day, today) : null;
+export function dayView(day: DayPlan, today: string, targets: Targets | null, profile: Profile | null): DayView {
+  const dayT = targets && profile ? dayTargetsOn(targets, profile, day.date) : null;
+  const order: readonly MealKey[] = dayT?.order ?? MEAL_KEYS;
+  const meals = order.map((k) => mealView(day[k], k, dayT));
+  const training = dayT?.kind === "training";
+  return {
+    date: day.date,
+    word: dayWord(day.date, today),
+    weekday: weekdayName(day.date),
+    training,
+    kindLabel: training ? "Training day" : "Rest day",
+    targets: dayT,
+    totals: sumNutrition(meals.flatMap((m) => (m.totals ? [m.totals] : []))),
+    meals,
+    arrangement: training
+      ? "The snack moves to right after training; the meal after it carries more of the day's calories."
+      : "No training today: a little less food, the same protein.",
+    day,
+  };
 }
 
-/**
- * The days still ahead, today first. A day already eaten leaves the screen: the
- * plan is the record, and there is nothing left to decide about it.
- */
-export function upcomingDays(plan: WeekPlan | null, today: string): DayView[] {
-  if (!plan) return [];
-  return plan.days.filter((d) => d.date >= today).map((d) => dayView(plan, d, today));
+/** The line a meal takes on a row: its name, with the flavour after it. */
+export function mealName(view: MealView): string {
+  return view.flavourLabel ? `${view.name} · ${view.flavourLabel}` : view.name;
 }
 
-/** The two days the screen gives its top half to, in order. */
-export function headlineDays(plan: WeekPlan | null, today: string): DayView[] {
-  return upcomingDays(plan, today).slice(0, 2);
+// --- the week ----------------------------------------------------------------
+
+export interface WeekSummary {
+  // Averages over the days that have made meals.
+  averageKcal: number;
+  averageProtein: number;
+  fishMeals: number;
+  madeMeals: number;
 }
 
-/** Everything after those two, as the compact list. */
-export function laterDays(plan: WeekPlan | null, today: string): DayView[] {
-  return upcomingDays(plan, today).slice(2);
+export function weekSummary(plan: WeekPlan, days: readonly DayView[]): WeekSummary {
+  const counted = days.filter((d) => d.meals.some((m) => m.totals));
+  const avg = (f: (n: Nutrition) => number) =>
+    counted.length ? counted.reduce((s, d) => s + f(d.totals), 0) / counted.length : 0;
+  return {
+    averageKcal: avg((n) => n.kcal),
+    averageProtein: avg((n) => n.protein),
+    fishMeals: fishMeals(plan),
+    madeMeals: plan.days.reduce((s, d) => s + MEAL_KEYS.filter((k) => d[k].mode === "make").length, 0),
+  };
 }
+
+export interface MealsView {
+  profile: Profile | null;
+  // Null before onboarding and when the reader withheld body data.
+  targets: Targets | null;
+  summary: TargetsSummary | null;
+  // Every day of the week in date order.
+  week: DayView[];
+  // The days still ahead, today first; a day already eaten leaves the screen.
+  upcoming: DayView[];
+  // Today and tomorrow, the two day cards.
+  headline: DayView[];
+  // Everything after those two, one row each.
+  later: DayView[];
+  weekSummary: WeekSummary | null;
+  // No plan, or the plan's last day is past.
+  exhausted: boolean;
+  shopping: ShoppingGroup[];
+  leftToBuy: number;
+}
+
+/** Everything the meals screen draws, from the state, the date and the region. */
+export function mealsView(state: MealsState, today: string, region: Region): MealsView {
+  const profile = state.charter?.profile ?? null;
+  const targets = targetsOf(state.charter, region);
+  const plan = state.plan;
+  const week = plan ? plan.days.map((d) => dayView(d, today, targets, profile)) : [];
+  const upcoming = week.filter((d) => d.date >= today);
+  return {
+    profile,
+    targets,
+    summary: targets && profile ? targetsSummary(targets, profile) : null,
+    week,
+    upcoming,
+    headline: upcoming.slice(0, 2),
+    later: upcoming.slice(2),
+    weekSummary: plan ? weekSummary(plan, week) : null,
+    exhausted: planExhausted(plan, today),
+    shopping: shoppingGroups(state.shopping),
+    leftToBuy: leftToBuy(state.shopping),
+  };
+}
+
+/** One day by its date, or null when the plan does not cover it. */
+export function dayViewOn(state: MealsState, date: string, today: string, region: Region): DayView | null {
+  const day = state.plan?.days.find((d) => d.date === date);
+  if (!day) return null;
+  return dayView(day, today, targetsOf(state.charter, region), state.charter?.profile ?? null);
+}
+
+// --- pictures ----------------------------------------------------------------
 
 // The line under a dish photograph, and where it goes when it is tapped.
 export interface DishPhotoCredit {
@@ -204,36 +364,21 @@ export interface DishPhotoCredit {
   url: string;
 }
 
-/**
- * A picture on the screen, and the page it was found on for the proxy to send
- * as Referer — an arbitrary CDN may be behind a hotlink check
- * (docs/pitfall/30). Null where there is nothing to send.
- */
+/** A picture on the screen, and the page it was found on for the proxy's Referer (pitfall 30). */
 export interface Picture {
   url: string;
   pageUrl: string | null;
 }
 
-/**
- * The picture a night shows: what the search found for the dish, or the one
- * written onto the dish when the week was applied.
- *
- * The cache first, because it is the newer of the two: a run that landed after
- * the week was written is a photograph the plan on disk knows nothing about.
- */
-export function dishPicture(dish: Dish | null | undefined, photos: PhotoCache | undefined): Picture | null {
-  const photo = photoForDish(dish, photos);
-  if (photo) return { url: photo.url, pageUrl: photo.pageUrl || null };
-  return dish?.image ? { url: dish.image, pageUrl: null } : null;
+/** The photograph the search found for a meal, by its searchName. */
+export function dishPicture(meal: { searchName?: string } | null | undefined, photos: PhotoCache | undefined): Picture | null {
+  const photo = photoForDish(meal, photos);
+  return photo ? { url: photo.url, pageUrl: photo.pageUrl || null } : null;
 }
 
 /**
- * The picture a shopping line shows: TheMealDB's cut-out where there is one,
- * and what the search found otherwise.
- *
- * The bank first on purpose — a white-background cut-out of a bok choy
- * identifies the vegetable in the shop better than a photograph of a dish with
- * some in it (docs/73 图片).
+ * The picture a food shows: TheMealDB's cut-out where there is one, and what
+ * the search found otherwise (docs/73 图片).
  */
 export function ingredientPicture(
   en: string,
@@ -246,18 +391,12 @@ export function ingredientPicture(
   return photo ? { url: photo.url, pageUrl: photo.pageUrl || null } : null;
 }
 
-/**
- * The credit the photograph on screen owes: the site it was found on, and the
- * page it sits on. The line reads "Photo: example.com" and opens that page.
- *
- * Null for a dish drawn from its ingredients, whose credit is the screen's
- * standing TheMealDB line instead.
- */
+/** "Photo: example.com" and the page it opens, or null for a meal drawn from its foods. */
 export function dishPhotoCredit(
-  dish: Dish | null | undefined,
+  meal: { searchName?: string } | null | undefined,
   photos: PhotoCache | undefined,
 ): DishPhotoCredit | null {
-  const photo = photoForDish(dish, photos);
+  const photo = photoForDish(meal, photos);
   if (!photo) return null;
   const site = photo.site.trim();
   const url = photo.pageUrl.trim();
@@ -265,54 +404,38 @@ export function dishPhotoCredit(
   return { text: `Photo: ${site}`, url };
 }
 
-// How many cut-outs a strip has room for, and which aisles are worth showing.
-//
-// A vegetable or a cut of meat is a picture of what is being cooked; a jar of
-// paste or a box of stock is a picture of a label, and a shelf of packshots
-// says nothing about the dish. So the pantry lines go last rather than out —
-// a dish that is all pantry still gets a strip.
 const THUMBNAIL_LIMIT = 4;
-const PICTURES_THE_DISH: readonly IngredientCategory[] = ["produce", "protein"];
 
 /**
- * Up to four ingredient photographs standing in for a dish that has no picture
- * of its own. Ingredients no source has a photograph of are skipped rather than
- * drawn as a gap, and the strip that draws these caps and de-duplicates them
- * again (images.ts) — what is returned here is the order, not the row.
- *
- * Resolved by the English name, never the reader's — images.ts is one table in
- * one language.
+ * Up to four food cut-outs standing in for a meal with no photograph of its
+ * own: the protein and the vegetables and fruit first, oils and sauces last.
+ * Foods no bank has a picture of are skipped.
  */
 export function dishThumbnails(
-  dish: Dish | null,
+  items: readonly TemplateItem[] | undefined,
   resolve: (name: string) => string | null = ingredientImageUrl,
 ): string[] {
-  if (!dish) return [];
   const front: string[] = [];
   const back: string[] = [];
   const seen = new Set<string>();
-  for (const ing of dish.ingredients) {
-    const url = resolve(ing.en);
-    if (!url || seen.has(url)) continue;
+  for (const item of items ?? []) {
+    const food = foodById(item.foodId);
+    const url = food ? resolve(food.en) : null;
+    if (!food || !url || seen.has(url)) continue;
     seen.add(url);
-    (PICTURES_THE_DISH.includes(ing.category) ? front : back).push(url);
+    (item.role === "protein" || item.role === "staple" || isProduce(food) ? front : back).push(url);
   }
   return [...front, ...back].slice(0, THUMBNAIL_LIMIT);
 }
 
-/**
- * The second line of a shopping row: how long the thing keeps, and the one
- * instruction a line can carry.
- *
- * The quantity is not in it. It is set on the right of the row instead, where a
- * column of quantities can be read down in a shop — which is the only place
- * this screen is ever read.
- */
+// --- the shopping list -------------------------------------------------------
+
+/** The second line of a shopping row: how long it keeps, and the one instruction a line can carry. */
 export function shoppingNote(item: ShoppingItem): string {
   return keepsLabel(item.keeps) + (item.freezeOnArrival ? " · freeze on arrival" : "");
 }
 
-/** How many lines are still to be bought. The only count the list shows. */
+/** How many lines are still to be bought. */
 export function leftToBuy(shopping: ShoppingState): number {
   return currentList(shopping).filter((i) => !isChecked(shopping, i)).length;
 }
@@ -323,14 +446,7 @@ export interface ShoppingGroup {
   items: ShoppingItem[];
 }
 
-/**
- * The list as it is drawn: the aisles in the order the derivation already put
- * them in (CATEGORY_ORDER, so one order and not two), and inside each aisle the
- * ticked lines sunk to the bottom in the order they were already in.
- *
- * Sunk rather than hidden: a ticked line is what is in the fridge, and the list
- * is the inventory (docs/73).
- */
+/** The list in aisle order, ticked lines sunk to the bottom of their aisle. */
 export function shoppingGroups(shopping: ShoppingState): ShoppingGroup[] {
   const list = currentList(shopping);
   const groups: ShoppingGroup[] = [];
@@ -340,10 +456,7 @@ export function shoppingGroups(shopping: ShoppingState): ShoppingGroup[] {
     groups.push({
       category,
       label: categoryLabel(category),
-      items: [
-        ...mine.filter((i) => !isChecked(shopping, i)),
-        ...mine.filter((i) => isChecked(shopping, i)),
-      ],
+      items: [...mine.filter((i) => !isChecked(shopping, i)), ...mine.filter((i) => isChecked(shopping, i))],
     });
   }
   return groups;

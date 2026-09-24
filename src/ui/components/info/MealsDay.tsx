@@ -1,26 +1,22 @@
-// One day (docs/73): the three meals stacked, and for the ones actually cooked
-// here, the steps.
-//
-// The steps are asked for when this screen opens and not before — most dishes
-// of a week are never opened, and a week of steps written up front is a week of
-// tokens spent on nothing (method.ts). Until the answer lands the Method box
-// says it is being written; when it lands, that box fills and nothing else on
-// the screen moves.
+// One day (docs/73): the four meals in eating order, each with its foods at
+// their solved grams and a one-line method.
 //
 // Rendering and event binding only.
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { openExternal } from "../../../platform/app/external-link";
 import type { PhotoCache } from "../../../info/meals/dish-photos";
 import { markDishPhotoBroken } from "../../../info/meals/photo-store";
-import type { DishMethod, MealsState } from "../../../info/meals/types";
+import { hostRegion } from "../../../info/meals/region";
+import type { MealsState } from "../../../info/meals/types";
 import {
   dayViewOn,
   dishPhotoCredit,
   dishPicture,
   dishThumbnails,
   ingredientPicture,
+  mealName,
   modeWord,
   weekdayName,
   type MealView,
@@ -35,113 +31,40 @@ export interface MealsDayProps {
   date: string;
   onBack: () => void;
   onAsk: () => void;
-  // One headless turn per dish, at most once however many callers ask
-  // (ensureDishMethod). Null is "this day has no steps", which is the state
-  // every day starts in.
-  onWriteMethod: (dishId: string) => Promise<DishMethod | null>;
 }
 
-/** The two labelled lines a cooked meal is actually made of. */
-function BasePlus({ label, text }: { label: string; text: string }) {
-  if (!text) return null;
-  return (
-    <div className="mt-1.5 flex gap-3 text-[13px] leading-relaxed">
-      <span className="w-[44px] flex-none text-faint-foreground">{label}</span>
-      <span className="min-w-0 flex-1 text-muted-foreground">{text}</span>
-    </div>
-  );
-}
-
-function Method({ method }: { method: DishMethod | null }) {
-  return (
-    <div className="mt-4 border-t border-border-subtle pt-3.5">
-      <h3 className="m-0 text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
-        Method
-      </h3>
-      {method ? (
-        <>
-          <ol className="m-0 mt-2.5 flex list-none flex-col gap-2 p-0">
-            {method.steps.map((step, i) => (
-              <li key={i} className="flex gap-3 text-[14px] leading-relaxed text-foreground">
-                <span className="w-[16px] flex-none text-[12px] leading-[1.9] tabular-nums text-faint-foreground">
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1">{step}</span>
-              </li>
-            ))}
-          </ol>
-          {/* The note is the cook's aside, not a sixth step: it is set apart
-              from the numbers rather than running straight on from them. */}
-          {method.note && (
-            <p className="m-0 mt-3.5 border-t border-border-subtle pt-3 text-[13px] leading-relaxed text-muted-foreground">
-              {method.note}
-            </p>
-          )}
-        </>
-      ) : (
-        // Two bars where the steps will go, so the box is the height it will
-        // settle at and the sentence is not left alone on a white field.
-        <div className="mt-2.5">
-          <p className="m-0 text-[13px] leading-relaxed text-faint-foreground">
-            Writing the steps…
-          </p>
-          <div className="mt-3 flex flex-col gap-2" aria-hidden="true">
-            <div className="h-3 w-11/12 rounded bg-muted" />
-            <div className="h-3 w-3/5 rounded bg-muted" />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MealCard({
-  view,
-  photos,
-  method,
-}: {
-  view: MealView;
-  photos: PhotoCache;
-  // Undefined for a meal with no steps to show at all; null while they are
-  // being written.
-  method?: DishMethod | null;
-}) {
-  const { meal, dish } = view;
+function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
   const [photoFailed, setPhotoFailed] = useState(false);
-  const cooked = (meal.mode === "cook" || meal.mode === "reheat" || meal.mode === "packed") && !!dish;
-  const picture = cooked ? dishPicture(dish, photos) : null;
-  const credit = cooked ? dishPhotoCredit(dish, photos) : null;
-  const fresh = meal.mode === "reheat" ? (meal.freshAdd ?? dish?.fresh ?? "") : (dish?.fresh ?? "");
+  const made = view.mode === "make";
+  const dish = { searchName: view.searchName };
+  const picture = made ? dishPicture(dish, photos) : null;
+  const credit = made ? dishPhotoCredit(dish, photos) : null;
 
   return (
     <section className="rounded-2xl border border-border-soft bg-card p-5">
       <div className="flex items-baseline gap-2">
         <span className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
           {view.label}
+          {view.postWorkout ? " · after training" : ""}
         </span>
         <span className="flex-1" />
-        {/* The pair reads as one line of label: the meal on the left and how it
-            is made on the right, neither of them at the dish's weight. */}
         <span className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-          {modeWord(meal.mode)}
+          {made && view.minutes !== null ? `${view.minutes} min` : modeWord(view.mode)}
         </span>
       </div>
 
-      {cooked && dish ? (
+      {made ? (
         <>
           <DishImage
             image={picture?.url}
             imagePageUrl={picture?.pageUrl}
-            thumbnails={dishThumbnails(dish, (en) => ingredientPicture(en, photos)?.url ?? null)}
-            alt={dish.name}
+            thumbnails={dishThumbnails(view.meal.items, (en) => ingredientPicture(en, photos)?.url ?? null)}
+            alt={view.name}
             photoClassName="mt-3 aspect-[16/9] max-h-40 w-full"
             stripClassName="mt-3"
             onPhotoFailed={() => {
               setPhotoFailed(true);
-              // A picture the search found and this app cannot load is dropped
-              // from the cache, so the next Apply looks the dish up again
-              // rather than loading the same dead URL every week.
-              if (dish.searchName) void markDishPhotoBroken(dish.searchName);
+              if (view.searchName) void markDishPhotoBroken(view.searchName);
             }}
           />
           {credit && !photoFailed && (
@@ -154,47 +77,42 @@ function MealCard({
             </button>
           )}
           <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
-            {dish.name}
+            {mealName(view)}
           </div>
-          {dish.oneLine && (
-            <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-muted-foreground">
-              {dish.oneLine}
+          {view.totals && (
+            <p className="m-0 mt-1.5 text-[13px] tabular-nums text-muted-foreground">
+              {Math.round(view.totals.kcal)} kcal · P {Math.round(view.totals.protein)} g · F{" "}
+              {Math.round(view.totals.fat)} g · C {Math.round(view.totals.carbs)} g
             </p>
           )}
-          {meal.note && (
-            <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-muted-foreground">
-              {meal.note}
+          {view.rows.length > 0 && (
+            <ul className="m-0 mt-3 flex list-none flex-col gap-1 p-0">
+              {view.rows.map((r) => (
+                <li key={r.foodId} className="flex gap-3 text-[13px] tabular-nums text-foreground">
+                  <span className="min-w-0 flex-1">
+                    {r.name}
+                    {r.units ? <span className="text-faint-foreground"> {r.units}</span> : null}
+                  </span>
+                  <span className="w-[52px] text-right">{r.grams} g</span>
+                  <span className="w-[64px] text-right text-muted-foreground">{Math.round(r.kcal)} kcal</span>
+                  <span className="w-[52px] text-right text-muted-foreground">{r.protein.toFixed(1)} g</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {view.method && (
+            <p className="m-0 mt-3 border-t border-border-subtle pt-3 text-[14px] leading-relaxed text-foreground">
+              {view.method}
             </p>
           )}
-          <div className="mt-2.5">
-            <BasePlus label="Base" text={dish.base} />
-            <BasePlus label="Fresh" text={fresh} />
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-[12px] text-faint-foreground">
-              {dish.handsOnMinutes} min hands-on
-            </span>
-            {dish.keepsADay && (
-              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[12px] text-faint-foreground">
-                keeps a day
-              </span>
-            )}
-          </div>
-          {/* Steps only where the meal is actually cooked here. A packed lunch
-              is a box; it was cooked at the meal its pointer names. */}
-          {method !== undefined && <Method method={method} />}
         </>
       ) : (
-        <>
-          <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
-            {meal.place || modeWord(meal.mode)}
-          </div>
-          {meal.note && (
-            <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-muted-foreground">
-              {meal.note}
-            </p>
-          )}
-        </>
+        <div className="mt-3.5 font-display text-[17px] font-medium leading-snug text-foreground">
+          {view.name || modeWord(view.mode)}
+        </div>
+      )}
+      {view.note && (
+        <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-muted-foreground">{view.note}</p>
       )}
     </section>
   );
@@ -202,40 +120,7 @@ function MealCard({
 
 export function MealsDay(props: MealsDayProps) {
   const { state, photos, today, date } = props;
-  const view = dayViewOn(state?.plan ?? null, date, today);
-
-  // The steps as they land, held here rather than read back through the whole
-  // state: a reload would hand every box on the screen a new object, and this
-  // one box is the only thing that changed.
-  const [written, setWritten] = useState<Record<string, DishMethod>>({});
-  const asked = useRef(new Set<string>());
-  const live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
-
-  const wanted = (view?.meals ?? [])
-    .filter((m) => (m.meal.mode === "cook" || m.meal.mode === "reheat") && m.dish)
-    .map((m) => m.dish as NonNullable<typeof m.dish>);
-  const missing = wanted.filter((d) => !d.method && !written[d.id]).map((d) => d.id);
-  const missingKey = missing.join(",");
-  const write = props.onWriteMethod;
-  useEffect(() => {
-    for (const dishId of missingKey ? missingKey.split(",") : []) {
-      if (asked.current.has(dishId)) continue;
-      asked.current.add(dishId);
-      void write(dishId).then(
-        (method) => {
-          if (method && live.current) setWritten((prev) => ({ ...prev, [dishId]: method }));
-        },
-        () => {},
-      );
-    }
-  }, [missingKey, write]);
-
+  const view = state ? dayViewOn(state, date, today, hostRegion()) : null;
   const word = view?.word ?? "";
   const askLabel = word === "Today" ? "Ask about today" : `Ask about ${weekdayName(date)}`;
 
@@ -252,18 +137,15 @@ export function MealsDay(props: MealsDayProps) {
         <div className="h-24" />
       ) : (
         <div className="flex flex-col gap-4">
-          {view.meals.map((m) => {
-            const cooking = m.meal.mode === "cook" || m.meal.mode === "reheat";
-            const method = m.dish ? (m.dish.method ?? written[m.dish.id] ?? null) : null;
-            return (
-              <MealCard
-                key={m.key}
-                view={m}
-                photos={photos}
-                {...(cooking && m.dish ? { method } : {})}
-              />
-            );
-          })}
+          <p className="m-0 text-[13px] text-muted-foreground">
+            {view.kindLabel}
+            {view.targets
+              ? ` · ${Math.round(view.totals.kcal)} / ${view.targets.kcal} kcal · P ${Math.round(view.totals.protein)} / ${view.targets.protein} g`
+              : ""}
+          </p>
+          {view.meals.map((m) => (
+            <MealCard key={m.key} view={m} photos={photos} />
+          ))}
         </div>
       )}
       <PhotoCredit />
