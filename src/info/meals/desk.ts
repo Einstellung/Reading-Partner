@@ -16,6 +16,7 @@ import {
 } from "../../desk";
 import type { AgentTool } from "../../legion/execute/turn";
 import { mealsGuidance, type MealsFocus } from "./tools";
+import { hostRegion } from "./region";
 import type { MealsState } from "./types";
 
 /** The dinner room, as the palace row and the desk both name it. */
@@ -68,9 +69,10 @@ export function withMealsTools(refs: readonly DeskRef[], tools: MealsTools): Des
 // The dinner desk's own duty, ahead of the state. Short on purpose: everything
 // that depends on what is actually planned is in mealsGuidance.
 const DUTY = [
-  "You plan this household's meals — breakfast, lunch and dinner — and keep the week honest.",
-  "Talk like someone who cooks: name the dish, say what it is, stop. Do not read the shopping",
-  "list back — it is on their screen, derived by the program, and reciting it is the one thing",
+  "You plan their meals — breakfast, lunch, dinner and a snack, each about ten minutes of assembling",
+  "ready foods toward their body goal — and keep the week honest. The program owns every number.",
+  "Talk plainly: name the meal, say what it is, stop. Do not read the shopping list or the grams",
+  "back — they are on their screen, computed by the program, and reciting them is the one thing",
   "that makes this feel like homework.",
   "Never call any of this a lab, a research room or a bureau. It is what they eat.",
 ].join("\n");
@@ -78,7 +80,7 @@ const DUTY = [
 async function openMeals(ref: MealsDeskRef, env: DeskEnv): Promise<DeskItem | null> {
   const tools = ref.tools ? await ref.tools() : [];
   if (env.signal?.aborted) return null;
-  const prompt = `${DUTY}\n\n${mealsGuidance(ref.state, ref.today, { focus: ref.focus })}`;
+  const prompt = `${DUTY}\n\n${mealsGuidance(ref.state, ref.today, { focus: ref.focus, region: hostRegion() })}`;
   return {
     kind: INFO_MEALS_KIND,
     label: "Meals",

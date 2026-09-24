@@ -157,18 +157,16 @@ export function solveMeal(slot: MealSlot, items: readonly TemplateItem[], target
     .map((r) => ({ foodId: r.food.id, food: r.food, role: r.item.role, grams: r.grams, ...rowNutrition(r.food, r.grams) }));
   const totals = addUp(solved);
   const produceG = solved.filter((r) => isProduce(r.food)).reduce((s, r) => s + r.grams, 0);
+  return { slot, target, rows: solved, totals, produceG, cells: mealCells(slot, target, totals, produceG) };
+}
+
+/** The three squares of a meal, from what it adds up to. */
+export function mealCells(slot: MealSlot, target: MealTarget, totals: Nutrition, produceG: number): MealCells {
   const main = slot !== "snack";
   return {
-    slot,
-    target,
-    rows: solved,
-    totals,
-    produceG,
-    cells: {
-      protein: totals.protein >= Math.min(target.protein * 0.9, main ? 20 : 8),
-      produce: produceG >= (slot === "lunch" || slot === "dinner" ? 150 : 80),
-      carbs: totals.carbs >= (main ? 30 : 15),
-    },
+    protein: totals.protein >= Math.min(target.protein * 0.9, main ? 20 : 8),
+    produce: produceG >= (slot === "lunch" || slot === "dinner" ? 150 : 80),
+    carbs: totals.carbs >= (main ? 30 : 15),
   };
 }
 
