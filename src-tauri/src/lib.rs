@@ -54,10 +54,7 @@ pub fn run() {
         // Ours, out of plugins/openin: the iOS share sheet for one file, so a
         // reader can open a book in another app. Off iOS it answers the
         // availability probe with false and the control is never drawn.
-        .plugin(tauri_plugin_openin::init())
-        // Ours, out of plugins/health: body measurements from Apple Health,
-        // read-only, for the meal targets. Off iOS it answers null.
-        .plugin(tauri_plugin_health::init());
+        .plugin(tauri_plugin_openin::init());
 
     // The voice commands and their state only exist on desktop (see the module
     // note above); everything else is registered on both.

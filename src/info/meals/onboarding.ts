@@ -4,7 +4,6 @@
 // line and the profile it ends in are here, so MealsOnboarding.tsx only draws
 // the thread and dispatches taps.
 
-import type { BodyMeasurements } from "../../platform/app/health";
 import type { FoodTag } from "./nutrition/foods";
 import type { Consent, Goal, Profile, Sex, Targets, TrainTime, Work } from "./nutrition/targets";
 
@@ -39,20 +38,10 @@ export interface Answers {
   avoid: string[];
 }
 
-/** Which body fields came from Apple Health and are still as it gave them. */
-export type HealthFields = Partial<Record<StepperField | "sex", true>>;
-
 export interface OnboardingState {
   answers: Answers;
   // The step being asked; RESULT_STEP once every question is answered.
   step: number;
-  // "pending" from the moment the reader agrees to Apple Health until the one
-  // read has come back; the screen makes that read when it sees "pending".
-  health: "idle" | "pending" | "done";
-  fromHealth: HealthFields;
-  // The days the 7-day weight mean covers, when it came from Apple Health.
-  weightFrom: string | null;
-  weightTo: string | null;
 }
 
 export const LIMITS: Readonly<Record<StepperField, readonly [number, number]>> = {
@@ -74,8 +63,7 @@ export const STEP_SIZE: Readonly<Record<StepperField, number>> = {
 export const ZH_WEEKDAY = ["", "一", "二", "三", "四", "五", "六", "日"];
 
 export const CONSENT_OPTIONS: readonly { value: Consent; label: string }[] = [
-  { value: "health", label: "同意，从 Apple 健康读" },
-  { value: "manual", label: "同意，我自己填" },
+  { value: "manual", label: "同意" },
   { value: "no", label: "不同意" },
 ];
 export const GOAL_OPTIONS: readonly { value: Goal; label: string; sub: string }[] = [
@@ -146,10 +134,6 @@ export function initialOnboarding(existing?: Profile | null): OnboardingState {
       avoid: [],
     },
     step: 0,
-    health: "idle",
-    fromHealth: {},
-    weightFrom: null,
-    weightTo: null,
   };
 }
 
@@ -157,7 +141,7 @@ export function initialOnboarding(existing?: Profile | null): OnboardingState {
 export function stepDone(a: Answers, id: StepId): boolean {
   switch (id) {
     case "consent":
-      return a.consent === "health" || a.consent === "manual";
+      return a.consent === "manual";
     case "goal":
       return a.goal !== null;
     case "body":
@@ -192,8 +176,7 @@ export type OnboardingAction =
   | { type: "flag"; field: "bodyFatKnown" | "waistKnown" }
   | { type: "step"; field: StepperField; dir: 1 | -1 }
   | { type: "next" }
-  | { type: "goto"; step: number }
-  | { type: "health"; measurements: BodyMeasurements | null };
+  | { type: "goto"; step: number };
 
 const round1 = (x: number) => Math.round(x * 10) / 10;
 const clampTo = (field: StepperField, v: number) => {
@@ -217,64 +200,19 @@ function toggled(list: readonly string[], value: string): string[] {
   return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
 }
 
-/** Apple Health's numbers into the body step, each within the stepper's range. */
-function withHealth(s: OnboardingState, m: BodyMeasurements | null): OnboardingState {
-  if (!m) return { ...s, health: "done" };
-  const a = { ...s.answers };
-  const from: HealthFields = {};
-  if (m.heightCm !== null) {
-    a.heightCm = clampTo("heightCm", Math.round(m.heightCm));
-    from.heightCm = true;
-  }
-  if (m.weightKg !== null) {
-    a.weightKg = clampTo("weightKg", m.weightKg);
-    from.weightKg = true;
-  }
-  if (m.bodyFatPct !== null) {
-    a.bodyFatPct = clampTo("bodyFatPct", m.bodyFatPct);
-    a.bodyFatKnown = true;
-    from.bodyFatPct = true;
-  }
-  if (m.waistCm !== null) {
-    a.waistCm = clampTo("waistCm", Math.round(m.waistCm));
-    a.waistKnown = true;
-    from.waistCm = true;
-  }
-  if (m.age !== null) {
-    a.age = clampTo("age", m.age);
-    from.age = true;
-  }
-  if (m.sex !== null) {
-    a.sex = m.sex;
-    from.sex = true;
-  }
-  return {
-    ...s,
-    answers: a,
-    health: "done",
-    fromHealth: from,
-    weightFrom: from.weightKg ? m.weightFrom : null,
-    weightTo: from.weightKg ? m.weightTo : null,
-  };
-}
-
 export function onboardingReducer(s: OnboardingState, action: OnboardingAction): OnboardingState {
   const a = s.answers;
   switch (action.type) {
-    case "consent": {
-      const next = picked(s, { ...a, consent: action.value });
-      return action.value === "health" && s.health === "idle" ? { ...next, health: "pending" } : next;
-    }
+    case "consent":
+      return picked(s, { ...a, consent: action.value });
     case "goal":
       return picked(s, { ...a, goal: action.value });
     case "work":
       return picked(s, { ...a, work: action.value });
     case "minutes":
       return picked(s, { ...a, minutesPerMeal: action.value });
-    case "sex": {
-      const { sex: _dropped, ...rest } = s.fromHealth;
-      return { ...s, answers: { ...a, sex: action.value }, fromHealth: action.value === a.sex ? s.fromHealth : rest };
-    }
+    case "sex":
+      return { ...s, answers: { ...a, sex: action.value } };
     case "trainTime":
       return { ...s, answers: { ...a, trainTime: action.value } };
     case "people":
@@ -303,8 +241,7 @@ export function onboardingReducer(s: OnboardingState, action: OnboardingAction):
     case "step": {
       const field = action.field;
       const value = clampTo(field, a[field] + action.dir * STEP_SIZE[field]);
-      const { [field]: _dropped, ...rest } = s.fromHealth;
-      return { ...s, answers: { ...a, [field]: value }, fromHealth: rest };
+      return { ...s, answers: { ...a, [field]: value } };
     }
     case "next": {
       const id = STEPS[s.step];
@@ -312,36 +249,7 @@ export function onboardingReducer(s: OnboardingState, action: OnboardingAction):
     }
     case "goto":
       return action.step >= 0 && action.step < s.step ? { ...s, step: action.step } : s;
-    case "health":
-      return withHealth(s, action.measurements);
   }
-}
-
-/** Whether the body step shows Apple Health's numbers. */
-export function bodyFromHealth(s: OnboardingState): boolean {
-  return s.answers.consent === "health" && Object.keys(s.fromHealth).length > 0;
-}
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function monthDay(date: string): { month: string; day: number } | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!m) return null;
-  return { month: MONTHS[Number(m[2]) - 1] ?? "", day: Number(m[3]) };
-}
-
-/** "7-day avg, Sep 16–22" under the weight from Apple Health. */
-export function weightRangeLabel(from: string | null, to: string | null): string | null {
-  const a = from ? monthDay(from) : null;
-  const b = to ? monthDay(to) : null;
-  if (!a || !b) return null;
-  const range =
-    from === to
-      ? `${a.month} ${a.day}`
-      : a.month === b.month
-        ? `${a.month} ${a.day}–${b.day}`
-        : `${a.month} ${a.day}–${b.month} ${b.day}`;
-  return `7-day avg, ${range}`;
 }
 
 /** The reader's answer to a step, as the bubble under the question shows it. */
@@ -377,7 +285,7 @@ export function answerText(a: Answers, id: StepId): string {
 
 /** The profile the answers make, or null while any of it is missing or consent was withheld. */
 export function toProfile(a: Answers): Profile | null {
-  if (a.consent !== "health" && a.consent !== "manual") return null;
+  if (a.consent !== "manual") return null;
   if (!a.goal || !a.sex || !a.work || a.minutesPerMeal === null) return null;
   if (!stepDone(a, "train") || !stepDone(a, "logistics")) return null;
   const dislikes = a.avoid.flatMap((label) => {
@@ -423,16 +331,14 @@ export const INTRO_LINE = "先问几个问题，都是点选，一两分钟。�
 export const NO_CONSENT_REPLY = "好，不存身体数据。那就算不了热量，只能按份量给你排。改主意了点上面那条回答。";
 
 /** What the thread asks at a step. */
-export function questionText(s: OnboardingState, id: StepId): string {
+export function questionText(id: StepId): string {
   switch (id) {
     case "consent":
       return "排之前要用到你的体重和体脂。这两项属于健康信息，先单独问你要不要给。";
     case "goal":
       return "这段时间主要想要什么？";
     case "body":
-      return bodyFromHealth(s)
-        ? "身体数据。身高、体重和体脂我从 Apple 健康读到了（体重和体脂取最近 7 天平均），不对就改。体脂和腰围不知道可以不填。"
-        : "身体数据。点加减调到你的数。体脂和腰围不知道可以不填。";
+      return "身体数据。点加减调到你的数。体脂和腰围不知道可以不填。";
     case "train":
       return "每周哪几天练？一般什么时候练？练的那天加餐会挪到练完之后。";
     case "work":

@@ -6,7 +6,6 @@
 
 import { useEffect, useReducer, useRef, useState } from "react";
 
-import { readBodyMeasurements } from "../../../platform/app/health";
 import { computeTargets, type Profile } from "../../../info/meals/nutrition/targets";
 import {
   AVOID_OPTIONS,
@@ -31,7 +30,6 @@ import {
   resultLine,
   stepDone,
   toProfile,
-  weightRangeLabel,
   type OnboardingAction,
   type OnboardingState,
   type StepId,
@@ -92,32 +90,10 @@ function Opt({
   );
 }
 
-function HealthBadge() {
-  return (
-    <span className="rounded-full border border-accent-line px-[7px] text-[11px] leading-[18px] text-accent-line">
-      From Apple Health
-    </span>
-  );
-}
-
-function Field({
-  title,
-  badge,
-  aside,
-  children,
-}: {
-  title: string;
-  badge?: boolean;
-  aside?: string | null;
-  children: React.ReactNode;
-}) {
+function Field({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border-t border-border-subtle py-2.5 first:border-t-0 first:pt-0">
-      <div className="mb-1.5 flex flex-wrap items-baseline gap-2 text-[13px] text-muted-foreground">
-        {title}
-        {badge && <HealthBadge />}
-        {aside && <span className="text-faint-foreground">{aside}</span>}
-      </div>
+      <div className="mb-1.5 flex flex-wrap items-baseline gap-2 text-[13px] text-muted-foreground">{title}</div>
       {children}
     </div>
   );
@@ -197,7 +173,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               {[
                 ["What", "体重、体脂率、身高、腰围（腰围选填）。"],
                 ["Why", "只用来算你每天该吃多少热量和蛋白，不做别的。"],
-                ["Where", "只存在这台设备和你的账号里，不给第三方，不用于广告；计划的饭不会当成已吃写回 Apple 健康。"],
+                ["Where", "只存在这台设备和你的账号里，不给第三方，不用于广告。"],
                 ["Undo", "随时可以在设置里撤回同意并删掉这些数据。"],
               ].map(([dt, dd]) => (
                 <div key={dt} className="mt-2.5 first:mt-0">
@@ -240,7 +216,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
     case "body":
       return (
         <Panel>
-          <Field title="Sex" badge={s.fromHealth.sex}>
+          <Field title="Sex">
             <Opts>
               {SEX_OPTIONS.map((o) => (
                 <Opt
@@ -252,20 +228,16 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               ))}
             </Opts>
           </Field>
-          <Field title="Age" badge={s.fromHealth.age}>
+          <Field title="Age">
             <Stepper field="age" value={String(a.age)} unit="岁" dispatch={dispatch} />
           </Field>
-          <Field title="Height" badge={s.fromHealth.heightCm}>
+          <Field title="Height">
             <Stepper field="heightCm" value={String(a.heightCm)} unit="cm" dispatch={dispatch} />
           </Field>
-          <Field
-            title="Weight"
-            badge={s.fromHealth.weightKg}
-            aside={s.fromHealth.weightKg ? weightRangeLabel(s.weightFrom, s.weightTo) : null}
-          >
+          <Field title="Weight">
             <Stepper field="weightKg" value={a.weightKg.toFixed(1)} unit="kg" dispatch={dispatch} />
           </Field>
-          <Field title="Body fat · optional" badge={a.bodyFatKnown && s.fromHealth.bodyFatPct}>
+          <Field title="Body fat · optional">
             {a.bodyFatKnown && (
               <Stepper field="bodyFatPct" value={a.bodyFatPct.toFixed(1)} unit="%" dispatch={dispatch} />
             )}
@@ -277,7 +249,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               />
             </div>
           </Field>
-          <Field title="Waist · optional" badge={a.waistKnown && s.fromHealth.waistCm}>
+          <Field title="Waist · optional">
             {a.waistKnown && (
               <Stepper field="waistCm" value={String(a.waistCm)} unit="cm" dispatch={dispatch} />
             )}
@@ -467,17 +439,6 @@ function Result({
 export function MealsOnboarding(props: MealsOnboardingProps) {
   const [s, dispatch] = useReducer(onboardingReducer, props.existing, initialOnboarding);
   const current = useRef<HTMLDivElement | null>(null);
-  const asked = useRef(false);
-
-  // The one Apple Health read, made when the reader agrees to it.
-  useEffect(() => {
-    if (s.health !== "pending" || asked.current) return;
-    asked.current = true;
-    void readBodyMeasurements().then(
-      (measurements) => dispatch({ type: "health", measurements }),
-      () => dispatch({ type: "health", measurements: null }),
-    );
-  }, [s.health]);
 
   // Bring the question being asked into view whenever the step moves.
   const first = useRef(true);
@@ -502,7 +463,7 @@ export function MealsOnboarding(props: MealsOnboardingProps) {
           <div key={id} className="flex flex-col gap-3.5">
             <div ref={i === s.step ? current : undefined} className="scroll-mt-16">
               <Ai>
-                <p className="m-0">{questionText(s, id)}</p>
+                <p className="m-0">{questionText(id)}</p>
               </Ai>
               {i === s.step && <StepPanel id={id} s={s} dispatch={dispatch} />}
             </div>

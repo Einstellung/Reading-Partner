@@ -1,18 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
-import type { BodyMeasurements } from "../../../src/platform/app/health";
 import { computeTargets } from "../../../src/info/meals/nutrition/targets";
 import {
   RESULT_STEP,
   STEPS,
   answerText,
-  bodyFromHealth,
   initialOnboarding,
   onboardingReducer,
-  questionText,
   resultLine,
   toProfile,
-  weightRangeLabel,
   type OnboardingAction,
   type OnboardingState,
 } from "../../../src/info/meals/onboarding";
@@ -20,17 +16,6 @@ import { profile } from "./fixtures/week";
 
 const run = (actions: OnboardingAction[], s: OnboardingState = initialOnboarding()) =>
   actions.reduce(onboardingReducer, s);
-
-const HEALTH: BodyMeasurements = {
-  heightCm: 175.4,
-  weightKg: 72.26,
-  weightFrom: "2026-09-16",
-  weightTo: "2026-09-22",
-  bodyFatPct: 18,
-  waistCm: null,
-  sex: "m",
-  age: 30,
-};
 
 // The prototype's example: a man cutting, training Mon/Wed/Fri evenings.
 const EXAMPLE: OnboardingAction[] = [
@@ -62,10 +47,9 @@ describe("onboarding steps", () => {
     expect(STEPS[s.step]).toBe("train");
   });
 
-  test("不同意 stays on consent and asks for no Apple Health read", () => {
+  test("不同意 stays on consent", () => {
     const s = run([{ type: "consent", value: "no" }]);
     expect(s.step).toBe(0);
-    expect(s.health).toBe("idle");
     expect(toProfile(s.answers)).toBeNull();
   });
 
@@ -133,53 +117,10 @@ describe("onboarding steps", () => {
   });
 });
 
-describe("Apple Health", () => {
-  test("agreeing to Apple Health asks for one read", () => {
-    let s = run([{ type: "consent", value: "health" }]);
-    expect(s.health).toBe("pending");
-    s = run([{ type: "goto", step: 0 }, { type: "consent", value: "health" }], { ...s, health: "done" });
-    expect(s.health).toBe("done");
-  });
-
-  test("its numbers prefill the body step with badges and the 7-day range", () => {
-    const s = run([{ type: "consent", value: "health" }, { type: "health", measurements: HEALTH }]);
-    expect(s.answers).toMatchObject({ heightCm: 175, weightKg: 72.3, bodyFatPct: 18, sex: "m", age: 30 });
-    expect(s.fromHealth).toEqual({ heightCm: true, weightKg: true, bodyFatPct: true, sex: true, age: true });
-    expect(bodyFromHealth(s)).toBe(true);
-    expect(questionText(s, "body")).toContain("Apple 健康");
-    expect(weightRangeLabel(s.weightFrom, s.weightTo)).toBe("7-day avg, Sep 16–22");
-  });
-
-  test("changing a prefilled number drops its badge", () => {
-    const s = run([
-      { type: "consent", value: "health" },
-      { type: "health", measurements: HEALTH },
-      { type: "step", field: "weightKg", dir: -1 },
-    ]);
-    expect(s.answers.weightKg).toBe(71.8);
-    expect(s.fromHealth.weightKg).toBeUndefined();
-    expect(s.fromHealth.heightCm).toBe(true);
-  });
-
-  test("nothing from Health leaves the manual values and no badge", () => {
-    const s = run([{ type: "consent", value: "health" }, { type: "health", measurements: null }]);
-    expect(s.health).toBe("done");
-    expect(s.answers.heightCm).toBe(170);
-    expect(bodyFromHealth(s)).toBe(false);
-    expect(questionText(s, "body")).not.toContain("Apple 健康");
-  });
-
-  test("the range label spans months and single days", () => {
-    expect(weightRangeLabel("2026-08-30", "2026-09-05")).toBe("7-day avg, Aug 30–Sep 5");
-    expect(weightRangeLabel("2026-09-22", "2026-09-22")).toBe("7-day avg, Sep 22");
-    expect(weightRangeLabel(null, "2026-09-22")).toBeNull();
-  });
-});
-
 describe("answer lines", () => {
   test("each step's answer reads as in the prototype", () => {
     const a = run(EXAMPLE).answers;
-    expect(answerText(a, "consent")).toBe("同意，我自己填");
+    expect(answerText(a, "consent")).toBe("同意");
     expect(answerText(a, "goal")).toBe("减脂");
     expect(answerText(a, "body")).toBe("男 · 30 岁 · 170 cm · 65.0 kg · 体脂 20.0%");
     expect(answerText(a, "train")).toBe("周一、三、五 · 下班后");

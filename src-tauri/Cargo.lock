@@ -3499,7 +3499,6 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-haptics",
- "tauri-plugin-health",
  "tauri-plugin-http",
  "tauri-plugin-opener",
  "tauri-plugin-openin",
@@ -4695,17 +4694,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67ab59e8202362fb5fec1158bdb497466983ddac2483e606e4d5c1bf9b118c6c"
 dependencies = [
  "log",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "tauri-plugin-health"
-version = "0.1.0"
-dependencies = [
  "serde",
  "serde_json",
  "tauri",

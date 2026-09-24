@@ -250,8 +250,7 @@ export const MEDICAL_NOTE =
 
 export const HEALTH_DATA_NOTE =
   "Health data (height, weight, body fat, waist) is used only to calculate these targets. It stays on this " +
-  "device and in your account, is never given to third parties or used for ads, and planned meals are never " +
-  "written to Apple Health as eaten.";
+  "device and in your account, and is never given to third parties or used for ads.";
 
 /** The one line at the foot of the home screen. */
 export const FOOT_NOTE =
