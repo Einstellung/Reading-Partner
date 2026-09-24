@@ -305,8 +305,13 @@ export default function InfoHome(props: {
 
         let inner: React.ReactNode;
         let ask: AskableScreen;
+        // Which screen the scroll container is showing. It keys the container,
+        // so a new screen starts at its top instead of at wherever the last
+        // one was scrolled to (they all share this one element otherwise).
+        let shown: string;
         if (screen === "meals-onboarding" || (screen === "meals" && meals.state && !meals.state.charter)) {
           const replay = screen === "meals-onboarding";
+          shown = replay ? "onboarding-replay" : "onboarding";
           ask = { label: "Ask about meals", onAsk: () => openChat({ kind: "week" }) };
           inner = (
             <MealsOnboarding
@@ -317,9 +322,11 @@ export default function InfoHome(props: {
             />
           );
         } else if (screen === "meals-method") {
+          shown = "method";
           ask = { label: "Ask about the numbers", onAsk: () => openChat({ kind: "week" }) };
           inner = <MealsMethod state={meals.state} onBack={backFromSide} />;
         } else if (screen === "meals-shopping") {
+          shown = "shopping";
           ask = { label: "Ask about shopping", onAsk: () => openChat({ kind: "shopping" }) };
           inner = (
             <MealsShopping
@@ -332,6 +339,7 @@ export default function InfoHome(props: {
             />
           );
         } else if (screen === "meals-day" && day) {
+          shown = `day:${day}`;
           const label =
             day === meals.today ? "Ask about today" : `Ask about ${weekdayName(day)}`;
           ask = { label, onAsk: () => openChat({ kind: "day", date: day }) };
@@ -347,6 +355,7 @@ export default function InfoHome(props: {
             />
           );
         } else {
+          shown = "home";
           ask = { label: "Ask about this week", onAsk: () => openChat({ kind: "week" }) };
           inner = (
             <MealsHome
@@ -363,7 +372,9 @@ export default function InfoHome(props: {
           );
         }
         const page = (
-          <div className="absolute inset-0 overflow-y-auto bg-background">{inner}</div>
+          <div key={shown} className="absolute inset-0 overflow-y-auto bg-background">
+            {inner}
+          </div>
         );
         // The same pull-down the briefing has, on all three: the phone's way
         // into a chat is one gesture everywhere (docs/22).
