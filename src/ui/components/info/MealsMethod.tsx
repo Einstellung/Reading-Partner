@@ -18,7 +18,6 @@ import { MealsColumn, MealsHeader } from "./MealsChrome";
 export interface MealsMethodProps {
   state: MealsState | null;
   onBack: () => void;
-  onAsk: () => void;
 }
 
 function Segments({ segments }: { segments: TextSegment[] }) {
@@ -45,7 +44,7 @@ function Segments({ segments }: { segments: TextSegment[] }) {
 function FoodTable() {
   return (
     <div className="mt-2 overflow-x-auto">
-      <table className="w-full min-w-[480px] border-collapse text-[12px] tabular-nums">
+      <table className="w-full min-w-[560px] border-collapse text-[12px] tabular-nums">
         <thead>
           <tr className="text-faint-foreground">
             <th className="py-1 pr-2 text-left font-normal">Food</th>
@@ -59,7 +58,7 @@ function FoodTable() {
         <tbody>
           {foodTableRows().map((r) => (
             <tr key={r.id} className="border-t border-border-subtle text-foreground">
-              <td className="py-1 pr-2">{r.name}</td>
+              <td className="whitespace-nowrap py-1 pr-2">{r.name}</td>
               <td className="py-1 pr-2 text-right">{r.kcal}</td>
               <td className="py-1 pr-2 text-right">{r.protein}</td>
               <td className="py-1 pr-2 text-right">{r.fat}</td>
@@ -80,12 +79,7 @@ export function MealsMethod(props: MealsMethodProps) {
 
   return (
     <MealsColumn>
-      <MealsHeader
-        title="Method & sources"
-        askLabel="Ask about the numbers"
-        onAsk={props.onAsk}
-        onBack={props.onBack}
-      />
+      <MealsHeader title="Method & sources" onBack={props.onBack} />
       <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">
         Every number in Meals comes from the steps below. Worked lines use your answers.
       </p>

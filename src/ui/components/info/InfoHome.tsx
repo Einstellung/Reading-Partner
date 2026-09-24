@@ -318,7 +318,7 @@ export default function InfoHome(props: {
           );
         } else if (screen === "meals-method") {
           ask = { label: "Ask about the numbers", onAsk: () => openChat({ kind: "week" }) };
-          inner = <MealsMethod state={meals.state} onBack={backFromSide} onAsk={ask.onAsk} />;
+          inner = <MealsMethod state={meals.state} onBack={backFromSide} />;
         } else if (screen === "meals-shopping") {
           ask = { label: "Ask about shopping", onAsk: () => openChat({ kind: "shopping" }) };
           inner = (
