@@ -21,6 +21,8 @@ export type ScreenKind =
   | "meals"
   | "meals-shopping"
   | "meals-day"
+  | "meals-method"
+  | "meals-onboarding"
   | "saved"
   | "savedArticle"
   | "library"
@@ -43,6 +45,8 @@ export type PhoneScreen =
   // Which day is open. One of a week, so the entry carries the date the way an
   // opened saved article carries its record.
   | { kind: "meals-day"; date: string }
+  | { kind: "meals-method" }
+  | { kind: "meals-onboarding" }
   | { kind: "saved" }
   | { kind: "savedArticle"; article: SavedArticle }
   | { kind: "library" }

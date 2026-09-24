@@ -24,6 +24,12 @@ import { InfoCall } from "./InfoCall";
 import { MealsHome } from "./MealsPage";
 import { MealsDay } from "./MealsDay";
 import { MealsShopping } from "./MealsShopping";
+import { MealsMethod } from "./MealsMethod";
+import { MealsOnboarding } from "./MealsOnboarding";
+import { saveProfile } from "../../../info/meals/apply";
+import { liveMealsPorts } from "../../../info/meals/live";
+import { loadMeals } from "../../../info/meals/store";
+import type { Profile } from "../../../info/meals/nutrition/targets";
 import { useMeals } from "./use-meals";
 import type { MealsFocus } from "../../../info/meals/tools";
 import { weekdayName } from "../../../info/meals/view";
@@ -38,7 +44,13 @@ export type { HomeScreen } from "../base/shell-nav";
 // The three screens of the meals line. They share one hook, one thread and one
 // sidebar item, so they are drawn by one branch.
 function isMealsScreen(screen: HomeScreen | null): boolean {
-  return screen === "meals" || screen === "meals-shopping" || screen === "meals-day";
+  return (
+    screen === "meals" ||
+    screen === "meals-shopping" ||
+    screen === "meals-day" ||
+    screen === "meals-method" ||
+    screen === "meals-onboarding"
+  );
 }
 
 // What a shell needs to know to put its own affordance around a screen that has
@@ -138,6 +150,10 @@ export default function InfoHome(props: {
   // (the desktop's) leaves both out and this screen remembers it itself.
   mealsDay?: string | null;
   onOpenMealsDay?: (date: string) => void;
+  // Back from Method & sources and from a replayed onboarding, both of which
+  // are opened from more than one screen. The phone passes its stack's pop; the
+  // desktop leaves it out and this screen goes back to where it opened them.
+  onMealsBack?: () => void;
   // Whether the call keeps its corner cards (docs/03). Default, and the desktop
   // shell: it does. The phone shell turns them off — there the chat is a screen
   // of the navigation stack with gestures in and out of it, and a card that
@@ -150,6 +166,8 @@ export default function InfoHome(props: {
   // The day the desktop shell has open. It has no navigation stack to hold it,
   // and the phone's entry overrides this the moment it supplies one.
   const [localMealsDay, setLocalMealsDay] = useState<string | null>(null);
+  // Where the desktop shell opened Method & sources from, to go back to it.
+  const [methodFrom, setMethodFrom] = useState<HomeScreen>("meals");
   const info = useInfoHome({
     role: props.role,
     onNavigate,
@@ -263,10 +281,45 @@ export default function InfoHome(props: {
           props.onOpenMealsDay?.(date);
         };
         const back = () => onNavigate("meals");
+        const backFromSide = () => (props.onMealsBack ? props.onMealsBack() : onNavigate(methodFrom));
+        const openMethod = () => {
+          setMethodFrom(screen);
+          onNavigate("meals-method");
+        };
+        // Onboarding's last button: save the answers, then ask for the week
+        // with the state as it now is, profile and all.
+        const finishOnboarding = async (profile: Profile): Promise<boolean> => {
+          const saved = await saveProfile(
+            profile,
+            liveMealsPorts({ today: () => meals.today, changed: meals.reload }),
+          );
+          if (!saved.ok) return false;
+          const fresh = await loadMeals().catch(() => null);
+          if (screen !== "meals") onNavigate("meals");
+          info.askMeals(fresh ?? meals.state ?? EMPTY_MEALS, meals.today, {
+            focus: { kind: "week" },
+            kickoff: MEALS_KICKOFF,
+          });
+          return true;
+        };
 
         let inner: React.ReactNode;
         let ask: AskableScreen;
-        if (screen === "meals-shopping") {
+        if (screen === "meals-onboarding" || (screen === "meals" && meals.state && !meals.state.charter)) {
+          const replay = screen === "meals-onboarding";
+          ask = { label: "Ask about meals", onAsk: () => openChat({ kind: "week" }) };
+          inner = (
+            <MealsOnboarding
+              key={replay ? "replay" : "first"}
+              existing={meals.state?.charter?.profile ?? null}
+              onFinish={finishOnboarding}
+              {...(replay ? { onBack: backFromSide } : {})}
+            />
+          );
+        } else if (screen === "meals-method") {
+          ask = { label: "Ask about the numbers", onAsk: () => openChat({ kind: "week" }) };
+          inner = <MealsMethod state={meals.state} onBack={backFromSide} onAsk={ask.onAsk} />;
+        } else if (screen === "meals-shopping") {
           ask = { label: "Ask about shopping", onAsk: () => openChat({ kind: "shopping" }) };
           inner = (
             <MealsShopping
@@ -290,6 +343,7 @@ export default function InfoHome(props: {
               date={day}
               onBack={back}
               onAsk={ask.onAsk}
+              onOpenMethod={openMethod}
             />
           );
         } else {
@@ -303,6 +357,8 @@ export default function InfoHome(props: {
               onAsk={ask.onAsk}
               onOpenShopping={() => onNavigate("meals-shopping")}
               onOpenDay={openDay}
+              onOpenMethod={openMethod}
+              onReplayOnboarding={() => onNavigate("meals-onboarding")}
             />
           );
         }

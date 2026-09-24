@@ -21,8 +21,18 @@ import {
   weekdayName,
   type MealView,
 } from "../../../info/meals/view";
-import { MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
-import { DishImage } from "./MealsImages";
+import { dayMeters, guideLine, macroLine, mealHeading, proteinCell } from "../../../info/meals/screen-lines";
+import {
+  CardLabel,
+  CardLink,
+  Cells,
+  DayKindTag,
+  MealsColumn,
+  MealsHeader,
+  PhotoCredit,
+} from "./MealsChrome";
+import { DishImage, IngredientThumb } from "./MealsImages";
+import type { DayView } from "../../../info/meals/view";
 
 export interface MealsDayProps {
   state: MealsState | null;
@@ -31,6 +41,7 @@ export interface MealsDayProps {
   date: string;
   onBack: () => void;
   onAsk: () => void;
+  onOpenMethod: () => void;
 }
 
 function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
@@ -43,14 +54,11 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
   return (
     <section className="rounded-2xl border border-border-soft bg-card p-5">
       <div className="flex items-baseline gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
-          {view.label}
-          {view.postWorkout ? " · after training" : ""}
-        </span>
+        <CardLabel>{mealHeading(view)}</CardLabel>
         <span className="flex-1" />
-        <span className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
+        <CardLabel accent>
           {made && view.minutes !== null ? `${view.minutes} min` : modeWord(view.mode)}
-        </span>
+        </CardLabel>
       </div>
 
       {made ? (
@@ -81,29 +89,60 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
           </div>
           {view.totals && (
             <p className="m-0 mt-1.5 text-[13px] tabular-nums text-muted-foreground">
-              {Math.round(view.totals.kcal)} kcal · P {Math.round(view.totals.protein)} g · F{" "}
-              {Math.round(view.totals.fat)} g · C {Math.round(view.totals.carbs)} g
+              {macroLine(view.totals)}
             </p>
+          )}
+          {view.cells && (
+            <div className="mt-2">
+              <Cells cells={view.cells} big />
+            </div>
           )}
           {view.rows.length > 0 && (
-            <ul className="m-0 mt-3 flex list-none flex-col gap-1 p-0">
-              {view.rows.map((r) => (
-                <li key={r.foodId} className="flex gap-3 text-[13px] tabular-nums text-foreground">
-                  <span className="min-w-0 flex-1">
-                    {r.name}
-                    {r.units ? <span className="text-faint-foreground"> {r.units}</span> : null}
-                  </span>
-                  <span className="w-[52px] text-right">{r.grams} g</span>
-                  <span className="w-[64px] text-right text-muted-foreground">{Math.round(r.kcal)} kcal</span>
-                  <span className="w-[52px] text-right text-muted-foreground">{r.protein.toFixed(1)} g</span>
-                </li>
-              ))}
-            </ul>
+            <table className="mt-3 w-full border-collapse text-[13px] tabular-nums">
+              <thead>
+                <tr className="text-[11px] text-faint-foreground">
+                  <th className="pb-1 text-left font-normal">Ingredient</th>
+                  <th className="pb-1 text-right font-normal">g</th>
+                  <th className="pb-1 text-right font-normal">kcal</th>
+                  <th className="pb-1 text-right font-normal">Protein</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.rows.map((r) => {
+                  const pic = ingredientPicture(r.en, photos);
+                  return (
+                    <tr key={r.foodId} className="border-t border-border-subtle text-foreground">
+                      <td className="py-1.5 pr-2">
+                        <span className="flex items-center gap-2">
+                          <IngredientThumb
+                            size={28}
+                            url={pic?.url ?? null}
+                            pageUrl={pic?.pageUrl ?? null}
+                            category={r.category}
+                            alt={r.name}
+                          />
+                          <span className="min-w-0">
+                            {r.name}
+                            {r.units ? <span className="text-faint-foreground"> {r.units}</span> : null}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="w-[44px] py-1.5 text-right">{r.grams}</td>
+                      <td className="w-[44px] py-1.5 text-right text-muted-foreground">{Math.round(r.kcal)}</td>
+                      <td className="w-[56px] py-1.5 text-right text-muted-foreground">{proteinCell(r.protein)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
           {view.method && (
-            <p className="m-0 mt-3 border-t border-border-subtle pt-3 text-[14px] leading-relaxed text-foreground">
+            <div className="mt-3 border-t border-border-subtle pt-2.5 text-[14px] leading-relaxed text-foreground">
+              <span className="mb-0.5 block">
+                <CardLabel>How</CardLabel>
+              </span>
               {view.method}
-            </p>
+            </div>
           )}
         </>
       ) : (
@@ -114,6 +153,34 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
       {view.note && (
         <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-muted-foreground">{view.note}</p>
       )}
+    </section>
+  );
+}
+
+/** The day against its targets: the kind of day, two bars, fat and carbs. */
+function DaySummary({ view, onOpenMethod }: { view: DayView; onOpenMethod: () => void }) {
+  return (
+    <section className="rounded-2xl border border-border-soft bg-card p-5">
+      <div className="flex items-center gap-2">
+        <DayKindTag training={view.training} />
+        <span className="flex-1" />
+        <CardLink onClick={onOpenMethod}>How targets work ›</CardLink>
+      </div>
+      <div className="mt-2">
+        {dayMeters(view).map((m) => (
+          <div key={m.label} className="flex items-center gap-2.5 py-[3px] text-[13px]">
+            <span className="w-[58px] flex-none text-muted-foreground">{m.label}</span>
+            <span className="relative h-[3px] flex-1 overflow-hidden rounded-sm bg-muted">
+              <span className="absolute inset-y-0 left-0 bg-accent-line" style={{ width: `${m.pct}%` }} />
+            </span>
+            <span className="w-[112px] flex-none text-right tabular-nums text-faint-foreground">{m.value}</span>
+          </div>
+        ))}
+      </div>
+      <p className="m-0 mt-2.5 text-[13px] tabular-nums leading-relaxed text-muted-foreground">{guideLine(view)}</p>
+      <p className="m-0 mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+        Planned against target. {view.arrangement}
+      </p>
     </section>
   );
 }
@@ -137,12 +204,7 @@ export function MealsDay(props: MealsDayProps) {
         <div className="h-24" />
       ) : (
         <div className="flex flex-col gap-4">
-          <p className="m-0 text-[13px] text-muted-foreground">
-            {view.kindLabel}
-            {view.targets
-              ? ` · ${Math.round(view.totals.kcal)} / ${view.targets.kcal} kcal · P ${Math.round(view.totals.protein)} / ${view.targets.protein} g`
-              : ""}
-          </p>
+          {view.targets && <DaySummary view={view} onOpenMethod={props.onOpenMethod} />}
           {view.meals.map((m) => (
             <MealCard key={m.key} view={m} photos={photos} />
           ))}
