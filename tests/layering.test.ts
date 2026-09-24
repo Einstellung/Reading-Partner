@@ -153,6 +153,9 @@ const LAYER: Record<string, Layer> = {
   // and must not enter the collection pipeline. It reads nothing else under
   // info/, so it is a leaf.
   "info/meals": "domain",
+  // The headless nutrition core: targets from body data, the food table, the
+  // gram solver. Imports nothing from info/meals, which imports it.
+  "info/meals/nutrition": "domain",
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",
