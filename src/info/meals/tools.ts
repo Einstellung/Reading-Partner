@@ -260,7 +260,8 @@ export function mealsGuidance(
     "name, what an image search would find), a one-line `method` in their language and `minutes`.",
     "The program solves the grams and checks the week: foods in the table, roles, minutes,",
     "dislikes, flavours in a row, fish twice, and whether the protein reaches the meal's target.",
-    "What fails comes back to you: fix only those meals and call again.",
+    "What fails comes back to you: fix those meals and send the whole week again (an adjustment",
+    "sends only its own meals).",
     "",
     "FLAVOURS",
     FLAVOURS.map((f) => `${f.id} (${f.zh})`).join(", "),
@@ -412,7 +413,13 @@ export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
           text:
             "Nothing was proposed — the plan does not hold up:\n" +
             checked.problems.map((p) => `- ${p}`).join("\n") +
-            "\nFix only those meals and call propose_meals_plan again.",
+            // Nothing of a refused draft is kept, so a fresh week goes back
+            // whole: the model otherwise sends just the fixed day and is
+            // refused again for being short.
+            (adjustment
+              ? "\nFix only those meals and call propose_meals_plan again."
+              : "\nFix those meals and call propose_meals_plan again with the whole week, all " +
+                `${WEEK_DAYS} days — nothing of this draft was kept.`),
         };
       }
 

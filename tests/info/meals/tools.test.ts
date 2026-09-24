@@ -226,7 +226,8 @@ test("a week that fails the checks goes back to the model, and the fixed one is 
   const first = said(await tool.execute({ days: broken }));
   expect(first).toContain("Nothing was proposed");
   expect(first).toContain('Day 1 lunch: "dragon_steak" is not in the food table');
-  expect(first).toContain("Fix only those meals and call propose_meals_plan again.");
+  expect(first).toContain("call propose_meals_plan again with the whole week, all 7 days");
+  expect(first).not.toContain("Fix only those meals");
   expect(d.cards).toEqual([]);
 
   // The template holds now; the flavour rule reads the solved week.
@@ -251,6 +252,7 @@ test("an adjustment re-picks only the meals it sends, and is checked against the
     }),
   );
   expect(slow).toContain("Day 2 lunch takes 25 minutes; they allow 10.");
+  expect(slow).toContain("Fix only those meals and call propose_meals_plan again.");
 
   const out = await tool.execute({
     adjustment: true,
