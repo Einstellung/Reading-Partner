@@ -7,7 +7,7 @@
 // this file is the pure half — the keys, what still has to be searched for, and
 // what a plan looks like once the pictures have landed.
 
-import { isDishPhotoMiss, type Dish, type DishPhoto, type DishPhotoEntry, type WeekPlan } from "./types";
+import { isDishPhotoMiss, type DishPhoto, type DishPhotoEntry } from "./types";
 
 // How long an empty answer stands before the name is searched again. A search
 // that found nothing today may find something next season, and asking every
@@ -68,7 +68,7 @@ export function photoAt(cache: PhotoCache | undefined, key: string): DishPhoto |
 
 /** The photograph a dish shows, from the cache, or null. */
 export function photoForDish(
-  dish: Dish | null | undefined,
+  dish: { searchName?: string } | null | undefined,
   cache: PhotoCache | undefined,
 ): DishPhoto | null {
   if (!dish) return null;
@@ -99,24 +99,4 @@ export function withoutPhoto(
   const next = { ...cache };
   delete next[key];
   return next;
-}
-
-/**
- * The plan with every dish's `image` set from the cache.
- *
- * The same object back when nothing changed, so a caller can tell whether a
- * write is worth making. A dish the cache has nothing for is left exactly as it
- * is, including an `image` it already carries: an adjustment keeps the dishes of
- * the week it adjusts, and a search that has not landed yet must not strip their
- * photographs.
- */
-export function withDishPhotos(plan: WeekPlan, cache: PhotoCache): WeekPlan {
-  let changed = false;
-  const dishes = plan.dishes.map((dish) => {
-    const photo = photoForDish(dish, cache);
-    if (!photo || dish.image === photo.url) return dish;
-    changed = true;
-    return { ...dish, image: photo.url };
-  });
-  return changed ? { ...plan, dishes } : plan;
 }

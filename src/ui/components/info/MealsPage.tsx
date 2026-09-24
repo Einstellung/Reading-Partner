@@ -9,7 +9,8 @@
 //
 // None of the bureau's vocabulary appears here. It is what they eat.
 
-import type { MealsState, ShoppingItem } from "../../../info/meals/types";
+import type { Meal, MealsState, ShoppingItem } from "../../../info/meals/types";
+import { hostRegion } from "../../../info/meals/region";
 import type { PhotoCache } from "../../../info/meals/dish-photos";
 import {
   linesInOrder,
@@ -22,9 +23,8 @@ import { planExhausted } from "../../../info/meals/week";
 import {
   dishPicture,
   dishThumbnails,
-  headlineDays,
+  mealsView,
   ingredientPicture,
-  laterDays,
   mealName,
   type DayView,
 } from "../../../info/meals/view";
@@ -46,6 +46,15 @@ export interface MealsHomeProps {
   onOpenDay: (date: string) => void;
 }
 
+// The meal a day's picture comes from: the latest made main meal.
+function leadMeal(view: DayView): Meal | null {
+  for (const key of ["dinner", "lunch", "breakfast"] as const) {
+    const meal = view.day[key];
+    if (meal.mode === "make") return meal;
+  }
+  return null;
+}
+
 /**
  * The picture a day leads with: the dish's photograph in a 16:9 band, or the
  * row of its ingredients' cut-outs, or nothing. The band is the photograph's
@@ -61,14 +70,15 @@ function DayPicture({
   photos: PhotoCache;
   big: boolean;
 }) {
-  const picture = dishPicture(view.dish, photos);
-  const thumbnails = dishThumbnails(view.dish, (en) => ingredientPicture(en, photos)?.url ?? null);
+  const lead = leadMeal(view);
+  const picture = dishPicture(lead, photos);
+  const thumbnails = dishThumbnails(lead?.items, (en) => ingredientPicture(en, photos)?.url ?? null);
   return (
     <DishImage
       image={picture?.url}
       imagePageUrl={picture?.pageUrl}
       thumbnails={thumbnails}
-      alt={view.dish?.name ?? view.word}
+      alt={lead?.name ?? view.word}
       photoClassName={
         big ? "mt-3 aspect-[16/9] max-h-40 w-full" : "mt-2.5 aspect-[16/9] max-h-24 w-full"
       }
@@ -200,8 +210,9 @@ function WeekRow({
   photos: PhotoCache;
   onOpen: () => void;
 }) {
-  const picture = dishPicture(view.dish, photos);
-  const thumbnails = dishThumbnails(view.dish, (en) => ingredientPicture(en, photos)?.url ?? null);
+  const lead = leadMeal(view);
+  const picture = dishPicture(lead, photos);
+  const thumbnails = dishThumbnails(lead?.items, (en) => ingredientPicture(en, photos)?.url ?? null);
   const lunch = view.meals.find((m) => m.key === "lunch");
   const dinner = view.meals.find((m) => m.key === "dinner");
   return (
@@ -220,7 +231,7 @@ function WeekRow({
             image={picture?.url}
             imagePageUrl={picture?.pageUrl}
             thumbnails={thumbnails}
-            alt={view.dish?.name ?? view.weekday}
+            alt={lead?.name ?? view.weekday}
             size="row"
             photoClassName="size-full"
           />
@@ -242,8 +253,9 @@ function WeekRow({
 export function MealsHome(props: MealsHomeProps) {
   const { state, today, photos } = props;
   const plan = state?.plan ?? null;
-  const head = headlineDays(plan, today);
-  const later = laterDays(plan, today);
+  const view = state ? mealsView(state, today, hostRegion()) : null;
+  const head = view?.headline ?? [];
+  const later = view?.later ?? [];
   const shopping = state?.shopping ?? EMPTY_SHOPPING;
   // The page's own read of the list is a card's worth of preview, so it is
   // settled here rather than carried: nothing is ticked from this screen.
