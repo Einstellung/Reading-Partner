@@ -17,7 +17,7 @@ import type { AgentTool } from "../../legion/execute/turn";
 import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
 import type { MealsCard, MealsPlanCardData } from "./cards";
 import { checkPlan } from "./checks";
-import { FOODS, foodAllowed } from "./nutrition/foods";
+import { FOOD_TAGS, FOODS, foodAllowed } from "./nutrition/foods";
 import type { TemplateItem, TemplateRole } from "./nutrition/solve";
 import type { Goal, Profile, Region, Targets, TrainTime, Work } from "./nutrition/targets";
 import {
@@ -533,7 +533,13 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       work: Type.Optional(Type.String({ description: `One of: ${WORKS.join(", ")}.` })),
       minutesPerMeal: Type.Optional(Type.Number()),
       people: Type.Optional(Type.Number()),
-      dislikes: Type.Optional(Type.Array(Type.String())),
+      dislikes: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            `Each one a food tag where one fits (${FOOD_TAGS.join(", ")}), else a food id from the ` +
+            "listing; free text only for what neither covers, since the program cannot check it.",
+        }),
+      ),
       shops: Type.Optional(Type.Array(Type.String())),
       kitchen: Type.Optional(Type.Array(Type.String())),
       notes: Type.Optional(Type.String({ description: "Their meals in their own words, one paragraph." })),
