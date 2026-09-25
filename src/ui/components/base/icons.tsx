@@ -41,15 +41,11 @@ export function IconPointer({ size = 20 }: IconProps) {
 export function IconHighlight({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path d="M12.6 3.4L16.6 7.4L9.9 14.1L4.9 15.1L5.9 10.1L12.6 3.4Z" />
 			<path d="M4 17.8H16" strokeWidth="1.8" />
@@ -61,14 +57,10 @@ export function IconHighlight({ size = 20 }: IconProps) {
 export function IconUnderline({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.5"
 			strokeLinecap="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path d="M6.2 3.6V9.2C6.2 11.3 7.9 13 10 13C12.1 13 13.8 11.3 13.8 9.2V3.6" />
 			<path d="M5 16.6H15" />
@@ -80,14 +72,10 @@ export function IconUnderline({ size = 20 }: IconProps) {
 export function IconArea({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<rect x="3.2" y="3.2" width="13.6" height="13.6" rx="1.6" strokeDasharray="2.9 2.3" />
 		</svg>
@@ -141,15 +129,11 @@ export function IconSparkle({ size = 20 }: IconProps) {
 export function IconAskHere({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<rect x="3.4" y="2.8" width="13.2" height="8.8" rx="2.6" />
 			<path d="M7.6 11.6L8.3 14.7L11 11.6" />
@@ -162,15 +146,11 @@ export function IconAskHere({ size = 20 }: IconProps) {
 export function IconObservations({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<rect x="5" y="5" width="10" height="10" rx="1.5" />
 			<rect x="8" y="8" width="4" height="4" />
@@ -278,14 +258,10 @@ export function IconExpand({ size = 16 }: IconProps) {
 export function IconSidebar({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<rect x="2.75" y="3.75" width="14.5" height="12.5" rx="2.5" />
 			<path d="M8 3.75V16.25" />
@@ -297,14 +273,10 @@ export function IconSidebar({ size = 20 }: IconProps) {
 export function IconOutline({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path d="M3.5 5H16.5" />
 			<path d="M6.75 8.75H16.5" />
@@ -319,15 +291,11 @@ export function IconOutline({ size = 20 }: IconProps) {
 export function IconTextSize({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path d="M1.75 15.25L5.5 4.75L9.25 15.25" />
 			<path d="M3.1 11.5H7.9" />
@@ -493,15 +461,11 @@ export function IconTrash({ size = 16 }: IconProps) {
 export function IconBooks({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path d="M3.25 4.25H7.25V16.25H3.25V4.25Z" />
 			<path d="M9.25 4.25H13.25V16.25H9.25V4.25Z" />
@@ -577,15 +541,11 @@ export function IconBookSparkle({ size = 20 }: IconProps) {
 export function IconRetell({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path d="M3.25 3.75H16.75V12.25H3.25V3.75Z" />
 			<path d="M10 12.25V15.25" />
@@ -600,15 +560,11 @@ export function IconRetell({ size = 20 }: IconProps) {
 export function IconRehearse({ size = 20 }: IconProps) {
 	return (
 		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 20 20"
-			fill="none"
+			{...svgProps(size)}
 			stroke="currentColor"
 			strokeWidth="1.4"
 			strokeLinecap="round"
 			strokeLinejoin="round"
-			xmlns="http://www.w3.org/2000/svg"
 		>
 			<path d="M3.25 3.75H16.75V11.25H3.25V3.75Z" />
 			<rect x="8.5" y="12.75" width="3" height="4.5" rx="1.5" />
