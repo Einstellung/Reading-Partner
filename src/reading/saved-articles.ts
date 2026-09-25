@@ -31,10 +31,10 @@
 // the bodies the collector publishes (info/boxes/publish.ts), so an article
 // read from the briefing and the copy kept from it hold the same markup.
 //
-// Nothing deletes a body file. File-level deletes do not propagate (docs/13),
-// so a device that dropped one locally would pull it straight back from the
-// remote on the next pass, every pass. An un-kept article leaves its body
-// behind: dead weight that costs nothing to sync, since it never changes again.
+// Un-keeping the last record that points at a body deletes the body, here and
+// in Drive (removeSavedArticle). The remote half is a purge request because
+// file-level deletes do not propagate (docs/13): without it the file would stay
+// in Drive and come down onto every new device.
 
 import { readJson } from "../platform/app/atomic-fs";
 import { appData } from "../platform/app/appdata";
@@ -46,6 +46,7 @@ import {
   type GuardedFileIo,
 } from "../platform/app/guarded-file";
 import { asString } from "../platform/std/json";
+import { requestRemotePurge } from "../platform/sync";
 import { sanitizeArticleHtml, stripDataImages } from "../info/extract/sanitize";
 
 export const SAVED_ARTICLES_FILE = "saved-articles.json";
@@ -354,12 +355,18 @@ export interface SavedArticlesIo extends GuardedFileIo<ParsedSavedArticles> {
   // holds a copy of it.
   readBody(file: string): Promise<unknown>;
   exists(file: string): Promise<boolean>;
+  // Delete a body file on this device; raises when it would not go.
+  removeBody(file: string): Promise<void>;
+  // Ask the next sync pass to delete these paths from Drive (platform/sync).
+  purgeRemote(paths: readonly string[]): Promise<void>;
 }
 
 export const savedArticlesIo: SavedArticlesIo = {
   ...appGuardedFileIo<ParsedSavedArticles>(),
   readBody: (file) => readJson<unknown>(file),
   exists: (file) => appData.exists(file).catch(() => false),
+  removeBody: (file) => appData.remove(file),
+  purgeRemote: requestRemotePurge,
 };
 
 // The body of one kept article, read from the file the record points at.
@@ -503,11 +510,43 @@ export async function setSavedArticleTopic(
   return save(io, next, read.repaired);
 }
 
-// Un-save an article: a real removal, not an archive (docs/21).
+// Un-save an article: a real removal, not an archive (docs/21). Its body goes
+// with it once no record left points at the same file.
 export async function removeSavedArticle(
   id: string,
   io: SavedArticlesIo = savedArticlesIo,
 ): Promise<void> {
   const read = await readSavedArticles(io);
-  await save(io, removeSavedArticleById(read.list, id), read.repaired);
+  const next = removeSavedArticleById(read.list, id);
+  if (!(await save(io, next, read.repaired))) return;
+  const path = orphanedBody(read.list, next, read.repaired);
+  if (path === null) return;
+  // Local first, remote second. Asked the other way, a pass landing between the
+  // two finds the file here and gone from Drive, and uploads it again. A body
+  // that will not delete stays behind as dead weight, which is all it was
+  // before this ran.
+  try {
+    await io.removeBody(path);
+  } catch {
+    return;
+  }
+  await io.purgeRemote([path]).catch(() => {});
+}
+
+// The body file an un-save leaves with no record pointing at it, or null.
+// Content-addressed, so another record can share it. Never after a read that
+// set entries aside: those may point at it too, and the file they are in is
+// still on disk to be recovered. Pure, unit-tested.
+export function orphanedBody(
+  before: readonly SavedArticle[],
+  after: readonly SavedArticle[],
+  repaired: boolean,
+): string | null {
+  if (repaired) return null;
+  const kept = new Set(after.map(articleBodyHashOf));
+  for (const a of before) {
+    const hash = articleBodyHashOf(a);
+    if (hash !== "" && !kept.has(hash) && !after.includes(a)) return articleBodyPath(hash);
+  }
+  return null;
 }
