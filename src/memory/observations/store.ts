@@ -380,6 +380,59 @@ export class ObservationFileStore {
     return true;
   }
 
+  // delete() for a list: one read and one append of the tombstone file, one
+  // rebuild. Deleting a book drops every observation of it at once, and a
+  // rebuild per id reads the whole directory each time. Answers with how many
+  // ids were there to delete.
+  async deleteMany(ids: readonly string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    let text = (await this.fs.read(this.tombstonePath)) ?? "";
+    const tombstoned = parseTombstones(text);
+    const day = isoDate(this.now());
+    let count = 0;
+    let appended = false;
+    const onDisk: string[] = [];
+    for (const id of new Set(ids)) {
+      const present = (await this.fs.read(this.entryPath(id))) !== null;
+      if (!tombstoned.has(id) && !present) continue;
+      count++;
+      if (!tombstoned.has(id)) {
+        text = appendTombstone(text, id, day);
+        appended = true;
+      }
+      if (present) onDisk.push(id);
+    }
+    if (count === 0) return 0;
+    if (appended) await this.fs.write(this.tombstonePath, text);
+    for (const id of onDisk) await this.fs.remove(this.entryPath(id));
+    await this.rebuildIndex();
+    return count;
+  }
+
+  // File every observation of one book under another, and hand the book's mark
+  // cursor across with them. What a replaced book becomes (a translation takes
+  // the original's place, reading/delete/retire-book.ts): the observations are
+  // about the same reading, and the conversations they were distilled from move
+  // with their thread ids, so the per-thread cursor already lines up. `updated`
+  // is left alone — nothing new was observed. Answers with how many moved.
+  async moveBook(fromBookId: string, toBookId: string): Promise<number> {
+    if (fromBookId === toBookId) return 0;
+    const moved = (await this.list()).filter((o) => o.bookId === fromBookId);
+    for (const entry of moved) {
+      await this.fs.write(this.entryPath(entry.id), serializeObservation({ ...entry, bookId: toBookId }));
+    }
+    const stored = await this.readStoredMeta();
+    const cursor = stored.distilledMarks?.[fromBookId];
+    if (cursor !== undefined && stored.distilledMarks?.[toBookId] === undefined) {
+      await this.fs.write(
+        `${this.dir}/meta.json`,
+        JSON.stringify({ ...stored, distilledMarks: { ...stored.distilledMarks, [toBookId]: cursor } }, null, 2),
+      );
+    }
+    if (moved.length > 0) await this.rebuildIndex();
+    return moved.length;
+  }
+
   // The index as a prompt loads it. Without a topic that is the file verbatim,
   // every line naming the topic it belongs to; with one it is that topic's lines
   // with the topic segment dropped, because a prompt built for one topic would

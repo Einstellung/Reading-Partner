@@ -31,8 +31,9 @@ import { appData } from "../../platform/app/appdata";
 import { recordDeletion } from "../../platform/app/deleted-books";
 import { removeLibraryEntry } from "../../platform/app/library";
 import { removeViewState } from "../../platform/app/storage";
-import { listSupplements, type SupplementRef } from "../../platform/app/supplements";
-import { listTopics, removeFileFromTopic, type Topic } from "../../platform/app/topics";
+import { listSupplements, supplementsFile, type SupplementRef } from "../../platform/app/supplements";
+import { deleteThreadImages } from "../../platform/app/thread-images";
+import { listTopics, removeFileFromTopic, type FileRef, type Topic } from "../../platform/app/topics";
 import { ObservationFileStore } from "../../memory/observations/store";
 import type { Observation } from "../../memory/observations/types";
 import type { Statement } from "../../memory/statements/types";
@@ -42,7 +43,15 @@ import { deleteRetell, listAllRetells } from "../retell/store";
 import type { Retell } from "../retell/types";
 import { talkOutlineOfRetell } from "../talk/store";
 import { deleteOutlineWithRehearsals, deleteRetellWithTalk } from "./delete-retell";
-import { deadLocalPathsFor, observationIdsToDelete, retellIdsToDelete } from "./pick";
+import { prepPaperCacheFiles } from "./prep-files";
+import {
+  deadLocalPathsFor,
+  hasOtherReference,
+  isLastReferenceToBook,
+  observationIdsToDelete,
+  retellIdsToDelete,
+  type SupplementList,
+} from "./pick";
 
 // Everything this reaches outside itself, so the order can be tested without a
 // filesystem, a sync engine or a topic on disk.
@@ -53,15 +62,22 @@ export interface DeleteBookDeps {
   listTopics: () => Promise<Topic[]>;
   unlinkFile: (topicId: string, path: string) => Promise<void>;
   listObservations: () => Promise<Observation[]>;
-  deleteObservation: (id: string) => Promise<void>;
+  deleteObservations: (ids: readonly string[]) => Promise<void>;
   listStatements: () => Promise<Statement[]>;
   listSupplements: (bookId: string) => Promise<SupplementRef[]>;
+  /** Every book's supplements list on this device, for reference counting. */
+  listSupplementLists: () => Promise<SupplementList[]>;
   listRetells: () => Promise<Retell[]>;
   deleteRetell: (retellId: string) => Promise<void>;
   outlineIdOfRetell: (retellId: string) => Promise<string | null>;
   deleteTalkOutline: (outlineId: string) => Promise<void>;
   removeFile: (path: string) => Promise<void>;
   removeDir: (path: string) => Promise<void>;
+  /** The ids in a book's thread file, read before the file goes. */
+  threadIdsOf: (bookId: string) => Promise<string[]>;
+  removeThreadImages: (threadId: string) => Promise<void>;
+  /** The downloaded papers' caches of a book's prep, read before prep goes. */
+  prepCacheFiles: (bookId: string) => Promise<string[]>;
 }
 
 // A file or directory that is not there is already in the state this asks for.
@@ -77,18 +93,46 @@ export const liveDeleteBookDeps: DeleteBookDeps = {
   listTopics,
   unlinkFile: removeFileFromTopic,
   listObservations: () => new ObservationFileStore(observationFs).list(),
-  deleteObservation: async (id) => {
-    await new ObservationFileStore(observationFs).delete(id);
+  deleteObservations: async (ids) => {
+    await new ObservationFileStore(observationFs).deleteMany(ids);
   },
   listStatements: () => listStatements(),
   listSupplements,
+  listSupplementLists: liveSupplementLists,
   listRetells: listAllRetells,
   deleteRetell,
   outlineIdOfRetell: async (retellId) => (await talkOutlineOfRetell(retellId))?.id ?? null,
   deleteTalkOutline: deleteOutlineWithRehearsals,
   removeFile: (path) => removeIfPresent(path, (p) => appData.remove(p)),
   removeDir: (path) => removeIfPresent(path, (p) => appData.removeDir(p)),
+  threadIdsOf: liveThreadIds,
+  removeThreadImages: deleteThreadImages,
+  prepCacheFiles: (bookId) => prepPaperCacheFiles(bookId),
 };
+
+// Every supplements-<bookId>.json at the AppData root. An unreadable one
+// throws: a list that could not be read may hold the reference that keeps a
+// document alive, and a delete that cannot count must not run.
+async function liveSupplementLists(): Promise<SupplementList[]> {
+  const out: SupplementList[] = [];
+  for (const entry of await appData.readDir(".")) {
+    if (!entry.isFile) continue;
+    const m = /^supplements-(.+)\.json$/.exec(entry.name);
+    if (!m || supplementsFile(m[1]) !== entry.name) continue;
+    out.push({ bookId: m[1], items: await listSupplements(m[1]) });
+  }
+  return out;
+}
+
+// The thread ids in a book's thread file, asides included (they are rows of the
+// same map). Read straight off disk rather than through the thread store: the
+// book is being deleted, and loading it would put its threads in the cache.
+async function liveThreadIds(bookId: string): Promise<string[]> {
+  const path = `threads-${bookId}.json`;
+  if (!(await appData.exists(path))) return [];
+  const parsed = JSON.parse(await appData.readText(path)) as { threads?: Record<string, unknown> };
+  return Object.keys(parsed.threads ?? {});
+}
 
 /**
  * Delete a book and everything that is about it. What is about the reader —
@@ -131,9 +175,7 @@ async function deleteOne(
   // book is deleted by book id, and the store is one flat directory (docs/48).
   const statements = await deps.listStatements();
   const observations = await deps.listObservations();
-  for (const id of observationIdsToDelete(observations, statements, bookId)) {
-    await deps.deleteObservation(id);
-  }
+  await deps.deleteObservations(observationIdsToDelete(observations, statements, bookId));
 
   await deleteRetells(bookId, deps);
   await deleteSupplements(bookId, deps, seen);
@@ -154,14 +196,21 @@ async function deleteSupplements(
   seen: Set<string>,
 ): Promise<void> {
   let refs: SupplementRef[];
+  let topics: Topic[];
+  let lists: SupplementList[];
   try {
     refs = await deps.listSupplements(bookId);
+    topics = await deps.listTopics();
+    lists = await deps.listSupplementLists();
   } catch (e) {
     console.warn("failed to list the supplements of a deleted book", bookId, e);
     return;
   }
   for (const ref of refs) {
     if (seen.has(ref.hash)) continue;
+    // Listed somewhere else too — on a shelf, or by a book this sweep is not
+    // deleting — so only this book's reference goes, with its list.
+    if (hasOtherReference(ref.hash, topics, lists, seen)) continue;
     try {
       await deleteOne(ref.hash, deps, seen);
     } catch (e) {
@@ -191,8 +240,19 @@ async function deleteRetells(bookId: string, deps: DeleteBookDeps): Promise<void
   }
 }
 
+// The thread ids and the paper caches are read first: the ids are in the thread
+// file and the caches are found through the prep state, and both go below.
 async function deleteLocalFiles(bookId: string, deps: DeleteBookDeps): Promise<void> {
+  const threadIds = await deps.threadIdsOf(bookId).catch((e) => {
+    console.warn("failed to read the threads of a deleted book", bookId, e);
+    return [] as string[];
+  });
+  const caches = await deps.prepCacheFiles(bookId).catch((e) => {
+    console.warn("failed to read the prep of a deleted book", bookId, e);
+    return [] as string[];
+  });
   const { files, dirs } = deadLocalPathsFor(bookId);
+  files.push(...caches);
   for (const file of files) {
     try {
       await deps.removeFile(file);
@@ -207,4 +267,49 @@ async function deleteLocalFiles(bookId: string, deps: DeleteBookDeps): Promise<v
       console.warn("failed to delete", dir, e);
     }
   }
+  for (const threadId of threadIds) {
+    try {
+      await deps.removeThreadImages(threadId);
+    } catch (e) {
+      console.warn("failed to delete the images of", threadId, e);
+    }
+  }
+}
+
+/**
+ * Delete a document nothing lists any more, and leave it alone while something
+ * does (docs/50 「引用计数」). The reader takes one reference away — unlinks it
+ * from a topic, removes it from a book's supplements — and this decides whether
+ * that was the last. Answers whether it deleted. A reference list that cannot
+ * be read throws, and nothing is deleted.
+ */
+export async function deleteIfUnreferenced(
+  hash: string,
+  deps: DeleteBookDeps = liveDeleteBookDeps,
+): Promise<boolean> {
+  const topics = await deps.listTopics();
+  const lists = await deps.listSupplementLists();
+  if (hasOtherReference(hash, topics, lists)) return false;
+  await deleteBook(hash, deps);
+  return true;
+}
+
+/** Take a file off a topic, and the document with it when that was the last reference. */
+export async function removeFromTopic(
+  topicId: string,
+  file: FileRef,
+  deps: DeleteBookDeps = liveDeleteBookDeps,
+): Promise<boolean> {
+  await deps.unlinkFile(topicId, file.path);
+  return file.hash ? deleteIfUnreferenced(file.hash, deps) : false;
+}
+
+/** Whether removeFromTopic would delete the document: what the confirmation says. */
+export async function isLastReference(
+  topics: readonly Topic[],
+  topicId: string,
+  file: FileRef,
+  deps: Pick<DeleteBookDeps, "listSupplementLists"> = liveDeleteBookDeps,
+): Promise<boolean> {
+  return isLastReferenceToBook(topics, topicId, file, await deps.listSupplementLists());
 }

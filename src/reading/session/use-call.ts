@@ -35,7 +35,7 @@ import {
   type Thread,
   type ThreadMessage,
 } from "../../platform/app/threads";
-import { readThreadImages, saveThreadImages } from "../../platform/app/thread-images";
+import { deleteThreadImages, readThreadImages, saveThreadImages } from "../../platform/app/thread-images";
 import { asideReceipt, asideReturn, type AsideReturn } from "../aside";
 import { hostMarkIds } from "../chat-marks";
 import { markExcerpt, reopenCall } from "../reopen";
@@ -1404,6 +1404,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         // conversation that has just gone.
         pendingRef.current.clear(id);
         firstAskRef.current.delete(id);
+        void deleteThreadImages(id).catch((e) =>
+          console.warn("failed to delete a deleted thread's images", id, e),
+        );
         if (topicId) logEvent(topicId, "thread-delete", { threadId: id, book: false });
       }
       return gone;

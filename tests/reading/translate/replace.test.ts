@@ -96,6 +96,7 @@ interface Recorded {
   saved: Map<string, MarkRecord[]>;
   threads: Map<string, Thread[]>;
   deleted: string[];
+  successors: Array<{ hash: string; path: string }>;
 }
 
 async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promise<Recorded> {
@@ -108,6 +109,7 @@ async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promi
     saved: new Map(),
     threads: new Map([["old-book-id", threads]]),
     deleted: [],
+    successors: [],
     deps: {} as ReplaceDeps,
   };
   rec.deps = {
@@ -150,7 +152,8 @@ async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promi
       const doc = parseEpub(bytes).docs[0];
       return { doc: doc.doc, text: doc.text, spineIndex: doc.index, idref: doc.idref };
     },
-    deleteBook: async (bookId) => {
+    retireOriginal: async (bookId, successor) => {
+      rec.successors.push(successor);
       rec.order.push("delete");
       rec.deleted.push(bookId);
       // What reading/delete does to a book's own files, by the id it was given.
@@ -281,6 +284,8 @@ test("the conversations move to the translation, ids and messages unchanged", as
 
   // And the delete, which works by the old id, took nothing with it.
   expect(rec.deleted).toEqual(["old-book-id"]);
+  // Retired in favour of the translation, under the path the topic lists it by.
+  expect(rec.successors).toEqual([{ hash: "new-book-id", path: result.path }]);
   expect(rec.threads.get("old-book-id")).toBeUndefined();
 });
 

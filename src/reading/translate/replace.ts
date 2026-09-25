@@ -19,11 +19,12 @@
 //      loses by having the article translated (docs/03: a thread outlives the
 //      material it was opened on). Ids, messages and anchors are kept; only the
 //      book the file is for changes.
-//   5. Delete the original through the ordinary delete path (reading/delete),
-//      which is what takes its topic row, its reading position, its pagination
-//      and its prep material with it. Last, because everything that had to be
-//      read off the old book has been read by now — and it deletes by the old
-//      id, which is no longer the key the moved conversations are under.
+//   5. Retire the original (reading/delete/retire-book.ts): what is about the
+//      work — reading position, supplements, prep notes, retells, observations,
+//      every shelf and book that listed it — moves to the translation, and only
+//      the original's own bytes and caches go. Last, because everything that had
+//      to be read off the old book has been read by now — and it deletes by the
+//      old id, which is no longer the key the moved conversations are under.
 //
 // Every side effect is injected, so the order above is what the test pins down
 // rather than what a filesystem happens to do.
@@ -70,7 +71,8 @@ export interface ReplaceDeps {
   adoptThreads(bookId: string, threads: readonly Thread[]): Promise<void>;
   /** The new document, opened far enough for a mark to be relocated in it. */
   targetOf(bytes: Uint8Array): CarryTarget;
-  deleteBook(bookId: string): Promise<void>;
+  /** Move the work onto the successor and delete the original's bytes. */
+  retireOriginal(bookId: string, successor: { hash: string; path: string }): Promise<void>;
 }
 
 export interface ReplaceResult {
@@ -191,7 +193,7 @@ export async function replaceWithTranslation(
   const orphaned = orphanedThreadIds(threads, movedMarkIds);
   if (threads.length > 0) await deps.adoptThreads(fresh.hash, threads);
 
-  await deps.deleteBook(entry.hash);
+  await deps.retireOriginal(entry.hash, { hash: fresh.hash, path });
 
   return {
     entry: fresh,

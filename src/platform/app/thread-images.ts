@@ -65,3 +65,12 @@ export async function readThreadImages(
   }
   return out;
 }
+
+// A thread's images go when the thread does: they are local-only and keyed by
+// nothing but the thread id, so nothing else would ever find them again. Absent
+// is already the state this asks for.
+export async function deleteThreadImages(threadId: string): Promise<void> {
+  const dir = threadImageDir(threadId);
+  if (!(await appData.exists(dir))) return;
+  await appData.removeDir(dir);
+}
