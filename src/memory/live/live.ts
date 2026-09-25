@@ -209,9 +209,9 @@ let gate = createDistillGate();
 
 // What a pass that ran is reported as: one log line either way, the panel told
 // whenever anything reached disk, and a warn carrying the sub-agent's own
-// sentence when the pass did not finish. The transcript pass and the marks pass
-// differ only in which field names the subject — a thread id or a book id — and
-// in what the warn line calls the pass.
+// sentence when the pass did not finish. The transcript, marks and retell passes
+// differ only in which fields name the subject — a thread id, a book id, a
+// thread id and its retell id — and in what the warn line calls the pass.
 function reportDistillOutcome(
   topicId: string,
   subject: Record<string, string>,
@@ -424,6 +424,7 @@ function distillSourceUnit(
       materials: unit.retell.materials,
       threadId: unit.id,
       messages: unit.messages,
+      trigger,
     });
   }
   return distillThread({
@@ -578,6 +579,7 @@ export interface DistillRetellOptions {
   // The retell conversation as it stands on disk, oldest first. Which part of
   // it is new is worked out from the stored cursor (retell.ts).
   messages: DistillMessage[];
+  trigger: DistillTrigger;
   signal?: AbortSignal;
 }
 
@@ -586,8 +588,9 @@ export interface DistillRetellOptions {
 // failed pass is a warn plus an event and the cursor stays where it was so the
 // next exit redoes the stretch.
 //
-// Unlike the reading trigger there is only one caller and one route into it —
-// the retell view unmounting — because every way out of a retell goes through that.
+// The retell view unmounting is one route in ("talk-exit"), since every way out
+// of a retell goes through it; the other is the source table, through which the
+// sweep reaches a retell like any other conversation. The caller names which.
 export function distillRetell(opts: DistillRetellOptions): Promise<void> {
   const { threadId, topicId } = opts;
   return gate.run(threadId, async () => {
@@ -619,40 +622,19 @@ export function distillRetell(opts: DistillRetellOptions): Promise<void> {
       // not something to log: the reader steps out to check the outline and comes
       // back. Nothing ran, so nothing changed.
       if (!result.ran) return;
-      if (!result.ok) {
-        console.warn("retell distillation did not finish:", result.failure);
-        logEvent(topicId, "distill-failed", {
-          threadId,
-          retellId: opts.retellId,
-          trigger: "talk-exit",
-          ...distillFailurePayload({
-            stage: "run",
-            outcome: result.outcome,
-            ...(result.cause ? { cause: result.cause } : {}),
-            coverage: result.coverage,
-            counts: result,
-          }),
-        });
-        if (result.created + result.updated + result.deleted > 0) notifyObservationChange(topicId);
-        return;
-      }
-      logEvent(topicId, "distill-run", {
-        threadId,
-        retellId: opts.retellId,
-        trigger: "talk-exit",
-        messages: result.distilled,
-        created: result.created,
-        updated: result.updated,
-        deleted: result.deleted,
-      });
-      notifyObservationChange(topicId);
+      reportDistillOutcome(
+        topicId,
+        { threadId, retellId: opts.retellId, trigger: opts.trigger },
+        "retell distillation",
+        result,
+      );
     } catch (e) {
       if (e instanceof StoppedError) return;
       console.warn("retell distillation could not start", e);
       logEvent(topicId, "distill-failed", {
         threadId,
         retellId: opts.retellId,
-        trigger: "talk-exit",
+        trigger: opts.trigger,
         ...distillFailurePayload({ stage: "setup", error: e }),
       });
     }
