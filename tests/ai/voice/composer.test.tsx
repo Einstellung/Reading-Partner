@@ -1,4 +1,4 @@
-// The composer's voice-input default (src/ui/components/chat/Composer.tsx). Voice is a base
+// The composer's voice-input default (src/ui/components/chat/Composer.tsx, composer-voice.ts). Voice is a base
 // capability: the mic renders unless a caller explicitly opts out, or the host
 // cannot record. Covered two ways — the pure prop resolver, and a static render
 // that proves the mic button is actually in (or out of) the DOM. Run: bun test.
@@ -6,7 +6,8 @@
 import { beforeEach, expect, spyOn, test } from "bun:test";
 import * as os from "@tauri-apps/plugin-os";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Composer, resolveComposerVoice } from "../../../src/ui/components/chat/Composer";
+import { Composer } from "../../../src/ui/components/chat/Composer";
+import { resolveComposerVoice } from "../../../src/ui/components/chat/composer-voice";
 
 // The render tests stand in for a desktop host: capture is a Rust command
 // compiled `#[cfg(desktop)]`, and without the plugin the composer would rightly

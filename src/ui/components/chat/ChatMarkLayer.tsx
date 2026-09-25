@@ -13,21 +13,20 @@ import {
 	useState,
 	type RefObject,
 } from 'react';
-import {
-	createStrokeGate,
-	locateChatMarks,
-	type ChatMarkDraw,
-} from '../../../reading/chat-marks';
+import { createStrokeGate, type ChatMarkDraw } from '../../../reading/chat-marks';
 import type { Annotation, MarkPen } from '../../../platform/app/reader-contract';
 import {
 	boxesHold,
+	caretOffsetAt,
 	indexRendered,
 	markFill,
+	measureMarks,
 	offsetOf,
 	paintBoxes,
 	rangeOfSpan,
 	toBoxes,
 	type MarkBox,
+	type PaintedMark,
 	type RenderedText,
 } from './chat-mark-dom';
 import {
@@ -81,78 +80,6 @@ const gesture = createGestureLatch();
 // not re-render the Markdown of all the others, and a row is memoized on its
 // message (MessageBubble). Only the layer inside a row subscribes.
 export const ChatMarksContext = createContext<ChatMarkHost | null>(null);
-
-// One mark as it is drawn: the pieces it paints as, the line boxes it is
-// pressed on (a 2px rule is not a target — the words above it are), and the
-// entry both came from.
-interface PaintedMark {
-	annotation: Annotation;
-	pen: MarkPen;
-	color: string;
-	paint: MarkBox[];
-	hit: MarkBox[];
-}
-
-// Every mark on one reply, measured against the reply as it stands now. One
-// whose words are no longer there is not drawn and not an error: the entry
-// stays in the file, it just has nothing to sit on (reading/chat-marks.ts).
-function measureMarks(body: HTMLElement, host: ChatMarkHost, messageTs: number): PaintedMark[] {
-	const index = indexRendered(body);
-	if (index.text === '') return [];
-	const origin = body.getBoundingClientRect();
-	const out: PaintedMark[] = [];
-	for (const found of locateChatMarks(index.text, host.marks, host.threadId, messageTs)) {
-		const range = rangeOfSpan(index, found.span, body.ownerDocument);
-		if (!range) continue;
-		const hit = toBoxes(Array.from(range.getClientRects()), origin);
-		if (hit.length === 0) continue;
-		const color = typeof found.annotation.color === 'string' && found.annotation.color
-			? found.annotation.color
-			: host.color;
-		out.push({
-			annotation: found.annotation,
-			pen: found.anchor.pen,
-			color,
-			paint: paintBoxes(hit, found.anchor.pen),
-			hit,
-		});
-	}
-	return out;
-}
-
-// Where a screen point falls in a reply's rendering, or null when it falls
-// outside it.
-//
-// `caretRangeFromPoint` is WebKit's and Blink's, `caretPositionFromPoint` the
-// standard name for the same thing; which of the two a given WKWebView answers
-// to depends on its version, so both are asked and neither is assumed.
-function caretOffsetAt(
-	index: RenderedText,
-	doc: Document,
-	x: number,
-	y: number,
-): number | null {
-	const legacy = (
-		doc as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null }
-	).caretRangeFromPoint;
-	if (typeof legacy === 'function') {
-		const range = legacy.call(doc, x, y);
-		return range ? offsetOf(index, range.startContainer, range.startOffset) : null;
-	}
-	const standard = (
-		doc as Document & {
-			caretPositionFromPoint?: (
-				x: number,
-				y: number,
-			) => { offsetNode: Node; offset: number } | null;
-		}
-	).caretPositionFromPoint;
-	if (typeof standard === 'function') {
-		const at = standard.call(doc, x, y);
-		return at ? offsetOf(index, at.offsetNode, at.offset) : null;
-	}
-	return null;
-}
 
 // The marks on one reply, painted under its words, and the press that opens
 // one. The layer wraps the reply's body so the two always read the same

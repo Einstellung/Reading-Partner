@@ -42,7 +42,8 @@ afterEach(cleanup);
 
 // After the window is up, not statically: the composer reaches react-dom, which
 // decides once at evaluation whether it is in a browser (tests/support/dom.ts).
-const { Composer, resolveComposerVoice } = await import("../../../src/ui/components/chat/Composer");
+const { Composer } = await import("../../../src/ui/components/chat/Composer");
+const { resolveComposerVoice } = await import("../../../src/ui/components/chat/composer-voice");
 
 const TO_VOICE = "Switch to voice";
 const TO_KEYBOARD = "Switch to keyboard";

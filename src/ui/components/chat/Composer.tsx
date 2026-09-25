@@ -12,82 +12,36 @@ import { MicButton } from './MicButton';
 import { HoldToTalk } from './HoldToTalk';
 import type { PendingImage } from './types';
 import type { CleanupModel } from '../../../ai/voice';
-import type { ProviderId } from '../../../ai/providers';
-import { loadSettings, toReasoning, type DictationLocale } from '../../../platform/app/settings';
+import { loadSettings, type DictationLocale } from '../../../platform/app/settings';
 import { hasNativeRecorder, hasOnDeviceDictation } from '../../../platform/app/platform';
+import { cleanupModelFromSettings, resolveComposerVoice, type ComposerVoice } from './composer-voice';
 
-// Optional enrichment for the composer's built-in voice input. The mic is on by
-// default; this only adds context. `glossary` seeds the STT cleanup pass with
-// the current surface's proper names (book title + outline, article title) so
-// mis-transcriptions of those terms get corrected. The cleanup model is derived
-// from settings inside the composer, not passed here.
-export interface ComposerVoice {
-	glossary?: string;
-}
-
-// Resolve the `voice` prop against one host capability. The control is enabled
-// unless a caller explicitly opts out with `voice={false}`, or the host cannot
-// do it — on a phone the capture commands are not compiled in, so a mic there is
-// a button whose only outcome is an error (see hasNativeRecorder).
-//
-// The composer asks this once for the recorder and once for on-device dictation.
-// The two are exclusive in practice — a host either records for an STT round
-// trip or dictates on device — but they are asked separately, so a host that
-// grew both would show both rather than silently pick one.
-export function resolveComposerVoice(
-	voice: ComposerVoice | false | undefined,
-	hostCan: boolean,
-): { glossary: string } | null {
-	if (voice === false || !hostCan) return null;
-	return { glossary: voice?.glossary ?? '' };
-}
-
-// Which language the phone listens for, from settings (docs/15). Undefined until
-// settings load; a hold that begins in that window falls back to the device's
-// own preferred language for that one hold rather than blocking the press.
-function useDictationLocale(): DictationLocale | undefined {
-	const [locale, setLocale] = useState<DictationLocale | undefined>(undefined);
-	useEffect(() => {
-		let alive = true;
-		loadSettings()
-			.then((s) => {
-				if (alive) setLocale(s.dictationLocale);
-			})
-			.catch(() => {});
-		return () => {
-			alive = false;
-		};
-	}, []);
-	return locale;
-}
-
-// The cleanup model the composer's voice input runs on, derived from settings so
-// any composer has working voice input without the caller wiring it. Null until
-// settings load, and null when no default provider/model is configured (the mic
-// then skips the polish pass and keeps the raw transcript).
-function useDefaultCleanupModel(): CleanupModel | null {
-	const [model, setModel] = useState<CleanupModel | null>(null);
+// What the composer's voice input reads from settings, so any composer has
+// working voice input without the caller wiring it. Both are unset until
+// settings load. The cleanup model is then null when no default provider/model
+// is configured. The locale is which language the phone listens for (docs/15);
+// a hold that begins before it loads falls back to the device's own preferred
+// language for that one hold rather than blocking the press.
+function useVoiceSettings(): {
+	cleanupModel: CleanupModel | null;
+	dictationLocale: DictationLocale | undefined;
+} {
+	const [cleanupModel, setCleanupModel] = useState<CleanupModel | null>(null);
+	const [dictationLocale, setDictationLocale] = useState<DictationLocale | undefined>(undefined);
 	useEffect(() => {
 		let alive = true;
 		loadSettings()
 			.then((s) => {
 				if (!alive) return;
-				setModel(
-					s.defaultProviderId && s.defaultModelId
-						? {
-								providerId: s.defaultProviderId as ProviderId,
-								modelId: s.defaultModelId,
-								reasoning: toReasoning(s.chatThinking),
-							}
-						: null,
-				);
+				setCleanupModel(cleanupModelFromSettings(s));
+				setDictationLocale(s.dictationLocale);
 			})
 			.catch(() => {});
 		return () => {
 			alive = false;
 		};
 	}, []);
-	return model;
+	return { cleanupModel, dictationLocale };
 }
 
 // Staged images inside the composer: a placeholder card with a spinner while the
@@ -158,8 +112,7 @@ export function Composer({
 	// Which half of the composer is showing on a host that dictates. Keyboard
 	// first: the mode is a place the user goes, not one they land in.
 	const [voiceMode, setVoiceMode] = useState(false);
-	const cleanupModel = useDefaultCleanupModel();
-	const dictationLocale = useDictationLocale();
+	const { cleanupModel, dictationLocale } = useVoiceSettings();
 
 	// Drop a cleaned voice transcript into the composer for review (never
 	// auto-sent), appended after any text the user already typed.

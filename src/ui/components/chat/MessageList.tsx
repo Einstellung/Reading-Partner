@@ -22,6 +22,7 @@ import { phaseLabel } from './phase-line';
 import { mayMarkReply } from '../../../reading/chat-marks';
 import { ChatMarkLayer, ChatMarksContext, usePenStrokes, type ChatMarkHost } from './ChatMarkLayer';
 import { messageToParts, type CardActionHandler, type CardSurface } from './chatParts';
+import { messageRowLayout } from './message-row';
 import { DispatchPart } from './DispatchPart';
 import { ReceiptPart } from './ReceiptPart';
 import { DeliveredRunsContext, deliveredRunIds, type DeliveredRuns } from './deliveredRuns';
@@ -198,7 +199,7 @@ const MessageBubble = memo(function MessageBubble({
 	surface: CardSurface;
 	onCardAction?: CardActionHandler;
 }) {
-	const { role, images, streaming, failed, notice } = message;
+	const { role, images, streaming } = message;
 	const lg = size === 'lg';
 	// Dev-only diagnostic for the streaming gray-line glitch; no-op in prod and
 	// when this row isn't a streaming AI reply. Ref is attached to the prose row.
@@ -231,48 +232,33 @@ const MessageBubble = memo(function MessageBubble({
 		);
 	}
 
-	const parts = messageToParts(message);
-	const cardParts = parts.filter((p): p is Extract<typeof p, { type: 'card' }> => p.type === 'card');
-	const toolPart = parts.find((p): p is Extract<typeof p, { type: 'tool-trace' }> => p.type === 'tool-trace');
-	const textPart = parts.find((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text' && !!p.text);
-	const ticketParts = parts.filter(
-		(p): p is Extract<typeof p, { type: 'receipt' } | { type: 'dispatch' }> =>
-			p.type === 'receipt' || p.type === 'dispatch',
-	);
+	const layout = messageRowLayout(messageToParts(message), message);
 
-	// A card row (add-source flow) stands alone in the flow — no prose or trace.
-	//
-	// An aside receipt is the exception: it is a footnote on the message above it
-	// rather than a turn of its own, so its row pulls back over the list's gap
-	// and keeps a few pixels of it. The pull is per list spacing (lg / sm) and is
-	// applied to no other kind of card.
-	if (cardParts.length > 0) {
-		const footnote = cardParts.every((p) => p.card.kind === 'aside');
+	// An aside receipt is a footnote on the message above it rather than a turn
+	// of its own, so its row pulls back over the list's gap and keeps a few
+	// pixels of it. The pull is per list spacing (lg / sm) and is applied to no
+	// other kind of card.
+	if (layout.kind === 'cards') {
 		return (
 			<div
 				className={
-					footnote
+					layout.footnote
 						? lg
 							? 'mt-[calc(0.625rem_-_1.5rem*var(--chat-scale,1))] flex flex-col'
 							: '-mt-1.5 flex flex-col'
 						: 'my-1 flex flex-col gap-2'
 				}
 			>
-				{cardParts.map((p) => (
+				{layout.cards.map((p) => (
 					<CardPartView key={p.id} part={p} surface={surface} onCardAction={onCardAction} />
 				))}
 			</div>
 		);
 	}
 
-	// AI: a turn that failed to reach the model is the app's words standing in for
-	// the reply, drawn as a failure. A row carrying a notice is not that, even
-	// with nothing written — it falls through to the notice-only row below.
-	// refusalRow clears `failed`, so no refusal arrives here with both set; the
-	// `!notice` half stays for any other path that ever marks a row and then adds
-	// a sentence about the turn, and because a row is cheap to hand-build and
-	// render, this is checked by a test rather than argued about.
-	if (failed && !notice) {
+	// Because a row is cheap to hand-build and render, which rows land here is
+	// checked by a test rather than argued about (budget-notice.test.tsx).
+	if (layout.kind === 'failed') {
 		return (
 			<div
 				className={
@@ -286,17 +272,14 @@ const MessageBubble = memo(function MessageBubble({
 			</div>
 		);
 	}
-	// A trace of nothing but quiet calls draws nothing at all — and must not draw
-	// an empty box in place of the status line the row would otherwise show.
-	const trace =
-		toolPart && visibleTrace(toolPart.tools).length ? (
-			<ToolTrace tools={toolPart.tools} size={size} />
-		) : null;
-	// What this round wrote down and what it sent off, between the words and the
-	// trace: the records of the turn, in the order the calls finished.
-	const tickets = ticketParts.length ? (
+	if (layout.kind === 'phase') return <PhaseLine phase={message.phase} size={size} />;
+	if (layout.kind === 'empty') return null;
+
+	const trace = layout.tools ? <ToolTrace tools={layout.tools} size={size} /> : null;
+	if (layout.kind === 'trace') return trace;
+	const tickets = layout.tickets.length ? (
 		<div className="flex flex-col gap-1.5">
-			{ticketParts.map((p, i) =>
+			{layout.tickets.map((p, i) =>
 				p.type === 'dispatch' ? (
 					<DispatchPart key={i} runId={p.runId} receipt={p.receipt} size={size} />
 				) : (
@@ -319,39 +302,16 @@ const MessageBubble = memo(function MessageBubble({
 			)}
 		</div>
 	) : null;
-	// While a tool runs with no reply text yet, the trace is the status line.
-	if (streaming && !textPart) {
-		if (tickets) {
-			return (
-				<div className="flex flex-col gap-2">
-					{tickets}
-					{trace}
-				</div>
-			);
-		}
-		return trace ?? <PhaseLine phase={message.phase} size={size} />;
-	}
-	// A turn that stopped before writing anything (turn-rows.ts): the notice is
-	// the whole row. Not red and with no Copy — nothing failed and there are no
-	// model words to take.
-	if (!textPart) {
-		if (!notice) {
-			if (!tickets) return trace;
-			return (
-				<div className="flex flex-col gap-2">
-					{tickets}
-					{trace}
-				</div>
-			);
-		}
+	if (layout.kind === 'stack') {
 		return (
 			<div className="flex flex-col gap-2">
 				{tickets}
 				{trace}
-				<BudgetNotice text={notice} size={size} />
+				{layout.notice && <BudgetNotice text={layout.notice} size={size} />}
 			</div>
 		);
 	}
+	const { textPart } = layout;
 	return (
 		<div
 			ref={rowRef}
@@ -389,8 +349,8 @@ const MessageBubble = memo(function MessageBubble({
 			{trace}
 			{/* After the answer, before the copy affordance: the notice belongs to the
 			    reply, but Copy takes the model's words only. */}
-			{!streaming && notice && <BudgetNotice text={notice} size={size} />}
-			{!streaming && <CopyButton text={textPart.text} />}
+			{layout.notice && <BudgetNotice text={layout.notice} size={size} />}
+			{layout.copy && <CopyButton text={textPart.text} />}
 		</div>
 	);
 });

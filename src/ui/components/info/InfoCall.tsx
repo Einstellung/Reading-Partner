@@ -24,7 +24,7 @@ import ChatPipCard from "../chat/ChatPipCard";
 import { callLayout } from "../chat/call-layout";
 import ReadingPipCard from "../chat/ReadingPipCard";
 import { useInfoCall } from "./use-info-call";
-import type { ComposerVoice } from "../chat/Composer";
+import type { ComposerVoice } from "../chat/composer-voice";
 import { chatGlance } from "../chat/chatParts";
 import type { BriefingView } from "../../../info/briefer/reader";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";

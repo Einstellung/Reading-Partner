@@ -10,8 +10,8 @@
 // puts a newline between block elements — and an anchor taken from it would not
 // be findable in this one.
 
-import type { MarkPen } from "../../../platform/app/reader-contract";
-import type { ChatMarkSpan } from "../../../reading/chat-marks";
+import type { Annotation, MarkPen } from "../../../platform/app/reader-contract";
+import { locateChatMarks, type ChatMarkSpan } from "../../../reading/chat-marks";
 
 // A text node and where its characters start in the rendering.
 export interface TextRun {
@@ -253,4 +253,83 @@ export function boxesHold(boxes: readonly MarkBox[], x: number, y: number): bool
   return boxes.some(
     (b) => x >= b.left && x <= b.left + b.width && y >= b.top && y <= b.top + b.height,
   );
+}
+
+// --- a reply as it stands now ----------------------------------------------
+
+// One mark as it is drawn: the pieces it paints as, the line boxes it is
+// pressed on (a 2px rule is not a target — the words above it are), and the
+// entry both came from.
+export interface PaintedMark {
+  annotation: Annotation;
+  pen: MarkPen;
+  color: string;
+  paint: MarkBox[];
+  hit: MarkBox[];
+}
+
+// Every mark on one reply, measured against the reply as it stands now. One
+// whose words are no longer there is not drawn and not an error: the entry
+// stays in the file, it just has nothing to sit on (reading/chat-marks.ts).
+// `host.color` is the fill for a mark that carries no colour of its own.
+export function measureMarks(
+  body: HTMLElement,
+  host: { marks: readonly Annotation[]; threadId: string; color: string },
+  messageTs: number,
+): PaintedMark[] {
+  const index = indexRendered(body);
+  if (index.text === "") return [];
+  const origin = body.getBoundingClientRect();
+  const out: PaintedMark[] = [];
+  for (const found of locateChatMarks(index.text, host.marks, host.threadId, messageTs)) {
+    const range = rangeOfSpan(index, found.span, body.ownerDocument);
+    if (!range) continue;
+    const hit = toBoxes(Array.from(range.getClientRects()), origin);
+    if (hit.length === 0) continue;
+    const color = typeof found.annotation.color === "string" && found.annotation.color
+      ? found.annotation.color
+      : host.color;
+    out.push({
+      annotation: found.annotation,
+      pen: found.anchor.pen,
+      color,
+      paint: paintBoxes(hit, found.anchor.pen),
+      hit,
+    });
+  }
+  return out;
+}
+
+// Where a screen point falls in a reply's rendering, or null when it falls
+// outside it.
+//
+// `caretRangeFromPoint` is WebKit's and Blink's, `caretPositionFromPoint` the
+// standard name for the same thing; which of the two a given WKWebView answers
+// to depends on its version, so both are asked and neither is assumed.
+export function caretOffsetAt(
+  index: RenderedText,
+  doc: Document,
+  x: number,
+  y: number,
+): number | null {
+  const legacy = (
+    doc as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null }
+  ).caretRangeFromPoint;
+  if (typeof legacy === "function") {
+    const range = legacy.call(doc, x, y);
+    return range ? offsetOf(index, range.startContainer, range.startOffset) : null;
+  }
+  const standard = (
+    doc as Document & {
+      caretPositionFromPoint?: (
+        x: number,
+        y: number,
+      ) => { offsetNode: Node; offset: number } | null;
+    }
+  ).caretPositionFromPoint;
+  if (typeof standard === "function") {
+    const at = standard.call(doc, x, y);
+    return at ? offsetOf(index, at.offsetNode, at.offset) : null;
+  }
+  return null;
 }
