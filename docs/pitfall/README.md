@@ -140,6 +140,7 @@
 - [137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch](./touch/137-zoom-plugin-wheel-is-ctrl-only-and-doubles-per-notch.md) — 缩放插件的 `enableWheel` 只是 ctrl/meta+滚轮的开关（裸滚轮在 handler 第一行就返回，从来不归它管），关掉它等于白白没有桌面缩放；步长是 `1 - deltaY*0.01` 且没有灵敏度选项，Chromium 一格 100px 就翻倍，只能自己接管，用 `exp(-px/800)` 一条指数曲线同时喂鼠标和触控板
 - [143-ios-puts-its-selection-callout-below-the-selection](./touch/143-ios-puts-its-selection-callout-below-the-selection.md) — iPad 上系统的 `Copy | Look Up | Translate` 条不是固定在选区上方：选区中心在安全区竖向中点以上时它在下方，以下时在上方，两边都是离选区 15px、高 44px，横向对着选区中心夹进屏幕。它是浮在 WKWebView 上的 UIKit 视图，DOM 里没有、`elementFromPoint` 看不见、落在它上面的触摸网页收不到；贴着选区放的浮动控件被盖掉 37px 只剩 7px 可点。那个控件已删（作废 2026-08-20），再往选区旁边放东西要按这条带子两边都让并重新量
 - [333-idb-cannot-hold-a-contact-and-then-move-it](./touch/333-idb-cannot-hold-a-contact-and-then-move-it.md) — idb 的 HID 通道按住不动或按轨迹移动，没有「按住再拖」这一笔，长按延长划线验不了；走 GestureDriver 的 `press(forDuration:thenDragTo:)`，命令是 `ios-sim.sh press-drag`
+- [425-a-card-shown-before-the-reading-faces-keeps-the-previous-column](./touch/425-a-card-shown-before-the-reading-faces-keeps-the-previous-column.md) — EPUB 翻页的页卡片挂上时只量一次页首在第几列，`createEpubReader` 拿到存盘的分页表就挂、不等 Noto Serif，回退字体更密把页首量进前一列，字体到了也不重算：高亮存对了页却画在显示错列的卡片上看不见，相邻页码同一列。挂第一张卡片之前 `await readingFontsReady()`
 
 ## 网络与 CSP
 

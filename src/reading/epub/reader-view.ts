@@ -55,7 +55,7 @@ import { createMarkLayer, type MarkLayer } from "./mark-layer";
 import { createSpineTexts } from "./mark-write";
 import { createCardPool } from "./card-pool";
 import { createPageCard, type PageCard } from "./page-card";
-import { createPageResources } from "./page-mount";
+import { createPageResources, readingFontsReady } from "./page-mount";
 import type { Pagination } from "./paginate";
 import type { EpubBook } from "./parse";
 import {
@@ -141,6 +141,10 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   const book: EpubBook = acquireEpub(bookId, buffer);
   const pagination: Pagination = await ensurePagination(bookId, book, host);
   const pagesCount = pagination.blocks.length;
+  // A card finds its page's column once, when it is shown; shown against the
+  // fallback face it keeps a column one early (docs/pitfall/425). A stored
+  // table means the ruler never ran, so nothing has loaded the faces yet.
+  await readingFontsReady();
   const resources = createPageResources(book.zip);
 
   // --- the desk ------------------------------------------------------------
