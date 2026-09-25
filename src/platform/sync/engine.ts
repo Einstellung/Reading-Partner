@@ -67,6 +67,8 @@
 //
 // Everything the pass touches (backend, fs, books) is injected; the Tauri wiring
 // lives in index.ts. reconcile() (reconcile.ts) is the pure decision core.
+// What a pass counts as failed and the transfer pool are in pass-failures.ts;
+// the holdings half of a pass (docs/59) is HoldingsExchange (holdings-exchange.ts).
 
 import { DELETED_BOOKS_FILE, parseDeletedBooks } from "../app/deleted-books";
 import { isAuthFailure, isRemoteGone, type SyncBackend } from "./backend";
