@@ -28,6 +28,7 @@ import { CallLimiter, type LimiterConfig } from "../../../legion/execute/limiter
 import { ObservableRun, type RunActivity, type RunSnapshot, type RunTimers } from "../../../legion/execute/observable-run";
 import type { BookChapter } from "../../chapters";
 import { createChapterSpineState, normalizeChapterSpineOnLoad, type SpineChapter, type ChapterSpineState } from "./types";
+import { errMsg } from "../../../platform/std/errors";
 
 export type { AiCallOptions };
 
@@ -283,7 +284,6 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
     if (this.running || !this.state) return;
     const ch = this.state.chapters.find((c) => c.index === index);
     if (!ch || ch.status !== "pending") return;
-    ch.status = "pending";
     ch.error = undefined;
     this.targets = new Set([index]);
     void this.persist();
@@ -336,7 +336,7 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
     void this.kick();
   }
 
-  private async run(mode: "full" | "plan-only" = "full"): Promise<void> {
+  private async run(): Promise<void> {
     if (this.running || !this.state) return;
     this.running = true;
     this.stopFlag = false;
@@ -344,7 +344,6 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
     this.notify();
     try {
       await this.runPlan();
-      if (mode === "plan-only") return;
       if (this.state.planStatus === "done" && !this.stopFlag) {
         await this.runChapters();
         await this.runOverviewIfReady();
@@ -377,7 +376,7 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
         return;
       }
       s.planStatus = "failed";
-      s.planError = e instanceof Error ? e.message : String(e);
+      s.planError = errMsg(e);
     }
     await this.persist();
   }
@@ -419,7 +418,7 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
         return;
       }
       ch.status = "failed";
-      ch.error = e instanceof Error ? e.message : String(e);
+      ch.error = errMsg(e);
     }
     await this.persist();
   }
@@ -456,7 +455,7 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
         return;
       }
       s.overviewStatus = "failed";
-      s.overviewError = e instanceof Error ? e.message : String(e);
+      s.overviewError = errMsg(e);
     }
     await this.persist();
   }

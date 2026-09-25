@@ -35,3 +35,31 @@ export function asText(v: unknown): string {
 export function asString(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
+
+/**
+ * An array field, coerced element by element: every item becomes a trimmed
+ * string (`String(v ?? "")`, so `null`/`undefined` become "") and empty
+ * results are dropped. `v` itself being anything but an array yields [].
+ */
+export function asStrings(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => String(x ?? "").trim()).filter((x) => x !== "");
+}
+
+/** A model reply as an object, or the reason it is not one. */
+export function readObject(
+  text: string,
+): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+  const json = extractJson(text);
+  if (!json) return { ok: false, error: "no JSON object in reply" };
+  let data: unknown;
+  try {
+    data = JSON.parse(json);
+  } catch (e) {
+    return { ok: false, error: `invalid JSON: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, error: "reply is not an object" };
+  }
+  return { ok: true, value: data as Record<string, unknown> };
+}

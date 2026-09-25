@@ -11,6 +11,8 @@
 // the real @embedpdf imports: with every side injected, the fallback path — the
 // one that only runs on a platform we cannot reproduce here — is testable.
 
+import { errMsg } from "../../platform/std/errors";
+
 export type EngineMode = "worker" | "main-thread";
 
 export interface EngineStart<E> {
@@ -36,7 +38,7 @@ export interface StartedEngine<E> {
 }
 
 function reasonOf(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  return errMsg(e);
 }
 
 /**

@@ -8,6 +8,7 @@ import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { dayNumber, localDate } from "../../platform/std/day";
 import { requestRemotePurge } from "../../platform/sync";
+import { listFileNames } from "./list-files";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { InfoItem } from "../sources/item";
 
@@ -220,8 +221,7 @@ export async function pruneStaleDailyFiles(
 ): Promise<void> {
   let names: string[];
   try {
-    const entries = await appData.readDir("");
-    names = entries.filter((e) => e.isFile).map((e) => e.name);
+    names = await listFileNames();
   } catch {
     return;
   }

@@ -5,6 +5,7 @@
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
 import { emptyDeletions, readDeletions, type Deletions } from "./deleted-books";
 import { basename, decodeLegacyName, normalizeFilePath } from "./path";
+import { createSerialQueue } from "./serial-queue";
 
 // Exported so the shelf's pull route can name it once (reading/pull-routes.ts).
 export const TOPICS_FILE = "topics.json";
@@ -158,19 +159,9 @@ export function createTopicStore(io: TopicIo): TopicStore {
   // on the other. A mutation overlapping a pull costs what it always did — one
   // of the two writes lands whole — which is what the shelf's pull route
   // re-reads for.
-  //
-  // In the closure rather than at module scope: a chain is a queue of work, and
-  // a queue shared by everything that ever imported this file makes one caller's
-  // unfinished write the thing the next caller waits behind.
-  let mutations: Promise<unknown> = Promise.resolve();
-
+  const queue = createSerialQueue();
   function serialize<T>(run: () => Promise<T>): Promise<T> {
-    // Run whether the one before resolved or rejected, and keep the chain's own
-    // handle settled: a mutation that throws must neither block the next one nor
-    // surface here as an unhandled rejection. The caller still gets the rejection.
-    const next = mutations.then(run, run);
-    mutations = next.catch(() => {});
-    return next;
+    return queue.run(run);
   }
 
   // The topic library read.

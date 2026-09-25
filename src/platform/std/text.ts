@@ -47,6 +47,21 @@ export function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** A sentence with no terminator in it is still a sentence; this is where it stops. */
+const RUNAWAY_SENTENCE = 240;
+
+/**
+ * The first sentence of a block. Ends at the first terminator — ASCII or CJK
+ * (`.!?。！？`) — that is followed by a space or by nothing, so "v1.2" and
+ * "Dr. Who" do not end one; a block with no terminator at all is cut at a
+ * length rather than sent whole.
+ */
+export function firstSentence(text: string): string {
+  const at = /[.!?。！？](\s|$)/.exec(text);
+  if (at) return text.slice(0, at.index + 1);
+  return text.length <= RUNAWAY_SENTENCE ? text : `${text.slice(0, RUNAWAY_SENTENCE).trimEnd()}…`;
+}
+
 // --- markup -----------------------------------------------------------------
 
 /**

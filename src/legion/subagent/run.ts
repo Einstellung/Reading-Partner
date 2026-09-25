@@ -31,6 +31,7 @@ import {
   type SubagentToolFailure,
   type SubagentTurnFn,
 } from "./types";
+import { errMsg } from "../../platform/std/errors";
 
 export interface SubagentDeps {
   run: SubagentTurnFn;
@@ -99,7 +100,7 @@ function instrument(
         tally.successes++;
         return result;
       } catch (e) {
-        tally.fail(tool.name, e instanceof Error ? e.message : String(e));
+        tally.fail(tool.name, errMsg(e));
         throw e;
       }
     },
@@ -224,7 +225,7 @@ export async function runSubagent(
     // Cancellation is not a failure and must never become a brief: a brief for a
     // run the reader hung up on is a brief nobody asked for.
     if (e instanceof StoppedError || signal?.aborted) throw new StoppedError();
-    const message = e instanceof Error ? e.message : String(e);
+    const message = errMsg(e);
     return finish(
       { outcome: "failed", message },
       { name: e instanceof Error ? e.constructor.name : typeof e, message },

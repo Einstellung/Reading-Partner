@@ -27,6 +27,7 @@
 import { appData } from "../../platform/app/appdata";
 import { readJson, writeTextAtomic } from "../../platform/app/atomic-fs";
 import { emptyPool, POOL_VERSION, type Pool, type PoolMark } from "./item-pool";
+import { listFileNames } from "./list-files";
 import type { InfoItem } from "../sources/item";
 
 const MARKS_FILE = "info-pool-marks.json";
@@ -49,8 +50,7 @@ export async function loadPool(): Promise<Pool> {
   const pool = emptyPool();
   let names: string[] = [];
   try {
-    const entries = await appData.readDir("");
-    names = entries.filter((e) => e.isFile).map((e) => e.name);
+    names = await listFileNames();
   } catch {
     return pool;
   }
@@ -130,8 +130,7 @@ export async function savePoolPolled(pool: Pool): Promise<void> {
 export async function removeCollectedPoolFiles(): Promise<void> {
   let names: string[] = [];
   try {
-    const entries = await appData.readDir("");
-    names = entries.filter((e) => e.isFile).map((e) => e.name);
+    names = await listFileNames();
   } catch {
     return;
   }

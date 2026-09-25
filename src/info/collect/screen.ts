@@ -16,7 +16,7 @@
 
 import { aiLanguageName, type AiLanguage } from "../../platform/app/settings";
 import type { ParseTally } from "../../platform/app/structured-output";
-import { extractJson } from "../../platform/std/json";
+import { readObject } from "../../platform/std/json";
 import type { CableHit } from "../cable/types";
 import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
@@ -243,16 +243,9 @@ export function parseScreenVerdicts(
   validIds: Set<string>,
   tally?: ParseTally,
 ): ScreenParseOutcome {
-  const json = extractJson(text);
-  if (!json) return { ok: false, error: "no JSON object in reply" };
-  let data: unknown;
-  try {
-    data = JSON.parse(json);
-  } catch (e) {
-    return { ok: false, error: `invalid JSON: ${e instanceof Error ? e.message : String(e)}` };
-  }
-  if (!data || typeof data !== "object") return { ok: false, error: "reply is not an object" };
-  const raw = (data as Record<string, unknown>).verdicts;
+  const read = readObject(text);
+  if (!read.ok) return { ok: false, error: read.error };
+  const raw = read.value.verdicts;
   if (!Array.isArray(raw)) {
     if (tally) tally.fail = "missing-field";
     return { ok: false, error: "missing verdicts array" };

@@ -10,6 +10,7 @@
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { briefingFile, newestBriefingDate, todayLocal } from "../collect/store";
+import { listFileNames } from "../collect/list-files";
 import { parseBriefing } from "./briefing";
 import type { Briefing } from "./types";
 
@@ -37,8 +38,7 @@ export async function loadBriefing(date: string = todayLocal()): Promise<Briefin
 export async function loadLatestBriefing(): Promise<Briefing | null> {
   let names: string[];
   try {
-    const entries = await appData.readDir("");
-    names = entries.filter((e) => e.isFile).map((e) => e.name);
+    names = await listFileNames();
   } catch {
     return null;
   }

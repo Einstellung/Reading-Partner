@@ -12,13 +12,3 @@ export function pageRangeLabel(args: Record<string, any>): string {
   const hi = Math.max(from, to);
   return lo === hi ? `Reading page ${lo}` : `Reading pages ${lo}–${hi}`;
 }
-
-// The site a URL belongs to, for a label that would otherwise be a line of query
-// string. The URL itself when it will not parse.
-export function hostOf(url: string): string {
-  try {
-    return new URL(url).host || url;
-  } catch {
-    return url;
-  }
-}

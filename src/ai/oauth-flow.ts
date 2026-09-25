@@ -26,6 +26,7 @@ import {
 	type ProviderCredentialId,
 } from "./credentials";
 import { coalesceRefresh } from "./token-refresh";
+import { errMsg } from "../platform/std/errors";
 
 // Treat the token as expired this long before the real boundary so an in-flight
 // request never races it.
@@ -211,7 +212,7 @@ export function createOAuthFlow(config: OAuthProviderConfig): OAuthFlow {
 		try {
 			({ code } = await listener);
 		} catch (e) {
-			throw new Error(`AUTO_CALLBACK_FAILED: ${e instanceof Error ? e.message : String(e)}`);
+			throw new Error(`AUTO_CALLBACK_FAILED: ${errMsg(e)}`);
 		}
 		await store(await exchangeCode(code, verifier, { state }));
 	}

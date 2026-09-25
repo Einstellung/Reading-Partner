@@ -20,6 +20,7 @@ import FlowReaderPane from "../reading/epub/FlowReaderPane";
 import { parseEpubRangeCfi, resolveRange } from "../reading/epub/cfi";
 import { FLOW_DISPLAY_DEFAULT, normalizeFlowDisplay, type FlowDisplay } from "../reading/epub/flow-display";
 import { initPaperTint } from "../ui/components/base/paper-tint";
+import { errMsg } from "../platform/std/errors";
 
 interface FlowLog {
   ready: boolean;
@@ -152,7 +153,7 @@ export async function runFlowReaderSmoke(): Promise<void> {
   try {
     buffer = src ? await (await fetch(src)).arrayBuffer() : syntheticBook();
   } catch (e) {
-    log.error = e instanceof Error ? e.message : String(e);
+    log.error = errMsg(e);
     return;
   }
   const bookId = params.get("book") ?? (src ? `flow-${src.replace(/[^a-z0-9]+/gi, "-").slice(-40)}` : "flow-smoke");

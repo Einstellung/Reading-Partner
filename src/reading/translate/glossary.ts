@@ -12,27 +12,14 @@
 // about, and the same budget buys five times as many paragraphs.
 
 import { estimateTextTokens } from "../../budget";
+import { firstSentence } from "../../platform/std/text";
 import type { GlossaryRequest } from "./prompt";
 import type { TranslatableBlock } from "./segment";
 
 /** How many source tokens of sample the glossary pass is shown. */
 export const GLOSSARY_SAMPLE_TOKENS = 2000;
 
-/** A sentence with no terminator in it is still a sentence; this is where it stops. */
-const RUNAWAY_SENTENCE = 240;
-
 const HEADING = /^h[1-6]$/;
-
-/**
- * The first sentence of a block. Ends at the first terminator that is followed
- * by a space or by nothing, so "v1.2" and "Dr. Who" do not end one; a block with
- * no terminator at all is cut at a length rather than sent whole.
- */
-export function firstSentence(text: string): string {
-  const at = /[.!?。！？](\s|$)/.exec(text);
-  if (at) return text.slice(0, at.index + 1);
-  return text.length <= RUNAWAY_SENTENCE ? text : `${text.slice(0, RUNAWAY_SENTENCE).trimEnd()}…`;
-}
 
 /**
  * The glossary pass's request: the title, every heading, and opening sentences

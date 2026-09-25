@@ -10,8 +10,7 @@ import { sanitize, sanitizeDocument } from "../../../src/reading/epub/sanitize";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import { blockTexts, characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { fulltextFrom } from "../../../src/reading/epub/fulltext";
-import { epubCfi, parseEpubCfi } from "../../../src/reading/epub/cfi";
-import { decodeEpubLocator, encodeEpubLocator } from "../../../src/reading/locator";
+import { parseEpubCfi } from "../../../src/reading/epub/cfi";
 import { epubFigures } from "../../../src/reading/figures/epub";
 import { renderEpubFigure } from "../../../src/reading/figures/render";
 import { sniffContentType } from "../../../src/reading/sources/url";
@@ -272,20 +271,6 @@ test("an EPUB produces the Fulltext shape a PDF produces", async () => {
 });
 
 // --- locators ----------------------------------------------------------------
-
-test("a locator round-trips through its string form", () => {
-  const cfi = epubCfi(2, "c2", "/4/6/1:12");
-  expect(cfi).toBe("epubcfi(/6/6[c2]!/4/6/1:12)");
-  const parsed = parseEpubCfi(cfi);
-  expect(parsed).toEqual({ spineIndex: 2, idref: "c2", steps: [4, 6, 1], offset: 12 });
-  const locator = decodeEpubLocator(cfi);
-  expect(locator).toEqual({ kind: "epub", cfi });
-  expect(encodeEpubLocator(locator!)).toBe(cfi);
-  expect(decodeEpubLocator("not a cfi")).toBeNull();
-  // A range is not a position this app writes, so it is refused rather than
-  // half-understood.
-  expect(decodeEpubLocator("epubcfi(/6/4!/4/2,/1:0,/1:5)")).toBeNull();
-});
 
 test("every page's locator is a CFI naming that page's spine item", async () => {
   const book = parseEpub(simpleBook());

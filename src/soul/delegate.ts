@@ -16,6 +16,7 @@ import { appRunner } from "../legion/execute/runner";
 import { delegableWorkerKinds } from "../legion/execute/worker";
 import type { DelegateInput, Delegated } from "../legion/execute/worker";
 import { appData } from "../platform/app/appdata";
+import { firstSentence } from "../platform/std/text";
 import type { BoxOrigin } from "../box";
 
 export const DELEGATE_TOOL = "delegate";
@@ -67,13 +68,6 @@ export async function writeBriefFile(text: string): Promise<string> {
  * for. A call naming a kind nothing runs is refused in the call, where the model
  * can read why.
  */
-// The brief's first sentence, for the receipt: the whole brief is a paragraph
-// written for a worker, and the receipt has one line.
-function firstSentence(task: string): string {
-  const end = task.search(/[.!?](\s|$)/);
-  return end < 0 ? task : task.slice(0, end + 1);
-}
-
 export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
   const kinds = (deps.kinds ?? delegableWorkerKinds)();
   const write = deps.writeBrief ?? writeBriefFile;

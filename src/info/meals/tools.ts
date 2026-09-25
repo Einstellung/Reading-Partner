@@ -14,6 +14,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
+import { asStrings } from "../../platform/std/json";
 import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
 import type { MealsCard, MealsPlanCardData } from "./cards";
 import { checkPlan } from "./checks";
@@ -497,9 +498,9 @@ export function patchProfile(profile: Profile, args: Record<string, unknown>): P
       .sort();
     set("trainingDays", days);
   }
-  if (Array.isArray(args.dislikes)) set("dislikes", toStrings(args.dislikes));
-  if (Array.isArray(args.shops)) set("shops", toStrings(args.shops));
-  if (Array.isArray(args.kitchen)) set("kitchen", toStrings(args.kitchen));
+  if (Array.isArray(args.dislikes)) set("dislikes", asStrings(args.dislikes));
+  if (Array.isArray(args.shops)) set("shops", asStrings(args.shops));
+  if (Array.isArray(args.kitchen)) set("kitchen", asStrings(args.kitchen));
   return touched ? next : null;
 }
 
@@ -946,11 +947,6 @@ export async function markShoppingTripDone(
 
 
 // --- reading what the model sent ---------------------------------------------
-
-function toStrings(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((v) => String(v ?? "").trim()).filter((v) => v !== "");
-}
 
 function record(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};

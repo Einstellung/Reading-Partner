@@ -43,6 +43,7 @@ import {
   type VoiceSessionSnapshot,
   type VoiceTurn,
 } from "./voice-session";
+import { errMsg } from "../../platform/std/errors";
 
 /** The turn the opening line is asked as. Native turns start at 1. */
 export const KICKOFF_TURN = 0;
@@ -174,7 +175,7 @@ const ENDED: Partial<Record<ConversationReason, string>> = {
 };
 
 function describe(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  return errMsg(e);
 }
 
 function finite(v: unknown): number | null {

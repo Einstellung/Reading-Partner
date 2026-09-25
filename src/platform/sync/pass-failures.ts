@@ -2,6 +2,8 @@
 // and the bounded pool its data-channel transfers run in. Both are what make a
 // pass per-item rather than all-or-nothing (docs/pitfall/52).
 
+import { errMsg } from "../std/errors";
+
 // A run of failures this long means the link is down, not that one file is
 // awkward. The rest of the pass would only spend its retry budget failing the
 // same way, so it is left for the next pass. It is consulted before a transfer
@@ -41,7 +43,7 @@ export async function runPool<T>(
 const MESSAGE_LIMIT = 160;
 
 export function messageOf(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  return errMsg(e);
 }
 
 // What failed in one pass, and whether to keep going. Every line the user reads

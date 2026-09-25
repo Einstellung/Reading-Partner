@@ -13,6 +13,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
+import { asStrings } from "../../platform/std/json";
 import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
 import type { SourceDescriptor } from "../sources/descriptor";
@@ -196,8 +197,8 @@ export function buildProposeLabTool(deps: LabToolDeps): AgentTool {
           receipt: null,
         };
       }
-      const questions = toStrings(args.questions);
-      const { claimed, unknown } = resolveClaimedSources(toStrings(args.sources), await deps.sources());
+      const questions = asStrings(args.questions);
+      const { claimed, unknown } = resolveClaimedSources(asStrings(args.sources), await deps.sources());
       deps.onLabCard({
         kind: "lab-proposal",
         threadId: deps.threadId,
@@ -276,12 +277,4 @@ export function buildArchiveLabTool(deps: LabToolDeps): AgentTool {
       };
     },
   };
-}
-
-// Tool arguments arrive as whatever the model sent. An array of strings is what
-// the schema asks for; anything else reads as nothing rather than as a string
-// spelling of itself.
-function toStrings(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((v) => String(v ?? "").trim()).filter((v) => v !== "");
 }

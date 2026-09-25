@@ -58,6 +58,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { createSessionFileSystem, SESSIONS_ROOT } from "../../platform/app/session-fs";
 import type { StreamFn } from "./contract";
+import { providerConfigFor } from "./provider-config";
 import { providerCallSetup } from "../../ai/call-setup";
 import {
   DEFAULT_MAX_RETRIES,
@@ -182,20 +183,8 @@ export interface HarnessHandle {
 // closed over by the stream function, which is where this app keeps that
 // decision (src/ai/providers.ts).
 function modelsFor(model: Model<Api>, streamFn: StreamFn): Models {
-  const streams = {
-    stream: streamFn,
-    streamSimple: streamFn,
-  };
   const models = createModels();
-  models.setProvider(
-    createProvider({
-      id: model.provider,
-      name: model.provider,
-      auth: { apiKey: { name: model.provider, resolve: async () => ({ auth: {} }) } },
-      models: [model],
-      api: streams,
-    }),
-  );
+  models.setProvider(createProvider(providerConfigFor(model, [model], streamFn)));
   return models;
 }
 

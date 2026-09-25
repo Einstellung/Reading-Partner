@@ -15,9 +15,8 @@ import type { ParseTally } from "../../platform/app/structured-output";
 import type { Cable } from "../cable/types";
 import { pictureSummary } from "../picture/picture";
 import type { Judgment, Picture } from "../picture/types";
-import { asArray, asText, isObject } from "../../platform/std/json";
-import { readObject } from "./json";
-import { PICTURE_SUMMARY_CHARS } from "./analyst";
+import { asArray, asText, isObject, readObject } from "../../platform/std/json";
+import { formatQuestions, PICTURE_SUMMARY_CHARS } from "./analyst";
 import type { ParseOutcome, SynthesisInput, SynthesisOutput } from "./types";
 
 // The reader's day, not the room's. Three articles is already a lot to ask of
@@ -150,10 +149,7 @@ function formatCable(cable: Cable): string {
 
 export function synthesisUserMessage(input: SynthesisInput): string {
   const { lab } = input;
-  const questions =
-    lab.charter.questions.length > 0
-      ? lab.charter.questions.map((q, i) => `${i + 1}. ${q}`).join("\n")
-      : "(none written yet)";
+  const questions = formatQuestions(lab);
   return [
     `ROOM: ${lab.name}`,
     "SCOPE",

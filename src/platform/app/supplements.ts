@@ -13,6 +13,7 @@
 // (pitfall 119).
 
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
+import { createSerialQueue } from "./serial-queue";
 
 /** One supplement: which document it is, and where it came from. */
 export interface SupplementRef {
@@ -52,14 +53,9 @@ export function createSupplementStore(io: SupplementIo): SupplementStore {
   // one's edit — one chat turn ingesting two links is exactly that. One chain
   // for the store rather than one per book: these writes are rare, and a queue
   // that cannot be indexed wrong is worth more here than the parallelism.
-  //
-  // In the closure rather than at module scope, for the reason topics.ts gives.
-  let mutations: Promise<unknown> = Promise.resolve();
-
+  const queue = createSerialQueue();
   function serialize<T>(run: () => Promise<T>): Promise<T> {
-    const next = mutations.then(run, run);
-    mutations = next.catch(() => {});
-    return next;
+    return queue.run(run);
   }
 
   // A file that is not there is a book with no supplements. Content that does

@@ -70,6 +70,7 @@ import {
 } from "./provider-ids";
 import { recordModelCall, type ModelCallContext } from "./model-usage";
 import type { Settings } from "../platform/app/settings";
+import { errMsg } from "../platform/std/errors";
 
 export {
 	API_KEY_PROVIDER_IDS,
@@ -512,7 +513,7 @@ export async function streamChatCore(params: StreamChatCoreParams): Promise<void
 		onDone(full, final);
 	} catch (e) {
 		record(undefined, false);
-		onError(e instanceof Error ? e.message : String(e));
+		onError(errMsg(e));
 	}
 }
 
@@ -545,6 +546,6 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
 		// rejected image. It is still a call that was made, and a line of zeros
 		// says so; the ids are the ones it was going to use.
 		recordModelCall({ ...spend, provider: providerId, model: modelId, ok: false });
-		onError(e instanceof Error ? e.message : String(e));
+		onError(errMsg(e));
 	}
 }

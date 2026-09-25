@@ -2,28 +2,17 @@
 // Run: bash scripts/t.sh tests/reading/translate/glossary.test.ts
 
 import { expect, test } from "bun:test";
-import { firstSentence, glossaryRequestFor } from "../../../src/reading/translate/glossary";
+import { glossaryRequestFor } from "../../../src/reading/translate/glossary";
 import { segmentDocument } from "../../../src/reading/translate/segment";
+
+// firstSentence itself now lives in platform/std/text.ts and is tested there
+// (src/platform/std/text.test.ts); glossary.ts just imports it.
 
 function blocks(html: string) {
   return segmentDocument(
     new DOMParser().parseFromString(`<html><body>${html}</body></html>`, "text/html"),
   );
 }
-
-test("a sentence ends at a terminator that a space or the end follows", () => {
-  expect(firstSentence("One thing. Then another.")).toBe("One thing.");
-  expect(firstSentence("Version v1.2 shipped. Later.")).toBe("Version v1.2 shipped.");
-  expect(firstSentence("第一句。第二句。")).toBe("第一句。第二句。");
-  expect(firstSentence("No terminator here")).toBe("No terminator here");
-});
-
-test("a sentence with no terminator at all is cut rather than sent whole", () => {
-  const long = "word ".repeat(200);
-  const cut = firstSentence(long);
-  expect(cut.length).toBeLessThan(long.length);
-  expect(cut.endsWith("…")).toBe(true);
-});
 
 test("the request is the title, every heading, and opening sentences", () => {
   const request = glossaryRequestFor(

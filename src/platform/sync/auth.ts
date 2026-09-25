@@ -50,6 +50,7 @@ import {
   refreshBody,
   type AuthFlow,
 } from "./authFlow";
+import { errMsg } from "../std/errors";
 
 const AUTH_FILE = "sync-auth.json";
 // Refresh this long before the real expiry so an in-flight request never races
@@ -159,7 +160,7 @@ async function captureLoopbackCode(flow: AuthFlow, challenge: string, state: str
   try {
     return (await listener).code;
   } catch (e) {
-    throw new Error(`Google sign-in could not capture the redirect: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`Google sign-in could not capture the redirect: ${errMsg(e)}`);
   }
 }
 

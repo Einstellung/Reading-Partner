@@ -93,6 +93,7 @@ import type { PoolRecord } from "../collect/item-pool";
 import { boxBriefing } from "./briefing";
 import type { Briefing } from "./types";
 import type { InfoItem } from "../sources/item";
+import { errMsg } from "../../platform/std/errors";
 
 export type { AiCallOptions };
 export type { CollectProgress, InfoSourceRef, SourceResult };
@@ -522,7 +523,7 @@ export class InfoPipeline {
       await this.boxPhase(date, day);
     } catch (e) {
       const stopped = e instanceof StoppedError;
-      this.error = stopped ? null : e instanceof Error ? e.message : String(e);
+      this.error = stopped ? null : errMsg(e);
       // Park the run: it keeps every source it collected, and the next Generate
       // continues from there instead of paying for the fetching twice.
       if (this.run) {
@@ -866,7 +867,7 @@ export class InfoPipeline {
       );
     } catch (e) {
       if (e instanceof StoppedError || isAbortError(e)) throw e;
-      const why = e instanceof Error ? e.message : String(e);
+      const why = errMsg(e);
       console.warn(`the ${lab.name} room could not be analyzed`, e);
       this.run = addWarnings(this.run!, [`${lab.name}: ${why}`], this.deps.now());
       this.touch();
@@ -988,7 +989,7 @@ export class InfoPipeline {
       this.briefing = briefing;
     } catch (e) {
       if (e instanceof StoppedError) this.error = null;
-      else this.error = e instanceof Error ? e.message : String(e);
+      else this.error = errMsg(e);
     } finally {
       this.running = false;
       this.stopping = false;
