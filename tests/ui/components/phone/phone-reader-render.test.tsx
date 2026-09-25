@@ -79,11 +79,15 @@ const io: PhoneBookIo = {
         { title: "One: the machine", page: 2, level: 0 },
         { title: "Two: the tape", page: 40, level: 1 },
       ],
+      recut: false,
     };
   },
   async loadAnnotations(): Promise<Annotation[]> {
     return [];
   },
+  ensureFulltext: () => new Promise(() => {}),
+  ensureFigures: () => new Promise(() => {}),
+  clearFigureCache() {},
   seedReadingPosition() {},
   keepReadingPosition() {},
   release() {},
