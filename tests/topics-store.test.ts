@@ -29,6 +29,7 @@ import {
   renameTopic,
   setFileHash,
   createTopicStore,
+  pruneDeletedFromTopics,
   type Topic,
   type TopicFile,
   type TopicIo,
@@ -300,4 +301,41 @@ test("a second store's mutation does not queue behind the first store's unfinish
 
   release();
   await stuck;
+});
+
+// --- the deletion log (platform/app/deleted-books.ts, docs/50) --------------
+//
+// A topic the log says is gone, and a book the log says is gone, are not on
+// the shelf whatever topics.json holds: the merge lets an edit outrank the
+// delete, and the row comes back in the file.
+
+const LOG = "deleted-books.jsonl";
+
+test("a topic and a book the log says are deleted are not listed", async () => {
+  disk.files.set(LOG, '{"kind":"topic","id":"t2","op":"delete","at":"2026-09-20T10:00:00.000Z"}\n{"bookId":"h1","at":"2026-09-20T10:00:00.000Z"}\n');
+  const topics = await listTopics();
+  expect(topics.map((t) => t.id)).toEqual(["t1"]);
+  expect(topics[0]!.files.map((f) => f.path)).toEqual(["/books/tracing.pdf"]);
+  // Listing wrote nothing.
+  expect(disk.files.get(TOPICS_FILE)).toBe(SHELF_JSON);
+});
+
+test("a book the log revived is on the shelf again", async () => {
+  disk.files.set(LOG, '{"bookId":"h1","at":"2026-09-20T10:00:00.000Z"}\n{"kind":"book","id":"h1","op":"revive","at":"2026-09-21T10:00:00.000Z"}\n');
+  const topics = await listTopics();
+  expect(topics.find((t) => t.id === "t1")!.files.map((f) => f.path)).toEqual([
+    "/books/jit.pdf",
+    "/books/tracing.pdf",
+  ]);
+});
+
+test("pruning writes the file without what the log says is gone, once", async () => {
+  disk.files.set(LOG, '{"kind":"topic","id":"t2","op":"delete","at":"2026-09-20T10:00:00.000Z"}\n');
+  expect(await pruneDeletedFromTopics()).toBe(true);
+  expect(onDisk().topics.map((t) => t.id)).toEqual(["t1"]);
+  expect(await pruneDeletedFromTopics()).toBe(false);
+});
+
+test("a log that is not there hides nothing", async () => {
+  expect((await listTopics()).map((t) => t.id).sort()).toEqual(["t1", "t2"]);
 });

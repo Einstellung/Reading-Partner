@@ -3,6 +3,7 @@
 // references; files are never copied. Persisted to AppData/topics.json.
 
 import { readGuardedJson, writeTextAtomic, type GuardedRead } from "./atomic-fs";
+import { emptyDeletions, readDeletions, type Deletions } from "./deleted-books";
 import { basename, decodeLegacyName, normalizeFilePath } from "./path";
 
 // Exported so the shelf's pull route can name it once (reading/pull-routes.ts).
@@ -76,6 +77,33 @@ export function healTopicFiles(files: FileRef[]): FileRef[] {
   return changed ? out : files;
 }
 
+// Pure: drop what the deletion log says is gone — a topic by its id, a file by
+// the book id it carries. The record may still be in the file: a topic's row
+// comes back when another device edited it (a lastOpenedAt) after this one
+// deleted it, since an edit outranks a delete in the merge (merge/records.ts),
+// and a book's FileRef the same way. The log is what the reader asked for, so
+// the store answers from it and the file catches up on the next write. Returns
+// the same array when nothing is dropped, so a caller can skip the write.
+export function pruneDeletedTopics(topics: Topic[], deletions: Deletions): Topic[] {
+  if (deletions.topic.size === 0 && deletions.book.size === 0) return topics;
+  let changed = false;
+  const out: Topic[] = [];
+  for (const topic of topics) {
+    if (deletions.topic.has(topic.id)) {
+      changed = true;
+      continue;
+    }
+    const files = topic.files.filter((f) => !f.hash || !deletions.book.has(f.hash));
+    if (files.length !== topic.files.length) {
+      changed = true;
+      out.push({ ...topic, files });
+    } else {
+      out.push(topic);
+    }
+  }
+  return changed ? out : topics;
+}
+
 export function healTopics(topics: Topic[]): Topic[] {
   let changed = false;
   const healed = topics.map((topic) => {
@@ -96,6 +124,8 @@ export interface TopicIo {
   write: (contents: string) => Promise<void>;
   newId: () => string;
   now: () => number;
+  // What the deletion log says is gone (deleted-books.ts). Left out, nothing is.
+  deletions?: () => Promise<Deletions>;
 }
 
 export interface TopicStore {
@@ -109,6 +139,9 @@ export interface TopicStore {
   removeFile: (id: string, path: string) => Promise<void>;
   setFileHash: (id: string, path: string, hash: string) => Promise<void>;
   markOpened: (id: string, path: string) => Promise<void>;
+  // Write the file without what the deletion log says is gone. Answers whether
+  // anything was dropped.
+  pruneDeleted: () => Promise<boolean>;
 }
 
 export function createTopicStore(io: TopicIo): TopicStore {
@@ -164,7 +197,9 @@ export function createTopicStore(io: TopicIo): TopicStore {
   // Every read hands out repaired references, whether or not the file on disk has
   // been rewritten yet.
   async function load(): Promise<TopicFile> {
-    return { topics: healTopics((await readStore()).topics) };
+    const healed = healTopics((await readStore()).topics);
+    const deletions = io.deletions ? await io.deletions() : emptyDeletions();
+    return { topics: pruneDeletedTopics(healed, deletions) };
   }
 
   function save(store: TopicFile): Promise<void> {
@@ -297,6 +332,17 @@ export function createTopicStore(io: TopicIo): TopicStore {
         file.lastOpenedAt = io.now();
         await save(store);
       }),
+
+    pruneDeleted: () =>
+      serialize(async () => {
+        const raw = await readStore();
+        const healed = healTopics(raw.topics);
+        const deletions = io.deletions ? await io.deletions() : emptyDeletions();
+        const pruned = pruneDeletedTopics(healed, deletions);
+        if (pruned === healed) return false;
+        await save({ topics: pruned });
+        return true;
+      }),
   };
 }
 
@@ -309,6 +355,7 @@ const store = createTopicStore({
   write: (contents) => writeTextAtomic(TOPICS_FILE, contents),
   newId: () => crypto.randomUUID(),
   now: () => Date.now(),
+  deletions: readDeletions,
 });
 
 export function repairTopicPaths(): Promise<boolean> {
@@ -334,6 +381,11 @@ export function renameTopic(id: string, name: string): Promise<void> {
 // The row and nothing else. What else named the topic is settled by the domain
 // (reading/delete/delete-topic.ts), which is where the cascade can reach the
 // stores platform/app may not import; this is the last step of it.
+/** Finish a deletion the merge undid: rewrite the file without what the log says is gone. */
+export function pruneDeletedFromTopics(): Promise<boolean> {
+  return store.pruneDeleted();
+}
+
 export function removeTopicRecord(id: string): Promise<void> {
   return store.remove(id);
 }

@@ -8,6 +8,7 @@
 import { appData } from "./appdata";
 import { readGuardedJson, writeTextAtomic } from "./atomic-fs";
 import { contentHash } from "./content-hash";
+import { isDeleted, readDeletions, recordRevival } from "./deleted-books";
 import { basename, decodeLegacyName } from "./path";
 
 const LIBRARY_DIR = "library";
@@ -269,6 +270,13 @@ export async function listLibraryEntries(): Promise<Record<string, LibraryEntry>
 // — re-importing the same content neither re-copies the blob nor overwrites the
 // registry. originalPath is always a stored topic file path, which topics.ts
 // normalized on the way in (path.ts), so the basename here is the real filename.
+//
+// A book the reader deleted is the same bytes and the same id, so importing it
+// again is how it comes back: the deletion log gets a revive before anything
+// is written, or the next sync pass would take the new marks and threads off
+// every device again (deleted-books.ts). A log that will not read stops the
+// import — an import that cannot say the book is back is one the next pass
+// undoes.
 export async function importBook(
   bytes: Uint8Array,
   originalPath: string,
@@ -276,6 +284,7 @@ export async function importBook(
 ): Promise<LibraryEntry> {
   const hash = await contentHash(bytes);
   const format = formatOfBytes(bytes);
+  if (isDeleted(await readDeletions(), "book", hash)) await recordRevival("book", hash, Date.now());
   await ensureDir();
   if (!(await libraryHas(hash))) {
     await appData.writeBytes(libraryBookPath(hash, format), bytes);
