@@ -284,7 +284,6 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
     if (this.running || !this.state) return;
     const ch = this.state.chapters.find((c) => c.index === index);
     if (!ch || ch.status !== "pending") return;
-    ch.status = "pending";
     ch.error = undefined;
     this.targets = new Set([index]);
     void this.persist();
@@ -337,7 +336,7 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
     void this.kick();
   }
 
-  private async run(mode: "full" | "plan-only" = "full"): Promise<void> {
+  private async run(): Promise<void> {
     if (this.running || !this.state) return;
     this.running = true;
     this.stopFlag = false;
@@ -345,7 +344,6 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
     this.notify();
     try {
       await this.runPlan();
-      if (mode === "plan-only") return;
       if (this.state.planStatus === "done" && !this.stopFlag) {
         await this.runChapters();
         await this.runOverviewIfReady();

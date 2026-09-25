@@ -43,10 +43,10 @@ export const TURN_STALL_MS = 90_000;
  * How long the app has to have been away before a stream that produced nothing
  * while it was gone is cut the moment it comes back.
  */
-export const AWAY_STALL_MS = 20_000;
+const AWAY_STALL_MS = 20_000;
 
 /** How often the wall clock is read. */
-export const STALL_TICK_MS = 5_000;
+const STALL_TICK_MS = 5_000;
 
 /** What the reader's surface is told. */
 export const STALL_MESSAGE = "the model stopped answering partway through";
@@ -70,7 +70,7 @@ export interface StallTimers {
   every(ms: number, tick: () => void): () => void;
 }
 
-export const realStallTimers: StallTimers = {
+const realStallTimers: StallTimers = {
   now: () => Date.now(),
   every: (ms, tick) => {
     const id = setInterval(tick, ms);
@@ -81,7 +81,7 @@ export const realStallTimers: StallTimers = {
   },
 };
 
-export interface StallOptions {
+interface StallOptions {
   /** Silence this long ends the watch. TURN_STALL_MS unless a caller says. */
   stallMs?: number;
   awayMs?: number;
@@ -219,11 +219,6 @@ let shared: StallWatches | null = null;
 export function stallWatches(): StallWatches {
   shared ??= createStallWatches();
   return shared;
-}
-
-/** Throw the registry away. For tests, which are not one process per case. */
-export function resetStallWatches(): void {
-  shared = null;
 }
 
 /**

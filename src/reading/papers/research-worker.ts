@@ -12,14 +12,11 @@
 // sub-agent is legion's (legion/subagent/worker.ts).
 
 import { registerWorker } from "../../legion/execute/worker";
-import { OUTPUTS_DIR } from "../../legion/execute/outputs";
 import { agentWorker, type AgentWorkerDeps, type SubagentDefinition } from "../../legion/subagent";
 import { loadSettings } from "../../platform/app/settings";
 import { buildResearchAgent, RESEARCH_KIND, RESEARCH_TURN_ROUNDS } from "./research-agent";
 import { readingFetch } from "../../platform/http/throttled-fetch";
 import { searchPapers, type PaperSearchFn } from "./paper-search";
-
-export { RESEARCH_KIND, OUTPUTS_DIR };
 
 // The literature sub-agent as this device would build it: the reader's own
 // Semantic Scholar key where they have one, and the four databases behind it.
