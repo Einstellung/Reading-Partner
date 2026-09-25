@@ -69,6 +69,7 @@ import {
 	type ProviderId,
 } from "./provider-ids";
 import { recordModelCall, type ModelCallContext } from "./model-usage";
+import type { Settings } from "../platform/app/settings";
 
 export {
 	API_KEY_PROVIDER_IDS,
@@ -328,6 +329,16 @@ export async function resolveApiKey(id: ProviderId): Promise<string> {
 export function modelSupportsImages(providerId: ProviderId, modelId: string): boolean {
 	const model = providers[providerId]?.getModels().find((m) => m.id === modelId);
 	return !!model?.input.includes("image");
+}
+
+// Whether the talk model (the default one) takes images: what gates a paste
+// before it is staged. False while no default model is set.
+export function defaultModelTakesImages(s: Pick<Settings, "defaultProviderId" | "defaultModelId">): boolean {
+	return !!(
+		s.defaultProviderId &&
+		s.defaultModelId &&
+		modelSupportsImages(s.defaultProviderId as ProviderId, s.defaultModelId)
+	);
 }
 
 // Everything a call needs before it can stream: the provider, the looked-up

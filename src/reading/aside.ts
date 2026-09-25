@@ -5,7 +5,8 @@
 //
 // What is here is the pure half: how much of the parent conversation an aside's
 // turn opens on, which selection is worth opening one on, which rows may offer
-// it, the line it leaves behind and the way back. The record and its store are
+// it, the line it leaves behind and the way back (asideReturnable alone reads
+// the store, for whether that way is still there). The record and its store are
 // platform/app/threads.ts; the assembly that uses the tail is reading/turn.ts;
 // the surfaces are ui/components/chat and reading/session/use-call.ts.
 //
@@ -15,6 +16,7 @@
 // does.
 
 import {
+  getThread,
   threadKind,
   type AsideAnchor,
   type Thread,
@@ -185,6 +187,16 @@ export function asideReturn(
   const kind = threadKind(parent);
   if (kind === "aside") return null;
   return { threadId: parent.id, annotationId: parent.annotationId, isBook: kind === "book" };
+}
+
+// Whether a side conversation still has somewhere to go back to: a record under
+// its parent link that is not itself an aside. Read from the thread store at
+// render rather than settled when it opened, because the parent can go while it
+// is open — another device's delete arrives through sync.
+export function asideReturnable(bookId: string | null, parentThreadId: string): boolean {
+  if (!bookId) return false;
+  const parent = getThread(bookId, parentThreadId);
+  return !!parent && !!asideReturn(parent);
 }
 
 // --- the line an aside leaves on the lesson -------------------------------
