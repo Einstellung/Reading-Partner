@@ -26,6 +26,7 @@ import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { contentHash } from "../platform/app/content-hash";
 import { libraryHas, readLibraryBook } from "../platform/app/library";
 import type { FileRef } from "../platform/app/topics";
+import { bytesToBase64 } from "../platform/std/base64";
 import { Gate } from "../platform/std/gate";
 import {
   cleanAuthor,
@@ -247,11 +248,7 @@ async function writeCover(bookId: string, jpeg: Uint8Array, author: string): Pro
 }
 
 function dataUrl(jpeg: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < jpeg.length; i += 0x8000) {
-    binary += String.fromCharCode(...jpeg.subarray(i, i + 0x8000));
-  }
-  return `data:${MIME};base64,${btoa(binary)}`;
+  return `data:${MIME};base64,${bytesToBase64(jpeg)}`;
 }
 
 // --- failures ---------------------------------------------------------------

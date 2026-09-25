@@ -40,11 +40,11 @@ import { loadAnnotations } from "../platform/app/annotations";
 import {
   getThread,
   listThreads,
-  readThreadImages,
   setThreadFocusChapter,
   threadKind,
   type ThreadKind,
 } from "../platform/app/threads";
+import { readThreadImages } from "../platform/app/thread-images";
 import { chapterAt } from "../fulltext/query";
 import { getFulltext, saveFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";

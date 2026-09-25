@@ -8,6 +8,7 @@
 
 import { decodeBlob } from "../../ai/image-utils";
 import { loadPdfjs } from "../../fulltext/extract";
+import { bytesToBase64 } from "../../platform/std/base64";
 import { heldEpub } from "../epub/book-cache";
 import { openZip, type EpubZip } from "../epub/zip";
 import { planEpubView, rasterizeEpubFigure, type Rasterizer } from "./raster";
@@ -75,17 +76,6 @@ export function epubImageType(href: string): string | null {
   const dot = href.lastIndexOf(".");
   if (dot < 0) return null;
   return EPUB_IMAGE_TYPES[href.slice(dot + 1).toLowerCase()] ?? null;
-}
-
-function base64Of(bytes: Uint8Array): string {
-  let binary = "";
-  // In chunks: String.fromCharCode spread over a multi-megabyte array overflows
-  // the argument list.
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
 }
 
 // The archive a figure comes out of. The open book's own zip when this is the
@@ -170,7 +160,7 @@ export async function renderEpubFigure(
     };
   }
 
-  const base64 = base64Of(bytes);
+  const base64 = bytesToBase64(bytes);
   return { dataUrl: `data:${mimeType};base64,${base64}`, base64, mimeType, width: 0, height: 0 };
 }
 
