@@ -263,7 +263,7 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 不是遗留，是终态。
 
 - 阅读区标注层、`PenToolbar` 的色板、`AnnotationPopup`、`CallBubble`、`MicButton` 的按住录音、`TraceList` 的滑动删除、`ReadingPipCard`：没有对应的 Radix 原语，或者已经按实测结论调过（坑 67、`panel-position.ts`、`useKeyboardInset`）。
-- 聊天输入区（`chat.tsx` 的 Composer、`ChatPipCard`）：自动增高、图片贴片、语音接管都是自己的逻辑，textarea 只是里面的一块。
+- 聊天输入区（`chat/Composer.tsx`、`ChatPipCard`）：自动增高、图片贴片、语音接管都是自己的逻辑，textarea 只是里面的一块。
 - 侧栏标签行、`Sidebar` 的抽屉和背板、`LibraryScreen` / `BriefingPage` / `PrepPanel` 的列表行：`<button>` 就是它们该有的样子，包一层组件不会少写一行。
 - `HomeCard` / `InfoCards` 的卡片外壳、`settings/cardStyles.ts` 的 `CARD`：shadcn 的 Card 是 header/content/footer 三段式，这里的卡片没有那个结构。
 

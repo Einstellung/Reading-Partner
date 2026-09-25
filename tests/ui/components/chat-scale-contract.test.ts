@@ -25,7 +25,7 @@ function read(path: string): string {
 
 const scope = read("ui/components/base/ChatScaleScope.tsx");
 const keys = read("ui/components/base/chat-scale-keys.ts");
-const chat = read("ui/components/chat/chat.tsx");
+const chat = read("ui/components/chat/MessageList.tsx") + read("ui/components/chat/Composer.tsx");
 const callView = read("ui/components/chat/CallView.tsx");
 const retellView = read("ui/components/retell/RetellView.tsx");
 const infoCall = read("ui/components/info/InfoCall.tsx");

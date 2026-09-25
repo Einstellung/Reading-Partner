@@ -68,7 +68,7 @@ import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/CallBubble";
 import CallView from "./ui/components/chat/CallView";
-import type { ChatMarkHost } from "./ui/components/chat/chat";
+import type { ChatMarkHost } from "./ui/components/chat/ChatMarkLayer";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsDialog from "./ui/components/SettingsDialog";

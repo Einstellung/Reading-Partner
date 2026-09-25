@@ -11,7 +11,8 @@
 // CitationContext.
 
 import ChatScaleScope from "../base/ChatScaleScope";
-import { Composer, MessageList } from "../chat/chat";
+import { Composer } from "../chat/Composer";
+import { MessageList } from "../chat/MessageList";
 import { CitationContext } from "../markdown/Markdown";
 import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";

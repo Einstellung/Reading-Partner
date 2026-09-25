@@ -1,5 +1,5 @@
 // Drawing on a reply with the pen the top bar has selected
-// (src/ui/components/chat/chat.tsx). Which rows may be drawn on is pure and
+// (src/ui/components/chat/ChatMarkLayer.tsx). Which rows may be drawn on is pure and
 // tested in tests/reading/chat-marks.test.ts; what needs a document is the
 // wiring — that the marker only lands on the rows the rule allows, that a
 // stroke is taken when the finger comes off and names exactly the words it
@@ -8,7 +8,8 @@
 // Run: bun test.
 import { afterEach, expect, test } from "bun:test";
 import { createElement } from "react";
-import { MessageList, type ChatMarkHost } from "../../../../src/ui/components/chat/chat";
+import { MessageList } from "../../../../src/ui/components/chat/MessageList";
+import type { ChatMarkHost } from "../../../../src/ui/components/chat/ChatMarkLayer";
 import type { Annotation } from "../../../../src/platform/app/reader-contract";
 import type { ChatMarkDraw } from "../../../../src/reading/chat-marks";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";

@@ -18,7 +18,7 @@ import { createRoot } from "react-dom/client";
 // a layout measured here has to be the app's layout.
 import "../../../styles.css";
 import ChatScaleScope from "../base/ChatScaleScope";
-import { MessageList } from "./chat";
+import { MessageList } from "./MessageList";
 import type { ThreadMessage } from "./types";
 import type { ChatMarkDraw } from "../../../reading/chat-marks";
 

@@ -7,7 +7,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReadingIntent } from '../../../reading/intents';
 import { IconExpand } from '../base/icons';
-import { Composer, MessageList, type ComposerVoice } from './chat';
+import { Composer, type ComposerVoice } from './Composer';
+import { MessageList } from './MessageList';
 import IntentChips from './IntentChips';
 import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';

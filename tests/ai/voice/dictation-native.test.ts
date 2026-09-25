@@ -165,7 +165,7 @@ test("a failed start drops the listener rather than leaking one per press", asyn
 
 // The dictation language is a setting rather than the device's own language, and
 // the whole value of that decision is that the string reaches the plugin. It
-// crosses four hands to get there — settings.json, a hook in chat.tsx, a prop on
+// crosses four hands to get there — settings.json, a hook in Composer.tsx, a prop on
 // HoldToTalk, then DictationOptions — and nothing else checks the last one.
 test("the chosen locale is what the start command carries", async () => {
   const b = bridge();

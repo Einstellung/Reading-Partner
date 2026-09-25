@@ -1,5 +1,5 @@
 // What the one status line says while a turn is running with nothing written
-// yet. The line is drawn by PhaseLine (chat.tsx); the words are here so they can
+// yet. The line is drawn by PhaseLine (MessageList.tsx); the words are here so they can
 // be read back by a test.
 
 import type { TurnPhase } from "../../../ai/turn-rows";

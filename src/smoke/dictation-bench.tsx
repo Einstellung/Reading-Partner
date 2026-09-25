@@ -75,7 +75,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { addPluginListener } from "@tauri-apps/api/core";
 
-import { Composer } from "../ui/components/chat/chat";
+import { Composer } from "../ui/components/chat/Composer";
 import {
   DICTATION_EVENT,
   VOICE_PLUGIN,

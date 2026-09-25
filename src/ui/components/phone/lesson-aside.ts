@@ -6,7 +6,7 @@
 // what the reader gets is the block their finger landed in, clipped by the same
 // rule a desktop selection is clipped by (reading/aside.ts: asideSpan).
 //
-// The reply is found by `data-reply-ts`, the marker chat.tsx already writes on
+// The reply is found by `data-reply-ts`, the marker MessageList.tsx already writes on
 // the prose of a reply worth marking (reading/chat-marks.ts: mayMarkReply). So
 // a hold on the reader's own message, on a tool trace, on a budget notice or on
 // a reply still being written picks nothing, without this file knowing what any
