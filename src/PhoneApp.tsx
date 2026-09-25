@@ -507,6 +507,7 @@ export default function PhoneApp({
         targets={{
           goToDoor: () => onNavigate("vestibule"),
           goToBriefing: () => onNavigate("briefing"),
+          goToMeals: () => onNavigate("meals"),
         }}
       />
     </div>

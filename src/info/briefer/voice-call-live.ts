@@ -11,10 +11,9 @@
 // stream of text, an ending, and an abort, and that is what askOnThread is.
 
 import { runAgentTurn } from "../../legion/execute/turn";
-import { assembleTurn, soulHarness } from "../../soul";
+import { soulHarness } from "../../soul";
 import { replayableHistory } from "../../ai/turn-rows";
 import { glossaryTerms } from "../../ai/voice/cleanup";
-import { openDesk } from "../../desk";
 import { loadDeviceSettings } from "../../platform/app/device";
 import { hasWebviewSignIn } from "../../platform/app/platform";
 import { loadSettings, toReasoning } from "../../platform/app/settings";
@@ -32,8 +31,7 @@ import { briefingAnchor, noBriefingAnchor } from "./anchors";
 import { infoBookId } from "./call";
 import { buildLiveCompanionTools, type BriefingControl } from "./companion-live";
 import { nativeConversation } from "../../soul/voice/conversation";
-import { withCompanionTools } from "./desk";
-import { SECRETARY_ROLE_ID } from "./role";
+import { assembleInfoTurn } from "./info-turn";
 import {
   createVoiceCall,
   type VoiceCall,
@@ -143,18 +141,15 @@ export function askOnThread(opts: {
           // The same desk the text chat lays for this day, assembled the same
           // way: a call is the info conversation in another modality, not a
           // second AI.
-          const desk = await openDesk(withCompanionTools(opts.anchor.desk, opts.tools), {
+          // No meals tools: a call is only ever anchored to a day.
+          const { turn } = await assembleInfoTurn({
+            anchor: opts.anchor,
+            key: opts.bookId,
+            dateKey: opts.dateKey,
             settings,
-            thread: { key: opts.bookId, id: opts.anchor.threadId },
             signal,
-          });
-          const turn = await assembleTurn({
-            desk,
             messages: rows,
-            role: SECRETARY_ROLE_ID,
-            // Where this turn is being held: a run delegated here comes back
-            // into the day's briefing thread, not to the door (docs/68).
-            origin: { place: "briefing", date: opts.dateKey },
+            companionTools: opts.tools,
           });
           // Abandoned, or too big to leave the model room to answer. Nothing was
           // said and nothing is worth retrying, so the floor goes back to the

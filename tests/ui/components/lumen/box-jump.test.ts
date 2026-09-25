@@ -65,5 +65,9 @@ test("the door and the briefing go to their own place in either shell", () => {
       steps: [{ step: "go-to-briefing", date: "2026-09-15" }],
       unreachable: null,
     });
+    expect(planJump({ place: "meals" }, place)).toEqual({
+      steps: [{ step: "go-to-meals" }],
+      unreachable: null,
+    });
   }
 });

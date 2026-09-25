@@ -24,7 +24,8 @@ export type JumpStep =
   | { step: "open-annotation"; annotationId: string }
   | { step: "open-thread"; bookId: string; threadId: string }
   | { step: "go-to-door"; date: string }
-  | { step: "go-to-briefing"; date: string };
+  | { step: "go-to-briefing"; date: string }
+  | { step: "go-to-meals" };
 
 export interface Jump {
   steps: JumpStep[];
@@ -61,5 +62,7 @@ export function planJump(origin: BoxOrigin, place: Place): Jump {
       return { steps: [{ step: "go-to-door", date: origin.date }], unreachable: null };
     case "briefing":
       return { steps: [{ step: "go-to-briefing", date: origin.date }], unreachable: null };
+    case "meals":
+      return { steps: [{ step: "go-to-meals" }], unreachable: null };
   }
 }

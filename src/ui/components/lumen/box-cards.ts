@@ -67,6 +67,8 @@ export function originLabel(origin: BoxOrigin, title: string | null): string {
       return `At the door · ${origin.date}`;
     case "briefing":
       return `Briefing · ${origin.date}`;
+    case "meals":
+      return "Meals";
   }
 }
 

@@ -94,6 +94,7 @@ export interface LumenJumpTargets {
 	openAnnotation?: (annotationId: string) => void;
 	goToDoor: (date: string) => void;
 	goToBriefing: (date: string) => void;
+	goToMeals: () => void;
 }
 
 export function LumenCorner({
@@ -292,6 +293,9 @@ export function LumenCorner({
 						break;
 					case "go-to-briefing":
 						targets.goToBriefing(step.date);
+						break;
+					case "go-to-meals":
+						targets.goToMeals();
 						break;
 				}
 			}
