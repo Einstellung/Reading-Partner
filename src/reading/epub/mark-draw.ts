@@ -41,7 +41,7 @@ export interface MarkRangeSource {
 }
 
 /** A live Range on the view's tree for a span of the ingestion text. */
-function rangeOfSpan(source: MarkRangeSource, spine: SpineText, span: { start: number; end: number }): Range | null {
+export function rangeOfSpan(source: MarkRangeSource, spine: SpineText, span: { start: number; end: number }): Range | null {
   const from = runAt(spine.text.runs, span.start);
   const to = runAt(spine.text.runs, span.end);
   if (!from || !to) return null;
@@ -76,6 +76,11 @@ export function colorOf(ann: Annotation): string {
   return typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color) ? color : DEFAULT_MARK_COLOR;
 }
 
+// The same violet the PDF side paints an AI-cited quote in
+// (reading/engine/EmbedPdfView.tsx), at the same opacity.
+const QUOTE_COLOR = "#4a3a9e";
+const QUOTE_OPACITY = "0.24";
+
 export interface MarkPainter {
   /** The named sublayer of an overlay, created on first use. */
   sublayer(overlay: HTMLElement, name: string): HTMLElement;
@@ -83,6 +88,8 @@ export interface MarkPainter {
   drawStroke(into: HTMLElement, kind: "highlight" | "underline", rects: PageRect[], color: string): void;
   /** The one selected mark's outline. The shell selects at most one at a time. */
   drawSelection(into: HTMLElement, rects: PageRect[], color: string): void;
+  /** The band over a passage the AI cited. Not a mark: nothing is written for it. */
+  drawQuote(into: HTMLElement, rects: PageRect[]): void;
 }
 
 export function createMarkPainter(owner: Document): MarkPainter {
@@ -117,6 +124,10 @@ export function createMarkPainter(owner: Document): MarkPainter {
       if (!box) return;
       const grown = { left: box.left - 3, top: box.top - 3, width: box.width + 6, height: box.height + 6 };
       into.append(rectDiv(grown, `border:1.5px solid ${color};border-radius:3px;box-sizing:border-box;opacity:0.9`));
+    },
+
+    drawQuote(into, rects) {
+      for (const r of rects) into.append(rectDiv(r, `background:${QUOTE_COLOR};opacity:${QUOTE_OPACITY};border-radius:2px;`));
     },
   };
 }

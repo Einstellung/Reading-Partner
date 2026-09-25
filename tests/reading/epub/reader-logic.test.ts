@@ -14,6 +14,7 @@ import {
   indexRuns,
   keyTurn,
   labelForBlock,
+  locateQuote,
   offsetOfPoint,
   pageIndexOfCfi,
   pageScroll,
@@ -227,6 +228,58 @@ describe("finding a cited quote in the text", () => {
     expect(findQuoteAt(text, "five six", 30)).toEqual({ start: 20, end: 28 });
     expect(findQuoteAt(text, "Four five\n six", 0)?.start).toBe(15);
     expect(findQuoteAt(text, "nothing like it", 0)).toBeNull();
+  });
+});
+
+describe("locating a cited quote by the table", () => {
+  // Every sentence differs, so a quote names one place in the book.
+  const numbered = (from: number, count: number) =>
+    Array.from({ length: count }, (_, i) => `<p>Sentence ${from + i} says something only it says, at length.</p>`).join("");
+  const book = parseEpub(
+    buildEpub({
+      docs: [
+        { name: "c1.xhtml", body: numbered(0, 40) },
+        { name: "c2.xhtml", body: `${numbered(100, 20)}<p>${"the quick brown fox again. ".repeat(40)}</p>` },
+      ],
+    }),
+  );
+  const textOf = (spine: number) => book.docs[spine]?.text.text;
+
+  test("the words on the cited page, and their page is the table's", async () => {
+    const pagination = await paginate(book, characterRuler(250));
+    expect(pagination.blocks.length).toBeGreaterThan(6);
+    for (const k of [1, 3, 5]) {
+      const block = pagination.blocks[k];
+      const text = textOf(block.spine) ?? "";
+      const start = text.indexOf("Sentence", block.charOffset);
+      const quote = text.slice(start, start + 30);
+      const spot = locateQuote(pagination, textOf, k, quote);
+      expect(spot).toEqual({
+        pageIndex: blockIndexAt(pagination, block.spine, start),
+        spine: block.spine,
+        start,
+        end: start + 30,
+      });
+      // Cited a page early, the same words are found and put on their own page.
+      expect(locateQuote(pagination, textOf, k - 1, quote)?.pageIndex).toBe(spot?.pageIndex);
+    }
+  });
+
+  test("words the book repeats are the copy on or after the cited page", async () => {
+    const pagination = await paginate(book, characterRuler(250));
+    const last = pagination.blocks.length - 1;
+    const block = pagination.blocks[last];
+    const spot = locateQuote(pagination, textOf, last, "the quick brown fox");
+    expect(spot?.spine).toBe(block.spine);
+    expect(spot?.start).toBeGreaterThanOrEqual(block.charOffset);
+    expect(spot?.pageIndex).toBe(last);
+  });
+
+  test("no page, no document, or words not in it", async () => {
+    const pagination = await paginate(book, characterRuler(250));
+    expect(locateQuote(pagination, textOf, pagination.blocks.length, "Sentence 1")).toBeNull();
+    expect(locateQuote(pagination, () => undefined, 0, "Sentence 1")).toBeNull();
+    expect(locateQuote(pagination, textOf, 0, "nothing the book says")).toBeNull();
   });
 });
 

@@ -48,7 +48,8 @@ import {
 import { parseEpub } from "../../../src/reading/epub/parse";
 import { createSpineTexts, textMarkOf, type TextMarkContext } from "../../../src/reading/epub/mark-write";
 import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
-import { blockIndexAt } from "../../../src/reading/epub/reader-logic";
+import { blockIndexAt, locateQuote } from "../../../src/reading/epub/reader-logic";
+import { createMarkPainter, rangeOfSpan } from "../../../src/reading/epub/mark-draw";
 import { extractDocumentText, runAt } from "../../../src/reading/epub/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
 import { buildEpub, prose } from "./fixture";
@@ -508,5 +509,49 @@ describe("a stroke becomes a mark and is found again", () => {
     expect(annotationPage(mark as { position?: { pageIndex?: number } })).toBe(5);
     expect(annotationPage(ink as { position?: { pageIndex?: number } })).toBe(5);
     expect(mark.pageLabel).toBe(ink.pageLabel);
+  });
+});
+
+describe("a cited quote on a view's clone", () => {
+  test("is found on the ingestion text and carried onto the clone by CFI", async () => {
+    const { parsed, pagination, spineOf } = await writer();
+    const doc = parsed.docs[1];
+    const quote = "alpha beta gamma";
+    const page = pagination.blocks.findIndex((b) => b.spine === doc.index);
+    const spot = locateQuote(pagination, (s) => parsed.docs[s]?.text.text, page, quote);
+    expect(spot?.spine).toBe(doc.index);
+    const spine = spineOf(doc.index);
+    if (!spot || !spine) throw new Error("not found");
+    // A second parse: no node of it is a key of the ingestion tree's index (pitfall 267).
+    const clone = cloneOf(doc.html);
+    const range = rangeOfSpan(
+      {
+        rangeOfCfi: (cfi) => {
+          const parsedCfi = parseEpubRangeCfi(cfi);
+          return parsedCfi ? resolveRange(clone, parsedCfi) : null;
+        },
+        spine: () => spine,
+      },
+      spine,
+      spot,
+    );
+    expect(range?.toString()).toBe(quote);
+    expect(range?.startContainer.ownerDocument).toBe(clone.ownerDocument);
+  });
+
+  test("is banded in the PDF side's violet, whichever view draws it", () => {
+    const owner = new DOMParser().parseFromString("<html><body></body></html>", "text/html");
+    const layer = owner.createElement("div");
+    createMarkPainter(owner).drawQuote(layer, [
+      { left: 10, top: 20, width: 100, height: 18 },
+      { left: 10, top: 40, width: 60, height: 18 },
+    ]);
+    expect(layer.children.length).toBe(2);
+    const band = layer.children[0] as HTMLElement;
+    expect(band.style.left).toBe("10px");
+    expect(band.style.top).toBe("20px");
+    expect(band.style.opacity).toBe("0.24");
+    // #4a3a9e, as the DOM serialises it.
+    expect(band.style.background).toBe("rgb(74, 58, 158)");
   });
 });
