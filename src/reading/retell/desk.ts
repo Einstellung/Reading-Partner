@@ -43,7 +43,7 @@ import {
 } from "../prep/papers/classroom";
 import { buildClassroomTools } from "../prep/papers/tools";
 import type { PrepState } from "../prep/papers/types";
-import { HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../desk";
+import { HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../desk-history";
 import { RETELL_LADDER, type RetellReductionId } from "./ladder";
 import { retellPrepStatus, selectRetellPrepNotes } from "./prep-notes";
 import { buildArrangeTools, type TalkOutline } from "../talk";

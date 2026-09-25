@@ -12,7 +12,7 @@ import { estimateTextTokens } from "../../../budget";
 import type { Fulltext } from "../../../fulltext/types";
 import { requalifyNoteAnchors } from "../anchors";
 import { stripModelAsides } from "./notes";
-import { paperPriority } from "./scheduler";
+import { chapterIndexForPage, paperPriority } from "./scheduler";
 import type { PrepChapter, PrepPaper, PrepState } from "./types";
 
 export interface ClassroomNote {
@@ -205,6 +205,29 @@ export function selectClassroomNotes(
     out.push(note);
   }
   return out;
+}
+
+// The papers a prep run has written a note for.
+export function notedPapers(prep: PrepState): PrepPaper[] {
+  return prep.papers.filter((p) => p.status === "done" || p.status === "abstract-only");
+}
+
+// What a reading turn carries of the notes on disk: every one under the cap,
+// and the same list under a quarter of the budget for when the window is tight
+// (the "prep-notes-trim" rung). `page` is where the reader is, and it only
+// orders them — including in the tight list, which is why that one is a
+// smaller budget rather than a filter on the chapter number.
+export function turnClassroomNotes(
+  onDisk: readonly ClassroomNote[],
+  prep: PrepState,
+  page: number,
+): { notes: ClassroomNote[]; tight: ClassroomNote[] } {
+  const papers = notedPapers(prep);
+  const sel = { chapter: chapterIndexForPage(prep.chapters, page), chapterCount: prep.chapters.length };
+  return {
+    notes: selectClassroomNotes(onDisk, papers, sel),
+    tight: selectClassroomNotes(onDisk, papers, { ...sel, budget: CLASSROOM_NOTE_BUDGET_TIGHT }),
+  };
 }
 
 // What one note costs the prompt. Exported because a caller spending one budget

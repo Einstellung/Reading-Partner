@@ -19,7 +19,7 @@ import {
 } from "../../desk";
 import type { Rung } from "../../budget";
 import { languageInstruction } from "../../platform/app/settings";
-import { HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../desk";
+import { HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../desk-history";
 import { buildArrangeTools, type TalkArrangementCardData, type TalkOutline } from "../talk";
 import { buildCoachSystemPrompt } from "./coach";
 
