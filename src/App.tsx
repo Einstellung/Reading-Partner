@@ -30,7 +30,7 @@ import { getThread, type ThreadMessage } from "./platform/app/threads";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { defaultModelTakesImages } from "./ai";
-import { locateQuote, prepKind, type Citation } from "./reading/prep";
+import { prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
 import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
@@ -72,11 +72,12 @@ import SettingsView from "./ui/components/SettingsView";
 import { levelGate, toolInCall, type CallRow } from "./reading/call-state";
 import { asideReturnable } from "./reading/aside";
 import { markExcerpt } from "./reading/reopen";
-import { asideIntents, bookTextNotice, openingIntents } from "./reading/intents";
+import { asideIntents, bookTextNotice, bookTextState, openingIntents } from "./reading/intents";
 import type { ReadingTurnContext } from "./reading/desk";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
 import { useCall } from "./reading/session/use-call";
+import { readingTurnContext } from "./reading/session/turn-context";
 import { useMarkDoors } from "./reading/session/use-mark-doors";
 import { AI_PEN_COLOR, useMarks } from "./reading/session/use-marks";
 import { openBook, switchDocument } from "./reading/session/open-book";
@@ -84,6 +85,7 @@ import {
   citationLogDetail,
   citationSources,
   createQuoteCheck,
+  quoteSearchText,
   routeCitation,
 } from "./reading/session/citations";
 import { createPasteHandler, systemImageReader } from "./reading/session/paste-images";
@@ -345,14 +347,7 @@ export default function App() {
   }, [settings]);
 
   useEffect(() => {
-    ctxRef.current = {
-      topicId: activeTopic?.id ?? null,
-      topicName: activeTopic?.name ?? "",
-      fileName: title ?? "",
-      pageLabel: stats?.pageLabel ?? null,
-      pageIndex: stats?.pageIndex ?? null,
-      files: activeTopic?.files.map((f) => ({ path: f.path, name: f.name, hash: f.hash })) ?? [],
-    };
+    ctxRef.current = readingTurnContext(activeTopic, title ?? "", stats);
   });
 
   // Lesson prep (docs/09): the panel's state and every callback that serves it.
@@ -631,10 +626,7 @@ export default function App() {
   const jumpToQuote = useCallback(async (pageIndex: number, quote: string) => {
     let searchText = quote;
     try {
-      const ft = await currentFulltextRef.current;
-      const pageText = ft?.pages?.[pageIndex];
-      const located = pageText ? locateQuote(pageText, quote) : null;
-      if (located) searchText = located.text;
+      searchText = quoteSearchText(await currentFulltextRef.current, pageIndex, quote);
     } catch {
       // Fulltext unavailable — fall through with the model's quote as-is.
     }
@@ -1283,9 +1275,7 @@ export default function App() {
   // chip waits on, and on a long book that is tens of seconds of the entry
   // looking like it has nothing to offer.
   const callNote = call?.isBook
-    ? bookTextNotice(
-        fulltextPending ? "extracting" : fulltext?.status === "ok" ? "ok" : "unreadable",
-      )
+    ? bookTextNotice(bookTextState(fulltext, fulltextPending))
     : null;
 
   // Host for inline [fig:N] cards (M9): resolve/raster/jump against the open

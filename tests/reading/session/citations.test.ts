@@ -7,6 +7,7 @@ import {
   citationLogDetail,
   citationSources,
   createQuoteCheck,
+  quoteSearchText,
   routeCitation,
   type CitationTargets,
 } from "../../../src/reading/session/citations";
@@ -104,4 +105,18 @@ test("a quote check caches its answer per page and quote", () => {
   expect(check(1, "beta")).toBe(true);
   expect(check(1, "else")).toBe(true);
   expect(createQuoteCheck({ pages })(1, "beta")).toBe(false);
+});
+
+test("a followed quote is looked for in the page's own words", () => {
+  // The model's rendering folds case and line breaks; the highlight has to find
+  // what the page prints.
+  const ft = { pages: ["Intro.", "The Machine\nthinks well."] };
+  expect(quoteSearchText(ft, 1, "the machine thinks")).toBe("The Machine\nthinks");
+});
+
+test("a quote that is not on its page is looked for as written", () => {
+  const ft = { pages: ["Intro.", "Nothing like it."] };
+  expect(quoteSearchText(ft, 1, "the machine thinks")).toBe("the machine thinks");
+  expect(quoteSearchText(null, 0, "the machine thinks")).toBe("the machine thinks");
+  expect(quoteSearchText(ft, 9, "the machine thinks")).toBe("the machine thinks");
 });

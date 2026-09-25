@@ -11,6 +11,7 @@ import {
   SPAN_INTENTS,
   asideIntents,
   bookTextNotice,
+  bookTextState,
   openingIntents,
 } from "../../src/reading/intents";
 
@@ -91,4 +92,13 @@ test("a book with no text layer says that, rather than promising it shortly", ()
 // entry is opened.
 test("a book whose text is in says nothing", () => {
   expect(bookTextNotice("ok")).toBeNull();
+});
+
+test("a book's text state is read the same way on every shell", () => {
+  expect(bookTextState(null, true)).toBe("extracting");
+  expect(bookTextState({ status: "ok" }, true)).toBe("extracting");
+  expect(bookTextState({ status: "ok" }, false)).toBe("ok");
+  expect(bookTextState({ status: "no-text" }, false)).toBe("unreadable");
+  // A failed extraction resolves to null, which is a book with nothing to read.
+  expect(bookTextState(null, false)).toBe("unreadable");
 });

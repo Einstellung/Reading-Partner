@@ -80,6 +80,22 @@ export function citationSources(slugKey: string | null, titleKey: string): Ancho
 }
 
 /**
+ * What to look for on the page when a citation's quote is followed: the page's
+ * own words where the quote is found on it (0-based page), so the highlight
+ * lands on what is printed rather than on the model's rendering of it; the
+ * quote as written otherwise, which the reader shows as a banner.
+ */
+export function quoteSearchText(
+  fulltext: { pages: readonly string[] } | null,
+  pageIndex: number,
+  quote: string,
+): string {
+  const pageText = fulltext?.pages?.[pageIndex];
+  const located = pageText ? locateQuote(pageText, quote) : null;
+  return located ? located.text : quote;
+}
+
+/**
  * Whether a citation's quote is really on the page it names (1-based), against
  * this book's text. Same answer the click's highlight asks locateQuote for, so
  * the two cannot disagree about what counts as found.
