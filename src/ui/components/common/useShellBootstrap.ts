@@ -46,7 +46,7 @@ import { startMealsPhotoHousekeeping } from "../../../info/meals/photo-sweep";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerInfoCollectWorker } from "../../../info/program/live";
 import { registerBriefingDelivery } from "../../../info/briefer/deliver";
-import { deleteBook } from "../../../reading/delete/delete-book";
+import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
 import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
 import { registerRetellDesk } from "../../../reading/retell/desk";
@@ -212,7 +212,7 @@ export function bootDomains(): void {
   // The translation replaces a document by deleting the original, and the path
   // that does that is reached from here rather than from inside reading/
   // (tool-live.ts says why).
-  setBookDeleter(deleteBook);
+  setBookDeleter(deleteIfUnreferenced);
   // Translating a document, as a run (docs/55 step 11). Not delegable: the
   // entrance is translate_document, and its task book is JSON rather than
   // something a model writes.

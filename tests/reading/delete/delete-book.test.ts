@@ -70,11 +70,15 @@ function deps(log: Log, over: Partial<DeleteBookDeps> = {}): DeleteBookDeps {
       log.calls.push(`unlink ${topicId} ${path}`);
     },
     listObservations: async () => Object.values(OBSERVATIONS).flat(),
-    deleteObservation: async (id) => {
-      log.calls.push(`observation ${id}`);
+    deleteObservations: async (ids) => {
+      for (const id of ids) log.calls.push(`observation ${id}`);
     },
     listStatements: async () => STATEMENTS,
     listSupplements: async () => [],
+    listSupplementLists: async () => [],
+    threadIdsOf: async () => [],
+    removeThreadImages: note("images"),
+    prepCacheFiles: async () => [],
     listRetells: async () => RETELLS,
     deleteRetell: note("retell"),
     outlineIdOfRetell: async (retellId) => (retellId === "r-1" ? "o-1" : null),
@@ -157,10 +161,10 @@ test("a supplement of a supplement goes too, and a cycle stops", async () => {
   await deleteBook(
     BOOK,
     deps(log, {
-      listSupplements: supplementsOf({ [BOOK]: [SUPPLEMENT], [SUPPLEMENT]: [OTHER, BOOK] }),
+      listSupplements: supplementsOf({ [BOOK]: [SUPPLEMENT], [SUPPLEMENT]: ["dddd4444", BOOK] }),
     }),
   );
-  expect(log.calls).toContain("tombstone " + OTHER);
+  expect(log.calls).toContain("tombstone dddd4444");
   // The book names itself back through its supplement, and is tombstoned once.
   expect(log.calls.filter((c) => c === "tombstone " + BOOK)).toHaveLength(1);
 });

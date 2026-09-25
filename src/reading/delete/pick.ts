@@ -58,13 +58,47 @@ export function retellIdsToDelete(retells: readonly Retell[], bookId: string): s
     .map((r) => r.id);
 }
 
+/** One book's supplements list, as the reference counting reads it. */
+export interface SupplementList {
+  bookId: string;
+  items: ReadonlyArray<{ hash: string }>;
+}
+
+/**
+ * Whether anything still lists this document: a topic's FileRef, or a book's
+ * supplements. These are the two places a document is put by the reader, and
+ * the same bytes can be put in both — the same URL pasted into two books, an
+ * article that is on a shelf and also a supplement of a book (docs/50
+ * 「引用计数」). The document's data goes only when neither is left.
+ *
+ * `ignoreBooks` are the lists that do not count: the document's own (a book
+ * that lists itself keeps nothing alive) and those of the books the same sweep
+ * is deleting, whose lists are about to go with them.
+ */
+export function hasOtherReference(
+  hash: string,
+  topics: readonly Topic[],
+  lists: readonly SupplementList[],
+  ignoreBooks: ReadonlySet<string> = new Set(),
+): boolean {
+  for (const topic of topics) {
+    if (topic.files.some((f) => f.hash === hash)) return true;
+  }
+  for (const list of lists) {
+    if (list.bookId === hash || ignoreBooks.has(list.bookId)) continue;
+    if (list.items.some((s) => s.hash === hash)) return true;
+  }
+  return false;
+}
+
 /**
  * Whether taking this file out of this topic takes the last reference to the
  * book with it — the question that decides whether the reader is unlinking or
  * deleting (LibraryScreen.tsx).
  *
  * The same PDF added to two topics is two FileRefs with one hash, and removing
- * one of them must not delete the book out from under the other. A file with no
+ * one of them must not delete the book out from under the other; nor may it
+ * when a book lists the same document among its supplements. A file with no
  * hash yet (added but never opened) is not a book this can speak for, so it
  * answers no and the caller unlinks.
  */
@@ -72,15 +106,35 @@ export function isLastReferenceToBook(
   topics: readonly Topic[],
   topicId: string,
   file: FileRef,
+  lists: readonly SupplementList[] = [],
 ): boolean {
   if (!file.hash) return false;
-  for (const topic of topics) {
-    for (const other of topic.files) {
-      if (topic.id === topicId && other.path === file.path) continue;
-      if (other.hash === file.hash) return false;
-    }
-  }
-  return true;
+  const rest = topics.map((t) =>
+    t.id === topicId ? { ...t, files: t.files.filter((f) => f.path !== file.path) } : t,
+  );
+  return !hasOtherReference(file.hash, rest, lists);
+}
+
+/**
+ * Pure: a retell with one material swapped for another, or null when it does
+ * not name the old one. What a translation does to a retell of the original
+ * (retire-book.ts): the pass the reader made is over the same work. A retell
+ * that already names the new document keeps its own entry and its own
+ * decisions, and the old ones are dropped rather than doubled.
+ */
+export function retellWithMaterialReplaced(retell: Retell, fromId: string, toId: string): Retell | null {
+  const names = (id: string) =>
+    retell.materials.some((m) => m.bookId === id) || retell.decisions.some((d) => d.bookId === id);
+  if (!names(fromId)) return null;
+  const hadNew = retell.materials.some((m) => m.bookId === toId);
+  const materials = hadNew
+    ? retell.materials.filter((m) => m.bookId !== fromId)
+    : retell.materials.map((m) => (m.bookId === fromId ? { ...m, bookId: toId } : m));
+  const taken = new Set(retell.decisions.filter((d) => d.bookId === toId).map((d) => d.chapter));
+  const decisions = retell.decisions
+    .filter((d) => d.bookId !== fromId || !taken.has(d.chapter))
+    .map((d) => (d.bookId === fromId ? { ...d, bookId: toId } : d));
+  return { ...retell, materials, decisions };
 }
 
 // Every kind of file named for a book id, in the order deleteBook removes them:

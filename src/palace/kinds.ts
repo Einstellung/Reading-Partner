@@ -462,7 +462,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     gc: "domain-housekeeping",
-    note: "orphan: a pasted screenshot is neither synced nor ever deleted",
+    note: "not synced; deleted with its thread (use-call.ts) and with the book the thread is filed under (reading/delete)",
   },
 
   // -- prep material --------------------------------------------------------
@@ -549,7 +549,7 @@ export const PALACE = [
     sync: "local",
     deleteWith: "never",
     gc: "domain-housekeeping",
-    note: "orphan: a downloaded paper's cache is keyed by a synthetic prep path, so deleting the book leaves it behind",
+    note: "keyed by a synthetic prep path (prep/papers/store.ts), so reading/delete finds it through the prep state before the prep directory goes",
   },
   // Not a derived cache, which is why it sits among them with a different
   // deletion and a different life: an EPUB's position blocks are cut once, on

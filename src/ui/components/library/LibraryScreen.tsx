@@ -25,9 +25,8 @@ import {
 } from "../../../platform/app/topics";
 import { logEvent } from "../../../platform/app/events";
 import { listLibraryEntries, type LibraryEntry } from "../../../platform/app/library";
-import { deleteBook } from "../../../reading/delete/delete-book";
+import { isLastReference, removeFromTopic } from "../../../reading/delete/delete-book";
 import { deleteTopic } from "../../../reading/delete/delete-topic";
-import { isLastReferenceToBook } from "../../../reading/delete/pick";
 import {
   formatPublishedAt,
   loadSavedArticles,
@@ -327,10 +326,10 @@ export default function LibraryScreen(props: {
                     await removeFileFromTopic(activeTopic.id, p);
                     await props.onTopicsChanged();
                   }}
-                  // deleteBook unlinks the book from every topic itself, so the
-                  // shelf reread below is the only thing left to do here.
-                  onDeleteBook={async (bookId) => {
-                    await deleteBook(bookId);
+                  // removeFromTopic counts the references again at the moment
+                  // of the delete: the book goes only if nothing else lists it.
+                  onDeleteBook={async (file) => {
+                    await removeFromTopic(activeTopic.id, file);
                     await props.onTopicsChanged();
                   }}
                   onOpenSavedArticle={setOpenSavedArticle}
@@ -513,7 +512,7 @@ function TopicMaterials(props: {
   onRetell: (file: FileRef) => void;
   onRemoveFile: (path: string) => void;
   // Take the book itself away, with everything about it.
-  onDeleteBook: (bookId: string) => void;
+  onDeleteBook: (file: FileRef) => void;
   onOpenSavedArticle: (article: SavedArticle) => void;
   onRemoveSavedArticle: (id: string) => void;
 }) {
@@ -523,10 +522,21 @@ function TopicMaterials(props: {
   const { books, articles } = splitMaterials(files, props.entries);
   const meta = props.meta;
   const [removing, setRemoving] = useState<FileRef | null>(null);
-  // Whether the confirmation is offering to unlink or to delete.
-  const lastReference = removing
-    ? isLastReferenceToBook(props.topics, props.topic.id, removing)
-    : false;
+  // Whether the confirmation is offering to unlink or to delete. Null until the
+  // supplement lists have been read, and the dialog waits for it.
+  const [lastReference, setLastReference] = useState<boolean | null>(null);
+  useEffect(() => {
+    setLastReference(null);
+    if (!removing) return;
+    let live = true;
+    isLastReference(props.topics, props.topic.id, removing)
+      .then((last) => live && setLastReference(last))
+      // A list that cannot be read offers the unlink, which deletes nothing.
+      .catch(() => live && setLastReference(false));
+    return () => {
+      live = false;
+    };
+  }, [removing, props.topics, props.topic.id]);
 
   return (
     <>
@@ -599,7 +609,7 @@ function TopicMaterials(props: {
         </>
       )}
 
-      {removing && (
+      {removing && lastReference !== null && (
         <RemoveFileButton
           title={displayFileTitle(removing.name)}
           lastReference={lastReference}
@@ -607,7 +617,7 @@ function TopicMaterials(props: {
           onOpenChange={(open) => !open && setRemoving(null)}
           onRemove={() =>
             lastReference && removing.hash
-              ? props.onDeleteBook(removing.hash)
+              ? props.onDeleteBook(removing)
               : props.onRemoveFile(removing.path)
           }
         />
