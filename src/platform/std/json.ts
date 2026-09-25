@@ -35,3 +35,13 @@ export function asText(v: unknown): string {
 export function asString(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
+
+/**
+ * An array field, coerced element by element: every item becomes a trimmed
+ * string (`String(v ?? "")`, so `null`/`undefined` become "") and empty
+ * results are dropped. `v` itself being anything but an array yields [].
+ */
+export function asStrings(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => String(x ?? "").trim()).filter((x) => x !== "");
+}
