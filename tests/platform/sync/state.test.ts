@@ -7,7 +7,13 @@
 // file. AppData is in memory. Run: bun test.
 
 import { beforeEach, expect, test } from "bun:test";
-import { emptyState, loadState, recordPassResult } from "../../../src/platform/sync/state";
+import {
+  emptyState,
+  loadState,
+  recordPassResult,
+  signedInState,
+  signedOutState,
+} from "../../../src/platform/sync/state";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 // state.ts keeps this name to itself and nothing else writes the file, so it is
@@ -102,4 +108,53 @@ test("a status emit with a timestamp records it, and its error either way", () =
   // A null error is a real value — the pass that clears it has to be able to.
   recordPassResult(state, { lastSyncAt: null, lastError: null });
   expect(state.lastError).toBeNull();
+});
+
+// Sign-out used to empty the purge queue, so a file a device had asked Drive to
+// lose came back down the next time the same account signed in.
+function queued(): ReturnType<typeof emptyState> {
+  const s = emptyState();
+  s.purge = ["retell-a.json"];
+  s.snapshot = { "topics.json": { rev: 1, mtime: 1, size: 1, hash: "h" } };
+  s.drive.fileIds = { "topics.json": "id" };
+  s.lastSyncAt = 5;
+  return s;
+}
+
+test("a sign-out keeps the purge queue for the account it names files in", () => {
+  const s = queued();
+  signedOutState(s, "a@x.com");
+  expect(s.purge).toEqual(["retell-a.json"]);
+  expect(s.purgeAccount).toBe("a@x.com");
+  expect(s.snapshot).toEqual({});
+  expect(s.drive.fileIds).toEqual({});
+  expect(s.lastSyncAt).toBeNull();
+
+  signedInState(s, "a@x.com");
+  expect(s.purge).toEqual(["retell-a.json"]);
+  expect(s.purgeAccount).toBeNull();
+});
+
+test("another account signing in drops the queue; so does one nobody can name", () => {
+  const s = queued();
+  signedOutState(s, "a@x.com");
+  signedInState(s, "b@x.com");
+  expect(s.purge).toEqual([]);
+
+  const t = queued();
+  signedOutState(t, "a@x.com");
+  signedInState(t, null);
+  expect(t.purge).toEqual([]);
+
+  const u = queued();
+  signedOutState(u, null);
+  expect(u.purge).toEqual([]);
+  expect(u.purgeAccount).toBeNull();
+});
+
+test("a queue requested with no account signed in is kept for whichever signs in", () => {
+  const s = emptyState();
+  s.purge = ["info-cables-2026-07-01.json"];
+  signedInState(s, "b@x.com");
+  expect(s.purge).toEqual(["info-cables-2026-07-01.json"]);
 });

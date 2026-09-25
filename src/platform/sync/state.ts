@@ -41,6 +41,10 @@ export interface SyncState {
   // Drive with nothing left that remembers to go back for them. Drained by the
   // engine, one entry dropped per delete that lands.
   purge: string[];
+  // The account whose Drive `purge` was queued against, recorded when that
+  // account signs out; null while signed in, or when nothing was queued.
+  // Sign-in to that same account keeps the queue, to any other drops it.
+  purgeAccount: string | null;
 }
 
 export function emptyState(): SyncState {
@@ -51,7 +55,38 @@ export function emptyState(): SyncState {
     lastSyncAt: null,
     lastError: null,
     purge: [],
+    purgeAccount: null,
   };
+}
+
+// What signing out leaves. The Drive ids and the snapshot go, so an account
+// signing in later starts clean; local data is untouched. The purge queue
+// stays, tagged with the account it names files in: it is the only record that
+// those files still have to leave that Drive, and dropping it brings them back
+// down the next time the same account signs in. Without a known account it
+// cannot be tagged, and a queue nobody can attribute is dropped.
+export function signedOutState(state: SyncState, account: string | null): void {
+  state.drive = emptyState().drive;
+  state.snapshot = {};
+  if (account) {
+    state.purgeAccount = state.purge.length > 0 ? account : null;
+  } else {
+    state.purge = [];
+    state.purgeAccount = null;
+  }
+  state.lastSyncAt = null;
+  state.lastError = null;
+}
+
+// What signing in does to a queue a sign-out tagged. The same account takes it
+// up where it stopped. Another account's Drive never held those files, and a
+// delete aimed at it would be this build deleting a file it knows nothing
+// about — and an account that cannot be named is not known to be the same one.
+// A queue with no tag was requested while no account was signed in, which is
+// a statement about the data, not about a Drive, so it stays.
+export function signedInState(state: SyncState, account: string | null): void {
+  if (state.purgeAccount !== null && state.purgeAccount !== account) state.purge = [];
+  state.purgeAccount = null;
 }
 
 // Fold one engine status emit into the state that gets written to disk.
