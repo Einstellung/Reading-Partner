@@ -28,6 +28,7 @@ import { CallLimiter, type LimiterConfig } from "../../../legion/execute/limiter
 import { ObservableRun, type RunActivity, type RunSnapshot, type RunTimers } from "../../../legion/execute/observable-run";
 import type { BookChapter } from "../../chapters";
 import { createChapterSpineState, normalizeChapterSpineOnLoad, type SpineChapter, type ChapterSpineState } from "./types";
+import { errMsg } from "../../../platform/std/errors";
 
 export type { AiCallOptions };
 
@@ -377,7 +378,7 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
         return;
       }
       s.planStatus = "failed";
-      s.planError = e instanceof Error ? e.message : String(e);
+      s.planError = errMsg(e);
     }
     await this.persist();
   }
@@ -419,7 +420,7 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
         return;
       }
       ch.status = "failed";
-      ch.error = e instanceof Error ? e.message : String(e);
+      ch.error = errMsg(e);
     }
     await this.persist();
   }
@@ -456,7 +457,7 @@ export class ChapterSpinePipeline extends ObservableRun<ChapterSpineState | null
         return;
       }
       s.overviewStatus = "failed";
-      s.overviewError = e instanceof Error ? e.message : String(e);
+      s.overviewError = errMsg(e);
     }
     await this.persist();
   }

@@ -42,6 +42,7 @@ import {
 import { holdingsDeviceOf } from "./holdings";
 import type { DriveIds } from "./state";
 import { inSyncRange } from "./syncFs";
+import { errMsg } from "../std/errors";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
@@ -141,7 +142,7 @@ function transportError(
   if (timedOutAfter !== null) {
     return new SyncTransportError(`Drive ${what} timed out after ${timedOutAfter}ms`);
   }
-  return new SyncTransportError(e instanceof Error ? e.message : String(e));
+  return new SyncTransportError(errMsg(e));
 }
 
 function parseManifest(bytes: Uint8Array): RemoteState {

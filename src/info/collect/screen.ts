@@ -22,6 +22,7 @@ import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
 import type { Picture } from "../picture/types";
 import { formatSignals, type InfoItem } from "../sources/item";
+import { errMsg } from "../../platform/std/errors";
 
 // Items per screening call. Big enough that a few hundred items are a handful
 // of calls, small enough that one bad reply costs little and that the model
@@ -249,7 +250,7 @@ export function parseScreenVerdicts(
   try {
     data = JSON.parse(json);
   } catch (e) {
-    return { ok: false, error: `invalid JSON: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, error: `invalid JSON: ${errMsg(e)}` };
   }
   if (!data || typeof data !== "object") return { ok: false, error: "reply is not an object" };
   const raw = (data as Record<string, unknown>).verdicts;

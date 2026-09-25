@@ -21,6 +21,7 @@ import {
 import type { SessionStatus, SignInOutcome } from "../extract/webview-session";
 import { buildReadPageTool } from "../extract/read-page-tool";
 import { buildArchiveLabTool, buildProposeLabTool, type LabToolDeps } from "./lab-tool";
+import { errMsg } from "../../platform/std/errors";
 
 export type BriefingScope = "retriage" | "full";
 
@@ -254,7 +255,7 @@ export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
       } catch (e) {
         return (
           `The sign-in window for ${site.label} could not be opened: ` +
-          `${e instanceof Error ? e.message : String(e)}. Tell the user; they can also sign in ` +
+          `${errMsg(e)}. Tell the user; they can also sign in ` +
           `from the sources page.`
         );
       }
@@ -273,7 +274,7 @@ export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
       } catch (e) {
         return (
           `${opened}, but the session check that follows failed: ` +
-          `${e instanceof Error ? e.message : String(e)}. Say you cannot confirm the session.`
+          `${errMsg(e)}. Say you cannot confirm the session.`
         );
       }
       return `${opened}, ${sessionVerdict(site, status)}`;

@@ -3,6 +3,7 @@
 // info's inner directories may not reach into analysis.
 
 import { extractJson } from "../../platform/std/json";
+import { errMsg } from "../../platform/std/errors";
 
 /** The reply as an object, or the reason it is not one. */
 export function readObject(
@@ -14,7 +15,7 @@ export function readObject(
   try {
     data = JSON.parse(json);
   } catch (e) {
-    return { ok: false, error: `invalid JSON: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, error: `invalid JSON: ${errMsg(e)}` };
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return { ok: false, error: "reply is not an object" };

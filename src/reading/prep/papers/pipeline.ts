@@ -23,6 +23,7 @@ import { isRateLimitError } from "../../../platform/http/throttled-fetch";
 import { abstractNoteBody } from "./notes";
 import { earliestCooldown, nextQueued, normalizeOnLoad } from "./scheduler";
 import { createPrepState, type PrepPaper, type PrepState } from "./types";
+import { errMsg } from "../../../platform/std/errors";
 
 // The stall-watchdog defaults, re-exported for callers that tuned them before.
 export { DEFAULT_WATCHDOG_MS, DEFAULT_MAX_ATTEMPTS, DEFAULT_RETRY_DELAY_MS };
@@ -339,7 +340,7 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
       s.planStatus = "done";
     } catch (e) {
       s.planStatus = "failed";
-      s.planError = e instanceof Error ? e.message : String(e);
+      s.planError = errMsg(e);
     }
     await this.persist();
   }
@@ -434,7 +435,7 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
         if (isRateLimitError(e)) this.cooldown(paper, e.message);
         else {
           paper.status = "failed";
-          paper.error = e instanceof Error ? e.message : String(e);
+          paper.error = errMsg(e);
         }
       }
       await this.persist();
@@ -479,7 +480,7 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
     } catch (e) {
       if (!this.skippedMeanwhile(paper)) {
         paper.status = "failed";
-        paper.error = e instanceof Error ? e.message : String(e);
+        paper.error = errMsg(e);
       }
     }
     await this.persist();
@@ -509,7 +510,7 @@ export class PrepPipeline extends ObservableRun<PrepState | null, PrepActivity> 
       await this.deps.writeNote(paper, abstractNoteBody(paper.abstract));
     } catch (e) {
       paper.status = "failed";
-      paper.error = e instanceof Error ? e.message : String(e);
+      paper.error = errMsg(e);
     }
     await this.persist();
   }

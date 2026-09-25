@@ -102,6 +102,7 @@ import {
 } from "./indicator-probe";
 import { NO_HEARD, RESOLVE_MS, classifyHold, type Heard } from "./hold-outcome";
 import { holdTheScreen } from "./wake-lock";
+import { errMsg } from "../platform/std/errors";
 
 interface Entry {
   id: number;
@@ -539,7 +540,7 @@ function IndicatorProbe({ onTouched }: { onTouched: () => void }) {
         setFailure(null);
         benchJournal.probe(wanted, answer);
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = errMsg(e);
         // The native side tears the probe down before it throws, so the stack is
         // at rest whatever went wrong.
         setStage("off");

@@ -22,6 +22,7 @@ import { collectSource, fetchBodies, type WebviewFetch } from "./engine";
 import type { InfoItem } from "./item";
 import { probeSource, pipeLabel } from "./probe";
 import type { ProbeConfirmCardData, TrialSample } from "./source-cards";
+import { errMsg } from "../../platform/std/errors";
 
 // A body of at least this many plain-text characters counts as "full text" in a
 // trial sample (below it the fetch got a headline/teaser only).
@@ -116,7 +117,7 @@ export async function trialSource(
       error: samples.length ? undefined : "No articles could be fetched.",
     };
   } catch (e) {
-    return { ok: false, samples: [], error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, samples: [], error: errMsg(e) };
   }
 }
 

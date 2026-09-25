@@ -64,6 +64,7 @@ import { hasTranslations, segmentDocument } from "./segment";
 import { translateArticleEpub } from "./translate-article";
 import type { MarkRecord } from "./carry-marks";
 import type { TranslateTarget, TranslateToolDeps } from "./tool";
+import { errMsg } from "../../platform/std/errors";
 
 /** The body of an article on the shelf, parsed the way the translator parses it. */
 function bodyOf(bytes: Uint8Array): HTMLElement | null {
@@ -248,7 +249,7 @@ export function translateBookWorker(deps: TranslateWorkerDeps = {}) {
       try {
         return await runTranslation(target, ref, ctx, stop.signal);
       } catch (e) {
-        const reason = e instanceof Error ? e.message : String(e);
+        const reason = errMsg(e);
         // The last line the run carries, so the screen says what went wrong
         // rather than where it had got to. The reader is not told here: this
         // is one attempt of up to three, and a run that has spent them leaves

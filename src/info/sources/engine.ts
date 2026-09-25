@@ -35,6 +35,7 @@ import {
 } from "./descriptor";
 import { pluginOf } from "./plugin";
 import type { InfoItem } from "./item";
+import { errMsg } from "../../platform/std/errors";
 
 // Render one article in a hidden webview and hand back what its DOM held
 // (src/info/extract/webview-article.ts). Injected like every other capability
@@ -646,7 +647,7 @@ export async function collectAll(
         // health sidecar; staying quiet leaves it pending, so the next Generate
         // simply fetches it.
         if (isAbortError(e) || deps.signal?.aborted) return [] as InfoItem[];
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errMsg(e);
         console.warn(`info source ${desc.id} failed`, e);
         health[desc.id] = { ...health[desc.id], lastError: msg, lastErrorAt: now() };
         await settled?.({

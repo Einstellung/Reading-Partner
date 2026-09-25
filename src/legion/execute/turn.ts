@@ -98,6 +98,7 @@ import {
 import { normalizeToolResult, toolLabel } from "./tool-result";
 import { createHarness, createSessionRepo, sweepSessionGroup } from "./harness";
 import type { AgentLane, HeldHarness, HeldLane } from "./held";
+import { errMsg } from "../../platform/std/errors";
 
 export {
   REFUSE_MIDTURN,
@@ -703,7 +704,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
   } catch (e) {
     ended = true;
     if (signal?.aborted) return;
-    onError(e instanceof Error ? e.message : String(e), undefined, e);
+    onError(errMsg(e), undefined, e);
   } finally {
     ended = true;
     // What the stall window has to clear, measured on a real turn. Development
@@ -814,6 +815,6 @@ export async function runAgentTurn(options: RunAgentTurnOptions): Promise<void> 
       onRefusal,
     });
   } catch (e) {
-    onError(e instanceof Error ? e.message : String(e), undefined, e);
+    onError(errMsg(e), undefined, e);
   }
 }

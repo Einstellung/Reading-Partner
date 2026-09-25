@@ -13,6 +13,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
 import type { FetchFn } from "./http";
 import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "./read-page";
+import { errMsg } from "../../platform/std/errors";
 
 // Render a page readout into the text the AI reads back. HTML pages show the
 // title, the readable text, and the full link list (anchor → absolute URL) so the
@@ -70,7 +71,7 @@ export function buildReadPageTool(deps: { fetchFn: FetchFn }): AgentTool {
       try {
         res = await deps.fetchFn(target);
       } catch (e) {
-        return `Could not read ${target}: ${e instanceof Error ? e.message : String(e)}`;
+        return `Could not read ${target}: ${errMsg(e)}`;
       }
       if (!res.ok) return `Could not read ${target}: HTTP ${res.status}.`;
       const body = await res.text();
