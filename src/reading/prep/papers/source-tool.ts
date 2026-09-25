@@ -12,7 +12,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../../legion/execute/turn";
 import { looksLikeHttpUrl } from "../../sources";
-import { hostOf } from "../../../ai/tool-labels";
+import { hostOf } from "../../../platform/std/url";
 
 /** What starting one ingest run answers: enough to name the run, nothing read yet. */
 export interface StartedIngest {

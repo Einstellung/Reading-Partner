@@ -23,6 +23,7 @@ import { writeRunOutput } from "../../legion/execute/outputs";
 import { StoppedError } from "../../legion/stop";
 import { appData } from "../../platform/app/appdata";
 import { formatOfBytes, readLibraryBook } from "../../platform/app/library";
+import { hostOf } from "../../platform/std/url";
 import type { Fulltext } from "../../fulltext/types";
 import { ensureDocumentFulltext } from "./fulltext";
 import { ingestUrlLive } from "./live";
@@ -65,15 +66,6 @@ async function libraryFulltext(hash: string): Promise<Fulltext | null> {
   } catch (e) {
     console.warn("could not read the ingested document text", e);
     return null;
-  }
-}
-
-/** The host of a URL, for the progress line. The URL itself where it will not parse. */
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host || url;
-  } catch {
-    return url;
   }
 }
 
