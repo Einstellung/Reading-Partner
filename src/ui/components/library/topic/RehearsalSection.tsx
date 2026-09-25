@@ -30,6 +30,7 @@ import { listRetellsForTopic } from "../../../../reading/retell";
 import { Button } from "../../ui/button";
 import CardMenu from "../../shelf/CardMenu";
 import DeleteRehearsalButton from "./DeleteRehearsalButton";
+import { settleDelete } from "../../common/settle-delete";
 
 const ROW = "flex items-center gap-2 rounded-lg border border-border py-1 pl-3 pr-1.5";
 
@@ -182,7 +183,13 @@ export default function RehearsalSection(props: {
           open
           onOpenChange={(open) => !open && setDeleting(null)}
           onDelete={() => {
-            void deleteRehearsal(deleting.id as string).then(refresh);
+            setError(null);
+            void settleDelete({
+              act: () => deleteRehearsal(deleting.id as string),
+              refresh,
+              failed: `Could not delete “${deleting.name}”`,
+              onFail: setError,
+            });
           }}
         />
       )}

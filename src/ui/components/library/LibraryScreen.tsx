@@ -62,6 +62,7 @@ import { displayFileTitle, type BookMeta } from "../shelf/file-title";
 import { splitMaterials } from "../shelf/article-row";
 import ArticleRows from "../shelf/ArticleRows";
 import RemoveFileButton from "./RemoveFileButton";
+import { settleDelete } from "../common/settle-delete";
 import SavedArticleView from "./SavedArticleView";
 import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
@@ -86,6 +87,8 @@ export default function LibraryScreen(props: {
   onOpenFile: (file: FileRef) => void;
   // A topic or file was created / renamed / deleted on disk: reload the list.
   onTopicsChanged: () => Promise<void> | void;
+  // A failure the reader has to hear about, such as a delete that did not happen.
+  onSay: (line: string) => void;
 }) {
   // Articles kept out of a briefing (docs/21), and which one is being read.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
@@ -323,21 +326,33 @@ export default function LibraryScreen(props: {
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
                   onRetell={(f) => void startRetellOn(f)}
-                  onRemoveFile={async (p) => {
-                    await removeFileFromTopic(activeTopic.id, p);
-                    await props.onTopicsChanged();
-                  }}
+                  onRemoveFile={(p) =>
+                    void settleDelete({
+                      act: () => removeFileFromTopic(activeTopic.id, p),
+                      refresh: props.onTopicsChanged,
+                      failed: "Could not remove the book from this topic",
+                      onFail: props.onSay,
+                    })
+                  }
                   // deleteBook unlinks the book from every topic itself, so the
                   // shelf reread below is the only thing left to do here.
-                  onDeleteBook={async (bookId) => {
-                    await deleteBook(bookId);
-                    await props.onTopicsChanged();
-                  }}
+                  onDeleteBook={(bookId) =>
+                    void settleDelete({
+                      act: () => deleteBook(bookId),
+                      refresh: props.onTopicsChanged,
+                      failed: "Could not delete the book",
+                      onFail: props.onSay,
+                    })
+                  }
                   onOpenSavedArticle={setOpenSavedArticle}
-                  onRemoveSavedArticle={async (id) => {
-                    await removeSavedArticle(id);
-                    await refreshSavedArticles();
-                  }}
+                  onRemoveSavedArticle={(id) =>
+                    void settleDelete({
+                      act: () => removeSavedArticle(id),
+                      refresh: refreshSavedArticles,
+                      failed: "Could not remove the article",
+                      onFail: props.onSay,
+                    })
+                  }
                 />
               )}
             </div>
@@ -360,10 +375,14 @@ export default function LibraryScreen(props: {
           await props.onTopicsChanged();
         }}
         // Confirmed in DeleteTopicButton, which is what calls this.
-        onDelete={async (t) => {
-          await deleteTopic(t.id);
-          await props.onTopicsChanged();
-        }}
+        onDelete={(t) =>
+          void settleDelete({
+            act: () => deleteTopic(t.id),
+            refresh: props.onTopicsChanged,
+            failed: `Could not delete “${t.name}”`,
+            onFail: props.onSay,
+          })
+        }
         onOpen={props.onOpenTopic}
       />
     </div>
