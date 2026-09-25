@@ -11,15 +11,8 @@
 // of each other, and a per-field merge would assemble a state that never
 // existed on either device (pitfall 237).
 
-import {
-  quarantineFile,
-  readGuardedJson,
-  writeTextAtomic,
-  type CorruptFileReport,
-  type GuardedRead,
-} from "../../platform/app/atomic-fs";
+import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../platform/app/guarded-file";
 import { isObject } from "../../platform/std/json";
-import { reportStoreError } from "../../platform/app/store-errors";
 import type { Profile } from "./nutrition/targets";
 import {
   EMPTY_MEALS,
@@ -37,25 +30,10 @@ import {
 
 export const MEALS_FILE = "info-meals.json";
 
-// The file access this store needs, as a parameter. A test hands it an
-// in-memory AppData instead of rewriting the module registry with mock.module
-// (pitfall 119).
-export interface MealsIo {
-  read(
-    file: string,
-    validate: (raw: unknown) => MealsState | null,
-  ): Promise<GuardedRead<MealsState>>;
-  write(file: string, contents: string): Promise<void>;
-  quarantine(file: string): Promise<string | null>;
-  reportCorrupt(report: CorruptFileReport): void;
-}
+// The file access this store needs, as a parameter (platform/app/guarded-file).
+export type MealsIo = GuardedFileIo<MealsState>;
 
-export const mealsIo: MealsIo = {
-  read: readGuardedJson,
-  write: writeTextAtomic,
-  quarantine: quarantineFile,
-  reportCorrupt: (report) => reportStoreError("corrupt-file", report),
-};
+export const mealsIo: MealsIo = appGuardedFileIo();
 
 /**
  * The state out of a parsed info-meals.json, or null when the bytes are not
@@ -156,11 +134,8 @@ export function mealsFileBody(state: MealsState): string {
 // No file is an empty state. A file sitting there unread is not that — it
 // raises, so the next write cannot put one drafted week over the reader's own.
 async function readMeals(io: MealsIo): Promise<MealsState> {
-  const read = await io.read(MEALS_FILE, parseMealsFile);
-  if (read.status === "ok") return read.value;
-  if (read.status === "missing") return { ...EMPTY_MEALS, shopping: { ...EMPTY_SHOPPING } };
-  if (read.savedAs === null) throw new Error(`${MEALS_FILE} could not be read`);
-  return { ...EMPTY_MEALS, shopping: { ...EMPTY_SHOPPING } };
+  const state = await readGuardedFile(io, MEALS_FILE, parseMealsFile);
+  return state ?? { ...EMPTY_MEALS, shopping: { ...EMPTY_SHOPPING } };
 }
 
 /** Everything the meals screen shows, as one read. */

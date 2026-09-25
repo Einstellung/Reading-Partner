@@ -8,13 +8,11 @@
 // become the list that gets written (docs/13).
 
 import {
-  quarantineFile,
-  readGuardedJson,
-  writeTextAtomic,
-  type CorruptFileReport,
-  type GuardedRead,
-} from "../../platform/app/atomic-fs";
-import { reportStoreError } from "../../platform/app/store-errors";
+  appGuardedFileIo,
+  quarantineBeforeWrite,
+  readGuardedFile,
+  type GuardedFileIo,
+} from "../../platform/app/guarded-file";
 import { entryId, labsFileBody, parseLabsFile, type ParsedLabs } from "./labs";
 import type { Lab } from "./types";
 
@@ -22,41 +20,19 @@ export { activeLabs, labsForSource, newLabId } from "./labs";
 
 export const LABS_FILE = "info-labs.json";
 
-// The file access this store needs, as a parameter. A test hands it an
-// in-memory AppData instead of rewriting the module registry with mock.module,
-// which rewrites it for every other test file in the same worker (pitfall 119).
-export interface LabsIo {
-  read(file: string, validate: (raw: unknown) => Lab[] | null): Promise<GuardedRead<Lab[]>>;
-  write(file: string, contents: string): Promise<void>;
-  quarantine(file: string): Promise<string | null>;
-  reportCorrupt(report: CorruptFileReport): void;
-}
+// The file access this store needs, as a parameter (platform/app/guarded-file).
+export type LabsIo = GuardedFileIo<ParsedLabs>;
 
-export const labsIo: LabsIo = {
-  read: readGuardedJson,
-  write: writeTextAtomic,
-  quarantine: quarantineFile,
-  reportCorrupt: (report) => reportStoreError("corrupt-file", report),
-};
-
-const EMPTY: ParsedLabs = { labs: [], foreign: [], repaired: false };
+export const labsIo: LabsIo = appGuardedFileIo();
 
 // No file is an empty list: a device that has never opened a room has none, and
 // the companion is then told to propose one. A file that is sitting there unread
 // is not that — it raises, so the next addLab cannot write one room over the
 // reader's four.
 async function readLabs(io: LabsIo): Promise<ParsedLabs> {
-  let parsed: ParsedLabs = EMPTY;
-  const read = await io.read(LABS_FILE, (raw) => {
-    const res = parseLabsFile(raw);
-    if (res === null) return null;
-    parsed = res;
-    return res.labs;
-  });
-  if (read.status === "ok") return parsed;
-  if (read.status === "missing") return { labs: [], foreign: [], repaired: false };
-  if (read.savedAs === null) throw new Error(`${LABS_FILE} could not be read`);
-  return { labs: [], foreign: [], repaired: false };
+  return (
+    (await readGuardedFile(io, LABS_FILE, parseLabsFile)) ?? { labs: [], foreign: [], repaired: false }
+  );
 }
 
 /** Every room in the file, open and archived alike. */
@@ -78,16 +54,7 @@ async function mutate(io: LabsIo, change: (labs: Lab[]) => Lab[]): Promise<Lab[]
   // An entry was left behind by the read: keep the bytes before replacing them,
   // and refuse the write when they could not be moved (they would then exist
   // nowhere).
-  if (file.repaired) {
-    let savedAs: string | null = null;
-    try {
-      savedAs = await io.quarantine(LABS_FILE);
-    } catch (e) {
-      console.error(`failed to quarantine ${LABS_FILE}`, e);
-    }
-    io.reportCorrupt({ file: LABS_FILE, savedAs });
-    if (savedAs === null) return file.labs;
-  }
+  if (file.repaired && !(await quarantineBeforeWrite(io, LABS_FILE))) return file.labs;
   await io.write(LABS_FILE, labsFileBody(next, foreign));
   return next;
 }

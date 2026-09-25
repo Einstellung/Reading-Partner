@@ -14,14 +14,7 @@
 // gives them their own rule.
 
 import { appData } from "../../platform/app/appdata";
-import {
-  quarantineFile,
-  readGuardedJson,
-  writeTextAtomic,
-  type CorruptFileReport,
-  type GuardedRead,
-} from "../../platform/app/atomic-fs";
-import { reportStoreError } from "../../platform/app/store-errors";
+import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../platform/app/guarded-file";
 import { parseCableDay } from "./cable";
 import type { CableDay } from "./types";
 
@@ -32,20 +25,13 @@ export function cablesFile(date: string): string {
   return `${CABLES_PREFIX}${date}.json`;
 }
 
-export interface CableIo {
-  read(file: string, validate: (raw: unknown) => CableDay | null): Promise<GuardedRead<CableDay>>;
-  write(file: string, contents: string): Promise<void>;
-  quarantine(file: string): Promise<string | null>;
-  reportCorrupt(report: CorruptFileReport): void;
+export interface CableIo extends GuardedFileIo<CableDay> {
   /** Every file name at the AppData root; the caller filters. */
   list(): Promise<string[]>;
 }
 
 export const cableIo: CableIo = {
-  read: readGuardedJson,
-  write: writeTextAtomic,
-  quarantine: quarantineFile,
-  reportCorrupt: (report) => reportStoreError("corrupt-file", report),
+  ...appGuardedFileIo<CableDay>(),
   list: async () => {
     const entries = await appData.readDir("");
     return entries.filter((e) => e.isFile).map((e) => e.name);
@@ -58,16 +44,12 @@ export async function loadCableDay(
   io: CableIo = cableIo,
 ): Promise<CableDay | null> {
   const file = cablesFile(date);
-  const read = await io.read(file, (raw) => {
+  return readGuardedFile(io, file, (raw) => {
     const day = parseCableDay(raw);
     // A file under one date holding another's is not this day's; treat it the
     // way the briefing store does and refuse it.
     return day && day.date === date ? day : null;
   });
-  if (read.status === "ok") return read.value;
-  if (read.status === "missing") return null;
-  if (read.savedAs === null) throw new Error(`${file} could not be read`);
-  return null;
 }
 
 export async function saveCableDay(day: CableDay, io: CableIo = cableIo): Promise<void> {

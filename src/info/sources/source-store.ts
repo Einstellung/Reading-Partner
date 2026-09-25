@@ -16,14 +16,13 @@
 // device looks like.
 
 import { appData } from "../../platform/app/appdata";
+import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import {
-  quarantineFile,
-  readGuardedJson,
-  writeTextAtomic,
-  type CorruptFileReport,
-  type GuardedRead,
-} from "../../platform/app/atomic-fs";
-import { reportStoreError } from "../../platform/app/store-errors";
+  appGuardedFileIo,
+  quarantineBeforeWrite,
+  readGuardedFile,
+  type GuardedFileIo,
+} from "../../platform/app/guarded-file";
 import type { PullMatcher } from "../../platform/sync/pull-routes";
 import { validateDescriptor, type SourceDescriptor } from "./descriptor";
 import { parseSiteSessions, type SiteSessions } from "./site-session";
@@ -99,27 +98,12 @@ function entryId(entry: unknown): string {
 
 // --- filesystem ------------------------------------------------------------
 
-// The file access this store needs, as a parameter. A test hands it an
-// in-memory AppData instead of rewriting the module registry with mock.module,
-// which rewrites it for every other test file in the same worker (pitfall 119).
+// The file access this store needs, as a parameter (platform/app/guarded-file).
 // Every exported call takes it last and defaults to the real one, so callers
 // pass nothing.
-export interface SourcesIo {
-  read(
-    file: string,
-    validate: (raw: unknown) => SourceDescriptor[] | null,
-  ): Promise<GuardedRead<SourceDescriptor[]>>;
-  write(file: string, contents: string): Promise<void>;
-  quarantine(file: string): Promise<string | null>;
-  reportCorrupt(report: CorruptFileReport): void;
-}
+export type SourcesIo = GuardedFileIo<ParsedSources>;
 
-export const sourcesIo: SourcesIo = {
-  read: readGuardedJson,
-  write: writeTextAtomic,
-  quarantine: quarantineFile,
-  reportCorrupt: (report) => reportStoreError("corrupt-file", report),
-};
+export const sourcesIo: SourcesIo = appGuardedFileIo();
 
 // The subscriptions read. An empty list is the answer for a file that is not
 // there yet, and for one whose bad content has just been moved aside. It is not
@@ -132,18 +116,9 @@ export const sourcesIo: SourcesIo = {
 //
 // Content that does not parse is quarantined and a fresh list takes over.
 async function readSources(io: SourcesIo): Promise<ParsedSources> {
-  let parsed: ParsedSources = { sources: [], foreign: [], repaired: false };
-  const read = await io.read(SOURCES_FILE, (raw) => {
-    const res = parseSources(raw);
-    if (res === null) return null;
-    parsed = res;
-    return res.sources;
-  });
-  if (read.status === "ok") return parsed;
-  const empty: ParsedSources = { sources: [], foreign: [], repaired: false };
-  if (read.status === "missing") return empty;
-  if (read.savedAs === null) throw new Error(`${SOURCES_FILE} could not be read`);
-  return empty;
+  return (
+    (await readGuardedFile(io, SOURCES_FILE, parseSources)) ?? { sources: [], foreign: [], repaired: false }
+  );
 }
 
 // Load the source list. No file is an empty list and stays one: onboarding owns
@@ -185,16 +160,7 @@ async function mutate(
   // An entry was left behind by the read: keep the bytes before replacing them,
   // and refuse the write when they could not be moved (they would then exist
   // nowhere).
-  if (file.repaired) {
-    let savedAs: string | null = null;
-    try {
-      savedAs = await io.quarantine(SOURCES_FILE);
-    } catch (e) {
-      console.error(`failed to quarantine ${SOURCES_FILE}`, e);
-    }
-    io.reportCorrupt({ file: SOURCES_FILE, savedAs });
-    if (savedAs === null) return file.sources;
-  }
+  if (file.repaired && !(await quarantineBeforeWrite(io, SOURCES_FILE))) return file.sources;
   await io.write(SOURCES_FILE, JSON.stringify([...next, ...foreign], null, 2));
   return next;
 }

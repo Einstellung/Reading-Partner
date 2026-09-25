@@ -36,17 +36,15 @@
 // remote on the next pass, every pass. An un-kept article leaves its body
 // behind: dead weight that costs nothing to sync, since it never changes again.
 
-import {
-  quarantineFile,
-  readGuardedJson,
-  writeTextAtomic,
-  type CorruptFileReport,
-  type GuardedRead,
-} from "../platform/app/atomic-fs";
 import { readJson } from "../platform/app/atomic-fs";
 import { appData } from "../platform/app/appdata";
 import { contentHash } from "../platform/app/content-hash";
-import { reportStoreError } from "../platform/app/store-errors";
+import {
+  appGuardedFileIo,
+  quarantineBeforeWrite,
+  readGuardedFile,
+  type GuardedFileIo,
+} from "../platform/app/guarded-file";
 import { asString } from "../platform/std/json";
 import { sanitizeArticleHtml, stripDataImages } from "../info/extract/sanitize";
 
@@ -345,19 +343,10 @@ export function sanitizeStoredHtml(html: unknown): string {
 
 // --- filesystem ------------------------------------------------------------
 
-// The file access this store needs, as a parameter. A test hands it an
-// in-memory AppData instead of rewriting the module registry with mock.module,
-// which rewrites it for every other test file in the same worker (pitfall 119).
+// The file access this store needs, as a parameter (platform/app/guarded-file).
 // Every exported call takes it last and defaults to the real one, so callers
 // pass nothing.
-export interface SavedArticlesIo {
-  read(
-    file: string,
-    validate: (raw: unknown) => SavedArticle[] | null,
-  ): Promise<GuardedRead<SavedArticle[]>>;
-  write(file: string, contents: string): Promise<void>;
-  quarantine(file: string): Promise<string | null>;
-  reportCorrupt(report: CorruptFileReport): void;
+export interface SavedArticlesIo extends GuardedFileIo<ParsedSavedArticles> {
   // A body file, parsed; null when it is not there or could not be read. Not the
   // guarded read the records get, and deliberately: a missing body is ordinary
   // (the record reached this device ahead of its file), and bad bytes are not
@@ -368,10 +357,7 @@ export interface SavedArticlesIo {
 }
 
 export const savedArticlesIo: SavedArticlesIo = {
-  read: readGuardedJson,
-  write: writeTextAtomic,
-  quarantine: quarantineFile,
-  reportCorrupt: (report) => reportStoreError("corrupt-file", report),
+  ...appGuardedFileIo<ParsedSavedArticles>(),
   readBody: (file) => readJson<unknown>(file),
   exists: (file) => appData.exists(file).catch(() => false),
 };
@@ -423,17 +409,8 @@ async function readSavedArticles(io: SavedArticlesIo): Promise<{
   list: SavedArticle[];
   repaired: boolean;
 }> {
-  let repaired = false;
-  const read = await io.read(SAVED_ARTICLES_FILE, (raw) => {
-    const parsed = parseSavedArticles(raw);
-    if (parsed === null) return null;
-    repaired = parsed.repaired;
-    return parsed.articles;
-  });
-  if (read.status === "ok") return { list: read.value, repaired };
-  if (read.status === "missing") return { list: [], repaired: false };
-  if (read.savedAs === null) throw new Error(`${SAVED_ARTICLES_FILE} could not be read`);
-  return { list: [], repaired: false };
+  const parsed = await readGuardedFile(io, SAVED_ARTICLES_FILE, parseSavedArticles);
+  return parsed === null ? { list: [], repaired: false } : { list: parsed.articles, repaired: parsed.repaired };
 }
 
 export async function loadSavedArticles(
@@ -462,7 +439,7 @@ export async function hasSavedArticles(io: SavedArticlesIo = savedArticlesIo): P
     if (Array.isArray(raw)) {
       any = raw.some((e) => !!e && typeof e === "object" && !Array.isArray(e));
     }
-    return [];
+    return { articles: [], repaired: false };
   });
   return any;
 }
@@ -475,16 +452,7 @@ export async function hasSavedArticles(io: SavedArticlesIo = savedArticlesIo): P
 // that fails leaves those bytes in place and the write is refused: the entries
 // would otherwise exist nowhere.
 async function save(io: SavedArticlesIo, list: SavedArticle[], repaired: boolean): Promise<boolean> {
-  if (repaired) {
-    let savedAs: string | null = null;
-    try {
-      savedAs = await io.quarantine(SAVED_ARTICLES_FILE);
-    } catch (e) {
-      console.error(`failed to quarantine ${SAVED_ARTICLES_FILE}`, e);
-    }
-    io.reportCorrupt({ file: SAVED_ARTICLES_FILE, savedAs });
-    if (savedAs === null) return false;
-  }
+  if (repaired && !(await quarantineBeforeWrite(io, SAVED_ARTICLES_FILE))) return false;
   await io.write(SAVED_ARTICLES_FILE, JSON.stringify(list, null, 2));
   return true;
 }
