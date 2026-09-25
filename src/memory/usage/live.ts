@@ -7,23 +7,13 @@
 // (tests/layering.test.ts). Nothing in this directory imports anything but
 // platform.
 
-import { appData } from "../../platform/app/appdata";
-import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { appTextFileIo } from "../../platform/app/text-file-io";
 import { currentDeviceId } from "../../platform/app/device";
 import type { UsageIo } from "./log";
 import { createModelCallLog } from "./model-calls";
 
-// The exists() probe keeps "not there yet" apart from "there and would not
-// open". Every append rewrites the whole log, so the two cannot share an
-// answer — see UsageIo.read.
 export const usageIo: UsageIo = {
-  async read(path) {
-    if (!(await appData.exists(path))) return null;
-    return await appData.readText(path);
-  },
-  write(path, content) {
-    return writeTextAtomic(path, content);
-  },
+  ...appTextFileIo(),
   deviceId: currentDeviceId,
   now: Date.now,
 };

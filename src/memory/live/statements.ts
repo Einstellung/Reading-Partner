@@ -6,8 +6,7 @@
 // directory (memory/observations/store.ts), so an id is a file name and nothing
 // has to be walked to find it.
 
-import { appData } from "../../platform/app/appdata";
-import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { appTextFileIo } from "../../platform/app/text-file-io";
 import { ObservationFileStore } from "../observations/store";
 import {
   createStatementStore,
@@ -24,13 +23,7 @@ import { observationFs } from "./fs";
 // exists() probe is what keeps the two apart — a cost this path can afford,
 // which the per-entry reads could not.
 export const statementIo: StatementIo = {
-  async read(path) {
-    if (!(await appData.exists(path))) return null;
-    return await appData.readText(path);
-  },
-  write(path, content) {
-    return writeTextAtomic(path, content);
-  },
+  ...appTextFileIo(),
   async observationDates(id): Promise<DaySpan | null> {
     const entry = await new ObservationFileStore(observationFs).get(id);
     return entry ? { first: entry.created, last: entry.updated } : null;
