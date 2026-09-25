@@ -4,12 +4,11 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IconClose, IconColorSwatch, IconTrash } from '../base/icons';
-import { overlayLayerOpen } from '../base/overlay-layer';
 import { placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
-import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
+import { OVERLAY_Z, useCloseOnOutsidePress, useOverlaySafePadding } from '../ui/overlay';
 import type { Annotation, ColorEntry } from './types';
 
 interface AnnotationPopupProps {
@@ -66,18 +65,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 		);
 	}, [anchor.x, anchor.y, annotation.id, viewport, margin]);
 
-	// A press outside closes the popup. pointerdown, not mousedown, and capture:
-	// docs/pitfall/webview/67-webkit-tap-does-not-focus-a-button.md. A press while an
-	// overlay layer is up belongs to that layer, which is portalled under <body>
-	// and so is never inside this ref (base/overlay-layer).
-	useEffect(() => {
-		function onDown(e: PointerEvent) {
-			if (overlayLayerOpen()) return;
-			if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-		}
-		document.addEventListener('pointerdown', onDown, true);
-		return () => document.removeEventListener('pointerdown', onDown, true);
-	}, [onClose]);
+	useCloseOnOutsidePress(ref, onClose);
 
 	// Debounced comment commit; flushed on blur.
 	const timer = useRef<number | undefined>(undefined);

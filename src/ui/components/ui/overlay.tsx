@@ -42,6 +42,7 @@ import {
   useState,
   useSyncExternalStore,
   type ReactNode,
+  type RefObject,
 } from "react";
 
 import {
@@ -49,7 +50,7 @@ import {
   pushBottomSheet,
   subscribeBottomSheet,
 } from "@/ui/components/base/bottom-sheet";
-import { pushOverlayLayer } from "@/ui/components/base/overlay-layer";
+import { overlayLayerOpen, pushOverlayLayer } from "@/ui/components/base/overlay-layer";
 import {
   measureSafeAreaInsets,
   NO_SAFE_AREA,
@@ -207,6 +208,30 @@ export function useOverlaySafePadding(): SafeAreaInsets {
 export function OverlayLayer() {
   useEffect(pushOverlayLayer, []);
   return null;
+}
+
+// A press outside a hand-placed floater closes it (CallBubble, AnnotationPopup).
+// pointerdown, not mousedown, and capture:
+// docs/pitfall/webview/67-webkit-tap-does-not-focus-a-button.md — on touch the
+// mouse events are compatibility events and taps on the top bar and the sidebar
+// never reached a mousedown listener.
+//
+// While an overlay layer is up, every press belongs to it. A floater's own
+// dialogs are such layers, portalled under <body>, so containment would read the
+// press on their buttons as a press outside and close the floater out from
+// under them (base/overlay-layer).
+export function useCloseOnOutsidePress(
+  ref: RefObject<HTMLElement | null>,
+  onClose: () => void,
+): void {
+  useEffect(() => {
+    function onDown(e: PointerEvent) {
+      if (overlayLayerOpen()) return;
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [ref, onClose]);
 }
 
 // The same registration for a sheet pinned across the bottom edge, which is one
