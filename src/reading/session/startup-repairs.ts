@@ -7,14 +7,21 @@
 
 import { repairLibraryNames } from "../../platform/app/library";
 import { repairTopicPaths } from "../../platform/app/topics";
+import { settleDeletions } from "../delete/settle";
 
 export interface StartupRepairIo {
   /** Names an iOS import left percent-encoded (docs/pitfall/106). */
   repairTopicPaths(): Promise<boolean>;
   repairLibraryNames(): Promise<boolean>;
+  /** What the deletion log says is gone and is still here (reading/delete/settle.ts). */
+  settleDeletions(): Promise<boolean>;
 }
 
-export const startupRepairIo: StartupRepairIo = { repairTopicPaths, repairLibraryNames };
+export const startupRepairIo: StartupRepairIo = {
+  repairTopicPaths,
+  repairLibraryNames,
+  settleDeletions: () => settleDeletions(),
+};
 
 // Runs once, in the background. Answers whether the shelf has to be read again:
 // nothing here is on the reader's critical path, so a run that changed nothing
@@ -25,7 +32,7 @@ export const startupRepairIo: StartupRepairIo = { repairTopicPaths, repairLibrar
 export async function runStartupRepairs(
   io: StartupRepairIo = startupRepairIo,
 ): Promise<boolean> {
-  return Promise.all([io.repairTopicPaths(), io.repairLibraryNames()])
+  return Promise.all([io.repairTopicPaths(), io.repairLibraryNames(), io.settleDeletions()])
     .then((wrote) => wrote.some(Boolean))
     .catch((e) => {
       console.warn("name repair skipped", e);

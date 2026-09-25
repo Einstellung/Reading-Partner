@@ -70,8 +70,13 @@
 // What a pass counts as failed and the transfer pool are in pass-failures.ts;
 // the holdings half of a pass (docs/59) is HoldingsExchange (holdings-exchange.ts).
 
-import { DELETED_BOOKS_FILE, parseDeletedBooks } from "../app/deleted-books";
-import { isAuthFailure, isRemoteGone, type SyncBackend } from "./backend";
+import {
+  DELETED_BOOKS_FILE,
+  effectiveDeletions,
+  emptyDeletions,
+  type Deletions,
+} from "../app/deleted-books";
+import { isAuthFailure, isRemoteGone, type RemoteState, type SyncBackend } from "./backend";
 import type { BookFs } from "./books";
 import { hashBytes } from "./content";
 import type { BaseStore, TrashJournal } from "./localStore";
@@ -237,8 +242,8 @@ export class SyncEngine {
   // tombstone list that only grows does not cost a Drive search per book per
   // pass (syncBooks).
   private readonly booksRemoved = new Set<string>();
-  // The parsed tombstone and the hash of the bytes it was parsed from.
-  private deadCache: { hash: string; books: Set<string> } | null = null;
+  // The parsed deletion log and the hash of the bytes it was parsed from.
+  private deadCache: { hash: string; deletions: Deletions } | null = null;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   // In-range paths the app has changed since the running pass started. Empty is
   // the whole of "there is nothing to send"; see the top of this file for why
@@ -535,31 +540,74 @@ export class SyncEngine {
     }
   }
 
-  // The books the reader deleted, as this device's copy of the tombstone knows
-  // them (platform/app/deleted-books.ts). Read through the pass's own fs rather
-  // than through readDeletedBooks: it is an in-range file like any other, and
-  // the pass reads every other file it acts on this way. A file that will not
-  // read is no tombstones — a pass that cannot read it must not conclude that
-  // every book is deleted.
+  // What the reader deleted, as this device's copy of the deletion log knows it
+  // (platform/app/deleted-books.ts): the latest event per thing, so a book
+  // imported again after its deletion is not dead. Read through the pass's own
+  // fs rather than through readDeletions: it is an in-range file like any other,
+  // and the pass reads every other file it acts on this way. A file that will
+  // not read is no deletions — a pass that cannot read it must not conclude
+  // that everything is deleted.
   //
   // Taken from the scan, and cached on the content hash the scan already
   // produced, so a steady pass reads nothing: the file is absent on most
-  // devices, and where it exists it changes only when a book is deleted. A
-  // tombstone this pass pulls is therefore acted on by the next one — the
-  // download lands after the plan is made either way, and fifteen seconds is not
-  // a property anything here needs.
-  private async deadBooks(local: LocalFile[]): Promise<Set<string>> {
+  // devices, and where it exists it changes only when something is deleted. A
+  // line this pass pulls is therefore acted on by the next one — the download
+  // lands after the plan is made either way, and fifteen seconds is not a
+  // property anything here needs.
+  private async deletions(local: LocalFile[]): Promise<Deletions> {
     const f = local.find((l) => l.path === DELETED_BOOKS_FILE);
-    if (!f) return new Set();
-    if (this.deadCache?.hash === f.hash) return this.deadCache.books;
+    if (!f) return emptyDeletions();
+    if (this.deadCache?.hash === f.hash) return this.deadCache.deletions;
     try {
-      const books = parseDeletedBooks(
+      const deletions = effectiveDeletions(
         new TextDecoder().decode(await this.d.fs.read(DELETED_BOOKS_FILE)),
       );
-      this.deadCache = { hash: f.hash, books };
-      return books;
+      this.deadCache = { hash: f.hash, deletions };
+      return deletions;
     } catch {
-      return new Set();
+      return emptyDeletions();
+    }
+  }
+
+  // Bring the deletion log up to date with the remote before the plan is made
+  // (see runPass). The log is never dead and never inferred deleted, so the one
+  // thing a plan can say about it is download or merge; whichever it is, it is
+  // done here exactly as the main loops would do it, and the path is answered
+  // so the caller re-scans and reports it as pulled. Null when the local copy
+  // is current, or when the transfer failed — a failed pull leaves the log as
+  // it was, and the pass plans from that as it always did.
+  private async pullLogFirst(
+    local: LocalFile[],
+    remote: RemoteState,
+    failures: PassFailures,
+  ): Promise<string | null> {
+    if (remote[DELETED_BOOKS_FILE] === undefined) return null;
+    const pre = reconcile(local, remote, this.snapshot, () => false);
+    const dl = pre.downloads.find((d) => d.path === DELETED_BOOKS_FILE);
+    const mg = pre.merges.find((m) => m.path === DELETED_BOOKS_FILE);
+    if (!dl && !mg) return null;
+    try {
+      if (dl) {
+        const bytes = await this.d.backend.download(dl.path);
+        await this.writeLocal(dl.path, bytes);
+        const st = await this.d.fs.stat(dl.path);
+        this.snapshot[dl.path] = {
+          rev: dl.rev,
+          mtime: st?.mtime ?? 0,
+          size: bytes.length,
+          hash: await hashBytes(bytes),
+        };
+        await this.setBase(dl.path, bytes);
+      } else if (mg) {
+        const { up, bytes } = await this.mergeOne(mg);
+        await this.record(up, bytes);
+      }
+      failures.succeeded();
+      return DELETED_BOOKS_FILE;
+    } catch (e) {
+      if (isAuthFailure(e)) throw e;
+      if (!isRemoteGone(e)) failures.record(`pull ${DELETED_BOOKS_FILE}`, e);
+      return null;
     }
   }
 
@@ -663,11 +711,24 @@ export class SyncEngine {
       // business in a plan.
       await this.drainPurge(failures);
       const remote = await this.d.backend.listRemote();
-      const local = await this.hashLocal(await this.d.fs.list());
-      // Read before the plan is made: the tombstone is what turns "this file is
-      // only on one side" from something to copy into something to take away
+      let local = await this.hashLocal(await this.d.fs.list());
+      const changed: string[] = [];
+      // A newer log in the remote comes down before anything else is planned.
+      // The purges below are decided from this device's copy of the log, and a
+      // copy behind the remote's says a book is dead that another device has
+      // since imported again: planned from it, this pass would take the revived
+      // book's new files out of the remote, and the device that holds them
+      // would not upload them a second time — to its reconcile they were never
+      // changed (pitfall 404). Rare, and one download when it happens.
+      const log = await this.pullLogFirst(local, remote, failures);
+      if (log) {
+        changed.push(log);
+        local = await this.hashLocal(await this.d.fs.list());
+      }
+      // Read before the plan is made: the log is what turns "this file is only
+      // on one side" from something to copy into something to take away
       // (dead-paths.ts).
-      const dead = await this.deadBooks(local);
+      const dead = await this.deletions(local);
       // What the other devices' trees say has gone (docs/59 §3). It joins the
       // tombstone's paths in the one predicate reconcile already takes, so an
       // inferred deletion executes through purgeDead like every other: trash
@@ -704,8 +765,6 @@ export class SyncEngine {
       for (const path of plan.dropBases) {
         await this.d.base.remove(path).catch(() => {});
       }
-
-      const changed: string[] = [];
 
       // Before the transfers, like drainPurge and for the same reason: a path
       // this pass is about to take away has no business in one. The paths are
@@ -819,7 +878,7 @@ export class SyncEngine {
       if (!failures.halted()) await this.holdingsExchange.publishHoldings(holdings, local, failures);
       this.holdingsExchange.finishPass(holdings);
 
-      await this.syncBooks(failures, dead);
+      await this.syncBooks(failures, dead.book);
 
       // A pass that got this far pulled what it could, so the next one is due on
       // the normal schedule rather than on the next 15s tick.

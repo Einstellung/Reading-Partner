@@ -11,6 +11,7 @@ function fakeIo(over: Partial<StartupRepairIo> = {}): StartupRepairIo {
   return {
     repairTopicPaths: async () => false,
     repairLibraryNames: async () => false,
+    settleDeletions: async () => false,
     ...over,
   };
 }
@@ -22,6 +23,7 @@ test("a launch with nothing to repair is no reason to re-read the shelf", async 
 test("a repair that rewrote something is a reason to re-read the shelf", async () => {
   expect(await runStartupRepairs(fakeIo({ repairTopicPaths: async () => true }))).toBe(true);
   expect(await runStartupRepairs(fakeIo({ repairLibraryNames: async () => true }))).toBe(true);
+  expect(await runStartupRepairs(fakeIo({ settleDeletions: async () => true }))).toBe(true);
 });
 
 test("a repair that throws takes neither the other one nor the launch down", async () => {

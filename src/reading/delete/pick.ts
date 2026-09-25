@@ -8,7 +8,7 @@
 //
 // Pure by construction: the inputs are the records the caller already read.
 
-import { rowOf, type PalaceKind } from "../../palace";
+import { ownedPaths } from "../../platform/sync/dead-paths";
 import type { FileRef, Topic } from "../../platform/app/topics";
 import type { Observation } from "../../memory/observations/types";
 import type { Statement } from "../../memory/statements/types";
@@ -83,35 +83,15 @@ export function isLastReferenceToBook(
   return true;
 }
 
-// Every kind of file named for a book id, in the order deleteBook removes them:
-// the marks, threads and prep the engine purges on every device off the
-// tombstone, then the caches, the blob and the covers, which only ever existed
-// on this one. The paths themselves
-// are the table's (palace/kinds.ts) — the shapes are written down once, beside
-// the sync range and the merge strategy that read them — and a book-owned kind
-// missing from this list fails the guard in tests/palace/derived.test.ts.
-const OWNED_BY_A_BOOK: readonly PalaceKind[] = [
-  "annotations",
-  "supplements",
-  "reading-thread",
-  "prep-state",
-  "prep-note",
-  "prep-cache",
-  "fulltext",
-  "figures",
-  "book-pdf",
-  "book-epub",
-  "pagination",
-  "cover-image",
-  "cover-meta",
-  "cover-failure",
-];
-
 /**
  * Everything of this book's that is a file on this device, as AppData-relative
- * paths.
+ * paths: the marks, threads and prep the engine purges on every device off the
+ * deletion log, then the caches, the blob and the covers, which only ever
+ * existed on this one. Every kind of file named for a book id, folded off the
+ * table (palace/kinds.ts, through platform/sync/dead-paths.ts) rather than
+ * listed again here.
  *
- * The synced half is deleted here as well as by the engine: the tombstone takes
+ * The synced half is deleted here as well as by the engine: the log takes
  * those paths off every device on the next pass, and this device deletes its
  * own copies now so the shelf is right before that pass runs. prep-<bookId>/
  * goes as a directory, which is what takes its pdf/ sub-cache with it.
@@ -121,19 +101,8 @@ const OWNED_BY_A_BOOK: readonly PalaceKind[] = [
  * picture again the day the reader imports the same PDF.
  */
 export function deadLocalPathsFor(bookId: string): { files: string[]; dirs: string[] } {
-  const files: string[] = [];
-  const dirs: string[] = [];
-  for (const kind of OWNED_BY_A_BOOK) {
-    const path = rowOf(kind).pathFor?.(bookId);
-    if (path === undefined) continue;
-    if (path.endsWith("/")) {
-      // Without the trailing slash the sync range wants: these go to a
-      // directory remove, not to a path matcher.
-      const dir = path.slice(0, -1);
-      if (!dirs.includes(dir)) dirs.push(dir);
-    } else if (!files.includes(path)) {
-      files.push(path);
-    }
-  }
-  return { files, dirs };
+  const owned = ownedPaths("book", bookId, () => true);
+  // Without the trailing slash the sync range wants: these go to a directory
+  // remove, not to a path matcher.
+  return { files: owned.files, dirs: owned.dirs.map((d) => d.slice(0, -1)) };
 }

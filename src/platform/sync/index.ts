@@ -12,6 +12,7 @@
 // background edges, both kept out of the pass itself.
 
 import { onPathChanged } from "../app/appdata";
+import { isDeleted, readDeletions } from "../app/deleted-books";
 import { onFileWritten } from "../app/atomic-fs";
 import { observeAppLifecycle } from "../app/lifecycle";
 import type { Shell } from "../app/shell";
@@ -369,8 +370,14 @@ export const NO_ACCOUNT_FOR_BOOK = "Sign in to your account to download this boo
  */
 export async function fetchBook(hash: string): Promise<void> {
   if (!signedIn || !isGoogleConfigured()) throw new Error(NO_ACCOUNT_FOR_BOOK);
+  // A deleted book is not brought back by asking for it: the blob may still be
+  // in Drive for a while after the deletion, and a copy pulled now would be an
+  // orphan the next pass cannot see (docs/50).
+  if (isDeleted(await readDeletions(), "book", hash)) throw new Error(DELETED_BOOK);
   await ensureEngine().fetchBook(hash);
 }
+
+export const DELETED_BOOK = "This book was deleted";
 
 /**
  * Upload one book's blob to the account (docs/70): a book imported on the

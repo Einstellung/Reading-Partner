@@ -43,8 +43,8 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { recordDeletion } from "../../platform/app/deleted-books";
 import { createRecordStore, removeRecordFiles } from "../../platform/app/record-store";
-import { requestRemotePurge } from "../../platform/sync";
 import { talkOutlineForRetell } from "../talk/store";
 import { runEntryOf } from "./summary";
 import {
@@ -385,21 +385,6 @@ export async function appendRun(run: BuiltRun): Promise<RehearsalRunEntry> {
   return entry;
 }
 
-// Every transcript this rehearsal has on disk, as AppData-relative paths. Listed
-// rather than derived from the index: the remote holds exactly what was
-// uploaded, and what was uploaded is what is on disk. A directory that is not
-// there, or will not list, is no transcripts.
-async function runPagesPaths(rehearsalId: string): Promise<string[]> {
-  const dir = runPagesDir(rehearsalId);
-  if (!dir) return [];
-  try {
-    if (!(await appData.exists(dir))) return [];
-    return (await appData.readDir(dir)).filter((e) => e.isFile).map((e) => `${dir}/${e.name}`);
-  } catch {
-    return [];
-  }
-}
-
 /**
  * Drop a rehearsal: the object, the index of its passes, every transcript under
  * it, and the rescue copy if there is one. Not the outline — a talk outlives the
@@ -407,28 +392,19 @@ async function runPagesPaths(rehearsalId: string): Promise<string[]> {
  *
  * The object, the index and the transcripts are in sync range, and a sync
  * propagates no file deletion of its own: deleted here alone they are downloaded
- * back on the next pass (docs/13, pitfall 208). So the remote copies are queued
- * first — the transcripts by name, because the queue takes paths and the
- * directory listing is gone the moment the local delete runs. The .bad rescue
- * copy is not queued: it was never in range (syncFs.ts), so there is no remote
- * copy of it to take out.
+ * back on the next pass, and the other devices keep theirs (docs/13, pitfall
+ * 208). So the deletion is logged first (platform/app/deleted-books.ts) and
+ * every device, this one included, drops the rehearsal's files on its next
+ * pass — runs/<id>/ as a directory (platform/sync/dead-paths.ts). A log that
+ * cannot be written throws before anything is removed.
  */
 export async function deleteRehearsal(rehearsalId: string): Promise<void> {
-  const files = [
+  await recordDeletion("rehearsal", rehearsalId, Date.now());
+  await removeRecordFiles([
     rehearsalFile(rehearsalId),
     rehearsalRunsFile(rehearsalId),
     badFile(rehearsalId),
-  ];
-  try {
-    await requestRemotePurge([
-      rehearsalFile(rehearsalId),
-      rehearsalRunsFile(rehearsalId),
-      ...(await runPagesPaths(rehearsalId)),
-    ]);
-  } catch (e) {
-    console.warn("failed to queue a rehearsal for remote deletion", rehearsalId, e);
-  }
-  await removeRecordFiles(files);
+  ]);
   // The transcripts go as a directory: one per pass, and there is no list of
   // them left to walk once the index above is gone.
   const dir = runPagesDir(rehearsalId);
@@ -447,5 +423,12 @@ export async function deleteRehearsal(rehearsalId: string): Promise<void> {
 export async function deleteRehearsalsForRetell(retellId: string): Promise<void> {
   for (const r of await listAllRehearsals()) {
     if (r.retellId === retellId) await deleteRehearsal(r.id);
+  }
+}
+
+/** Drop every rehearsal of an outline, when the outline itself is deleted. */
+export async function deleteRehearsalsForOutline(outlineId: string): Promise<void> {
+  for (const r of await listAllRehearsals()) {
+    if (r.outlineId === outlineId) await deleteRehearsal(r.id);
   }
 }

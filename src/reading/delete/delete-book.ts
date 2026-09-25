@@ -28,12 +28,11 @@
 // surfaces that rather than reporting a delete that did not happen.
 
 import { appData } from "../../platform/app/appdata";
-import { appendDeletedBook } from "../../platform/app/deleted-books";
+import { recordDeletion } from "../../platform/app/deleted-books";
 import { removeLibraryEntry } from "../../platform/app/library";
 import { removeViewState } from "../../platform/app/storage";
 import { listSupplements, type SupplementRef } from "../../platform/app/supplements";
 import { listTopics, removeFileFromTopic, type Topic } from "../../platform/app/topics";
-import { localDate } from "../../platform/std/day";
 import { ObservationFileStore } from "../../memory/observations/store";
 import type { Observation } from "../../memory/observations/types";
 import type { Statement } from "../../memory/statements/types";
@@ -41,7 +40,8 @@ import { listStatements } from "../../memory/live/statements";
 import { observationFs } from "../../memory/live/fs";
 import { deleteRetell, listAllRetells } from "../retell/store";
 import type { Retell } from "../retell/types";
-import { deleteTalkOutline, talkOutlineOfRetell } from "../talk/store";
+import { talkOutlineOfRetell } from "../talk/store";
+import { deleteOutlineWithRehearsals, deleteRetellWithTalk } from "./delete-retell";
 import { deadLocalPathsFor, observationIdsToDelete, retellIdsToDelete } from "./pick";
 
 // Everything this reaches outside itself, so the order can be tested without a
@@ -71,7 +71,7 @@ async function removeIfPresent(path: string, remove: (p: string) => Promise<void
 }
 
 export const liveDeleteBookDeps: DeleteBookDeps = {
-  tombstone: (bookId) => appendDeletedBook(bookId, localDate(Date.now())),
+  tombstone: (bookId) => recordDeletion("book", bookId, Date.now()),
   removeLibraryEntry,
   removeViewState,
   listTopics,
@@ -85,7 +85,7 @@ export const liveDeleteBookDeps: DeleteBookDeps = {
   listRetells: listAllRetells,
   deleteRetell,
   outlineIdOfRetell: async (retellId) => (await talkOutlineOfRetell(retellId))?.id ?? null,
-  deleteTalkOutline,
+  deleteTalkOutline: deleteOutlineWithRehearsals,
   removeFile: (path) => removeIfPresent(path, (p) => appData.remove(p)),
   removeDir: (path) => removeIfPresent(path, (p) => appData.removeDir(p)),
 };
@@ -171,8 +171,9 @@ async function deleteSupplements(
 }
 
 // A retell of this book alone, with the talk it produced and the rehearsals of
-// that talk. The outline goes before the retell, because the retell is how the
-// outline is found.
+// that talk (delete-retell.ts). Each is logged under its own id: the retell
+// rides on the book by a rule about its materials, not by its name, so the
+// book's own line in the log reaches none of its files.
 async function deleteRetells(bookId: string, deps: DeleteBookDeps): Promise<void> {
   let retells: Retell[];
   try {
@@ -183,11 +184,7 @@ async function deleteRetells(bookId: string, deps: DeleteBookDeps): Promise<void
   }
   for (const retellId of retellIdsToDelete(retells, bookId)) {
     try {
-      const outlineId = await deps.outlineIdOfRetell(retellId);
-      if (outlineId) await deps.deleteTalkOutline(outlineId);
-      // The rehearsals of that talk go with the retell: deleteRetell takes them
-      // (retell/store.ts), which is where the cascade has always lived.
-      await deps.deleteRetell(retellId);
+      await deleteRetellWithTalk(retellId, deps);
     } catch (e) {
       console.warn("failed to delete a retell of a deleted book", retellId, e);
     }

@@ -379,7 +379,7 @@ export const PALACE = [
     deleteWith: "retell",
     gc: "never",
     distill: { unit: "thread", cursor: "distilledMessages" },
-    note: "deleting a retell drops retell-<id>.json alone today, so this is registered and not yet wired",
+    note: "dies with the retell through the deletion log (platform/sync/dead-paths.ts)",
   },
   {
     kind: "talk-thread",
@@ -396,7 +396,7 @@ export const PALACE = [
     deleteWith: "outline",
     gc: "never",
     distill: { unit: "thread", cursor: "distilledMessages" },
-    note: "registered and not yet wired: nothing reads it and nothing deletes it with its outline",
+    note: "dies with the outline through the deletion log (platform/sync/dead-paths.ts); the distiller reads it (reading/distill/source.ts)",
   },
   {
     kind: "info-thread",
@@ -721,6 +721,7 @@ export const PALACE = [
     kind: "rehearsal-run",
     domain: "reading",
     match: keyed(new RegExp(`^runs/(${SEG})/${SEG}\\.json$`)),
+    pathFor: (id: string) => `runs/${id}/`,
     dir: { prefix: "runs", depth: 2 },
     samples: ["runs/1754400000000/8f1c0a52-3b7d-4c1e-9a2f-0d5e6b7c8a90.json"],
     id: "rehearsalId",

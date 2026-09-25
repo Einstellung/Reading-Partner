@@ -16,6 +16,7 @@ import { startBellWatch, startSoulSession } from "../../../soul";
 import { startRunner } from "../../../legion/execute/runner";
 import { watchAppAwayForStalls } from "../../../legion/execute/stall";
 import { purgeLegacyChapterNotes } from "../../../reading/prep/chapters/purge";
+import { settleDeletions } from "../../../reading/delete/settle";
 import { SHELF_PULL_ROUTE } from "../../../reading/pull-routes";
 
 export function useBackgroundServices({
@@ -45,9 +46,16 @@ export function useBackgroundServices({
     void initSync(form)
       .catch((e) => console.warn("sync init failed", e))
       .finally(() => void purgeLegacyChapterNotes());
+    // A deletion log pulled from another device is finished here — the shelf
+    // entry, the blob and the caches of a book it names, the row of a topic —
+    // before the shelf redraws (reading/delete/settle.ts).
     return registerPullRoute({
       ...SHELF_PULL_ROUTE,
-      onPulled: () => onShelfPulled(),
+      onPulled: () => {
+        void settleDeletions()
+          .catch((e) => console.warn("settling deletions skipped", e))
+          .finally(() => onShelfPulled());
+      },
     });
   }, [form, onShelfPulled]);
 

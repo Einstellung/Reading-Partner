@@ -17,9 +17,9 @@
 // not there. The events in platform/app/events.ts keep the old names, because
 // they are history already written into events-<topicId>.jsonl.
 
-import { appData } from "../../platform/app/appdata";
-import { createRecordStore } from "../../platform/app/record-store";
-import { requestRemotePurge } from "../../platform/sync";
+import { recordDeletion } from "../../platform/app/deleted-books";
+import { createRecordStore, removeRecordFiles } from "../../platform/app/record-store";
+import { dropThreadCache, threadFileName } from "../../platform/app/threads";
 import { deleteRehearsalsForRetell } from "../rehearsal/store";
 import {
   newRetell,
@@ -115,27 +115,26 @@ export function recordRetellDecision(
   );
 }
 
-// Delete a retell, and the record of every time it was given. The conversation
-// file is left where it is — the thread store owns it — and so is any deck an
-// older build wrote under slides/<retellId>/; an orphan of either is inert. The rehearsals are not — they are a list of runs of a retell that no
-// longer exists, and nothing will ever open them again.
+// Delete a retell: its record, its conversation, and the record of every time
+// it was given. Any deck an older build wrote under slides/<retellId>/ is left
+// where it is; an orphan of it is inert. The rehearsals are not — they are a
+// list of runs of a retell that no longer exists, and nothing will ever open
+// them again. The talk outline the retell produced is the caller's
+// (reading/delete/delete-retell.ts), because the outline's store cannot reach
+// the rehearsals of its own outline without a cycle.
 //
 // retell-<id>.json is in sync range, and a sync propagates no file deletion of
-// its own: deleted here alone it is downloaded back on the next pass (docs/13,
-// pitfall 208). So the remote copy is asked for first and the local file goes
-// after — the other order loses the path if the app dies between the two, and
-// the queue survives on disk until a pass has taken it out of Drive.
+// its own: deleted here alone it is downloaded back on the next pass, and the
+// other devices keep their copies (docs/13, pitfall 208). So the deletion is
+// logged first (platform/app/deleted-books.ts): every device reads the log and
+// drops the retell's files (platform/sync/dead-paths.ts), this one included on
+// its next pass, which is what takes the remote copy out. A log that cannot be
+// written is a deletion that would not travel, so it throws before anything is
+// removed.
 export async function deleteRetell(retellId: string): Promise<void> {
-  try {
-    await requestRemotePurge([retellFile(retellId)]);
-  } catch (e) {
-    console.warn("failed to queue a retell for remote deletion", retellId, e);
-  }
-  try {
-    await appData.remove(retellFile(retellId));
-  } catch (e) {
-    console.warn("failed to delete a retell", retellId, e);
-  }
+  await recordDeletion("retell", retellId, Date.now());
+  await removeRecordFiles([retellFile(retellId), threadFileName(retellThreadKey(retellId))]);
+  dropThreadCache(retellThreadKey(retellId));
   await deleteRehearsalsForRetell(retellId);
 }
 

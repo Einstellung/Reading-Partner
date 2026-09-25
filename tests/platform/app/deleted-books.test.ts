@@ -72,3 +72,70 @@ test("an existing line is never rewritten", () => {
   const next = appendDeletedBookLine(text, "b2", "2026-09-06");
   expect(next.startsWith(text)).toBe(true);
 });
+
+// --- the log as events (docs/50 「载体」) --------------------------------------
+
+import {
+  appendTombstoneLine,
+  effectiveDeletions,
+  parseTombstones,
+  tombstoneAt,
+} from "../../../src/platform/app/deleted-books";
+
+const T1 = "2026-09-20T10:00:00.000Z";
+const T2 = "2026-09-21T10:00:00.000Z";
+
+test("a revive after a delete brings the book back; a delete after that takes it again", () => {
+  let text = appendTombstoneLine("", { kind: "book", id: "h1", op: "delete", at: T1 });
+  expect(effectiveDeletions(text).book.has("h1")).toBe(true);
+  text = appendTombstoneLine(text, { kind: "book", id: "h1", op: "revive", at: T2 });
+  expect(effectiveDeletions(text).book.has("h1")).toBe(false);
+  expect(parseDeletedBooks(text).has("h1")).toBe(false);
+  text = appendTombstoneLine(text, { kind: "book", id: "h1", op: "delete", at: "2026-09-22T10:00:00.000Z" });
+  expect(effectiveDeletions(text).book.has("h1")).toBe(true);
+  expect(text.split("\n").filter(Boolean)).toHaveLength(3);
+});
+
+test("the order in the file does not matter, only the moments do", () => {
+  const text = `{"kind":"book","id":"h1","op":"revive","at":"${T2}"}\n{"bookId":"h1","at":"${T1}"}\n`;
+  expect(effectiveDeletions(text).book.has("h1")).toBe(false);
+});
+
+test("a tie goes to the delete", () => {
+  const text = `{"bookId":"h1","at":"${T1}"}\n{"kind":"book","id":"h1","op":"revive","at":"${T1}"}\n`;
+  expect(effectiveDeletions(text).book.has("h1")).toBe(true);
+});
+
+test("a day written by the first build sorts before any moment inside it", () => {
+  const text = `{"bookId":"h1","at":"2026-09-21"}\n{"kind":"book","id":"h1","op":"revive","at":"2026-09-21T00:00:00.000Z"}\n`;
+  expect(effectiveDeletions(text).book.has("h1")).toBe(false);
+});
+
+test("a revive of a book that is not deleted writes nothing", () => {
+  expect(appendTombstoneLine("", { kind: "book", id: "h1", op: "revive", at: T1 })).toBe("");
+});
+
+test("a book's delete keeps the shape an older client reads; the other kinds have their own", () => {
+  const text = [
+    appendTombstoneLine("", { kind: "book", id: "h1", op: "delete", at: T1 }),
+    appendTombstoneLine("", { kind: "retell", id: "r1", op: "delete", at: T1 }),
+    appendTombstoneLine("", { kind: "topic", id: "t1", op: "delete", at: T1 }),
+  ].join("");
+  expect(text).toBe(
+    `{"bookId":"h1","at":"${T1}"}\n{"kind":"retell","id":"r1","op":"delete","at":"${T1}"}\n{"kind":"topic","id":"t1","op":"delete","at":"${T1}"}\n`,
+  );
+  const d = effectiveDeletions(text);
+  expect([...d.book]).toEqual(["h1"]);
+  expect([...d.retell]).toEqual(["r1"]);
+  expect([...d.topic]).toEqual(["t1"]);
+  expect(d.outline.size + d.rehearsal.size).toBe(0);
+});
+
+test("a line with an unknown kind or op is not an event", () => {
+  const text = '{"kind":"desk","id":"x","op":"delete","at":"1"}\n{"kind":"retell","id":"r1","op":"drop","at":"1"}\n{"kind":"retell","id":"","op":"delete"}\n';
+  expect(parseTombstones(text)).toEqual([]);
+});
+
+test("the moment is an ISO time", () => {
+  expect(tombstoneAt(Date.UTC(2026, 8, 20, 10))).toBe("2026-09-20T10:00:00.000Z");
+});
