@@ -7,6 +7,7 @@
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { dayNumber, localDate } from "../../platform/std/day";
+import { listFileNames } from "./list-files";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { InfoItem } from "../sources/item";
 
@@ -208,8 +209,7 @@ export function staleCableFiles(names: string[], today: string, days = CABLE_DAY
 export async function pruneStaleDailyFiles(today: string): Promise<void> {
   let names: string[];
   try {
-    const entries = await appData.readDir("");
-    names = entries.filter((e) => e.isFile).map((e) => e.name);
+    names = await listFileNames();
   } catch {
     return;
   }
