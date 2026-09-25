@@ -29,6 +29,17 @@ export const observationFs: ObservationFs = {
       return null;
     }
   },
+  // Missing reads as null like read() does; a file that is there and will not
+  // read throws. One probe, and only on the failure path, so a read that works
+  // costs what it did.
+  async readStrict(path) {
+    try {
+      return await appData.readText(path);
+    } catch (e) {
+      if (await appData.exists(path)) throw e;
+      return null;
+    }
+  },
   async write(path, content) {
     const dir = path.slice(0, path.lastIndexOf("/"));
     if (dir) await appData.mkdirp(dir);

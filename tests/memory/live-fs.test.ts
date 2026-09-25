@@ -57,9 +57,15 @@ test("a file that is not there is absent through the whole store path", async ()
   expect(await store.readIndexText()).toBe("");
   expect(await store.readIndex()).toEqual([]);
   expect(await store.getMeta("t")).toEqual({ lastDistilledAt: null, lastAnnotationDistillAt: null });
-  expect(await store.delete("m-1a2b3c4d1a2b3c4d")).toBe(false);
   expect(await store.update("m-1a2b3c4d1a2b3c4d", { body: "b" })).toBeNull();
   expect(fs.exists).not.toHaveBeenCalled();
+
+  // The one read that may rewrite the tombstone file probes once, and only
+  // because the read failed: missing has to be told from unreadable there,
+  // since an unreadable log written back as one line is every other line's
+  // deletion to the merge (pitfall 208).
+  expect(await store.delete("m-1a2b3c4d1a2b3c4d")).toBe(false);
+  expect(fs.exists).toHaveBeenCalledTimes(1);
 });
 
 // A file the host will not open reads the same as one that is not there. The

@@ -42,7 +42,13 @@ import type {
 
 // The few fs operations the store needs, relative paths under the app data dir.
 export interface ObservationFs {
-  read(path: string): Promise<string | null>; // null when missing
+  read(path: string): Promise<string | null>; // null when missing, or when it will not read
+  // null when missing; throws when the file is there and will not read. Used
+  // before the one file this store rewrites from what it read — the tombstones:
+  // a log read as empty and written back as one line is, to the merge, the
+  // deletion of every other line on every device (pitfall 208). Left out, read
+  // is used and the two cases are not told apart.
+  readStrict?(path: string): Promise<string | null>;
   write(path: string, content: string): Promise<void>;
   remove(path: string): Promise<void>;
   listDir(path: string): Promise<string[]>; // file names; [] when the dir is missing
@@ -181,6 +187,12 @@ export class ObservationFileStore {
 
   private async readTombstones(): Promise<Set<string>> {
     return parseTombstones((await this.fs.read(this.tombstonePath)) ?? "");
+  }
+
+  // The read behind a rewrite of the tombstone file: missing is empty, anything
+  // else that stops the read throws, so the rewrite never happens.
+  private readTombstonesForWrite(): Promise<string | null> {
+    return this.fs.readStrict ? this.fs.readStrict(this.tombstonePath) : this.fs.read(this.tombstonePath);
   }
 
   // A tombstoned id does not exist, whether or not its file is still on disk —
@@ -356,7 +368,7 @@ export class ObservationFileStore {
   // Deleting an id that is already tombstoned succeeds without writing a second
   // line — asking for something to be gone again is not an error.
   async delete(id: string): Promise<boolean> {
-    const text = (await this.fs.read(this.tombstonePath)) ?? "";
+    const text = (await this.readTombstonesForWrite()) ?? "";
     const tombstoned = parseTombstones(text).has(id);
     const onDisk = (await this.fs.read(this.entryPath(id))) !== null;
     if (!tombstoned && !onDisk) return false;
@@ -396,7 +408,7 @@ export class ObservationFileStore {
   // this device last rebuilt — the owner's three arrived by exactly that route —
   // so this deletes nothing and infers nothing.
   async rebuildIndex(): Promise<void> {
-    const text = await this.fs.read(this.tombstonePath);
+    const text = await this.readTombstonesForWrite();
     if (text === null) await this.fs.write(this.tombstonePath, "");
     const names = await this.fs.listDir(this.dir);
     const entries = await this.readEntries(names, parseTombstones(text ?? ""));
