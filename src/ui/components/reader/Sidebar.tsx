@@ -159,7 +159,7 @@ export default function Sidebar({
 				<div className="min-h-0 flex-1">
 					{tab === "outline" ? (
 						<OutlineView
-							fulltext={fulltext}
+							outline={fulltext?.outline ?? []}
 							pending={fulltextPending}
 							bookTitle={bookTitle}
 							supplements={supplements}

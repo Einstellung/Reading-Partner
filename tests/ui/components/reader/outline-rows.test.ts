@@ -1,13 +1,10 @@
 import { expect, test } from "bun:test";
 import { outlineRows, ruleAt } from "../../../../src/ui/components/reader/outline-rows";
-import type { Fulltext } from "../../../../src/fulltext/types";
 
-const BOOK = {
-  outline: [
-    { title: "One", level: 0, page: 1 },
-    { title: "Two", level: 1, page: 9 },
-  ],
-} as unknown as Fulltext;
+const BOOK = [
+  { title: "One", level: 0, page: 1 },
+  { title: "Two", level: 1, page: 9 },
+];
 
 const SUPPS = [
   { hash: "s1", title: "A page", sourceUrl: "https://www.example.com/x", addedAt: 1 },
@@ -18,7 +15,7 @@ const source = (url: string | undefined) => (url ? new URL(url).hostname.replace
 
 test("with no supplements the list is the book's outline and nothing else", () => {
   const rows = outlineRows({
-    bookFulltext: BOOK,
+    bookOutline: BOOK,
     bookTitle: "The Book",
     supplements: [],
     docId: "b",
@@ -31,7 +28,7 @@ test("with no supplements the list is the book's outline and nothing else", () =
 
 test("supplements come after the chapters, with their domain and the rule above them", () => {
   const rows = outlineRows({
-    bookFulltext: BOOK,
+    bookOutline: BOOK,
     bookTitle: "The Book",
     supplements: SUPPS,
     docId: "b",
@@ -46,7 +43,7 @@ test("supplements come after the chapters, with their domain and the rule above 
 
 test("the row the reader is on is the lit one", () => {
   const rows = outlineRows({
-    bookFulltext: BOOK,
+    bookOutline: BOOK,
     bookTitle: "The Book",
     supplements: SUPPS,
     docId: "s2",
@@ -61,7 +58,7 @@ test("the row the reader is on is the lit one", () => {
 
 test("a book with no outline gets a row of its own to go back to, only when it needs one", () => {
   const withSupps = outlineRows({
-    bookFulltext: null,
+    bookOutline: [],
     bookTitle: "Scanned",
     supplements: SUPPS,
     docId: "s1",
@@ -73,7 +70,7 @@ test("a book with no outline gets a row of its own to go back to, only when it n
   expect(withSupps[0]).toMatchObject({ title: "Scanned", current: false });
 
   const alone = outlineRows({
-    bookFulltext: null,
+    bookOutline: [],
     bookTitle: "Scanned",
     supplements: [],
     docId: "b",
