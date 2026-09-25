@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import { DEFAULT_STT_BASE, DEFAULT_STT_MODEL, hasSttKey, setSttKey } from "../../../ai/voice";
 import { type Settings } from "../../../platform/app/settings";
+import ApiKeyField from "./ApiKeyField";
 import { CARD } from "./cardStyles";
-import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 
@@ -16,42 +15,14 @@ export default function VoiceInputCard({
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
 }) {
-  const [configured, setConfigured] = useState(false);
-  const [key, setKey] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    hasSttKey().then(setConfigured);
-  }, []);
-
-  const saveKey = async () => {
-    setBusy(true);
-    try {
-      await setSttKey(key);
-      setKey("");
-      setConfigured(await hasSttKey());
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className={CARD}>
-      <Label layout="stack">
-        API key
-        <div className="flex gap-2">
-          <Input
-            type="password"
-            placeholder={configured ? "Replace STT API key" : "STT API key"}
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-          />
-          <Button type="button" variant="outline" disabled={busy || !key.trim()} onClick={saveKey}>
-            Save
-          </Button>
-          {configured && <span className="self-center text-xs text-[#5fb236]">Connected</span>}
-        </div>
-      </Label>
+      <ApiKeyField
+        has={hasSttKey}
+        save={setSttKey}
+        placeholder="STT API key"
+        replacePlaceholder="Replace STT API key"
+      />
       <Label layout="stack">
         Model
         <Input
