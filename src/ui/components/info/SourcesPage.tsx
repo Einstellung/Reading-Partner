@@ -29,6 +29,7 @@ import { HIT_44 } from "../base/buttons";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import { roomsUsingSource } from "./sources-page";
+import RemoveSourceButton from "./RemoveSourceButton";
 
 function timeAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -174,6 +175,7 @@ export interface SourcesPageProps {
 
 export function SourcesPage(props: SourcesPageProps) {
   const sites = signInSites(props.sources);
+  const [removing, setRemoving] = useState<SourceDescriptor | null>(null);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
@@ -295,7 +297,7 @@ export function SourcesPage(props: SourcesPageProps) {
                   size="icon"
                   aria-label="Remove source"
                   title="Remove"
-                  onClick={() => props.onRemove(s.id)}
+                  onClick={() => setRemoving(s)}
                   className="h-7 w-7 flex-none rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:text-[#c0392b] group-hover:opacity-100"
                 >
                   ✕
@@ -304,6 +306,15 @@ export function SourcesPage(props: SourcesPageProps) {
             );
           })}
         </ul>
+      )}
+
+      {removing && (
+        <RemoveSourceButton
+          name={removing.name}
+          open
+          onOpenChange={(open) => !open && setRemoving(null)}
+          onRemove={() => props.onRemove(removing.id)}
+        />
       )}
     </div>
   );

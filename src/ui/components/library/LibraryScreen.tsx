@@ -62,6 +62,7 @@ import { displayFileTitle, type BookMeta } from "../shelf/file-title";
 import { splitMaterials } from "../shelf/article-row";
 import ArticleRows from "../shelf/ArticleRows";
 import RemoveFileButton from "./RemoveFileButton";
+import RemoveSavedArticleButton from "./RemoveSavedArticleButton";
 import { settleDelete } from "../common/settle-delete";
 import SavedArticleView from "./SavedArticleView";
 import TopicCard from "../shelf/TopicCard";
@@ -542,6 +543,7 @@ function TopicMaterials(props: {
   const { books, articles } = splitMaterials(files, props.entries);
   const meta = props.meta;
   const [removing, setRemoving] = useState<FileRef | null>(null);
+  const [removingArticle, setRemovingArticle] = useState<SavedArticle | null>(null);
   // Whether the confirmation is offering to unlink or to delete.
   const lastReference = removing
     ? isLastReferenceToBook(props.topics, props.topic.id, removing)
@@ -606,7 +608,7 @@ function TopicMaterials(props: {
                     <Button
                       variant="destructive-outline"
                       size="sm"
-                      onClick={() => props.onRemoveSavedArticle(a.id)}
+                      onClick={() => setRemovingArticle(a)}
                     >
                       Remove
                     </Button>
@@ -616,6 +618,15 @@ function TopicMaterials(props: {
             })}
           </ul>
         </>
+      )}
+
+      {removingArticle && (
+        <RemoveSavedArticleButton
+          title={removingArticle.title}
+          open
+          onOpenChange={(open) => !open && setRemovingArticle(null)}
+          onRemove={() => props.onRemoveSavedArticle(removingArticle.id)}
+        />
       )}
 
       {removing && (
