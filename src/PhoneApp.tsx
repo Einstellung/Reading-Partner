@@ -23,13 +23,8 @@ import {
 } from "./platform/app/open-in";
 import FlowReaderPane from "./reading/epub/FlowReaderPane";
 import type { FlowReaderPaneProps } from "./reading/epub/flow-contract";
-import { initSync, TICK_MS } from "./platform/sync";
-import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { registerPullRoute } from "./platform/sync/pull-routes";
-import { KEPT_ARTICLES_PULL_ROUTE, SHELF_PULL_ROUTE } from "./reading/pull-routes";
-import { startBellWatch, startSoulSession } from "./soul";
-import { startRunner } from "./legion/execute/runner";
-import { watchAppAwayForStalls } from "./legion/execute/stall";
+import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
 import {
   loadSavedArticles,
   savedArticlesForTopic,
@@ -74,6 +69,7 @@ import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
+import { useBackgroundServices } from "./ui/components/common/useBackgroundServices";
 
 // InfoHome's screen for a stack entry, or null on the ones it does not draw.
 // Null keeps it mounted with its pipeline and its opened article intact, the
@@ -215,69 +211,31 @@ export default function PhoneApp({
 
   // Account sync (docs/13). The kept articles are what this shell mostly shows
   // and they arrive over sync, so a pulled saved-articles.json reloads the list.
-  // The shelf is the other half: topics.json and library.json are what its cards
-  // are made of, and a book added on the desk reaches the phone as a pull and
-  // nothing else — without this route the phone drew the topics it had when the
-  // screen was last left. The two routes overlap on saved-articles.json, which
+  // The shelf is the other half, and its route is registered by
+  // useBackgroundServices below: topics.json and library.json are what its
+  // cards are made of, and a book added on the desk reaches the phone as a pull
+  // and nothing else. The two routes overlap on saved-articles.json, which
   // costs one extra read of the shelf's two files.
   // Every other file a pull writes has a route of its own (platform/sync/
   // pull-routes.ts), settings.json included — this shell holds it whole in
   // memory and saves it whole, so a field merged in from another device is
   // undone by the next save unless the shared bootstrap reads the copy back.
-  useEffect(() => {
-    // "phone": the books channel stays off here, since nothing on this shell
-    // can open a PDF (docs/22).
-    // Once, on the way up: the chapter notes written before this was a
-    // chapter-spine pass are deleted from here and queued for deletion from
-    // Drive. After initSync, so the queue is written to the state file that was
-    // just read rather than to the placeholder it replaced.
-    void initSync("phone")
-      .catch((e) => console.warn("sync init failed", e))
-      .finally(() => void purgeLegacyChapterNotes());
-    const offKept = registerPullRoute({
-      ...KEPT_ARTICLES_PULL_ROUTE,
-      onPulled: () => void refreshSavedArticles(),
-    });
-    const offShelf = registerPullRoute({
-      ...SHELF_PULL_ROUTE,
-      onPulled: () => void refreshShelf(),
-    });
-    return () => {
-      offKept();
-      offShelf();
-    };
-  }, [refreshSavedArticles, refreshShelf]);
+  useEffect(
+    () =>
+      registerPullRoute({
+        ...KEPT_ARTICLES_PULL_ROUTE,
+        onPulled: () => void refreshSavedArticles(),
+      }),
+    [refreshSavedArticles],
+  );
 
-  // The soul's inbox, on the same beat as the pull (docs/55). The phone runs no
-  // heavy work of its own, but a run it delegated to the desktop rings its bell
-  // here too, through the conversation the two devices share.
   const settingsRef = useRef(settings);
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
-  useEffect(
-    () => startBellWatch({ settings: () => settingsRef.current, intervalMs: TICK_MS }),
-    [],
-  );
-
-  // The same poll as the desktop's (docs/55). The phone wins the election for
-  // nothing heavy, so this is how a run it delegated is seen to finish, and how
-  // a local run of its own is picked up at all.
-  useEffect(() => startRunner({ intervalMs: TICK_MS }), []);
-
-  // Where the app is, for the turns that are streaming (legion/execute/stall.ts).
-  // The same watch the desktop shell keeps, and the phone is the shell that is
-  // switched away from: iOS freezes the process moments after, and the stream
-  // being read does not survive it.
-  useEffect(() => watchAppAwayForStalls(window), []);
-
-  // A turn the last process was killed in the middle of is finished now, on the
-  // session it was killed on (src/soul/recover.ts). It runs at start and not on
-  // the first turn, because the reader who lost an answer has no reason to ask
-  // for another one before they see it (docs/pitfall/394).
-  useEffect(() => {
-    void startSoulSession();
-  }, []);
+  const onShelfPulled = useCallback(() => void refreshShelf(), [refreshShelf]);
+  // The background services both shells start (useBackgroundServices.ts).
+  useBackgroundServices({ form: "phone", settingsRef, onShelfPulled });
 
   // The Android button, bound only while back has somewhere to go: with nothing
   // to close and nothing to pop it belongs to the system, which leaves the app

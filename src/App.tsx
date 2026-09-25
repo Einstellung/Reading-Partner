@@ -27,18 +27,12 @@ import {
   type Topic,
 } from "./platform/app/topics";
 import { getThread, type ThreadMessage } from "./platform/app/threads";
-import { initSync, TICK_MS } from "./platform/sync";
-import { registerPullRoute } from "./platform/sync/pull-routes";
-import { startBellWatch, startSoulSession } from "./soul";
-import { watchAppAwayForStalls } from "./legion/execute/stall";
-import { startRunner } from "./legion/execute/runner";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
 import { modelSupportsImages, type ProviderId } from "./ai";
 import { locateQuote, prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
-import { purgeLegacyChapterNotes } from "./reading/prep/chapters/purge";
 import { useChapterSpine } from "./reading/prep/chapters/use-chapter-spine";
 import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps } from "./memory";
@@ -90,7 +84,6 @@ import { importPickedBook } from "./reading/session/import-book";
 import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
 import { fileSharedBook, watchSharedBooks } from "./reading/session/shared-file";
 import type { ReaderShell } from "./reading/session/shell";
-import { SHELF_PULL_ROUTE } from "./reading/pull-routes";
 import { keepReadingPosition } from "./reading/reading-position";
 import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
@@ -112,6 +105,7 @@ import { activeNavFor, screenForNav } from "./ui/components/base/shell-nav";
 import { shellPlaces } from "./ui/components/base/places";
 import { registerPlaces } from "./desk";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
+import { useBackgroundServices } from "./ui/components/common/useBackgroundServices";
 import { applyAppUpdate, useAppUpdate } from "./ui/components/common/useAppUpdate";
 import { clearScrollMemory } from "./ui/components/common/scroll-memory";
 import type { Annotation as PopupAnnotation, ToolType } from "./ui/components/reader/types";
@@ -441,55 +435,12 @@ export default function App() {
     });
   }, [refreshTopics]);
 
-  // Account sync (docs/13): start the engine if the user is signed in with
-  // auto-sync on, and redraw the shelf when a pull rewrites what it is made of.
-  // Everything else a pull touches has a route of its own (platform/sync/
-  // pull-routes.ts): the per-book caches are platform's, settings.json is the
-  // shared bootstrap's, and the briefing is the info screen's.
-  useEffect(() => {
-    // Once, on the way up: the chapter notes written before this was a
-    // chapter-spine pass are deleted from here and queued for deletion from
-    // Drive. After initSync, so the queue is written to the state file that was
-    // just read rather than to the placeholder it replaced.
-    void initSync("desktop")
-      .catch((e) => console.warn("sync init failed", e))
-      .finally(() => void purgeLegacyChapterNotes());
-    return registerPullRoute({
-      ...SHELF_PULL_ROUTE,
-      onPulled: () => {
-        refreshTopics().catch(() => {});
-      },
-    });
+  // The background services both shells start (useBackgroundServices.ts). A
+  // pull that rewrites the shelf's files redraws it.
+  const onShelfPulled = useCallback(() => {
+    refreshTopics().catch(() => {});
   }, [refreshTopics]);
-
-  // The soul's inbox (docs/55). Whatever legion has to tell it arrives on the
-  // same beat as the pull: a look on the way up and one every tick after, which
-  // costs a directory listing when there is nothing in it. A bell that is there
-  // starts a turn the reader did not start, and the soul decides what, if
-  // anything, to say about it.
-  useEffect(
-    () => startBellWatch({ settings: () => settingsRef.current, intervalMs: TICK_MS }),
-    [],
-  );
-
-  // What legion owes, on the same beat (docs/55). No kind has a worker
-  // registered yet, and then the poll costs nothing: it looks at the table
-  // before it looks at the disk.
-  useEffect(() => startRunner({ intervalMs: TICK_MS }), []);
-
-  // A turn the last process was killed in the middle of is finished now, on the
-  // session it was killed on (src/soul/recover.ts). It runs at start and not on
-  // the first turn, because the reader who lost an answer has no reason to ask
-  // for another one before they see it (docs/pitfall/394).
-  useEffect(() => {
-    void startSoulSession();
-  }, []);
-
-  // Where the app is, for the turns that are streaming (legion/execute/stall.ts).
-  // iOS freezes the process moments after it is switched away and the stream
-  // that was being read does not survive it; coming back is when a turn still
-  // holding the lane has to be cut loose.
-  useEffect(() => watchAppAwayForStalls(window), []);
+  useBackgroundServices({ form: "desktop", settingsRef, onShelfPulled });
 
   // Whether a finger may mark the page. Applied alongside the tool, and again
   // whenever the setting changes, so the reader never routes a finger by a stale
