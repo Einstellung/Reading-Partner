@@ -49,6 +49,7 @@ import {
   type Models,
 } from "@earendil-works/pi-ai";
 import type { StreamFn, TurnLane } from "./contract";
+import { providerConfigFor } from "./provider-config";
 import {
   createHarness,
   settlePrevious,
@@ -165,15 +166,7 @@ function turnSlot(): {
     const next = new Map(known ?? []);
     next.set(model.id, model);
     catalogue.set(model.provider, next);
-    models.setProvider(
-      createProvider({
-        id: model.provider,
-        name: model.provider,
-        auth: { apiKey: { name: model.provider, resolve: async () => ({ auth: {} }) } },
-        models: [...next.values()],
-        api: { stream: streamFn, streamSimple: streamFn },
-      }),
-    );
+    models.setProvider(createProvider(providerConfigFor(model, [...next.values()], streamFn)));
   };
 
   return {
