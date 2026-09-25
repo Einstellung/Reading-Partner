@@ -41,15 +41,14 @@ import { hostMarkIds } from "../chat-marks";
 import { markExcerpt, reopenCall } from "../reopen";
 import type { Fulltext } from "../../fulltext";
 import { distillThread, type DistillAnnotation } from "../../memory";
+import { callReducer, type CallRow, type CallState, type CallView } from "../call-state";
 import {
   applyRowChange,
-  callReducer,
-  type CallRow,
-  type CallState,
-  type CallView,
+  joinRoundTexts,
+  phaseOnToolStart,
   type RowChange,
-} from "../call-state";
-import { joinRoundTexts, phaseOnToolStart, type TurnPhase } from "../../ai/turn-rows";
+  type TurnPhase,
+} from "../../ai/turn-rows";
 import { annotationPage } from "../context";
 import { persistedTrace, type ToolStatus } from "../../ai/tool-status";
 import type { AgentToolEnd, AgentToolStart } from "../../legion/execute/contract";

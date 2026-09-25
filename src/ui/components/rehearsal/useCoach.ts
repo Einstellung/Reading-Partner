@@ -92,54 +92,54 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
       setError("Configure a provider in Settings and I can tell you how that pass went.");
       return;
     }
-    const run = begin();
-
-    void (async () => {
-      const stored = await openCoachThread(outlineId).catch((): StoredMessage[] => []);
-      if (run.signal.aborted) return;
-      const assembled = await buildCoachTurn({
-        outline: current,
-        topicName: topicNameRef.current,
-        settings: s,
-        // The card rows are persisted with no text of their own (the payload is
-        // in `parts`), and an empty message is one some providers reject
-        // outright. What they say is in the outline the prompt carries anyway.
-        history: stored
-          .filter((m) => m.text.trim() !== "")
-          .map((m) => ({ role: m.role, text: m.text })),
-        talk: {
-          read: () => loadTalkOutline(outlineId),
-          edit: async (change) => {
-            const next = await editTalkOutline(outlineId, change);
-            if (next) {
-              outlineRef.current = next;
-              setOutline(next);
-            }
-            return next;
+    begin((run) => {
+      void (async () => {
+        const stored = await openCoachThread(outlineId).catch((): StoredMessage[] => []);
+        if (run.signal.aborted) return;
+        const assembled = await buildCoachTurn({
+          outline: current,
+          topicName: topicNameRef.current,
+          settings: s,
+          // The card rows are persisted with no text of their own (the payload is
+          // in `parts`), and an empty message is one some providers reject
+          // outright. What they say is in the outline the prompt carries anyway.
+          history: stored
+            .filter((m) => m.text.trim() !== "")
+            .map((m) => ({ role: m.role, text: m.text })),
+          talk: {
+            read: () => loadTalkOutline(outlineId),
+            edit: async (change) => {
+              const next = await editTalkOutline(outlineId, change);
+              if (next) {
+                outlineRef.current = next;
+                setOutline(next);
+              }
+              return next;
+            },
           },
-        },
-        onCard: (payload: TalkArrangementCardData) => raiseCard("talk", payload),
-      });
-      // Declined before sending: the same inputs assemble the same call, so
-      // there is nothing a second press would change (docs/pitfall/65).
-      if (assembled.refusal) {
-        run.decline(assembled.refusal);
-        return;
-      }
-      void runAgentTurn({
-        providerId: s.defaultProviderId as ProviderId,
-        modelId: s.defaultModelId as string,
-        systemPrompt: assembled.systemPrompt,
-        messages: assembled.messages,
-        tools: assembled.tools,
-        signal: run.signal,
-        reasoning: toReasoning(s.chatThinking),
-        telemetry: { surface: "talk", thread: threadId },
-        harness: soulHarness(),
-        ...(assembled.origin ? { deliverTo: assembled.origin } : {}),
-        ...run.handlers(assembled.notice),
-      });
-    })();
+          onCard: (payload: TalkArrangementCardData) => raiseCard("talk", payload),
+        });
+        // Declined before sending: the same inputs assemble the same call, so
+        // there is nothing a second press would change (docs/pitfall/65).
+        if (assembled.refusal) {
+          run.decline(assembled.refusal);
+          return;
+        }
+        void runAgentTurn({
+          providerId: s.defaultProviderId as ProviderId,
+          modelId: s.defaultModelId as string,
+          systemPrompt: assembled.systemPrompt,
+          messages: assembled.messages,
+          tools: assembled.tools,
+          signal: run.signal,
+          reasoning: toReasoning(s.chatThinking),
+          telemetry: { surface: "talk", thread: threadId },
+          harness: soulHarness(),
+          ...(assembled.origin ? { deliverTo: assembled.origin } : {}),
+          ...run.handlers(assembled.notice),
+        });
+      })();
+    });
   }, [outlineId, threadId, begin, raiseCard, setError]);
 
   // Open the talk and its conversation, and read them again when a pass has been

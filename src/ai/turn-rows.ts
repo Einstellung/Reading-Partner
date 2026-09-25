@@ -17,7 +17,13 @@
 // from a domain: this is what an agent turn's ending is, not how a row is drawn.
 // The rows are taken structurally, so each surface keeps its own row type.
 
-import type { ToolStatus } from "./tool-status";
+import {
+  appendRunningTool,
+  relabelRunningTool,
+  resolveToolStatus,
+  type Receipt,
+  type ToolStatus,
+} from "./tool-status";
 
 // What a turn is doing right now, for the one status line a row draws where the
 // reply will appear. Only while the turn runs — every ending clears it:
@@ -139,4 +145,116 @@ export function joinRoundTexts(texts: readonly string[]): string {
     out = out ? appendRoundBreak(out) + t : t;
   }
   return out;
+}
+
+// --- what a running turn does to its row -----------------------------------
+// The one state machine every chat surface streams a turn through: the reading
+// call (reading/call-state.ts, which applies it to the live-turns registry's
+// copy of the row and to the one on screen) and useStreamingTurn (the coach,
+// the retell, the lesson and the info companion). Data rather than a closure so
+// the same change can be applied to two mirrors of one row and the two cannot
+// drift.
+
+// The part of a chat row a turn writes. Each surface's row type extends it with
+// whatever else it draws, and every change below leaves those fields alone.
+export interface TurnRow {
+  text: string;
+  // The row being written, and the one whose turn failed.
+  streaming?: boolean;
+  failed?: boolean;
+  phase?: TurnPhase;
+  // The app's remark about the turn (see refusalRow above). Display-only.
+  notice?: string;
+  tools?: ToolStatus[];
+}
+
+export type RowChange =
+  // The model started reasoning: the row has a status line to draw and nothing
+  // else. The thinking text itself is never carried — it is not shown.
+  | { kind: "phase"; phase: "thinking" }
+  // A chunk of the reply arrived.
+  | { kind: "delta"; chunk: string }
+  // The reader spoke mid-answer and the model has now been handed it, so this
+  // row is finished as it stands and the reply that follows is a new one
+  // (docs/72). What it wrote stays; only the marks of a turn in flight go.
+  | { kind: "handed-over" }
+  // A tool started. What the round wrote before calling it stays where it is,
+  // with a blank line opened under it for the next round (docs/pitfall/291); the
+  // status line is drawn in that gap and comes off when the tool returns. A
+  // quiet call (docs/72) draws no line and leaves the phase where it was.
+  | { kind: "tool-start"; name: string; label: string; quiet?: true }
+  | { kind: "tool-end"; name: string; isError: boolean; receipt?: Receipt; error?: string }
+  // A running tool said something new about itself — one line, rewritten in
+  // place (docs/25).
+  | { kind: "tool-label"; name: string; label: string }
+  // The answer landed. The trace stays, settled, and the budget notice rides the
+  // displayed row only (never persisted).
+  | { kind: "answer"; text: string; notice?: string }
+  // The model could not be reached: the words stand in for the reply, and Retry
+  // is worth offering.
+  | { kind: "error"; text: string }
+  // The loop declined. The sentence is the app's, so it goes in `notice` and
+  // never in `text`.
+  | { kind: "refusal"; text: string }
+  // The stop button: the half sentence stays, as a finished row.
+  | { kind: "stopped"; text: string };
+
+export function applyRowChange<M extends TurnRow>(row: M, change: RowChange): M {
+  switch (change.kind) {
+    case "phase":
+      return { ...row, phase: change.phase };
+    case "delta":
+      return { ...row, text: row.text + change.chunk, phase: "writing" };
+    case "handed-over":
+      return { ...row, streaming: undefined, phase: undefined };
+    case "tool-start":
+      return {
+        ...row,
+        text: appendRoundBreak(row.text),
+        phase: phaseOnToolStart(row.phase, change.quiet),
+        tools: appendRunningTool(row.tools, change.name, change.label, change.quiet),
+      };
+    case "tool-end": {
+      const tools = resolveToolStatus(row.tools, change.name, change.isError, {
+        ...(change.receipt ? { receipt: change.receipt } : {}),
+        ...(change.error ? { error: change.error } : {}),
+      });
+      return tools ? { ...row, tools } : row;
+    }
+    case "tool-label": {
+      const tools = relabelRunningTool(row.tools, change.name, change.label);
+      return tools ? { ...row, tools } : row;
+    }
+    case "answer":
+      return {
+        ...row,
+        text: change.text,
+        streaming: undefined,
+        failed: undefined,
+        phase: undefined,
+        notice: change.notice,
+      };
+    case "error":
+      return {
+        ...row,
+        text: change.text,
+        failed: true,
+        streaming: undefined,
+        phase: undefined,
+        notice: undefined,
+        tools: undefined,
+      };
+    case "refusal":
+      return { ...row, ...refusalRow(row, change.text), phase: undefined };
+    case "stopped":
+      return {
+        ...row,
+        text: change.text,
+        streaming: undefined,
+        failed: undefined,
+        phase: undefined,
+        notice: undefined,
+        tools: undefined,
+      };
+  }
 }

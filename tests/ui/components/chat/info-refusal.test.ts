@@ -172,11 +172,11 @@ test("a notice-only row is cleared by the next attempt; a card row is not", () =
 });
 
 // The bug was a missing callback, so the guard is that the callback is there:
-// nothing else in this file can tell whether the companion wires it.
+// nothing else in this file can tell whether the companion wires it. The
+// companion hands its turn the streaming hook's callbacks, and the hook is
+// where the refusal exit is.
 test("the companion's agent turn wires the refusal exit", () => {
-  const source = readFileSync(
-    new URL("../../../../src/ui/components/info/use-info-call.ts", import.meta.url),
-    "utf8",
-  );
-  expect(source).toContain("onRefusal:");
+  const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+  expect(read("../../../../src/ui/components/info/use-info-call.ts")).toContain("...run.handlers(");
+  expect(read("../../../../src/ui/components/chat/useStreamingTurn.ts")).toContain("onRefusal:");
 });

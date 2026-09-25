@@ -49,7 +49,7 @@ import {
 } from "../../../info/briefer/card-actions";
 import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
 import { applyPlan } from "../../../info/meals/apply";
-import type { MealsCard, MealsPlanCardData } from "../../../info/meals/cards";
+import type { MealsPlanCardData } from "../../../info/meals/cards";
 import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
 import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
@@ -57,35 +57,23 @@ import { addSource, hasSources, loadSources } from "../../../info/sources/source
 import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
 import { modelIdFor } from "../../../ai/model-tier";
-import type { ToolStatus } from "../../../ai/tool-status";
-import { appendRunningTool, resolveToolStatus } from "../../../ai/tool-status";
 import { navigateAway } from "../chat/call-layout";
+import { replayableHistory } from "../../../ai/turn-rows";
 import {
-  appendRoundBreak,
-  phaseOnToolStart,
-  refusalRow,
-  replayableHistory,
-  type TurnPhase,
-} from "../../../ai/turn-rows";
-import {
-  cardRow,
   findCardPart,
-  insertBeforeLast,
-  nextCardId,
   patchCardPayload,
   rehydrateMessage,
   toPersistedCardPart,
-  toPersistedTracePart,
   upsertCardRow,
   type CardAction,
 } from "../chat/chatParts";
+import { useStreamingTurn, type StreamingTurnRun } from "../chat/useStreamingTurn";
 import type { ChatMessage, ProviderId } from "../../../ai/providers";
 import type { BriefingView, RequestOutcome } from "../../../info/briefer/reader";
 import type {
   LabArchiveCardData,
   LabProposalCardData,
 } from "../../../info/boxes/cards";
-import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { ThreadMessage as UiMessage } from "../chat/types";
 
 export interface InfoCallOptions {
@@ -134,17 +122,17 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const { anchor, dateKey, view, collecting, pipCards, onHangUp, onSourcesChanged, onTopicsChanged, onOpenBriefing, onMealsChanged } =
     opts;
   const [swapped, setSwapped] = useState(false);
-  const [messages, setMessages] = useState<UiMessage[]>([]);
-  const [streaming, setStreaming] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  // Settles the turn in flight after a Stop. runAgentTurn says nothing once the
-  // reader has aborted it (no onDone, no onError), so what a stopped turn
-  // leaves behind is decided here, as in reading/session/use-call.ts.
-  const stopTurnRef = useRef<(() => void) | null>(null);
   // A conversation anchored to a date lives in that day's file; a standing one
   // (meals's) names its own, so its thread outlives any day (anchors.ts).
   const bookId = anchor.bookKey ?? infoBookId(dateKey);
   const stickKey = infoStickKey(dateKey, anchor.threadId);
+  // The turn in flight and the rows it writes into. Stop settles it the way
+  // every chat surface does: runAgentTurn says nothing once the reader has
+  // aborted it, so the hook keeps what was written.
+  const { messages, setMessages, streaming, begin, raiseCard, stop, abort } = useStreamingTurn(
+    bookId,
+    anchor.threadId,
+  );
 
   // An info call ends by its component unmounting, where a reading call ends at
   // call === null and App clears the whole store.
@@ -184,17 +172,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   // copy and the failed-card retry both address the right run.
   const lastJobRef = useRef<BriefingJob>("first");
 
-  const patchLast = useCallback((patch: Partial<UiMessage> | ((m: UiMessage) => Partial<UiMessage>)) => {
-    setMessages((prev) => {
-      if (!prev.length) return prev;
-      const next = [...prev];
-      const last = next[next.length - 1];
-      const p = typeof patch === "function" ? patch(last) : patch;
-      next[next.length - 1] = { ...last, ...p };
-      return next;
-    });
-  }, []);
-
   // A synthetic turn injected into the thread outside an AI reply: a card gesture
   // reporting itself, or a settled briefing job re-anchoring the AI. Shown at
   // once, and written to disk unless the outcome is in-session only.
@@ -227,7 +204,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       // Gated on the on-disk thread being empty, so a reopened conversation never
       // re-greets.
       if (anchor.onboarding && thread.messages.length === 0) {
-        void runAgent([{ role: "user", text: OPENING_KICKOFF }], { seedStreaming: true });
+        begin((run) => void runAgent([{ role: "user", text: OPENING_KICKOFF }], run));
       }
       // A screen's button opened this conversation with something to say ("Plan
       // this week."). Sent as the reader's own turn, shown and persisted, and
@@ -237,9 +214,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     })();
     return () => {
       live = false;
-      abortRef.current?.abort();
-      abortRef.current = null;
-      setStreaming(false);
+      abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId, anchor.threadId]);
@@ -298,30 +273,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     awaitingBriefing.current = true;
     setMessages((prev) => upsertCardRow(prev, plan.cardId, plan.card));
     return outcome;
-  }
-
-  // Insert a card as its own row just before the streaming reply, and persist it
-  // — probe-confirm and profile-update are both durable. The tools hand back a
-  // structured payload; this closure is the one place that turns a payload into a
-  // card part.
-  function insertCard(
-    prefix: string,
-    payload:
-      | ProbeConfirmCardData
-      | TopicProposalCardData
-      | LabProposalCardData
-      | LabArchiveCardData
-      | MealsCard,
-  ) {
-    const cardId = nextCardId(prefix);
-    const ts = Date.now();
-    setMessages((prev) => insertBeforeLast(prev, cardRow(cardId, payload, ts)));
-    appendMessage(bookId, anchor.threadId, {
-      role: "ai",
-      text: "",
-      ts,
-      parts: [toPersistedCardPart(cardId, payload)],
-    });
   }
 
   // Add the trialed source when the user clicks a confirm card's Add. One gesture,
@@ -509,16 +460,14 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
 
   // The companion's agent turn: the anchor's desk (the day's briefing, and the
   // article where there is one) assembled into one call (src/soul), then
-  // run with the tool trace and confirm cards this surface draws.
-  // `seedStreaming` starts the streaming reply without a visible user message (the
-  // onboarding opener); otherwise the caller already appended the user turn.
-  async function runAgent(history: ChatMessage[], opts?: { seedStreaming?: boolean }) {
-    if (opts?.seedStreaming) {
-      setMessages((prev) => [...prev, { role: "ai", text: "", ts: Date.now(), streaming: true }]);
-    }
+  // run with the tool trace and confirm cards this surface draws. The row it
+  // answers into is already open (useStreamingTurn); for the onboarding opener
+  // there is no visible user message above it, otherwise the caller already
+  // appended the user turn.
+  async function runAgent(history: ChatMessage[], run: StreamingTurnRun) {
     const settings = await loadSettings();
     if (!settings.defaultProviderId || !settings.defaultModelId) {
-      patchLast({ text: "No AI provider configured (Settings).", failed: true, streaming: false });
+      run.fail("No AI provider configured (Settings).");
       return;
     }
     // The briefing controller for generate_briefing: a background job through the
@@ -526,7 +475,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     // a run started here, a run was already going here, or the request was left
     // for the machine that collects — so the companion reports the right one.
     //
-    // The desk is laid before the turn is marked streaming, and caught: opening
+    // The desk is laid inside a catch: opening
     // the briefing builds those tools, which awaits the article extractor's
     // chunk (info/extract/readable-lazy). That is a fetch, and a fetch can fail
     // — a chunk 404ing after a redeploy, a dropped connection, a CSP that turns
@@ -536,7 +485,6 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     // unhandled one and the reply row spins for good. The turn stops here
     // instead, in the row the reader is already looking at; the next send tries
     // the chunk again, since cacheUntilFailure drops a rejected load.
-    const controller = new AbortController();
     let turn: AssembledTurn | null;
     try {
       const assembled = await assembleInfoTurn({
@@ -544,69 +492,43 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         key: bookId,
         dateKey,
         settings,
-        signal: controller.signal,
+        signal: run.signal,
         messages: history,
         companionTools: () =>
           buildLiveCompanionTools(
-            (payload) => insertCard("probe", payload),
+            (payload) => raiseCard("probe", payload),
             { start: (scope) => runBriefingJob(scope) },
             {
               collecting,
               lab: {
                 threadId: anchor.threadId,
-                onLabCard: (payload) => insertCard("lab", payload),
+                onLabCard: (payload) => raiseCard("lab", payload),
               },
             },
           ),
         mealsTools: async () =>
           buildLiveMealsTools({
             threadId: anchor.threadId,
-            onMealsCard: (payload) => insertCard("meals", payload),
+            onMealsCard: (payload) => raiseCard("meals", payload),
             today: () => todayLocal(),
             changed: () => onMealsChanged?.(),
           }),
-        topic: { onCard: (payload) => insertCard("topic", payload) },
+        topic: { onCard: (payload) => raiseCard("topic", payload) },
       });
       deskRef.current = assembled.items;
       turn = assembled.turn;
     } catch (e) {
       console.error("failed to load the article extractor", e);
-      patchLast({ text: "The article extractor could not be loaded. Try again.", failed: true, streaming: false });
+      run.fail("The article extractor could not be loaded. Try again.");
       return;
     }
     // The reader walked away while the desk was being laid.
     if (!turn) return;
     // Too big to leave the model room to answer, and nothing to retry.
     if (turn.refusal) {
-      patchLast({ text: turn.refusal, failed: true, streaming: false });
+      run.fail(turn.refusal);
       return;
     }
-    abortRef.current = controller;
-    setStreaming(true);
-    let full = "";
-    // The phase the row was last told about (ai/turn-rows.ts). A thinking delta
-    // arrives by the hundred and says nothing the status line does not already
-    // say, so only a change of phase is written through.
-    let phase: TurnPhase | null = null;
-    // The abort is a request, so the stream can still land a word after Stop has
-    // settled the row; the row is not reopened for it.
-    const patchLive: typeof patchLast = (patch) => {
-      if (!controller.signal.aborted) patchLast(patch);
-    };
-    // What it wrote stays as a finished row and is kept; a turn that wrote
-    // nothing leaves no row behind.
-    stopTurnRef.current = () => {
-      stopTurnRef.current = null;
-      if (full.trim()) {
-        patchLast({ text: full, streaming: false, phase: undefined });
-        appendMessage(bookId, anchor.threadId, { role: "ai", text: full, ts: Date.now() });
-      } else {
-        setMessages((prev) => prev.slice(0, -1));
-      }
-      setStreaming(false);
-      abortRef.current = null;
-    };
-
     void runAgentTurn({
       providerId: settings.defaultProviderId as ProviderId,
       // Which of the two models this thread runs on (ai/model-tier.ts): the
@@ -616,80 +538,11 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       messages: turn.messages,
       tools: turn.tools,
       reasoning: toReasoning(settings.chatThinking),
-      signal: controller.signal,
+      signal: run.signal,
       telemetry: { surface: "info", thread: anchor.threadId },
       harness: soulHarness(),
       ...(turn.origin ? { deliverTo: turn.origin } : {}),
-      onDelta: (t) => {
-        full += t;
-        phase = "writing";
-        patchLive({ text: full, streaming: true, phase: "writing" });
-      },
-      // The thinking itself is dropped; only that it is happening is shown.
-      onThinking: () => {
-        if (phase === "thinking") return;
-        phase = "thinking";
-        patchLive({ phase: "thinking" });
-      },
-      // What this round wrote before calling the tool stays on screen, with a
-      // blank line opened under it for the next round (docs/pitfall/291). A
-      // quiet call is not named and leaves the phase alone (ai/turn-rows.ts).
-      onToolStart: (info) => {
-        full = appendRoundBreak(full);
-        phase = phaseOnToolStart(phase, info.quiet) ?? null;
-        const next = phase;
-        patchLive((m) => ({
-          text: full,
-          phase: next ?? undefined,
-          tools: appendRunningTool(m.tools, info.name, info.label, info.quiet),
-        }));
-      },
-      onToolEnd: (info) =>
-        patchLive((m) => ({
-          tools:
-            resolveToolStatus(m.tools, info.name, info.isError, {
-              ...(info.receipt ? { receipt: info.receipt } : {}),
-              ...(info.error ? { error: info.error } : {}),
-            }) ?? [...(m.tools ?? [])],
-        })),
-      onDone: (text, _assistant, turnText) => {
-        const finalText = turnText || text || full;
-        stopTurnRef.current = null;
-        let toolsAtDone: ToolStatus[] = [];
-        patchLast((m) => {
-          toolsAtDone = [...(m.tools ?? [])];
-          return { text: finalText, streaming: false, phase: undefined, tools: toolsAtDone };
-        });
-        setStreaming(false);
-        abortRef.current = null;
-        if (finalText.trim()) {
-          // The settled trace is stored with the answer (chatParts.ts): what the
-          // turn did is part of the reply the reader comes back to.
-          const trace = toPersistedTracePart(toolsAtDone);
-          appendMessage(bookId, anchor.threadId, {
-            role: "ai",
-            text: finalText,
-            ts: Date.now(),
-            ...(trace ? { parts: [trace] } : {}),
-          });
-        }
-      },
-      // The loop declined mid-turn rather than failing to reach the model. It is
-      // not an error and there is nothing to retry, so it is not dressed as one
-      // (turn-rows.ts; App and useRetell pass this too).
-      onRefusal: (m) => {
-        stopTurnRef.current = null;
-        patchLast((prev) => ({ ...refusalRow(prev, m), phase: undefined }));
-        setStreaming(false);
-        abortRef.current = null;
-      },
-      onError: (m) => {
-        if (controller.signal.aborted) return; // stop() already kept the partial
-        stopTurnRef.current = null;
-        patchLast({ text: m || "The reply failed.", failed: true, streaming: false, phase: undefined, tools: undefined });
-        setStreaming(false);
-        abortRef.current = null;
-      },
+      ...run.handlers(),
     });
   }
 
@@ -698,15 +551,13 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     const now = Date.now();
     const userMsg: UiMessage = { role: "user", text, ts: now };
     const history: ChatMessage[] = replayableHistory([...messages, userMsg]);
-    setMessages((prev) => [...prev, userMsg, { role: "ai", text: "", ts: now + 1, streaming: true }]);
+    setMessages((prev) => [...prev, userMsg]);
     appendMessage(bookId, anchor.threadId, { role: "user", text, ts: now });
-    await runAgent(history);
-  }
-
-  function stop() {
-    const settle = stopTurnRef.current;
-    abortRef.current?.abort();
-    settle?.();
+    let sent: Promise<void> | undefined;
+    begin((run) => {
+      sent = runAgent(history, run);
+    });
+    await sent;
   }
 
   return { messages, stickKey, streaming, swapped, setSwapped, send, stop, onCardAction };

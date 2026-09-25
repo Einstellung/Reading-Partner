@@ -137,7 +137,7 @@ test("Stop settles the row, keeps the partial answer and frees the composer", as
   const last = result.current.messages[result.current.messages.length - 1];
   expect(last.role).toBe("ai");
   expect(last.text).toBe("Half an answer");
-  expect(last.streaming).toBe(false);
+  expect(last.streaming).toBeFalsy();
   expect(last.failed).toBeFalsy();
   expect(result.current.streaming).toBe(false);
   const kept = append.mock.calls.filter((c) => c[2].role === "ai");
