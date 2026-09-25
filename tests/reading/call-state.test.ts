@@ -4,15 +4,14 @@
 
 import { expect, test } from "bun:test";
 import {
-  applyRowChange,
   callReducer,
   levelGate,
   mayOpenBookThread,
   toolInCall,
   type CallRow,
   type CallState,
-  type RowChange,
 } from "../../src/reading/call-state";
+import { applyRowChange, type RowChange } from "../../src/ai/turn-rows";
 
 // A surface's row: CallRow plus something only the render layer knows about, so
 // a transition that dropped it would show up here.

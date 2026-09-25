@@ -213,72 +213,72 @@ export function useRetell(retellId: string, topicName: string): RetellController
       setError("Configure a provider in Settings to start the retell.");
       return;
     }
-    const run = begin();
-
-    void (async () => {
-      const assembled = await buildRetellTurn({
-        retell: retellRef.current ?? current,
-        materials: materialsRef.current,
-        topicName,
-        settings: s,
-        // The card rows are persisted with no text of their own (the payload is
-        // in `parts`), and an empty message is one some providers reject
-        // outright. What the decision cards say is in the record the prompt
-        // carries anyway, so they are left out of the replay.
-        history: (getThread(key, threadId)?.messages ?? [])
-          .filter((m) => m.text.trim() !== "")
-          .map((m) => ({ role: m.role, text: m.text })),
-        record: async (decision) => {
-          const next = await recordRetellDecision(retellId, decision);
-          if (next) {
-            retellRef.current = next;
-            setRetell(next);
-          }
-        },
-        // The ref, not the snapshot the turn was assembled from: read_retell_outline
-        // has to answer with the entry recorded a moment ago in this same turn,
-        // and with the one the reader just moved in the outline pane.
-        readRetell: () => retellRef.current,
-        // The talk this retell arranges at the end (docs/44). `read` does not
-        // make one, so a retell that never gets arranged leaves no empty talk
-        // behind; the first write makes it, through the same find-or-create the
-        // rehearsal uses, so the two doors cannot leave two outlines.
-        talk: {
-          read: () => talkOutlineOfRetell(retellId),
-          edit: async (change) => {
-            const owner = retellRef.current ?? current;
-            const outline = await talkOutlineForRetell({
-              topicId: owner.topicId,
-              retellId,
-              name: owner.name,
-            });
-            return editTalkOutline(outline.id, change);
+    begin((run) => {
+      void (async () => {
+        const assembled = await buildRetellTurn({
+          retell: retellRef.current ?? current,
+          materials: materialsRef.current,
+          topicName,
+          settings: s,
+          // The card rows are persisted with no text of their own (the payload is
+          // in `parts`), and an empty message is one some providers reject
+          // outright. What the decision cards say is in the record the prompt
+          // carries anyway, so they are left out of the replay.
+          history: (getThread(key, threadId)?.messages ?? [])
+            .filter((m) => m.text.trim() !== "")
+            .map((m) => ({ role: m.role, text: m.text })),
+          record: async (decision) => {
+            const next = await recordRetellDecision(retellId, decision);
+            if (next) {
+              retellRef.current = next;
+              setRetell(next);
+            }
           },
-        },
-        onDecisionCard: (payload) => raiseCard("retell", payload),
-        onArrangeCard: (payload) => raiseCard("talk", payload),
-      });
-      if (run.signal.aborted) return;
-      // Declined before sending: the same inputs assemble the same call, so
-      // there is nothing a second press would change (docs/pitfall/65).
-      if (assembled.refusal) {
-        run.decline(assembled.refusal);
-        return;
-      }
-      void runAgentTurn({
-        providerId: s.defaultProviderId as ProviderId,
-        modelId: s.defaultModelId as string,
-        systemPrompt: assembled.systemPrompt,
-        messages: assembled.messages,
-        tools: assembled.tools,
-        signal: run.signal,
-        reasoning: toReasoning(s.chatThinking),
-        telemetry: { surface: "talk", thread: threadId },
-        harness: soulHarness(),
-        ...(assembled.origin ? { deliverTo: assembled.origin } : {}),
-        ...run.handlers(assembled.notice),
-      });
-    })();
+          // The ref, not the snapshot the turn was assembled from: read_retell_outline
+          // has to answer with the entry recorded a moment ago in this same turn,
+          // and with the one the reader just moved in the outline pane.
+          readRetell: () => retellRef.current,
+          // The talk this retell arranges at the end (docs/44). `read` does not
+          // make one, so a retell that never gets arranged leaves no empty talk
+          // behind; the first write makes it, through the same find-or-create the
+          // rehearsal uses, so the two doors cannot leave two outlines.
+          talk: {
+            read: () => talkOutlineOfRetell(retellId),
+            edit: async (change) => {
+              const owner = retellRef.current ?? current;
+              const outline = await talkOutlineForRetell({
+                topicId: owner.topicId,
+                retellId,
+                name: owner.name,
+              });
+              return editTalkOutline(outline.id, change);
+            },
+          },
+          onDecisionCard: (payload) => raiseCard("retell", payload),
+          onArrangeCard: (payload) => raiseCard("talk", payload),
+        });
+        if (run.signal.aborted) return;
+        // Declined before sending: the same inputs assemble the same call, so
+        // there is nothing a second press would change (docs/pitfall/65).
+        if (assembled.refusal) {
+          run.decline(assembled.refusal);
+          return;
+        }
+        void runAgentTurn({
+          providerId: s.defaultProviderId as ProviderId,
+          modelId: s.defaultModelId as string,
+          systemPrompt: assembled.systemPrompt,
+          messages: assembled.messages,
+          tools: assembled.tools,
+          signal: run.signal,
+          reasoning: toReasoning(s.chatThinking),
+          telemetry: { surface: "talk", thread: threadId },
+          harness: soulHarness(),
+          ...(assembled.origin ? { deliverTo: assembled.origin } : {}),
+          ...run.handlers(assembled.notice),
+        });
+      })();
+    });
   }, [retellId, key, threadId, topicName, begin, raiseCard, setError]);
 
   // A retell opened with nothing in it starts itself: stage one of the retell is

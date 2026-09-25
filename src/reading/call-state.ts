@@ -10,20 +10,8 @@
 
 import type { CompressedImage } from "../ai/image-utils";
 import type { AsideAnchor, MessageOrigin } from "../platform/app/threads";
-import {
-  appendRunningTool,
-  relabelRunningTool,
-  resolveToolStatus,
-  type Receipt,
-  type ToolStatus,
-} from "../ai/tool-status";
-import {
-  appendRoundBreak,
-  holdsNoAnswer,
-  phaseOnToolStart,
-  refusalRow,
-  type TurnPhase,
-} from "../ai/turn-rows";
+import type { ToolStatus } from "../ai/tool-status";
+import { applyRowChange, holdsNoAnswer, type RowChange, type TurnPhase } from "../ai/turn-rows";
 
 // Picture-in-picture (docs/03): the bubble by the mark, chat taking the whole
 // window with reading shrunk to a corner card, and reading back with chat
@@ -98,102 +86,6 @@ export interface CallState<M extends CallRow> {
   error?: boolean;
 }
 
-
-// What a running turn does to the row it is writing. It is data rather than a
-// closure because the same change is applied to two mirrors of that row: the one
-// the live-turns registry holds (which keeps being written after the bubble is
-// closed) and the one on screen. One function applies it, so the two cannot
-// drift.
-export type RowChange =
-  // The model started reasoning: the row has a status line to draw and nothing
-  // else. The thinking text itself is never carried — it is not shown.
-  | { kind: "phase"; phase: "thinking" }
-  // A chunk of the reply arrived.
-  | { kind: "delta"; chunk: string }
-  // The reader spoke mid-answer and the model has now been handed it, so this
-  // row is finished as it stands and the reply that follows is a new one
-  // (docs/72). What it wrote stays; only the marks of a turn in flight go.
-  | { kind: "handed-over" }
-  // A tool started. What the round wrote before calling it stays where it is,
-  // with a blank line opened under it for the next round (docs/pitfall/291); the
-  // status line is drawn in that gap and comes off when the tool returns. A
-  // quiet call (docs/72) draws no line and leaves the phase where it was.
-  | { kind: "tool-start"; name: string; label: string; quiet?: true }
-  | { kind: "tool-end"; name: string; isError: boolean; receipt?: Receipt; error?: string }
-  // A running tool said something new about itself — one line, rewritten in
-  // place (docs/25).
-  | { kind: "tool-label"; name: string; label: string }
-  // The answer landed. The trace goes except for the calls that failed, and the
-  // budget notice rides the displayed row only (never persisted).
-  | { kind: "answer"; text: string; notice?: string }
-  // The model could not be reached: the words stand in for the reply, and Retry
-  // is worth offering (ai/turn-rows.ts).
-  | { kind: "error"; text: string }
-  // The loop declined. The sentence is the app's, so it goes in `notice` and
-  // never in `text`.
-  | { kind: "refusal"; text: string }
-  // The stop button: the half sentence stays, as a finished row.
-  | { kind: "stopped"; text: string };
-
-export function applyRowChange<M extends CallRow>(row: M, change: RowChange): M {
-  switch (change.kind) {
-    case "phase":
-      return { ...row, phase: change.phase };
-    case "delta":
-      return { ...row, text: row.text + change.chunk, phase: "writing" };
-    case "handed-over":
-      return { ...row, streaming: undefined, phase: undefined };
-    case "tool-start":
-      return {
-        ...row,
-        text: appendRoundBreak(row.text),
-        phase: phaseOnToolStart(row.phase, change.quiet),
-        tools: appendRunningTool(row.tools, change.name, change.label, change.quiet),
-      };
-    case "tool-end": {
-      const tools = resolveToolStatus(row.tools, change.name, change.isError, {
-        ...(change.receipt ? { receipt: change.receipt } : {}),
-        ...(change.error ? { error: change.error } : {}),
-      });
-      return tools ? { ...row, tools } : row;
-    }
-    case "tool-label": {
-      const tools = relabelRunningTool(row.tools, change.name, change.label);
-      return tools ? { ...row, tools } : row;
-    }
-    case "answer":
-      return {
-        ...row,
-        text: change.text,
-        streaming: undefined,
-        failed: undefined,
-        phase: undefined,
-        notice: change.notice,
-      };
-    case "error":
-      return {
-        ...row,
-        text: change.text,
-        failed: true,
-        streaming: undefined,
-        phase: undefined,
-        notice: undefined,
-        tools: undefined,
-      };
-    case "refusal":
-      return { ...row, ...refusalRow(row, change.text), phase: undefined };
-    case "stopped":
-      return {
-        ...row,
-        text: change.text,
-        streaming: undefined,
-        failed: undefined,
-        phase: undefined,
-        notice: undefined,
-        tools: undefined,
-      };
-  }
-}
 
 // Everything that moves the call. Each one is a thing that happened, not a
 // setter: the guards below are the rules, and they used to exist only as the

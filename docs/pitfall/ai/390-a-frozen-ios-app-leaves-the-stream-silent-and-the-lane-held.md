@@ -36,7 +36,7 @@ app 没有 `UIBackgroundModes`。切走几秒后进程被冻结，那条流式 H
 
 掐的方式只能是 `lane.requestAbort(operationId)`，也就是用户按停止走的那条路。不能只 abort 底下那个 HTTP 请求：pi 的 `publishResponse` 见到 `stopReason: "aborted"` 而 durable control 不是 `cancel_requested`，会抛 `SessionInvariantError`。也不能让流自己 throw：`performGeneration` 没有兜它，异常会穿过 `drive` 出去。`requestAbort` 之后 run 正常结算、lane 交还、线程不再算 busy。
 
-停止和停摆走的是同一条路，所以要一个标记把两者分开：`runHarnessTurn` 里 `stalled` 为真时，结算成 aborted 的分支报 `onError(STALL_MESSAGE, undefined, new StallError())`。`src/reading/session/use-call.ts` 认出 `isStall(thrown)` 就丢掉半截那一行，把没递进去的 steering 写回线程文件，然后原样再问一次（只一次）。问题本来就在线程文件里，重问读得到；用户看到的是一条来晚了的完整回复。
+停止和停摆走的是同一条路，所以要一个标记把两者分开：`runHarnessTurn` 里 `stalled` 为真时，结算成 aborted 的分支报 `onError(STALL_MESSAGE, undefined, new StallError())`。`src/reading/session/use-call.ts` 认出 `isStall(thrown)` 就丢掉半截那一行，把没递进去的 steering 写回线程文件，然后原样再问一次（只一次）。问题本来就在线程文件里，重问读得到；用户看到的是一条来晚了的完整回复。其余对话面（教练、复述、手机课堂、info）走 `src/ui/components/chat/useStreamingTurn.ts`，同样丢行重问一次，重问时由调用方重新组装回合。
 
 不 resume 而是重问：pi 确实能让一条 run 挂在 `assistant.retry_wait` 上等重试，但只对它自己的分类器认为可重试的失败，而那个分类器读的是供应商的措辞（见 `watchdog.ts` 里那段），停摆到它手上是一个没有任何裁决的 abort。重问多花一轮工具的 token，换一条完整的回复。
 

@@ -1,17 +1,13 @@
-// The row arithmetic a streaming turn does (src/ui/components/chat/streaming-turn.ts):
-// opening the answer row, the deltas and the tool trace, the finished reply.
+// Which row a streaming turn writes into (src/ui/components/chat/streaming-turn.ts):
+// opening the answer row, finding it by timestamp, dropping it. What the turn
+// does to that row is applyRowChange, tested in tests/ai/turn-rows-change.test.ts.
 // Pure — no React. Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
-  answeredRow,
   dropAiRow,
   openAnswerRow,
   patchAiRow,
-  withDelta,
-  withPhase,
-  withToolEnd,
-  withToolStart,
 } from "../../../../src/ui/components/chat/streaming-turn";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
@@ -51,75 +47,4 @@ test("openAnswerRow keeps an answer that is there", () => {
 test("dropAiRow removes the ai row at that timestamp and nothing else", () => {
   const rows: ThreadMessage[] = [{ role: "user", text: "q", ts: 5 }, ai(5, "half")];
   expect(dropAiRow(rows, 5)).toEqual([{ role: "user", text: "q", ts: 5 }]);
-});
-
-test("withDelta appends to the text already streamed", () => {
-  expect(withDelta(ai(1, "he"), "llo").text).toBe("hello");
-});
-
-// The tool start every test below hands in: the label is the adapter's now
-// (legion/execute/contract.ts), so the row is told what to draw rather than
-// looking it up.
-const START = { name: "read_talk_outline", args: {}, label: "Reading the talk outline" };
-
-test("the phase follows the turn: thinking, then the tool, then the reply", () => {
-  const thinking = withPhase(ai(1), "thinking");
-  expect(thinking.phase).toBe("thinking");
-  const calling = withToolStart(thinking, START);
-  expect(calling.phase).toBe("tool");
-  expect(withDelta(calling, "so").phase).toBe("writing");
-});
-
-test("the answer clears the phase", () => {
-  const row = withPhase(ai(1, "", { streaming: true }), "thinking");
-  expect(answeredRow(row, "done", 1).phase).toBeUndefined();
-});
-
-test("withToolStart keeps what the round wrote and puts the tool on the trace as running", () => {
-  const next = withToolStart(ai(1, "let me look"), START);
-  expect(next.text).toBe("let me look\n\n");
-  expect(next.tools).toEqual([
-    { name: "read_talk_outline", label: expect.any(String), state: "running" },
-  ]);
-});
-
-test("withToolStart opens no gap on a round that wrote nothing", () => {
-  expect(withToolStart(ai(1), START).text).toBe("");
-});
-
-test("withToolEnd settles a finished tool in place and marks a failed one", () => {
-  const started = withToolStart(ai(1), START);
-  expect(withToolEnd(started, { name: "read_talk_outline", isError: false }).tools).toEqual([
-    { name: "read_talk_outline", label: expect.any(String), state: "done" },
-  ]);
-  expect(
-    withToolEnd(started, { name: "read_talk_outline", isError: true, error: "no outline" }).tools,
-  ).toEqual([
-    { name: "read_talk_outline", label: expect.any(String), state: "error", error: "no outline" },
-  ]);
-});
-
-test("withToolEnd leaves the row alone when nothing of that name is running", () => {
-  const row = ai(1, "text");
-  expect(withToolEnd(row, { name: "absent", isError: false })).toBe(row);
-});
-
-test("answeredRow keeps the whole trace and carries the notice when there is one", () => {
-  const row = ai(1, "partial", {
-    streaming: true,
-    tools: [
-      { name: "a", label: "A", state: "running" },
-      { name: "b", label: "B", state: "error" },
-    ],
-  });
-  expect(answeredRow(row, "the whole answer", 1)).toEqual({
-    role: "ai",
-    text: "the whole answer",
-    ts: 1,
-    tools: [
-      { name: "a", label: "A", state: "running" },
-      { name: "b", label: "B", state: "error" },
-    ],
-  });
-  expect(answeredRow(row, "x", 1, "left out chapter 3").notice).toBe("left out chapter 3");
 });

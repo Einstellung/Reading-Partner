@@ -13,18 +13,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ProviderId } from "../../../ai";
-import {
-  appendRunningTool,
-  resolveToolStatus,
-  type ToolStatus,
-} from "../../../ai/tool-status";
 import { runAgentTurn } from "../../../legion/execute/turn";
 import {
   appendMessage,
   getBookThread,
   getThread,
   loadThreads,
-  patchThreadMessage,
 } from "../../../platform/app/threads";
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
 import type { Fulltext } from "../../../fulltext/types";
@@ -41,7 +35,7 @@ import { chapterOfReadChapterLabel } from "../../../reading/lecture/tools";
 import { resolveBookThread } from "../../../reading/session/book-thread";
 import { buildReadingTurn } from "../../../reading/turn";
 import { soulHarness } from "../../../soul";
-import { rehydrateMessage, toPersistedTracePart } from "../chat/chatParts";
+import { rehydrateMessage } from "../chat/chatParts";
 import type { ThreadMessage } from "../chat/types";
 import { useStreamingTurn } from "../chat/useStreamingTurn";
 import type { LessonFocus } from "./lesson-view";
@@ -114,10 +108,6 @@ export function useLessonCall(book: LessonBook): LessonCall {
   // thread already held. Kept beside the state so a turn can add to it without
   // reading a render-old copy.
   const taughtRef = useRef<Set<number>>(new Set());
-  // The running turn's trace, so the settled one can be stored with the reply:
-  // useStreamingTurn appends the words alone, and the taught set is read back
-  // off the trace next time this thread is opened.
-  const toolsRef = useRef<ToolStatus[]>([]);
 
   const { messages, setMessages, streaming, begin, running, stop, abort } = useStreamingTurn(
     bookId,
@@ -149,97 +139,88 @@ export function useLessonCall(book: LessonBook): LessonCall {
       setStatus(NO_PROVIDER);
       return;
     }
-    const run = begin();
-    toolsRef.current = [];
-
-    void (async () => {
-      const turn = await buildReadingTurn({
-        bookId,
-        threadId: id,
-        // The lesson is the book-level thread: no mark under it, and no marks
-        // on this shell at all (docs/74).
-        annotationId: "",
-        annotation: undefined,
-        annotations: [],
-        fulltext: ft,
-        // No figures and no bytes: the phone never rasterizes a page, so the
-        // tools that would need a canvas are not mounted (reading/desk.ts).
-        figures: [],
-        buffer: null,
-        form: "phone",
-        context: {
-          topicId,
-          topicName,
-          fileName: title,
-          // No page is open, because no page is drawn. The prompt's position
-          // block says so rather than naming one the reader cannot see.
-          pageLabel: null,
-          pageIndex: null,
-          files: [],
-        },
-        settings: s,
-        getPipeline: () => null,
-        distillAnnotations: () => [],
-        signal: run.signal,
-      });
-      // The reader left while the desk was being laid.
-      if (!turn) return;
-      // Declined before sending: the same inputs assemble the same call, so a
-      // second press changes nothing (docs/pitfall/65).
-      if (turn.refusal) {
-        run.decline(turn.refusal);
-        return;
-      }
-      const h = run.handlers(turn.notice);
-      void runAgentTurn({
-        providerId: s.defaultProviderId as ProviderId,
-        modelId: s.defaultModelId as string,
-        systemPrompt: turn.systemPrompt,
-        messages: turn.messages,
-        tools: turn.tools,
-        signal: run.signal,
-        reasoning: toReasoning(s.chatThinking),
-        // The same surface the desk's reading turns are logged under: what
-        // differs is the form, and that is the prompt's business (docs/74).
-        telemetry: { surface: "reading", inline: turn.inline, thread: id },
-        about: { bookId },
-        harness: soulHarness(),
-        ...(turn.origin ? { deliverTo: turn.origin } : {}),
-        ...h,
-        onToolStart: (info) => {
-          toolsRef.current = appendRunningTool(toolsRef.current, info.name, info.label, info.quiet);
-          if (info.name === "read_chapter") noteTaught(info.label);
-          h.onToolStart(info);
-        },
-        onToolEnd: (info) => {
-          toolsRef.current =
-            resolveToolStatus(toolsRef.current, info.name, info.isError, {
-              ...(info.receipt ? { receipt: info.receipt } : {}),
-              ...(info.error ? { error: info.error } : {}),
-            }) ?? toolsRef.current;
-          h.onToolEnd(info);
-          readFocus();
-        },
-        onDone: (finalText, assistant, turnText) => {
-          h.onDone(finalText, assistant, turnText);
-          if (run.signal.aborted) return;
-          // The settled trace goes on the reply the hook just wrote: it is the
-          // record of which chapters this lesson has taught, and without it a
-          // reopened sheet forgets every tick.
-          const trace = toPersistedTracePart(toolsRef.current);
-          if (trace) patchThreadMessage(bookId, id, run.ts, { parts: [trace] });
-          readFocus();
-        },
-        onError: (message, assistant, thrown) => {
-          h.onError(message, assistant, thrown);
-          readFocus();
-        },
-        onRefusal: (message) => {
-          h.onRefusal?.(message);
-          readFocus();
-        },
-      });
-    })();
+    begin((run) => {
+      void (async () => {
+        const turn = await buildReadingTurn({
+          bookId,
+          threadId: id,
+          // The lesson is the book-level thread: no mark under it, and no marks
+          // on this shell at all (docs/74).
+          annotationId: "",
+          annotation: undefined,
+          annotations: [],
+          fulltext: ft,
+          // No figures and no bytes: the phone never rasterizes a page, so the
+          // tools that would need a canvas are not mounted (reading/desk.ts).
+          figures: [],
+          buffer: null,
+          form: "phone",
+          context: {
+            topicId,
+            topicName,
+            fileName: title,
+            // No page is open, because no page is drawn. The prompt's position
+            // block says so rather than naming one the reader cannot see.
+            pageLabel: null,
+            pageIndex: null,
+            files: [],
+          },
+          settings: s,
+          getPipeline: () => null,
+          distillAnnotations: () => [],
+          signal: run.signal,
+        });
+        // The reader left while the desk was being laid.
+        if (!turn) return;
+        // Declined before sending: the same inputs assemble the same call, so a
+        // second press changes nothing (docs/pitfall/65).
+        if (turn.refusal) {
+          run.decline(turn.refusal);
+          return;
+        }
+        const h = run.handlers(turn.notice);
+        void runAgentTurn({
+          providerId: s.defaultProviderId as ProviderId,
+          modelId: s.defaultModelId as string,
+          systemPrompt: turn.systemPrompt,
+          messages: turn.messages,
+          tools: turn.tools,
+          signal: run.signal,
+          reasoning: toReasoning(s.chatThinking),
+          // The same surface the desk's reading turns are logged under: what
+          // differs is the form, and that is the prompt's business (docs/74).
+          telemetry: { surface: "reading", inline: turn.inline, thread: id },
+          about: { bookId },
+          harness: soulHarness(),
+          ...(turn.origin ? { deliverTo: turn.origin } : {}),
+          ...h,
+          onToolStart: (info) => {
+            if (info.name === "read_chapter") noteTaught(info.label);
+            h.onToolStart(info);
+          },
+          onToolEnd: (info) => {
+            h.onToolEnd(info);
+            readFocus();
+          },
+          // The hook stores the settled trace with the reply: it is the record of
+          // which chapters this lesson has taught, and without it a reopened sheet
+          // forgets every tick.
+          onDone: (finalText, assistant, turnText) => {
+            h.onDone(finalText, assistant, turnText);
+            if (run.signal.aborted) return;
+            readFocus();
+          },
+          onError: (message, assistant, thrown) => {
+            h.onError(message, assistant, thrown);
+            readFocus();
+          },
+          onRefusal: (message) => {
+            h.onRefusal?.(message);
+            readFocus();
+          },
+        });
+      })();
+    });
   }, [begin, bookId, noteTaught, readFocus, title, topicId, topicName]);
 
   // Read rather than closed over: the opening line is sent from inside the

@@ -140,7 +140,7 @@ test("a chunk that never arrives ends the turn in the chat, not in an unhandled 
   // The reply row says so instead of spinning forever.
   const last = result.current.messages[result.current.messages.length - 1];
   expect(last.role).toBe("ai");
-  expect(last.streaming).toBe(false);
+  expect(last.streaming).toBeFalsy();
   expect(last.failed).toBe(true);
   expect(last.text).toContain("article extractor");
   // The composer is free again, so sending once more retries the chunk.
@@ -160,7 +160,7 @@ test("the onboarding opener says the same thing rather than sitting on an empty 
 
   expect(turn).not.toHaveBeenCalled();
   const last = result.current.messages[result.current.messages.length - 1];
-  expect(last.streaming).toBe(false);
+  expect(last.streaming).toBeFalsy();
   expect(last.failed).toBe(true);
   expect(last.text).toContain("article extractor");
 });

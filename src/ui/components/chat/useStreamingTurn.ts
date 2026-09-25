@@ -1,34 +1,32 @@
 // One AI turn streaming into a conversation: the rows it writes, the controller
-// that stops it, and the six callbacks runAgentTurn hands the surface back.
+// that stops it, and the callbacks runAgentTurn hands the surface back.
 //
-// The coach (rehearsal) and the retell both hold a conversation whose turns are
-// assembled from a file the AI may write to mid-turn, and both streamed them the
-// same way down to the character. What differs is only what the turn is made of
-// and what happens once it settles, so that is what stays at the call sites.
-// The row arithmetic itself has no React in it and lives in streaming-turn.ts.
+// Every chat surface but the reading call streams through this: the coach
+// (rehearsal), the retell, the phone lesson and the info companion. What
+// differs between them is only what the turn is made of and what happens once
+// it settles, so that is what stays at the call sites. What a turn does to its
+// row is applyRowChange (ai/turn-rows.ts), the reducer the reading call runs
+// too; which row that is lives in streaming-turn.ts.
 
 import { useCallback, useRef, useState } from "react";
 import type { AgentCallbacks } from "../../../legion/execute/contract";
+import { isStall } from "../../../legion/execute/stall";
 import { appendMessage } from "../../../platform/app/threads";
-import { phaseOnToolStart, refusalRow } from "../../../ai/turn-rows";
+import {
+  applyRowChange,
+  phaseOnToolStart,
+  type RowChange,
+  type TurnPhase,
+} from "../../../ai/turn-rows";
 import {
   cardRow,
   insertBeforeLast,
   nextCardId,
   toPersistedCardPart,
+  toPersistedTracePart,
   type CardPayload,
 } from "./chatParts";
-import {
-  answeredRow,
-  dropAiRow,
-  openAnswerRow,
-  patchAiRow,
-  withDelta,
-  withPhase,
-  withToolEnd,
-  withToolStart,
-} from "./streaming-turn";
-import type { TurnPhase } from "../../../ai/turn-rows";
+import { answerRow, dropAiRow, openAnswerRow, patchAiRow } from "./streaming-turn";
 import type { ThreadMessage } from "./types";
 
 // The callbacks a caller passes straight through to runAgentTurn.
@@ -45,6 +43,9 @@ export interface StreamingTurnRun {
   // The loop declined rather than failed to reach the model, so the sentence is
   // the app talking about the turn, not a reply (turn-rows.ts).
   decline(message: string): void;
+  // The turn could not be sent at all, for a reason the surface words itself.
+  // The sentence stands in the row as a failure.
+  fail(text: string): void;
   // `notice` is what the turn had to leave out to fit the window; it is known
   // only once the turn has been assembled, so it is given here rather than at
   // begin().
@@ -62,14 +63,26 @@ export interface StreamingTurn {
   // written and persisted with it, so a reopened conversation still shows what
   // landed. Only the id prefix differs between the kinds of card.
   raiseCard(prefix: string, payload: CardPayload): void;
-  // Opens the row the answer streams into and takes the turn in flight.
-  begin(): StreamingTurnRun;
+  // Opens the row the answer streams into and hands `ask` the turn in flight.
+  // `ask` assembles the turn and sends it; it is called a second time, with a
+  // fresh row, when the first attempt's stream went silent (see onError below),
+  // so it has to read what it sends from where it lives rather than from the
+  // rows on screen.
+  begin(ask: (run: StreamingTurnRun) => void): void;
   // Whether a turn is in flight.
   running(): boolean;
   stop(): void;
   // Stops the turn without keeping the half sentence: the way out when the view
   // is going away rather than the reader pressing stop.
   abort(): void;
+}
+
+// The turn in flight: its controller, and its own copy of the row it writes.
+// The copy is what stop() keeps and what the trace is persisted from, read
+// here rather than out of the rows on screen.
+interface LiveTurn {
+  controller: AbortController;
+  row: ThreadMessage;
 }
 
 export function useStreamingTurn(
@@ -83,12 +96,7 @@ export function useStreamingTurn(
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
-  const partialRef = useRef<{ ts: number; text: string } | null>(null);
-  // The phase the row was last told about. Thinking deltas arrive by the
-  // hundred and say nothing the line does not already say, so only a change of
-  // phase is written through.
-  const phaseRef = useRef<TurnPhase | null>(null);
+  const liveRef = useRef<LiveTurn | null>(null);
 
   // Read rather than closed over, so begin() stays stable across renders.
   const settledRef = useRef(onSettled);
@@ -113,104 +121,167 @@ export function useStreamingTurn(
     [key, threadId],
   );
 
-  const begin = useCallback((): StreamingTurnRun => {
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const ts = Date.now();
-    partialRef.current = { ts, text: "" };
-    phaseRef.current = null;
-    setError(null);
-    setStreaming(true);
-    setMessages((rows) => openAnswerRow(rows, ts));
+  const begin = useCallback(
+    (ask: (run: StreamingTurnRun) => void) => {
+      const attempt = (n: number) => {
+        const controller = new AbortController();
+        const ts = Date.now();
+        const live: LiveTurn = { controller, row: answerRow(ts) };
+        liveRef.current = live;
+        setError(null);
+        setStreaming(true);
+        setMessages((rows) => openAnswerRow(rows, ts));
 
-    const finish = () => {
-      if (abortRef.current === controller) abortRef.current = null;
-      partialRef.current = null;
-      phaseRef.current = null;
-      setStreaming(false);
-    };
-    // The turn is over, however it ended. Work waiting on it takes the
-    // conversation as it stands: the reader's half is on disk either way, and a
-    // reply that failed is no reason to lose what they said.
-    const settle = () => settledRef.current?.();
-    const fail = (text: string) => {
-      finish();
-      patchRow(ts, () => ({ role: "ai", text, ts, failed: true }));
-      settle();
-    };
-    const decline = (message: string) => {
-      finish();
-      patchRow(ts, (m) => ({ ...m, ...refusalRow(m, message), phase: undefined }));
-      settle();
-    };
+        // One change, applied to both copies of the row.
+        const write = (change: RowChange) => {
+          live.row = applyRowChange(live.row, change);
+          patchRow(ts, (m) => applyRowChange(m, change));
+        };
+        // The phase the row was last told about. Thinking deltas arrive by the
+        // hundred and say nothing the line does not already say, so only a
+        // change of phase is written through.
+        let phase: TurnPhase | null = null;
 
-    return {
-      ts,
-      signal: controller.signal,
-      decline,
-      handlers: (notice?: string) => ({
-        onDelta: (chunk) => {
-          const p = partialRef.current;
-          if (p) p.text += chunk;
-          phaseRef.current = "writing";
-          patchRow(ts, (m) => withDelta(m, chunk));
-        },
-        // The thinking itself is dropped; only that it is happening is shown.
-        onThinking: () => {
-          if (phaseRef.current === "thinking") return;
-          phaseRef.current = "thinking";
-          patchRow(ts, (m) => withPhase(m, "thinking"));
-        },
-        // A quiet call leaves the phase where it was, so the row goes on saying
-        // whatever it was saying (turn-rows.ts).
-        onToolStart: (info) => {
-          phaseRef.current = phaseOnToolStart(phaseRef.current, info.quiet) ?? null;
-          patchRow(ts, (m) => withToolStart(m, info));
-        },
-        onToolEnd: (info) => patchRow(ts, (m) => withToolEnd(m, info)),
-        // Every round's words, not the answering round's alone: a round that
-        // called a tool may have written a sentence first, and it has been on
-        // screen since (withToolStart keeps it), so it is part of the reply.
-        onDone: (finalText, _assistant, turnText) => {
-          if (controller.signal.aborted) return; // stop() already kept the partial
-          const full = turnText || finalText;
+        const finish = () => {
+          if (liveRef.current === live) liveRef.current = null;
+          setStreaming(false);
+        };
+        // The turn is over, however it ended. Work waiting on it takes the
+        // conversation as it stands: the reader's half is on disk either way,
+        // and a reply that failed is no reason to lose what they said.
+        const settle = () => settledRef.current?.();
+        const fail = (text: string) => {
           finish();
-          patchRow(ts, (m) => answeredRow(m, full, ts, notice));
-          appendMessage(key, threadId, { role: "ai", text: full, ts });
-          // After the append, never before: work deferred to the settle reads
-          // the thread file, which only now holds the reply.
+          write({ kind: "error", text });
           settle();
-        },
-        onError: (message) => fail(`⚠️ Couldn't reach the model. ${message}`),
-        onRefusal: (message) => decline(message),
-      }),
-    };
-  }, [key, threadId, patchRow]);
+        };
+        const decline = (message: string) => {
+          finish();
+          write({ kind: "refusal", text: message });
+          settle();
+        };
+        // The abort is a request: the stream can still land a word after stop()
+        // has settled the row, and the row is not reopened for it.
+        const stopped = () => controller.signal.aborted;
 
-  const running = useCallback(() => abortRef.current !== null, []);
+        ask({
+          ts,
+          signal: controller.signal,
+          decline,
+          fail,
+          handlers: (notice?: string) => ({
+            onDelta: (chunk) => {
+              if (stopped()) return;
+              phase = "writing";
+              write({ kind: "delta", chunk });
+            },
+            // The thinking itself is dropped; only that it is happening is shown.
+            onThinking: () => {
+              if (stopped() || phase === "thinking") return;
+              phase = "thinking";
+              write({ kind: "phase", phase: "thinking" });
+            },
+            // A quiet call leaves the phase where it was, so the row goes on
+            // saying whatever it was saying (turn-rows.ts).
+            onToolStart: (info) => {
+              if (stopped()) return;
+              phase = phaseOnToolStart(phase, info.quiet) ?? null;
+              write({
+                kind: "tool-start",
+                name: info.name,
+                label: info.label,
+                ...(info.quiet ? { quiet: true as const } : {}),
+              });
+            },
+            onToolEnd: (info) => {
+              if (stopped()) return;
+              write({
+                kind: "tool-end",
+                name: info.name,
+                isError: info.isError,
+                ...(info.receipt ? { receipt: info.receipt } : {}),
+                ...(info.error ? { error: info.error } : {}),
+              });
+            },
+            // Every round's words, not the answering round's alone: a round that
+            // called a tool may have written a sentence first, and it has been
+            // on screen since (the tool start keeps it), so it is part of the
+            // reply.
+            onDone: (finalText, _assistant, turnText) => {
+              if (stopped()) return; // stop() already kept the partial
+              const full = turnText || finalText;
+              finish();
+              write({ kind: "answer", text: full, ...(notice ? { notice } : {}) });
+              // The settled trace goes to disk with the answer: what the turn did
+              // is part of the reply, and the lesson reads which chapters it
+              // taught back off it (reading/lesson/thread-state.ts).
+              const trace = toPersistedTracePart(live.row.tools ?? []);
+              appendMessage(key, threadId, {
+                role: "ai",
+                text: full,
+                ts,
+                ...(trace ? { parts: [trace] } : {}),
+              });
+              // After the append, never before: work deferred to the settle reads
+              // the thread file, which only now holds the reply.
+              settle();
+            },
+            onError: (message, _assistant, thrown) => {
+              if (stopped()) return;
+              // The stream went silent and the watch cut it
+              // (legion/execute/stall.ts): the app was switched away mid-answer
+              // and the connection did not survive being frozen. The question
+              // is in the thread file, so the turn is asked again in a fresh row
+              // and the half-written one goes; what the reader gets is a reply
+              // that arrived late (docs/pitfall/390). Nothing settles here: the
+              // turn is not over until the second attempt is.
+              //
+              // Once. A second stall is a failure like any other, and the reader
+              // is shown it rather than left watching the same turn go around.
+              if (isStall(thrown) && n === 0) {
+                finish();
+                setMessages((rows) => dropAiRow(rows, ts));
+                attempt(n + 1);
+                return;
+              }
+              fail(`⚠️ Couldn't reach the model. ${message}`);
+            },
+            onRefusal: (message) => {
+              if (stopped()) return;
+              decline(message);
+            },
+          }),
+        });
+      };
+      attempt(0);
+    },
+    [key, threadId, patchRow],
+  );
+
+  const running = useCallback(() => liveRef.current !== null, []);
 
   // Stop keeps the half sentence: the abort silences the agent, so persisting it
   // here is the only way it survives.
   const stop = useCallback(() => {
-    const controller = abortRef.current;
-    const partial = partialRef.current;
-    if (!controller) return;
-    controller.abort();
-    abortRef.current = null;
+    const live = liveRef.current;
+    if (!live) return;
+    live.controller.abort();
+    liveRef.current = null;
     setStreaming(false);
-    const text = (partial?.text ?? "").trim();
-    if (partial && text) {
-      appendMessage(key, threadId, { role: "ai", text, ts: partial.ts });
-      patchRow(partial.ts, () => ({ role: "ai", text, ts: partial.ts }));
-    } else if (partial) {
-      setMessages((rows) => dropAiRow(rows, partial.ts));
+    const { ts } = live.row;
+    const text = live.row.text.trim();
+    if (text) {
+      appendMessage(key, threadId, { role: "ai", text, ts });
+      patchRow(ts, (m) => applyRowChange(m, { kind: "stopped", text }));
+    } else {
+      setMessages((rows) => dropAiRow(rows, ts));
     }
-    partialRef.current = null;
   }, [key, threadId, patchRow]);
 
   const abort = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
+    liveRef.current?.controller.abort();
+    liveRef.current = null;
+    setStreaming(false);
   }, []);
 
   return {
