@@ -3,7 +3,7 @@
 // book still owes. A fake io, so none of it needs a webview. Run: bun test.
 
 import { expect, test } from "bun:test";
-import type { Annotation, ViewState } from "../../../../src/platform/app/reader-contract";
+import type { Annotation, ViewState } from "../../../src/platform/app/reader-contract";
 import {
   closePhoneBook,
   cuttingStatus,
@@ -11,7 +11,7 @@ import {
   openPhoneBook,
   phoneViewState,
   type PhoneBookIo,
-} from "../../../../src/ui/components/phone/open-epub";
+} from "../../../src/reading/session/open-epub";
 
 const MARK: Annotation = {
   id: "m1",

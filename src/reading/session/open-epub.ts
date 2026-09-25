@@ -10,20 +10,20 @@
 //
 // Pure over an io, so the order can be read and tested without a webview.
 
-import { loadAnnotations } from "../../../platform/app/annotations";
-import { readLibraryBook } from "../../../platform/app/library";
+import { loadAnnotations } from "../../platform/app/annotations";
+import { readLibraryBook } from "../../platform/app/library";
 import {
   isPageMark,
   pageMarks,
   type Annotation,
   type ViewState,
-} from "../../../platform/app/reader-contract";
-import { getViewState } from "../../../platform/app/storage";
-import { markOpened } from "../../../platform/app/topics";
-import type { OutlineItem } from "../../../fulltext/types";
-import { acquireEpub, outlineFor, preparePagination, releaseEpub } from "../../../reading/epub";
-import { keepReadingPosition, seedReadingPosition } from "../../../reading/reading-position";
-import { cuttingStatus, openingViewState } from "../../../reading/session/open-book";
+} from "../../platform/app/reader-contract";
+import { getViewState } from "../../platform/app/storage";
+import { markOpened } from "../../platform/app/topics";
+import type { OutlineItem } from "../../fulltext/types";
+import { acquireEpub, outlineFor, preparePagination, releaseEpub } from "../epub";
+import { keepReadingPosition, seedReadingPosition } from "../reading-position";
+import { cuttingStatus, openingViewState } from "./open-book";
 
 // The desk's own line, re-exported rather than restated: the reader is told the
 // same thing on both machines while the same table is being cut.

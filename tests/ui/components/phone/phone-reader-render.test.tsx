@@ -13,7 +13,7 @@ import {
   type FlowDisplay,
 } from "../../../../src/reading/epub/flow-display";
 import { AI_NOT_ON_PHONE } from "../../../../src/ui/components/phone/reader-gate";
-import type { PhoneBookIo } from "../../../../src/ui/components/phone/open-epub";
+import type { PhoneBookIo } from "../../../../src/reading/session/open-epub";
 import { useDom } from "../../../support/dom";
 
 // The window first: the screen pulls in Radix, which pulls in react-dom, and

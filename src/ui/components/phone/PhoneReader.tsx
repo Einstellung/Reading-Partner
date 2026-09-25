@@ -6,9 +6,9 @@
 // the two were built apart; the shell that mounts this screen is where they
 // meet.
 //
-// The order a book opens in is open-epub.ts, which has no React in it. What is
-// here is the binding: the state that sequence produces, the handle the pane
-// hands back, and the four things a tap can reach.
+// The order a book opens in is reading/session/open-epub.ts, which has no React
+// in it. What is here is the binding: the state that sequence produces, the
+// handle the pane hands back, and the four things a tap can reach.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
@@ -44,7 +44,7 @@ import {
   phoneBookIo,
   type OpenedBook,
   type PhoneBookIo,
-} from "./open-epub";
+} from "../../../reading/session/open-epub";
 import { flowTool } from "./reader-gate";
 import PhoneDisplaySheet from "./PhoneDisplaySheet";
 import PhoneOutlineSheet from "./PhoneOutlineSheet";
