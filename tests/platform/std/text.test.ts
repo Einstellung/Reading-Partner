@@ -6,6 +6,7 @@ import {
   escapeHtmlAttr,
   escapeHtmlText,
   escapeXml,
+  firstSentence,
   oneLine,
   pad2,
   padInt,
@@ -94,4 +95,19 @@ test("pad2 pads to two digits and padInt rounds and clamps", () => {
   expect(padInt(7.6, 4)).toBe("0008");
   expect(padInt(-3, 4)).toBe("0000");
   expect(padInt(123456, 4)).toBe("123456");
+});
+
+test("firstSentence ends at a terminator that a space or the end follows", () => {
+  expect(firstSentence("One thing. Then another.")).toBe("One thing.");
+  expect(firstSentence("Version v1.2 shipped. Later.")).toBe("Version v1.2 shipped.");
+  expect(firstSentence("第一句。第二句。")).toBe("第一句。第二句。");
+  expect(firstSentence("第一句。 第二句。")).toBe("第一句。");
+  expect(firstSentence("No terminator here")).toBe("No terminator here");
+});
+
+test("firstSentence cuts a runaway sentence with no terminator at all", () => {
+  const long = "word ".repeat(200);
+  const cut = firstSentence(long);
+  expect(cut.length).toBeLessThan(long.length);
+  expect(cut.endsWith("…")).toBe(true);
 });
