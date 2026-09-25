@@ -44,7 +44,6 @@ import { distillThread, type DistillAnnotation } from "../../memory";
 import { callReducer, type CallRow, type CallState, type CallView } from "../call-state";
 import {
   applyRowChange,
-  joinRoundTexts,
   phaseOnToolStart,
   type RowChange,
   type TurnPhase,
@@ -58,6 +57,7 @@ import type { FiguresIndex } from "../figures";
 import { readingTurns, type LiveTurn } from "../live-turns";
 import { createDelivered } from "../delivered";
 import { createSteering, type Steering } from "../steering";
+import { createRowSplit } from "../turn-row-split";
 import { boxUnseenTurn, setOpenCallPeek, watching, type TurnOutcome } from "../turn-box";
 import { arrivedMessage, createOwnAppends } from "../thread-arrivals";
 import { deferHangup } from "./hangup";
@@ -525,55 +525,29 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       dispatch({ type: "row-changed", threadId, ts, change, error });
     };
 
-    // The row this turn is writing. It moves when the reader speaks into the
-    // turn: the model is handed their line at the end of the round in flight,
-    // and what it writes after that is an answer to them, so it gets a row of
-    // its own (docs/72).
-    // Set when the turn's first row is made, below.
-    let rowTs = 0;
-    // What of this turn is already in the thread file: every row above a line
-    // the reader got in, written there when the model was handed it. Empty
-    // while nobody has spoken into this turn, which is the ordinary case and
-    // the one where onDone persists the whole reply itself.
-    const persisted: string[] = [];
-    let steered = false;
-    // What of the row being written is already down, so two lines drained at
-    // the same boundary do not write it twice.
-    let rowPersisted: string | null = null;
-    // The model has the reader's line; the next thing written opens the new
-    // row. Deferred to that moment rather than done on the spot so a turn that
-    // ends right after the injection leaves no empty row behind.
-    let splitPending = false;
-    // The run whose answer the row being written is a reply to (docs/72), and
-    // the one the next row will be. Set when a delegated run is delivered into
-    // this turn; null on every ordinary row, which is all of them.
-    let rowOrigin: { runId: string } | null = null;
-    let nextOrigin: { runId: string } | null = null;
-
-    const splitRow = () => {
-      splitPending = false;
-      rowPersisted = null;
-      const was = rowTs;
-      rowTs = Math.max(Date.now(), was + 1);
-      rowOrigin = nextOrigin;
-      nextOrigin = null;
-      const row = shapes.current.newRow({
-        role: "ai",
-        text: "",
-        ts: rowTs,
-        streaming: true,
-        ...(rowOrigin ? { origin: rowOrigin } : {}),
-      });
-      liveTurns.openRow(threadId, controller, row);
-      dispatch({ type: "row-split", threadId, ts: was, row });
-      phase = null;
-    };
+    // The row this turn is writing, and what of the turn is already in the
+    // thread file (reading/turn-row-split.ts). It moves when the reader speaks
+    // into the turn or a delegated run comes back into it (docs/72).
+    const rows = createRowSplit();
 
     // Called by everything that puts something in the row, and by nothing that
     // ends the turn: an ending writes into the row that is already there.
     const writingRow = (): number => {
-      if (splitPending) splitRow();
-      return rowTs;
+      const at = rows.writing(Date.now);
+      if (at.split) {
+        const { was, origin } = at.split;
+        const row = shapes.current.newRow({
+          role: "ai",
+          text: "",
+          ts: at.ts,
+          streaming: true,
+          ...(origin ? { origin } : {}),
+        });
+        liveTurns.openRow(threadId, controller, row);
+        dispatch({ type: "row-split", threadId, ts: was, row });
+        phase = null;
+      }
+      return at.ts;
     };
 
     // The phase the row was last told about. A thinking delta arrives by the
@@ -592,21 +566,13 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     // the row above it, so the file reads user / ai / user / ai in the order
     // it all happened rather than every question before every answer.
     const steering = createSteering((lines) => {
-      steered = true;
       const head = (liveTurns.get(threadId)?.message.text ?? "").trim();
-      if (head && head !== rowPersisted) {
-        appendOwn(home, threadId, { role: "ai", text: head, ts: rowTs });
-        persisted.push(head);
-        rowPersisted = head;
-      }
+      const down = rows.steered(head);
+      if (down) appendOwn(home, threadId, { role: "ai", text: down.text, ts: down.ts });
       for (const line of lines) {
         appendOwn(home, threadId, { role: "user", text: line.text, ts: line.ts });
         dispatch({ type: "row-delivered", threadId, ts: line.ts });
       }
-      // The reply that follows is a new row — unless there is nothing above to
-      // separate it from. A line the model was handed before it had written a
-      // word needs no split: an empty row would be the whole of what it left.
-      splitPending = head !== "";
     });
 
     // A run this conversation delegated, come back while the turn that asked
@@ -616,20 +582,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     // nothing goes into the thread file. What is left behind is the reply — a
     // row of its own, marked with the run it answers.
     const delivered = createDelivered((runId) => {
-      steered = true;
       const head = (liveTurns.get(threadId)?.message.text ?? "").trim();
-      if (head && head !== rowPersisted) {
-        appendOwn(home, threadId, { role: "ai", text: head, ts: rowTs });
-        persisted.push(head);
-        rowPersisted = head;
-      }
-      // Handed it before a word was written: this row is the answer, and an
-      // empty row above it would be the whole of what the split left behind.
-      if (head === "") rowOrigin = { runId };
-      else {
-        splitPending = true;
-        nextOrigin = { runId };
-      }
+      const down = rows.delivered(head, runId);
+      if (down) appendOwn(home, threadId, { role: "ai", text: down.text, ts: down.ts });
     });
 
     // A quiet call is not named on screen, so the phase stays where it was
@@ -717,7 +672,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     };
 
     const ts = Date.now();
-    rowTs = ts;
+    rows.start(ts);
     const streamingRow = shapes.current.newRow({ role: "ai", text: "", ts, streaming: true });
     liveTurns.start({ threadId, bookId, home, controller, message: streamingRow, steering, delivered });
     dispatch({ type: "turn-started", threadId, row: streamingRow });
@@ -761,7 +716,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       // reads as a one-word reply. No Retry offered — the same inputs assemble
       // the same call, so there is nothing for a second press to change.
       if (turn.refusal) {
-        showFailure("refusal", turn.refusal, rowTs);
+        showFailure("refusal", turn.refusal, rows.ts);
         return;
       }
 
@@ -793,7 +748,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         // The thinking itself is dropped; only that it is happening is shown.
         onThinking: () => onThinking(writingRow()),
         onToolStart: (info) => onToolStart(info, writingRow()),
-        onToolEnd: (info) => onToolEnd(info, rowTs),
+        onToolEnd: (info) => onToolEnd(info, rows.ts),
         onSteerable: (port) => {
           steering.open(port);
           delivered.open(port);
@@ -813,21 +768,12 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           // last line into the file, so what is left is this row's own text —
           // the answer to what they said. Nothing at all, when the model was
           // handed their line and then stopped: the row above is already down.
-          const full = turnText || finalText;
-          const prefix = joinRoundTexts(persisted);
-          const tail = !steered
-            ? full
-            : full.startsWith(prefix)
-              ? full.slice(prefix.length).trimStart()
-              : // The canonical join does not continue what was already
-                // written down (a row opened after a second line, say). What
-                // the reader watched arrive in this row is then the answer.
-                (live?.message.text ?? "").trim();
-          if (!steered || tail) {
+          const tail = rows.answerTail(turnText || finalText, live?.message.text ?? "");
+          if (tail !== null) {
             // The notice rides the displayed row only. Persisting it would replay it
             // next turn as if the model had written it, and it would then describe a
             // turn whose assembly no longer applies.
-            write({ kind: "answer", text: tail, ...(turn.notice ? { notice: turn.notice } : {}) }, rowTs);
+            write({ kind: "answer", text: tail, ...(turn.notice ? { notice: turn.notice } : {}) }, rows.ts);
             // The settled trace goes to disk with the answer: what the turn did
             // is part of the reply, and a reopened thread that shows the words
             // without them is a thread that says the answer came from nowhere.
@@ -837,19 +783,19 @@ export function useCall<M extends CallRow, I extends StagedImage>(
             appendOwn(home, threadId, {
               role: "ai",
               text: tail,
-              ts: rowTs,
-              ...(rowOrigin ? { origin: rowOrigin } : {}),
+              ts: rows.ts,
+              ...(rows.origin ? { origin: rows.origin } : {}),
               ...(trace ? { parts: [{ type: "trace" as const, tools: trace }] } : {}),
             });
           } else {
-            write({ kind: "handed-over" }, rowTs);
+            write({ kind: "handed-over" }, rows.ts);
           }
           // read_chapter may have parked the conversation on a chapter while the
           // turn ran (docs/09); the status row is how the reader finds out.
           syncFocusChapter();
           // Nobody was looking: the answer is in the thread file and the card in
           // the corner is how the reader finds out it is there (docs/68).
-          reportUnseen({ kind: "answer", text: tail }, rowTs);
+          reportUnseen({ kind: "answer", text: tail ?? "" }, rows.ts);
           // A hangup that happened mid-answer waited for this (see captureHangup):
           // distillation reads the thread file, which only now holds the reply.
           live?.onSettled?.();
@@ -880,7 +826,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
           if (isStall(thrown) && attempt === 0 && !controller.signal.aborted) {
             const dead = liveTurns.settle(threadId, controller);
             delivered.close();
-            dispatch({ type: "row-dropped", threadId, ts: rowTs });
+            dispatch({ type: "row-dropped", threadId, ts: rows.ts });
             // Anything said into the dead turn goes into the file first, so the
             // turn that follows is assembled with it and answers it too.
             flushSteering(threadId, home, steering);
@@ -889,12 +835,12 @@ export function useCall<M extends CallRow, I extends StagedImage>(
             return;
           }
           if (!controller.signal.aborted) console.error("agent turn failed", message);
-          showFailure("error", message, rowTs);
+          showFailure("error", message, rows.ts);
         },
         // The loop gave up mid-turn: the call outgrew the window, or it spent the
         // round cap fetching without answering. Shown like the refusal above,
         // because that is what it is.
-        onRefusal: (message: string) => showFailure("refusal", message, rowTs),
+        onRefusal: (message: string) => showFailure("refusal", message, rows.ts),
       });
     })();
   }, [
