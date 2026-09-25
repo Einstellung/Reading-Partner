@@ -8,7 +8,7 @@
 //
 // Pure, and apart from the .tsx, so the rule can be tested without React.
 
-import { currentList, isChecked, shoppingItemKey } from "./shopping";
+import { currentList, isChecked, leftToBuy, missed, shoppingItemKey, stillToGet } from "./shopping";
 import { CATEGORY_ORDER, type IngredientCategory, type ShoppingItem, type ShoppingState } from "./types";
 import { categoryLabel, weekdayName } from "./view";
 
@@ -92,8 +92,8 @@ export function aislesOf(items: readonly ShoppingItem[]): ShoppingAisle[] {
  */
 export function shoppingStatus(state: ShoppingState, lines: readonly ShoppingItem[]): string {
   const done = state.doneOn;
-  if (!done) return `${lines.filter((i) => !isChecked(state, i)).length} left`;
-  const toGet = lines.filter((i) => i.afterDone && !isChecked(state, i)).length;
+  if (!done) return `${leftToBuy(state, lines)} left`;
+  const toGet = stillToGet(state, lines).length;
   return `Bought · ${weekdayName(done)}${toGet ? ` · ${toGet} to get` : ""}`;
 }
 
@@ -110,9 +110,9 @@ export function shoppingPreview(
 ): ShoppingPreview {
   const done = state.doneOn;
   if (done) {
-    const toGet = lines.filter((i) => i.afterDone && !isChecked(state, i));
+    const toGet = stillToGet(state, lines);
     if (toGet.length) return { items: toGet.slice(0, limit), more: null };
-    const missedCount = lines.filter((i) => !i.afterDone && !isChecked(state, i)).length;
+    const missedCount = missed(state, lines).length;
     return {
       items: [],
       more: missedCount ? `${missedCount} you didn't get` : "Everything on the list.",

@@ -12,10 +12,8 @@ import { ingredientImageUrl } from "./images";
 import { foodById, isProduce } from "./nutrition/foods";
 import type { MealCells, Nutrition, TemplateItem, TemplateRole } from "./nutrition/solve";
 import type { DayTargets, Goal, MealTarget, Profile, Region, Targets } from "./nutrition/targets";
-import { currentList, isChecked } from "./shopping";
 import { dayTargetsOn, mealNumbers, sumNutrition, targetsOf } from "./solve-week";
 import {
-  CATEGORY_ORDER,
   FLAVOURS,
   MEAL_KEYS,
   type DayPlan,
@@ -27,7 +25,6 @@ import {
   type MealMode,
   type MealsState,
   type ShoppingItem,
-  type ShoppingState,
   type WeekPlan,
 } from "./types";
 import { addDays, isoWeekday, planExhausted } from "./week";
@@ -323,8 +320,6 @@ export interface MealsView {
   weekSummary: WeekSummary | null;
   // No plan, or the plan's last day is past.
   exhausted: boolean;
-  shopping: ShoppingGroup[];
-  leftToBuy: number;
 }
 
 /** Everything the meals screen draws, from the state, the date and the region. */
@@ -344,8 +339,6 @@ export function mealsView(state: MealsState, today: string, region: Region): Mea
     later: upcoming.slice(2),
     weekSummary: plan ? weekSummary(plan, week) : null,
     exhausted: planExhausted(plan, today),
-    shopping: shoppingGroups(state.shopping),
-    leftToBuy: leftToBuy(state.shopping),
   };
 }
 
@@ -433,31 +426,4 @@ export function dishThumbnails(
 /** The second line of a shopping row: how long it keeps, and the one instruction a line can carry. */
 export function shoppingNote(item: ShoppingItem): string {
   return keepsLabel(item.keeps) + (item.freezeOnArrival ? " · freeze on arrival" : "");
-}
-
-/** How many lines are still to be bought. */
-export function leftToBuy(shopping: ShoppingState): number {
-  return currentList(shopping).filter((i) => !isChecked(shopping, i)).length;
-}
-
-export interface ShoppingGroup {
-  category: IngredientCategory;
-  label: string;
-  items: ShoppingItem[];
-}
-
-/** The list in aisle order, ticked lines sunk to the bottom of their aisle. */
-export function shoppingGroups(shopping: ShoppingState): ShoppingGroup[] {
-  const list = currentList(shopping);
-  const groups: ShoppingGroup[] = [];
-  for (const category of CATEGORY_ORDER) {
-    const mine = list.filter((i) => i.category === category);
-    if (!mine.length) continue;
-    groups.push({
-      category,
-      label: categoryLabel(category),
-      items: [...mine.filter((i) => !isChecked(shopping, i)), ...mine.filter((i) => isChecked(shopping, i))],
-    });
-  }
-  return groups;
 }

@@ -40,7 +40,7 @@ test("a fresh order walks the aisles and sinks the ticked lines", () => {
   const state = listed();
   const first = orderShoppingLines(state);
   const bokChoy = shoppingItemKey({ name: "上海青", category: "produce" });
-  expect(first).toContain(bokChoy);
+  expect(first.filter((k) => k.startsWith("produce"))[0]).toBe(bokChoy);
 
   const ticked = setShoppingChecked(state, bokChoy, true);
   const next = orderShoppingLines(ticked);
@@ -73,7 +73,7 @@ test("the aisles keep the order the snapshot fixed", () => {
   const state = listed();
   const order = orderShoppingLines(state);
   const aisles = aislesOf(linesInOrder(state, order));
-  expect(aisles[0]?.label).toBe("Produce");
+  expect(aisles.map((a) => a.label)).toEqual(["Produce", "Protein", "Dairy", "Frozen", "Grains", "Pantry"]);
   const flat = aisles.flatMap((a) => a.items.map(shoppingItemKey));
   expect(flat).toEqual(order);
 });
