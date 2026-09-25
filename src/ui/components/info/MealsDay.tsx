@@ -214,5 +214,3 @@ export function MealsDay(props: MealsDayProps) {
     </MealsColumn>
   );
 }
-
-export default MealsDay;

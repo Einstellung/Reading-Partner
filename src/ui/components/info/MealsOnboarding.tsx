@@ -496,5 +496,3 @@ export function MealsOnboarding(props: MealsOnboardingProps) {
     </MealsColumn>
   );
 }
-
-export default MealsOnboarding;

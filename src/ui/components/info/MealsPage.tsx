@@ -401,5 +401,3 @@ export function MealsHome(props: MealsHomeProps) {
     </MealsColumn>
   );
 }
-
-export default MealsHome;

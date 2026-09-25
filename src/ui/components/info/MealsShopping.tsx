@@ -19,7 +19,7 @@ import {
   LONG_LIST,
   orderShoppingLines,
 } from "../../../info/meals/list-order";
-import { isChecked, shoppingItemKey } from "../../../info/meals/shopping";
+import { isChecked, missed, shoppingItemKey, stillToGet } from "../../../info/meals/shopping";
 import { EMPTY_SHOPPING } from "../../../info/meals/types";
 import { ingredientPicture, shoppingNote, weekdayName } from "../../../info/meals/view";
 import { Button } from "../ui/button";
@@ -113,19 +113,32 @@ function Line({
   );
 }
 
-function Aisles({
-  items,
-  state,
-  photos,
-  mark,
-  onToggleItem,
-}: {
+interface GroupProps {
   items: ShoppingItem[];
   state: MealsState;
   photos: PhotoCache;
   mark: boolean;
   onToggleItem: (key: string, checked: boolean) => void;
-}) {
+}
+
+function Lines({ items, state, photos, mark, onToggleItem }: GroupProps) {
+  return (
+    <ul className="m-0 flex list-none flex-col p-0">
+      {items.map((item) => (
+        <Line
+          key={shoppingItemKey(item)}
+          item={item}
+          checked={isChecked(state.shopping, item)}
+          photos={photos}
+          mark={mark}
+          onToggle={(checked) => onToggleItem(shoppingItemKey(item), checked)}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function Aisles({ items, ...rest }: GroupProps) {
   return (
     <div className="flex flex-col gap-4">
       {aislesOf(items).map((aisle) => (
@@ -133,59 +146,21 @@ function Aisles({
           <h3 className="m-0 mb-1.5 text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
             {aisle.label}
           </h3>
-          <ul className="m-0 flex list-none flex-col p-0">
-            {aisle.items.map((item) => (
-              <Line
-                key={shoppingItemKey(item)}
-                item={item}
-                checked={isChecked(state.shopping, item)}
-                photos={photos}
-                mark={mark}
-                onToggle={(checked) => onToggleItem(shoppingItemKey(item), checked)}
-              />
-            ))}
-          </ul>
+          <Lines items={aisle.items} {...rest} />
         </div>
       ))}
     </div>
   );
 }
 
-function FlatGroup({
-  title,
-  hint,
-  items,
-  state,
-  photos,
-  mark,
-  onToggleItem,
-}: {
-  title: string;
-  hint?: string;
-  items: ShoppingItem[];
-  state: MealsState;
-  photos: PhotoCache;
-  mark: boolean;
-  onToggleItem: (key: string, checked: boolean) => void;
-}) {
+function FlatGroup({ title, hint, ...rest }: GroupProps & { title: string; hint?: string }) {
   return (
     <div className="mt-5">
       <h3 className="m-0 mb-1.5 text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
         {title}
       </h3>
       {hint && <p className="m-0 mb-1.5 text-[12px] leading-normal text-faint-foreground">{hint}</p>}
-      <ul className="m-0 flex list-none flex-col p-0">
-        {items.map((item) => (
-          <Line
-            key={shoppingItemKey(item)}
-            item={item}
-            checked={isChecked(state.shopping, item)}
-            photos={photos}
-            mark={mark}
-            onToggle={(checked) => onToggleItem(shoppingItemKey(item), checked)}
-          />
-        ))}
-      </ul>
+      <Lines {...rest} />
     </div>
   );
 }
@@ -205,8 +180,8 @@ export function MealsShopping(props: MealsShoppingProps) {
 
   const left = lines.filter((i) => !isChecked(shopping, i));
   const bought = lines.filter((i) => isChecked(shopping, i));
-  const toGet = left.filter((i) => i.afterDone);
-  const missedLines = left.filter((i) => !i.afterDone);
+  const toGet = stillToGet(shopping, lines);
+  const missedLines = missed(shopping, lines);
 
   return (
     <MealsColumn>
@@ -296,5 +271,3 @@ export function MealsShopping(props: MealsShoppingProps) {
     </MealsColumn>
   );
 }
-
-export default MealsShopping;
