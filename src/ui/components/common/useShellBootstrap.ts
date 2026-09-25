@@ -47,7 +47,12 @@ import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerInfoCollectWorker } from "../../../info/program/live";
 import { registerBriefingDelivery } from "../../../info/briefer/deliver";
 import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
-import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
+import { retireReplacedBook } from "../../../reading/delete/retire-book";
+import {
+  registerTranslateBookWorker,
+  setBookDeleter,
+  setBookRetirer,
+} from "../../../reading/translate/tool-live";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
 import { registerRetellDesk } from "../../../reading/retell/desk";
 import type { SyncHealthReport } from "../../../platform/sync";
@@ -209,10 +214,13 @@ export function bootDomains(): void {
   // device: which one collects is the election's answer, and a device with no
   // worker for the kind could not win it.
   registerInfoCollectWorker();
-  // The translation replaces a document by deleting the original, and the path
-  // that does that is reached from here rather than from inside reading/
-  // (tool-live.ts says why).
-  setBookDeleter(deleteIfUnreferenced);
+  // Removing a supplement deletes the document when nothing else lists it, and
+  // a translation retires the original; both paths are reached from here rather
+  // than from inside reading/ (tool-live.ts says why).
+  setBookDeleter(async (bookId) => {
+    await deleteIfUnreferenced(bookId);
+  });
+  setBookRetirer((bookId, successor) => retireReplacedBook(bookId, successor));
   // Translating a document, as a run (docs/55 step 11). Not delegable: the
   // entrance is translate_document, and its task book is JSON rather than
   // something a model writes.

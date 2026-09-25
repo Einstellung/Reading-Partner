@@ -128,13 +128,25 @@ export function setBookDeleter(fn: BookDeleter): void {
 }
 
 /**
- * The same function for everything else that takes a document off the shelf —
- * remove_supplement (reading/ingest/remove-tool.ts) deletes exactly what a
- * replaced original does. Registered once, read wherever it is needed; null
- * until the shell has handed it down.
+ * What remove_supplement (reading/ingest/remove-tool.ts) calls once the row is
+ * off the book's list: it deletes the document only when nothing else lists it
+ * (reading/delete: deleteIfUnreferenced). Registered once, read wherever it is
+ * needed; null until the shell has handed it down.
  */
 export function bookDeleter(): BookDeleter | null {
   return deleteBook;
+}
+
+/**
+ * How a translated original is retired: the work moves to the translation and
+ * the original's bytes go (reading/delete/retire-book.ts). Registered by the
+ * shell for the same layering reason as the deleter.
+ */
+type BookRetirer = (bookId: string, successor: { hash: string; path: string }) => Promise<void>;
+let retireBook: BookRetirer | null = null;
+
+export function setBookRetirer(fn: BookRetirer): void {
+  retireBook = fn;
 }
 
 export interface TranslateDeskRef {
@@ -290,8 +302,8 @@ async function runTranslation(
     await tell(target.bookId, line);
     return { progress: line };
   }
-  const removeBook = deleteBook;
-  if (!removeBook) throw new Error("the app is not ready to replace a document yet");
+  const retireOriginal = retireBook;
+  if (!retireOriginal) throw new Error("the app is not ready to replace a document yet");
 
   // What the turn used to do before it answered: a megabyte of EPUB, a parse
   // and a walk of the body. It is the same two questions, asked where the
@@ -347,7 +359,7 @@ async function runTranslation(
           const doc = parseEpub(bytes).docs[0];
           return { doc: doc.doc, text: doc.text, spineIndex: doc.index, idref: doc.idref };
         },
-        deleteBook: removeBook,
+        retireOriginal,
       },
       // The counter, as one line the run carries. The runner writes it to disk
       // at most once every thirty seconds (docs/55), so this is a sentence that
