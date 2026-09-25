@@ -8,6 +8,7 @@ import { PAGE_GEOMETRY, columnScrollTop } from "../../../src/reading/epub/page-g
 import { parseEpub } from "../../../src/reading/epub/parse";
 import {
   blockIndexAt,
+  blockInfo,
   cfiForBlock,
   findQuoteAt,
   indexRuns,
@@ -19,6 +20,7 @@ import {
   bookLinkTarget,
   quoteQueries,
   restoreTarget,
+  spineStartsOf,
   statsOf,
   claimsTouch,
   swipeTurn,
@@ -51,6 +53,30 @@ describe("where the reader is", () => {
   test("a block number is the CFI the renderer is sent to", () => {
     expect(cfiForBlock(pagination, 1)).toBe("epubcfi(/6/2[c1]!/4/6/1:0)");
     expect(cfiForBlock(pagination, 99)).toBeNull();
+  });
+
+  test("a page's table entry, and nothing past the last page", () => {
+    expect(blockInfo(pagination, 1)).toEqual({ spine: 0, charOffset: 900, label: "2" });
+    expect(blockInfo(pagination, 2)).toEqual({ spine: 1, charOffset: 0, label: null });
+    expect(blockInfo(pagination, 3)).toBeUndefined();
+    expect(blockInfo(pagination, -1)).toBeUndefined();
+  });
+
+  test("each spine document starts on its first page, and one with no page has none", () => {
+    const withGap = paged([
+      { spine: 0, charOffset: 0, cfi: "epubcfi(/6/2[c1]!/4/2/1:0)", label: null },
+      { spine: 0, charOffset: 900, cfi: "epubcfi(/6/2[c1]!/4/6/1:0)", label: null },
+      { spine: 2, charOffset: 0, cfi: "epubcfi(/6/6[c3]!/4/2/1:0)", label: null },
+      { spine: 2, charOffset: 700, cfi: "epubcfi(/6/6[c3]!/4/4/1:0)", label: null },
+      { spine: 3, charOffset: 0, cfi: "epubcfi(/6/8[c4]!/4/2/1:0)", label: null },
+    ]);
+    const starts = spineStartsOf(withGap);
+    expect([...starts.entries()]).toEqual([
+      [0, 0],
+      [2, 2],
+      [3, 4],
+    ]);
+    expect(starts.has(1)).toBe(false);
   });
 
   test("a CFI names the page it falls in", () => {

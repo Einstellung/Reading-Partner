@@ -22,7 +22,7 @@ import type {
 import { openExternal } from "../../platform/app/external-link";
 import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
 import { caretAtPoint } from "./caret";
-import { epubCfi, parseCfiStart, resolvePoint, textSteps } from "./cfi";
+import { epubCfi, parseCfiStart, resolvePointRange, textSteps } from "./cfi";
 import type { FlowReaderView, FlowTool } from "./flow-contract";
 import {
   IDLE,
@@ -36,12 +36,11 @@ import {
 import { FLOW_PAPERS, type FlowDisplay } from "./flow-display";
 import { createFlowMarks, type FlowDoc, type PressPoint } from "./flow-marks";
 import { flowBaselineCss, mountFlowDocument } from "./flow-mount";
-import type { SpineText } from "./mark-draw";
+import { createSpineTexts } from "./mark-write";
 import { createPageResources, readingFontsReady } from "./page-mount";
 import type { Pagination } from "./paginate";
 import type { EpubBook } from "./parse";
-import { blockIndexAt, bookLinkTarget, labelForBlock, pageIndexOfCfi } from "./reader-logic";
-import { indexRuns } from "./text";
+import { bookLinkTarget, labelForBlock, pageIndexOfCfi, spineStartsOf } from "./reader-logic";
 import { hrefFragment, resolveZipPath } from "./zip";
 
 export interface FlowReaderCallbacks {
@@ -152,11 +151,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     };
   });
 
-  const spineStarts = new Map<number, number>();
-  for (let i = 0; i < pagination.blocks.length; i++) {
-    const s = pagination.blocks[i].spine;
-    if (!spineStarts.has(s)) spineStarts.set(s, i);
-  }
+  const spineStarts = spineStartsOf(pagination);
   const firstPageOfSpine = (spine: number) => spineStarts.get(spine) ?? 0;
 
   // --- state ----------------------------------------------------------------
@@ -174,17 +169,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   // --- the marks ------------------------------------------------------------
   // One index of a spine item's text per book. It is the ingestion tree's,
   // never the column's clone's (docs/pitfall/267).
-  const spineTexts = new Map<number, SpineText>();
-  function spineOf(index: number): SpineText | null {
-    const hit = spineTexts.get(index);
-    if (hit) return hit;
-    const doc = book.docs[index];
-    const root = doc?.doc.documentElement;
-    if (!doc || !root) return null;
-    const entry: SpineText = { index, idref: doc.idref, root, text: doc.text, runs: indexRuns(doc.text) };
-    spineTexts.set(index, entry);
-    return entry;
-  }
+  const spineOf = createSpineTexts(book);
 
   function viewportBox(): DOMRect {
     return scroller.getBoundingClientRect();
@@ -211,11 +196,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     docAt,
     docOf: (spine) => docs[spine] ?? null,
     isShown,
-    blockAt: (i) => {
-      const block = pagination.blocks[i];
-      return block ? { spine: block.spine, charOffset: block.charOffset, label: block.label ?? null } : undefined;
-    },
-    pageOfPoint: (spine, charOffset) => blockIndexAt(pagination, spine, charOffset),
+    pagination,
     spineOf,
     onSave: (anns) => callbacks.onSaveAnnotations(anns),
     onSelect: (ids) => callbacks.onSelectAnnotations(ids),
@@ -322,17 +303,8 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     if (!parsed) return null;
     const doc = docs[parsed.spineIndex];
     if (!doc) return null;
-    const at = resolvePoint(doc.root, parsed);
-    if (!at) return null;
-    const range = owner.createRange();
-    if (at.node.nodeType === 3) {
-      const text = at.node as Text;
-      range.setStart(text, at.offset);
-      range.setEnd(text, Math.min(text.data.length, at.offset + 1));
-    } else {
-      range.selectNode(at.node);
-    }
-    return { doc, range };
+    const range = resolvePointRange(doc.root, target);
+    return range ? { doc, range } : null;
   }
 
   function scrollTo(doc: Column, rect: DOMRect): void {

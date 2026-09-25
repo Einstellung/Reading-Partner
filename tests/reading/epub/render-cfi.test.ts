@@ -9,7 +9,7 @@
 // one every other EPUB reader reads.
 
 import { describe, expect, test } from "bun:test";
-import { parseCfiStart, parseEpubCfi, resolvePoint } from "../../../src/reading/epub/cfi";
+import { parseCfiStart, parseEpubCfi, resolvePoint, resolvePointRange } from "../../../src/reading/epub/cfi";
 import { blockNumberAt, characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { parseEpub, type EpubBook } from "../../../src/reading/epub/parse";
 import { indexRuns, offsetOfPoint } from "../../../src/reading/epub/reader-logic";
@@ -128,5 +128,65 @@ describe("a page's CFI resolves in the card's tree", () => {
     expect(html).toContain("bye");
     const root = cardTree(book, 0);
     expect(root.querySelector("script")).toBeNull();
+  });
+});
+
+// What both views measure a position from when they go to a CFI: the column
+// scrolls to its box, a sheet finds the column it is laid out in.
+describe("a CFI's start point as a range with a box", () => {
+  function oneDoc(body: string): EpubBook {
+    return parseEpub(buildEpub({ docs: [{ name: "c1.xhtml", body }] }));
+  }
+
+  test("every page start is the character the page begins with, on the card's tree", async () => {
+    const book = parseEpub(
+      buildEpub({
+        docs: [
+          { name: "c1.xhtml", body: `<h1>One</h1>${prose(12, 350)}` },
+          { name: "c2.xhtml", body: `<h1>Two</h1>${prose(9, 420)}` },
+        ],
+      }),
+    );
+    const pagination = await paginate(book, ruler);
+    expect(pagination.blocks.length).toBeGreaterThan(3);
+    const roots = book.docs.map((_, i) => cardTree(book, i));
+    for (const block of pagination.blocks) {
+      const range = resolvePointRange(roots[block.spine], block.cfi);
+      expect(range).not.toBeNull();
+      if (!range) continue;
+      // On the card's own clone, never the ingestion tree it was cut on.
+      expect(roots[block.spine].contains(range.startContainer)).toBe(true);
+      expect(range.startContainer.nodeType).toBe(3);
+      expect(range.toString()).toBe(book.docs[block.spine].text.text[block.charOffset]);
+    }
+  });
+
+  test("a point at the end of a text node is the empty range there", () => {
+    const root = cardTree(oneDoc(`<p>abc</p>`), 0);
+    const range = resolvePointRange(root, "epubcfi(/6/2!/4/2/1:3)");
+    expect(range).not.toBeNull();
+    expect(range!.startContainer.nodeType).toBe(3);
+    expect(range!.startOffset).toBe(3);
+    expect(range!.endOffset).toBe(3);
+  });
+
+  test("a point on an element is the whole element", () => {
+    const root = cardTree(oneDoc(`<p>abc</p><p>def</p>`), 0);
+    const range = resolvePointRange(root, "epubcfi(/6/2!/4/4)");
+    expect(range).not.toBeNull();
+    expect(range!.toString()).toBe("def");
+    expect(range!.startContainer).toBe(range!.endContainer);
+    expect(range!.endOffset - range!.startOffset).toBe(1);
+  });
+
+  test("a range CFI answers for its start", () => {
+    const root = cardTree(oneDoc(`<p>abcdef</p>`), 0);
+    expect(resolvePointRange(root, "epubcfi(/6/2!/4/2,/1:2,/1:5)")!.toString()).toBe("c");
+  });
+
+  test("a string that is not a CFI, or a point the tree does not have, is null", () => {
+    const root = cardTree(oneDoc(`<p>abc</p>`), 0);
+    expect(resolvePointRange(root, "not a cfi")).toBeNull();
+    expect(resolvePointRange(root, "epubcfi(/6/2!/4/40/1:0)")).toBeNull();
   });
 });

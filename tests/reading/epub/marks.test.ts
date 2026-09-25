@@ -30,12 +30,13 @@ import {
 } from "../../../src/reading/epub/mark-geometry";
 import {
   epubInkOf,
+  epubSortOffset,
   markKind,
   newEpubInk,
   newEpubMark,
   quoteSelectorAt,
 } from "../../../src/reading/epub/annotation";
-import { epubRangeCfi, parseEpubRangeCfi, rangeToCfi, resolveSteps, textSteps } from "../../../src/reading/epub/cfi";
+import { epubRangeCfi, parseEpubRangeCfi, resolveRange, resolveSteps, textSteps } from "../../../src/reading/epub/cfi";
 import {
   BODY_WIDTH,
   PAGE_GEOMETRY,
@@ -45,7 +46,10 @@ import {
   PAGE_WIDTH,
 } from "../../../src/reading/epub/page-geometry";
 import { parseEpub } from "../../../src/reading/epub/parse";
-import { extractDocumentText, indexRuns, offsetOfPoint, runAt } from "../../../src/reading/epub/text";
+import { createSpineTexts, textMarkOf, type TextMarkContext } from "../../../src/reading/epub/mark-write";
+import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
+import { blockIndexAt } from "../../../src/reading/epub/reader-logic";
+import { extractDocumentText, runAt } from "../../../src/reading/epub/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
 import { buildEpub, prose } from "./fixture";
 
@@ -321,72 +325,120 @@ function cloneOf(html: string): Element {
   return root;
 }
 
+// A Range over a span of the text, on whichever copy of the tree `root` is.
+function rangeOn(root: Element, span: { start: number; end: number }): Range {
+  const text = extractDocumentText(root);
+  const from = runAt(text.runs, span.start);
+  const to = runAt(text.runs, span.end);
+  if (!from || !to) throw new Error("no runs");
+  const range = root.ownerDocument.createRange();
+  range.setStart(from.node, from.offset);
+  range.setEnd(to.node, to.offset);
+  return range;
+}
+
+async function writer() {
+  const parsed = await book();
+  const pagination = await paginate(parsed, characterRuler(250));
+  const spineOf = createSpineTexts(parsed);
+  const ctx = (spine: number, over: Partial<TextMarkContext> = {}): TextMarkContext => ({
+    spine,
+    stroke: "highlight",
+    color: "#ffd400",
+    spineOf,
+    pagination,
+    authorName: "Reader",
+    now: "2026-09-25T08:00:00.000Z",
+    id: "m1",
+    ...over,
+  });
+  return { parsed, pagination, spineOf, ctx };
+}
+
 describe("a stroke becomes a mark and is found again", () => {
-  test("the offsets written down are the ones the CFI resolves back to", async () => {
-    const parsed = await book();
+  test("a stroke on a view's clone is written with the ingestion tree's offsets", async () => {
+    const { parsed, pagination, ctx } = await writer();
+    const pages = new Set<number>();
     for (const doc of parsed.docs) {
-      const runs = indexRuns(doc.text);
-      const root = doc.doc.documentElement;
-      expect(root).not.toBeNull();
+      // The view's tree: the same markup parsed a second time, so no node in
+      // it is a key of the ingestion tree's offset index (pitfall 267).
+      const clone = cloneOf(doc.html);
       for (const start of [12, 180, 500]) {
         const span = { start, end: start + 40 };
-        const from = runAt(doc.text.runs, span.start);
-        const to = runAt(doc.text.runs, span.end);
-        expect(from).not.toBeNull();
-        expect(to).not.toBeNull();
-        if (!from || !to || !root) continue;
+        const range = rangeOn(clone, span);
+        const mark = textMarkOf(range, ctx(doc.index));
+        expect(mark).not.toBeNull();
+        if (!mark) continue;
 
-        // What the card hands back when the pen lifts.
-        const range = doc.doc.createRange();
-        range.setStart(from.node, from.offset);
-        range.setEnd(to.node, to.offset);
-        const cfi = rangeToCfi(range, doc.index, doc.idref);
-        expect(cfi).not.toBeNull();
-        if (!cfi) continue;
+        const pageIndex = blockIndexAt(pagination, doc.index, span.start);
+        pages.add(pageIndex);
+        expect(epubSortOffset(mark.sortIndex)).toBe(span.start);
+        expect(mark.text).toBe(doc.text.text.slice(span.start, span.end));
+        expect(annotationPage(mark as { position?: { pageIndex?: number } })).toBe(pageIndex + 1);
+        expect(mark.pageLabel).toBe(String(pageIndex + 1));
+        expect(mark).toMatchObject({
+          id: "m1",
+          type: "highlight",
+          color: "#ffd400",
+          authorName: "Reader",
+          dateCreated: "2026-09-25T08:00:00.000Z",
+        });
 
-        // What is written down: the offsets, taken back off the ingestion tree
-        // rather than off the node identities of a clone (pitfall 267).
-        const back = parseEpubRangeCfi(cfi);
-        expect(back).not.toBeNull();
-        if (!back) continue;
-        expect(back.spineIndex).toBe(doc.index);
-        const a = resolveSteps(root, back.start.steps, back.start.offset);
-        const b = resolveSteps(root, back.end.steps, back.end.offset);
-        expect(a).not.toBeNull();
-        expect(b).not.toBeNull();
-        if (!a || !b) continue;
-        expect(offsetOfPoint(doc.text, runs, a.node, a.offset)).toBe(span.start);
-        expect(offsetOfPoint(doc.text, runs, b.node, b.offset)).toBe(span.end);
+        // The CFI names the same words on the ingestion tree and on the clone.
+        const cfi = (mark.position as { value: string }).value;
+        const parsedCfi = parseEpubRangeCfi(cfi);
+        expect(parsedCfi?.spineIndex).toBe(doc.index);
+        if (!parsedCfi) continue;
+        expect(resolveRange(doc.doc.documentElement!, parsedCfi)?.toString()).toBe(range.toString());
+        expect(resolveRange(clone, parsedCfi)?.toString()).toBe(range.toString());
       }
     }
+    // Offsets that fell back to 0 would put every mark on its document's first page.
+    expect(pages.size).toBeGreaterThan(2);
   });
 
-  test("the CFI a card writes resolves on another copy of the same document", async () => {
-    const parsed = await book();
+  test("the stroke and the printed page number are the ones handed in", async () => {
+    const { parsed, pagination, ctx } = await writer();
+    const printed = { ...pagination, blocks: pagination.blocks.map((b, i) => ({ ...b, label: `p${i}` })) };
     const doc = parsed.docs[1];
-    const root = doc.doc.documentElement;
-    if (!root) throw new Error("no content root");
-    const span = { start: 20, end: 64 };
-    const from = runAt(doc.text.runs, span.start);
-    const to = runAt(doc.text.runs, span.end);
-    if (!from || !to) throw new Error("no runs");
-    const range = doc.doc.createRange();
-    range.setStart(from.node, from.offset);
-    range.setEnd(to.node, to.offset);
-    const cfi = rangeToCfi(range, doc.index, doc.idref);
-    if (!cfi) throw new Error("no cfi");
+    const span = { start: 300, end: 330 };
+    const mark = textMarkOf(rangeOn(cloneOf(doc.html), span), ctx(doc.index, { stroke: "underline", pagination: printed }));
+    expect(mark?.type).toBe("underline");
+    expect(mark?.pageLabel).toBe(`p${blockIndexAt(pagination, doc.index, span.start)}`);
+  });
 
-    // The card's tree: the same markup parsed a second time.
+  test("a stroke on no words, or off the book, writes nothing", async () => {
+    const { parsed, ctx } = await writer();
+    const doc = parsed.docs[0];
     const clone = cloneOf(doc.html);
-    const back = parseEpubRangeCfi(cfi);
-    if (!back) throw new Error("no parse");
-    const a = resolveSteps(clone, back.start.steps, back.start.offset);
-    const b = resolveSteps(clone, back.end.steps, back.end.offset);
-    if (!a || !b) throw new Error("no resolve");
-    const onClone = clone.ownerDocument.createRange();
-    onClone.setStart(a.node, a.offset);
-    onClone.setEnd(b.node, b.offset);
-    expect(onClone.toString()).toBe(range.toString());
+
+    const collapsed = rangeOn(clone, { start: 50, end: 50 });
+    expect(collapsed.collapsed).toBe(true);
+    expect(textMarkOf(collapsed, ctx(doc.index))).toBeNull();
+
+    const gap = doc.text.text.indexOf(" ", 30);
+    expect(textMarkOf(rangeOn(clone, { start: gap, end: gap + 1 }), ctx(doc.index))).toBeNull();
+
+    const words = rangeOn(clone, { start: 30, end: 60 });
+    expect(textMarkOf(words, ctx(7))).toBeNull();
+
+    const loose = clone.ownerDocument.createElement("div");
+    loose.textContent = "words outside any content root";
+    const outside = clone.ownerDocument.createRange();
+    outside.setStart(loose.firstChild!, 0);
+    outside.setEnd(loose.firstChild!, 5);
+    expect(textMarkOf(outside, ctx(doc.index))).toBeNull();
+  });
+
+  test("a spine item's text is indexed once, on the ingestion tree", async () => {
+    const { parsed, spineOf } = await writer();
+    const first = spineOf(1);
+    expect(first).not.toBeNull();
+    expect(spineOf(1)).toBe(first);
+    expect(first?.root).toBe(parsed.docs[1].doc.documentElement!);
+    expect(first?.idref).toBe(parsed.docs[1].idref);
+    expect(first?.text).toBe(parsed.docs[1].text);
+    expect(spineOf(9)).toBeNull();
   });
 
   test("the repair walks a quote's span onto the card without a stored CFI", async () => {

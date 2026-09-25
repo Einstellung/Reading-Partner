@@ -14,14 +14,15 @@
 // viewport rect.
 
 import type { Annotation, AnnotationPopupParams } from "../../platform/app/reader-contract";
-import { DEFAULT_MARK_COLOR, epubPositionOf, markKind, newEpubMark, quoteSelectorAt } from "./annotation";
+import { DEFAULT_MARK_COLOR, epubPositionOf, markKind } from "./annotation";
 import { caretAtPoint, rangeBetween, type CaretPoint } from "./caret";
-import { parseCfiStart, parseEpubRangeCfi, rangeToCfi, resolveRange, resolveSteps } from "./cfi";
+import { parseCfiStart, parseEpubRangeCfi, resolveRange } from "./cfi";
 import type { FlowTool } from "./flow-contract";
 import { wordBoundsAt } from "./flow-gesture";
 import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "./mark-draw";
 import { popupRect, rectsHit, unionRect, type PageRect } from "./mark-geometry";
-import { offsetOfPoint } from "./text";
+import { textMarkOf } from "./mark-write";
+import type { Pagination } from "./paginate";
 
 /** One spine document as it stands in the column. */
 export interface FlowDoc {
@@ -44,8 +45,7 @@ export interface FlowMarkHost {
   docOf(spine: number): FlowDoc | null;
   /** Whether a document is laid out where the reader can see it now. */
   isShown(doc: FlowDoc): boolean;
-  blockAt(pageIndex: number): { spine: number; charOffset: number; label: string | null } | undefined;
-  pageOfPoint(spine: number, charOffset: number): number;
+  pagination: Pagination;
   spineOf(index: number): SpineText | null;
   /** Every mark of the book, after one was added. */
   onSave(annotations: Annotation[]): void;
@@ -190,38 +190,18 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
   // --- writing a mark -----------------------------------------------------
 
   function commit(d: Drag): boolean {
-    if (!d.range || d.range.collapsed) return false;
-    const cfi = rangeToCfi(d.range, d.doc.spine, d.doc.idref);
-    if (!cfi) return false;
-    const spine = host.spineOf(d.doc.spine);
-    const parsed = parseEpubRangeCfi(cfi);
-    if (!spine || !parsed) return false;
-    // Back to the ingestion tree before any offset is read off it: the column's
-    // nodes are a clone's, and the offsets the pagination was cut on are the
-    // ingestion tree's (docs/pitfall/267).
-    const from = resolveSteps(spine.root, parsed.start.steps, parsed.start.offset);
-    const to = resolveSteps(spine.root, parsed.end.steps, parsed.end.offset);
-    if (!from || !to) return false;
-    const start = offsetOfPoint(spine.text, spine.runs, from.node, from.offset);
-    const end = offsetOfPoint(spine.text, spine.runs, to.node, to.offset);
-    const span = { start: Math.min(start, end), end: Math.max(start, end) };
-    const quote = quoteSelectorAt(spine.text.text, span);
-    if (quote.exact.trim() === "") return false;
-    const pageIndex = host.pageOfPoint(spine.index, span.start);
-    const block = host.blockAt(pageIndex);
-    const mark = newEpubMark({
-      id: crypto.randomUUID(),
+    if (!d.range) return false;
+    const mark = textMarkOf(d.range, {
+      spine: d.doc.spine,
       stroke: "highlight",
       color: d.color,
-      cfi,
-      spineIndex: spine.index,
-      span,
-      pageIndex,
-      pageLabel: block?.label ?? String(pageIndex + 1),
-      quote,
+      spineOf: host.spineOf,
+      pagination: host.pagination,
       authorName: host.authorName,
       now: new Date().toISOString(),
-    }) as Annotation;
+      id: crypto.randomUUID(),
+    });
+    if (!mark) return false;
     marks.set(mark.id, mark);
     invalidate(d.doc.spine);
     host.onSave(Array.from(marks.values()));

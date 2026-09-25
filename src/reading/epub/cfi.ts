@@ -319,6 +319,28 @@ export function resolveRange(root: Element, parsed: ParsedRangeCfi): Range | nul
   return range;
 }
 
+/**
+ * Where a CFI's start point sits, as a Range that has a box: the one character
+ * after the point, or the whole element when the point is on one. A collapsed
+ * range has no client rects to measure a position from. Null when the string
+ * is not a CFI or the point is not in this tree.
+ */
+export function resolvePointRange(root: Element, cfi: string): Range | null {
+  const parsed = parseCfiStart(cfi);
+  if (!parsed) return null;
+  const at = resolvePoint(root, parsed);
+  if (!at) return null;
+  const range = root.ownerDocument.createRange();
+  if (at.node.nodeType === 3) {
+    const text = at.node as Text;
+    range.setStart(text, at.offset);
+    range.setEnd(text, Math.min(text.data.length, at.offset + 1));
+  } else {
+    range.selectNode(at.node);
+  }
+  return range;
+}
+
 /** A live Range in a content tree, as a range CFI. Null when either end is outside the tree. */
 export function rangeToCfi(range: Range, spineIndex: number, idref: string): string | null {
   const start = pointSteps(range.startContainer, range.startOffset);

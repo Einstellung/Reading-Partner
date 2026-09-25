@@ -2,7 +2,8 @@
 // what a highlight, an underline and a selection look like once it is found.
 // The sheets (mark-layer.ts) and the reflow column (flow-marks.ts) mount their
 // overlays differently and measure in different coordinates, so each one keeps
-// its own mounting, hit-testing and writing; only what is identical is here.
+// its own mounting and hit-testing; only what is identical is here, and writing
+// a mark down is mark-write.ts.
 //
 // Every rect here is already in the caller's own coordinates: this file draws
 // what it is handed and converts nothing.

@@ -28,6 +28,25 @@ export function labelForBlock(pagination: Pagination, pageIndex: number): string
   return label ? label : null;
 }
 
+/** What the pagination table says about a page, or undefined out of range. */
+export function blockInfo(
+  pagination: Pagination,
+  pageIndex: number,
+): { spine: number; charOffset: number; label: string | null } | undefined {
+  const block = pagination.blocks[pageIndex];
+  return block ? { spine: block.spine, charOffset: block.charOffset, label: block.label ?? null } : undefined;
+}
+
+/** The first page of every spine document the table has, by spine index. */
+export function spineStartsOf(pagination: Pagination): Map<number, number> {
+  const starts = new Map<number, number>();
+  for (let i = 0; i < pagination.blocks.length; i++) {
+    const s = pagination.blocks[i].spine;
+    if (!starts.has(s)) starts.set(s, i);
+  }
+  return starts;
+}
+
 /** The 0-based page a point in a spine document falls in. */
 export function blockIndexAt(pagination: Pagination, spine: number, charOffset: number): number {
   return blockNumberAt(pagination, spine, charOffset) - 1;
