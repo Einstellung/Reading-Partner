@@ -5,7 +5,9 @@
 // later, one entry at a time; sharing a file would mean the run's load-modify-
 // save sitting on top of a week the reader has meanwhile adjusted. The two have
 // nothing to say to each other — the cache is keyed by name and outlives every
-// week — so they are two files and palace merges each whole (kinds.ts).
+// week — so they are two files. Palace merges the week whole and this one per
+// key against the last synced copy (kinds.ts), which is what lets a dropped
+// entry stay dropped on the other device.
 
 import {
   quarantineFile,

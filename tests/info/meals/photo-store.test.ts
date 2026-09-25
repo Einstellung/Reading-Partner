@@ -21,6 +21,7 @@ import {
   photoForIngredient,
 } from "../../../src/info/meals/dish-photos";
 import type { DishPhoto } from "../../../src/info/meals/types";
+import { mergeFile } from "../../../src/platform/sync/merge";
 
 let io: FakeAppData;
 
@@ -112,4 +113,64 @@ test("a meal and an ingredient read their own keys, and a miss is nothing", () =
   expect(photoForDish(null, cache)).toBeNull();
   expect(photoForIngredient("Kale", cache)).toBeNull();
   expect(photoForIngredient("bok choy", cache)).toBeNull();
+});
+
+// --- across devices ----------------------------------------------------------
+//
+// The run on the PC writes entries while the phone marks a dead picture broken,
+// both against the copy they last synced. Sync merges the file per key against
+// that copy (palace/kinds.ts), so neither device's edit undoes the other's.
+
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+/** Two devices that have both synced `seed`, and the bytes they agreed on. */
+async function twoDevices(seed: Record<string, DishPhoto>) {
+  const a = createFakeAppData();
+  await savePhotoEntries(seed, a);
+  const base = a.files.get(MEALS_PHOTOS_FILE) as string;
+  const b = createFakeAppData();
+  b.files.set(MEALS_PHOTOS_FILE, base);
+  return { a, b, base };
+}
+
+/** The keys each device holds once it has merged the other's copy over the base. */
+function synced(base: string, a: FakeAppData, b: FakeAppData): string[][] {
+  const bytes = (d: FakeAppData) => enc.encode(d.files.get(MEALS_PHOTOS_FILE) as string);
+  const keys = (local: FakeAppData, remote: FakeAppData) => {
+    const out = mergeFile({
+      path: MEALS_PHOTOS_FILE,
+      base: enc.encode(base),
+      local: bytes(local),
+      remote: bytes(remote),
+    });
+    expect(out.copies).toEqual([]);
+    const parsed = parsePhotoFile(JSON.parse(dec.decode(out.merged)));
+    return Object.keys(parsed?.photos ?? {}).sort();
+  };
+  return [keys(a, b), keys(b, a)];
+}
+
+test("two devices that each found a photograph both keep both", async () => {
+  const { a, b, base } = await twoDevices({ "dish:mapo tofu": PHOTO });
+  await savePhotoEntries({ "dish:shakshuka": PHOTO }, a);
+  await savePhotoEntries({ "ingredient:kale": { none: true, checkedAt: 5 } }, b);
+  const all = ["dish:mapo tofu", "dish:shakshuka", "ingredient:kale"];
+  expect(synced(base, a, b)).toEqual([all, all]);
+});
+
+// The other device writes the file too, just not that entry: a device that left
+// the file alone would hand the merge nothing to decide.
+test("a photograph one device dropped stays dropped while the other adds its own", async () => {
+  const { a, b, base } = await twoDevices({ "dish:mapo tofu": PHOTO, "dish:shakshuka": PHOTO });
+  await markDishPhotoBroken("mapo tofu", a);
+  await savePhotoEntries({ "ingredient:kale": { none: true, checkedAt: 5 } }, b);
+  const all = ["dish:shakshuka", "ingredient:kale"];
+  expect(synced(base, a, b)).toEqual([all, all]);
+});
+
+test("a photograph one device dropped stays dropped when the other did nothing", async () => {
+  const { a, b, base } = await twoDevices({ "dish:mapo tofu": PHOTO, "dish:shakshuka": PHOTO });
+  await markDishPhotoBroken("mapo tofu", a);
+  expect(synced(base, a, b)).toEqual([["dish:shakshuka"], ["dish:shakshuka"]]);
 });

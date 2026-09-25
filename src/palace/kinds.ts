@@ -1036,10 +1036,11 @@ export const PALACE = [
     id: "fixed",
     refs: [],
     sync: "data",
-    merge: "opaque",
+    merge: "records",
+    shape: { kind: "map", container: "photos", idField: null },
     deleteWith: "never",
     gc: "never",
-    note: "the photographs the meals line found for dishes and ingredients (docs/73 图片), keyed by what was searched for and outliving every week; its own file because the run that writes it is on the PC minutes after the phone wrote the week",
+    note: "the photographs the meals line found for dishes and ingredients (docs/73 图片), keyed by what was searched for and outliving every week; its own file because the run that writes it is on the PC minutes after the phone wrote the week; records-merged per key, so the run's new entries and the phone dropping a picture that will not load both survive a crossing sync",
   },
   {
     kind: "info-picture",
