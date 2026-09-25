@@ -29,7 +29,7 @@ import { listTalkOutlinesForTopic } from "../../../../reading/talk";
 import { listRetellsForTopic } from "../../../../reading/retell";
 import { Button } from "../../ui/button";
 import CardMenu from "../../shelf/CardMenu";
-import DeleteRehearsalButton from "./DeleteRehearsalButton";
+import ConfirmDestructiveDialog from "../../common/ConfirmDestructiveDialog";
 
 const ROW = "flex items-center gap-2 rounded-lg border border-border py-1 pl-3 pr-1.5";
 
@@ -49,7 +49,7 @@ export default function RehearsalSection(props: {
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<RehearsalRow | null>(null);
 
-  const refresh = useCallback(async () => {
+  const load = useCallback(async () => {
     const [rehearsals, retells, outlines] = await Promise.all([
       listRehearsalsForTopic(topic.id),
       listRetellsForTopic(topic.id),
@@ -78,19 +78,27 @@ export default function RehearsalSection(props: {
       const last = log.runs[log.runs.length - 1];
       counts.set(r.id, { runs: log.runs.length, lastRunAt: last ? last.startedAt : null });
     }
-    setRows(rehearsalRows(rehearsals, withTalk, counts));
+    return rehearsalRows(rehearsals, withTalk, counts);
   }, [topic.id]);
+  const refresh = useCallback(async () => setRows(await load()), [load]);
 
+  // Both outcomes are dropped once the topic has changed: a read for the topic
+  // just left can finish after the one for the topic now shown.
   useEffect(() => {
     let cancelled = false;
     setRows(null);
-    void refresh().catch(() => {
-      if (!cancelled) setRows([]);
-    });
+    void load().then(
+      (r) => {
+        if (!cancelled) setRows(r);
+      },
+      () => {
+        if (!cancelled) setRows([]);
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [refresh, reloadKey]);
+  }, [load, reloadKey]);
 
   // A row without an id is a retell's talk nobody has given yet: the object is
   // made now, which is the same call the retell's own Rehearse button makes.
@@ -177,11 +185,12 @@ export default function RehearsalSection(props: {
       )}
 
       {deleting?.id && (
-        <DeleteRehearsalButton
-          name={deleting.name}
+        <ConfirmDestructiveDialog
+          title={`Delete “${deleting.name}”?`}
+          description="Every pass over this talk goes with it. The talk itself stays where it is, and you can rehearse it again from the retell."
           open
           onOpenChange={(open) => !open && setDeleting(null)}
-          onDelete={() => {
+          onConfirm={() => {
             void deleteRehearsal(deleting.id as string).then(refresh);
           }}
         />

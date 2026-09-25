@@ -57,14 +57,13 @@ import {
   ROW_LIST,
   ROW_NAME,
 } from "../shelf/cardStyles";
-import DeleteTopicButton from "./DeleteTopicButton";
 import { displayFileTitle, type BookMeta } from "../shelf/file-title";
 import { splitMaterials } from "../shelf/article-row";
 import ArticleRows from "../shelf/ArticleRows";
-import RemoveFileButton from "./RemoveFileButton";
 import SavedArticleView from "./SavedArticleView";
 import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
+import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import { shelfHeaderLine, shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
 import ObservationSection from "./topic/ObservationSection";
 import RehearsalSection from "./topic/RehearsalSection";
@@ -359,7 +358,7 @@ export default function LibraryScreen(props: {
           await renameTopic(topic.id, name);
           await props.onTopicsChanged();
         }}
-        // Confirmed in DeleteTopicButton, which is what calls this.
+        // Confirmed in the topic list's ConfirmDestructiveDialog, which is what calls this.
         onDelete={async (t) => {
           await deleteTopic(t.id);
           await props.onTopicsChanged();
@@ -481,11 +480,12 @@ function TopicLibrary(props: {
         />
       )}
       {deleting && (
-        <DeleteTopicButton
-          topicName={deleting.name}
+        <ConfirmDestructiveDialog
+          title={`Delete “${deleting.name}”?`}
+          description="The topic goes, with the retells, talks and rehearsals made in it. The PDFs stay on disk; articles kept here move to Brief."
           open
           onOpenChange={(open) => !open && setDeleting(null)}
-          onDelete={() => props.onDelete(deleting)}
+          onConfirm={() => props.onDelete(deleting)}
         />
       )}
     </div>
@@ -600,12 +600,21 @@ function TopicMaterials(props: {
       )}
 
       {removing && (
-        <RemoveFileButton
-          title={displayFileTitle(removing.name)}
-          lastReference={lastReference}
+        <ConfirmDestructiveDialog
+          title={
+            lastReference
+              ? `Delete “${displayFileTitle(removing.name)}”?`
+              : `Remove “${displayFileTitle(removing.name)}”?`
+          }
+          description={
+            lastReference
+              ? "Delete this book and everything about it? Your notes about yourself stay."
+              : "The topic loses the book. The file stays on disk, and so do its reading position and marks — adding it back brings them with it."
+          }
+          actionLabel={lastReference ? "Delete" : "Remove"}
           open
           onOpenChange={(open) => !open && setRemoving(null)}
-          onRemove={() =>
+          onConfirm={() =>
             lastReference && removing.hash
               ? props.onDeleteBook(removing.hash)
               : props.onRemoveFile(removing.path)

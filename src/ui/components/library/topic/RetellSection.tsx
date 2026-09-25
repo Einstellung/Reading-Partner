@@ -21,7 +21,7 @@ import {
 import { Button } from "../../ui/button";
 import CardMenu from "../../shelf/CardMenu";
 import { displayFileTitle } from "../../shelf/file-title";
-import DeleteRetellButton from "./DeleteRetellButton";
+import ConfirmDestructiveDialog from "../../common/ConfirmDestructiveDialog";
 import NewRetellDialog from "./NewRetellDialog";
 
 const ROW = "flex items-center gap-2 rounded-lg border border-border py-1 pl-3 pr-1.5";
@@ -38,23 +38,32 @@ export default function RetellSection(props: {
   const [deleting, setDeleting] = useState<RetellRow | null>(null);
   const [candidates, setCandidates] = useState<MaterialCandidate[]>([]);
 
-  const refresh = useCallback(async () => {
-    setRows(retellRows(await listRetellsForTopic(topic.id)));
-  }, [topic.id]);
+  const load = useCallback(
+    async () => retellRows(await listRetellsForTopic(topic.id)),
+    [topic.id],
+  );
+  const refresh = useCallback(async () => setRows(await load()), [load]);
 
+  // Both outcomes are dropped once the topic has changed: a read for the topic
+  // just left can finish after the one for the topic now shown.
   useEffect(() => {
     let cancelled = false;
     setRows(null);
-    void refresh().catch(() => {
-      if (!cancelled) setRows([]);
-    });
+    void load().then(
+      (r) => {
+        if (!cancelled) setRows(r);
+      },
+      () => {
+        if (!cancelled) setRows([]);
+      },
+    );
     void retellCandidates(topic, displayFileTitle).then((c) => {
       if (!cancelled) setCandidates(c);
     });
     return () => {
       cancelled = true;
     };
-  }, [topic, refresh]);
+  }, [topic, load]);
 
   const create = useCallback(
     async (bookIds: string[]) => {
@@ -123,11 +132,12 @@ export default function RetellSection(props: {
       )}
 
       {deleting && (
-        <DeleteRetellButton
-          name={deleting.name}
+        <ConfirmDestructiveDialog
+          title={`Delete “${deleting.name}”?`}
+          description="The retell goes, and with it the outline you settled and every rehearsal of its talk. The books, their marks and their notes are untouched."
           open
           onOpenChange={(open) => !open && setDeleting(null)}
-          onDelete={() => {
+          onConfirm={() => {
             void deleteRetell(deleting.id).then(refresh);
           }}
         />
