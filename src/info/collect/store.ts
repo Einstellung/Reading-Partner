@@ -6,6 +6,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
+import { dayNumber, localDate } from "../../platform/std/day";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { InfoItem } from "../sources/item";
 
@@ -19,10 +20,7 @@ export interface CachedArticle {
 // Local "YYYY-MM-DD" (not UTC): the briefing is a daily ritual in the reader's
 // own timezone, so day boundaries are local. Pure, unit-tested.
 export function localDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return localDate(d.getTime());
 }
 
 export function todayLocal(now: Date = new Date()): string {
@@ -202,14 +200,6 @@ export function staleCableFiles(names: string[], today: string, days = CABLE_DAY
     if (date !== null && now - date > days) out.push(name);
   }
   return out;
-}
-
-// A local date as a day count, for the one subtraction above. Read at midnight
-// UTC on purpose: both ends are local dates already, and that keeps the
-// arithmetic clear of daylight saving.
-function dayNumber(date: string): number | null {
-  const ms = Date.parse(`${date}T00:00:00Z`);
-  return Number.isFinite(ms) ? Math.round(ms / 86_400_000) : null;
 }
 
 // Delete every past day's derived info file, and the cables older than the keep

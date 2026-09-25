@@ -21,6 +21,7 @@
 // back: sources -> sources/plugins is the one direction the layering test
 // allows, and the program registers the set (sources/plugins/all.ts).
 
+import { addDays } from "../../platform/std/day";
 import type { FetchFn } from "../extract/http";
 import type { SourceDescriptor } from "./descriptor";
 import type { InfoItem, ItemSignals } from "./item";
@@ -128,8 +129,5 @@ export function queryInt(q: IndexQuery, key: string): number | undefined {
 
 // Local date `days` back from `today` ("2026-09-13" - 2 -> "2026-09-11").
 export function daysBefore(today: string, days: number): string {
-  const [y, m, d] = today.split("-").map(Number);
-  const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
-  date.setUTCDate(date.getUTCDate() - days);
-  return date.toISOString().slice(0, 10);
+  return addDays(today, -days);
 }

@@ -19,7 +19,6 @@
 
 import { appData } from "./appdata";
 import { writeTextAtomic } from "./atomic-fs";
-import { localDate } from "./day";
 import { parseRecordIds } from "./record-lines";
 
 export const DELETED_BOOKS_FILE = "deleted-books.jsonl";
@@ -61,11 +60,12 @@ export async function readDeletedBooks(): Promise<Set<string>> {
 /**
  * Record that a book is gone. Asking for a book that is already tombstoned to be
  * gone again writes nothing — it is not an error, and a second line would be a
- * second record for the merge to carry forever.
+ * second record for the merge to carry forever. `at` is the local day, from the
+ * caller because platform/app imports nothing that would date it.
  */
-export async function appendDeletedBook(bookId: string, now?: number): Promise<void> {
+export async function appendDeletedBook(bookId: string, at: string): Promise<void> {
   const text = await readText();
-  const next = appendDeletedBookLine(text, bookId, localDate(now ?? Date.now()));
+  const next = appendDeletedBookLine(text, bookId, at);
   if (next === text) return;
   await writeTextAtomic(DELETED_BOOKS_FILE, next);
 }
