@@ -18,7 +18,10 @@ import {
 } from "../../../src/platform/app/threads";
 import { registerInfoDesk } from "../../../src/info/briefer/desk";
 import { registerSecretaryRole } from "../../../src/info/briefer/role";
-import { registerBriefingDelivery } from "../../../src/info/briefer/deliver";
+import { registerBriefingDelivery, registerMealsDelivery } from "../../../src/info/briefer/deliver";
+import { registerMealsDesk } from "../../../src/info/meals/desk";
+import { EMPTY_MEALS } from "../../../src/info/meals/types";
+import type { AgentTool } from "../../../src/legion/execute/turn";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 import type { Turn } from "../../support/scripted-turn";
 import { scriptedBellSender } from "../../support/scripted-runner";
@@ -35,6 +38,7 @@ const settings: Settings = {
 };
 
 registerInfoDesk();
+registerMealsDesk();
 registerSecretaryRole();
 
 let disk: FakeDisk;
@@ -152,6 +156,61 @@ test("a run that comes back before anything was said that day still has somewher
 
     expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
     expect(threadMessages(BOOK, THREAD)!.map((m) => m.role)).toEqual(["ai"]);
+  } finally {
+    off();
+  }
+});
+
+// The meals conversation is one standing thread in a file of its own. A run
+// delegated from it comes back there, on the meals desk with the meals tools,
+// and not into that day's briefing.
+test("a run delegated from the meals conversation is answered in the meals thread, on the meals desk", async () => {
+  const mealsTool: AgentTool = {
+    name: "propose_meals_plan",
+    label: () => "Propose",
+    description: "stand-in",
+    parameters: { type: "object", properties: {} } as never,
+    effect: "read",
+    execute: async () => "",
+  };
+  const off = registerMealsDelivery({
+    state: async () => EMPTY_MEALS,
+    today: () => DATE,
+    tools: async () => [mealsTool],
+  });
+  try {
+    createThread("info-meals", "info", "meals");
+    appendMessage("info-meals", "meals", { role: "user", text: "Is tofu cheaper this week?", ts: NOW - 60_000 });
+
+    const bells = bellStore();
+    const { box, files } = boxStore();
+    await bells.ring(
+      "run-done",
+      {
+        runId: "r-m1",
+        kind: "tasking",
+        brief: "Tofu is down 10%.",
+        deliverTo: JSON.stringify({ place: "meals" }),
+      },
+      { at: NOW - 1000 },
+    );
+    const { send: scripted, prompts } = sender([{ text: "Tofu is 10% cheaper this week." }]);
+    const tools: string[][] = [];
+    const send: SendBellTurn = (turn) => {
+      tools.push(turn.tools.map((t) => t.name));
+      return scripted(turn);
+    };
+
+    expect(await answerBell({ settings, bells, box, send, now: () => NOW })).toBe(1);
+
+    expect(threadMessages("info-meals", "meals")!.map((m) => m.role)).toEqual(["user", "ai"]);
+    expect(threadMessages(BOOK, THREAD)).toBeNull();
+    expect(disk.files.get(threadFileName(doorKey(doorDate(new Date(NOW)))))).toBeUndefined();
+    expect(prompts[0]).toContain("You plan their meals");
+    expect(tools[0]).toContain("propose_meals_plan");
+
+    const item = JSON.parse([...files.values()][0]!) as Record<string, unknown>;
+    expect(item.origin).toEqual({ place: "meals" });
   } finally {
     off();
   }

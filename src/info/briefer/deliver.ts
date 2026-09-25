@@ -1,4 +1,5 @@
-// Giving a run's answer back in the briefing it was asked about (docs/68).
+// Giving a run's answer back in the briefing it was asked about (docs/68), or
+// in the meals conversation (at the end of this file).
 //
 // The soul rings the bell and this lays the secretary's desk for that day: the
 // same day's briefing, the same thread the reader asked in, the same role. What
@@ -23,7 +24,19 @@ import { loadBriefing } from "../boxes/store";
 import { loadPublishedBriefing } from "../boxes/publish";
 import type { Briefing } from "../boxes/types";
 import { loadSources } from "../sources/source-store";
-import { briefingAnchor, briefingThreadId, noBriefingAnchor } from "./anchors";
+import { todayLocal } from "../collect/store";
+import { withMealsTools } from "../meals/desk";
+import { buildLiveMealsTools } from "../meals/live";
+import { loadMeals } from "../meals/store";
+import type { MealsState } from "../meals/types";
+import {
+  MEALS_BOOK_ID,
+  MEALS_THREAD_ID,
+  briefingAnchor,
+  briefingThreadId,
+  mealsAnchor,
+  noBriefingAnchor,
+} from "./anchors";
 import { infoBookId } from "./call";
 import type { CompanionContext } from "./chat";
 import { buildLiveCompanionTools } from "./companion-live";
@@ -144,4 +157,73 @@ export async function openBriefingDelivery(
 /** Say that a run delegated from a briefing is answered in that briefing. The undo is for tests. */
 export function registerBriefingDelivery(deps: BriefingDeliveryDeps = {}): () => void {
   return registerDelivery("briefing", (input) => openBriefingDelivery(input, deps));
+}
+
+export interface MealsDeliveryDeps {
+  /** The household and the week. Off this device's own file unless a test hands one in. */
+  state?: () => Promise<MealsState>;
+  /** The host's local date. */
+  today?: () => string;
+  /** The meals tools for this turn. None of them draw, because nothing is watching. */
+  tools?: () => Promise<AgentTool[]>;
+}
+
+// The meals set as a turn nobody is watching can hold it: a proposal's card has
+// no screen to go to, and no screen is there to be told to reload.
+const liveMealsTools = async (): Promise<AgentTool[]> =>
+  buildLiveMealsTools({
+    threadId: MEALS_THREAD_ID,
+    onMealsCard: () => {},
+    today: () => todayLocal(),
+    changed: () => {},
+  });
+
+/**
+ * Assemble the turn that answers a bell in the meals conversation: the one
+ * standing thread, on the meals desk with its tools. Null when it could not be
+ * assembled — the bell then falls back to the door.
+ */
+export async function openMealsDelivery(
+  input: DeliveryInput,
+  deps: MealsDeliveryDeps = {},
+): Promise<Delivery | null> {
+  if (input.origin.place !== "meals") return null;
+  const key = MEALS_BOOK_ID;
+  const threadId = MEALS_THREAD_ID;
+  await loadThreads(key).catch(() => ({}));
+  const existing = getThread(key, threadId);
+  const history: DeskMessage[] = (existing?.messages ?? []).map((m) => ({
+    role: m.role,
+    text: m.text,
+  }));
+  if (!existing) createThread(key, "info", threadId);
+
+  const state = await (deps.state ?? (() => loadMeals()))();
+  const anchor = mealsAnchor(state, (deps.today ?? todayLocal)());
+  const desk = await openDesk(withMealsTools(anchor.desk, deps.tools ?? liveMealsTools), {
+    settings: input.settings,
+    thread: { key, id: threadId },
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  const turn = await assembleTurn({
+    desk,
+    messages: [...history, { role: "user", text: input.bell }],
+    role: SECRETARY_ROLE_ID,
+  });
+  if (!turn) return null;
+  return {
+    key,
+    threadId,
+    turn: {
+      systemPrompt: turn.systemPrompt,
+      tools: turn.tools,
+      messages: turn.messages,
+      refusal: turn.refusal,
+    },
+  };
+}
+
+/** Say that a run delegated from the meals conversation is answered there. The undo is for tests. */
+export function registerMealsDelivery(deps: MealsDeliveryDeps = {}): () => void {
+  return registerDelivery("meals", (input) => openMealsDelivery(input, deps));
 }

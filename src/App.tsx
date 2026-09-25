@@ -1264,6 +1264,10 @@ export default function App() {
         if (inReader) closeReader();
         setHomeScreen("briefing");
       },
+      goToMeals: () => {
+        if (inReader) closeReader();
+        setHomeScreen("meals");
+      },
     }),
     [topics, openFile, reopenThreadCall, openThreadForAnnotation, inReader, closeReader],
   );

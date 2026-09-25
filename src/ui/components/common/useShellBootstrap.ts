@@ -45,7 +45,7 @@ import { registerMealsPhotosWorker } from "../../../info/meals/photo-worker";
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photo-sweep";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
 import { registerInfoCollectWorker } from "../../../info/program/live";
-import { registerBriefingDelivery } from "../../../info/briefer/deliver";
+import { registerBriefingDelivery, registerMealsDelivery } from "../../../info/briefer/deliver";
 import { deleteBook } from "../../../reading/delete/delete-book";
 import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
@@ -205,6 +205,7 @@ export function bootDomains(): void {
   // the day's briefing thread it is answered back into (docs/63, docs/68).
   registerTaskingWorker();
   registerBriefingDelivery();
+  registerMealsDelivery();
   // The day's collection, as a run (docs/55 step 12). Registered on every
   // device: which one collects is the election's answer, and a device with no
   // worker for the kind could not win it.

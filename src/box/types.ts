@@ -71,7 +71,9 @@ export function isBoxSource(value: unknown): value is BoxItemSource {
 export type BoxOrigin =
   | { place: "book"; bookId: string; threadId: string; annotationId?: string; page?: number }
   | { place: "door"; date: string }
-  | { place: "briefing"; date: string };
+  | { place: "briefing"; date: string }
+  // The standing meals conversation: one thread, in a file of its own.
+  | { place: "meals" };
 
 export interface BoxItem {
   id: string;

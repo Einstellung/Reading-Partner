@@ -12,11 +12,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runAgentTurn } from "../../../legion/execute/turn";
-import { assembleTurn, soulHarness, type AssembledTurn } from "../../../soul";
+import { soulHarness, type AssembledTurn } from "../../../soul";
 import { applyTopicProposal, type TopicProposalCardData } from "../../../memory";
-import { openDesk, type DeskItem } from "../../../desk";
-import { withCompanionTools } from "../../../info/briefer/desk";
-import { SECRETARY_ROLE_ID } from "../../../info/briefer/role";
+import type { DeskItem } from "../../../desk";
+import { assembleInfoTurn } from "../../../info/briefer/info-turn";
 import { loadSettings, toReasoning } from "../../../platform/app/settings";
 import { createTopic } from "../../../platform/app/topics";
 import {
@@ -52,7 +51,6 @@ import { addLab, archiveLab, claimSources } from "../../../info/labs/store";
 import { applyPlan } from "../../../info/meals/apply";
 import type { MealsCard, MealsPlanCardData } from "../../../info/meals/cards";
 import { buildLiveMealsTools, liveMealsPorts } from "../../../info/meals/live";
-import { withMealsTools } from "../../../info/meals/desk";
 import { todayLocal } from "../../../info/collect/store";
 import type { InfoCallAnchor } from "../../../info/briefer/anchors";
 import { addSource, hasSources, loadSources } from "../../../info/sources/source-store";
@@ -541,9 +539,14 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     const controller = new AbortController();
     let turn: AssembledTurn | null;
     try {
-      const desk = await openDesk(
-        withMealsTools(
-        withCompanionTools(anchor.desk, () =>
+      const assembled = await assembleInfoTurn({
+        anchor,
+        key: bookId,
+        dateKey,
+        settings,
+        signal: controller.signal,
+        messages: history,
+        companionTools: () =>
           buildLiveCompanionTools(
             (payload) => insertCard("probe", payload),
             { start: (scope) => runBriefingJob(scope) },
@@ -555,35 +558,17 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
               },
             },
           ),
-        ),
-        async () =>
+        mealsTools: async () =>
           buildLiveMealsTools({
             threadId: anchor.threadId,
             onMealsCard: (payload) => insertCard("meals", payload),
             today: () => todayLocal(),
             changed: () => onMealsChanged?.(),
           }),
-        ),
-        {
-          settings,
-          thread: { key: bookId, id: anchor.threadId },
-          signal: controller.signal,
-        },
-      );
-      deskRef.current = desk.items;
-      turn = await assembleTurn({
-        desk,
-        messages: history,
-        // Whose desk this is (docs/71 角色): the secretary's duty and the
-        // companion tools ride the turn from the role, not from the briefing.
-        role: SECRETARY_ROLE_ID,
-        // Where this turn is being held (docs/68). A run delegated out of the
-        // briefing comes back into this day's own thread; without it the answer
-        // would be given at the door, where the question was never asked.
-        origin: { place: "briefing", date: dateKey },
-        // Where a proposal for this conversation's topic is drawn (memory/filing).
         topic: { onCard: (payload) => insertCard("topic", payload) },
       });
+      deskRef.current = assembled.items;
+      turn = assembled.turn;
     } catch (e) {
       console.error("failed to load the article extractor", e);
       patchLast({ text: "The article extractor could not be loaded. Try again.", failed: true, streaming: false });

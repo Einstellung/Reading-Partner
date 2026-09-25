@@ -1,4 +1,5 @@
-// What the info chat's Stop leaves behind.
+// The info chat's turn: what Stop leaves behind, and where a run delegated
+// from it is sent back to.
 //
 // runAgentTurn answers a reader's abort with silence: no onDone, no onError
 // (tests/legion/execute/turn.test.ts pins that). Whatever the surface does
@@ -21,7 +22,9 @@ import * as threads from "../../../../src/platform/app/threads";
 import { DEFAULT_SETTINGS } from "../../../../src/platform/app/settings";
 import { INFO_BRIEFING_KIND, registerInfoDesk } from "../../../../src/info/briefer/desk";
 import { registerSecretaryRole } from "../../../../src/info/briefer/role";
-import type { InfoCallAnchor } from "../../../../src/info/briefer/anchors";
+import { mealsAnchor, type InfoCallAnchor } from "../../../../src/info/briefer/anchors";
+import { registerMealsDesk } from "../../../../src/info/meals/desk";
+import { EMPTY_MEALS } from "../../../../src/info/meals/types";
 import type { BriefingView } from "../../../../src/info/briefer/reader";
 import type { Thread } from "../../../../src/platform/app/threads";
 
@@ -72,9 +75,9 @@ function anchor(): InfoCallAnchor {
   };
 }
 
-function options(): InfoCallOptions {
+function options(a: InfoCallAnchor = anchor()): InfoCallOptions {
   return {
-    anchor: anchor(),
+    anchor: a,
     dateKey: "2026-08-13",
     view: stubView(),
     collecting: true,
@@ -160,4 +163,22 @@ test("a turn stopped before it wrote anything leaves no row and keeps nothing", 
   expect(result.current.messages.map((m) => m.role)).toEqual(["user"]);
   expect(result.current.streaming).toBe(false);
   expect(append.mock.calls.filter((c) => c[2].role === "ai")).toEqual([]);
+});
+
+// The meals conversation is its own standing thread (anchors.ts). A run it
+// delegates is stamped with that thread, so the answer, or a reply recovered
+// after the process died, lands there and not in that day's briefing.
+test("a meals turn is stamped with the meals thread, not the day's briefing", async () => {
+  const { turn, settled } = stubHost("");
+  registerMealsDesk();
+  const { result } = renderHook(() => useInfoCall(options(mealsAnchor(EMPTY_MEALS, "2026-08-13"))));
+  await startTurn(result);
+
+  expect(turn).toHaveBeenCalledTimes(1);
+  expect(turn.mock.calls[0]![0].deliverTo).toEqual({ place: "meals" });
+
+  await act(async () => {
+    result.current.stop();
+    await settled;
+  });
 });

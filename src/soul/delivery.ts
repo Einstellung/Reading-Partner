@@ -131,7 +131,7 @@ export function liveDeliverer(place: BoxOrigin["place"]): LiveDeliverer | null {
 
 /**
  * The origin off a run's `deliverTo`, or null when there is none, it is not
- * JSON, or it is not one of the three shapes. A run delegated before this
+ * JSON, or it is not one of the known shapes. A run delegated before this
  * existed has no origin, and a bell about it is answered at the door.
  */
 export function parseOrigin(deliverTo: string | undefined): BoxOrigin | null {
@@ -144,7 +144,7 @@ export function parseOrigin(deliverTo: string | undefined): BoxOrigin | null {
 }
 
 /**
- * The same three shapes, read off a value that is already parsed: what a
+ * The same shapes, read off a value that is already parsed: what a
  * session entry holds (src/soul/recover.ts). Null for anything else.
  */
 export function originOf(value: unknown): BoxOrigin | null {
@@ -166,6 +166,7 @@ export function originOf(value: unknown): BoxOrigin | null {
     if (typeof o.date !== "string") return null;
     return { place: o.place, date: o.date };
   }
+  if (o.place === "meals") return { place: "meals" };
   return null;
 }
 
@@ -181,5 +182,6 @@ export function originLabel(origin: BoxOrigin): string {
       : `a book you were reading, p. ${origin.page}`;
   }
   if (origin.place === "briefing") return `the briefing of ${origin.date}`;
+  if (origin.place === "meals") return "the meals conversation";
   return `at the door, ${origin.date}`;
 }
