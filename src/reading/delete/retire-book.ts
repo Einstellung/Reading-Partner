@@ -29,7 +29,6 @@ import {
   type SupplementRef,
 } from "../../platform/app/supplements";
 import { addFileToTopic, listTopics, removeFileFromTopic, type Topic } from "../../platform/app/topics";
-import { localDate } from "../../platform/std/day";
 import { ObservationFileStore } from "../../memory/observations/store";
 import { observationFs } from "../../memory/live/fs";
 import { listAllRetells, updateRetell } from "../retell/store";
