@@ -1,13 +1,13 @@
 // A document's prep material as a set of files, for the two things that act on
 // all of it at once: deleting the document, and a translation taking its place
-// (reading/delete). Everything under prep-<id>/ is found by the directory; the
+// (delete-book.ts, retire-book.ts). Everything under prep-<id>/ is found by the directory; the
 // downloaded papers' text and figure caches are not — they sit at the AppData
 // root under a hash of a synthetic path (papers/store.ts: paperFulltextHash), so
 // the only way to them is through the slugs in the prep state.
 
 import { appData } from "../../platform/app/appdata";
-import { paperFulltextHash } from "./papers/store";
-import { prepDir } from "./store-base";
+import { paperFulltextHash } from "../prep/papers/store";
+import { prepDir } from "../prep/store-base";
 
 function fulltextFile(key: string): string {
   return `fulltext-${key}.json`;

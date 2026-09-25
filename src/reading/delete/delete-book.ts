@@ -43,7 +43,7 @@ import { observationFs } from "../../memory/live/fs";
 import { deleteRetell, listAllRetells } from "../retell/store";
 import type { Retell } from "../retell/types";
 import { deleteTalkOutline, talkOutlineOfRetell } from "../talk/store";
-import { prepPaperCacheFiles } from "../prep/relocate";
+import { prepPaperCacheFiles } from "./prep-files";
 import {
   deadLocalPathsFor,
   hasOtherReference,

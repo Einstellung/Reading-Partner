@@ -5,7 +5,7 @@ import {
   paperSlugsOf,
   prepPaperCacheFiles,
   type PrepFilesIo,
-} from "../../../src/reading/prep/relocate";
+} from "../../../src/reading/delete/prep-files";
 
 function memIo(files: Map<string, string>): PrepFilesIo {
   return {
