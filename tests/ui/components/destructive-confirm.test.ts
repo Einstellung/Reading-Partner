@@ -40,14 +40,30 @@ test("nothing calls the native confirm or alert", () => {
   expect(offenders).toEqual([]);
 });
 
-test("deleting a topic goes through an AlertDialog", () => {
-  const source = readFileSync(join(ROOT, "ui/components/library/DeleteTopicButton.tsx"), "utf8");
+test("the destructive confirmation runs the act from the AlertDialog's action", () => {
+  const source = readFileSync(join(ROOT, "ui/components/common/ConfirmDestructiveDialog.tsx"), "utf8");
   // The delete hangs off the dialog's action, not off the trigger.
-  expect(source).toContain('<AlertDialogAction variant="destructive" onClick={onDelete}>');
+  expect(source).toContain('<AlertDialogAction variant="destructive" onClick={props.onConfirm}>');
   expect(source).toContain("<AlertDialogCancel>");
+});
+
+test("deleting a topic goes through the destructive confirmation", () => {
+  const source = readFileSync(join(ROOT, "ui/components/library/LibraryScreen.tsx"), "utf8");
+  const start = source.indexOf("{deleting && (");
+  const dialog = source.slice(start, source.indexOf("/>", start));
+  expect(dialog).toContain("<ConfirmDestructiveDialog");
   // The promise the wording has always made: the topic goes with the work done
   // in it (reading/delete/delete-topic.ts), the PDFs do not.
-  expect(source).toContain("The PDFs stay on disk");
+  expect(dialog).toContain("The PDFs stay on disk");
+});
+
+// deleteRetell takes the retell's rehearsals with it (reading/retell/store.ts),
+// so the confirmation says so.
+test("deleting a retell says its rehearsals go too", () => {
+  const source = readFileSync(join(ROOT, "ui/components/library/topic/RetellSection.tsx"), "utf8");
+  const start = source.indexOf("<ConfirmDestructiveDialog");
+  const dialog = source.slice(start, source.indexOf("/>", start));
+  expect(dialog).toContain("every rehearsal of its talk");
 });
 
 test("the citation chip carries a 44px target without moving the line", () => {
