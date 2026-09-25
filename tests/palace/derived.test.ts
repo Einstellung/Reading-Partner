@@ -184,6 +184,8 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "memory/observations/arrears.ts",
   "memory/observations/recall.ts",
   "reading/desk.ts",
+  "reading/desk-history.ts",
+  "reading/desk-tools.ts",
   "reading/rehearsal/store.ts",
   "reading/retell/store.ts",
   "reading/session/hangup.ts",

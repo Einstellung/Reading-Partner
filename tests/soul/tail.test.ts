@@ -11,7 +11,7 @@ import {
   type ConversationSpan,
   type TailSpan,
 } from "../../src/soul";
-import { HISTORY_KEEP } from "../../src/reading/desk";
+import { HISTORY_KEEP } from "../../src/reading/desk-history";
 import type { ConversationIo } from "../../src/conversations";
 import { threadFileName, type Thread } from "../../src/platform/app/threads";
 

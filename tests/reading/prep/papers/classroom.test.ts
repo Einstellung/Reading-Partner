@@ -10,10 +10,12 @@ import { estimateTextTokens } from "../../../../src/budget";
 import type { PrepChapter, PrepPaper, PrepState } from "../../../../src/reading/prep/papers/types";
 import {
   classroomNoteBody,
+  notedPapers,
   prepNotesSection,
   prepStatusSection,
   selectClassroomNotes,
   surveyBodyPageCount,
+  turnClassroomNotes,
   CLASSROOM_NOTE_BUDGET,
   CLASSROOM_NOTE_BUDGET_TIGHT,
   type ClassroomNote,
@@ -344,6 +346,47 @@ test("the prep list is where the slugs come from, and it says so", () => {
   const prompt = prepStatusSection(prep([paper()]), new Set());
   expect(prompt).toContain("never");
   expect(prompt).toContain("make one up from a reference-list entry");
+});
+
+// --- what a reading turn carries ---
+
+test("only a paper with a note written counts as noted", () => {
+  const state = prep([
+    paper({ slug: "a", status: "done" }),
+    paper({ slug: "b", status: "abstract-only" }),
+    paper({ slug: "c", status: "failed" }),
+    paper({ slug: "d", status: "queued" as PrepPaper["status"] }),
+  ]);
+  expect(notedPapers(state).map((p) => p.slug)).toEqual(["a", "b"]);
+});
+
+test("a turn's notes are ordered from the reader's chapter, and the tight list is the same queue under a quarter", () => {
+  const chapters: PrepChapter[] = [
+    { index: 1, title: "One", startPage: 1 },
+    { index: 2, title: "Two", startPage: 20 },
+  ];
+  // Each note over half the tight budget, so the tight list holds one.
+  let body = "";
+  while (estimateTextTokens(body) < CLASSROOM_NOTE_BUDGET_TIGHT * 0.6) body += "word ".repeat(100);
+  const state = prep(
+    [
+      paper({ slug: "early", citedInChapters: [1] }),
+      paper({ slug: "late", citedInChapters: [2] }),
+      paper({ slug: "failed", status: "failed" }),
+    ],
+    chapters,
+  );
+  const onDisk: ClassroomNote[] = [
+    { slug: "early", title: "Early", body },
+    { slug: "late", title: "Late", body },
+    { slug: "failed", title: "Failed", body },
+  ];
+  const at2 = turnClassroomNotes(onDisk, state, 25);
+  expect(at2.notes.map((n) => n.slug)).toEqual(["late", "early"]);
+  expect(at2.tight.map((n) => n.slug)).toEqual(["late"]);
+  const at1 = turnClassroomNotes(onDisk, state, 3);
+  expect(at1.notes.map((n) => n.slug)).toEqual(["early", "late"]);
+  expect(at1.tight.map((n) => n.slug)).toEqual(["early"]);
 });
 
 // --- the tools paragraph ---

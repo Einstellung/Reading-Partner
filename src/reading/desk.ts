@@ -1,9 +1,12 @@
-// The book on the desk (docs/61), and the articles the reader kept beside it.
+// The book on the desk (docs/61). The articles the reader kept beside it are
+// reading/saved-articles-desk.ts, registered here with it.
 //
 // This is everything a reading turn's material contributes to one call: which
 // tools the book mounts, how much of it is inlined, the prompt those blocks come
 // out in, the replayed conversation and the ladder of what to give up when the
-// window is tight (M6/M9, docs/03, docs/09, docs/21, docs/24). What it
+// window is tight (M6/M9, docs/03, docs/09, docs/21, docs/24). The thread's
+// shape is read by desk-frame.ts, the history by desk-history.ts, and the tools
+// every thread carries are desk-tools.ts's. What it
 // does not do is assemble a call — the desk hands these items to src/soul,
 // which is the one place a turn is put together, whatever is lying on it.
 //
@@ -13,13 +16,7 @@
 // produced them. Nothing here asks which mode the reader is in, because there is
 // no longer such a thing.
 
-import {
-  annotationPage,
-  buildReadingTools,
-  markedPageRange,
-  markedPagesSection,
-  spineOverviewSection,
-} from "./context";
+import { buildReadingTools, markedPageRange, markedPagesSection, spineOverviewSection } from "./context";
 import { toAnnotationLite, type AnnotationLite, type TopicMaterial } from "../fulltext/format";
 import { modelSupportsImages, type ProviderId } from "../ai";
 import { estimateTextTokens } from "../budget";
@@ -30,29 +27,20 @@ import {
   type DeskItemKind,
   type DeskPromptView,
 } from "../desk";
-import { EXPLAIN_KICKOFF } from "./intents";
-import { asideParentTail, ASIDE_KICKOFF } from "./aside";
+import { asideParentTail } from "./aside";
 import { markedReplyText } from "./chat-marks";
 import { READING_LADDER, type ReadingReductionId } from "./ladder";
-import { isPageMark, type Annotation } from "../platform/app/reader-contract";
+import type { Annotation } from "../platform/app/reader-contract";
 import { buildSystemPrompt, type BooklistItem } from "../platform/app/context";
 import { loadAnnotations } from "../platform/app/annotations";
-import {
-  getThread,
-  listThreads,
-  readThreadImages,
-  setThreadFocusChapter,
-  threadKind,
-  type ThreadKind,
-} from "../platform/app/threads";
+import { getThread, readThreadImages, setThreadFocusChapter } from "../platform/app/threads";
 import { chapterAt } from "../fulltext/query";
-import { getFulltext, saveFulltext } from "../fulltext/store";
+import { getFulltext } from "../fulltext/store";
 import type { Fulltext } from "../fulltext/types";
 import { buildFigureTools } from "./figures/tools";
 import { buildVisualAidGuidance } from "./figures/prompt";
 import { renderFigure, renderPageImage } from "./figures/render";
 import {
-  attachPageWindow,
   pageImageTokens,
   pageWindowPrompt,
   planPageWindow,
@@ -62,27 +50,20 @@ import {
 import type { Figure } from "./figures/types";
 import { logEvent } from "../platform/app/events";
 import { AI_EVENT_TOPIC } from "../platform/app/structured-output";
-import {
-  distillThread,
-  distillUnitOf,
-  getObservationAdapter,
-  pagelessMarkIds,
-  type DistillAnnotation,
-  type Observation,
-} from "../memory";
+import { getObservationAdapter, type DistillAnnotation, type Observation } from "../memory";
 import { readSpineOverview } from "./prep/chapters/store";
-import { chapterIndexForPage } from "./prep/papers/scheduler";
-import { paperFulltextHash, readPrepNote } from "./prep/papers/store";
+import { readPrepNote } from "./prep/papers/store";
 import { parseNote } from "./prep/papers/notes";
 import {
   classroomNoteBody,
+  notedPapers,
   prepNotesSection,
   prepStatusSection,
-  selectClassroomNotes,
   surveyBodyPageCount,
-  CLASSROOM_NOTE_BUDGET_TIGHT,
+  turnClassroomNotes,
   type ClassroomNote,
 } from "./prep/papers/classroom";
+import type { PrepPaper } from "./prep/papers/types";
 import {
   buildReadChapterTool,
   chapterOutlineSection,
@@ -107,55 +88,24 @@ import {
   type TableChapter,
 } from "./chapters";
 import { buildClassroomTools } from "./prep/papers/tools";
-import { INGEST_URL_PROMPT, buildSourceTools } from "./prep/papers/source-tool";
-import { startUrlIngest } from "./ingest/url-run";
-import { REMOVE_SUPPLEMENT_PROMPT, buildSupplementTools } from "./ingest/remove-tool";
-import { listSupplements, removeSupplement } from "../platform/app/supplements";
-import { TRANSLATE_PROMPT, buildTranslateTools } from "./translate/tool";
-import { bookDeleter, liveTranslateToolDeps } from "./translate/tool-live";
-import {
-  buildSavedArticleTools,
-  prepareSavedArticle,
-  SAVED_ARTICLES_PROMPT,
-  type SavedArticleStore,
-} from "./saved-article-tools";
-import {
-  hasSavedArticles,
-  loadSavedArticles,
-  loadSavedArticleBody,
-  NO_ARTICLE_BODY,
-  type SavedArticle,
-} from "./saved-articles";
-import { readingFetch } from "../platform/http/throttled-fetch";
-import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
-import { RESEARCH_PROMPT } from "./papers/research-agent";
 import type { BoxOrigin } from "../box";
 import type { PrepPipeline } from "./prep/papers/pipeline";
+import { threadFrame } from "./desk-frame";
+import {
+  composeMessages,
+  distillOnTrim,
+  historyKeep,
+  replayedLesson,
+  type ReadingTurnMessage,
+} from "./desk-history";
+import { bookSideTools, LITERATURE_TOOL_PROMPTS, SHELF_TOOL_PROMPTS } from "./desk-tools";
+import { savedArticlesKind } from "./saved-articles-desk";
 
-// The two kinds of thing a reading turn puts on the desk. Named here because
-// the caller lists them by name and the palace table marks the rows they open.
+// The book is one of the two kinds of thing a reading turn puts on the desk; the
+// kept articles beside it are the other (reading/saved-articles-desk.ts). Named
+// here because the caller lists them by name and the palace table marks the
+// rows they open.
 export const BOOK_KIND = "book";
-export const SAVED_ARTICLES_KIND = "saved-articles";
-
-// Replayed thread history is trimmed to this many messages per turn; crossing
-// the cap fires the fallback distillation before older turns fall out
-// of context (docs/02: hangup is the main trigger, trimming the backstop).
-export const HISTORY_KEEP = 40;
-// The trim-triggered distillation re-fires only after this many new messages.
-export const TRIM_DISTILL_MIN_NEW = 20;
-// How short the replayed history gets when the budget ladder reaches its last
-// rung. Three exchanges: above the two rounds that are never dropped, below
-// anything that would still be called a conversation.
-export const HISTORY_KEEP_TIGHT = 6;
-
-// The real kept-article store. A failed read answers "nothing kept" rather than
-// failing the turn: the tools are an offer, and a turn the reader is waiting for
-// is not the place to raise a store problem the library screen will raise.
-export const savedArticleStoreOnDisk: SavedArticleStore = {
-  any: () => hasSavedArticles().catch(() => false),
-  all: () => loadSavedArticles().catch((): SavedArticle[] => []),
-  body: (article) => loadSavedArticleBody(article).catch(() => NO_ARTICLE_BODY),
-};
 
 // The live reading position and topic scope for the turn (App's ctxRef).
 export interface ReadingTurnContext {
@@ -165,12 +115,6 @@ export interface ReadingTurnContext {
   pageLabel: string | null;
   pageIndex: number | null;
   files: { path: string; name: string; hash?: string }[];
-}
-
-export interface ReadingTurnMessage {
-  role: "user" | "ai";
-  text: string;
-  images?: { data: string; mediaType: string }[];
 }
 
 // One page of the open book as an image, with the pixel size it came out at so
@@ -243,23 +187,7 @@ export interface BookDeskRef {
   renderPage?: PageRenderFn;
 }
 
-// The articles the reader kept on the info side (docs/21), as a thing that lies
-// beside the book rather than a branch inside it: it brings two tools and a
-// paragraph, and nothing else about the turn changes when it is there.
-export interface SavedArticlesDeskRef {
-  // The book the kept article would be put on the prep list of.
-  bookId: string;
-  getPipeline: () => PrepPipeline | null;
-  // Injected so the assembly runs with no AppData. It is asked `any` here — the
-  // records themselves are read when a tool actually runs.
-  savedArticles?: SavedArticleStore;
-}
-
 const bookKind: DeskItemKind<BookDeskRef> = { kind: BOOK_KIND, open: openBook };
-const savedArticlesKind: DeskItemKind<SavedArticlesDeskRef> = {
-  kind: SAVED_ARTICLES_KIND,
-  open: openSavedArticles,
-};
 
 /**
  * Register what reading can put on the desk. Called once at startup by the
@@ -286,7 +214,6 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     onSupplementGone,
     threadId,
     annotationId,
-    annotation: ann,
     annotations,
     fulltext: currentFulltext,
     figures: figuresIndex,
@@ -308,14 +235,8 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // topic is where data is filed, and this book's file is what is filed.
   const topicId = context.topicId;
   const topicName = context.topicName;
-  const { fileName, pageLabel, pageIndex, files } = context;
+  const { fileName, pageLabel, files } = context;
   const materials = await gatherTopicMaterials(files, bookId, currentFulltext, annotations);
-  // Which of the three doors this conversation came in by
-  // (platform/app/threads.ts). Whether a mark is hosting it is the caller's to
-  // say — it opened the conversation — and whether it hangs off another one is
-  // only on the record, so the two are read together through the one derivation.
-  // A thread the store has not got yet answers exactly as it did before asides
-  // existed.
   // A conversation is in the file of the document it belongs to: the book's
   // for the lesson and everything pulled out of it, the document on screen for
   // a mark drawn on it (reading/session/documents.ts). Which of the two this
@@ -325,12 +246,18 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   const readThread = (id: string) =>
     getThread(docId, id) ?? (docId === bookId ? undefined : getThread(bookId, id));
   const thread = readThread(threadId);
-  const kind: ThreadKind = threadKind({ ...thread, annotationId });
-  const isBook = kind === "book";
-  // The classroom and everything opened off it: the reader has read none of this
-  // book (docs/09). It decides the prompt's opening and how much the reading
-  // position counts for; only a mark-anchored thread is outside it.
-  const bookLevel = kind !== "mark";
+  const {
+    kind,
+    isBook,
+    bookLevel,
+    onMark,
+    aside,
+    currentPage,
+    page,
+    selectionText,
+    selectionComment,
+    pageAnchor,
+  } = threadFrame(ref, thread);
   // The conversation this aside was pulled out of. Read live, like everything
   // else about the thread: the parent goes on being written to while an aside is
   // open, and none of it is copied onto the aside.
@@ -338,27 +265,13 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     kind === "aside" && thread?.parentThreadId
       ? readThread(thread.parentThreadId)
       : undefined;
-  // Anchored on a page: a mark thread, and an aside drawn on the page. The
-  // book-level thread's position is wherever the reader currently is, and so is
-  // a chat-span aside's — its span came out of a reply, not out of a page.
-  //
-  // A mark drawn on a reply is not a page anchor either (docs/09). It has an
-  // annotation like a drawn one and no page like a selected one, so what tells
-  // the two apart is the mark and not the presence of an id.
-  const onMark = annotationId !== "" && isPageMark(ann as Annotation | undefined);
-  const aside: { from: "chat" | "mark" } | null =
-    kind === "aside" ? { from: onMark ? "mark" : "chat" } : null;
-  const currentPage = pageIndex !== null ? pageIndex + 1 : null;
-  const page = onMark
-    ? annotationPage(ann as { position?: { pageIndex?: number } } | undefined)
-    : currentPage;
   const chapterTitle =
     currentFulltext && page ? chapterAt(currentFulltext, page)?.title ?? null : null;
   // Where the reader is, for a run delegated from this turn to be delivered back
   // to (docs/68). The page is the one the turn is about: the marked passage's
   // page on a mark thread, and the reader's position otherwise. A function
   // because this turn hands runs over from two places — the desk it answers
-  // with, and the ingest tool below.
+  // with, and the ingest tool.
   const deliveryOrigin = (): BoxOrigin => ({
     place: "book",
     bookId,
@@ -377,18 +290,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     fulltextAvailable: m.fulltext?.status === "ok",
     isCurrent: m.path === bookId,
   }));
-  // The passage in the prompt's anchor slot. A chat-span aside has no mark, so
-  // it is the span the reader selected out of the reply, stored verbatim on the
-  // thread (platform/app/threads.ts: never an offset).
-  const markText = typeof ann?.text === "string" ? ann.text : "";
-  const selectionText =
-    aside?.from === "chat" ? thread?.asideAnchor?.text ?? markText : markText;
-  const selectionComment = typeof ann?.comment === "string" ? ann.comment : undefined;
 
-  // What one page of the document on screen is cited as: [p.12] in the book,
-  // [Some Article p.4] in a supplement (docs/67).
-  const pageAnchor = (page: number) =>
-    viewing ? `[${viewing.title} p.${page}]` : `[p.${page}]`;
   // The text of the marked page and its neighbours, inlined so the turn does not
   // have to fetch them (reading/context.ts). Only where the page is the mark's:
   // the book-level thread's page follows the reader's scrolling and a chat-span
@@ -548,92 +450,20 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     mediaType,
   }));
 
-  // Link ingestion (docs/09, docs/67 「辅助资料」): the model can ingest a
-  // user-pasted URL with ingest_url on any thread of this book — "compare this
-  // link with ch.3" is a question a marked passage can raise as easily as the
-  // book-level thread can.
-  //
-  // Mounted on every book thread, with a prep pipeline or without one. A tool
-  // that is only sometimes there is one the model stops reaching for, which is
-  // the same judgement translate makes below.
-  //
-  // The taking-in itself is a run (reading/ingest/url-worker.ts): the tool writes
-  // it and this turn ends, and what came in is said back into this thread when
-  // the run lands. What a pasted link always produces is a supplement of this
-  // book, which the reader can open in the same reader; the prep half — full
-  // text the model reads with read_paper — rides along wherever there is a
-  // pipeline to carry it, and the run reaches for the same one this turn holds.
-  const livePipeline = getPipeline();
-  tools = [
-    ...tools,
-    ...buildSourceTools({
-      start: async (url, note) => {
-        const started = await startUrlIngest(
-          { url, bookId, ...(note ? { note } : {}) },
-          { origin: deliveryOrigin() },
-        );
-        // The Outline is asked again when the run lands, not now: the supplement
-        // does not exist yet, and by the time it does this turn is long over and
-        // nothing else would think to look. Not awaited — that is the whole
-        // point of the run.
-        void started.done
-          ?.then(() => onSupplement?.())
-          .catch(() => {});
-        return { runId: started.runId };
-      },
-    }),
-  ];
-
-  // Taking one away again (docs/67 「辅助资料」). The reader corrects what was
-  // taken in by saying so, which is where every correction of this kind goes;
-  // the Outline has no delete button. Mounted beside the ingest on every book
-  // thread, because a supplement can be discussed from any of them.
-  tools = [
-    ...tools,
-    ...buildSupplementTools({
-      // Read now rather than off the turn's copy: a link ingested earlier in
-      // this same turn is a supplement the reader can already be asking about.
-      list: () => listSupplements(bookId),
-      remove: async (one) => {
-        const removeBook = bookDeleter();
-        if (!removeBook) throw new Error("the app is not ready to delete a document yet");
-        // The reader first: the bytes on screen are about to stop existing.
-        onSupplementGone?.(one.hash);
-        await removeSupplement(bookId, one.hash);
-        // The prep list keeps its row — the note is a record of a reading that
-        // happened — but the source is off: skipped is the status a paper the
-        // run must not touch again already has.
-        const paper = livePipeline
-          ?.snapshot()
-          .state?.papers.find((p) => p.documentId === one.hash);
-        if (paper) livePipeline?.skip(paper.slug);
-        await removeBook(one.hash);
-        onSupplement?.();
-      },
-    }),
-  ];
-
-  // Translation (docs/67): the reader says "translate this" and the article on
-  // the shelf is replaced by a bilingual copy. Mounted on every book thread, not
-  // only on an article's: the tool itself is what says a PDF cannot be done in
-  // the app, and a tool that is only sometimes there is one the model stops
-  // reaching for. It translates with the model this conversation is on.
-  tools = [
-    ...tools,
-    ...buildTranslateTools(
-      liveTranslateToolDeps({
-        bookId,
-        docId,
-        topicId,
-        threadId,
-        model: {
-          providerId: s.defaultProviderId as ProviderId,
-          modelId: s.defaultModelId as string,
-          sessionId: threadId,
-        },
-      }),
-    ),
-  ];
+  // The tools every thread of the book carries (reading/desk-tools.ts). The
+  // pipeline is read here, at the point it always was.
+  const sideTools = bookSideTools({
+    bookId,
+    docId,
+    topicId,
+    threadId,
+    settings: s,
+    pipeline: getPipeline(),
+    origin: deliveryOrigin,
+    ...(onSupplement ? { onSupplement } : {}),
+    ...(onSupplementGone ? { onSupplementGone } : {}),
+  });
+  tools = [...tools, ...sideTools.shelf];
 
   // read_paper / read_note over whatever the prep run produced. Mounted wherever
   // there is a prep state to read, which is what "by data" means here: the tools
@@ -649,12 +479,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // along at all, and it is a bad witness: a reader parked on p.12 of the
   // embodied-AI survey was two days into chapter 4, and the turn carried one of
   // the twenty notes. The position now only orders them, and only once the cap
-  // bites (prep/papers/classroom.ts) — including in the tight list, which is why that
-  // one is a smaller budget rather than a filter on the chapter number.
-  //
-  // The body stored here is the body that gets printed: classroomNoteBody is the
-  // one place a stored note becomes prompt text, so what selectClassroomNotes
-  // prices is what the prompt carries.
+  // bites (prep/papers/classroom.ts).
   let classroomNotes: ClassroomNote[] = [];
   let classroomNotesTight: ClassroomNote[] = [];
   if (prepState) {
@@ -664,47 +489,16 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     // block — 40k of budget, above the spine and the overview — stops matching
     // and gets written again instead of read from the cache.
     const notePage = kind === "aside" ? currentPage : page;
-    const here = focusChapter?.startPage ?? notePage ?? (pageIndex !== null ? pageIndex + 1 : 1);
-    const chapterIdx = chapterIndexForPage(prepState.chapters, here);
-    const notePapers = (prepState?.papers ?? []).filter(
-      (p) => p.status === "done" || p.status === "abstract-only",
-    );
-    const onDisk = (
-      await Promise.all(
-        notePapers.map(async (p): Promise<ClassroomNote | null> => {
-          const raw = await readPrepNote(bookId, p.slug);
-          if (!raw) return null;
-          return {
-            slug: p.slug,
-            title: p.title,
-            body: classroomNoteBody(parseNote(raw).body, p.slug),
-          };
-        }),
-      )
-    ).filter((n): n is ClassroomNote => n !== null);
-    const sel = { chapter: chapterIdx, chapterCount: prepState?.chapters.length ?? 0 };
-    classroomNotes = selectClassroomNotes(onDisk, notePapers, sel);
-    classroomNotesTight = selectClassroomNotes(onDisk, notePapers, {
-      ...sel,
-      budget: CLASSROOM_NOTE_BUDGET_TIGHT,
-    });
+    const here = focusChapter?.startPage ?? notePage ?? currentPage ?? 1;
+    const onDisk = await readClassroomNotes(bookId, notedPapers(prepState));
+    ({ notes: classroomNotes, tight: classroomNotesTight } = turnClassroomNotes(
+      onDisk,
+      prepState,
+      here,
+    ));
   }
 
-  // Academic literature (docs/24, docs/25), mounted on every reading turn. Not gated on
-  // the prep pipeline or on the turn being in the book's own thread: "what is the
-  // latest research on this" is a question the reader can have on any page of any book,
-  // and a tool that is only sometimes there is one the model cannot learn to reach for.
-  const literatureDeps = {
-    fetchFn: readingFetch,
-    s2ApiKey: s.semanticScholarApiKey ?? undefined,
-  };
-  // find_paper stays on the reader's turn. Pointing at one endnote is a different
-  // job from a topic search: the answer is a single record, the companion wants
-  // that record rather than prose about it, and delegating it would spend model
-  // turns to come back with less. The topic search itself is no longer a tool of
-  // this turn at all — it is a run now (docs/68), handed over with the soul's
-  // delegate and answered back into this thread when it is finished.
-  tools = [...tools, buildFindPaperTool(literatureDeps)];
+  tools = [...tools, ...sideTools.literature];
   // The whole-book outline from the reader's notes (docs/09), when they exist.
   const spineOverview = spineOverviewSection(await readSpineOverview(bookId));
   // A booklist entry with no text layer and no marks is a title the model can do
@@ -775,14 +569,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       // brought — a kept article's paragraph among them — because the order they
       // came out in before the desk existed is the order the provider's cache
       // still remembers.
-      toolPrompts: [
-        INGEST_URL_PROMPT,
-        REMOVE_SUPPLEMENT_PROMPT,
-        TRANSLATE_PROMPT,
-        ...view.toolPrompts,
-        FIND_PAPER_PROMPT,
-        RESEARCH_PROMPT,
-      ],
+      toolPrompts: [...SHELF_TOOL_PROMPTS, ...view.toolPrompts, ...LITERATURE_TOOL_PROMPTS],
       supplements: supplementsSection(supplements, viewing),
       ...(focusChapter ? { focusLabel: chapterFocusLabel(focusChapter) } : {}),
       // Memory, as one paragraph of three blocks in a fixed order (docs/48),
@@ -810,7 +597,15 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
         hasChapterTable: !!chapterTable,
         ...(markedRange ? { markedPages: markedRange } : {}),
         ...(spineProgress ? { spine: spineProgress } : {}),
-        ...(aside ? { aside: { ...aside, lessonReplayed: replayedLesson(dropped) > 0 } } : {}),
+        ...(aside
+          ? {
+              aside: {
+                ...aside,
+                lessonReplayed:
+                  replayedLesson(parentTail.length, prior.length, historyKeep(dropped)) > 0,
+              },
+            }
+          : {}),
       }),
     });
   }
@@ -843,83 +638,35 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       }))
     : [];
   if (signal?.aborted) return null;
-  // Replay only the tail of a long thread, and before the older turns fall
-  // out of context, run the fallback distillation (docs/02: hangup is the
-  // main trigger, the trim is the backstop).
-  //
-  // Counted on the thread's own messages, not on what gets replayed: the
-  // parent's tail rides an aside's every turn and is not a length this
-  // conversation reached.
-  if (threadMsgs.length > HISTORY_KEEP && topicId) {
-    // Whose arrears these are (memory/observations/arrears.ts). A chat-span
-    // aside has no mark, so it is no unit of its own and this stretch belongs to
-    // the conversation it was pulled out of.
-    const marks = distillAnnotations();
-    // Both files: the lesson and its asides are the book's, and a mark drawn on
-    // a supplement has its conversation in that document's file (docs/67). A
-    // stretch of either can be the unit this pass belongs to.
-    const threads =
-      docId === bookId ? listThreads(bookId) : [...listThreads(bookId), ...listThreads(docId)];
-    const unit = distillUnitOf(threads, threadId, pagelessMarkIds(marks));
-    // Where the pass says it happened follows the unit. Folded into the lesson,
-    // the position is the reader's own page — the same answer the lesson gives
-    // for itself — and there is no marked passage, because the lesson has none.
-    const folded = !!unit && unit.threadId !== threadId;
-    void distillThread(
-      {
-        topicId,
-        topicName,
-        bookId,
-        bookName: fileName,
-        threadId: unit?.threadId ?? threadId,
-        trigger: "trim",
-        annotationId: unit?.annotationId ?? annotationId,
-        page: folded ? (unit.annotationId === "" ? currentPage : null) : page,
-        markedText: folded ? "" : selectionText,
-        messages:
-          unit?.messages ??
-          threadMsgs.map(({ id, role, text, ts }) => ({ ...(id ? { id } : {}), role, text, ts })),
-        ...(unit ? { parts: unit.parts } : {}),
-        annotations: marks,
-      },
-      TRIM_DISTILL_MIN_NEW,
-    );
-  }
+  distillOnTrim({
+    topicId,
+    topicName,
+    bookId,
+    docId,
+    bookName: fileName,
+    threadId,
+    annotationId,
+    page,
+    currentPage,
+    selectionText,
+    messages: threadMsgs,
+    marks: distillAnnotations,
+  });
 
-  // How many messages of the parent's stretch survive into this turn, given what
-  // the budget gave up. composeMessages trims the joined history from the front,
-  // so the borrowed half is the first thing to go — and on an aside long enough
-  // to fill the history by itself, or one whose parent is gone, there was never
-  // any. The prompt says so rather than describing a stretch that is not there.
-  function replayedLesson(dropped: ReadonlySet<string>): number {
-    const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
-    const cut = Math.max(0, parentTail.length + prior.length - keep);
-    return Math.max(0, parentTail.length - cut);
-  }
-
-  function composeMessages(dropped: ReadonlySet<string>): ReadingTurnMessage[] {
-    const keep = dropped.has("history-trim") ? HISTORY_KEEP_TIGHT : HISTORY_KEEP;
-    // The parent's stretch first, this conversation's own after. Trimmed from
-    // the front, so the borrowed context is what the tight rung gives up before
-    // it starts cutting into what the reader said here.
-    const history = [...parentTail, ...prior, ...(trailing ? [trailing] : [])];
-    const tail = history.length > keep ? history.slice(history.length - keep) : history;
-    // Every provider wants the exchange to open on a user message. A thread the
-    // reader started from a chip already does, and is replayed as it stands so
-    // the model reads the ask they actually picked. What needs a stand-in is a
-    // tail that opens on a reply: a thread from before the chips, and any thread
-    // long enough that the trim above cut its first message off.
-    const opensOnUser = tail.length > 0 && tail[0].role === "user";
-    const msgs: ReadingTurnMessage[] = opensOnUser
-      ? [...tail]
-      : [{ role: "user" as const, text: aside ? ASIDE_KICKOFF : EXPLAIN_KICKOFF }, ...tail];
-    // The pictures ride the message being answered and nothing else. Every
-    // earlier turn of this thread was sent the same window when it was the
-    // current one, so those messages carry the line that says so instead — one
-    // window in context at a time, however long the conversation runs.
-    if (!pageWindow || pageImages.length === 0 || dropped.has("page-window")) return msgs;
-    return attachPageWindow(msgs, pageWindow, windowImages);
-  }
+  // The replayed history, given what the budget gave up (reading/desk-history.ts).
+  // The page images go out only while the ladder has not taken the window back.
+  const replay = (dropped: ReadonlySet<string>): ReadingTurnMessage[] =>
+    composeMessages({
+      parentTail,
+      prior,
+      ...(trailing ? { trailing } : {}),
+      keep: historyKeep(dropped),
+      aside: aside !== null,
+      pageWindow:
+        pageWindow && pageImages.length > 0 && !dropped.has("page-window")
+          ? { plan: pageWindow, images: windowImages }
+          : null,
+    });
 
   // The catalog is only redundant while nothing is leaning on it: once the
   // conversation has cited a [fig:N], dropping the list of figures makes the
@@ -927,7 +674,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   // has the material they give up — composing the prompt to price a block that
   // is not there costs a full re-render for nothing.
   const skip = new Set<ReadingReductionId>();
-  if (composeMessages(new Set()).some((m) => m.text.includes("[fig:"))) skip.add("figure-catalog");
+  if (replay(new Set()).some((m) => m.text.includes("[fig:"))) skip.add("figure-catalog");
   if (inline === "none") skip.add("chapter-inline");
   if (classroomNotes.length === 0) skip.add("prep-notes-trim");
   if (!pageWindow || pageImages.length === 0) skip.add("page-window");
@@ -962,7 +709,7 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
       observations: topicObservations,
       snapshot: (tight: boolean) => (tight ? observationSnapshotTight : observationSnapshot),
     },
-    history: { compose: composeMessages },
+    history: { compose: replay },
     // Where the reader is, for a run delegated from this turn to be delivered
     // back to (docs/68).
     origin: deliveryOrigin(),
@@ -972,59 +719,21 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   };
 }
 
-// Saved info articles (docs/21): the model can list what the reader kept and
-// put one into this book's prep list, then read it with read_paper. Gated on
-// there being something kept — a tool whose only possible answer is "nothing"
-// is one the model learns to call for nothing — and on the prep state
-// existing, since read_paper is what the answer sends it to.
-async function openSavedArticles(
-  ref: SavedArticlesDeskRef,
-  _env: DeskEnv,
-): Promise<DeskItem | null> {
-  const { bookId, getPipeline, savedArticles = savedArticleStoreOnDisk } = ref;
-  const livePipeline = getPipeline();
-  const prepState = livePipeline?.snapshot().state ?? null;
-  if (!livePipeline || !prepState) return null;
-  if (!(await savedArticles.any().catch(() => false))) return null;
-  // The records are read on the first tool call, not here: most turns mount
-  // these tools without the model ever reaching for them. Read once per
-  // turn, however often it does. The bodies are not in there — only the one
-  // article the reader names is read, in add below.
-  let records: Promise<SavedArticle[]> | null = null;
-  const list = () => (records ??= savedArticles.all().catch((): SavedArticle[] => []));
-  return {
-    kind: SAVED_ARTICLES_KIND,
-    label: "Kept articles",
-    tools: buildSavedArticleTools({
-      list,
-      add: async (article) => {
-        const body = await savedArticles.body(article);
-        const prepared = prepareSavedArticle(article, body.text);
-        const paper = await livePipeline.ingestCaptured(prepared.mint, prepared.fetched);
-        // The kept text goes into the fulltext cache under the slug the paper
-        // got, which is why it is written after the ingest and not before:
-        // the slug is minted in there. Nothing reads that cache in between —
-        // the digest was handed the text directly, and read_paper is not
-        // reachable until this call answers.
-        await saveFulltext(paperFulltextHash(bookId, paper.slug), prepared.fulltext);
-        return {
-          slug: paper.slug,
-          title: paper.title,
-          kind: "article",
-          pages: prepared.fulltext.pages.length,
-          chars: prepared.chars,
-          status: paper.status,
-          error: paper.error,
-        };
-      },
+// The notes a prep run has on disk for these papers, each already through
+// classroomNoteBody: that is the one place a stored note becomes prompt text,
+// so what selectClassroomNotes prices is what the prompt carries.
+async function readClassroomNotes(
+  bookId: string,
+  papers: readonly PrepPaper[],
+): Promise<ClassroomNote[]> {
+  const onDisk = await Promise.all(
+    papers.map(async (p): Promise<ClassroomNote | null> => {
+      const raw = await readPrepNote(bookId, p.slug);
+      if (!raw) return null;
+      return { slug: p.slug, title: p.title, body: classroomNoteBody(parseNote(raw).body, p.slug) };
     }),
-    toolPrompts: [SAVED_ARTICLES_PROMPT],
-    rungs: [],
-    // Nothing of its own in the prompt: what a kept article contributes is two
-    // tools and the paragraph that says when to reach for them, and that
-    // paragraph belongs among the book's own (see composePrompt above).
-    prompt: () => "",
-  };
+  );
+  return onDisk.filter((n): n is ClassroomNote => n !== null);
 }
 
 // One line per turn that sent page images, so what the visual window costs is a

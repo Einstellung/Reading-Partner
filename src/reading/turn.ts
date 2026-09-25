@@ -18,13 +18,9 @@ import { assembleTurn } from "../soul";
 import { deskKindRegistered, openDesk, type DeskEnv } from "../desk";
 import { EXPLAIN_KICKOFF } from "./intents";
 import type { InlineMode } from "./lecture";
-import {
-  registerReadingDesk,
-  BOOK_KIND,
-  SAVED_ARTICLES_KIND,
-  type BookDeskRef,
-  type ReadingTurnMessage,
-} from "./desk";
+import { registerReadingDesk, BOOK_KIND, type BookDeskRef } from "./desk";
+import type { ReadingTurnMessage } from "./desk-history";
+import { SAVED_ARTICLES_KIND } from "./saved-articles-desk";
 import type { SavedArticleStore } from "./saved-article-tools";
 import type { Settings } from "../platform/app/settings";
 
@@ -38,14 +34,16 @@ export { EXPLAIN_KICKOFF };
 // context with these.
 export {
   gatherTopicMaterials,
+  type PageRenderFn,
+  type ReadingTurnContext,
+  type RenderedPage,
+} from "./desk";
+export {
   HISTORY_KEEP,
   HISTORY_KEEP_TIGHT,
   TRIM_DISTILL_MIN_NEW,
-  type PageRenderFn,
-  type ReadingTurnContext,
   type ReadingTurnMessage,
-  type RenderedPage,
-} from "./desk";
+} from "./desk-history";
 // The configured model's metadata, now that every turn is fitted by the same
 // assembly. Re-exported because the retell and coach turns still ask for it
 // here (reading/retell/turn.ts, reading/rehearsal/coach-turn.ts).
