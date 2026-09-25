@@ -8,7 +8,7 @@
 
 - docs/22 不做书的理由是 PDFium WASM。EPUB 绕开了它，但 docs/64 的 Letter 纸在 393pt 宽的屏上 fit-width 是 0.48 倍、正文约 7.7pt，纸页在手机上守不住。手机用自己的重排视图。
 - PDF 不给手机看。书架上 PDF 的封面照常渲染，点了出一条提示，不打开。
-- AI 在手机上全部置灰：笔架上的 AI pen 和顶栏的 Learn this book with AI 都画出来但不可按，各带一句原因。不隐藏：手机是 reading 的一种形态，规矩要在界面上读得出来。以后开放时只摘掉这个闸。
+- AI 的闸：笔架上的 AI pen 画出来但不可按，带一句原因。不隐藏：手机是 reading 的一种形态，规矩要在界面上读得出来。2026-09-25 起顶栏的 Learn this book with AI 可按，进的是和 iPad 同一堂课（[77](./77-手机EPUB课堂.md)）；AI pen 仍置灰，原因改成 `The AI pen is not on the phone yet — Learn this book with AI is in the top bar`。
 - 长按划线。手指按住不动约半秒起一条高亮，拖动延长，抬手落标注。也可以在笔架上选 Highlight 再拖，两条路落的是同一种标注。点已有标注弹出删除。墨迹不做：手机没有页。
 - 手机上只有 Outline 一个侧栏内容，做成 sheet（Radix dialog 贴底边）。条目按分页表的块号跳，不按 href——`outlineFor` 交回的就是块号。没有 Marks 列表、备课面板、痕迹列表。
 - 笔架上不画导航锁：手机没有页可以锁住，一根手指只有滚动一个意思。那一格改成 Aa，打开显示设置。`PenToolbar` 加 `omit` 省掉某个工具，桌面不变——置灰是「有这个工具，这本书不给开」，省掉是「这个形态没有这种东西」。
@@ -28,7 +28,7 @@
 
 纸色照 docs/64「纸色」那一层挂在 host 上，但值由 Aa 里选的纸给（见下），不读 `--page-wash`：阅读屏里只有 Aa 的选择说话，和 app 的护眼开关不叠加。
 
-书内链接照 `reader-logic.ts` 的 `bookLinkTarget` 走；外链走 `platform/app/external-link`。`[p.N]` 跳转和引文高亮手机上没有调用方，不接。
+书内链接照 `reader-logic.ts` 的 `bookLinkTarget` 走；外链走 `platform/app/external-link`。`[p.N]` 跳转和引文高亮的调用方是课堂里点的引文（[77](./77-手机EPUB课堂.md)）。
 
 ## 显示设置
 
@@ -47,7 +47,7 @@
 
 ## 外壳
 
-`PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/PhoneReader.tsx`：自己的顶栏（返回、书名、页码、Outline、笔架、Learn 按钮），笔架复用 `PenToolbar` 的 `disabled`，阅读区挂 `FlowReaderPane`。打开顺序复用 `open-book.ts` 里能用的头几步（读位置、`preparePagination`、读标注），不抽全文、不抽图、不读线程、不蒸馏：桌上没有 AI。
+`PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/PhoneReader.tsx`：自己的顶栏（返回、书名、页码、Outline、笔架、Learn 按钮），笔架复用 `PenToolbar` 的 `disabled`，阅读区挂 `FlowReaderPane`。打开顺序在 `reading/session/open-epub.ts`：复用 `open-book.ts` 的读位置、`preparePagination`、读标注，之后在后台抽全文和图索引给课堂用（[77](./77-手机EPUB课堂.md)）。
 
 ## 验过的
 
