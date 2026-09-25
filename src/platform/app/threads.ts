@@ -715,7 +715,7 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
     // rewritten without them — an in-file edit, so per-file LWW sync carries the
     // removal to other devices (unlike a whole-file deletion, which v1 sync does
     // not propagate). The threads' images under images/threads/<threadId>/ are
-    // left on disk; they are not synced and a stale directory is harmless. No-op
+    // the caller's to delete (thread-images.ts: deleteThreadImages). No-op
     // when the thread is already gone.
     remove: (bookId, threadId) => {
       const held = cache.get(bookId);
