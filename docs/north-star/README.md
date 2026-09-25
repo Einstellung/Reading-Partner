@@ -19,5 +19,6 @@
 - [sync-tiers](./sync-tiers.md) — 同步停在档 1，[59](../platform/59-同步：持有清单与裁决.md) 的档 2 删除推断、档 3 消息级线程、档 4 裁决层都没翻开；档 2 翻开前要先补 `retired` 的生产端
 - [topic-in-info](./topic-in-info.md) — cable 在三个出口带 topic（[61](../soul/61-palace与desk.md) 第 4 步），desk 那半落了这半没排，`BRIEF_TOPIC_ID` 还是应急版
 - [info-bureau](./info-bureau.md) — 情报局的其余机构：专项组、编辑部、A 档源、[65](../info/65-加工手册：常态模型、日更列表、滚雪球与稿.md) 五层，源侧等 [17](../info/17-信息源系统.md) 重做
+- [share](./share.md) — 分享出去：info 或书的合集带网站地址传给没装过 app 的人；图片卡片不要服务器，链接要一个上传接口加静态托管；等有网站、装上即用之后再做
 
 webview 渲染管子（隐藏 WebviewWindow 当渲染引擎）已经落地并随彭博社源发货，不再是北极星方向；现状和剩下的缺口（SPA 站发现层）记在 [17](../info/17-信息源系统.md)。
