@@ -23,6 +23,7 @@ import { normalizeTitle } from "../../info/sources/plugins/match";
 import { searchOpenAlexTopic, type OpenAlexHit } from "../../info/sources/plugins/openalex-client";
 import { pubmedUrl, searchPubmed, type PubmedArticle } from "../../info/sources/plugins/pubmed-client";
 import { searchS2Topic, type S2Hit } from "../../info/sources/plugins/s2-client";
+import { clipWords, oneLine } from "../../platform/std/text";
 
 export type PaperLibrary = "arxiv" | "pubmed" | "openalex" | "semantic-scholar";
 
@@ -106,15 +107,10 @@ export const ABSTRACT_CHARS = 420;
 
 // --- normalization ---
 
-// Trim to `max` characters on a word boundary. (A local copy rather than an
-// import from reading/context: papers must not import its own group root, which
-// imports papers — tests/layering.test.ts would report the cycle.)
+// Trim to `max` characters on a word boundary, whitespace folded first (an
+// abstract can carry line breaks the cut should not preserve).
 export function clipAbstract(text: string, max = ABSTRACT_CHARS): string {
-  const t = text.replace(/\s+/g, " ").trim();
-  if (t.length <= max) return t;
-  const cut = t.slice(0, max);
-  const sp = cut.lastIndexOf(" ");
-  return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + "…";
+  return clipWords(oneLine(text), max);
 }
 
 // DOIs are case-insensitive and travel with or without a resolver prefix, so both
