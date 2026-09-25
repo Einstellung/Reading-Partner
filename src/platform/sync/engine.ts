@@ -67,34 +67,25 @@
 //
 // Everything the pass touches (backend, fs, books) is injected; the Tauri wiring
 // lives in index.ts. reconcile() (reconcile.ts) is the pure decision core.
+// What a pass counts as failed and the transfer pool are in pass-failures.ts;
+// the holdings half of a pass (docs/59) is HoldingsExchange (holdings-exchange.ts).
 
 import { DELETED_BOOKS_FILE, parseDeletedBooks } from "../app/deleted-books";
-import { isAuthFailure, isRemoteGone, type RemoteState, type SyncBackend } from "./backend";
+import { isAuthFailure, isRemoteGone, type SyncBackend } from "./backend";
 import type { BookFs } from "./books";
 import { hashBytes } from "./content";
 import type { BaseStore, TrashJournal } from "./localStore";
 import type { MergeFile } from "./merge/contract";
 import { mergeFile } from "./merge";
 import { isDeadPath } from "./dead-paths";
-import {
-  buildHoldings,
-  emptyHoldingsPass,
-  holdingsRemoteName,
-  isDeviceId,
-  parseHoldings,
-  renderHoldingsPass,
-  sameFiles,
-  serializeHoldings,
-  summariseHoldingsPass,
-  SELF_KEY,
-  type Holdings,
-  type HoldingsFiles,
-  type HoldingsPass,
-  type HoldingsStore,
-} from "./holdings";
-import { HOLDINGS_INFER_DELETIONS, inferDeletions } from "./infer-deletions";
+import { emptyHoldingsPass, type HoldingsStore } from "./holdings";
+import { HoldingsExchange } from "./holdings-exchange";
+import { HOLDINGS_INFER_DELETIONS } from "./infer-deletions";
+import { messageOf, PassFailures, runPool } from "./pass-failures";
 import { cachedHash, reconcile, type Merge, type Snapshot, type Upload } from "./reconcile";
 import { inSyncRange, type LocalFile, type ScannedFile, type SyncFs } from "./syncFs";
+
+export { MAX_CONSECUTIVE_FAILURES } from "./pass-failures";
 
 export const TICK_MS = 15_000;
 export const PULL_INTERVAL_MS = 5 * 60_000;
@@ -107,14 +98,6 @@ export const PULL_INTERVAL_MS = 5 * 60_000;
 // device that synced this recently cannot be meaningfully stale, and no amount
 // of flapping costs more than the steady 15s tick already does.
 export const RESUME_MIN_INTERVAL_MS = 30_000;
-
-// A run of failures this long means the link is down, not that one file is
-// awkward. The rest of the pass would only spend its retry budget failing the
-// same way, so it is left for the next pass. It is consulted before a transfer
-// is dispatched, so a pool that trips it still has whatever it had on the wire:
-// the guard exists to save a device from grinding through hundreds of items on
-// a dead link, not to make the last few requests exact.
-export const MAX_CONSECUTIVE_FAILURES = 3;
 
 // How many data-channel transfers are on the wire at once.
 //
@@ -131,36 +114,6 @@ export const MAX_CONSECUTIVE_FAILURES = 3;
 // picks this number either. Eight is small enough that a data file which grew
 // an order of magnitude would still be affordable.
 export const DATA_CONCURRENCY = 8;
-
-// Run `task` over every item with at most `limit` of them in flight.
-//
-// `task` must not reject. A rejection would take the whole Promise.all with it
-// and leave its siblings running unobserved, which is precisely the
-// all-or-nothing behaviour a pass must not have (docs/pitfall/52) — so every
-// caller keeps the try/catch its serial loop had, inside the task.
-//
-// `stop` is asked before each dispatch and never mid-task: nothing here can
-// call back a request that is already on the wire, so a pool that stops costs
-// at most the tasks it had already started.
-async function runPool<T>(
-  items: readonly T[],
-  limit: number,
-  stop: () => boolean,
-  task: (item: T) => Promise<void>,
-): Promise<void> {
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < items.length && !stop()) {
-      await task(items[next++]);
-    }
-  };
-  const width = Math.min(Math.max(1, limit), items.length);
-  await Promise.all(Array.from({ length: width }, () => worker()));
-}
-
-// Cap on the failure text kept for the UI: it is shown on one line in Settings,
-// and Drive's error bodies run long.
-const MESSAGE_LIMIT = 160;
 
 // Whether the books channel runs at all. "mirror" is every shell that can open
 // a book: local-only blobs go up, remote-only ones come down. "off" is the
@@ -252,62 +205,6 @@ export interface PassResult {
   snapshot: Snapshot;
 }
 
-function messageOf(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
-
-// What failed in one pass, and whether to keep going. Every line the user reads
-// about a partial pass is composed here, so it names the file rather than the
-// URL: "download annotations-<hash>.json failed: …" is diagnosable, the Drive
-// media URL alone is not.
-class PassFailures {
-  count = 0;
-  private first: string | null = null;
-  private streak = 0;
-  private auth: unknown = null;
-
-  record(what: string, e: unknown): void {
-    this.count += 1;
-    this.streak += 1;
-    if (this.first === null) {
-      const detail = messageOf(e);
-      const line = `${what} failed: ${detail}`;
-      this.first = line.length > MESSAGE_LIMIT ? `${line.slice(0, MESSAGE_LIMIT - 1)}…` : line;
-    }
-  }
-
-  // A dead token is not one awkward file: every request left in the pass would
-  // only spend itself learning the same thing, which on the data channel is two
-  // hundred more requests into the same wall. The serial loops throw it on the
-  // spot; a pool cannot, because it has siblings on the wire that nothing can
-  // call back — so it is kept here, dispatch stops at once, the in-flight tasks
-  // are left to settle, and rethrowAuthFailure() puts the pass exactly where
-  // the serial `throw` used to put it. Siblings that fail the same way after it
-  // are dropped rather than recorded: they are one condition, not several
-  // faults, and the pass reports the auth error itself either way.
-  recordAuth(e: unknown): void {
-    if (this.auth === null) this.auth = e;
-  }
-
-  rethrowAuthFailure(): void {
-    if (this.auth !== null) throw this.auth;
-  }
-
-  succeeded(): void {
-    this.streak = 0;
-  }
-
-  halted(): boolean {
-    return this.auth !== null || this.streak >= MAX_CONSECUTIVE_FAILURES;
-  }
-
-  message(): string | null {
-    if (this.count === 0) return null;
-    if (this.count === 1) return this.first;
-    return `${this.count} items failed; first: ${this.first}`;
-  }
-}
-
 // What one purge did. `changed` is for the caches keyed by path: this device
 // had the file and no longer has it. `done` is stricter — the path left every
 // side it was on — and it is what a peer's cached tree is allowed to advance
@@ -315,22 +212,6 @@ class PassFailures {
 interface PurgeResult {
   changed: boolean;
   done: boolean;
-}
-
-// A peer's tree this pass fetched, waiting to become the base of the next
-// difference (docs/59 §8.4). It may not become one until the deletions its own
-// difference produced have actually left this device: a cache advanced over a
-// purge that failed differences the peer's tree against itself next pass, and
-// the path is never named again.
-interface PeerAdvance {
-  device: string;
-  bytes: Uint8Array;
-  // The rev the listing gave this copy, for peerHoldingsRev.
-  rev: number;
-  // The paths this peer's difference put in front of purgeDead. Contested paths
-  // are not here: nothing was asked of the purge for them, so nothing about
-  // them can hold the cache back.
-  deletions: string[];
 }
 
 export class SyncEngine {
@@ -368,18 +249,20 @@ export class SyncEngine {
   // themselves exactly like a user's edit; this is what tells the two apart.
   private readonly selfWrites = new Map<string, number>();
   private unwatch: (() => void) | null = null;
-  // The rev each cached peer holdings was fetched at, so a pass that finds the
-  // same rev in the listing fetches nothing (holdings.ts). In memory: it is a
-  // request saved, not a fact anything depends on.
-  private readonly peerHoldingsRev = new Map<string, number>();
-  // What the last pass did with holdings, for holdingsReport().
-  private lastHoldings: HoldingsPass = emptyHoldingsPass();
+  private readonly holdingsExchange: HoldingsExchange;
 
   constructor(deps: EngineDeps) {
     this.d = deps;
     this.now = deps.now ?? Date.now;
     this.snapshot = deps.snapshot;
     this.lastSyncAt = deps.restoredLastSyncAt ?? null;
+    this.holdingsExchange = new HoldingsExchange({
+      backend: deps.backend,
+      store: deps.holdings,
+      deviceId: deps.deviceId,
+      appVersion: deps.appVersion,
+      now: this.now,
+    });
     // From construction rather than from start(): there is no window in which
     // this engine exists and is not keeping the record, and listening costs one
     // string test per write whether or not anything ticks. stop() gives it back,
@@ -739,188 +622,11 @@ export class SyncEngine {
     return { changed, done: true };
   }
 
-  // --- holdings (docs/59) ---------------------------------------------------
-
-  // This device's id, or "" when it has none to publish under yet.
-  private device(): string {
-    const id = this.d.deviceId?.() ?? "";
-    return isDeviceId(id) ? id : "";
-  }
-
-  private holdingsStore(): HoldingsStore | null {
-    return this.device() === "" ? null : (this.d.holdings ?? null);
-  }
-
-  // What this device holds, as this pass scanned it. The paths are exactly the
-  // ones inSyncRange admits — the fs is free to hand over more, and a tree that
-  // claimed files the other device is not even supposed to have would be a tree
-  // whose absences mean nothing.
-  //
-  // complete is true because there is no other way to get here: a pass whose
-  // fs.list() threw ended before this. The field is for the peers that will
-  // one day publish a partial scan, and for the reader of the file.
-  private selfHoldings(local: LocalFile[]): Holdings {
-    const files: HoldingsFiles = {};
-    for (const f of local) if (inSyncRange(f.path)) files[f.path] = [f.hash, f.size];
-    return buildHoldings({ device: this.device(), at: this.now(), app: this.d.appVersion?.(), files });
-  }
-
-  // Fetch every peer holdings whose rev moved, and work out what they say this
-  // device should delete. The order is the whole of the safety: the cached copy
-  // is read (that is the base), the current one is fetched, the difference is
-  // taken, and the cache is not advanced here at all. Advancing it before the
-  // difference would erase the base; advancing it before the purge ran would
-  // erase it just as surely a moment later, so the fetched copy is handed back
-  // and advancePeerHoldings decides after the executing half of the pass.
-  private async pullPeerHoldings(
-    pass: HoldingsPass,
-    local: LocalFile[],
-    remote: RemoteState,
-    failures: PassFailures,
-  ): Promise<{ inferred: Set<string>; advances: PeerAdvance[] }> {
-    const inferred = new Set<string>();
-    const advances: PeerAdvance[] = [];
-    const store = this.holdingsStore();
-    const listed = this.d.backend.listedHoldings?.();
-    if (!store || !listed) return { inferred, advances };
-    const me = this.device();
-
-    const localTree = new Map(local.map((f) => [f.path, { hash: f.hash }]));
-    const remoteHashes = new Map<string, string>();
-    for (const [path, e] of Object.entries(remote)) if (e.hash) remoteHashes.set(path, e.hash);
-
-    for (const device of Object.keys(listed).sort()) {
-      // My own copy, coming back from the remote. It says nothing I do not
-      // already know, and differencing it against itself would let a device
-      // infer deletions from its own past.
-      if (device === me) continue;
-      const cached = parseHoldings(await store.read(device));
-      // The rev of what is cached is not in the file — a holdings answers "what
-      // did this device hold", not "where is the remote" (holdings.ts) — so it
-      // is remembered here. A restart costs one refetch per peer, which is one
-      // request on the first pass of a process and nothing after.
-      const knownRev = this.peerHoldingsRev.get(device);
-      const fresh = cached !== null && knownRev !== undefined && knownRev >= listed[device].rev;
-
-      let bytes: Uint8Array | null = null;
-      if (!fresh) {
-        try {
-          bytes = await this.d.backend.download(holdingsRemoteName(device));
-          failures.succeeded();
-        } catch (e) {
-          if (isAuthFailure(e)) throw e;
-          // One peer's tree that will not fetch is not the pass. Without the
-          // current copy there is no difference to take, so this peer is simply
-          // not reasoned about until it fetches.
-          if (!isRemoteGone(e)) failures.record(`holdings ${device}`, e);
-          pass.peers.push({ device, cached, current: null });
-          continue;
-        }
-      }
-      const current = bytes === null ? cached : parseHoldings(bytes);
-      pass.peers.push({ device, cached, current });
-
-      let deletions: string[] = [];
-      if (pass.enabled) {
-        const out = inferDeletions({ base: cached, current, local: localTree, remoteHashes });
-        deletions = out.deletions;
-        for (const path of out.deletions) inferred.add(path);
-        pass.contested.push(...out.contested);
-      }
-
-      if (bytes !== null) {
-        advances.push({ device, bytes, rev: listed[device].rev, deletions });
-        pass.fetched += 1;
-      }
-    }
-    pass.inferred = [...inferred].sort();
-    return { inferred, advances };
-  }
-
-  // Move each peer's cached tree up to the copy this pass read — but only for a
-  // peer whose whole difference actually left this device. One purge that
-  // failed holds that peer's cache where it is, so the next pass takes the same
-  // difference, names the same paths, and does the same thing; an advance here
-  // would leave the next pass differencing the peer's tree against itself, with
-  // the file on this device and nothing left that could ever name it (docs/59
-  // §8.4 promises one pass late, not forever).
-  //
-  // Deferred to after the purges rather than remembered as a list of pending
-  // deletions: the difference is recomputable from two trees this device
-  // already has, and a persisted list would be a second thing that has to stay
-  // true across a crash.
-  private async advancePeerHoldings(
-    advances: readonly PeerAdvance[],
-    purged: ReadonlySet<string>,
-  ): Promise<void> {
-    const store = this.holdingsStore();
-    if (!store) return;
-    for (const a of advances) {
-      if (!a.deletions.every((path) => purged.has(path))) continue;
-      // The rev is claimed only for a copy that actually landed on disk.
-      // Claiming it for a write that failed would leave this device
-      // differencing against a base it no longer has and never fetching
-      // again — safe, in that it infers nothing, and silent, which is worse.
-      const stored = await store.write(a.device, a.bytes).then(
-        () => true,
-        () => false,
-      );
-      if (stored) this.peerHoldingsRev.set(a.device, a.rev);
-    }
-  }
-
-  // Publish this device's tree, but only when it is not the tree (or the
-  // build) already published: an idle pass must stay at one request (docs/59 §2), and
-  // everything in the file that is not a path or a hash — `at` above all —
-  // would make every pass an upload.
-  //
-  // Not gated on the pass being clean. What this says is what this device
-  // holds, not that the remote agrees with it, and a device on a link where no
-  // pass is ever wholly clean (docs/pitfall/52) would otherwise never tell the
-  // others anything.
-  private async publishHoldings(
-    pass: HoldingsPass,
-    local: LocalFile[],
-    failures: PassFailures,
-  ): Promise<void> {
-    const store = this.holdingsStore();
-    if (!store) return;
-    const mine = this.selfHoldings(local);
-    pass.self = mine;
-    const last = parseHoldings(await store.read(SELF_KEY));
-    // A new build republishes once even over the same tree: the app field is
-    // how a phone tells that this desktop is behind (peer-versions.ts), and an
-    // update that left the tree alone would otherwise go on reading as the old
-    // version.
-    if (last && sameFiles(last.files, mine.files) && last.app === mine.app) return;
-
-    const name = holdingsRemoteName(mine.device);
-    const bytes = serializeHoldings(mine);
-    const rev = (this.d.backend.listedHoldings?.()[mine.device]?.rev ?? 0) + 1;
-    try {
-      await this.d.backend.upload(name, bytes, {
-        rev,
-        mtime: mine.at,
-        hash: await hashBytes(bytes),
-      });
-      failures.succeeded();
-    } catch (e) {
-      if (isAuthFailure(e)) throw e;
-      failures.record(`publish ${name}`, e);
-      return;
-    }
-    // Only after it landed: the local copy is what says "the others have seen
-    // this tree", and claiming that for an upload that failed would skip the
-    // republish the next pass owes.
-    await store.write(SELF_KEY, bytes).catch(() => {});
-    pass.published = true;
-  }
-
   /** Everything this device knows about holdings after the last pass, as text:
    * my tree, each peer's, and what was inferred from them. The one thing that
    * makes a wrong deletion on two real devices attributable (docs/59 §7). */
   holdingsReport(): string {
-    return renderHoldingsPass(this.lastHoldings);
+    return this.holdingsExchange.holdingsReport();
   }
 
   private async runPass(): Promise<void> {
@@ -969,7 +675,7 @@ export class SyncEngine {
       // is no second way to delete anything.
       const holdings = emptyHoldingsPass();
       holdings.enabled = this.d.inferDeletions ?? HOLDINGS_INFER_DELETIONS;
-      const { inferred, advances } = await this.pullPeerHoldings(
+      const { inferred, advances } = await this.holdingsExchange.pullPeerHoldings(
         holdings,
         local,
         remote,
@@ -1016,7 +722,7 @@ export class SyncEngine {
       // it is allowed to say has been deleted is exactly what this pass got rid
       // of. A halted pass never reaches most of its purges, so most of its
       // peers stay where they were, which is the same statement.
-      await this.advancePeerHoldings(advances, purged);
+      await this.holdingsExchange.advancePeerHoldings(advances, purged);
 
       // Pull first so library.json is current before the books channel reads it.
       await runPool(plan.downloads, DATA_CONCURRENCY, () => failures.halted(), async (dl) => {
@@ -1110,15 +816,8 @@ export class SyncEngine {
       // scanned: whatever the transfers above did lands in the next pass's scan
       // and the next publish. A halted pass does not try — the link is down and
       // one more request would only find that out again.
-      if (!failures.halted()) await this.publishHoldings(holdings, local, failures);
-      this.lastHoldings = holdings;
-      // A pass that neither published nor fetched a tree says nothing, which is
-      // what a steady pass is. The line is the only record of an inferred
-      // deletion outside the trash journal, so it is not conditional on a debug
-      // flag nobody has turned on.
-      if (holdings.published || holdings.inferred.length > 0 || holdings.fetched > 0) {
-        console.info(summariseHoldingsPass(holdings));
-      }
+      if (!failures.halted()) await this.holdingsExchange.publishHoldings(holdings, local, failures);
+      this.holdingsExchange.finishPass(holdings);
 
       await this.syncBooks(failures, dead);
 

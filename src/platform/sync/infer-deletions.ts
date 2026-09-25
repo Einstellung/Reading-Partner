@@ -55,9 +55,10 @@ export interface InferResult {
   //
   // The caller owes them one thing this module cannot do: the cached base a
   // difference was taken against may not advance to `current` until every one
-  // of these has actually gone (engine.ts advancePeerHoldings). Advancing over
-  // a purge that failed differences the next pass's tree against itself, and
-  // the path is in neither side — inferred once, then never again.
+  // of these has actually gone (holdings-exchange.ts advancePeerHoldings).
+  // Advancing over a purge that failed differences the next pass's tree
+  // against itself, and the path is in neither side — inferred once, then
+  // never again.
   deletions: string[];
   // A delete that met a local edit. The edit is kept and uploaded by the
   // ordinary reconcile path; this is only reported.

@@ -342,7 +342,7 @@ export async function requestRemotePurge(paths: readonly string[]): Promise<void
 // disagree about a file are diagnosed from this and nothing else records why a
 // path went, so it is reachable without a screen — `__syncHoldings()` in the
 // webview console, on the desktop and over the iPad debug channel alike. A pass
-// that did something also logs one line of it (engine.ts).
+// that did something also logs one line of it (holdings-exchange.ts).
 export function syncHoldingsReport(): string {
   return engine?.holdingsReport() ?? "sync: no engine";
 }
