@@ -119,5 +119,3 @@ export function MealsMethod(props: MealsMethodProps) {
     </MealsColumn>
   );
 }
-
-export default MealsMethod;

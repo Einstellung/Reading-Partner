@@ -12,7 +12,6 @@
 import { foodById, type Food } from "./nutrition/foods";
 import {
   CATEGORY_ORDER,
-  EMPTY_SHOPPING,
   KEEPS_ORDER,
   MEAL_KEYS,
   type ShoppingItem,
@@ -128,19 +127,31 @@ export function isChecked(state: ShoppingState, item: ShoppingItem): boolean {
   return state.checked[shoppingItemKey(item)] === true;
 }
 
+// The three below read the list, or the lines the caller is drawing it as
+// (list-order.ts), so a count beside the list is a count of what is drawn.
+
 /** The lines still to be bought. The only count the list shows. */
-export function leftToBuy(state: ShoppingState): number {
-  return currentList(state).filter((i) => !isChecked(state, i)).length;
+export function leftToBuy(
+  state: ShoppingState,
+  lines: readonly ShoppingItem[] = currentList(state),
+): number {
+  return lines.filter((i) => !isChecked(state, i)).length;
 }
 
 /** Lines added after the trip was called done, not yet picked up. */
-export function stillToGet(state: ShoppingState): ShoppingItem[] {
-  return currentList(state).filter((i) => i.afterDone && !isChecked(state, i));
+export function stillToGet(
+  state: ShoppingState,
+  lines: readonly ShoppingItem[] = currentList(state),
+): ShoppingItem[] {
+  return lines.filter((i) => i.afterDone && !isChecked(state, i));
 }
 
 /** Lines the trip was supposed to bring home and did not. */
-export function missed(state: ShoppingState): ShoppingItem[] {
-  return currentList(state).filter((i) => !i.afterDone && !isChecked(state, i));
+export function missed(
+  state: ShoppingState,
+  lines: readonly ShoppingItem[] = currentList(state),
+): ShoppingItem[] {
+  return lines.filter((i) => !i.afterDone && !isChecked(state, i));
 }
 
 /**
@@ -260,39 +271,4 @@ export function replaceShoppingItem(
 /** Call the trip done. Nothing reopens it in this slice (docs/73). */
 export function markShoppingDone(state: ShoppingState, date: string): ShoppingState {
   return { ...state, doneOn: date };
-}
-
-/** An empty trip, for a week that has none yet. */
-export function emptyShopping(): ShoppingState {
-  return { ...EMPTY_SHOPPING, items: [], reader: [], dropped: {}, replaced: {}, checked: {} };
-}
-
-export interface ShoppingGroup {
-  category: ShoppingItem["category"];
-  items: ShoppingItem[];
-}
-
-/**
- * The list as it is drawn: the aisles in the order the derivation already put
- * them in (CATEGORY_ORDER, so one order and not two), and inside each aisle the
- * ticked lines sunk to the bottom in the order they were already in.
- *
- * Sunk rather than hidden: a ticked line is what is in the fridge, and the list
- * is the inventory (docs/73).
- */
-export function shoppingGroups(state: ShoppingState): ShoppingGroup[] {
-  const list = currentList(state);
-  const groups: ShoppingGroup[] = [];
-  for (const category of CATEGORY_ORDER) {
-    const mine = list.filter((i) => i.category === category);
-    if (!mine.length) continue;
-    groups.push({
-      category,
-      items: [
-        ...mine.filter((i) => !isChecked(state, i)),
-        ...mine.filter((i) => isChecked(state, i)),
-      ],
-    });
-  }
-  return groups;
 }

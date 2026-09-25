@@ -1,6 +1,6 @@
 // What the meals screen reads off the state (src/info/meals/view.ts): the
 // words, the targets card, a day's four meals in eating order with every food
-// at its solved grams, which days are ahead, and the shopping list's order.
+// at its solved grams, and which days are ahead.
 // Run: scripts/t.sh tests/info/meals/view.test.ts
 
 import { expect, test } from "bun:test";
@@ -10,12 +10,10 @@ import {
   dayWord,
   dishThumbnails,
   keepsLabel,
-  leftToBuy,
   mealLabel,
   mealName,
   mealsView,
   modeWord,
-  shoppingGroups,
   shoppingNote,
   targetsSummary,
   weekdayName,
@@ -23,9 +21,8 @@ import {
 import type { TemplateItem } from "../../../src/info/meals/nutrition/solve";
 import { computeTargets } from "../../../src/info/meals/nutrition/targets";
 import type { ShoppingItem } from "../../../src/info/meals/types";
-import { deriveShoppingList, setShoppingChecked, shoppingItemKey } from "../../../src/info/meals/shopping";
 import { solvePlan, targetsOf } from "../../../src/info/meals/solve-week";
-import { MON, charter, draftWeek, profile, shopping, state, week } from "./fixtures/week";
+import { MON, charter, draftWeek, profile, state } from "./fixtures/week";
 
 test("every mode has a plain word and none of them apologises", () => {
   expect(modeWord("make")).toBe("Make");
@@ -211,14 +208,4 @@ test("a strip is four cut-outs at most, the jars last and the repeats gone", () 
   ];
   const resolve = (en: string) => (en === "lettuce" ? "bok choy.png" : en ? `${en}.png` : null);
   expect(dishThumbnails(items, resolve)).toEqual(["salmon.png", "rice.png", "bok choy.png", "cucumber.png"]);
-});
-
-test("the list is drawn in aisle order, ticked lines sunk, and counted once", () => {
-  const items = deriveShoppingList(week(), MON);
-  const bokChoy = items.find((i) => i.name === "上海青")!;
-  const state = setShoppingChecked(shopping({ items }), shoppingItemKey(bokChoy), true);
-  expect(leftToBuy(state)).toBe(items.length - 1);
-  const groups = shoppingGroups(state);
-  expect(groups.map((g) => g.label)).toEqual(["Produce", "Protein", "Dairy", "Frozen", "Grains", "Pantry"]);
-  expect(groups[0]!.items[groups[0]!.items.length - 1]!.name).toBe("上海青");
 });

@@ -53,6 +53,7 @@ test("the files the app writes are classified by what they hold", () => {
   expect(strategyFor("info-feedback.jsonl")).toBe("records");
   expect(strategyFor("saved-articles.json")).toBe("records");
   expect(strategyFor("info-pool-marks.json")).toBe("records");
+  expect(strategyFor("info-meals-photos.json")).toBe("records");
   // One line per deleted observation. Records because nothing else propagates a
   // deletion: this module removes no file, so an observation deleted on one
   // device comes back from the other unless its tombstone travels and unions.

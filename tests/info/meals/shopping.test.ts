@@ -15,7 +15,6 @@ import {
   removeShoppingItem,
   replaceShoppingItem,
   setShoppingChecked,
-  shoppingGroups,
   shoppingItemKey,
   stillToGet,
 } from "../../../src/info/meals/shopping";
@@ -225,14 +224,4 @@ test("Done splits what is still to get from what the trip missed", () => {
 test("the same line is not added twice", () => {
   const first = addReaderItem(shopping(), reader("milk"));
   expect(addReaderItem(first, reader("milk"))).toBe(first);
-});
-
-test("groups sink the ticked lines inside their aisle", () => {
-  const items = deriveShoppingList(week(), MON);
-  const key = shoppingItemKey(items.find((i) => i.name === BOK_CHOY)!);
-  const produceBefore = shoppingGroups(shopping({ items })).find((g) => g.category === "produce")!;
-  expect(produceBefore.items[0]!.name).toBe(BOK_CHOY);
-  const state = setShoppingChecked(shopping({ items }), key, true);
-  const produce = shoppingGroups(state).find((g) => g.category === "produce")!;
-  expect(produce.items[produce.items.length - 1]!.name).toBe(BOK_CHOY);
 });
