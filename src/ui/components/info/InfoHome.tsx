@@ -125,6 +125,8 @@ export default function InfoHome(props: {
   onOpenSettings: () => void;
   // Keeping an article can create the Brief topic, so the shelf needs a reload.
   onTopicsChanged: () => Promise<void> | void;
+  // A failure the reader has to hear about, such as a removal that did not happen.
+  onSay: (line: string) => void;
   // Called with a way to close the info call whenever one opens, and with null
   // when it closes. For a shell whose back is global (the phone's: a left-edge
   // swipe and the Android button, neither of which can aim at a close button) —
@@ -173,6 +175,7 @@ export default function InfoHome(props: {
     onNavigate,
     onTopicsChanged: props.onTopicsChanged,
     onOverlayChange: props.onOverlayChange,
+    onSay: props.onSay,
   });
 
   // What a hold on Lumen would be about (docs/68). The briefing screen is the

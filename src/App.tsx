@@ -1494,6 +1494,7 @@ export default function App() {
             launchReady={bootstrapped}
             onOpenSettings={openSettings}
             onTopicsChanged={refreshTopics}
+            onSay={(line) => pushToast("error", line)}
           />
 
           {!inReader && settingsShowing && (
@@ -1514,6 +1515,7 @@ export default function App() {
               onAddFile={addFile}
               onOpenFile={openFile}
               onTopicsChanged={refreshTopics}
+              onSay={(line) => pushToast("error", line)}
             />
           )}
         </div>

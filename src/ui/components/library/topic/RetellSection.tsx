@@ -22,6 +22,7 @@ import { Button } from "../../ui/button";
 import CardMenu from "../../shelf/CardMenu";
 import { displayFileTitle } from "../../shelf/file-title";
 import ConfirmDestructiveDialog from "../../common/ConfirmDestructiveDialog";
+import { settleDelete } from "../../common/settle-delete";
 import NewRetellDialog from "./NewRetellDialog";
 
 const ROW = "flex items-center gap-2 rounded-lg border border-border py-1 pl-3 pr-1.5";
@@ -138,7 +139,13 @@ export default function RetellSection(props: {
           open
           onOpenChange={(open) => !open && setDeleting(null)}
           onConfirm={() => {
-            void deleteRetellWithTalk(deleting.id).then(refresh);
+            setError(null);
+            void settleDelete({
+              act: () => deleteRetellWithTalk(deleting.id),
+              refresh,
+              failed: `Could not delete “${deleting.name}”`,
+              onFail: setError,
+            });
           }}
         />
       )}

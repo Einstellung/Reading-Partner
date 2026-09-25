@@ -59,6 +59,7 @@ import {
 import { displayFileTitle, type BookMeta } from "../shelf/file-title";
 import { splitMaterials } from "../shelf/article-row";
 import ArticleRows from "../shelf/ArticleRows";
+import { settleDelete } from "../common/settle-delete";
 import SavedArticleView from "./SavedArticleView";
 import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
@@ -84,6 +85,8 @@ export default function LibraryScreen(props: {
   onOpenFile: (file: FileRef) => void;
   // A topic or file was created / renamed / deleted on disk: reload the list.
   onTopicsChanged: () => Promise<void> | void;
+  // A failure the reader has to hear about, such as a delete that did not happen.
+  onSay: (line: string) => void;
 }) {
   // Articles kept out of a briefing (docs/21), and which one is being read.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
@@ -321,21 +324,33 @@ export default function LibraryScreen(props: {
                   onAddFile={props.onAddFile}
                   onOpenFile={props.onOpenFile}
                   onRetell={(f) => void startRetellOn(f)}
-                  onRemoveFile={async (p) => {
-                    await removeFileFromTopic(activeTopic.id, p);
-                    await props.onTopicsChanged();
-                  }}
+                  onRemoveFile={(p) =>
+                    void settleDelete({
+                      act: () => removeFileFromTopic(activeTopic.id, p),
+                      refresh: props.onTopicsChanged,
+                      failed: "Could not remove the book from this topic",
+                      onFail: props.onSay,
+                    })
+                  }
                   // removeFromTopic counts the references again at the moment
                   // of the delete: the book goes only if nothing else lists it.
-                  onDeleteBook={async (file) => {
-                    await removeFromTopic(activeTopic.id, file);
-                    await props.onTopicsChanged();
-                  }}
+                  onDeleteBook={(file) =>
+                    void settleDelete({
+                      act: () => removeFromTopic(activeTopic.id, file),
+                      refresh: props.onTopicsChanged,
+                      failed: "Could not delete the book",
+                      onFail: props.onSay,
+                    })
+                  }
                   onOpenSavedArticle={setOpenSavedArticle}
-                  onRemoveSavedArticle={async (id) => {
-                    await removeSavedArticle(id);
-                    await refreshSavedArticles();
-                  }}
+                  onRemoveSavedArticle={(id) =>
+                    void settleDelete({
+                      act: () => removeSavedArticle(id),
+                      refresh: refreshSavedArticles,
+                      failed: "Could not remove the article",
+                      onFail: props.onSay,
+                    })
+                  }
                 />
               )}
             </div>
@@ -358,10 +373,14 @@ export default function LibraryScreen(props: {
           await props.onTopicsChanged();
         }}
         // Confirmed in the topic list's ConfirmDestructiveDialog, which is what calls this.
-        onDelete={async (t) => {
-          await deleteTopic(t.id);
-          await props.onTopicsChanged();
-        }}
+        onDelete={(t) =>
+          void settleDelete({
+            act: () => deleteTopic(t.id),
+            refresh: props.onTopicsChanged,
+            failed: `Could not delete “${t.name}”`,
+            onFail: props.onSay,
+          })
+        }
         onOpen={props.onOpenTopic}
       />
     </div>
@@ -522,6 +541,7 @@ function TopicMaterials(props: {
   const { books, articles } = splitMaterials(files, props.entries);
   const meta = props.meta;
   const [removing, setRemoving] = useState<FileRef | null>(null);
+  const [removingArticle, setRemovingArticle] = useState<SavedArticle | null>(null);
   // Whether the confirmation is offering to unlink or to delete. Null until the
   // supplement lists have been read, and the dialog waits for it.
   const [lastReference, setLastReference] = useState<boolean | null>(null);
@@ -597,7 +617,7 @@ function TopicMaterials(props: {
                     <Button
                       variant="destructive-outline"
                       size="sm"
-                      onClick={() => props.onRemoveSavedArticle(a.id)}
+                      onClick={() => setRemovingArticle(a)}
                     >
                       Remove
                     </Button>
@@ -607,6 +627,17 @@ function TopicMaterials(props: {
             })}
           </ul>
         </>
+      )}
+
+      {removingArticle && (
+        <ConfirmDestructiveDialog
+          title={`Remove “${removingArticle.title}”?`}
+          description="The article leaves your saved articles. Saving it again from a briefing brings it back."
+          actionLabel="Remove"
+          open
+          onOpenChange={(open) => !open && setRemovingArticle(null)}
+          onConfirm={() => props.onRemoveSavedArticle(removingArticle.id)}
+        />
       )}
 
       {removing && lastReference !== null && (

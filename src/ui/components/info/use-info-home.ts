@@ -82,6 +82,7 @@ import { hasWebviewSignIn } from "../../../platform/app/platform";
 import type { CollectorSites } from "../../../info/briefer/reader";
 import type { ComposerVoice } from "../chat/composer-voice";
 import type { HomeScreen } from "./InfoHome";
+import { settleDelete } from "../common/settle-delete";
 
 export interface KeepArticlePorts {
   // Read the item's body when the screen has not already got it.
@@ -129,6 +130,8 @@ export interface InfoHomeOptions {
   // Called with a way to close the info call whenever one opens, and with null
   // when it closes.
   onOverlayChange?: (dismiss: (() => void) | null) => void;
+  // A failure the reader has to hear about, such as a removal that did not happen.
+  onSay: (line: string) => void;
 }
 
 export interface InfoHomeController {
@@ -181,7 +184,7 @@ export interface InfoHomeController {
 }
 
 export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
-  const { role, onNavigate, onTopicsChanged, onOverlayChange } = opts;
+  const { role, onNavigate, onTopicsChanged, onOverlayChange, onSay } = opts;
   const [infoSnap, setInfoSnap] = useState<InfoSnapshot | null>(null);
   // Whether the user has any source configured (drives onboarding), plus the
   // source list + health for the source-list page (docs/17).
@@ -352,12 +355,14 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
 
   const removeSourceById = useCallback(
     (id: string) => {
-      void (async () => {
-        await removeSource(id);
-        await refreshSources();
-      })();
+      void settleDelete({
+        act: () => removeSource(id),
+        refresh: refreshSources,
+        failed: "Could not remove the source",
+        onFail: onSay,
+      });
     },
-    [refreshSources],
+    [refreshSources, onSay],
   );
 
   const openArticle = useCallback(
