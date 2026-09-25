@@ -100,24 +100,25 @@ test("a file with no book id yet is never the last reference", () => {
 
 test("the local paths cover the synced ones, the caches and the blob", () => {
   const { files, dirs } = deadLocalPathsFor(BOOK);
+  // In the table's order (palace/kinds.ts): the paths are folded off it.
   expect(files).toEqual([
+    `library/${BOOK}.pdf`,
+    `library/${BOOK}.epub`,
     `annotations-${BOOK}.json`,
     // The list of what this book took in from its own conversation. The
     // supplements themselves are books and are deleted as books (delete-book.ts).
     `supplements-${BOOK}.json`,
     `threads-${BOOK}.json`,
     `fulltext-${BOOK}.json`,
-    `figures-${BOOK}.json`,
-    `library/${BOOK}.pdf`,
-    `library/${BOOK}.epub`,
     `pagination-${BOOK}.json`,
+    `figures-${BOOK}.json`,
     // The cover, the author record beside it and the marker that says why there
     // is no cover: a deleted book must not be a picture on the next shelf, and
     // covers are filed under the book id, so re-importing the same PDF would
     // otherwise show the old one.
+    `covers/${BOOK}.failed.json`,
     `covers/${BOOK}.jpg`,
     `covers/${BOOK}.json`,
-    `covers/${BOOK}.failed.json`,
   ]);
   // No trailing slash: this goes to a directory remove, not to a path matcher.
   expect(dirs).toEqual([`prep-${BOOK}`]);

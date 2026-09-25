@@ -24,6 +24,7 @@ import { threadFileKey, threadFileName } from "../../src/platform/app/threads";
 import { strategyFor } from "../../src/platform/sync/merge/contract";
 import { recordShape } from "../../src/platform/sync/merge/records";
 import { deadPathsFor, isDeadPath } from "../../src/platform/sync/dead-paths";
+import { emptyDeletions } from "../../src/platform/app/deleted-books";
 import { inSyncRange } from "../../src/platform/sync/syncFs";
 import { deadLocalPathsFor } from "../../src/reading/delete/pick";
 import {
@@ -72,7 +73,10 @@ test("a sample is a deleted book's exactly when its row is named for a book", ()
   for (const row of PALACE) {
     for (const path of row.samples) {
       const id = resolvePalace(path)?.id;
-      const claimed = id === null || id === undefined ? false : isDeadPath(path, new Set([id]));
+      const claimed =
+        id === null || id === undefined
+          ? false
+          : isDeadPath(path, { ...emptyDeletions(), book: new Set([id]) });
       const owned = row.deleteWith === "book" && row.id === "bookId";
       expect(`${path}: ${claimed}`).toBe(`${path}: ${owned}`);
     }
@@ -93,7 +97,7 @@ test("what a deleted book takes covers every kind named for a book", () => {
 
   // And the synced half is the part of that the reconcile loop can see, all of
   // it deleted here as well.
-  const synced = deadPathsFor(BOOK);
+  const synced = deadPathsFor("book", BOOK);
   for (const path of [...synced.files, ...synced.dirs]) {
     expect(`${path}: ${removed.has(path)}`).toBe(`${path}: true`);
   }
