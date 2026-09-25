@@ -29,7 +29,7 @@ import {
 import { getThread, type ThreadMessage } from "./platform/app/threads";
 import { DEFAULT_SETTINGS, type Settings } from "./platform/app/settings";
 import { buildGlossary } from "./ai/voice";
-import { modelSupportsImages, type ProviderId } from "./ai";
+import { defaultModelTakesImages } from "./ai";
 import { locateQuote, prepKind, type Citation } from "./reading/prep";
 import { usePrep } from "./reading/prep/papers/use-prep";
 import { usePrepTrigger } from "./reading/session/use-prep-trigger";
@@ -59,6 +59,8 @@ import BookPane from "./ui/components/reader/BookPane";
 import PrepPanel from "./ui/components/reader/PrepPanel";
 import ReaderTopBar from "./ui/components/reader/ReaderTopBar";
 import { useReaderZoomKeys } from "./ui/components/reader/reader-zoom-keys";
+import { escapeTarget } from "./ui/components/reader/escape";
+import { readerTool } from "./ui/components/reader/reader-tool";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/CallBubble";
 import CallView from "./ui/components/chat/CallView";
@@ -68,16 +70,22 @@ import ChatPipCard from "./ui/components/chat/ChatPipCard";
 import SettingsDialog from "./ui/components/SettingsDialog";
 import SettingsView from "./ui/components/SettingsView";
 import { levelGate, toolInCall, type CallRow } from "./reading/call-state";
-import { asideReturn } from "./reading/aside";
+import { asideReturnable } from "./reading/aside";
 import { markExcerpt } from "./reading/reopen";
 import { asideIntents, bookTextNotice, openingIntents } from "./reading/intents";
+import type { ReadingTurnContext } from "./reading/desk";
 import { resolveBookThread } from "./reading/session/book-thread";
 import { closeBook } from "./reading/session/close-book";
 import { useCall } from "./reading/session/use-call";
 import { useMarkDoors } from "./reading/session/use-mark-doors";
 import { AI_PEN_COLOR, useMarks } from "./reading/session/use-marks";
 import { openBook, switchDocument } from "./reading/session/open-book";
-import { supplementForSlug, supplementTitles } from "./reading/session/supplement-citation";
+import {
+  citationLogDetail,
+  citationSources,
+  createQuoteCheck,
+  routeCitation,
+} from "./reading/session/citations";
 import { createPasteHandler, systemImageReader } from "./reading/session/paste-images";
 import { runStartupRepairs } from "./reading/session/startup-repairs";
 import { importPickedBook } from "./reading/session/import-book";
@@ -190,14 +198,7 @@ export default function App() {
   // Refs the session and the two panels read at call time, so their callbacks
   // keep a stable identity (avoids dependency churn).
   const settingsRef = useRef<Settings>({ ...DEFAULT_SETTINGS });
-  const ctxRef = useRef<{
-    topicId: string | null;
-    topicName: string;
-    fileName: string;
-    pageLabel: string | null;
-    pageIndex: number | null;
-    files: { path: string; name: string; hash?: string }[];
-  }>({
+  const ctxRef = useRef<ReadingTurnContext>({
     topicId: null,
     topicName: "",
     fileName: "",
@@ -572,18 +573,10 @@ export default function App() {
   const toolType = toolInCall(pickedTool, call);
 
   // Apply the tool once the view is initialized (setTool before the engine
-  // is ready throws). The AI pen is the underline tool in a fixed purple.
+  // is ready throws).
   useEffect(() => {
     if (!viewReady) return;
-    const tool =
-      toolType === "none"
-        ? { type: "pointer" as const }
-        : toolType === "navlock"
-          ? { type: "navlock" as const }
-          : toolType === "ai"
-            ? { type: "underline" as const, color: AI_PEN_COLOR }
-            : { type: toolType, color: penColor };
-    viewRef.current?.setTool(tool);
+    viewRef.current?.setTool(readerTool(toolType, penColor));
   }, [toolType, penColor, viewReady]);
 
   // What a card in the reading conversation raises. Two do: an aside's receipt,
@@ -653,61 +646,32 @@ export default function App() {
   // note in the prep panel (v1: the note, not the paper PDF).
   const onCitation = useCallback((c: Citation) => {
     const topicId = ctxRef.current.topicId;
-    if (topicId) {
-      const detail: Record<string, string | number> =
-        c.kind === "page"
-          ? { kind: "page", page: c.page }
-          : c.kind === "figure"
-            ? { kind: "figure", id: c.id }
-            : { kind: "paper", slug: c.slug };
-      logEvent(topicId, "citation-click", detail);
+    if (topicId) logEvent(topicId, "citation-click", citationLogDetail(c));
+    const route = routeCitation(c, {
+      figures: figuresRef.current,
+      supplements: supplementsRef.current,
+      papers: pipelineRef.current?.snapshot().state?.papers,
+    });
+    if (route.kind === "warn") {
+      pushToast("warn", route.message);
+      return;
     }
-    if (c.kind === "page") {
-      const pageIndex = c.page - 1;
-      if (c.quote) void jumpToQuote(pageIndex, c.quote);
-      else viewRef.current?.navigate({ pageIndex });
-    } else if (c.kind === "figure") {
-      // Reachable when this document's figure list is empty, which is both "no
-      // figures in it" and "extraction hasn't finished" — nothing here can tell
-      // those apart. Either way the jump has nowhere to go, so say so rather
-      // than do nothing. (With a figure list, an unknown id never gets here: it
-      // renders as an inert chip instead of a control.)
-      const fig = findFigureById(figuresRef.current, c.id);
-      if (!fig) {
-        pushToast("warn", `No figure ${c.id} in this document.`);
-        return;
-      }
-      viewRef.current?.navigate({ pageIndex: fig.page - 1 });
+    if (route.kind === "page") {
+      if (route.quote) void jumpToQuote(route.pageIndex, route.quote);
+      else viewRef.current?.navigate({ pageIndex: route.pageIndex });
+    } else if (route.kind === "supplement") {
+      // The jump has to wait for the engine to have the new bytes, which is
+      // what the await is.
+      const { supplement, pageIndex, quote } = route;
+      void (async () => {
+        if (docIdRef.current !== supplement.hash) {
+          await openDocumentRef.current(supplement.hash, supplement.title);
+        }
+        if (quote) await jumpToQuote(pageIndex, quote);
+        else viewRef.current?.navigate({ pageIndex });
+      })();
     } else {
-      // A supplement is cited by its title (docs/67). Open it if it is not the
-      // document on screen, then go to the page — the jump has to wait for the
-      // engine to have the new bytes, which is what the await is.
-      const supplement = supplementForSlug(c.slug, supplementsRef.current);
-      if (supplement) {
-        void (async () => {
-          if (docIdRef.current !== supplement.hash) {
-            await openDocumentRef.current(supplement.hash, supplement.title);
-          }
-          const pageIndex = c.page - 1;
-          if (c.quote) await jumpToQuote(pageIndex, c.quote);
-          else viewRef.current?.navigate({ pageIndex });
-        })();
-        swapToReading();
-        return;
-      }
-      // The model can cite a paper that isn't prepped — an abbreviated slug, or
-      // one it remembers from another book. Selecting it opened the prep panel
-      // on nothing, which reads as the panel being broken. Say so instead.
-      //
-      // Only once there is a list to check against: prep state loads a moment
-      // after the book does, and a citation clicked in that window is very
-      // likely real. No state means open the panel and let it catch up.
-      const papers = pipelineRef.current?.snapshot().state?.papers;
-      if (papers && !papers.some((p) => p.slug === c.slug)) {
-        pushToast("warn", `No prepped paper "${c.slug}" — the reply cited one that isn't here.`);
-        return;
-      }
-      setSelectedPrepSlug(c.slug);
+      setSelectedPrepSlug(route.slug);
       setSidebarTab("prep");
       setSidebarOpen(true);
     }
@@ -1006,14 +970,7 @@ export default function App() {
   }, [topics, openFile]);
 
   // Does the active default model accept images? (Gates a paste up front.)
-  const modelTakesImages = useCallback(() => {
-    const s = settingsRef.current;
-    return !!(
-      s.defaultProviderId &&
-      s.defaultModelId &&
-      modelSupportsImages(s.defaultProviderId as ProviderId, s.defaultModelId)
-    );
-  }, []);
+  const modelTakesImages = useCallback(() => defaultModelTakesImages(settingsRef.current), []);
 
   // One global paste path, owned here because it belongs to no field: whatever
   // is pasted belongs to the conversation that was open when it was pasted, even
@@ -1120,26 +1077,32 @@ export default function App() {
   );
   const onEmbedSelect = useCallback((ids: string[]) => setSelectedAnnId(ids[0] ?? null), []);
 
-  // Escape closes whatever is topmost (Settings, else a side conversation — which
-  // steps back to the one it came off rather than out of both — else the open
-  // call, same path as the hang-up button, else the annotation popup); Ctrl/Cmd+\
-  // toggles the sidebar. Escape works even while a composer has focus; the
-  // sidebar toggle is ignored while typing so it doesn't fight text input. The
-  // session's own reference to the open call (not `call`) keeps this listener
-  // stable across a streaming reply's frequent state churn.
+  // Escape closes whatever is topmost (ui/components/reader/escape.ts; the call
+  // by the same path as the hang-up button); Ctrl/Cmd+\ toggles the sidebar.
+  // Escape works even while a composer has focus; the sidebar toggle is ignored
+  // while typing so it doesn't fight text input. The session's own reference to
+  // the open call (not `call`) keeps this listener stable across a streaming
+  // reply's frequent state churn.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.key === "Escape") {
-        if (readerSettings) setReaderSettings(false);
-        else if (settingsShowing) setHomeScreen(screenBeforeSettings.current);
-        else if (quoteHlActive) viewRef.current?.clearQuoteHighlight();
-        else if (currentCall()?.aside) returnFromAside();
-        else if (currentCall()) endCall();
-        else if (popup) setPopup(null);
-        // Esc dismisses what is covering something. The column covers nothing,
-        // so it stays; the drawer goes.
-        else if (sidebarOpen && !sidebarColumn) setSidebarOpen(false);
+        const target = escapeTarget({
+          readerSettings,
+          settingsShowing,
+          quoteHighlight: quoteHlActive,
+          call: currentCall(),
+          popup: !!popup,
+          sidebarOpen,
+          sidebarColumn,
+        });
+        if (target === "reader-settings") setReaderSettings(false);
+        else if (target === "settings") setHomeScreen(screenBeforeSettings.current);
+        else if (target === "quote-highlight") viewRef.current?.clearQuoteHighlight();
+        else if (target === "aside") returnFromAside();
+        else if (target === "call") endCall();
+        else if (target === "popup") setPopup(null);
+        else if (target === "sidebar") setSidebarOpen(false);
         return;
       }
       const target = e.target as HTMLElement | null;
@@ -1342,57 +1305,28 @@ export default function App() {
     };
   }, [figures, onCitation]);
 
-  // The slugs a [slug p.N] citation may name. Null — not an empty set — until
-  // prep state has actually loaded: "this paper isn't prepped" and "the list
-  // isn't here yet" are different answers, and only the first should strike a
-  // citation back to plain text. Keyed on the slugs themselves so the set keeps
-  // its identity across the status changes that fire while prep runs, which is
-  // what keeps every rendered reply from re-linkifying each time.
+  // The names a [name p.N] citation may carry (reading/session/citations.ts):
+  // the prepped slugs, null until prep state has loaded, and the supplements'
+  // titles (docs/67). Keyed on the names themselves so the sources keep their
+  // identity across the status changes that fire while prep runs, which is what
+  // keeps every rendered reply from re-linkifying each time.
   const prepSlugKey = prepSnap?.state?.papers.map((p) => p.slug).join("\n") ?? null;
-  // Plus the supplements' titles, which are the other thing a [name p.N]
-  // citation may be (docs/67). Unlike the prep list these are always known —
-  // the file is read when the book opens — so an empty set is really "none".
   const supplementKey = supplements.map((one) => one.title).join("\n");
-  const citationSources = useMemo(
-    () => ({
-      slugs: prepSlugKey === null ? null : new Set(prepSlugKey.split("\n").filter(Boolean)),
-      titles: supplementTitles(supplementKey ? supplementKey.split("\n").map((title) => ({ title, hash: "", addedAt: 0 })) : []),
-    }),
+  const citationSourcesValue = useMemo(
+    () => citationSources(prepSlugKey, supplementKey),
     [prepSlugKey, supplementKey],
   );
 
   // Whether a citation's quote is really on the page it names — what decides
   // whether a reply prints it as the book's words or falls back to a bare page
-  // chip (QuoteCheckContext). The answer is the same one jumpToQuote asks for
-  // when the citation is clicked, so the two cannot disagree about what counts
-  // as found.
-  //
-  // Cached per (page, quote), and the cache belongs to this memo so it empties
-  // by construction whenever the book's text changes — a check made against the
-  // previous book's pages must not outlive it. The cache is not an optimization
-  // to skip: every delta of a streaming reply re-renders the whole tree, and
-  // locateQuote folds an entire page of text per call.
-  const verifyQuote = useMemo<QuoteCheck>(() => {
-    const cache = new Map<string, boolean>();
-    return (page, quote) => {
-      const key = `${page}\u0000${quote}`;
-      const seen = cache.get(key);
-      if (seen !== undefined) return seen;
-      // No text for that page — extraction still running, an unreadable scan, a
-      // page number past the end. None of those is evidence against the quote,
-      // so it passes, the same way an unknown prep list lets a citation link on
-      // its shape alone.
-      const pageText = fulltext?.pages[page - 1];
-      const ok = pageText ? locateQuote(pageText, quote) !== null : true;
-      cache.set(key, ok);
-      return ok;
-    };
-  }, [fulltext]);
+  // chip (QuoteCheckContext). One check per book text, so its cache empties
+  // whenever the text changes.
+  const verifyQuote = useMemo<QuoteCheck>(() => createQuoteCheck(fulltext), [fulltext]);
 
   return (
     <CardRegistryProvider>
     <CitationContext.Provider value={onCitation}>
-    <PrepSlugContext.Provider value={citationSources}>
+    <PrepSlugContext.Provider value={citationSourcesValue}>
     <FigureContext.Provider value={figureHost}>
     <QuoteCheckContext.Provider value={verifyQuote}>
     {/* p-safe: the insets (iPad, viewport-fit=cover). box-sizing:border-box
@@ -1815,15 +1749,5 @@ export default function App() {
     </CitationContext.Provider>
     </CardRegistryProvider>
   );
-}
-
-// Whether a side conversation still has somewhere to go back to: a record under
-// its parent link that is not itself an aside (reading/aside.ts). Read at render
-// rather than settled when it opened, because the parent can go while it is open
-// — another device's delete arrives through sync.
-function asideReturnable(bookId: string | null, parentThreadId: string): boolean {
-  if (!bookId) return false;
-  const parent = getThread(bookId, parentThreadId);
-  return !!parent && !!asideReturn(parent);
 }
 

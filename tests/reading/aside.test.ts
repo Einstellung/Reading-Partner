@@ -13,6 +13,7 @@ import {
   asideReceiptItems,
   asideReceiptSummary,
   asideReturn,
+  asideReturnable,
   asideSpan,
   carriesAsideReceipt,
   openAsideReceipt,
@@ -23,6 +24,7 @@ import {
   ASIDE_QUESTION_MAX,
   ASIDE_SPAN_MAX,
 } from "../../src/reading/aside";
+import { createAsideThread, createBookThread, deleteThreadTree } from "../../src/platform/app/threads";
 
 // u1 a1 u2 a2 u3 a3 u4 a4, at ts 1..8.
 const lesson = [
@@ -369,4 +371,17 @@ test("a receipt written before items reads as one item", () => {
 
 test("a receipt of several is collapsed to a count", () => {
   expect(asideReceiptSummary(5)).toBe("5 questions while you were reading");
+});
+
+test("an aside is returnable while its parent is there and is not itself an aside", () => {
+  const book = "/books/aside-returnable.pdf";
+  createBookThread(book, "ret-lesson");
+  createAsideThread(book, "ret-aside", { parentThreadId: "ret-lesson" });
+  expect(asideReturnable(book, "ret-lesson")).toBe(true);
+  expect(asideReturnable(null, "ret-lesson")).toBe(false);
+  expect(asideReturnable(book, "ret-missing")).toBe(false);
+  // A parent that is itself an aside is not followed.
+  expect(asideReturnable(book, "ret-aside")).toBe(false);
+  deleteThreadTree(book, "ret-lesson");
+  expect(asideReturnable(book, "ret-lesson")).toBe(false);
 });

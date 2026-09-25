@@ -25,6 +25,7 @@ export {
 	nextDefaultsForActive,
 	isSelectableModel,
 	modelSupportsImages,
+	defaultModelTakesImages,
 	streamChat,
 	ModelCallError,
 	providers,
