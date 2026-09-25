@@ -43,14 +43,13 @@
 import { BACKGROUND_CONTEXT, type Context, type Entry } from "@earendil-works/pi-agent-core";
 import { joinRoundTexts } from "../ai/turn-rows";
 import type { HeldHarness, HeldRecovery } from "../legion/execute/held";
-import { DELIVERY_ENTRY, runAgentTurn } from "../legion/execute/turn";
+import { DELIVERY_ENTRY } from "../legion/execute/turn";
 import type { BoxOrigin, BoxStore } from "../box";
-import { loadSettings, toReasoning, type Settings } from "../platform/app/settings";
-import type { ProviderId } from "../ai";
-import { modelIdFor } from "../ai/model-tier";
+import { loadSettings, type Settings } from "../platform/app/settings";
 import { coverOf } from "./bell";
 import { deliveryOpener, originOf, type Delivery } from "./delivery";
 import { landReply } from "./landing";
+import { sendHeadless } from "./headless";
 
 /** One try at finishing a turn, written on the branch that holds it. */
 export const RECOVERY_ATTEMPT = "reading-partner.recovery-attempt";
@@ -91,30 +90,19 @@ export interface ResumedTurn {
 
 export type SendResumedTurn = (turn: ResumedTurn) => Promise<string>;
 
-// The app's sender. Nothing is watching: there is no composer open and no
-// reader waiting, so only the end of it is of any interest. `messages` is empty
-// because the prompt is already in the session the lane belongs to — the turn
-// resumes a run rather than starting one.
+// The app's sender. `messages` is empty because the prompt is already in the
+// session the lane belongs to — the turn resumes a run rather than starting one.
 const appSend: SendResumedTurn = (turn) =>
-  new Promise<string>((resolve, reject) => {
-    void runAgentTurn({
-      providerId: turn.settings.defaultProviderId as ProviderId,
-      modelId: modelIdFor(turn.settings, "talk") as string,
-      systemPrompt: turn.systemPrompt,
-      messages: [],
-      tools: turn.tools,
-      harness: turn.harness,
-      resume: turn.operationId,
-      ...(turn.signal ? { signal: turn.signal } : {}),
-      reasoning: toReasoning(turn.settings.chatThinking),
-      telemetry: { surface: "recovery", thread: turn.threadId },
-      onDelta: () => {},
-      onToolStart: () => {},
-      onToolEnd: () => {},
-      onDone: (finalText, _assistant, turnText) => resolve(turnText || finalText),
-      onError: (message: string) => reject(new Error(message)),
-      onRefusal: (message: string) => reject(new Error(message)),
-    });
+  sendHeadless({
+    settings: turn.settings,
+    systemPrompt: turn.systemPrompt,
+    messages: [],
+    tools: turn.tools,
+    harness: turn.harness,
+    resume: turn.operationId,
+    surface: "recovery",
+    threadId: turn.threadId,
+    ...(turn.signal ? { signal: turn.signal } : {}),
   });
 
 /**

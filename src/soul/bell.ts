@@ -31,14 +31,12 @@
 import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
 import { appData } from "../platform/app/appdata";
-import { runAgentTurn, type AgentTool } from "../legion/execute/turn";
+import type { AgentTool } from "../legion/execute/turn";
 import type { SteerPort } from "../legion/execute/contract";
 import type { HeldHarness } from "../legion/execute/held";
 import type { DeskMessage } from "../desk";
-import type { ProviderId } from "../ai";
-import { modelIdFor } from "../ai/model-tier";
 import { createBookThread, getBookThread, loadThreads } from "../platform/app/threads";
-import { toReasoning, type Settings } from "../platform/app/settings";
+import type { Settings } from "../platform/app/settings";
 import { appBox, type BoxOrigin, type BoxStore } from "../box";
 import { doorDate, doorKey, openDoorTurn } from "./door";
 import {
@@ -50,6 +48,7 @@ import {
 } from "./delivery";
 import { landReply } from "./landing";
 import { soulHarness } from "./harness";
+import { sendHeadless } from "./headless";
 
 /** What one bell turn is sent. The default sender is the app's; tests pass one. */
 export interface BellTurn {
@@ -228,31 +227,19 @@ export function renderBell(bell: Bell, substance?: RunSubstance | null): string 
   return lines.join("\n");
 }
 
-// The app's sender: the same call every other soul turn makes, on the same
-// harness, with no streaming surface listening.
+// The app's sender. A bell is its own message; the turn it starts is new.
 const appSend: SendBellTurn = (turn) =>
-  new Promise<string>((resolve, reject) => {
-    void runAgentTurn({
-      providerId: turn.settings.defaultProviderId as ProviderId,
-      modelId: modelIdFor(turn.settings, "talk") as string,
-      systemPrompt: turn.systemPrompt,
-      messages: turn.messages,
-      tools: turn.tools,
-      harness: turn.harness,
-      ...(turn.signal ? { signal: turn.signal } : {}),
-      ...(turn.onSteerable ? { onSteerable: turn.onSteerable } : {}),
-      ...(turn.deliverTo ? { deliverTo: turn.deliverTo } : {}),
-      reasoning: toReasoning(turn.settings.chatThinking),
-      telemetry: { surface: "bell", thread: turn.threadId },
-      // Nothing is watching this turn happen: there is no composer open and no
-      // reader waiting on it. Only the end of it is of any interest.
-      onDelta: () => {},
-      onToolStart: () => {},
-      onToolEnd: () => {},
-      onDone: (finalText, _assistant, turnText) => resolve(turnText || finalText),
-      onError: (message: string) => reject(new Error(message)),
-      onRefusal: (message: string) => reject(new Error(message)),
-    });
+  sendHeadless({
+    settings: turn.settings,
+    systemPrompt: turn.systemPrompt,
+    messages: turn.messages,
+    tools: turn.tools,
+    harness: turn.harness,
+    surface: "bell",
+    threadId: turn.threadId,
+    ...(turn.signal ? { signal: turn.signal } : {}),
+    ...(turn.onSteerable ? { onSteerable: turn.onSteerable } : {}),
+    ...(turn.deliverTo ? { deliverTo: turn.deliverTo } : {}),
   });
 
 /** How long a cover may be. One line on a card, and it is never rewritten (docs/60). */
