@@ -29,7 +29,6 @@ import { deleteBook } from "../../../reading/delete/delete-book";
 import { deleteTopic } from "../../../reading/delete/delete-topic";
 import { isLastReferenceToBook } from "../../../reading/delete/pick";
 import {
-  formatPublishedAt,
   loadSavedArticles,
   removeSavedArticle,
   savedArticlesForTopic,
@@ -53,12 +52,9 @@ import {
   PAGE_HEADER_TEXT,
   PAGE_SUB,
   PAGE_TITLE,
-  ROW,
-  ROW_LIST,
-  ROW_NAME,
 } from "../shelf/cardStyles";
 import { displayFileTitle, type BookMeta } from "../shelf/file-title";
-import { splitMaterials } from "../shelf/article-row";
+import { savedArticleLine, splitMaterials } from "../shelf/article-row";
 import ArticleRows from "../shelf/ArticleRows";
 import SavedArticleView from "./SavedArticleView";
 import TopicCard from "../shelf/TopicCard";
@@ -558,6 +554,7 @@ function TopicMaterials(props: {
               cards started rather than announcing a second kind of thing. */}
           <ArticleRows
             rows={articles}
+            rowKey={(row) => row.file.path}
             underCards={books.length > 0}
             onOpen={(row) => props.onOpenFile(row.file)}
             onRemove={(row) => setRemoving(row.file)}
@@ -570,32 +567,12 @@ function TopicMaterials(props: {
           {/* Articles are rows, not cards: a kept web page has no cover, and a
               grid of blank tiles would say less than a line of text. */}
           <h2 className="mt-10 mb-3 text-[15px] font-semibold text-foreground">Saved articles</h2>
-          <ul className={ROW_LIST}>
-            {props.savedArticles.map((a) => {
-              const line = [a.sourceName, formatPublishedAt(a.publishedAt)]
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <li key={a.id} className={ROW}>
-                  <button className={ROW_NAME} onClick={() => props.onOpenSavedArticle(a)}>
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                      <span className="truncate">{a.title}</span>
-                      {line && <span className="text-xs text-muted-foreground">{line}</span>}
-                    </span>
-                  </button>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="destructive-outline"
-                      size="sm"
-                      onClick={() => props.onRemoveSavedArticle(a.id)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <ArticleRows
+            rows={props.savedArticles.map((a) => ({ article: a, title: a.title, line: savedArticleLine(a) }))}
+            rowKey={(row) => row.article.id}
+            onOpen={(row) => props.onOpenSavedArticle(row.article)}
+            onRemove={(row) => props.onRemoveSavedArticle(row.article.id)}
+          />
         </>
       )}
 

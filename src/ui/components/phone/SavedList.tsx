@@ -3,7 +3,8 @@
 // themselves (docs/21): no removal here — that lives in the library, next to the
 // topic the article was filed under.
 
-import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
+import type { SavedArticle } from "../../../reading/saved-articles";
+import { savedArticleLine } from "../shelf/article-row";
 import { Button } from "../ui/button";
 
 export default function SavedList({
@@ -29,7 +30,7 @@ export default function SavedList({
 
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {articles.map((a) => {
-            const published = formatPublishedAt(a.publishedAt);
+            const line = savedArticleLine(a);
             return (
               <li key={a.id}>
                 <button
@@ -38,10 +39,7 @@ export default function SavedList({
                 >
                   <span className="text-[15px] font-medium leading-snug text-foreground">{a.title}</span>
                   <span className="flex items-center gap-2">
-                    {a.sourceName && (
-                      <span className="text-[12px] text-faint-foreground">{a.sourceName}</span>
-                    )}
-                    {published && <span className="text-[12px] text-faint-foreground">{published}</span>}
+                    {line && <span className="text-[12px] text-faint-foreground">{line}</span>}
                     {a.summaryOnly && <span className="text-[12px] text-[#b08a3a]">summary only</span>}
                   </span>
                 </button>
