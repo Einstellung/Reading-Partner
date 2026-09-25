@@ -17,6 +17,7 @@ import { appRunner } from "../../../legion/execute/runner";
 import { isTerminal, type Run } from "../../../legion/run";
 import type { Receipt } from "../../../ai/tool-status";
 import { clipLine } from "../../../platform/std/text";
+import { watchSource } from "../../../platform/std/watch";
 
 /** How far a handed-off piece of work has got, for the one line drawn about it. */
 export type DispatchState = "running" | "done" | "failed" | "gone";
@@ -124,7 +125,6 @@ function same(a: DispatchSnapshot, b: DispatchSnapshot): boolean {
  * dozen; the runs are read once and each ticket picks its own out.
  */
 export function createDispatchWatch(deps: DispatchWatchDeps): DispatchWatch {
-  const listeners = new Set<() => void>();
   // The snapshot handed out for each run id, kept until something about that run
   // actually changed: useSyncExternalStore re-renders on identity.
   const snaps = new Map<string, DispatchSnapshot>();
@@ -132,8 +132,6 @@ export function createDispatchWatch(deps: DispatchWatchDeps): DispatchWatch {
   // asked again: the file is either there or it is not.
   const outputs = new Map<string, string | null>();
   let loaded = false;
-  let off: (() => void) | null = null;
-  let chain: Promise<void> = Promise.resolve();
 
   function put(next: DispatchSnapshot): boolean {
     const id = next.run?.id;
@@ -144,48 +142,34 @@ export function createDispatchWatch(deps: DispatchWatchDeps): DispatchWatch {
     return true;
   }
 
-  async function read(): Promise<void> {
-    const runs = await deps.list();
-    let changed = !loaded;
-    loaded = true;
-    for (const run of runs) {
-      if (run.state === "done" && run.output !== undefined && !outputs.has(run.id)) {
-        outputs.set(run.id, await deps.readOutput(run.output).catch(() => null));
+  // The first ticket arms the whole thing; the last one to leave disarms it, so
+  // a thread with no tickets in it is not listening to the runner.
+  const watch = watchSource({
+    subscribe: (fn) => deps.subscribe(fn),
+    failure: "the runs behind the dispatch tickets would not read",
+    async read(notify) {
+      const runs = await deps.list();
+      let changed = !loaded;
+      loaded = true;
+      for (const run of runs) {
+        if (run.state === "done" && run.output !== undefined && !outputs.has(run.id)) {
+          outputs.set(run.id, await deps.readOutput(run.output).catch(() => null));
+        }
+        if (put({ loaded: true, run, output: outputs.get(run.id) ?? null })) changed = true;
       }
-      if (put({ loaded: true, run, output: outputs.get(run.id) ?? null })) changed = true;
-    }
-    // A run this device has no file for keeps whatever it had; what it loses is
-    // `loaded: false`, which is how a ticket stops waiting and says gone.
-    for (const [id, snap] of snaps) {
-      if (snap.loaded) continue;
-      snaps.set(id, { ...snap, loaded: true });
-      changed = true;
-    }
-    if (changed) for (const fn of [...listeners]) fn();
-  }
-
-  function refresh(): Promise<void> {
-    chain = chain
-      .then(() => read())
-      .catch((e) => console.warn("the runs behind the dispatch tickets would not read", e));
-    return chain;
-  }
+      // A run this device has no file for keeps whatever it had; what it loses is
+      // `loaded: false`, which is how a ticket stops waiting and says gone.
+      for (const [id, snap] of snaps) {
+        if (snap.loaded) continue;
+        snaps.set(id, { ...snap, loaded: true });
+        changed = true;
+      }
+      if (changed) notify();
+    },
+  });
 
   return {
-    subscribe(fn) {
-      listeners.add(fn);
-      // The first ticket arms the whole thing; the last one to leave disarms it,
-      // so a thread with no tickets in it is not listening to the runner.
-      off ??= deps.subscribe(() => void refresh());
-      void refresh();
-      return () => {
-        listeners.delete(fn);
-        if (listeners.size === 0) {
-          off?.();
-          off = null;
-        }
-      };
-    },
+    subscribe: watch.subscribe,
     snapshot(runId) {
       const held = snaps.get(runId);
       if (held) return held;
@@ -193,7 +177,7 @@ export function createDispatchWatch(deps: DispatchWatchDeps): DispatchWatch {
       snaps.set(runId, fresh);
       return fresh;
     },
-    refresh,
+    refresh: watch.refresh,
   };
 }
 

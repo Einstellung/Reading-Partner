@@ -11,6 +11,7 @@
 // exactly once and the file does not change afterwards.
 
 import { appData } from "../../platform/app/appdata";
+import { watchSource } from "../../platform/std/watch";
 import { appRunner } from "../../legion/execute/runner";
 import type { Run } from "../../legion/run";
 import {
@@ -49,60 +50,44 @@ function same(a: TranslateView | null, b: TranslateView | null): boolean {
 }
 
 export function createTranslateWatch(deps: TranslateWatchDeps): TranslateWatch {
-  const listeners = new Set<() => void>();
   const dismissed = new Set<string>();
   // What each finished run left behind. A run that answered null once is not
   // asked again: the file is either there or it is not.
   const outputs = new Map<string, Replacement | null>();
   let view: TranslateView | null = null;
-  let off: (() => void) | null = null;
-  let chain: Promise<void> = Promise.resolve();
 
-  function publish(next: TranslateView | null): void {
-    if (same(view, next)) return;
-    view = next;
-    for (const fn of [...listeners]) fn();
-  }
-
-  async function read(): Promise<void> {
-    const run = latestTranslateRun(await deps.list());
-    if (!run || dismissed.has(run.id)) {
-      publish(null);
-      return;
-    }
-    if (run.state === "done" && run.output !== undefined && !outputs.has(run.id)) {
-      const text = await deps.readOutput(run.output).catch(() => null);
-      outputs.set(run.id, text === null ? null : parseReplacement(text));
-    }
-    publish(translateView(run, outputs.get(run.id) ?? null));
-  }
-
-  function refresh(): Promise<void> {
-    chain = chain.then(() => read()).catch((e) => console.warn("a translation run would not read", e));
-    return chain;
-  }
+  // The first watcher arms the whole thing; the last one to leave disarms it,
+  // so a shell with the reader closed is not listening to the runner.
+  const watch = watchSource({
+    subscribe: (fn) => deps.subscribe(fn),
+    failure: "a translation run would not read",
+    async read(notify) {
+      const publish = (next: TranslateView | null): void => {
+        if (same(view, next)) return;
+        view = next;
+        notify();
+      };
+      const run = latestTranslateRun(await deps.list());
+      if (!run || dismissed.has(run.id)) {
+        publish(null);
+        return;
+      }
+      if (run.state === "done" && run.output !== undefined && !outputs.has(run.id)) {
+        const text = await deps.readOutput(run.output).catch(() => null);
+        outputs.set(run.id, text === null ? null : parseReplacement(text));
+      }
+      publish(translateView(run, outputs.get(run.id) ?? null));
+    },
+  });
 
   return {
-    subscribe(fn) {
-      listeners.add(fn);
-      // The first watcher arms the whole thing; the last one to leave disarms
-      // it, so a shell with the reader closed is not listening to the runner.
-      off ??= deps.subscribe(() => void refresh());
-      void refresh();
-      return () => {
-        listeners.delete(fn);
-        if (listeners.size === 0) {
-          off?.();
-          off = null;
-        }
-      };
-    },
+    subscribe: watch.subscribe,
     snapshot: () => view,
     dismiss(runId) {
       dismissed.add(runId);
-      void refresh();
+      void watch.refresh();
     },
-    refresh,
+    refresh: watch.refresh,
   };
 }
 
