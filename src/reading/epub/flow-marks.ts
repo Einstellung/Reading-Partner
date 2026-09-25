@@ -19,7 +19,7 @@ import { caretAtPoint, rangeBetween, type CaretPoint } from "./caret";
 import { parseCfiStart, parseEpubRangeCfi, resolveRange } from "./cfi";
 import type { FlowTool } from "./flow-contract";
 import { wordBoundsAt } from "./flow-gesture";
-import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "./mark-draw";
+import { colorOf, createMarkPainter, rangeForMark, type MarkRangeSource, type SpineText } from "./mark-draw";
 import { popupRect, rectsHit, unionRect, type PageRect } from "./mark-geometry";
 import { textMarkOf } from "./mark-write";
 import type { Pagination } from "./paginate";
@@ -95,6 +95,28 @@ export interface FlowMarks {
   tapAt(clientX: number, clientY: number): boolean;
 }
 
+/** A document's tree and spine item, for the shared lookups in mark-draw.ts. */
+export function flowRangeSource(doc: FlowDoc, spineOf: (index: number) => SpineText | null): MarkRangeSource {
+  return {
+    rangeOfCfi: (cfi: string) => {
+      const parsed = parseEpubRangeCfi(cfi);
+      return parsed ? resolveRange(doc.root, parsed) : null;
+    },
+    spine: () => spineOf(doc.spine),
+  };
+}
+
+/** A range's boxes in its document host's coordinates, the overlay's. */
+export function rectsIn(doc: FlowDoc, range: Range): PageRect[] {
+  const box = doc.host.getBoundingClientRect();
+  const out: PageRect[] = [];
+  for (const r of Array.from(range.getClientRects())) {
+    if (r.width < 0.5 || r.height < 0.5) continue;
+    out.push({ left: r.left - box.left, top: r.top - box.top, width: r.width, height: r.height });
+  }
+  return out;
+}
+
 export function createFlowMarks(host: FlowMarkHost): FlowMarks {
   const marks = new Map<string, Annotation>();
   const painted = new Map<number, PaintedMark[]>();
@@ -113,29 +135,9 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     return parseCfiStart(position.value)?.spineIndex ?? null;
   }
 
-  /** The document's tree and spine item, for the shared mark lookup. */
-  function rangesOf(doc: FlowDoc) {
-    return {
-      rangeOfCfi: (cfi: string) => {
-        const parsed = parseEpubRangeCfi(cfi);
-        return parsed ? resolveRange(doc.root, parsed) : null;
-      },
-      spine: (): SpineText | null => host.spineOf(doc.spine),
-    };
-  }
+  const rangesOf = (doc: FlowDoc) => flowRangeSource(doc, host.spineOf);
 
   // --- painting -----------------------------------------------------------
-
-  /** A range's boxes in the host's coordinates. */
-  function rectsIn(doc: FlowDoc, range: Range): PageRect[] {
-    const box = doc.host.getBoundingClientRect();
-    const out: PageRect[] = [];
-    for (const r of Array.from(range.getClientRects())) {
-      if (r.width < 0.5 || r.height < 0.5) continue;
-      out.push({ left: r.left - box.left, top: r.top - box.top, width: r.width, height: r.height });
-    }
-    return out;
-  }
 
   function paint(doc: FlowDoc): void {
     const layer = painter.sublayer(doc.overlay, "rp-marks");

@@ -19,6 +19,16 @@ export interface FlowReaderView {
   goToCfi(cfi: string): void;
   goToHref(href: string): void;
   goToPage(pageIndex: number): void;
+  /**
+   * Scroll to a passage the AI cited on a page and band it in the violet the
+   * sheets use (ViewInstance.highlightQuote): the words are looked for from
+   * that page's start and land about a third down the viewport. Resolves true
+   * once they are banded; false when they are not in the book, and the column
+   * is then at the start of the page. The band goes on the next tap on the
+   * page, the next citation, or any other going somewhere.
+   */
+  highlightQuote(pageIndex: number, req: { searchText: string; displayText: string }): Promise<boolean>;
+  clearQuoteHighlight(): void;
   removeAnnotations(ids: string[]): void;
   setTool(tool: FlowTool): void;
   /**

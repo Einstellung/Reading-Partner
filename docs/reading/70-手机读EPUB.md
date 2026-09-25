@@ -28,7 +28,7 @@
 
 纸色照 docs/64「纸色」那一层挂在 host 上，但值由 Aa 里选的纸给（见下），不读 `--page-wash`：阅读屏里只有 Aa 的选择说话，和 app 的护眼开关不叠加。
 
-书内链接照 `reader-logic.ts` 的 `bookLinkTarget` 走；外链走 `platform/app/external-link`。`[p.N]` 跳转和引文高亮的调用方是课堂里点的引文（[77](./77-手机EPUB课堂.md)）。
+书内链接照 `reader-logic.ts` 的 `bookLinkTarget` 走；外链走 `platform/app/external-link`。引文高亮是 `FlowReaderView.highlightQuote(pageIndex, { searchText, displayText })`，调用方是课堂里点的引文（[77](./77-手机EPUB课堂.md)）。它和 iPad 的 `ViewInstance.highlightQuote` 同一个签名、同一套找法：`reader-logic.ts` 的 `locateQuote` 按分页表从引用页的起点在摄入树的文本里找字，经 CFI 落到这一列的克隆树上（坑 267），滚到字在视口三分之一处，用 `mark-draw.ts` 的 `drawQuote` 画同一种紫，画在 overlay 自己的 `.rp-quote` 子层里（坑 272）。找不到就停在那页开头、返回 false。下一次点页面、下一次引用、任何 `goTo*` 或 `clearQuoteHighlight()` 都清掉。
 
 ## 显示设置
 

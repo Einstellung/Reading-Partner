@@ -290,3 +290,33 @@ export function findQuoteAt(text: string, searchText: string, from: number): { s
   }
   return null;
 }
+
+/** Where a cited quote is: its page by the table, and its span in that spine document's text. */
+export interface QuoteSpot {
+  pageIndex: number;
+  spine: number;
+  start: number;
+  end: number;
+}
+
+/**
+ * Find a quote the AI cited on a page. The search starts at the page's first
+ * character in its spine document and falls back to the whole document; the
+ * page handed back is the one the words are on by the table, which may be a
+ * neighbour of the cited one. Null when the page is out of range, its document
+ * has no text, or the words are not in it.
+ */
+export function locateQuote(
+  pagination: Pagination,
+  textOf: (spine: number) => string | undefined,
+  pageIndex: number,
+  searchText: string,
+): QuoteSpot | null {
+  const block = pagination.blocks[pageIndex];
+  if (!block) return null;
+  const text = textOf(block.spine);
+  if (text === undefined) return null;
+  const span = findQuoteAt(text, searchText, block.charOffset);
+  if (!span) return null;
+  return { pageIndex: blockIndexAt(pagination, block.spine, span.start), spine: block.spine, ...span };
+}

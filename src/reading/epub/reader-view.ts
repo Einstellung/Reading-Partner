@@ -51,6 +51,7 @@ import {
   type Zoom,
 } from "./page-geometry";
 import { showsThroughBody, visibleRects } from "./mark-geometry";
+import { createMarkPainter } from "./mark-draw";
 import { createMarkLayer, type MarkLayer } from "./mark-layer";
 import { createSpineTexts } from "./mark-write";
 import { createCardPool } from "./card-pool";
@@ -61,7 +62,7 @@ import type { EpubBook } from "./parse";
 import {
   blockIndexAt,
   bookLinkTarget,
-  findQuoteAt,
+  locateQuote,
   pageScroll,
   restoreTarget,
   spineStartsOf,
@@ -70,11 +71,6 @@ import {
 } from "./reader-logic";
 import { extractDocumentText, runAt } from "./text";
 import { hrefFragment, resolveZipPath } from "./zip";
-
-// The same violet the PDF side paints an AI-cited quote in
-// (reading/engine/EmbedPdfView.tsx), at the same opacity.
-const QUOTE_COLOR = "#4a3a9e";
-const QUOTE_OPACITY = "0.24";
 
 // Sheets kept mounted beyond the visible ones, each side.
 const MOUNT_MARGIN = 1;
@@ -185,6 +181,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   // Which sheet carries the cited quote, and whether painting it pulled that
   // sheet off its own column onto the one the words are in.
   let quote: { pageIndex: number; shifted: boolean } | null = null;
+  const painter = createMarkPainter(owner);
   let mountedFrom = 0;
   let mountedTo = -1;
   let scrollTimer: number | null = null;
@@ -422,15 +419,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   // The overlay carries two sublayers: the marks' and the quote's. Each clears
   // only its own, or a cited quote would wipe the page's marks off the sheet.
   function quoteLayer(card: PageCard): HTMLElement | null {
-    const overlay = card.overlay;
-    if (!overlay) return null;
-    const existing = overlay.querySelector<HTMLElement>(".rp-quote");
-    if (existing) return existing;
-    const el = owner.createElement("div");
-    el.className = "rp-quote";
-    el.style.cssText = "position:absolute;inset:0;pointer-events:none";
-    overlay.append(el);
-    return el;
+    return card.overlay ? painter.sublayer(card.overlay, "rp-quote") : null;
   }
 
   // A sheet a quote pulled off its own column goes back to it, so the page
@@ -463,12 +452,9 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   }
 
   async function paintQuote(i: number, searchText: string): Promise<boolean> {
-    const block = pagination.blocks[i];
-    const doc = book.docs[block.spine];
-    if (!doc) return false;
-    const span = findQuoteAt(doc.text.text, searchText, block.charOffset);
+    const span = locateQuote(pagination, (spine) => book.docs[spine]?.text.text, i, searchText);
     if (!span) return false;
-    const target = blockIndexAt(pagination, block.spine, span.start);
+    const target = span.pageIndex;
     if (target !== i) placePage(target);
     const card = await cardReady(target);
     if (!card?.mounted || !card.overlay) return false;
@@ -497,11 +483,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     const layer = quoteLayer(card);
     if (!layer) return false;
     layer.replaceChildren();
-    for (const r of bands) {
-      const d = owner.createElement("div");
-      d.style.cssText = `position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:${QUOTE_COLOR};opacity:${QUOTE_OPACITY};border-radius:2px;`;
-      layer.append(d);
-    }
+    painter.drawQuote(layer, bands);
     quote = { pageIndex: target, shifted };
     callbacks.onQuoteHighlightChange(true);
     return true;
