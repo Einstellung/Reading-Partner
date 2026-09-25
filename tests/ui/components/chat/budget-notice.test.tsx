@@ -1,4 +1,4 @@
-// The end-of-reply budget notice (src/ui/components/chat/chat.tsx): the line
+// The end-of-reply budget notice (src/ui/components/chat/MessageList.tsx): the line
 // that says what a turn had to leave out of the model's view to fit the context
 // window. It is not a failure and must not read as one — no error color, no
 // toast, and it never joins the reply's own text. Rendered statically, so the
@@ -6,7 +6,7 @@
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MessageList } from "../../../../src/ui/components/chat/chat";
+import { MessageList } from "../../../../src/ui/components/chat/MessageList";
 import { refusalRow } from "../../../../src/ai/turn-rows";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
@@ -64,7 +64,7 @@ test("a row that is only a notice renders the notice, not an error", () => {
 
 // `failed` and a notice on the same row. refusalRow can no longer make one
 // (turn-rows.ts clears the mark), so the row is built here by hand — which is
-// the point: the guard in chat.tsx is `failed && !notice`, and it stays for any
+// the point: the guard in MessageList.tsx is `failed && !notice`, and it stays for any
 // path that ever marks a row and then puts a sentence about the turn on it. When
 // both are there the notice decides how the row reads — the app talking about
 // the turn, not a failure — so the failure style must not win. Drop the

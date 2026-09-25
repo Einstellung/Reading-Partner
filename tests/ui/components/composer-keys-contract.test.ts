@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../src");
-const chat = readFileSync(join(SRC, "ui/components/chat/chat.tsx"), "utf8");
+const chat = readFileSync(join(SRC, "ui/components/chat/Composer.tsx"), "utf8");
 const button = readFileSync(join(SRC, "ui/components/ui/button.tsx"), "utf8");
 
 test("neither form chooses between Stop and Send", () => {

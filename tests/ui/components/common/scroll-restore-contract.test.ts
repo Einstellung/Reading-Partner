@@ -33,7 +33,7 @@ function read(path: string): string {
     .join("\n");
 }
 
-const chat = read("ui/components/chat/chat.tsx");
+const chat = read("ui/components/chat/MessageList.tsx");
 const callView = read("ui/components/chat/CallView.tsx");
 const app = read("App.tsx");
 const infoCall = read("ui/components/info/InfoCall.tsx");

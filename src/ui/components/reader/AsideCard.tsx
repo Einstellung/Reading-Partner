@@ -1,7 +1,7 @@
 // The receipt a side conversation leaves on the lesson it was pulled out of
 // (docs/03, docs/09). Not a turn of the lesson and not drawn as one: a footnote
 // row set against the left rule, tucked up under the message it interrupted
-// (the pull is in chat.tsx, which knows the row spacing it has to cancel).
+// (the pull is in MessageList.tsx, which knows the row spacing it has to cancel).
 //
 // It is also a door. A side conversation opened out of a reply has no mark and
 // no page, so nothing in the margins of the book leads back to it; the lesson's

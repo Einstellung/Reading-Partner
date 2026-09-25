@@ -1,4 +1,4 @@
-// Where the tool-call trace is drawn in a reply (src/ui/components/chat/chat.tsx).
+// Where the tool-call trace is drawn in a reply (src/ui/components/chat/MessageList.tsx).
 // A tool round interrupts the reply: what the model wrote before calling the tool
 // stays where the reader read it, the status line is drawn under those words, and
 // the next round continues below (docs/pitfall/291). Rendered statically, so the
@@ -6,7 +6,7 @@
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MessageList } from "../../../../src/ui/components/chat/chat";
+import { MessageList } from "../../../../src/ui/components/chat/MessageList";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
 const FIRST = "Let me check page four.";

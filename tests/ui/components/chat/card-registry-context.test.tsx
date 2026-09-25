@@ -22,7 +22,7 @@ afterEach(cleanup);
 const { CardRegistryContext } = await import("../../../../src/ui/components/chat/cardRegistryContext");
 const { CardRegistryProvider } = await import("../../../../src/ui/components/CardRegistryProvider");
 const { CARD_REGISTRY } = await import("../../../../src/ui/components/cardRegistry");
-const { MessageList } = await import("../../../../src/ui/components/chat/chat");
+const { MessageList } = await import("../../../../src/ui/components/chat/MessageList");
 const InfoHomeModule = await import("../../../../src/ui/components/info/InfoHome");
 
 const DECISION: RetellDecisionCardData = {

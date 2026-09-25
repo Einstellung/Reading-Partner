@@ -22,10 +22,10 @@ function read(path: string): string {
 
 const receipt = read("ui/components/chat/ReceiptPart.tsx");
 const dispatch = read("ui/components/chat/DispatchPart.tsx");
-const chat = read("ui/components/chat/chat.tsx");
+const chat = read("ui/components/chat/MessageList.tsx");
 
 test("a receipt sits between the trace and the prose in weight", () => {
-  // The trace is neutral-400 and the prose neutral-800 (chat.tsx).
+  // The trace is neutral-400 and the prose neutral-800 (MessageList.tsx).
   expect(receipt).toContain("text-neutral-600");
   expect(receipt).toContain("text-neutral-500");
   expect(receipt).not.toContain("text-neutral-400");
@@ -48,7 +48,7 @@ test("a receipt only offers a link where the host can go there", () => {
   expect(receipt).toContain('from \'../ui/button\'');
   expect(receipt).toContain('variant="link"');
   expect(receipt).not.toContain("<a ");
-  // Which link kinds are walkable is chat.tsx's call, and today it is the book.
+  // Which link kinds are walkable is MessageList.tsx's call, and today it is the book.
   expect(chat).toContain("p.receipt.link?.kind === 'book'");
 });
 

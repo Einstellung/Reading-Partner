@@ -1,4 +1,4 @@
-// The composer's voice mode (src/ui/components/chat/chat.tsx, HoldToTalk.tsx):
+// The composer's voice mode (src/ui/components/chat/Composer.tsx, HoldToTalk.tsx):
 // that the keyboard/voice switch appears only on a host that dictates on
 // device, that switching swaps the field for the hold bar, and that the desktop
 // composer is untouched. The gesture itself is ai/voice/hold-machine.ts and is
@@ -42,7 +42,8 @@ afterEach(cleanup);
 
 // After the window is up, not statically: the composer reaches react-dom, which
 // decides once at evaluation whether it is in a browser (tests/support/dom.ts).
-const { Composer, resolveComposerVoice } = await import("../../../src/ui/components/chat/chat");
+const { Composer } = await import("../../../src/ui/components/chat/Composer");
+const { resolveComposerVoice } = await import("../../../src/ui/components/chat/composer-voice");
 
 const TO_VOICE = "Switch to voice";
 const TO_KEYBOARD = "Switch to keyboard";

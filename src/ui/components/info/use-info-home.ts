@@ -80,7 +80,7 @@ import {
 } from "../../../info/extract/webview-session";
 import { hasWebviewSignIn } from "../../../platform/app/platform";
 import type { CollectorSites } from "../../../info/briefer/reader";
-import type { ComposerVoice } from "../chat/chat";
+import type { ComposerVoice } from "../chat/composer-voice";
 import type { HomeScreen } from "./InfoHome";
 
 export interface KeepArticlePorts {

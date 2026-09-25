@@ -59,7 +59,7 @@ function keptTools(previous: { tools?: ToolStatus[] }): ToolStatus[] {
 // what the rounds before the stop wrote (a tool start keeps those words and opens
 // a blank line, appendRoundBreak below), and then the row is those words with the
 // notice under them. It is empty where nothing was written before the stop; the
-// notice is then the whole row and chat.tsx draws it alone.
+// notice is then the whole row and MessageList.tsx draws it alone.
 //
 // `failed` is cleared rather than left alone. Every call site spreads this over
 // the row as it stands, so anything the function does not name survives; a row

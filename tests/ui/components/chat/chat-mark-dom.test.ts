@@ -15,6 +15,7 @@
 import { expect, test } from "bun:test";
 import {
   boxesHold,
+  caretOffsetAt,
   indexRendered,
   markFill,
   offsetOf,
@@ -180,4 +181,31 @@ test("a press lands on the line, not on the stroke", () => {
   expect(boxesHold(boxes, 160, 259)).toBe(true);
   expect(boxesHold(boxes, 160, 300)).toBe(false);
   expect(boxesHold(boxes, 10, 245)).toBe(false);
+});
+
+// Which of the two caret lookups a WKWebView answers to depends on its version.
+// A headless DOM has neither, so each is supplied on a stand-in document.
+test("a screen point is read through whichever caret lookup the document has", () => {
+  const el = body("<p>attention heads</p><p>are three matrices</p>");
+  const index = indexRendered(el);
+  const second = el.querySelectorAll("p")[1].firstChild as Text;
+
+  const webkit = {
+    caretRangeFromPoint: () => {
+      const r = document.createRange();
+      r.setStart(second, 4);
+      return r;
+    },
+  } as unknown as Document;
+  expect(caretOffsetAt(index, webkit, 0, 0)).toBe("attention heads".length + 4);
+
+  const standard = {
+    caretPositionFromPoint: () => ({ offsetNode: second, offset: 4 }),
+  } as unknown as Document;
+  expect(caretOffsetAt(index, standard, 0, 0)).toBe("attention heads".length + 4);
+
+  // Off the rendering, or a document that can answer neither.
+  const outside = { caretPositionFromPoint: () => null } as unknown as Document;
+  expect(caretOffsetAt(index, outside, 0, 0)).toBeNull();
+  expect(caretOffsetAt(index, {} as Document, 0, 0)).toBeNull();
 });
