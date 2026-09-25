@@ -21,6 +21,7 @@ import {
   hasSavedArticles,
   loadSavedArticleBody,
   loadSavedArticles,
+  orphanedBody,
   removeSavedArticle,
   saveArticle,
   type SavedArticle,
@@ -328,13 +329,62 @@ test("a bodyHash that is not a hash never becomes a path", async () => {
   expect(await loadSavedArticleBody(hostile, io)).toEqual({ text: "", html: "" });
 });
 
-// File-level deletes do not propagate (docs/13), so a device that dropped a body
-// locally would pull it straight back on the next pass. The body stays: dead
-// weight that never changes and so never costs a second upload.
-test("un-keeping drops the record and leaves the body file where it is", async () => {
+test("un-keeping drops the record and the body it alone pointed at", async () => {
   const saved = await saveArticle({ ...input(), text: "the body", html: "<p>the body</p>" }, io);
   await removeSavedArticle(saved!.id, io);
 
   expect(io.json(FILE)).toEqual([]);
-  expect(bodyFiles()).toEqual([articleBodyPath(saved!.bodyHash)]);
+  expect(bodyFiles()).toEqual([]);
+  expect(io.purged).toEqual([articleBodyPath(saved!.bodyHash)]);
+});
+
+// --- the body an un-keep leaves behind ---------------------------------------
+
+// A body file used to outlive its record forever, in Drive too.
+test("un-keeping the last record on a body deletes it here and asks Drive to", async () => {
+  const other = "fedcba9876543210fedcba9876543210";
+  io.files.set(
+    FILE,
+    JSON.stringify([record(), record({ id: "https://example.com/b", bodyHash: other })]),
+  );
+  io.files.set(articleBodyPath(other), "{}");
+
+  await removeSavedArticle("https://example.com/b", io);
+
+  expect(idsOnDisk()).toEqual(["https://example.com/a"]);
+  expect(io.files.has(articleBodyPath(other))).toBe(false);
+  expect(io.purged).toEqual([articleBodyPath(other)]);
+});
+
+test("a body another record still points at stays", async () => {
+  const shared = KEPT[0].bodyHash;
+  io.files.set(FILE, JSON.stringify(KEPT));
+  io.files.set(articleBodyPath(shared), "{}");
+
+  await removeSavedArticle("https://example.com/a", io);
+
+  expect(io.files.has(articleBodyPath(shared))).toBe(true);
+  expect(io.purged).toEqual([]);
+});
+
+test("a body is not touched when the records write did not happen", async () => {
+  const bytes = JSON.stringify([record(), { junk: true }]);
+  io.files.set(FILE, bytes);
+  io.quarantineFails = true;
+  io.files.set(articleBodyPath(KEPT[0].bodyHash), "{}");
+
+  await removeSavedArticle("https://example.com/a", io);
+
+  expect(io.files.get(FILE)).toBe(bytes);
+  expect(io.files.has(articleBodyPath(KEPT[0].bodyHash))).toBe(true);
+  expect(io.purged).toEqual([]);
+});
+
+test("orphanedBody: none for a record without a body, a missing id, or a repaired read", () => {
+  const a = record();
+  const bare = record({ id: "https://example.com/x", bodyHash: "" });
+  expect(orphanedBody([a], [], false)).toBe(articleBodyPath(a.bodyHash));
+  expect(orphanedBody([a], [], true)).toBeNull();
+  expect(orphanedBody([a, bare], [a], false)).toBeNull();
+  expect(orphanedBody([a], [a], false)).toBeNull();
 });

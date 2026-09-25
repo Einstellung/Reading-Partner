@@ -801,7 +801,7 @@ export const PALACE = [
     merge: "opaque",
     deleteWith: "never",
     gc: "never",
-    note: "named for the hash of its own bytes, so a file is written once and never revised and two devices never conflict",
+    note: "named for the hash of its own bytes, so a file is written once and never revised and two devices never conflict; un-keeping the last record that points at one deletes it, locally and from Drive",
   },
 
   // -- memory ---------------------------------------------------------------

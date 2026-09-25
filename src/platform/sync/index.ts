@@ -11,7 +11,7 @@
 // (which decides whether books travel at all) and the window's foreground and
 // background edges, both kept out of the pass itself.
 
-import { onPathChanged } from "../app/appdata";
+import { appData, onPathChanged } from "../app/appdata";
 import { isDeleted, readDeletions } from "../app/deleted-books";
 import { onFileWritten } from "../app/atomic-fs";
 import { observeAppLifecycle } from "../app/lifecycle";
@@ -21,7 +21,9 @@ import { SyncEngine, type EngineDeps } from "./engine";
 import { dispatchPull } from "./pull-routes";
 import { tauriSyncFs } from "./syncFs";
 import { tauriBookFs } from "./books";
+import { HOLDINGS_DIR } from "./holdings";
 import {
+  BASE_DIR,
   readCachedPeerHoldings,
   tauriBaseStore,
   tauriHoldingsStore,
@@ -45,6 +47,8 @@ import {
   loadState,
   recordPassResult,
   saveState,
+  signedInState,
+  signedOutState,
   type SyncState,
 } from "./state";
 
@@ -275,6 +279,7 @@ export async function signInToGoogle(): Promise<void> {
   await signIn();
   signedIn = true;
   email = await currentEmail();
+  signedInState(state, email);
   // Auto-sync defaults on after the first sign-in (docs/13).
   state.autoSync = true;
   // Drop any recorded reason the engine was not running; it is running now.
@@ -288,19 +293,15 @@ export async function signOutOfGoogle(): Promise<void> {
   stopEngine();
   engine = null;
   await signOut();
+  signedOutState(state, email);
   signedIn = false;
   email = null;
-  // Reset the Drive ids and last-sync snapshot so a different account signing in
-  // later starts clean; local data is untouched.
-  state.drive = emptyState().drive;
-  state.snapshot = {};
-  // The queue names files in the Drive this device is signing out of. Another
-  // account's Drive never held them, and a delete aimed at it would be this
-  // build deleting a file it knows nothing about.
-  state.purge = [];
-  state.lastSyncAt = null;
-  state.lastError = null;
   await saveState(state);
+  // The merge bases and the cached trees describe the Drive being left. Kept
+  // into another account's Drive, a base would have a three-way merge read that
+  // Drive's missing records as deletions; gone, the next merge takes the union.
+  await appData.removeDir(BASE_DIR).catch(() => {});
+  await appData.removeDir(HOLDINGS_DIR).catch(() => {});
   notify();
 }
 

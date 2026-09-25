@@ -8,10 +8,9 @@
 // nothing, and the caller's watchdog should hear about that rather than the
 // picture.
 //
-// Not in collect/store.ts's daily prune, on purpose: that sweep keeps today and
-// deletes every other day it can name, and cables are kept for thirty days
-// because a picture's judgments cite ids in them. Whoever wires the housekeeping
-// gives them their own rule.
+// Pruned by collect/store.ts on their own rule, not the daily one: cables are
+// kept for thirty days because a picture's judgments cite ids in them, and a
+// pruned day is also purged from Drive.
 
 import { appData } from "../../platform/app/appdata";
 import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../platform/app/guarded-file";

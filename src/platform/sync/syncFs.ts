@@ -25,13 +25,27 @@ export interface LocalFile extends ScannedFile {
   hash: string;
 }
 
+// A scan, and what it could not see. `unreadable` names every directory whose
+// readDir failed and every listed file that would not stat: a path at or under
+// one of them may be on this device although the scan does not list it, so its
+// absence from the scan says nothing. Absent or empty is a whole scan. On the
+// array rather than beside it so a plain ScannedFile[] still is one.
+export type Scan = ScannedFile[] & { unreadable?: readonly string[] };
+
+/** Whether a path at or under one of `unreadable` (dirs, files, or "" for the
+ * root) — whether a scan that could not see these can say anything about it. */
+export function unseen(unreadable: readonly string[], path: string): boolean {
+  return unreadable.some((u) => u === "" || path === u || path.startsWith(`${u}/`));
+}
+
 export interface SyncFs {
   // Every in-range file with its mtime/size. A readDir of the range plus one
   // stat per file — two hundred-odd round trips through the IPC, which is why
   // nothing but a pass calls it any more (engine.ts). Deliberately does not
   // hash: mtime and size rule a file out without reading it, and the pass
-  // hashes only what they flag.
-  list(): Promise<ScannedFile[]>;
+  // hashes only what they flag. A read failure does not throw and is not
+  // skipped: it goes into the scan's `unreadable`.
+  list(): Promise<Scan>;
   read(path: string): Promise<Uint8Array>;
   // Writes bytes, creating any parent directory first.
   write(path: string, bytes: Uint8Array): Promise<void>;
@@ -111,27 +125,36 @@ function worthDescending(rel: string): boolean {
 
 // --- Tauri implementation --------------------------------------------------
 
-async function walk(dir: string, out: ScannedFile[]): Promise<void> {
+// A directory that will not read, or a listed file that will not stat, is
+// written down rather than skipped: "not in the scan" is otherwise the same as
+// "not on this device", and a pass that took it that way would pull the remote
+// copy over a local one it never saw, and publish a holdings that tells every
+// peer the file is gone (docs/59 §4).
+async function walk(dir: string, out: ScannedFile[], unreadable: string[]): Promise<void> {
   let entries;
   try {
     entries = await appData.readDir(dir || ".");
   } catch {
+    unreadable.push(dir);
     return;
   }
   for (const e of entries) {
     const rel = dir ? `${dir}/${e.name}` : e.name;
     if (e.isDirectory) {
       // Only descend into directories that can hold in-range files.
-      if (worthDescending(rel)) await walk(rel, out);
+      if (worthDescending(rel)) await walk(rel, out, unreadable);
       continue;
     }
     if (!e.isFile || !inSyncRange(rel)) continue;
-    // A file that vanished between readDir and stat has no stat to take: null,
-    // and it is simply skipped. Not a throw to swallow — appData.stat answers
-    // null for a file it cannot read, so this test is the whole of the
-    // handling and dropping it would empty every scan.
+    // appData.stat answers null both for a file that vanished since readDir and
+    // for one it cannot stat. The two cannot be told apart here, so both count
+    // as unseen: a vanished file costs one partial pass, a misread one would
+    // cost the file.
     const info = await appData.stat(rel);
-    if (!info) continue;
+    if (!info) {
+      unreadable.push(rel);
+      continue;
+    }
     out.push({ path: rel, mtime: info.mtimeMs, size: info.size });
   }
 }
@@ -139,8 +162,9 @@ async function walk(dir: string, out: ScannedFile[]): Promise<void> {
 export const tauriSyncFs: SyncFs = {
   async list() {
     const out: ScannedFile[] = [];
-    await walk("", out);
-    return out;
+    const unreadable: string[] = [];
+    await walk("", out, unreadable);
+    return Object.assign(out, { unreadable });
   },
   read(path) {
     return appData.readBytes(path);

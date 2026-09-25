@@ -66,7 +66,7 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 正文快照按内容寻址存成不可变 blob，像书那样只传一次，不进每次同步都参与合并的记录文件。记录文件里只留快照 hash、URL、标题、来源、发表时间、`summaryOnly` 和归属。
 
-已落地，走的是 data 通道不是 books blob 通道：`article-bodies/<hash>.json`，文件名是自己字节的 hash，合并落 `opaque`（同名即同内容，没有冲突可解）。拆之前 34 条记录 883 KB，其中 857 KB 是正文，每收藏一篇整份重传。整文件删除不传播（[13](../platform/13-账户同步.md)），所以取消收下只删记录，正文文件留着。
+已落地，走的是 data 通道不是 books blob 通道：`article-bodies/<hash>.json`，文件名是自己字节的 hash，合并落 `opaque`（同名即同内容，没有冲突可解）。拆之前 34 条记录 883 KB，其中 857 KB 是正文，每收藏一篇整份重传。取消收下时，没有别的记录再指向的正文文件本地删掉，远端走 purge 队列删（整文件删除不传播，[13](../platform/13-账户同步.md)）；读记录时有条目被挪到一边就不删。
 
 同步范围（`src/platform/sync/syncFs.ts`）现在的分界：`user-profile.md`、`info-sources.json`、`info-feedback.jsonl` 在范围内，`threads-*.json` 通配匹配所以 `threads-info-<date>.json` 也在；`briefing-<date>.json`、`info-articles-<date>.json`、`info-items-<date>.json`、`info-source-health.json` 都是派生的，不同步。收下的记录和 `article-bodies/<hash>.json` 都在范围内。
 

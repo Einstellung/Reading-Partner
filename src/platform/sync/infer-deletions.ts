@@ -25,11 +25,10 @@
 import type { Holdings } from "./holdings";
 import { neverInferDelete } from "./syncFs";
 
-// Tier 2 of docs/59 §7, wired but not armed. Deleting on inference needs both
-// devices to have been publishing holdings for a while — the base a difference
-// is taken against is what the previous release accumulated — so the release
-// that lands the publishing half must not also be the one that acts on it. The
-// next release flips this to true.
+// Tier 2 of docs/59 §7, wired but not armed. It stays off until the producer of
+// a holdings' `retired` list lands: nothing fills it yet (docs/59 §8.7), so a
+// build that narrowed the sync range would read to every peer as the user
+// deleting those files.
 export const HOLDINGS_INFER_DELETIONS = false;
 
 export interface LocalTreeEntry {

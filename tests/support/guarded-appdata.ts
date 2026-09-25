@@ -32,6 +32,10 @@ export interface FakeAppData {
    *  "not there" and "unreadable", the way readJson answers. */
   readBody(file: string): Promise<unknown>;
   exists(file: string): Promise<boolean>;
+  removeBody(file: string): Promise<void>;
+  /** Paths handed to the remote purge, in order. */
+  purged: string[];
+  purgeRemote(paths: readonly string[]): Promise<void>;
   /** What is on disk at `file`, parsed. Undefined when there is no file. */
   json(file: string): unknown;
 }
@@ -97,6 +101,17 @@ export function createFakeAppData(): FakeAppData {
     async exists(file: string): Promise<boolean> {
       await null;
       return io.files.has(file);
+    },
+
+    async removeBody(file: string): Promise<void> {
+      await null;
+      io.files.delete(file);
+    },
+
+    purged: [],
+    async purgeRemote(paths: readonly string[]): Promise<void> {
+      await null;
+      io.purged.push(...paths);
     },
 
     json(file: string): unknown {

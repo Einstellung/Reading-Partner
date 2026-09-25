@@ -3,11 +3,13 @@
 // need the Tauri plugin. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { installAppData } from "../../support/appdata-fake";
 import {
   CABLE_DAYS,
   leanItems,
   localDateString,
   newestBriefingDate,
+  pruneStaleDailyFiles,
   staleCableFiles,
   staleDailyFiles,
   todayLocal,
@@ -116,6 +118,38 @@ test("cables are kept for thirty days and go on the thirty-first", () => {
     "info-cables-2026-06-24.json",
     "info-cables-2025-12-01.json",
   ]);
+});
+
+// Cables sync and the daily files do not. Pruned only locally, every cable ever
+// written stayed in Drive and a new device pulled them all.
+test("a pruned cables day is also purged from Drive, after its local copy is gone", async () => {
+  const disk = installAppData();
+  for (const name of [
+    "info-cables-2026-07-25.json",
+    "info-cables-2026-06-24.json",
+    "info-items-2026-07-24.json",
+    "topics.json",
+  ]) {
+    disk.files.set(name, "{}");
+  }
+  const purged: string[][] = [];
+  await pruneStaleDailyFiles("2026-07-25", async (paths) => {
+    // The local copy is already gone when the purge is asked for.
+    for (const p of paths) expect(disk.files.has(p)).toBe(false);
+    purged.push([...paths]);
+  });
+  expect(purged).toEqual([["info-cables-2026-06-24.json"]]);
+  expect([...disk.files.keys()].sort()).toEqual(["info-cables-2026-07-25.json", "topics.json"]);
+});
+
+test("nothing to prune asks for no purge", async () => {
+  const disk = installAppData();
+  disk.files.set("info-cables-2026-07-25.json", "{}");
+  let asked = false;
+  await pruneStaleDailyFiles("2026-07-25", async () => {
+    asked = true;
+  });
+  expect(asked).toBe(false);
 });
 
 test("staleCableFiles leaves every other prefix and every name it cannot date alone", () => {

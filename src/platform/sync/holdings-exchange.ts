@@ -84,13 +84,19 @@ export class HoldingsExchange {
   // claimed files the other device is not even supposed to have would be a tree
   // whose absences mean nothing.
   //
-  // complete is true because there is no other way to get here: a pass whose
-  // fs.list() threw ended before this. The field is for the peers that will
-  // one day publish a partial scan, and for the reader of the file.
-  private selfHoldings(local: LocalFile[]): Holdings {
+  // complete is false when the scan could not read a directory or a file
+  // (syncFs.ts `unreadable`): the tree is still published, for the report and
+  // the version hint, but no peer reasons from its absences (infer-deletions.ts).
+  private selfHoldings(local: LocalFile[], complete: boolean): Holdings {
     const files: HoldingsFiles = {};
     for (const f of local) if (inSyncRange(f.path)) files[f.path] = [f.hash, f.size];
-    return buildHoldings({ device: this.device(), at: this.now(), app: this.d.appVersion?.(), files });
+    return buildHoldings({
+      device: this.device(),
+      at: this.now(),
+      app: this.d.appVersion?.(),
+      complete,
+      files,
+    });
   }
 
   // Fetch every peer holdings whose rev moved, and work out what they say this
@@ -156,7 +162,10 @@ export class HoldingsExchange {
         pass.contested.push(...out.contested);
       }
 
-      if (bytes !== null) {
+      // A partial tree never becomes the base: the next difference would start
+      // from absences that meant nothing, and a deletion made in between would
+      // never be named. The cache stays on the last whole tree instead.
+      if (bytes !== null && current?.complete !== false) {
         advances.push({ device, bytes, rev: listed[device].rev, deletions });
         pass.fetched += 1;
       }
@@ -210,17 +219,25 @@ export class HoldingsExchange {
     pass: HoldingsPass,
     local: LocalFile[],
     failures: PassFailures,
+    complete = true,
   ): Promise<void> {
     const store = this.holdingsStore();
     if (!store) return;
-    const mine = this.selfHoldings(local);
+    const mine = this.selfHoldings(local, complete);
     pass.self = mine;
     const last = parseHoldings(await store.read(SELF_KEY));
     // A new build republishes once even over the same tree: the app field is
     // how a phone tells that this desktop is behind (peer-versions.ts), and an
     // update that left the tree alone would otherwise go on reading as the old
     // version.
-    if (last && sameFiles(last.files, mine.files) && last.app === mine.app) return;
+    if (
+      last &&
+      sameFiles(last.files, mine.files) &&
+      last.app === mine.app &&
+      last.complete === mine.complete
+    ) {
+      return;
+    }
 
     const name = holdingsRemoteName(mine.device);
     const bytes = serializeHoldings(mine);

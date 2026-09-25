@@ -88,7 +88,7 @@ import { HoldingsExchange } from "./holdings-exchange";
 import { HOLDINGS_INFER_DELETIONS } from "./infer-deletions";
 import { messageOf, PassFailures, runPool } from "./pass-failures";
 import { cachedHash, reconcile, type Merge, type Snapshot, type Upload } from "./reconcile";
-import { inSyncRange, type LocalFile, type ScannedFile, type SyncFs } from "./syncFs";
+import { inSyncRange, unseen, type LocalFile, type Scan, type SyncFs } from "./syncFs";
 
 export { MAX_CONSECUTIVE_FAILURES } from "./pass-failures";
 
@@ -401,24 +401,25 @@ export class SyncEngine {
 
   // Fill in the content hash of every scanned file. The snapshot supplies it
   // for free when mtime and size still match, so a steady pass reads only the
-  // files that actually moved. A file that will not read is dropped from the
-  // pass entirely: it cannot be uploaded, and list() already tolerates one
-  // vanishing mid-scan.
-  private async hashLocal(scanned: ScannedFile[]): Promise<LocalFile[]> {
-    const out: LocalFile[] = [];
-    for (const f of scanned) {
+  // files that actually moved. A file that will not read cannot be uploaded,
+  // so it leaves the files — and joins the scan's `unreadable`, because it is
+  // still on this device and nothing may take its absence for a deletion.
+  private async hashLocal(scan: Scan): Promise<{ files: LocalFile[]; unreadable: string[] }> {
+    const files: LocalFile[] = [];
+    const unreadable = [...(scan.unreadable ?? [])];
+    for (const f of scan) {
       const known = cachedHash(this.snapshot[f.path], f);
       if (known !== null) {
-        out.push({ ...f, hash: known });
+        files.push({ ...f, hash: known });
         continue;
       }
       try {
-        out.push({ ...f, hash: await hashBytes(await this.d.fs.read(f.path)) });
+        files.push({ ...f, hash: await hashBytes(await this.d.fs.read(f.path)) });
       } catch {
-        // skipped
+        unreadable.push(f.path);
       }
     }
-    return out;
+    return { files, unreadable };
   }
 
   private emitStatus(): void {
@@ -711,7 +712,7 @@ export class SyncEngine {
       // business in a plan.
       await this.drainPurge(failures);
       const remote = await this.d.backend.listRemote();
-      let local = await this.hashLocal(await this.d.fs.list());
+      let { files: local, unreadable } = await this.hashLocal(await this.d.fs.list());
       const changed: string[] = [];
       // A newer log in the remote comes down before anything else is planned.
       // The purges below are decided from this device's copy of the log, and a
@@ -723,7 +724,13 @@ export class SyncEngine {
       const log = await this.pullLogFirst(local, remote, failures);
       if (log) {
         changed.push(log);
-        local = await this.hashLocal(await this.d.fs.list());
+        ({ files: local, unreadable } = await this.hashLocal(await this.d.fs.list()));
+      }
+      // A scan that could not see part of this device is a failed item like any
+      // other, so the pass is not clean and the reader is told (health.ts).
+      if (unreadable.length > 0) {
+        const more = unreadable.length > 1 ? ` and ${unreadable.length - 1} more` : "";
+        failures.record("scan", new Error(`could not read ${unreadable[0] || "AppData"}${more}`));
       }
       // Read before the plan is made: the log is what turns "this file is only
       // on one side" from something to copy into something to take away
@@ -735,7 +742,9 @@ export class SyncEngine {
       // first, then local, then remote, then the snapshot and the base. There
       // is no second way to delete anything.
       const holdings = emptyHoldingsPass();
-      holdings.enabled = this.d.inferDeletions ?? HOLDINGS_INFER_DELETIONS;
+      // Not from a partial scan: a path this device could not see reads as one
+      // it does not hold, which is the start of every wrong inference.
+      holdings.enabled = (this.d.inferDeletions ?? HOLDINGS_INFER_DELETIONS) && unreadable.length === 0;
       const { inferred, advances } = await this.holdingsExchange.pullPeerHoldings(
         holdings,
         local,
@@ -748,6 +757,12 @@ export class SyncEngine {
         this.snapshot,
         (path) => isDeadPath(path, dead) || inferred.has(path),
       );
+      // A path the scan could not see looks absent, and an absent path with a
+      // newer remote is a download — over a local copy that may hold edits the
+      // remote never saw. It waits for a pass that can see it.
+      if (unreadable.length > 0) {
+        plan.downloads = plan.downloads.filter((dl) => !unseen(unreadable, dl.path));
+      }
       await this.d.trash.prune(this.now()).catch(() => {});
 
       // No bytes move for these: the snapshot is only catching up on what it
@@ -875,7 +890,9 @@ export class SyncEngine {
       // scanned: whatever the transfers above did lands in the next pass's scan
       // and the next publish. A halted pass does not try — the link is down and
       // one more request would only find that out again.
-      if (!failures.halted()) await this.holdingsExchange.publishHoldings(holdings, local, failures);
+      if (!failures.halted()) {
+        await this.holdingsExchange.publishHoldings(holdings, local, failures, unreadable.length === 0);
+      }
       this.holdingsExchange.finishPass(holdings);
 
       await this.syncBooks(failures, dead.book);

@@ -7,6 +7,7 @@
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { dayNumber, localDate } from "../../platform/std/day";
+import { requestRemotePurge } from "../../platform/sync";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { InfoItem } from "../sources/item";
 
@@ -205,7 +206,18 @@ export function staleCableFiles(names: string[], today: string, days = CABLE_DAY
 // Delete every past day's derived info file, and the cables older than the keep
 // window. Best effort: a listing failure or a file that will not go away is
 // swallowed, since a briefing must still generate.
-export async function pruneStaleDailyFiles(today: string): Promise<void> {
+//
+// The cables are in the sync range and the daily files are not, so a cable
+// deleted here also has to leave Drive: a sync never propagates a local delete
+// (docs/13), and every new device would pull the whole history down. The purge
+// is only asked for once the local copy is gone — asked first, a pass could
+// run between the two, find the file still here and no longer in Drive, and
+// upload it again. Every device prunes on this same rule, so a remote delete
+// takes nothing another device still keeps.
+export async function pruneStaleDailyFiles(
+  today: string,
+  purgeRemote: (paths: readonly string[]) => Promise<void> = requestRemotePurge,
+): Promise<void> {
   let names: string[];
   try {
     const entries = await appData.readDir("");
@@ -213,11 +225,15 @@ export async function pruneStaleDailyFiles(today: string): Promise<void> {
   } catch {
     return;
   }
-  for (const name of [...staleDailyFiles(names, today), ...staleCableFiles(names, today)]) {
+  const cables = staleCableFiles(names, today);
+  const gone: string[] = [];
+  for (const name of [...staleDailyFiles(names, today), ...cables]) {
     try {
       await appData.remove(name);
+      if (cables.includes(name)) gone.push(name);
     } catch {
       // Locked or already gone; keep going through the rest.
     }
   }
+  if (gone.length > 0) await purgeRemote(gone).catch(() => {});
 }
