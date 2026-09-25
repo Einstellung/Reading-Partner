@@ -78,6 +78,59 @@ function LivenessHint({ activity, withUnit }: { activity: Liveness; withUnit?: b
   );
 }
 
+// The line under either half's header that says where planning is. The two
+// halves differ only in what they are reading and what they count.
+function PlanStatusLine({
+  status,
+  error,
+  activity,
+  runningText,
+  doneText,
+  onRetry,
+  running,
+}: {
+  status: "pending" | "running" | "done" | "failed";
+  error?: string;
+  activity: Liveness | null;
+  runningText: string;
+  doneText: string;
+  onRetry(): void;
+  running: boolean;
+}) {
+  return (
+    <div className="mt-0.5 text-[11px] text-neutral-400">
+      {status === "running" && (
+        <>
+          {runningText}
+          {activity && (
+            <>
+              {" "}
+              <LivenessHint activity={activity} withUnit />
+            </>
+          )}
+        </>
+      )}
+      {status === "pending" && "Waiting to plan…"}
+      {status === "failed" && (
+        <span className="flex items-center gap-1.5">
+          <span className="text-destructive">Plan failed: {error}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="text-neutral-500"
+            onClick={onRetry}
+            disabled={running}
+          >
+            Retry
+          </Button>
+        </span>
+      )}
+      {status === "done" && doneText}
+    </div>
+  );
+}
+
 const STATUS_PILL = "rounded px-1.5 py-0.5 text-[10px] leading-none";
 const SECTION = "border-b border-border-subtle px-3 py-3";
 const HEADER = "border-b border-border-subtle px-3 py-2";
@@ -290,36 +343,15 @@ function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
             </Button>
           )}
         </div>
-        <div className="mt-0.5 text-[11px] text-neutral-400">
-          {state.planStatus === "running" && (
-            <>
-              Reading this document's references…
-              {planActivity && (
-                <>
-                  {" "}
-                  <LivenessHint activity={planActivity} withUnit />
-                </>
-              )}
-            </>
-          )}
-          {state.planStatus === "pending" && "Waiting to plan…"}
-          {state.planStatus === "failed" && (
-            <span className="flex items-center gap-1.5">
-              <span className="text-destructive">Plan failed: {state.planError}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                className="text-neutral-500"
-                onClick={onRetryPlan}
-                disabled={running}
-              >
-                Retry
-              </Button>
-            </span>
-          )}
-          {state.planStatus === "done" && `${doneCount} of ${state.papers.length} papers ready`}
-        </div>
+        <PlanStatusLine
+          status={state.planStatus}
+          error={state.planError}
+          activity={planActivity}
+          runningText="Reading this document's references…"
+          doneText={`${doneCount} of ${state.papers.length} papers ready`}
+          onRetry={onRetryPlan}
+          running={running}
+        />
       </div>
 
       <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto p-0">
@@ -522,29 +554,15 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
             )
           )}
         </div>
-        <div className="mt-0.5 text-[11px] text-neutral-400">
-          {state.planStatus === "running" && (
-            <>
-              Reading this book's structure…
-              {planActivity && (
-                <>
-                  {" "}
-                  <LivenessHint activity={planActivity} withUnit />
-                </>
-              )}
-            </>
-          )}
-          {state.planStatus === "pending" && "Waiting to plan…"}
-          {state.planStatus === "failed" && (
-            <span className="flex items-center gap-1.5">
-              <span className="text-destructive">Plan failed: {state.planError}</span>
-              <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRetryPlan} disabled={running}>
-                Retry
-              </Button>
-            </span>
-          )}
-          {state.planStatus === "done" && `${doneCount} of ${state.chapters.length} chapters ready`}
-        </div>
+        <PlanStatusLine
+          status={state.planStatus}
+          error={state.planError}
+          activity={planActivity}
+          runningText="Reading this book's structure…"
+          doneText={`${doneCount} of ${state.chapters.length} chapters ready`}
+          onRetry={onRetryPlan}
+          running={running}
+        />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

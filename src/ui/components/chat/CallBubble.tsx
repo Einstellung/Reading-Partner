@@ -4,7 +4,7 @@
 // up). Closing at any time is safe, mid-answer included: the turn goes on
 // writing into the thread. Tailwind-only.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { ReadingIntent } from '../../../reading/intents';
 import { IconExpand } from '../base/icons';
 import { Composer } from './Composer';
@@ -14,9 +14,8 @@ import IntentChips from './IntentChips';
 import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
-import { OVERLAY_Z, OverlaySurface, useOverlaySafePadding } from '../ui/overlay';
+import { OVERLAY_Z, OverlaySurface, useCloseOnOutsidePress, useOverlaySafePadding } from '../ui/overlay';
 import DeleteThreadButton from './DeleteThreadButton';
-import { overlayLayerOpen } from '../base/overlay-layer';
 import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import type { PendingImage, ThreadMessage } from './types';
@@ -97,23 +96,7 @@ export default function CallBubble({
 		);
 	}, [anchor.x, anchor.y, messages.length, width, viewport, margin]);
 
-	// A press outside closes the bubble. pointerdown, not mousedown, and capture:
-	// docs/pitfall/webview/67-webkit-tap-does-not-focus-a-button.md — on touch the mouse
-	// events are compatibility events and the reader's taps on the top bar and the
-	// sidebar never reached this.
-	//
-	// While an overlay layer is up, every press belongs to it. The bubble's own
-	// delete confirmation is one of those layers, and it renders under <body>, so
-	// containment would read the press on its Delete button as a press outside
-	// and close the bubble out from under it (base/overlay-layer).
-	useEffect(() => {
-		function onDown(e: PointerEvent) {
-			if (overlayLayerOpen()) return;
-			if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-		}
-		document.addEventListener('pointerdown', onDown, true);
-		return () => document.removeEventListener('pointerdown', onDown, true);
-	}, [onClose]);
+	useCloseOnOutsidePress(ref, onClose);
 
 	// Everything in here is opened from a floater, not from the app behind it. A
 	// modal dialog raised from a control in this header — the delete confirmation
