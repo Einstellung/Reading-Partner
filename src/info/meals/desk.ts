@@ -12,7 +12,6 @@ import {
   type DeskEnv,
   type DeskItem,
   type DeskItemKind,
-  type DeskRef,
 } from "../../desk";
 import type { AgentTool } from "../../legion/execute/turn";
 import { mealsGuidance, type MealsFocus } from "./tools";
@@ -51,19 +50,6 @@ const mealsKind: DeskItemKind<MealsDeskRef> = {
 /** Register what meals can put on the desk. Called at startup with the rest. */
 export function registerMealsDesk(): () => void {
   return registerDeskItemKind(mealsKind);
-}
-
-/**
- * Bind this turn's tools to the meals item on a desk an anchor described. The
- * mirror of withCompanionTools, and applied after it, so a desk that carries
- * both keeps each one's.
- */
-export function withMealsTools(refs: readonly DeskRef[], tools: MealsTools): DeskRef[] {
-  return refs.map((r) =>
-    r.kind === INFO_MEALS_KIND
-      ? { kind: r.kind, ref: { ...(r.ref as MealsDeskRef), tools } }
-      : { kind: r.kind, ref: r.ref },
-  );
 }
 
 // The dinner desk's own duty, ahead of the state. Short on purpose: everything

@@ -11,7 +11,7 @@
 // and not the conversation, so no `watching` is offered and the card always goes
 // in the box.
 
-import { openDesk } from "../../desk";
+import { bindItemTools, openDesk } from "../../desk";
 import type { DeskMessage } from "../../desk";
 import type { AgentTool } from "../../legion/execute/turn";
 import { loadDeviceSettings } from "../../platform/app/device";
@@ -25,7 +25,7 @@ import { loadPublishedBriefing } from "../boxes/publish";
 import type { Briefing } from "../boxes/types";
 import { loadSources } from "../sources/source-store";
 import { todayLocal } from "../collect/store";
-import { withMealsTools } from "../meals/desk";
+import { INFO_MEALS_KIND } from "../meals/desk";
 import { buildLiveMealsTools } from "../meals/live";
 import { loadMeals } from "../meals/store";
 import type { MealsState } from "../meals/types";
@@ -40,7 +40,7 @@ import {
 import { infoBookId } from "./call";
 import type { CompanionContext } from "./chat";
 import { buildLiveCompanionTools } from "./companion-live";
-import { withCompanionTools } from "./desk";
+import { INFO_BRIEFING_KIND } from "./desk";
 import { SECRETARY_ROLE_ID } from "./role";
 
 export interface BriefingDeliveryDeps {
@@ -129,7 +129,7 @@ export async function openBriefingDelivery(
     ? briefingAnchor(briefing, ctx)
     : noBriefingAnchor(ctx, { dateKey: date, notices: [] });
 
-  const desk = await openDesk(withCompanionTools(anchor.desk, deps.tools ?? liveTools), {
+  const desk = await openDesk(bindItemTools(anchor.desk, INFO_BRIEFING_KIND, deps.tools ?? liveTools), {
     settings: input.settings,
     thread: { key, id: threadId },
     ...(input.signal ? { signal: input.signal } : {}),
@@ -200,7 +200,7 @@ export async function openMealsDelivery(
 
   const state = await (deps.state ?? (() => loadMeals()))();
   const anchor = mealsAnchor(state, (deps.today ?? todayLocal)());
-  const desk = await openDesk(withMealsTools(anchor.desk, deps.tools ?? liveMealsTools), {
+  const desk = await openDesk(bindItemTools(anchor.desk, INFO_MEALS_KIND, deps.tools ?? liveMealsTools), {
     settings: input.settings,
     thread: { key, id: threadId },
     ...(input.signal ? { signal: input.signal } : {}),

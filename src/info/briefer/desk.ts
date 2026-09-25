@@ -30,7 +30,6 @@ import {
   type DeskItem,
   type DeskItemKind,
   type DeskPromptView,
-  type DeskRef,
 } from "../../desk";
 import { addSourceSystemPrompt } from "../sources/source-skill";
 import { holdSecretaryTools } from "./role";
@@ -138,23 +137,6 @@ export function registerInfoDesk(): () => void {
   return () => {
     for (const undo of off) undo();
   };
-}
-
-/**
- * Bind the companion tools to the briefing ref on a desk an anchor described.
- * An anchor is decidable from what is already read off disk (anchors.ts); the
- * tools are the running turn's, so the runner attaches them here rather than
- * the anchor carrying a closure.
- */
-export function withCompanionTools(
-  refs: readonly DeskRef[],
-  tools: CompanionTools,
-): DeskRef[] {
-  return refs.map((r) =>
-    r.kind === INFO_BRIEFING_KIND
-      ? { kind: r.kind, ref: { ...(r.ref as InfoBriefingDeskRef), tools } }
-      : { kind: r.kind, ref: r.ref },
-  );
 }
 
 // The briefing: every tool the companion has, the whole of what it is told about

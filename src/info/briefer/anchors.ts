@@ -41,7 +41,7 @@ export interface InfoCallAnchor {
   placeholder: string;
   // What this conversation lays on the desk, in prompt order (src/desk). The
   // companion tools are bound to it by whoever runs the turn
-  // (desk.ts: withCompanionTools), so an anchor stays decidable from what has
+  // (desk/bind.ts: bindItemTools), so an anchor stays decidable from what has
   // already been read off disk.
   desk: DeskRef[];
   // The corner position card: the article/briefing shrunk to a title, an

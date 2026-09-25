@@ -6,12 +6,11 @@
 
 import { beforeEach, expect, test } from "bun:test";
 import { assembleTurn } from "../../../src/soul";
-import { openDesk, type DeskEnv, type DeskRef } from "../../../src/desk";
+import { bindItemTools, openDesk, type DeskEnv, type DeskRef } from "../../../src/desk";
 import {
   INFO_ARTICLE_KIND,
   INFO_BRIEFING_KIND,
   registerInfoDesk,
-  withCompanionTools,
 } from "../../../src/info/briefer/desk";
 import {
   SECRETARY_DUTY,
@@ -120,7 +119,7 @@ function withObservations(ref: DeskRef, observations: Observation[]): DeskRef {
 }
 
 async function assemble(refs: DeskRef[], tools: AgentTool[] = []) {
-  const desk = await openDesk(withCompanionTools(refs, async () => tools), env());
+  const desk = await openDesk(bindItemTools(refs, INFO_BRIEFING_KIND, async () => tools), env());
   // Every info turn is the soul with the secretary on (docs/71 角色), which is
   // where the companion tools and the duty paragraph come from.
   const turn = await assembleTurn({ desk, role: SECRETARY_ROLE_ID });
@@ -174,7 +173,7 @@ test("the companion tools are the secretary's, and come ahead of the soul's own"
 // role (as it does now).
 test("a turn with no secretary loaded mounts none of the companion tools", async () => {
   const desk = await openDesk(
-    withCompanionTools([briefingRef], async () => [tool("probe_source")]),
+    bindItemTools([briefingRef], INFO_BRIEFING_KIND, async () => [tool("probe_source")]),
     env(),
   );
   const turn = await assembleTurn({ desk });
@@ -187,7 +186,7 @@ test("a turn with no secretary loaded mounts none of the companion tools", async
 test("a desk item offering one of the secretary's tool names is refused", async () => {
   const desk = await openDesk(
     [
-      ...withCompanionTools([briefingRef], async () => [tool("read_page")]),
+      ...bindItemTools([briefingRef], INFO_BRIEFING_KIND, async () => [tool("read_page")]),
       { kind: INFO_ARTICLE_KIND, ref: { ...(articleRef.ref as object) } },
     ],
     env(),

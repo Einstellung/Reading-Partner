@@ -5,13 +5,13 @@
 // (voice-call-live.ts) both lay it here, so the two open the same conversation.
 
 import type { BoxOrigin } from "../../box";
-import { openDesk, type DeskItem } from "../../desk";
+import { bindItemTools, openDesk, type DeskItem } from "../../desk";
 import type { AgentTool } from "../../legion/execute/turn";
 import type { Settings } from "../../platform/app/settings";
 import { assembleTurn, type AssembleInput, type AssembledTurn } from "../../soul";
-import { withMealsTools, type MealsTools } from "../meals/desk";
+import { INFO_MEALS_KIND, type MealsTools } from "../meals/desk";
 import { MEALS_THREAD_ID, type InfoCallAnchor } from "./anchors";
-import { withCompanionTools } from "./desk";
+import { INFO_BRIEFING_KIND } from "./desk";
 import { SECRETARY_ROLE_ID } from "./role";
 
 export interface InfoTurnInput {
@@ -51,8 +51,8 @@ export function infoOrigin(anchor: InfoCallAnchor, dateKey: string): BoxOrigin {
 
 export async function assembleInfoTurn(input: InfoTurnInput): Promise<InfoTurn> {
   const { anchor, mealsTools } = input;
-  const refs = withCompanionTools(anchor.desk, input.companionTools);
-  const desk = await openDesk(mealsTools ? withMealsTools(refs, mealsTools) : refs, {
+  const refs = bindItemTools(anchor.desk, INFO_BRIEFING_KIND, input.companionTools);
+  const desk = await openDesk(mealsTools ? bindItemTools(refs, INFO_MEALS_KIND, mealsTools) : refs, {
     settings: input.settings,
     thread: { key: input.key, id: anchor.threadId },
     ...(input.signal ? { signal: input.signal } : {}),
