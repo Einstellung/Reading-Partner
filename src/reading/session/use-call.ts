@@ -29,14 +29,13 @@ import {
   getThread,
   onThreadMessage,
   patchThreadMessage,
-  readThreadImages,
-  saveThreadImages,
   setThreadFocusChapter,
   type AsideAnchor,
   type PersistedCardPayload,
   type Thread,
   type ThreadMessage,
 } from "../../platform/app/threads";
+import { readThreadImages, saveThreadImages } from "../../platform/app/thread-images";
 import { asideReceipt, asideReturn, type AsideReturn } from "../aside";
 import { hostMarkIds } from "../chat-marks";
 import { markExcerpt, reopenCall } from "../reopen";

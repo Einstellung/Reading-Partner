@@ -15,6 +15,7 @@ import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
 import * as threads from "../../../src/platform/app/threads";
+import * as threadImages from "../../../src/platform/app/thread-images";
 import * as turn from "../../../src/reading/turn";
 import type { CallRow } from "../../../src/reading/call-state";
 import type { StagedImage } from "../../../src/reading/pending-images";
@@ -476,7 +477,7 @@ test("deleting the side conversation puts the reader back in the lesson", async 
 test("a question sent with an image attached is reported even if it has not reached the file", async () => {
   const world = fakeWorld({ [LESSON]: thread(LESSON, { book: true }) });
   let releaseImages: () => void = () => {};
-  const saveThreadImages = spyOn(threads, "saveThreadImages").mockImplementation(
+  const saveThreadImages = spyOn(threadImages, "saveThreadImages").mockImplementation(
     () => new Promise<string[]>((resolve) => (releaseImages = () => resolve(["a.png"]))),
   );
   try {
