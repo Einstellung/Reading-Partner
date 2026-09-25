@@ -7,7 +7,6 @@
 import { expect, test } from "bun:test";
 import {
   addDiscovered,
-  daysBetween,
   drawForDay,
   dueSources,
   emptyPool,
@@ -279,9 +278,10 @@ test("a source the pool is holding nothing for is named, whatever its schedule s
   expect(named.map((d) => d.id)).toEqual(["lost"]);
 });
 
-test("daysBetween counts whole days and shrugs at nonsense", () => {
-  expect(daysBetween("2026-08-08", "2026-08-11")).toBe(3);
-  expect(daysBetween("2026-08-11", "2026-08-11")).toBe(0);
-  expect(daysBetween("2026-08-12", "2026-08-11")).toBe(-1);
-  expect(daysBetween("not-a-date", "2026-08-11")).toBe(0);
+test("eviction keeps a day whose date will not parse", () => {
+  let pool = emptyPool();
+  ({ pool } = addDiscovered(pool, [item("a")], "not-a-date"));
+  const { pool: next, droppedDays } = evict(pool, "2026-08-11", []);
+  expect(droppedDays).toEqual([]);
+  expect(Object.keys(next.days)).toEqual(["not-a-date"]);
 });

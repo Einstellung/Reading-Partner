@@ -25,6 +25,7 @@
 // Everything here is pure. The files are pool-store.ts's business, the polling
 // is collector.ts's.
 
+import { daysBetween } from "../../platform/std/day";
 import { pollIntervalMs, type SourceDescriptor } from "../sources/descriptor";
 import type { InfoItem } from "../sources/item";
 import { keepVerdict, type ScreenVerdict } from "./screen";
@@ -77,18 +78,6 @@ export interface Pool {
 // saved comes from loadPool, which grants it there.
 export function emptyPool(): Pool {
   return { version: POOL_VERSION, days: {}, marks: {}, lastPolled: {}, marksWritable: false };
-}
-
-// --- dates ------------------------------------------------------------------
-
-// Whole days from `from` to `to`, both local "YYYY-MM-DD". Parsed as UTC so the
-// arithmetic is not a DST question; the strings were made from local time and
-// only their difference is used.
-export function daysBetween(from: string, to: string): number {
-  const a = Date.parse(`${from}T00:00:00Z`);
-  const b = Date.parse(`${to}T00:00:00Z`);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
-  return Math.round((b - a) / 86_400_000);
 }
 
 // --- discovery --------------------------------------------------------------
@@ -210,12 +199,13 @@ export function evict(
   for (const [date, items] of Object.entries(pool.days)) {
     // A day from the future (the clock moved) is kept: it is not aged out, and
     // deleting today's items because of a timezone hop would cost a whole poll.
-    if (daysBetween(date, today) > POOL_ITEM_DAYS) droppedDays.push(date);
+    // A date that will not parse counts as no days old, so it is kept.
+    if ((daysBetween(date, today) ?? 0) > POOL_ITEM_DAYS) droppedDays.push(date);
     else days[date] = items;
   }
   const marks: Record<string, PoolMark> = {};
   for (const [id, mark] of Object.entries(pool.marks)) {
-    if (daysBetween(markDate(mark), today) <= POOL_MARK_DAYS) marks[id] = mark;
+    if ((daysBetween(markDate(mark), today) ?? 0) <= POOL_MARK_DAYS) marks[id] = mark;
   }
   const live = new Set(known);
   const lastPolled: Record<string, number> = {};

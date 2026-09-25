@@ -17,7 +17,7 @@ import { openDesk, type DeskEnv, type DeskMessage } from "../desk";
 import { type SourceUnit } from "../memory";
 import { resolvePalace } from "../palace";
 import { appData } from "../platform/app/appdata";
-import { pad2 } from "../platform/std/text";
+import { localDate } from "../platform/std/day";
 import { loadThreads, peekThreads } from "../platform/app/threads";
 import type { Settings } from "../platform/app/settings";
 import type { BudgetPurpose } from "../budget";
@@ -28,7 +28,7 @@ export const DOOR_KIND = "conversation";
 
 /** The day a conversation at the door is filed under, in the reader's own zone. */
 export function doorDate(now: Date = new Date()): string {
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  return localDate(now.getTime());
 }
 
 /**

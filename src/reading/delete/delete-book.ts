@@ -33,6 +33,7 @@ import { removeLibraryEntry } from "../../platform/app/library";
 import { removeViewState } from "../../platform/app/storage";
 import { listSupplements, type SupplementRef } from "../../platform/app/supplements";
 import { listTopics, removeFileFromTopic, type Topic } from "../../platform/app/topics";
+import { localDate } from "../../platform/std/day";
 import { ObservationFileStore } from "../../memory/observations/store";
 import type { Observation } from "../../memory/observations/types";
 import type { Statement } from "../../memory/statements/types";
@@ -70,7 +71,7 @@ async function removeIfPresent(path: string, remove: (p: string) => Promise<void
 }
 
 export const liveDeleteBookDeps: DeleteBookDeps = {
-  tombstone: (bookId) => appendDeletedBook(bookId),
+  tombstone: (bookId) => appendDeletedBook(bookId, localDate(Date.now())),
   removeLibraryEntry,
   removeViewState,
   listTopics,

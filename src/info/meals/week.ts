@@ -5,6 +5,7 @@
 // Every one of these is a fact the program owns. None of it is ever asked of
 // the model: a model that is told today's date still counts days wrong.
 
+import { addDays, daysBetween, isoWeekday } from "../../platform/std/day";
 import type { TemplateItem } from "./nutrition/solve";
 import { dayPlan, isTrainingDay, type Profile } from "./nutrition/targets";
 import {
@@ -25,40 +26,9 @@ export const WEEK_DAYS = 7;
 // What decides the order a day's meals are eaten in.
 type DayOrderProfile = Pick<Profile, "trainingDays" | "trainTime">;
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-// Local "YYYY-MM-DD" as a day number, through UTC so a DST boundary cannot add
-// or lose an hour mid-week. The string is a calendar day, not an instant.
-function dayNumber(date: string): number | null {
-  if (!DATE_RE.test(date)) return null;
-  const ms = Date.parse(`${date}T00:00:00Z`);
-  return Number.isNaN(ms) ? null : Math.round(ms / 86_400_000);
-}
-
-function fromDayNumber(n: number): string {
-  return new Date(n * 86_400_000).toISOString().slice(0, 10);
-}
-
-/** The local date `n` days after `date`. Returns `date` unchanged if unparseable. */
-export function addDays(date: string, n: number): string {
-  const d = dayNumber(date);
-  return d === null ? date : fromDayNumber(d + n);
-}
-
-/** Whole days from `from` to `to`; negative when `to` is earlier. Null if either is not a date. */
-export function daysBetween(from: string, to: string): number | null {
-  const a = dayNumber(from);
-  const b = dayNumber(to);
-  return a === null || b === null ? null : b - a;
-}
-
-/** ISO weekday of a local date: Monday 1 … Sunday 7. 0 when unparseable. */
-export function isoWeekday(date: string): number {
-  const d = dayNumber(date);
-  if (d === null) return 0;
-  // 1970-01-01 was a Thursday (4).
-  return ((((d + 3) % 7) + 7) % 7) + 1;
-}
+// The calendar arithmetic is platform/std/day's; re-exported because the rest
+// of meals reads it from here.
+export { addDays, daysBetween, isoWeekday };
 
 /** The seven local dates a week starting on `startDate` covers. */
 export function weekDates(startDate: string): string[] {

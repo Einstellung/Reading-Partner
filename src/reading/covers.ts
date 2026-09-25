@@ -26,6 +26,7 @@ import { writeTextAtomic } from "../platform/app/atomic-fs";
 import { contentHash } from "../platform/app/content-hash";
 import { libraryHas, readLibraryBook } from "../platform/app/library";
 import type { FileRef } from "../platform/app/topics";
+import { Gate } from "../platform/std/gate";
 import {
   cleanAuthor,
   COVER_JPEG_QUALITY,
@@ -38,7 +39,6 @@ import {
   coverRequestKey,
   coverRetryDue,
   coverScaleFactor,
-  createGate,
   createSingleFlight,
   parseCoverFailure,
   parseCoverMeta,
@@ -68,7 +68,7 @@ export interface BookCover {
 const NONE: BookCover = { url: null, author: null };
 
 const flight = createSingleFlight<BookCover>();
-const renders = createGate(COVER_RENDER_LIMIT);
+const renders = new Gate(COVER_RENDER_LIMIT);
 
 // An answer, and whether it may be kept for the session. Everything a render
 // settles is kept; an answer that only says the book is not on this device yet

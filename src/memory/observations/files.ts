@@ -30,7 +30,7 @@ export function isoDate(now: number): string {
 // consistent clock will do, while localDate dates something the reader remembers
 // happening. Re-exported from platform because the deleted-books file dates its
 // own records the same way.
-export { localDate } from "../../platform/app/day";
+export { localDate } from "../../platform/std/day";
 
 // The later of two "YYYY-MM-DD" days, for both memory stores: an observation's
 // `updated` and a statement's `lastSupported` are each the last day the evidence
