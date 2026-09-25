@@ -23,8 +23,9 @@
 // picked them up would be showing retells as outlines.
 
 import { readGuardedJson } from "../../platform/app/atomic-fs";
+import { recordDeletion } from "../../platform/app/deleted-books";
 import { createRecordStore, removeRecordFiles } from "../../platform/app/record-store";
-import { requestRemotePurge } from "../../platform/sync";
+import { dropThreadCache, threadFileName } from "../../platform/app/threads";
 import {
   newTalkOutline,
   newTalkOutlineId,
@@ -171,19 +172,19 @@ export function talkThreadKey(outlineId: string): string {
 }
 
 /**
- * Drop an outline. The rehearsals against it are the caller's to deal with.
+ * Drop an outline and the conversation held over it. The rehearsals against it
+ * are the caller's to deal with (reading/delete/delete-retell.ts): their store
+ * reads this one, so this one cannot read theirs.
  *
  * outline-<id>.json is in sync range, and a sync propagates no file deletion of
- * its own — a file gone locally but present in the remote is downloaded back
- * (docs/13, pitfall 208). So the remote copy is queued first, and the queue
- * survives on disk until a pass has taken it out of Drive.
+ * its own — a file gone locally but present in the remote is downloaded back,
+ * and the other devices keep theirs (docs/13, pitfall 208). So the deletion is
+ * logged first (platform/app/deleted-books.ts) and every device, this one
+ * included, drops the outline's files on its next pass. A log that cannot be
+ * written throws before anything is removed.
  */
 export async function deleteTalkOutline(outlineId: string): Promise<void> {
-  const file = talkOutlineFile(outlineId);
-  try {
-    await requestRemotePurge([file]);
-  } catch (e) {
-    console.warn("failed to queue for remote deletion", file, e);
-  }
-  await removeRecordFiles([file]);
+  await recordDeletion("outline", outlineId, Date.now());
+  await removeRecordFiles([talkOutlineFile(outlineId), threadFileName(talkThreadKey(outlineId))]);
+  dropThreadCache(talkThreadKey(outlineId));
 }

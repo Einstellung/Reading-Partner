@@ -2,13 +2,15 @@
 // becomes of each (docs/61 「登记」, docs/50).
 //
 // The shape is delete-book.ts's — a domain module that owns an order of
-// operations across several stores — with one difference. A deleted book has a
-// tombstone, and the tombstone is what makes the deletion travel and what lets a
-// crash in the middle finish itself later; a topic has none, because every one
-// of the steps here is a record-level edit that travels on its own. So the order
-// is the other way round: the references go first and the topic's own row goes
-// last, and a run that dies half way leaves a topic the reader can delete again
-// rather than records filed under an id nothing can name.
+// operations across several stores. The topic's line in the deletion log goes
+// first: the row's own delete is a record-level edit that travels, but a device
+// that opened one of the topic's books in the meantime edited the same record,
+// and an edit outranks a delete in the merge (merge/records.ts) — the topic
+// would come back. The log is read by the topic store (platform/app/topics.ts),
+// which shows no topic the log says is gone, whatever topics.json holds. Then
+// the references, and the topic's own row last, so a run that dies half way
+// leaves a topic the reader can delete again rather than records filed under
+// an id nothing can name.
 //
 // Which kinds are acted on is not written here. Every row that declares a
 // reference to `topics` carries the action it chose (palace/kinds.ts), and
@@ -32,9 +34,11 @@ import {
 import { flushThreads, loadThreads, setThreadTopic } from "../../platform/app/threads";
 import { ObservationFileStore } from "../../memory/observations/store";
 import { observationFs } from "../../memory/live/fs";
+import { recordDeletion } from "../../platform/app/deleted-books";
 import { deleteRetell, listAllRetells } from "../retell/store";
+import { deleteOutlineWithRehearsals, deleteRetellWithTalk } from "./delete-retell";
 import type { Retell } from "../retell/types";
-import { deleteTalkOutline, listAllTalkOutlines, talkOutlineOfRetell } from "../talk/store";
+import { listAllTalkOutlines, talkOutlineOfRetell } from "../talk/store";
 import type { TalkOutline } from "../talk/types";
 import { deleteRehearsal, listAllRehearsals } from "../rehearsal/store";
 import type { Rehearsal } from "../rehearsal/types";
@@ -51,6 +55,7 @@ export interface TopicThreadFile {
 // Everything this reaches outside itself, so the cascade can be run against
 // records in memory rather than against a disk, a sync queue and a topic file.
 export interface DeleteTopicDeps {
+  tombstone: (topicId: string) => Promise<void>;
   listRetells: () => Promise<Retell[]>;
   outlineIdOfRetell: (retellId: string) => Promise<string | null>;
   deleteRetell: (retellId: string) => Promise<void>;
@@ -84,11 +89,12 @@ async function liveThreadFiles(): Promise<TopicThreadFile[]> {
 }
 
 export const liveDeleteTopicDeps: DeleteTopicDeps = {
+  tombstone: (topicId) => recordDeletion("topic", topicId, Date.now()),
   listRetells: listAllRetells,
   outlineIdOfRetell: async (retellId) => (await talkOutlineOfRetell(retellId))?.id ?? null,
   deleteRetell,
   listOutlines: listAllTalkOutlines,
-  deleteOutline: deleteTalkOutline,
+  deleteOutline: deleteOutlineWithRehearsals,
   listRehearsals: listAllRehearsals,
   deleteRehearsal,
   listSavedArticles: () => loadSavedArticles(),
@@ -121,15 +127,15 @@ export const liveDeleteTopicDeps: DeleteTopicDeps = {
 type Handler = (topicId: string, deps: DeleteTopicDeps) => Promise<void>;
 
 // A retell of this topic, with the talk it produced and the rehearsals of that
-// talk. The outline goes first, because the retell is how it is found; the
-// rehearsals go with the retell (retell/store.ts), which is where that cascade
-// has always lived.
+// talk (delete-retell.ts).
 const deleteRetells: Handler = async (topicId, deps) => {
   for (const retell of await deps.listRetells()) {
     if (retell.topicId !== topicId) continue;
-    const outlineId = await deps.outlineIdOfRetell(retell.id);
-    if (outlineId) await deps.deleteOutline(outlineId);
-    await deps.deleteRetell(retell.id);
+    await deleteRetellWithTalk(retell.id, {
+      outlineIdOfRetell: deps.outlineIdOfRetell,
+      deleteTalkOutline: deps.deleteOutline,
+      deleteRetell: deps.deleteRetell,
+    });
   }
 };
 
@@ -209,13 +215,16 @@ export function handledKinds(): PalaceKind[] {
  *
  * The cascade is best-effort, one kind at a time: a rehearsal whose transcripts
  * will not delete must not keep the topic on the shelf, and everything left
- * behind is an orphan rather than a half-deleted topic. The row itself is the
- * step that throws — the reader is told the topic is still there.
+ * behind is an orphan rather than a half-deleted topic. The log line and the
+ * row itself are the steps that throw — the reader is told the topic is still
+ * there. Brief is never logged: it is written back by ensureBrief, and a
+ * deleted Brief is meant to come back empty.
  */
 export async function deleteTopic(
   topicId: string,
   deps: DeleteTopicDeps = liveDeleteTopicDeps,
 ): Promise<void> {
+  if (topicId !== BRIEF_TOPIC_ID) await deps.tombstone(topicId);
   for (const step of cascadeOfTopic()) {
     if (step.action === "keep") continue;
     const run = HANDLERS[step.kind];

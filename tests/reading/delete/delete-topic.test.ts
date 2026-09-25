@@ -71,11 +71,23 @@ function world(): World {
   };
 }
 
+// What the fake log holds per world, across two deps() over the same world.
+const logged = new WeakMap<World, Set<string>>();
+
 function deps(w: World, over: Partial<DeleteTopicDeps> = {}): DeleteTopicDeps {
   const wrote = (what: string): void => {
     w.writes.push(what);
   };
   return {
+    // Idempotent like the real log (deleted-books.ts): a second line for a
+    // topic already logged is never written.
+    tombstone: async (topicId) => {
+      const seen = logged.get(w) ?? new Set<string>();
+      logged.set(w, seen);
+      if (seen.has(topicId)) return;
+      seen.add(topicId);
+      wrote(`tombstone ${topicId}`);
+    },
     listRetells: async () => w.retells,
     outlineIdOfRetell: async (retellId) =>
       w.outlines.find((o) => o.retellId === retellId)?.id ?? null,
@@ -174,6 +186,9 @@ test("the retell takes its outline with it, and the topic's row goes last", asyn
   const w = world();
   await deleteTopic(GONE, deps(w));
   expect(w.writes).toEqual([
+    // The log first: it is what keeps the row from coming back when another
+    // device edited it meanwhile.
+    `tombstone ${GONE}`,
     `file events-${GONE}.jsonl`,
     "thread info-2026-09-13 th-1",
     "thread 2026-09-13 th-2",

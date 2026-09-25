@@ -8,9 +8,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { logEvent } from "../../../../platform/app/events";
 import type { Topic } from "../../../../platform/app/topics";
+import { deleteRetellWithTalk } from "../../../../reading/delete/delete-retell";
 import {
   createRetell,
-  deleteRetell,
   listRetellsForTopic,
   retellCandidates,
   retellRows,
@@ -138,7 +138,7 @@ export default function RetellSection(props: {
           open
           onOpenChange={(open) => !open && setDeleting(null)}
           onConfirm={() => {
-            void deleteRetell(deleting.id).then(refresh);
+            void deleteRetellWithTalk(deleting.id).then(refresh);
           }}
         />
       )}

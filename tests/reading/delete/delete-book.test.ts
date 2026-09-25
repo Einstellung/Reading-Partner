@@ -100,17 +100,19 @@ test("the whole order, once, from the tombstone down to the files", async () => 
     // The talk goes before the retell it came out of, which is how it is found.
     "outline o-1",
     "retell r-1",
+    // In the table's order (palace/kinds.ts), which is the one place the
+    // shapes are written.
+    `file library/${BOOK}.pdf`,
+    `file library/${BOOK}.epub`,
     `file annotations-${BOOK}.json`,
     `file supplements-${BOOK}.json`,
     `file threads-${BOOK}.json`,
     `file fulltext-${BOOK}.json`,
-    `file figures-${BOOK}.json`,
-    `file library/${BOOK}.pdf`,
-    `file library/${BOOK}.epub`,
     `file pagination-${BOOK}.json`,
+    `file figures-${BOOK}.json`,
+    `file covers/${BOOK}.failed.json`,
     `file covers/${BOOK}.jpg`,
     `file covers/${BOOK}.json`,
-    `file covers/${BOOK}.failed.json`,
     `dir prep-${BOOK}`,
   ]);
 });
