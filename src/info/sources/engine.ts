@@ -24,7 +24,8 @@ import { htmlToText } from "../extract/sanitize";
 import type { ExtractReadable } from "../extract/readable-select";
 import { webviewBody, type WebviewArticle } from "../extract/webview-article";
 import { parseFeed, feedFieldBody, type FeedEntry } from "./feed";
-import { Gate, mapSettled } from "./pool";
+import { Gate } from "../../platform/std/gate";
+import { mapSettled } from "./pool";
 import {
   dotPath,
   pickString,

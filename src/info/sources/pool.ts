@@ -3,8 +3,9 @@
 // slowest source; these two pieces let a source fetch several at once without
 // letting a dozen sources put sixty requests on the wire together.
 //
-// Gate is the shared cap across sources; mapSettled is the per-call cap. Both
-// are pure (no fetch, no clock) and unit-tested in tests/info/sources/pool.test.ts.
+// A Gate (platform/std/gate) is the shared cap across sources; mapSettled is the
+// per-call cap. Pure (no fetch, no clock) and unit-tested in
+// tests/info/sources/pool.test.ts.
 //
 // Two properties the engine depends on:
 //   - Order. Fetches finish in whatever order the hosts answer, but the results
@@ -14,52 +15,15 @@
 //     their results; every slot reports its own outcome.
 
 import { AbortError } from "../../platform/app/abort";
+import type { Gate } from "../../platform/std/gate";
 
 export type Settled<R> = { ok: true; value: R } | { ok: false; error: unknown };
-
-// A counting semaphore. One instance is shared by every source in a run, so the
-// per-source limits multiply up to this ceiling and no further.
-export class Gate {
-  private active = 0;
-  private waiting: (() => void)[] = [];
-
-  constructor(private readonly limit: number) {}
-
-  // For tests and diagnostics: how many tasks hold a slot right now.
-  get inFlight(): number {
-    return this.active;
-  }
-
-  async run<T>(fn: () => Promise<T>): Promise<T> {
-    await this.acquire();
-    try {
-      return await fn();
-    } finally {
-      this.release();
-    }
-  }
-
-  private acquire(): Promise<void> {
-    if (this.active < this.limit) {
-      this.active++;
-      return Promise.resolve();
-    }
-    return new Promise<void>((resolve) => this.waiting.push(resolve));
-  }
-
-  // The slot is handed to the next waiter rather than freed and re-taken: a
-  // free-then-take would let a task arriving in between slip past the limit.
-  private release(): void {
-    const waiter = this.waiting.shift();
-    if (waiter) waiter();
-    else this.active--;
-  }
-}
 
 export interface MapSettledOptions {
   // Tasks in flight from this call. Values below 1 are treated as 1.
   limit: number;
-  // Shared ceiling across concurrent calls, if any.
+  // Shared ceiling across concurrent calls, if any. One gate is shared by every
+  // source in a run, so the per-source limits multiply up to it and no further.
   gate?: Gate;
   // Once aborted, no queued task starts. Tasks already running are left to
   // settle — the fetch inside them takes the same signal, so they end promptly.

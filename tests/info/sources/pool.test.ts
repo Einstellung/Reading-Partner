@@ -4,7 +4,8 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { Gate, mapSettled } from "../../../src/info/sources/pool";
+import { Gate } from "../../../src/platform/std/gate";
+import { mapSettled } from "../../../src/info/sources/pool";
 
 // A task that resolves only when the test says so, so "how many ran at once" is
 // observable without leaning on timers.
@@ -163,17 +164,6 @@ test("a task queued behind the gate does not start once the run is aborted", asy
   const results = await queued;
   expect(ran).toEqual(["holder"]);
   expect(results.every((r) => !r.ok)).toBe(true);
-});
-
-test("a rejecting task releases its gate slot", async () => {
-  const gate = new Gate(1);
-  await expect(
-    gate.run(async () => {
-      throw new Error("boom");
-    }),
-  ).rejects.toThrow("boom");
-  expect(gate.inFlight).toBe(0);
-  expect(await gate.run(async () => "next")).toBe("next");
 });
 
 test("an empty input list is a no-op", async () => {
