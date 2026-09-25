@@ -139,6 +139,10 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Settles the turn in flight after a Stop. runAgentTurn says nothing once the
+  // reader has aborted it (no onDone, no onError), so what a stopped turn
+  // leaves behind is decided here, as in reading/session/use-call.ts.
+  const stopTurnRef = useRef<(() => void) | null>(null);
   // A conversation anchored to a date lives in that day's file; a standing one
   // (meals's) names its own, so its thread outlives any day (anchors.ts).
   const bookId = anchor.bookKey ?? infoBookId(dateKey);
@@ -599,6 +603,24 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
     // arrives by the hundred and says nothing the status line does not already
     // say, so only a change of phase is written through.
     let phase: TurnPhase | null = null;
+    // The abort is a request, so the stream can still land a word after Stop has
+    // settled the row; the row is not reopened for it.
+    const patchLive: typeof patchLast = (patch) => {
+      if (!controller.signal.aborted) patchLast(patch);
+    };
+    // What it wrote stays as a finished row and is kept; a turn that wrote
+    // nothing leaves no row behind.
+    stopTurnRef.current = () => {
+      stopTurnRef.current = null;
+      if (full.trim()) {
+        patchLast({ text: full, streaming: false, phase: undefined });
+        appendMessage(bookId, anchor.threadId, { role: "ai", text: full, ts: Date.now() });
+      } else {
+        setMessages((prev) => prev.slice(0, -1));
+      }
+      setStreaming(false);
+      abortRef.current = null;
+    };
 
     void runAgentTurn({
       providerId: settings.defaultProviderId as ProviderId,
@@ -616,13 +638,13 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       onDelta: (t) => {
         full += t;
         phase = "writing";
-        patchLast({ text: full, streaming: true, phase: "writing" });
+        patchLive({ text: full, streaming: true, phase: "writing" });
       },
       // The thinking itself is dropped; only that it is happening is shown.
       onThinking: () => {
         if (phase === "thinking") return;
         phase = "thinking";
-        patchLast({ phase: "thinking" });
+        patchLive({ phase: "thinking" });
       },
       // What this round wrote before calling the tool stays on screen, with a
       // blank line opened under it for the next round (docs/pitfall/291). A
@@ -631,14 +653,14 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         full = appendRoundBreak(full);
         phase = phaseOnToolStart(phase, info.quiet) ?? null;
         const next = phase;
-        patchLast((m) => ({
+        patchLive((m) => ({
           text: full,
           phase: next ?? undefined,
           tools: appendRunningTool(m.tools, info.name, info.label, info.quiet),
         }));
       },
       onToolEnd: (info) =>
-        patchLast((m) => ({
+        patchLive((m) => ({
           tools:
             resolveToolStatus(m.tools, info.name, info.isError, {
               ...(info.receipt ? { receipt: info.receipt } : {}),
@@ -647,6 +669,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
         })),
       onDone: (text, _assistant, turnText) => {
         const finalText = turnText || text || full;
+        stopTurnRef.current = null;
         let toolsAtDone: ToolStatus[] = [];
         patchLast((m) => {
           toolsAtDone = [...(m.tools ?? [])];
@@ -670,17 +693,15 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       // not an error and there is nothing to retry, so it is not dressed as one
       // (turn-rows.ts; App and useRetell pass this too).
       onRefusal: (m) => {
+        stopTurnRef.current = null;
         patchLast((prev) => ({ ...refusalRow(prev, m), phase: undefined }));
         setStreaming(false);
         abortRef.current = null;
       },
       onError: (m) => {
-        if (controller.signal.aborted) {
-          patchLast({ streaming: false, phase: undefined });
-          if (full.trim()) appendMessage(bookId, anchor.threadId, { role: "ai", text: full, ts: Date.now() });
-        } else {
-          patchLast({ text: m || "The reply failed.", failed: true, streaming: false, phase: undefined, tools: undefined });
-        }
+        if (controller.signal.aborted) return; // stop() already kept the partial
+        stopTurnRef.current = null;
+        patchLast({ text: m || "The reply failed.", failed: true, streaming: false, phase: undefined, tools: undefined });
         setStreaming(false);
         abortRef.current = null;
       },
@@ -698,7 +719,9 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   }
 
   function stop() {
+    const settle = stopTurnRef.current;
     abortRef.current?.abort();
+    settle?.();
   }
 
   return { messages, stickKey, streaming, swapped, setSwapped, send, stop, onCardAction };
