@@ -1,15 +1,17 @@
-// What the phone's reader will not do yet, and the one sentence each control
-// says about it (docs/70).
+// What the phone's reader will not do yet, and the one sentence the control
+// says about it (docs/70, docs/77).
 //
-// The AI is not on this shell: there is no book thread, no classroom and no
-// pen that opens one. Both controls are still drawn — the phone is one of the
-// reading forms, and the rule has to be legible where the reader would reach
-// for it — so what is needed here is the reason, not an absence.
+// The book's lesson is on the phone — Learn in the top bar opens the same
+// book-level conversation the iPad has — but the AI pen is not: there is no
+// asking about a passage here yet. The pen is still drawn — the phone is one of
+// the reading forms, and the rule has to be legible where the reader would
+// reach for it — so what is needed is the reason, and the way in that is here.
 
 import type { FlowTool } from "../../../reading/epub/flow-contract";
 import type { Tool, ToolType } from "../reader/types";
 
-export const AI_NOT_ON_PHONE = "The AI does not read with you on the phone yet";
+export const AI_PEN_NOT_ON_PHONE =
+  "The AI pen is not on the phone yet — Learn this book with AI is in the top bar";
 
 // The lock holds a page still under a finger that is drawing. The phone has no
 // pages to hold — it is one scroll, and the finger scrolls it — so the rack

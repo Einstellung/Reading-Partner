@@ -3,16 +3,22 @@
 // unpressable. The pane itself is another file's; what is pinned here is the
 // shell it is handed to. Run: bun test.
 
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { useEffect } from "react";
 import type { Annotation, ViewStats } from "../../../../src/platform/app/reader-contract";
+import type { Settings } from "../../../../src/platform/app/settings";
+import type { Thread, ThreadMessage } from "../../../../src/platform/app/threads";
+import * as events from "../../../../src/platform/app/events";
+import * as memory from "../../../../src/memory";
+import { bookThreadIo } from "../../../../src/reading/session/book-thread";
+import type { LessonTopic } from "../../../../src/ui/components/phone/use-book-lesson";
 import type { FlowReaderPaneProps } from "../../../../src/reading/epub/flow-contract";
 import {
   FLOW_DISPLAY_DEFAULT,
   FLOW_DISPLAY_KEY,
   type FlowDisplay,
 } from "../../../../src/reading/epub/flow-display";
-import { AI_NOT_ON_PHONE } from "../../../../src/ui/components/phone/reader-gate";
+import { AI_PEN_NOT_ON_PHONE } from "../../../../src/ui/components/phone/reader-gate";
 import type { PhoneBookIo } from "../../../../src/reading/session/open-epub";
 import { useDom } from "../../../support/dom";
 
@@ -40,6 +46,9 @@ const pages: number[] = [];
 // Every display the pane has been handed, the one it mounted at included. The
 // real pane turns a change into view.setDisplay; the shell's half is the prop.
 const displays: FlowDisplay[] = [];
+// Every quote the column was asked to mark, and how many times a pane mounted.
+const highlights: [number, string][] = [];
+let paneMounts = 0;
 
 // What the reflow pane does as far as this screen is concerned: it comes up,
 // reports where the reader is, and hands back a handle. Nothing of the real
@@ -49,13 +58,17 @@ function StubPane(props: FlowReaderPaneProps) {
     displays.push(props.display);
   }, [props.display]);
   useEffect(() => {
+    paneMounts += 1;
     props.onView({
       goToCfi() {},
       goToHref() {},
       goToPage(pageIndex) {
         pages.push(pageIndex);
       },
-      highlightQuote: async () => false,
+      highlightQuote: async (pageIndex, req) => {
+        highlights.push([pageIndex, req.searchText]);
+        return true;
+      },
       clearQuoteHighlight() {},
       removeAnnotations() {},
       setTool() {},
@@ -96,7 +109,14 @@ const io: PhoneBookIo = {
   async markOpened() {},
 };
 
-async function openReader() {
+// The shell's one back, as the reader registers it (nav-stack.ts): what the
+// lesson hands over while it is on screen, null when it is not.
+let overlay: (() => void) | null = null;
+const toasts: string[] = [];
+
+// No topic unless a test asks for one: with a topic, leaving the book logs the
+// call's end and starts distillation, both of which write to disk.
+async function openReader(topic: LessonTopic | null = null) {
   const view = render(
     <PhoneReader
       Pane={StubPane}
@@ -104,6 +124,12 @@ async function openReader() {
       name="A book"
       topicId="t1"
       path="/books/a.epub"
+      topic={topic}
+      settingsRef={{ current: {} as Settings }}
+      pushToast={(_kind, message) => toasts.push(message)}
+      onOverlayChange={(dismiss) => {
+        overlay = dismiss;
+      }}
       io={io}
       onBack={() => {}}
     />,
@@ -125,11 +151,137 @@ test("the book comes up and the bar counts in the pages the desk counts in", asy
   expect(container.textContent).toContain("printed 52");
 });
 
-test("the AI controls are on screen and cannot be pressed", async () => {
-  const { container } = await openReader();
+test("the AI pen is on screen with its reason, and Learn can be pressed", async () => {
+  const { container, getByLabelText } = await openReader();
   const dim = [...container.querySelectorAll("button[disabled]")];
   const reasons = dim.map((b) => b.getAttribute("title"));
-  expect(reasons.filter((r) => r === AI_NOT_ON_PHONE).length).toBe(2);
+  expect(reasons.filter((r) => r === AI_PEN_NOT_ON_PHONE).length).toBe(1);
+  expect((getByLabelText("Learn this book with AI") as HTMLButtonElement).disabled).toBe(false);
+});
+
+// --- the lesson (docs/77) ---------------------------------------------------
+
+// The book's thread, from its file (book-thread.ts): none yet, so one is made.
+function bookThread(messages: ThreadMessage[]): Thread {
+  return { id: "th1", annotationId: "", book: true, path: "b1", createdAt: 1, messages };
+}
+
+async function openLesson(messages: ThreadMessage[] = [], topic: LessonTopic | null = null) {
+  spyOn(bookThreadIo, "loadThreads").mockResolvedValue({});
+  spyOn(bookThreadIo, "getBookThread").mockReturnValue(bookThread(messages));
+  const view = await openReader(topic);
+  await act(async () => {
+    fireEvent.click(view.getByLabelText("Learn this book with AI"));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return view;
+}
+
+afterEach(() => {
+  mock.restore();
+  overlay = null;
+  pages.length = 0;
+  highlights.length = 0;
+});
+
+test("Learn puts the book's lesson over the reader, and the reader stays mounted under it", async () => {
+  const mountsBefore = paneMounts;
+  const { container, getByTestId } = await openLesson();
+  const lesson = container.querySelector('[aria-label="Lesson"]');
+  expect(lesson).not.toBeNull();
+  // The empty lesson says what it is for, and that the text is still coming.
+  expect(lesson?.querySelector("h1")?.textContent).toBe("A book");
+  expect(lesson?.querySelector("textarea")?.getAttribute("placeholder")).toBe(
+    "Ask me to teach you part of this book…",
+  );
+  expect(lesson?.textContent).toContain("Still reading through this book");
+  // No dictation, no hang-up: the bar's back is the way out.
+  expect(lesson?.querySelector('[aria-label="Hang up"]')).toBeNull();
+  expect(lesson?.querySelector('[aria-label="Back to the page"]')).not.toBeNull();
+  // The column was not unmounted to make room.
+  expect(getByTestId("pane")).not.toBeNull();
+  expect(paneMounts).toBe(mountsBefore + 1);
+  // And the shell's back is told to close it before it leaves the book.
+  expect(overlay).not.toBeNull();
+});
+
+test("back from the lesson is the page, with the same column and the call left open", async () => {
+  const mountsBefore = paneMounts;
+  const { container, getByLabelText } = await openLesson();
+  await act(async () => {
+    fireEvent.click(getByLabelText("Back to the page"));
+  });
+  expect(container.querySelector('[aria-label="Lesson"]')).toBeNull();
+  expect(paneMounts).toBe(mountsBefore + 1);
+  expect(overlay).toBeNull();
+  // Learn again goes straight back in: the call is still there, no file read.
+  const reads = (bookThreadIo.loadThreads as unknown as { mock: { calls: unknown[] } }).mock.calls
+    .length;
+  await act(async () => {
+    fireEvent.click(getByLabelText("Learn this book with AI"));
+  });
+  expect(container.querySelector('[aria-label="Lesson"]')).not.toBeNull();
+  expect(
+    (bookThreadIo.loadThreads as unknown as { mock: { calls: unknown[] } }).mock.calls.length,
+  ).toBe(reads);
+});
+
+test("the shell's back closes the lesson rather than leaving the book", async () => {
+  const { container } = await openLesson();
+  await act(async () => {
+    overlay?.();
+  });
+  expect(container.querySelector('[aria-label="Lesson"]')).toBeNull();
+});
+
+test("a reply finished while the reader was in the lesson leaves no dot on Learn", async () => {
+  const { container, getByLabelText } = await openLesson([
+    { role: "user", text: "Teach me chapter 1.", ts: 1 },
+    { role: "ai", text: "Chapter I is one conversation.", ts: 2 },
+  ]);
+  await act(async () => {
+    fireEvent.click(getByLabelText("Back to the page"));
+  });
+  expect(container.querySelector("[data-lesson-dot]")).toBeNull();
+});
+
+test("going back to the page does not end the lesson; leaving the book does", async () => {
+  const logged = spyOn(events, "logEvent").mockImplementation(() => {});
+  const distilled = spyOn(memory, "distillThread").mockResolvedValue(undefined as never);
+  const { getByLabelText, unmount } = await openLesson([], { id: "t1", name: "Novels", files: [] });
+  await act(async () => {
+    fireEvent.click(getByLabelText("Back to the page"));
+  });
+  const ends = () => logged.mock.calls.filter((c) => c[1] === "call-end");
+  expect(ends()).toEqual([]);
+  unmount();
+  expect(ends().map((c) => c[2])).toEqual([{ threadId: "th1", book: true }]);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(distilled).toHaveBeenCalledTimes(1);
+});
+
+test("a page citation closes the lesson and takes the column to the page", async () => {
+  const { container } = await openLesson([
+    { role: "user", text: "Where does Darcy snub her?", ts: 1 },
+    { role: "ai", text: "On the page after the ball [p.14].", ts: 2 },
+  ]);
+  // The reply is markdown, rendered lazily.
+  let chip: Element | null = null;
+  for (let i = 0; i < 50 && !chip; i++) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    chip = container.querySelector('[aria-label="Lesson"] a[href="#rp-page-14"]');
+  }
+  expect(chip).not.toBeNull();
+  await act(async () => {
+    fireEvent.click(chip as Element);
+  });
+  expect(container.querySelector('[aria-label="Lesson"]')).toBeNull();
+  expect(pages).toEqual([13]);
 });
 
 test("the outline sheet lists the chapters and navigates by block", async () => {

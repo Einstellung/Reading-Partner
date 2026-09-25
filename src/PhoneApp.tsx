@@ -451,11 +451,18 @@ export default function PhoneApp({
 
           {base.kind === "reader" && openedBook && Pane && (
             <PhoneReader
+              // One screen per book: its lesson and its refs belong to the book
+              // it was opened on, and leaving the book hangs that lesson up.
+              key={openedBook.bookId}
               Pane={Pane}
               bookId={openedBook.bookId}
               name={openedBook.name}
               topicId={openedBook.topicId}
               path={openedBook.path}
+              topic={topics?.find((t) => t.id === openedBook.topicId) ?? null}
+              settingsRef={settingsRef}
+              pushToast={pushToast}
+              onOverlayChange={onOverlayChange}
               onBack={goBack}
             />
           )}
