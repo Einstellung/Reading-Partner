@@ -29,8 +29,9 @@ export type EventType =
   // A pass that finished. `trigger` is what set it going (hangup, trim, timer,
   // startup, foreground, book-switch, talk-exit). A transcript pass carries the
   // threadId, a silent-marking pass the bookId, a retell's pass (docs/31) also
-  // { retellId, messages } — which retell it was and how many messages it covered.
-  | "distill-run" // { trigger, threadId?, bookId?, created, updated, deleted, retellId?, messages? }
+  // the retellId. Lines written before 2026-09-25 also carry a retell's
+  // `messages` (how many it covered), and label every retell pass "talk-exit".
+  | "distill-run" // { trigger, threadId?, bookId?, created, updated, deleted, retellId? }
   // A distillation pass that did not finish, so nothing was observed and its
   // cursors did not advance. `stage` is how far it got and `reason` is the one
   // category the failure sorts into; `outcome` is the sub-agent's

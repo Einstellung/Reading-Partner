@@ -147,6 +147,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
         retellName: current.name,
         materials: current.materials.map((m) => m.title),
         threadId,
+        trigger: "talk-exit",
         // Read at the moment the pass starts, not now: a deferred pass runs
         // after the reply has been appended, and that reply is part of the
         // stretch being distilled.
