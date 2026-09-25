@@ -20,12 +20,9 @@ import {
   epubInkOf,
   markKind,
   newEpubInk,
-  newEpubMark,
-  quoteSelectorAt,
   type MarkKind,
 } from "./annotation";
 import { caretAtPoint, rangeBetween, type CaretPoint } from "./caret";
-import { parseEpubRangeCfi, resolveSteps } from "./cfi";
 import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "./mark-draw";
 import type { PageCard } from "./page-card";
 import { PAGE_HEIGHT, PAGE_WIDTH } from "./page-geometry";
@@ -47,7 +44,9 @@ import {
   type PagePoint,
   type PageRect,
 } from "./mark-geometry";
-import { offsetOfPoint } from "./text";
+import { textMarkOf } from "./mark-write";
+import type { Pagination } from "./paginate";
+import { blockInfo } from "./reader-logic";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -60,10 +59,8 @@ export interface MarkHost {
   pageOfCard(card: PageCard): number | null;
   /** The mounted card showing a page, or null when the page has no sheet. */
   cardOfPage(pageIndex: number): PageCard | null;
-  /** What the pagination table says about a page. */
-  blockAt(pageIndex: number): { spine: number; charOffset: number; label: string | null } | undefined;
-  /** The page a point in a spine document falls on. */
-  pageOfPoint(spine: number, charOffset: number): number;
+  /** The book's pagination table: what each page is and where it starts. */
+  pagination: Pagination;
   /** The ingestion side of a spine item, or null when there is none. */
   spineOf(index: number): SpineText | null;
   onSave(annotations: Annotation[]): void;
@@ -266,41 +263,21 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
 
   function commitText(d: Extract<Drag, { kind: "text" }>): boolean {
     const card = d.card;
-    if (!d.range || d.range.collapsed || card.spine === null) return false;
-    const cfi = card.cfiOf(d.range);
-    if (!cfi) return false;
-    const spine = host.spineOf(card.spine);
-    const parsed = parseEpubRangeCfi(cfi);
-    if (!spine || !parsed) return false;
-    // Back to the ingestion tree before any offset is read off it: the card's
-    // nodes are a clone's, and the offsets the pagination was cut on are the
-    // ingestion tree's (docs/pitfall/267).
-    const from = resolveSteps(spine.root, parsed.start.steps, parsed.start.offset);
-    const to = resolveSteps(spine.root, parsed.end.steps, parsed.end.offset);
-    if (!from || !to) return false;
-    const start = offsetOfPoint(spine.text, spine.runs, from.node, from.offset);
-    const end = offsetOfPoint(spine.text, spine.runs, to.node, to.offset);
-    const span = { start: Math.min(start, end), end: Math.max(start, end) };
-    const quote = quoteSelectorAt(spine.text.text, span);
-    if (quote.exact.trim() === "") return false;
-    const pageIndex = host.pageOfPoint(spine.index, span.start);
-    const block = host.blockAt(pageIndex);
-    const mark = newEpubMark({
-      id: crypto.randomUUID(),
+    if (!d.range || card.spine === null) return false;
+    const mark = textMarkOf(d.range, {
+      spine: card.spine,
       stroke: d.stroke,
       color: d.color,
-      cfi,
-      spineIndex: spine.index,
-      span,
-      pageIndex,
-      pageLabel: block?.label ?? String(pageIndex + 1),
-      quote,
+      spineOf: host.spineOf,
+      pagination: host.pagination,
       authorName: host.authorName,
       now: new Date().toISOString(),
-    }) as Annotation;
+      id: crypto.randomUUID(),
+    });
+    if (!mark) return false;
     marks.set(mark.id, mark);
     host.onSave([mark]);
-    repaintPage(pageIndex);
+    repaintPagesOf([mark]);
     return true;
   }
 
@@ -308,7 +285,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     if (d.points.length < 2) return false;
     const pageIndex = host.pageOfCard(d.card);
     if (pageIndex === null) return false;
-    const block = host.blockAt(pageIndex);
+    const block = blockInfo(host.pagination, pageIndex);
     if (!block) return false;
     const mark = newEpubInk({
       id: crypto.randomUUID(),

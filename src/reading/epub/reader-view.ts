@@ -51,8 +51,8 @@ import {
   type Zoom,
 } from "./page-geometry";
 import { showsThroughBody, visibleRects } from "./mark-geometry";
-import type { SpineText } from "./mark-draw";
 import { createMarkLayer, type MarkLayer } from "./mark-layer";
+import { createSpineTexts } from "./mark-write";
 import { createCardPool } from "./card-pool";
 import { createPageCard, type PageCard } from "./page-card";
 import { createPageResources } from "./page-mount";
@@ -64,10 +64,11 @@ import {
   findQuoteAt,
   pageScroll,
   restoreTarget,
+  spineStartsOf,
   statsOf,
   viewStateOf,
 } from "./reader-logic";
-import { extractDocumentText, indexRuns, runAt } from "./text";
+import { extractDocumentText, runAt } from "./text";
 import { hrefFragment, resolveZipPath } from "./zip";
 
 // The same violet the PDF side paints an AI-cited quote in
@@ -289,11 +290,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
     slot.shown = null;
   }
 
-  const spineStarts = new Map<number, number>();
-  for (let i = 0; i < pagination.blocks.length; i++) {
-    const s = pagination.blocks[i].spine;
-    if (!spineStarts.has(s)) spineStarts.set(s, i);
-  }
+  const spineStarts = spineStartsOf(pagination);
   function firstPageOfSpine(spine: number): number {
     return spineStarts.get(spine) ?? 0;
   }
@@ -302,17 +299,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
   // One index of a spine item's text per book, built when a mark on it is first
   // written or repaired. It is the ingestion tree's, never a card's clone's
   // (docs/pitfall/267).
-  const spineTexts = new Map<number, SpineText>();
-  function spineOf(index: number): SpineText | null {
-    const hit = spineTexts.get(index);
-    if (hit) return hit;
-    const doc = book.docs[index];
-    const root = doc?.doc.documentElement;
-    if (!doc || !root) return null;
-    const entry: SpineText = { index, idref: doc.idref, root, text: doc.text, runs: indexRuns(doc.text) };
-    spineTexts.set(index, entry);
-    return entry;
-  }
+  const spineOf = createSpineTexts(book);
 
   const marks: MarkLayer = createMarkLayer({
     owner,
@@ -323,11 +310,7 @@ export async function createEpubReader(opts: EpubReaderOptions): Promise<EpubRea
       return null;
     },
     cardOfPage: (i) => slots[i]?.card ?? null,
-    blockAt: (i) => {
-      const block = pagination.blocks[i];
-      return block ? { spine: block.spine, charOffset: block.charOffset, label: block.label ?? null } : undefined;
-    },
-    pageOfPoint: (spine, charOffset) => blockIndexAt(pagination, spine, charOffset),
+    pagination,
     spineOf,
     onSave: (annotations) => callbacks.onSaveAnnotations(annotations),
     onSelect: (ids) => callbacks.onSelectAnnotations(ids),

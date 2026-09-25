@@ -14,7 +14,7 @@
 // page coordinates, and the two conversions between the page's unscaled
 // coordinates and the viewport's.
 
-import { parseCfiStart, parseEpubRangeCfi, rangeToCfi, resolvePoint, resolveRange } from "./cfi";
+import { parseCfiStart, parseEpubRangeCfi, resolvePoint, resolvePointRange, resolveRange } from "./cfi";
 import { PAGE_FRAME } from "../engine/page-frame";
 import { BODY_WIDTH, PAGE_HEIGHT, PAGE_WIDTH, columnOf } from "./page-geometry";
 import { mountDocument, type MountedDocument, type PageResources } from "./page-mount";
@@ -44,8 +44,6 @@ export interface PageCard {
   fromViewport(p: PagePoint2): PagePoint2;
   /** A live Range for a range CFI in this card's tree, or null. */
   rangeOf(cfi: string): Range | null;
-  /** A range CFI for a live Range in this card's tree, or null. */
-  cfiOf(range: Range): string | null;
   /** Page-space rects of a live Range, clipped to nothing: the caller clips. */
   rectsOf(range: Range): DOMRect[];
   /**
@@ -145,10 +143,6 @@ export function createPageCard(owner: Document, resources: PageResources): PageC
       return range;
     },
 
-    cfiOf(range) {
-      return doc ? rangeToCfi(range, doc.index, doc.idref) : null;
-    },
-
     showColumnOf(range) {
       const m = card.mounted;
       if (!m) return false;
@@ -172,20 +166,8 @@ export function createPageCard(owner: Document, resources: PageResources): PageC
 // the columns box untransformed, so the answer is a column index and not one
 // shifted by whatever page the card showed before.
 function columnOfCfi(m: MountedDocument, cfi: string): number | null {
-  const parsed = parseCfiStart(cfi);
-  if (!parsed) return null;
-  const at = resolvePoint(m.root, parsed);
-  if (!at) return null;
-  const owner = m.root.ownerDocument;
-  const range = owner.createRange();
-  if (at.node.nodeType === 3) {
-    const text = at.node as Text;
-    range.setStart(text, at.offset);
-    range.setEnd(text, Math.min(text.data.length, at.offset + 1));
-  } else {
-    range.selectNode(at.node);
-  }
-  return columnOfRange(m, range);
+  const range = resolvePointRange(m.root, cfi);
+  return range ? columnOfRange(m, range) : null;
 }
 
 // The column a range's first box sits in, measured with the columns box
