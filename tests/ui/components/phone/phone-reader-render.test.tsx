@@ -55,6 +55,8 @@ function StubPane(props: FlowReaderPaneProps) {
       goToPage(pageIndex) {
         pages.push(pageIndex);
       },
+      highlightQuote: async () => false,
+      clearQuoteHighlight() {},
       removeAnnotations() {},
       setTool() {},
       setDisplay() {},

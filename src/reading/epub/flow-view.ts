@@ -34,13 +34,14 @@ import {
   type PressState,
 } from "./flow-gesture";
 import { FLOW_PAPERS, type FlowDisplay } from "./flow-display";
-import { createFlowMarks, type FlowDoc, type PressPoint } from "./flow-marks";
+import { createFlowMarks, flowRangeSource, rectsIn, type FlowDoc, type PressPoint } from "./flow-marks";
 import { flowBaselineCss, mountFlowDocument } from "./flow-mount";
+import { createMarkPainter, rangeOfSpan } from "./mark-draw";
 import { createSpineTexts } from "./mark-write";
 import { createPageResources, readingFontsReady } from "./page-mount";
 import type { Pagination } from "./paginate";
 import type { EpubBook } from "./parse";
-import { bookLinkTarget, labelForBlock, pageIndexOfCfi, spineStartsOf } from "./reader-logic";
+import { bookLinkTarget, labelForBlock, locateQuote, pageIndexOfCfi, spineStartsOf } from "./reader-logic";
 import { hrefFragment, resolveZipPath } from "./zip";
 
 export interface FlowReaderCallbacks {
@@ -71,6 +72,9 @@ const SCROLL_SETTLE_MS = 120;
 // for, and in what steps: past the leading of one line, then the next.
 const TOP_PROBE_PX = 57;
 const TOP_PROBE_STEP = 8;
+
+// How far down the viewport a cited passage lands.
+const QUOTE_LANDING = 1 / 3;
 
 // Passes over a restored position: the first lands on the estimated height of
 // every document above, the next ones on the real one once those documents have
@@ -307,38 +311,111 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     return range ? { doc, range } : null;
   }
 
-  function scrollTo(doc: Column, rect: DOMRect): void {
+  // Bring a box `below` pixels under the viewport's top edge.
+  function scrollTo(doc: Column, rect: DOMRect, below = 0): void {
     const r = rect.width === 0 && rect.height === 0 ? doc.host.getBoundingClientRect() : rect;
-    scroller.scrollTop += r.top - viewportBox().top;
+    scroller.scrollTop += r.top - viewportBox().top - below;
   }
 
-  // Land a CFI at the top edge. Every document above it is a guess tall until
-  // it has been laid out, so the landing is repeated over a few frames as the
-  // guesses turn into heights, and once more when the pictures of the document
-  // itself have arrived.
-  function settle(target: string, frames = SETTLE_FRAMES): void {
+  // Land a range `below` pixels under the top edge. Every document above it is
+  // a guess tall until it has been laid out, so the landing is repeated over a
+  // few frames as the guesses turn into heights, and once more when the
+  // pictures of the document itself have arrived; `done` runs after that.
+  function land(
+    find: () => { doc: Column; range: Range } | null,
+    below: () => number,
+    done: () => void,
+    frames = SETTLE_FRAMES,
+  ): void {
     if (destroyed) return;
-    const hit = rangeOfCfi(target);
+    const hit = find();
     if (!hit) return;
-    scrollTo(hit.doc, hit.range.getBoundingClientRect());
+    scrollTo(hit.doc, hit.range.getBoundingClientRect(), below());
     if (frames > 0) {
-      requestAnimationFrame(() => settle(target, frames - 1));
+      requestAnimationFrame(() => land(find, below, done, frames - 1));
       return;
     }
     void hit.doc.ready.then(() => {
       if (destroyed) return;
-      const again = rangeOfCfi(target);
-      if (again) scrollTo(again.doc, again.range.getBoundingClientRect());
-      const page = pageIndexOfCfi(pagination, target);
-      if (page !== null) pinned = { cfi: target, pageIndex: page, scrollTop: scroller.scrollTop };
-      readPosition();
-      paintShown();
-      emit();
+      const again = find();
+      if (again) scrollTo(again.doc, again.range.getBoundingClientRect(), below());
+      done();
     });
+  }
+
+  // Land a CFI at the top edge.
+  function settle(target: string): void {
+    land(
+      () => rangeOfCfi(target),
+      () => 0,
+      () => {
+        const page = pageIndexOfCfi(pagination, target);
+        if (page !== null) pinned = { cfi: target, pageIndex: page, scrollTop: scroller.scrollTop };
+        readPosition();
+        paintShown();
+        emit();
+      },
+    );
   }
 
   function goToCfi(target: string): void {
     settle(target);
+  }
+
+  // --- the cited quote ------------------------------------------------------------
+  // A band over the words, in the overlay's own sublayer so the marks' repaint
+  // never wipes it (docs/pitfall/272). The Range lives on the column's tree, so
+  // a relayout only has to measure it again.
+  const painter = createMarkPainter(owner);
+  let quote: { doc: Column; range: Range } | null = null;
+
+  function paintQuote(): void {
+    if (!quote) return;
+    const layer = painter.sublayer(quote.doc.overlay, "rp-quote");
+    layer.replaceChildren();
+    painter.drawQuote(layer, rectsIn(quote.doc, quote.range));
+  }
+
+  function clearQuote(): void {
+    if (!quote) return;
+    quote.doc.overlay.querySelector<HTMLElement>(".rp-quote")?.replaceChildren();
+    quote = null;
+  }
+
+  // The words are found on the ingestion text by the table (reader-logic.ts,
+  // the sheets' search) and carried onto the column's tree by CFI, never by
+  // node identity (docs/pitfall/267).
+  function highlightQuote(page: number, searchText: string): boolean {
+    clearQuote();
+    const i = Math.min(Math.max(0, page), pagesCount - 1);
+    const spot = locateQuote(pagination, (spine) => book.docs[spine]?.text.text, i, searchText);
+    const doc = spot ? docs[spot.spine] : undefined;
+    const text = doc ? spineOf(doc.spine) : null;
+    const range = spot && doc && text ? rangeOfSpan(flowRangeSource(doc, spineOf), text, spot) : null;
+    if (!doc || !range || range.collapsed) {
+      goToPage(i);
+      return false;
+    }
+    const mine = { doc, range };
+    quote = mine;
+    // Measured again on every pass of the landing: a document off screen may
+    // not have been laid out yet, and its pictures move the words under the
+    // band when they arrive.
+    const find = () => {
+      if (quote === mine) paintQuote();
+      return mine;
+    };
+    land(
+      find,
+      () => scroller.clientHeight * QUOTE_LANDING,
+      () => {
+        find();
+        readPosition();
+        paintShown();
+        emit();
+      },
+    );
+    return true;
   }
 
   function goToPage(i: number): void {
@@ -420,6 +497,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
         marks.cancelDrag();
         break;
       case "tap":
+        clearQuote();
         if (at && !marks.tapAt(at.x, at.y)) followLinkAt(at.x, at.y);
         break;
       case "none":
@@ -479,6 +557,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   function relayout(): void {
     if (destroyed) return;
     for (const doc of docs) marks.invalidate(doc.spine);
+    paintQuote();
     if (cfi) settle(cfi);
   }
 
@@ -505,13 +584,22 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   }
 
   return {
-    goToCfi,
+    goToCfi: (target) => {
+      clearQuote();
+      goToCfi(target);
+    },
     goToHref: (href) => {
+      clearQuote();
       const hash = href.indexOf("#");
       const entry = hash >= 0 ? href.slice(0, hash) : href;
       goToEntry(entry, hrefFragment(href));
     },
-    goToPage,
+    goToPage: (i) => {
+      clearQuote();
+      goToPage(i);
+    },
+    highlightQuote: async (page, req) => highlightQuote(page, req.searchText),
+    clearQuoteHighlight: clearQuote,
     removeAnnotations: (ids) => marks.unsetAnnotations(ids),
     setDisplay: (next) => {
       if (destroyed) return;
