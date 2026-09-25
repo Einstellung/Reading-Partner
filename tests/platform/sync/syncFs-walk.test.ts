@@ -10,7 +10,7 @@
 
 import { beforeEach, expect, spyOn, test } from "bun:test";
 import * as fs from "@tauri-apps/plugin-fs";
-import { tauriSyncFs } from "../../../src/platform/sync/syncFs";
+import { tauriSyncFs, unseen } from "../../../src/platform/sync/syncFs";
 
 function entry(name: string, isDirectory: boolean): fs.DirEntry {
   return { name, isFile: !isDirectory, isDirectory, isSymlink: false };
@@ -40,11 +40,12 @@ function info(mtime: Date | null, size: number): fs.FileInfo {
 }
 
 // One in-range root file, one in-range file a directory down, one file the walk
-// must not descend into, and one that disappears between readDir and stat.
+// must not descend into, and one (library.json) that disappears between
+// readDir and stat.
 const TREE: Record<string, fs.DirEntry[]> = {
   ".": [
     entry("topics.json", false),
-    entry("vanished.json", false),
+    entry("library.json", false),
     entry("fulltext-abc.json", false),
     entry("observations", true),
     entry("prep-abc", true),
@@ -70,7 +71,7 @@ beforeEach(() => {
 
 test("list returns every in-range file with its mtime in milliseconds", async () => {
   const files = await tauriSyncFs.list();
-  expect(files).toEqual([
+  expect([...files]).toEqual([
     { path: "topics.json", mtime: 1_700_000_000_123, size: 12 },
     { path: "observations/index.json", mtime: 1_700_000_111_000, size: 34 },
     // A host that reports no modification time reads as 0, not as a skip.
@@ -78,10 +79,39 @@ test("list returns every in-range file with its mtime in milliseconds", async ()
   ]);
 });
 
-test("a file that vanishes between readDir and stat is the only thing skipped", async () => {
+test("a file that will not stat is left out of the files and named as unseen", async () => {
   const files = await tauriSyncFs.list();
-  expect(files.map((f) => f.path)).not.toContain("vanished.json");
+  expect(files.map((f) => f.path)).not.toContain("library.json");
   expect(files.length).toBe(3);
+  expect(files.unreadable).toEqual(["library.json"]);
+});
+
+// The scan used to swallow a readDir error and return what it had, which reads
+// exactly like a device that holds nothing under that directory.
+test("a directory that will not read is named as unseen, and so is the root", async () => {
+  spyOn(fs, "readDir").mockImplementation(async (path) => {
+    if (String(path) === "observations") throw new Error("EACCES: observations");
+    return TREE[String(path)] ?? [];
+  });
+  const files = await tauriSyncFs.list();
+  expect(files.map((f) => f.path)).not.toContain("observations/index.json");
+  expect(files.unreadable).toEqual(["library.json", "observations"]);
+
+  spyOn(fs, "readDir").mockImplementation(async () => {
+    throw new Error("EIO");
+  });
+  const none = await tauriSyncFs.list();
+  expect(none.length).toBe(0);
+  expect(none.unreadable).toEqual([""]);
+});
+
+test("unseen covers the path itself, everything under it, and everything under the root", () => {
+  expect(unseen(["observations"], "observations/index.json")).toBe(true);
+  expect(unseen(["observations"], "observations")).toBe(true);
+  expect(unseen(["observations"], "observations-x.json")).toBe(false);
+  expect(unseen(["topics.json"], "topics.json")).toBe(true);
+  expect(unseen([""], "library.json")).toBe(true);
+  expect(unseen([], "library.json")).toBe(false);
 });
 
 test("the walk does not descend into a directory that holds no in-range file", async () => {

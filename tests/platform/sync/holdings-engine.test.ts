@@ -32,7 +32,7 @@ import {
   SELF_KEY,
   type HoldingsStore,
 } from "../../../src/platform/sync/holdings";
-import type { ScannedFile, SyncFs } from "../../../src/platform/sync/syncFs";
+import type { Scan, SyncFs } from "../../../src/platform/sync/syncFs";
 import type { Snapshot } from "../../../src/platform/sync/reconcile";
 import { hashBytes } from "../../../src/platform/sync/content";
 
@@ -115,13 +115,15 @@ function makeDevice(id: string, seed: Record<string, string> = {}) {
   const files = new Map<string, { bytes: Uint8Array; mtime: number }>();
   let clock = 1000;
   for (const [k, v] of Object.entries(seed)) files.set(k, { bytes: enc(v), mtime: (clock += 1) });
+  // Paths the scan cannot see: on disk, and named in the scan's unreadable the
+  // way a readDir or stat that failed is (syncFs.ts).
+  const hidden = new Set<string>();
   const fs: SyncFs = {
-    async list(): Promise<ScannedFile[]> {
-      return [...files.entries()].map(([path, f]) => ({
-        path,
-        mtime: f.mtime,
-        size: f.bytes.length,
-      }));
+    async list(): Promise<Scan> {
+      const out = [...files.entries()]
+        .filter(([path]) => !hidden.has(path))
+        .map(([path, f]) => ({ path, mtime: f.mtime, size: f.bytes.length }));
+      return Object.assign(out, { unreadable: [...hidden] });
     },
     async read(path) {
       const f = files.get(path);
@@ -202,6 +204,8 @@ function makeDevice(id: string, seed: Record<string, string> = {}) {
     paths: () => [...files.keys()].sort(),
     text: (p: string) => (files.has(p) ? dec(files.get(p)!.bytes) : null),
     put: (p: string, text: string) => files.set(p, { bytes: enc(text), mtime: (clock += 1) }),
+    hide: (p: string) => hidden.add(p),
+    unhide: (p: string) => hidden.delete(p),
     cached: (device: string) => parseHoldings(held.get(device) ?? null),
     self: () => parseHoldings(held.get(SELF_KEY) ?? null),
   };
@@ -354,7 +358,7 @@ test("the same tree scanned twice publishes the same bytes", async () => {
   expect(remote2.text("holdings-d-a.json")).toBe(first);
 });
 
-test("a peer's incomplete holdings is cached but never inferred from", async () => {
+test("a peer's incomplete holdings is never inferred from, nor becomes the base", async () => {
   const remote = makeRemote();
   const A = makeDevice("d-a", { "topics.json": "topics" });
   const a = engineFor(remote, A, { inferDeletions: true });
@@ -374,7 +378,57 @@ test("a peer's incomplete holdings is cached but never inferred from", async () 
   await a.engine.syncNow();
 
   expect(A.text("topics.json")).toBe("topics");
-  expect(A.cached("d-b")!.complete).toBe(false);
+  // The cache stays on the last whole tree, so the difference the next whole
+  // tree makes is taken from there.
+  expect(A.cached("d-b")!.complete).toBe(true);
+  expect(Object.keys(A.cached("d-b")!.files)).toEqual(["topics.json"]);
+});
+
+test("a file the scan could not see makes the published tree partial and deletes nothing", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": "topics", "settings.json": "{}" });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A, { inferDeletions: true });
+  const b = engineFor(remote, B, { inferDeletions: true });
+  await settle(a.engine, b.engine);
+  expect(B.text("topics.json")).toBe("topics");
+
+  A.hide("topics.json");
+  await a.engine.syncNow();
+  expect(A.self()!.complete).toBe(false);
+  expect(Object.keys(A.self()!.files)).toEqual(["settings.json"]);
+  // Not a clean pass: the reader hears that part of the device went unread.
+  expect(a.engine.status().lastError).toContain("scan failed: could not read topics.json");
+
+  await b.engine.syncNow();
+  expect(B.text("topics.json")).toBe("topics");
+  expect(remote.names()).toContain("topics.json");
+
+  // Seen again: a whole tree, republished although its files did not change
+  // from the last whole one, and still nothing inferred.
+  A.unhide("topics.json");
+  await a.engine.syncNow();
+  expect(A.self()!.complete).toBe(true);
+  await b.engine.syncNow();
+  expect(B.text("topics.json")).toBe("topics");
+});
+
+test("a path the scan could not see is not pulled over", async () => {
+  const remote = makeRemote();
+  const A = makeDevice("d-a", { "topics.json": "v1" });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A);
+  const b = engineFor(remote, B);
+  await settle(a.engine, b.engine);
+
+  B.put("topics.json", "theirs");
+  await b.engine.syncNow();
+  A.put("topics.json", "mine");
+  A.hide("topics.json");
+  await a.engine.syncNow();
+
+  expect(A.text("topics.json")).toBe("mine");
+  expect(remote.text("topics.json")).toBe("theirs");
 });
 
 test("the report names this device's tree and the peer's", async () => {
