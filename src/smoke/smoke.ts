@@ -16,7 +16,8 @@
 import { writeProbeResult } from "./probe-shell";
 import type { PdfEngine } from "@embedpdf/models";
 import { getPdfiumEngine, pdfiumEngineMode } from "../reading/engine/engine-singleton";
-import { SMOKE_PDF_BASE64, decodeBase64 } from "./smoke-pdf";
+import { base64ToBytes } from "../platform/std/base64";
+import { SMOKE_PDF_BASE64 } from "./smoke-pdf";
 
 // Where the verdict is written, relative to the app data dir. The CI does not
 // assume where BaseDirectory.AppData maps on iOS — it locates the file by its
@@ -177,7 +178,7 @@ export async function runSmoke(): Promise<void> {
     result.stage = "engine-ready";
 
     result.stage = "open";
-    const bytes = decodeBase64(SMOKE_PDF_BASE64);
+    const bytes = base64ToBytes(SMOKE_PDF_BASE64);
     const t1 = performance.now();
     let doc;
     try {

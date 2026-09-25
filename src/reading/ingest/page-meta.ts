@@ -16,6 +16,7 @@ export interface PageMeta {
   publishedAt?: string;
 }
 
+import { base64ToBytes } from "../../platform/std/base64";
 import { oneLine } from "../../platform/std/text";
 
 // How far into the page to look. Everything here lives in <head>, and a page
@@ -236,9 +237,7 @@ export function decodeDataImage(src: string): { bytes: Uint8Array; mediaType: st
   const m = DATA_IMAGE.exec(src.trim());
   if (!m) return null;
   try {
-    const binary = atob(m[2].replace(/\s+/g, ""));
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const bytes = base64ToBytes(m[2].replace(/\s+/g, ""));
     return bytes.length === 0 ? null : { bytes, mediaType: m[1].toLowerCase() };
   } catch {
     return null;

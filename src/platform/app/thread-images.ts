@@ -1,8 +1,9 @@
 import { appData } from "./appdata";
 
-// Thread images live one directory per thread. Mirrors annotations.ts's base64
-// <-> bytes helpers; here `data` is bare base64 (no data: prefix), matching the
-// ChatMessage.images contract.
+// Thread images live one directory per thread. `data` is bare base64 (no data:
+// prefix), matching the ChatMessage.images contract. The base64 pair below is a
+// local copy of platform/std/base64.ts: platform/app imports nothing else under
+// src/ (tests/layering.test.ts).
 function threadImageDir(threadId: string): string {
   return `images/threads/${threadId}`;
 }
