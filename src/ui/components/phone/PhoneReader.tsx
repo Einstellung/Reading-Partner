@@ -46,9 +46,21 @@ import {
   type PhoneBookIo,
 } from "./open-epub";
 import { flowTool } from "./reader-gate";
+import { deletePhoneMark, markThreadId, type MarkDeleteIo } from "./delete-mark";
+import PhoneDeleteMarkDialog from "./PhoneDeleteMarkDialog";
 import PhoneDisplaySheet from "./PhoneDisplaySheet";
 import PhoneOutlineSheet from "./PhoneOutlineSheet";
 import PhoneReaderBar from "./PhoneReaderBar";
+import { deleteThreadTree, loadThreads } from "../../../platform/app/threads";
+import { logEvent } from "../../../platform/app/events";
+
+const markDeleteIo: MarkDeleteIo = {
+  loadThreads,
+  deleteThreadTree,
+  deleteAnnotations,
+  logThreadDelete: (topicId, threadId) =>
+    logEvent(topicId, "thread-delete", { threadId, book: false }),
+};
 
 export default function PhoneReader(props: {
   Pane: ComponentType<FlowReaderPaneProps>;
@@ -127,14 +139,30 @@ export default function PhoneReader(props: {
     [prefs],
   );
 
+  // The mark whose conversation is about to go with it, while that is being
+  // confirmed.
+  const [confirming, setConfirming] = useState<string | null>(null);
+
   const removeMark = useCallback(
     (id: string) => {
-      viewRef.current?.removeAnnotations([id]);
-      deleteAnnotations(bookId, [id]);
-      marksRef.current = marksRef.current.filter((a) => a.id !== id);
-      setPopup(null);
+      void deletePhoneMark({ bookId, topicId }, marksRef.current, id, markDeleteIo)
+        .then((ids) => {
+          viewRef.current?.removeAnnotations(ids);
+          const gone = new Set(ids);
+          marksRef.current = marksRef.current.filter((a) => !gone.has(a.id));
+        })
+        .catch((e: unknown) => console.error("failed to delete the mark", e));
     },
-    [bookId],
+    [bookId, topicId],
+  );
+
+  const askRemoveMark = useCallback(
+    (id: string) => {
+      setPopup(null);
+      if (markThreadId(marksRef.current.find((a) => a.id === id))) setConfirming(id);
+      else removeMark(id);
+    },
+    [removeMark],
   );
 
   return (
@@ -191,8 +219,16 @@ export default function PhoneReader(props: {
         {popup && (
           <MarkPopup
             rect={popup.rect}
-            onDelete={() => removeMark(popup.annotation.id)}
+            onDelete={() => askRemoveMark(popup.annotation.id)}
             onClose={() => setPopup(null)}
+          />
+        )}
+
+        {confirming && (
+          <PhoneDeleteMarkDialog
+            open
+            onOpenChange={(open) => !open && setConfirming(null)}
+            onDelete={() => removeMark(confirming)}
           />
         )}
       </div>
