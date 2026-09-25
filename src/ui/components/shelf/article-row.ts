@@ -12,6 +12,7 @@ import {
   type LibraryEntry,
 } from "../../../platform/app/library";
 import type { FileRef } from "../../../platform/app/topics";
+import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
 import { displayFileTitle } from "./file-title";
 
 const ISO_DATE = /^(\d{4}-\d{2}-\d{2})/;
@@ -40,6 +41,12 @@ export function articleRowLine(entry: LibraryEntry): string {
   return [displaySource(entry.sourceUrl), formatArticleDate(entry.publishedAt)]
     .filter((part) => part !== null && part !== "")
     .join(" · ");
+}
+
+// The same line for an article kept out of a briefing (reading/saved-articles.ts):
+// the feed's name rather than a host, and its date as that module formats it.
+export function savedArticleLine(article: Pick<SavedArticle, "sourceName" | "publishedAt">): string {
+  return [article.sourceName, formatPublishedAt(article.publishedAt)].filter(Boolean).join(" · ");
 }
 
 // One article row, ready to render.

@@ -45,7 +45,13 @@ const entries: Record<string, LibraryEntry> = {
 
 const split = splitMaterials(files, entries);
 const html = renderToStaticMarkup(
-  <ArticleRows rows={split.articles} underCards onOpen={() => {}} onRemove={() => {}} />,
+  <ArticleRows
+    rows={split.articles}
+    rowKey={(row) => row.file.path}
+    underCards
+    onOpen={() => {}}
+    onRemove={() => {}}
+  />,
 );
 
 test("the book stays a card and only the articles are rows", () => {
@@ -71,6 +77,6 @@ test("every row offers the same remove a card does, and no cover", () => {
 
 test("nothing is drawn when a topic has no articles", () => {
   expect(
-    renderToStaticMarkup(<ArticleRows rows={[]} onOpen={() => {}} onRemove={() => {}} />),
+    renderToStaticMarkup(<ArticleRows rows={[]} rowKey={() => ""} onOpen={() => {}} onRemove={() => {}} />),
   ).toBe("");
 });

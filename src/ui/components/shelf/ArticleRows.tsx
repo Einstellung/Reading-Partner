@@ -6,21 +6,23 @@
 
 import { Button } from "../ui/button";
 import { ROW, ROW_LIST, ROW_NAME } from "./cardStyles";
-import type { ArticleRow } from "./article-row";
 
-export default function ArticleRows(props: {
-  rows: ArticleRow[];
+// A topic's articles (article-row.ts ArticleRow) and the articles kept out of a
+// briefing are drawn the same way; all a row needs is its title and its line.
+export default function ArticleRows<R extends { title: string; line: string }>(props: {
+  rows: R[];
+  rowKey: (row: R) => string;
   // Set when cards are drawn above these rows, which is the only time the list
   // needs room over it.
   underCards?: boolean;
-  onOpen: (row: ArticleRow) => void;
-  onRemove: (row: ArticleRow) => void;
+  onOpen: (row: R) => void;
+  onRemove: (row: R) => void;
 }) {
   if (props.rows.length === 0) return null;
   return (
     <ul className={`${ROW_LIST}${props.underCards ? " mt-4" : ""}`}>
       {props.rows.map((row) => (
-        <li key={row.file.path} className={ROW}>
+        <li key={props.rowKey(row)} className={ROW}>
           <button className={ROW_NAME} onClick={() => props.onOpen(row)}>
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="truncate">{row.title}</span>

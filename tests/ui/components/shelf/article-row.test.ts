@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import {
   articleRowLine,
   formatArticleDate,
+  savedArticleLine,
   splitMaterials,
 } from "../../../../src/ui/components/shelf/article-row";
 import type { LibraryEntry } from "../../../../src/platform/app/library";
@@ -96,4 +97,15 @@ test("an entry with no kind is a book", () => {
   });
   expect(split.books.length).toBe(1);
   expect(split.articles).toEqual([]);
+});
+
+test("a saved article's line is its source and date, whichever it has", () => {
+  const date = new Date("2026-08-30T12:00:00Z").toLocaleDateString();
+  expect(savedArticleLine({ sourceName: "Hacker News", publishedAt: "2026-08-30T12:00:00Z" })).toBe(
+    `Hacker News · ${date}`,
+  );
+  expect(savedArticleLine({ sourceName: "", publishedAt: "2026-08-30T12:00:00Z" })).toBe(date);
+  expect(savedArticleLine({ sourceName: "Hacker News", publishedAt: "" })).toBe("Hacker News");
+  expect(savedArticleLine({ sourceName: "", publishedAt: "  " })).toBe("");
+  expect(savedArticleLine({ sourceName: "Blog", publishedAt: "last week" })).toBe("Blog · last week");
 });

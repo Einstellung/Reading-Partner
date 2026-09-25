@@ -13,7 +13,11 @@
 
 import type { OutlineItem } from "../../../fulltext/types";
 import type { FlowPaperName } from "../../../reading/epub/flow-display";
+import OutlineView from "../reader/OutlineView";
 import { Dialog, DialogSheetContent, DialogTitle } from "../ui/dialog";
+
+const NO_SUPPLEMENTS = [] as const;
+const noop = () => {};
 
 export default function PhoneOutlineSheet(props: {
   open: boolean;
@@ -30,29 +34,23 @@ export default function PhoneOutlineSheet(props: {
         <DialogTitle className="border-b border-border-subtle px-4 py-3 text-[15px]">
           Outline
         </DialogTitle>
-        {props.outline.length === 0 ? (
-          <p className="m-0 px-4 py-6 text-[14px] text-faint-foreground">
-            This book has no table of contents.
-          </p>
-        ) : (
-          <ul className="m-0 list-none overflow-y-auto p-0 pb-safe-4">
-            {props.outline.map((item, i) => (
-              <li key={`${item.page}-${i}`}>
-                <button
-                  className="flex w-full items-baseline gap-2 border-0 bg-transparent px-4 py-3 text-left text-[15px] coarse:min-h-[44px] can-hover:hover:bg-muted"
-                  style={{ paddingLeft: `${16 + item.level * 14}px` }}
-                  onClick={() => {
-                    props.onGoToPage(item.page - 1);
-                    props.onOpenChange(false);
-                  }}
-                >
-                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                  <span className="flex-none text-[12px] text-faint-foreground">{item.page}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        {/* The phone has no supplements: the sheet is the book's chapters only. */}
+        <OutlineView
+          size="sheet"
+          outline={props.outline}
+          pending={false}
+          bookTitle=""
+          supplements={NO_SUPPLEMENTS}
+          docId={null}
+          bookId={null}
+          displaySource={() => ""}
+          onNavigatePage={(page) => {
+            props.onGoToPage(page - 1);
+            props.onOpenChange(false);
+          }}
+          onOpenBook={noop}
+          onOpenSupplement={noop}
+        />
       </DialogSheetContent>
     </Dialog>
   );

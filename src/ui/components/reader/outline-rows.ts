@@ -11,7 +11,7 @@
 // as the row that goes back to it.
 
 import type { SupplementRef } from "../../../platform/app/supplements";
-import type { Fulltext } from "../../../fulltext/types";
+import type { OutlineItem } from "../../../fulltext/types";
 
 export type OutlineRow =
   | { kind: "chapter"; title: string; level: number; page: number; current: boolean }
@@ -19,8 +19,8 @@ export type OutlineRow =
   | { kind: "supplement"; hash: string; title: string; source: string; current: boolean };
 
 export interface OutlineInput {
-  /** The book's own full text, which is where its outline is. */
-  bookFulltext: Fulltext | null;
+  /** The book's own table of contents, whichever document is on screen. */
+  bookOutline: readonly OutlineItem[];
   bookTitle: string;
   supplements: readonly SupplementRef[];
   /** The document on screen: the book's id, or a supplement's. */
@@ -35,10 +35,9 @@ export interface OutlineInput {
  * supplements — which is what makes the sidebar say the document has none.
  */
 export function outlineRows(input: OutlineInput): OutlineRow[] {
-  const { bookFulltext, bookTitle, supplements, docId, bookId, displaySource } = input;
+  const { bookOutline, bookTitle, supplements, docId, bookId, displaySource } = input;
   const onBook = docId !== null && docId === bookId;
-  const outline = bookFulltext?.outline ?? [];
-  const rows: OutlineRow[] = outline.map((item) => ({
+  const rows: OutlineRow[] = bookOutline.map((item) => ({
     kind: "chapter" as const,
     title: item.title,
     level: item.level,
