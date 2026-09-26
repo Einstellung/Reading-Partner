@@ -20,3 +20,10 @@ test("card display width divides natural pixels by the device pixel ratio", () =
   // A zero / bogus dpr never divides by less than 1.
   expect(cardDisplayWidth(500, 0)).toBe(500);
 });
+
+test("an unmeasured card width leaves the image at its own size", () => {
+  // An EPUB figure is the book's file handed to <img> as is, with no width
+  // read off it. A width of 0 px would draw it invisible.
+  expect(cardDisplayWidth(0, 2)).toBeUndefined();
+  expect(cardDisplayWidth(0, 1)).toBeUndefined();
+});
