@@ -110,6 +110,14 @@ export type BookTextState =
   // The extraction finished with nothing usable, or failed outright.
   | "unreadable";
 
+// Which of the three a book is in, from what the shell holds: the extraction's
+// promise still out, or what it came back with. Both shells ask it the same way
+// (App.tsx, and the phone's EPUB lesson, docs/77).
+export function bookTextState(fulltext: { status: string } | null, pending: boolean): BookTextState {
+  if (pending) return "extracting";
+  return fulltext?.status === "ok" ? "ok" : "unreadable";
+}
+
 export function bookTextNotice(state: BookTextState): string | null {
   if (state === "extracting")
     return "Still reading through this book — I can't teach from it just yet.";

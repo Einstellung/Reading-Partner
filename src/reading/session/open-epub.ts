@@ -1,29 +1,33 @@
-// Opening a book on the phone, in order (docs/70). The desk's sequence
-// (reading/session/open-book.ts) with everything the phone does not have taken
-// out: no full text, no figures, no threads, no prep, no distillation — there
-// is no AI on this shell to read any of it.
+// Opening a book on the phone, in order (docs/70, docs/77). The desk's sequence
+// (reading/session/open-book.ts) with what the phone does not have taken out: no
+// supplements, no prep, no distillation on the way in, and the threads are not
+// read here — the Learn button reads the book's own when it is pressed
+// (book-thread.ts), the way the desk's top-bar button does.
 //
 // What is left is the order that still matters: the pages are cut before the
 // marks are loaded, because a mark's page number is read off the table that was
 // just written, and the reading position is seeded before the pane mounts, so
-// the first write for this book lands on the position it opened at.
+// the first write for this book lands on the position it opened at. Then the
+// two things a lesson turn reads are started with the desk's own functions and
+// handed over unfinished: the reader is drawn without waiting for either.
 //
 // Pure over an io, so the order can be read and tested without a webview.
 
-import { loadAnnotations } from "../../../platform/app/annotations";
-import { readLibraryBook } from "../../../platform/app/library";
+import { loadAnnotations } from "../../platform/app/annotations";
+import { readLibraryBook } from "../../platform/app/library";
 import {
   isPageMark,
   pageMarks,
   type Annotation,
   type ViewState,
-} from "../../../platform/app/reader-contract";
-import { getViewState } from "../../../platform/app/storage";
-import { markOpened } from "../../../platform/app/topics";
-import type { OutlineItem } from "../../../fulltext/types";
-import { acquireEpub, outlineFor, preparePagination, releaseEpub } from "../../../reading/epub";
-import { keepReadingPosition, seedReadingPosition } from "../../../reading/reading-position";
-import { cuttingStatus, openingViewState } from "../../../reading/session/open-book";
+} from "../../platform/app/reader-contract";
+import { getViewState } from "../../platform/app/storage";
+import { markOpened } from "../../platform/app/topics";
+import type { Fulltext, OutlineItem } from "../../fulltext/types";
+import { acquireEpub, outlineFor, preparePagination, releaseEpub } from "../epub";
+import type { FiguresIndex } from "../figures";
+import { keepReadingPosition, seedReadingPosition } from "../reading-position";
+import { bookOpenIo, cuttingStatus, openingViewState } from "./open-book";
 
 // The desk's own line, re-exported rather than restated: the reader is told the
 // same thing on both machines while the same table is being cut.
@@ -34,13 +38,21 @@ export interface PhoneBookIo {
   getViewState(bookId: string): Promise<ViewState | null>;
   // Cut the book (or read its stored table back) and give the chapters their
   // page numbers. The table itself never leaves this call: the shell only asks
-  // it where the chapters are.
+  // it where the chapters are, and the extractions below whether it was just
+  // replaced.
   prepare(
     bookId: string,
     buffer: ArrayBuffer,
     onProgress: (done: number, total: number) => void,
-  ): Promise<{ outline: OutlineItem[] }>;
+  ): Promise<{ outline: OutlineItem[]; recut: boolean }>;
   loadAnnotations(bookId: string): Promise<Annotation[]>;
+  // The full text and the figure index, sliced off the table. `stale` says the
+  // table was just replaced, so a cache counted in its old page numbers is
+  // another book's (open-book.ts).
+  ensureFulltext(bookId: string, buffer: ArrayBuffer, stale: boolean): Promise<Fulltext>;
+  ensureFigures(bookId: string, buffer: ArrayBuffer, stale: boolean): Promise<FiguresIndex>;
+  // The crops of the book read before this one.
+  clearFigureCache(): void;
   seedReadingPosition(bookId: string, state: ViewState | null): void;
   keepReadingPosition(bookId: string, state: ViewState): void;
   release(bookId: string): void;
@@ -49,16 +61,21 @@ export interface PhoneBookIo {
 
 // The real one. The pagination is cut in the webview like everywhere else, and
 // the outline is read off the table that comes back, so the chapter a reader
-// taps lands on the same block number the top bar counts in.
+// taps lands on the same block number the top bar counts in. The text and the
+// figures are the desk's own calls: the pages a lesson cites here are the pages
+// the iPad cites, because both slice them off the one synced table.
 export const phoneBookIo: PhoneBookIo = {
   readBook: readLibraryBook,
   getViewState,
   async prepare(bookId, buffer, onProgress) {
     const book = acquireEpub(bookId, buffer);
-    const { pagination } = await preparePagination(bookId, book, undefined, onProgress);
-    return { outline: outlineFor(book, pagination) };
+    const { pagination, recut } = await preparePagination(bookId, book, undefined, onProgress);
+    return { outline: outlineFor(book, pagination), recut };
   },
   loadAnnotations,
+  ensureFulltext: (bookId, buffer, stale) => bookOpenIo.ensureFulltext(bookId, buffer, "epub", stale),
+  ensureFigures: (bookId, buffer, stale) => bookOpenIo.ensureFigures(bookId, buffer, "epub", stale),
+  clearFigureCache: bookOpenIo.clearFigureCache,
   seedReadingPosition,
   keepReadingPosition,
   release: releaseEpub,
@@ -75,6 +92,11 @@ export interface OpenedBook {
   // Every mark, which is what is written back.
   allAnnotations: Annotation[];
   outline: OutlineItem[];
+  // What a lesson turn reads (docs/77), still running when the book is handed
+  // over. The shapes useCall awaits (currentFulltextRef, currentFiguresRef);
+  // null when the extraction failed.
+  fulltext: Promise<Fulltext | null>;
+  figures: Promise<FiguresIndex | null>;
 }
 
 /**
@@ -111,11 +133,13 @@ export async function openPhoneBook(
   }
 
   let outline: OutlineItem[] = [];
+  let recut = false;
   try {
     const prepared = await io.prepare(bookId, buffer, (done, total) =>
       onStatus(cuttingStatus(done, total)),
     );
     outline = prepared.outline;
+    recut = prepared.recut;
   } catch (e) {
     console.error("failed to lay the book's pages out", e);
   }
@@ -130,12 +154,26 @@ export async function openPhoneBook(
 
   io.seedReadingPosition(bookId, state);
 
+  // Fire-and-forget, in the desk's order. Neither is awaited here: the pane
+  // mounts now, and a lesson asked for before the text is in waits for it.
+  io.clearFigureCache();
+  const figures = io.ensureFigures(bookId, buffer, recut).catch((e) => {
+    console.warn("failed to extract figures", e);
+    return null;
+  });
+  const fulltext = io.ensureFulltext(bookId, buffer, recut).catch((e) => {
+    console.warn("failed to extract fulltext", e);
+    return null;
+  });
+
   return {
     buffer,
     viewState: phoneViewState(state),
     annotations: pageMarks(saved),
     allAnnotations: saved,
     outline,
+    fulltext,
+    figures,
   };
 }
 

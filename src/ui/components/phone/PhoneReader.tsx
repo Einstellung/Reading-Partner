@@ -1,14 +1,15 @@
 // The phone's reading screen (docs/70). Its own top bar over the reflow pane,
-// and nothing else: no sidebar, no call, no prep panel.
+// and the book's lesson (docs/77), which Learn draws over the whole screen: no
+// sidebar, no prep panel, no corner cards.
 //
 // The pane is a prop rather than an import. It is written against the contract
 // (reading/epub/flow-contract.ts) and the shell against the same contract, so
 // the two were built apart; the shell that mounts this screen is where they
 // meet.
 //
-// The order a book opens in is open-epub.ts, which has no React in it. What is
-// here is the binding: the state that sequence produces, the handle the pane
-// hands back, and the four things a tap can reach.
+// The order a book opens in is reading/session/open-epub.ts, which has no React
+// in it. What is here is the binding: the state that sequence produces, the
+// handle the pane hands back, and the four things a tap can reach.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
@@ -44,11 +45,15 @@ import {
   phoneBookIo,
   type OpenedBook,
   type PhoneBookIo,
-} from "./open-epub";
+} from "../../../reading/session/open-epub";
+import type { Settings } from "../../../platform/app/settings";
 import { flowTool } from "./reader-gate";
+import { createViewGate } from "./epub-lesson";
+import PhoneBookLesson from "./PhoneBookLesson";
 import PhoneDisplaySheet from "./PhoneDisplaySheet";
 import PhoneOutlineSheet from "./PhoneOutlineSheet";
 import PhoneReaderBar from "./PhoneReaderBar";
+import { useBookLesson, type LessonTopic } from "./use-book-lesson";
 
 export default function PhoneReader(props: {
   Pane: ComponentType<FlowReaderPaneProps>;
@@ -57,6 +62,14 @@ export default function PhoneReader(props: {
   // Where the book was opened from, so leaving it can record that it was read.
   topicId: string;
   path: string;
+  // The topic itself, for what a lesson turn is told about where the book is
+  // filed (turn-context.ts). Null until the shelf has been read.
+  topic: LessonTopic | null;
+  settingsRef: { readonly current: Settings };
+  pushToast(kind: "warn" | "error", message: string): void;
+  // The lesson is drawn over the reader rather than pushed on the stack, so the
+  // shell's back has to be told to close it first (nav-stack.ts).
+  onOverlayChange?(dismiss: (() => void) | null): void;
   onBack: () => void;
   io?: PhoneBookIo;
 }) {
@@ -80,6 +93,34 @@ export default function PhoneReader(props: {
   const marksRef = useRef<readonly Annotation[]>([]);
   // The last position the pane reported, for the write on the way out.
   const lastStateRef = useRef<ViewState | null>(null);
+  // Holds a citation's jump until the column can take it (epub-lesson.ts).
+  const gate = useMemo(() => createViewGate<FlowReaderView>(), []);
+
+  const removeMark = useCallback(
+    (id: string) => {
+      viewRef.current?.removeAnnotations([id]);
+      deleteAnnotations(bookId, [id]);
+      marksRef.current = marksRef.current.filter((a) => a.id !== id);
+      setPopup(null);
+    },
+    [bookId],
+  );
+
+  // Above the open/close effect below, so leaving the book hangs the lesson up
+  // before the reader lets the book go (use-book-lesson.ts).
+  const lesson = useBookLesson({
+    bookId,
+    name,
+    topic: props.topic,
+    settingsRef: props.settingsRef,
+    pushToast: props.pushToast,
+    ...(props.onOverlayChange ? { onOverlayChange: props.onOverlayChange } : {}),
+    book,
+    stats,
+    marksRef,
+    removeMark,
+    gate,
+  });
 
   // Open on arrival, and settle the book on the way out. One effect: the two
   // halves are the same book, and the cleanup has to release exactly what this
@@ -105,11 +146,12 @@ export default function PhoneReader(props: {
       });
     return () => {
       left = true;
+      gate.detach();
       viewRef.current?.destroy();
       viewRef.current = null;
       closePhoneBook(io, { bookId, topicId, path }, lastStateRef.current);
     };
-  }, [bookId, topicId, path, io]);
+  }, [bookId, topicId, path, io, gate]);
 
   // The rack drives the pane directly as well as the state: the pane holds the
   // tool it was last told about, and a prop change alone would not reach a pane
@@ -127,21 +169,19 @@ export default function PhoneReader(props: {
     [prefs],
   );
 
-  const removeMark = useCallback(
-    (id: string) => {
-      viewRef.current?.removeAnnotations([id]);
-      deleteAnnotations(bookId, [id]);
-      marksRef.current = marksRef.current.filter((a) => a.id !== id);
-      setPopup(null);
-    },
-    [bookId],
-  );
-
   return (
-    // The paper the reader chose is the whole screen's, not just the column's:
-    // the dark one redefines the tokens the bar and the sheets are drawn from
-    // (styles.css), and the other three leave them alone.
-    <div className="absolute inset-0 flex flex-col bg-background" data-reader-paper={display.paper}>
+    <div className="absolute inset-0">
+    {/* The paper the reader chose is the whole reading screen's, not just the
+        column's: the dark one redefines the tokens the bar and the sheets are
+        drawn from (styles.css), and the other three leave them alone. The
+        lesson is not under it — it is a conversation, not the paper. */}
+    <div
+      className="absolute inset-0 flex flex-col bg-background"
+      data-reader-paper={display.paper}
+      // Covered, not unmounted, while the lesson is up: the column keeps its
+      // place and its layout, so a citation can be found and marked in it.
+      aria-hidden={lesson.onScreen || undefined}
+    >
       <PhoneReaderBar
         title={name}
         status={status}
@@ -151,6 +191,8 @@ export default function PhoneReader(props: {
         onBack={props.onBack}
         onOutline={() => setOutlineOpen(true)}
         onDisplay={() => setDisplayOpen(true)}
+        {...(book ? { onLearn: lesson.learn } : {})}
+        learnDot={lesson.dot}
       />
 
       <div className="relative min-h-0 flex-1">
@@ -168,8 +210,12 @@ export default function PhoneReader(props: {
             className="absolute inset-0"
             onView={(view) => {
               viewRef.current = view;
+              gate.attach(view);
             }}
-            onInitialized={() => setStatus(null)}
+            onInitialized={() => {
+              setStatus(null);
+              gate.ready();
+            }}
             onError={(e) => {
               console.error("the reading area failed", e);
               setFailed("This book could not be drawn.");
@@ -211,6 +257,9 @@ export default function PhoneReader(props: {
         onOpenChange={setDisplayOpen}
         onChange={changeDisplay}
       />
+    </div>
+
+    {lesson.onScreen && <PhoneBookLesson title={name} lesson={lesson} />}
     </div>
   );
 }

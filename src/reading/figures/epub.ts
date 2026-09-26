@@ -14,7 +14,7 @@ import type { EpubBook, SpineDocument } from "../epub/parse";
 import { SVG_NS, XLINK_NS } from "../epub/sanitize";
 import { resolveZipPath } from "../epub/zip";
 import { figureCaptionId } from "./extract";
-import { canonicalFigureId, compareFigureIds } from "./lookup";
+import { canonicalFigureId, compareFigureIds, issuedFigureId } from "./lookup";
 import { FIGURES_VERSION, type CaptionSource, type Figure, type FiguresIndex } from "./types";
 
 // A paragraph next to a picture is only read as its caption when it is short.
@@ -105,7 +105,7 @@ export function epubFigures(book: EpubBook, pagination: Pagination): FiguresInde
       if (!href || !book.zip.has(href)) continue;
       const { caption, source } = captionFor(el);
       const printed = caption ? figureCaptionId(caption) : null;
-      const id = printed ?? `c${doc.index + 1}-${++unnumbered}`;
+      const id = printed ?? issuedFigureId(doc.index + 1, ++unnumbered);
       const key = canonicalFigureId(id);
       if (byId.has(key)) continue; // the same picture captioned twice (a bilingual edition)
       const offset = doc.text.offsets.get(el) ?? 0;

@@ -26,9 +26,22 @@ const SEP_CLASS = "[.\\-\\u2010-\\u2015\\u2212]";
 // because the citation grammar embeds it in a larger pattern.
 export const FIGURE_ID_PATTERN = `\\d{1,3}(?:${SEP_CLASS}\\d{1,3}){0,3}[a-z]?`;
 
+// The id an EPUB picture is issued when its caption prints no number:
+// "c<spine item>-<n>" (figures/epub.ts). It starts with a letter, so it cannot
+// collide with a printed number, and it is only ever minted here.
+export function issuedFigureId(spineIndex: number, n: number): string {
+  return `c${spineIndex}-${n}`;
+}
+const ISSUED_ID_PATTERN = `c\\d{1,4}-\\d{1,4}`;
+
+// Every id the index can hold, printed or issued: what a [fig:…] citation may
+// name. Kept apart from FIGURE_ID_PATTERN, which also reads numbers off
+// captions, where "Figure c2-1" is not a figure number.
+export const FIGURE_REF_PATTERN = `(?:${FIGURE_ID_PATTERN}|${ISSUED_ID_PATTERN})`;
+
 // Whether a string is shaped like a figure id at all. Used to gate a citation
 // href before it is read back as one.
-export const FIGURE_ID_RE = new RegExp(`^${FIGURE_ID_PATTERN}$`, "i");
+export const FIGURE_ID_RE = new RegExp(`^${FIGURE_REF_PATTERN}$`, "i");
 
 // The caption label in front of a number, in either language, plus whatever
 // punctuation or space separates it from the number.

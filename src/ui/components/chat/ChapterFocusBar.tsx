@@ -18,12 +18,39 @@ export interface ChapterFocusBarProps extends ChapterFocus {
 	// How far this book's preparation has got. Passed only while a run is going;
 	// absent = nothing is being prepared and the line says nothing about it.
 	prep?: { done: number; total: number } | null;
+	// A row of its own under a bar, rather than floating over the top of the
+	// conversation. The phone's lesson has a bar across the top (docs/77), and
+	// the floating line would sit on it.
+	row?: boolean;
 }
 
-export default function ChapterFocusBar({ onClear, prep, ...focus }: ChapterFocusBarProps) {
+export default function ChapterFocusBar({ onClear, prep, row, ...focus }: ChapterFocusBarProps) {
 	const label = chapterFocusLabel(focus);
 	const prepLabel = prepProgressLabel(prep);
 	if (!label && !prepLabel) return null;
+	if (row) {
+		return (
+			<div className="flex min-h-9 flex-none items-center gap-1.5 border-b border-border-subtle pl-4 pr-1 text-xs text-muted-foreground">
+				<span className="h-1.5 w-1.5 flex-none rounded-full bg-accent-line" />
+				<span className="min-w-0 flex-1 truncate [font-variant-numeric:tabular-nums]">
+					{label ? (prepLabel ? `${label} · ${prepLabel}` : label) : prepLabel}
+				</span>
+				{label && onClear && (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						title="Clear chapter focus"
+						aria-label="Clear chapter focus"
+						onClick={onClear}
+						className="flex-none text-neutral-400"
+					>
+						<IconClose size={14} />
+					</Button>
+				)}
+			</div>
+		);
+	}
 	return (
 		<div className="absolute left-1/2 top-4 z-10 flex max-w-[70%] -translate-x-1/2 items-center gap-1">
 			{label && <span className="truncate text-xs text-neutral-500">{label}</span>}

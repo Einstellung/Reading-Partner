@@ -3,7 +3,9 @@
 // book still owes. A fake io, so none of it needs a webview. Run: bun test.
 
 import { expect, test } from "bun:test";
-import type { Annotation, ViewState } from "../../../../src/platform/app/reader-contract";
+import type { Fulltext } from "../../../src/fulltext/types";
+import type { FiguresIndex } from "../../../src/reading/figures";
+import type { Annotation, ViewState } from "../../../src/platform/app/reader-contract";
 import {
   closePhoneBook,
   cuttingStatus,
@@ -11,7 +13,7 @@ import {
   openPhoneBook,
   phoneViewState,
   type PhoneBookIo,
-} from "../../../../src/ui/components/phone/open-epub";
+} from "../../../src/reading/session/open-epub";
 
 const MARK: Annotation = {
   id: "m1",
@@ -28,6 +30,9 @@ const CHAT_MARK: Annotation = {
   chatAnchor: { threadId: "t", messageTs: 1, text: "a phrase", occurrence: 0, pen: "underline" },
 } as unknown as Annotation;
 
+const FULLTEXT = { status: "ok", pages: ["one", "two"], outline: [] } as unknown as Fulltext;
+const FIGURES = { figures: [] } as unknown as FiguresIndex;
+
 function fakeIo(log: string[], over: Partial<PhoneBookIo> = {}): PhoneBookIo {
   return {
     async readBook() {
@@ -41,11 +46,22 @@ function fakeIo(log: string[], over: Partial<PhoneBookIo> = {}): PhoneBookIo {
     async prepare(_id, _buffer, onProgress) {
       log.push("prepare");
       onProgress(1, 4);
-      return { outline: [{ title: "One", page: 2, level: 0 }] };
+      return { outline: [{ title: "One", page: 2, level: 0 }], recut: false };
     },
     async loadAnnotations() {
       log.push("loadAnnotations");
       return [MARK, CHAT_MARK];
+    },
+    async ensureFulltext(_id, _buffer, stale) {
+      log.push(`ensureFulltext stale=${stale}`);
+      return FULLTEXT;
+    },
+    async ensureFigures(_id, _buffer, stale) {
+      log.push(`ensureFigures stale=${stale}`);
+      return FIGURES;
+    },
+    clearFigureCache() {
+      log.push("clearFigureCache");
     },
     seedReadingPosition() {
       log.push("seedReadingPosition");
@@ -75,6 +91,11 @@ test("the pages are cut before the marks are read", async () => {
     "prepare",
     "loadAnnotations",
     "seedReadingPosition",
+    // What a lesson turn reads, started after everything the pane needs and in
+    // the desk's order (open-book.ts).
+    "clearFigureCache",
+    "ensureFigures stale=false",
+    "ensureFulltext stale=false",
   ]);
   // The reader is told what is happening while the book is being laid out, and
   // told it in the same words the desk uses.
@@ -138,4 +159,47 @@ test("what the pane hands back never drops the marks it cannot hold", () => {
   const merged = mergeSavedMarks([MARK, CHAT_MARK], [redrawn]);
   expect(merged.map((a) => a.id)).toEqual(["m2", "m1"]);
   expect(merged[1]).toBe(redrawn);
+});
+
+test("the book is handed over before its text is in", async () => {
+  let finish: (ft: Fulltext) => void = () => {};
+  const io = fakeIo([], {
+    ensureFulltext: () => new Promise<Fulltext>((resolve) => (finish = resolve)),
+  });
+  const opened = await openPhoneBook("b1", io, () => {});
+  // The pane can mount now; the lesson waits on the promise.
+  let landed: Fulltext | null | undefined;
+  void opened.fulltext.then((ft) => (landed = ft));
+  await Promise.resolve();
+  expect(landed).toBeUndefined();
+  finish(FULLTEXT);
+  expect(await opened.fulltext).toBe(FULLTEXT);
+  expect(await opened.figures).toBe(FIGURES);
+});
+
+test("a table cut again makes both caches stale", async () => {
+  const log: string[] = [];
+  const io = fakeIo(log, {
+    async prepare() {
+      return { outline: [], recut: true };
+    },
+  });
+  await openPhoneBook("b1", io, () => {});
+  expect(log).toContain("ensureFigures stale=true");
+  expect(log).toContain("ensureFulltext stale=true");
+});
+
+test("an extraction that fails is a lesson with nothing to read, not a book that will not open", async () => {
+  const io = fakeIo([], {
+    ensureFulltext: async () => {
+      throw new Error("no text");
+    },
+    ensureFigures: async () => {
+      throw new Error("no figures");
+    },
+  });
+  const opened = await openPhoneBook("b1", io, () => {});
+  expect(opened.outline).toEqual([{ title: "One", page: 2, level: 0 }]);
+  expect(await opened.fulltext).toBeNull();
+  expect(await opened.figures).toBeNull();
 });

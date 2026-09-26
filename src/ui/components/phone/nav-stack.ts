@@ -87,7 +87,8 @@ export function canGoBack(stack: NavStack): boolean {
 }
 
 // What a back does. A view drawn over the screens rather than beside them — the
-// info call, the lesson's aside (docs/74) — is not a stack entry, and back has
+// info call, the lesson's aside (docs/74), an EPUB's lesson over its reader
+// (docs/77) — is not a stack entry, and back has
 // to close it rather than navigate underneath it:
 // popping while it is up leaves the overlay on screen and drops the reader on a
 // screen they never chose, which is what they see the moment they hang up.
