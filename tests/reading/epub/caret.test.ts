@@ -46,4 +46,23 @@ describe("the caret in a text node", () => {
     expect(lineOf(lines, { left: 210, right: 210, top: 20, bottom: 40 })).toBe(3);
     expect(lineOf(lines, { left: 150, right: 150, top: 0, bottom: 20 })).toBe(0);
   });
+
+  test("a point past the end of a short last line is on that line, not the full line above", () => {
+    // Glyph boxes sixteen pixels tall on a twenty-four pixel pitch, as the
+    // engine reports them: the gap between lines is wider than the slack. Two
+    // full lines of thirty characters, then six.
+    const lines: Box[] = [
+      { left: 0, right: 300, top: 0, bottom: 16 },
+      { left: 0, right: 300, top: 24, bottom: 40 },
+      { left: 0, right: 60, top: 48, bottom: 64 },
+    ];
+    const length = 66;
+    const caret = (i: number): Box => {
+      const row = Math.min(Math.floor(i / 30), 2);
+      const x = i === length ? 60 : (i - row * 30) * 10;
+      return { left: x, right: x, top: lines[row].top, bottom: lines[row].bottom };
+    };
+    expect(lineOf(lines, { left: 200, right: 200, top: 56, bottom: 56 })).toBe(2);
+    expect(nearestOffset(length, caret, lines, 200, 56)).toBe(66);
+  });
 });

@@ -7,16 +7,15 @@
 // offset, and the Range between them is built by hand.
 //
 // `caretRangeFromPoint` is the engine's own answer and is used when it reaches
-// into the shadow root. Measured on WebKitGTK: ShadowRoot does not carry it at
-// all, and the one on Document does resolve past a shadow host — so the two are
-// tried in that order and every answer is checked to be inside the card's own
-// content root, a range that stopped at the host being no answer.
+// into the shadow root. ShadowRoot does not carry it on WebKit, and the one on
+// Document stops at the shadow host in WKWebView and in WebKitGTK 2.52 alike
+// (docs/pitfall/278, 442). Both are still tried, and every answer is checked to
+// be inside the card's own content root, a range that stopped at the host being
+// no answer.
 //
 // Behind them is a measuring fallback: the text node nearest the point, then a
-// binary search over the caret boxes inside it. On iOS it is the path that
-// runs: the document's method stops at the shadow host (docs/pitfall/435). Both
-// paths were driven over the same words on the same sheet and wrote the same
-// range CFI, character for character. The search is logarithmic because it runs
+// binary search over the caret boxes inside it. On iOS and on the Linux desktop
+// it is the path that runs (docs/pitfall/435, 442). The search is logarithmic because it runs
 // on every move of a live drag, and it orders the boxes by the node's own line
 // boxes, because a document laid out as columns puts later text higher up.
 
@@ -137,16 +136,20 @@ export interface Box {
 }
 
 /**
- * Which of a text node's line boxes a box is on: the one holding its middle,
- * else the nearest. The line boxes come in document order, so a line's index
- * is its place in reading order. Comparing heights alone is not: in a paged
- * document laid out as CSS columns, the top line of one column is read after
- * the bottom line of the column before it.
+ * Which of a text node's line boxes a box is on: the one holding its middle;
+ * else, of the lines at its height, the nearest; else the nearest of all. The
+ * line boxes come in document order, so a line's index is its place in
+ * reading order. Comparing heights alone is not: in a paged document laid out
+ * as CSS columns, the top line of one column is read after the bottom line of
+ * the column before it. A point past the end of a paragraph's short last line
+ * is on that line, however far along: the full line above is nearer in a
+ * straight line but not at the point's height.
  */
 export function lineOf(lines: readonly Box[], r: Box): number {
   const cx = (r.left + r.right) / 2;
   const cy = (r.top + r.bottom) / 2;
   let best = 0;
+  let bestLevel = false;
   let bestDistance = Infinity;
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
@@ -154,8 +157,10 @@ export function lineOf(lines: readonly Box[], r: Box): number {
     const dy = cy < l.top - LINE_SLACK ? l.top - cy : cy > l.bottom + LINE_SLACK ? cy - l.bottom : 0;
     const d = dx * dx + dy * dy;
     if (d === 0) return i;
-    if (d < bestDistance) {
+    const level = dy === 0;
+    if ((level && !bestLevel) || (level === bestLevel && d < bestDistance)) {
       best = i;
+      bestLevel = level;
       bestDistance = d;
     }
   }
