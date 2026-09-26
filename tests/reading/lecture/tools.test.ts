@@ -6,6 +6,7 @@ import { MAX_PAGES } from "../../../src/fulltext/format";
 import { FULLTEXT_VERSION, type Fulltext } from "../../../src/fulltext/types";
 import { buildChapterTable, type TableChapter } from "../../../src/reading/chapters";
 import { buildReadChapterTool, READ_CHAPTER_MAX_PAGES } from "../../../src/reading/lecture";
+import { lessonFocusLine } from "../../../src/ui/components/phone/lesson-view";
 
 function book(pages: number): Fulltext {
   return {
@@ -84,4 +85,37 @@ test("with no chapter table it takes a page range, four times read_pages' cap", 
   expect(pages.length).toBe(READ_CHAPTER_MAX_PAGES);
   expect(out).toContain("=== Page 10 === [p.10]");
   expect(out).not.toContain("=== Page 50 ===");
+});
+
+// The live bug, on Pride and Prejudice: the tool row said "Reading chapter 6"
+// while the focus line it wrote said "CHAPTER V.". The number the model passes,
+// the row it draws and the chapter it parks on are one chapter.
+test("the row a call draws names the chapter the focus line shows", async () => {
+  const ft = book(30);
+  const table = buildChapterTable(
+    [
+      { title: "PRIDE. and PREJUDICE", startPage: 1 },
+      { title: "Chapter I.", startPage: 12 },
+      { title: "I hope Mr. Bingley will like it. CHAPTER II.", startPage: 16 },
+      { title: "CHAPTER III.", startPage: 18 },
+      { title: "CHAPTER IV.", startPage: 21 },
+      { title: "CHAPTER V.", startPage: 24 },
+      { title: "CHAPTER VI.", startPage: 26 },
+    ],
+    ft,
+  );
+  const focused: TableChapter[] = [];
+  const tool = buildReadChapterTool({
+    bookName: "pride.epub",
+    fulltext: ft,
+    chapters: table,
+    onFocus: (c) => focused.push(c),
+  });
+  expect(tool.label({ chapter: 5 })).toBe("Reading chapter 5");
+  await tool.execute({ chapter: 5 });
+  expect(focused.map((c) => c.title)).toEqual(["CHAPTER V."]);
+  expect(lessonFocusLine(table, { chapter: focused[0].number!, page: null, resumed: false })).toBe("Now: CHAPTER V.");
+
+  await tool.execute({ chapter: 2 });
+  expect(lessonFocusLine(table, { chapter: focused[1].number!, page: null, resumed: false })).toBe("Now: CHAPTER II.");
 });

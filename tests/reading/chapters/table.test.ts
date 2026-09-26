@@ -14,6 +14,7 @@ import {
   chapterRanges,
   chapterTableSection,
   chapterTableUsable,
+  chapterTitle,
   pickChapterTable,
   MIN_CHAPTERS,
 } from "../../../src/reading/chapters";
@@ -246,4 +247,56 @@ test("an already-clean table survives the filter untouched", () => {
     [2, "Two", 6, 10],
     [3, "Three", 11, 20],
   ]);
+});
+
+// Novels print their chapter numbers in Roman numerals, and a front-matter entry
+// ahead of chapter one is exactly the off-by-one the printed number exists to
+// avoid: numbered by position, "CHAPTER V." became chapter 6.
+test("a Roman chapter number is the printed number", () => {
+  expect(chapterNumber("Chapter I.")).toBe(1);
+  expect(chapterNumber("CHAPTER V.")).toBe(5);
+  expect(chapterNumber("CHAPTER XIII")).toBe(13);
+  expect(chapterNumber("CHAPTERXXVII.")).toBe(27);
+  expect(chapterNumber("Chapter IV The Return")).toBe(4);
+  expect(chapterNumber("Chapters")).toBeNull();
+  expect(chapterNumber("PRIDE. and PREJUDICE")).toBeNull();
+});
+
+// Project Gutenberg's Pride and Prejudice: the heading of an illustrated chapter
+// holds the illustration's caption, and the book's own table of contents was
+// generated from the whole heading, so the caption is in the entry's title.
+test("an illustration caption ahead of the chapter heading is not the chapter's title", () => {
+  expect(chapterTitle("I hope Mr. Bingley will like it. CHAPTER II.")).toBe("CHAPTER II.");
+  expect(chapterTitle("\u201cOn the Stairs.\u201d CHAPTERXXVII.")).toBe("CHAPTERXXVII.");
+  expect(chapterTitle("CHAPTER IV.")).toBe("CHAPTER IV.");
+  expect(chapterTitle("Part One: Chapter 1 The Beginning")).toBe("Part One: Chapter 1 The Beginning");
+  expect(chapterTitle("PRIDE. and PREJUDICE")).toBe("PRIDE. and PREJUDICE");
+});
+
+test("a Pride and Prejudice outline: front matter first, Roman chapters, captions in titles", () => {
+  const table = buildChapterTable(
+    [
+      { title: "PRIDE. and PREJUDICE", startPage: 1 },
+      { title: "Chapter I.", startPage: 12 },
+      { title: "I hope Mr. Bingley will like it. CHAPTER II.", startPage: 16 },
+      { title: "He rode a black horse. CHAPTER III.", startPage: 18 },
+      { title: "CHAPTER IV.", startPage: 21 },
+      { title: "CHAPTER V.", startPage: 24 },
+      { title: "CHAPTER VI.", startPage: 26 },
+    ],
+    book(30),
+  );
+  expect(table.map((c) => [c.number, c.title])).toEqual([
+    [null, "PRIDE. and PREJUDICE"],
+    [1, "Chapter I."],
+    [2, "CHAPTER II."],
+    [3, "CHAPTER III."],
+    [4, "CHAPTER IV."],
+    [5, "CHAPTER V."],
+    [6, "CHAPTER VI."],
+  ]);
+  const five = chapterByNumber(table, 5)!;
+  expect([five.startPage, five.endPage]).toEqual([24, 25]);
+  expect(chapterTableSection(table)).toContain("- [ch.5] CHAPTER V. — p.24-25");
+  expect(chapterTableSection(table)).toContain("- [ch.2] CHAPTER II. — p.16-17");
 });

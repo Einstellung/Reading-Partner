@@ -14,6 +14,7 @@ export {
   chapterRanges,
   chapterTableSection,
   chapterTableUsable,
+  chapterTitle,
   chapterTokens,
   pageRangeText,
   pickChapterTable,
