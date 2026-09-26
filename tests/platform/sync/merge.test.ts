@@ -45,7 +45,7 @@ function merged(path: string, base: Uint8Array | null, local: Uint8Array, remote
 
 test("the files the app writes are classified by what they hold", () => {
   expect(strategyFor("annotations-abc123.json")).toBe("records");
-  expect(strategyFor("threads-abc123.json")).toBe("records");
+  expect(strategyFor("threads-abc123.json")).toBe("messages");
   expect(strategyFor("library.json")).toBe("records");
   expect(strategyFor("topics.json")).toBe("records");
   expect(strategyFor("reading-state.json")).toBe("records");

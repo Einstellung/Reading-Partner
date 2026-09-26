@@ -20,6 +20,7 @@ import {
 import { lowerCursorWins } from "./cursors";
 import { mergeObject, type ResolveConflict } from "./fields";
 import { latticeFor } from "./lattice";
+import { mergeThread } from "./messages";
 import { mergeProse } from "./prose";
 import {
   lineCollection,
@@ -27,6 +28,7 @@ import {
   readCollection,
   recordShape,
   writeCollection,
+  type SettleRecord,
 } from "./records";
 import {
   canonical,
@@ -93,15 +95,17 @@ export function mergeFile(input: MergeInput): MergeOutput {
   const merged =
     strategy === "records"
       ? mergeRecordFile(input)
-      : strategy === "fields"
-        ? mergeFieldFile(input)
-        : strategy === "cursors"
-          ? mergeFieldFile(input, lowerCursorWins)
-          : strategy === "prose"
-            ? mergeProseFile(input)
-            : strategy === "lattice"
-              ? mergeLatticeFile(input)
-              : null;
+      : strategy === "messages"
+        ? mergeRecordFile(input, mergeThread)
+        : strategy === "fields"
+          ? mergeFieldFile(input)
+          : strategy === "cursors"
+            ? mergeFieldFile(input, lowerCursorWins)
+            : strategy === "prose"
+              ? mergeProseFile(input)
+              : strategy === "lattice"
+                ? mergeLatticeFile(input)
+                : null;
   // A strategy returns null when the file is not the shape it merges —
   // unparseable JSON, a record with no identity, bytes that are not UTF-8. The
   // file then keeps its content whole instead of being half-understood.
@@ -143,7 +147,9 @@ function texts(input: MergeInput): Texts | null {
   return { base: input.base === null ? null : decode(input.base), local, remote };
 }
 
-function mergeRecordFile(input: MergeInput): MergeOutput | null {
+// Records, and the messages strategy, which is records with a way into a
+// thread both sides edited.
+function mergeRecordFile(input: MergeInput, settle?: SettleRecord): MergeOutput | null {
   const shape = recordShape(input.path);
   const t = texts(input);
   if (shape === null || t === null) return null;
@@ -167,7 +173,7 @@ function mergeRecordFile(input: MergeInput): MergeOutput | null {
   // A base that no longer parses, or that predates the shape, is no base.
   const base = t.base === null ? null : readCollection(parseJson(t.base), shape);
 
-  const merged = mergeCollection(base, local, remote);
+  const merged = mergeCollection(base, local, remote, settle);
   const written = writeCollection(merged, shape, base, local, remote);
   return {
     merged: write(written.value, t.base, t.local, t.remote),

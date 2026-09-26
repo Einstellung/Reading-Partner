@@ -96,13 +96,15 @@ export interface ThreadMessage {
   // write untouched (tests/threads-store.test.ts holds that property down —
   // it is not a type, and a `messages.map(...)` in a write path would end it).
   //
-  // It does not survive everything. This file merges with the records strategy
-  // and a thread record is atomic there (platform/sync/merge/records.ts): two
-  // devices that both edited one thread get one whole version of it, and the
-  // losing version takes its messages with it into the journal. That costs a
-  // whole message today; once the backfill runs it can also hand back a
-  // surviving message stripped of the id a device that migrated later gave it.
-  // Which is why an anchor carries the thread-and-stamp pair beside the id.
+  // It does not survive everything. This file merges one message at a time
+  // (platform/sync/merge/messages.ts), and the id is the message's identity
+  // there, "<threadId>:<ts>:<role>" standing in when it has none. Two devices
+  // that both edited one message still get one whole version of it, and a
+  // thread whose messages cannot be keyed one to one is still settled whole.
+  // Either can hand back a surviving message without the id one side gave it,
+  // which is why an anchor carries the thread-and-stamp pair beside the id. A
+  // backfill that adds ids to old messages changes their identity: it has to
+  // mint the same id on every device, or both versions of the message stay.
   id?: string;
   role: "user" | "ai";
   text: string;
