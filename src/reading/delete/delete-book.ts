@@ -46,6 +46,7 @@ import { deleteOutlineWithRehearsals, deleteRetellWithTalk } from "./delete-rete
 import { prepPaperCacheFiles } from "./prep-files";
 import {
   deadLocalPathsFor,
+  filesOnlyInTopic,
   hasOtherReference,
   isLastReferenceToBook,
   observationIdsToDelete,
@@ -286,10 +287,13 @@ async function deleteLocalFiles(bookId: string, deps: DeleteBookDeps): Promise<v
 export async function deleteIfUnreferenced(
   hash: string,
   deps: DeleteBookDeps = liveDeleteBookDeps,
+  // Documents the same sweep is deleting, whose supplement lists do not count
+  // (pick.ts orphanedTogether): two that list each other can then both go.
+  going: ReadonlySet<string> = new Set(),
 ): Promise<boolean> {
   const topics = await deps.listTopics();
   const lists = await deps.listSupplementLists();
-  if (hasOtherReference(hash, topics, lists)) return false;
+  if (hasOtherReference(hash, topics, lists, going)) return false;
   await deleteBook(hash, deps);
   return true;
 }
@@ -312,4 +316,16 @@ export async function isLastReference(
   deps: Pick<DeleteBookDeps, "listSupplementLists"> = liveDeleteBookDeps,
 ): Promise<boolean> {
   return isLastReferenceToBook(topics, topicId, file, await deps.listSupplementLists());
+}
+
+/**
+ * The files the topic's delete confirmation offers to delete with it: the ones
+ * nothing else lists once the topic is gone (pick.ts filesOnlyInTopic).
+ */
+export async function listFilesOnlyInTopic(
+  topics: readonly Topic[],
+  topicId: string,
+  deps: Pick<DeleteBookDeps, "listSupplementLists"> = liveDeleteBookDeps,
+): Promise<FileRef[]> {
+  return filesOnlyInTopic(topics, topicId, await deps.listSupplementLists());
 }

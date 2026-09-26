@@ -116,6 +116,55 @@ export function isLastReferenceToBook(
 }
 
 /**
+ * The documents among `hashes` that nothing outside them would still list: the
+ * set that can go together. A document another one of them lists as a
+ * supplement goes with it, and one listed by a book that is not going stays —
+ * so the answer is found by dropping the ones something else holds until
+ * nothing more drops.
+ */
+export function orphanedTogether(
+  hashes: Iterable<string>,
+  topics: readonly Topic[],
+  lists: readonly SupplementList[],
+): Set<string> {
+  let going = new Set(hashes);
+  for (;;) {
+    const next = new Set([...going].filter((h) => !hasOtherReference(h, topics, lists, going)));
+    if (next.size === going.size) return next;
+    going = next;
+  }
+}
+
+/**
+ * The files of a topic that no other topic, and no book outside them, still
+ * lists: what the topic's delete confirmation offers to delete with it
+ * (docs/50). The same count deleteIfUnreferenced makes, taken with the topic
+ * gone. One FileRef per document, in the topic's order; a file with no hash yet
+ * is not a document this can speak for and is never offered.
+ */
+export function filesOnlyInTopic(
+  topics: readonly Topic[],
+  topicId: string,
+  lists: readonly SupplementList[],
+): FileRef[] {
+  const topic = topics.find((t) => t.id === topicId);
+  if (!topic) return [];
+  const seen = new Set<string>();
+  const files = topic.files.filter((f) => {
+    if (!f.hash || seen.has(f.hash)) return false;
+    seen.add(f.hash);
+    return true;
+  });
+  const rest = topics.filter((t) => t.id !== topicId);
+  const going = orphanedTogether(
+    files.map((f) => f.hash!),
+    rest,
+    lists,
+  );
+  return files.filter((f) => going.has(f.hash!));
+}
+
+/**
  * Pure: a retell with one material swapped for another, or null when it does
  * not name the old one. What a translation does to a retell of the original
  * (retire-book.ts): the pass the reader made is over the same work. A retell

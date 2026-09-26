@@ -7,10 +7,17 @@ import {
   deleteBook,
   deleteIfUnreferenced,
   isLastReference,
+  listFilesOnlyInTopic,
   removeFromTopic,
   type DeleteBookDeps,
 } from "../../../src/reading/delete/delete-book";
-import { hasOtherReference, isLastReferenceToBook } from "../../../src/reading/delete/pick";
+import { deleteTopic, type DeleteTopicDeps } from "../../../src/reading/delete/delete-topic";
+import {
+  filesOnlyInTopic,
+  hasOtherReference,
+  isLastReferenceToBook,
+  orphanedTogether,
+} from "../../../src/reading/delete/pick";
 import type { Topic } from "../../../src/platform/app/topics";
 
 const X = "xxxx0000";
@@ -123,4 +130,95 @@ test("a deleted book takes its threads' images and its prep's paper caches", asy
   expect(w.removed).toContain("images/threads/th-2");
   expect(w.removed).toContain("fulltext-k1.json");
   expect(w.removed).toContain("figures-k1.json");
+});
+
+// --- a topic's delete, with the files only in it ---------------------------
+
+test("files only in a topic: not in another topic, not a surviving book's supplement", () => {
+  const topics = [
+    topic("gone", [["x", X], ["y", Y], ["z", Z], ["s", S], ["x2", X], ["new", ""]]),
+    topic("kept", [["z", Z], ["w", "wwww4444"]]),
+  ];
+  // S is a supplement of a book in "kept", so it stays.
+  const only = filesOnlyInTopic(topics, "gone", [{ bookId: "wwww4444", items: [{ hash: S }] }]);
+  expect(only.map((f) => f.path)).toEqual(["x", "y"]);
+  expect(filesOnlyInTopic(topics, "nope", [])).toEqual([]);
+});
+
+test("a supplement of a book that goes with the topic goes too; one of a surviving book stays", () => {
+  const topics = [topic("gone", [["x", X], ["s", S]]), topic("kept", [["z", Z]])];
+  const onlyTheTopic = filesOnlyInTopic(topics, "gone", [{ bookId: X, items: [{ hash: S }] }]);
+  expect(onlyTheTopic.map((f) => f.hash)).toEqual([X, S]);
+  // Two that list each other, both only here: both go.
+  expect(
+    orphanedTogether([X, S], [], [
+      { bookId: X, items: [{ hash: S }] },
+      { bookId: S, items: [{ hash: X }] },
+    ]),
+  ).toEqual(new Set([X, S]));
+  // A surviving book lists S: S drops out, and X with it only if it needed S.
+  expect(orphanedTogether([X, S], [], [{ bookId: Z, items: [{ hash: S }] }])).toEqual(new Set([X]));
+});
+
+function topicDeps(topics: Topic[]): DeleteTopicDeps {
+  const none = async () => [];
+  return {
+    tombstone: async () => {},
+    listRetells: none,
+    outlineIdOfRetell: async () => null,
+    deleteRetell: async () => {},
+    listOutlines: none,
+    deleteOutline: async () => {},
+    listRehearsals: none,
+    deleteRehearsal: async () => {},
+    listSavedArticles: none,
+    setArticleTopic: async () => {},
+    listThreadFiles: none,
+    clearThreadTopic: async () => {},
+    clearDistillCursors: async () => {},
+    removeFile: async () => {},
+    flushThreads: async () => {},
+    removeTopicRecord: async (id) => {
+      const i = topics.findIndex((t) => t.id === id);
+      if (i >= 0) topics.splice(i, 1);
+    },
+  };
+}
+
+test("deleting a topic with its files deletes the ones only in it, mutual supplements included", async () => {
+  const topics = [topic("gone", [["x", X], ["y", Y], ["s", S]]), topic("kept", [["y", Y]])];
+  const w = world(topics, { [X]: [S], [S]: [X] });
+  const deleted = await deleteTopic("gone", topicDeps(topics), {
+    alsoDeleteFiles: [X, S],
+    bookDeps: w.deps,
+  });
+  expect(topics.map((t) => t.id)).toEqual(["kept"]);
+  expect(new Set(deleted)).toEqual(new Set([X, S]));
+  expect(new Set(w.tombstoned)).toEqual(new Set([X, S]));
+  expect(w.tombstoned).not.toContain(Y);
+});
+
+test("a file filed somewhere else since the confirmation is counted again and stays", async () => {
+  const topics = [topic("gone", [["x", X], ["z", Z]]), topic("kept", [["x", X]])];
+  const w = world(topics, {});
+  const deleted = await deleteTopic("gone", topicDeps(topics), {
+    alsoDeleteFiles: [X, Z],
+    bookDeps: w.deps,
+  });
+  expect(deleted).toEqual([Z]);
+  expect(w.tombstoned).toEqual([Z]);
+});
+
+test("without the option the topic's files are left alone", async () => {
+  const topics = [topic("gone", [["x", X]])];
+  const w = world(topics, {});
+  expect(await deleteTopic("gone", topicDeps(topics), { bookDeps: w.deps })).toEqual([]);
+  expect(w.tombstoned).toEqual([]);
+});
+
+test("the confirmation's list is read with the supplement lists", async () => {
+  const topics = [topic("gone", [["x", X], ["s", S]])];
+  const w = world(topics, { [Z]: [S] });
+  const only = await listFilesOnlyInTopic(topics, "gone", w.deps);
+  expect(only.map((f) => f.hash)).toEqual([X]);
 });
