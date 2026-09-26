@@ -16,9 +16,10 @@ jobs:
           # more than the runner itself.
           - platform: ubuntu-22.04
             args: ""
-          # One universal binary rather than two downloads.
+          # Apple silicon only; Intel Macs are not built. latest.json then
+          # carries darwin-aarch64 and darwin-aarch64-app, no x86_64 keys.
           - platform: macos-latest
-            args: "--target universal-apple-darwin"
+            args: "--target aarch64-apple-darwin"
           - platform: windows-latest
             args: ""
 
@@ -33,7 +34,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -108,7 +109,7 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
           # latest.json carries a key per installer (linux-x86_64-deb, -rpm,
-          # -appimage, windows-x86_64-msi, -nsis, darwin-*-app), and the updater
+          # -appimage, windows-x86_64-msi, -nsis, darwin-aarch64-app), and the updater
           # looks up the one it was installed from first. This only picks what
           # the bare windows-x86_64 fallback points at: the setup.exe, which is
           # what the release page offers first.
