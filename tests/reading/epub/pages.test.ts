@@ -122,6 +122,19 @@ describe("where the reader is on the desk", () => {
     expect(columnPosition(50, 1, 0)).toEqual({ pageIndex: 0, pageY: 0 });
   });
 
+  test("a top edge in the gap between two sheets is on the lower one", () => {
+    // Sheet i spans [i*pitch + gap/2, i*pitch + gap/2 + height): at scale 1
+    // the gap under sheet 2 and over sheet 3 is [3*pitch - 4, 3*pitch + 4).
+    const pitch = PAGE_GEOMETRY.height + 8;
+    expect(columnPosition(3 * pitch - 4, 1, 10)).toEqual({ pageIndex: 3, pageY: 0 });
+    expect(columnPosition(3 * pitch - 0.5, 1, 10)).toEqual({ pageIndex: 3, pageY: 0 });
+    expect(columnPosition(3 * pitch - 4.5, 1, 10).pageIndex).toBe(2);
+    expect(columnPosition(columnScrollTop(2, PAGE_GEOMETRY.height, 1), 1, 10)).toEqual({
+      pageIndex: 2,
+      pageY: PAGE_GEOMETRY.height,
+    });
+  });
+
   test("the flip rests on the nearest slot", () => {
     expect(flipPosition(0, 800, 5)).toBe(0);
     expect(flipPosition(1200, 800, 5)).toBe(2);

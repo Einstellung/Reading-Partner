@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { ViewState } from "../../../src/platform/app/reader-contract";
 import { extractDocumentText } from "../../../src/reading/epub/text";
 import { characterRuler, paginate, type Pagination } from "../../../src/reading/epub/paginate";
-import { PAGE_GEOMETRY, columnScrollTop } from "../../../src/reading/epub/page-geometry";
+import { PAGE_GEOMETRY, columnPosition, columnScrollTop } from "../../../src/reading/epub/page-geometry";
 import { parseEpub } from "../../../src/reading/epub/parse";
 import {
   blockIndexAt,
@@ -164,6 +164,21 @@ describe("where the reader is", () => {
     expect(column.scrollTop).toBe(columnScrollTop(4, 120, 1.5));
     expect(column.scrollLeft).toBeNull();
     expect(pageScroll("vertical", 0, 0, 1, 0).scrollTop).toBe(columnScrollTop(0, 0, 1));
+  });
+
+  test("a page placed in the column reads back as that page once the webview rounds the offset", () => {
+    // An iPad fit-width scale: 834 CSS px over the 816 px sheet. Page 5's top
+    // is at a fractional offset (5436.47) and WKWebView keeps scrollTop in
+    // whole pixels; the top bar read the rounded-down offset as page 4.
+    const scale = 834 / 816;
+    for (let i = 0; i < 38; i++) {
+      const exact = pageScroll("vertical", i, 0, scale, 0).scrollTop ?? 0;
+      for (const stored of [Math.floor(exact), Math.round(exact), Math.ceil(exact)]) {
+        const at = columnPosition(stored, scale, 38);
+        expect(at.pageIndex).toBe(i);
+        expect(at.pageY).toBeLessThan(1);
+      }
+    }
   });
 
   test("a state without a CFI does not carry an empty one", () => {

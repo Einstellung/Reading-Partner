@@ -206,6 +206,12 @@ export function stripMetrics(scale: number): StripMetrics {
 /**
  * Where the reader is in the vertical column: the page whose sheet the
  * viewport's top edge is in, and how far into it, in unscaled page units.
+ *
+ * A top edge in the gap between two sheets is on the lower one. Sheet i
+ * starts half a gap into its slot, and a page placed at its top
+ * (columnScrollTop) comes back from the webview rounded to a whole pixel,
+ * possibly a fraction below the slot's start (docs/pitfall/450); counted from
+ * the slot's start, that is the page before.
  */
 export function columnPosition(
   scrollTop: number,
@@ -214,7 +220,7 @@ export function columnPosition(
 ): { pageIndex: number; pageY: number } {
   const { pitch } = stripMetrics(scale);
   if (pagesCount <= 0 || pitch <= 0) return { pageIndex: 0, pageY: 0 };
-  const index = Math.min(pagesCount - 1, Math.max(0, Math.floor(scrollTop / pitch)));
+  const index = Math.min(pagesCount - 1, Math.max(0, Math.floor((scrollTop + PAGE_GAP / 2) / pitch)));
   const within = Math.max(0, scrollTop - index * pitch) / scale;
   return { pageIndex: index, pageY: Math.min(PAGE_HEIGHT, within) };
 }
