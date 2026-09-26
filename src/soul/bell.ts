@@ -31,6 +31,7 @@
 import { appBells, BRIEF_MAX, type Bell, type BellStore, type RunDonePayload } from "../legion/bell";
 import { appRuns, type RunStore } from "../legion/run";
 import { appData } from "../platform/app/appdata";
+import { plainBlocks } from "../platform/std/markdown-plain";
 import type { AgentTool } from "../legion/execute/turn";
 import type { SteerPort } from "../legion/execute/contract";
 import type { HeldHarness } from "../legion/execute/held";
@@ -251,7 +252,9 @@ export const COVER_MAX = 120;
  * turn to say what its first sentence already says.
  */
 export function coverOf(reply: string): string {
-  const text = reply.trim().replace(/\s+/g, " ");
+  // Replies are markdown and the card is a line of text: the first block with
+  // its marks off, so a reply that opens on a heading is covered by it.
+  const text = plainBlocks(reply)[0] ?? "";
   if (text === "") return "";
   const end = text.search(/[.!?。！？](\s|$)/u);
   const first = end === -1 ? text : text.slice(0, end + 1);

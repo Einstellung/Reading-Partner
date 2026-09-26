@@ -84,6 +84,20 @@ test("a cover is one sentence and never longer than the card", () => {
   expect(item.cover.length).toBeLessThanOrEqual(120);
 });
 
+// The card is one line of text, not a renderer: a reply that opens on a
+// markdown heading reads as the heading, without the marks.
+test("a reply opening on a heading covers with the heading, marks gone", () => {
+  const text = "# *Pride and Prejudice*, Chapter IX (pp.40–43)\n\nThis is the novel's Chapter IX [p.40]. More.";
+  const item = unseenTurnItem({ ...ANSWER, outcome: { kind: "answer", text } });
+  expect(item.cover).toBe("Pride and Prejudice, Chapter IX (pp.40–43)");
+});
+
+test("a reply opening on prose covers with its first sentence, marks and citations gone", () => {
+  const text = "**Darcy** is *proud* [p.12], not `rude`. Second.";
+  const item = unseenTurnItem({ ...ANSWER, outcome: { kind: "answer", text } });
+  expect(item.cover).toBe("Darcy is proud, not rude.");
+});
+
 test("a thread with no mark and no page leaves both off the origin", () => {
   const item = unseenTurnItem({ ...ANSWER, annotationId: "", page: null });
   expect(item.origin).toEqual({ place: "book", bookId: "b-hash", threadId: "t-1" });
