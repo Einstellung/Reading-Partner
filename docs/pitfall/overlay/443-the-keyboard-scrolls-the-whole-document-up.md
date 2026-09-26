@@ -20,6 +20,6 @@ iPhone 上三个对话面（手机 EPUB 课堂、手机 PDF 课堂、简报对�
 
 ## 解法
 
-手机外壳（`phone/KeyboardShell.tsx`，算式在 `common/keyboard-frame.ts`）键盘在时只挪不缩：`top` 设成 `visualViewport.offsetTop`，把自己放到 WebKit 卷到的地方，尺寸不变；被键盘盖住的高度 `covered = 外壳高 - visualViewport.height` 经 `ShellKeyboardContext` 交给 `CallView`，它自己垫 `covered - env(safe-area-inset-bottom)`（它本来就停在底部安全区上方）。外壳外面套一层 `overflow: clip`：挪下去的外壳伸出页面底边，不裁掉就把文档拉长、WebKit 能卷得更多、外壳又跟着挪；用 `clip` 不用 `hidden`，后者仍是滚动容器，聚焦时会被 WebKit 卷。用 `top` 不用 transform，免得外壳变成里面 `fixed` 元素的包含块。iPad 和桌面没有这个 context，照旧由 `CallView` 自己量。
+手机外壳（`common/KeyboardShell.tsx`，算式在 `common/keyboard-frame.ts`）键盘在时只挪不缩：`top` 设成 `visualViewport.offsetTop`，把自己放到 WebKit 卷到的地方，尺寸不变；被键盘盖住的高度 `covered = 外壳高 - visualViewport.height` 经 `ShellKeyboardContext` 交给 `CallView`，它自己垫 `covered - env(safe-area-inset-bottom)`（它本来就停在底部安全区上方）。外壳外面套一层 `overflow: clip`：挪下去的外壳伸出页面底边，不裁掉就把文档拉长、WebKit 能卷得更多、外壳又跟着挪；用 `clip` 不用 `hidden`，后者仍是滚动容器，聚焦时会被 WebKit 卷。用 `top` 不用 transform，免得外壳变成里面 `fixed` 元素的包含块。iPad 第一次弹键盘也是这种做法，平板/桌面外壳套同一个 `KeyboardShell`，见坑 454。
 
 外壳不能跟着缩到可见区域那么高：那样课堂底下挂着的 EPUB 阅读器跟着重排，模拟器上第二次在 EPUB 课堂里弹键盘时 React 报 update depth 超限、整个 app 白屏（PDF 课堂和简报对话不出）。确切的循环没能在模拟器外复现；只挪不缩之后，键盘变化只重渲 `KeyboardShell` 和读 context 的对话，别的都不重排也不重渲。
