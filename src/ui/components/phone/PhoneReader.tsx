@@ -32,6 +32,8 @@ import {
   writeFlowDisplay,
   type FlowDisplay,
 } from "../../../reading/epub/flow/flow-display";
+import { EDGE_ZONE } from "./edge-back-gesture";
+import { pageMarks } from "../../../platform/app/reader-contract";
 import { browserPrefStore } from "../base/pref-store";
 import { IconTrash } from "../base/icons";
 import { cn } from "../lib/utils";
@@ -245,11 +247,15 @@ export default function PhoneReader(props: {
           <Pane
             bookId={bookId}
             buffer={book.buffer}
-            annotations={book.annotations}
+            // The marks as they stand now, not as the book opened: a switch
+            // between scrolling and turning mounts a new view with this list,
+            // and the list it saves back replaces the page marks on disk.
+            annotations={pageMarks(marksRef.current)}
             authorName="me"
             viewState={book.viewState}
             tool={flowTool(tool)}
             display={display}
+            backEdgePx={EDGE_ZONE}
             className="absolute inset-0"
             onView={(view) => {
               viewRef.current = view;
@@ -303,7 +309,7 @@ export default function PhoneReader(props: {
         outline={book?.outline ?? []}
         paper={display.paper}
         onOpenChange={setOutlineOpen}
-        onGoToPage={(pageIndex) => viewRef.current?.goToPage(pageIndex)}
+        onGoToChapter={(pageIndex) => viewRef.current?.goToChapter(pageIndex)}
       />
 
       <PhoneDisplaySheet

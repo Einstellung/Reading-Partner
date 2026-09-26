@@ -9,7 +9,7 @@ import { openZip, resolveZipPath } from "../../../src/reading/epub/file/zip";
 import { sanitize, sanitizeDocument } from "../../../src/reading/epub/file/sanitize";
 import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { blockTexts, characterRuler, paginate } from "../../../src/reading/epub/paginate";
-import { fulltextFrom } from "../../../src/reading/epub/fulltext";
+import { fulltextFrom, outlineHrefAt } from "../../../src/reading/epub/fulltext";
 import { parseEpubCfi } from "../../../src/reading/epub/file/cfi";
 import { epubFigures } from "../../../src/reading/figures/epub";
 import { renderEpubFigure } from "../../../src/reading/figures/render";
@@ -268,6 +268,20 @@ test("an EPUB produces the Fulltext shape a PDF produces", async () => {
   // The outline never goes backwards: chapter two is not before chapter one.
   const pages = ft.outline.map((o) => o.page);
   expect([...pages].sort((a, b) => a - b)).toEqual(pages);
+});
+
+test("an outline row's page leads back to the heading it was made from", async () => {
+  const book = parseEpub(simpleBook());
+  const pagination = await paginate(book, ruler);
+  const ft = fulltextFrom(book, pagination);
+  const entryOf = (name: string) => book.docs.find((d) => d.entry.endsWith(name))!.entry;
+  const [first, second] = ft.outline;
+  expect(outlineHrefAt(book, pagination, first.page)).toBe(`${entryOf("c1.xhtml")}#h1`);
+  expect(outlineHrefAt(book, pagination, second.page)).toBe(`${entryOf("c2.xhtml")}#h2`);
+  // A page no chapter starts on has no heading to go to.
+  const bare = pagination.blocks.findIndex((_, i) => !ft.outline.some((o) => o.page === i + 1));
+  expect(bare).toBeGreaterThanOrEqual(0);
+  expect(outlineHrefAt(book, pagination, bare + 1)).toBeNull();
 });
 
 // --- locators ----------------------------------------------------------------

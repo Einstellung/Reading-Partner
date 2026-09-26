@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 435）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 445）。
 
 ## EmbedPDF 引擎
 
@@ -147,6 +147,12 @@
 - [425-a-card-shown-before-the-reading-faces-keeps-the-previous-column](./touch/425-a-card-shown-before-the-reading-faces-keeps-the-previous-column.md) — EPUB 翻页的页卡片挂上时只量一次页首在第几列，`createEpubReader` 拿到存盘的分页表就挂、不等 Noto Serif，回退字体更密把页首量进前一列，字体到了也不重算：高亮存对了页却画在显示错列的卡片上看不见，相邻页码同一列。挂第一张卡片之前 `await readingFontsReady()`
 - [450-a-page-placed-at-a-fractional-scrolltop-reads-back-as-the-page-before](./touch/450-a-page-placed-at-a-fractional-scrolltop-reads-back-as-the-page-before.md) — EPUB 竖排的页顶在 iPad 的 scale 下是小数（5436.47），WKWebView 读回整数 scrollTop，`columnPosition` 从槽起点 `floor` 就算成上一页：跳到 p.6 的引文或图卡，屏幕是第 6 页、顶栏写 5、存盘 `pageY` 1056。顶边落在两纸间距里算下面那张（加半个间距再 floor）；Chromium 留小数，无头复现不出
 - [434-a-tap-turn-pays-for-the-synthetic-mouse-events](./touch/434-a-tap-turn-pays-for-the-synthetic-mouse-events.md) — 手机分页探针里点按翻页每次掉一帧 42-47 ms，拖动翻页没有；touchend 里 `preventDefault()` 后降到 22-26 ms。推测是 iOS 在 tap 后补发的合成鼠标事件和 `:hover` 失效落在整章大小的 shadow 树上；自己处理点按的阅读区都该取消 touchend，链接和标注靠自己的命中测试分派
+- [435-caret-search-in-columns-reads-later-text-as-earlier](./touch/435-caret-search-in-columns-reads-later-text-as-earlier.md) — iOS 上 `caretRangeFromPoint` 进不了 shadow root，走 `caret.ts` 的测量二分；它按高度排序，CSS 多栏里后一栏顶行比前一栏底部高，翻页模式的锚点取到下一屏。按文本节点自己的行盒（文档顺序）排序
+- [436-a-collapsed-range-in-columns-measures-as-one-column](./touch/436-a-collapsed-range-in-columns-measures-as-one-column.md) — iOS 上 CSS 多栏里折叠 Range 的矩形按没分栏的位置报，一字符 Range 才对；caret 二分拿它比，长按划线起止解到同一处、标注存不下。量边界用字符的矩形
+- [442-webkitgtk-caretrangefrompoint-also-stops-at-the-host](./touch/442-webkitgtk-caretrangefrompoint-also-stops-at-the-host.md) — WebKitGTK 2.52.6 上 `document.caretRangeFromPoint` 也停在宿主给 `DIV@0`，坑 278 那行对 Linux 的说法已过时；桌面划线和 iOS 走同一条 `caret.ts` 测量二分，坑 435、436 桌面也有，而且在 Linux 上就能用 WebKit2 绑定量
+- [437-capturing-on-the-routers-ancestor-hides-the-lift](./touch/437-capturing-on-the-routers-ancestor-hides-the-lift.md) — 翻页模式划线时把指针捕获到 frame（路由所在 scroller 的祖先）上，路由收不到抬手、以为手指还按着，之后的触摸全按多指吞掉。捕获到 scroller 上
+- [438-a-margin-past-the-first-column-is-no-element](./touch/438-a-margin-past-the-first-column-is-no-element.md) — 翻页模式第一栏之后的页边、段间空白不在任何元素里，划线拖进去找不到 caret。翻页视图把点收进版心再上下探
+- [439-a-remounted-view-saves-the-opening-marks-back](./touch/439-a-remounted-view-saves-the-opening-marks-back.md) — 切换滚动/翻页的新视图拿开书时的标注，存回去删掉中途划的线。传当前标注
 
 ## 网络与 CSP
 

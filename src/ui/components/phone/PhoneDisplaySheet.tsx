@@ -26,6 +26,7 @@ import {
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../ui/dialog";
+import { Switch } from "../ui/switch";
 
 export default function PhoneDisplaySheet(props: {
   open: boolean;
@@ -86,6 +87,14 @@ export default function PhoneDisplaySheet(props: {
                 onClick={() => onChange({ ...display, padX: s.value })}
               />
             ))}
+          </Row>
+
+          <Row label="Turn pages">
+            <Switch
+              aria-label="Turn pages"
+              checked={display.mode === "paged"}
+              onCheckedChange={(on) => onChange({ ...display, mode: on ? "paged" : "scroll" })}
+            />
           </Row>
 
           <Row label="Paper">
