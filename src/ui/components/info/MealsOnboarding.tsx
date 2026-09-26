@@ -2,7 +2,7 @@
 // tapping, then the daily targets and the button that plans the week.
 //
 // Rendering and event binding only. The steps, their answers, what completes
-// them and the profile they make are info/meals/onboarding.ts.
+// them and the profile they make are info/meals/screen/onboarding.ts.
 
 import { useEffect, useReducer, useRef, useState } from "react";
 
@@ -34,9 +34,9 @@ import {
   type OnboardingState,
   type StepId,
   type StepperField,
-} from "../../../info/meals/onboarding";
+} from "../../../info/meals/screen/onboarding";
 import { hostRegion } from "../../../info/meals/region";
-import { targetsSummary } from "../../../info/meals/view";
+import { targetsSummary } from "../../../info/meals/screen/view";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { MealsColumn, MealsHeader, TargetsCard } from "./MealsChrome";

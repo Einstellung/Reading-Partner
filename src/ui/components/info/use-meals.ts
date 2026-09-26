@@ -9,12 +9,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { todayLocal } from "../../../info/collect/store";
 import { liveMealsPorts } from "../../../info/meals/live";
-import { setShoppingChecked } from "../../../info/meals/shopping";
+import { setShoppingChecked } from "../../../info/meals/plan/shopping";
 import { markShoppingTripDone } from "../../../info/meals/tools";
-import type { PhotoCache } from "../../../info/meals/dish-photos";
-import { loadMealsPhotos } from "../../../info/meals/photo-store";
-import { loadMeals, saveShopping } from "../../../info/meals/store";
-import type { MealsState } from "../../../info/meals/types";
+import type { PhotoCache } from "../../../info/meals/photos/dish-photos";
+import { loadMealsPhotos } from "../../../info/meals/photos/photo-store";
+import { loadMeals, saveShopping } from "../../../info/meals/plan/store";
+import type { MealsState } from "../../../info/meals/plan/types";
 
 export interface MealsController {
   // Null until info-meals.json has answered. The screen holds on null rather

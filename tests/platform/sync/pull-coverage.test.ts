@@ -17,7 +17,7 @@ import { expect, test } from "bun:test";
 import { PALACE } from "../../../src/palace";
 import { ASK_PULL_ROUTE } from "../../../src/info/briefer/handoff";
 import { READER_PULL_ROUTE } from "../../../src/info/briefer/reader";
-import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/info/meals/photo-sweep";
+import { MEALS_PHOTOS_PULL_ROUTE } from "../../../src/info/meals/photos/photo-sweep";
 import { SOURCES_PULL_ROUTE } from "../../../src/info/sources/source-store";
 import {
   BOOK_CACHE_PULL_ROUTE,

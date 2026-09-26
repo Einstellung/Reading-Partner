@@ -20,7 +20,7 @@ import type {
   LabProposalCardData,
 } from "../../../info/boxes/cards";
 import type { MealsPlanCardData } from "../../../info/meals/cards";
-import { modeWord, weekdayName } from "../../../info/meals/view";
+import { modeWord, weekdayName } from "../../../info/meals/screen/view";
 import { proposedTopicName, type TopicProposalCardData } from "../../../memory";
 import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";

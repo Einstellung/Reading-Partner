@@ -13,9 +13,9 @@ import {
   type MealsPorts,
 } from "../../../src/info/meals/apply";
 import type { MealsPlanCardData } from "../../../src/info/meals/cards";
-import type { PhotoQuery } from "../../../src/info/meals/photo-run";
-import { currentList, deriveShoppingList, shoppingItemKey } from "../../../src/info/meals/shopping";
-import { solvePlan, targetsOf } from "../../../src/info/meals/solve-week";
+import type { PhotoQuery } from "../../../src/info/meals/photos/photo-run";
+import { currentList, deriveShoppingList, shoppingItemKey } from "../../../src/info/meals/plan/shopping";
+import { solvePlan, targetsOf } from "../../../src/info/meals/plan/solve-week";
 import type {
   Deviation,
   DishPhotoEntry,
@@ -23,8 +23,8 @@ import type {
   MealsState,
   ShoppingState,
   WeekPlan,
-} from "../../../src/info/meals/types";
-import { mealOn } from "../../../src/info/meals/week";
+} from "../../../src/info/meals/plan/types";
+import { mealOn } from "../../../src/info/meals/plan/week";
 import { MON, charter, draftWeek, profile, shopping, state, week } from "./fixtures/week";
 
 interface Harness {

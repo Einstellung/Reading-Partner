@@ -1,6 +1,6 @@
 // Method & sources (docs/73 屏幕): every formula with the reader's own numbers
 // worked through, the food table with each row's source, and the medical and
-// health-data notes. Rendering only; the text is info/meals/method-screen.ts.
+// health-data notes. Rendering only; the text is info/meals/screen/method-screen.ts.
 
 import { openExternal } from "../../../platform/app/external-link";
 import { hostRegion } from "../../../info/meals/region";
@@ -10,9 +10,9 @@ import {
   foodTableRows,
   methodSections,
   type TextSegment,
-} from "../../../info/meals/method-screen";
-import { targetsOf } from "../../../info/meals/solve-week";
-import type { MealsState } from "../../../info/meals/types";
+} from "../../../info/meals/screen/method-screen";
+import { targetsOf } from "../../../info/meals/plan/solve-week";
+import type { MealsState } from "../../../info/meals/plan/types";
 import { MealsColumn, MealsHeader } from "./MealsChrome";
 
 export interface MealsMethodProps {

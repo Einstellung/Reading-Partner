@@ -14,13 +14,13 @@ import {
   sourceLabel,
   type Food,
 } from "../../../../src/info/meals/nutrition/foods";
-import { ingredientImageUrl } from "../../../../src/info/meals/images";
+import { ingredientImageUrl } from "../../../../src/info/meals/photos/images";
 import {
   CATEGORY_ORDER,
   KEEPS_ORDER,
   type IngredientCategory,
   type KeepsClass,
-} from "../../../../src/info/meals/types";
+} from "../../../../src/info/meals/plan/types";
 
 const ROLES = ["protein", "staple", "veg", "fruit", "fat", "sauce", "dairy"];
 

@@ -10,9 +10,9 @@ import {
   type MealsToolDeps,
 } from "../../../src/info/meals/tools";
 import type { MealsPorts } from "../../../src/info/meals/apply";
-import type { Deviation, MealsState, ShoppingState, WeekPlan } from "../../../src/info/meals/types";
-import { EMPTY_MEALS } from "../../../src/info/meals/types";
-import { mealOn } from "../../../src/info/meals/week";
+import type { Deviation, MealsState, ShoppingState, WeekPlan } from "../../../src/info/meals/plan/types";
+import { EMPTY_MEALS } from "../../../src/info/meals/plan/types";
+import { mealOn } from "../../../src/info/meals/plan/week";
 import { MON, shopping, state } from "./fixtures/week";
 
 function tool(current: MealsState) {

@@ -7,21 +7,21 @@
 // reopens it — a week has one trip.
 //
 // Rendering and event binding only. The order the lines are drawn in, and the
-// words above them, are in info/meals/list-order.ts.
+// words above them, are in info/meals/screen/list-order.ts.
 
 import { useRef } from "react";
 
-import type { MealsState, ShoppingItem } from "../../../info/meals/types";
-import type { PhotoCache } from "../../../info/meals/dish-photos";
+import type { MealsState, ShoppingItem } from "../../../info/meals/plan/types";
+import type { PhotoCache } from "../../../info/meals/photos/dish-photos";
 import {
   aislesOf,
   linesInOrder,
   LONG_LIST,
   orderShoppingLines,
-} from "../../../info/meals/list-order";
-import { isChecked, missed, shoppingItemKey, stillToGet } from "../../../info/meals/shopping";
-import { EMPTY_SHOPPING } from "../../../info/meals/types";
-import { ingredientPicture, shoppingNote, weekdayName } from "../../../info/meals/view";
+} from "../../../info/meals/screen/list-order";
+import { isChecked, missed, shoppingItemKey, stillToGet } from "../../../info/meals/plan/shopping";
+import { EMPTY_SHOPPING } from "../../../info/meals/plan/types";
+import { ingredientPicture, shoppingNote, weekdayName } from "../../../info/meals/screen/view";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";

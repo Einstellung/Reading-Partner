@@ -7,9 +7,9 @@
 
 import type { MealsPorts } from "./apply";
 import type { MealsCard } from "./cards";
-import { ingredientImageUrl } from "./images";
-import { mealsPhotoSearcher } from "./photo-sweep";
-import { loadMealsPhotos } from "./photo-store";
+import { ingredientImageUrl } from "./photos/images";
+import { mealsPhotoSearcher } from "./photos/photo-sweep";
+import { loadMealsPhotos } from "./photos/photo-store";
 import {
   loadMeals,
   saveCharter,
@@ -18,7 +18,7 @@ import {
   savePhotosAsked,
   savePlan,
   saveShopping,
-} from "./store";
+} from "./plan/store";
 import { hasWebviewFetch } from "../../platform/app/platform";
 import {
   buildAddShoppingItemsTool,

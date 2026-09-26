@@ -7,12 +7,12 @@
 // worth one. They are deliberately crude — a glyph says "this is produce", a
 // photograph says which vegetable, and nothing in between is any use.
 //
-// Rendering only; which URL an image resolves to is in info/meals/images.ts.
+// Rendering only; which URL an image resolves to is in info/meals/photos/images.ts.
 
 import { useState } from "react";
 
-import { imageSrc, stripSources } from "../../../info/meals/images";
-import type { IngredientCategory } from "../../../info/meals/types";
+import { imageSrc, stripSources } from "../../../info/meals/photos/images";
+import type { IngredientCategory } from "../../../info/meals/plan/types";
 
 function Glyph({ size = 20, children }: { size?: number; children: React.ReactNode }) {
   return (

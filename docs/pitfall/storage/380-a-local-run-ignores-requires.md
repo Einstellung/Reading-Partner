@@ -12,7 +12,7 @@
 
 ## 解法
 
-能搜的机器自己发起，不等别人派：声明了 `WEBVIEW_FETCH` 的设备读同步过来的 `info-meals.json` 和 `info-meals-photos.json`，自己算出这周还缺什么再起 run（`src/info/meals/photo-sweep.ts`）。启动、pull 写了这两份文件、本机应用周计划，三个时机同一趟，一次只跑一个。
+能搜的机器自己发起，不等别人派：声明了 `WEBVIEW_FETCH` 的设备读同步过来的 `info-meals.json` 和 `info-meals-photos.json`，自己算出这周还缺什么再起 run（`src/info/meals/photos/photo-sweep.ts`）。启动、pull 写了这两份文件、本机应用周计划，三个时机同一趟，一次只跑一个。
 
 没有这个能力的设备一条都不起：`startPhotoRun` 这个 port 在那些机器上就不挂，worker 自己在读 ask 之前也再拒一次——图片缓存是同步的，手机跑一趟就是把整周写成 miss，在电脑上压三十天。
 

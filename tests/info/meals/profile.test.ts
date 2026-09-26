@@ -6,10 +6,10 @@ import { expect, test } from "bun:test";
 import type { MealsPorts } from "../../../src/info/meals/apply";
 import { saveProfile } from "../../../src/info/meals/apply";
 import { regionForTimeZone } from "../../../src/info/meals/region";
-import { deriveShoppingList } from "../../../src/info/meals/shopping";
-import { mealsFileBody, parseMealsFile } from "../../../src/info/meals/store";
+import { deriveShoppingList } from "../../../src/info/meals/plan/shopping";
+import { mealsFileBody, parseMealsFile } from "../../../src/info/meals/plan/store";
 import { buildUpdateProfileTool, patchProfile } from "../../../src/info/meals/tools";
-import type { MealsState, ShoppingState, WeekPlan, MealsCharter } from "../../../src/info/meals/types";
+import type { MealsState, ShoppingState, WeekPlan, MealsCharter } from "../../../src/info/meals/plan/types";
 import { MON, profile, state, week } from "./fixtures/week";
 
 function ports(initial: MealsState) {

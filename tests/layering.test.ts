@@ -158,6 +158,13 @@ const LAYER: Record<string, Layer> = {
   // The headless nutrition core: targets from body data, the food table, the
   // gram solver. Imports nothing from info/meals, which imports it.
   "info/meals/nutrition": "domain",
+  // The week's own data: the plan and its charter, the shopping list derived
+  // from it, the solver and the persisted store.
+  "info/meals/plan": "domain",
+  // Everything that fetches or caches a dish or ingredient photo.
+  "info/meals/photos": "domain",
+  // The day and week screens' text and layout, plus onboarding.
+  "info/meals/screen": "domain",
   "info/picture": "domain",
   "info/program": "domain",
   "info/sources": "domain",
@@ -227,6 +234,7 @@ const LAYER: Record<string, Layer> = {
   "ui/components/chat": "ui",
   "ui/components/common": "ui",
   "ui/components/info": "ui",
+  "ui/components/info/meals": "ui",
   "ui/components/lib": "ui",
   // Lumen: the companion's body, its motion maths and its two raster layers.
   "ui/components/lumen": "ui",
