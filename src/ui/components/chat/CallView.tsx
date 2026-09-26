@@ -19,7 +19,7 @@ import { MessageList } from './MessageList';
 import type { ChatMarkHost } from './ChatMarkLayer';
 import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
-import { useKeyboardInset } from '../common/useKeyboardInset';
+import { useKeyboardInset, useShellKeyboard } from '../common/useKeyboardInset';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
@@ -149,8 +149,10 @@ export default function CallView({
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
 	// Reserve space for the soft keyboard so the bottom composer stays above it
 	// (iPad). box-sizing:border-box shrinks the flex column by this padding, so the
-	// message list gives up the room and the composer rises. 0 on desktop.
-	const keyboardInset = useKeyboardInset();
+	// message list gives up the room and the composer rises. 0 on desktop, and
+	// off in a shell that moves itself above the keyboard (the phone's).
+	const shellKeyboard = useShellKeyboard();
+	const keyboardInset = useKeyboardInset(shellKeyboard === null);
 
 	return (
 		<div
@@ -233,7 +235,10 @@ export default function CallView({
 							stickKey={stickKey}
 						/>
 					</div>
-					<div key={composerKey} className="px-4 pb-6" ref={composerSlot}>
+					{/* On the keyboard the composer sits just above it: the room under it
+					    at rest is for the thumb and the home indicator, which the
+					    keyboard covers. */}
+					<div key={composerKey} className={`px-4 ${shellKeyboard ? 'pb-2' : 'pb-6'}`} ref={composerSlot}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							{footer}
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />

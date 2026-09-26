@@ -50,6 +50,7 @@
 | 给工具写 TypeBox 参数 schema | AI 调用与上下文窗口 |
 | 给回合加埋点、读 AI 埋点日志对账 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
+| 输入框、软键盘、按键盘让位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
 | 给回合加中途插话、动 live-turns 注册表 | 开发环境 + AI 调用与上下文窗口 |
@@ -305,6 +306,7 @@
 ## 浮层与 shadcn 原语
 
 - [392-the-keyboard-stops-resizing-the-window-after-an-app-switch](./overlay/392-the-keyboard-stops-resizing-the-window-after-an-app-switch.md) — iPad 切走再回来之后，软键盘不再改 `window.innerHeight`，只改 visual viewport，`window` 上一个事件都不发；只听 `window` resize 的测量就停在没有键盘那会儿的盒子上（实测 Lumen 的角落差 250px）。判断「离底边多远」要用可见区域的底边，算 `fixed` 元素升多少仍用 layout viewport 的高度，而且事件当场读到的还是 React 上 padding 之前的位置，要在 `requestAnimationFrame` 里补一遍
+- [443-the-keyboard-scrolls-the-whole-document-up](./overlay/443-the-keyboard-scrolls-the-whole-document-up.md) — iPhone 上键盘弹起时 `innerHeight` 和 visual viewport 一起变矮，页面却仍按全高排版，WKWebView 把整个文档往上卷键盘那么高（实测软键盘卷 413、附件栏卷 68），顶栏卷出屏幕，`innerHeight - vv.height - vv.offsetTop` 恒为 0。手机外壳键盘在时高设成 `vv.height`、`top` 设成 `vv.offsetTop`，去掉底部安全区，经 context 让 `CallView` 别再垫一遍
 - [386-a-moved-box-reports-nothing](./overlay/386-a-moved-box-reports-nothing.md) — `CallView` 的 composer 在空态和非空态里是同一个下标上的 `<div>`，React 复用同一个 DOM 节点：callback ref 不再调一次，`ResizeObserver` 只管尺寸不管位置，于是量到的还是它居中时的盒子，Lumen 一直压着发送键。两个分支各给一个 key
 - [68-overflow-x-auto-clips-the-other-axis](./overlay/68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
 - [80-portalled-overlay-trips-the-host-outside-press](./overlay/80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路
