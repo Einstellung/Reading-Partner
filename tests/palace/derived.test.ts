@@ -193,6 +193,8 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "reading/rehearsal/store.ts",
   "reading/retell/store.ts",
   "reading/session/hangup.ts",
+  // The topic whose event log records a conversation delete; passed in, not stored.
+  "reading/delete/delete-thread.ts",
   "reading/talk/store.ts",
   // A source unit names the topic its conversation is filed under; the table is built in memory each sweep.
   "reading/distill/source.ts",

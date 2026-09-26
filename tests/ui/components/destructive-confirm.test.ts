@@ -51,10 +51,13 @@ test("deleting a topic goes through the destructive confirmation", () => {
   const source = readFileSync(join(ROOT, "ui/components/library/LibraryScreen.tsx"), "utf8");
   const start = source.indexOf("{deleting && (");
   const dialog = source.slice(start, source.indexOf("/>", start));
-  expect(dialog).toContain("<ConfirmDestructiveDialog");
-  // The promise the wording has always made: the topic goes with the work done
-  // in it (reading/delete/delete-topic.ts), the PDFs do not.
-  expect(dialog).toContain("The PDFs stay on disk");
+  expect(dialog).toContain("<TopicDeleteDialog");
+  const own = readFileSync(join(ROOT, "ui/components/library/TopicDeleteDialog.tsx"), "utf8");
+  expect(own).toContain("<ConfirmDestructiveDialog");
+  // The topic goes with the work done in it (reading/delete/delete-topic.ts);
+  // its files go only when the box is ticked (shelf/topic-delete.ts).
+  const words = readFileSync(join(ROOT, "ui/components/shelf/topic-delete.ts"), "utf8");
+  expect(words).toContain("with the retells, talks and rehearsals made in it");
 });
 
 // deleteRetell takes the retell's rehearsals with it (reading/retell/store.ts),
