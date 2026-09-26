@@ -130,6 +130,13 @@ block2 = "=0.6.2"
 # resolution keeps this out of every non-test build.
 tauri = { version = "2", features = ["test"] }
 
+# tauri-plugin-http 2.5.9 with one change in src/error.rs: a failed request
+# reports reqwest's whole source chain (dns, connect, TLS, timeout) instead of
+# only "error sending request for url (…)". Upstream still drops it (2.7.0).
+# Re-vendor when bumping the plugin.
+[patch.crates-io]
+tauri-plugin-http = { path = "vendor/tauri-plugin-http" }
+
 # Full dev rebuilds peak at many GB of linker memory, which has triggered
 # systemd-oomd to kill the whole desktop session (docs/pitfall/14).
 [profile.dev]
