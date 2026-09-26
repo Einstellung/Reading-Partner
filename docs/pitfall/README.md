@@ -75,7 +75,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 398）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 435）。
 
 ## EmbedPDF 引擎
 
@@ -141,6 +141,7 @@
 - [143-ios-puts-its-selection-callout-below-the-selection](./touch/143-ios-puts-its-selection-callout-below-the-selection.md) — iPad 上系统的 `Copy | Look Up | Translate` 条不是固定在选区上方：选区中心在安全区竖向中点以上时它在下方，以下时在上方，两边都是离选区 15px、高 44px，横向对着选区中心夹进屏幕。它是浮在 WKWebView 上的 UIKit 视图，DOM 里没有、`elementFromPoint` 看不见、落在它上面的触摸网页收不到；贴着选区放的浮动控件被盖掉 37px 只剩 7px 可点。那个控件已删（作废 2026-08-20），再往选区旁边放东西要按这条带子两边都让并重新量
 - [333-idb-cannot-hold-a-contact-and-then-move-it](./touch/333-idb-cannot-hold-a-contact-and-then-move-it.md) — idb 的 HID 通道按住不动或按轨迹移动，没有「按住再拖」这一笔，长按延长划线验不了；走 GestureDriver 的 `press(forDuration:thenDragTo:)`，命令是 `ios-sim.sh press-drag`
 - [425-a-card-shown-before-the-reading-faces-keeps-the-previous-column](./touch/425-a-card-shown-before-the-reading-faces-keeps-the-previous-column.md) — EPUB 翻页的页卡片挂上时只量一次页首在第几列，`createEpubReader` 拿到存盘的分页表就挂、不等 Noto Serif，回退字体更密把页首量进前一列，字体到了也不重算：高亮存对了页却画在显示错列的卡片上看不见，相邻页码同一列。挂第一张卡片之前 `await readingFontsReady()`
+- [434-a-tap-turn-pays-for-the-synthetic-mouse-events](./touch/434-a-tap-turn-pays-for-the-synthetic-mouse-events.md) — 手机分页探针里点按翻页每次掉一帧 42-47 ms，拖动翻页没有；touchend 里 `preventDefault()` 后降到 22-26 ms。推测是 iOS 在 tap 后补发的合成鼠标事件和 `:hover` 失效落在整章大小的 shadow 树上；自己处理点按的阅读区都该取消 touchend，链接和标注靠自己的命中测试分派
 
 ## 网络与 CSP
 
@@ -233,6 +234,7 @@
 - [375-pinch-in-needs-a-scale-below-one](./ios-build/375-pinch-in-needs-a-scale-below-one.md) — `ios-sim.sh pinch in` 的默认 scale 2.0 被 UIKit 拒绝，缩小要传小于 1 的数；顺带 `handle` 上的方法叫 `zoomReset` 不是 `resetZoom`
 - [426-a-no-sign-simulator-build-has-no-entitlements](./ios-build/426-a-no-sign-simulator-build-has-no-entitlements.md) — `tauri ios build --no-sign` 跳过签名，模拟器包里就没有 `__entitlements` 段，App Group 的 `containerURL` 返回 nil（扩展报 no App Group container）；`codesign -d --entitlements` 对模拟器包永远是空 dict，不能拿来判断。验 entitlement 的模拟器包去掉 `--no-sign`（ad hoc 签，不碰钥匙串），核对用 `strings | grep application-groups`
 - [427-a-copied-cargo-target-breaks-swift-rs-module-cache](./ios-build/427-a-copied-cargo-target-breaks-swift-rs-module-cache.md) — 把老检出的 `target/aarch64-apple-ios-sim` 克隆到新检出复用，swift-rs 的 `.pcm` 里写死了老的 module cache 路径，build script 重跑时 panic（`missing required module 'SwiftShims'`）；拷完删掉所有 `*/out/swift-rs` 再构建
+- [433-simulator-webcontent-memory-needs-footprint](./ios-build/433-simulator-webcontent-memory-needs-footprint.md) — 模拟器的 WebContent 不在 `simctl spawn launchctl list` 里，是宿主上 `launchd_sim` 的子进程；它的 RSS 同一页面几分钟内在 73-332 MB 间跳，要按父进程找到后用 `footprint` 读 `phys_footprint`，同一会话先量空页面当基线只比差值
 
 ## Android 构建与签名
 
@@ -426,3 +428,4 @@
 - [337-sim-bridge-eval-error-with-no-message-prints-as-at-sign](./dev-env/337-sim-bridge-eval-error-with-no-message-prints-as-at-sign.md) — WebKit 里没带 message 的错误（`TypeError` 之类）的 `stack` 不带消息行，sim bridge 的 client 原样 `String(e.stack)` 送回来，看着就是一个孤零零的 `@`；查了半天才发现是自己写的选择器/断言没命中。别去改 bridge 的错误传递，eval 脚本里每处 DOM 查找自己 `throw new Error("说清楚的话")`
 - [382-ios-sim-port-is-only-where-the-script-looks](./dev-env/382-ios-sim-port-is-only-where-the-script-looks.md) — `IOS_SIM_PORT` 只改 bridge 往哪敲 `eval`，vite 的端口在 `vite.config.ts` 的 `strictPort` 里；设了它 app 起来也永远 `waiting for the app to answer the bridge`。附：`cmd_up` 会 `pkill -f "tauri ios dev"`，并行会话互相收掉对方的 dev server
 - [418-a-failed-null-check-on-a-dom-node-prints-for-half-a-minute](./dev-env/418-a-failed-null-check-on-a-dom-node-prints-for-half-a-minute.md) — `expect(queryByText(...)).toBeNull()` 失败时 bun 把 happy-dom 元素连同整棵树格式化出来，一个用例 29 秒、日志 233 万行，断言那行埋在最后；"文字不在"改比 `container.textContent`
+- [432-two-pages-on-one-dev-server-share-the-sim-bridge](./dev-env/432-two-pages-on-one-dev-server-share-the-sim-bridge.md) — sim bridge 按端口寻址不按设备：同一个 vite 上 Safari 和 app 两个页面都在长轮询，`ios-sim.sh eval` 交给先来取的那个，`IOS_SIM_UDID` 管不到；一个 dev server 同时只留一个页面，读数时带上页面自己的标记核对
