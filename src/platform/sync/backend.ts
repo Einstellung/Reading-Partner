@@ -38,6 +38,15 @@ export interface RemoteEntry {
 // "observations/m-ab12cd34ef567890.md").
 export type RemoteState = Record<string, RemoteEntry>;
 
+// A name the data folder holds more than once. Drive allows it, and two devices
+// that each create a file before seeing the other's make one. The listing
+// reports the copy it chose for the name in RemoteState; these are the rest.
+export interface RemoteDuplicate {
+  name: string;
+  // Handles only the backend reads, in an order every device agrees on.
+  extras: string[];
+}
+
 // --- how a failure is classified ------------------------------------------
 //
 // Three kinds of failure have to be told apart in code, never by matching
@@ -118,6 +127,18 @@ export interface SyncBackend {
   // the engine publishes and infers nothing.
   listedHoldings?(): Record<string, RemoteEntry>;
 
+  // The in-range names that same listing found more than once, answered from
+  // what it already fetched. The copy the listing chose is the same on every
+  // device and is the one download/upload address by name; the extras are
+  // reached only through the two calls below, so the engine can merge each into
+  // the chosen copy before taking it away (duplicates.ts). Optional, all three
+  // together: a backend whose names are unique has no duplicates.
+  listedDuplicates?(): RemoteDuplicate[];
+  // Throws RemoteGoneError when that copy is not in the remote any more.
+  downloadExtra?(handle: string): Promise<Uint8Array>;
+  // A copy that is already gone is success, like remove().
+  removeExtra?(handle: string): Promise<void>;
+
   // Throws RemoteGoneError when the name is not in the remote any more.
   download(name: string): Promise<Uint8Array>;
   // Writes the bytes and the metadata that describes them together, so a rev is
@@ -129,7 +150,8 @@ export interface SyncBackend {
   // This serves the one thing reconcile cannot express: a build that has decided
   // a file is not data any more and must not survive on the other devices. A
   // name that is not in the remote is success, not an error: the state this asks
-  // for already holds.
+  // for already holds. Every copy under the name goes, not just the chosen one:
+  // a survivor would be listed again next pass and the file would come back.
   remove(name: string): Promise<void>;
 
   hasBook(hash: string): Promise<boolean>;
@@ -139,6 +161,7 @@ export interface SyncBackend {
   // Take a book's blob out of the remote for good, for a book the reader deleted
   // (platform/app/deleted-books.ts). Without it the blob outlives every device's
   // copy of the book, and the next device to sign in on a clean snapshot pulls
-  // it back. A hash that is not in the remote is success, like remove().
+  // it back. A hash that is not in the remote is success, like remove(), and
+  // every copy under the hash goes, for the same reason.
   removeBook(hash: string): Promise<void>;
 }

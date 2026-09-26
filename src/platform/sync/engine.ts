@@ -83,6 +83,7 @@ import type { BaseStore, TrashJournal } from "./localStore";
 import type { MergeFile } from "./merge/contract";
 import { mergeFile } from "./merge";
 import { isDeadPath } from "./dead-paths";
+import { absorbDuplicates } from "./duplicates";
 import { emptyHoldingsPass, type HoldingsStore } from "./holdings";
 import { HoldingsExchange } from "./holdings-exchange";
 import { HOLDINGS_INFER_DELETIONS } from "./infer-deletions";
@@ -714,6 +715,20 @@ export class SyncEngine {
       // business in a plan.
       await this.drainPurge(failures);
       const remote = await this.d.backend.listRemote();
+      // Before the scan, so a conflict copy it writes is uploaded by this pass.
+      await absorbDuplicates(
+        {
+          backend: this.d.backend,
+          merge: this.d.merge ?? mergeFile,
+          snapshot: this.snapshot,
+          trash: this.d.trash,
+          writeLocal: (path, bytes) => this.writeLocal(path, bytes),
+          exists: async (path) => (await this.d.fs.stat(path)) !== null,
+          now: this.now,
+        },
+        remote,
+        failures,
+      );
       let { files: local, unreadable } = await this.hashLocal(await this.d.fs.list());
       const changed: string[] = [];
       // A newer log in the remote comes down before anything else is planned.

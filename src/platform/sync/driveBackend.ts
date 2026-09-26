@@ -25,6 +25,13 @@
 // treats a 404 as "this id is stale" — forget it, find the name again, retry
 // once — because otherwise one dead id fails that file on every pass forever
 // (docs/pitfall/52).
+//
+// Drive does not keep names unique. Two devices that each create a data file
+// before seeing the other's leave two files under one name, and so do two that
+// upload the same book at once. A name therefore means one chosen copy — the
+// highest rev, then the lowest id, so every device chooses the same one
+// whatever order Drive lists them in — and the listing reports the rest for the
+// engine to merge in and delete (duplicates.ts). A delete takes every copy.
 
 import { cleanTauriFetch, type TauriFetch } from "../app/tauri-fetch";
 import { sleep } from "../http/throttled-fetch";
@@ -34,6 +41,7 @@ import {
   RemoteGoneError,
   SyncHttpError,
   SyncTransportError,
+  type RemoteDuplicate,
   type RemoteEntry,
   type RemoteMeta,
   type RemoteState,
@@ -197,6 +205,16 @@ function entryOf(f: DriveFile): RemoteEntry | null {
   };
 }
 
+// The order same-named copies are preferred in: the latest publish first, then
+// the id, which every device reads identically. A copy that predates
+// appProperties sorts below any that carries a rev.
+function byPreference(a: DriveFile, b: DriveFile): number {
+  const ra = numberProp(a.appProperties, "rev") ?? -1;
+  const rb = numberProp(b.appProperties, "rev") ?? -1;
+  if (ra !== rb) return rb - ra;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 function propsOf(meta: RemoteMeta): Record<string, string> {
   return { rev: String(meta.rev), mtime: String(meta.mtime), hash: meta.hash };
 }
@@ -221,6 +239,8 @@ export class DriveBackend implements SyncBackend {
   // The holdings files the last listRemote() enumerated, by device id
   // (holdings.ts). Empty until a listing has run.
   private holdings: Record<string, RemoteEntry> = {};
+  // The in-range names the last listRemote() found more than once.
+  private duplicates: RemoteDuplicate[] = [];
 
   constructor(private readonly d: DriveBackendDeps) {}
 
@@ -436,9 +456,8 @@ export class DriveBackend implements SyncBackend {
     if (changed) await this.d.persistIds();
   }
 
-  // Every live file in data/, one page at a time.
-  private async listDataFiles(): Promise<DriveFile[]> {
-    const q = `'${this.ids.dataFolderId}' in parents and trashed=false`;
+  // Every file matching `q`, one page at a time.
+  private async listAll(q: string): Promise<DriveFile[]> {
     const out: DriveFile[] = [];
     let pageToken: string | undefined;
     do {
@@ -460,52 +479,48 @@ export class DriveBackend implements SyncBackend {
   // ignored: the folder is the user's, and something they dropped in it is not
   // an instruction to write it into their AppData.
   async listRemote(): Promise<RemoteState> {
-    const files = await this.listDataFiles();
+    const byName = new Map<string, DriveFile[]>();
+    for (const f of await this.listAll(`'${this.ids.dataFolderId}' in parents and trashed=false`)) {
+      const group = byName.get(f.name!);
+      if (group) group.push(f);
+      else byName.set(f.name!, [f]);
+    }
     const out: RemoteState = {};
     const unseeded: DriveFile[] = [];
-    // Two files under one name is a Drive the app is not supposed to produce
-    // but can find; the first listed wins, so which one is chosen at least does
-    // not change from pass to pass.
-    const seen = new Set<string>();
+    const holdings: Record<string, RemoteEntry> = {};
+    const duplicates: RemoteDuplicate[] = [];
     let learnedIds = false;
 
-    const holdings: Record<string, RemoteEntry> = {};
-
-    for (const f of files) {
-      const name = f.name!;
+    for (const [name, group] of byName) {
       // Before the range test, because a holdings file is deliberately out of
       // range: it is enumerated by the same listing so a peer's tree costs no
       // request, and it must not reach RemoteState, where reconcile would treat
       // it as one of the user's files and write it into AppData (docs/59 §8.12).
       const device = holdingsDeviceOf(name);
+      if (device === null && !inSyncRange(name)) continue;
+      const [f, ...extras] = group.sort(byPreference);
+      if (this.ids.fileIds[name] !== f!.id) {
+        this.ids.fileIds[name] = f!.id;
+        learnedIds = true;
+      }
       if (device !== null) {
-        if (seen.has(name)) continue;
-        seen.add(name);
-        if (this.ids.fileIds[name] !== f.id) {
-          this.ids.fileIds[name] = f.id;
-          learnedIds = true;
-        }
         // No hash is not a reason to skip it: what a fetch is decided on is the
         // rev, and a holdings uploaded by this build always carries one.
-        holdings[device] = entryOf(f) ?? {
+        holdings[device] = entryOf(f!) ?? {
           rev: 0,
-          mtime: driveMtime(f),
-          size: Number(f.size ?? 0),
+          mtime: driveMtime(f!),
+          size: Number(f!.size ?? 0),
         };
         continue;
       }
-      if (!inSyncRange(name) || seen.has(name)) continue;
-      seen.add(name);
-      if (this.ids.fileIds[name] !== f.id) {
-        this.ids.fileIds[name] = f.id;
-        learnedIds = true;
-      }
-      const entry = entryOf(f);
+      if (extras.length > 0) duplicates.push({ name, extras: extras.map((e) => e.id) });
+      const entry = entryOf(f!);
       if (entry) out[name] = entry;
-      else unseeded.push(f);
+      else unseeded.push(f!);
     }
     if (learnedIds) await this.d.persistIds();
     this.holdings = holdings;
+    this.duplicates = duplicates;
 
     if (unseeded.length > 0) await this.seedFromManifest(unseeded, out);
     return out;
@@ -516,6 +531,35 @@ export class DriveBackend implements SyncBackend {
   // in data/ is that the listing a pass already makes enumerates them.
   listedHoldings(): Record<string, RemoteEntry> {
     return this.holdings;
+  }
+
+  listedDuplicates(): RemoteDuplicate[] {
+    return this.duplicates;
+  }
+
+  async downloadExtra(handle: string): Promise<Uint8Array> {
+    try {
+      return await this.getMedia(handle, "download");
+    } catch (e) {
+      if (e instanceof SyncHttpError && e.status === 404) {
+        throw new RemoteGoneError(`Drive copy not found: ${handle}`);
+      }
+      throw e;
+    }
+  }
+
+  async removeExtra(handle: string): Promise<void> {
+    await this.deleteById(handle, "delete");
+  }
+
+  // Delete for good, not to trash. 404 counts as done: the file is not there,
+  // which is what was asked for.
+  private async deleteById(id: string, what: string): Promise<void> {
+    try {
+      await this.send(`${DRIVE}/files/${id}`, { method: "DELETE" }, what, SMALL, async () => undefined);
+    } catch (e) {
+      if (!(e instanceof SyncHttpError) || e.status !== 404) throw e;
+    }
   }
 
   // Files uploaded before appProperties existed. Their rev lives in the old
@@ -577,10 +621,13 @@ export class DriveBackend implements SyncBackend {
     return parseManifest(await this.getMedia(found.id, "manifest download"));
   }
 
+  private dataFileQuery(name: string): string {
+    return `name='${escapeQ(name)}' and '${this.ids.dataFolderId}' in parents and trashed=false`;
+  }
+
+  // The copy the name means, chosen the way the listing chooses it.
   private async findDataFile(name: string): Promise<DriveFile | null> {
-    return this.findOne(
-      `name='${escapeQ(name)}' and '${this.ids.dataFolderId}' in parents and trashed=false`,
-    );
+    return (await this.listAll(this.dataFileQuery(name))).sort(byPreference)[0] ?? null;
   }
 
   private forgetFile(name: string): void {
@@ -644,35 +691,27 @@ export class DriveBackend implements SyncBackend {
 
   // Delete for good, not to trash: a file the app has decided is not data any
   // more would otherwise sit in the user's Drive bin for thirty days, and this
-  // is the app's own folder, not something the user filed there. A cached id is
-  // tried first and, when it turns out to be stale, the name is searched — the
-  // same two steps download and upload take, for the same reason. 404 counts as
-  // done: the file is not there, which is what was asked for.
+  // is the app's own folder, not something the user filed there. Every copy
+  // under the name goes, found by a search that does not stop at the first,
+  // along with the cached id in case the search has not caught up with it.
   async remove(name: string): Promise<void> {
-    const del = (id: string): Promise<undefined> =>
-      this.send(`${DRIVE}/files/${id}`, { method: "DELETE" }, "delete", SMALL, async () => undefined);
-
-    const cached = await this.withCachedId(this.ids.fileIds[name], () => this.forgetFile(name), del);
-    if (!cached.done) {
-      const found = await this.findDataFile(name);
-      if (found) {
-        try {
-          await del(found.id);
-        } catch (e) {
-          // Someone else deleted it between the search and the delete. The file
-          // is gone, which is the whole of what this was asked to arrange.
-          if (!(e instanceof SyncHttpError) || e.status !== 404) throw e;
-        }
-      }
+    const cached = this.ids.fileIds[name];
+    const found = await this.listAll(this.dataFileQuery(name));
+    for (const id of new Set([...(cached ? [cached] : []), ...found.map((f) => f.id)])) {
+      await this.deleteById(id, "delete");
     }
     this.forgetFile(name);
     await this.d.persistIds();
   }
 
+  private bookQuery(hash: string): string {
+    return `name='${escapeQ(hash)}.pdf' and '${this.ids.booksFolderId}' in parents and trashed=false`;
+  }
+
+  // Any copy will do: a book is named by its content hash, so two copies hold
+  // the same bytes.
   private async findBook(hash: string): Promise<DriveFile | null> {
-    return this.findOne(
-      `name='${escapeQ(hash)}.pdf' and '${this.ids.booksFolderId}' in parents and trashed=false`,
-    );
+    return this.findOne(this.bookQuery(hash));
   }
 
   async hasBook(hash: string): Promise<boolean> {
@@ -712,33 +751,15 @@ export class DriveBackend implements SyncBackend {
     return this.getMedia(found.id, "book download", BULK);
   }
 
-  // The books channel's remove(), and the same two steps for the same reasons:
-  // the cached id first, the name searched when it turns out to be stale, and a
-  // 404 counted as done. Deleted for good rather than trashed — this is the
-  // app's own folder, and a book the reader deleted has no business sitting in
-  // their Drive bin for thirty days.
+  // The books channel's remove(), for the same reasons: deleted for good rather
+  // than trashed, and every copy under the hash, since two devices uploading
+  // the same book at once leave two and the survivor would be pulled back by the
+  // next device to sign in.
   async removeBook(hash: string): Promise<void> {
-    const del = (id: string): Promise<undefined> =>
-      this.send(`${DRIVE}/files/${id}`, { method: "DELETE" }, "book delete", SMALL, async () => undefined);
-
-    const cached = await this.withCachedId(
-      this.ids.bookIds[hash],
-      () => {
-        delete this.ids.bookIds[hash];
-      },
-      del,
-    );
-    if (!cached.done) {
-      const found = await this.findBook(hash);
-      if (found) {
-        try {
-          await del(found.id);
-        } catch (e) {
-          // Gone between the search and the delete, which is the whole of what
-          // this was asked to arrange.
-          if (!(e instanceof SyncHttpError) || e.status !== 404) throw e;
-        }
-      }
+    const cached = this.ids.bookIds[hash];
+    const found = await this.listAll(this.bookQuery(hash));
+    for (const id of new Set([...(cached ? [cached] : []), ...found.map((f) => f.id)])) {
+      await this.deleteById(id, "book delete");
     }
     delete this.ids.bookIds[hash];
     await this.d.persistIds();

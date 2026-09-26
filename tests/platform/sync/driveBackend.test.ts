@@ -12,6 +12,9 @@ import { DriveBackend, resumeOffset } from "../../../src/platform/sync/driveBack
 import { RemoteGoneError, SyncTransportError } from "../../../src/platform/sync/backend";
 import type { DriveIds } from "../../../src/platform/sync/state";
 import type { TauriFetch } from "../../../src/platform/app/tauri-fetch";
+import { SyncEngine } from "../../../src/platform/sync/engine";
+import type { MergeInput } from "../../../src/platform/sync/merge/contract";
+import type { SyncFs } from "../../../src/platform/sync/syncFs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
@@ -80,6 +83,8 @@ function makeDrive() {
   // Same, but the request never completes: what a reset connection or a dead
   // route looks like, as opposed to a status the server chose.
   let throwWhen: ((method: string, url: string, body: string) => boolean) | null = null;
+  // Drive does not promise a listing order; flipping it shows what depends on one.
+  let reversed = false;
 
   const add = (seed: Seed): string => {
     const id = `id-${++nextId}`;
@@ -127,7 +132,8 @@ function makeDrive() {
     if (method === "GET" && url.startsWith(`${DRIVE}/files?q=`)) {
       const params = new URL(url).searchParams;
       const size = Number(params.get("pageSize") ?? "100");
-      const hits = search(params.get("q") ?? "").slice(0, size);
+      const all = search(params.get("q") ?? "");
+      const hits = (reversed ? all.reverse() : all).slice(0, size);
       return json({
         files: hits.map((f) => ({
           id: f.id,
@@ -222,6 +228,9 @@ function makeDrive() {
       return hits[0];
     },
     reset: () => requests.splice(0, requests.length),
+    reverseListings: () => {
+      reversed = true;
+    },
     failOn: (fn: typeof failWhen) => {
       failWhen = fn;
     },
@@ -1021,4 +1030,151 @@ test("a remove that fails for any other reason is reported, so the queue keeps t
 
   await expect(backend.remove("notes-b1/chapter-02.md")).rejects.toThrow();
   expect(drive.byName("notes-b1/chapter-02.md").length).toBe(1);
+});
+
+// --- same-named copies ---------------------------------------------------------
+//
+// Drive lets two files share a name: two devices that each create one before
+// seeing the other's leave both. A name means one copy, chosen the same way on
+// every device; the rest are merged in by the engine and then deleted.
+
+test("remove deletes every copy under the name, so none is listed again", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const first = drive.add({ name: "notes-b1/state.json", parents: [seeded.dataFolderId], body: "a" });
+  drive.add({ name: "notes-b1/state.json", parents: [seeded.dataFolderId], body: "b" });
+  drive.add({ name: "notes-b1/state.json", parents: [seeded.dataFolderId], body: "c" });
+  const { backend, ids } = makeBackend(drive, { ...seeded, fileIds: { "notes-b1/state.json": first } });
+
+  await backend.remove("notes-b1/state.json");
+
+  expect(drive.byName("notes-b1/state.json")).toEqual([]);
+  expect(await backend.listRemote()).toEqual({});
+  expect(ids.fileIds["notes-b1/state.json"]).toBeUndefined();
+});
+
+test("removeBook deletes every copy under the hash", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  drive.add({ name: "h1.pdf", parents: [seeded.booksFolderId], body: "PDF" });
+  drive.add({ name: "h1.pdf", parents: [seeded.booksFolderId], body: "PDF" });
+  const { backend } = makeBackend(drive, seeded);
+
+  await backend.removeBook("h1");
+
+  expect(drive.byName("h1.pdf")).toEqual([]);
+  expect(await backend.hasBook("h1")).toBe(false);
+});
+
+// Two devices listing the same Drive, one of which Drive answers in the other
+// order.
+async function listBothWays(seed: (drive: Drive, dataFolderId: string) => void) {
+  const out = [];
+  for (const reverse of [false, true]) {
+    const drive = makeDrive();
+    const seeded = seedTree(drive);
+    seed(drive, seeded.dataFolderId);
+    if (reverse) drive.reverseListings();
+    const { backend, ids } = makeBackend(drive, seeded);
+    const remote = await backend.listRemote();
+    out.push({ remote, duplicates: backend.listedDuplicates(), chosen: ids.fileIds["topics.json"] });
+  }
+  return out;
+}
+
+const revved = (rev: number, hash: string) => ({ rev: String(rev), mtime: "1", hash });
+
+test("the listing chooses the highest rev whatever order Drive lists the copies in", async () => {
+  const [a, b] = await listBothWays((drive, parent) => {
+    drive.add({ name: "topics.json", parents: [parent], body: "old", appProperties: revved(2, "h2") });
+    drive.add({ name: "topics.json", parents: [parent], body: "new", appProperties: revved(5, "h5") });
+  });
+
+  expect(a!.remote["topics.json"]!.rev).toBe(5);
+  expect(a).toEqual(b!);
+  expect(a!.duplicates).toEqual([{ name: "topics.json", extras: [expect.any(String)] }]);
+  expect(a!.duplicates[0]!.extras[0]).not.toBe(a!.chosen);
+});
+
+test("copies at the same rev are told apart by id, not by listing order", async () => {
+  const [a, b] = await listBothWays((drive, parent) => {
+    drive.add({ name: "topics.json", parents: [parent], body: "x", appProperties: revved(3, "hx") });
+    drive.add({ name: "topics.json", parents: [parent], body: "y", appProperties: revved(3, "hy") });
+  });
+
+  expect(a!.remote["topics.json"]!.hash).toBe("hx");
+  expect(a).toEqual(b!);
+});
+
+test("an upload through a stale id lands on the copy the listing would choose", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const parent = seeded.dataFolderId;
+  drive.add({ name: "topics.json", parents: [parent], body: "old", appProperties: revved(2, "h2") });
+  const chosen = drive.add({ name: "topics.json", parents: [parent], body: "new", appProperties: revved(5, "h5") });
+  const { backend, ids } = makeBackend(drive, { ...seeded, fileIds: { "topics.json": "id-gone" } });
+
+  await backend.upload("topics.json", enc("newer"), { rev: 6, mtime: 2, hash: "h6" });
+
+  expect(ids.fileIds["topics.json"]).toBe(chosen);
+  expect(drive.byName("topics.json").map((f) => f.body).sort()).toEqual(["newer", "old"]);
+});
+
+// A device on a real pass, over the fake Drive: the extra copy's content has to
+// be in the chosen one before the extra is deleted, and what the device ends up
+// holding is the merge of both.
+test("a pass merges a duplicate into the chosen copy, publishes it, then deletes the duplicate", async () => {
+  const drive = makeDrive();
+  const seeded = seedTree(drive);
+  const parent = seeded.dataFolderId;
+  const chosen = drive.add({ name: "topics.json", parents: [parent], body: "A", appProperties: revved(3, "hA") });
+  const extra = drive.add({ name: "topics.json", parents: [parent], body: "B", appProperties: revved(2, "hB") });
+  const { backend } = makeBackend(drive, seeded);
+
+  const files = new Map<string, Uint8Array>();
+  const fs: SyncFs = {
+    list: async () => [...files].map(([path, b]) => ({ path, mtime: 1, size: b.length })),
+    read: async (path) => files.get(path)!,
+    write: async (path, bytes) => {
+      files.set(path, bytes);
+    },
+    stat: async (path) => (files.has(path) ? { mtime: 1, size: files.get(path)!.length } : null),
+    remove: async (path) => {
+      files.delete(path);
+    },
+  };
+  const merges: MergeInput[] = [];
+  const engine = new SyncEngine({
+    backend,
+    fs,
+    books: { listHashes: async () => [], has: async () => false, read: async () => enc(""), write: async () => {} },
+    booksPolicy: "off",
+    base: { read: async () => null, has: async () => false, write: async () => {}, remove: async () => {} },
+    trash: { append: async () => {}, prune: async () => {} },
+    snapshot: {},
+    merge: (input) => {
+      merges.push(input);
+      const merged = [dec(input.local), dec(input.remote)].sort().join("+");
+      return { merged: enc(merged), copies: [], dropped: [], contested: false };
+    },
+  });
+
+  await engine.syncNow();
+
+  expect(merges.map((m) => [m.base, dec(m.local), dec(m.remote)])).toEqual([[null, "A", "B"]]);
+  const left = drive.one("topics.json");
+  expect(left.id).toBe(chosen);
+  expect(left.body).toBe("A+B");
+  expect(left.appProperties?.rev).toBe("4");
+  // Published before the delete: a pass that dies between the two leaves both
+  // copies, never neither.
+  const publishedAt = drive.requests.findIndex(
+    (r) => r.method === "PATCH" && r.url.includes(`/files/${chosen}?`),
+  );
+  const deletedAt = drive.requests.findIndex(
+    (r) => r.method === "DELETE" && r.url.endsWith(`/files/${extra}`),
+  );
+  expect(publishedAt).toBeGreaterThan(-1);
+  expect(deletedAt).toBeGreaterThan(publishedAt);
+  expect(dec(files.get("topics.json")!)).toBe("A+B");
 });
