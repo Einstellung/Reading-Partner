@@ -72,12 +72,11 @@ export default function PenToolbar({
 	// Horizontal hangs the palette below the swatch and centres it on it; vertical
 	// opens it to the swatch's side. Both are measured and clamped to the viewport:
 	// the header's tool band scrolls, so the swatch can sit against the screen edge
-	// with half the palette's colors past it.
+	// with half the palette's colors past it. A closed palette has nothing to
+	// place and sets nothing: a state update from a layout effect is one more
+	// nested sync render even when it changes nothing (docs/pitfall/457).
 	useLayoutEffect(() => {
-		if (!paletteOpen) {
-			setPalettePos(null);
-			return;
-		}
+		if (!paletteOpen) return;
 		const swatch = swatchRef.current;
 		const popover = popoverRef.current;
 		if (!swatch || !popover) return;
@@ -121,6 +120,8 @@ export default function PenToolbar({
 	// color belongs to, so the swatch picks it up rather than sitting there dead.
 	function pickSwatch() {
 		if (!hasColor) onToolChange({ type: 'highlight', color: tool.color });
+		// Opening: hidden again until the layout effect has measured it.
+		if (!hasColor || !paletteOpen) setPalettePos(null);
 		setPaletteOpen((v) => !hasColor || !v);
 	}
 

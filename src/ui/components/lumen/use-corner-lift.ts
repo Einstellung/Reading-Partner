@@ -74,14 +74,13 @@ export function useCornerLift(shown: boolean, chatMain: boolean): {
     let pending = 0;
     const read = () => {
       const box = element.getBoundingClientRect();
+      const next = readFrame();
       // Same numbers, same object, on both of these: a keyboard-induced scroll
       // that moves nothing must not re-run the placement (useViewportSize.ts).
-      setFrame((was) => {
-        const next = readFrame();
-        return was.height === next.height && was.visibleBottom === next.visibleBottom
-          ? was
-          : next;
-      });
+      // Both read before the updater, which React may replay (docs/pitfall/457).
+      setFrame((was) =>
+        was.height === next.height && was.visibleBottom === next.visibleBottom ? was : next,
+      );
       setComposer((was) =>
         was && was.top === box.top && was.bottom === box.bottom
           ? was

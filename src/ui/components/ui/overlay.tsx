@@ -188,11 +188,12 @@ export function useOverlaySafePadding(): SafeAreaInsets {
   const [insets, setInsets] = useState<SafeAreaInsets>(NO_SAFE_AREA);
 
   useBeforePaint(() => {
-    const read = () =>
-      setInsets((current) => {
-        const next = measureSafeAreaInsets();
-        return sameInsets(current, next) ? current : next;
-      });
+    // Measured here, not in the updater, which React may replay on renders to
+    // come (docs/pitfall/457).
+    const read = () => {
+      const next = measureSafeAreaInsets();
+      setInsets((current) => (sameInsets(current, next) ? current : next));
+    };
     read();
     window.addEventListener("resize", read);
     window.addEventListener("orientationchange", read);
