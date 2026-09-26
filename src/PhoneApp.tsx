@@ -69,7 +69,7 @@ import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
-import { KeyboardShell } from "./ui/components/phone/KeyboardShell";
+import { KeyboardShell } from "./ui/components/common/KeyboardShell";
 import { useBackgroundServices } from "./ui/components/common/useBackgroundServices";
 
 // InfoHome's screen for a stack entry, or null on the ones it does not draw.

@@ -30,6 +30,7 @@ import { Composer } from "../chat/Composer";
 import { MessageList } from "../chat/MessageList";
 import MaterialFigureScope from "../common/MaterialFigureScope";
 import NameDialog from "../common/NameDialog";
+import { useKeyboardRoom } from "../common/useKeyboardInset";
 import { Button } from "../ui/button";
 import { rehearsalForRetell, type Rehearsal } from "../../../reading/rehearsal";
 import type { Retell } from "../../../reading/retell";
@@ -104,10 +105,13 @@ export default function RetellView(props: {
     preparing,
   });
 
+  // The composer is docked at the bottom, so the keyboard would cover it.
+  const keyboard = useKeyboardRoom();
+
   return (
     <MaterialFigureScope retellId={props.retellId}>
       <CitationContext.Provider value={null}>
-        <div className="absolute inset-0 flex flex-col bg-background">
+        <div className="absolute inset-0 flex flex-col bg-background" style={{ paddingBottom: keyboard.padding }}>
           <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
             <Button
               type="button"
