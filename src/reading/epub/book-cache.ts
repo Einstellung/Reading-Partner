@@ -21,7 +21,7 @@ import { remapEpubAnnotations } from "./migrate";
 import { createLayoutRuler } from "./page-ruler";
 import { paginate, type Pagination } from "./paginate";
 import { putPagination, readPagination } from "./pagination-store";
-import { parseEpub, type EpubBook } from "./parse";
+import { parseEpub, type EpubBook } from "./file/parse";
 
 /** A book's table, and whether getting it meant cutting the book over again. */
 export interface PreparedPagination {

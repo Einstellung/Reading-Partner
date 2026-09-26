@@ -91,7 +91,7 @@ export function sniffContentType(firstBytes: Uint8Array, contentType?: string | 
   // sniff on the first bytes of a response, so it reads the layout the format
   // requires — mimetype first, stored, so its content sits in the clear right
   // after the local header. A book repacked by an ordinary zip tool fails this
-  // and is recognised from the whole file instead (reading/epub/sniff.ts); no
+  // and is recognised from the whole file instead (reading/epub/file/sniff.ts); no
   // prefix of the bytes can answer for the central directory.
   if (
     firstBytes.length >= 4 &&

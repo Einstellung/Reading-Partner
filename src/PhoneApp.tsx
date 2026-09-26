@@ -21,8 +21,8 @@ import {
   openInAvailable,
   shareFileName,
 } from "./platform/app/open-in";
-import FlowReaderPane from "./reading/epub/FlowReaderPane";
-import type { FlowReaderPaneProps } from "./reading/epub/flow-contract";
+import FlowReaderPane from "./reading/epub/flow/FlowReaderPane";
+import type { FlowReaderPaneProps } from "./reading/epub/flow/flow-contract";
 import { registerPullRoute } from "./platform/sync/pull-routes";
 import { KEPT_ARTICLES_PULL_ROUTE } from "./reading/pull-routes";
 import {

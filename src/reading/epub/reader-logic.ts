@@ -9,11 +9,11 @@
 
 import type { ViewState, ViewStats } from "../../platform/app/reader-contract";
 import type { ReadingLayout } from "../engine/layout-modes";
-import { compareLocal, parseCfiStart } from "./cfi";
+import { compareLocal, parseCfiStart } from "./file/cfi";
 import { atLockedZoom, canZoomIn, canZoomOut, columnScrollTop, type Zoom } from "./page-geometry";
 import { blockNumberAt, type Pagination } from "./paginate";
 
-export { indexRuns, offsetOfPoint } from "./text";
+export { indexRuns, offsetOfPoint } from "./file/text";
 
 // --------------------------------------------------------------- position ---
 

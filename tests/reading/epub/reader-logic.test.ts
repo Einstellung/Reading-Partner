@@ -2,10 +2,10 @@
 
 import { describe, expect, test } from "bun:test";
 import type { ViewState } from "../../../src/platform/app/reader-contract";
-import { extractDocumentText } from "../../../src/reading/epub/text";
+import { extractDocumentText } from "../../../src/reading/epub/file/text";
 import { characterRuler, paginate, type Pagination } from "../../../src/reading/epub/paginate";
 import { PAGE_GEOMETRY, columnScrollTop } from "../../../src/reading/epub/page-geometry";
-import { parseEpub } from "../../../src/reading/epub/parse";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
 import {
   blockIndexAt,
   blockInfo,

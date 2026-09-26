@@ -13,19 +13,19 @@
 // coordinate, and every coordinate inside it is a page coordinate
 // (mark-geometry.ts). The card converts between them.
 
-import type { Annotation, AnnotationPopupParams, Tool } from "../../platform/app/reader-contract";
-import { pointerKindOf, routePointer, toolKindOf, type ToolKind } from "../engine/gesture/touch-routing";
+import type { Annotation, AnnotationPopupParams, Tool } from "../../../platform/app/reader-contract";
+import { pointerKindOf, routePointer, toolKindOf, type ToolKind } from "../../engine/gesture/touch-routing";
 import {
   DEFAULT_MARK_COLOR,
   epubInkOf,
   markKind,
   newEpubInk,
   type MarkKind,
-} from "./annotation";
-import { caretAtPoint, rangeBetween, type CaretPoint } from "./caret";
-import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "./mark-draw";
+} from "../annotation";
+import { caretAtPoint, rangeBetween, type CaretPoint } from "../caret";
+import { colorOf, createMarkPainter, rangeForMark, type SpineText } from "../mark-draw";
 import type { PageCard } from "./page-card";
-import { PAGE_HEIGHT, PAGE_WIDTH } from "./page-geometry";
+import { PAGE_HEIGHT, PAGE_WIDTH } from "../page-geometry";
 import {
   HIT_PAD,
   INK_MIN_STEP,
@@ -43,10 +43,10 @@ import {
   unionRect,
   type PagePoint,
   type PageRect,
-} from "./mark-geometry";
-import { textMarkOf } from "./mark-write";
-import type { Pagination } from "./paginate";
-import { blockInfo } from "./reader-logic";
+} from "../mark-geometry";
+import { textMarkOf } from "../mark-write";
+import type { Pagination } from "../paginate";
+import { blockInfo } from "../reader-logic";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 

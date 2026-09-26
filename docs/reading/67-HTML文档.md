@@ -101,10 +101,10 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 ## 代码事实
 
 - 网页正文抽取有两个：`src/reading/sources/article.ts` 的 `extractArticle` 是字符串正则、只出纯文本，`ingest_url` 今天用它；`src/info/extract/readable.ts` 的 `extractReadable` 走 Readability 加 defuddle 回退、出 HTML、要 DOMParser，收藏文章的 `html` 是它产的（`src/reading/saved-articles.ts`）。构建 EPUB 要 HTML，用后者，经 `readable-lazy.ts` 那扇门进；`ingest_url` 合并后也换到它。
-- 消毒：`src/reading/epub/sanitize.ts` 的 `sanitizeDocument`，允许列表、幂等（坑 126）。构建时先用它过一遍，产出直接就是阅读器要吃的那棵树。
+- 消毒：`src/reading/epub/file/sanitize.ts` 的 `sanitizeDocument`，允许列表、幂等（坑 126）。构建时先用它过一遍，产出直接就是阅读器要吃的那棵树。
 - 入库：`src/platform/app/library.ts` 的 `importBook(bytes, originalPath)`，按内容哈希判重，`formatOfBytes` 嗅探格式。EPUB 字节进去就是一本书，重复摄入同一篇是 no-op。
-- zip 写：`fflate` 0.8.3 已装（`src/reading/epub/zip.ts` 用它的 `unzipSync` 读），构建用 `zipSync`，`mimetype` 条目必须第一个且不压缩。
-- nav：`src/reading/epub/nav.ts` 读 EPUB 3 的 `<nav epub:type="toc">`。构建时从正文的 h1–h3 生成这棵 nav，Outline 侧栏就有章节。
+- zip 写：`fflate` 0.8.3 已装（`src/reading/epub/file/zip.ts` 用它的 `unzipSync` 读），构建用 `zipSync`，`mimetype` 条目必须第一个且不压缩。
+- nav：`src/reading/epub/file/nav.ts` 读 EPUB 3 的 `<nav epub:type="toc">`。构建时从正文的 h1–h3 生成这棵 nav，Outline 侧栏就有章节。
 - `LibraryEntry` 今天只有 hash、title、originalFilename、addedAt、format。
 
 ## v1 范围
@@ -114,7 +114,7 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 - 摄入：URL → `fetchWithRetry` 取页面 → `extractReadable` 出 HTML → 下图 → `buildArticleEpub` → `importBook` → 补 kind 和来源字段 → 确认卡。PDF 链接照旧走 `sniffContentType` 分流，直接 `importBook`。
 - 书架：topic 内文章行没有封面，一行标题加来源域名加日期。
 - `ingest_url` 改成上面这条摄入路；落成书的 supplement、digest 挂在产出的文档上都已做。
-- 封面：`src/reading/epub/cover-svg.ts` 的纯函数 `typographicCover` / `volumeCover` 出 SVG，`packArticleEpub` 收一个可选 `cover`，写成 `cover.svg` 并在 manifest 上标 `properties="cover-image"`（另写 EPUB 2 的 `<meta name="cover">`），书架原有的取封面那条路不动。稿和合订本的构建器还没有，先只有这一层。
+- 封面：`src/reading/epub/file/cover-svg.ts` 的纯函数 `typographicCover` / `volumeCover` 出 SVG，`packArticleEpub` 收一个可选 `cover`，写成 `cover.svg` 并在 manifest 上标 `properties="cover-image"`（另写 EPUB 2 的 `<meta name="cover">`），书架原有的取封面那条路不动。稿和合订本的构建器还没有，先只有这一层。
 - 翻译核心：`translateArticleEpub(epubBytes, deps) → { bytes, blocks, glossary }`，术语表一趟、切批并发一趟、写回、重新打包，两个模型调用都注入；`carryMarks` 按引文把划线搬到译本。单测覆盖：可译块各多一个兄弟块、公式代码表格逐字不变、nav 和图片不变、再翻一次被拒。
 
 不在 v1，各一句：

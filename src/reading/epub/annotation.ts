@@ -17,7 +17,7 @@
 // a passage the book repeats is found at the copy that was marked.
 
 import { padInt } from "../../platform/std/text";
-import { runAt, type DocumentText } from "./text";
+import { runAt, type DocumentText } from "./file/text";
 
 /** What a FragmentSelector holding an EPUB CFI declares itself to conform to. */
 export const CFI_CONFORMS_TO = "http://www.idpf.org/epub/linking/cfi/epub-cfi.html";

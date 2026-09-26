@@ -9,8 +9,8 @@
 // document read "page 2" over every illustration, and a relayout sent it back
 // to that page.
 
-import { pointSteps, textSteps } from "./cfi";
-import type { CaretPoint } from "./caret";
+import { pointSteps, textSteps } from "../file/cfi";
+import type { CaretPoint } from "../caret";
 
 export interface TopEdgeProbe {
   /** The element at a viewport point, in the document's shadow tree. */

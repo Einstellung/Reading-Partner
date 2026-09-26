@@ -11,8 +11,8 @@ import {
   wordBoundsAt,
   type PressEvent,
   type PressState,
-} from "../../../src/reading/epub/flow-gesture";
-import { FLOW_DISPLAY_DEFAULT } from "../../../src/reading/epub/flow-display";
+} from "../../../../src/reading/epub/flow/flow-gesture";
+import { FLOW_DISPLAY_DEFAULT } from "../../../../src/reading/epub/flow/flow-display";
 
 const down = (over: Partial<Extract<PressEvent, { kind: "down" }>> = {}): PressEvent => ({
   kind: "down",

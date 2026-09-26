@@ -11,8 +11,8 @@ import {
   resolveRange,
   parseEpubCfi,
   compareLocal,
-} from "../../../src/reading/epub/cfi";
-import { cssUrls, rewriteCssUrls, sanitizeCss, sanitizeDeclarations } from "../../../src/reading/epub/css-sanitize";
+} from "../../../src/reading/epub/file/cfi";
+import { cssUrls, rewriteCssUrls, sanitizeCss, sanitizeDeclarations } from "../../../src/reading/epub/file/css-sanitize";
 import { remapEpubAnnotations } from "../../../src/reading/epub/migrate";
 import {
   BODY_HEIGHT,
@@ -42,10 +42,10 @@ import {
   paginationFile,
   storedVersionOf,
 } from "../../../src/reading/epub/pagination-store";
-import { parseEpub } from "../../../src/reading/epub/parse";
-import { sanitize } from "../../../src/reading/epub/sanitize";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
+import { sanitize } from "../../../src/reading/epub/file/sanitize";
 import { makeEpubSortIndex } from "../../../src/reading/epub/annotation";
-import { createPageCard } from "../../../src/reading/epub/page-card";
+import { createPageCard } from "../../../src/reading/epub/paged/page-card";
 import { createPageResources, mountDocument } from "../../../src/reading/epub/page-mount";
 import { PAGE_WASH_GROUP_STYLE, PAGE_WASH_STYLE } from "../../../src/reading/engine/page-wash";
 import { buildEpub, prose } from "./fixture";

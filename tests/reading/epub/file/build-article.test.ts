@@ -3,14 +3,14 @@
 // Run: bash scripts/t.sh tests/reading/epub/build-article.test.ts
 
 import { expect, test } from "bun:test";
-import { buildArticleEpub, MISSING_IMAGE_HEIGHT } from "../../../src/reading/epub/build-article";
-import { isEpub } from "../../../src/reading/epub/sniff";
-import { openZip } from "../../../src/reading/epub/zip";
-import { parseEpub } from "../../../src/reading/epub/parse";
-import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
-import { fulltextFrom } from "../../../src/reading/epub/fulltext";
-import { typographicCover } from "../../../src/reading/epub/cover-svg";
-import { PNG } from "./fixture";
+import { buildArticleEpub, MISSING_IMAGE_HEIGHT } from "../../../../src/reading/epub/file/build-article";
+import { isEpub } from "../../../../src/reading/epub/file/sniff";
+import { openZip } from "../../../../src/reading/epub/file/zip";
+import { parseEpub } from "../../../../src/reading/epub/file/parse";
+import { characterRuler, paginate } from "../../../../src/reading/epub/paginate";
+import { fulltextFrom } from "../../../../src/reading/epub/fulltext";
+import { typographicCover } from "../../../../src/reading/epub/file/cover-svg";
+import { PNG } from "../fixture";
 
 const GIF = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0x80, 0, 0]);
 

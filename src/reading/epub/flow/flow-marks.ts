@@ -13,16 +13,16 @@
 // is a rect the overlay draws unchanged. Only the popup's rect leaves as a
 // viewport rect.
 
-import type { Annotation, AnnotationPopupParams } from "../../platform/app/reader-contract";
-import { DEFAULT_MARK_COLOR, epubPositionOf, markKind } from "./annotation";
-import { caretAtPoint, rangeBetween, type CaretPoint } from "./caret";
-import { parseCfiStart, parseEpubRangeCfi, resolveRange } from "./cfi";
+import type { Annotation, AnnotationPopupParams } from "../../../platform/app/reader-contract";
+import { DEFAULT_MARK_COLOR, epubPositionOf, markKind } from "../annotation";
+import { caretAtPoint, rangeBetween, type CaretPoint } from "../caret";
+import { parseCfiStart, parseEpubRangeCfi, resolveRange } from "../file/cfi";
 import type { FlowTool } from "./flow-contract";
 import { wordBoundsAt } from "./flow-gesture";
-import { colorOf, createMarkPainter, rangeForMark, type MarkRangeSource, type SpineText } from "./mark-draw";
-import { popupRect, rectsHit, unionRect, type PageRect } from "./mark-geometry";
-import { textMarkOf } from "./mark-write";
-import type { Pagination } from "./paginate";
+import { colorOf, createMarkPainter, rangeForMark, type MarkRangeSource, type SpineText } from "../mark-draw";
+import { popupRect, rectsHit, unionRect, type PageRect } from "../mark-geometry";
+import { textMarkOf } from "../mark-write";
+import type { Pagination } from "../paginate";
 
 /** One spine document as it stands in the column. */
 export interface FlowDoc {

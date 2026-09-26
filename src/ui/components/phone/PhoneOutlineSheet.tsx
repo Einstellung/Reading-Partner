@@ -12,7 +12,7 @@
 // is the position block — so a tap is goToPage.
 
 import type { OutlineItem } from "../../../fulltext/types";
-import type { FlowPaperName } from "../../../reading/epub/flow-display";
+import type { FlowPaperName } from "../../../reading/epub/flow/flow-display";
 import OutlineView from "../reader/OutlineView";
 import { Dialog, DialogSheetContent, DialogTitle } from "../ui/dialog";
 

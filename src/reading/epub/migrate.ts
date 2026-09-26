@@ -14,11 +14,11 @@
 
 import type { Annotation } from "../../platform/app/reader-contract";
 import { epubInkOf, makeEpubSortIndex } from "./annotation";
-import { parseCfiStart, resolvePoint } from "./cfi";
+import { parseCfiStart, resolvePoint } from "./file/cfi";
 import { scaleInkPath } from "./mark-geometry";
 import { blockNumberAt, type Pagination } from "./paginate";
-import type { EpubBook } from "./parse";
-import { indexRuns, offsetOfPoint } from "./text";
+import type { EpubBook } from "./file/parse";
+import { indexRuns, offsetOfPoint } from "./file/text";
 
 export interface RemappedAnnotations {
   annotations: Annotation[];

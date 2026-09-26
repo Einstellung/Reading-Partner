@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { openZip } from "../../../src/reading/epub/zip";
+import { openZip } from "../../../src/reading/epub/file/zip";
 import {
   MIN_RASTER_EDGE,
   RASTER_MAX_EDGE,

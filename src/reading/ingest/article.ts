@@ -18,7 +18,7 @@
 import { contentHash } from "../../platform/app/content-hash";
 import type { ImportMeta, LibraryEntry, LibraryKind } from "../../platform/app/library";
 import type { ExtractReadable } from "../../info/extract/readable-select";
-import { buildArticleEpub, type ArticleImage } from "../epub/build-article";
+import { buildArticleEpub, type ArticleImage } from "../epub/file/build-article";
 import { resolveUrlSource, sniffContentType } from "../sources";
 import {
   articleFileName,

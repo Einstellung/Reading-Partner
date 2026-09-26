@@ -8,9 +8,9 @@ import {
   quoteSelectorAt,
   rangeAtSpan,
 } from "../../../src/reading/epub/annotation";
-import { buildArticleEpub } from "../../../src/reading/epub/build-article";
-import { parseEpubRangeCfi, rangeToCfi, resolveRange } from "../../../src/reading/epub/cfi";
-import { parseEpub, type SpineDocument } from "../../../src/reading/epub/parse";
+import { buildArticleEpub } from "../../../src/reading/epub/file/build-article";
+import { parseEpubRangeCfi, rangeToCfi, resolveRange } from "../../../src/reading/epub/file/cfi";
+import { parseEpub, type SpineDocument } from "../../../src/reading/epub/file/parse";
 import { carryMarks, type MarkRecord } from "../../../src/reading/translate/carry-marks";
 import { translateArticleEpub } from "../../../src/reading/translate/translate-article";
 import type { TranslateBatchFn } from "../../../src/reading/translate/prompt";

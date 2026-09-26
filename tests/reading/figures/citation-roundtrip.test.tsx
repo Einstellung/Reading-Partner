@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildEpub, PNG, prose } from "../epub/fixture";
-import { parseEpub } from "../../../src/reading/epub/parse";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { epubFigures } from "../../../src/reading/figures/epub";
 import { findFigureById } from "../../../src/reading/figures/lookup";

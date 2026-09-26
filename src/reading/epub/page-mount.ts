@@ -11,7 +11,7 @@
 // urls rewritten) and the url()s of a <style>. Attribute values change; the
 // tree's shape does not.
 
-import { SHIPPED_FONT_STACK, rewriteCssUrls, sanitizeCss } from "./css-sanitize";
+import { SHIPPED_FONT_STACK, rewriteCssUrls, sanitizeCss } from "./file/css-sanitize";
 import { PAGE_WASH_CSS, PAGE_WASH_GROUP_CSS } from "../engine/page-wash";
 import {
   BASE_FONT_PX,
@@ -23,9 +23,9 @@ import {
   PAGE_PAD_Y,
   PAGE_WIDTH,
 } from "./page-geometry";
-import type { SpineDocument } from "./parse";
-import { XLINK_NS } from "./sanitize";
-import { resolveZipPath, type EpubZip } from "./zip";
+import type { SpineDocument } from "./file/parse";
+import { XLINK_NS } from "./file/sanitize";
+import { resolveZipPath, type EpubZip } from "./file/zip";
 
 /** The faces shipped in public/fonts, declared in styles.css. */
 export const READING_FONT_STACK = SHIPPED_FONT_STACK;

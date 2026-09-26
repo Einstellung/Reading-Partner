@@ -6,7 +6,7 @@
 
 ## 原因
 
-`src/reading/epub/zip.ts` 的 `openZip` 开包时只解一次，`filter` 里用 `isMarkup(name)` 挑出 markup 条目预先解压，`text()` 只从那张表里查；其余条目留给 `bytes()` 按需再解一次。SVG 不在 markup 之列。查不到不区分「条目不存在」和「条目没预解」，两种都是 `null`。
+`src/reading/epub/file/zip.ts` 的 `openZip` 开包时只解一次，`filter` 里用 `isMarkup(name)` 挑出 markup 条目预先解压，`text()` 只从那张表里查；其余条目留给 `bytes()` 按需再解一次。SVG 不在 markup 之列。查不到不区分「条目不存在」和「条目没预解」，两种都是 `null`。
 
 ## 解法
 

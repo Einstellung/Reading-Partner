@@ -7,7 +7,7 @@ import type {
   AnnotationPopupParams,
   ViewState,
   ViewStats,
-} from "../../platform/app/reader-contract";
+} from "../../../platform/app/reader-contract";
 import type { FlowDisplay } from "./flow-display";
 
 export interface FlowTool {

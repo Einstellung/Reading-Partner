@@ -18,11 +18,11 @@ import type {
   AnnotationPopupParams,
   ViewState,
   ViewStats,
-} from "../../platform/app/reader-contract";
-import { openExternal } from "../../platform/app/external-link";
-import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
-import { caretAtPoint } from "./caret";
-import { epubCfi, parseCfiStart, resolvePointRange } from "./cfi";
+} from "../../../platform/app/reader-contract";
+import { openExternal } from "../../../platform/app/external-link";
+import { acquireEpub, ensurePagination, releaseEpub } from "../book-cache";
+import { caretAtPoint } from "../caret";
+import { epubCfi, parseCfiStart, resolvePointRange } from "../file/cfi";
 import type { FlowReaderView, FlowTool } from "./flow-contract";
 import {
   IDLE,
@@ -36,14 +36,14 @@ import {
 import { FLOW_PAPERS, type FlowDisplay } from "./flow-display";
 import { createFlowMarks, flowRangeSource, rectsIn, type FlowDoc, type PressPoint } from "./flow-marks";
 import { flowBaselineCss, mountFlowDocument } from "./flow-mount";
-import { createMarkPainter, rangeOfSpan } from "./mark-draw";
-import { createSpineTexts } from "./mark-write";
-import { createPageResources, readingFontsReady } from "./page-mount";
-import type { Pagination } from "./paginate";
-import type { EpubBook } from "./parse";
-import { bookLinkTarget, labelForBlock, locateQuote, pageIndexOfCfi, spineStartsOf } from "./reader-logic";
+import { createMarkPainter, rangeOfSpan } from "../mark-draw";
+import { createSpineTexts } from "../mark-write";
+import { createPageResources, readingFontsReady } from "../page-mount";
+import type { Pagination } from "../paginate";
+import type { EpubBook } from "../file/parse";
+import { bookLinkTarget, labelForBlock, locateQuote, pageIndexOfCfi, spineStartsOf } from "../reader-logic";
 import { topEdgeSteps } from "./top-edge";
-import { hrefFragment, resolveZipPath } from "./zip";
+import { hrefFragment, resolveZipPath } from "../file/zip";
 
 export interface FlowReaderCallbacks {
   onChangeViewState(state: ViewState): void;

@@ -199,6 +199,18 @@ const LAYER: Record<string, Layer> = {
   // A peer of reading/engine rather than a corner of it: that directory is
   // PDFium geometry all the way down, and the two share the shell's contract.
   "reading/epub": "domain",
+  // The headless ingestion: unpack, sanitize, parse, the CFI grammar, and the
+  // cover an app-built document draws. Everything both reading areas below
+  // build on, and the only one of the three that may not import either.
+  "reading/epub/file": "domain",
+  // The paged desk (docs/64): sheets scaled and clipped on a scrolling
+  // viewport, one PDFium-style page at a time.
+  "reading/epub/paged": "domain",
+  // The reflow column (docs/70): one native scroll container, spine documents
+  // laid end to end. A peer of reading/epub/paged, not a corner of it — the
+  // two reading areas share reading/epub/file and reading/epub's own marks and
+  // pagination, and reach for neither of each other.
+  "reading/epub/flow": "domain",
   "reading/figures": "domain",
   // Turning a pasted URL into a document on the shelf (docs/67). A domain of its
   // own rather than a corner of reading/epub: the building of the file is that

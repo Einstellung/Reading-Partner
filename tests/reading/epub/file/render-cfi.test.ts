@@ -9,16 +9,16 @@
 // one every other EPUB reader reads.
 
 import { describe, expect, test } from "bun:test";
-import { parseCfiStart, parseEpubCfi, resolvePoint, resolvePointRange } from "../../../src/reading/epub/cfi";
-import { blockNumberAt, characterRuler, paginate } from "../../../src/reading/epub/paginate";
-import { parseEpub, type EpubBook } from "../../../src/reading/epub/parse";
-import { indexRuns, offsetOfPoint } from "../../../src/reading/epub/reader-logic";
-import { extractDocumentText } from "../../../src/reading/epub/text";
-import { buildEpub, prose } from "./fixture";
+import { parseCfiStart, parseEpubCfi, resolvePoint, resolvePointRange } from "../../../../src/reading/epub/file/cfi";
+import { blockNumberAt, characterRuler, paginate } from "../../../../src/reading/epub/paginate";
+import { parseEpub, type EpubBook } from "../../../../src/reading/epub/file/parse";
+import { indexRuns, offsetOfPoint } from "../../../../src/reading/epub/reader-logic";
+import { extractDocumentText } from "../../../../src/reading/epub/file/text";
+import { buildEpub, prose } from "../fixture";
 
 // The vendored parser, by path rather than by the `foliate-js` alias: that
 // alias is vite's, and this runs under bun.
-const EPUBCFI = "../../../vendor/foliate-js/epubcfi.js";
+const EPUBCFI = "../../../../vendor/foliate-js/epubcfi.js";
 const CFI = (await import(EPUBCFI)) as {
   parse(cfi: string): unknown;
   toRange(doc: Document, parts: unknown): Range;

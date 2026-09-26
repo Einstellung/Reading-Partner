@@ -23,8 +23,8 @@
 // identifier — is derived from content and not from the clock.
 
 import { strToU8, zipSync, type Zippable } from "fflate";
-import { contentHash } from "../../platform/app/content-hash";
-import { escapeXml, oneLine } from "../../platform/std/text";
+import { contentHash } from "../../../platform/app/content-hash";
+import { escapeXml, oneLine } from "../../../platform/std/text";
 import { sanitizeDocument } from "./sanitize";
 
 export interface ArticleImage {

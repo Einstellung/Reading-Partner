@@ -21,15 +21,15 @@ import type {
   ViewInstance,
   ViewState,
   ViewStats,
-} from "../../platform/app/reader-contract";
-import { openExternal } from "../../platform/app/external-link";
-import { LAYOUT_SETTINGS, type ReadingLayout } from "../engine/layout-modes";
-import { PAGE_FRAME } from "../engine/page-frame";
-import { attachTouchRouter } from "../engine/gesture/attach-touch";
-import { attachPinchZoom } from "../engine/gesture/pinch-zoom";
-import { attachWheelZoom } from "../engine/gesture/wheel-zoom";
-import type { PagedGestureCtx } from "../engine/gesture/context";
-import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
+} from "../../../platform/app/reader-contract";
+import { openExternal } from "../../../platform/app/external-link";
+import { LAYOUT_SETTINGS, type ReadingLayout } from "../../engine/layout-modes";
+import { PAGE_FRAME } from "../../engine/page-frame";
+import { attachTouchRouter } from "../../engine/gesture/attach-touch";
+import { attachPinchZoom } from "../../engine/gesture/pinch-zoom";
+import { attachWheelZoom } from "../../engine/gesture/wheel-zoom";
+import type { PagedGestureCtx } from "../../engine/gesture/context";
+import { acquireEpub, ensurePagination, releaseEpub } from "../book-cache";
 import {
   PAGE_GAP,
   anchorAt,
@@ -49,16 +49,16 @@ import {
   type DeskMetrics,
   type DeskView,
   type Zoom,
-} from "./page-geometry";
-import { showsThroughBody, visibleRects } from "./mark-geometry";
-import { createMarkPainter } from "./mark-draw";
+} from "../page-geometry";
+import { showsThroughBody, visibleRects } from "../mark-geometry";
+import { createMarkPainter } from "../mark-draw";
 import { createMarkLayer, type MarkLayer } from "./mark-layer";
-import { createSpineTexts } from "./mark-write";
+import { createSpineTexts } from "../mark-write";
 import { createCardPool } from "./card-pool";
 import { createPageCard, type PageCard } from "./page-card";
-import { createPageResources, readingFontsReady } from "./page-mount";
-import type { Pagination } from "./paginate";
-import type { EpubBook } from "./parse";
+import { createPageResources, readingFontsReady } from "../page-mount";
+import type { Pagination } from "../paginate";
+import type { EpubBook } from "../file/parse";
 import {
   blockIndexAt,
   bookLinkTarget,
@@ -68,9 +68,9 @@ import {
   spineStartsOf,
   statsOf,
   viewStateOf,
-} from "./reader-logic";
-import { extractDocumentText, runAt } from "./text";
-import { hrefFragment, resolveZipPath } from "./zip";
+} from "../reader-logic";
+import { extractDocumentText, runAt } from "../file/text";
+import { hrefFragment, resolveZipPath } from "../file/zip";
 
 // Sheets kept mounted beyond the visible ones, each side.
 const MOUNT_MARGIN = 1;

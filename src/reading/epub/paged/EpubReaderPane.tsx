@@ -11,8 +11,8 @@ import type {
   ViewInstance,
   ViewState,
   ViewStats,
-} from "../../platform/app/reader-contract";
-import { SWIPE_MIN, claimsTouch, keyTurn, swipeTurn, tapZone, type Turn } from "./reader-logic";
+} from "../../../platform/app/reader-contract";
+import { SWIPE_MIN, claimsTouch, keyTurn, swipeTurn, tapZone, type Turn } from "../reader-logic";
 import { createEpubReader, type EpubReaderController } from "./reader-view";
 
 export interface EpubReaderPaneProps {

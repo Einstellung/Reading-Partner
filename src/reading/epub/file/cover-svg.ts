@@ -18,7 +18,7 @@
 // acceptable because the cover is a picture and not a page: nothing paginates
 // against it, so it costs no page number when it renders a little differently.
 
-import { escapeXml, oneLine } from "../../platform/std/text";
+import { escapeXml, oneLine } from "../../../platform/std/text";
 
 /** The sheet. Portrait, in the proportion of a trade paperback. */
 export const COVER_WIDTH = 600;

@@ -17,12 +17,12 @@ import type { AgentCallbacks } from "../../../../src/legion/execute/contract";
 import { callSettings, emptyReadingTurn } from "../../../support/use-call";
 import { bookThreadIo } from "../../../../src/reading/session/book-thread";
 import type { LessonTopic } from "../../../../src/ui/components/phone/use-book-lesson";
-import type { FlowReaderPaneProps } from "../../../../src/reading/epub/flow-contract";
+import type { FlowReaderPaneProps } from "../../../../src/reading/epub/flow/flow-contract";
 import {
   FLOW_DISPLAY_DEFAULT,
   FLOW_DISPLAY_KEY,
   type FlowDisplay,
-} from "../../../../src/reading/epub/flow-display";
+} from "../../../../src/reading/epub/flow/flow-display";
 import { AI_PEN_NOT_ON_PHONE } from "../../../../src/ui/components/phone/reader-gate";
 import type { PhoneBookIo } from "../../../../src/reading/session/open-epub";
 import { useDom } from "../../../support/dom";

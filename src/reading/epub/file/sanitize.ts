@@ -34,7 +34,7 @@
 // removes what reaches out of the archive or out of the page box. What a page
 // card lays over the app's baseline is exactly this tree's CSS.
 
-import { escapeHtmlText } from "../../platform/std/text";
+import { escapeHtmlText } from "../../../platform/std/text";
 import { sanitizeCss, sanitizeDeclarations, type CssUrlResolver } from "./css-sanitize";
 import { hrefFragment, resolveZipPath } from "./zip";
 

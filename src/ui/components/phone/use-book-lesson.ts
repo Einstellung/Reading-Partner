@@ -19,7 +19,7 @@ import { logEvent } from "../../../platform/app/events";
 import type { Annotation, ViewStats } from "../../../platform/app/reader-contract";
 import type { Settings } from "../../../platform/app/settings";
 import type { Topic } from "../../../platform/app/topics";
-import type { FlowReaderView } from "../../../reading/epub/flow-contract";
+import type { FlowReaderView } from "../../../reading/epub/flow/flow-contract";
 import { findFigureById, renderFigure, type Figure, type FiguresIndex } from "../../../reading/figures";
 import { bookTextNotice, bookTextState } from "../../../reading/intents";
 import type { Citation } from "../../../reading/prep";

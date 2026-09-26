@@ -14,11 +14,11 @@
 // page coordinates, and the two conversions between the page's unscaled
 // coordinates and the viewport's.
 
-import { parseCfiStart, parseEpubRangeCfi, resolvePoint, resolvePointRange, resolveRange } from "./cfi";
-import { PAGE_FRAME } from "../engine/page-frame";
-import { BODY_WIDTH, PAGE_HEIGHT, PAGE_WIDTH, columnOf } from "./page-geometry";
-import { mountDocument, type MountedDocument, type PageResources } from "./page-mount";
-import type { SpineDocument } from "./parse";
+import { parseCfiStart, parseEpubRangeCfi, resolvePoint, resolvePointRange, resolveRange } from "../file/cfi";
+import { PAGE_FRAME } from "../../engine/page-frame";
+import { BODY_WIDTH, PAGE_HEIGHT, PAGE_WIDTH, columnOf } from "../page-geometry";
+import { mountDocument, type MountedDocument, type PageResources } from "../page-mount";
+import type { SpineDocument } from "../file/parse";
 
 export interface PagePoint2 {
   x: number;

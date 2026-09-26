@@ -28,8 +28,8 @@ import {
   rangeAtSpan,
   type TextSpan,
 } from "../epub/annotation";
-import { rangeToCfi } from "../epub/cfi";
-import type { DocumentText } from "../epub/text";
+import { rangeToCfi } from "../epub/file/cfi";
+import type { DocumentText } from "../epub/file/text";
 import { locateQuote } from "../prep/quote-locate";
 
 /** A mark as it is stored: the annotation record, fields and all. */

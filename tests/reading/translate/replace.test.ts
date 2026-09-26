@@ -5,14 +5,14 @@
 import { expect, test } from "bun:test";
 import type { ImportMeta, LibraryEntry } from "../../../src/platform/app/library";
 import type { Thread } from "../../../src/platform/app/threads";
-import { buildArticleEpub } from "../../../src/reading/epub/build-article";
-import { parseEpub } from "../../../src/reading/epub/parse";
+import { buildArticleEpub } from "../../../src/reading/epub/file/build-article";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
 import {
   newEpubMark,
   quoteSelectorAt,
   rangeAtSpan,
 } from "../../../src/reading/epub/annotation";
-import { rangeToCfi } from "../../../src/reading/epub/cfi";
+import { rangeToCfi } from "../../../src/reading/epub/file/cfi";
 import type { MarkRecord } from "../../../src/reading/translate/carry-marks";
 import {
   documentPathOf,

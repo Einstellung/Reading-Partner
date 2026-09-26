@@ -19,7 +19,7 @@ import {
   writeFlowDisplay,
   type FlowDisplay,
   type FlowDisplayStore,
-} from "../../../src/reading/epub/flow-display";
+} from "../../../../src/reading/epub/flow/flow-display";
 
 function store(initial?: string): FlowDisplayStore & { slots: Map<string, string> } {
   const slots = new Map<string, string>();

@@ -23,7 +23,7 @@
 // means. That is enough to decide what to keep, and it is what keeps the test
 // for "does this rule escape" a string test rather than a grammar.
 
-import { oneLine } from "../../platform/std/text";
+import { oneLine } from "../../../platform/std/text";
 
 /** How a url() reference is answered: the entry it resolves to, or null to drop it. */
 export type CssUrlResolver = (raw: string) => string | null;

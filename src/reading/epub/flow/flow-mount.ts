@@ -10,10 +10,10 @@
 // changing the type is rewriting that one element per document, not remounting
 // anything.
 
-import { PAGE_WASH_CSS, PAGE_WASH_GROUP_CSS } from "../engine/page-wash";
+import { PAGE_WASH_CSS, PAGE_WASH_GROUP_CSS } from "../../engine/page-wash";
 import { FLOW_PAD_Y, FLOW_PAPERS, type FlowDisplay } from "./flow-display";
-import { READING_FONT_STACK, imagesSettled, rewriteResources, type PageResources } from "./page-mount";
-import type { SpineDocument } from "./parse";
+import { READING_FONT_STACK, imagesSettled, rewriteResources, type PageResources } from "../page-mount";
+import type { SpineDocument } from "../file/parse";
 
 // The group's box is the sheet's (absolute, inset 0); in the column the paper
 // is as tall as the words, so the group sits in flow and only the isolation is

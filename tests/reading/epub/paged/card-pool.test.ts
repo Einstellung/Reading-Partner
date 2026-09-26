@@ -9,10 +9,10 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { CARD_POOL_LIMIT, createCardPool } from "../../../src/reading/epub/card-pool";
-import { paginate, characterRuler } from "../../../src/reading/epub/paginate";
-import { parseEpub } from "../../../src/reading/epub/parse";
-import { buildEpub } from "./fixture";
+import { CARD_POOL_LIMIT, createCardPool } from "../../../../src/reading/epub/paged/card-pool";
+import { paginate, characterRuler } from "../../../../src/reading/epub/paginate";
+import { parseEpub } from "../../../../src/reading/epub/file/parse";
+import { buildEpub } from "../fixture";
 
 interface FakeCard {
   id: string;

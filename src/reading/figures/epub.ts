@@ -10,9 +10,9 @@
 // two never close a cycle.
 
 import { PAGINATION_VERSION, blockNumberAt, type Pagination } from "../epub/paginate";
-import type { EpubBook, SpineDocument } from "../epub/parse";
-import { SVG_NS, XLINK_NS } from "../epub/sanitize";
-import { resolveZipPath } from "../epub/zip";
+import type { EpubBook, SpineDocument } from "../epub/file/parse";
+import { SVG_NS, XLINK_NS } from "../epub/file/sanitize";
+import { resolveZipPath } from "../epub/file/zip";
 import { figureCaptionId } from "./extract";
 import { canonicalFigureId, compareFigureIds, issuedFigureId } from "./lookup";
 import { FIGURES_VERSION, type CaptionSource, type Figure, type FiguresIndex } from "./types";

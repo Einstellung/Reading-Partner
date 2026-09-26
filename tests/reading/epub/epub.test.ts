@@ -4,13 +4,13 @@
 
 import { expect, test } from "bun:test";
 import { buildEpub, PNG, prose } from "./fixture";
-import { isEpub, looksLikeZip } from "../../../src/reading/epub/sniff";
-import { openZip, resolveZipPath } from "../../../src/reading/epub/zip";
-import { sanitize, sanitizeDocument } from "../../../src/reading/epub/sanitize";
-import { parseEpub } from "../../../src/reading/epub/parse";
+import { isEpub, looksLikeZip } from "../../../src/reading/epub/file/sniff";
+import { openZip, resolveZipPath } from "../../../src/reading/epub/file/zip";
+import { sanitize, sanitizeDocument } from "../../../src/reading/epub/file/sanitize";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { blockTexts, characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { fulltextFrom } from "../../../src/reading/epub/fulltext";
-import { parseEpubCfi } from "../../../src/reading/epub/cfi";
+import { parseEpubCfi } from "../../../src/reading/epub/file/cfi";
 import { epubFigures } from "../../../src/reading/figures/epub";
 import { renderEpubFigure } from "../../../src/reading/figures/render";
 import { sniffContentType } from "../../../src/reading/sources/url";

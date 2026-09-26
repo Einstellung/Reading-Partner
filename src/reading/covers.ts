@@ -50,8 +50,8 @@ import {
   type CoverMeta,
 } from "./cover-cache";
 import { renderFirstPageJpeg } from "./engine/raster";
-import { renderEpubCover } from "./epub/epub-cover";
-import { isEpub } from "./epub/sniff";
+import { renderEpubCover } from "./epub/file/epub-cover";
+import { isEpub } from "./epub/file/sniff";
 
 const COVERS_DIR = "covers";
 const MIME = "image/jpeg";

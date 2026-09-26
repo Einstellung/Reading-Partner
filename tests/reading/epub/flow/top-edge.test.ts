@@ -2,11 +2,11 @@
 // The hit tests are a webview's; which answer counts is decided here.
 
 import { describe, expect, test } from "bun:test";
-import { epubCfi } from "../../../src/reading/epub/cfi";
-import type { Pagination } from "../../../src/reading/epub/paginate";
-import { PAGE_GEOMETRY } from "../../../src/reading/epub/page-geometry";
-import { pageIndexOfCfi } from "../../../src/reading/epub/reader-logic";
-import { topEdgeSteps } from "../../../src/reading/epub/top-edge";
+import { epubCfi } from "../../../../src/reading/epub/file/cfi";
+import type { Pagination } from "../../../../src/reading/epub/paginate";
+import { PAGE_GEOMETRY } from "../../../../src/reading/epub/page-geometry";
+import { pageIndexOfCfi } from "../../../../src/reading/epub/reader-logic";
+import { topEdgeSteps } from "../../../../src/reading/epub/flow/top-edge";
 
 // body: p /2, p /4, div /6 (the picture, /4/6/2), p /8
 const doc = new DOMParser().parseFromString(

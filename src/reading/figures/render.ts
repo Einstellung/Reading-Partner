@@ -10,7 +10,7 @@ import { decodeBlob } from "../../ai/image-utils";
 import { loadPdfjs } from "../../fulltext/extract";
 import { bytesToBase64 } from "../../platform/std/base64";
 import { heldEpub } from "../epub/book-cache";
-import { openZip, type EpubZip } from "../epub/zip";
+import { openZip, type EpubZip } from "../epub/file/zip";
 import { planEpubView, rasterizeEpubFigure, type Rasterizer } from "./raster";
 import { pdfBBox, type Figure } from "./types";
 
