@@ -2,7 +2,8 @@
 // same watch the lesson's "Ask about this" uses (long-press.ts), bound to every
 // element under the host that carries the selector, plus the two things a menu
 // on a card needs that a menu on prose does not: the click the finger's lift
-// turns into is swallowed (hold-menu.ts stepClickGuard), and a right click or
+// turns into is swallowed, and so is the click of the tap that puts the menu
+// away (hold-menu.ts stepClickGuard), and a right click or
 // Android's own long-press (`contextmenu`) opens the same menu.
 //
 // The press and the held highlight are data attributes set on the element
@@ -42,13 +43,20 @@ export function useHold(host: RefObject<HTMLElement | null>, opts: HoldOptions =
   const enabled = opts.enabled ?? true;
   const [held, setHeld] = useState<Held | null>(null);
   const heldEl = useRef<HTMLElement | null>(null);
+  // Whether the menu is up, for the down that puts it away. The state is a
+  // render behind the listener.
+  const menuUp = useRef(false);
 
   const release = useCallback(() => {
     heldEl.current?.removeAttribute("data-held");
     heldEl.current = null;
+    menuUp.current = false;
     setHeld(null);
   }, []);
-  const closeMenu = useCallback(() => setHeld(null), []);
+  const closeMenu = useCallback(() => {
+    menuUp.current = false;
+    setHeld(null);
+  }, []);
 
   useEffect(() => {
     const el = host.current;
@@ -64,6 +72,7 @@ export function useHold(host: RefObject<HTMLElement | null>, opts: HoldOptions =
       heldEl.current?.removeAttribute("data-held");
       heldEl.current = target;
       target.setAttribute("data-held", "");
+      menuUp.current = true;
       const r = target.getBoundingClientRect();
       setHeld({
         key: target.getAttribute(attr) ?? "",
@@ -90,8 +99,11 @@ export function useHold(host: RefObject<HTMLElement | null>, opts: HoldOptions =
       },
     });
 
+    // Capture, on the host: it runs before the scrim's own handler closes the menu.
     const onDown = () => {
-      guard = stepClickGuard(guard, { type: "down", at: performance.now() }, LONG_PRESS_MS).guard;
+      const at = performance.now();
+      guard = stepClickGuard(guard, { type: "down", at }, LONG_PRESS_MS).guard;
+      if (menuUp.current) guard = stepClickGuard(guard, { type: "dismiss", at }, LONG_PRESS_MS).guard;
     };
     const onClick = (e: MouseEvent) => {
       const step = stepClickGuard(

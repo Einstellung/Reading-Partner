@@ -208,19 +208,29 @@ export function otherTopicNames(
 // click on whatever it rested on: the card the menu is about would open under
 // it. Also a hold that started just beside a card (no menu, the watch was never
 // armed) has iOS snap the click on release onto the card; a hold is not an
-// open either way.
+// open either way. And a tap that puts a menu away (on the scrim, or anywhere
+// else while it is up) lands its click on whatever was under the scrim once the
+// scrim is gone: iOS sends the click even though the down was prevented.
 
 export interface ClickGuard {
   // When the last finger went down, anywhere on the surface; null before one has.
   downAt: number | null;
   // Whether a hold fired since.
   fired: boolean;
+  // When that down put a menu away; null when it did not.
+  dismissedAt: number | null;
 }
 
-export const NO_CLICK_GUARD: ClickGuard = { downAt: null, fired: false };
+export const NO_CLICK_GUARD: ClickGuard = { downAt: null, fired: false, dismissedAt: null };
+
+// How long after a down that put a menu away its click may come. A click that
+// late with no down between is not that tap's.
+export const DISMISS_CLICK_MS = 1000;
 
 export type ClickGuardEvent =
   | { type: "down"; at: number }
+  // The down just stepped found a menu up: it closes the menu and does nothing else.
+  | { type: "dismiss"; at: number }
   | { type: "fire" }
   // onHoldable: whether the click is on something a hold would open a menu for.
   | { type: "click"; at: number; onHoldable: boolean };
@@ -238,12 +248,18 @@ export function stepClickGuard(
 ): ClickGuardStep {
   switch (event.type) {
     case "down":
-      return { guard: { downAt: event.at, fired: false }, swallow: false };
+      return { guard: { downAt: event.at, fired: false, dismissedAt: null }, swallow: false };
+    case "dismiss":
+      return { guard: { ...guard, dismissedAt: event.at }, swallow: false };
     case "fire":
       return { guard: { ...guard, fired: true }, swallow: false };
     case "click": {
-      const next = { ...guard, fired: false };
+      const next = { ...guard, fired: false, dismissedAt: null };
       if (guard.fired) return { guard: next, swallow: true };
+      // Whatever it landed on: the tap was for the menu.
+      if (guard.dismissedAt !== null && event.at - guard.dismissedAt <= DISMISS_CLICK_MS) {
+        return { guard: next, swallow: true };
+      }
       const held = guard.downAt !== null && event.at - guard.downAt >= holdMs;
       return { guard: next, swallow: held && event.onHoldable };
     }

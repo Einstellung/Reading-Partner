@@ -3,8 +3,10 @@
 // trash icon. Anchored on the held element's box, below it when there is room
 // and above it when there is not.
 //
-// A faint scrim takes the next press: it closes the menu, and the tap that
-// closed it never reaches the card under it.
+// A faint scrim takes the next press: it closes the menu. The click iOS still
+// sends for that tap, onto the card under it once the scrim is gone, is
+// swallowed by the hold's guard (use-hold.ts); so the scrim must sit inside
+// the hold's host.
 
 import { IconTrash } from "../base/icons";
 import { Button } from "../ui/button";

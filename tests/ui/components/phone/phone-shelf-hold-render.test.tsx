@@ -163,3 +163,40 @@ test("the New topic sheet opens with its field focused, and Create waits for a n
   fireEvent.change(field as HTMLInputElement, { target: { value: "Cities" } });
   expect((byText("Create") as HTMLButtonElement).disabled).toBe(false);
 });
+
+test("the tap on the scrim closes the menu and opens nothing; the next tap opens", async () => {
+  let opened: string[] = [];
+  const { container } = render(
+    createElement(PhoneShelf, {
+      topics: TOPICS,
+      topic: null,
+      entries: {},
+      onOpenTopic: (id: string) => opened.push(id),
+      onOpenBook: () => {},
+      onOpenLesson: () => {},
+      onBack: () => {},
+      onSay: () => {},
+      onImported: async () => {},
+      onChanged: async () => {},
+      onNotice: () => {},
+    }),
+  );
+  const held = container.querySelector<HTMLElement>('[data-hold="t1"]') as HTMLElement;
+  const other = container.querySelector<HTMLElement>('[data-hold="t2"]') as HTMLElement;
+  fireEvent.contextMenu(held);
+  await settle();
+  const scrim = container.querySelector<HTMLElement>("div[aria-hidden].fixed.inset-0") as HTMLElement;
+  expect(scrim).not.toBeNull();
+  fireEvent.pointerDown(scrim, { pointerId: 1 });
+  await settle();
+  expect(byText("Delete topic")).toBeNull();
+  // iOS sends the click to what was under the scrim.
+  fireEvent.pointerUp(other, { pointerId: 1 });
+  fireEvent.click(other);
+  expect(opened).toEqual([]);
+
+  fireEvent.pointerDown(other, { pointerId: 2 });
+  fireEvent.pointerUp(other, { pointerId: 2 });
+  fireEvent.click(other);
+  expect(opened).toEqual(["t2"]);
+});

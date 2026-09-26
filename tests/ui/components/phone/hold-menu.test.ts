@@ -12,6 +12,7 @@ import {
   holdDoneLine,
   holdMenuHead,
   holdMenuItems,
+  DISMISS_CLICK_MS,
   NO_CLICK_GUARD,
   otherTopicNames,
   restoreKey,
@@ -174,6 +175,39 @@ test("a new down clears a hold that never got its click", () => {
   g = stepClickGuard(g, { type: "fire" }, HOLD).guard;
   g = stepClickGuard(g, { type: "down", at: 3000 }, HOLD).guard;
   expect(stepClickGuard(g, { type: "click", at: 3050, onHoldable: true }, HOLD).swallow).toBe(false);
+});
+
+const dismissAt = (at: number) => {
+  const g = stepClickGuard(NO_CLICK_GUARD, { type: "down", at }, HOLD).guard;
+  return stepClickGuard(g, { type: "dismiss", at }, HOLD).guard;
+};
+
+test("the tap that puts a menu away does not open what was under it", () => {
+  expect(stepClickGuard(dismissAt(0), { type: "click", at: 90, onHoldable: true }, HOLD).swallow).toBe(true);
+  // Nor anything else under the scrim.
+  expect(stepClickGuard(dismissAt(0), { type: "click", at: 90, onHoldable: false }, HOLD).swallow).toBe(true);
+});
+
+test("the tap after the one that put the menu away is a tap", () => {
+  const first = stepClickGuard(dismissAt(0), { type: "click", at: 90, onHoldable: true }, HOLD);
+  const g = stepClickGuard(first.guard, { type: "down", at: 400 }, HOLD).guard;
+  expect(stepClickGuard(g, { type: "click", at: 480, onHoldable: true }, HOLD).swallow).toBe(false);
+});
+
+test("a dismissing tap whose click never came does not eat the next tap", () => {
+  const g = stepClickGuard(dismissAt(0), { type: "down", at: 200 }, HOLD).guard;
+  expect(stepClickGuard(g, { type: "click", at: 260, onHoldable: true }, HOLD).swallow).toBe(false);
+});
+
+test("a click long after the dismissing down, with no down between, is not that tap's", () => {
+  const late = DISMISS_CLICK_MS + 1;
+  expect(stepClickGuard(dismissAt(0), { type: "click", at: late, onHoldable: false }, HOLD).swallow).toBe(false);
+});
+
+test("a dismissing hold beside a card still keeps the card shut", () => {
+  // Past the dismiss window, the hold rule has it.
+  const late = DISMISS_CLICK_MS + 1;
+  expect(stepClickGuard(dismissAt(0), { type: "click", at: late, onHoldable: true }, HOLD).swallow).toBe(true);
 });
 
 // ---- in-place removal ------------------------------------------------------------
