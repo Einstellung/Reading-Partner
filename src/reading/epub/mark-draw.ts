@@ -19,7 +19,7 @@ import {
   sameWords,
 } from "./annotation";
 import { epubRangeCfi, textSteps } from "./cfi";
-import { underlineBand, unionRect, type PageRect } from "./mark-geometry";
+import { lineBands, underlineBand, unionRect, type PageRect } from "./mark-geometry";
 import { runAt, type DocumentText, type TextRun } from "./text";
 
 /** The book's side of one spine item, as the mark views need it. */
@@ -112,8 +112,10 @@ export function createMarkPainter(owner: Document): MarkPainter {
 
     rectDiv,
 
+    // Both translucent paints go through lineBands: the rects a range gives
+    // cover a word in an element of its own twice (docs/pitfall/444).
     drawStroke(into, kind, rects, color) {
-      for (const r of rects) {
+      for (const r of lineBands(rects)) {
         const box = kind === "underline" ? underlineBand(r) : r;
         into.append(rectDiv(box, `background:${color};opacity:${MARKUP_OPACITY};border-radius:1px`));
       }
@@ -127,7 +129,7 @@ export function createMarkPainter(owner: Document): MarkPainter {
     },
 
     drawQuote(into, rects) {
-      for (const r of rects) into.append(rectDiv(r, `background:${QUOTE_COLOR};opacity:${QUOTE_OPACITY};border-radius:2px;`));
+      for (const r of lineBands(rects)) into.append(rectDiv(r, `background:${QUOTE_COLOR};opacity:${QUOTE_OPACITY};border-radius:2px;`));
     },
   };
 }

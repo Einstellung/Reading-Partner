@@ -24,6 +24,12 @@
 // list has not settled to its full height yet — records the bottom over it and
 // leaves the reader on the newest message, where a list with no memory leaves
 // them. Without the two seams this module is the pin it was before them.
+//
+// The container can change size under a list too: the phone's soft keyboard
+// shortens the whole shell (docs/pitfall/443), and the scroller loses height at
+// its bottom with no scroll and no content change. A pinned list is taken back
+// to the bottom; one the reader scrolled up keeps its offset, which keeps what
+// it showed at its top where it was.
 
 /** The part of a scroll container this needs. An Element satisfies it. */
 export interface ScrollHost {
@@ -49,6 +55,8 @@ export interface StickOptions {
 	resolveHost?(list: Element): ScrollHost | null;
 	/** Subscribes to whatever changes the rendered height. Injected by the tests. */
 	observeContent?(list: Element, onChange: () => void): () => void;
+	/** Subscribes to the scrolling element's own size. Injected by the tests. */
+	observeHost?(host: ScrollHost, onChange: () => void): () => void;
 	/** Where this list was left, if it is one that is remembered. Null = the bottom. */
 	restore?(): StickPosition | null;
 	/** Records where the reader is. Called on every scroll of theirs. */
@@ -102,6 +110,13 @@ function observeContentDefault(list: Element, onChange: () => void): () => void 
 	};
 }
 
+function observeHostDefault(host: ScrollHost, onChange: () => void): () => void {
+	if (typeof ResizeObserver === "undefined" || !(host instanceof Element)) return () => {};
+	const ro = new ResizeObserver(() => onChange());
+	ro.observe(host);
+	return () => ro.disconnect();
+}
+
 /**
  * Keeps `list` scrolled to its bottom while the reader has not scrolled away.
  * Returns the teardown.
@@ -110,6 +125,7 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	const threshold = options.threshold ?? DEFAULT_THRESHOLD;
 	const resolveHost = options.resolveHost ?? ((el: Element) => scrollableAncestor(el) as ScrollHost | null);
 	const observeContent = options.observeContent ?? observeContentDefault;
+	const observeHost = options.observeHost ?? observeHostDefault;
 
 	const saved = options.restore?.() ?? null;
 	let host: ScrollHost | null = null;
@@ -120,15 +136,20 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	// The place to go back to, until the first pass writes it. Null for a list left
 	// at the bottom: that comes back as the pin, not as an offset.
 	let place = saved && !saved.stuck ? saved.top : null;
-	// The height the last scroll event was measured against. A scroll that comes
-	// with a changed height came from the content, not from the reader.
+	// The heights the last scroll event was measured against, the content's and
+	// the container's. A scroll that comes with either changed came from the
+	// layout, not from the reader.
 	let seenHeight = 0;
+	let seenClient = 0;
+	let unobserveHost = () => {};
 
 	const onScroll = () => {
 		if (!host) return;
 		const height = host.scrollHeight;
-		const grew = height !== seenHeight;
+		const client = host.clientHeight;
+		const grew = height !== seenHeight || client !== seenClient;
 		seenHeight = height;
+		seenClient = client;
 		// A pinned list whose height moved under it: the browser may report that as
 		// a scroll (anchoring), and reading the distance then would unpin it.
 		if (grew && stuck) {
@@ -145,10 +166,18 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 	const bind = (next: ScrollHost | null) => {
 		if (next === host) return;
 		host?.removeEventListener("scroll", onScroll);
+		unobserveHost();
+		unobserveHost = () => {};
 		host = next;
 		host?.addEventListener("scroll", onScroll);
+		if (host) unobserveHost = observeHost(host, onHostResize);
 		seenHeight = host?.scrollHeight ?? 0;
+		seenClient = host?.clientHeight ?? 0;
 	};
+
+	function onHostResize() {
+		if (stuck) toBottom();
+	}
 
 	function toBottom() {
 		if (!host) return;
@@ -156,6 +185,7 @@ export function stickToBottom(list: Element, options: StickOptions = {}): () => 
 		// under `scroll-behavior: smooth` and never catch a list that keeps growing.
 		host.scrollTop = host.scrollHeight - host.clientHeight;
 		seenHeight = host.scrollHeight;
+		seenClient = host.clientHeight;
 	}
 
 	// The host is re-resolved while the walk has only found the page: on mount

@@ -12,6 +12,7 @@
 | 手机上的手势、页面导航 | 触摸与手势 |
 | 鼠标滚轮、触控板 pinch | 触摸与手势 |
 | EPUB 页卡片、shadow root、blob 资源 | WebKit / webview + 网络与 CSP + 触摸与手势 |
+| EPUB 上画高亮、下划线、引文底 | WebKit / webview |
 | 发请求、外链资源、CSP | 网络与 CSP |
 | 比不同供应商的网络延迟、量首包时间 | 网络与 CSP |
 | 读写 AppData | 存储与数据目录 |
@@ -50,6 +51,7 @@
 | 给工具写 TypeBox 参数 schema | AI 调用与上下文窗口 |
 | 给回合加埋点、读 AI 埋点日志对账 | AI 调用与上下文窗口 |
 | 顶栏、工具条、下拉浮层的定位 | 浮层与 shadcn 原语 |
+| 输入框、软键盘、按键盘让位 | 浮层与 shadcn 原语 |
 | 全局样式、Tailwind layer、字体与行高 | 排版基线与 Tailwind + EmbedPDF 引擎 |
 | 加测试文件、给 store 写单测 | 开发环境 |
 | 给回合加中途插话、动 live-turns 注册表 | 开发环境 + AI 调用与上下文窗口 |
@@ -303,10 +305,12 @@
 - [398-an-iphone-video-without-playsinline-still-goes-fullscreen](./webview/398-an-iphone-video-without-playsinline-still-goes-fullscreen.md) — iPhone 上 `allowsInlineMediaPlayback` 已是 YES（wry 设的），不带 `playsinline` 的 video 一 `play()` 照样进原生全屏盖住 app，带的才在纸页里播；同页后开的出声媒体会把先开的暂停；没播过的 video 不画首帧，只剩白底加播放钮。消毒器要留 `playsinline`，构建时补上，首帧靠 `poster`
 - [399-the-app-csp-has-no-media-src-so-blob-media-never-loads](./webview/399-the-app-csp-has-no-media-src-so-blob-media-never-loads.md) — CSP 没写 `media-src`，回退到 `default-src 'self'`，blob 源的 video/audio 报 `MEDIA_ERR_SRC_NOT_SUPPORTED`（code 4）和 `NotSupportedError`，像编码问题；`img-src` 有 `blob:` 所以图一直没事。Linux WebKitGTK 和 iPhone WKWebView 一样，加 `media-src 'self' blob:` 即可
 - [366-a-shortened-scroller-keeps-the-old-offset](./webview/366-a-shortened-scroller-keeps-the-old-offset.md) — 内容变矮之后 WKWebView 不夹回过期的 `scrollTop`，也不发 scroll 事件：它照旧报旧偏移并把这段量算进 `scrollHeight`，直到有人往这条轴上写一次。EPUB 从纵向栏切 paged flip 时 `placePage` 只写 `scrollLeft`，一行卡片的页带被顶到视口上方 2068px，整片全白而页码照走。改内容尺寸之后，该布局拥有的那条轴无条件写一遍，答案是 0 也写
+- [444-range-client-rects-count-an-element-and-its-text-twice](./webview/444-range-client-rects-count-an-element-and-its-text-twice.md) — `Range.getClientRects()` 对完整包住的元素（引文里的 `<em>`）既给元素盒又给文字盒，半透明的引文底和高亮在那个词上叠两层（实测取色 (174,163,194) 对 (205,196,205)）；`drawQuote` / `drawStroke` 先过 `lineBands`，同一行上重叠或相接的并成一条
 
 ## 浮层与 shadcn 原语
 
 - [392-the-keyboard-stops-resizing-the-window-after-an-app-switch](./overlay/392-the-keyboard-stops-resizing-the-window-after-an-app-switch.md) — iPad 切走再回来之后，软键盘不再改 `window.innerHeight`，只改 visual viewport，`window` 上一个事件都不发；只听 `window` resize 的测量就停在没有键盘那会儿的盒子上（实测 Lumen 的角落差 250px）。判断「离底边多远」要用可见区域的底边，算 `fixed` 元素升多少仍用 layout viewport 的高度，而且事件当场读到的还是 React 上 padding 之前的位置，要在 `requestAnimationFrame` 里补一遍
+- [443-the-keyboard-scrolls-the-whole-document-up](./overlay/443-the-keyboard-scrolls-the-whole-document-up.md) — iPhone 上键盘弹起时 `innerHeight` 和 visual viewport 一起变矮，页面却仍按全高排版，WKWebView 把整个文档往上卷键盘那么高（实测软键盘卷 413、附件栏卷 68），顶栏卷出屏幕，`innerHeight - vv.height - vv.offsetTop` 恒为 0。手机外壳键盘在时只把 `top` 设成 `vv.offsetTop`、尺寸不变（缩外壳会带着课堂底下的阅读器重排，EPUB 课堂第二次弹键盘白屏），外面套 `overflow: clip`，被盖住的高度经 context 交给 `CallView` 自己垫
 - [386-a-moved-box-reports-nothing](./overlay/386-a-moved-box-reports-nothing.md) — `CallView` 的 composer 在空态和非空态里是同一个下标上的 `<div>`，React 复用同一个 DOM 节点：callback ref 不再调一次，`ResizeObserver` 只管尺寸不管位置，于是量到的还是它居中时的盒子，Lumen 一直压着发送键。两个分支各给一个 key
 - [68-overflow-x-auto-clips-the-other-axis](./overlay/68-overflow-x-auto-clips-the-other-axis.md) — 手机上让工具条横滑的那条 `overflow-x-auto` 把 `overflow-y` 也变成裁剪，带子里的下拉浮层整个看不见，z-index 救不了；浮层改 `fixed` + 开面板时量锚点矩形
 - [80-portalled-overlay-trips-the-host-outside-press](./overlay/80-portalled-overlay-trips-the-host-outside-press.md) — Radix 浮层 Portal 到 `<body>`，宿主那条「点外面就关」的 `pointerdown` 把落在对话框按钮上的第一按判成点外面，气泡先关、按钮收不到 click；改成全局层级计数 `overlayLayerOpen()`，有层开着就整条让路

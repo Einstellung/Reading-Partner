@@ -69,6 +69,7 @@ import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
+import { KeyboardShell } from "./ui/components/phone/KeyboardShell";
 import { useBackgroundServices } from "./ui/components/common/useBackgroundServices";
 
 // InfoHome's screen for a stack entry, or null on the ones it does not draw.
@@ -347,7 +348,7 @@ export default function PhoneApp({
   return (
     // The backdrop the swipe reveals, and the clip that hides whatever has left
     // the screen. Only ever visible while a gesture or its animation is running.
-    <div className="relative h-full overflow-hidden bg-muted-soft">
+    <KeyboardShell className="relative h-full overflow-hidden bg-muted-soft">
       {/* p-safe: the notch and the home indicator (viewport-fit=cover). Fixed
           overlays are not covered by it and pad themselves — docs/pitfall/74. */}
       <div ref={surfaceRef} className="flex h-full flex-col bg-background p-safe">
@@ -518,6 +519,6 @@ export default function PhoneApp({
           goToMeals: () => onNavigate("meals"),
         }}
       />
-    </div>
+    </KeyboardShell>
   );
 }

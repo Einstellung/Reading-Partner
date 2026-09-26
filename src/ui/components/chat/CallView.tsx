@@ -19,7 +19,8 @@ import { MessageList } from './MessageList';
 import type { ChatMarkHost } from './ChatMarkLayer';
 import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
-import { useKeyboardInset } from '../common/useKeyboardInset';
+import { useKeyboardInset, useShellKeyboard } from '../common/useKeyboardInset';
+import { coveredPadding } from '../common/keyboard-frame';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
@@ -147,15 +148,22 @@ export default function CallView({
 		</Button>
 	);
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
-	// Reserve space for the soft keyboard so the bottom composer stays above it
-	// (iPad). box-sizing:border-box shrinks the flex column by this padding, so the
-	// message list gives up the room and the composer rises. 0 on desktop.
-	const keyboardInset = useKeyboardInset();
+	// Reserve space for the soft keyboard so the bottom composer stays above it.
+	// box-sizing:border-box shrinks the flex column by this padding, so the message
+	// list gives up the room and the composer rises. 0 on desktop. The phone's
+	// shell says how much of it the keyboard covers; the call ends above the home
+	// indicator's inset, which that count includes. Elsewhere the call measures.
+	const shellKeyboard = useShellKeyboard();
+	const measuredInset = useKeyboardInset(shellKeyboard === null);
+	const keyboardUp = shellKeyboard !== null && shellKeyboard > 0;
+	const keyboardPadding = keyboardUp
+		? coveredPadding(shellKeyboard)
+		: measuredInset || undefined;
 
 	return (
 		<div
 			className="relative flex h-full w-full flex-col bg-chat-surface [--chat-bubble-bg:var(--chat-bubble)] [--chat-code-bg:var(--chat-code)]"
-			style={{ paddingBottom: keyboardInset || undefined }}
+			style={{ paddingBottom: keyboardPadding }}
 		>
 			{header}
 
@@ -233,7 +241,10 @@ export default function CallView({
 							stickKey={stickKey}
 						/>
 					</div>
-					<div key={composerKey} className="px-4 pb-6" ref={composerSlot}>
+					{/* On the keyboard the composer sits just above it: the room under it
+					    at rest is for the thumb and the home indicator, which the
+					    keyboard covers. */}
+					<div key={composerKey} className={`px-4 ${keyboardUp ? 'pb-2' : 'pb-6'}`} ref={composerSlot}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							{footer}
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />
