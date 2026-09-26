@@ -267,6 +267,7 @@ jobs:
           echo "IPA_NAME=$OUT" >> "$GITHUB_ENV"
 
       - name: Upload the unsigned ipa
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: ios-sideload-ipa
