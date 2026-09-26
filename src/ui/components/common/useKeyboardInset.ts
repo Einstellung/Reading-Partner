@@ -1,19 +1,21 @@
 import { createContext, useContext, useEffect, useState, type RefObject } from "react";
+import { flushSync } from "react-dom";
 import { coveredPadding, keyboardFrame, keyboardInset, readViewport, type KeyboardFrame } from "./keyboard-frame";
 
-// Runs `update` now and whenever the window or its visual viewport changes;
-// returns the unsubscribe. The keyboard fires only on the visual viewport, and
-// iOS pairs resize with scroll (docs/pitfall/392); rotation fires on the window.
-function onViewportChange(update: () => void): () => void {
+// Runs `update` now, and `onEvent` whenever the window or its visual viewport
+// changes; returns the unsubscribe. The keyboard fires only on the visual
+// viewport, and iOS pairs resize with scroll (docs/pitfall/392); rotation fires
+// on the window.
+function onViewportChange(update: () => void, onEvent: () => void = update): () => void {
 	const vv = window.visualViewport;
 	update();
-	window.addEventListener("resize", update);
-	vv?.addEventListener("resize", update);
-	vv?.addEventListener("scroll", update);
+	window.addEventListener("resize", onEvent);
+	vv?.addEventListener("resize", onEvent);
+	vv?.addEventListener("scroll", onEvent);
 	return () => {
-		window.removeEventListener("resize", update);
-		vv?.removeEventListener("resize", update);
-		vv?.removeEventListener("scroll", update);
+		window.removeEventListener("resize", onEvent);
+		vv?.removeEventListener("resize", onEvent);
+		vv?.removeEventListener("scroll", onEvent);
 	};
 }
 
@@ -67,22 +69,26 @@ export function useKeyboardRoom(): KeyboardRoom {
  */
 export function useKeyboardFrame(shell: RefObject<HTMLElement | null>): KeyboardFrame | null {
 	const [frame, setFrame] = useState<KeyboardFrame | null>(null);
-	useEffect(
-		() =>
-			onViewportChange(() => {
-				const r = readViewport();
-				const height = shell.current?.offsetHeight ?? 0;
-				const next = r && height > 0 ? keyboardFrame(r, height) : null;
-				// Same frame, same object: the scroll events a keyboard pairs with its
-				// resize must not re-render the shell for nothing.
-				setFrame((prev) =>
-					prev && next && prev.top === next.top && prev.covered === next.covered && prev.cramped === next.cramped
-						? prev
-						: next,
-				);
-			}),
-		[shell],
-	);
+	useEffect(() => {
+		const update = () => {
+			const r = readViewport();
+			const height = shell.current?.offsetHeight ?? 0;
+			const next = r && height > 0 ? keyboardFrame(r, height) : null;
+			// Same frame, same object: the scroll events a keyboard pairs with its
+			// resize must not re-render the shell for nothing.
+			setFrame((prev) =>
+				prev && next && prev.top === next.top && prev.covered === next.covered && prev.cramped === next.cramped
+					? prev
+					: next,
+			);
+		};
+		// Rendered before the event returns. React renders an update from a
+		// `scroll` event in a task of its own, after the frame's animation
+		// callbacks: the page would paint one frame scrolled with the shell not
+		// yet moved, and Lumen, which measures the composer on the event and again
+		// on that frame, measured it unmoved and stood on it (docs/pitfall/458).
+		return onViewportChange(update, () => flushSync(update));
+	}, [shell]);
 	return frame;
 }
 

@@ -195,3 +195,26 @@ test("a desktop window: nothing moves and nothing is covered", () => {
 	expect(chat()).toBe("0");
 	expect(heard.every((c) => c === 0)).toBe(true);
 });
+
+test("the shell has moved when the document's scroll event returns", () => {
+	shellHeight = 1210;
+	keyboard(1210, 1210, 0);
+	const { shell, chat } = drawShell();
+	// Outside act, the way WebKit delivers it: React would render a scroll
+	// event's update in a task of its own, after the frame in which Lumen
+	// measures the composer (docs/pitfall/458).
+	const flags = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+	const actWas = flags.IS_REACT_ACT_ENVIRONMENT;
+	flags.IS_REACT_ACT_ENVIRONMENT = false;
+	try {
+		(window as { innerHeight: number }).innerHeight = 870;
+		vv.height = 870;
+		vv.offsetTop = 340;
+		vv.dispatchEvent(new Event("scroll"));
+		expect(shell.style.top).toBe("340px");
+		expect(chat()).toBe("340");
+	} finally {
+		flags.IS_REACT_ACT_ENVIRONMENT = actWas;
+	}
+	keyboard(1210, 1210, 0);
+});
