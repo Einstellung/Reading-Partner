@@ -118,7 +118,7 @@ function collectCallbacks() {
 		get done() {
 			return done;
 		},
-		// Every round's text, joined (ai/turn-rows.ts).
+		// Every round's text, joined (ai/turn-view/turn-rows.ts).
 		get turnText() {
 			return turnText;
 		},

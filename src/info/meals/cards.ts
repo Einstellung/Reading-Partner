@@ -7,7 +7,7 @@
 // landed (apply.ts). `phase` is what a second click reads to do nothing. The
 // profile has no card: onboarding and a stated change write it directly.
 
-import type { DayPlan, MealRef } from "./types";
+import type { DayPlan, MealRef } from "./plan/types";
 
 // A week of meals, or the one or two meals of it a deviation reopened. Either
 // way the card carries the whole week as it would stand once applied, solved

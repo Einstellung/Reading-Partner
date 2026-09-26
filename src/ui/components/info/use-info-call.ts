@@ -58,7 +58,7 @@ import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
 import { modelIdFor } from "../../../ai/model-tier";
 import { navigateAway } from "../chat/call-layout";
-import { replayableHistory } from "../../../ai/turn-rows";
+import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import {
   findCardPart,
   patchCardPayload,

@@ -20,7 +20,7 @@ import { registerInfoDesk } from "../../../src/info/briefer/desk";
 import { registerSecretaryRole } from "../../../src/info/briefer/role";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../src/info/briefer/deliver";
 import { registerMealsDesk } from "../../../src/info/meals/desk";
-import { EMPTY_MEALS } from "../../../src/info/meals/types";
+import { EMPTY_MEALS } from "../../../src/info/meals/plan/types";
 import type { AgentTool } from "../../../src/legion/execute/turn";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 import type { Turn } from "../../support/scripted-turn";

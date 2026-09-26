@@ -19,7 +19,7 @@ import {
   syncSpeechKey,
   type SpeechKeyBridge,
 } from "../../../src/ai/voice/speech-key";
-import { loadCredentials, setActiveCredential } from "../../../src/ai/credentials";
+import { loadCredentials, setActiveCredential } from "../../../src/ai/auth/credentials";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 const FILE = "credentials.json";

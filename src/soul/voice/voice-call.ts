@@ -26,7 +26,7 @@
 //    transcript (the note is not something the reader said), and the reply it
 //    produces is recorded and spoken like any other.
 
-import type { TurnActivity } from "../../ai/activity";
+import type { TurnActivity } from "../../ai/turn-view/activity";
 import { speechEnvelope } from "./conversation";
 import type {
   ConversationEvent,

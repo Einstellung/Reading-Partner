@@ -24,8 +24,8 @@ import {
 } from "../../../src/info/meals/tools";
 import type { MealsPorts } from "../../../src/info/meals/apply";
 import type { MealsCard, MealsPlanCardData } from "../../../src/info/meals/cards";
-import { currentList, deriveShoppingList } from "../../../src/info/meals/shopping";
-import { solvePlan, targetsOf } from "../../../src/info/meals/solve-week";
+import { currentList, deriveShoppingList } from "../../../src/info/meals/plan/shopping";
+import { solvePlan, targetsOf } from "../../../src/info/meals/plan/solve-week";
 import {
   EMPTY_MEALS,
   type MealKey,
@@ -33,7 +33,7 @@ import {
   type MealsState,
   type ShoppingState,
   type WeekPlan,
-} from "../../../src/info/meals/types";
+} from "../../../src/info/meals/plan/types";
 import { MON, charter, draftWeek, profile, shopping, state, week } from "./fixtures/week";
 
 function deps(current: MealsState): MealsToolDeps & { cards: MealsCard[] } {

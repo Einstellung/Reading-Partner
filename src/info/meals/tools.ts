@@ -17,7 +17,7 @@ import type { AgentTool } from "../../legion/execute/turn";
 import { asStrings } from "../../platform/std/json";
 import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
 import type { MealsCard, MealsPlanCardData } from "./cards";
-import { checkPlan } from "./checks";
+import { checkPlan } from "./plan/checks";
 import { FOOD_TAGS, FOODS, foodAllowed } from "./nutrition/foods";
 import type { TemplateItem, TemplateRole } from "./nutrition/solve";
 import type { Goal, Profile, Region, Targets, TrainTime, Work } from "./nutrition/targets";
@@ -28,8 +28,8 @@ import {
   markShoppingDone,
   removeShoppingItem,
   replaceShoppingItem,
-} from "./shopping";
-import { targetsOf } from "./solve-week";
+} from "./plan/shopping";
+import { targetsOf } from "./plan/solve-week";
 import {
   CATEGORY_ORDER,
   FLAVOURS,
@@ -46,8 +46,8 @@ import {
   type MealsState,
   type ShoppingItem,
   type WeekPlan,
-} from "./types";
-import { WEEK_DAYS, addDays, assembleWeekPlan, dayOn, isoWeekday, type DayDraft, type MealDraft } from "./week";
+} from "./plan/types";
+import { WEEK_DAYS, addDays, assembleWeekPlan, dayOn, isoWeekday, type DayDraft, type MealDraft } from "./plan/week";
 
 /** What the reader has in front of them when they open the conversation. */
 export type MealsFocus =

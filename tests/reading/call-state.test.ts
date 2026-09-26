@@ -11,7 +11,7 @@ import {
   type CallRow,
   type CallState,
 } from "../../src/reading/call-state";
-import { applyRowChange, type RowChange } from "../../src/ai/turn-rows";
+import { applyRowChange, type RowChange } from "../../src/ai/turn-view/turn-rows";
 
 // A surface's row: CallRow plus something only the render layer knows about, so
 // a transition that dropped it would show up here.

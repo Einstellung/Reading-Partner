@@ -24,7 +24,7 @@ import { INFO_BRIEFING_KIND, registerInfoDesk } from "../../../../src/info/brief
 import { registerSecretaryRole } from "../../../../src/info/briefer/role";
 import { mealsAnchor, type InfoCallAnchor } from "../../../../src/info/briefer/anchors";
 import { registerMealsDesk } from "../../../../src/info/meals/desk";
-import { EMPTY_MEALS } from "../../../../src/info/meals/types";
+import { EMPTY_MEALS } from "../../../../src/info/meals/plan/types";
 import type { BriefingView } from "../../../../src/info/briefer/reader";
 import type { Thread } from "../../../../src/platform/app/threads";
 

@@ -8,11 +8,11 @@
 // sentences, with nothing to approve.
 
 import type { MealsPlanCardData } from "./cards";
-import type { PhotoCache } from "./dish-photos";
+import type { PhotoCache } from "./photos/dish-photos";
 import type { Profile, Region, Targets } from "./nutrition/targets";
-import { photoQueriesForPlan, type PhotoQuery } from "./photo-run";
-import { currentList, deriveShoppingList, isChecked, reconcileShoppingList } from "./shopping";
-import { solvePlan, targetsOf } from "./solve-week";
+import { photoQueriesForPlan, type PhotoQuery } from "./photos/photo-run";
+import { currentList, deriveShoppingList, isChecked, reconcileShoppingList } from "./plan/shopping";
+import { solvePlan, targetsOf } from "./plan/solve-week";
 import type {
   Deviation,
   MealKey,
@@ -21,8 +21,8 @@ import type {
   MealsState,
   ShoppingState,
   WeekPlan,
-} from "./types";
-import { applyDeviation, weekId } from "./week";
+} from "./plan/types";
+import { applyDeviation, weekId } from "./plan/week";
 
 export interface MealsPorts {
   // The profile, the week and the list as they are NOW.

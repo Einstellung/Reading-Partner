@@ -22,7 +22,7 @@ import {
   type VoiceCallTranscript,
 } from "../../../src/soul/voice/voice-call";
 import { INTERRUPTED_MARK, type VoiceTurn } from "../../../src/soul/voice/voice-session";
-import type { TurnActivity } from "../../../src/ai/activity";
+import type { TurnActivity } from "../../../src/ai/turn-view/activity";
 
 // Three sentences as the splitter cuts them (a fullwidth comma is a boundary),
 // so two go out mid-stream and the last waits for the model to finish.

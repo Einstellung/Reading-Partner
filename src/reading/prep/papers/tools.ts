@@ -11,7 +11,7 @@ import { requalifyNoteAnchors } from "../anchors";
 import { parseNote, stripModelAsides } from "./notes";
 import { paperFulltextHash, readPrepNote } from "./store";
 import type { PrepPaper, PrepState } from "./types";
-import { pageRangeLabel } from "../../../ai/tool-labels";
+import { pageRangeLabel } from "../../../ai/turn-view/tool-labels";
 
 function slugList(states: readonly PrepState[]): string {
   return states.flatMap((s) => s.papers.map((p) => p.slug)).join(", ") || "(none)";

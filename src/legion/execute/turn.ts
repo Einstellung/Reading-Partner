@@ -73,7 +73,7 @@ import { recordToolArgs } from "../../platform/app/structured-output";
 import { providerCallSetup } from "../../ai/call-setup";
 import { recordModelCall, type ModelCallAbout } from "../../ai/model-usage";
 import { DEFAULT_MAX_RETRIES, resolveCall, toPiMessages } from "../../ai/providers";
-import { joinRoundTexts } from "../../ai/turn-rows";
+import { joinRoundTexts } from "../../ai/turn-view/turn-rows";
 import {
   REFUSE_MIDTURN,
   REFUSE_ROUNDS,

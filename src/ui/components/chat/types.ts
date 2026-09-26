@@ -1,8 +1,8 @@
 // The prop contracts for a chat row and its composer.
 
 import type { CompressedImage } from "../../../ai/image-utils";
-import type { ToolStatus } from "../../../ai/tool-status";
-import type { TurnPhase } from "../../../ai/turn-rows";
+import type { ToolStatus } from "../../../ai/turn-view/tool-status";
+import type { TurnPhase } from "../../../ai/turn-view/turn-rows";
 import type { InfoCard } from "../../../info/boxes/cards";
 import type { MessageOrigin } from "../../../platform/app/threads";
 import type { ChatPart } from "./chatParts";

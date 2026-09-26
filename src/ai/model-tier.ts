@@ -7,7 +7,7 @@
 //             which follows the talk model until the reader picks one.
 //
 // Both tiers are always the default provider's: credentials are single-active
-// (ai/credentials.ts), so a model id under a second provider would have no key
+// (ai/auth/credentials.ts), so a model id under a second provider would have no key
 // to call with. A tier names a model, never a provider.
 //
 // Classification lives here and nowhere else. There is no model picker per

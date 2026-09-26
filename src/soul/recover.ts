@@ -41,7 +41,7 @@
 //   not a run    a compaction or a navigation. Neither is anybody's answer.
 
 import { BACKGROUND_CONTEXT, type Context, type Entry } from "@earendil-works/pi-agent-core";
-import { joinRoundTexts } from "../ai/turn-rows";
+import { joinRoundTexts } from "../ai/turn-view/turn-rows";
 import type { HeldHarness, HeldRecovery } from "../legion/execute/held";
 import { DELIVERY_ENTRY } from "../legion/execute/turn";
 import type { BoxOrigin, BoxStore } from "../box";

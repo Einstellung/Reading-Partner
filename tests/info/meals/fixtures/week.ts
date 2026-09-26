@@ -5,7 +5,7 @@
 
 import type { Profile } from "../../../../src/info/meals/nutrition/targets";
 import type { TemplateItem } from "../../../../src/info/meals/nutrition/solve";
-import { solvePlan, targetsOf } from "../../../../src/info/meals/solve-week";
+import { solvePlan, targetsOf } from "../../../../src/info/meals/plan/solve-week";
 import type {
   DayPlan,
   Flavour,
@@ -14,9 +14,9 @@ import type {
   MealsState,
   ShoppingState,
   WeekPlan,
-} from "../../../../src/info/meals/types";
-import { EMPTY_SHOPPING } from "../../../../src/info/meals/types";
-import { addDays } from "../../../../src/info/meals/week";
+} from "../../../../src/info/meals/plan/types";
+import { EMPTY_SHOPPING } from "../../../../src/info/meals/plan/types";
+import { addDays } from "../../../../src/info/meals/plan/week";
 
 // A Monday.
 export const MON = "2026-09-21";

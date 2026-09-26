@@ -15,7 +15,7 @@
 import { appData } from "../../../platform/app/appdata";
 import { appRunner } from "../../../legion/execute/runner";
 import { isTerminal, type Run } from "../../../legion/run";
-import type { Receipt } from "../../../ai/tool-status";
+import type { Receipt } from "../../../ai/turn-view/tool-status";
 import { clipLine } from "../../../platform/std/text";
 import { watchSource } from "../../../platform/std/watch";
 

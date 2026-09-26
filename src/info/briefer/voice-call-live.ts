@@ -12,7 +12,7 @@
 
 import { runAgentTurn } from "../../legion/execute/turn";
 import { soulHarness } from "../../soul";
-import { replayableHistory } from "../../ai/turn-rows";
+import { replayableHistory } from "../../ai/turn-view/turn-rows";
 import { glossaryTerms } from "../../ai/voice/cleanup";
 import { loadDeviceSettings } from "../../platform/app/device";
 import { hasWebviewSignIn } from "../../platform/app/platform";

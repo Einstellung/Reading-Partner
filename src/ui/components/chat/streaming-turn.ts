@@ -1,9 +1,9 @@
 // Which row a streaming turn writes into, as rows: opening it, finding it by
 // its timestamp, dropping it. What a turn does to that row once found is
-// applyRowChange (ai/turn-rows.ts), the reducer the reading call runs too. No
+// applyRowChange (ai/turn-view/turn-rows.ts), the reducer the reading call runs too. No
 // React, so it can be tested; useStreamingTurn.ts is the wiring that calls it.
 
-import { holdsNoAnswer } from "../../../ai/turn-rows";
+import { holdsNoAnswer } from "../../../ai/turn-view/turn-rows";
 import type { ThreadMessage } from "./types";
 
 // Only the AI row at `ts` is rewritten; a user row that happens to share the

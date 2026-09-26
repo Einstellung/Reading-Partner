@@ -21,7 +21,7 @@ import type {
   ThreadMessage as StoredMessage,
 } from "../../../platform/app/threads";
 import type { ThreadMessage } from "./types";
-import { persistedTrace, type Receipt, type ToolStatus } from "../../../ai/tool-status";
+import { persistedTrace, type Receipt, type ToolStatus } from "../../../ai/turn-view/tool-status";
 
 // The domain payload a card renders. Payload types stay in the domain layer
 // (info/boxes/cards.ts, reading/retell/cards.ts, reading/aside.ts); this

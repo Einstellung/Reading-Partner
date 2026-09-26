@@ -55,9 +55,9 @@ import type {
 	Transport,
 } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
-import { getValidAnthropicAuth } from "./anthropic-oauth";
-import { getValidOpenAIAuth } from "./openai-oauth";
-import { activeProviderId, loadCredentials, setActiveCredential } from "./credentials";
+import { getValidAnthropicAuth } from "./auth/anthropic-oauth";
+import { getValidOpenAIAuth } from "./auth/openai-oauth";
+import { activeProviderId, loadCredentials, setActiveCredential } from "./auth/credentials";
 import { providerCallSetup } from "./call-setup";
 import {
 	API_KEY_PROVIDER_IDS,
@@ -67,7 +67,7 @@ import {
 	type ApiKeyProviderId,
 	type AuthKind,
 	type ProviderId,
-} from "./provider-ids";
+} from "./auth/provider-ids";
 import { recordModelCall, type ModelCallContext } from "./model-usage";
 import type { Settings } from "../platform/app/settings";
 import { errMsg } from "../platform/std/errors";

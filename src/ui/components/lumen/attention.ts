@@ -8,7 +8,7 @@
 // reason: the numbers below are the ones worth a test, and a component is not
 // where they can have one.
 
-import type { TurnActivity } from "../../../ai/activity";
+import type { TurnActivity } from "../../../ai/turn-view/activity";
 import type { Attention } from "./lumen-motion";
 
 /**

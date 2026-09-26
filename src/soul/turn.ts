@@ -13,7 +13,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { fitToBudget, type BudgetPurpose, type Rung } from "../budget";
 import type { DeskItem, DeskMemory, DeskMessage, OpenedDesk } from "../desk";
 import type { Settings } from "../platform/app/settings";
-import type { ProviderId } from "../ai/provider-ids";
+import type { ProviderId } from "../ai/auth/provider-ids";
 import { providers, toPiMessages } from "../ai/providers";
 import { modelIdFor, type ModelTier } from "../ai/model-tier";
 import type { AgentTool } from "../legion/execute/turn";

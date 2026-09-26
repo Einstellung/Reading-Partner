@@ -65,8 +65,8 @@ const BY_VALUE_ALLOWED: Record<string, { values: string[]; why: string }> = {
 const LITERALS_ALLOWED: Record<string, string> = {
   "reading/engine/EmbedPdfView.tsx":
     "the quote highlight, handed to the PDF engine's annotation layer, which takes a colour and not a class",
-  "reading/engine/spike-harness.tsx": "a dev harness, not a screen anyone ships",
-  "ui/components/chat/aside-spike-harness.tsx": "a dev harness, not a screen anyone ships",
+  "smoke/spike-harness.tsx": "a dev harness, not a screen anyone ships",
+  "smoke/aside-spike-harness.tsx": "a dev harness, not a screen anyone ships",
   "ui/components/base/icons.tsx": "an illustration's own palette",
   "ui/components/lumen/Lumen.tsx": "the companion's own palette (docs/66), which is a character and not a theme",
   "smoke/dictation-bench.tsx": "a bench page, and a crash net that cannot count on the stylesheet",

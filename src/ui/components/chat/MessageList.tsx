@@ -16,8 +16,8 @@ import { stickToBottom } from '../common/stick-to-bottom';
 import { copyText } from '../common/clipboard';
 import type { ThreadMessage } from './types';
 import type { CompressedImage } from '../../../ai/image-utils';
-import { visibleTrace, type ToolStatus } from '../../../ai/tool-status';
-import { QUEUED_NOTE, type TurnPhase } from '../../../ai/turn-rows';
+import { visibleTrace, type ToolStatus } from '../../../ai/turn-view/tool-status';
+import { QUEUED_NOTE, type TurnPhase } from '../../../ai/turn-view/turn-rows';
 import { phaseLabel } from './phase-line';
 import { mayMarkReply } from '../../../reading/chat-marks';
 import { ChatMarkLayer, ChatMarksContext, usePenStrokes, type ChatMarkHost } from './ChatMarkLayer';
@@ -104,7 +104,7 @@ function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) 
 	// The calls that finished collapse into one grey line under the answer, in the
 	// order they ran; a running call keeps its own line with the ellipsis, and a
 	// failure keeps its own line in red with the sentence the tool threw. Quiet
-	// calls are not here at all (ai/tool-status.ts) unless they failed.
+	// calls are not here at all (ai/turn-view/tool-status.ts) unless they failed.
 	const shown = visibleTrace(tools);
 	const done = shown.filter((t) => t.state === 'done');
 	return (

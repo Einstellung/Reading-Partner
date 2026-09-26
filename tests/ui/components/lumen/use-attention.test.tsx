@@ -8,7 +8,7 @@
 import { afterEach, expect, test } from "bun:test";
 
 import { useDom } from "../../../support/dom";
-import type { TurnActivity } from "../../../../src/ai/activity";
+import type { TurnActivity } from "../../../../src/ai/turn-view/activity";
 
 const { act, cleanup, render, waitFor } = await useDom();
 afterEach(cleanup);

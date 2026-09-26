@@ -14,7 +14,7 @@ import { Button } from '../ui/button';
 import { ReceiptFrame, receiptText } from './ReceiptPart';
 import { dispatchView, dispatchWatch, type DispatchWatch } from './dispatch-view';
 import { useDeliveredRuns } from './deliveredRuns';
-import type { Receipt } from '../../../ai/tool-status';
+import type { Receipt } from '../../../ai/turn-view/tool-status';
 
 export function DispatchPart({
 	runId,

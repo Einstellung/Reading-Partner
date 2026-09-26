@@ -47,7 +47,7 @@
 // in this table, not a second branch on the send path.
 
 import type { ProviderHeaders } from "@earendil-works/pi-ai";
-import type { ProviderId } from "./provider-ids";
+import type { ProviderId } from "./auth/provider-ids";
 
 // The per-call setup handed to pi. Both fields are optional and both are
 // omitted for the providers that need neither, which is what pi wants: no

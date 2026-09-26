@@ -16,7 +16,7 @@ import {
 import type { AgentTool } from "../../legion/execute/turn";
 import { mealsGuidance, type MealsFocus } from "./tools";
 import { hostRegion } from "./region";
-import type { MealsState } from "./types";
+import type { MealsState } from "./plan/types";
 
 /** The dinner room, as the palace row and the desk both name it. */
 export const INFO_MEALS_KIND = "info-meals";

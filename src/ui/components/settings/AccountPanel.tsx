@@ -36,7 +36,7 @@ import SyncCard from "./SyncCard";
 
 // The everyday model dropdown's "unset" row. Radix reserves the empty string, so
 // following the chat model needs a value of its own; no provider id looks like
-// this one (ai/provider-ids.ts).
+// this one (ai/auth/provider-ids.ts).
 const SAME_AS_CHAT = "same-as-chat";
 
 const THINKING_OPTIONS: { value: ThinkingSetting; label: string }[] = [

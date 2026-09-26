@@ -2,7 +2,7 @@
 // exits (src/ai/agent.ts) and the companion used to wire only one, so a refusal
 // — the round cap, or a call that outgrew the window — arrived through onError
 // and was drawn as a failed reply. It goes through onRefusal now and lands in
-// the row's `notice` (src/ai/turn-rows.ts), which keeps it out
+// the row's `notice` (src/ai/turn-view/turn-rows.ts), which keeps it out
 // of `text` and so out of the next request. The loop is driven by a scripted
 // fake stream: no provider, no network. Run: bun test.
 
@@ -23,7 +23,7 @@ import {
   holdsNoAnswer,
   refusalRow,
   replayableHistory,
-} from "../../../../src/ai/turn-rows";
+} from "../../../../src/ai/turn-view/turn-rows";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
 const MODEL = { id: "m", provider: "faux" } as unknown as Model<Api>;
