@@ -17,8 +17,16 @@
 - 蒸馏源已登记六种：`src/reading/distill/source.ts` 五种（`reading-thread`、`annotations`、`retell-thread`、`talk-thread`、`rehearsal-run`），加 `src/info/briefer/distill-source.ts` 一种。
 - 水位只有游标那半边（`observations/meta.json`）。溯源账本（一 pass 一行：kind、单元、区间、产出的 observation id、时间）和它的三个读者（gc、stub、诊断）都没有。
 - concern 只有 `kind`、`expectedIntervalDays`、`lapsed` 三个字段和手写入口，`src/memory/statements/types.ts` 上写着 Nothing computes `lapsed` yet。三档证据、跨渠道复现、新鲜度衰减、转正、author 改写限制、info 分拣消费全无。
-- 48 的作废清单执行完毕，guessed profile 已退役（71c69b43），info 的 screen 和 triage 读 statement。`logUsage` 有一个生产调用点，`src/soul/turn.ts` 每轮记 shown。
+- 48 的作废清单执行完毕，guessed profile 已退役（71c69b43），info 的 screen 和 triage 读 statement。`logUsage` 有一个生产调用点，`src/soul/turn.ts` 每轮记 shown；`cited`、`rejected` 两种 kind 在 `src/memory/usage/log.ts` 里定义了，没有任何调用点写它们。这份使用日志和它旁边的模型调用日志都是只写不读——文件自己的注释写明「nothing reads this log yet」。
 - statement 层的六步检索管线没做，首次启动引导改成收集第一批 concern 也没做。
+- dream 不读 `contradictedBy`：第二次矛盾会写成一条新 statement，旧的既不降权也不被取代。`src/memory/statements/types.ts` 的 `contradictedBy` 字段今天只被删除审计的证据链读（`reading/delete/pick.ts`），dream 侧（`src/memory/dream/`）不读。
+- dream「考虑过、但当晚没能挂上任何 statement 的观察」按什么退出未做，退出窗口 K 也没定。`src/memory/dream/candidates.ts` 只给两份原始列表（未读过的观察、未被取代的 statement），不做筛选也不排序。
+- dream 回放不按 gain×need 排序、不优先处理 correction：`candidates.ts` 的两份列表是磁盘上的事实顺序，不是排出来的。
+- 门口对话（`listDoorUnits`，`src/soul/door.ts:87`）没有接进蒸馏：调用方需要调 `registerDistillSource`，但 `bootDomains`（`src/ui/components/common/useShellBootstrap.ts`）只注册了 info 和 reading 两侧的蒸馏源，没碰门口。
+- `events-<topicId>.jsonl`（`src/platform/app/events.ts`）只增不减，没有轮转也没有直接删除的代码。
+- 退役设备的 handoff 残留没有清理：`info-collector-legacy` 只在 palace 登记了一行（`src/palace/kinds.ts`），没有清理逻辑。58 自己盘点出的五处孤儿——线程配图目录、`threads-retell-<id>.json`/`threads-talk-<id>.json` 删记录时不级联、`deleteTopic` 不级联、按路径哈希命名的封面失败标记、条目级冲突副本——一个都没逐个核实修掉。
+- info 日切缓存的 `pruneStaleDailyFiles` 有两个调用点（`src/info/briefer/reader.ts:237`、`src/info/program/live.ts:623`），58 认为重新分诊那条路径不会触发它，这个判断本身还没验证。
+- sessionId 当 OpenAI 的 `prompt_cache_key` 没做：`src/ai/call-setup.ts` 只有注释说明这个想法，openai 这条 provider 没有对应的 `SetupRule`。见 [05](../soul/05-AI接入备忘.md)。
 
 ## 待定
 

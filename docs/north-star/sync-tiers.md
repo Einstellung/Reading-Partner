@@ -16,9 +16,12 @@
 - 档 3：`src/palace/kinds.ts` 里四种 threads 行都用 `MAP_THREADS`，合并停在 records 级。59 §5 的 `messages` 策略、消息身份、前缀取长、journal 都没有。
 - 档 4 裁决层没做。59 §6 定了只对 prose、管线形状、以及两台设备抢在 run 文件同步之前怎么收场。
 - 59 §4 说的迁移闸门改成自己设备的树差分没做。
-- [13](../platform/13-账户同步.md) 的「按需与分批」整节没做。
+- [13](../platform/13-账户同步.md) 的「按需与分批」整节没做：按需下载只在手机 EPUB 上有（`src/reading/engine`、`src/ui/components/phone/PhoneShelf.tsx`），桌面和 iPad 的书仍然全量镜像，书架没有「在云端」这个状态。
+- 开发者用的 sync doctor 屏没有，今天只有控制台里的 `window.__syncHoldings()`（`src/platform/sync/index.ts`）。
 - [18](../platform/18-iOS-Google登录.md) 的 iOS 登录冷启动续跑没做，PKCE 的 verifier 和 state 只在内存（`src/platform/sync/auth.ts`）。
 
 ## 待定
 
 59 §10 剩三条：退出再登录留下的孤儿文件；三台以上设备的三方状态；裁决用哪个模型、算谁的预算。「不可推断删除名单谁维护」已按倾向做掉。
+
+[50](../platform/50-删除.md) 留了两条没做：删除日志压缩和过期（判据是「比最老设备的 lastSyncAt 还老」，需要各设备心跳文件，今天没有）；给读者一个「这本书留下的印象一起删」的选项，把只以这本书为证据的 statement 一并标掉（statement 默认不随书删，这是要不要开一个显式第二档）。
