@@ -60,7 +60,14 @@ import SavedArticleView from "./SavedArticleView";
 import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
-import { shelfHeaderLine, shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
+import TopicDeleteDialog from "./TopicDeleteDialog";
+import {
+  NEW_TOPIC_BLURB,
+  NEW_TOPIC_PLACEHOLDER,
+  shelfHeaderLine,
+  shelfOrder,
+  TOPIC_GRID_COLUMNS_CLASS,
+} from "../shelf/topic-shelf";
 import ObservationSection from "./topic/ObservationSection";
 import RehearsalSection from "./topic/RehearsalSection";
 import RetellSection from "./topic/RetellSection";
@@ -368,10 +375,10 @@ export default function LibraryScreen(props: {
           await renameTopic(topic.id, name);
           await props.onTopicsChanged();
         }}
-        // Confirmed in the topic list's ConfirmDestructiveDialog, which is what calls this.
-        onDelete={(t) =>
+        // Confirmed in the topic list's TopicDeleteDialog, which is what calls this.
+        onDelete={(t, alsoDeleteFiles) =>
           void settleDelete({
-            act: () => deleteTopic(t.id),
+            act: () => deleteTopic(t.id, undefined, { alsoDeleteFiles }),
             refresh: props.onTopicsChanged,
             failed: `Could not delete “${t.name}”`,
             onFail: props.onSay,
@@ -383,10 +390,6 @@ export default function LibraryScreen(props: {
   );
 }
 
-// A topic is a question, so the placeholder is one and so is the empty state's
-// sentence.
-const NEW_TOPIC_PLACEHOLDER = "e.g. what makes JITs fast";
-const NEW_TOPIC_BLURB = "A topic is one question and the books you read against it.";
 
 // The empty shelf both screens draw when they have nothing: three book-shaped
 // outlines standing on a line, so an empty screen says what a full one will look
@@ -421,7 +424,8 @@ function TopicLibrary(props: {
   topics: Topic[];
   onCreate: (name: string) => void;
   onRename: (topic: Topic, name: string) => void;
-  onDelete: (topic: Topic) => void;
+  // With the files the reader chose to delete along with it.
+  onDelete: (topic: Topic, alsoDeleteFiles: string[]) => void;
   onOpen: (topic: Topic) => void;
 }) {
   // Which dialog is up. Each is mounted only while it is open, so its field
@@ -494,12 +498,11 @@ function TopicLibrary(props: {
         />
       )}
       {deleting && (
-        <ConfirmDestructiveDialog
-          title={`Delete “${deleting.name}”?`}
-          description="The topic goes, with the retells, talks and rehearsals made in it. The PDFs stay on disk; articles kept here move to Brief."
-          open
+        <TopicDeleteDialog
+          topic={deleting}
+          topics={props.topics}
           onOpenChange={(open) => !open && setDeleting(null)}
-          onConfirm={() => props.onDelete(deleting)}
+          onConfirm={(files) => props.onDelete(deleting, files)}
         />
       )}
     </div>

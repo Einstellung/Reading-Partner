@@ -413,6 +413,8 @@ export default function PhoneApp({
               articles={savedArticles ?? []}
               onOpen={(article) => setStack((s) => push(s, { kind: "savedArticle", article }))}
               onBack={goBack}
+              onChanged={refreshSavedArticles}
+              onNotice={pushToast}
             />
           )}
 
@@ -435,6 +437,8 @@ export default function PhoneApp({
               onBack={goBack}
               onSay={(line) => pushToast("warn", line)}
               onImported={refreshShelf}
+              onChanged={refreshShelf}
+              onNotice={pushToast}
             />
           )}
 
@@ -446,6 +450,7 @@ export default function PhoneApp({
               topicName={topics?.find((t) => t.id === base.topicId)?.name ?? ""}
               onBack={goBack}
               onOverlayChange={onOverlayChange}
+              onNotice={pushToast}
               {...(canOpenIn ? { onOpenIn: () => handOver(base.bookId, base.name) } : {})}
             />
           )}

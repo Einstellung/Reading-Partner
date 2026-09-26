@@ -2,7 +2,8 @@
 // DISMISS_MS as the Root's duration and calls back when it elapses), so all that
 // is left here is the list and the identity of the entries in it.
 
-export type ToastKind = "warn" | "error";
+// "info" is a plain line after something the reader asked for went through.
+export type ToastKind = "info" | "warn" | "error";
 
 export interface ToastItem {
 	id: string;

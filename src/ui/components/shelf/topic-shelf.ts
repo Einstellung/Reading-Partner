@@ -37,6 +37,11 @@ export const TOPIC_GRID_COLUMNS_CLASS = TOPIC_GRID_STEPS.map((s) => s.className)
 // Newest topic first, the order listTopics already returns them in, restated
 // here so the screen does not depend on who loaded the list. Name breaks a tie
 // (two topics created in the same millisecond by an import).
+// A topic is a question, so the placeholder is one and so is the empty state's
+// sentence. The desk's name dialog and the phone's sheet both say these.
+export const NEW_TOPIC_PLACEHOLDER = "e.g. what makes JITs fast";
+export const NEW_TOPIC_BLURB = "A topic is one question and the books you read against it.";
+
 export function shelfOrder(topics: Topic[]): Topic[] {
   return [...topics].sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name));
 }

@@ -59,6 +59,44 @@ function button(root: ParentNode, label: string): HTMLButtonElement | null {
   );
 }
 
+test("a hold on an aside's row offers to delete that aside", async () => {
+  const { root } = draw({
+    asideDelete: { topicId: "t1", onChanged: () => {}, onNotice: () => {} },
+  });
+  const surface = root.querySelector("[data-lesson-press]") as HTMLElement;
+  // The row as reader/AsideCard.tsx draws it; the card itself is tested there.
+  const row = document.createElement("button");
+  row.setAttribute("data-aside-id", "aside-1");
+  row.title = "Why divide by root d?";
+  surface.appendChild(row);
+  fireEvent.contextMenu(row);
+  await new Promise((r) => setTimeout(r, 20));
+  const item = button(document.body, "Delete aside");
+  expect(item).not.toBeNull();
+  expect(document.body.textContent).toContain("Why divide by root d?");
+  fireEvent.click(item!);
+  await new Promise((r) => setTimeout(r, 20));
+  expect(document.body.querySelector("[role=alertdialog]")?.textContent).toContain(
+    "The aside goes, and its row in the lesson with it.",
+  );
+  fireEvent.click(button(document.body, "Cancel")!);
+  surface.removeChild(row);
+});
+
+test("an aside's own screen has no hold on rows", async () => {
+  const { root } = draw({
+    aside: { span: "a head" },
+    asideDelete: { topicId: "t1", onChanged: () => {}, onNotice: () => {} },
+  });
+  const row = document.createElement("button");
+  row.setAttribute("data-aside-id", "aside-2");
+  root.firstElementChild?.appendChild(row);
+  fireEvent.contextMenu(row);
+  await new Promise((r) => setTimeout(r, 20));
+  expect(button(document.body, "Delete aside")).toBeNull();
+  row.remove();
+});
+
 test("the bar carries the paper, and the door to another app only when there is one", () => {
   const { root } = draw();
   expect(root.textContent).toContain("BERT");

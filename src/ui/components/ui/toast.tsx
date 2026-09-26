@@ -48,6 +48,7 @@ const toastVariants = cva(
   {
     variants: {
       kind: {
+        info: "border-border bg-card text-foreground",
         warn: "border-amber-300 bg-amber-50 text-amber-800",
         error: "border-red-300 bg-red-50 text-red-800",
       },

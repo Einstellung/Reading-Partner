@@ -107,6 +107,11 @@ export interface LongPressOptions {
   // Felt rather than seen: the control appears under the reader's own finger,
   // which is the one place they are not looking.
   feedback?: () => void;
+  // The watch started on this target, and later ended (fired or called off).
+  // What the host draws a press with: a card that gives a little under the
+  // finger while it is being held.
+  onArm?: (target: EventTarget | null) => void;
+  onDisarm?: () => void;
   ms?: number;
   slop?: number;
 }
@@ -134,6 +139,8 @@ export function bindLongPress(host: HTMLElement, opts: LongPressOptions): () => 
 
   const apply = (step: LongPressStep) => {
     state = step.state;
+    if (step.action === "arm") opts.onArm?.(press?.target ?? null);
+    else if (step.action === "disarm" || step.action === "fire") opts.onDisarm?.();
     if (step.action === "arm") {
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {

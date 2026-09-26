@@ -63,6 +63,11 @@ test("pressing a row navigates back into that conversation", () => {
   expect(raised).toEqual([{ kind: "navigate", to: "aside", arg: "aside-1" }]);
 });
 
+test("each row carries its thread id, which the phone lesson's hold finds it by", () => {
+  const { rows } = draw(one);
+  expect(rows[0].getAttribute("data-aside-id")).toBe("aside-1");
+});
+
 // The records already on disk carry one aside's fields at the top level and no
 // `items`. Nothing migrates them, so the row has to read them as they are.
 test("a receipt written before items still draws its row", () => {

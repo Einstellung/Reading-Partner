@@ -11,6 +11,8 @@
 // the guard never runs; the call is also outside the capability's ACL and
 // rejects with nothing to catch it (docs/pitfall/98).
 
+import type { ReactNode } from "react";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,14 +33,21 @@ export default function ConfirmDestructiveDialog(props: {
   open: boolean;
   onOpenChange(open: boolean): void;
   onConfirm(): void;
+  // Anything the confirmation shows between its sentence and its buttons: a
+  // topic's files that could go with it, and the box that says whether they do.
+  children?: ReactNode;
 }) {
   return (
     <AlertDialog open={props.open} onOpenChange={props.onOpenChange}>
-      <AlertDialogContent>
+      {/* One track no wider than the dialog: the content is a grid, and its
+          implicit auto column grows to fit a long unbreakable title and pushes
+          the dialog off a phone screen. */}
+      <AlertDialogContent className="grid-cols-[minmax(0,1fr)]">
         <AlertDialogHeader>
           <AlertDialogTitle>{props.title}</AlertDialogTitle>
           <AlertDialogDescription>{props.description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {props.children}
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={props.onConfirm}>

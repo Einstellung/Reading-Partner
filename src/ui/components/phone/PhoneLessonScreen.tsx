@@ -33,6 +33,8 @@ export default function PhoneLessonScreen(props: {
   // the info call registers the way out of itself: as something drawn over the
   // screens that back consumes first.
   onOverlayChange?: (dismiss: (() => void) | null) => void;
+  // The line after an aside was deleted, or the one saying it was not.
+  onNotice?: (kind: "info" | "error", line: string) => void;
 }) {
   const call = useLessonCall({
     bookId: props.bookId,
@@ -108,6 +110,11 @@ export default function PhoneLessonScreen(props: {
       // what parks the lesson there (docs/09).
       onPickChapter={(chapter) => call.send(takeMeTo(chapter))}
       onAsk={enter}
+      // A hold on an aside's row deletes that aside; the lesson then re-reads
+      // itself without the row.
+      {...(props.onNotice
+        ? { asideDelete: { topicId: props.topicId, onChanged: reload, onNotice: props.onNotice } }
+        : {})}
       // The one card this conversation raises: a receipt row, which is the door
       // back into the side conversation it stands for (reader/AsideCard.tsx).
       onCardAction={(_cardId, action) => {

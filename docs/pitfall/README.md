@@ -112,6 +112,8 @@
 
 ## 触摸与手势
 
+- [411-position-keyed-rows-defeat-a-flip-by-node](./touch/411-position-keyed-rows-defeat-a-flip-by-node.md) — 课堂删 aside 后滑动不播或往反方向挪：消息行按下标做 key，删中间一条后 React 把后续节点复用给下一条内容，按节点配对的 FLIP 量的是别的内容；列表贴底时移动的其实是上面的行。改成每层容器记前后各几个、删后按顺序从两头重新取来配对（`phone/slide-into-place.ts`）
+- [410-a-hold-beside-a-card-opens-it-on-release](./touch/410-a-hold-beside-a-card-opens-it-on-release.md) — 手机书架上在卡片旁边按住半秒，长按没起（按下点不在卡片上），松手 WebKit 把 click 吸附到旁边的卡片上照样打开；长按判定看 pointerdown 的目标，click 看吸附后的目标。按下超过长按时长、落在可长按元素上的 click 在面板捕获阶段吞掉（`phone/hold-menu.ts` stepClickGuard），面板根节点关掉选区和 callout
 - [267-a-rulers-nodes-belong-to-the-clone-it-laid-out](./touch/267-a-rulers-nodes-belong-to-the-clone-it-laid-out.md) — 分页量尺交回的是离屏克隆树的节点，按节点身份查摄入树的偏移表全部落空成 0：CFI 对、charOffset 错、单测全绿（测试量尺用的是原树）。先取 CFI 步，在摄入树上解析回节点再取偏移
 - [268-a-books-font-family-paginates-differently-on-every-device](./touch/268-a-books-font-family-paginates-differently-on-every-device.md) — 书的 `font-family: Georgia, serif` 压过基线，Georgia 没装就回退到设备默认字体，同一本书 73 页对 74 页，而分页表是跨设备同步写一次不重算的。消毒器把通用族名和未内嵌的具名字体一律改写成打包的字体栈，书自带 `@font-face` 的名字保留
 - [274-a-page-card-holds-the-whole-chapter](./touch/274-a-page-card-holds-the-whole-chapter.md) — 页卡片挂的是整份 spine 文档，看不见的列还在 DOM 里：`innerText` 给整章，`textContent` 还夹着书自带 `<style>` 的 CSS 源码。页的文本只从分页表的 `charOffset` 或 `Fulltext.pages[]` 来

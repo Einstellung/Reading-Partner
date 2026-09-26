@@ -37,6 +37,8 @@ import { observationFs } from "../../memory/live/fs";
 import { recordDeletion } from "../../platform/app/deleted-books";
 import { deleteRetell, listAllRetells } from "../retell/store";
 import { deleteOutlineWithRehearsals, deleteRetellWithTalk } from "./delete-retell";
+import { deleteIfUnreferenced, liveDeleteBookDeps, type DeleteBookDeps } from "./delete-book";
+import { orphanedTogether } from "./pick";
 import type { Retell } from "../retell/types";
 import { listAllTalkOutlines, talkOutlineOfRetell } from "../talk/store";
 import type { TalkOutline } from "../talk/types";
@@ -219,11 +221,26 @@ export function handledKinds(): PalaceKind[] {
  * row itself are the steps that throw — the reader is told the topic is still
  * there. Brief is never logged: it is written back by ensureBrief, and a
  * deleted Brief is meant to come back empty.
+ *
+ * Answers with the documents deleted along with it (options.alsoDeleteFiles).
  */
+export interface DeleteTopicOptions {
+  /**
+   * Documents to delete once the topic is gone: the ones the confirmation
+   * listed as only in this topic (delete-book.ts listFilesOnlyInTopic) and the
+   * reader chose to delete too. Each is counted again at delete time and goes
+   * through deleteIfUnreferenced, so one filed somewhere else in the meantime
+   * stays.
+   */
+  alsoDeleteFiles?: readonly string[];
+  bookDeps?: DeleteBookDeps;
+}
+
 export async function deleteTopic(
   topicId: string,
   deps: DeleteTopicDeps = liveDeleteTopicDeps,
-): Promise<void> {
+  options: DeleteTopicOptions = {},
+): Promise<string[]> {
   if (topicId !== BRIEF_TOPIC_ID) await deps.tombstone(topicId);
   for (const step of cascadeOfTopic()) {
     if (step.action === "keep") continue;
@@ -241,4 +258,32 @@ export async function deleteTopic(
     console.warn("failed to flush the conversations unfiled from a deleted topic", topicId, e);
   }
   await deps.removeTopicRecord(topicId);
+  const files = options.alsoDeleteFiles ?? [];
+  return files.length > 0 ? deleteFilesOfTopic(files, options.bookDeps ?? liveDeleteBookDeps) : [];
+}
+
+// After the row: the topic's own reference is gone, so the count sees what is
+// left. A reference list that cannot be read deletes nothing; a document that
+// fails half way is warned about and the rest still go. Answers with the ids
+// that were deleted, which is what the reader is told.
+async function deleteFilesOfTopic(
+  hashes: readonly string[],
+  deps: DeleteBookDeps,
+): Promise<string[]> {
+  let going: Set<string>;
+  try {
+    going = orphanedTogether(hashes, await deps.listTopics(), await deps.listSupplementLists());
+  } catch (e) {
+    console.warn("failed to count the references of a deleted topic's files", e);
+    return [];
+  }
+  const deleted: string[] = [];
+  for (const hash of going) {
+    try {
+      if (await deleteIfUnreferenced(hash, deps, going)) deleted.push(hash);
+    } catch (e) {
+      console.warn("failed to delete a file of a deleted topic", hash, e);
+    }
+  }
+  return deleted;
 }

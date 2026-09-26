@@ -50,10 +50,24 @@ import type { Settings } from "../../../platform/app/settings";
 import { flowTool } from "./reader-gate";
 import { createViewGate } from "./epub-lesson";
 import PhoneBookLesson from "./PhoneBookLesson";
+import { deletePhoneMark, markThreadId, type MarkDeleteIo } from "./delete-mark";
+import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import PhoneDisplaySheet from "./PhoneDisplaySheet";
 import PhoneOutlineSheet from "./PhoneOutlineSheet";
 import PhoneReaderBar from "./PhoneReaderBar";
 import { useBookLesson, type LessonTopic } from "./use-book-lesson";
+import { deleteThreadTree, loadThreads } from "../../../platform/app/threads";
+import { logEvent } from "../../../platform/app/events";
+import { deleteThreadImages } from "../../../platform/app/thread-images";
+
+const markDeleteIo: MarkDeleteIo = {
+  loadThreads,
+  deleteThreadTree,
+  deleteAnnotations,
+  logThreadDelete: (topicId, threadId) =>
+    logEvent(topicId, "thread-delete", { threadId, book: false }),
+  removeThreadImages: deleteThreadImages,
+};
 
 export default function PhoneReader(props: {
   Pane: ComponentType<FlowReaderPaneProps>;
@@ -169,6 +183,35 @@ export default function PhoneReader(props: {
     [prefs],
   );
 
+  // The mark whose conversation is about to go with it, while that is being
+  // confirmed.
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  // The reader deleting a mark from its popup: the conversation opened from it
+  // goes too (delete-mark.ts). removeMark above stays mark-only, which is what
+  // the lesson's call asks of it after it has dropped the threads itself.
+  const deleteMarkWithThread = useCallback(
+    (id: string) => {
+      void deletePhoneMark({ bookId, topicId }, marksRef.current, id, markDeleteIo)
+        .then((ids) => {
+          viewRef.current?.removeAnnotations(ids);
+          const gone = new Set(ids);
+          marksRef.current = marksRef.current.filter((a) => !gone.has(a.id));
+        })
+        .catch((e: unknown) => console.error("failed to delete the mark", e));
+    },
+    [bookId, topicId],
+  );
+
+  const askRemoveMark = useCallback(
+    (id: string) => {
+      setPopup(null);
+      if (markThreadId(marksRef.current.find((a) => a.id === id))) setConfirming(id);
+      else deleteMarkWithThread(id);
+    },
+    [deleteMarkWithThread],
+  );
+
   return (
     <div className="absolute inset-0">
     {/* The paper the reader chose is the whole reading screen's, not just the
@@ -237,8 +280,20 @@ export default function PhoneReader(props: {
         {popup && (
           <MarkPopup
             rect={popup.rect}
-            onDelete={() => removeMark(popup.annotation.id)}
+            onDelete={() => askRemoveMark(popup.annotation.id)}
             onClose={() => setPopup(null)}
+          />
+        )}
+
+        {confirming && (
+          // Opened after the popup has closed, so it sits on the dialog layer
+          // and nothing covers Cancel (docs/pitfall/211).
+          <ConfirmDestructiveDialog
+            title="Delete this mark?"
+            description="The mark goes, and with it the conversation opened from it. This cannot be undone."
+            open
+            onOpenChange={(open) => !open && setConfirming(null)}
+            onConfirm={() => deleteMarkWithThread(confirming)}
           />
         )}
       </div>
