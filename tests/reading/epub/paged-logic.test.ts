@@ -7,6 +7,7 @@ import {
   columnAt,
   columnCount,
   inBackEdge,
+  inkOnPage,
   isInkAt,
   layoutWindow,
   locateInWindow,
@@ -137,5 +138,18 @@ describe("the back band", () => {
     expect(inBackEdge(110, 100, 24)).toBe(true);
     expect(inBackEdge(90, 100, 24)).toBe(false);
     expect(inBackEdge(5, 0, 0)).toBe(false);
+  });
+});
+
+describe("the first ink on a page", () => {
+  test("a caret on the line before, a word broken across pages, moves onto this page", () => {
+    // "Librari-" ends the page before; "an)." starts this one at offset 7.
+    expect(inkOnPage("Librarian).", 6, (o) => o >= 7)).toBe(7);
+  });
+
+  test("a caret already on this page is kept; space and other pages are not", () => {
+    expect(inkOnPage("the whale", 4, () => true)).toBe(4);
+    expect(inkOnPage("a  b", 1, () => true)).toBeNull();
+    expect(inkOnPage("whale", 0, () => false)).toBeNull();
   });
 });

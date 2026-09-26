@@ -110,17 +110,21 @@ function searchForCaret(shadow: ShadowRoot, root: Element, clientX: number, clie
   return { node: text, offset };
 }
 
-function caretRect(range: Range, text: Text, offset: number): DOMRect {
-  range.setStart(text, offset);
-  range.collapse(true);
-  const own = range.getBoundingClientRect();
-  if (own.width > 0 || own.height > 0) return own;
-  // A collapsed range can report nothing at a line break; the character beside
-  // the boundary always has a box.
-  const at = Math.max(0, Math.min(text.data.length - 1, offset > 0 ? offset - 1 : 0));
-  range.setStart(text, at);
-  range.setEnd(text, at + 1);
-  return range.getBoundingClientRect();
+// The box of the boundary before a character, read off that character's own
+// box: its left edge, or the last character's right edge at the node's end. A
+// collapsed range is not measured, because inside CSS columns WebKit places it
+// as if the columns were one (docs/pitfall/436).
+function caretRect(range: Range, text: Text, offset: number): Box {
+  const length = text.data.length;
+  for (let at = Math.min(offset, length - 1); at >= 0; at--) {
+    range.setStart(text, at);
+    range.setEnd(text, at + 1);
+    const r = range.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) continue;
+    const x = at === offset ? r.left : r.right;
+    return { left: x, right: x, top: r.top, bottom: r.bottom };
+  }
+  return { left: 0, right: 0, top: 0, bottom: 0 };
 }
 
 export interface Box {

@@ -140,6 +140,19 @@ export function isInkAt(text: string, offset: number): boolean {
   return c !== "" && c.trim() !== "";
 }
 
+/**
+ * The first character at or just after a caret that is ink and on the page
+ * shown. A caret at the start of a line can be the boundary at the end of the
+ * line before it, and where a word is broken across two pages that line is on
+ * the page before: the character there is not this page's first.
+ */
+export function inkOnPage(text: string, offset: number, onPage: (offset: number) => boolean, reach = 2): number | null {
+  for (let o = offset; o < Math.min(text.length, offset + reach); o++) {
+    if (isInkAt(text, o) && onPage(o)) return o;
+  }
+  return null;
+}
+
 /** Whether a touch starts in the left band the shell's back gesture owns. */
 export function inBackEdge(x: number, left: number, zone: number): boolean {
   return zone > 0 && x - left >= 0 && x - left < zone;

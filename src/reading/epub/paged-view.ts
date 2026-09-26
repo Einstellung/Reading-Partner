@@ -38,7 +38,7 @@ import {
   columnAt,
   columnCount,
   inBackEdge,
-  isInkAt,
+  inkOnPage,
   layoutWindow,
   locateInWindow,
   neighbourSpines,
@@ -295,7 +295,16 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
         hit: (x, y) => leaf.shadow.elementFromPoint(x, y),
         caret: (x, y) => {
           const c = caretAtPoint(leaf.shadow, leaf.root, x, y);
-          return c && isInkAt(c.node.data, c.offset) ? c : null;
+          if (!c) return null;
+          const onPage = (o: number) => {
+            const r = owner.createRange();
+            r.setStart(c.node, o);
+            r.setEnd(c.node, o + 1);
+            const b = firstBox(r);
+            return !!b && b.left >= box.left - 1 && b.left < box.right;
+          };
+          const offset = inkOnPage(c.node.data, c.offset, onPage);
+          return offset === null ? null : { node: c.node, offset };
         },
       },
     );

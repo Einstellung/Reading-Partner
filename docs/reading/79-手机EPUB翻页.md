@@ -29,7 +29,7 @@
 屏页不存。存盘、顶栏、[p.N] 引用都是分页表 v2 的 CFI 和页号，和滚动模式、iPad 互认。ViewState 照滚动模式写（`layout: "vertical"`、`scale: "auto"`），手机翻不翻页不写进书的状态。
 
 - CFI → 屏页：`resolvePointRange` 在克隆树上解出 Range；折叠的 Range 扩成一个字符再取第一个矩形（元素位置取子元素的矩形），`columnAt` 按它离 host 左缘多远除以屏宽得列号。
-- 屏页 → CFI：在当前屏版心里从上往下每 8px、行首和往里 40/120px 探点，`caretAtPoint` 拿第一个落在非空白字符上的 caret，出 CFI；整页没有字（插图页）按 `top-edge.ts` 的规矩取探到的第一个元素。
+- 屏页 → CFI：在当前屏版心里从上往下每 8px、行首和往里 40/120px 探点，`caretAtPoint` 拿第一个落在非空白字符上、且字符矩形在本屏的 caret（`inkOnPage`：词被断在两屏时，行首边界可能量到上一屏的行尾），出 CFI；整页没有字（插图页）按 `top-edge.ts` 的规矩取探到的第一个元素。
 - 页号：`pageIndexOfCfi(pagination, anchor)`。
 
 ## 锚点
@@ -38,7 +38,7 @@
 
 ## 划线（第一片的最小行为）
 
-`flow-marks.ts` 原样接上，`flow-gesture.ts` 的按压状态机挂在 frame 上：长按 500ms 在字上起划，拿着 Highlight 笔按下即划；拿笔时路由把手指当笔（`tool: "highlight"`、`fingerDraw: true`），只从屏幕边带起的横滑翻页，和 iPad 拿笔时一样。点标注开弹窗、点链接跟链接，都在点按区翻页之前判。一页之内的划线、显示、删除可用；跨页延长、拖到页边自动翻页不做。以上在模拟器上都还没验。
+`flow-marks.ts` 原样接上，`flow-gesture.ts` 的按压状态机挂在 frame 上：长按 500ms 在字上起划，拿着 Highlight 笔按下即划；拿笔时路由把手指当笔（`tool: "highlight"`、`fingerDraw: true`），只从屏幕边带起的横滑翻页，和 iPad 拿笔时一样。点标注开弹窗、点链接跟链接，都在点按区翻页之前判。一页之内长按划线在模拟器上验过；点标注开弹窗没出来，删除还没验。跨页延长、拖到页边自动翻页不做。
 
 ## 第二片要接的
 
