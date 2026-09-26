@@ -84,8 +84,10 @@ function distanceTo(rects: readonly DOMRect[], x: number, y: number): number | n
  * nearest the point, then the character boundary inside it.
  */
 function searchForCaret(shadow: ShadowRoot, root: Element, clientX: number, clientY: number): CaretPoint | null {
-  let el = shadow.elementFromPoint(clientX, clientY);
-  while (el && !inside(root, el)) el = el.parentElement;
+  // The book's topmost element under the point, looked for through whatever
+  // the shell lays over the page (Lumen in its corner): a stroke that runs
+  // under it still reaches the words there.
+  const el = shadow.elementsFromPoint(clientX, clientY).find((e) => inside(root, e));
   // Nothing of the book under the point: the sheet's margin, or its paper.
   if (!el) return null;
   const owner = root.ownerDocument;

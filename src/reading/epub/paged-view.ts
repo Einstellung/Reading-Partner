@@ -45,6 +45,7 @@ import {
   neighbourSpines,
   pageProbePoints,
   pagedColumnCss,
+  strokeProbePoints,
   windowPageOf,
   type PagedWindow,
 } from "./paged-logic";
@@ -315,8 +316,8 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
   // --- the marks ------------------------------------------------------------------
   // The column's marks module as is: a mark is drawn over the rects of its
   // range in the document's overlay, and the overlay spans every column
-  // because the host does not clip. Marks across two pages are docs/79's
-  // second slice.
+  // because the host does not clip: a mark that runs onto the next screen is
+  // drawn on both.
   function docAt(clientX: number, clientY: number): FlowDoc | null {
     const hit = owner.elementFromPoint(clientX, clientY);
     if (!hit) return null;
@@ -337,6 +338,17 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     onSave: (anns) => callbacks.onSaveAnnotations(anns),
     onSelect: (ids) => callbacks.onSelectAnnotations(ids),
     onPopup: (params) => callbacks.onAnnotationPopup(params),
+    // Past the first column a margin is inside no element of the book, so a
+    // finger that runs off the words finds nothing under it: the stroke ends
+    // on the nearest words of the screen shown instead (paged-logic.ts).
+    strokeCaret: (doc, clientX, clientY) => {
+      const box = scroller.getBoundingClientRect();
+      for (const p of strokeProbePoints({ x: clientX, y: clientY }, box, display.padX)) {
+        const caret = caretAtPoint(doc.shadow, doc.root, p.x, p.y);
+        if (caret) return caret;
+      }
+      return null;
+    },
   });
   marks.reset(opts.annotations);
   marks.setTool(tool);
@@ -495,9 +507,10 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     quote = null;
   }
 
-  // Turned to the page the words start on and banded there. Where the words
-  // run onto the next page, and how the lesson brings the reader back, is the
-  // second slice (docs/79).
+  // Turned to the screen the words start on and banded there. The band is
+  // drawn over every rect of the range, so words that run onto the next screen
+  // are banded there too. The words' start is the anchor: a picture arriving
+  // later in the document lays it out again on the screen holding them.
   function highlightQuote(page: number, searchText: string): boolean {
     clearQuote();
     const i = Math.min(Math.max(0, page), pagesCount - 1);
@@ -511,7 +524,8 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     }
     column = columnOfRange(leaf, range);
     place();
-    anchor = anchorOfShown();
+    const local = pointSteps(range.startContainer, range.startOffset);
+    anchor = local !== null ? epubCfi(leaf.spine, leaf.idref, local) : anchorOfShown();
     quote = { leaf, range };
     paintQuote();
     paintShown();

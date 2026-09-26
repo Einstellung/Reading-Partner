@@ -38,11 +38,8 @@
 
 ## 划线（第一片的最小行为）
 
-`flow-marks.ts` 原样接上，`flow-gesture.ts` 的按压状态机挂在 frame 上：长按 500ms 在字上起划，拿着 Highlight 笔按下即划；拿笔时路由把手指当笔（`tool: "highlight"`、`fingerDraw: true`），只从屏幕边带起的横滑翻页，和 iPad 拿笔时一样。点标注开弹窗、点链接跟链接，都在点按区翻页之前判。起划时指针捕获到 scroller（路由所在处），不捕获到 frame，否则路由收不到抬手（坑 437）。一页之内长按划线、点标注开弹窗、删除在模拟器上验过。跨页延长、拖到页边自动翻页不做。
+`flow-marks.ts` 原样接上，`flow-gesture.ts` 的按压状态机挂在 frame 上：长按 500ms 在字上起划，拿着 Highlight 笔按下即划；拿笔时路由把手指当笔（`tool: "highlight"`、`fingerDraw: true`），只从屏幕边带起的横滑翻页，和 iPad 拿笔时一样。点标注开弹窗、点链接跟链接，都在点按区翻页之前判。起划时指针捕获到 scroller（路由所在处），不捕获到 frame，否则路由收不到抬手（坑 437）。划线不跨屏、拖到页边不翻页，和 iPad 纸页一样（iPad 一笔只在一张纸上）。手指拖出字（页边、最后一行下面、段间空白，也包括盖在字上的 Lumen）时，终点取本屏版心里最近的字：`strokeCaret` 用 `strokeProbePoints` 把点收进版心、先上后下探（坑 438）；`caret.ts` 找元素用 `elementsFromPoint` 取书里最上面那个，透过壳盖在上面的东西。已有的跨屏标注按整个 range 的矩形画，两屏各画各的。切换模式时新视图挂的是当前的全部标注（坑 439）。
 
-## 第二片要接的
+## 引文和位置
 
-- 跨页划线：`paged-view.ts` 的 `feed` 里 `extend-mark` 分支；手指停在右缘时自动翻页要调 `turn(1)` 并在翻完后接着 `marks.extendDrag`。`rectsIn` 已经给出所有列上的矩形，跨两页的线两页各画各的。
-- 引文回书：`highlightQuote` 现在翻到引文起点那页、在该文档 overlay 的 `.rp-quote` 子层画紫，没在模拟器上验；课堂回书的流程（[77](./77-手机EPUB课堂.md)）在翻页模式下要从头走一遍。
-- 其它读位置的消费者：`top-edge.ts` 在翻页模式的等价物是 `anchorOfShown`（`pageProbePoints` + `isInkAt`）；课堂、Lumen 这些读当前位置的地方都应该读 ViewState 的 cfi，不要去量 DOM。
-- Lumen 与翻页手势共存没验。
+引文回书（[77](./77-手机EPUB课堂.md)）：`highlightQuote` 翻到引文起点所在的屏，在该文档 overlay 的 `.rp-quote` 子层按整个 range 画紫，跨屏的引文两屏都有；锚点取引文起点的 CFI，之后的重排落在引文所在屏。读者位置的消费者（顶栏、课堂的 turn context、离开时写的位置）都读视图回调的 ViewStats/ViewState，翻页模式由锚点给出，不量 DOM。Lumen 挂在壳上、不在 frame 里，它的拖动和点按到不了翻页路由。

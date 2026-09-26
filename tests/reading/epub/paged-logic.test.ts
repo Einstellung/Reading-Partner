@@ -13,6 +13,7 @@ import {
   locateInWindow,
   neighbourSpines,
   pageProbePoints,
+  strokeProbePoints,
   pagedColumnCss,
   windowPageOf,
 } from "../../../src/reading/epub/paged-logic";
@@ -151,5 +152,35 @@ describe("the first ink on a page", () => {
     expect(inkOnPage("the whale", 4, () => true)).toBe(4);
     expect(inkOnPage("a  b", 1, () => true)).toBeNull();
     expect(inkOnPage("whale", 0, () => false)).toBeNull();
+  });
+});
+
+describe("a stroke that runs off the words", () => {
+  const box = { left: 0, top: 100, width: 393, height: 600 };
+
+  test("a finger in the right margin is looked for inside the column, at its own height first", () => {
+    const pts = strokeProbePoints({ x: 390, y: 400 }, box, 36);
+    expect(pts[0]).toEqual({ x: 393 - 36 - 1, y: 400 });
+    for (const p of pts) expect(p.x).toBe(356);
+  });
+
+  test("below the last line it walks up first, then down, and never leaves the text area", () => {
+    const pts = strokeProbePoints({ x: 200, y: 900 }, box, 36, 10);
+    const bottom = 100 + 600 - FLOW_PAD_Y - 1;
+    expect(pts[0]).toEqual({ x: 200, y: bottom });
+    expect(pts[1].y).toBe(bottom - 10);
+    for (const p of pts) {
+      expect(p.y).toBeGreaterThanOrEqual(100 + FLOW_PAD_Y);
+      expect(p.y).toBeLessThanOrEqual(bottom);
+    }
+  });
+
+  test("from the middle: every point above before any below", () => {
+    const pts = strokeProbePoints({ x: 10, y: 400 }, box, 36, 50);
+    expect(pts[0]).toEqual({ x: 37, y: 400 });
+    const firstBelow = pts.findIndex((p) => p.y > 400);
+    expect(firstBelow).toBeGreaterThan(1);
+    expect(pts.slice(1, firstBelow).every((p) => p.y < 400)).toBe(true);
+    expect(pts.slice(firstBelow).every((p) => p.y > 400)).toBe(true);
   });
 });

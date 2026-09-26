@@ -134,6 +134,32 @@ export function pageProbePoints(
   return points;
 }
 
+/**
+ * Where a stroke's end is looked for when the finger has run off the words of
+ * the screen shown: into a side margin, below the last line, or between two
+ * paragraphs. Past the first column none of those is inside an element of the
+ * book (the columns overflow the paper's own box), so nothing is under the
+ * finger at all. The point is pulled into the column's text, then walked up a
+ * few pixels at a time and, failing that, down: the first point on words is
+ * where the stroke ends, the way the iPad's sheet resolves a finger in its
+ * margin to the nearest line.
+ */
+export function strokeProbePoints(
+  at: { x: number; y: number },
+  box: { left: number; top: number; width: number; height: number },
+  padX: number,
+  step = 8,
+): { x: number; y: number }[] {
+  const x = Math.min(Math.max(at.x, box.left + padX + 1), box.left + box.width - padX - 1);
+  const top = box.top + FLOW_PAD_Y;
+  const bottom = box.top + box.height - FLOW_PAD_Y - 1;
+  const y0 = Math.min(Math.max(at.y, top), bottom);
+  const points = [{ x, y: y0 }];
+  for (let y = y0 - step; y >= top; y -= step) points.push({ x, y });
+  for (let y = y0 + step; y <= bottom; y += step) points.push({ x, y });
+  return points;
+}
+
 /** Whether the character at an offset is ink rather than space. */
 export function isInkAt(text: string, offset: number): boolean {
   const c = text.charAt(offset);
