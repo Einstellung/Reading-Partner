@@ -29,7 +29,11 @@ import {
   runTopicDelete,
   type HoldDeleteDeps,
 } from "./hold-delete";
+import { slideWhenGone } from "./slide-into-place";
 import { fadeOut, unfade, useHold, type Held } from "./use-hold";
+
+// What leave() answers for a choice that takes nothing off the screen.
+const STAYS = { undo: () => {}, faded: Promise.resolve() };
 
 export type NoticeKind = "info" | "error";
 
@@ -131,21 +135,33 @@ export function useHoldDelete(opts: HoldDeleteOptions): HoldDeleteControl {
     [held, subject, facts, closeMenu],
   );
 
-  // Fade the held element and hide it by key; answers the undo.
+  // Fade the held element and hide it by key, and slide what follows it into
+  // the space once it is gone. The slide is measured before anything moves: a
+  // reread that lands mid-fade (the lesson's) takes the item out early.
+  // Answers the undo, and when the fade is over.
   const leave = useCallback((key: string) => {
     const el = heldElement();
-    const cancel = fadeOut(el, () => setHidden((h) => hideKey(h, key)));
-    return () => {
+    const stopSlide = slideWhenGone(el);
+    let settle = () => {};
+    const faded = new Promise<void>((resolve) => (settle = resolve));
+    const cancel = fadeOut(el, () => {
+      setHidden((h) => hideKey(h, key));
+      settle();
+    });
+    const undo = () => {
       cancel();
+      stopSlide();
       unfade(el);
       setHidden((h) => restoreKey(h, key));
+      settle();
     };
+    return { undo, faded };
   }, [heldElement]);
 
   const confirm = useCallback(() => {
     if (!ask) return;
     const { choice, subject: s, key } = ask;
-    const undo = choiceRemovesItem(choice) ? leave(key) : () => {};
+    const { undo, faded } = choiceRemovesItem(choice) ? leave(key) : STAYS;
     void runHoldChoice(choice, s, deps)
       .then((line) => onNotice("info", line))
       .catch((e: unknown) => {
@@ -153,14 +169,15 @@ export function useHoldDelete(opts: HoldDeleteOptions): HoldDeleteControl {
         undo();
         onNotice("error", holdFailedLine(choice));
       })
-      .finally(() => void onChanged());
+      // The reread after the fade, so the item fades before it is taken out.
+      .finally(() => void faded.then(() => onChanged()));
   }, [ask, deps, leave, onNotice, onChanged]);
 
   const confirmTopic = useCallback(
     (alsoDeleteFiles: string[]) => {
       if (!topicAsk) return;
       const { topic, key } = topicAsk;
-      const undo = leave(key);
+      const { undo, faded } = leave(key);
       void runTopicDelete(topic, topics ?? [], alsoDeleteFiles, entries ?? {}, deps)
         .then((line) => onNotice("info", line))
         .catch((e: unknown) => {
@@ -168,7 +185,8 @@ export function useHoldDelete(opts: HoldDeleteOptions): HoldDeleteControl {
           undo();
           onNotice("error", holdFailedLine("delete-topic"));
         })
-        .finally(() => void onChanged());
+        // The reread after the fade, so the item fades before it is taken out.
+        .finally(() => void faded.then(() => onChanged()));
     },
     [topicAsk, topics, entries, deps, leave, onNotice, onChanged],
   );
