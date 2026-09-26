@@ -214,6 +214,10 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   "ui/components/phone/PhoneShelf.tsx",
   "ui/components/phone/shelf-list.ts",
   "ui/components/phone/use-lesson-call.ts",
+  // A hold on a book or an aside names the topic it was held in, for the delete
+  // it confirms (delete-book.ts, delete-thread.ts). Nothing here is a record.
+  "ui/components/phone/hold-menu.ts",
+  "ui/components/phone/lesson-view.ts",
 ];
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../src");
