@@ -19,6 +19,7 @@ import {
   getThread,
   threadKind,
   type AsideAnchor,
+  type PersistedCardPayload,
   type Thread,
   type ThreadMessage,
 } from "../platform/app/threads";
@@ -349,4 +350,44 @@ export function asideReceipt(input: {
     };
   }
   return { mode: "new", text, card: { kind: "aside", items: [item] } };
+}
+
+// What deleting an aside does to the row it left on its parent: the row stops
+// naming it. The card loses its item and the text its sentence, so neither the
+// reader nor the model is shown an aside that is gone. A row that named only
+// this aside goes whole. The sentences are one per item in the same order
+// (asideReceipt); a row whose text does not line up with its items keeps its
+// text and loses only the item.
+export type AsideReceiptRemoval =
+  | { mode: "remove"; ts: number }
+  | { mode: "patch"; ts: number; text: string; parts: ThreadMessage["parts"] };
+
+export function receiptWithoutAside(
+  messages: readonly Pick<ThreadMessage, "text" | "ts" | "parts">[],
+  threadId: string,
+): AsideReceiptRemoval[] {
+  const out: AsideReceiptRemoval[] = [];
+  for (const m of messages) {
+    const receipt = openAsideReceipt(m);
+    if (!receipt) continue;
+    const items = asideReceiptItems(receipt.card);
+    const at = items.findIndex((item) => item.threadId === threadId);
+    if (at < 0) continue;
+    const rest = items.filter((_, i) => i !== at);
+    if (rest.length === 0) {
+      out.push({ mode: "remove", ts: m.ts });
+      continue;
+    }
+    const lines = m.text.split("\n");
+    const text =
+      lines.length === items.length ? lines.filter((_, i) => i !== at).join("\n") : m.text;
+    const card: AsideReceiptCardData = { kind: "aside", items: rest };
+    out.push({
+      mode: "patch",
+      ts: m.ts,
+      text,
+      parts: [{ type: "card", id: receipt.cardId, card: card as unknown as PersistedCardPayload }],
+    });
+  }
+  return out;
 }

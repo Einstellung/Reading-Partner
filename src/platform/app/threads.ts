@@ -340,6 +340,7 @@ export interface ThreadStore {
   removeTree: (bookId: string, threadId: string) => string[];
   append: (bookId: string, threadId: string, message: ThreadMessage) => Thread | undefined;
   patch: (bookId: string, threadId: string, ts: number, patch: Partial<ThreadMessage>) => void;
+  removeMessage: (bookId: string, threadId: string, ts: number) => void;
   setFocusChapter: (bookId: string, threadId: string, chapter: number | null) => void;
   setTopic: (bookId: string, threadId: string, topicId: string | null) => void;
   flush: () => Promise<void>;
@@ -772,6 +773,19 @@ export function createThreadStore(io: ThreadIo): ThreadStore {
       entry.gen++;
       schedule(bookId);
     },
+    // Take one message out of a conversation, found by its stamp as patch finds
+    // it. Only for a row that stands for something now gone — an aside's
+    // receipt once its last aside is deleted (reading/delete/delete-thread.ts).
+    removeMessage: (bookId, threadId, ts) => {
+      const entry = cache.get(bookId);
+      const thread = entry?.threads[threadId];
+      if (!entry || !thread) return;
+      const i = thread.messages.findIndex((m) => m.ts === ts);
+      if (i < 0) return;
+      thread.messages.splice(i, 1);
+      entry.gen++;
+      schedule(bookId);
+    },
     // Park the conversation on a chapter, or clear it (docs/09). Written on the
     // thread rather than beside it because it is what the next turn of *this*
     // conversation loads, and a book with two conversations open must not have
@@ -895,6 +909,8 @@ export const patchThreadMessage = (
   ts: number,
   patch: Partial<ThreadMessage>,
 ): void => store.patch(bookId, threadId, ts, patch);
+export const removeThreadMessage = (bookId: string, threadId: string, ts: number): void =>
+  store.removeMessage(bookId, threadId, ts);
 export const setThreadFocusChapter = (
   bookId: string,
   threadId: string,
