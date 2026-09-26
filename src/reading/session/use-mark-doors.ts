@@ -18,7 +18,7 @@ import {
   type ThreadMessage,
 } from "../../platform/app/threads";
 import { asideAnchorAt } from "../aside";
-import type { CallRow, CallState } from "../call-state";
+import type { CallRow, CallState } from "../turn/call-state";
 import {
   buildChatMark,
   chatMarkWords,

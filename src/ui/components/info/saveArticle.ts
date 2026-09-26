@@ -17,7 +17,7 @@
 
 import type { ArticleBody } from "../../../info/briefer/reader";
 import type { BriefingItemMeta } from "../../../info/boxes/types";
-import type { SavedArticleInput } from "../../../reading/saved-articles";
+import type { SavedArticleInput } from "../../../reading/saved/saved-articles";
 
 export function toSavedArticleInput(ctx: {
   topicId: string;

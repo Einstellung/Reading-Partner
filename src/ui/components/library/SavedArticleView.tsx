@@ -13,7 +13,7 @@ import {
   NO_ARTICLE_BODY,
   type SavedArticle,
   type SavedArticleBody,
-} from "../../../reading/saved-articles";
+} from "../../../reading/saved/saved-articles";
 import { Button } from "../ui/button";
 
 export default function SavedArticleView({

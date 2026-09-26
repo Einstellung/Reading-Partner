@@ -10,8 +10,8 @@
 // removeMark that records, the card channel) and leaves the rest alone.
 
 import { DEFAULT_SETTINGS, type Settings } from "../../src/platform/app/settings";
-import type { CallRow } from "../../src/reading/call-state";
-import type { StagedImage } from "../../src/reading/pending-images";
+import type { CallRow } from "../../src/reading/turn/call-state";
+import type { StagedImage } from "../../src/reading/turn/pending-images";
 import type { Thread, ThreadMessage } from "../../src/platform/app/threads";
 import type { useCall } from "../../src/reading/session/use-call";
 

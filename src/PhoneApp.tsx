@@ -29,7 +29,7 @@ import {
   loadSavedArticles,
   savedArticlesForTopic,
   type SavedArticle,
-} from "./reading/saved-articles";
+} from "./reading/saved/saved-articles";
 import { registerPlaces } from "./desk";
 import { PHONE_PLACES, shellPlaces } from "./ui/components/base/places";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";

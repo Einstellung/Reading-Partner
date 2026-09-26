@@ -22,9 +22,9 @@ import { isPageMark, type Annotation, type ViewInstance } from "../../platform/a
 import type { Thread } from "../../platform/app/threads";
 import { toDistillAnnotations, type DistillAnnotation } from "../../memory";
 import { asideFraming } from "../aside";
-import type { CallRow, CallState, CallView } from "../call-state";
+import type { CallRow, CallState, CallView } from "../turn/call-state";
 import { orderTraceMarks } from "../chat-marks";
-import { markExcerpt } from "../reopen";
+import { markExcerpt } from "../turn/reopen";
 import { marksOfDocument, withMark } from "./documents";
 
 // A ref the shell owns and this hook only reads.

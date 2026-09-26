@@ -3,7 +3,7 @@
 // themselves (docs/21): no removal here — that lives in the library, next to the
 // topic the article was filed under.
 
-import type { SavedArticle } from "../../../reading/saved-articles";
+import type { SavedArticle } from "../../../reading/saved/saved-articles";
 import { savedArticleLine } from "../shelf/article-row";
 import { Button } from "../ui/button";
 

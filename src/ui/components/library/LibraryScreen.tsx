@@ -32,7 +32,7 @@ import {
   removeSavedArticle,
   savedArticlesForTopic,
   type SavedArticle,
-} from "../../../reading/saved-articles";
+} from "../../../reading/saved/saved-articles";
 import { createRetell } from "../../../reading/retell";
 import RetellView from "../retell/RetellView";
 import CoachView from "../rehearsal/CoachView";

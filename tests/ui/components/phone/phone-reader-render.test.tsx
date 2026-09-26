@@ -12,7 +12,7 @@ import * as events from "../../../../src/platform/app/events";
 import * as memory from "../../../../src/memory";
 import * as threads from "../../../../src/platform/app/threads";
 import * as agent from "../../../../src/legion/execute/turn";
-import * as turn from "../../../../src/reading/turn";
+import * as turn from "../../../../src/reading/turn/turn";
 import type { AgentCallbacks } from "../../../../src/legion/execute/contract";
 import { callSettings, emptyReadingTurn } from "../../../support/use-call";
 import { bookThreadIo } from "../../../../src/reading/session/book-thread";

@@ -9,7 +9,7 @@ import {
 } from "../../../../src/ui/components/info/use-info-home";
 import type { ArticleState } from "../../../../src/info/briefer/reader";
 import type { BriefingItemMeta } from "../../../../src/info/boxes/types";
-import type { SavedArticle, SavedArticleInput } from "../../../../src/reading/saved-articles";
+import type { SavedArticle, SavedArticleInput } from "../../../../src/reading/saved/saved-articles";
 
 const META: BriefingItemMeta = {
   title: "A paper",

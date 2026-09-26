@@ -10,7 +10,7 @@ import { DELETED_BOOKS_FILE } from "../platform/app/deleted-books";
 import { LIBRARY_FILE } from "../platform/app/library";
 import { TOPICS_FILE } from "../platform/app/topics";
 import type { PullMatcher } from "../platform/sync/pull-routes";
-import { SAVED_ARTICLES_FILE } from "./saved-articles";
+import { SAVED_ARTICLES_FILE } from "./saved/saved-articles";
 
 // Everything the desktop shelf draws itself from. One route rather than three,
 // so a pull that wrote all of them refreshes it once.

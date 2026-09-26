@@ -21,7 +21,7 @@ const { buildRetellTurn, OBSERVATION_ORDER_TIGHT } = await import(
 );
 // The replay cap is the reading turn's; a retell borrows it rather than
 // declaring a second one.
-const { HISTORY_KEEP } = await import("../../../src/reading/turn");
+const { HISTORY_KEEP } = await import("../../../src/reading/turn/turn");
 const { combineChapters } = await import("../../../src/reading/retell/outline");
 import type { LoadedMaterial } from "../../../src/reading/retell/material";
 import type { PrepPaper, PrepState } from "../../../src/reading/prep/papers/types";

@@ -7,7 +7,7 @@
 // article and the conversation that is up all live in use-info-home.ts.
 
 import { useState } from "react";
-import { savedArticleId } from "../../../reading/saved-articles";
+import { savedArticleId } from "../../../reading/saved/saved-articles";
 import type { HomeScreen } from "../base/shell-nav";
 import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";

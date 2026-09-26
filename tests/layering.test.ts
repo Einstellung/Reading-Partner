@@ -181,6 +181,21 @@ const LAYER: Record<string, Layer> = {
   "info/tasking": "domain",
   reading: "domain",
   "reading/chapters": "domain",
+  // A reading turn's own corner: the desk assembly's tool set and history
+  // (turn.ts), giving an answer back inside the book it was asked in
+  // (deliver.ts), the live/steering/box machinery a call rides on, and the
+  // row split a bubble renders from. Imports reading's own root (the desk
+  // assembly) and reading/saved, never the other way — that direction is
+  // what keeps the desk out of a cycle with the call state it feeds.
+  "reading/turn": "domain",
+  // The articles the reader kept on the info side (docs/21), as their own
+  // corner: the store, the chat tools and the desk item that lays them
+  // beside the open book. Reaches for nothing else under reading/, so the
+  // desk (reading/desk.ts) and reading/turn can both depend on it.
+  "reading/saved": "domain",
+  // A book's cover: rendered once, cached, read back. No dependency on
+  // anything else under reading/ besides reading/epub and reading/engine.
+  "reading/covers": "domain",
   // Deleting a book, which is one order of operations across the library, the
   // topics, the observation stores and the retell/talk/rehearsal trio. A domain
   // of its own because it belongs to none of them and drives all of them.

@@ -1,5 +1,5 @@
 // The book on the desk (docs/61). The articles the reader kept beside it are
-// reading/saved-articles-desk.ts, registered here with it.
+// reading/saved/saved-articles-desk.ts, registered here with it.
 //
 // This is everything a reading turn's material contributes to one call: which
 // tools the book mounts, how much of it is inlined, the prompt those blocks come
@@ -100,10 +100,10 @@ import {
   type ReadingTurnMessage,
 } from "./desk-history";
 import { bookSideTools, LITERATURE_TOOL_PROMPTS, SHELF_TOOL_PROMPTS } from "./desk-tools";
-import { savedArticlesKind } from "./saved-articles-desk";
+import { savedArticlesKind } from "./saved/saved-articles-desk";
 
 // The book is one of the two kinds of thing a reading turn puts on the desk; the
-// kept articles beside it are the other (reading/saved-articles-desk.ts). Named
+// kept articles beside it are the other (reading/saved/saved-articles-desk.ts). Named
 // here because the caller lists them by name and the palace table marks the
 // rows they open.
 export const BOOK_KIND = "book";
