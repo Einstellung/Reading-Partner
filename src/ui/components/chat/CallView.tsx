@@ -50,7 +50,7 @@ interface CallViewProps {
 	// wording; the book-level thread (docs/03: the blackboard button) passes the
 	// book's title and the ask that opens a lesson. A node rather than a string,
 	// because an aside opens on the words it was pulled out of and shows them
-	// (phone/PhoneLesson.tsx).
+	// (phone/lesson/PhoneLesson.tsx).
 	emptyTitle?: ReactNode;
 	placeholder?: string;
 	// What an empty conversation offers under the composer (reading/intents.ts).

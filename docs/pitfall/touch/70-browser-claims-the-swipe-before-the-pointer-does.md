@@ -28,7 +28,7 @@
 
 纵向拖动不满足条件，一次都不 prevent，页面照常原生滚动（起手落在左缘带里也一样），浏览器 cancel 掉指针，手势状态机顺势放弃 —— 这正是要的行为。
 
-手势本身仍然跑在 pointer 通道上（`src/ui/components/phone/edge-back-gesture.ts` 是纯状态机，`useEdgeBack.ts` 接线），touch 通道只回答一个问题："这一下要不要从浏览器手里抢过来"。和阅读器一样是两条独立通道（坑 38）。
+手势本身仍然跑在 pointer 通道上（`src/ui/components/phone/gesture/edge-back-gesture.ts` 是纯状态机，`useEdgeBack.ts` 接线），touch 通道只回答一个问题："这一下要不要从浏览器手里抢过来"。和阅读器一样是两条独立通道（坑 38）。
 
 顺带把 `html` 上的 `overscroll-behavior-x: none` 加上：app 没有可走的浏览器历史，横向 overscroll 传到视口只会白白离开页面。app 的两个 webview 里前进后退手势本来就是关的，这条只在浏览器里起作用 —— 而浏览器正是开发时看手机形态的地方。
 

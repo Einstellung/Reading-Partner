@@ -36,7 +36,7 @@ PDFKit 插件路线关掉。
 
 ### AI 上手机
 
-对着这本书聊在做：2026-09-25 定，顶栏的 Learn 进和 iPad 同一堂课，开书时手机自己抽全文和图索引，见 [77](../reading/77-手机EPUB课堂.md)。笔架的 AI pen 仍置灰（`src/ui/components/phone/reader-gate.ts`）。还要做的形态：选中一段问一句、划线开线程、书里的 pull-to-ask（简报页有，`PullToAsk.tsx`）。
+对着这本书聊在做：2026-09-25 定，顶栏的 Learn 进和 iPad 同一堂课，开书时手机自己抽全文和图索引，见 [77](../reading/77-手机EPUB课堂.md)。笔架的 AI pen 仍置灰（`src/ui/components/phone/reader/reader-gate.ts`）。还要做的形态：选中一段问一句、划线开线程、书里的 pull-to-ask（简报页有，`PullToAsk.tsx`）。
 
 ### 听
 

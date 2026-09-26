@@ -47,7 +47,7 @@
 
 ## 外壳
 
-`PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/PhoneReader.tsx`：自己的顶栏（返回、书名、页码、Outline、笔架、Learn 按钮），笔架复用 `PenToolbar` 的 `disabled`，阅读区挂 `FlowReaderPane`。打开顺序在 `reading/session/open-epub.ts`：复用 `open-book.ts` 的读位置、`preparePagination`、读标注，之后在后台抽全文和图索引给课堂用（[77](./77-手机EPUB课堂.md)）。
+`PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/reader/PhoneReader.tsx`：自己的顶栏（返回、书名、页码、Outline、笔架、Learn 按钮），笔架复用 `PenToolbar` 的 `disabled`，阅读区挂 `FlowReaderPane`。打开顺序在 `reading/session/open-epub.ts`：复用 `open-book.ts` 的读位置、`preparePagination`、读标注，之后在后台抽全文和图索引给课堂用（[77](./77-手机EPUB课堂.md)）。
 
 ## 验过的
 

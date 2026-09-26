@@ -276,6 +276,9 @@ const LAYER: Record<string, Layer> = {
   // is one caller.
   "ui/components/orb": "ui",
   "ui/components/phone": "ui",
+  "ui/components/phone/gesture": "ui",
+  "ui/components/phone/lesson": "ui",
+  "ui/components/phone/reader": "ui",
   "ui/components/reader": "ui",
   "ui/components/rehearsal": "ui",
   "ui/components/retell": "ui",

@@ -524,7 +524,7 @@ body {
 
 /* The same thing, for the phone lesson's replies (docs/74). A hold on a
    paragraph there means "Ask about this"
-   (ui/components/phone/long-press.ts), and iOS answers a hold on selectable
+   (ui/components/phone/gesture/long-press.ts), and iOS answers a hold on selectable
    text with the callout and the magnifier — two gestures on one press, and the
    system's wins. Scoped to the reply prose (`data-reply-ts`, written by
    MessageList.tsx), so the reader's own messages, the composer and the aside's

@@ -35,7 +35,7 @@ export async function voiceStopFeedback(): Promise<void> {
 /**
  * A hold landed. One light tap, because what it confirms is small — a control
  * has appeared under the finger, which is the one place the reader is not
- * looking (ui/components/phone/long-press.ts).
+ * looking (ui/components/phone/gesture/long-press.ts).
  */
 export async function longPressFeedback(): Promise<void> {
   await impact("light");
