@@ -113,7 +113,7 @@ test("the surfaces that are not remembered pass no key", () => {
   for (const path of [
     "ui/components/chat/CallBubble.tsx",
     "ui/components/retell/RetellView.tsx",
-    "ui/components/chat/aside-spike-harness.tsx",
+    "smoke/aside-spike-harness.tsx",
   ]) {
     expect(read(path)).not.toContain("stickKey");
   }

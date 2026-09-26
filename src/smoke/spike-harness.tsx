@@ -10,17 +10,17 @@ import { createRoot } from "react-dom/client";
 // model from the app: preflight's `box-sizing: border-box` is what keeps the
 // viewport's own padding inside the frame, and its `line-height` moves the
 // paged strip (pitfall 76). A layout measured here has to be the app's layout.
-import "../../styles.css";
+import "../styles.css";
 import { flushSync } from "react-dom";
-import EmbedPdfView from "./EmbedPdfView";
+import EmbedPdfView from "../reading/engine/EmbedPdfView";
 import type {
   AnnotationAnchor,
   EmbedPdfHandle,
   EmbedPdfViewProps,
   EmbedViewState,
   EmbedViewStats,
-} from "./types";
-import { embedToZotero, type ZoteroAnnotation } from "./convert";
+} from "../reading/engine/types";
+import { embedToZotero, type ZoteroAnnotation } from "../reading/engine/convert";
 
 // Render counter to measure re-render isolation (perf item #3). A parent churn
 // (window.__churn(n)) mimics the shell's AI-streaming state updates; with the

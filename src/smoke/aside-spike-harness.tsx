@@ -16,11 +16,11 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 // The app's global baseline, for the same reason the engine harness imports it:
 // a layout measured here has to be the app's layout.
-import "../../../styles.css";
-import ChatScaleScope from "../base/ChatScaleScope";
-import { MessageList } from "./MessageList";
-import type { ThreadMessage } from "./types";
-import type { ChatMarkDraw } from "../../../reading/chat-marks";
+import "../styles.css";
+import ChatScaleScope from "../ui/components/base/ChatScaleScope";
+import { MessageList } from "../ui/components/chat/MessageList";
+import type { ThreadMessage } from "../ui/components/chat/types";
+import type { ChatMarkDraw } from "../reading/chat-marks";
 
 interface Rect {
   x: number;

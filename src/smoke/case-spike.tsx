@@ -16,12 +16,17 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import "../../../styles.css";
-import { cn } from "../lib/utils";
-import type { VoiceCallHandle } from "../orb/orb";
-import { Lumen, LumenCase } from "./Lumen";
-import { caseLeanDeg, caseLookGaze, caseReach, caseTriggerStyle } from "./case-motion";
-import { useCaseMotion } from "./use-case-motion";
+import "../styles.css";
+import { cn } from "../ui/components/lib/utils";
+import type { VoiceCallHandle } from "../ui/components/orb/orb";
+import { Lumen, LumenCase } from "../ui/components/lumen/Lumen";
+import {
+  caseLeanDeg,
+  caseLookGaze,
+  caseReach,
+  caseTriggerStyle,
+} from "../ui/components/lumen/case-motion";
+import { useCaseMotion } from "../ui/components/lumen/use-case-motion";
 
 const SILENT: VoiceCallHandle = {
   phase: "idle",
