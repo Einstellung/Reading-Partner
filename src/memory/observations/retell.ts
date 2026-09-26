@@ -19,17 +19,21 @@ import type { ObservationAdapter } from "./adapter";
 import {
   DISTILL_BRIEF_TOKENS,
   DISTILL_MAX_ROUNDS,
+  cursorOver,
   datingRule,
   distillCoverage,
   emptyRejectionCounts,
   emptyRelationCounts,
   evidenceDates,
   formatEvidenceSpan,
+  messageCursor,
+  unreadMessages,
   type DistillCoverage,
   type DistillDeps,
   type DistillMessage,
   type DistillResult,
   type EvidenceDates,
+  type MessageCursor,
 } from "./distill";
 import type { ObservationMeta } from "./store";
 import { buildObservationTools, type ObservationWriteAction } from "./tools";
@@ -65,11 +69,10 @@ export interface RetellDistillInput {
 // Pure — unit-tested.
 export function selectNewMessages(
   messages: readonly DistillMessage[],
-  cursor: number,
+  cursor: number | MessageCursor,
 ): { fresh: DistillMessage[]; total: number } {
   const spoken = messages.filter((m) => m.text.trim() !== "");
-  const from = Math.min(Math.max(cursor, 0), spoken.length);
-  return { fresh: spoken.slice(from), total: spoken.length };
+  return { fresh: unreadMessages(spoken, cursor), total: spoken.length };
 }
 
 export function buildRetellDistillSystemPrompt(input: RetellDistillInput): string {
@@ -305,8 +308,12 @@ export async function runRetellDistillPass(
 ): Promise<RetellPassResult> {
   const now = deps.now ?? Date.now;
   const meta = await deps.store.getMeta();
-  const cursor = meta.distilledMessages?.[input.threadId] ?? 0;
-  const { fresh, total } = selectNewMessages(input.messages, cursor);
+  const { fresh, total } = selectNewMessages(
+    input.messages,
+    messageCursor(meta, input.threadId),
+  );
+  // How many of the spoken messages earlier passes read.
+  const cursor = total - fresh.length;
   if (fresh.length === 0) return { ran: false, skipped: "no-new-messages" };
   // Nothing the reader said in this stretch → nothing a retell is uniquely
   // able to observe. The AI's own half of the conversation is not evidence
@@ -338,6 +345,10 @@ export async function runRetellDistillPass(
     ...meta,
     lastDistilledAt: now(),
     distilledMessages: { ...(meta.distilledMessages ?? {}), [input.threadId]: total },
+    distilledMessageKeys: {
+      ...(meta.distilledMessageKeys ?? {}),
+      [input.threadId]: cursorOver(input.messages.filter((m) => m.text.trim() !== "")).read,
+    },
   });
   return { ran: true, distilled: fresh.length, coverage, ...result };
 }

@@ -119,6 +119,7 @@ test("a finished pass writes observations and stores the message cursor", async 
     lastDistilledAt: JULY_17,
     lastAnnotationDistillAt: null,
     distilledMessages: { "retell-1": 2 },
+    distilledMessageKeys: { "retell-1": ["100:ai", "200:user"] },
   });
 });
 
@@ -231,6 +232,7 @@ test("the two passes do not overwrite each other's bookkeeping in meta.json", as
     lastAnnotationDistillAt: null,
     // The retell's cursor survived the reading pass, and vice versa.
     distilledMessages: { "retell-1": 2, "thread-9": 1 },
+    distilledMessageKeys: { "retell-1": ["100:ai", "200:user"], "thread-9": ["10:user"] },
     distilledMarks: { "book-1": 700 },
   });
 });

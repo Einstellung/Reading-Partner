@@ -955,24 +955,89 @@ export type DistillPassResult =
   | { ran: false; skipped: DistillSkip }
   | ({ ran: true; coverage: DistillCoverage } & DistillResult);
 
-// How many of a thread's messages have already been folded in.
-export function messageCursor(meta: ObservationMeta, threadId: string): number {
-  return meta.distilledMessages?.[threadId] ?? 0;
+// What passes have read of one thread (docs/58, docs/59 §5).
+//
+// `read` is the key of every message a pass read, in thread order. It is the
+// cursor since conversation files merge one message at a time: a message
+// another device wrote sorts by its stamp, which can put it inside a stretch
+// already read, and a count would cover it for good while shifting a read one
+// past its end. A set of keys says of each message whether a pass saw it.
+//
+// `count` is the number versions before this one wrote, and this one still
+// writes beside `read` for them. When `read` is absent, or its length is not
+// the count (an older version moved the count and dropped the keys, see
+// store.ts), the count means what it always meant: the first `count` messages
+// in current order, on top of whatever `read` holds.
+export interface MessageCursor {
+  count: number;
+  read?: readonly string[];
 }
 
-// New messages the reader themselves wrote, after the cursor. Empty rows and the
+// A message's key in `read`: its id, else its stamp and role, the same identity
+// the merge gives it (messages.ts) with the thread left to the map key.
+export function readKey(m: DistillMessage): string {
+  return m.id ?? `${m.ts}:${m.role}`;
+}
+
+export function messageCursor(meta: ObservationMeta, threadId: string): MessageCursor {
+  const count = meta.distilledMessages?.[threadId] ?? 0;
+  const read = meta.distilledMessageKeys?.[threadId];
+  return read ? { count, read } : { count };
+}
+
+// The messages no pass has read yet, in their order. A bare number is a count
+// with no keys. A message with an id is also found by its stamp and role, so a
+// path that narrowed the id away does not make it new again.
+export function unreadMessages<M extends DistillMessage>(
+  messages: readonly M[],
+  cursor: number | MessageCursor,
+): M[] {
+  const { count, read } = typeof cursor === "number" ? { count: cursor, read: undefined } : cursor;
+  const counted = read === undefined || read.length !== count ? Math.max(count, 0) : 0;
+  const keys = new Set(read ?? []);
+  return messages.filter(
+    (m, i) => i >= counted && !keys.has(readKey(m)) && !keys.has(`${m.ts}:${m.role}`),
+  );
+}
+
+// The cursor a finished pass leaves over the messages it was handed.
+export function cursorOver(messages: readonly DistillMessage[]): { count: number; read: string[] } {
+  return { count: messages.length, read: messages.map(readKey) };
+}
+
+// A count read the old way, resolved once into keys: every thread among
+// `parts` whose cursor is a count with no keys, or with keys it does not match,
+// gets the pair its reading stands for now. Pinned, a message the merge later
+// sorts into that stretch is not covered by it. Null when every cursor is
+// already a pair.
+export function resolveCursors(
+  meta: ObservationMeta,
+  parts: readonly DistillUnitPart[],
+): Pick<ObservationMeta, "distilledMessages" | "distilledMessageKeys"> | null {
+  const counts: Record<string, number> = {};
+  const keys: Record<string, string[]> = {};
+  for (const p of parts) {
+    const cursor = messageCursor(meta, p.threadId);
+    const paired = cursor.read === undefined ? cursor.count === 0 : cursor.read.length === cursor.count;
+    if (paired) continue;
+    const unread = new Set(unreadMessages(p.messages, cursor));
+    const pinned = cursorOver(p.messages.filter((m) => !unread.has(m)));
+    counts[p.threadId] = pinned.count;
+    keys[p.threadId] = pinned.read;
+  }
+  if (Object.keys(counts).length === 0) return null;
+  return { distilledMessages: counts, distilledMessageKeys: keys };
+}
+
+// New messages the reader themselves wrote, not yet read. Empty rows and the
 // AI's own half do not count: neither is evidence about the reader, and counting
 // them would make every answer look like arrears. Pure — unit-tested.
 export function countNewReaderMessages(
   messages: readonly DistillMessage[],
-  cursor: number,
+  cursor: number | MessageCursor,
 ): number {
-  const from = Math.min(Math.max(cursor, 0), messages.length);
-  let n = 0;
-  for (let i = from; i < messages.length; i++) {
-    if (messages[i].role === "user" && messages[i].text.trim() !== "") n++;
-  }
-  return n;
+  return unreadMessages(messages, cursor).filter((m) => m.role === "user" && m.text.trim() !== "")
+    .length;
 }
 
 // One thread's own messages inside a transcript made of several — a lesson and
@@ -993,7 +1058,7 @@ export interface DistillUnitPart {
 // yet, given where each thread's cursor stands.
 export function countNewUnitMessages(
   parts: readonly DistillUnitPart[],
-  cursorOf: (threadId: string) => number,
+  cursorOf: (threadId: string) => number | MessageCursor,
 ): number {
   let n = 0;
   for (const p of parts) n += countNewReaderMessages(p.messages, cursorOf(p.threadId));
@@ -1020,14 +1085,14 @@ export async function runDistillPass(
   const parts: readonly DistillUnitPart[] = input.parts ?? [
     { threadId: input.threadId, messages: input.messages },
   ];
-  const cursorOf = (threadId: string): number => messageCursor(meta, threadId);
+  const cursorOf = (threadId: string): MessageCursor => messageCursor(meta, threadId);
   const fresh = countNewUnitMessages(parts, cursorOf);
+  // The stretch the cursors would move over, gathered per part: each thread's
+  // cursor is over its own messages.
+  const owed = parts.flatMap((p) => unreadMessages(p.messages, cursorOf(p.threadId)));
   // Where the whole unit stands: how much of it is behind its cursors, so
   // "nothing new" can be told from "the reader said nothing".
-  const behind = parts.reduce(
-    (n, p) => n + Math.min(cursorOf(p.threadId), p.messages.length),
-    0,
-  );
+  const behind = parts.reduce((n, p) => n + p.messages.length, 0) - owed.length;
   // Nothing the reader said → nothing that can't be re-derived from the book and
   // the mark itself. Marks with no conversation at all are a pass of their own
   // (runMarksDistillPass), not a degenerate case of this one.
@@ -1040,12 +1105,9 @@ export async function runDistillPass(
     input.annotations ?? [],
     input.bookId === undefined ? null : markCursor(meta, input.bookId),
   );
-  // The stretch the cursors would move over. The whole transcript still goes to
-  // the model — a conversation about one passage is one unit — so the dates come
-  // from all of it, while the coverage is the part that is still owed. Across a
-  // folded unit that is every thread's own tail, which is why it is gathered per
-  // part rather than sliced off the merged list.
-  const owed = parts.flatMap((p) => p.messages.slice(cursorOf(p.threadId)));
+  // The whole transcript still goes to the model — a conversation about one
+  // passage is one unit — so the dates come from all of it, while the coverage
+  // is the part that is still owed.
   const coverage = distillCoverage(
     owed.map((m) => m.ts).sort((a, b) => a - b),
     behind,
@@ -1086,6 +1148,10 @@ export async function runDistillPass(
     distilledMessages: {
       ...(meta.distilledMessages ?? {}),
       ...Object.fromEntries(parts.map((p) => [p.threadId, p.messages.length])),
+    },
+    distilledMessageKeys: {
+      ...(meta.distilledMessageKeys ?? {}),
+      ...Object.fromEntries(parts.map((p) => [p.threadId, cursorOver(p.messages).read])),
     },
     ...(markCursorNext !== null && input.bookId !== undefined
       ? { distilledMarks: { ...(meta.distilledMarks ?? {}), [input.bookId]: markCursorNext } }

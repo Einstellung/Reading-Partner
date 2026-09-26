@@ -12,7 +12,7 @@ memory 是采集来的数据的再加工中心，legion 是 agent 的调度中�
 
 | 蒸馏器 | 游标 | 触发 |
 |---|---|---|
-| `distillThread` / `distillMarks` | `observations/meta.json`：`distilledMessages` 按 threadId、`distilledMarks` 按 bookId、节流戳 `lastDistilledAt` 和 `lastAnnotationDistillAt` 按 topicId | `arrears.ts` 从盘上算欠账，`startDistillSweeps` 每 30 分钟扫一次，另加挂断、启动、回前台、切书 |
+| `distillThread` / `distillMarks` | `observations/meta.json`：`distilledMessageKeys`（已读消息 key，见「消息游标」）和 `distilledMessages`（条数）按 threadId、`distilledMarks` 按 bookId、节流戳 `lastDistilledAt` 和 `lastAnnotationDistillAt` 按 topicId | `arrears.ts` 从盘上算欠账，`startDistillSweeps` 每 30 分钟扫一次，另加挂断、启动、回前台、切书 |
 | `distillRetell` | 自己在 `retell.ts` 里挑游标 | `useRetell.ts` 里视图卸载 |
 | profile guess、dream | 各自的状态文件 | 各自的闸 |
 
@@ -64,6 +64,12 @@ job 只剩一种，跑哪个 pass 由单元自己说（划线走标记 pass，�
 水位按单元，不按 topic。`lastDistilledAt` 和 `lastAnnotationDistillAt` 那两个按 topicId 的戳是节流，不是水位，两件事不混。
 
 存储不迁移。`observations/meta.json` 的游标表就是水位那一半；溯源新开一个追加文件，一次 pass 一行：kind、单元、区间、产出的 observation id、时间。形状稳下来再谈合并。
+
+#### 消息游标
+
+对话单元的水位是已读消息的 key 列表 `distilledMessageKeys[threadId]`：消息 id，没有 id 的用 `ts:role`，按线程顺序。一条消息读没读过逐条判断，不看位置，因为线程按消息合并（docs/59 §5）后对端的消息按 ts 可以插进已读的那段中间（坑 480）。pass 成功后把这趟喂进去的每条消息的 key 写进去，复述只记有字的那几条。
+
+`distilledMessages[threadId]` 仍是条数，新代码照写，等于列表长度，给还没升级的设备用。读的规则：列表在且长度等于条数，只看列表；没有列表，或长度对不上（老设备跑过 pass，它写 meta.json 会抹掉列表，坑 481），条数按老意思读成当前顺序的前 N 条，叠在列表上。扫欠账时把这样读出来的结果写回成列表和条数（`resolveCursors`），老条数只解释一次；老设备再写一次，就再解释一次。两台设备同步时两个映射都是「取小」：条数取小，列表取短的，等长按内容，两边选中同一侧，仍是一对（`merge/cursors.ts`）。
 
 账本有三个读者：gc 问一个单元能不能回收；stub 问哪几条观察覆盖了被删的区间；诊断问某条观察是哪一趟 pass 从哪一段里出来的。
 

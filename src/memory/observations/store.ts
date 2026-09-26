@@ -70,6 +70,12 @@ export interface ObservationMeta {
   // again by the arrears sweep (arrears.ts). Neither may drop the other's
   // bookkeeping when it writes here.
   distilledMessages?: Record<string, number>;
+  // The key of every message a pass read, by thread id, in thread order — the
+  // cursor proper since messages merge one at a time (distill.ts MessageCursor).
+  // Written with the count above as a pair, the count equal to the list's
+  // length. Versions before it neither read nor keep this map: their setMeta
+  // writes the file without it, and their count then stands alone.
+  distilledMessageKeys?: Record<string, string[]>;
   // The newest mark folded in, by book id. Per book because a topic is several
   // books read against one question (docs/01 §1): one topic-wide cursor advanced
   // by a pass over book A puts book B's older marks behind it, and they are then
@@ -86,7 +92,17 @@ interface StoredObservationMeta {
   lastDistilledAt?: Record<string, number>;
   lastAnnotationDistillAt?: Record<string, number>;
   distilledMessages?: Record<string, number>;
+  distilledMessageKeys?: Record<string, string[]>;
   distilledMarks?: Record<string, number>;
+}
+
+function keyListMap(value: unknown): Record<string, string[]> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    if (Array.isArray(v) && v.every((k) => typeof k === "string")) out[key] = v as string[];
+  }
+  return out;
 }
 
 function numberMap(value: unknown): Record<string, number> {
@@ -546,6 +562,7 @@ export class ObservationFileStore {
         lastDistilledAt: numberMap(parsed.lastDistilledAt),
         lastAnnotationDistillAt: numberMap(parsed.lastAnnotationDistillAt),
         distilledMessages: numberMap(parsed.distilledMessages),
+        distilledMessageKeys: keyListMap(parsed.distilledMessageKeys),
         distilledMarks: numberMap(parsed.distilledMarks),
       };
     } catch {
@@ -556,11 +573,13 @@ export class ObservationFileStore {
   async getMeta(topicId: string): Promise<ObservationMeta> {
     const stored = await this.readStoredMeta();
     const messages = stored.distilledMessages ?? {};
+    const keys = stored.distilledMessageKeys ?? {};
     const marks = stored.distilledMarks ?? {};
     return {
       lastDistilledAt: stored.lastDistilledAt?.[topicId] ?? null,
       lastAnnotationDistillAt: stored.lastAnnotationDistillAt?.[topicId] ?? null,
       ...(Object.keys(messages).length ? { distilledMessages: messages } : {}),
+      ...(Object.keys(keys).length ? { distilledMessageKeys: keys } : {}),
       ...(Object.keys(marks).length ? { distilledMarks: marks } : {}),
     };
   }
@@ -582,6 +601,10 @@ export class ObservationFileStore {
       lastDistilledAt: { ...(stored.lastDistilledAt ?? {}) },
       lastAnnotationDistillAt: { ...(stored.lastAnnotationDistillAt ?? {}) },
       distilledMessages: { ...(stored.distilledMessages ?? {}), ...(meta.distilledMessages ?? {}) },
+      distilledMessageKeys: {
+        ...(stored.distilledMessageKeys ?? {}),
+        ...(meta.distilledMessageKeys ?? {}),
+      },
       distilledMarks: { ...(stored.distilledMarks ?? {}), ...(meta.distilledMarks ?? {}) },
     };
     if (meta.lastDistilledAt === null) delete next.lastDistilledAt?.[topicId];
