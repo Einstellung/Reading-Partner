@@ -125,8 +125,8 @@ export interface PalaceRow {
   sync: SyncChannel;
   // How sync merges two edits of it. Present exactly when sync is "data".
   merge?: MergeStrategy;
-  // When merge is "records": where the records sit and what identifies one,
-  // read off the writer rather than guessed.
+  // When merge is "records" or "messages": where the records sit and what
+  // identifies one, read off the writer rather than guessed.
   shape?: RecordShape;
   fieldGroups?: FieldGroups;
   // A tree comparison may never conclude this path was deleted (docs/59 §8.8):
@@ -374,7 +374,7 @@ export const PALACE = [
     id: "retellId",
     refs: [{ kind: "retell", via: "retellId" }],
     sync: "data",
-    merge: "records",
+    merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "retell",
     gc: "never",
@@ -391,7 +391,7 @@ export const PALACE = [
     id: "outlineId",
     refs: [{ kind: "outline", via: "outlineId" }],
     sync: "data",
-    merge: "records",
+    merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "outline",
     gc: "never",
@@ -411,7 +411,7 @@ export const PALACE = [
       { kind: "topics", via: "threads[].topicId", onDelete: "clear" },
     ],
     sync: "data",
-    merge: "records",
+    merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "never",
     gc: "never",
@@ -428,7 +428,7 @@ export const PALACE = [
     id: "date",
     refs: [{ kind: "topics", via: "threads[].topicId", onDelete: "clear" }],
     sync: "data",
-    merge: "records",
+    merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "never",
     gc: "never",
@@ -445,7 +445,7 @@ export const PALACE = [
     id: "bookId",
     refs: [{ kind: "library", via: "bookId" }],
     sync: "data",
-    merge: "records",
+    merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "book",
     gc: "never",

@@ -10,6 +10,10 @@ export type MergeStrategy =
   // array of objects carrying an id, an object keyed by id, and JSONL (one
   // record per line, the line itself is the identity).
   | "records"
+  // The conversation files: records whose record is a thread, except that a
+  // thread both sides edited is not atomic. Its own keys merge as fields and its
+  // messages three-way per message (platform/sync/merge/messages.ts, docs/59 §5).
+  | "messages"
   // JSON objects of scalar settings: three-way per field.
   | "fields"
   // Fields, where the scalars are watermarks and the lower of two is the safe

@@ -112,6 +112,17 @@ export interface CollectionMerge {
   contested: boolean;
 }
 
+// How a strategy opens up a record both sides edited instead of choosing one
+// whole (messages.ts). `base` is undefined when the record is new on both
+// sides. Null hands the record back to the atomic rule. It must be symmetric in
+// the two sides, like everything that decides here.
+export type SettleRecord = (
+  id: string,
+  base: Json | undefined,
+  local: Json,
+  remote: Json,
+) => { value: Json; dropped: DroppedRecord[]; contested: boolean } | null;
+
 // Per record, against the base. A record only one side touched is taken from
 // that side; one both sides touched is settled by content and reported as
 // contested; a record the base had and one side deleted goes only if the other
@@ -122,6 +133,7 @@ export function mergeCollection(
   base: Collection | null,
   local: Collection,
   remote: Collection,
+  settle?: SettleRecord,
 ): CollectionMerge {
   const order = orderIds(base ? base.ids : [], local.ids, remote.ids);
   const ids: string[] = [];
@@ -143,12 +155,19 @@ export function mergeCollection(
       } else if (inBase && sameValue(r, b)) {
         byId.set(id, l);
       } else {
-        // Both edited it. One version goes in the file, the other is journalled
-        // so the edit that lost is still recoverable.
-        const { winner, loser } = chooseByContent(l, r);
-        byId.set(id, winner);
-        dropped.push({ id, record: loser });
-        contested = true;
+        const settled = settle ? settle(id, inBase ? b : undefined, l, r) : null;
+        if (settled !== null) {
+          byId.set(id, settled.value);
+          dropped.push(...settled.dropped);
+          contested = contested || settled.contested;
+        } else {
+          // Both edited it. One version goes in the file, the other is
+          // journalled so the edit that lost is still recoverable.
+          const { winner, loser } = chooseByContent(l, r);
+          byId.set(id, winner);
+          dropped.push({ id, record: loser });
+          contested = true;
+        }
       }
       ids.push(id);
       continue;

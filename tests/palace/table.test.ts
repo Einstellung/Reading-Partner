@@ -60,7 +60,9 @@ test("a row that syncs on the data channel says how it merges", () => {
 });
 
 test("a row that merges as records says where its records sit", () => {
-  const missing = PALACE.filter((r) => r.merge === "records" && r.shape === undefined).map(
+  const missing = PALACE.filter(
+    (r) => (r.merge === "records" || r.merge === "messages") && r.shape === undefined,
+  ).map(
     (r) => r.kind,
   );
   expect(missing).toEqual([]);
