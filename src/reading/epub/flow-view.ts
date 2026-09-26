@@ -22,7 +22,7 @@ import type {
 import { openExternal } from "../../platform/app/external-link";
 import { acquireEpub, ensurePagination, releaseEpub } from "./book-cache";
 import { caretAtPoint } from "./caret";
-import { epubCfi, parseCfiStart, resolvePointRange, textSteps } from "./cfi";
+import { epubCfi, parseCfiStart, resolvePointRange } from "./cfi";
 import type { FlowReaderView, FlowTool } from "./flow-contract";
 import {
   IDLE,
@@ -42,6 +42,7 @@ import { createPageResources, readingFontsReady } from "./page-mount";
 import type { Pagination } from "./paginate";
 import type { EpubBook } from "./parse";
 import { bookLinkTarget, labelForBlock, locateQuote, pageIndexOfCfi, spineStartsOf } from "./reader-logic";
+import { topEdgeSteps } from "./top-edge";
 import { hrefFragment, resolveZipPath } from "./zip";
 
 export interface FlowReaderCallbacks {
@@ -232,25 +233,21 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     return null;
   }
 
-  // The first character under the viewport's top edge: probed just below the
-  // edge, at the column's left and at its middle, stepping down a line or so
-  // until a point lands on the words rather than between them.
-  function firstCaretCfi(doc: Column): string | null {
+  // The place under the viewport's top edge (top-edge.ts): probed just below
+  // the edge, at the column's left and at its middle, stepping down a line or
+  // so until a point lands on the words rather than between them.
+  function topCfi(doc: Column): string | null {
     const box = viewportBox();
     const xs = [box.left + display.padX + 2, box.left + box.width / 2];
+    const points: { x: number; y: number }[] = [];
     for (let dy = 1; dy <= TOP_PROBE_PX; dy += TOP_PROBE_STEP) {
-      const y = box.top + dy;
-      for (const x of xs) {
-        const el = doc.shadow.elementFromPoint(x, y);
-        if (!el || el === doc.root || el.localName === "body" || !doc.root.contains(el)) continue;
-        const caret = caretAtPoint(doc.shadow, doc.root, x, y);
-        if (!caret) continue;
-        const local = textSteps(caret.node, caret.offset);
-        if (local === null) continue;
-        return epubCfi(doc.spine, doc.idref, local);
-      }
+      for (const x of xs) points.push({ x, y: box.top + dy });
     }
-    return null;
+    const local = topEdgeSteps(doc.root, points, {
+      hit: (x, y) => doc.shadow.elementFromPoint(x, y),
+      caret: (x, y) => caretAtPoint(doc.shadow, doc.root, x, y),
+    });
+    return local === null ? null : epubCfi(doc.spine, doc.idref, local);
   }
 
   function readPosition(): void {
@@ -263,7 +260,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     const doc = docAtTop();
     if (!doc) return;
     const start = firstPageOfSpine(doc.spine);
-    cfi = firstCaretCfi(doc) ?? pagination.blocks[start]?.cfi ?? null;
+    cfi = topCfi(doc) ?? pagination.blocks[start]?.cfi ?? null;
     pageIndex = (cfi ? pageIndexOfCfi(pagination, cfi) : null) ?? start;
   }
 
