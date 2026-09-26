@@ -17,6 +17,7 @@ const { render, cleanup, fireEvent } = await useDom();
 const { default: PhoneLesson } = await import(
   "../../../../src/ui/components/phone/PhoneLesson"
 );
+const { ShellKeyboardContext } = await import("../../../../src/ui/components/common/useKeyboardInset");
 
 afterEach(cleanup);
 
@@ -26,7 +27,7 @@ const CHAPTERS: TableChapter[] = [
   { index: 3, number: 3, title: "BERT", startPage: 3, endPage: 6 },
 ];
 
-function draw(over: Partial<LessonViewProps> = {}): {
+function draw(over: Partial<LessonViewProps> = {}, keyboard: { covered: number; cramped: boolean } | null = null): {
   root: HTMLElement;
   sent: string[];
   picked: TableChapter[];
@@ -47,7 +48,8 @@ function draw(over: Partial<LessonViewProps> = {}): {
     onPickChapter: (c) => picked.push(c),
     ...over,
   };
-  const { container } = render(createElement(PhoneLesson, props));
+  const screen = createElement(PhoneLesson, props);
+  const { container } = render(keyboard ? createElement(ShellKeyboardContext.Provider, { value: keyboard }, screen) : screen);
   return { root: container, sent, picked };
 }
 
@@ -88,6 +90,22 @@ test("a chip sends the reader's own line", () => {
   fireEvent.click(button(root, "I don't follow")!);
   fireEvent.click(button(root, "Skip")!);
   expect(sent).toEqual(["I don't follow.", "Skip this one."]);
+});
+
+test("a phone on its side with the keyboard up drops the chips with the bar; portrait keeps both", () => {
+  const portrait = draw({}, { covered: 413, cramped: false }).root;
+  expect(button(portrait, "I don't follow")).not.toBeNull();
+  expect(button(portrait, "Back to the shelf")).not.toBeNull();
+  cleanup();
+
+  for (const messages of [[{ role: "ai" as const, text: "Six stops.", ts: 1 }], []]) {
+    const { root } = draw({ messages }, { covered: 272, cramped: true });
+    expect(button(root, "I don't follow")).toBeNull();
+    expect(button(root, "Skip")).toBeNull();
+    expect(button(root, "Back to the shelf")).toBeNull();
+    expect(root.querySelector("textarea")).not.toBeNull();
+    cleanup();
+  }
 });
 
 test("the chapter sheet opens on the bar, and a tap on a chapter is not navigation", () => {

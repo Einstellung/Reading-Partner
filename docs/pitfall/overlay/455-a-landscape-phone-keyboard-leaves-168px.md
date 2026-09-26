@@ -18,4 +18,4 @@ iPhone 横屏点对话输入框，软键盘加附件栏之后能看见的只有�
 
 ## 解法
 
-可见高度低于「最高的顶栏 98 + 最高的输入框行 122 + 两行对话 72 = 292」时，`keyboardFrame` 给出 `cramped`（`common/keyboard-frame.ts` 的 `chatBarFits`），外壳经 context 交给 `CallView`，它把宿主的顶栏、角上的挂断/删除、章节行都收起来，列表顶距回到 16。竖屏软键盘剩 543、硬件键盘附件栏剩得更多，都在线上面，竖屏不变。
+可见高度低于「最高的顶栏 98 + 最高的输入框行 122 + 两行对话 72 = 292」时，`keyboardFrame` 给出 `cramped`（`common/keyboard-frame.ts` 的 `chatBarFits`），外壳经 context 交给 `CallView`，它把宿主的顶栏、角上的挂断/删除、章节行都收起来，列表顶距回到 16；PDF 课堂的两颗快捷钮（`PhoneLesson` 读同一个 `cramped`）也收起来。竖屏软键盘剩 543、硬件键盘附件栏剩得更多，都在线上面，竖屏不变。
