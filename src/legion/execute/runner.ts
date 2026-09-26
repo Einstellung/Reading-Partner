@@ -37,6 +37,7 @@ import {
   type RunStore,
 } from "../run";
 import { dueRuns, reclaimAfterRestart, type DueRun } from "../schedule";
+import { GiveUpError } from "../stop";
 import { currentDeviceId } from "../../platform/app/device";
 import {
   registeredWorkerKinds,
@@ -295,8 +296,13 @@ export function createRunner(deps: RunnerDeps = {}): Runner {
       // A try that failed. Below the limit the same device goes again in place:
       // a new claimant stamp, one more attempt, one more revision, and the run
       // never leaves `running`.
-      if (current.attempts >= MAX_ATTEMPTS) {
-        await store.transition(id, "failed", { at, ...carry });
+      // A worker that gave up has said another attempt would come out the same.
+      const gaveUp = failure instanceof GiveUpError;
+      if (current.attempts >= MAX_ATTEMPTS || gaveUp) {
+        await store.transition(id, "failed", {
+          at,
+          ...(gaveUp ? { progress: why(failure) } : carry),
+        });
         announce();
         await bells
           .ring("run-failed", {

@@ -14,3 +14,13 @@ export class StoppedError extends Error {
     this.name = "StoppedError";
   }
 }
+
+// A failure another attempt cannot change: the worker looked and will not do
+// this. The runner stops the run at `failed` on the first one instead of
+// spending the remaining attempts, with the message as the run's last line.
+export class GiveUpError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "GiveUpError";
+  }
+}
