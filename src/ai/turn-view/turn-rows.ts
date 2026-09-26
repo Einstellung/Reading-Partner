@@ -17,7 +17,7 @@
 // from a domain: this is what an agent turn's ending is, not how a row is drawn.
 // The rows are taken structurally, so each surface keeps its own row type.
 
-import type { MessageOrigin } from "../platform/app/threads";
+import type { MessageOrigin } from "../../platform/app/threads";
 import {
   appendRunningTool,
   relabelRunningTool,
