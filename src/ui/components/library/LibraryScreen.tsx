@@ -61,7 +61,13 @@ import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import TopicDeleteDialog from "./TopicDeleteDialog";
-import { shelfHeaderLine, shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
+import {
+  NEW_TOPIC_BLURB,
+  NEW_TOPIC_PLACEHOLDER,
+  shelfHeaderLine,
+  shelfOrder,
+  TOPIC_GRID_COLUMNS_CLASS,
+} from "../shelf/topic-shelf";
 import ObservationSection from "./topic/ObservationSection";
 import RehearsalSection from "./topic/RehearsalSection";
 import RetellSection from "./topic/RetellSection";
@@ -384,10 +390,6 @@ export default function LibraryScreen(props: {
   );
 }
 
-// A topic is a question, so the placeholder is one and so is the empty state's
-// sentence.
-const NEW_TOPIC_PLACEHOLDER = "e.g. what makes JITs fast";
-const NEW_TOPIC_BLURB = "A topic is one question and the books you read against it.";
 
 // The empty shelf both screens draw when they have nothing: three book-shaped
 // outlines standing on a line, so an empty screen says what a full one will look
