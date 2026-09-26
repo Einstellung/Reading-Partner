@@ -95,7 +95,9 @@ const LIST = {} as Element;
 
 function bind(host: ReturnType<typeof makeHost>) {
 	let notify = () => {};
+	let notifyHost = () => {};
 	let observing = true;
+	let observingHost = false;
 	const stop = stickToBottom(LIST, {
 		resolveHost: () => host as unknown as ScrollHost,
 		observeContent: (_list, onChange) => {
@@ -104,8 +106,21 @@ function bind(host: ReturnType<typeof makeHost>) {
 				observing = false;
 			};
 		},
+		observeHost: (_host, onChange) => {
+			notifyHost = onChange;
+			observingHost = true;
+			return () => {
+				observingHost = false;
+			};
+		},
 	});
-	return { stop, contentChanged: () => notify(), isObserving: () => observing };
+	return {
+		stop,
+		contentChanged: () => notify(),
+		hostResized: () => notifyHost(),
+		isObserving: () => observing,
+		isObservingHost: () => observingHost,
+	};
 }
 
 const bottomOf = (host: { scrollHeight: number; clientHeight: number }) => host.scrollHeight - host.clientHeight;
@@ -188,13 +203,52 @@ test("a height change that arrives as a scroll event does not unpin", () => {
 	stop();
 });
 
+// The keyboard rising: the container gets shorter from the bottom and nothing
+// scrolls, so no scroll event and no content change say so. Readings from the
+// iPhone simulator, where the list was left 363-408px short of its bottom.
+test("a pinned list stays pinned when its container gets shorter", () => {
+	const host = makeHost(3000, 700);
+	const { stop, hostResized } = bind(host);
+	host.flush();
+	host.clientHeight = 337;
+	hostResized();
+	expect(host.scrollTop).toBe(bottomOf(host));
+	stop();
+});
+
+test("a list that was not pinned keeps what it showed at its top", () => {
+	const host = makeHost(3000, 700);
+	const { stop, hostResized } = bind(host);
+	host.scrollTo(900);
+	host.clientHeight = 337;
+	hostResized();
+	expect(host.scrollTop).toBe(900);
+	stop();
+});
+
+test("a container that got shorter and reports it as a scroll does not unpin", () => {
+	const host = makeHost(3000, 700);
+	const { stop, contentChanged } = bind(host);
+	host.flush();
+	host.clientHeight = 337;
+	// A pixel of drift arrives with the new height, before the resize is seen.
+	host.scrollTop -= 1;
+	host.flush();
+	host.grow(200);
+	contentChanged();
+	expect(host.scrollTop).toBe(bottomOf(host));
+	stop();
+});
+
 test("teardown releases the container and the height watcher", () => {
 	const host = makeHost(1000, 300);
-	const { stop, isObserving } = bind(host);
+	const { stop, isObserving, isObservingHost } = bind(host);
 	expect(host.listenerCount()).toBe(1);
+	expect(isObservingHost()).toBe(true);
 	stop();
 	expect(host.listenerCount()).toBe(0);
 	expect(isObserving()).toBe(false);
+	expect(isObservingHost()).toBe(false);
 });
 
 // The store behind the two seams, in one variable. One memory across two binds
