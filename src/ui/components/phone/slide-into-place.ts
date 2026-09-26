@@ -1,10 +1,21 @@
-// After an item leaves a list in place (use-hold-delete.ts), the ones after it
-// slide into the space it freed instead of jumping there: measure them before
-// the item is taken out, measure again once it is gone, and play each one back
-// from where it was (FLIP). Grid cards move sideways and up, rows move up.
+// After an item leaves a list in place (use-hold-delete.ts), what is around it
+// slides into the space it freed instead of jumping there: measure it before
+// the item is taken out, measure again once it is gone, and play each element
+// back from where it was (FLIP). Grid cards move sideways and up, rows move up.
+// A list held at the bottom of its scroller (the lesson, read at its latest
+// turn) closes the gap from above instead: the scroll clamps, the rows before
+// the item move down and the ones after it stay. So both sides are measured,
+// and whatever did not move is left alone.
 // "Gone" is watched on the DOM, not on a render: the shelf hides the item by
 // key, the lesson drops it when it rereads the conversation, and either way
 // the mutation observer runs before the next paint.
+//
+// Elements are found again by order, not held by node: the lesson's rows are
+// keyed by position (chat/MessageList.tsx), so dropping an aside's row hands
+// each later node the content of the row after it and removes the last node.
+// Everything removed lies between the two sides, so the k-th child from the
+// start of a container before is the k-th from the start after, and likewise
+// from the end, whether React kept the nodes or reused them (docs/pitfall 411).
 
 /** How long the slide takes. */
 export const SLIDE_MS = 280;
@@ -20,25 +31,63 @@ export interface Offset {
   dy: number;
 }
 
-/** What `followers` walks: the part of a DOM element it reads. */
+/** What `movingGroups` walks: the part of a DOM element it reads. */
 export interface TreeNode {
   parentElement: TreeNode | null;
+  previousElementSibling: TreeNode | null;
   nextElementSibling: TreeNode | null;
 }
 
 /**
- * Everything that can move when `el` goes: its later siblings, then the later
- * siblings of each ancestor, up to and not past the ancestor `stop` accepts
- * (the scroller). What comes before `el` in the document stays where it is.
+ * One container's share of what can move: its first `lead` children, which
+ * come before the item, and its last `trail`, which come after it.
  */
-export function followers<T extends TreeNode>(el: T, stop: (node: T) => boolean): T[] {
-  const out: T[] = [];
+export interface MovingGroup<T> {
+  parent: T;
+  lead: number;
+  trail: number;
+}
+
+/**
+ * Everything that can move when `el` goes: its siblings, then the siblings of
+ * each ancestor, up to and not past the ancestor `stop` accepts (the
+ * scroller). Grouped by the container they sit in, innermost first.
+ */
+export function movingGroups<T extends TreeNode>(el: T, stop: (node: T) => boolean): MovingGroup<T>[] {
+  const out: MovingGroup<T>[] = [];
   let node: T | null = el;
   while (node && !stop(node)) {
-    for (let s = node.nextElementSibling as T | null; s; s = s.nextElementSibling as T | null) out.push(s);
-    node = node.parentElement as T | null;
+    const parent = node.parentElement as T | null;
+    let lead = 0;
+    let trail = 0;
+    for (let s = node.previousElementSibling; s; s = s.previousElementSibling) lead++;
+    for (let s = node.nextElementSibling; s; s = s.nextElementSibling) trail++;
+    if (parent && lead + trail > 0) out.push({ parent, lead, trail });
+    node = parent;
   }
   return out;
+}
+
+/**
+ * The elements the groups name, each group's lead then its trail. `childrenOf`
+ * answers null for a container that has left the document; what it held left
+ * with it and comes back as nulls, as does any slot a container no longer has
+ * room for. Called before the item goes and again after, the two lists line
+ * up one for one.
+ */
+export function movingSlots<T>(
+  groups: readonly MovingGroup<T>[],
+  childrenOf: (parent: T) => readonly T[] | null,
+): (T | null)[] {
+  return groups.flatMap(({ parent, lead, trail }) => {
+    const kids = childrenOf(parent) ?? [];
+    const first = Array.from({ length: lead }, (_, i) => kids[i] ?? null);
+    const last = Array.from({ length: trail }, (_, i) => {
+      const at = kids.length - trail + i;
+      return at >= lead ? (kids[at] ?? null) : null;
+    });
+    return [...first, ...last];
+  });
 }
 
 /** How far back each element starts: where it was, less where it is now. */
@@ -62,15 +111,19 @@ function reducedMotion(): boolean {
 // How long to wait for the item to be taken out before giving up the slide.
 const GONE_WAIT_MS = 5000;
 
+// A container's children, or null once it has left the document.
+function liveChildren(parent: HTMLElement): HTMLElement[] | null {
+  return parent.isConnected ? (Array.from(parent.children) as HTMLElement[]) : null;
+}
+
 /**
- * Measure what follows `el` while it is still in the list, and play the slide
+ * Measure what is around `el` while it is still in the list, and play the slide
  * when `el` leaves the document. Answers the cancel, for a delete that failed.
  * A no-op under reduced motion or where the Web Animations API is missing.
  */
 export function slideWhenGone(el: HTMLElement | null): () => void {
   if (!el || reducedMotion() || typeof el.animate !== "function") return () => {};
-  const moving = followers(el, scrolls);
-  const play = captureSlide(moving);
+  const play = captureSlide(movingGroups(el, scrolls));
   const watch = new MutationObserver(() => {
     if (el.isConnected) return;
     stop();
@@ -87,15 +140,18 @@ export function slideWhenGone(el: HTMLElement | null): () => void {
 }
 
 // Measure now; answers what plays the slide from these places.
-function captureSlide(moving: readonly HTMLElement[]): () => void {
-  const before = moving.map((m) => m.getBoundingClientRect());
+function captureSlide(groups: readonly MovingGroup<HTMLElement>[]): () => void {
+  const before = movingSlots(groups, liveChildren).map((m) => m?.getBoundingClientRect() ?? null);
   return () => {
-    const kept = moving.flatMap((m, i) => (m.isConnected ? [{ el: m, was: before[i]! }] : []));
-    const live = kept.map((k) => k.el);
-    const after = live.map((m) => m.getBoundingClientRect());
-    slideOffsets(kept.map((k) => k.was), after).forEach(({ dx, dy }, i) => {
+    const now = movingSlots(groups, liveChildren);
+    const pairs = now.flatMap((el, i) => {
+      const was = before[i];
+      return el && was ? [{ el, was }] : [];
+    });
+    const after = pairs.map((p) => p.el.getBoundingClientRect());
+    slideOffsets(pairs.map((p) => p.was), after).forEach(({ dx, dy }, i) => {
       if (!dx && !dy) return;
-      live[i]!.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], {
+      pairs[i]!.el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], {
         duration: SLIDE_MS,
         easing: SLIDE_EASING,
       });

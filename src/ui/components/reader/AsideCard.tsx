@@ -53,7 +53,9 @@ function AsideReceiptRow({
       // (phone/use-hold.ts sets data-held and data-leaving on it).
       data-aside-id={item.threadId}
       onClick={onOpen}
-      className="w-full items-baseline justify-start gap-2 text-left text-muted-foreground transition-opacity duration-200 data-held:relative data-held:z-21 data-held:bg-card data-held:ring-2 data-held:ring-accent-line data-leaving:opacity-0"
+      // Held, the row reaches back over the block's rule and draws it itself,
+      // so the highlight takes the row in with its rule (BLOCK: 2px + pl-3).
+      className="w-full items-baseline justify-start gap-2 text-left text-muted-foreground transition-opacity duration-200 data-held:relative data-held:z-21 data-held:-ml-3.5 data-held:w-[calc(100%+0.875rem)] data-held:border-l-2 data-held:border-muted-strong data-held:pl-4 data-held:bg-card data-held:ring-2 data-held:ring-accent-line data-leaving:opacity-0"
     >
       <span className={LABEL}>Aside</span>
       {anchor !== "" && (
