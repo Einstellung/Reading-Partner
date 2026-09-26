@@ -13,7 +13,7 @@ import {
   deleteLesson,
 } from "../../../reading/delete/delete-thread";
 import { deleteTopic } from "../../../reading/delete/delete-topic";
-import { removeSavedArticle } from "../../../reading/saved-articles";
+import { removeSavedArticle } from "../../../reading/saved/saved-articles";
 import { topicDeleteWords } from "../shelf/topic-delete";
 import {
   holdDoneLine,

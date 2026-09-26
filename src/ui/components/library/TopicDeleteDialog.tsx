@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { listLibraryEntries, type LibraryEntry } from "../../../platform/app/library";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import { listFilesOnlyInTopic } from "../../../reading/delete/delete-book";
-import { loadSavedArticles, savedArticlesForTopic } from "../../../reading/saved-articles";
+import { loadSavedArticles, savedArticlesForTopic } from "../../../reading/saved/saved-articles";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
