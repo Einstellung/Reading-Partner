@@ -6,9 +6,9 @@
 // It wraps, because the bubble is 360px wide and narrower on a phone: the chips
 // sit two-across there and in one row wherever they fit.
 
-import type { ReadingIntent } from '../../../reading/intents';
-import { Button } from '../ui/button';
-import { cn } from '../lib/utils';
+import type { ReadingIntent } from '../../../../reading/intents';
+import { Button } from '../../ui/button';
+import { cn } from '../../lib/utils';
 
 interface IntentChipsProps {
 	intents: readonly ReadingIntent[];

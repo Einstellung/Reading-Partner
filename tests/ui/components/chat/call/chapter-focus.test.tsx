@@ -9,8 +9,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
-import ChapterFocusBar from "../../../../src/ui/components/chat/ChapterFocusBar";
-import { chapterFocusLabel, prepProgressLabel } from "../../../../src/ui/components/chat/chapterFocus";
+import ChapterFocusBar from "../../../../../src/ui/components/chat/call/ChapterFocusBar";
+import { chapterFocusLabel, prepProgressLabel } from "../../../../../src/ui/components/chat/call/chapterFocus";
 
 test("names the chapter and its page range", () => {
   expect(
@@ -94,7 +94,7 @@ test("the focus is stated, and clearing it is the only control offered", () => {
 // absence of props no caller passes any more.
 test("the call carries the focus line and no mode switches", () => {
   const callView = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../../../../src/ui/components/chat/CallView.tsx"),
+    join(dirname(fileURLToPath(import.meta.url)), "../../../../../src/ui/components/chat/call/CallView.tsx"),
     "utf8",
   );
   expect(callView).toContain("ChapterFocusBar");

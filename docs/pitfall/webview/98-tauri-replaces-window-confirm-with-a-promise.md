@@ -28,7 +28,7 @@ window.confirm = async function (m) { return await invoke("plugin:dialog|confirm
 
 ## 解法
 
-不修 `window.confirm` 那条路，破坏性确认一律用项目已有的 `ui/alert-dialog.tsx`（`common/ConfirmDestructiveDialog.tsx`、`chat/DeleteThreadButton.tsx`）。原生 confirm 在 Tauri 里要过 ACL、在 iOS 上样式和安全区不受控；AlertDialog 走 `ui/overlay.tsx` 那套，安全区、滚动锁、44px 命中区都已经验过。
+不修 `window.confirm` 那条路，破坏性确认一律用项目已有的 `ui/alert-dialog.tsx`（`common/ConfirmDestructiveDialog.tsx`、`chat/call/DeleteThreadButton.tsx`）。原生 confirm 在 Tauri 里要过 ACL、在 iOS 上样式和安全区不受控；AlertDialog 走 `ui/overlay.tsx` 那套，安全区、滚动锁、44px 命中区都已经验过。
 
 护栏是 `tests/ui/components/destructive-confirm.test.ts`：`src/` 下出现 `window.confirm` / `window.alert` 就红。
 

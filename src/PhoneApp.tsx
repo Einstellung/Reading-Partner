@@ -37,7 +37,7 @@ import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
 import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
-import { ComposerSlotContext } from "./ui/components/chat/composer-slot";
+import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
 import {
   readLumenCornerShown,
   writeLumenCornerShown,

@@ -34,7 +34,7 @@ function read(path: string): string {
 }
 
 const chat = read("ui/components/chat/MessageList.tsx");
-const callView = read("ui/components/chat/CallView.tsx");
+const callView = read("ui/components/chat/call/CallView.tsx");
 const app = read("App.tsx");
 const infoCall = read("ui/components/info/InfoCall.tsx");
 
@@ -111,7 +111,7 @@ test("the surfaces that are not remembered pass no key", () => {
   // a key on it would let it read the call window's position. The retell and the
   // spike harness have no swap at all.
   for (const path of [
-    "ui/components/chat/CallBubble.tsx",
+    "ui/components/chat/call/CallBubble.tsx",
     "ui/components/retell/RetellView.tsx",
     "smoke/aside-spike-harness.tsx",
   ]) {

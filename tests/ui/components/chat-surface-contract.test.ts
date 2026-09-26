@@ -23,7 +23,7 @@ function read(path: string): string {
 }
 
 const styles = read("styles.css");
-const callView = read("ui/components/chat/CallView.tsx");
+const callView = read("ui/components/chat/call/CallView.tsx");
 const chat = read("ui/components/chat/MessageList.tsx") + read("ui/components/chat/Composer.tsx");
 const markdown = read("ui/components/markdown/MarkdownRenderer.tsx");
 

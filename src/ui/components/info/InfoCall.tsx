@@ -19,10 +19,10 @@
 // Rendering and event binding only: the conversation, the briefing job and the
 // card gestures are in use-info-call.ts.
 
-import CallView from "../chat/CallView";
-import ChatPipCard from "../chat/ChatPipCard";
-import { callLayout } from "../chat/call-layout";
-import ReadingPipCard from "../chat/ReadingPipCard";
+import CallView from "../chat/call/CallView";
+import ChatPipCard from "../chat/call/ChatPipCard";
+import { callLayout } from "../chat/call/call-layout";
+import ReadingPipCard from "../chat/call/ReadingPipCard";
 import { useInfoCall } from "./use-info-call";
 import type { ComposerVoice } from "../chat/composer-voice";
 import { chatGlance } from "../chat/chatParts";

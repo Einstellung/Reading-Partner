@@ -48,7 +48,7 @@ afterEach(cleanup);
 
 const { Dialog, DialogFullScreenContent } = await import("../../../../src/ui/components/ui/dialog");
 const { default: DeleteThreadButton } = await import(
-  "../../../../src/ui/components/chat/DeleteThreadButton"
+  "../../../../src/ui/components/chat/call/DeleteThreadButton"
 );
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../../src");
@@ -156,6 +156,6 @@ test("the floating dialog rung clears the floaters and stays under the anchored 
 test("the reading bubble says which rung it stands on", () => {
   // Where the fix lives. The confirm is portalled to <body> and cannot tell what
   // opened it; the surface is the only thing that knows.
-  const source = readFileSync(join(SRC, "ui/components/chat/CallBubble.tsx"), "utf8");
+  const source = readFileSync(join(SRC, "ui/components/chat/call/CallBubble.tsx"), "utf8");
   expect(source).toContain('<OverlaySurface layer="floating">');
 });

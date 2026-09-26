@@ -21,9 +21,9 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 	AlertDialogTrigger,
-} from '../ui/alert-dialog';
-import { Button } from '../ui/button';
-import { IconTrash } from '../base/icons';
+} from '../../ui/alert-dialog';
+import { Button } from '../../ui/button';
+import { IconTrash } from '../../base/icons';
 
 interface DeleteThreadButtonProps {
 	onDelete(): void;

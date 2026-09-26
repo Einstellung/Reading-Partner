@@ -1,4 +1,4 @@
-// The hold-to-talk overlay's arithmetic (src/ui/components/chat/hold-zones.ts):
+// The hold-to-talk overlay's arithmetic (src/ui/components/chat/voice/hold-zones.ts):
 // the zone under a finger, the meter's bars, and the line each zone shows.
 // Run: bun test.
 
@@ -10,7 +10,7 @@ import {
   barHeights,
   zoneAt,
   type Box,
-} from "../../../../src/ui/components/chat/hold-zones";
+} from "../../../../../src/ui/components/chat/voice/hold-zones";
 
 // A phone-sized layout: two 56px targets at the top of the overlay, the bar
 // they were dragged from below.

@@ -8,21 +8,21 @@
 // the hang-up button and the chapter-focus line stay outside it.
 
 import type { ReactNode } from 'react';
-import type { ReadingIntent } from '../../../reading/intents';
-import ChatScaleScope from '../base/ChatScaleScope';
+import type { ReadingIntent } from '../../../../reading/intents';
+import ChatScaleScope from '../../base/ChatScaleScope';
 import { useComposerSlot } from './composer-slot';
-import { IconClose } from '../base/icons';
+import { IconClose } from '../../base/icons';
 import ChapterFocusBar, { type ChapterFocusBarProps } from './ChapterFocusBar';
-import { Composer } from './Composer';
-import type { ComposerVoice } from './composer-voice';
-import { MessageList } from './MessageList';
-import type { ChatMarkHost } from './ChatMarkLayer';
+import { Composer } from '../Composer';
+import type { ComposerVoice } from '../composer-voice';
+import { MessageList } from '../MessageList';
+import type { ChatMarkHost } from '../ChatMarkLayer';
 import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
-import { useKeyboardRoom } from '../common/useKeyboardInset';
-import type { PendingImage, ThreadMessage } from './types';
-import type { CardActionHandler } from './chatParts';
-import { Button } from '../ui/button';
+import { useKeyboardRoom } from '../../common/useKeyboardInset';
+import type { PendingImage, ThreadMessage } from '../types';
+import type { CardActionHandler } from '../chatParts';
+import { Button } from '../../ui/button';
 
 interface CallViewProps {
 	messages: ThreadMessage[];

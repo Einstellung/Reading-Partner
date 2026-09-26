@@ -2,7 +2,7 @@
 // tapped in. Both hang off whether the shell keeps the corner cards.
 
 import { expect, test } from "bun:test";
-import { callLayout, navigateAway } from "../../../../src/ui/components/chat/call-layout";
+import { callLayout, navigateAway } from "../../../../../src/ui/components/chat/call/call-layout";
 
 test("with corner cards the call swaps between the two layouts", () => {
   expect(callLayout(true, false)).toBe("chat-main");

@@ -3,7 +3,7 @@
 // arithmetic over numbers the component measures, so they live here and are
 // tested rather than eyeballed on a device.
 
-import type { Zone } from '../../../ai/voice';
+import type { Zone } from '../../../../ai/voice';
 
 // The part of a DOMRect these need. A plain object so a test can state one.
 export interface Box {

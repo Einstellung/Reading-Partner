@@ -125,7 +125,7 @@ export interface LessonViewProps {
  * The line under the top bar. Null when there is no chapter to name — no focus,
  * or a focus whose chapter is not in the table this device has — which is also
  * what tells the row not to render, the way the desk's line does
- * (chat/chapterFocus.ts).
+ * (chat/call/chapterFocus.ts).
  */
 export function lessonFocusLine(
   chapters: readonly TableChapter[] | null,

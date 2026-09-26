@@ -262,6 +262,8 @@ const LAYER: Record<string, Layer> = {
   "ui/components": "ui",
   "ui/components/base": "ui",
   "ui/components/chat": "ui",
+  "ui/components/chat/call": "ui",
+  "ui/components/chat/voice": "ui",
   "ui/components/common": "ui",
   "ui/components/info": "ui",
   "ui/components/info/meals": "ui",

@@ -1,13 +1,13 @@
-// The opening-intent chips (src/ui/components/chat/IntentChips.tsx). What the
+// The opening-intent chips (src/ui/components/chat/call/IntentChips.tsx). What the
 // render layer owes the table: one chip per intent showing its label, a press
 // sending its message and not its label, and no chips at all for an empty set.
 // Rendered as a plain function call and walked as an element tree — no DOM
 // needed. Run: bun test.
 
 import { expect, test } from "bun:test";
-import IntentChips from "../../../../src/ui/components/chat/IntentChips";
-import { Button } from "../../../../src/ui/components/ui/button";
-import { MARK_INTENTS, openingIntents } from "../../../../src/reading/intents";
+import IntentChips from "../../../../../src/ui/components/chat/call/IntentChips";
+import { Button } from "../../../../../src/ui/components/ui/button";
+import { MARK_INTENTS, openingIntents } from "../../../../../src/reading/intents";
 
 type El = { type?: unknown; props?: Record<string, any> };
 

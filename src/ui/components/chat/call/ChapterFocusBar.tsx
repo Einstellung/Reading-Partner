@@ -8,9 +8,9 @@
 // can be going before any chapter is in focus, so either one alone is enough to
 // draw it. Renders nothing when neither has anything to say.
 
-import { IconClose } from '../base/icons';
+import { IconClose } from '../../base/icons';
 import { chapterFocusLabel, prepProgressLabel, type ChapterFocus } from './chapterFocus';
-import { Button } from '../ui/button';
+import { Button } from '../../ui/button';
 
 export interface ChapterFocusBarProps extends ChapterFocus {
 	// Drop the focus. Absent = the line only states it.

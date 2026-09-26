@@ -2,8 +2,8 @@
 // reading is full-screen and a call is still live (docs/03). Click swaps the
 // conversation back to full screen; the small ✕ hangs up. Tailwind-only.
 
-import { IconClose, IconSparkle } from '../base/icons';
-import { Button } from '../ui/button';
+import { IconClose, IconSparkle } from '../../base/icons';
+import { Button } from '../../ui/button';
 
 interface ChatPipCardProps {
 	lastMessage: string | null;

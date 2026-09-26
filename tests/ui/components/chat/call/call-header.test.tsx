@@ -1,5 +1,5 @@
 // What the main-screen call puts in its top-left corner
-// (src/ui/components/chat/CallView.tsx). An aside offers one control, the way
+// (src/ui/components/chat/call/CallView.tsx). An aside offers one control, the way
 // back to the lesson it came out of — not the hang-up, not the delete, and not
 // the sentence it was opened on, which a long mark turns into a layout problem.
 // The conversation it came off keeps all three of its own. Rendered against a
@@ -9,13 +9,13 @@
 
 import { afterEach, expect, test } from "bun:test";
 import { createElement } from "react";
-import { useDom } from "../../../support/dom";
+import { useDom } from "../../../../support/dom";
 
 // react-dom has to be evaluated with a window in scope (tests/support/dom.ts),
 // and CallView reaches it through the delete control's AlertDialog, so the
 // component is imported after the window is up rather than at the top.
 const { cleanup, fireEvent, render } = await useDom();
-const { default: CallView } = await import("../../../../src/ui/components/chat/CallView");
+const { default: CallView } = await import("../../../../../src/ui/components/chat/call/CallView");
 afterEach(cleanup);
 
 type CallViewProps = Parameters<typeof CallView>[0];

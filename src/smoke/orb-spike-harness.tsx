@@ -16,7 +16,7 @@ import { createRoot } from "react-dom/client";
 
 // The app's global baseline: what is measured here has to be the app's layout.
 import "../styles.css";
-import ReadingPipCard from "../ui/components/chat/ReadingPipCard";
+import ReadingPipCard from "../ui/components/chat/call/ReadingPipCard";
 import { BriefingPage } from "../ui/components/info/BriefingPage";
 import { StubOrbLayer } from "../ui/components/info/VoiceOrbEntry";
 import type { Briefing } from "../info/boxes/types";

@@ -18,8 +18,8 @@
 // below puts it out.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '../ui/button';
-import { IconMic } from '../base/icons';
+import { Button } from '../../ui/button';
+import { IconMic } from '../../base/icons';
 import {
 	FINISH_TIMEOUT_MS,
 	START_TIMEOUT_HINT,
@@ -34,9 +34,9 @@ import {
 	type HoldEvent,
 	type HoldState,
 	type Zone,
-} from '../../../ai/voice';
+} from '../../../../ai/voice';
 import { METER_BARS, RELEASE_LABEL, barHeights, zoneAt, type Box } from './hold-zones';
-import type { DictationLocale } from '../../../platform/app/settings';
+import type { DictationLocale } from '../../../../platform/app/settings';
 
 export function HoldToTalk({
 	onSend,

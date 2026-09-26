@@ -5,20 +5,20 @@
 // writing into the thread. Tailwind-only.
 
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { ReadingIntent } from '../../../reading/intents';
-import { IconExpand } from '../base/icons';
-import { Composer } from './Composer';
-import type { ComposerVoice } from './composer-voice';
-import { MessageList } from './MessageList';
+import type { ReadingIntent } from '../../../../reading/intents';
+import { IconExpand } from '../../base/icons';
+import { Composer } from '../Composer';
+import type { ComposerVoice } from '../composer-voice';
+import { MessageList } from '../MessageList';
 import IntentChips from './IntentChips';
-import type { CardActionHandler } from './chatParts';
-import { Button } from '../ui/button';
-import { cn } from '../lib/utils';
-import { OVERLAY_Z, OverlaySurface, useCloseOnOutsidePress, useOverlaySafePadding } from '../ui/overlay';
+import type { CardActionHandler } from '../chatParts';
+import { Button } from '../../ui/button';
+import { cn } from '../../lib/utils';
+import { OVERLAY_Z, OverlaySurface, useCloseOnOutsidePress, useOverlaySafePadding } from '../../ui/overlay';
 import DeleteThreadButton from './DeleteThreadButton';
-import { fitPanelWidth, placePanel, pointAnchor } from '../common/panel-position';
-import { useViewportSize } from '../common/useViewportSize';
-import type { PendingImage, ThreadMessage } from './types';
+import { fitPanelWidth, placePanel, pointAnchor } from '../../common/panel-position';
+import { useViewportSize } from '../../common/useViewportSize';
+import type { PendingImage, ThreadMessage } from '../types';
 
 interface CallBubbleProps {
 	anchor: { x: number; y: number };

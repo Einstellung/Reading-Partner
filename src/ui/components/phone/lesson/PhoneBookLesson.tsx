@@ -9,8 +9,8 @@
 // Citations are chips and quote blocks that jump (no CitationModeContext here —
 // "quote" is the PDF lesson's, where there is no page to jump to).
 
-import CallView from "../../chat/CallView";
-import ChapterFocusBar from "../../chat/ChapterFocusBar";
+import CallView from "../../chat/call/CallView";
+import ChapterFocusBar from "../../chat/call/ChapterFocusBar";
 import {
   CitationContext,
   FigureContext,

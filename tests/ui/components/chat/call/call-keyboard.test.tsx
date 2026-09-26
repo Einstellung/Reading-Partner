@@ -10,11 +10,11 @@
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createElement } from "react";
-import { useDom } from "../../../support/dom";
+import { useDom } from "../../../../support/dom";
 
 const { cleanup, render } = await useDom();
-const { default: CallView } = await import("../../../../src/ui/components/chat/CallView");
-const { ShellKeyboardContext } = await import("../../../../src/ui/components/common/useKeyboardInset");
+const { default: CallView } = await import("../../../../../src/ui/components/chat/call/CallView");
+const { ShellKeyboardContext } = await import("../../../../../src/ui/components/common/useKeyboardInset");
 
 const saved = { vv: Object.getOwnPropertyDescriptor(window, "visualViewport"), inner: window.innerHeight };
 

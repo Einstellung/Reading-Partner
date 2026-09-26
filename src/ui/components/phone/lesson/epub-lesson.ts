@@ -14,7 +14,7 @@ import type { Figure } from "../../../../reading/figures";
 import type { Fulltext } from "../../../../fulltext";
 import type { Citation } from "../../../../reading/prep";
 import { quoteSearchText, routeCitation } from "../../../../reading/session/citations";
-import type { ChapterFocus } from "../../chat/chapterFocus";
+import type { ChapterFocus } from "../../chat/call/chapterFocus";
 
 /** Whether the lesson covers the page: the book's call, in its full-screen view. */
 export function lessonOnScreen(call: { isBook?: boolean; view: CallView } | null): boolean {

@@ -13,7 +13,7 @@
 // an aside has none of: the chapter sheet, the standing chips and the hold.
 
 import { useEffect, useRef, useState } from "react";
-import CallView from "../../chat/CallView";
+import CallView from "../../chat/call/CallView";
 import { useShellKeyboard } from "../../common/useKeyboardInset";
 import { CitationModeContext } from "../../markdown/Markdown";
 import { Button } from "../../ui/button";
