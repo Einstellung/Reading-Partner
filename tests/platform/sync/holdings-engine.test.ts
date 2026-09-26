@@ -7,7 +7,9 @@
 // an idle pass adds no request, a holdings never reaches either device's
 // AppData, and — with the inference armed — a deletion on one device travels,
 // an edit beats a delete, a device with no cached base concludes nothing, and a
-// purge that failed keeps the base it was taken against until it lands.
+// purge that failed keeps the base it was taken against until it lands. Also
+// the one race two devices need to show: two uploads of the same rev, the
+// earlier overwritten, merged back on the device that lost.
 // Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -659,4 +661,56 @@ test("a purge that never lands names the same path every pass", async () => {
   // And the remote copy is untouched, so a third device is not looking at a
   // path this one half deleted.
   expect(remote.names()).toContain("topics.json");
+});
+
+// --- two uploads of the same rev --------------------------------------------
+
+// Drive has no conditional write. Both devices plan rev N+1 from the same
+// listing, both publish it, and the later upload replaces the earlier. The
+// device that lost then holds its own rev under the other's hash; it has to
+// merge the two back together, or its edit lives only on it until the next
+// download throws it away.
+test("an upload another device overwrote at the same rev is merged back, and both devices end on both edits", async () => {
+  const remote = makeRemote();
+  const path = "annotations-x.json";
+  const A = makeDevice("d-a", { [path]: JSON.stringify([{ id: "r0", note: "zero" }]) });
+  const B = makeDevice("d-b");
+  const a = engineFor(remote, A);
+  // B lists through a view that can be held at a moment in the past: the
+  // listing it planned from, before A's upload landed.
+  const live = remote.backend();
+  let frozen: RemoteState | null = null;
+  const b = engineFor(remote, B, {
+    backend: { ...live, listRemote: async () => frozen ?? live.listRemote() },
+  });
+  await settle(a.engine, b.engine);
+  const start = remote.meta.get(path)!.rev;
+
+  A.put(path, JSON.stringify([{ id: "r0", note: "zero" }, { id: "rA", note: "from A" }]));
+  B.put(path, JSON.stringify([{ id: "r0", note: "zero" }, { id: "rB", note: "from B" }]));
+
+  frozen = await live.listRemote();
+  await a.engine.syncNow();
+  await b.engine.syncNow();
+  frozen = null;
+
+  // The race as it lands: one rev, B's bytes, A's snapshot on its own hash.
+  expect(remote.meta.get(path)!.rev).toBe(start + 1);
+  expect(remote.text(path)).toContain("rB");
+  expect(remote.text(path)).not.toContain("rA");
+  expect(a.snapshot[path]!.rev).toBe(start + 1);
+  expect(a.snapshot[path]!.hash).not.toBe(remote.meta.get(path)!.hash);
+
+  await settle(a.engine, b.engine);
+
+  const ids = (text: string | null) =>
+    (JSON.parse(text ?? "[]") as { id: string }[]).map((r) => r.id).sort();
+  expect(ids(remote.text(path))).toEqual(["r0", "rA", "rB"]);
+  expect(ids(A.text(path))).toEqual(["r0", "rA", "rB"]);
+  expect(ids(B.text(path))).toEqual(["r0", "rA", "rB"]);
+  expect(A.text(path)).toBe(B.text(path));
+  expect(remote.meta.get(path)!.rev).toBe(start + 2);
+  // A union drops nothing, so nothing had to be journalled.
+  expect(A.trashed()).toEqual([]);
+  expect(B.trashed()).toEqual([]);
 });

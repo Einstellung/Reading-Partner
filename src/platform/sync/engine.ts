@@ -450,7 +450,9 @@ export class SyncEngine {
   }
 
   // One three-way merge, start to finish: fetch the other side, merge it with
-  // this one over the base, and get the result onto disk and into Drive.
+  // this one over the base, and get the result onto disk and into Drive. A
+  // merge reconcile marked noBase gets no base: the one on disk is this
+  // device's own upload that another device overwrote (reconcile.ts).
   //
   // The local write comes before the upload on purpose. The merged bytes are
   // the only copy that holds both sides' work, and a merge whose upload dies is
@@ -459,7 +461,7 @@ export class SyncEngine {
   private async mergeOne(mg: Merge): Promise<{ up: Upload; bytes: Uint8Array }> {
     const remote = await this.d.backend.download(mg.path);
     const local = await this.d.fs.read(mg.path);
-    const base = await this.d.base.read(mg.path);
+    const base = mg.noBase ? null : await this.d.base.read(mg.path);
     const out = (this.d.merge ?? mergeFile)({ path: mg.path, base, local, remote });
 
     await this.writeLocal(mg.path, out.merged);

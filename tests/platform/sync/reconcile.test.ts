@@ -109,6 +109,49 @@ test("no snapshot at all merges rather than picking a side", () => {
   expect(plan.downloads).toEqual([{ path: "remoteOnly", rev: 5, size: 10 }]);
 });
 
+// Drive has no conditional write: two devices both publish rev 6 and the later
+// one replaces the earlier. The one that lost sees its own rev under someone
+// else's hash. That is not "in sync", and its base (its own upload) is no
+// common ancestor, so the merge runs without one.
+test("the remote at the snapshot's rev under another hash merges with no base", () => {
+  const snap: Snapshot = { a: { rev: 6, mtime: 100, size: 10, hash: "hA" } };
+  const remote: RemoteState = { a: { rev: 6, mtime: 120, size: 11, hash: "hB" } };
+  const plan = reconcile([L("a", 100, "hA")], remote, snap);
+  expect(plan.merges).toEqual([{ path: "a", rev: 7, noBase: true }]);
+  expect(plan.uploads).toEqual([]);
+  expect(plan.downloads).toEqual([]);
+  expect(plan.converged).toEqual([]);
+});
+
+test("an overwritten upload edited again here still merges with no base", () => {
+  const snap: Snapshot = { a: { rev: 6, mtime: 100, size: 10, hash: "hA" } };
+  const remote: RemoteState = { a: { rev: 6, mtime: 120, size: 11, hash: "hB" } };
+  const plan = reconcile([L("a", 300, "hA2", 12)], remote, snap);
+  expect(plan.merges).toEqual([{ path: "a", rev: 7, noBase: true }]);
+  expect(plan.uploads).toEqual([]);
+});
+
+test("the same rev with a hash missing on either side is decided as before", () => {
+  // No remote hash: in sync, as it always was.
+  const snap: Snapshot = { a: { rev: 6, mtime: 100, size: 10, hash: "hA" } };
+  const bare: RemoteState = { a: { rev: 6, mtime: 120, size: 10 } };
+  let plan = reconcile([L("a", 100, "hA")], bare, snap);
+  expect(plan.merges).toEqual([]);
+  expect(plan.uploads).toEqual([]);
+  expect(plan.downloads).toEqual([]);
+  // ...and a local edit over it uploads.
+  plan = reconcile([L("a", 300, "hA2")], bare, snap);
+  expect(plan.uploads).toEqual([{ path: "a", rev: 7, mtime: 300, size: 10, hash: "hA2" }]);
+  expect(plan.merges).toEqual([]);
+  // No snapshot hash: the mtime/size rule, not a merge.
+  const old: Snapshot = { a: { rev: 6, mtime: 100, size: 10 } };
+  const hashed: RemoteState = { a: { rev: 6, mtime: 120, size: 10, hash: "hB" } };
+  plan = reconcile([L("a", 100, "hA")], hashed, old);
+  expect(plan.merges).toEqual([]);
+  expect(plan.uploads).toEqual([]);
+  expect(plan.converged).toEqual([{ path: "a", rev: 6, mtime: 100, size: 10, hash: "hA" }]);
+});
+
 // The first pass after the upgrade reads a snapshot with no hashes in it.
 // Calling every file changed there would push the whole data set over the
 // remote, so those entries keep the old mtime/size rule until the engine fills

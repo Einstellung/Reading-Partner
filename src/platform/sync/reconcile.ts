@@ -13,6 +13,14 @@
 // file is the wrong unit to pick a winner at when the file is a collection of
 // records — one device's annotations are not an alternative to the other's.
 //
+// Drive has no conditional write, so two devices that planned the same rev both
+// publish it and the later one silently replaces the earlier. The device that
+// lost then sees the remote at the rev it last published, under a hash that is
+// not the one it published. That remote is not what this device last saw, so it
+// is merged, and merged without a base: the base this device holds is its own
+// overwritten upload, not an ancestor both sides share, and reading the other
+// side's missing records against it would turn them into deletions.
+//
 // File-level deletions are still not propagated — a file missing locally but
 // present remotely is left alone, so nothing is ever destroyed by a sync.
 // Record-level deletion inside a file is the merge module's decision. The one
@@ -47,6 +55,10 @@ export interface Download {
 export interface Merge {
   path: string;
   rev: number;
+  // The remote replaced this device's own upload at the same rev, so the base
+  // on disk is not a common ancestor and must not be read as one: the engine
+  // merges the two sides with no base (merge/contract.ts), which keeps both.
+  noBase?: true;
 }
 
 // Nothing needs to move for this file, and the snapshot does not say so yet:
@@ -185,7 +197,22 @@ export function reconcile(
       uploads.push({ path, rev: nextRev(), mtime: loc.mtime, size: loc.size, hash: loc.hash });
     };
 
-    if (localChanged && remoteChanged) {
+    // Same rev, different bytes, both hashes known: another device published
+    // this rev over the one this device published. Neither "in sync" nor a
+    // three-way merge over this device's base — whether or not the file changed
+    // here since. Without a hash on either side nothing can tell, and the file
+    // is decided as before.
+    const overwritten =
+      !!rem &&
+      !!base &&
+      rem.rev === base.rev &&
+      rem.hash !== undefined &&
+      base.hash !== undefined &&
+      rem.hash !== base.hash;
+
+    if (overwritten) {
+      merges.push({ path, rev: nextRev(), noBase: true });
+    } else if (localChanged && remoteChanged) {
       // Both sides moved. Merge them; do not pick one.
       merges.push({ path, rev: nextRev() });
     } else if (localChanged) {
