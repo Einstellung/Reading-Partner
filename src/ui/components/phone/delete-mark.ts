@@ -1,7 +1,8 @@
 // Deleting a mark in the phone reader. A mark with a conversation on it is that
 // conversation's only door, so the two go together, the same pairing the desktop
 // trace list makes (reading/session/use-mark-doors.ts, use-call.ts dropThread):
-// the conversation and the asides off it leave the book's threads file, and any
+// the conversation and the asides off it leave the book's threads file with
+// their images, and any
 // other page mark hosting one of those asides goes with them. Marks drawn on
 // replies stay (reading/chat-marks.ts: hostMarkIds).
 //
@@ -18,6 +19,7 @@ export interface MarkDeleteIo {
   deleteThreadTree(bookId: string, threadId: string): string[];
   deleteAnnotations(bookId: string, ids: string[]): void;
   logThreadDelete(topicId: string, threadId: string): void;
+  removeThreadImages(threadId: string): Promise<void>;
 }
 
 // The conversation deleting this mark would take with it, if any.
@@ -45,7 +47,12 @@ export async function deletePhoneMark(
       },
     );
     if (loaded) gone = io.deleteThreadTree(target.bookId, threadId);
-    for (const id of gone) io.logThreadDelete(target.topicId, id);
+    for (const id of gone) {
+      io.logThreadDelete(target.topicId, id);
+      void io.removeThreadImages(id).catch((e: unknown) =>
+        console.warn("failed to delete a deleted thread's images", id, e),
+      );
+    }
   }
   const ids = [markId, ...hostMarkIds(marks, gone).filter((id) => id !== markId)];
   io.deleteAnnotations(target.bookId, ids);

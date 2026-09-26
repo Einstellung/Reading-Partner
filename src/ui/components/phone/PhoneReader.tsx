@@ -47,12 +47,13 @@ import {
 } from "./open-epub";
 import { flowTool } from "./reader-gate";
 import { deletePhoneMark, markThreadId, type MarkDeleteIo } from "./delete-mark";
-import PhoneDeleteMarkDialog from "./PhoneDeleteMarkDialog";
+import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import PhoneDisplaySheet from "./PhoneDisplaySheet";
 import PhoneOutlineSheet from "./PhoneOutlineSheet";
 import PhoneReaderBar from "./PhoneReaderBar";
 import { deleteThreadTree, loadThreads } from "../../../platform/app/threads";
 import { logEvent } from "../../../platform/app/events";
+import { deleteThreadImages } from "../../../platform/app/thread-images";
 
 const markDeleteIo: MarkDeleteIo = {
   loadThreads,
@@ -60,6 +61,7 @@ const markDeleteIo: MarkDeleteIo = {
   deleteAnnotations,
   logThreadDelete: (topicId, threadId) =>
     logEvent(topicId, "thread-delete", { threadId, book: false }),
+  removeThreadImages: deleteThreadImages,
 };
 
 export default function PhoneReader(props: {
@@ -225,10 +227,14 @@ export default function PhoneReader(props: {
         )}
 
         {confirming && (
-          <PhoneDeleteMarkDialog
+          // Opened after the popup has closed, so it sits on the dialog layer
+          // and nothing covers Cancel (docs/pitfall/211).
+          <ConfirmDestructiveDialog
+            title="Delete this mark?"
+            description="The mark goes, and with it the conversation opened from it. This cannot be undone."
             open
             onOpenChange={(open) => !open && setConfirming(null)}
-            onDelete={() => removeMark(confirming)}
+            onConfirm={() => removeMark(confirming)}
           />
         )}
       </div>

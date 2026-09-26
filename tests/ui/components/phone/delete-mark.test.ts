@@ -33,6 +33,7 @@ function fakeIo(opts: { loadFails?: boolean } = {}) {
     },
     deleteAnnotations: (bookId, ids) => void calls.push(`marks:${bookId}:${ids.join(",")}`),
     logThreadDelete: (topicId, threadId) => void calls.push(`log:${topicId}:${threadId}`),
+    removeThreadImages: async (threadId) => void calls.push(`images:${threadId}`),
   };
   return { io, calls };
 }
@@ -59,7 +60,9 @@ test("a mark with a conversation takes the conversation, its asides and their pa
     "load:book",
     "tree:book:t1",
     "log:topic:t1",
+    "images:t1",
     "log:topic:t2",
+    "images:t2",
     "marks:book:a,aside-host",
   ]);
 });
