@@ -89,7 +89,8 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
   if (failed) return <Chip label={figureChipLabel(figure)} onClick={() => host.onJump(figure)} />;
 
   // Display at the crop's natural size (÷ dpr) so a small figure is never
-  // upscaled; max-w-full still shrinks a big crop to fit. The card is a block
+  // upscaled; an unmeasured card (an EPUB's own file) takes its own size.
+  // max-w-full still shrinks a big crop to fit. The card is a block
   // box on its own line, centered in the reply.
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio : 1;
   const displayWidth = card ? cardDisplayWidth(card.width, dpr) : undefined;

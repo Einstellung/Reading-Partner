@@ -27,7 +27,7 @@
 | 不出整包，只验原生插件的 Swift / Rust 编得过 | iOS 构建与签名 |
 | 动 CI 的构建缓存、靠 build script 生成的东西 | iOS 构建与签名 |
 | SSH 远程到 Mac 上签名、构建 | iOS 构建与签名 |
-| 在模拟器上验分享进 app、文档类型打开 | iOS 构建与签名 |
+| 在模拟器上验分享进 app、文档类型打开、share extension 和 App Group | iOS 构建与签名 |
 | 真机无人值守跑、判 app 还活着没有、手机上发网络请求 | iOS 构建与签名 |
 | 原生录音、回声消除、后台识别 | 原生音频与语音 |
 | 解流式 TTS 的音频分片、按字节数算时长 | 原生音频与语音 |
@@ -231,6 +231,8 @@
 - [294-simctl-openurl-picks-the-handler-not-you](./ios-build/294-simctl-openurl-picks-the-handler-not-you.md) — `xcrun simctl openurl` 投 `file://` 是交给 LaunchServices 按 UTI 挑 app，PDF/EPUB 在模拟器上归系统「预览」，把 `LSHandlerRank` 改成 `Owner` 也抢不过，系统 app 又卸不掉；要验 `application:openURL:` 得驱动真的分享面板——XCUITest 附着 Safari，点分享按钮再点 `shareCell`，不需要 idb
 - [374-the-idb-venv-does-not-survive-tmp](./ios-build/374-the-idb-venv-does-not-survive-tmp.md) — `/tmp/idbvenv` 会被系统清掉一半，`bin/idb` 还在但 import 不到 idb；触摸静默失效、滚动位置读成 0，venv 要建在家目录并用 `IDB` 指过去
 - [375-pinch-in-needs-a-scale-below-one](./ios-build/375-pinch-in-needs-a-scale-below-one.md) — `ios-sim.sh pinch in` 的默认 scale 2.0 被 UIKit 拒绝，缩小要传小于 1 的数；顺带 `handle` 上的方法叫 `zoomReset` 不是 `resetZoom`
+- [426-a-no-sign-simulator-build-has-no-entitlements](./ios-build/426-a-no-sign-simulator-build-has-no-entitlements.md) — `tauri ios build --no-sign` 跳过签名，模拟器包里就没有 `__entitlements` 段，App Group 的 `containerURL` 返回 nil（扩展报 no App Group container）；`codesign -d --entitlements` 对模拟器包永远是空 dict，不能拿来判断。验 entitlement 的模拟器包去掉 `--no-sign`（ad hoc 签，不碰钥匙串），核对用 `strings | grep application-groups`
+- [427-a-copied-cargo-target-breaks-swift-rs-module-cache](./ios-build/427-a-copied-cargo-target-breaks-swift-rs-module-cache.md) — 把老检出的 `target/aarch64-apple-ios-sim` 克隆到新检出复用，swift-rs 的 `.pcm` 里写死了老的 module cache 路径，build script 重跑时 panic（`missing required module 'SwiftShims'`）；拷完删掉所有 `*/out/swift-rs` 再构建
 
 ## Android 构建与签名
 

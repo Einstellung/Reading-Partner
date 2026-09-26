@@ -44,7 +44,10 @@ function cropScale(tier: FigureTier, rw: number): number {
 // CSS width to display a crop at: its natural pixel width divided by the device
 // pixel ratio, so a 2x-rendered crop shows at 1x logical size and is never
 // upscaled past its own resolution. The container still caps it via max-width.
-export function cardDisplayWidth(naturalWidthPx: number, devicePixelRatio: number): number {
+// An EPUB figure's card is the book's own file, not measured (width 0): no
+// width, so the <img> takes the picture's own size under the same caps.
+export function cardDisplayWidth(naturalWidthPx: number, devicePixelRatio: number): number | undefined {
+  if (naturalWidthPx <= 0) return undefined;
   return naturalWidthPx / Math.max(1, devicePixelRatio || 1);
 }
 
