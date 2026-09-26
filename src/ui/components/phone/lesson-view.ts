@@ -110,6 +110,15 @@ export interface LessonViewProps {
   // it is the lesson. `span` is the words it was pulled out of, named in the
   // strip over it.
   aside?: { onBack?: () => void; span: string };
+
+  // A hold on an aside's receipt row offers to delete that aside (hold-menu.ts).
+  // Absent = no hold on the rows: the aside view has none to hold.
+  asideDelete?: {
+    topicId: string;
+    // Re-read the lesson, which has lost the row.
+    onChanged: () => void;
+    onNotice: (kind: "info" | "error", line: string) => void;
+  };
 }
 
 /**

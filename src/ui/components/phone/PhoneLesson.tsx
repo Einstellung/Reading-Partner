@@ -20,6 +20,9 @@ import { Popover, PopoverAnchor, PopoverContent } from "../ui/popover";
 import { longPressFeedback } from "../../../platform/app/haptics";
 import { replySpanAt, type LessonAskSpan } from "./lesson-aside";
 import { bindLongPress } from "./long-press";
+import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
+import HoldMenu from "./HoldMenu";
+import { useHoldDelete } from "./use-hold-delete";
 import PhoneChapterSheet from "./PhoneChapterSheet";
 import PhoneLessonBar from "./PhoneLessonBar";
 import { LESSON_CHIPS, lessonFocusLine, type LessonViewProps } from "./lesson-view";
@@ -76,6 +79,29 @@ export default function PhoneLesson(props: LessonViewProps) {
       },
     });
   }, [onAsk, aside]);
+
+  // A hold on an aside's receipt row (reader/AsideCard.tsx marks each with its
+  // thread id) offers to delete that aside. The lesson only.
+  const asideDelete = aside ? undefined : props.asideDelete;
+  const rowHold = useHoldDelete({
+    host: surface,
+    attr: "data-aside-id",
+    enabled: asideDelete !== undefined,
+    subjectOf: (key) => {
+      if (!asideDelete) return null;
+      const row = surface.current?.querySelector(`[data-aside-id="${CSS.escape(key)}"]`);
+      return {
+        kind: "aside",
+        bookId: props.bookId,
+        topicId: asideDelete.topicId,
+        asideId: key,
+        question: row?.getAttribute("title") ?? "",
+      };
+    },
+    presentKeys: [],
+    onNotice: (kind, line) => asideDelete?.onNotice(kind, line),
+    onChanged: () => asideDelete?.onChanged(),
+  });
 
   // A lesson that moved on is a lesson the held paragraph may no longer be in.
   useEffect(() => setHeld(null), [props.messages]);
@@ -213,6 +239,17 @@ export default function PhoneLesson(props: LessonViewProps) {
           </Button>
         </PopoverContent>
       </Popover>
+      <HoldMenu {...rowHold.menu} />
+      {rowHold.ask && (
+        <ConfirmDestructiveDialog
+          title={rowHold.ask.words.title}
+          description={rowHold.ask.words.description}
+          actionLabel={rowHold.ask.words.action}
+          open
+          onOpenChange={(open) => !open && rowHold.endAsk()}
+          onConfirm={rowHold.confirm}
+        />
+      )}
       <PhoneChapterSheet
         open={chaptersOpen}
         chapters={props.chapters}

@@ -49,8 +49,11 @@ function AsideReceiptRow({
       variant="ghost"
       size="footnote"
       title={item.question}
+      // What the phone lesson's hold finds the row by, to offer deleting it
+      // (phone/use-hold.ts sets data-held and data-leaving on it).
+      data-aside-id={item.threadId}
       onClick={onOpen}
-      className="w-full items-baseline justify-start gap-2 text-left text-muted-foreground"
+      className="w-full items-baseline justify-start gap-2 text-left text-muted-foreground transition-opacity duration-200 data-held:relative data-held:z-21 data-held:bg-card data-held:ring-2 data-held:ring-accent-line data-leaving:opacity-0"
     >
       <span className={LABEL}>Aside</span>
       {anchor !== "" && (

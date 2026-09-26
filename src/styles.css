@@ -530,7 +530,8 @@ body {
    MessageList.tsx), so the reader's own messages, the composer and the aside's
    conversation stay ordinary selectable text. Inherited into everything the
    reply renders, which is what WebKit reads (docs/pitfall/49, 262). */
-[data-lesson-press] [data-reply-ts] {
+[data-lesson-press] [data-reply-ts],
+[data-lesson-press] [data-aside-id] {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
