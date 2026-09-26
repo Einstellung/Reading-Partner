@@ -17,6 +17,7 @@
 // from a domain: this is what an agent turn's ending is, not how a row is drawn.
 // The rows are taken structurally, so each surface keeps its own row type.
 
+import type { MessageOrigin } from "../platform/app/threads";
 import {
   appendRunningTool,
   relabelRunningTool,
@@ -166,6 +167,9 @@ export interface TurnRow {
   // The app's remark about the turn (see refusalRow above). Display-only.
   notice?: string;
   tools?: ToolStatus[];
+  // The delegated run this row answers (platform/app/threads.ts). Set only by
+  // the reading call, which is the only surface a run is delivered into.
+  origin?: MessageOrigin;
 }
 
 export type RowChange =
@@ -197,7 +201,10 @@ export type RowChange =
   // never in `text`.
   | { kind: "refusal"; text: string }
   // The stop button: the half sentence stays, as a finished row.
-  | { kind: "stopped"; text: string };
+  | { kind: "stopped"; text: string }
+  // A delegated run was handed to the model before the row had a word in it,
+  // so this row is the answer to it (docs/72). The row goes on being written.
+  | { kind: "origin"; origin: MessageOrigin };
 
 export function applyRowChange<M extends TurnRow>(row: M, change: RowChange): M {
   switch (change.kind) {
@@ -256,5 +263,7 @@ export function applyRowChange<M extends TurnRow>(row: M, change: RowChange): M 
         notice: undefined,
         tools: undefined,
       };
+    case "origin":
+      return { ...row, origin: change.origin };
   }
 }

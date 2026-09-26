@@ -510,6 +510,14 @@ test("every way a turn ends clears the phase", () => {
   expect(endings.map((e) => applyRowChange(row, e).phase)).toEqual(endings.map(() => undefined));
 });
 
+test("a row marked with a run keeps being written", () => {
+  const row = ai(1, "so", { streaming: true, phase: "writing" });
+  expect(applyRowChange(row, { kind: "origin", origin: { runId: "r-1" } })).toEqual({
+    ...row,
+    origin: { runId: "r-1" },
+  });
+});
+
 // The registry's copy of the row and the one on screen are patched separately;
 // they stay in step only because one function applies the change to both.
 test("a change nothing matches hands the row back untouched", () => {
