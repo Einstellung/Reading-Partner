@@ -10,6 +10,8 @@ developer.apple.com → Account → Certificates, Identifiers & Profiles → Ide
 - Description 随意(如 Reading Partner)。
 - Capabilities 全部保持默认,不勾。
 
+分享扩展要的两个 App Group 和扩展 App ID 另见 [78](./78-分享.md) 的「开工前」。
+
 ## 2. App Store Connect 建 App 条目(一次性)
 
 appstoreconnect.apple.com → My Apps → 加号 → New App。

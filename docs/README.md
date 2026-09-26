@@ -77,6 +77,7 @@
 - [50 删除](./platform/50-删除.md) — 删除一本书与同步的删除模型
 - [59 同步：持有清单与裁决](./platform/59-同步：持有清单与裁决.md) — 按持有清单裁决的同步模型
 - [76 桌面自动更新](./platform/76-桌面自动更新.md) — 桌面版从 GitHub Releases 自更新
+- [78 分享](./platform/78-分享.md) — iOS 双向分享：Share Extension 进 Lumen 对话和书库，openin 往外交文字和链接
 
 ## pitfall
 
