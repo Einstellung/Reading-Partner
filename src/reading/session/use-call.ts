@@ -1165,7 +1165,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
   const keepPartial = useCallback((live: LiveTurn<M>) => {
     const partial = live.message.text.trim();
     if (partial) {
-      appendOwn(live.home, live.threadId, { role: "ai", text: partial, ts: live.message.ts });
+      const { ts, origin } = live.message;
+      appendOwn(live.home, live.threadId, { role: "ai", text: partial, ts, ...(origin ? { origin } : {}) });
     }
     live.onSettled?.();
     return partial;

@@ -234,6 +234,36 @@ test("a delivered row the reader then steers goes into the file still marked wit
   }
 });
 
+test("stopped mid-reply to a run delivered mid-answer: the kept half is still marked with the run", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    act(() => r.options().onDelta("because"));
+    const waiting = deliverIntoReadingTurn({ origin, bell, runId: "r-1" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    act(() => r.land(0));
+    await act(async () => {
+      await waiting;
+    });
+    act(() => r.options().onDelta("the literature"));
+
+    await act(async () => {
+      view.result.current.stop();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(r.stored.map((m) => [m.role, m.text, m.origin])).toEqual([
+      ["user", "why this?", undefined],
+      ["ai", "because", undefined],
+      ["ai", "the literature", { runId: "r-1" }],
+    ]);
+  } finally {
+    r.restore();
+  }
+});
+
 test("a turn that ended before the boundary drained it answers no bell", async () => {
   const r = rig();
   try {
