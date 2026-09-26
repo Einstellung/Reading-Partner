@@ -50,6 +50,12 @@ export interface FlowReaderPaneProps {
   /** The type and paper the column mounts at, so it never starts at a default
    *  the reader has already moved off. */
   display: FlowDisplay;
+  /**
+   * The width of the left band the shell's back gesture owns. In the paged
+   * view a touch starting there is left to the shell; elsewhere a swipe to the
+   * right turns back a page.
+   */
+  backEdgePx?: number;
   onView: (view: FlowReaderView) => void;
   onInitialized: () => void;
   onError: (e: Error) => void;

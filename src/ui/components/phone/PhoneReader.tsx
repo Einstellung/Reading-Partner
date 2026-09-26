@@ -32,6 +32,7 @@ import {
   writeFlowDisplay,
   type FlowDisplay,
 } from "../../../reading/epub/flow-display";
+import { EDGE_ZONE } from "./edge-back-gesture";
 import { browserPrefStore } from "../base/pref-store";
 import { IconTrash } from "../base/icons";
 import { cn } from "../lib/utils";
@@ -207,6 +208,7 @@ export default function PhoneReader(props: {
             viewState={book.viewState}
             tool={flowTool(tool)}
             display={display}
+            backEdgePx={EDGE_ZONE}
             className="absolute inset-0"
             onView={(view) => {
               viewRef.current = view;

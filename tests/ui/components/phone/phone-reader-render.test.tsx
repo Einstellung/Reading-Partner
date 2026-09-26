@@ -420,6 +420,7 @@ test("a book opens at the settings the reader left, not at the default", async (
   await openReader();
   // The pane was mounted with them: no 17px frame first, and nothing pushed in
   // after.
-  expect(displays).toEqual([{ fontPx: 21, lineHeight: 1.4, padX: 36, paper: "green" }]);
+  // A slot written before the paged mode existed reads as the scrolled column.
+  expect(displays).toEqual([{ fontPx: 21, lineHeight: 1.4, padX: 36, paper: "green", mode: "scroll" }]);
   localStorage.removeItem(FLOW_DISPLAY_KEY);
 });
