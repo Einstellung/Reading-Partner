@@ -196,9 +196,12 @@ jobs:
           xcrun altool --upload-app --type ios --file "$IPA" \
             --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
 
-      # Keep the ipa for post-mortems even when the upload step fails.
+      # Keep the ipa for post-mortems even when the upload step fails. Allowed
+      # to fail itself (artifact storage can run out) so it never fails the job
+      # and keeps `distribute` from running.
       - name: Archive the ipa
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: ios-ipa

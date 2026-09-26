@@ -221,13 +221,6 @@ jobs:
           echo "staged: $OUT ($(du -h "$OUT" | cut -f1))"
           echo "APK_NAME=$OUT" >> "$GITHUB_ENV"
 
-      - name: Upload the signed APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: android-apk
-          path: ${{ env.APK_NAME }}
-          if-no-files-found: error
-
       # Only when release.yml called us with a tag. The release is the one
       # tauri-action created for the desktop bundles, so this job must run after
       # it; --clobber keeps a re-run idempotent.
@@ -236,6 +229,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ inputs.release_tag }}" "$APK_NAME" --clobber
+
+      # After the release upload, and allowed to fail: artifact storage can run
+      # out, and the APK on the release is the product.
+      - name: Upload the signed APK
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-apk
+          path: ${{ env.APK_NAME }}
+          if-no-files-found: error
 
       - name: Dump build tree on failure
         if: failure()
