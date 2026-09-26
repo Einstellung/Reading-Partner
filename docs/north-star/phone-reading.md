@@ -8,7 +8,9 @@
 
 ## 已经做的（不属于北极星）
 
-显示设置 Aa sheet：字号、行距、边距、四种纸色含深色，手机阅读屏放开深色；只做滚动。Aa 按钮顶掉笔架上的导航锁那一格。已做，随 v0.21.0 发出，定案见 [70](../reading/70-手机读EPUB.md)。
+显示设置 Aa sheet：字号、行距、边距、四种纸色含深色，手机阅读屏放开深色。Aa 按钮顶掉笔架上的导航锁那一格。已做，随 v0.21.0 发出，定案见 [70](../reading/70-手机读EPUB.md)。
+
+左右翻页：Aa 里开关切换滚动和翻页，一个 spine 文档排成 CSS 列一列一屏，手势照搬 iPad 纸页，存盘和页码仍是分页表 v2。第一片已做，跨页划线和引文回书是第二片，定案见 [79](../reading/79-手机EPUB翻页.md)。
 
 ### PDF 上手机
 
@@ -27,10 +29,6 @@ PDFKit 插件路线关掉。
 依据：[pdfium-on-iphone](../research/pdfium-on-iphone.md)（引擎跑得动，但 fit-width 下正文 1.1mm 高、WebContent 峰值 700-760MB、不嵌字体的中文不出字）、[pdfkit-plugin-route](../research/pdfkit-plugin-route.md)（15-20 个新文件跨三种语言，原生视图叠 webview 的 hit-test 无先例，不解决字号问题，Android 分叉）、[pdf-reflow-on-phone](../research/pdf-reflow-on-phone.md)（重排正文能读，公式、无框线表格、标题页三处错法）。
 
 ## 认定要做、这次不做的
-
-### 左右翻页
-
-网文阅读器的默认形态，我们只有滚动。要把每个 spine 文档排成 CSS 列一列一屏，和 `src/reading/epub/page-ruler.ts` 的量尺同源；自己的坐标要和分页表 v2（[64](../reading/64-epub纸页.md)）对齐，块号仍是引用坐标。这是这批活里最贵的一件，单独做。
 
 ### Marks 列表
 

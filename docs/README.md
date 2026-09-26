@@ -19,6 +19,7 @@
 - [70 手机读EPUB](./reading/70-手机读EPUB.md) — 手机上的 EPUB 重排阅读与划线
 - [74 手机PDF课堂](./reading/74-手机PDF课堂.md) — 手机打开 PDF 直接进 AI 带读的课堂
 - [77 手机EPUB课堂](./reading/77-手机EPUB课堂.md) — 手机读 EPUB 时进和 iPad 同一堂书级课堂
+- [79 手机EPUB翻页](./reading/79-手机EPUB翻页.md) — 手机 EPUB 左右翻页，屏页与分页表的换算
 
 ## soul
 
