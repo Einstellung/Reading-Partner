@@ -23,12 +23,14 @@ export function useViewportSize(): ViewportSize {
 	const [size, setSize] = useState<ViewportSize>(read);
 	useEffect(() => {
 		// Same value, same object: a keyboard-induced scroll that leaves the size
-		// alone must not re-run every panel's layout effect.
-		const update = () =>
-			setSize((prev) => {
-				const next = read();
-				return prev.width === next.width && prev.height === next.height ? prev : next;
-			});
+		// alone must not re-run every panel's layout effect. Read here, not in the
+		// updater: React replays an updater on every render until the updates
+		// queued before it have rendered, and one that reads the viewport hands
+		// each replay a new object (docs/pitfall/457).
+		const update = () => {
+			const next = read();
+			setSize((prev) => (prev.width === next.width && prev.height === next.height ? prev : next));
+		};
 		// Rotation and window resizing fire on window; the keyboard and the address
 		// bar only fire on the visual viewport, and iOS pairs resize with scroll.
 		window.addEventListener("resize", update);

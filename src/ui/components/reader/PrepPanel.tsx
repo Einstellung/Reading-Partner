@@ -17,7 +17,7 @@
 //
 // Plain and functional by design — visibility over polish. Tailwind-only.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { PrepKind } from "../../../reading/prep";
 import type {
   ChapterSpineActivity,
@@ -33,6 +33,7 @@ import type {
 import { CitationContext, Markdown } from "../markdown/Markdown";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { useKeyboardRoom } from "../common/useKeyboardInset";
 
 // "1234" -> "1.2k", "812" -> "812". Keeps the liveness line compact.
 function compactChars(chars: number): string {
@@ -657,16 +658,26 @@ function StartPrep({ kind, onStart }: { kind: PrepKind; onStart(): void }) {
 }
 
 export default function PrepPanel({ kind, papers, chapters }: PrepPanelProps) {
+  // The sidebar runs to the bottom of the screen and the paper half's field is
+  // docked there, so the keyboard would cover it.
+  const keyboard = useKeyboardRoom();
+  let panel: ReactNode;
   if (kind === "papers") {
-    return papers.snapshot?.state ? (
+    panel = papers.snapshot?.state ? (
       <PaperPrep papers={papers} />
     ) : (
       <StartPrep kind={kind} onStart={papers.onStartPrep} />
     );
+  } else {
+    panel = chapters.snapshot?.state ? (
+      <ChapterPrep chapters={chapters} />
+    ) : (
+      <StartPrep kind={kind} onStart={chapters.onGenerate} />
+    );
   }
-  return chapters.snapshot?.state ? (
-    <ChapterPrep chapters={chapters} />
-  ) : (
-    <StartPrep kind={kind} onStart={chapters.onGenerate} />
+  return (
+    <div className="h-full" style={{ paddingBottom: keyboard.padding }}>
+      {panel}
+    </div>
   );
 }

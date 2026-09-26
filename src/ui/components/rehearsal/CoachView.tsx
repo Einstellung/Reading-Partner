@@ -17,6 +17,7 @@ import { CitationContext } from "../markdown/Markdown";
 import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";
 import { useCoach } from "./useCoach";
+import { useKeyboardRoom } from "../common/useKeyboardInset";
 
 export default function CoachView(props: {
   outlineId: string;
@@ -32,10 +33,12 @@ export default function CoachView(props: {
   onBack(): void;
 }) {
   const coach = useCoach(props.outlineId, props.topicName, props.passKey ?? 0);
+  // The composer is docked at the bottom, so the keyboard would cover it.
+  const keyboard = useKeyboardRoom();
 
   return (
     <CitationContext.Provider value={null}>
-      <div className="absolute inset-0 flex flex-col bg-background">
+      <div className="absolute inset-0 flex flex-col bg-background" style={{ paddingBottom: keyboard.padding }}>
         <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-2">
           <Button
             type="button"

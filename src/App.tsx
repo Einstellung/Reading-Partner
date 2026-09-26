@@ -64,6 +64,7 @@ import { readerTool } from "./ui/components/reader/reader-tool";
 import AnnotationPopup from "./ui/components/reader/AnnotationPopup";
 import CallBubble from "./ui/components/chat/CallBubble";
 import CallView from "./ui/components/chat/CallView";
+import { KeyboardShell } from "./ui/components/common/KeyboardShell";
 import type { ChatMarkHost } from "./ui/components/chat/ChatMarkLayer";
 import ReadingPipCard from "./ui/components/chat/ReadingPipCard";
 import ChatPipCard from "./ui/components/chat/ChatPipCard";
@@ -1321,8 +1322,11 @@ export default function App() {
     <QuoteCheckContext.Provider value={verifyQuote}>
     {/* p-safe: the insets (iPad, viewport-fit=cover). box-sizing:border-box
         keeps the padding inside the full-height shell. Fixed overlays are not
-        covered by it and pad themselves — see docs/pitfall/74. */}
-    <div className="flex flex-col h-full p-safe">
+        covered by it and pad themselves — see docs/pitfall/74.
+        KeyboardShell: the iPad's first keyboard scrolls the whole document up
+        by its height (docs/pitfall/443); the shell moves back into view without
+        changing size, so neither reader beside the chat is laid out again. */}
+    <KeyboardShell className="relative flex flex-col h-full p-safe">
       {/* z-10: the color palette drops out of the header into the reader area,
           and <main> is positioned too — without this it would paint over it.
           Three sections: left = navigation, center = tool group, right = AI +
@@ -1734,7 +1738,7 @@ export default function App() {
           onClose={() => setReaderSettings(false)}
         />
       )}
-    </div>
+    </KeyboardShell>
     </QuoteCheckContext.Provider>
     </FigureContext.Provider>
     </PrepSlugContext.Provider>

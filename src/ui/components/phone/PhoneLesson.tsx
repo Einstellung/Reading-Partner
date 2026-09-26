@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import CallView from "../chat/CallView";
+import { useShellKeyboard } from "../common/useKeyboardInset";
 import { CitationModeContext } from "../markdown/Markdown";
 import { Button } from "../ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "../ui/popover";
@@ -161,7 +162,10 @@ export default function PhoneLesson(props: LessonViewProps) {
   // The two the reader never has to type. A chip says what a reader would have
   // said, so it sends a line and not a command (docs/09). An aside has none:
   // the reader is there about one sentence, and the chips are about the lesson.
-  const chips = props.aside ? undefined : (
+  // A phone on its side with the keyboard up has no room for them either: they
+  // go with the bar (CallView), for the composer and a line of the lesson.
+  const cramped = useShellKeyboard()?.cramped ?? false;
+  const chips = props.aside || cramped ? undefined : (
     <div className="mb-2 flex flex-wrap gap-2">
       {LESSON_CHIPS.map((chip) => (
         <Button

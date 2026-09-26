@@ -19,8 +19,7 @@ import { MessageList } from './MessageList';
 import type { ChatMarkHost } from './ChatMarkLayer';
 import IntentChips from './IntentChips';
 import DeleteThreadButton from './DeleteThreadButton';
-import { useKeyboardInset, useShellKeyboard } from '../common/useKeyboardInset';
-import { coveredPadding } from '../common/keyboard-frame';
+import { useKeyboardRoom } from '../common/useKeyboardInset';
 import type { PendingImage, ThreadMessage } from './types';
 import type { CardActionHandler } from './chatParts';
 import { Button } from '../ui/button';
@@ -150,25 +149,23 @@ export default function CallView({
 	const composerProps = { pendingImages, onRemoveImage, hint, streaming, onStop, voice };
 	// Reserve space for the soft keyboard so the bottom composer stays above it.
 	// box-sizing:border-box shrinks the flex column by this padding, so the message
-	// list gives up the room and the composer rises. 0 on desktop. The phone's
-	// shell says how much of it the keyboard covers; the call ends above the home
-	// indicator's inset, which that count includes. Elsewhere the call measures.
-	const shellKeyboard = useShellKeyboard();
-	const measuredInset = useKeyboardInset(shellKeyboard === null);
-	const keyboardUp = shellKeyboard !== null && shellKeyboard > 0;
-	const keyboardPadding = keyboardUp
-		? coveredPadding(shellKeyboard)
-		: measuredInset || undefined;
+	// list gives up the room and the composer rises. None on desktop.
+	// Cramped — a phone on its side with the software keyboard up leaves 168px —
+	// the call drops everything above its list, the host's bar, the corner
+	// controls and the chapter line, for the composer and a line or two of the
+	// conversation. They come back with the keyboard's going.
+	const keyboard = useKeyboardRoom();
+	const cramped = keyboard.cramped;
 
 	return (
 		<div
 			className="relative flex h-full w-full flex-col bg-chat-surface [--chat-bubble-bg:var(--chat-bubble)] [--chat-code-bg:var(--chat-code)]"
-			style={{ paddingBottom: keyboardPadding }}
+			style={{ paddingBottom: keyboard.padding }}
 		>
-			{header}
+			{!cramped && header}
 
 			{/* The corner controls, for a call that was not given a bar of its own. */}
-			{!header && (
+			{!header && !cramped && (
 			<div className="absolute left-4 top-4 z-10 flex items-center gap-1">
 				{/* An aside's one control is the way back to the lesson it came out
 				    of. What it was opened on is not quoted beside it: a reader can
@@ -202,7 +199,7 @@ export default function CallView({
 
 			{/* An aside never carries a chapter focus of its own — it reads its
 			    parent's — so this slot is the non-aside's alone. */}
-			{!aside && chapterFocus && <ChapterFocusBar {...chapterFocus} />}
+			{!aside && !cramped && chapterFocus && <ChapterFocusBar {...chapterFocus} />}
 
 			{empty ? (
 				<Scope className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
@@ -230,8 +227,9 @@ export default function CallView({
 					    top-3), not just the hang-up button — below that the first message
 					    renders under the card. A call with a bar of its own has neither,
 					    and reserving that band under a bar would open the transcript a
-					    third of a phone screen down. */}
-					<div className={`min-h-0 flex-1 overflow-y-auto px-4 ${header ? 'pt-4' : 'pt-36'}`}>
+					    third of a phone screen down. Nor does a cramped call, which has
+					    dropped its controls for the room. */}
+					<div className={`min-h-0 flex-1 overflow-y-auto px-4 ${header || cramped ? 'pt-4' : 'pt-36'}`}>
 						<MessageList
 							messages={messages}
 							size="lg"
@@ -244,7 +242,7 @@ export default function CallView({
 					{/* On the keyboard the composer sits just above it: the room under it
 					    at rest is for the thumb and the home indicator, which the
 					    keyboard covers. */}
-					<div key={composerKey} className={`px-4 ${keyboardUp ? 'pb-2' : 'pb-6'}`} ref={composerSlot}>
+					<div key={composerKey} className={`px-4 ${keyboard.up ? 'pb-2' : 'pb-6'}`} ref={composerSlot}>
 						<div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
 							{footer}
 							<Composer onSend={onSend} placeholder="Reply…" pill {...composerProps} />

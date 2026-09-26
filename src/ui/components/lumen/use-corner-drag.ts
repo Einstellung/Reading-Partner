@@ -110,15 +110,16 @@ export function useCornerDrag(composerLiftPx: number): CornerDrag {
   // The window the corner is being dragged in. A rotation changes both the
   // travel and which edge carries an inset, so the two are read together.
   useEffect(() => {
-    const read = () =>
-      setFrame((was) => {
-        const next = windowFrame(measureSafeAreaInsets());
-        return was.width === next.width &&
-          was.height === next.height &&
-          sameInsets(was.insets, next.insets)
+    // Measured here, not in the updater, which React may replay on renders to
+    // come (docs/pitfall/457).
+    const read = () => {
+      const next = windowFrame(measureSafeAreaInsets());
+      setFrame((was) =>
+        was.width === next.width && was.height === next.height && sameInsets(was.insets, next.insets)
           ? was
-          : next;
-      });
+          : next,
+      );
+    };
     read();
     window.addEventListener("resize", read);
     window.addEventListener("orientationchange", read);
