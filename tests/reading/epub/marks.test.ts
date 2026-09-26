@@ -24,6 +24,7 @@ import {
   rectsHit,
   shouldAppendInkPoint,
   showsThroughBody,
+  lineBands,
   underlineBand,
   unionRect,
   visibleRects,
@@ -202,6 +203,56 @@ describe("what is painted for a stroke", () => {
     ]);
     expect(box).toEqual({ left: 60, top: 100, width: 200, height: 50 });
     expect(unionRect([])).toBeNull();
+  });
+});
+
+// Range.getClientRects() on "…to tempt <em>me</em>; and I am…" (docs/pitfall/444):
+// the <em> box and the text inside it come back as two rects over one word.
+const ITALIC_LINE = [
+  { left: 60, top: 100, width: 180, height: 22 },
+  { left: 240, top: 100, width: 30, height: 22 },
+  { left: 240.4, top: 100.5, width: 29, height: 21 },
+  { left: 270, top: 100, width: 200, height: 22 },
+];
+
+describe("each spot of a line is painted once", () => {
+  test("a word in its own element and its text become one band with the line", () => {
+    expect(lineBands(ITALIC_LINE)).toEqual([{ left: 60, top: 100, width: 410, height: 22 }]);
+  });
+
+  test("lines stay lines, even when a tight line height lets their boxes touch", () => {
+    const bands = lineBands([
+      { left: 60, top: 100, width: 400, height: 22 },
+      { left: 60, top: 120, width: 300, height: 22 },
+    ]);
+    expect(bands).toEqual([
+      { left: 60, top: 100, width: 400, height: 22 },
+      { left: 60, top: 120, width: 300, height: 22 },
+    ]);
+  });
+
+  test("a real gap on a line stays a gap", () => {
+    const bands = lineBands([
+      { left: 300, top: 100, width: 40, height: 22 },
+      { left: 60, top: 100, width: 100, height: 22 },
+    ]);
+    expect(bands).toEqual([
+      { left: 60, top: 100, width: 100, height: 22 },
+      { left: 300, top: 100, width: 40, height: 22 },
+    ]);
+  });
+
+  test("the quote band and a highlight both paint the merged line", () => {
+    const owner = new DOMParser().parseFromString("<html><body></body></html>", "text/html");
+    const painter = createMarkPainter(owner);
+    const quote = owner.createElement("div");
+    painter.drawQuote(quote, ITALIC_LINE);
+    expect(quote.children.length).toBe(1);
+    for (const kind of ["highlight", "underline"] as const) {
+      const marks = owner.createElement("div");
+      painter.drawStroke(marks, kind, ITALIC_LINE, "#ffd400");
+      expect(marks.children.length).toBe(1);
+    }
   });
 });
 

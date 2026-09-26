@@ -149,6 +149,50 @@ export function underlineBand(r: PageRect, thickness = UNDERLINE_THICKNESS): Pag
   };
 }
 
+/**
+ * A range's rects as one band per run of words on a line, so a translucent
+ * paint covers every spot once.
+ *
+ * `Range.getClientRects()` returns an element the range wholly contains as a
+ * box of its own and its text as another: an italic word inside a quote comes
+ * back twice, and painting both doubles the colour over it (docs/pitfall/444).
+ * Rects sharing a line (vertically overlapping by at least half the shorter)
+ * that overlap or touch are merged; a real gap on a line stays a gap, and a
+ * tight line height that lets two lines' boxes overlap by a sliver keeps them
+ * two lines.
+ */
+export function lineBands(rects: readonly PageRect[]): PageRect[] {
+  const TOUCH = 0.5;
+  const sorted = [...rects].sort((a, b) => a.top - b.top || a.left - b.left);
+  const lines: PageRect[][] = [];
+  for (const r of sorted) {
+    const line = lines.find((l) => {
+      const top = Math.min(...l.map((x) => x.top));
+      const bottom = Math.max(...l.map((x) => x.top + x.height));
+      const height = bottom - top;
+      const shared = Math.min(bottom, r.top + r.height) - Math.max(top, r.top);
+      return shared >= Math.min(height, r.height) / 2;
+    });
+    if (line) line.push(r);
+    else lines.push([r]);
+  }
+  const out: PageRect[] = [];
+  for (const line of lines) {
+    line.sort((a, b) => a.left - b.left);
+    let band: PageRect | null = null;
+    for (const r of line) {
+      if (band && r.left <= band.left + band.width + TOUCH) {
+        band = unionRect([band, r])!;
+      } else {
+        if (band) out.push(band);
+        band = { ...r };
+      }
+    }
+    if (band) out.push(band);
+  }
+  return out;
+}
+
 // ------------------------------------------------------------ hit testing ---
 
 /** How far outside a mark a press still counts as a press on it. */
