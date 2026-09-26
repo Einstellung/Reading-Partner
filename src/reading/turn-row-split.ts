@@ -21,6 +21,8 @@ export interface RowOrigin {
 export interface RowToPersist {
   text: string;
   ts: number;
+  /** Absent on an ordinary row, as on the thread message it becomes. */
+  origin?: RowOrigin;
 }
 
 /** Where the next thing written lands. `split` is set when that opens a row. */
@@ -82,7 +84,7 @@ export function createRowSplit(): RowSplit {
     if (!head || head === rowPersisted) return null;
     persisted.push(head);
     rowPersisted = head;
-    return { text: head, ts: rowTs };
+    return { text: head, ts: rowTs, ...(rowOrigin ? { origin: rowOrigin } : {}) };
   };
 
   return {

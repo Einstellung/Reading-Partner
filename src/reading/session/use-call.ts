@@ -572,7 +572,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const steering = createSteering((lines) => {
       const head = (liveTurns.get(threadId)?.message.text ?? "").trim();
       const down = rows.steered(head);
-      if (down) appendOwn(home, threadId, { role: "ai", text: down.text, ts: down.ts });
+      if (down) appendOwn(home, threadId, { role: "ai", ...down });
       for (const line of lines) {
         appendOwn(home, threadId, { role: "user", text: line.text, ts: line.ts });
         dispatch({ type: "row-delivered", threadId, ts: line.ts });
@@ -588,7 +588,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     const delivered = createDelivered((runId) => {
       const head = (liveTurns.get(threadId)?.message.text ?? "").trim();
       const down = rows.delivered(head, runId);
-      if (down) appendOwn(home, threadId, { role: "ai", text: down.text, ts: down.ts });
+      if (down) appendOwn(home, threadId, { role: "ai", ...down });
     });
 
     // A quiet call is not named on screen, so the phase stays where it was
