@@ -2,18 +2,17 @@
 
 ## 愿景
 
-同步今天停在档 1：整棵树对拉，不推断删除。[59](../platform/59-同步：持有清单与裁决.md) 定了往上三档——档 2 按持有清单推断删除，档 3 线程按消息合并，档 4 冲突交给一个 agent 裁决。
+同步今天停在档 1：整棵树对拉，不推断删除。[59](../platform/59-同步：持有清单与裁决.md) 定了往上三档——档 2 按持有清单推断删除，档 3 线程按消息合并，档 4 冲突交给一个 agent 裁决。档 3 已落地（`src/platform/sync/merge/messages.ts`），混版期会抖，要单独发一版。
 
 ## 为什么现在不做
 
-档 2 翻开前要先补 `retired` 的生产端，翻早了会把路径读成删除。档 3 和档 4 各是一轮活，没有用户在催；档 4 过去等 legion，现在不等了。
+档 2 翻开前要先补 `retired` 的生产端，翻早了会把路径读成删除。档 4 是一轮活，没有用户在催；过去等 legion，现在不等了。
 
 ## 将来做时已知的事实
 
 - 档 2 的算法和引擎接线全在：`src/platform/sync/infer-deletions.ts`，开关是同一个文件里的 `HOLDINGS_INFER_DELETIONS = false`。
 - 翻开前必须补 `selfHoldings` 的 `retired` 生产端：`src/platform/sync/holdings.ts` 有字段，没人填；范围一收窄，对端会把那些路径读成删除。
 - holdings 的 `app` 字段已经带上（8e1e7351），报告里看得到对端版本。
-- 档 3：`src/palace/kinds.ts` 里四种 threads 行都用 `MAP_THREADS`，合并停在 records 级。59 §5 的 `messages` 策略、消息身份、前缀取长、journal 都没有。
 - 档 4 裁决层没做。59 §6 定了只对 prose、管线形状、以及两台设备抢在 run 文件同步之前怎么收场。
 - 59 §4 说的迁移闸门改成自己设备的树差分没做。
 - [13](../platform/13-账户同步.md) 的「按需与分批」整节没做：按需下载只在手机 EPUB 上有（`src/reading/engine`、`src/ui/components/phone/PhoneShelf.tsx`），桌面和 iPad 的书仍然全量镜像，书架没有「在云端」这个状态。
