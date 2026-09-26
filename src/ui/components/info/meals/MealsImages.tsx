@@ -11,8 +11,8 @@
 
 import { useState } from "react";
 
-import { imageSrc, stripSources } from "../../../info/meals/photos/images";
-import type { IngredientCategory } from "../../../info/meals/plan/types";
+import { imageSrc, stripSources } from "../../../../info/meals/photos/images";
+import type { IngredientCategory } from "../../../../info/meals/plan/types";
 
 function Glyph({ size = 20, children }: { size?: number; children: React.ReactNode }) {
   return (

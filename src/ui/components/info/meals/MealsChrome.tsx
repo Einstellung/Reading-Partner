@@ -5,13 +5,13 @@
 // what its Ask button says are the caller's, because the caller is the one that
 // knows which day it is looking at.
 
-import { openExternal } from "../../../platform/app/external-link";
-import { Button } from "../ui/button";
-import { IconSparkle } from "../base/icons";
-import { cn } from "../lib/utils";
-import type { MealCells } from "../../../info/meals/nutrition/solve";
-import { cellMarks, cellsAriaLabel } from "../../../info/meals/screen/screen-lines";
-import type { TargetsSummary } from "../../../info/meals/screen/view";
+import { openExternal } from "../../../../platform/app/external-link";
+import { Button } from "../../ui/button";
+import { IconSparkle } from "../../base/icons";
+import { cn } from "../../lib/utils";
+import type { MealCells } from "../../../../info/meals/nutrition/solve";
+import { cellMarks, cellsAriaLabel } from "../../../../info/meals/screen/screen-lines";
+import type { TargetsSummary } from "../../../../info/meals/screen/view";
 
 /** The one column all three screens are drawn in: phone width, centred wider. */
 export function MealsColumn({ children }: { children: React.ReactNode }) {

@@ -11,19 +11,19 @@
 
 import { useRef } from "react";
 
-import type { MealsState, ShoppingItem } from "../../../info/meals/plan/types";
-import type { PhotoCache } from "../../../info/meals/photos/dish-photos";
+import type { MealsState, ShoppingItem } from "../../../../info/meals/plan/types";
+import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import {
   aislesOf,
   linesInOrder,
   LONG_LIST,
   orderShoppingLines,
-} from "../../../info/meals/screen/list-order";
-import { isChecked, missed, shoppingItemKey, stillToGet } from "../../../info/meals/plan/shopping";
-import { EMPTY_SHOPPING } from "../../../info/meals/plan/types";
-import { ingredientPicture, shoppingNote, weekdayName } from "../../../info/meals/screen/view";
-import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
+} from "../../../../info/meals/screen/list-order";
+import { isChecked, missed, shoppingItemKey, stillToGet } from "../../../../info/meals/plan/shopping";
+import { EMPTY_SHOPPING } from "../../../../info/meals/plan/types";
+import { ingredientPicture, shoppingNote, weekdayName } from "../../../../info/meals/screen/view";
+import { Button } from "../../ui/button";
+import { Checkbox } from "../../ui/checkbox";
 import { MealsColumn, MealsHeader, PhotoCredit } from "./MealsChrome";
 import { IngredientThumb } from "./MealsImages";
 

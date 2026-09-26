@@ -6,7 +6,7 @@
 
 import { useEffect, useReducer, useRef, useState } from "react";
 
-import { computeTargets, type Profile } from "../../../info/meals/nutrition/targets";
+import { computeTargets, type Profile } from "../../../../info/meals/nutrition/targets";
 import {
   AVOID_OPTIONS,
   CONSENT_OPTIONS,
@@ -34,11 +34,11 @@ import {
   type OnboardingState,
   type StepId,
   type StepperField,
-} from "../../../info/meals/screen/onboarding";
-import { hostRegion } from "../../../info/meals/region";
-import { targetsSummary } from "../../../info/meals/screen/view";
-import { cn } from "../lib/utils";
-import { Button } from "../ui/button";
+} from "../../../../info/meals/screen/onboarding";
+import { hostRegion } from "../../../../info/meals/region";
+import { targetsSummary } from "../../../../info/meals/screen/view";
+import { cn } from "../../lib/utils";
+import { Button } from "../../ui/button";
 import { MealsColumn, MealsHeader, TargetsCard } from "./MealsChrome";
 
 export interface MealsOnboardingProps {

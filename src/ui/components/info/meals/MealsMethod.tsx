@@ -2,17 +2,17 @@
 // worked through, the food table with each row's source, and the medical and
 // health-data notes. Rendering only; the text is info/meals/screen/method-screen.ts.
 
-import { openExternal } from "../../../platform/app/external-link";
-import { hostRegion } from "../../../info/meals/region";
+import { openExternal } from "../../../../platform/app/external-link";
+import { hostRegion } from "../../../../info/meals/region";
 import {
   HEALTH_DATA_NOTE,
   MEDICAL_NOTE,
   foodTableRows,
   methodSections,
   type TextSegment,
-} from "../../../info/meals/screen/method-screen";
-import { targetsOf } from "../../../info/meals/plan/solve-week";
-import type { MealsState } from "../../../info/meals/plan/types";
+} from "../../../../info/meals/screen/method-screen";
+import { targetsOf } from "../../../../info/meals/plan/solve-week";
+import type { MealsState } from "../../../../info/meals/plan/types";
 import { MealsColumn, MealsHeader } from "./MealsChrome";
 
 export interface MealsMethodProps {

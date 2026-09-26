@@ -9,19 +9,19 @@
 //
 // None of the bureau's vocabulary appears here. It is what they eat.
 
-import type { Meal, MealsState, ShoppingItem } from "../../../info/meals/plan/types";
-import { FOOT_NOTE } from "../../../info/meals/screen/method-screen";
-import { dayTotalsLine, mealNumbersLine, weekRowNumbers } from "../../../info/meals/screen/screen-lines";
-import { hostRegion } from "../../../info/meals/region";
-import type { PhotoCache } from "../../../info/meals/photos/dish-photos";
+import type { Meal, MealsState, ShoppingItem } from "../../../../info/meals/plan/types";
+import { FOOT_NOTE } from "../../../../info/meals/screen/method-screen";
+import { dayTotalsLine, mealNumbersLine, weekRowNumbers } from "../../../../info/meals/screen/screen-lines";
+import { hostRegion } from "../../../../info/meals/region";
+import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import {
   linesInOrder,
   orderShoppingLines,
   shoppingPreview,
   shoppingStatus,
-} from "../../../info/meals/screen/list-order";
-import { EMPTY_SHOPPING } from "../../../info/meals/plan/types";
-import { planExhausted } from "../../../info/meals/plan/week";
+} from "../../../../info/meals/screen/list-order";
+import { EMPTY_SHOPPING } from "../../../../info/meals/plan/types";
+import { planExhausted } from "../../../../info/meals/plan/week";
 import {
   dishPicture,
   dishThumbnails,
@@ -29,8 +29,8 @@ import {
   ingredientPicture,
   mealName,
   type DayView,
-} from "../../../info/meals/screen/view";
-import { Button } from "../ui/button";
+} from "../../../../info/meals/screen/view";
+import { Button } from "../../ui/button";
 import {
   Cells,
   Chevron,

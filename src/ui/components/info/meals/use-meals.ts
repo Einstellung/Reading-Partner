@@ -7,14 +7,14 @@
 // on a file, and the on-disk list is re-read whenever the AI applies a plan.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { todayLocal } from "../../../info/collect/store";
-import { liveMealsPorts } from "../../../info/meals/live";
-import { setShoppingChecked } from "../../../info/meals/plan/shopping";
-import { markShoppingTripDone } from "../../../info/meals/tools";
-import type { PhotoCache } from "../../../info/meals/photos/dish-photos";
-import { loadMealsPhotos } from "../../../info/meals/photos/photo-store";
-import { loadMeals, saveShopping } from "../../../info/meals/plan/store";
-import type { MealsState } from "../../../info/meals/plan/types";
+import { todayLocal } from "../../../../info/collect/store";
+import { liveMealsPorts } from "../../../../info/meals/live";
+import { setShoppingChecked } from "../../../../info/meals/plan/shopping";
+import { markShoppingTripDone } from "../../../../info/meals/tools";
+import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
+import { loadMealsPhotos } from "../../../../info/meals/photos/photo-store";
+import { loadMeals, saveShopping } from "../../../../info/meals/plan/store";
+import type { MealsState } from "../../../../info/meals/plan/types";
 
 export interface MealsController {
   // Null until info-meals.json has answered. The screen holds on null rather

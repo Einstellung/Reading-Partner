@@ -5,11 +5,11 @@
 
 import { useState } from "react";
 
-import { openExternal } from "../../../platform/app/external-link";
-import type { PhotoCache } from "../../../info/meals/photos/dish-photos";
-import { markDishPhotoBroken } from "../../../info/meals/photos/photo-store";
-import { hostRegion } from "../../../info/meals/region";
-import type { MealsState } from "../../../info/meals/plan/types";
+import { openExternal } from "../../../../platform/app/external-link";
+import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
+import { markDishPhotoBroken } from "../../../../info/meals/photos/photo-store";
+import { hostRegion } from "../../../../info/meals/region";
+import type { MealsState } from "../../../../info/meals/plan/types";
 import {
   dayViewOn,
   dishPhotoCredit,
@@ -20,8 +20,8 @@ import {
   modeWord,
   weekdayName,
   type MealView,
-} from "../../../info/meals/screen/view";
-import { dayMeters, guideLine, macroLine, mealHeading, proteinCell } from "../../../info/meals/screen/screen-lines";
+} from "../../../../info/meals/screen/view";
+import { dayMeters, guideLine, macroLine, mealHeading, proteinCell } from "../../../../info/meals/screen/screen-lines";
 import {
   CardLabel,
   CardLink,
@@ -32,7 +32,7 @@ import {
   PhotoCredit,
 } from "./MealsChrome";
 import { DishImage, IngredientThumb } from "./MealsImages";
-import type { DayView } from "../../../info/meals/screen/view";
+import type { DayView } from "../../../../info/meals/screen/view";
 
 export interface MealsDayProps {
   state: MealsState | null;

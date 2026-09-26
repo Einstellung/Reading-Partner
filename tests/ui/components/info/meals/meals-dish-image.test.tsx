@@ -6,14 +6,14 @@
 // before this. Run: scripts/t.sh tests/ui/components/info/meals-dish-image.test.tsx
 
 import { afterEach, expect, test } from "bun:test";
-import { useDom } from "../../../support/dom";
+import { useDom } from "../../../../support/dom";
 
 const { act, cleanup, fireEvent, render } = await useDom();
 afterEach(cleanup);
 
 // Imported after the window is up, for the reason launch-placeholder.test.tsx
 // gives: react-dom decides once, at evaluation, whether it is in a browser.
-const { DishImage } = await import("../../../../src/ui/components/info/MealsImages");
+const { DishImage } = await import("../../../../../src/ui/components/info/meals/MealsImages");
 
 const CUTOUTS = ["/a.png", "/b.png", "/c.png", "/d.png"];
 
