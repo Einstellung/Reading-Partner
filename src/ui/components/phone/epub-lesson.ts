@@ -7,9 +7,9 @@
 // page otherwise; "chat-pip" is the call left open behind the page, which the
 // phone does not draw at all (no corner cards on this shell).
 
-import type { CallRow, CallView } from "../../../reading/call-state";
+import type { CallRow, CallView } from "../../../reading/turn/call-state";
 import type { TableChapter } from "../../../reading/chapters";
-import type { FlowReaderView } from "../../../reading/epub/flow-contract";
+import type { FlowReaderView } from "../../../reading/epub/flow/flow-contract";
 import type { Figure } from "../../../reading/figures";
 import type { Fulltext } from "../../../fulltext";
 import type { Citation } from "../../../reading/prep";

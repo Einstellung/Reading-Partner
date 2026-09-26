@@ -6,7 +6,7 @@
 
 ## 原因
 
-`readingTurns()` 是模块级单例（`src/reading/live-turns.ts` 顶部就写着为什么：回合要活得比 React 树长）。测试里为了观察回合中途的行为，`runAgentTurn` 被 mock 成一个永不 resolve 的 Promise——于是那条线程上的 live turn 永远不结算，留在注册表里。下一个测试文件用同一个 `threadId`（都是 `"t1"`）挂载 hook，`send` 看见这条线程上有回合在跑，就按 docs/72 走 steer，不再起新回合。
+`readingTurns()` 是模块级单例（`src/reading/turn/live-turns.ts` 顶部就写着为什么：回合要活得比 React 树长）。测试里为了观察回合中途的行为，`runAgentTurn` 被 mock 成一个永不 resolve 的 Promise——于是那条线程上的 live turn 永远不结算，留在注册表里。下一个测试文件用同一个 `threadId`（都是 `"t1"`）挂载 hook，`send` 看见这条线程上有回合在跑，就按 docs/72 走 steer，不再起新回合。
 
 在这条规则进来之前 `start()` 只是 abort 掉旧的再覆盖，所以这个泄漏一直存在但没有症状。
 

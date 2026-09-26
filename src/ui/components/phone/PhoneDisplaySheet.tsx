@@ -22,7 +22,7 @@ import {
   flowPaperSwatch,
   stepFlowFont,
   type FlowDisplay,
-} from "../../../reading/epub/flow-display";
+} from "../../../reading/epub/flow/flow-display";
 import { cn } from "../lib/utils";
 import { Button } from "../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../ui/dialog";

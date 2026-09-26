@@ -44,8 +44,8 @@ import { listAllTalkOutlines, talkOutlineOfRetell } from "../talk/store";
 import type { TalkOutline } from "../talk/types";
 import { deleteRehearsal, listAllRehearsals } from "../rehearsal/store";
 import type { Rehearsal } from "../rehearsal/types";
-import { loadSavedArticles, setSavedArticleTopic } from "../saved-articles";
-import type { SavedArticle } from "../saved-articles";
+import { loadSavedArticles, setSavedArticleTopic } from "../saved/saved-articles";
+import type { SavedArticle } from "../saved/saved-articles";
 
 /** One conversation file, reduced to what clearing a filed topic needs. */
 export interface TopicThreadFile {

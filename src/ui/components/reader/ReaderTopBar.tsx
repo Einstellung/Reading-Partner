@@ -5,7 +5,7 @@
 
 import type { RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
-import type { LevelGate } from "../../../reading/call-state";
+import type { LevelGate } from "../../../reading/turn/call-state";
 import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import type { ToolType } from "./types";
 import {

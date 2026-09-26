@@ -3,7 +3,7 @@
 // sidebar, no prep panel, no corner cards.
 //
 // The pane is a prop rather than an import. It is written against the contract
-// (reading/epub/flow-contract.ts) and the shell against the same contract, so
+// (reading/epub/flow/flow-contract.ts) and the shell against the same contract, so
 // the two were built apart; the shell that mounts this screen is where they
 // meet.
 //
@@ -26,12 +26,12 @@ import type {
 import type {
   FlowReaderPaneProps,
   FlowReaderView,
-} from "../../../reading/epub/flow-contract";
+} from "../../../reading/epub/flow/flow-contract";
 import {
   readFlowDisplay,
   writeFlowDisplay,
   type FlowDisplay,
-} from "../../../reading/epub/flow-display";
+} from "../../../reading/epub/flow/flow-display";
 import { browserPrefStore } from "../base/pref-store";
 import { IconTrash } from "../base/icons";
 import { cn } from "../lib/utils";

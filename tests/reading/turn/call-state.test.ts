@@ -1,0 +1,701 @@
+// The open call's transitions (src/reading/call-state). Every one of the moves
+// App.tsx used to make with a spread of its own is here, with the guards that
+// used to be implicit in where each of those spreads sat. Pure. Run: bun test.
+
+import { expect, test } from "bun:test";
+import {
+  callReducer,
+  levelGate,
+  mayOpenBookThread,
+  toolInCall,
+  type CallRow,
+  type CallState,
+} from "../../../src/reading/turn/call-state";
+import { applyRowChange, type RowChange } from "../../../src/ai/turn-view/turn-rows";
+
+// A surface's row: CallRow plus something only the render layer knows about, so
+// a transition that dropped it would show up here.
+interface Row extends CallRow {
+  parts?: string[];
+}
+
+const reduce = callReducer<Row>;
+
+function call(over: Partial<CallState<Row>> = {}): CallState<Row> {
+  return {
+    threadId: "t1",
+    annotationId: "mark-1",
+    view: "bubble",
+    anchor: { x: 10, y: 20 },
+    messages: [],
+    ...over,
+  };
+}
+
+const user = (ts: number, text: string): Row => ({ role: "user", text, ts });
+const ai = (ts: number, text: string, over: Partial<Row> = {}): Row => ({ role: "ai", text, ts, ...over });
+
+test("a fresh AI-pen mark opens a bubble, replacing whatever was open", () => {
+  const open = call({ threadId: "old", messages: [user(1, "hi")] });
+  const next = reduce(open, {
+    type: "opened",
+    call: call({ threadId: "new", annotationId: "mark-2", messages: [] }),
+  });
+
+  expect(next?.threadId).toBe("new");
+  expect(next?.view).toBe("bubble");
+  expect(next?.messages).toEqual([]);
+});
+
+test("the book-level thread opens straight to chat-main and is flagged as the book's", () => {
+  const next = reduce(null, {
+    type: "opened",
+    call: call({ threadId: "book", annotationId: "", isBook: true, view: "chat-main" }),
+  });
+
+  expect(next?.isBook).toBe(true);
+  expect(next?.annotationId).toBe("");
+  expect(next?.view).toBe("chat-main");
+});
+
+test("every way out of a call leaves nothing open", () => {
+  expect(reduce(call({ view: "chat-main" }), { type: "closed" })).toBeNull();
+  expect(reduce(null, { type: "closed" })).toBeNull();
+});
+
+test("deleting a mark closes the call anchored on it and no other", () => {
+  const open = call({ annotationId: "mark-1" });
+  expect(reduce(open, { type: "closed-with-mark", annotationId: "mark-1" })).toBeNull();
+  expect(reduce(open, { type: "closed-with-mark", annotationId: "mark-9" })).toBe(open);
+  // The book-level thread has no mark; a deleted mark must not take it down.
+  const book = call({ annotationId: "", isBook: true });
+  expect(reduce(book, { type: "closed-with-mark", annotationId: "mark-1" })).toBe(book);
+});
+
+test("chat takes the whole window from the bubble and from the chat corner card", () => {
+  expect(reduce(call({ view: "bubble" }), { type: "chat-opened" })?.view).toBe("chat-main");
+  expect(reduce(call({ view: "chat-pip" }), { type: "chat-opened" })?.view).toBe("chat-main");
+  expect(reduce(null, { type: "chat-opened" })).toBeNull();
+});
+
+test("chat shrinks to the corner card when the reader is wanted back", () => {
+  const open = call({ view: "chat-main", messages: [ai(1, "here")] });
+  const next = reduce(open, { type: "reading-uncovered" });
+
+  expect(next?.view).toBe("chat-pip");
+  expect(next?.messages).toBe(open.messages);
+});
+
+// The guard that differed between App's two callers. The bubble does not cover
+// the reader, so a citation tapped inside one has nothing to uncover: it jumps
+// the page and the bubble stays where it is.
+test("a bubble is not turned into the chat corner card by a citation", () => {
+  const open = call({ view: "bubble" });
+  expect(reduce(open, { type: "reading-uncovered" })).toBe(open);
+  const pip = call({ view: "chat-pip" });
+  expect(reduce(pip, { type: "reading-uncovered" })).toBe(pip);
+});
+
+test("a thread's stored images land on the rows they belong to", () => {
+  const open = call({ messages: [user(1, "look"), user(2, "and this"), ai(3, "I see")] });
+  const images = new Map([[1, [{ data: "AAA", mediaType: "image/png" as const }]]]);
+  const next = reduce(open, { type: "images-loaded", threadId: "t1", images });
+
+  expect(next?.messages[0].images).toEqual([{ data: "AAA", mediaType: "image/png" }]);
+  expect(next?.messages[1].images).toBeUndefined();
+  expect(next?.messages[2]).toBe(open.messages[2]);
+});
+
+test("images that finished loading for another thread are ignored", () => {
+  const open = call({ messages: [user(1, "look")] });
+  const images = new Map([[1, [{ data: "AAA", mediaType: "image/png" as const }]]]);
+
+  expect(reduce(open, { type: "images-loaded", threadId: "other", images })).toBe(open);
+});
+
+test("a turn starting replaces the rows that hold no answer and clears the retry", () => {
+  const open = call({
+    error: true,
+    messages: [
+      user(1, "why?"),
+      ai(2, "because"),
+      ai(3, "Couldn't reach the model.", { failed: true }),
+      ai(4, "", { notice: "too long to send" }),
+      ai(5, "", { streaming: true }),
+    ],
+  });
+  const row = ai(6, "", { streaming: true });
+  const next = reduce(open, { type: "turn-started", threadId: "t1", row });
+
+  expect(next?.messages.map((m) => m.ts)).toEqual([1, 2, 6]);
+  expect(next?.error).toBe(false);
+});
+
+test("a turn starting on a thread the call has moved off changes nothing", () => {
+  const open = call({ messages: [user(1, "why?")] });
+  const row = ai(2, "", { streaming: true });
+
+  expect(reduce(open, { type: "turn-started", threadId: "other", row })).toBe(open);
+});
+
+test("the reply is written into the AI row of that turn, and nothing else", () => {
+  const open = call({
+    messages: [user(7, "why?"), ai(7, "beca"), ai(8, "another turn")],
+  });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 7,
+    change: { kind: "delta", chunk: "use" },
+  });
+
+  expect(next?.messages[0].text).toBe("why?");
+  expect(next?.messages[1].text).toBe("because");
+  expect(next?.messages[2].text).toBe("another turn");
+});
+
+test("what a turn writes to a closed-over thread is dropped", () => {
+  const open = call({ messages: [ai(1, "half")] });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "other",
+    ts: 1,
+    change: { kind: "delta", chunk: " a sentence" },
+  });
+
+  expect(next).toBe(open);
+});
+
+test("a tool starting keeps what the round wrote and opens a line under it", () => {
+  const open = call({ messages: [ai(1, "let me look", { streaming: true })] });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "tool-start", name: "read_page", label: "Reading p. 4" },
+  });
+
+  expect(next?.messages[0].text).toBe("let me look\n\n");
+  expect(next?.messages[0].tools).toEqual([
+    { name: "read_page", label: "Reading p. 4", state: "running" },
+  ]);
+  expect(next?.messages[0].streaming).toBe(true);
+});
+
+// The shape the reader watches across a tool round (docs/pitfall/291): the first
+// paragraph stays put, the status line is drawn under it while the tool runs, and
+// the second paragraph continues below. The row is text plus a trace, in that
+// order (ui/components/chat/chatParts.ts), so where the line is drawn is the
+// trace's own place and not a third field.
+test("a second round continues under the first, one blank line apart", () => {
+  const changes: RowChange[] = [
+    { kind: "delta", chunk: "Let me check p. 4." },
+    { kind: "tool-start", name: "read_page", label: "Reading p. 4" },
+  ];
+  let open = call({ messages: [ai(1, "", { streaming: true })] });
+  for (const change of changes) {
+    open = reduce(open, { type: "row-changed", threadId: "t1", ts: 1, change })!;
+  }
+  // While the tool runs: the words, then the one status line.
+  expect(open.messages[0].text).toBe("Let me check p. 4.\n\n");
+  expect(open.messages[0].tools?.map((t) => t.state)).toEqual(["running"]);
+
+  const rest: RowChange[] = [
+    { kind: "tool-end", name: "read_page", isError: false },
+    { kind: "delta", chunk: "The page argues" },
+    { kind: "delta", chunk: " the retina is not a camera." },
+  ];
+  for (const change of rest) {
+    open = reduce(open, { type: "row-changed", threadId: "t1", ts: 1, change })!;
+  }
+  expect(open.messages[0].text).toBe(
+    "Let me check p. 4.\n\nThe page argues the retina is not a camera.",
+  );
+  expect(open.messages[0].tools).toEqual([
+    { name: "read_page", label: "Reading p. 4", state: "done" },
+  ]);
+
+  // The answer the loop hands over is the same two paragraphs, so nothing on
+  // screen moves when the turn lands.
+  const landed = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "answer", text: open.messages[0].text },
+  });
+  expect(landed?.messages[0].text).toBe(open.messages[0].text);
+  expect(landed?.messages[0].streaming).toBeUndefined();
+});
+
+// Two tools in one round, and a round that called a tool without writing: one
+// gap, wherever the status lines pile up.
+test("the gap between rounds is opened once", () => {
+  let open = call({ messages: [ai(1, "first", { streaming: true })] });
+  const changes: RowChange[] = [
+    { kind: "tool-start", name: "read_page", label: "Reading p. 4" },
+    { kind: "tool-start", name: "search", label: "Searching" },
+    { kind: "tool-end", name: "read_page", isError: false },
+    { kind: "tool-end", name: "search", isError: false },
+    { kind: "tool-start", name: "read_page", label: "Reading p. 5" },
+    { kind: "tool-end", name: "read_page", isError: false },
+    { kind: "delta", chunk: "second" },
+  ];
+  for (const change of changes) {
+    open = reduce(open, { type: "row-changed", threadId: "t1", ts: 1, change })!;
+  }
+  expect(open.messages[0].text).toBe("first\n\nsecond");
+});
+
+test("a tool that finished is settled in place, and a failed one carries why", () => {
+  const started = call({
+    messages: [
+      ai(1, "", {
+        streaming: true,
+        tools: [
+          { name: "read_page", label: "Reading p. 4", state: "running" },
+          { name: "search", label: "Searching", state: "running" },
+        ],
+      }),
+    ],
+  });
+  const ok = reduce(started, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "tool-end", name: "read_page", isError: false },
+  });
+  const failed = reduce(ok, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "tool-end", name: "search", isError: true },
+  });
+
+  expect(ok?.messages[0].tools?.map((t) => [t.name, t.state])).toEqual([
+    ["read_page", "done"],
+    ["search", "running"],
+  ]);
+  expect(failed?.messages[0].tools).toEqual([
+    { name: "read_page", label: "Reading p. 4", state: "done" },
+    { name: "search", label: "Searching", state: "error" },
+  ]);
+});
+
+test("a sub-agent's progress rewrites its one line instead of adding another", () => {
+  const open = call({
+    messages: [
+      ai(1, "", { tools: [{ name: "research", label: "Researching", state: "running" }] }),
+    ],
+  });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "tool-label", name: "research", label: "Read 3 papers" },
+  });
+
+  expect(next?.messages[0].tools).toEqual([
+    { name: "research", label: "Read 3 papers", state: "running" },
+  ]);
+});
+
+test("the answer landing keeps only the calls that failed, and carries the notice", () => {
+  const open = call({
+    messages: [
+      ai(1, "part", {
+        streaming: true,
+        tools: [
+          { name: "read_page", label: "Reading p. 4", state: "running" },
+          { name: "search", label: "Searching", state: "error" },
+        ],
+      }),
+    ],
+  });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "answer", text: "the whole answer", notice: "left out chapter 2" },
+  });
+  const row = next?.messages[0];
+
+  expect(row?.text).toBe("the whole answer");
+  expect(row?.streaming).toBeFalsy();
+  expect(row?.notice).toBe("left out chapter 2");
+  // The whole trace stays under the answer now, the calls that went fine too.
+  expect(row?.tools?.map((t) => t.state)).toContain("error");
+});
+
+test("a turn that could not reach the model says so in the row and offers a retry", () => {
+  const open = call({
+    messages: [ai(1, "", { streaming: true, tools: [{ name: "search", label: "S", state: "error" }] })],
+  });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "error", text: "Couldn't reach the model." },
+    error: true,
+  });
+  const row = next?.messages[0];
+
+  expect(row?.text).toBe("Couldn't reach the model.");
+  expect(row?.failed).toBe(true);
+  expect(row?.streaming).toBeFalsy();
+  expect(row?.tools).toBeFalsy();
+  expect(next?.error).toBe(true);
+});
+
+test("a refusal is the app talking about the turn, so it never becomes the reply", () => {
+  const open = call({
+    error: true,
+    messages: [ai(1, "", { streaming: true, tools: [{ name: "search", label: "S", state: "error" }] })],
+  });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "refusal", text: "This turn was too big to send." },
+    error: false,
+  });
+  const row = next?.messages[0];
+
+  expect(row?.text).toBe("");
+  expect(row?.notice).toBe("This turn was too big to send.");
+  expect(row?.failed).toBeFalsy();
+  expect(row?.streaming).toBe(false);
+  expect(row?.tools).toEqual([{ name: "search", label: "S", state: "error" }]);
+  expect(next?.error).toBe(false);
+});
+
+test("a change that says nothing about the retry leaves it as it was", () => {
+  const open = call({ error: true, messages: [ai(1, "half", { streaming: true })] });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "delta", chunk: " more" },
+  });
+
+  expect(next?.error).toBe(true);
+});
+
+test("the reader's message goes on the end of the conversation it was typed in", () => {
+  const open = call({ messages: [ai(1, "hello")] });
+  const row = user(2, "why?");
+  const next = reduce(open, { type: "row-appended", threadId: "t1", row });
+
+  expect(next?.messages.map((m) => m.ts)).toEqual([1, 2]);
+  expect(reduce(open, { type: "row-appended", threadId: "other", row })).toBe(open);
+});
+
+test("a run answered into the open conversation lands in it", () => {
+  const open = call({ messages: [user(1, "look into this")] });
+  const row = ai(2, "here is what it found", { id: "t-run" });
+  const next = reduce(open, { type: "row-arrived", threadId: "t1", row });
+
+  expect(next?.messages.map((m) => m.ts)).toEqual([1, 2]);
+  // A conversation that has since moved on is not the one it was written into.
+  expect(reduce(open, { type: "row-arrived", threadId: "other", row })).toBe(open);
+});
+
+test("a row that arrives twice is one row", () => {
+  const open = call({ messages: [ai(2, "here is what it found", { id: "t-run" })] });
+  const again = ai(2, "here is what it found", { id: "t-run" });
+
+  expect(reduce(open, { type: "row-arrived", threadId: "t1", row: again })).toBe(open);
+});
+
+test("arrivals are told apart by id, not by what they say", () => {
+  const open = call({ messages: [ai(2, "done", { id: "t-one" })] });
+  // The same words, at the same second, from a second run.
+  const other = ai(2, "done", { id: "t-two" });
+  const next = reduce(open, { type: "row-arrived", threadId: "t1", row: other });
+
+  expect(next?.messages.map((m) => m.id)).toEqual(["t-one", "t-two"]);
+  // And a row with no id has never been seen: nothing on screen carries one to
+  // compare it against.
+  const idless = ai(3, "from an older file");
+  expect(reduce(next, { type: "row-arrived", threadId: "t1", row: idless })?.messages).toHaveLength(3);
+});
+
+test("the stop button keeps the half sentence as a finished row", () => {
+  const open = call({
+    messages: [ai(1, "half a sen", { streaming: true, tools: [{ name: "s", label: "S", state: "running" }] })],
+  });
+  const next = reduce(open, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 1,
+    change: { kind: "stopped", text: "half a sen" },
+  });
+  const row = next?.messages[0];
+
+  expect(row?.text).toBe("half a sen");
+  expect(row?.streaming).toBeFalsy();
+  expect(row?.tools).toBeFalsy();
+});
+
+test("a turn stopped before it wrote anything leaves no row behind", () => {
+  const open = call({ messages: [user(1, "why?"), ai(1, "", { streaming: true })] });
+  const next = reduce(open, { type: "row-dropped", threadId: "t1", ts: 1 });
+
+  // The reader's message shares the timestamp and is not the row being dropped.
+  expect(next?.messages).toEqual([user(1, "why?")]);
+  expect(reduce(open, { type: "row-dropped", threadId: "other", ts: 1 })).toBe(open);
+});
+
+// Every kind of change rebuilds the row it lands on, and each rebuild is a place
+// the surface's own fields can be dropped. One of them going untested is how a
+// stored card would come back from a reopened thread and then vanish the moment
+// the turn ended.
+test("what only the surface knows about the row survives every change", () => {
+  const changes: RowChange[] = [
+    { kind: "delta", chunk: "!" },
+    { kind: "tool-start", name: "s", label: "S" },
+    { kind: "tool-label", name: "s", label: "still S" },
+    { kind: "tool-end", name: "s", isError: false },
+    { kind: "answer", text: "answered" },
+    { kind: "error", text: "could not be reached" },
+    { kind: "refusal", text: "declined" },
+    { kind: "stopped", text: "half a sen" },
+  ];
+  // A running tool, so the two changes that hand the row back when nothing
+  // matches take their rebuilding path instead.
+  const running = { name: "s", label: "S", state: "running" as const };
+
+  const survived = changes.map((change) => {
+    const open = call({ messages: [ai(1, "recorded", { parts: ["card"], tools: [running] })] });
+    const next = reduce(open, { type: "row-changed", threadId: "t1", ts: 1, change });
+    return [change.kind, next?.messages[0].parts];
+  });
+
+  expect(survived).toEqual(changes.map((c) => [c.kind, ["card"]]));
+  // Directly too: the registry's copy is patched by this function alone.
+  expect(applyRowChange(ai(1, "recorded", { parts: ["card"] }), { kind: "answer", text: "a" }).parts).toEqual([
+    "card",
+  ]);
+});
+
+test("what only the surface knows about the row survives its images arriving", () => {
+  const open = call({ messages: [user(1, "look"), ai(2, "recorded", { parts: ["card"] })] });
+  const images = new Map([[2, [{ data: "AAA", mediaType: "image/png" as const }]]]);
+  const next = reduce(open, { type: "images-loaded", threadId: "t1", images });
+
+  expect(next?.messages[1].parts).toEqual(["card"]);
+  expect(next?.messages[1].images).toEqual([{ data: "AAA", mediaType: "image/png" }]);
+});
+
+// The status line the row draws while it has written nothing (chat/phase-line).
+test("the phase follows the turn: thinking, then the tool, then the reply", () => {
+  const row = ai(1, "", { streaming: true });
+  const thinking = applyRowChange(row, { kind: "phase", phase: "thinking" });
+  expect(thinking.phase).toBe("thinking");
+
+  const calling = applyRowChange(thinking, { kind: "tool-start", name: "s", label: "S" });
+  expect(calling.phase).toBe("tool");
+
+  expect(applyRowChange(calling, { kind: "delta", chunk: "so" }).phase).toBe("writing");
+});
+
+test("every way a turn ends clears the phase", () => {
+  const endings: RowChange[] = [
+    { kind: "answer", text: "done" },
+    { kind: "error", text: "no reply" },
+    { kind: "refusal", text: "too big" },
+    { kind: "stopped", text: "half a sen" },
+  ];
+  const row = applyRowChange(ai(1, "", { streaming: true }), { kind: "phase", phase: "thinking" });
+
+  expect(endings.map((e) => applyRowChange(row, e).phase)).toEqual(endings.map(() => undefined));
+});
+
+test("a row marked with a run keeps being written", () => {
+  const row = ai(1, "so", { streaming: true, phase: "writing" });
+  expect(applyRowChange(row, { kind: "origin", origin: { runId: "r-1" } })).toEqual({
+    ...row,
+    origin: { runId: "r-1" },
+  });
+});
+
+// The registry's copy of the row and the one on screen are patched separately;
+// they stay in step only because one function applies the change to both.
+test("a change nothing matches hands the row back untouched", () => {
+  const row = ai(1, "text", { tools: [{ name: "a", label: "A", state: "running" }] });
+
+  expect(applyRowChange(row, { kind: "tool-end", name: "other", isError: false })).toBe(row);
+  expect(applyRowChange(row, { kind: "tool-label", name: "other", label: "x" })).toBe(row);
+});
+
+// --- what the open call leaves open ---------------------------------------
+//
+// Two levels, decided by the door (docs/09). These are the answers the top bar
+// draws its two dim buttons from.
+
+const LESSON = { isBook: true };
+const ASIDE = { aside: { parentThreadId: "lesson" } };
+// A page mark's own conversation, opened with no lesson running. Not a side
+// conversation, and still a first level.
+const MARK_THREAD = {};
+// Whether the room a side conversation came out of is still on this device.
+const PARENT_THERE = () => true;
+const PARENT_GONE = () => false;
+
+test("with nothing open, both doors are live", () => {
+  expect(levelGate(null, PARENT_THERE)).toEqual({ aiPen: null, bookThread: null });
+  expect(levelGate(undefined, PARENT_THERE)).toEqual({ aiPen: null, bookThread: null });
+});
+
+test("in the book's conversation the AI pen is live and the blackboard is not", () => {
+  const gate = levelGate(LESSON, PARENT_THERE);
+
+  expect(gate.aiPen).toBeNull();
+  expect(gate.bookThread).not.toBeNull();
+});
+
+test("in a side conversation neither door opens, and each says a different why", () => {
+  const gate = levelGate(ASIDE, PARENT_THERE);
+
+  expect(gate.aiPen).not.toBeNull();
+  expect(gate.bookThread).not.toBeNull();
+  // The book's conversation is already open behind this one, which is not the
+  // same thing as it being on screen.
+  expect(gate.bookThread).not.toBe(levelGate(LESSON, PARENT_THERE).bookThread);
+});
+
+// The parent is deleted on another device while the aside is open. There is
+// then no Back (App.tsx: asideReturnable) and nothing behind this conversation
+// for the sentence to be about, so the blackboard is the way into the classroom
+// rather than a second door onto it. Dim it too and hanging up is the only way
+// out, under a line that names a room that is gone.
+test("a side conversation whose parent is gone gets the blackboard back", () => {
+  expect(mayOpenBookThread(ASIDE, PARENT_THERE)).toBe(false);
+  expect(mayOpenBookThread(ASIDE, PARENT_GONE)).toBe(true);
+  expect(levelGate(ASIDE, PARENT_GONE).bookThread).toBeNull();
+  // The AI pen is not what changed: a side conversation is still the second
+  // level, whether or not the first one is still on this device.
+  expect(levelGate(ASIDE, PARENT_GONE).aiPen).toBe(levelGate(ASIDE, PARENT_THERE).aiPen);
+  // And the two rules the parent has nothing to do with are untouched.
+  expect(mayOpenBookThread(LESSON, PARENT_GONE)).toBe(false);
+  expect(mayOpenBookThread(MARK_THREAD, PARENT_GONE)).toBe(true);
+  expect(mayOpenBookThread(null, PARENT_GONE)).toBe(true);
+});
+
+test("a page mark's own conversation opens no side one, but the blackboard still opens", () => {
+  const gate = levelGate(MARK_THREAD, PARENT_THERE);
+
+  expect(gate.aiPen).toBe(levelGate(ASIDE, PARENT_THERE).aiPen);
+  expect(gate.bookThread).toBeNull();
+});
+
+test("every dim button says why in a sentence of its own", () => {
+  const lines = [
+    levelGate(ASIDE, PARENT_THERE).aiPen,
+    levelGate(ASIDE, PARENT_THERE).bookThread,
+    levelGate(LESSON, PARENT_THERE).bookThread,
+  ];
+
+  for (const line of lines) {
+    expect(line).toMatch(/^[A-Z].*\.$/);
+  }
+  expect(new Set(lines).size).toBe(3);
+});
+
+test("the rack acts with no pen where the AI pen is dim, and with it where it is not", () => {
+  expect(toolInCall("ai", LESSON)).toBe("ai");
+  expect(toolInCall("ai", null)).toBe("ai");
+  expect(toolInCall("ai", ASIDE)).toBe("none");
+  expect(toolInCall("ai", MARK_THREAD)).toBe("none");
+});
+
+// Held, not cleared: the reader who steps into a side conversation and back gets
+// the pen they were holding, and the other two are never taken off them.
+test("the AI pen comes back on the way out, and the other tools are never touched", () => {
+  // One pick, read twice: nothing wrote it back to "none" on the way in.
+  const picked = "ai";
+  expect(toolInCall(picked, ASIDE)).toBe("none");
+  expect(toolInCall(picked, LESSON)).toBe("ai");
+  for (const tool of ["none", "navlock", "highlight"] as const) {
+    expect(toolInCall(tool, ASIDE)).toBe(tool);
+    expect(toolInCall(tool, LESSON)).toBe(tool);
+  }
+});
+
+// --- the reader speaking into a running turn (docs/72) ----------------------
+
+test("a line said mid-answer lands under the reply being written, marked", () => {
+  const state = call({
+    messages: [
+      { role: "user", text: "why?", ts: 1 },
+      { role: "ai", text: "because", ts: 2, streaming: true },
+    ],
+  });
+  const next = reduce(state, {
+    type: "row-appended",
+    threadId: "t1",
+    row: { role: "user", text: "and the other one?", ts: 3, queued: true },
+  })!;
+  expect(next.messages.map((m) => m.ts)).toEqual([1, 2, 3]);
+  // The reply above it is still being written: nothing was cut off.
+  expect(next.messages[1].streaming).toBe(true);
+  expect(next.messages[2].queued).toBe(true);
+});
+
+test("the model handed the line: the reply so far is a row, the rest is a new one", () => {
+  const state = call({
+    messages: [
+      { role: "ai", text: "because", ts: 2, streaming: true, phase: "writing" },
+      { role: "user", text: "and the other one?", ts: 3, queued: true },
+    ],
+  });
+  const split = reduce(state, {
+    type: "row-split",
+    threadId: "t1",
+    ts: 2,
+    row: { role: "ai", text: "", ts: 4, streaming: true },
+  })!;
+  expect(split.messages.map((m) => m.ts)).toEqual([2, 3, 4]);
+  // Finished where it stands: the words stay, the marks of a turn in flight go.
+  expect(split.messages[0]).toMatchObject({ text: "because", streaming: undefined, phase: undefined });
+  expect(split.messages[2].streaming).toBe(true);
+
+  // The next delta writes into the new row, not the one above the reader.
+  const wrote = reduce(split, {
+    type: "row-changed",
+    threadId: "t1",
+    ts: 4,
+    change: { kind: "delta", chunk: "the other one is" },
+  })!;
+  expect(wrote.messages[0].text).toBe("because");
+  expect(wrote.messages[2].text).toBe("the other one is");
+});
+
+test("the queued mark comes off the row it was on, and off nothing else", () => {
+  const state = call({
+    messages: [
+      { role: "user", text: "first", ts: 3, queued: true },
+      { role: "user", text: "second", ts: 5, queued: true },
+    ],
+  });
+  const next = reduce(state, { type: "row-delivered", threadId: "t1", ts: 3 })!;
+  expect(next.messages[0].queued).toBeUndefined();
+  expect(next.messages[1].queued).toBe(true);
+});
+
+test("handed-over keeps the words and the failed calls, and ends the row", () => {
+  const row: Row = {
+    role: "ai",
+    text: "half a thought",
+    ts: 2,
+    streaming: true,
+    phase: "writing",
+    tools: [{ name: "read_page", label: "Reading", state: "error" }],
+  };
+  const handed = applyRowChange(row, { kind: "handed-over" } as RowChange);
+  expect(handed).toMatchObject({
+    text: "half a thought",
+    streaming: undefined,
+    phase: undefined,
+  });
+  expect(handed.tools).toHaveLength(1);
+});

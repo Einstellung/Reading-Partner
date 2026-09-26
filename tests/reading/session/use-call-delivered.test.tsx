@@ -7,14 +7,14 @@
 // the model call, and the turn left streaming for as long as the test wants.
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
-import { resetReadingTurns } from "../../../src/reading/live-turns";
-import { deliverIntoReadingTurn } from "../../../src/reading/deliver";
+import { resetReadingTurns } from "../../../src/reading/turn/live-turns";
+import { deliverIntoReadingTurn } from "../../../src/reading/turn/deliver";
 import * as agent from "../../../src/legion/execute/turn";
 import * as threads from "../../../src/platform/app/threads";
-import * as turn from "../../../src/reading/turn";
+import * as turn from "../../../src/reading/turn/turn";
 import type { RunAgentTurnOptions, SteerMessage, SteerPort } from "../../../src/legion/execute/contract";
-import type { CallRow } from "../../../src/reading/call-state";
-import type { StagedImage } from "../../../src/reading/pending-images";
+import type { CallRow } from "../../../src/reading/turn/call-state";
+import type { StagedImage } from "../../../src/reading/turn/pending-images";
 import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";
 import { CALL_BOOK as BOOK, callHost as host, emptyReadingTurn } from "../../support/use-call";

@@ -25,7 +25,7 @@ import { buildTranslateTools } from "../../src/reading/translate/tool";
 import { buildSourceTools as buildPrepSourceTools } from "../../src/reading/prep/papers/source-tool";
 import { buildClassroomTools } from "../../src/reading/prep/papers/tools";
 import { buildSupplementTools } from "../../src/reading/ingest/remove-tool";
-import { buildSavedArticleTools } from "../../src/reading/saved-article-tools";
+import { buildSavedArticleTools } from "../../src/reading/saved/saved-article-tools";
 import { buildCitationTools } from "../../src/reading/papers/citation-tool";
 import { buildPaperSearchTools } from "../../src/reading/papers/search-tool";
 import { buildRetellTools } from "../../src/reading/retell/tools";
@@ -125,7 +125,7 @@ const ROSTER: { where: string; tools: AgentTool[]; names: string[] }[] = [
     names: ["remove_supplement"],
   },
   {
-    where: "reading/saved-articles",
+    where: "reading/saved/saved-articles",
     tools: buildSavedArticleTools(any({ list: async () => [], add: async () => ({ status: "failed" }) })),
     names: ["list_saved_articles", "add_saved_article"],
   },

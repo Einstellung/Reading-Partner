@@ -19,7 +19,7 @@ import { logEvent } from "../../../platform/app/events";
 import type { Annotation, ViewStats } from "../../../platform/app/reader-contract";
 import type { Settings } from "../../../platform/app/settings";
 import type { Topic } from "../../../platform/app/topics";
-import type { FlowReaderView } from "../../../reading/epub/flow-contract";
+import type { FlowReaderView } from "../../../reading/epub/flow/flow-contract";
 import { findFigureById, renderFigure, type Figure, type FiguresIndex } from "../../../reading/figures";
 import { bookTextNotice, bookTextState } from "../../../reading/intents";
 import type { Citation } from "../../../reading/prep";
@@ -34,7 +34,7 @@ import {
 import type { OpenedBook } from "../../../reading/session/open-epub";
 import { readingTurnContext } from "../../../reading/session/turn-context";
 import { useCall } from "../../../reading/session/use-call";
-import type { CallRow } from "../../../reading/call-state";
+import type { CallRow } from "../../../reading/turn/call-state";
 import type { ReadingTurnContext } from "../../../reading/desk";
 import { nextCardId, rehydrateMessage, type ChatPart } from "../chat/chatParts";
 import type { PendingImage } from "../chat/types";

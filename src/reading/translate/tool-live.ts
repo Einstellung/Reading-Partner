@@ -40,7 +40,7 @@ import {
   listThreads,
   loadThreads,
 } from "../../platform/app/threads";
-import { parseEpub } from "../epub/parse";
+import { parseEpub } from "../epub/file/parse";
 import { translateBatchLive, translateGlossaryLive, type TranslateModel } from "./live";
 import {
   replaceWithTranslation,

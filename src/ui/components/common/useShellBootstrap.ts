@@ -38,7 +38,7 @@ import { registerSecretaryRole } from "../../../info/briefer/role";
 import { registerInfoDistillSource } from "../../../info/briefer/distill-source";
 import { registerReadingDistillSources } from "../../../reading/distill/source";
 import { registerReadingDesk } from "../../../reading/desk";
-import { registerBookDelivery } from "../../../reading/deliver";
+import { registerBookDelivery } from "../../../reading/turn/deliver";
 import { registerResearchWorker } from "../../../reading/papers/research-worker";
 import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-worker";

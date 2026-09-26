@@ -3,7 +3,7 @@
 // it out of Saved (hold-menu.ts), and it leaves where it stands.
 
 import { useRef } from "react";
-import type { SavedArticle } from "../../../reading/saved-articles";
+import type { SavedArticle } from "../../../reading/saved/saved-articles";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import { cn } from "../lib/utils";
 import { savedArticleLine } from "../shelf/article-row";

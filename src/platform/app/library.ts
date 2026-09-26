@@ -240,7 +240,7 @@ export async function readLibraryBook(bookId: string): Promise<Uint8Array> {
 
 // What a set of book bytes is, from the bytes themselves. Two formats, two
 // magic numbers, and no third answer: this only ever sees a file some caller has
-// already decided is a book (intake sniffs properly, reading/epub/sniff.ts, and
+// already decided is a book (intake sniffs properly, reading/epub/file/sniff.ts, and
 // the sync channel carries what another device imported).
 export function formatOfBytes(bytes: Uint8Array): BookFormat {
   const zip =

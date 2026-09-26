@@ -1,0 +1,302 @@
+// The open AI call (docs/03) as a value: which thread is on screen, where it is
+// anchored, how big it is drawn, and the rows in it. One book has at most one
+// call open; a turn can outlive it (reading/live-turns.ts owns that side).
+//
+// The row type is a parameter. What a reading row holds beyond text — staged
+// images, the durable card parts a reopened thread carries — is the render
+// layer's protocol (ui/components/chat/chatParts.ts), which a domain must not
+// import, so the state is generic over it the same way live-turns.ts is. What is
+// pinned here is only what the session itself reads and writes.
+
+import type { CompressedImage } from "../../ai/image-utils";
+import type { AsideAnchor, MessageOrigin } from "../../platform/app/threads";
+import type { ToolStatus } from "../../ai/turn-view/tool-status";
+import { applyRowChange, holdsNoAnswer, type RowChange, type TurnPhase } from "../../ai/turn-view/turn-rows";
+
+// Picture-in-picture (docs/03): the bubble by the mark, chat taking the whole
+// window with reading shrunk to a corner card, and reading back with chat
+// shrunk to a corner card.
+export type CallView = "bubble" | "chat-main" | "chat-pip";
+
+// The part of a chat row the session itself writes. A surface's row type extends
+// this with whatever else it draws.
+export interface CallRow {
+  role: "user" | "ai";
+  text: string;
+  ts: number;
+  // The stored message's own id (platform/app/threads.ts), on the rows that came
+  // from the file or arrived from outside the view. It is what `row-arrived`
+  // dedupes on; absent on every row the session drew itself and on every message
+  // written before ids existed, which is why that action is the only reader.
+  id?: string;
+  // The run this row of the soul's answers, when it answers one rather than
+  // the reader: a delegated run delivered back into the turn (docs/72). Stored
+  // with the message, unlike every display-only flag below it.
+  origin?: MessageOrigin;
+  // Display-form image bytes on a user row (persistence keeps filenames).
+  images?: CompressedImage[];
+  // The AI row currently being written, and the one whose turn failed.
+  streaming?: boolean;
+  failed?: boolean;
+  // A reader's row said while a turn was running and not yet handed to the
+  // model (docs/72). Display-only and never persisted: by the time the line is
+  // in the thread file it is in the model's context too, and the mark is gone.
+  queued?: boolean;
+  // The transient tool-call trace above a streaming reply (M6). Never persisted.
+  tools?: ToolStatus[];
+  // What the running turn is doing (ai/turn-view/turn-rows.ts), for the status line the
+  // surface draws while nothing is written yet. Display-only, like the trace.
+  phase?: TurnPhase;
+  // What the turn left out to fit the context window (src/budget) — the app's
+  // remark about the turn, not model output. Display-only, like the trace.
+  notice?: string;
+}
+
+export interface CallState<M extends CallRow> {
+  threadId: string;
+  // The AI-pen mark hosting this call. Empty string for the book-level thread
+  // (docs/03: top-bar AI button), flagged by `isBook`, and for a side
+  // conversation pulled out of a chat message.
+  annotationId: string;
+  isBook?: boolean;
+  // This conversation is a side one off another (docs/03), which the slot below
+  // holds instead of it: what it was opened on, and where going back leads.
+  // Never set together with `isBook` — an aside is never the lesson — and its
+  // presence is what says the affordance that opens one must not be offered
+  // again, which is how one level deep is enforced.
+  aside?: {
+    parentThreadId: string;
+    // "chat" is a span pulled out of a reply, "mark" one drawn on the page while
+    // the lesson ran (reading/aside.ts).
+    from: "chat" | "mark";
+    span: string;
+    // The reply the span came out of. Held here rather than read back off the
+    // record because a chat-span aside has no record until the reader asks
+    // something in it — opening one has to cost nothing.
+    anchor?: AsideAnchor;
+    // The view the conversation this came off was in. Going back restores it: a
+    // lesson left as the corner card while the reader read the page must not
+    // come back as chat over that page.
+    parentView?: CallView;
+  };
+  view: CallView;
+  anchor: { x: number; y: number };
+  messages: M[];
+  // The last turn failed, so the surface offers a retry.
+  error?: boolean;
+}
+
+
+// Everything that moves the call. Each one is a thing that happened, not a
+// setter: the guards below are the rules, and they used to exist only as the
+// emergent result of nineteen spread-updates in App.tsx.
+export type CallAction<M extends CallRow> =
+  // A conversation opened: a fresh AI-pen mark, a mark tapped, a thread opened
+  // from the trace list, or the book-level thread.
+  | { type: "opened"; call: CallState<M> }
+  // Every way out of a call: the ✕, Escape, touching the book, deleting the
+  // thread, opening another book, closing the reader.
+  | { type: "closed" }
+  // A mark was deleted from the trace list. Only a call anchored on that mark
+  // goes with it.
+  | { type: "closed-with-mark"; annotationId: string }
+  // Chat takes the whole window: expanding the bubble, or tapping the chat
+  // corner card.
+  | { type: "chat-opened" }
+  // The reader is wanted back, so chat shrinks to the corner card.
+  | { type: "reading-uncovered" }
+  // A thread's stored images finished loading, keyed by the row they belong to.
+  | { type: "images-loaded"; threadId: string; images: Map<number, CompressedImage[]> }
+  // A turn started on this thread: the row it will write is appended, and the
+  // rows a fresh attempt replaces go.
+  | { type: "turn-started"; threadId: string; row: M }
+  // The running turn wrote something. `error` is set when what it wrote was a
+  // failure worth retrying, and left alone otherwise.
+  | { type: "row-changed"; threadId: string; ts: number; change: RowChange; error?: boolean }
+  // A row that is not a turn's: the reader's own message.
+  | { type: "row-appended"; threadId: string; row: M }
+  // The reader spoke into the running turn and the model has been handed it:
+  // the AI row at `ts` is finished where it stands and the reply that follows
+  // starts a row of its own (docs/72).
+  | { type: "row-split"; threadId: string; ts: number; row: M }
+  // A queued reader row reached the model, so its mark comes off.
+  | { type: "row-delivered"; threadId: string; ts: number }
+  // Someone outside the view wrote into this conversation while it was open — a
+  // delegated run the soul answered into the thread it was sent from (docs/68).
+  // The view's own writes never come through here (reading/thread-arrivals.ts).
+  | { type: "row-arrived"; threadId: string; row: M }
+  // A turn stopped before writing anything, so its row is not a row.
+  | { type: "row-dropped"; threadId: string; ts: number };
+
+// The one place the open call changes. Pure: it starts no turn, writes no file
+// and touches no engine — the session (reading/session/) does all of that around
+// it.
+//
+// Rules that are easy to lose:
+//   - a row action carries the thread it belongs to, and a call that has since
+//     moved to another thread ignores it. Turns outlive the view they were
+//     started from (docs/03), so a late callback from a closed conversation is
+//     normal, not a bug.
+//   - only the AI's row is ever rewritten by a turn; matching on `ts` alone
+//     would let a reader's message with the same timestamp be overwritten.
+//   - the reader is uncovered only from chat-main, which is the only view that
+//     covers it. From the bubble there is nothing to uncover and the bubble
+//     stays a bubble — this is what a citation tapped inside a bubble does.
+//   - the state object is returned unchanged whenever nothing moved, so a
+//     streaming reply does not re-render the surfaces that did not change.
+export function callReducer<M extends CallRow>(
+  state: CallState<M> | null,
+  action: CallAction<M>,
+): CallState<M> | null {
+  switch (action.type) {
+    case "opened":
+      return action.call;
+    case "closed":
+      return null;
+    case "closed-with-mark":
+      return state && state.annotationId === action.annotationId ? null : state;
+  }
+  if (!state) return state;
+  switch (action.type) {
+    case "chat-opened":
+      return state.view === "chat-main" ? state : { ...state, view: "chat-main" };
+    case "reading-uncovered":
+      return state.view === "chat-main" ? { ...state, view: "chat-pip" } : state;
+  }
+  if (state.threadId !== action.threadId) return state;
+  switch (action.type) {
+    case "images-loaded": {
+      const { images } = action;
+      return {
+        ...state,
+        messages: state.messages.map((m) => (images.has(m.ts) ? { ...m, images: images.get(m.ts) } : m)),
+      };
+    }
+    case "turn-started":
+      return {
+        ...state,
+        error: false,
+        messages: [...state.messages.filter((m) => !holdsNoAnswer(m)), action.row],
+      };
+    case "row-changed":
+      return {
+        ...state,
+        error: action.error ?? state.error,
+        messages: state.messages.map((m) =>
+          m.ts === action.ts && m.role === "ai" ? applyRowChange(m, action.change) : m,
+        ),
+      };
+    case "row-appended":
+      return { ...state, messages: [...state.messages, action.row] };
+    case "row-split":
+      return {
+        ...state,
+        messages: [
+          ...state.messages.map((m) =>
+            m.ts === action.ts && m.role === "ai" ? applyRowChange(m, { kind: "handed-over" }) : m,
+          ),
+          action.row,
+        ],
+      };
+    case "row-delivered":
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.ts === action.ts && m.role === "user" && m.queued ? { ...m, queued: undefined } : m,
+        ),
+      };
+    case "row-arrived": {
+      // By id, never by what it says: a run answered twice with the same words
+      // is two answers, and one answer reported twice is one. A row with no id
+      // is one this reducer has never seen, because the only rows that carry one
+      // are the ones that came off the file.
+      const { id } = action.row;
+      if (id !== undefined && state.messages.some((m) => m.id === id)) return state;
+      return { ...state, messages: [...state.messages, action.row] };
+    }
+    case "row-dropped":
+      return {
+        ...state,
+        messages: state.messages.filter((m) => !(m.ts === action.ts && m.role === "ai")),
+      };
+  }
+}
+
+// --- what the open call leaves open ---------------------------------------
+
+// Two levels, and the door decides which one is open, not how deep the reader
+// feels they are (docs/03): the top bar's blackboard opens the book's
+// conversation, a pen stroke inside it — on the page or on a reply — opens a
+// side conversation off it, and a side conversation opens nothing. A thread
+// opened by marking the page with no conversation running is a first level too,
+// so it opens nothing either.
+//
+// The controls that would open a level that is not there are drawn dim rather
+// than dropped: a rule the reader can see is a rule they can learn.
+
+// As much of the open call as the answers below read. Null is no call at all,
+// which is not the same as a side conversation: with nothing open, a stroke on
+// the page opens the first level itself.
+export interface OpenLevel {
+  isBook?: boolean;
+  aside?: { parentThreadId: string };
+}
+
+const AI_PEN_DIM = "Only the book's conversation can open a side one.";
+const BOOK_THREAD_OPEN = "This book's conversation is already open.";
+const BOOK_THREAD_BEHIND = "The book's conversation is behind this side one.";
+
+// The AI pen opens a level, so it is live only where there is one left to open.
+export function mayOpenAside(call: OpenLevel | null | undefined): boolean {
+  return !call || call.isBook === true;
+}
+
+// The blackboard is live only where the book's conversation is not already on
+// screen or one step behind. While it is up, the corner card is the way back to
+// it; two doors onto the same room is one too many.
+//
+// `hasParent` is the caller's lookup for the room a side conversation came out
+// of. A parent that was deleted on another device leaves the aside with no Back
+// (App.tsx: asideReturnable), and nothing is behind it any more, so the
+// blackboard is the door into the classroom rather than a second one onto it.
+// Dim it there and hanging up is the only way out.
+export function mayOpenBookThread(
+  call: OpenLevel | null | undefined,
+  hasParent: (parentThreadId: string) => boolean,
+): boolean {
+  if (!call) return true;
+  if (call.isBook) return false;
+  if (!call.aside) return true;
+  return !hasParent(call.aside.parentThreadId);
+}
+
+// The pen the rack acts with. A dim AI pen is held rather than cleared: the
+// reader who steps into a side conversation and back gets the pen they were
+// holding back, and nothing they drew in between opened anything.
+export function toolInCall<T extends string>(
+  tool: T,
+  call: OpenLevel | null | undefined,
+): T | "none" {
+  return tool === "ai" && !mayOpenAside(call) ? "none" : tool;
+}
+
+// Why each of the two is dim, or null while it is live. The sentence is what the
+// control says about itself when it will not open.
+export interface LevelGate {
+  aiPen: string | null;
+  bookThread: string | null;
+}
+
+export function levelGate(
+  call: OpenLevel | null | undefined,
+  hasParent: (parentThreadId: string) => boolean,
+): LevelGate {
+  return {
+    aiPen: mayOpenAside(call) ? null : AI_PEN_DIM,
+    bookThread: mayOpenBookThread(call, hasParent)
+      ? null
+      : call?.aside
+        ? BOOK_THREAD_BEHIND
+        : BOOK_THREAD_OPEN,
+  };
+}

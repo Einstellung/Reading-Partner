@@ -18,7 +18,7 @@ import {
   type NavStack,
   type PhoneScreen,
 } from "../../../../src/ui/components/phone/nav-stack";
-import type { SavedArticle } from "../../../../src/reading/saved-articles";
+import type { SavedArticle } from "../../../../src/reading/saved/saved-articles";
 
 const article = { id: "a1", title: "One" } as unknown as SavedArticle;
 const other = { id: "a2", title: "Two" } as unknown as SavedArticle;

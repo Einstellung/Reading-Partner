@@ -38,10 +38,10 @@ import {
 import { deleteThreadImages, readThreadImages, saveThreadImages } from "../../platform/app/thread-images";
 import { asideReceipt, asideReturn, type AsideReturn } from "../aside";
 import { hostMarkIds } from "../chat-marks";
-import { markExcerpt, reopenCall } from "../reopen";
+import { markExcerpt, reopenCall } from "../turn/reopen";
 import type { Fulltext } from "../../fulltext";
 import { distillThread, type DistillAnnotation } from "../../memory";
-import { callReducer, type CallRow, type CallState, type CallView } from "../call-state";
+import { callReducer, type CallRow, type CallState, type CallView } from "../turn/call-state";
 import {
   applyRowChange,
   phaseOnToolStart,
@@ -54,15 +54,15 @@ import type { AgentToolEnd, AgentToolStart } from "../../legion/execute/contract
 import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
 import type { FiguresIndex } from "../figures";
-import { readingTurns, type LiveTurn } from "../live-turns";
-import { createDelivered } from "../delivered";
-import { createSteering, type Steering } from "../steering";
-import { createRowSplit } from "../turn-row-split";
-import { boxUnseenTurn, setOpenCallPeek, watching, type TurnOutcome } from "../turn-box";
-import { arrivedMessage, createOwnAppends } from "../thread-arrivals";
+import { readingTurns, type LiveTurn } from "../turn/live-turns";
+import { createDelivered } from "../turn/delivered";
+import { createSteering, type Steering } from "../turn/steering";
+import { createRowSplit } from "../turn/turn-row-split";
+import { boxUnseenTurn, setOpenCallPeek, watching, type TurnOutcome } from "../turn/turn-box";
+import { arrivedMessage, createOwnAppends } from "../turn/thread-arrivals";
 import { deferHangup } from "./hangup";
 import { threadHome, type ThreadOwner } from "./documents";
-import { createPendingImages, type StagedImage } from "../pending-images";
+import { createPendingImages, type StagedImage } from "../turn/pending-images";
 import type { PrepPipeline } from "../prep/papers/pipeline";
 import {
   backgroundFailureToast,
@@ -70,7 +70,7 @@ import {
   turnFailureView,
   type ReadingTurnContext,
   type TurnFailure,
-} from "../turn";
+} from "../turn/turn";
 
 // A ref the shell owns and this hook only reads.
 type HostRef<T> = { readonly current: T };

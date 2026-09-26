@@ -18,9 +18,9 @@ import {
   quoteSelectorOf,
   sameWords,
 } from "./annotation";
-import { epubRangeCfi, textSteps } from "./cfi";
+import { epubRangeCfi, textSteps } from "./file/cfi";
 import { lineBands, underlineBand, unionRect, type PageRect } from "./mark-geometry";
-import { runAt, type DocumentText, type TextRun } from "./text";
+import { runAt, type DocumentText, type TextRun } from "./file/text";
 
 /** The book's side of one spine item, as the mark views need it. */
 export interface SpineText {

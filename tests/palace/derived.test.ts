@@ -31,7 +31,7 @@ import {
   coverFailurePath,
   coverImagePath,
   coverMetaPath,
-} from "../../src/reading/cover-cache";
+} from "../../src/reading/covers/cover-cache";
 import { figuresFile } from "../../src/reading/figures/store";
 import { fulltextFile } from "../../src/fulltext/store";
 import { libraryBookPath } from "../../src/platform/app/library";
@@ -170,7 +170,7 @@ const STORES_A_TOPIC_ID: Record<string, readonly PalaceKind[]> = {
   "platform/app/threads.ts": ["info-thread", "conversation"],
   "reading/rehearsal/types.ts": ["rehearsal"],
   "reading/retell/types.ts": ["retell"],
-  "reading/saved-articles.ts": ["saved-articles"],
+  "reading/saved/saved-articles.ts": ["saved-articles"],
   "reading/talk/types.ts": ["outline"],
   "soul/sequence.ts": ["soul-sequence"],
 };

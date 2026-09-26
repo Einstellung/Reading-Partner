@@ -36,7 +36,7 @@ import {
   setSavedArticleTopic,
   type SavedArticle,
   type SavedArticleInput,
-} from "../../../reading/saved-articles";
+} from "../../../reading/saved/saved-articles";
 import { toSavedArticleInput } from "./saveArticle";
 import { appendFeedback } from "../../../memory/profile/feedback";
 import { assembleReaderSection } from "../../../memory/live/assemble";

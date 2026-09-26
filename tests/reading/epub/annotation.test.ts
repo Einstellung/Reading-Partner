@@ -23,9 +23,9 @@ import {
   sameWords,
 } from "../../../src/reading/epub/annotation";
 import { characterRuler, paginate, type Pagination } from "../../../src/reading/epub/paginate";
-import { parseEpub } from "../../../src/reading/epub/parse";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { indexRuns, offsetOfPoint } from "../../../src/reading/epub/reader-logic";
-import { extractDocumentText } from "../../../src/reading/epub/text";
+import { extractDocumentText } from "../../../src/reading/epub/file/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
 import { toDistillAnnotations } from "../../../src/memory/observations/arrears";
 import { buildEpub, prose } from "./fixture";

@@ -2,9 +2,9 @@
 // model. Run: bash scripts/t.sh tests/reading/translate/translate-article.test.ts
 
 import { expect, test } from "bun:test";
-import { buildArticleEpub } from "../../../src/reading/epub/build-article";
-import { parseEpub } from "../../../src/reading/epub/parse";
-import { openZip } from "../../../src/reading/epub/zip";
+import { buildArticleEpub } from "../../../src/reading/epub/file/build-article";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
+import { openZip } from "../../../src/reading/epub/file/zip";
 import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { segmentDocument } from "../../../src/reading/translate/segment";
 import {

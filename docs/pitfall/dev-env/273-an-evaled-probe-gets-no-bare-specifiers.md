@@ -2,7 +2,7 @@
 
 ## 现象
 
-sim bridge 的探针（`drive.py` 把一段 JS 贴进页面 eval）里 `await import("react")` 直接抛，`await import("/src/reading/epub/EpubReaderPane.tsx")` 却好好的。换成 `import("react-dom/client")` 同样抛。
+sim bridge 的探针（`drive.py` 把一段 JS 贴进页面 eval）里 `await import("react")` 直接抛，`await import("/src/reading/epub/paged/EpubReaderPane.tsx")` 却好好的。换成 `import("react-dom/client")` 同样抛。
 
 ## 原因
 

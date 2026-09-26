@@ -10,7 +10,7 @@
 
 import type { Fulltext } from "../../fulltext/types";
 import { ensurePagination, heldEpub } from "./book-cache";
-import { parseEpub, type EpubBook } from "./parse";
+import { parseEpub, type EpubBook } from "./file/parse";
 import { fulltextFrom } from "./fulltext";
 
 /**

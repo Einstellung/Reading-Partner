@@ -1,12 +1,12 @@
-// Reading an EPUB (docs/39, docs/64). Two halves that meet at the sanitized
-// tree: the headless ingestion (zip, sanitize, paginate, full text), and the
-// reading area that lays those same documents out on fixed sheets of paper.
+// Reading an EPUB (docs/39, docs/64): the headless ingestion (zip, sanitize,
+// paginate, full text) that both reading areas — the paged desk and the
+// reflow column — build on.
 
-export { isEpub, looksLikeZip } from "./sniff";
-export { openZip, resolveZipPath, hrefFragment, type EpubZip, type ZipEntry } from "./zip";
-export { sanitize, sanitizeDocument, type ResourceRefs, type SanitizedDocument } from "./sanitize";
-export { sanitizeCss, sanitizeDeclarations, rewriteCssUrls } from "./css-sanitize";
-export { extractDocumentText, indexRuns, offsetOfPoint, runAt, type DocumentText } from "./text";
+export { isEpub, looksLikeZip } from "./file/sniff";
+export { openZip, resolveZipPath, hrefFragment, type EpubZip, type ZipEntry } from "./file/zip";
+export { sanitize, sanitizeDocument, type ResourceRefs, type SanitizedDocument } from "./file/sanitize";
+export { sanitizeCss, sanitizeDeclarations, rewriteCssUrls } from "./file/css-sanitize";
+export { extractDocumentText, indexRuns, offsetOfPoint, runAt, type DocumentText } from "./file/text";
 export {
   elementSteps,
   epubCfi,
@@ -18,14 +18,14 @@ export {
   resolveRange,
   textSteps,
   type ParsedCfi,
-} from "./cfi";
-export { parseEpub, EpubParseError, type EpubBook, type SpineDocument } from "./parse";
+} from "./file/cfi";
+export { parseEpub, EpubParseError, type EpubBook, type SpineDocument } from "./file/parse";
 export {
   buildArticleEpub,
   MISSING_IMAGE_HEIGHT,
   type ArticleEpubInput,
   type ArticleImage,
-} from "./build-article";
+} from "./file/build-article";
 export {
   PAGINATION_VERSION,
   blockNumberAt,
@@ -47,24 +47,4 @@ export { fulltextFrom, outlineFor, type EpubFulltext } from "./fulltext";
 export { extractEpubFulltext } from "./live";
 export { acquireEpub, ensurePagination, heldEpub, preparePagination, releaseEpub } from "./book-cache";
 export { remapEpubAnnotations } from "./migrate";
-export { renderEpubCover } from "./epub-cover";
-export { default as EpubReaderPane } from "./EpubReaderPane";
-export type { FlowReaderPaneProps, FlowReaderView, FlowTool } from "./flow-contract";
-export {
-  FLOW_DISPLAY_DEFAULT,
-  FLOW_FONT_STEPS,
-  FLOW_LINE_STEPS,
-  FLOW_PAD_STEPS,
-  FLOW_PAPERS,
-  FLOW_PAPER_NAMES,
-  flowFontStep,
-  flowPaperSwatch,
-  normalizeFlowDisplay,
-  readFlowDisplay,
-  stepFlowFont,
-  writeFlowDisplay,
-  type FlowDisplay,
-  type FlowPaperName,
-} from "./flow-display";
-export { createFlowReader } from "./flow-view";
-export { default as FlowReaderPane } from "./FlowReaderPane";
+export { renderEpubCover } from "./file/epub-cover";

@@ -37,7 +37,7 @@ import {
   newEpubMark,
   quoteSelectorAt,
 } from "../../../src/reading/epub/annotation";
-import { epubRangeCfi, parseEpubRangeCfi, resolveRange, resolveSteps, textSteps } from "../../../src/reading/epub/cfi";
+import { epubRangeCfi, parseEpubRangeCfi, resolveRange, resolveSteps, textSteps } from "../../../src/reading/epub/file/cfi";
 import {
   BODY_WIDTH,
   PAGE_GEOMETRY,
@@ -46,12 +46,12 @@ import {
   PAGE_PAD_Y,
   PAGE_WIDTH,
 } from "../../../src/reading/epub/page-geometry";
-import { parseEpub } from "../../../src/reading/epub/parse";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
 import { createSpineTexts, textMarkOf, type TextMarkContext } from "../../../src/reading/epub/mark-write";
 import { characterRuler, paginate } from "../../../src/reading/epub/paginate";
 import { blockIndexAt, locateQuote } from "../../../src/reading/epub/reader-logic";
 import { createMarkPainter, rangeOfSpan } from "../../../src/reading/epub/mark-draw";
-import { extractDocumentText, runAt } from "../../../src/reading/epub/text";
+import { extractDocumentText, runAt } from "../../../src/reading/epub/file/text";
 import { annotationPage } from "../../../src/platform/app/reader-contract";
 import { buildEpub, prose } from "./fixture";
 

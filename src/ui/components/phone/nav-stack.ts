@@ -11,7 +11,7 @@
 // overlay: it is always pushed last, so `baseScreen` hands the shell the screen
 // that keeps rendering underneath it.
 
-import type { SavedArticle } from "../../../reading/saved-articles";
+import type { SavedArticle } from "../../../reading/saved/saved-articles";
 
 export type ScreenKind =
   | "home"

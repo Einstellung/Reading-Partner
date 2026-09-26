@@ -4,4 +4,4 @@
 // over a book has to hash it before it can cache, which is why the loading state
 // on a card is a state a user actually sees and not a flicker.
 
-export { bookCover, type BookCover } from "../../../reading/covers";
+export { bookCover, type BookCover } from "../../../reading/covers/covers";

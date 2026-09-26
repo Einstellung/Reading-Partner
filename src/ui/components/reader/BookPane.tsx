@@ -14,7 +14,7 @@ import type { Annotation, ViewState } from "../../../platform/app/reader-contrac
 import EmbedReaderPane, {
   type EmbedReaderPaneProps,
 } from "../../../reading/engine/EmbedReaderPane";
-import EpubReaderPane from "../../../reading/epub/EpubReaderPane";
+import EpubReaderPane from "../../../reading/epub/paged/EpubReaderPane";
 
 // The author every mark this app writes is attributed to.
 const AUTHOR_NAME = "Reading-Partner";

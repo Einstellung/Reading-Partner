@@ -17,7 +17,7 @@
 import type { PagePoint, PageRuler } from "./paginate";
 import { BODY_WIDTH, columnOf } from "./page-geometry";
 import { createPageResources, mountDocument, readingFontsReady, type PageResources } from "./page-mount";
-import type { EpubBook } from "./parse";
+import type { EpubBook } from "./file/parse";
 
 // Elements that are a page's first thing when nothing textual precedes them.
 const ATOMIC = new Set(["img", "svg", "hr", "video", "image"]);

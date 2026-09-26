@@ -17,7 +17,7 @@ import { BRIEF_TOPIC_ID } from "../../../src/platform/app/topics";
 import type { Retell } from "../../../src/reading/retell/types";
 import type { TalkOutline } from "../../../src/reading/talk/types";
 import type { Rehearsal } from "../../../src/reading/rehearsal/types";
-import type { SavedArticle } from "../../../src/reading/saved-articles";
+import type { SavedArticle } from "../../../src/reading/saved/saved-articles";
 
 const GONE = "t1";
 const KEPT = "t2";

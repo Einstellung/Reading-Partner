@@ -7,7 +7,7 @@
 // by seenReplyTs on every render: while the lesson is showing, every finished
 // reply in it has been seen.
 
-import type { CallRow, CallView } from "../call-state";
+import type { CallRow, CallView } from "../turn/call-state";
 
 export type LessonDot =
   // Pulsing: a reply is being written.

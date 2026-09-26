@@ -14,9 +14,9 @@ import {
   type FetchedBytes,
   type SupplementAttachment,
 } from "../../../src/reading/ingest/article";
-import { isEpub } from "../../../src/reading/epub/sniff";
-import { openZip } from "../../../src/reading/epub/zip";
-import { parseEpub } from "../../../src/reading/epub/parse";
+import { isEpub } from "../../../src/reading/epub/file/sniff";
+import { openZip } from "../../../src/reading/epub/file/zip";
+import { parseEpub } from "../../../src/reading/epub/file/parse";
 import type { Extraction } from "../../../src/info/extract/readable-select";
 import { PNG } from "../epub/fixture";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";

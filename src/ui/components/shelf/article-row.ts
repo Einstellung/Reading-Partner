@@ -12,7 +12,7 @@ import {
   type LibraryEntry,
 } from "../../../platform/app/library";
 import type { FileRef } from "../../../platform/app/topics";
-import { formatPublishedAt, type SavedArticle } from "../../../reading/saved-articles";
+import { formatPublishedAt, type SavedArticle } from "../../../reading/saved/saved-articles";
 import { displayFileTitle } from "./file-title";
 
 const ISO_DATE = /^(\d{4}-\d{2}-\d{2})/;

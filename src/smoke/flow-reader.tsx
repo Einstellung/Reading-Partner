@@ -15,10 +15,10 @@ import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { buildEpub, prose } from "../../tests/reading/epub/fixture";
 import type { Annotation, ViewState } from "../platform/app/reader-contract";
-import type { FlowReaderView, FlowTool } from "../reading/epub/flow-contract";
-import FlowReaderPane from "../reading/epub/FlowReaderPane";
-import { parseEpubRangeCfi, resolveRange } from "../reading/epub/cfi";
-import { FLOW_DISPLAY_DEFAULT, normalizeFlowDisplay, type FlowDisplay } from "../reading/epub/flow-display";
+import type { FlowReaderView, FlowTool } from "../reading/epub/flow/flow-contract";
+import FlowReaderPane from "../reading/epub/flow/FlowReaderPane";
+import { parseEpubRangeCfi, resolveRange } from "../reading/epub/file/cfi";
+import { FLOW_DISPLAY_DEFAULT, normalizeFlowDisplay, type FlowDisplay } from "../reading/epub/flow/flow-display";
 import { initPaperTint } from "../ui/components/base/paper-tint";
 import { errMsg } from "../platform/std/errors";
 

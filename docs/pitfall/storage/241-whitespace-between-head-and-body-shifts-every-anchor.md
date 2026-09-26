@@ -12,4 +12,4 @@ XHTML 用 XML 解析器解，`<head>...</head>\n<body>` 之间那个换行是 `<
 
 ## 解法
 
-正文抽取里维护一个"当前在块边界上"的标志，处在边界上时纯空白文本节点整个跳过（`src/reading/epub/text.ts` 的 `pushText`）。块内的空格照旧保留——`<em>a</em> <em>b</em>` 中间那个空格是词间距，不是版式。
+正文抽取里维护一个"当前在块边界上"的标志，处在边界上时纯空白文本节点整个跳过（`src/reading/epub/file/text.ts` 的 `pushText`）。块内的空格照旧保留——`<em>a</em> <em>b</em>` 中间那个空格是词间距，不是版式。

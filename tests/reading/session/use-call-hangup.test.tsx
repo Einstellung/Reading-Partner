@@ -13,14 +13,14 @@
 // none of these have any business deciding that here.
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { useCall } from "../../../src/reading/session/use-call";
-import { resetReadingTurns } from "../../../src/reading/live-turns";
+import { resetReadingTurns } from "../../../src/reading/turn/live-turns";
 import * as agent from "../../../src/legion/execute/turn";
 import * as events from "../../../src/platform/app/events";
 import * as observation from "../../../src/memory";
 import * as threads from "../../../src/platform/app/threads";
-import * as turn from "../../../src/reading/turn";
-import type { CallRow } from "../../../src/reading/call-state";
-import type { StagedImage } from "../../../src/reading/pending-images";
+import * as turn from "../../../src/reading/turn/turn";
+import type { CallRow } from "../../../src/reading/turn/call-state";
+import type { StagedImage } from "../../../src/reading/turn/pending-images";
 import type { HangupPass } from "../../../src/reading/session/hangup";
 import type { Thread, ThreadMessage } from "../../../src/platform/app/threads";
 import { useDom } from "../../support/dom";

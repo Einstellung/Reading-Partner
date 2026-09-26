@@ -9,12 +9,12 @@
 
 import type { Annotation } from "../../platform/app/reader-contract";
 import { newEpubMark, quoteSelectorAt } from "./annotation";
-import { parseEpubRangeCfi, rangeToCfi, resolveSteps } from "./cfi";
+import { parseEpubRangeCfi, rangeToCfi, resolveSteps } from "./file/cfi";
 import type { SpineText } from "./mark-draw";
 import type { Pagination } from "./paginate";
-import type { EpubBook } from "./parse";
+import type { EpubBook } from "./file/parse";
 import { blockIndexAt, blockInfo } from "./reader-logic";
-import { indexRuns, offsetOfPoint } from "./text";
+import { indexRuns, offsetOfPoint } from "./file/text";
 
 export interface TextMarkContext {
   /** The spine item the Range is in. */

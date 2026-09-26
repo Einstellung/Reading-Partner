@@ -7,7 +7,7 @@
 // the reading forms, and the rule has to be legible where the reader would
 // reach for it — so what is needed is the reason, and the way in that is here.
 
-import type { FlowTool } from "../../../reading/epub/flow-contract";
+import type { FlowTool } from "../../../reading/epub/flow/flow-contract";
 import type { Tool, ToolType } from "../reader/types";
 
 export const AI_PEN_NOT_ON_PHONE =

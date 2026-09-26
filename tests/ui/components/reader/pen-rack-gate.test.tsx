@@ -7,7 +7,7 @@
 // Run: bun test.
 import { afterEach, expect, test } from "bun:test";
 import PenToolbar from "../../../../src/ui/components/reader/PenToolbar";
-import type { LevelGate } from "../../../../src/reading/call-state";
+import type { LevelGate } from "../../../../src/reading/turn/call-state";
 import type { Tool, ToolType } from "../../../../src/ui/components/reader/types";
 import { useDom } from "../../../support/dom";
 

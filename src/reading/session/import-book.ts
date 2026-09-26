@@ -25,7 +25,7 @@ import { importBook, type BookFormat } from "../../platform/app/library";
 import { normalizeFilePath } from "../../platform/app/path";
 import { addFileToTopic } from "../../platform/app/topics";
 import { pushBook } from "../../platform/sync";
-import { isEpub } from "../epub/sniff";
+import { isEpub } from "../epub/file/sniff";
 import { sniffContentType } from "../sources/url";
 
 /** Everything filing a picked path needs: read the bytes, store them, list it. */

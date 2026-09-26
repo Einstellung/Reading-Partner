@@ -43,7 +43,7 @@ const BY_VALUE_ALLOWED: Record<string, { values: string[]; why: string }> = {
   // and the dark one's surface is duplicated from the `[data-reader-paper]`
   // block in styles.css because the column is a shadow root filled by hand and
   // a stylesheet is not importable.
-  "reading/epub/flow-display.ts": {
+  "reading/epub/flow/flow-display.ts": {
     values: ["#ffffff", "#f6efdc", "#1b1c1e"],
     why: "the paper a page is printed on, chosen in the reader rather than themed",
   },
@@ -51,7 +51,7 @@ const BY_VALUE_ALLOWED: Record<string, { values: string[]; why: string }> = {
     values: ["#ffffff"],
     why: "the white a cropped figure is rasterized onto, not a foreground colour",
   },
-  "reading/epub/epub-cover.ts": {
+  "reading/epub/file/epub-cover.ts": {
     values: ["#ffffff"],
     why: "the white a generated cover is drawn on, not a foreground colour",
   },

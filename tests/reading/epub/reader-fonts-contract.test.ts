@@ -23,7 +23,7 @@ function read(path: string): string {
 }
 
 test("the desk waits for the faces between the table and the first card", () => {
-  const desk = read("reading/epub/reader-view.ts");
+  const desk = read("reading/epub/paged/reader-view.ts");
   const opened = desk.indexOf("await ensurePagination(");
   const faces = desk.indexOf("await readingFontsReady()");
   expect(opened).toBeGreaterThan(-1);
@@ -34,7 +34,7 @@ test("the desk waits for the faces between the table and the first card", () => 
 });
 
 test("the column waits the same way", () => {
-  const column = read("reading/epub/flow-view.ts");
+  const column = read("reading/epub/flow/flow-view.ts");
   const opened = column.indexOf("await ensurePagination(");
   const faces = column.indexOf("await readingFontsReady()");
   expect(faces).toBeGreaterThan(opened);

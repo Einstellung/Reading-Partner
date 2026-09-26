@@ -24,7 +24,7 @@
 
 ## 重排视图
 
-`src/reading/epub/flow-view.ts`，React 壳 `FlowReaderPane.tsx`，和 `reader-view.ts`/`EpubReaderPane.tsx` 并列。一个滚动容器，spine 文档按顺序各挂一个 shadow host，复用 `page-mount.ts` 的 `mountDocument`/`createPageResources`/`BASELINE_CSS` 和打包字体；书的 CSS 照 docs/64 消毒后保留。单列，宽度随容器，左右 20px，正文 17px、行高 1.6，`img { max-width: 100%; height: auto }`，比容器宽的表格横向滚动。滚动是原生的（`touch-action: pan-y`），不走 `engine/gesture` 的路由。离屏的文档用 `content-visibility: auto`，估计高度按字数。
+`src/reading/epub/flow/flow-view.ts`，React 壳 `FlowReaderPane.tsx`，和 `reader-view.ts`/`EpubReaderPane.tsx` 并列。一个滚动容器，spine 文档按顺序各挂一个 shadow host，复用 `page-mount.ts` 的 `mountDocument`/`createPageResources`/`BASELINE_CSS` 和打包字体；书的 CSS 照 docs/64 消毒后保留。单列，宽度随容器，左右 20px，正文 17px、行高 1.6，`img { max-width: 100%; height: auto }`，比容器宽的表格横向滚动。滚动是原生的（`touch-action: pan-y`），不走 `engine/gesture` 的路由。离屏的文档用 `content-visibility: auto`，估计高度按字数。
 
 纸色照 docs/64「纸色」那一层挂在 host 上，但值由 Aa 里选的纸给（见下），不读 `--page-wash`：阅读屏里只有 Aa 的选择说话，和 app 的护眼开关不叠加。
 
@@ -43,7 +43,7 @@
 
 改字号、行距、边距之后位置不跑：`FlowReaderView.setDisplay` 改完每份文档的基线 `<style>`，再走 `relayout()`——标注矩形全部失效，按当前 CFI `settle` 回同一个字。宽度变化走的是同一个入口（原来的 ResizeObserver）。`intrinsicHeightEstimate` 吃当前排版参数，离屏文档的估高跟着字号和边距走。
 
-偏好存 localStorage（`phone-display`），不进同步：iPad 有自己的纸，这是这台手机的显示偏好。默认值、档位表、读写和校验（坏值按字段回默认，不整份丢）在 `reading/epub/flow-display.ts`。`FlowReaderPaneProps` 带初值，pane 挂载时就是上次的设置，不会先 17px 再跳。
+偏好存 localStorage（`phone-display`），不进同步：iPad 有自己的纸，这是这台手机的显示偏好。默认值、档位表、读写和校验（坏值按字段回默认，不整份丢）在 `reading/epub/flow/flow-display.ts`。`FlowReaderPaneProps` 带初值，pane 挂载时就是上次的设置，不会先 17px 再跳。
 
 ## 外壳
 

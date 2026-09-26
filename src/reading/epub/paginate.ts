@@ -15,11 +15,11 @@
 // notes as [p.N] strings that nothing rewrites, so recutting a book moves all
 // of them at once.
 
-import { elementSteps, epubCfi, parseEpubCfi, pointSteps, resolvePoint, textSteps } from "./cfi";
-import type { NavEntry } from "./nav";
+import { elementSteps, epubCfi, parseEpubCfi, pointSteps, resolvePoint, textSteps } from "./file/cfi";
+import type { NavEntry } from "./file/nav";
 import { PAGE_GEOMETRY, type PageGeometry } from "./page-geometry";
-import type { EpubBook, SpineDocument } from "./parse";
-import { indexRuns, offsetOfPoint, runAt } from "./text";
+import type { EpubBook, SpineDocument } from "./file/parse";
+import { indexRuns, offsetOfPoint, runAt } from "./file/text";
 
 // Version 2 is the laid-out page. Version 1 cut 1800 characters a block and is
 // read as absent: a book that has one is cut again, the one time a table is

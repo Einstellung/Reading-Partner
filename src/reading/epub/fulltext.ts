@@ -13,7 +13,7 @@ import {
   blockTexts,
   type Pagination,
 } from "./paginate";
-import { type EpubBook } from "./parse";
+import { type EpubBook } from "./file/parse";
 
 /**
  * The outline, with each entry's page being the position block its target falls

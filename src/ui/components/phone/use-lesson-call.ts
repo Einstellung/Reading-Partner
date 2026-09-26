@@ -33,7 +33,7 @@ import {
 } from "../../../reading/lesson/thread-state";
 import { chapterOfReadChapterLabel } from "../../../reading/lecture/tools";
 import { resolveBookThread } from "../../../reading/session/book-thread";
-import { buildReadingTurn } from "../../../reading/turn";
+import { buildReadingTurn } from "../../../reading/turn/turn";
 import { soulHarness } from "../../../soul";
 import { rehydrateMessage } from "../chat/chatParts";
 import type { ThreadMessage } from "../chat/types";
