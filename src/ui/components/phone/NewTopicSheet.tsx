@@ -7,6 +7,7 @@
 // a user gesture, and Radix's own autofocus runs after it.
 
 import { useState, type MutableRefObject } from "react";
+import { useKeyboardInset } from "../common/useKeyboardInset";
 import { NEW_TOPIC_BLURB, NEW_TOPIC_PLACEHOLDER } from "../shelf/topic-shelf";
 import { Button } from "../ui/button";
 import { Dialog, DialogDescription, DialogSheetContent, DialogTitle } from "../ui/dialog";
@@ -20,6 +21,7 @@ export default function NewTopicSheet(props: {
 }) {
   const [name, setName] = useState("");
   const trimmed = name.trim();
+  const keyboard = useKeyboardInset();
 
   return (
     <Dialog
@@ -33,6 +35,14 @@ export default function NewTopicSheet(props: {
           implicit auto column grows to fit a long unbroken name. */}
       <DialogSheetContent
         className="grid-cols-[minmax(0,1fr)]"
+        style={
+          keyboard > 0
+            ? {
+                bottom: keyboard,
+                maxHeight: `calc(100dvh - ${keyboard}px - max(env(safe-area-inset-top), 1rem))`,
+              }
+            : undefined
+        }
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           props.inputRef.current?.focus({ preventScroll: true });
