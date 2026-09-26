@@ -70,21 +70,52 @@ export const MIN_CHAPTERS = 3;
 export const MIN_CHAPTER_CHARS = 200;
 
 const CJK_CHAPTER = /第\s*(\d+)\s*[章讲課课]/;
-const EN_CHAPTER = /\bchapter\s+(\d+)\b/i;
+// Arabic or Roman after "chapter". The space is optional because Project
+// Gutenberg's Pride and Prejudice prints "CHAPTERXXVII.".
+const EN_CHAPTER = /\bchapter\s*(\d+|[ivxlcdm]+)\b/i;
 const LEADING_NUMBER = /^\s*(\d+)\s*[.、:：]?\s+\S/;
+const ROMAN = /^m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$/i;
+const ROMAN_DIGIT: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
 
-// The chapter number printed in a title, or null. Arabic digits only: every
-// table measured writes them that way, and a Chinese-numeral fallback would buy
-// nothing but a second thing to keep right.
+function romanValue(s: string): number | null {
+  if (!ROMAN.test(s)) return null;
+  const digits = s.toLowerCase().split("").map((ch) => ROMAN_DIGIT[ch]);
+  let n = 0;
+  for (let i = 0; i < digits.length; i++) {
+    n += digits[i] < (digits[i + 1] ?? 0) ? -digits[i] : digits[i];
+  }
+  return n;
+}
+
+// The chapter number printed in a title, or null. Arabic digits, and Roman
+// numerals after the word "chapter" (the English novel's "CHAPTER V."). No
+// Chinese numerals: every CJK table measured writes Arabic ones.
 export function chapterNumber(title: string): number | null {
   for (const re of [CJK_CHAPTER, EN_CHAPTER, LEADING_NUMBER]) {
     const m = re.exec(title);
     if (m) {
-      const n = Number(m[1]);
-      if (Number.isFinite(n) && n >= 0 && n < 1000) return n;
+      const n = /^\d+$/.test(m[1]) ? Number(m[1]) : romanValue(m[1]);
+      if (n !== null && n >= 0 && n < 1000) return n;
     }
   }
   return null;
+}
+
+// Text ahead of a chapter heading that ends as a sentence does, and the space
+// after it.
+const CAPTION_BEFORE_HEADING =
+  /^.*?[.!?"'’”)。！？」』]\s*(?=\bchapter\s*(?:\d+|[ivxlcdm]+)\b|第\s*\d+\s*[章讲課课])/i;
+
+// A table-of-contents title as the chapter's name. Gutenberg's generated EPUB
+// tables take the whole chapter heading, and an illustrated chapter's heading
+// holds the illustration's caption ahead of "CHAPTER II." — so the book's own
+// table says "I hope Mr. Bingley will like it. CHAPTER II.". The caption is cut.
+// A title with nothing ahead of its heading, or with something that does not end
+// as a sentence ("Part One: Chapter 1"), is left as it is.
+export function chapterTitle(title: string): string {
+  const t = (title ?? "").trim();
+  const m = CAPTION_BEFORE_HEADING.exec(t);
+  return m ? t.slice(m[0].length) : t;
 }
 
 // The text of a 1-based inclusive page range, or "" when the range is outside
@@ -126,7 +157,7 @@ export function chapterRanges(
   const total = Math.max(1, Math.round(totalPages));
   const clean = entries
     .map((e) => ({
-      title: (e.title ?? "").trim(),
+      title: chapterTitle(e.title),
       startPage: Math.max(1, Math.min(total, Math.round(e.startPage))),
     }))
     .filter((e) => Number.isFinite(e.startPage))
