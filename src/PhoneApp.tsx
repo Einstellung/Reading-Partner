@@ -69,7 +69,7 @@ import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
-import { ShellKeyboardContext, useKeyboardFrame } from "./ui/components/common/useKeyboardInset";
+import { KeyboardShell } from "./ui/components/phone/KeyboardShell";
 import { useBackgroundServices } from "./ui/components/common/useBackgroundServices";
 
 // InfoHome's screen for a stack entry, or null on the ones it does not draw.
@@ -261,15 +261,6 @@ export default function PhoneApp({
     useMemo(() => ({ enabled: backable, onBack: goBack }), [backable, goBack]),
   );
 
-  // While a keyboard is up the whole shell moves into the part of the screen it
-  // leaves: WKWebView scrolls the document up by the keyboard's height instead
-  // of shrinking the page (docs/pitfall/443), which took every top bar off
-  // screen. Sized to the visible part and placed at its top, the shell keeps its
-  // top bar under the status bar and ends on the keyboard; the conversation
-  // gives up the height. `top`, not a transform, so the shell never becomes the
-  // containing block of the fixed overlays inside it.
-  const keyboard = useKeyboardFrame();
-
   // InfoHome navigates by naming a destination, and uses the same call for its
   // own top bar backs ("briefing" from an article). goTo unwinds to a screen
   // already on the stack, so those stay backs instead of stacking a second copy.
@@ -357,20 +348,10 @@ export default function PhoneApp({
   return (
     // The backdrop the swipe reveals, and the clip that hides whatever has left
     // the screen. Only ever visible while a gesture or its animation is running.
-    <ShellKeyboardContext.Provider value={keyboard !== null}>
-    <div
-      className="relative h-full overflow-hidden bg-muted-soft"
-      style={keyboard ? { top: keyboard.top, height: keyboard.height } : undefined}
-    >
+    <KeyboardShell className="relative h-full overflow-hidden bg-muted-soft">
       {/* p-safe: the notch and the home indicator (viewport-fit=cover). Fixed
-          overlays are not covered by it and pad themselves — docs/pitfall/74.
-          The keyboard covers the home indicator, so its inset goes while the
-          keyboard is up. */}
-      <div
-        ref={surfaceRef}
-        className="flex h-full flex-col bg-background p-safe"
-        style={keyboard ? { paddingBottom: 0 } : undefined}
-      >
+          overlays are not covered by it and pad themselves — docs/pitfall/74. */}
+      <div ref={surfaceRef} className="flex h-full flex-col bg-background p-safe">
         {/* No shell header: every screen carries its own top bar, and a second
             one above them would cost a phone a line of reading height for
             nothing. */}
@@ -538,7 +519,6 @@ export default function PhoneApp({
           goToMeals: () => onNavigate("meals"),
         }}
       />
-    </div>
-    </ShellKeyboardContext.Provider>
+    </KeyboardShell>
   );
 }

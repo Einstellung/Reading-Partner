@@ -23,28 +23,33 @@ export interface ViewportReading {
 	vvScale: number;
 }
 
-/** The visible part of the document, in document pixels. */
-export interface VisibleFrame {
+/** Where the keyboard leaves room, for a shell laid out at its full height. */
+export interface KeyboardFrame {
+	/** How far down the document the visible part starts: the shell moves there. */
 	top: number;
-	height: number;
+	/** How much of the shell's bottom the keyboard covers. */
+	covered: number;
 }
 
 // Sub-pixel noise is not a keyboard.
 const SLACK = 1;
 
 /**
- * The visible part of the document while a keyboard (or the accessory bar of a
- * hardware one) covers the bottom of the screen, or null when nothing does.
+ * Where a shell `layoutHeight` tall has to move, and how much of it the
+ * keyboard (or the accessory bar of a hardware one) covers, or null when
+ * nothing does. The shell keeps its size: moved to the visible part's top, its
+ * top bar is under the status bar, and the view docked at its bottom pads
+ * itself by `covered`.
  *
  * A pinch-zoomed page also has a smaller, offset visual viewport; that is the
  * reader looking closer, not less room, so it is null too.
  */
-export function keyboardFrame(r: ViewportReading): VisibleFrame | null {
+export function keyboardFrame(r: ViewportReading, layoutHeight: number): KeyboardFrame | null {
 	if (Math.abs(r.vvScale - 1) > 0.01) return null;
 	const shrunk = r.vvHeight < r.innerHeight - SLACK;
 	const scrolled = r.vvOffsetTop > SLACK;
 	if (!shrunk && !scrolled) return null;
-	return { top: Math.round(r.vvOffsetTop), height: Math.round(r.vvHeight) };
+	return { top: Math.round(r.vvOffsetTop), covered: Math.max(0, Math.round(layoutHeight - r.vvHeight)) };
 }
 
 /**
@@ -61,4 +66,12 @@ export function readViewport(): ViewportReading | null {
 	const vv = window.visualViewport;
 	if (!vv) return null;
 	return { innerHeight: window.innerHeight, vvHeight: vv.height, vvOffsetTop: vv.offsetTop, vvScale: vv.scale };
+}
+
+/**
+ * The padding a view docked at the bottom of a moved shell takes: what the
+ * keyboard covers, less the home indicator's inset the view already ends above.
+ */
+export function coveredPadding(covered: number): string {
+	return `max(0px, calc(${covered}px - env(safe-area-inset-bottom)))`;
 }

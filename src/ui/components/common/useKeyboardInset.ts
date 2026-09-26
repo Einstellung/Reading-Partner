@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { keyboardFrame, keyboardInset, readViewport, type VisibleFrame } from "./keyboard-frame";
+import { createContext, useContext, useEffect, useState, type RefObject } from "react";
+import { keyboardFrame, keyboardInset, readViewport, type KeyboardFrame } from "./keyboard-frame";
 
 // Runs `update` now and whenever the window or its visual viewport changes;
 // returns the unsubscribe. The keyboard fires only on the visual viewport, and
@@ -18,35 +18,37 @@ function onViewportChange(update: () => void): () => void {
 }
 
 /**
- * Whether the shell around a view already keeps itself inside the part of the
- * screen the keyboard leaves (the phone shell, useKeyboardFrame). null: it does
- * not, and a bottom-docked view pads itself (useKeyboardInset). A boolean: it
- * does, and whether a keyboard is up right now.
+ * What the shell around a view says about the keyboard, when it is a shell that
+ * moves itself to the visible part of the screen (the phone's, useKeyboardFrame):
+ * how much of its bottom the keyboard covers, 0 with no keyboard. null: the
+ * shell does not, and a bottom-docked view measures for itself
+ * (useKeyboardInset).
  */
-export const ShellKeyboardContext = createContext<boolean | null>(null);
+export const ShellKeyboardContext = createContext<number | null>(null);
 
-export function useShellKeyboard(): boolean | null {
+export function useShellKeyboard(): number | null {
 	return useContext(ShellKeyboardContext);
 }
 
 /**
- * The visible part of the document while a keyboard is up, or null. A shell
- * that sizes itself to it and sits at its top keeps its top bar under the
- * status bar and its bottom on the keyboard, whichever way WKWebView answered
- * the keyboard (keyboard-frame.ts).
+ * Where the shell has to move while a keyboard is up, and how much of it the
+ * keyboard covers, or null. The shell keeps its size, so nothing laid out in it
+ * (a reader covered by a lesson included) is resized by the keyboard; only the
+ * view that owns the focused field pads itself (keyboard-frame.ts).
  */
-export function useKeyboardFrame(): VisibleFrame | null {
-	const [frame, setFrame] = useState<VisibleFrame | null>(null);
+export function useKeyboardFrame(shell: RefObject<HTMLElement | null>): KeyboardFrame | null {
+	const [frame, setFrame] = useState<KeyboardFrame | null>(null);
 	useEffect(
 		() =>
 			onViewportChange(() => {
 				const r = readViewport();
-				const next = r ? keyboardFrame(r) : null;
+				const height = shell.current?.offsetHeight ?? 0;
+				const next = r && height > 0 ? keyboardFrame(r, height) : null;
 				// Same frame, same object: the scroll events a keyboard pairs with its
 				// resize must not re-render the shell for nothing.
-				setFrame((prev) => (prev && next && prev.top === next.top && prev.height === next.height ? prev : next));
+				setFrame((prev) => (prev && next && prev.top === next.top && prev.covered === next.covered ? prev : next));
 			}),
-		[],
+		[shell],
 	);
 	return frame;
 }

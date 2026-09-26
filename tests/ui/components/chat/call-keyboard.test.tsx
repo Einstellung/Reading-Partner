@@ -31,7 +31,7 @@ afterEach(() => {
 
 const message = { id: "m1", role: "assistant" as const, content: "Hello." };
 
-function draw(shellKeyboard: boolean | null): HTMLElement {
+function draw(shellKeyboard: number | null): HTMLElement {
   const call = createElement(CallView, {
     messages: [message] as never,
     onSend: () => {},
@@ -50,14 +50,17 @@ test("on its own the call pads itself by the covered height", () => {
   expect(composerRow(root).className).toContain("pb-6");
 });
 
-test("in a shell that follows the keyboard the call does not pad, and sits close to it", () => {
-  const root = draw(true);
-  expect(root.style.paddingBottom).toBe("");
+test("in a shell that moves itself, the call pads by what the shell says is covered", () => {
+  const root = draw(413);
+  // The padding is coveredPadding(413), a calc over env() this DOM does not
+  // parse; what can be read here is that the call did not measure for itself.
+  expect(root.style.paddingBottom).not.toBe("403px");
   expect(composerRow(root).className).toContain("pb-2");
 });
 
-test("in that shell with the keyboard down the composer keeps its resting room", () => {
-  const root = draw(false);
+test("in that shell with the keyboard down the call does not measure for itself", () => {
+  // The viewport still reads as the iPad's shrunk one: the shell's word wins.
+  const root = draw(0);
   expect(root.style.paddingBottom).toBe("");
   expect(composerRow(root).className).toContain("pb-6");
 });
