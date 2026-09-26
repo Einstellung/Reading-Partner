@@ -69,6 +69,32 @@ test("a delivered run before a word was written marks the row in place", () => {
   expect(rows.writing(at(2000))).toEqual({ ts: 1000 });
 });
 
+test("a row marked with a run keeps its mark when a steer puts it in the file", () => {
+  const rows = createRowSplit();
+  rows.start(1000);
+  rows.delivered("", "run-1");
+  rows.writing(at(1500));
+  expect(rows.steered("The translation is in.")).toEqual({
+    text: "The translation is in.",
+    ts: 1000,
+    origin: { runId: "run-1" },
+  });
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: null } });
+});
+
+test("a row marked with a run keeps its mark when a second delivery puts it in the file", () => {
+  const rows = createRowSplit();
+  rows.start(1000);
+  rows.delivered("", "run-1");
+  rows.writing(at(1500));
+  expect(rows.delivered("The translation is in.", "run-2")).toEqual({
+    text: "The translation is in.",
+    ts: 1000,
+    origin: { runId: "run-1" },
+  });
+  expect(rows.writing(at(2000))).toEqual({ ts: 2000, split: { was: 1000, origin: { runId: "run-2" } } });
+});
+
 test("two steers drained at the same boundary write the row above once and split once", () => {
   const rows = createRowSplit();
   rows.start(1000);
