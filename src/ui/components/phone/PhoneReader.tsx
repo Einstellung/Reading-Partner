@@ -250,7 +250,7 @@ export default function PhoneReader(props: {
         outline={book?.outline ?? []}
         paper={display.paper}
         onOpenChange={setOutlineOpen}
-        onGoToPage={(pageIndex) => viewRef.current?.goToPage(pageIndex)}
+        onGoToChapter={(pageIndex) => viewRef.current?.goToChapter(pageIndex)}
       />
 
       <PhoneDisplaySheet

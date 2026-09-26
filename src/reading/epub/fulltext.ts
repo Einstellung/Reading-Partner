@@ -13,6 +13,7 @@ import {
   blockTexts,
   type Pagination,
 } from "./paginate";
+import type { NavEntry } from "./nav";
 import { type EpubBook } from "./parse";
 
 /**
@@ -22,8 +23,29 @@ import { type EpubBook } from "./parse";
  * table of contents is worse than one pointing a paragraph early.
  */
 export function outlineFor(book: EpubBook, pagination: Pagination): OutlineItem[] {
+  return tocTargets(book, pagination).map(({ item, page }) => ({
+    title: item.title,
+    page,
+    level: item.level,
+  }));
+}
+
+/**
+ * The first table-of-contents entry on a page (1-based), as a link the reader
+ * resolves the way it resolves the book's own (the archive entry, then the
+ * fragment). An outline row carries only its page, and the page's first block
+ * can be the tail of the chapter before; this is the heading the row was made
+ * from. Null when no entry is on that page.
+ */
+export function outlineHrefAt(book: EpubBook, pagination: Pagination, page: number): string | null {
+  const hit = tocTargets(book, pagination).find((t) => t.page === page);
+  if (!hit) return null;
+  return hit.item.fragment === null ? hit.item.entry : `${hit.item.entry}#${hit.item.fragment}`;
+}
+
+function tocTargets(book: EpubBook, pagination: Pagination): { item: NavEntry; page: number }[] {
   const byEntry = new Map(book.docs.map((d) => [d.entry, d]));
-  const out: OutlineItem[] = [];
+  const out: { item: NavEntry; page: number }[] = [];
   for (const item of book.nav.toc) {
     const doc = byEntry.get(item.entry);
     if (!doc) continue;
@@ -32,11 +54,7 @@ export function outlineFor(book: EpubBook, pagination: Pagination): OutlineItem[
       const el = doc.text.ids.get(item.fragment);
       if (el !== undefined) offset = doc.text.offsets.get(el) ?? 0;
     }
-    out.push({
-      title: item.title,
-      page: blockNumberAt(pagination, doc.index, offset),
-      level: item.level,
-    });
+    out.push({ item, page: blockNumberAt(pagination, doc.index, offset) });
   }
   return out;
 }

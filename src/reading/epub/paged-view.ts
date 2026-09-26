@@ -32,6 +32,7 @@ import { createFlowMarks, flowRangeSource, rectsIn, type FlowDoc, type PressPoin
 import { flowBaselineCss, mountFlowDocument } from "./flow-mount";
 import type { FlowReaderOptions } from "./flow-view";
 import { createMarkPainter, rangeOfSpan } from "./mark-draw";
+import { outlineHrefAt } from "./fulltext";
 import { createSpineTexts } from "./mark-write";
 import { createPageResources, readingFontsReady } from "./page-mount";
 import {
@@ -606,8 +607,13 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
       case "start-mark":
         if (!pressedAt) break;
         marks.beginDrag(pressedAt);
+        // Captured on the scroller, not the frame: the router listens there
+        // and has to see this finger lift, or it counts it as still down and
+        // eats every touch after it (docs/pitfall/437). It does not turn under
+        // the stroke: its own long press, shorter than this one, has already
+        // taken the finger off the page flip.
         try {
-          frame.setPointerCapture(event.pointerId);
+          scroller.setPointerCapture(event.pointerId);
         } catch {
           // The pointer may already be gone; the stroke still ends on its up.
         }
@@ -732,6 +738,12 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     goToPage: (i) => {
       clearQuote();
       goToPage(i);
+    },
+    goToChapter: (i) => {
+      clearQuote();
+      const href = outlineHrefAt(book, pagination, i + 1);
+      const hash = href ? href.indexOf("#") : -1;
+      if (!href || !goToEntry(hash >= 0 ? href.slice(0, hash) : href, hrefFragment(href))) goToPage(i);
     },
     highlightQuote: async (page, req) => highlightQuote(page, req.searchText),
     clearQuoteHighlight: clearQuote,

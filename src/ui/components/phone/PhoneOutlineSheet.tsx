@@ -9,7 +9,8 @@
 //
 // The entries carry page numbers rather than hrefs — the outline is read off
 // the pagination table (reading/epub/fulltext.ts outlineFor), whose coordinate
-// is the position block — so a tap is goToPage.
+// is the position block — so a tap is goToChapter: the page, with the view
+// left to find the heading on it.
 
 import type { OutlineItem } from "../../../fulltext/types";
 import type { FlowPaperName } from "../../../reading/epub/flow-display";
@@ -26,7 +27,7 @@ export default function PhoneOutlineSheet(props: {
   // scoped to that attribute have to be restated on it (docs/70).
   paper: FlowPaperName;
   onOpenChange: (open: boolean) => void;
-  onGoToPage: (pageIndex: number) => void;
+  onGoToChapter: (pageIndex: number) => void;
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -45,7 +46,7 @@ export default function PhoneOutlineSheet(props: {
           bookId={null}
           displaySource={() => ""}
           onNavigatePage={(page) => {
-            props.onGoToPage(page - 1);
+            props.onGoToChapter(page - 1);
             props.onOpenChange(false);
           }}
           onOpenBook={noop}

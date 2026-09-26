@@ -70,6 +70,9 @@ function StubPane(props: FlowReaderPaneProps) {
       goToPage(pageIndex) {
         pages.push(pageIndex);
       },
+      goToChapter(pageIndex) {
+        pages.push(pageIndex);
+      },
       highlightQuote: async (pageIndex, req) => {
         highlights.push([pageIndex, req.searchText]);
         return true;
