@@ -1,6 +1,6 @@
 // Which row a streaming turn writes into (src/ui/components/chat/streaming-turn.ts):
 // opening the answer row, finding it by timestamp, dropping it. What the turn
-// does to that row is applyRowChange, tested in tests/ai/turn-rows-change.test.ts.
+// does to that row is applyRowChange, tested in tests/ai/turn-view/turn-rows-change.test.ts.
 // Pure — no React. Run: bun test.
 
 import { expect, test } from "bun:test";

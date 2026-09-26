@@ -86,7 +86,7 @@ test("an everyday model is used by the everyday kinds and by nothing else", asyn
 });
 
 // The provider is never the tier's to choose: credentials are single-active
-// (src/ai/credentials.ts), so a second provider here would have no key.
+// (src/ai/auth/credentials.ts), so a second provider here would have no key.
 test("everyday work runs on the default provider, whatever model it names", async () => {
   persist({ defaultProviderId: "deepseek", defaultModelId: "chat-model", everydayModelId: "cheap" });
   for (const kind of EVERYDAY) {

@@ -8,7 +8,7 @@
 import { expect, test } from "bun:test";
 import { messageToParts } from "../../../../src/ui/components/chat/chatParts";
 import { deliveredRunIds } from "../../../../src/ui/components/chat/deliveredRuns";
-import type { ToolStatus } from "../../../../src/ai/tool-status";
+import type { ToolStatus } from "../../../../src/ai/turn-view/tool-status";
 import type { ThreadMessage } from "../../../../src/ui/components/chat/types";
 
 function row(tools: ToolStatus[], text = "Noted."): ThreadMessage {

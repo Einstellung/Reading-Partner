@@ -20,7 +20,7 @@ import { BOOK_PAGE_LABEL, formatPages } from "../../fulltext/format";
 import type { Fulltext } from "../../fulltext/types";
 import { MAX_CHAPTER_PAGES } from "./inline";
 import type { TableChapter } from "../chapters";
-import { pageRangeLabel } from "../../ai/tool-labels";
+import { pageRangeLabel } from "../../ai/turn-view/tool-labels";
 
 // The page-range form's cap. Four times read_pages', because the reader asking
 // for "the part about attention" on a book with no chapter table is asking for

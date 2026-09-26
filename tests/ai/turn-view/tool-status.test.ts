@@ -1,4 +1,4 @@
-// The streaming reply's tool-call trace (src/ai/tool-status), shared
+// The streaming reply's tool-call trace (src/ai/turn-view/tool-status), shared
 // by the reading companion and the info companion. Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
@@ -9,7 +9,7 @@ import {
   resolveToolStatus,
   visibleTrace,
   type ToolStatus,
-} from "../../src/ai/tool-status";
+} from "../../../src/ai/turn-view/tool-status";
 
 test("a started tool is appended as running", () => {
   expect(appendRunningTool(undefined, "read_pages", "Reading pages")).toEqual([

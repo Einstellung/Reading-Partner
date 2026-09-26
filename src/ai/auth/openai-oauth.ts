@@ -9,7 +9,7 @@
 // account id; pi's openai-codex-responses API decodes it and sets the
 // chatgpt-account-id header, so we only ever hand it the access token.
 
-import { base64Url } from "../platform/app/oauth";
+import { base64Url } from "../../platform/app/oauth";
 import type { OpenAICredential } from "./credentials";
 import { createOAuthFlow } from "./oauth-flow";
 import {

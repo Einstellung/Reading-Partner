@@ -11,7 +11,7 @@
 // Pure bookkeeping: the session hook reads the verdicts and does the writing —
 // the thread file, the live-turns registry, the reducer.
 
-import { joinRoundTexts } from "../ai/turn-rows";
+import { joinRoundTexts } from "../ai/turn-view/turn-rows";
 
 export interface RowOrigin {
   runId: string;

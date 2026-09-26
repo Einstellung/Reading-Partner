@@ -14,7 +14,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { hasNativeSpeech } from "../../platform/app/platform";
-import { loadCredentials, updateCredentials, type ApiKeyCredential } from "../credentials";
+import { loadCredentials, updateCredentials, type ApiKeyCredential } from "../auth/credentials";
 
 // The command, and the argument key it reads. Both are checked by a test rather
 // than by a device build: a typo in either is silent, and the symptom is a mute

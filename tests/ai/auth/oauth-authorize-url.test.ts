@@ -5,8 +5,8 @@
 // anthropic-oauth.ts and openai-oauth.ts, not written by hand. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { MANUAL_REDIRECT_URI, buildAuthUrl as anthropicAuthUrl } from "../../src/ai/anthropic-oauth";
-import { buildAuthUrl as openaiAuthUrl } from "../../src/ai/openai-oauth";
+import { MANUAL_REDIRECT_URI, buildAuthUrl as anthropicAuthUrl } from "../../../src/ai/auth/anthropic-oauth";
+import { buildAuthUrl as openaiAuthUrl } from "../../../src/ai/auth/openai-oauth";
 
 const CHALLENGE = "the-challenge";
 const STATE = "the-state";

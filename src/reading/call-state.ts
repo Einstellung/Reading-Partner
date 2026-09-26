@@ -10,8 +10,8 @@
 
 import type { CompressedImage } from "../ai/image-utils";
 import type { AsideAnchor, MessageOrigin } from "../platform/app/threads";
-import type { ToolStatus } from "../ai/tool-status";
-import { applyRowChange, holdsNoAnswer, type RowChange, type TurnPhase } from "../ai/turn-rows";
+import type { ToolStatus } from "../ai/turn-view/tool-status";
+import { applyRowChange, holdsNoAnswer, type RowChange, type TurnPhase } from "../ai/turn-view/turn-rows";
 
 // Picture-in-picture (docs/03): the bubble by the mark, chat taking the whole
 // window with reading shrunk to a corner card, and reading back with chat
@@ -44,7 +44,7 @@ export interface CallRow {
   queued?: boolean;
   // The transient tool-call trace above a streaming reply (M6). Never persisted.
   tools?: ToolStatus[];
-  // What the running turn is doing (ai/turn-rows.ts), for the status line the
+  // What the running turn is doing (ai/turn-view/turn-rows.ts), for the status line the
   // surface draws while nothing is written yet. Display-only, like the trace.
   phase?: TurnPhase;
   // What the turn left out to fit the context window (src/budget) — the app's

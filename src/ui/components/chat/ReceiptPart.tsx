@@ -11,7 +11,7 @@
 // from here, and a dead affordance is worse than none.
 
 import { Button } from '../ui/button';
-import type { Receipt } from '../../../ai/tool-status';
+import type { Receipt } from '../../../ai/turn-view/tool-status';
 
 /** The receipt's own type scale, between the trace's and the prose's. */
 export function receiptText(size: 'sm' | 'lg'): string {

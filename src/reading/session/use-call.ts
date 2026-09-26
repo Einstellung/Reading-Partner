@@ -47,9 +47,9 @@ import {
   phaseOnToolStart,
   type RowChange,
   type TurnPhase,
-} from "../../ai/turn-rows";
+} from "../../ai/turn-view/turn-rows";
 import { annotationPage } from "../context";
-import { persistedTrace, type ToolStatus } from "../../ai/tool-status";
+import { persistedTrace, type ToolStatus } from "../../ai/turn-view/tool-status";
 import type { AgentToolEnd, AgentToolStart } from "../../legion/execute/contract";
 import { chapterByNumber, type TableChapter } from "../chapters";
 import { loadChapterTable } from "../lecture";
@@ -592,7 +592,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     });
 
     // A quiet call is not named on screen, so the phase stays where it was
-    // (ai/turn-rows.ts): the row goes on saying "Thinking…", or on writing.
+    // (ai/turn-view/turn-rows.ts): the row goes on saying "Thinking…", or on writing.
     const onToolStart = (info: AgentToolStart, ts: number) => {
       phase = phaseOnToolStart(phase, info.quiet) ?? null;
       write(
@@ -762,7 +762,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
         onDelivered: (ids) => delivered.injected(ids),
         // Every round's words, not only the answering round's: a round that
         // called a tool may have written a sentence first, and it has been on
-        // screen since (ai/turn-rows.ts). A single-round turn is the same text
+        // screen since (ai/turn-view/turn-rows.ts). A single-round turn is the same text
         // either way.
         onDone: (finalText, _assistant, turnText) => {
           const live = liveTurns.settle(threadId, controller);

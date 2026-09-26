@@ -2,7 +2,7 @@
 // yet. The line is drawn by PhaseLine (MessageList.tsx); the words are here so they can
 // be read back by a test.
 
-import type { TurnPhase } from "../../../ai/turn-rows";
+import type { TurnPhase } from "../../../ai/turn-view/turn-rows";
 
 // `null` is "something else on the row already says this": a running tool draws
 // its own trace line, and a reply arriving is its own evidence.

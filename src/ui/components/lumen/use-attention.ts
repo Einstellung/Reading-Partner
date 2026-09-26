@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { TurnActivity } from "../../../ai/activity";
+import type { TurnActivity } from "../../../ai/turn-view/activity";
 import {
   applyActivity,
   attentionEndsAt,

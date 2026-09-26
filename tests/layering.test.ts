@@ -54,6 +54,8 @@ const LAYER: Record<string, Layer> = {
   "platform/sync/merge": "platform",
 
   ai: "capability",
+  "ai/auth": "capability",
+  "ai/turn-view": "capability",
   "ai/voice": "capability",
   // The Red Box (docs/60): what a delivery put in front of the reader, one item
   // per file, and the join two devices reconcile one with. A capability, and a

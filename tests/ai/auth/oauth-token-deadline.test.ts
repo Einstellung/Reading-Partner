@@ -4,9 +4,9 @@
 // signal at all. Run: bun test.
 
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { getValidAnthropicAuth } from "../../src/ai/anthropic-oauth";
-import { getValidOpenAIAuth } from "../../src/ai/openai-oauth";
-import { installAppData, type FakeDisk } from "../support/appdata-fake";
+import { getValidAnthropicAuth } from "../../../src/ai/auth/anthropic-oauth";
+import { getValidOpenAIAuth } from "../../../src/ai/auth/openai-oauth";
+import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 const FILE = "credentials.json";
 const TOKEN_TIMEOUT_MS = 30_000;

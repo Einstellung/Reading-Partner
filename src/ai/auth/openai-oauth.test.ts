@@ -1,6 +1,6 @@
 // The device-code login orchestration: which states it emits, in which order.
 // parseManualInput lives in platform/app/oauth and is covered in
-// tests/ai/openai-oauth.test.ts. Run: bun test.
+// tests/ai/auth/openai-oauth.test.ts. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { openaiLoginDeviceCode } from "./openai-oauth";

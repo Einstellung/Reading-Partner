@@ -6,11 +6,11 @@
 // it read at the start. Run: bun test.
 
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { anthropicLogout, getValidAnthropicAuth } from "../../src/ai/anthropic-oauth";
-import { setActiveCredential } from "../../src/ai/credentials";
-import { getValidOpenAIAuth } from "../../src/ai/openai-oauth";
-import { setSttKey } from "../../src/ai/voice/config";
-import { installAppData, type FakeDisk } from "../support/appdata-fake";
+import { anthropicLogout, getValidAnthropicAuth } from "../../../src/ai/auth/anthropic-oauth";
+import { setActiveCredential } from "../../../src/ai/auth/credentials";
+import { getValidOpenAIAuth } from "../../../src/ai/auth/openai-oauth";
+import { setSttKey } from "../../../src/ai/voice/config";
+import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 const FILE = "credentials.json";
 

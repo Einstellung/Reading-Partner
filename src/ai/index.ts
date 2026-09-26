@@ -7,7 +7,7 @@ export {
 	anthropicLoginWithManualCode,
 	anthropicLogout,
 	getValidAnthropicAuth,
-} from "./anthropic-oauth";
+} from "./auth/anthropic-oauth";
 export {
 	openaiLogin,
 	openaiLoginManualStart,
@@ -15,8 +15,8 @@ export {
 	openaiLoginDeviceCode,
 	openaiLogout,
 	getValidOpenAIAuth,
-} from "./openai-oauth";
-export type { DeviceCodeState } from "./device-code";
+} from "./auth/openai-oauth";
+export type { DeviceCodeState } from "./auth/device-code";
 export {
 	listProviders,
 	setApiKey,

@@ -16,7 +16,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { generatePKCE, parseManualInput } from "../platform/app/oauth";
+import { generatePKCE, parseManualInput } from "../../platform/app/oauth";
 import {
 	isOAuthCredential,
 	loadCredentials,
@@ -26,7 +26,7 @@ import {
 	type ProviderCredentialId,
 } from "./credentials";
 import { coalesceRefresh } from "./token-refresh";
-import { errMsg } from "../platform/std/errors";
+import { errMsg } from "../../platform/std/errors";
 
 // Treat the token as expired this long before the real boundary so an in-flight
 // request never races it.

@@ -9,9 +9,9 @@ import {
 	withActiveCredential,
 	type CredentialStore,
 	type CredentialsIo,
-} from "../../src/ai/credentials";
-import { defaultModelFor, getModels, nextDefaultsForActive } from "../../src/ai/providers";
-import { PROVIDER_IDS } from "../../src/ai/provider-ids";
+} from "../../../src/ai/auth/credentials";
+import { defaultModelFor, getModels, nextDefaultsForActive } from "../../../src/ai/providers";
+import { PROVIDER_IDS } from "../../../src/ai/auth/provider-ids";
 
 const oauth = { type: "oauth", access: "a", refresh: "r", expires: 1 } as const;
 const key = (k: string) => ({ type: "apiKey", key: k }) as const;

@@ -13,7 +13,7 @@ import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings"
 import { formatPages, formatSearch } from "../../../fulltext/format";
 import type { Fulltext } from "../../../fulltext/types";
 import type { PrepPaper } from "./types";
-import { pageRangeLabel } from "../../../ai/tool-labels";
+import { pageRangeLabel } from "../../../ai/turn-view/tool-labels";
 
 export const SHORT_PAPER_MAX = 10;
 const DIGEST_MAX_ROUNDS = 12;

@@ -18,7 +18,7 @@ import type { BudgetPurpose } from "../../budget";
 import type { AiSurface, TurnTelemetry } from "../../platform/app/cache-telemetry";
 import type { ModelCallAbout } from "../../ai/model-usage";
 import type { ChatMessage, ProviderId, ResponseHead, StreamOutcome } from "../../ai/providers";
-import type { Receipt } from "../../ai/tool-status";
+import type { Receipt } from "../../ai/turn-view/tool-status";
 import type { HeldHarness } from "./held";
 
 // An image block a tool can return alongside its text (e.g. view_figure hands
@@ -30,9 +30,9 @@ export interface ToolResultImage {
   mimeType: string;
 }
 
-// A write's receipt lives with the chat row that shows it (ai/tool-status.ts),
+// A write's receipt lives with the chat row that shows it (ai/turn-view/tool-status.ts),
 // so it is declared there and named here.
-export type { Receipt, ReceiptLink } from "../../ai/tool-status";
+export type { Receipt, ReceiptLink } from "../../ai/turn-view/tool-status";
 
 // A richer tool result: text (also used as the UI trace preview) plus optional
 // images and, for a write, its receipt. A tool may still return a plain string,
@@ -172,7 +172,7 @@ export interface AgentCallbacks {
   // The answering round's text, plus pi's AssistantMessage for that round —
   // usage, responseId, stopReason. A caller that only wants the text ignores it.
   //
-  // `turnText` is every round's text joined with a blank line (ai/turn-rows.ts):
+  // `turnText` is every round's text joined with a blank line (ai/turn-view/turn-rows.ts):
   // a round that calls a tool may write a sentence before it, and the chat
   // surfaces keep that sentence on screen, so it is part of the reply they
   // persist. A caller whose turn produces an artifact — a note, a sub-agent's

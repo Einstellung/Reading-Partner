@@ -16,7 +16,7 @@ import {
 	noActivity,
 	type LumenActivity,
 } from "../../../../src/ui/components/lumen/attention";
-import type { TurnActivity } from "../../../../src/ai/activity";
+import type { TurnActivity } from "../../../../src/ai/turn-view/activity";
 
 const start = (name: string): TurnActivity => ({ kind: "tool", name, phase: "start" });
 const end = (name: string): TurnActivity => ({ kind: "tool", name, phase: "end" });

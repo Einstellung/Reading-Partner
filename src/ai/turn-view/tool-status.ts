@@ -1,4 +1,4 @@
-import type { PersistedToolStatus } from "../platform/app/threads";
+import type { PersistedToolStatus } from "../../platform/app/threads";
 
 // A tool call an agent turn makes, and the trace of them a reply carries. Both
 // the reading companion and the info companion keep the same list: a status goes

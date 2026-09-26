@@ -2,7 +2,7 @@
 // message-level flags (MessageList.tsx: MessageBubble). The user's own rows are
 // not decided here: they are always the pill.
 
-import { visibleTrace, type ToolStatus } from '../../../ai/tool-status';
+import { visibleTrace, type ToolStatus } from '../../../ai/turn-view/tool-status';
 import type { ChatPart } from './chatParts';
 
 export type CardPart = Extract<ChatPart, { type: 'card' }>;

@@ -59,7 +59,7 @@ export interface PersistedToolStatus {
   state: "done" | "error";
   receipt?: { label: string; summary: string; link?: Record<string, unknown> };
   error?: string;
-  // The call was not shown to the reader (ai/tool-status.ts). Kept on disk all
+  // The call was not shown to the reader (ai/turn-view/tool-status.ts). Kept on disk all
   // the same: the file is the record of what the turn did, not of what was on
   // screen. Absent on every message written before the flag existed.
   quiet?: true;

@@ -3,7 +3,7 @@
 // card-registry-context; this is which shape a row gets. Run: bun test.
 
 import { expect, test } from "bun:test";
-import type { Receipt, ToolStatus } from "../../../../src/ai/tool-status";
+import type { Receipt, ToolStatus } from "../../../../src/ai/turn-view/tool-status";
 import type { ChatPart } from "../../../../src/ui/components/chat/chatParts";
 import { messageRowLayout } from "../../../../src/ui/components/chat/message-row";
 

@@ -153,7 +153,7 @@ test("the model handed the line: the file reads user / ai / user / ai and a new 
     expect(rows(view)[1].streaming).toBeUndefined();
 
     // `turnText` is every round's words joined, the head included
-    // (ai/turn-rows.ts); what goes in the file is what is not already there.
+    // (ai/turn-view/turn-rows.ts); what goes in the file is what is not already there.
     act(() =>
       r.options().onDone(
         "the other one is the 1962 figure",

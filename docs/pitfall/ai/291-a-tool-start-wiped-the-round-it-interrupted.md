@@ -12,7 +12,7 @@
 
 ## 解法
 
-一轮的文字不再是过场，是回复的一部分。`appendRoundBreak` / `joinRoundTexts`（`src/ai/turn-rows.ts`）是唯一的拼法：`tool-start` 把已有文字后面留一个空行（同一轮的第二个工具不再多留），循环在 `onDone` 的第三个参数 `turnText` 里交各轮拼接后的全文。两边共用这两个函数，否则落地那一刻屏幕上的回复会重画一次。
+一轮的文字不再是过场，是回复的一部分。`appendRoundBreak` / `joinRoundTexts`（`src/ai/turn-view/turn-rows.ts`）是唯一的拼法：`tool-start` 把已有文字后面留一个空行（同一轮的第二个工具不再多留），循环在 `onDone` 的第三个参数 `turnText` 里交各轮拼接后的全文。两边共用这两个函数，否则落地那一刻屏幕上的回复会重画一次。
 
 `onDone` 的第一个参数仍是答出来的那一轮，产出物走这条路（笔记、蒸馏、马前卒的结果不能带上"我先看看第 4 页"）。工具结果不进任何一条。
 

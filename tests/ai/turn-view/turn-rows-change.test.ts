@@ -1,12 +1,12 @@
-// What a running turn does to its row (applyRowChange, src/ai/turn-rows.ts),
+// What a running turn does to its row (applyRowChange, src/ai/turn-view/turn-rows.ts),
 // on the chat surfaces' own row type. The reading call runs the same reducer
 // over its CallRow (tests/reading/call-state.test.ts); these are the cases
 // useStreamingTurn leans on — the coach, the retell, the lesson and the info
 // companion. Pure. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { applyRowChange, type RowChange } from "../../src/ai/turn-rows";
-import type { ThreadMessage } from "../../src/ui/components/chat/types";
+import { applyRowChange, type RowChange } from "../../../src/ai/turn-view/turn-rows";
+import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 
 const ai = (ts: number, text = "", extra: Partial<ThreadMessage> = {}): ThreadMessage => ({
   role: "ai",

@@ -88,7 +88,7 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 - 共用的记忆作用域。已解决：`ObservationFileStore` 2026-09-06 改成全库一份目录（`observations/`，`src/memory/observations/store.ts`），topic 只是索引维度不再是目录边界，两个根天然共用同一份 observation 仓。info 侧仍然一条观察也不写，只读画像和反馈日志——写观察走 dream，见 [60](./60-info：白宫与Red Boxes.md) 的记忆回路。
 
-- 引用时的三件事。时效、证据不全两条已落地，见 `src/reading/saved-article-tools.ts`：`publishedAt` 进了引用路径（`publishedDay`），`summaryOnly` 跟着材料进了 reading 的 prompt，工具由 `src/reading/turn.ts` 装配（`buildSavedArticleTools`、`SAVED_ARTICLES_PROMPT`）。第三条已有落点：`src/ai/tool-status.ts` 的 `persistedTrace` 把结算后的工具轨迹写进 thread 文件（2026-09-19），`read_paper` 这类调用作为一行落在回复下方并跟着存盘，不再是成功即消失。
+- 引用时的三件事。时效、证据不全两条已落地，见 `src/reading/saved-article-tools.ts`：`publishedAt` 进了引用路径（`publishedDay`），`summaryOnly` 跟着材料进了 reading 的 prompt，工具由 `src/reading/turn.ts` 装配（`buildSavedArticleTools`、`SAVED_ARTICLES_PROMPT`）。第三条已有落点：`src/ai/turn-view/tool-status.ts` 的 `persistedTrace` 把结算后的工具轨迹写进 thread 文件（2026-09-19），`read_paper` 这类调用作为一行落在回复下方并跟着存盘，不再是成功即消失。
 
 反向的边已经有一条：`assembleReadingContext()` 把各 topic 的 observation 索引拼成一段 READER'S CURRENT CONTEXT 喂给 triage（`src/memory/live/assemble.ts` → `src/info/program/live.ts`）。reading→info 通了，info→reading 一条都没有。
 

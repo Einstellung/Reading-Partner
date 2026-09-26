@@ -4,9 +4,9 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { buildAuthUrl } from "../../src/ai/openai-oauth";
-import { generatePKCE, parseManualInput } from "../../src/platform/app/oauth";
-import { isOAuthCredential } from "../../src/ai/credentials";
+import { buildAuthUrl } from "../../../src/ai/auth/openai-oauth";
+import { generatePKCE, parseManualInput } from "../../../src/platform/app/oauth";
+import { isOAuthCredential } from "../../../src/ai/auth/credentials";
 
 test("buildAuthUrl carries the Codex OAuth client, redirect, scope, and flow flags", () => {
 	const url = new URL(buildAuthUrl("the-challenge", "the-state"));

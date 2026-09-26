@@ -1,4 +1,4 @@
-// What the `failed` mark decides once a turn has stopped (src/ai/turn-rows.ts).
+// What the `failed` mark decides once a turn has stopped (src/ai/turn-view/turn-rows.ts).
 // Two readers hang off it — what goes back to the model next turn, and which row
 // a fresh attempt replaces — and a refusal is not a failure, so refusalRow clears
 // the mark rather than leaving whatever was there. These tests are about that
@@ -6,7 +6,7 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
-import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../src/legion/execute/turn";
+import { REFUSE_MIDTURN, REFUSE_ROUNDS } from "../../../src/legion/execute/turn";
 import {
   appendRoundBreak,
   holdsNoAnswer,
@@ -14,8 +14,8 @@ import {
   phaseOnToolStart,
   refusalRow,
   replayableHistory,
-} from "../../src/ai/turn-rows";
-import type { ThreadMessage } from "../../src/ui/components/chat/types";
+} from "../../../src/ai/turn-view/turn-rows";
+import type { ThreadMessage } from "../../../src/ui/components/chat/types";
 
 const WORDS = "The passage argues that the retina is not a camera";
 

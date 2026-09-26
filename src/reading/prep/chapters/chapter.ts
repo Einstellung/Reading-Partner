@@ -24,7 +24,7 @@ import { aiLanguageName, type AiLanguage } from "../../../platform/app/settings"
 import { clipLine } from "../../../platform/std/text";
 import type { BookChapter } from "../../chapters";
 import type { SpineChapter } from "./types";
-import { pageRangeLabel } from "../../../ai/tool-labels";
+import { pageRangeLabel } from "../../../ai/turn-view/tool-labels";
 
 const CHAPTER_MAX_ROUNDS = 16;
 

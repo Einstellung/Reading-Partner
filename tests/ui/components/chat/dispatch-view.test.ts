@@ -12,7 +12,7 @@ import {
   type DispatchSnapshot,
 } from "../../../../src/ui/components/chat/dispatch-view";
 import type { Run } from "../../../../src/legion/run";
-import type { Receipt } from "../../../../src/ai/tool-status";
+import type { Receipt } from "../../../../src/ai/turn-view/tool-status";
 
 const RECEIPT: Receipt = {
   label: "Sent off literature work",

@@ -5,7 +5,7 @@
 // (rehearsal), the retell, the phone lesson and the info companion. What
 // differs between them is only what the turn is made of and what happens once
 // it settles, so that is what stays at the call sites. What a turn does to its
-// row is applyRowChange (ai/turn-rows.ts), the reducer the reading call runs
+// row is applyRowChange (ai/turn-view/turn-rows.ts), the reducer the reading call runs
 // too; which row that is lives in streaming-turn.ts.
 
 import { useCallback, useRef, useState } from "react";
@@ -17,7 +17,7 @@ import {
   phaseOnToolStart,
   type RowChange,
   type TurnPhase,
-} from "../../../ai/turn-rows";
+} from "../../../ai/turn-view/turn-rows";
 import {
   cardRow,
   insertBeforeLast,

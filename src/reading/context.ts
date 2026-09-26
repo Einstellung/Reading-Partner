@@ -17,7 +17,7 @@ import {
 } from "../fulltext/format";
 import type { Fulltext } from "../fulltext/types";
 import { PAGE_WINDOW_RADIUS } from "./figures/page-window";
-import { pageRangeLabel } from "../ai/tool-labels";
+import { pageRangeLabel } from "../ai/turn-view/tool-labels";
 
 // Engine annotation page (0-based position.pageIndex) -> 1-based page for the
 // full-text helpers. Defined with the annotation shape it reads so the units

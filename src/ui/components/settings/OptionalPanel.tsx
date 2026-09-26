@@ -2,7 +2,7 @@
 // is optional — the app works without any of it, one feature quieter each time.
 //
 // The note at the top is about the two voice keys, which live in
-// credentials.json and never sync (ai/credentials.ts). The Semantic Scholar key
+// credentials.json and never sync (ai/auth/credentials.ts). The Semantic Scholar key
 // is an ordinary setting and does sync, so the note names what it covers rather
 // than claiming all three.
 

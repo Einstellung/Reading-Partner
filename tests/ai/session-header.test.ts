@@ -24,7 +24,7 @@ import { runAgentTurn } from "../../src/legion/execute/turn";
 import { callModel } from "../../src/ai/model-call";
 import { getModels, providers, streamChat, PROVIDER_IDS, type ProviderId } from "../../src/ai/providers";
 import { providerCallSetup } from "../../src/ai/call-setup";
-import * as credentials from "../../src/ai/credentials";
+import * as credentials from "../../src/ai/auth/credentials";
 import { chatCleanupRunner } from "../../src/ai/voice";
 import * as cacheTelemetry from "../../src/platform/app/cache-telemetry";
 import * as sessionFs from "../../src/platform/app/session-fs";
