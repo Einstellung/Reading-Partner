@@ -589,6 +589,9 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       const head = (liveTurns.get(threadId)?.message.text ?? "").trim();
       const down = rows.delivered(head, runId);
       if (down) appendOwn(home, threadId, { role: "ai", ...down });
+      // Handed it before a word was written: the row already on screen is the
+      // answer, so it is marked now rather than only once the file is reopened.
+      if (rows.origin?.runId === runId) write({ kind: "origin", origin: rows.origin }, rows.ts);
     });
 
     // A quiet call is not named on screen, so the phase stays where it was

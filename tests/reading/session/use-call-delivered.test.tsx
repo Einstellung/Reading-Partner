@@ -264,6 +264,39 @@ test("stopped mid-reply to a run delivered mid-answer: the kept half is still ma
   }
 });
 
+test("stopped mid-reply to a run delivered before a word was written: the kept half is marked with the run", async () => {
+  const r = rig();
+  try {
+    const view = await mounted(r);
+    const waiting = deliverIntoReadingTurn({ origin, bell, runId: "r-9" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    act(() => r.land(0));
+    await act(async () => {
+      await waiting;
+    });
+    act(() => r.options().onDelta("the translation"));
+    // Marked on screen while it is still being written, not only once reopened.
+    expect(rows(view).map((m) => [m.role, m.text, m.origin])).toEqual([
+      ["user", "why this?", undefined],
+      ["ai", "the translation", { runId: "r-9" }],
+    ]);
+
+    await act(async () => {
+      view.result.current.stop();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(r.stored.map((m) => [m.role, m.text, m.origin])).toEqual([
+      ["user", "why this?", undefined],
+      ["ai", "the translation", { runId: "r-9" }],
+    ]);
+  } finally {
+    r.restore();
+  }
+});
+
 test("a turn that ended before the boundary drained it answers no bell", async () => {
   const r = rig();
   try {
