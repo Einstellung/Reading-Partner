@@ -19,6 +19,7 @@ import {
   SWEEP_INTERVAL_MS,
   MIN_NEW_MARKS,
   type DistillJob,
+  type SourceArrears,
   type SourceUnit,
   type TopicArrears,
 } from "../observations/arrears";
@@ -36,6 +37,7 @@ import {
   distillWritePayload,
   markCursor,
   messageCursor,
+  resolveCursors,
   runDistillPass,
   runMarksDistillPass,
   type DistillAnnotation,
@@ -513,6 +515,7 @@ async function collectArrears(
     },
     { isBusy: threadBusy },
   );
+  await pinCountCursors(sourceArrears, metaOf);
   const names = new Map(topics.map((t) => [t.id, t.name]));
   const out: TopicArrears[] = [];
   for (const [topicId, units] of sourceArrears) {
@@ -524,6 +527,31 @@ async function collectArrears(
     });
   }
   return out;
+}
+
+// Every count cursor the sweep read the old way (a file from before key
+// cursors, or a count an older version moved since) written back as the keys it
+// was read as, so the reading is made once (distill.ts resolveCursors). Only
+// the threads resolved are written; setMeta merges them onto the file.
+async function pinCountCursors(
+  sourceArrears: Map<string, SourceArrears[]>,
+  metaOf: (topicId: string) => Promise<ObservationMeta>,
+): Promise<void> {
+  for (const [topicId, units] of sourceArrears) {
+    const meta = await metaOf(topicId);
+    const parts = units.flatMap(({ unit }) =>
+      unit.cursor === "distilledMessages"
+        ? (unit.parts ?? [{ threadId: unit.id, messages: unit.messages }])
+        : [],
+    );
+    const pinned = resolveCursors(meta, parts);
+    if (pinned === null) continue;
+    await store.setMeta(topicId, {
+      lastDistilledAt: meta.lastDistilledAt,
+      lastAnnotationDistillAt: meta.lastAnnotationDistillAt,
+      ...pinned,
+    });
+  }
 }
 
 // The one job the sweep picked, run as the pass it is.

@@ -591,6 +591,7 @@ test("a finished pass advances both cursors", async () => {
     lastDistilledAt: JULY_17,
     lastAnnotationDistillAt: null,
     distilledMessages: { "thread-1": 2 },
+    distilledMessageKeys: { "thread-1": ["100:user", "200:ai"] },
     distilledMarks: { "book-1": 900 }, // the newest mark this pass was shown
   });
 });
@@ -647,6 +648,7 @@ test("a bookless pass writes an unstamped observation and moves only the message
     lastDistilledAt: JULY_17,
     lastAnnotationDistillAt: null,
     distilledMessages: { "briefing-2026-07-17": 2 },
+    distilledMessageKeys: { "briefing-2026-07-17": ["100:user", "200:ai"] },
   });
 });
 

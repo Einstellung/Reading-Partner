@@ -17,6 +17,7 @@ import {
   type DistillAnnotation,
   type DistillMessage,
   type DistillUnitPart,
+  type MessageCursor,
 } from "./distill";
 
 // How often the app looks, while it is open.
@@ -103,10 +104,9 @@ function plain(messages: readonly DistillMessage[], threadId: string): DistillMe
 
 // Every thread of one book reduced to the passes that should run over it.
 //
-// A folded transcript is merged into its parent's by timestamp. An aside opens
-// mid-lesson and the reader goes back to the lesson after, so a merge by ts is
-// append-only in time — which is what lets one cursor, counted in messages,
-// index the lot across restarts.
+// A folded transcript is merged into its parent's by timestamp. The cursors
+// stay one per thread, over each thread's own messages (distill.ts
+// MessageCursor), so the merged order is only what the model reads.
 export function distillUnits(
   threads: readonly UnitThread[],
   pageless?: ReadonlySet<string>,
@@ -280,13 +280,14 @@ export function countNewMarks(
 /**
  * What one unit owes, given where its cursor stands.
  *
- * A conversation takes a count per thread, because a unit merged from several
+ * A conversation takes a cursor per thread, because a unit merged from several
  * carries one cursor per part; a book's marks take the timestamp their map
- * holds. Both accept the number directly, which is the single-thread case.
+ * holds. Both accept a number directly: the single-thread case, where for a
+ * conversation it is a bare count.
  */
 export function countUnitOwed(
   unit: SourceUnit,
-  cursor: number | null | ((threadId: string) => number),
+  cursor: number | null | ((threadId: string) => number | MessageCursor),
 ): number {
   if (unit.cursor === "distilledMarks") {
     return countNewMarks(unit.marks, typeof cursor === "function" ? null : cursor);
@@ -300,7 +301,7 @@ export function countUnitOwed(
 export function unitArrears(
   source: string,
   unit: SourceUnit,
-  cursor: number | null | ((threadId: string) => number),
+  cursor: number | null | ((threadId: string) => number | MessageCursor),
 ): SourceArrears {
   return { source, unit, owed: countUnitOwed(unit, cursor) };
 }

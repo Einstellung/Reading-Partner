@@ -14,6 +14,7 @@ import {
   type SourceArrears,
   type SourceUnit,
 } from "../observations/arrears";
+import type { MessageCursor } from "../observations/distill";
 import { distillSources } from "./sources";
 
 /**
@@ -22,8 +23,8 @@ import { distillSources } from "./sources";
  * part, and because a topic's meta.json is one file read.
  */
 export interface CursorReader {
-  /** How many of that thread's messages a pass has already folded in. */
-  messages(threadId: string): number;
+  /** Which of that thread's messages a pass has already folded in. */
+  messages(threadId: string): number | MessageCursor;
   /** The newest mark of that book already folded in, or null for none. */
   marks(bookId: string): number | null;
 }
