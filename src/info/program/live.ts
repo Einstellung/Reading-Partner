@@ -78,6 +78,7 @@ import type { AnalystInput, LabRunResult } from "../analysis/types";
 import { getObservationAdapter } from "../../memory/live/live";
 import { buildObservationSnapshot, trimObservations } from "../../memory/observations/select";
 import { runDreamIfDue } from "../../memory/dream/live";
+import { sweepProseConflictsNow } from "../../memory/adjudicate/live";
 import { DAILY_ANCHOR_HOUR, DAILY_TICK_MS, lastAnchorDate } from "./daily";
 import { registerCollectWorker, writeCollectBrief, type CollectScope } from "./collect-worker";
 import { appRunner } from "../../legion/execute/runner";
@@ -473,6 +474,10 @@ async function checkDailyRound(): Promise<void> {
   // machine holds is deleted by this machine, and the ledger line is what tells
   // it which ones (docs/55). Once a day, and it never throws.
   await runLedgerHousekeeping();
+  // Every device looks for parked prose copies and asks for a run per copy
+  // (docs/59 §6); the run is keyed by content, so the devices' asks meet in one
+  // file and the election picks who settles it. Never throws, never calls a model.
+  await sweepProseConflictsNow();
 }
 
 // The wake is a hint and nothing more — the answer comes from the clock and the

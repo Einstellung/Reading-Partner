@@ -44,6 +44,7 @@ import { registerIngestUrlWorker } from "../../../reading/ingest/url-worker";
 import { registerMealsPhotosWorker } from "../../../info/meals/photos/photo-worker";
 import { startMealsPhotoHousekeeping } from "../../../info/meals/photos/photo-sweep";
 import { registerTaskingWorker } from "../../../info/tasking/worker";
+import { registerProseAdjudicateWorker } from "../../../memory/adjudicate/live";
 import { registerInfoCollectWorker } from "../../../info/program/live";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../info/briefer/deliver";
 import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
@@ -215,6 +216,10 @@ export function bootDomains(): void {
   // device: which one collects is the election's answer, and a device with no
   // worker for the kind could not win it.
   registerInfoCollectWorker();
+  // Settling a prose file sync parked a conflict copy of, with a model (docs/59
+  // §6). Registered on every device for the same reason as collect: the
+  // election picks the executor among the devices that hold the worker.
+  registerProseAdjudicateWorker();
   // Removing a supplement deletes the document when nothing else lists it, and
   // a translation retires the original; both paths are reached from here rather
   // than from inside reading/ (tool-live.ts says why).

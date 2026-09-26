@@ -107,6 +107,9 @@ const LAYER: Record<string, Layer> = {
   // sweep owes each of them (docs/58). A capability with a registry in it: the
   // domains register their own kinds at startup, so nothing here reaches up into
   // one. memory/live reads it; it never reads memory/live.
+  // Settling a parked prose conflict copy with a model, as a legion run (docs/59
+  // §6): discovery, the sweep that asks for runs, and the worker.
+  "memory/adjudicate": "capability",
   "memory/distill": "capability",
   // Where a conversation belongs (docs/21): the tool that proposes a topic, the
   // card it draws and the Apply that files it. Memory's, because a topic is the

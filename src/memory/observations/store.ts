@@ -111,6 +111,16 @@ const ENTRY_FILE = /^(m-[0-9a-f]{16})\.md$/;
 // no way to know it was there. This is that way.
 const CONFLICT_FILE = /^(m-[0-9a-f]{16})\.conflict-[0-9a-f]+\.md$/;
 
+// The frontmatter key an adjudicated entry carries: `legion/<runId>`, the run
+// that wrote it (docs/59 §6). An unknown pair to the parser, so it rides on
+// `extra` and survives every rewrite that does not know about it.
+export const RESOLVED_BY = "resolvedBy";
+
+/** Who adjudicated this entry's text, or null when nobody did. */
+export function resolvedByOf(entry: Pick<Observation, "extra"> | null): string | null {
+  return entry?.extra?.find(([key]) => key === RESOLVED_BY)?.[1] || null;
+}
+
 // A conflict copy of the index, which is a different thing entirely: the index
 // is derived — rebuilt from the entry files after every mutation — so a losing
 // version of it holds nothing the entry files do not already say. Sync has no
@@ -258,6 +268,51 @@ export class ObservationFileStore {
     }
     out.sort((a, b) => a.path.localeCompare(b.path));
     return out;
+  }
+
+  // Settle one conflict copy with text somebody adjudicated (docs/59 §6): the
+  // entry is rewritten with the given summary and body, and the copy is removed.
+  // Everything a person would not argue about is folded without asking — the
+  // anchors of both versions, the earlier `created`, the later `updated` — and
+  // `resolvedBy` is stamped so a second conflict between two adjudicated
+  // versions is recognisable as one. Null when the copy or the entry is gone:
+  // somebody settled it already.
+  async resolveConflict(
+    copyPath: string,
+    resolved: { summary: string; body: string; type?: Observation["type"] },
+    resolvedBy: string,
+  ): Promise<Observation | null> {
+    const name = copyPath.slice(copyPath.lastIndexOf("/") + 1);
+    const m = CONFLICT_FILE.exec(name);
+    if (!m || copyPath !== `${this.dir}/${name}`) return null;
+    const copyText = await this.fs.read(copyPath);
+    const kept = await this.get(m[1]);
+    if (copyText === null || !kept) return null;
+    const parked = parseObservation(copyText);
+    const anchors: EvidenceAnchors = {
+      annotationIds: appendUnique(kept.anchors.annotationIds, parked?.anchors.annotationIds ?? []),
+      messageIds: appendUnique(kept.anchors.messageIds, parked?.anchors.messageIds ?? []),
+    };
+    const cleaned = cleanObservationBody(resolved.body.trim(), anchors);
+    const created =
+      parked?.created && (!kept.created || parked.created < kept.created) ? parked.created : kept.created;
+    const entry: Observation = {
+      ...kept,
+      type: resolved.type ?? kept.type,
+      summary: oneLine(resolved.summary),
+      body: cleaned.body,
+      anchors: cleaned.anchors,
+      created,
+      updated: parked?.updated ? laterDay(kept.updated, parked.updated) : kept.updated,
+      extra: [
+        ...(kept.extra ?? []).filter(([key]) => key !== RESOLVED_BY),
+        [RESOLVED_BY, resolvedBy],
+      ],
+    };
+    await this.fs.write(this.entryPath(entry.id), serializeObservation(entry));
+    await this.fs.remove(copyPath);
+    await this.rebuildIndex();
+    return entry;
   }
 
   // Dated by the evidence it was anchored to, not by the day the pass ran:
