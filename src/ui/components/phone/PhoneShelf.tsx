@@ -31,7 +31,7 @@ import {
   ROW_LIST,
   ROW_NAME,
 } from "../shelf/cardStyles";
-import { coverTiles, fileCountLabel, singleCoverTile } from "../shelf/topic-shelf";
+import { coverTiles, fileCountLabel, shelfOrder, singleCoverTile } from "../shelf/topic-shelf";
 import { Button } from "../ui/button";
 import {
   lessonNote,
@@ -124,7 +124,8 @@ function TopicList(props: {
   onOpen: (topicId: string) => void;
   onBack: () => void;
 }) {
-  const topics = props.topics ?? [];
+  // Newest first, as on the desk: a topic made here lands at the top.
+  const topics = shelfOrder(props.topics ?? []);
   return (
     <div className="absolute inset-0 flex flex-col bg-background">
       <Header
