@@ -13,7 +13,7 @@
 
 import type { ReactNode } from "react";
 import { useRef } from "react";
-import { ShellKeyboardContext, useKeyboardFrame } from "../common/useKeyboardInset";
+import { ShellKeyboardContext, useKeyboardFrame } from "./useKeyboardInset";
 
 export function KeyboardShell({ className, children }: { className: string; children: ReactNode }) {
   const shellRef = useRef<HTMLDivElement>(null);

@@ -1,4 +1,4 @@
-// The phone shell and the keyboard (src/ui/components/phone/KeyboardShell.tsx,
+// The phone shell and the keyboard (src/ui/components/common/KeyboardShell.tsx,
 // docs/pitfall/443). Through raise and dismiss cycles, both keyboard kinds: the
 // shell moves to the visible top and never changes size, what it holds is not
 // rendered again, and only the chat reading the context hears the keyboard. A
@@ -15,7 +15,7 @@ import { createElement, memo } from "react";
 import { useDom } from "../../../support/dom";
 
 const { act, cleanup, render } = await useDom();
-const { KeyboardShell } = await import("../../../../src/ui/components/phone/KeyboardShell");
+const { KeyboardShell } = await import("../../../../src/ui/components/common/KeyboardShell");
 const { useShellKeyboard } = await import("../../../../src/ui/components/common/useKeyboardInset");
 
 const PHONE_H = 956;
