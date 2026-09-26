@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 435）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 436）。
 
 ## EmbedPDF 引擎
 
@@ -144,6 +144,7 @@
 - [333-idb-cannot-hold-a-contact-and-then-move-it](./touch/333-idb-cannot-hold-a-contact-and-then-move-it.md) — idb 的 HID 通道按住不动或按轨迹移动，没有「按住再拖」这一笔，长按延长划线验不了；走 GestureDriver 的 `press(forDuration:thenDragTo:)`，命令是 `ios-sim.sh press-drag`
 - [425-a-card-shown-before-the-reading-faces-keeps-the-previous-column](./touch/425-a-card-shown-before-the-reading-faces-keeps-the-previous-column.md) — EPUB 翻页的页卡片挂上时只量一次页首在第几列，`createEpubReader` 拿到存盘的分页表就挂、不等 Noto Serif，回退字体更密把页首量进前一列，字体到了也不重算：高亮存对了页却画在显示错列的卡片上看不见，相邻页码同一列。挂第一张卡片之前 `await readingFontsReady()`
 - [434-a-tap-turn-pays-for-the-synthetic-mouse-events](./touch/434-a-tap-turn-pays-for-the-synthetic-mouse-events.md) — 手机分页探针里点按翻页每次掉一帧 42-47 ms，拖动翻页没有；touchend 里 `preventDefault()` 后降到 22-26 ms。推测是 iOS 在 tap 后补发的合成鼠标事件和 `:hover` 失效落在整章大小的 shadow 树上；自己处理点按的阅读区都该取消 touchend，链接和标注靠自己的命中测试分派
+- [435-caret-search-in-columns-reads-later-text-as-earlier](./touch/435-caret-search-in-columns-reads-later-text-as-earlier.md) — iOS 上 `caretRangeFromPoint` 进不了 shadow root，走 `caret.ts` 的测量二分；它按高度排序，CSS 多栏里后一栏顶行比前一栏底部高，翻页模式的锚点取到下一屏。按文本节点自己的行盒（文档顺序）排序
 
 ## 网络与 CSP
 

@@ -13,11 +13,12 @@
 // content root, a range that stopped at the host being no answer.
 //
 // Behind them is a measuring fallback: the text node nearest the point, then a
-// binary search over the caret boxes inside it. It is not dead weight — no
-// engine is promised to have either method, and iOS has not been measured. Both
+// binary search over the caret boxes inside it. On iOS it is the path that
+// runs: the document's method stops at the shadow host (docs/pitfall/435). Both
 // paths were driven over the same words on the same sheet and wrote the same
 // range CFI, character for character. The search is logarithmic because it runs
-// on every move of a live drag.
+// on every move of a live drag, and it orders the boxes by the node's own line
+// boxes, because a document laid out as columns puts later text higher up.
 
 export interface CaretPoint {
   node: Text;
@@ -102,7 +103,11 @@ function searchForCaret(shadow: ShadowRoot, root: Element, clientX: number, clie
     if (distance === 0) break;
   }
   if (!best) return null;
-  return { node: best.node, offset: offsetInText(range, best.node, clientX, clientY) };
+  range.selectNodeContents(best.node);
+  const lines = Array.from(range.getClientRects()).filter((r) => r.width > 0 || r.height > 0);
+  const text = best.node;
+  const offset = nearestOffset(text.data.length, (i) => caretRect(range, text, i), lines, clientX, clientY);
+  return { node: text, offset };
 }
 
 function caretRect(range: Range, text: Text, offset: number): DOMRect {
@@ -118,32 +123,79 @@ function caretRect(range: Range, text: Text, offset: number): DOMRect {
   return range.getBoundingClientRect();
 }
 
-/** Whether a caret box sits before a point in reading order. */
-function beforePoint(r: DOMRect, x: number, y: number): boolean {
-  if (y > r.bottom) return true; // the point is on a later line
-  if (y < r.top) return false; // the point is on an earlier line
-  return r.left < x;
+export interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Which of a text node's line boxes a box is on: the one holding its middle,
+ * else the nearest. The line boxes come in document order, so a line's index
+ * is its place in reading order. Comparing heights alone is not: in a paged
+ * document laid out as CSS columns, the top line of one column is read after
+ * the bottom line of the column before it.
+ */
+export function lineOf(lines: readonly Box[], r: Box): number {
+  const cx = (r.left + r.right) / 2;
+  const cy = (r.top + r.bottom) / 2;
+  let best = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const dx = cx < l.left ? l.left - cx : cx > l.right ? cx - l.right : 0;
+    const dy = cy < l.top - LINE_SLACK ? l.top - cy : cy > l.bottom + LINE_SLACK ? cy - l.bottom : 0;
+    const d = dx * dx + dy * dy;
+    if (d === 0) return i;
+    if (d < bestDistance) {
+      best = i;
+      bestDistance = d;
+    }
+  }
+  return best;
 }
 
 /**
  * The character boundary of one text node nearest a viewport point, by binary
- * search over its caret boxes.
+ * search over its caret boxes. `caretBox(i)` is the box of boundary i; `lines`
+ * are the node's line boxes in document order (Range.getClientRects), which is
+ * what puts the boxes in reading order. With no line boxes the order falls
+ * back to top-to-bottom, left-to-right.
  */
-function offsetInText(range: Range, text: Text, clientX: number, clientY: number): number {
-  const length = text.data.length;
+export function nearestOffset(
+  length: number,
+  caretBox: (offset: number) => Box,
+  lines: readonly Box[],
+  clientX: number,
+  clientY: number,
+): number {
+  const point = { left: clientX, right: clientX, top: clientY, bottom: clientY };
+  const pointLine = lines.length > 0 ? lineOf(lines, point) : 0;
+  const before = (r: Box): boolean => {
+    if (lines.length > 0) {
+      const line = lineOf(lines, r);
+      if (line !== pointLine) return line < pointLine;
+    } else {
+      if (clientY > r.bottom) return true; // the point is on a later line
+      if (clientY < r.top) return false; // the point is on an earlier line
+    }
+    return r.left < clientX;
+  };
   let low = 0;
   let high = length;
   while (low < high) {
     const mid = (low + high + 1) >> 1;
-    if (beforePoint(caretRect(range, text, mid), clientX, clientY)) low = mid;
+    if (before(caretBox(mid))) low = mid;
     else high = mid - 1;
   }
   if (low >= length) return length;
   // Between two boundaries: the nearer one, so a stroke that ends past the
   // middle of a glyph takes that glyph in.
-  const here = caretRect(range, text, low);
-  const next = caretRect(range, text, low + 1);
-  const sameLine = Math.abs(next.top - here.top) <= LINE_SLACK;
+  const here = caretBox(low);
+  const next = caretBox(low + 1);
+  const sameLine =
+    lines.length > 0 ? lineOf(lines, next) === lineOf(lines, here) : Math.abs(next.top - here.top) <= LINE_SLACK;
   if (!sameLine) return low;
   return Math.abs(clientX - next.left) < Math.abs(clientX - here.left) ? low + 1 : low;
 }
