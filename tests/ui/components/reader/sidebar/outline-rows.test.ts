@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { outlineRows, ruleAt } from "../../../../src/ui/components/reader/outline-rows";
+import { outlineRows, ruleAt } from "../../../../../src/ui/components/reader/sidebar/outline-rows";
 
 const BOOK = [
   { title: "One", level: 0, page: 1 },

@@ -1,5 +1,5 @@
 // The conflict-copy notice in the AI observations panel
-// (src/ui/components/reader/ObservationPanel.tsx). Sync parks the losing version
+// (src/ui/components/library/topic/ObservationPanel.tsx). Sync parks the losing version
 // of an observation two devices both edited beside the winner; nothing in the app
 // mentioned that those files exist, so the reader's own writing sat on disk with
 // no way to know. Rendered statically, so the assertions are about what reaches
@@ -7,8 +7,8 @@
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import ObservationPanel from "../../../../src/ui/components/reader/ObservationPanel";
-import type { ObservationConflict } from "../../../../src/memory";
+import ObservationPanel from "../../../../../src/ui/components/library/topic/ObservationPanel";
+import type { ObservationConflict } from "../../../../../src/memory";
 
 function copy(over: Partial<ObservationConflict> = {}): ObservationConflict {
   return {

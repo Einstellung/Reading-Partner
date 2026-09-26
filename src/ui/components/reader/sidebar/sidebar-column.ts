@@ -30,9 +30,9 @@ export const SIDEBAR_OPEN_KEY = "reader-sidebar-open";
 // collapsed state the same way (docs/51), and one helper is what keeps the two
 // reading the same slot the same way. Re-exported so this module stays the one
 // import a caller of the reader panel's preference needs.
-import type { PrefStore } from "../base/pref-store";
-export type { PrefStore } from "../base/pref-store";
-export { browserPrefStore } from "../base/pref-store";
+import type { PrefStore } from "../../base/pref-store";
+export type { PrefStore } from "../../base/pref-store";
+export { browserPrefStore } from "../../base/pref-store";
 
 // The stored value only ever answers for the column. A drawer restored open
 // would put a dimmed backdrop over the book at launch, which is a state the

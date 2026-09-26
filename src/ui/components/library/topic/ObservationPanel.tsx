@@ -4,8 +4,8 @@
 // pattern as the prep panel.
 
 import { useState } from "react";
-import type { Observation, ObservationConflict, ObservationType, Statement } from "../../../memory";
-import { CitationContext, Markdown } from "../markdown/Markdown";
+import type { Observation, ObservationConflict, ObservationType, Statement } from "../../../../memory";
+import { CitationContext, Markdown } from "../../markdown/Markdown";
 import { statementRows, type StatementRow } from "./statements-view";
 
 const TYPE_STYLE: Record<ObservationType, string> = {

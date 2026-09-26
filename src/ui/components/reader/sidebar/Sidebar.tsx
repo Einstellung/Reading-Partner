@@ -23,13 +23,13 @@
 // where one step puts it.
 
 import type { ReactNode } from "react";
-import { IconHighlight, IconOutline, IconSparkle } from "../base/icons";
-import { Button } from "../ui/button";
+import { IconHighlight, IconOutline, IconSparkle } from "../../base/icons";
+import { Button } from "../../ui/button";
 import OutlineView from "./OutlineView";
 import TraceList from "./TraceList";
-import type { Annotation } from "./types";
-import type { Fulltext } from "../../../fulltext/types";
-import type { SupplementRef } from "../../../platform/app/supplements";
+import type { Annotation } from "../types";
+import type { Fulltext } from "../../../../fulltext/types";
+import type { SupplementRef } from "../../../../platform/app/supplements";
 
 export type SidebarTab = "outline" | "traces" | "prep";
 

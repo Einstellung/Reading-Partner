@@ -10,8 +10,8 @@
 // larger type, no supplements).
 
 import { outlineRows, ruleAt, type OutlineRow } from "./outline-rows";
-import type { SupplementRef } from "../../../platform/app/supplements";
-import type { OutlineItem } from "../../../fulltext/types";
+import type { SupplementRef } from "../../../../platform/app/supplements";
+import type { OutlineItem } from "../../../../fulltext/types";
 
 interface OutlineViewProps {
 	// The book's own outline, not the document on screen's.

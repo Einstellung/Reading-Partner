@@ -282,6 +282,7 @@ const LAYER: Record<string, Layer> = {
   "ui/components/phone/lesson": "ui",
   "ui/components/phone/reader": "ui",
   "ui/components/reader": "ui",
+  "ui/components/reader/sidebar": "ui",
   "ui/components/rehearsal": "ui",
   "ui/components/retell": "ui",
   "ui/components/settings": "ui",

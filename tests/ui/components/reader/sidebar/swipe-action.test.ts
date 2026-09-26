@@ -16,7 +16,7 @@ import {
   type SwipeCommand,
   type SwipeInput,
   type SwipeState,
-} from "../../../../src/ui/components/reader/swipe-action";
+} from "../../../../../src/ui/components/reader/sidebar/swipe-action";
 
 // Feed a script of inputs, returning the final state and every command emitted.
 function run(inputs: SwipeInput[], from: SwipeState = initSwipeState()) {

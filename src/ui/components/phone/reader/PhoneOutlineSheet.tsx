@@ -14,7 +14,7 @@
 
 import type { OutlineItem } from "../../../../fulltext/types";
 import type { FlowPaperName } from "../../../../reading/epub/flow/flow-display";
-import OutlineView from "../../reader/OutlineView";
+import OutlineView from "../../reader/sidebar/OutlineView";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
 
 const NO_SUPPLEMENTS = [] as const;

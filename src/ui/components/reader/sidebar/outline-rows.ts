@@ -10,8 +10,8 @@
 // would then be a line with nothing above it, so the book's own title stands in
 // as the row that goes back to it.
 
-import type { SupplementRef } from "../../../platform/app/supplements";
-import type { OutlineItem } from "../../../fulltext/types";
+import type { SupplementRef } from "../../../../platform/app/supplements";
+import type { OutlineItem } from "../../../../fulltext/types";
 
 export type OutlineRow =
   | { kind: "chapter"; title: string; level: number; page: number; current: boolean }

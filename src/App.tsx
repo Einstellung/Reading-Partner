@@ -8,15 +8,15 @@ import {
   type ViewStats,
 } from "./platform/app/reader-contract";
 import { documentShape, type Fulltext } from "./fulltext";
-import Sidebar, { type SidebarTab } from "./ui/components/reader/Sidebar";
+import Sidebar, { type SidebarTab } from "./ui/components/reader/sidebar/Sidebar";
 import {
   browserPrefStore,
   closesOnNavigate,
   columnLayoutNow,
   readSidebarOpen,
   writeSidebarOpen,
-} from "./ui/components/reader/sidebar-column";
-import { useSidebarColumn } from "./ui/components/reader/useSidebarColumn";
+} from "./ui/components/reader/sidebar/sidebar-column";
+import { useSidebarColumn } from "./ui/components/reader/sidebar/useSidebarColumn";
 import { ANNOTATION_COLORS } from "./platform/app/annotations";
 import {
   createTopic,

@@ -6,8 +6,8 @@
 // want the pictures"), which writes a new statement that supersedes the old,
 // and a superseded statement drops out of this list on its own.
 
-import { isObservationId, type Statement, type StatementKind } from "../../../memory";
-import { plural } from "../../../platform/std/text";
+import { isObservationId, type Statement, type StatementKind } from "../../../../memory";
+import { plural } from "../../../../platform/std/text";
 
 export interface StatementRow {
   id: string;

@@ -1,13 +1,13 @@
 // The "About you" block of the AI observations panel
-// (src/ui/components/reader/ObservationPanel.tsx): what is held to be true about
+// (src/ui/components/library/topic/ObservationPanel.tsx): what is held to be true about
 // the reader, shown to them read-only. Rendered statically, so the assertions
 // are about what reaches the DOM. Run: bun test.
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import ObservationPanel from "../../../../src/ui/components/reader/ObservationPanel";
-import type { Statement } from "../../../../src/memory";
-import { statement as statementRecord } from "../../../support/memory-fixtures";
+import ObservationPanel from "../../../../../src/ui/components/library/topic/ObservationPanel";
+import type { Statement } from "../../../../../src/memory";
+import { statement as statementRecord } from "../../../../support/memory-fixtures";
 
 // The text, the dates and how much the statement rests on are all rendered, so
 // this file pins them rather than taking the fixture's.

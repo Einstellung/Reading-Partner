@@ -1,10 +1,10 @@
 // The rows the observation panel's "About you" block prints
-// (src/ui/components/reader/statements-view.ts). Run: bun test.
+// (src/ui/components/library/topic/statements-view.ts). Run: bun test.
 
 import { expect, test } from "bun:test";
-import { statementRows } from "../../../../src/ui/components/reader/statements-view";
-import type { Statement } from "../../../../src/memory";
-import { statement as statementRecord } from "../../../support/memory-fixtures";
+import { statementRows } from "../../../../../src/ui/components/library/topic/statements-view";
+import type { Statement } from "../../../../../src/memory";
+import { statement as statementRecord } from "../../../../support/memory-fixtures";
 
 // The rows print the text and the date, so both are pinned here.
 function statement(over: Partial<Statement> & { id: string }): Statement {
