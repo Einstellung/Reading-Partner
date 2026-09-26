@@ -4,8 +4,9 @@
 //
 // useCall is the desk's session hook, used as it is: no `form`, so the turn is
 // the iPad tier. What the phone supplies is the host — the open book's bytes,
-// text, figures and marks — and the three things the desk does not do here: no
-// prep pipeline, no supplements, no pip view.
+// text, figures and marks — and what the desk does not do here: no prep
+// pipeline, no supplements, no pip view, no toast over a failure the lesson
+// already shows.
 //
 // The hook is called ahead of the reader's own open/close effect, so on the way
 // out of the book the call is hung up (call-end, distillation) before the reader
@@ -127,6 +128,9 @@ export function useBookLesson(args: BookLessonArgs) {
     distillAnnotations,
     pipelineRef,
     pushToast,
+    // The failure row and its Retry are what the lesson shows; a toast would
+    // cover the composer (the phone PDF lesson raises none either).
+    failureInline: true,
     removeMark,
     settingsRef: args.settingsRef,
     toDisplay: (msgs) => msgs.map(rehydrateMessage),

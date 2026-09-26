@@ -10,6 +10,11 @@ import type { Settings } from "../../../../src/platform/app/settings";
 import type { Thread, ThreadMessage } from "../../../../src/platform/app/threads";
 import * as events from "../../../../src/platform/app/events";
 import * as memory from "../../../../src/memory";
+import * as threads from "../../../../src/platform/app/threads";
+import * as agent from "../../../../src/legion/execute/turn";
+import * as turn from "../../../../src/reading/turn";
+import type { AgentCallbacks } from "../../../../src/legion/execute/contract";
+import { callSettings, emptyReadingTurn } from "../../../support/use-call";
 import { bookThreadIo } from "../../../../src/reading/session/book-thread";
 import type { LessonTopic } from "../../../../src/ui/components/phone/use-book-lesson";
 import type { FlowReaderPaneProps } from "../../../../src/reading/epub/flow-contract";
@@ -116,7 +121,7 @@ const toasts: string[] = [];
 
 // No topic unless a test asks for one: with a topic, leaving the book logs the
 // call's end and starts distillation, both of which write to disk.
-async function openReader(topic: LessonTopic | null = null) {
+async function openReader(topic: LessonTopic | null = null, settings = {} as Settings) {
   const view = render(
     <PhoneReader
       Pane={StubPane}
@@ -125,7 +130,7 @@ async function openReader(topic: LessonTopic | null = null) {
       topicId="t1"
       path="/books/a.epub"
       topic={topic}
-      settingsRef={{ current: {} as Settings }}
+      settingsRef={{ current: settings }}
       pushToast={(_kind, message) => toasts.push(message)}
       onOverlayChange={(dismiss) => {
         overlay = dismiss;
@@ -166,10 +171,14 @@ function bookThread(messages: ThreadMessage[]): Thread {
   return { id: "th1", annotationId: "", book: true, path: "b1", createdAt: 1, messages };
 }
 
-async function openLesson(messages: ThreadMessage[] = [], topic: LessonTopic | null = null) {
+async function openLesson(
+  messages: ThreadMessage[] = [],
+  topic: LessonTopic | null = null,
+  settings?: Settings,
+) {
   spyOn(bookThreadIo, "loadThreads").mockResolvedValue({});
   spyOn(bookThreadIo, "getBookThread").mockReturnValue(bookThread(messages));
-  const view = await openReader(topic);
+  const view = await openReader(topic, settings);
   await act(async () => {
     fireEvent.click(view.getByLabelText("Learn this book with AI"));
     await Promise.resolve();
@@ -261,6 +270,68 @@ test("going back to the page does not end the lesson; leaving the book does", as
     await Promise.resolve();
   });
   expect(distilled).toHaveBeenCalledTimes(1);
+});
+
+// The turn waits on the book's text and figures before it is assembled, and
+// the io above never finishes them. It also needs a provider (callSettings).
+function bookTextResolved() {
+  spyOn(io, "ensureFulltext").mockResolvedValue(null as never);
+  spyOn(io, "ensureFigures").mockResolvedValue(null as never);
+}
+
+// A turn that fails: the lesson is sent a question, and the model call comes
+// back with an error — with the lesson on screen, or after the reader went back
+// to the page.
+async function failTurn(view: Awaited<ReturnType<typeof openLesson>>, pageFirst: boolean) {
+  const stored: ThreadMessage[] = [];
+  spyOn(threads, "getThread").mockImplementation(
+    () => ({ ...bookThread([]), messages: stored.slice() }) as Thread,
+  );
+  spyOn(threads, "appendMessage").mockImplementation((_b, _t, m) => void stored.push(m));
+  spyOn(turn, "buildReadingTurn").mockResolvedValue(emptyReadingTurn());
+  let fail: ((message: string) => void) | null = null;
+  spyOn(agent, "runAgentTurn").mockImplementation((params) => {
+    fail = (message) => (params as unknown as AgentCallbacks).onError(message);
+    return new Promise<void>(() => {});
+  });
+  const box = view.container.querySelector('[aria-label="Lesson"] textarea') as HTMLTextAreaElement;
+  await act(async () => {
+    fireEvent.change(box, { target: { value: "Teach me chapter 1." } });
+  });
+  await act(async () => {
+    fireEvent.click(view.getByLabelText("Send"));
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  expect(fail).not.toBeNull();
+  if (pageFirst) {
+    await act(async () => {
+      fireEvent.click(view.getByLabelText("Back to the page"));
+    });
+  }
+  toasts.length = 0;
+  await act(async () => {
+    fail!("503 overloaded");
+  });
+}
+
+test("a turn that fails with the lesson on screen says so in the lesson, with no toast over the composer", async () => {
+  bookTextResolved();
+  const view = await openLesson([], null, callSettings);
+  await failTurn(view, false);
+  expect(toasts).toEqual([]);
+  const lesson = view.container.querySelector('[aria-label="Lesson"]');
+  expect(lesson?.textContent).toContain("Couldn't reach the model. 503 overloaded");
+  expect([...(lesson?.querySelectorAll("button") ?? [])].some((b) => b.textContent === "Retry")).toBe(
+    true,
+  );
+});
+
+test("a turn that fails with the reader on the page raises the toast and lights Learn", async () => {
+  bookTextResolved();
+  const view = await openLesson([], null, callSettings);
+  await failTurn(view, true);
+  expect(toasts).toEqual(["AI reply failed"]);
+  expect(view.container.querySelector('[data-lesson-dot="unseen"]')).not.toBeNull();
 });
 
 test("a page citation closes the lesson and takes the column to the page", async () => {

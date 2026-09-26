@@ -123,6 +123,10 @@ export interface CallHost<M extends CallRow, I extends StagedImage> extends Call
   // pipeline the reader is on now.
   pipelineRef: HostRef<PrepPipeline | null>;
   pushToast(kind: "warn" | "error", message: string): void;
+  // A failed turn in a conversation the reader has on screen (view chat-main)
+  // is told by its row and Retry alone, with no toast: the phone lesson, whose
+  // toast would sit over the composer. Unset, the toast goes up as well.
+  failureInline?: boolean;
   // The open book's marks as distillation's silent-marks input (docs/02).
   distillAnnotations(): DistillAnnotation[];
   // A link the model ingested became a supplement of the book: the Outline's
@@ -646,7 +650,8 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       if (controller.signal.aborted) return; // deleted thread / closed book, not a failure
       const view = turnFailureView(kind, message);
       if (callRef.current?.threadId === threadId) {
-        if (view.toast) pushToast("error", view.toast);
+        const inline = shapes.current.failureInline && callRef.current.view === "chat-main";
+        if (view.toast && !inline) pushToast("error", view.toast);
         write(
           view.as === "notice"
             ? { kind: "refusal", text: view.text }
