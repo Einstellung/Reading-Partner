@@ -1,10 +1,9 @@
 // Putting one document in another's place on the shelf: a translation where the
-// article was (reading/translate/replace.ts), or a new version of a book the
-// reader picked (reading/session/new-version.ts). What the two share is
-// everything after the new bytes exist, and what this owns is the order —
-// which is the whole of it, because every step can fail and the reader must
-// never be left with neither document or with marks that point at one that is
-// gone.
+// article was (reading/translate/replace.ts), or a new version of a book. What
+// the two share is everything after the new bytes exist, and what this owns is
+// the order — which is the whole of it, because every step can fail and the
+// reader must never be left with neither document or with marks that point at
+// one that is gone.
 //
 //   1. Import the new bytes and list them where the original was filed. From
 //      here the reader has both documents, which is the only overlap state that

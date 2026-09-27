@@ -38,7 +38,7 @@ import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import { startDistillSweeps } from "./memory";
 import { logEvent } from "./platform/app/events";
 import { prewarmPdfiumEngine } from "./reading/engine/engine-singleton";
-import { displaySource, getLibraryEntry, readLibraryBook, type BookFormat } from "./platform/app/library";
+import { displaySource, readLibraryBook, type BookFormat } from "./platform/app/library";
 import { listSupplements, type SupplementRef } from "./platform/app/supplements";
 import { openFailureText } from "./reading/engine/open-failure";
 import {
@@ -95,11 +95,7 @@ import { importPickedBook } from "./reading/session/import-book";
 import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
 import { fileSharedBook, watchSharedBooks } from "./reading/session/shared-file";
 import type { ReaderShell } from "./reading/session/shell";
-import { errMsg } from "./platform/std/errors";
-import { flushReadingPositions, keepReadingPosition } from "./reading/reading-position";
-import { replaceWithNewVersion, titleOfFile } from "./reading/session/new-version";
-import type { DocumentHome } from "./reading/replace/replace";
-import StatusPill from "./ui/components/reader/StatusPill";
+import { keepReadingPosition } from "./reading/reading-position";
 import { Button } from "./ui/components/ui/button";
 import { OVERLAY_Z } from "./ui/components/ui/overlay";
 import LibraryScreen from "./ui/components/library/LibraryScreen";
@@ -957,8 +953,8 @@ export default function App() {
     }
   }, [activeTopicId, refreshTopics, pushToast]);
 
-  // What took a document's place — a translation, or a new version picked from
-  // the More menu — and the reader is moved onto. A supplement is a document of
+  // The translation that took a document's place, which the reader is moved
+  // onto. A supplement is a document of
   // the session the reader is already in: they step onto it without leaving the
   // book (docs/67).
   const reopenReplacement = useCallback(
@@ -975,37 +971,6 @@ export default function App() {
     },
     [refreshSupplements, openDocument, openFile],
   );
-
-  // "Replace with a new version…": the line it shows while it runs and after.
-  const [newVersionLine, setNewVersionLine] = useState<{ text: string; running: boolean } | null>(null);
-  const replaceOpenDocument = useCallback(async () => {
-    const bookId = bookIdRef.current;
-    const docId = docIdRef.current;
-    if (!bookId || !docId) return;
-    const title = titleOfFile(docNameRef.current || bookTitle);
-    try {
-      const entry = await getLibraryEntry(docId);
-      if (!entry) throw new Error("it is not in the library");
-      const home: DocumentHome =
-        docId === bookId ? { kind: "topic", topicId: activeTopicId } : { kind: "book", bookId };
-      // The position is read back off the disk and carried, so the one the
-      // reader is at has to be there first.
-      await flushReadingPositions();
-      const done = await replaceWithNewVersion(entry, home, title, undefined, () =>
-        setNewVersionLine({ text: `Replacing "${title}" with the new version…`, running: true }),
-      );
-      if (done.kind === "cancelled") return;
-      if (done.kind === "refused") {
-        pushToast("error", done.why);
-        return;
-      }
-      setNewVersionLine({ text: done.line, running: false });
-      reopenReplacement(done.reopen);
-    } catch (e) {
-      console.error("failed to replace the document with a new version", e);
-      setNewVersionLine({ text: `Could not replace "${title}": ${errMsg(e)}`, running: false });
-    }
-  }, [activeTopicId, bookTitle, pushToast, reopenReplacement]);
 
   const continueReading = useCallback(() => {
     const recent = mostRecentlyOpened(topics ?? []);
@@ -1412,7 +1377,6 @@ export default function App() {
             onToggleLumen={toggleLumen}
             onOpenBookThread={openBookThread}
             onOpenSettings={openSettings}
-            onReplaceWithNewVersion={() => void replaceOpenDocument()}
             settingsAlert={syncReport.alert !== "none"}
           />
         </header>
@@ -1748,14 +1712,6 @@ export default function App() {
       </main>
 
       <Toast toasts={toasts} onDismiss={dismissToast} />
-
-      {newVersionLine && (
-        <StatusPill
-          text={newVersionLine.text}
-          running={newVersionLine.running}
-          onDismiss={() => setNewVersionLine(null)}
-        />
-      )}
 
       {/* The running translation's count, and the hand-off onto the document it
           produced: the original is off the shelf by then (reading/translate). */}

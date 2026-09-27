@@ -1,7 +1,6 @@
 // The one centred line at the bottom of the reader that a document being
-// replaced gets while it runs and when it is over: a translation's run
-// (TranslateStatus.tsx) and a new version picked from the More menu. Dismissable
-// once the work has stopped.
+// replaced gets while it runs and when it is over (TranslateStatus.tsx).
+// Dismissable once the work has stopped.
 
 export default function StatusPill({
   text,

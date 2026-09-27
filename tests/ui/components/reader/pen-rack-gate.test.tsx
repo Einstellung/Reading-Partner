@@ -124,7 +124,6 @@ function topBar(gate: LevelGate) {
       settingsAlert={false}
       lumenShown={true}
       onToggleLumen={() => {}}
-      onReplaceWithNewVersion={() => {}}
     />,
   );
   const button = (label: string) =>
