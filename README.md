@@ -164,7 +164,7 @@ Adaptive reasoning is on by default: low effort for conversation (fast answers, 
 
 ## Install
 
-Prebuilt binaries for Linux, macOS, Windows and Android are on the [releases page](https://github.com/Einstellung/Reading-Partner/releases). The desktop builds are unsigned: macOS will refuse the first launch until you right-click the app and choose Open, and Windows SmartScreen will warn once. The Android build is a signed arm64 APK you install directly, so the phone will ask you to allow installs from this source.
+Prebuilt binaries for Linux, macOS (Apple silicon only, no Intel build), Windows and Android are on the [releases page](https://github.com/Einstellung/Reading-Partner/releases). The desktop builds are unsigned: macOS will refuse the first launch until you right-click the app and choose Open, and Windows SmartScreen will warn once. The Android build is a signed arm64 APK you install directly, so the phone will ask you to allow installs from this source.
 
 Install the desktop app first. It is the one that collects, and the phone reads what it published (see [Two machines](#two-machines)).
 

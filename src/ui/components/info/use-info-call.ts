@@ -57,7 +57,7 @@ import { addSource, hasSources, loadSources } from "../../../info/sources/source
 import { distillInfoThread } from "../../../memory";
 import { forgetScroll } from "../common/scroll-memory";
 import { modelIdFor } from "../../../ai/model-tier";
-import { navigateAway } from "../chat/call-layout";
+import { navigateAway } from "../chat/call/call-layout";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
 import {
   findCardPart,

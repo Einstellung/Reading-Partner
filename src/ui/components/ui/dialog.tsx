@@ -192,7 +192,7 @@ const DialogSheetContent = React.forwardRef<
         ref={ref}
         data-slot="dialog-sheet-content"
         className={cn(
-          "fixed inset-x-0 bottom-0 grid rounded-t-lg border-t bg-background shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom",
+          "fixed inset-x-0 bottom-0 grid rounded-t-lg border-t bg-background text-foreground shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom",
           layer,
           OVERLAY_SAFE.sheet,
           className

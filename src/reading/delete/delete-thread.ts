@@ -98,7 +98,7 @@ async function settle(
 /**
  * Delete one conversation and the asides off it: the general case the two below
  * are named for. The phone reader's mark delete does the same from the marks it
- * holds (ui/components/phone/delete-mark.ts).
+ * holds (ui/components/phone/reader/delete-mark.ts).
  */
 export async function deleteConversation(
   target: ConversationTarget,

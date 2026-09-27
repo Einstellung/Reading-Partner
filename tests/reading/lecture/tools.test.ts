@@ -6,7 +6,7 @@ import { MAX_PAGES } from "../../../src/fulltext/format";
 import { FULLTEXT_VERSION, type Fulltext } from "../../../src/fulltext/types";
 import { buildChapterTable, type TableChapter } from "../../../src/reading/chapters";
 import { buildReadChapterTool, READ_CHAPTER_MAX_PAGES } from "../../../src/reading/lecture";
-import { lessonFocusLine } from "../../../src/ui/components/phone/lesson-view";
+import { lessonFocusLine } from "../../../src/ui/components/phone/lesson/lesson-view";
 
 function book(pages: number): Fulltext {
   return {

@@ -231,7 +231,7 @@ async function holdTheBar(holdMs: number, glossary?: string): Promise<Record<str
   const [React, ReactDOM, mod] = await Promise.all([
     import("react"),
     import("react-dom/client"),
-    import("../ui/components/chat/HoldToTalk"),
+    import("../ui/components/chat/voice/HoldToTalk"),
   ]);
 
   const host = document.createElement("div");

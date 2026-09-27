@@ -595,6 +595,11 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
       clearQuote();
       goToPage(i);
     },
+    // The heading is on screen with the page's start here (flow-contract.ts).
+    goToChapter: (i) => {
+      clearQuote();
+      goToPage(i);
+    },
     highlightQuote: async (page, req) => highlightQuote(page, req.searchText),
     clearQuoteHighlight: clearQuote,
     removeAnnotations: (ids) => marks.unsetAnnotations(ids),

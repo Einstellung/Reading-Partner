@@ -102,6 +102,7 @@ jobs:
       # Upload the smoke APK now, before the emulator runs, so a real-device
       # fallback exists even if the emulator step never reaches upload.
       - name: Upload the smoke APK
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: android-smoke-apk
@@ -134,6 +135,7 @@ jobs:
 
       - name: Upload smoke verdict and screenshot
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: android-smoke-verdict

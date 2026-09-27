@@ -188,7 +188,7 @@ export async function runGuidedDictation(): Promise<void> {
   const [React, ReactDOM, mod] = await Promise.all([
     import("react"),
     import("react-dom/client"),
-    import("../ui/components/chat/HoldToTalk"),
+    import("../ui/components/chat/voice/HoldToTalk"),
   ]);
 
   // One bar for the whole run, mounted once, exactly as the composer mounts it.

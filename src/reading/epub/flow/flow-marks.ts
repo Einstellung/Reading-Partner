@@ -51,6 +51,12 @@ export interface FlowMarkHost {
   onSave(annotations: Annotation[]): void;
   onSelect(ids: string[]): void;
   onPopup(params?: AnnotationPopupParams): void;
+  /**
+   * Where a drag's end is in a document, for a view whose margins are not the
+   * book's: the paged view (docs/79) looks for the nearest words on the screen
+   * shown. The caret under the point when absent.
+   */
+  strokeCaret?(doc: FlowDoc, clientX: number, clientY: number): CaretPoint | null;
 }
 
 /** Where a press landed: the document and the caret under the finger. */
@@ -263,7 +269,9 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
 
   function extendDrag(clientX: number, clientY: number): void {
     if (!drag) return;
-    const end = caretAtPoint(drag.doc.shadow, drag.doc.root, clientX, clientY);
+    const end = host.strokeCaret
+      ? host.strokeCaret(drag.doc, clientX, clientY)
+      : caretAtPoint(drag.doc.shadow, drag.doc.root, clientX, clientY);
     if (!end) return;
     drag.range = rangeBetween(owner, drag.start, end);
     paintDraft();

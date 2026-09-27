@@ -20,6 +20,12 @@ export interface FlowReaderView {
   goToHref(href: string): void;
   goToPage(pageIndex: number): void;
   /**
+   * An outline row was tapped: the page its chapter starts on. The scrolled
+   * column goes to the page, where the heading is on screen with it; the paged
+   * view goes to the screen the heading is on, which can be the page's second.
+   */
+  goToChapter(pageIndex: number): void;
+  /**
    * Scroll to a passage the AI cited on a page and band it in the violet the
    * sheets use (ViewInstance.highlightQuote): the words are looked for from
    * that page's start and land about a third down the viewport. Resolves true
@@ -50,6 +56,12 @@ export interface FlowReaderPaneProps {
   /** The type and paper the column mounts at, so it never starts at a default
    *  the reader has already moved off. */
   display: FlowDisplay;
+  /**
+   * The width of the left band the shell's back gesture owns. In the paged
+   * view a touch starting there is left to the shell; elsewhere a swipe to the
+   * right turns back a page.
+   */
+  backEdgePx?: number;
   onView: (view: FlowReaderView) => void;
   onInitialized: () => void;
   onError: (e: Error) => void;

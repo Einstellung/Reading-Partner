@@ -101,7 +101,7 @@ test("everyone who takes the safe padding places itself in a layout effect", () 
   for (const file of [
     "reader/AnnotationPopup.tsx",
     "reader/PenToolbar.tsx",
-    "chat/CallBubble.tsx",
+    "chat/call/CallBubble.tsx",
   ]) {
     const source = readFileSync(join(SRC, file), "utf8");
     expect(source).toContain("useOverlaySafePadding()");

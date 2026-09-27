@@ -57,7 +57,7 @@ EPUB 和 PDF 在阅读器里是同一种东西：桌上一张张纸。取代 [ep
 
 画在每张卡片的 `.rp-overlay` 里，`.rp-marks` 一层、引文的 `.rp-quote` 一层，各清各的（坑 272）。文字标注按 CFI 解成 Range 取 `getClientRects()` 换页坐标，裁到版心（坑 271）；高亮铺整行、划线只画行底 2px，两者都是 `MARKUP_OPACITY`。墨迹一条 SVG polyline。选中态是绕外接框的一圈描边。卡片一换页就重画；缩放不用重画，overlay 在纸的坐标系里，跟着 `scale()` 走。
 
-事件全在 app DOM：pane 的 pointer 先给标注层（`markPointerDown`），它按 `engine/gesture/touch-routing.ts` 的表判笔/手指/`fingerDraw`，接下了就 `setPointerCapture`，翻页和点击区再也读不到这个指针。文字笔从落点到抬手两次 `caretAtPoint` 建 Range —— 不走系统选区，阅读区 `user-select: none`（坑 49、262）；取字符位置：shadow root 上有 `caretRangeFromPoint` 就用它，没有就试 document 上的（WebKitGTK 实测 ShadowRoot 上没有，document 上的能穿进 shadow root），都没有就自己量——点下的元素、最近的文本节点、节点内按 caret box 二分（`caret.ts`）。两条路在同一句话上拖出来的 range CFI 逐字符相同。抬手写下 CFI、引文、页号，交给 `onSaveAnnotations`。没有工具在手就不消费指针，手势那边照常翻页。
+事件全在 app DOM：pane 的 pointer 先给标注层（`markPointerDown`），它按 `engine/gesture/touch-routing.ts` 的表判笔/手指/`fingerDraw`，接下了就 `setPointerCapture`，翻页和点击区再也读不到这个指针。文字笔从落点到抬手两次 `caretAtPoint` 建 Range —— 不走系统选区，阅读区 `user-select: none`（坑 49、262）；取字符位置：shadow root 上有 `caretRangeFromPoint` 就用它，没有就试 document 上的，都拿不到 shadow root 里的文本节点就自己量——点下的元素、最近的文本节点、节点内按行盒和字符矩形二分（`caret.ts`）。WebKit 的 ShadowRoot 上没有这个方法，document 上的在 WKWebView 和 WebKitGTK 2.52 上都停在宿主（坑 278、442），所以 iOS 和 Linux 桌面实际走的都是自己量的那条。抬手写下 CFI、引文、页号，交给 `onSaveAnnotations`。没有工具在手就不消费指针，手势那边照常翻页。
 
 点标注在页坐标里做命中测试（矩形 / 离墨迹路径的距离），发 `onAnnotationPopup({rect, annotation})`，rect 换回视口坐标。`navigate({annotationID})` 滚到那一页，标注在版心里看不见时按 `showColumnOf` 把卡片挪到它所在的列，判据和引文的是同一个。
 

@@ -81,12 +81,21 @@ export const FLOW_PAD_STEPS: readonly { value: number; label: string }[] = [
 /** Room above the first line and below the last of each document. Not a choice. */
 export const FLOW_PAD_Y = 24;
 
+/**
+ * How the reader moves through the book: one long column scrolled with the
+ * finger, or screens turned left and right (docs/79).
+ */
+export type FlowMode = "scroll" | "paged";
+
+export const FLOW_MODES: readonly FlowMode[] = ["scroll", "paged"];
+
 export interface FlowDisplay {
   fontPx: number;
   lineHeight: number;
   /** The column's side padding. */
   padX: number;
   paper: FlowPaperName;
+  mode: FlowMode;
 }
 
 // The column as it has been since docs/70, and the app's own default ground:
@@ -97,6 +106,8 @@ export const FLOW_DISPLAY_DEFAULT: FlowDisplay = {
   lineHeight: 1.6,
   padX: 20,
   paper: "white",
+  // The iPad's EPUB opens in its vertical column until the reader switches.
+  mode: "scroll",
 };
 
 export const FLOW_DISPLAY_KEY = "phone-display";
@@ -130,6 +141,7 @@ export function normalizeFlowDisplay(value: unknown): FlowDisplay {
       typeof paper === "string" && FLOW_PAPER_NAMES.includes(paper as FlowPaperName)
         ? (paper as FlowPaperName)
         : FLOW_DISPLAY_DEFAULT.paper,
+    mode: FLOW_MODES.includes(v.mode as FlowMode) ? (v.mode as FlowMode) : FLOW_DISPLAY_DEFAULT.mode,
   };
 }
 

@@ -1,0 +1,35 @@
+# Delete workflow artifacts older than the current release line and the three
+# before it, by hand. release.yml runs the same script after every successful
+# release; this is for looking first (dry_run, the default) or pruning between
+# releases. The rule and how an artifact's version is read are in
+# scripts/prune-artifacts.ts.
+
+name: Prune Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only print what would be kept and deleted"
+        type: boolean
+        default: true
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - name: Prune old artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            bun scripts/prune-artifacts.ts --dry-run
+          else
+            bun scripts/prune-artifacts.ts
+          fi

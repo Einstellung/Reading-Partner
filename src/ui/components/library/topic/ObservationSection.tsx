@@ -19,7 +19,7 @@ import {
   type ObservationConflict,
   type Statement,
 } from "../../../../memory";
-import ObservationPanel from "../../reader/ObservationPanel";
+import ObservationPanel from "./ObservationPanel";
 
 export default function ObservationSection({ topicId }: { topicId: string }) {
   // null while loading; [] when nothing has been distilled for this topic.

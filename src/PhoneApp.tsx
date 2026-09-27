@@ -37,16 +37,16 @@ import InfoHome, { type HomeScreen } from "./ui/components/info/InfoHome";
 import PhoneHome from "./ui/components/phone/PhoneHome";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
 import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
-import { ComposerSlotContext } from "./ui/components/chat/composer-slot";
+import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
 import {
   readLumenCornerShown,
   writeLumenCornerShown,
 } from "./ui/components/lumen/corner-pref";
 import { browserPrefStore } from "./ui/components/base/pref-store";
-import { PullToAsk } from "./ui/components/phone/PullToAsk";
-import PhoneReader from "./ui/components/phone/PhoneReader";
-import PhoneLessonScreen from "./ui/components/phone/PhoneLessonScreen";
-import PhoneLessonIntroSheet from "./ui/components/phone/PhoneLessonIntroSheet";
+import { PullToAsk } from "./ui/components/phone/gesture/PullToAsk";
+import PhoneReader from "./ui/components/phone/reader/PhoneReader";
+import PhoneLessonScreen from "./ui/components/phone/lesson/PhoneLessonScreen";
+import PhoneLessonIntroSheet from "./ui/components/phone/lesson/PhoneLessonIntroSheet";
 import PhoneShelf, { type PhoneBookOpen } from "./ui/components/phone/PhoneShelf";
 import { continueReading } from "./ui/components/phone/shelf-list";
 import SavedList from "./ui/components/phone/SavedList";
@@ -63,7 +63,7 @@ import {
   type NavStack,
   type PhoneScreen,
 } from "./ui/components/phone/nav-stack";
-import { useEdgeBack } from "./ui/components/phone/useEdgeBack";
+import { useEdgeBack } from "./ui/components/phone/gesture/useEdgeBack";
 import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";

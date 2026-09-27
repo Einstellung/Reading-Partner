@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { longPressFeedback } from "../../../platform/app/haptics";
 import { NO_CLICK_GUARD, stepClickGuard, type ClickGuard } from "./hold-menu";
-import { bindLongPress, LONG_PRESS_MS } from "./long-press";
+import { bindLongPress, LONG_PRESS_MS } from "./gesture/long-press";
 
 /** The element a hold landed on, by the key it carries, and where it is. */
 export interface Held {

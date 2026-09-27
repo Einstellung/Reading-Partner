@@ -8,8 +8,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { HIT_44 } from '../base/buttons';
 import { Button } from '../ui/button';
 import { IconKeyboard, IconMic, IconSend, IconStop } from '../base/icons';
-import { MicButton } from './MicButton';
-import { HoldToTalk } from './HoldToTalk';
+import { MicButton } from './voice/MicButton';
+import { HoldToTalk } from './voice/HoldToTalk';
 import type { PendingImage } from './types';
 import type { CleanupModel } from '../../../ai/voice';
 import { loadSettings, type DictationLocale } from '../../../platform/app/settings';

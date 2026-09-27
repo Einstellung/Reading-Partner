@@ -32,7 +32,7 @@
 
 ## 显示设置
 
-顶栏的 Aa 开一张贴底 sheet，和 Outline 同一种壳。四组，全部即点即生效，没有确定按钮；没有翻页方式，这个形态只有滚动。
+顶栏的 Aa 开一张贴底 sheet，和 Outline 同一种壳。全部即点即生效，没有确定按钮。滚动和翻页的开关在同一张 sheet 里，翻页见 [79](./79-手机EPUB翻页.md)；这一篇讲的是滚动。
 
 - 字号：14 / 15 / 17 / 19 / 21，−/+ 步进，中间那档 17 是原来的。
 - 行距：1.4 / 1.6 / 1.85（紧、标准、松），1.6 是原来的。
@@ -47,7 +47,7 @@
 
 ## 外壳
 
-`PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/PhoneReader.tsx`：自己的顶栏（返回、书名、页码、Outline、笔架、Learn 按钮），笔架复用 `PenToolbar` 的 `disabled`，阅读区挂 `FlowReaderPane`。打开顺序在 `reading/session/open-epub.ts`：复用 `open-book.ts` 的读位置、`preparePagination`、读标注，之后在后台抽全文和图索引给课堂用（[77](./77-手机EPUB课堂.md)）。
+`PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/reader/PhoneReader.tsx`：自己的顶栏（返回、书名、页码、Outline、笔架、Learn 按钮），笔架复用 `PenToolbar` 的 `disabled`，阅读区挂 `FlowReaderPane`。打开顺序在 `reading/session/open-epub.ts`：复用 `open-book.ts` 的读位置、`preparePagination`、读标注，之后在后台抽全文和图索引给课堂用（[77](./77-手机EPUB课堂.md)）。
 
 ## 验过的
 

@@ -83,6 +83,15 @@ describe("a value that is not on a ladder", () => {
     expect(normalizeFlowDisplay(null)).toEqual(FLOW_DISPLAY_DEFAULT);
     expect(normalizeFlowDisplay("17px")).toEqual(FLOW_DISPLAY_DEFAULT);
   });
+
+  test("the mode is scroll or paged, and scroll unless the reader chose otherwise", () => {
+    expect(FLOW_DISPLAY_DEFAULT.mode).toBe("scroll");
+    expect(normalizeFlowDisplay({ mode: "paged" }).mode).toBe("paged");
+    expect(normalizeFlowDisplay({ mode: "flip" }).mode).toBe("scroll");
+    // A slot written before there was a mode keeps everything else it held.
+    const old = normalizeFlowDisplay({ fontPx: 21, paper: "dark" });
+    expect(old).toEqual({ ...FLOW_DISPLAY_DEFAULT, fontPx: 21, paper: "dark", mode: "scroll" });
+  });
 });
 
 describe("the slot on this device", () => {
@@ -93,7 +102,7 @@ describe("the slot on this device", () => {
 
   test("what was written comes back", () => {
     const s = store();
-    const chosen: FlowDisplay = { fontPx: 21, lineHeight: 1.4, padX: 36, paper: "dark" };
+    const chosen: FlowDisplay = { fontPx: 21, lineHeight: 1.4, padX: 36, paper: "dark", mode: "paged" };
     writeFlowDisplay(s, chosen);
     expect(readFlowDisplay(s)).toEqual(chosen);
   });

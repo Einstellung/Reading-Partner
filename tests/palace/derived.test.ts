@@ -209,15 +209,15 @@ const CARRIES_ONE_IN_MEMORY: readonly string[] = [
   // leaving it can mark that file as read (docs/70). Nothing here is a record.
   // The lesson carries it for the same reason and one more: the prompt's
   // position block names the topic the paper is filed under (docs/74).
-  "ui/components/phone/PhoneLessonScreen.tsx",
-  "ui/components/phone/PhoneReader.tsx",
+  "ui/components/phone/lesson/PhoneLessonScreen.tsx",
+  "ui/components/phone/reader/PhoneReader.tsx",
   "ui/components/phone/PhoneShelf.tsx",
   "ui/components/phone/shelf-list.ts",
-  "ui/components/phone/use-lesson-call.ts",
+  "ui/components/phone/lesson/use-lesson-call.ts",
   // A hold on a book or an aside names the topic it was held in, for the delete
   // it confirms (delete-book.ts, delete-thread.ts). Nothing here is a record.
   "ui/components/phone/hold-menu.ts",
-  "ui/components/phone/lesson-view.ts",
+  "ui/components/phone/lesson/lesson-view.ts",
 ];
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../src");

@@ -34,7 +34,7 @@ Rust 侧工作量差得明显。硅基流动是 OpenAI 兼容的 `POST {base}/v1
 
 **最小的那一版（v0，不碰 Swift、不碰 Rust）：**四个状态，零音频反应。idle / listening / thinking / speaking，全部由已有的状态机推出来——`holdReducer`（`src/ai/voice/hold-machine.ts`）的 `status` 给前两个，简报 run-state 给后两个。CSS 动画，Tailwind utility，一个 `rounded-full` 的 div 加两三层 radial-gradient。ChatGPT voice mode 传达的九成是「我现在在哪个状态」，这一版就把它交付了。
 
-**v1（免费）：**给 listening 状态接上振幅。`{kind:"level"}` 已经一路走通到 `holdReducer` 的 `state.level`，`src/ui/components/chat/hold-zones.ts` 的 `barHeights` 已经在消费它。orb 只是同一个数的第二个读者，零新增桥。
+**v1（免费）：**给 listening 状态接上振幅。`{kind:"level"}` 已经一路走通到 `holdReducer` 的 `state.level`，`src/ui/components/chat/voice/hold-zones.ts` 的 `barHeights` 已经在消费它。orb 只是同一个数的第二个读者，零新增桥。
 
 **v2（等 TTS 落地再做）：**speaking 的振幅。别在 Swift 里给播放装第二个 tap 按帧往外推——按句合成的时候 Swift 手上已经有整句 PCM，顺手算一条 25 ms 窗的 RMS 包络（40 值/秒），随句子开始一次性发过去，TS 侧按本地时钟回放。这条包络和 docs/33 里「按这一句共 N 字、总时长 T 线性插值」用的是同一套机器，本来就要有。一句一条事件，20 分钟简报总共几十条 IPC。
 
