@@ -52,7 +52,8 @@ export interface RetellDistillInput {
   // not already see (selectNewMessages).
   messages: DistillMessage[];
   // How many messages earlier passes already folded in, so the transcript below
-  // does not read as the whole retell.
+  // does not read as the whole retell. Not a prefix: a message merged in from
+  // another device can land between ones already read (distill.ts readKey).
   earlier: number;
   // The current observation index — the whole of it, every pass. The first thing
   // the prompt asks for is a reconciliation against these lines.
@@ -186,8 +187,10 @@ export function buildRetellDistillUserMessage(input: RetellDistillInput): string
   ];
   if (input.earlier > 0) {
     lines.push(
-      `An earlier pass already folded in the first ${input.earlier} message(s) of this` +
-        " retell; only what follows is new.",
+      `Earlier passes already folded in ${input.earlier} other message(s) of this` +
+        " retell; the messages below are the ones no pass has read. A message merged" +
+        " in from another device can sit between ones already read, so they are not" +
+        " always the tail of the conversation.",
     );
   }
   lines.push("", "Transcript. Cite a message by the [n] in front of it:");

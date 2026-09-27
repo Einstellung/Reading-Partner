@@ -170,7 +170,7 @@ test("a second pass sends only the new stretch, and says what came before it", a
   // shown, and the pass turns that back into the message's own id.
   expect(task).toContain("[2] 1970-01-01 reader: that one I can only give the conclusion of");
   expect(task).not.toContain("lesion studies"); // already folded in
-  expect(task).toContain("first 2 message(s)");
+  expect(task).toContain("folded in 2 other message(s)");
   expect((await store.getMeta(TOPIC)).distilledMessages).toEqual({ "retell-1": 4 });
 });
 
