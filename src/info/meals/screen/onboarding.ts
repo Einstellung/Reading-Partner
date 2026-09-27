@@ -1,13 +1,23 @@
 // The Meals onboarding (docs/73 首次): a scripted, tap-only thread that asks
-// for consent, the goal, the body, training, work, minutes per meal and the
-// week's logistics, then shows the daily targets. Every step's rule, its answer
-// line and the profile it ends in are here, so MealsOnboarding.tsx only draws
-// the thread and dispatches taps.
+// for consent, the goal, the body, training, work and the week's logistics,
+// then shows the daily targets. Every step's rule, its answer line and the
+// profile it ends in are here, so MealsOnboarding.tsx only draws the thread
+// and dispatches taps.
 
 import type { FoodTag } from "../nutrition/foods";
-import type { Consent, Goal, Profile, Sex, Targets, TrainTime, Work } from "../nutrition/targets";
+import {
+  DEFAULT_EFFORT,
+  type Consent,
+  type Effort,
+  type Goal,
+  type Profile,
+  type Sex,
+  type Targets,
+  type TrainTime,
+  type Work,
+} from "../nutrition/targets";
 
-export const STEPS = ["consent", "goal", "body", "train", "work", "minutes", "logistics"] as const;
+export const STEPS = ["consent", "goal", "body", "train", "work", "logistics"] as const;
 export type StepId = (typeof STEPS)[number];
 /** The step index past the last question: the targets are showing. */
 export const RESULT_STEP = STEPS.length;
@@ -31,7 +41,8 @@ export interface Answers {
   // "现在不练" was tapped: training is answered with no days.
   noTraining: boolean;
   work: Work | null;
-  minutesPerMeal: number | null;
+  // Never asked: a replay keeps the level the conversation set.
+  effort: Effort;
   people: number;
   shops: string[];
   kitchen: string[];
@@ -85,7 +96,6 @@ export const WORK_OPTIONS: readonly { value: Work; label: string; sub: string }[
   { value: "stand", label: "常站或走", sub: "店员、老师、护士" },
   { value: "labor", label: "体力活", sub: "搬运、工地、农活" },
 ];
-export const MINUTES_OPTIONS: readonly number[] = [5, 10, 15];
 export const PEOPLE_OPTIONS: readonly { value: number; label: string }[] = [
   { value: 1, label: "1 人" },
   { value: 2, label: "2 人" },
@@ -127,7 +137,7 @@ export function initialOnboarding(existing?: Profile | null): OnboardingState {
       trainTime: null,
       noTraining: false,
       work: null,
-      minutesPerMeal: null,
+      effort: p?.effort ?? DEFAULT_EFFORT,
       people: 1,
       shops: [],
       kitchen: [],
@@ -150,8 +160,6 @@ export function stepDone(a: Answers, id: StepId): boolean {
       return (a.trainingDays.length > 0 && a.trainTime !== null) || a.noTraining;
     case "work":
       return a.work !== null;
-    case "minutes":
-      return a.minutesPerMeal !== null;
     case "logistics":
       return a.shops.length > 0 && a.kitchen.length > 0 && a.avoid.length > 0;
   }
@@ -159,7 +167,7 @@ export function stepDone(a: Answers, id: StepId): boolean {
 
 /** Steps a single tap answers; they move on by themselves. The rest have Next. */
 export function stepAdvancesOnPick(id: StepId): boolean {
-  return id === "consent" || id === "goal" || id === "work" || id === "minutes";
+  return id === "consent" || id === "goal" || id === "work";
 }
 
 export type OnboardingAction =
@@ -167,7 +175,6 @@ export type OnboardingAction =
   | { type: "goal"; value: Goal }
   | { type: "sex"; value: Sex }
   | { type: "work"; value: Work }
-  | { type: "minutes"; value: number }
   | { type: "trainTime"; value: TrainTime }
   | { type: "people"; value: number }
   | { type: "toggleDay"; day: number }
@@ -209,8 +216,6 @@ export function onboardingReducer(s: OnboardingState, action: OnboardingAction):
       return picked(s, { ...a, goal: action.value });
     case "work":
       return picked(s, { ...a, work: action.value });
-    case "minutes":
-      return picked(s, { ...a, minutesPerMeal: action.value });
     case "sex":
       return { ...s, answers: { ...a, sex: action.value } };
     case "trainTime":
@@ -273,8 +278,6 @@ export function answerText(a: Answers, id: StepId): string {
     }
     case "work":
       return WORK_OPTIONS.find((o) => o.value === a.work)?.label ?? "";
-    case "minutes":
-      return `${a.minutesPerMeal ?? ""} 分钟`;
     case "logistics": {
       const people = a.people >= 4 ? "4 人以上" : `${a.people} 人`;
       const avoid = a.avoid.length === 1 && a.avoid[0] === NO_DISLIKES ? "无忌口" : a.avoid.join("、");
@@ -286,7 +289,7 @@ export function answerText(a: Answers, id: StepId): string {
 /** The profile the answers make, or null while any of it is missing or consent was withheld. */
 export function toProfile(a: Answers): Profile | null {
   if (a.consent !== "manual") return null;
-  if (!a.goal || !a.sex || !a.work || a.minutesPerMeal === null) return null;
+  if (!a.goal || !a.sex || !a.work) return null;
   if (!stepDone(a, "train") || !stepDone(a, "logistics")) return null;
   const dislikes = a.avoid.flatMap((label) => {
     const tag = AVOID_OPTIONS.find((o) => o.label === label)?.tag;
@@ -304,7 +307,7 @@ export function toProfile(a: Answers): Profile | null {
     trainingDays: [...a.trainingDays],
     trainTime: a.trainTime ?? "evening",
     work: a.work,
-    minutesPerMeal: a.minutesPerMeal,
+    effort: a.effort,
     people: a.people,
     shops: [...a.shops],
     kitchen: [...a.kitchen],
@@ -343,8 +346,6 @@ export function questionText(id: StepId): string {
       return "每周哪几天练？一般什么时候练？练的那天加餐会挪到练完之后。";
     case "work":
       return "不算训练，平时上班大多是什么状态？";
-    case "minutes":
-      return "每顿最多肯花几分钟动手？我按这个挑菜，超过的不排。";
     case "logistics":
       return "最后几件杂事，一屏点完。";
   }

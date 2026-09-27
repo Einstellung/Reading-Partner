@@ -13,7 +13,7 @@
 
 import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../../platform/app/guarded-file";
 import { isObject } from "../../../platform/std/json";
-import type { Profile } from "../nutrition/targets";
+import { DEFAULT_EFFORT, EFFORTS, minuteCap, type Effort, type Profile } from "../nutrition/targets";
 import {
   EMPTY_MEALS,
   EMPTY_SHOPPING,
@@ -66,7 +66,13 @@ export function parseMealsFile(raw: unknown): MealsState | null {
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
 
-/** A profile as onboarding wrote it, or null. */
+/**
+ * A profile as onboarding wrote it, or null.
+ *
+ * The effort level defaults to simple when absent: onboarding never asks it.
+ * A profile written before the level existed carries `minutesPerMeal`, the
+ * answer it replaced, which is dropped.
+ */
 export function validateProfile(raw: unknown): Profile | null {
   if (!isObject(raw)) return null;
   const ok =
@@ -80,12 +86,14 @@ export function validateProfile(raw: unknown): Profile | null {
     raw.trainingDays.every(isNum) &&
     typeof raw.trainTime === "string" &&
     typeof raw.work === "string" &&
-    isNum(raw.minutesPerMeal) &&
     isNum(raw.people) &&
     isStrings(raw.shops) &&
     isStrings(raw.kitchen) &&
     isStrings(raw.dislikes);
-  return ok ? (raw as unknown as Profile) : null;
+  if (!ok) return null;
+  const { minutesPerMeal: _replaced, ...rest } = raw;
+  const effort = EFFORTS.includes(raw.effort as Effort) ? (raw.effort as Effort) : DEFAULT_EFFORT;
+  return { ...(rest as unknown as Profile), effort };
 }
 
 function validateCharter(raw: unknown): MealsCharter | null {
@@ -128,7 +136,16 @@ function isDeviation(raw: unknown): raw is Deviation {
 
 /** The file body to write for a state. */
 export function mealsFileBody(state: MealsState): string {
-  return JSON.stringify({ version: MEALS_VERSION, ...state }, null, 2);
+  return JSON.stringify({ version: MEALS_VERSION, ...state, charter: withMinutesForOldBuilds(state.charter) }, null, 2);
+}
+
+// Builds up to v0.22.0 reject a profile without `minutesPerMeal`, and a write
+// from one of them would then sync the profile away. Written for them only;
+// this build reads `effort`. Removable once no client older than this build is
+// in use.
+function withMinutesForOldBuilds(charter: MealsCharter | null): unknown {
+  if (!charter) return charter;
+  return { ...charter, profile: { ...charter.profile, minutesPerMeal: minuteCap(charter.profile) } };
 }
 
 // No file is an empty state. A file sitting there unread is not that — it

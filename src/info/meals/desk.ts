@@ -55,8 +55,8 @@ export function registerMealsDesk(): () => void {
 // The dinner desk's own duty, ahead of the state. Short on purpose: everything
 // that depends on what is actually planned is in mealsGuidance.
 const DUTY = [
-  "You plan their meals — breakfast, lunch, dinner and a snack, each about ten minutes of assembling",
-  "ready foods toward their body goal — and keep the week honest. The program owns every number.",
+  "You plan their meals — breakfast, lunch, dinner and a snack, simple food most of the time,",
+  "toward their body goal — and keep the week honest. The program owns every number.",
   "Talk plainly: name the meal, say what it is, stop. Do not read the shopping list or the grams",
   "back — they are on their screen, computed by the program, and reciting them is the one thing",
   "that makes this feel like homework.",

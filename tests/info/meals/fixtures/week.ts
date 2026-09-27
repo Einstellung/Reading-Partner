@@ -32,7 +32,7 @@ export function profile(over: Partial<Profile> = {}): Profile {
     trainingDays: [1, 3, 5],
     trainTime: "evening",
     work: "sit",
-    minutesPerMeal: 10,
+    effort: "simple",
     people: 1,
     shops: ["Hema"],
     kitchen: ["microwave", "one pan"],

@@ -1,6 +1,6 @@
 // The meals line's data (docs/73): one week of four meals a day — breakfast,
-// lunch, dinner and a snack — each about ten minutes of assembling ready foods,
-// with grams the program solves against the reader's body goal; the one
+// lunch, dinner and a snack — simple food by default, a proper meal when the
+// reader asks for one, with grams the program solves against the reader's body goal; the one
 // shopping trip derived from it; and the sentences the reader says when a meal
 // went differently.
 //
@@ -16,7 +16,7 @@ import type { TemplateItem, TemplateRole } from "../nutrition/solve";
 // What one meal is. All five are equal — delivery is a plan, not a failure to
 // plan, and a skipped meal is a meal (docs/north-star/diet.md).
 //
-// make      assembled at home from foods in the food table; the only mode with
+// make      made at home from foods in the food table; the only mode with
 //           grams
 // out       eaten somewhere, at a place the reader names
 // delivery  ordered in, from a place the reader names
@@ -120,6 +120,9 @@ export interface Meal {
   method?: string;
   // Hands-on minutes.
   minutes?: number;
+  // A one-off proper meal the reader asked for ("周六想好好做一顿"): its
+  // minutes are not held to the effort level's cap (checks.ts). Made meals only.
+  proper?: true;
   // The model's template: food ids from the food table and their roles, with
   // grams for the fixed items.
   items?: TemplateItem[];

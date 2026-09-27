@@ -12,6 +12,24 @@ export type TrainTime = "morning" | "midday" | "evening";
 export type Consent = "health" | "manual" | "no";
 /** The BMI cut points and the fat range follow the region, which is never asked. */
 export type Region = "CN" | "other";
+/**
+ * How much cooking the reader puts up with (docs/73 每顿怎么搭). Never asked:
+ * every profile starts at simple and only the conversation moves it.
+ *
+ * simple     one pot, a microwave or plain assembly
+ * homestyle  ordinary home cooking
+ */
+export type Effort = "simple" | "homestyle";
+
+export const EFFORTS: readonly Effort[] = ["simple", "homestyle"];
+export const DEFAULT_EFFORT: Effort = "simple";
+/** The hands-on minutes a made meal may take at each level. */
+export const EFFORT_MINUTES: Readonly<Record<Effort, number>> = { simple: 20, homestyle: 45 };
+
+/** The hands-on minutes the reader's level allows an everyday made meal. */
+export function minuteCap(profile: Pick<Profile, "effort">): number {
+  return EFFORT_MINUTES[profile.effort];
+}
 
 /** What onboarding collects. Plain data, stored as it is. */
 export interface Profile {
@@ -30,7 +48,7 @@ export interface Profile {
   /** Ignored when there are no training days. */
   trainTime: TrainTime;
   work: Work;
-  minutesPerMeal: number;
+  effort: Effort;
   people: number;
   shops: string[];
   kitchen: string[];
