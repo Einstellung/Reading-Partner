@@ -74,6 +74,11 @@ const LAYER: Record<string, Layer> = {
   // every domain registers into it and none of it knows what a book is.
   desk: "capability",
   fulltext: "capability",
+  // The nightly reclamation (docs/80): the garbage-marker registry, the generic
+  // retention rules and the executor. It imports platform and palace only; the
+  // domains register their markers into it, and the shell hands its night to
+  // legion/schedule, so it never reaches for either.
+  housekeeper: "capability",
   // Running an agent: the stall watchdog and the pacing limiter every unattended
   // call goes through, the observable shell the long pipelines share, and the
   // isolated sub-agent runner. A capability like ai itself, and one layer out

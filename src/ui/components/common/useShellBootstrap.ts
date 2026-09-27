@@ -57,6 +57,8 @@ import {
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
 import { registerRetellDesk } from "../../../reading/retell/desk";
 import type { SyncHealthReport } from "../../../platform/sync";
+import { HOUSEKEEPER_JOB } from "../../../housekeeper";
+import { registerNightlyJob } from "../../../legion/schedule";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";
 
@@ -236,6 +238,10 @@ export function bootDomains(): void {
   registerInfoDesk();
   registerMealsDesk();
   registerSecretaryRole();
+  // The nightly reclamation (docs/80), on every device for its own disk. A
+  // domain's garbage marker is registered in this function with the rest of its
+  // startup; the generic retention rules need nothing registered.
+  registerNightlyJob(HOUSEKEEPER_JOB);
 }
 
 export interface ShellBootstrap {

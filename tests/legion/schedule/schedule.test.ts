@@ -127,7 +127,7 @@ test("two devices both past the hour ring one bell between them", async () => {
   await desk.fired.record(nightly.id, at5(1));
   await laptop.fired.record(nightly.id, at5(1));
 
-  const shared = { schedules: [nightly], claims: async () => claims, now: NOW };
+  const shared = { schedules: [nightly], jobs: [], claims: async () => claims, now: NOW };
   await runScheduleTick({ ...shared, deviceId: "desk", fired: desk.fired, bells: desk.bellStore });
   await runScheduleTick({
     ...shared,
@@ -149,6 +149,8 @@ test("the bell carries the schedule and its brief", async () => {
   await h.fired.record(nightly.id, at5(1));
   await runScheduleTick({
     schedules: [nightly],
+    // Only the schedules: the shell tests register the real nightly jobs globally.
+    jobs: [],
     claims: async () => [claim("desk")],
     now: NOW,
     deviceId: "desk",
@@ -168,6 +170,7 @@ test("arming writes the anchor down and rings nothing", async () => {
   const h = fakes();
   await runScheduleTick({
     schedules: [nightly],
+    jobs: [],
     claims: async () => [claim("desk")],
     now: NOW,
     deviceId: "desk",

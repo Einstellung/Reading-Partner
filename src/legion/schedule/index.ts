@@ -19,6 +19,14 @@ export {
   type FiredStore,
 } from "./fired";
 export {
+  dueJobs,
+  jobFiredKey,
+  registerNightlyJob,
+  registeredNightlyJobs,
+  type DueJob,
+  type NightlyJob,
+} from "./jobs";
+export {
   dueSchedules,
   electForSchedule,
   lastAnchor,
