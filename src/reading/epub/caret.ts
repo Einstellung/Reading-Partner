@@ -120,12 +120,30 @@ function caretRect(range: Range, text: Text, offset: number): Box {
   for (let at = Math.min(offset, length - 1); at >= 0; at--) {
     range.setStart(text, at);
     range.setEnd(text, at + 1);
-    const r = range.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) continue;
+    const r = glyphBox(Array.from(range.getClientRects()));
+    if (!r) continue;
     const x = at === offset ? r.left : r.right;
     return { left: x, right: x, top: r.top, bottom: r.bottom };
   }
   return { left: 0, right: 0, top: 0, bottom: 0 };
+}
+
+/**
+ * A one-character Range's own glyph box among its client rects: the last one
+ * with a width. The first character of a wrapped line also reports an empty
+ * box at the end of the line before, and the bounding rect of the two spans
+ * both lines, at the top of a sheet the column before (docs/pitfall/486).
+ */
+export function glyphBox(rects: readonly Box[]): Box | null {
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const r = rects[i];
+    if (r.right - r.left > 0) return r;
+  }
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const r = rects[i];
+    if (r.bottom - r.top > 0) return r;
+  }
+  return null;
 }
 
 export interface Box {
@@ -205,9 +223,14 @@ export function nearestOffset(
   // middle of a glyph takes that glyph in.
   const here = caretBox(low);
   const next = caretBox(low + 1);
-  const sameLine =
-    lines.length > 0 ? lineOf(lines, next) === lineOf(lines, here) : Math.abs(next.top - here.top) <= LINE_SLACK;
-  if (!sameLine) return low;
+  const nextLine = lines.length > 0 ? lineOf(lines, next) : null;
+  const sameLine = nextLine !== null ? nextLine === lineOf(lines, here) : Math.abs(next.top - here.top) <= LINE_SLACK;
+  // `here` ends an earlier line and `next` starts the point's own: the point
+  // is left of its line's first character, in a blockquote's padding or the
+  // margin, and the stroke starts at that character. Taking `here` would take
+  // in the last character of the line above, which at the top of a sheet is
+  // the page before.
+  if (!sameLine) return nextLine !== null && nextLine === pointLine ? low + 1 : low;
   return Math.abs(clientX - next.left) < Math.abs(clientX - here.left) ? low + 1 : low;
 }
 
