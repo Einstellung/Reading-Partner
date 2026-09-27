@@ -16,6 +16,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { fileToReopen, type Replacement, type TranslateView } from "../../../reading/translate/book-run";
 import { translateWatch } from "../../../reading/translate/watch";
+import StatusPill from "./StatusPill";
 
 const subscribe = (fn: () => void): (() => void) => translateWatch().subscribe(fn);
 const snapshot = (): TranslateView | null => translateWatch().snapshot();
@@ -43,20 +44,10 @@ export default function TranslateStatus({
   if (!view) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
-      <div className="pointer-events-auto flex max-w-full items-center gap-3 rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-card-foreground shadow-lg backdrop-blur">
-        <span className="truncate">{view.text}</span>
-        {view.phase !== "running" && (
-          <button
-            type="button"
-            className="shrink-0 text-muted-foreground can-hover:hover:text-foreground"
-            onClick={() => translateWatch().dismiss(view.runId)}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        )}
-      </div>
-    </div>
+    <StatusPill
+      text={view.text}
+      running={view.phase === "running"}
+      onDismiss={() => translateWatch().dismiss(view.runId)}
+    />
   );
 }

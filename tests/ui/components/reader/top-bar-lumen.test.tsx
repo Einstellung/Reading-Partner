@@ -34,6 +34,7 @@ function bar(lumenShown: boolean) {
       settingsAlert={false}
       lumenShown={lumenShown}
       onToggleLumen={() => void toggled.push(true)}
+      onReplaceWithNewVersion={() => {}}
     />,
   );
   const openMenu = () => {

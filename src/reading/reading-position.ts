@@ -91,3 +91,6 @@ export const seedReadingPosition = (bookId: string, state: ViewState | null): vo
   positions.seed(bookId, state);
 export const keepReadingPosition = (bookId: string, state: ViewState): void =>
   positions.keep(bookId, state);
+// Everything on its way to disk, written now: a caller about to read a position
+// back off the disk (reading/replace) wants the one the reader is at.
+export const flushReadingPositions = (): Promise<void> => positions.flush();

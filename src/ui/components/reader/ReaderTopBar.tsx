@@ -10,6 +10,7 @@ import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import type { ToolType } from "./types";
 import {
   IconBookSparkle,
+  IconFileInto,
   IconFitWidth,
   IconGear,
   IconPagedLayout,
@@ -68,6 +69,9 @@ export default function ReaderTopBar(props: {
   // about the open book.
   lumenShown: boolean;
   onToggleLumen: () => void;
+  // Put a rebuilt copy of the document on screen in its place (reading/session/
+  // new-version.ts).
+  onReplaceWithNewVersion: () => void;
 }) {
   const { view, stats, sidebarOpen, gate } = props;
 
@@ -117,6 +121,13 @@ export default function ReaderTopBar(props: {
       onClick: props.onToggleLumen,
     },
     { kind: "divider" },
+    {
+      kind: "action",
+      label: "Replace with a new version…",
+      icon: IconFileInto,
+      disabled: !props.viewReady,
+      onClick: props.onReplaceWithNewVersion,
+    },
     {
       kind: "action",
       label: "Settings",
