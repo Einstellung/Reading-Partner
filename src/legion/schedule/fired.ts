@@ -43,10 +43,15 @@ export function createFiredStore(io: FiredIo): FiredStore {
   // Held in memory as well as on disk, for the reason info's morning round
   // holds its date: a file that will not write costs the schedule's bells, not
   // one bell per tick.
-  let cache: Record<string, number> | null = null;
+  //
+  // The memo is the promise, not the map: two ticks at a cold launch must
+  // share one disk read, or the slower one lands after a record and puts the
+  // stale copy back (pitfall 484). Each record chains on the map before it,
+  // and writes go out in record order, so the last write holds every record.
+  let map: Promise<Record<string, number>> | null = null;
+  let writes: Promise<void> = Promise.resolve();
 
-  async function read(): Promise<Record<string, number>> {
-    if (cache) return cache;
+  async function load(): Promise<Record<string, number>> {
     const text = await io.read().catch(() => null);
     let parsed: unknown = null;
     try {
@@ -60,20 +65,28 @@ export function createFiredStore(io: FiredIo): FiredStore {
         if (typeof at === "number" && Number.isFinite(at)) out[id] = at;
       }
     }
-    cache = out;
     return out;
+  }
+
+  function read(): Promise<Record<string, number>> {
+    map ??= load();
+    return map;
   }
 
   return {
     read,
-    async record(scheduleId, anchor) {
-      const all = { ...(await read()), [scheduleId]: anchor };
-      cache = all;
-      try {
-        await io.write(JSON.stringify(all, null, 2));
-      } catch (e) {
-        console.warn("failed to write down the schedule that fired", e);
-      }
+    record(scheduleId, anchor) {
+      const merged = read().then((all) => ({ ...all, [scheduleId]: anchor }));
+      map = merged;
+      writes = writes.then(async () => {
+        const all = await merged;
+        try {
+          await io.write(JSON.stringify(all, null, 2));
+        } catch (e) {
+          console.warn("failed to write down the schedule that fired", e);
+        }
+      });
+      return writes;
     },
   };
 }
