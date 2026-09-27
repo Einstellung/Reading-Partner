@@ -49,11 +49,8 @@ import { registerInfoCollectWorker } from "../../../info/program/live";
 import { registerBriefingDelivery, registerMealsDelivery } from "../../../info/briefer/deliver";
 import { deleteIfUnreferenced } from "../../../reading/delete/delete-book";
 import { retireReplacedBook } from "../../../reading/delete/retire-book";
-import {
-  registerTranslateBookWorker,
-  setBookDeleter,
-  setBookRetirer,
-} from "../../../reading/translate/tool-live";
+import { registerTranslateBookWorker, setBookDeleter } from "../../../reading/translate/tool-live";
+import { setBookRetirer } from "../../../reading/replace/live";
 import { registerRehearsalDesk } from "../../../reading/rehearsal/desk";
 import { registerRetellDesk } from "../../../reading/retell/desk";
 import type { SyncHealthReport } from "../../../platform/sync";

@@ -90,9 +90,12 @@ export async function preparePagination(
     // the case here: a first cut and a replacement land the same way.
     const table = await putPagination(bookId, fresh);
     // A table was on disk and is not this one, so the book was cut again and
-    // the marks move before anything reads a page number off them.
+    // the marks move before anything reads a page number off them. A first cut
+    // sets them too: marks carried in from a replaced document
+    // (reading/replace/carry-marks.ts) arrive with page 0, and for marks drawn
+    // against this same table the remap changes nothing and writes nothing.
     const recut = stored.storedVersion !== null;
-    if (recut) await migrateMarks(bookId, book, table, stored.outdated ?? undefined);
+    await migrateMarks(bookId, book, table, recut ? (stored.outdated ?? undefined) : undefined);
     return { pagination: table, recut };
   })();
   cutting.set(bookId, job);

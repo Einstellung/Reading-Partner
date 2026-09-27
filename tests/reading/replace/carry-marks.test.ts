@@ -1,4 +1,5 @@
-// Marks moving from an article to its translation, by their words.
+// Marks and the reading position moving onto a successor by their words: an
+// article onto its translation, a book onto a new version of itself.
 // Run: bash scripts/t.sh tests/reading/replace/carry-marks.test.ts
 
 import { expect, test } from "bun:test";
@@ -9,9 +10,25 @@ import {
   rangeAtSpan,
 } from "../../../src/reading/epub/annotation";
 import { buildArticleEpub } from "../../../src/reading/epub/file/build-article";
-import { parseEpubRangeCfi, rangeToCfi, resolveRange } from "../../../src/reading/epub/file/cfi";
+import {
+  epubCfi,
+  parseCfiStart,
+  parseEpubRangeCfi,
+  pointSteps,
+  rangeToCfi,
+  resolvePoint,
+  resolveRange,
+} from "../../../src/reading/epub/file/cfi";
+import { runAt } from "../../../src/reading/epub/file/text";
+import type { ViewState } from "../../../src/platform/app/reader-contract";
+import { buildEpub } from "../epub/fixture";
 import { parseEpub, type SpineDocument } from "../../../src/reading/epub/file/parse";
-import { carryMarks, type MarkRecord } from "../../../src/reading/replace/carry-marks";
+import {
+  carryMarks,
+  carryPosition,
+  carryTargetsOf,
+  type MarkRecord,
+} from "../../../src/reading/replace/carry-marks";
 import { translateArticleEpub } from "../../../src/reading/translate/translate-article";
 import type { TranslateBatchFn } from "../../../src/reading/translate/prompt";
 
@@ -123,4 +140,73 @@ test("a mark whose words are gone, and one that never had any, are reported", as
   expect(unmatched).toHaveLength(2);
   // Untouched: an unmatched mark is handed back exactly as it came.
   expect(unmatched[0]).toBe(gone);
+});
+
+// --- a book, onto a new version of itself --------------------------------------
+
+const CHAPTER_ONE = "<h1>One</h1><p>The opening chapter says where the argument starts.</p>";
+const CHAPTER_TWO =
+  "<h1>Two</h1><p>A model that plumbs its own depths is a different animal.</p>" +
+  "<p>The second paragraph is where the reader stopped reading last night.</p>";
+
+// The same words laid out differently: a chapter file added in front, and every
+// paragraph followed by its translation inside a wrapper.
+function relaidOut(body: string): string {
+  return body.replace(/<p>(.*?)<\/p>/g, '<div class="pair"><p>$1</p><p class="zh">[zh] $1</p></div>');
+}
+
+function books() {
+  const v1 = parseEpub(
+    buildEpub({ docs: [{ name: "c1.xhtml", body: CHAPTER_ONE }, { name: "c2.xhtml", body: CHAPTER_TWO }] }),
+  );
+  const v2 = parseEpub(
+    buildEpub({
+      docs: [
+        { name: "preface.xhtml", body: "<h1>Preface</h1><p>Added in the second version.</p>" },
+        { name: "c1.xhtml", body: relaidOut(CHAPTER_ONE) },
+        { name: "c2.xhtml", body: relaidOut(CHAPTER_TWO) },
+      ],
+    }),
+  );
+  return { v1, v2 };
+}
+
+test("a book's mark is found in whichever chapter file the new version has it in", () => {
+  const { v1, v2 } = books();
+  const phrase = "plumbs its own depths";
+  const { moved, unmatched } = carryMarks([markOver(v1.docs[1], phrase)], carryTargetsOf(v2));
+  expect(unmatched).toHaveLength(0);
+  const carried = moved[0];
+  const parsed = parseEpubRangeCfi((carried.position as { value: string }).value);
+  expect(parsed?.spineIndex).toBe(2);
+  expect(resolveRange(v2.docs[2].doc.documentElement, parsed!)?.toString()).toBe(phrase);
+  expect(carried.sortIndex).toBe(makeEpubSortIndex(2, v2.docs[2].text.text.indexOf(phrase)));
+});
+
+function pointCfiAt(spine: SpineDocument, phrase: string): string {
+  const at = runAt(spine.text.runs, spine.text.text.indexOf(phrase));
+  return epubCfi(spine.index, spine.idref, pointSteps(at!.node, at!.offset)!);
+}
+
+test("the reading position is moved onto the same words in the new version", () => {
+  const { v1, v2 } = books();
+  const phrase = "The second paragraph is where the reader stopped";
+  const state: ViewState = { pageIndex: 4, scale: 1, scrollMode: 0, pageY: 120, cfi: pointCfiAt(v1.docs[1], phrase) };
+  const carried = carryPosition(state, v1, carryTargetsOf(v2));
+  expect(carried.pageIndex).toBe(4);
+  expect(carried.pageY).toBe(120);
+  const parsed = parseCfiStart(carried.cfi!);
+  expect(parsed?.spineIndex).toBe(2);
+  const at = resolvePoint(v2.docs[2].doc.documentElement, parsed!);
+  expect((at?.node as Text).data.slice(at!.offset)).toStartWith(phrase);
+});
+
+test("a position whose words are gone keeps its page number and drops the old CFI", () => {
+  const { v1 } = books();
+  const other = parseEpub(buildEpub({ docs: [{ name: "x.xhtml", body: "<p>Nothing in common with the first book at all.</p>" }] }));
+  const state: ViewState = { pageIndex: 4, scale: 1, scrollMode: 0, cfi: pointCfiAt(v1.docs[1], "The second paragraph") };
+  expect(carryPosition(state, v1, carryTargetsOf(other))).toEqual({ pageIndex: 4, scale: 1, scrollMode: 0 });
+  // A PDF's position has no CFI and is handed back untouched.
+  const pdf: ViewState = { pageIndex: 2, scale: 1, scrollMode: 0 };
+  expect(carryPosition(pdf, v1, carryTargetsOf(other))).toBe(pdf);
 });

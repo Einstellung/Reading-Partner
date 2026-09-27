@@ -13,7 +13,11 @@ import {
   rangeAtSpan,
 } from "../../../src/reading/epub/annotation";
 import { rangeToCfi } from "../../../src/reading/epub/file/cfi";
-import type { MarkRecord } from "../../../src/reading/replace/carry-marks";
+import {
+  carryMarks,
+  carryTargetsOf,
+  type MarkRecord,
+} from "../../../src/reading/replace/carry-marks";
 import {
   documentPathOf,
   orphanedThreadIds,
@@ -138,7 +142,7 @@ async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promi
       rec.order.push("supplement");
       rec.supplement = { bookId, oldHash, ref };
     },
-    loadMarks: async () => marks,
+    loadMarks: async (bookId) => (bookId === "old-book-id" ? marks : []),
     saveMarks: async (bookId, saved) => {
       rec.order.push("save-marks");
       rec.saved.set(bookId, saved);
@@ -148,10 +152,13 @@ async function recorder(marks: MarkRecord[] = [], threads: Thread[] = []): Promi
       rec.order.push("adopt-threads");
       rec.threads.set(bookId, [...moved]);
     },
-    targetOf: (bytes) => {
-      const doc = parseEpub(bytes).docs[0];
-      return { doc: doc.doc, text: doc.text, spineIndex: doc.index, idref: doc.idref };
+    carryMarks: async (toCarry, _original, successor) =>
+      carryMarks(toCarry, carryTargetsOf(parseEpub(successor))),
+    getViewState: async () => null,
+    saveViewState: async () => {
+      rec.order.push("save-position");
     },
+    carryPosition: async (state) => state,
     retireOriginal: async (bookId, successor) => {
       rec.successors.push(successor);
       rec.order.push("delete");

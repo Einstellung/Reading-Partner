@@ -15,29 +15,23 @@ import { appRunner } from "../../legion/execute/runner";
 import { OUTPUTS_DIR } from "../../legion/execute/outputs";
 import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/execute/worker";
 import type { BoxOrigin } from "../../box";
-import { contentHash } from "../../platform/app/content-hash";
-import { loadAnnotations, saveAnnotations } from "../../platform/app/annotations";
-import type { Annotation } from "../../platform/app/reader-contract";
 import {
   formatOfBytes,
   getLibraryEntry,
-  importBook,
   isArticleEntry,
   listLibraryEntries,
   readLibraryBook,
   type LibraryEntry,
 } from "../../platform/app/library";
-import { addSupplement, listSupplements, removeSupplement } from "../../platform/app/supplements";
+import { listSupplements } from "../../platform/app/supplements";
 import { ensureDocumentFulltext } from "../ingest/fulltext";
 import { matchSupplement } from "../ingest/remove-tool";
 import { peekPrepPipeline } from "../prep/papers/live";
-import { addFileToTopic, listTopics } from "../../platform/app/topics";
+import { listTopics } from "../../platform/app/topics";
 import {
-  adoptThreads,
   appendMessage,
   createBookThread,
   getBookThread,
-  listThreads,
   loadThreads,
 } from "../../platform/app/threads";
 import { parseEpub } from "../epub/file/parse";
@@ -62,7 +56,7 @@ import {
 } from "./book-run";
 import { hasTranslations, segmentDocument } from "./segment";
 import { translateArticleEpub } from "./translate-article";
-import type { MarkRecord } from "../replace/carry-marks";
+import { bookRetirer, liveReplaceDeps } from "../replace/live";
 import type { TranslateTarget, TranslateToolDeps } from "./tool";
 import { errMsg } from "../../platform/std/errors";
 
@@ -136,18 +130,6 @@ export function setBookDeleter(fn: BookDeleter): void {
  */
 export function bookDeleter(): BookDeleter | null {
   return deleteBook;
-}
-
-/**
- * How a translated original is retired: the work moves to the translation and
- * the original's bytes go (reading/delete/retire-book.ts). Registered by the
- * shell for the same layering reason as the deleter.
- */
-type BookRetirer = (bookId: string, successor: { hash: string; path: string }) => Promise<void>;
-let retireBook: BookRetirer | null = null;
-
-export function setBookRetirer(fn: BookRetirer): void {
-  retireBook = fn;
 }
 
 export interface TranslateDeskRef {
@@ -303,7 +285,7 @@ async function runTranslation(
     await tell(target.bookId, line);
     return { progress: line };
   }
-  const retireOriginal = retireBook;
+  const retireOriginal = bookRetirer();
   if (!retireOriginal) throw new Error("the app is not ready to replace a document yet");
 
   // What the turn used to do before it answered: a megabyte of EPUB, a parse
@@ -327,6 +309,7 @@ async function runTranslation(
       entry,
       target.home,
       {
+        ...liveReplaceDeps(retireOriginal),
         readBook: readLibraryBook,
         translate: (bytes, onProgress) =>
           translateArticleEpub(bytes, {
@@ -335,32 +318,6 @@ async function runTranslation(
             onProgress,
             signal,
           }),
-        hash: contentHash,
-        importBook,
-        attach: (topicId, path, hash) => addFileToTopic(topicId, path, hash),
-        // Listed before the original is taken off, so the book is never a book
-        // with one supplement fewer than the reader put there.
-        replaceSupplement: async (bookId, oldHash, supplement) => {
-          await addSupplement(bookId, { ...supplement, addedAt: Date.now() });
-          await removeSupplement(bookId, oldHash);
-        },
-        loadMarks: async (bookId) => (await loadAnnotations(bookId)) as unknown as MarkRecord[],
-        saveMarks: async (bookId, marks) => {
-          saveAnnotations(bookId, marks as unknown as Annotation[]);
-        },
-        loadThreads: async (bookId) => {
-          await loadThreads(bookId);
-          return listThreads(bookId);
-        },
-        adoptThreads: async (bookId, threads) => {
-          await loadThreads(bookId);
-          adoptThreads(bookId, threads);
-        },
-        targetOf: (bytes) => {
-          const doc = parseEpub(bytes).docs[0];
-          return { doc: doc.doc, text: doc.text, spineIndex: doc.index, idref: doc.idref };
-        },
-        retireOriginal,
       },
       // The counter, as one line the run carries. The runner writes it to disk
       // at most once every thirty seconds (docs/55), so this is a sentence that
