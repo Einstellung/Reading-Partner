@@ -33,5 +33,5 @@ test("an item travels, merges as a lattice, and is never inferred away", () => {
   expect(isLatticeRegistered("box-item")).toBe(true);
   expect(latticeFor(SAMPLE)).not.toBeNull();
   expect(neverInferDelete(SAMPLE)).toBe(true);
-  expect(rowOf("box-item").gc).toBe("never");
+  expect(rowOf("box-item").retention).toEqual({ rule: "never" });
 });

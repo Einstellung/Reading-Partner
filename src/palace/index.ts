@@ -16,10 +16,11 @@ export const PALACE: readonly PalaceRow[] = ROWS;
 export type { PalaceKind, PalaceRow };
 export type {
   DeleteWith,
-  GcRule,
+  FlowRef,
   PalaceDomain,
   PalaceId,
   RefAction,
+  Retention,
   SyncChannel,
 } from "./kinds";
 export type { FieldGroups, MergeStrategy, RecordShape } from "./merge-types";

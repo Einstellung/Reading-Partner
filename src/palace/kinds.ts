@@ -48,15 +48,38 @@ export type DeleteWith =
   | "observation-tombstone"
   | "never";
 
-// What reclaims the space, per docs/58. "domain-housekeeping" is the domain's
-// own sweep of its derived files; the three after-distill rules are the disposal
-// a distilled source gets once its cursor has passed it.
-export type GcRule =
-  | "never"
-  | "domain-housekeeping"
-  | "after-distill-delete"
-  | "after-distill-tail"
-  | "after-distill-cold";
+// The code that already bounds a kind: a repo-relative file and the function in
+// it. tests/housekeeper/retention-guard.test.ts reads the file and fails when the
+// name is not there, so a row cannot claim a cleanup nobody wrote.
+export interface FlowRef {
+  file: string;
+  symbol: string;
+}
+
+// What reclaims the space a kind takes (docs/80). The housekeeper
+// (src/housekeeper) reads this; nothing else decides what goes at night.
+//
+//   never        nothing reclaims it, on purpose.
+//   age          older than `days` goes. `mtime` reads the file's stat;
+//                `name-date` reads the date the row's match captures, so only
+//                a row whose id is "date" can use it.
+//   keep-last    in each directory, the newest `count` stay, newest by mtime or
+//                by name (a name that sorts by time).
+//   tail         the file keeps its last `lines` lines. Local kinds only.
+//   with-parent  goes when its parent is deleted, by the flow named.
+//   inline       an immediate flow already bounds it.
+//   marker       a garbage marker a domain registers decides (docs/80).
+//
+// The first four are applied by the housekeeper's own marker; the next two are
+// not the housekeeper's; the last is the named marker's.
+export type Retention =
+  | { rule: "never" }
+  | { rule: "age"; days: number; from: "mtime" | "name-date" }
+  | { rule: "keep-last"; count: number; by: "mtime" | "name" }
+  | { rule: "tail"; lines: number }
+  | { rule: "with-parent"; parent: string; flow: FlowRef }
+  | { rule: "inline"; flow: FlowRef }
+  | { rule: "marker"; marker: string };
 
 // What the id captured out of a path means. "fixed" is a file with one name.
 export type PalaceId =
@@ -134,7 +157,7 @@ export interface PalaceRow {
   // conversation from zero or brings back a deletion that already travelled.
   neverInferDelete?: true;
   deleteWith: DeleteWith;
-  gc: GcRule;
+  retention: Retention;
   // The distillation that reads this kind as raw material, and the meta map its
   // cursor is keyed in.
   distill?: {
@@ -188,6 +211,24 @@ const HEX32 = "[0-9a-f]{32}";
 const SEG = "[A-Za-z0-9][A-Za-z0-9_-]{0,63}";
 const DATE = "\\d{4}-\\d{2}-\\d{2}";
 
+const NEVER = { rule: "never" } as const;
+
+function flow(file: string, symbol: string): FlowRef {
+  return { file, symbol };
+}
+
+function inline(ref: FlowRef): Retention {
+  return { rule: "inline", flow: ref };
+}
+
+function withParent(parent: string, ref: FlowRef): Retention {
+  return { rule: "with-parent", parent, flow: ref };
+}
+
+function marker(name: string): Retention {
+  return { rule: "marker", marker: name };
+}
+
 const MAP_THREADS: RecordShape = { kind: "map", container: "threads", idField: null };
 const ARRAY_ID: RecordShape = { kind: "array", container: null, idField: "id" };
 const LINES: RecordShape = { kind: "lines", container: null, idField: null };
@@ -208,7 +249,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "map", container: "books", idField: null },
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "book-pdf",
@@ -220,7 +261,7 @@ export const PALACE = [
     refs: [{ kind: "library", via: "hash" }],
     sync: "books",
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
     desk: true,
     deskKind: "book",
     note: "the authoritative copy of the file, on the content-addressed channel and never on the data one",
@@ -235,7 +276,7 @@ export const PALACE = [
     refs: [{ kind: "library", via: "hash" }],
     sync: "books",
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
     desk: true,
     deskKind: "book",
     note: "the same row as book-pdf for the other format; a book id is a hash of bytes, so only one of the two names exists per id",
@@ -251,7 +292,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "map", container: "states", idField: null },
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "settings",
@@ -266,7 +307,7 @@ export const PALACE = [
       ["defaultProviderId", "defaultModelId", "everydayModelId", "briefingModelId"],
     ],
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "a model id only means anything under its own provider, so the fields strategy settles the provider and every model id together (pitfall 237). briefingModelId is the name everydayModelId had before docs/75 and is still in older devices' files",
   },
   {
@@ -281,7 +322,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "array", container: "topics", idField: "id" },
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "deleted-books",
@@ -295,7 +336,7 @@ export const PALACE = [
     shape: LINES,
     neverInferDelete: true,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "a file-level delete does not travel, so the deletion travels as a record and is never dropped (pitfall 208)",
   },
 
@@ -309,7 +350,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "per-device settings: one machine starting with the computer says nothing about another",
   },
   {
@@ -322,8 +363,20 @@ export const PALACE = [
     refs: [{ kind: "topics", via: "<the file name>", onDelete: "delete" }],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: marker("events-tail"),
     note: "append-only local log, under a topic id or one of the reserved ids",
+  },
+  {
+    kind: "housekeeper-log",
+    domain: "platform",
+    match: fixed("housekeeper-log.jsonl"),
+    samples: ["housekeeper-log.jsonl"],
+    id: "fixed",
+    refs: [],
+    sync: "local",
+    deleteWith: "never",
+    retention: { rule: "tail", lines: 2000 },
+    note: "one line per thing the nightly housekeeper did or refused (src/housekeeper, docs/80); it trims itself",
   },
 
   // -- marks and conversations ---------------------------------------------
@@ -340,7 +393,7 @@ export const PALACE = [
     merge: "records",
     shape: ARRAY_ID,
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
     distill: { unit: "book-marks", cursor: "distilledMarks" },
   },
   {
@@ -359,7 +412,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "array", container: "items", idField: "hash" },
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
     note: "references only; each supplement is a library document of its own, and deleting the book deletes them too (docs/67)",
   },
   // The three specific thread keys sit above the general one, and the general
@@ -377,7 +430,7 @@ export const PALACE = [
     merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "retell",
-    gc: "never",
+    retention: NEVER,
     distill: { unit: "thread", cursor: "distilledMessages" },
     note: "dies with the retell through the deletion log (platform/sync/dead-paths.ts)",
   },
@@ -394,7 +447,7 @@ export const PALACE = [
     merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "outline",
-    gc: "never",
+    retention: NEVER,
     distill: { unit: "thread", cursor: "distilledMessages" },
     note: "dies with the outline through the deletion log (platform/sync/dead-paths.ts); the distiller reads it (reading/distill/source.ts)",
   },
@@ -414,7 +467,7 @@ export const PALACE = [
     merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     distill: { unit: "thread", cursor: "distilledMessages" },
     note: "a day's briefing conversations; the unit is one thread, not the file, and the onboarding thread id repeats across days (pitfall 209)",
   },
@@ -431,7 +484,7 @@ export const PALACE = [
     merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     distill: { unit: "thread", cursor: "distilledMessages" },
     note: "the door: what the reader says to the soul with nothing on the desk, one file per day",
   },
@@ -448,7 +501,7 @@ export const PALACE = [
     merge: "messages",
     shape: MAP_THREADS,
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
     distill: { unit: "thread", cursor: "distilledMessages" },
     note: "the book is what goes on the desk, not the thread file",
   },
@@ -461,7 +514,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: withParent("thread", flow("src/reading/delete/delete-thread.ts", "deleteThreadImages")),
     note: "not synced; deleted with its thread (use-call.ts) and with the book the thread is filed under (reading/delete)",
   },
 
@@ -481,7 +534,7 @@ export const PALACE = [
     sync: "data",
     merge: "fields",
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
     note: "the row that owns prep-<bookId>/, so it carries the walk's descend rule for all three prep kinds",
   },
   {
@@ -498,7 +551,7 @@ export const PALACE = [
     sync: "data",
     merge: "prose",
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "prep-cache",
@@ -510,7 +563,7 @@ export const PALACE = [
     refs: [{ kind: "library", via: "bookId" }],
     sync: "local",
     deleteWith: "book",
-    gc: "domain-housekeeping",
+    retention: withParent("book", flow("src/reading/delete/delete-book.ts", "deleteBook")),
     note: "everything else nested under prep-<bookId>/: downloaded PDFs above all, megabytes and re-fetchable",
   },
 
@@ -524,7 +577,7 @@ export const PALACE = [
     refs: [{ kind: "topics", via: "spans[].topicId", onDelete: "keep" }],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/soul/sequence.ts", "rebuildSequence")),
     note: "the time index over every conversation file, rebuilt by scanning them; a cache, so it does not travel, and a span's topic is whatever the file it was read off says now",
   },
   {
@@ -537,7 +590,7 @@ export const PALACE = [
     refs: [{ kind: "library", via: "bookId" }],
     sync: "local",
     deleteWith: "book",
-    gc: "domain-housekeeping",
+    retention: withParent("book", flow("src/reading/delete/delete-book.ts", "deleteBook")),
   },
   {
     kind: "fulltext-prep",
@@ -548,7 +601,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: withParent("book", flow("src/reading/delete/prep-files.ts", "prepPaperCacheFiles")),
     note: "keyed by a synthetic prep path (prep/papers/store.ts), so reading/delete finds it through the prep state before the prep directory goes",
   },
   // Not a derived cache, which is why it sits among them with a different
@@ -567,7 +620,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
     note: "written once and never rewritten (a version-1 table is replaced by a version-2 one exactly once, docs/64), so two devices that cut it independently keep whichever copy this one already has",
   },
   {
@@ -580,7 +633,7 @@ export const PALACE = [
     refs: [{ kind: "library", via: "bookId" }],
     sync: "local",
     deleteWith: "book",
-    gc: "domain-housekeeping",
+    retention: withParent("book", flow("src/reading/delete/delete-book.ts", "deleteBook")),
   },
   // covers/: the failure markers are matched first, because a marker's name is
   // a key with ".failed.json" on the end and the plain names would claim it.
@@ -593,7 +646,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: { rule: "age", days: 30, from: "mtime" },
     note: "orphan: a file whose bytes would not read has no book id, so it is filed under a hash of its path and no delete finds it",
   },
   {
@@ -606,7 +659,7 @@ export const PALACE = [
     refs: [{ kind: "library", via: "bookId" }],
     sync: "local",
     deleteWith: "book",
-    gc: "domain-housekeeping",
+    retention: withParent("book", flow("src/reading/delete/delete-book.ts", "deleteBook")),
   },
   {
     kind: "cover-image",
@@ -618,7 +671,7 @@ export const PALACE = [
     refs: [{ kind: "library", via: "bookId" }],
     sync: "local",
     deleteWith: "book",
-    gc: "domain-housekeeping",
+    retention: withParent("book", flow("src/reading/delete/delete-book.ts", "deleteBook")),
   },
   {
     kind: "cover-meta",
@@ -630,7 +683,7 @@ export const PALACE = [
     refs: [{ kind: "library", via: "bookId" }],
     sync: "local",
     deleteWith: "book",
-    gc: "domain-housekeeping",
+    retention: withParent("book", flow("src/reading/delete/delete-book.ts", "deleteBook")),
   },
 
   // -- retells, talks, rehearsals ------------------------------------------
@@ -649,7 +702,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "book",
-    gc: "never",
+    retention: NEVER,
     desk: true,
     note: "opaque today; it dies with a book only when every one of its materials was that book",
   },
@@ -669,7 +722,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "array", container: "segments", idField: "id" },
     deleteWith: "retell",
-    gc: "never",
+    retention: NEVER,
     desk: true,
     note: "the segments are what two devices edit at once; the spine beside them is a wrapper key and merges as fields",
   },
@@ -687,7 +740,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "outline",
-    gc: "never",
+    retention: NEVER,
     note: "opaque today; turning it into records is a behaviour change and not part of this pass",
   },
   {
@@ -699,7 +752,7 @@ export const PALACE = [
     refs: [{ kind: "rehearsal", via: "rehearsalId" }],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "the rescue copy a run index that would not parse is moved to, for a person to look at",
   },
   {
@@ -714,7 +767,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "array", container: "runs", idField: "id" },
     deleteWith: "rehearsal",
-    gc: "never",
+    retention: NEVER,
     note: "a row is a pass that happened and nothing edits one, so two devices that each gave the talk a turn keep both; it could only be records once the transcripts moved out of it",
   },
   {
@@ -729,7 +782,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "rehearsal",
-    gc: "never",
+    retention: NEVER,
     distill: { unit: "file", cursor: "distilledMessages" },
     note: "one immutable transcript per pass; judged by where it sits, because its own name is a run id",
   },
@@ -742,7 +795,7 @@ export const PALACE = [
     refs: [{ kind: "rehearsal", via: "rehearsalId" }],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "tens of megabytes of self-contained HTML, imported on the machine it is rehearsed on",
   },
   {
@@ -754,7 +807,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "orphan: an older build's talk file, nothing reads it",
   },
   {
@@ -766,7 +819,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "orphan: the slide decks an older build generated",
   },
 
@@ -786,7 +839,7 @@ export const PALACE = [
     merge: "records",
     shape: ARRAY_ID,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     desk: true,
   },
   {
@@ -800,7 +853,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "named for the hash of its own bytes, so a file is written once and never revised and two devices never conflict; un-keeping the last record that points at one deletes it, locally and from Drive",
   },
 
@@ -818,7 +871,7 @@ export const PALACE = [
     sync: "data",
     merge: "prose",
     deleteWith: "observation-tombstone",
-    gc: "never",
+    retention: NEVER,
     note: "the row that owns observations/, so it carries the walk's descend rule for the whole flat directory; its topic is an archival label and not a retrieval key (docs/48), so a deleted topic leaves the observation alone (docs/50)",
   },
   {
@@ -831,7 +884,7 @@ export const PALACE = [
     sync: "data",
     merge: "prose",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "derived from the entry files, and rebuilt rather than merged into",
   },
   {
@@ -845,7 +898,7 @@ export const PALACE = [
     merge: "cursors",
     neverInferDelete: true,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "every distillation cursor; the lower of two watermarks is the safe one, so it merges as cursors and not as fields",
   },
   {
@@ -860,7 +913,7 @@ export const PALACE = [
     shape: LINES,
     neverInferDelete: true,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "a deletion only survives by travelling as a record (pitfall 208)",
   },
   {
@@ -873,7 +926,7 @@ export const PALACE = [
     sync: "data",
     merge: "prose",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "the conflict copies a merge parks beside an entry, and anything else flat in the directory",
   },
   {
@@ -889,7 +942,7 @@ export const PALACE = [
     shape: { kind: "array", container: "statements", idField: "id" },
     neverInferDelete: true,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "two devices offline both add to it — a dream pass here, something the reader said there — and opaque would park one of the two in a conflict copy nobody opens",
   },
   {
@@ -904,7 +957,7 @@ export const PALACE = [
     merge: "records",
     shape: LINES,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "written by its own device alone, so the union of the lines is the whole history",
   },
   {
@@ -918,7 +971,7 @@ export const PALACE = [
     refs: [{ kind: "topics", via: "topicId", onDelete: "keep" }],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "a line per call and nothing collecting them: synced it would be a per-device file that only ever grows. What a machine spent is the machine's, and the cap (memory/usage/model-calls.ts) is what keeps it bounded",
   },
   {
@@ -931,7 +984,7 @@ export const PALACE = [
     sync: "data",
     merge: "prose",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "orphan: retired at 0.18 (docs/48) — nothing reads or writes it, and a file an older install left behind is neither migrated nor deleted, so it stays registered and in range",
   },
   {
@@ -944,7 +997,7 @@ export const PALACE = [
     sync: "data",
     merge: "prose",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "orphan: the profile's old name, retired with it at 0.18 — kept in range so a device on the old build stays in step",
   },
   {
@@ -956,7 +1009,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "orphan: the guess pass's stamp, retired with the pass at 0.18 (docs/48) — nothing writes it and nothing deletes it",
   },
   {
@@ -968,7 +1021,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
 
   // -- info -----------------------------------------------------------------
@@ -984,7 +1037,7 @@ export const PALACE = [
     shape: LINES,
     neverInferDelete: true,
     deleteWith: "never",
-    gc: "after-distill-tail",
+    retention: marker("info-feedback-tail"),
   },
   {
     kind: "info-sources",
@@ -997,7 +1050,7 @@ export const PALACE = [
     merge: "records",
     shape: ARRAY_ID,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "info-labs",
@@ -1013,7 +1066,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "array", container: "labs", idField: "id" },
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "the reader's research rooms (docs/63): authored in conversation, so records-merged on the room id rather than last-writer-wins over the list; the charter's topic is null in everything written this release, so nothing of a deleted topic's is here to clear",
   },
   {
@@ -1026,7 +1079,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "the week's dinners, the list derived from them and the nights that went differently (docs/73): one record, merged whole, because a per-field merge would assemble a week that never existed on either device",
   },
   {
@@ -1040,7 +1093,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "map", container: "photos", idField: null },
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "the photographs the meals line found for dishes and ingredients (docs/73 图片), keyed by what was searched for and outliving every week; its own file because the run that writes it is on the PC minutes after the phone wrote the week; records-merged per key, so the run's new entries and the phone dropping a picture that will not load both survive a crossing sync",
   },
   {
@@ -1054,7 +1107,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "one room's standing picture, written only by the device holding the collector claim, so there are never two halves to reconcile",
   },
   {
@@ -1068,7 +1121,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/info/collect/store.ts", "staleCableFiles")),
     note: "the day's kept items as evidence: synced because a picture's judgments cite cable ids, and kept for thirty days after the bodies are gone",
   },
   {
@@ -1081,7 +1134,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     desk: true,
     deskKind: "info-briefing",
     note: "what the collector publishes for the readers: a fixed name replaced whole, so nothing grows by the day",
@@ -1096,7 +1149,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "info-pool-marks",
@@ -1109,7 +1162,7 @@ export const PALACE = [
     merge: "records",
     shape: { kind: "map", container: "marks", idField: null },
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "what the collector has already put in a briefing (docs/35): not derived, and it travels so a machine taking over collection does not send the same item twice",
   },
   {
@@ -1123,7 +1176,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "what a device says it is and what it can do (src/legion/claim, docs/55). One per device and written by that device alone, so there is never a merge to do",
   },
   {
@@ -1137,7 +1190,7 @@ export const PALACE = [
     // devices is a request per pass spent on a file nobody opens.
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "orphan: the claim before it moved to legion/claim/ (docs/55). An older build still writes one; a device that upgrades writes the new path and leaves this behind",
   },
   {
@@ -1151,7 +1204,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "info-daily-briefing",
@@ -1163,7 +1216,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/info/collect/store.ts", "staleDailyFiles")),
     note: "the day boxed by room, derived and rebuilt rather than carried between devices",
   },
   {
@@ -1176,7 +1229,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/info/collect/store.ts", "staleDailyFiles")),
   },
   {
     kind: "info-daily-items",
@@ -1188,7 +1241,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/info/collect/store.ts", "staleDailyFiles")),
   },
   {
     kind: "info-daily-run",
@@ -1200,7 +1253,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/info/collect/store.ts", "staleDailyFiles")),
   },
   {
     kind: "info-daily-pool",
@@ -1212,7 +1265,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/info/collect/pool-store.ts", "removePoolDays")),
   },
   {
     kind: "info-pool-polled",
@@ -1223,7 +1276,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "info-site-sessions",
@@ -1234,7 +1287,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "cookies never leave the machine that signed in",
   },
   {
@@ -1246,7 +1299,7 @@ export const PALACE = [
     refs: [{ kind: "info-sources", via: "sourceId" }],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "info-daily-round",
@@ -1257,7 +1310,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
 
   // -- sync's own files -----------------------------------------------------
@@ -1270,7 +1323,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "run",
@@ -1286,7 +1339,7 @@ export const PALACE = [
     merge: "lattice",
     neverInferDelete: true,
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/legion/ledger/housekeeping.ts", "foldPass")),
     note: "one run per file, written by whichever device is executing it and by whichever one delegated it, so the merge is a join and not a three-way (src/legion/run/merge.ts). It is the row that owns legion/, and the descend rule names runs/ so the bell directory beside it — machine-local — is never walked. Never-infer-delete because the hot layer is folded into the ledger at different times on different devices, and a fold the peer has not done yet would read as a deletion (docs/55)",
   },
   {
@@ -1303,7 +1356,7 @@ export const PALACE = [
     shape: LINES,
     neverInferDelete: true,
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "the cold layer a finished run folds into, one file per day of endedAt in UTC, one line per run (src/legion/ledger, docs/55). The line is canonical, so two devices that folded the same run wrote the same bytes and the union of lines is one line. It is also the tombstone that authorises deleting the hot run file, so it is never inferred away and never collected: dropping a line brings the run it deleted back (pitfall 208)",
   },
   {
@@ -1315,7 +1368,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: marker("legion-bell"),
     note: "one bell per file, the soul's inbox on this device (src/legion/bell). Machine-local runtime, like the session beside it: a bell is addressed to the soul running here, and the words it produces travel as a conversation (docs/55)",
   },
   {
@@ -1327,7 +1380,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: marker("legion-run-files"),
     note: "what the soul wrote when it delegated, one file per run, frozen at creation (docs/68). Machine-local: today's only kind is a `local` run, which lives and dies on the device that asked for it, so the brief has nowhere else to be",
   },
   {
@@ -1339,7 +1392,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: marker("legion-run-files"),
     note: "what a run came back with, one file per run, named by the run's id. The box item points at it rather than holding it (docs/60, docs/68); machine-local for the same reason the brief beside it is",
   },
   {
@@ -1351,7 +1404,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "which anchor this device last rang a wake bell for (src/legion/schedule, docs/55). Machine-local: two devices agreeing on who fires is the election's job, and this is only how one device does not fire twice for the same hour",
   },
   {
@@ -1363,7 +1416,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/legion/execute/harness.ts", "sweepSessionGroup")),
     note: "the harness keeps one append-only JSONL per session (platform/app/session-fs.ts). A process start settles the previous session and begins a fresh one; the group keeps its newest five files (legion/execute/harness.ts). Machine-local runtime: a device that loses it starts the next run from a fresh session, and the conversation the reader sees is a projection of it that travels on its own (docs/55, docs/71)",
   },
 
@@ -1382,8 +1435,8 @@ export const PALACE = [
     merge: "lattice",
     neverInferDelete: true,
     deleteWith: "never",
-    gc: "never",
-    note: "one item per file, born on whichever device made the delivery and moved along by whichever one the reader was holding, so the merge is a join and not a three-way (src/box/merge.ts). The cover is written once and the state is the only thing that changes, which is what keeps the box off a second shared mutable file (docs/60). Never-infer-delete because nothing deletes an item today, so an absence on one device is a partial tree and not a deletion; the fold into memory is later and, like the ledger's, will have to carry its own tombstone (pitfall 208). gc never for the same reason: there is nothing yet that an item has been folded into",
+    retention: NEVER,
+    note: "one item per file, born on whichever device made the delivery and moved along by whichever one the reader was holding, so the merge is a join and not a three-way (src/box/merge.ts). The cover is written once and the state is the only thing that changes, which is what keeps the box off a second shared mutable file (docs/60). Never-infer-delete because nothing deletes an item today, so an absence on one device is a partial tree and not a deletion; the fold into memory is later and, like the ledger's, will have to carry its own tombstone (pitfall 208). retention never for the same reason: there is nothing yet that an item has been folded into",
   },
 
   {
@@ -1395,7 +1448,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
   },
   {
     kind: "sync-trash",
@@ -1406,7 +1459,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: inline(flow("src/platform/sync/localStore.ts", "pruneTrashText")),
   },
   {
     kind: "sync-base",
@@ -1417,7 +1470,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "the merge base mirrors the whole range; syncing the record of what was last agreed would be circular",
   },
   {
@@ -1429,7 +1482,7 @@ export const PALACE = [
     refs: [{ kind: "holdings", via: "deviceId" }],
     sync: "local",
     deleteWith: "never",
-    gc: "domain-housekeeping",
+    retention: marker("sync-holdings"),
     note: "the local cache of what each device says it holds",
   },
   {
@@ -1442,7 +1495,7 @@ export const PALACE = [
     refs: [],
     sync: "remote-only",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "each device's tree snapshot, published to the remote folder and taken out by name before reconcile sees one (docs/59)",
   },
   {
@@ -1454,7 +1507,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    gc: "never",
+    retention: NEVER,
     note: "plaintext provider tokens stay on the device rather than widening their exposure to the user's Drive",
   },
 ] as const satisfies readonly PalaceRow[];

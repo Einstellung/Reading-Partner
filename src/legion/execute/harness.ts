@@ -404,7 +404,7 @@ const KEEP_SESSIONS = 5;
 
 /**
  * Delete everything in a freshly created session's group but the newest few
- * files. This is the "domain-housekeeping" the palace's `session` row promises
+ * files. This is the inline flow the palace's `session` row names as its retention
  * (src/palace/kinds.ts).
  *
  * The directory is the repo's own: `metadata.path` is the file the repo just
