@@ -210,6 +210,16 @@ test("a profile starts at the simple level; one written with minutesPerMeal drop
   expect(validateProfile({ ...bare, effort: "homestyle" })?.effort).toBe("homestyle");
 });
 
+test("a written profile carries the minutes its effort level allows, for older builds", () => {
+  for (const [effort, minutes] of [["simple", 20], ["homestyle", 45]] as const) {
+    const state = { charter: charter({ effort }), plan: null, shopping: trip(), deviations: [] };
+    const body = JSON.parse(mealsFileBody(state)) as { charter: { profile: Record<string, unknown> } };
+    expect(body.charter.profile.minutesPerMeal).toBe(minutes);
+    expect(body.charter.profile.effort).toBe(effort);
+    expect(parseMealsFile(body)?.charter?.profile).toEqual(charter({ effort }).profile);
+  }
+});
+
 test("a file body round-trips through the parser", () => {
   const state = {
     charter: charter(),

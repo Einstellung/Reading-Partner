@@ -13,7 +13,7 @@
 
 import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../../platform/app/guarded-file";
 import { isObject } from "../../../platform/std/json";
-import { DEFAULT_EFFORT, EFFORTS, type Effort, type Profile } from "../nutrition/targets";
+import { DEFAULT_EFFORT, EFFORTS, minuteCap, type Effort, type Profile } from "../nutrition/targets";
 import {
   EMPTY_MEALS,
   EMPTY_SHOPPING,
@@ -136,7 +136,16 @@ function isDeviation(raw: unknown): raw is Deviation {
 
 /** The file body to write for a state. */
 export function mealsFileBody(state: MealsState): string {
-  return JSON.stringify({ version: MEALS_VERSION, ...state }, null, 2);
+  return JSON.stringify({ version: MEALS_VERSION, ...state, charter: withMinutesForOldBuilds(state.charter) }, null, 2);
+}
+
+// Builds up to v0.22.0 reject a profile without `minutesPerMeal`, and a write
+// from one of them would then sync the profile away. Written for them only;
+// this build reads `effort`. Removable once no client older than this build is
+// in use.
+function withMinutesForOldBuilds(charter: MealsCharter | null): unknown {
+  if (!charter) return charter;
+  return { ...charter, profile: { ...charter.profile, minutesPerMeal: minuteCap(charter.profile) } };
 }
 
 // No file is an empty state. A file sitting there unread is not that — it
