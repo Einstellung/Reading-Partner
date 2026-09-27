@@ -46,7 +46,7 @@ import {
 } from "../mark-geometry";
 import { textMarkOf } from "../mark-write";
 import type { Pagination } from "../paginate";
-import { blockInfo } from "../reader-logic";
+import { blockInfo, sheetMayShowMark, sheetsForMark } from "../reader-logic";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -184,10 +184,15 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     into.append(svg);
   }
 
-  function marksOnPage(pageIndex: number): Annotation[] {
+  // The marks a sheet tries: its own page's, and the text marks of the rest
+  // of its spine document, whose words this device's layout may have put on
+  // it (reader-logic.ts, docs/pitfall/485). The clip decides what shows.
+  function marksForSheet(pageIndex: number): Annotation[] {
     const out: Annotation[] = [];
     for (const ann of marks.values()) {
-      if (pageIndexOf(ann) === pageIndex) out.push(ann);
+      const page = pageIndexOf(ann);
+      if (page === null) continue;
+      if (sheetMayShowMark(host.pagination, page, markKind(ann) === "ink", pageIndex)) out.push(ann);
     }
     return out;
   }
@@ -197,7 +202,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     if (!layer) return;
     layer.replaceChildren();
     const drawn: PaintedMark[] = [];
-    for (const ann of marksOnPage(pageIndex)) {
+    for (const ann of marksForSheet(pageIndex)) {
       const kind = markKind(ann);
       if (!kind) continue;
       const color = colorOf(ann);
@@ -227,11 +232,12 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     if (card) paint(card, pageIndex);
   }
 
-  function repaintPagesOf(annotations: readonly Annotation[]): void {
+  function repaintSheetsOf(annotations: readonly Annotation[]): void {
     const pages = new Set<number>();
     for (const ann of annotations) {
       const page = pageIndexOf(ann);
-      if (page !== null) pages.add(page);
+      if (page === null) continue;
+      for (const sheet of sheetsForMark(host.pagination, page, markKind(ann) === "ink")) pages.add(sheet);
     }
     for (const page of pages) repaintPage(page);
   }
@@ -277,7 +283,7 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     if (!mark) return false;
     marks.set(mark.id, mark);
     host.onSave([mark]);
-    repaintPagesOf([mark]);
+    repaintSheetsOf([mark]);
     return true;
   }
 
@@ -417,40 +423,38 @@ export function createMarkLayer(host: MarkHost): MarkLayer {
     },
 
     setAnnotations(annotations) {
-      const stale = new Set<number>();
+      const changed: Annotation[] = [];
       for (const ann of annotations) {
         const previous = marks.get(ann.id);
-        const before = previous ? pageIndexOf(previous) : null;
-        if (before !== null) stale.add(before);
+        if (previous) changed.push(previous);
         marks.set(ann.id, ann);
+        changed.push(ann);
       }
-      for (const page of stale) repaintPage(page);
-      repaintPagesOf(annotations);
+      repaintSheetsOf(changed);
     },
 
     unsetAnnotations(ids) {
-      const pages = new Set<number>();
+      const gone: Annotation[] = [];
       for (const id of ids) {
         const ann = marks.get(id);
         if (!ann) continue;
-        const page = pageIndexOf(ann);
-        if (page !== null) pages.add(page);
+        gone.push(ann);
         marks.delete(id);
         selected.delete(id);
       }
-      for (const page of pages) repaintPage(page);
+      repaintSheetsOf(gone);
     },
 
     selectAnnotations(ids) {
       const touched = new Set<string>([...selected, ...ids]);
       selected.clear();
       for (const id of ids) selected.add(id);
-      const pages = new Set<number>();
+      const anns: Annotation[] = [];
       for (const id of touched) {
-        const page = marks.has(id) ? pageIndexOf(marks.get(id) as Annotation) : null;
-        if (page !== null) pages.add(page);
+        const ann = marks.get(id);
+        if (ann) anns.push(ann);
       }
-      for (const page of pages) repaintPage(page);
+      repaintSheetsOf(anns);
     },
 
     setTool(tool) {

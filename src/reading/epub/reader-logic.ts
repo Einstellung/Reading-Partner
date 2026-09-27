@@ -74,6 +74,36 @@ export function pageIndexOfCfi(pagination: Pagination, cfi: string): number | nu
   return found;
 }
 
+// ------------------------------------------------------------------ marks ---
+
+// A text mark is numbered by the table (the page its first character falls in)
+// and painted by its words. The two can disagree: a table cut on another device
+// lays the spine document a few lines apart from this one, and a sheet shows
+// the column its page's start lands in here, so the words on a sheet can be
+// ones the table puts on the page before or after (docs/pitfall/485). A sheet
+// therefore tries every text mark of its spine document and paints what its
+// column shows; ink is drawn in page coordinates and stays on its own page.
+
+/** Whether a sheet showing `sheetPage` tries to paint a mark numbered `markPage`. */
+export function sheetMayShowMark(pagination: Pagination, markPage: number, ink: boolean, sheetPage: number): boolean {
+  if (markPage === sheetPage) return true;
+  if (ink) return false;
+  const mark = pagination.blocks[markPage];
+  const sheet = pagination.blocks[sheetPage];
+  return !!mark && !!sheet && mark.spine === sheet.spine;
+}
+
+/** The pages whose sheets may show a mark numbered `markPage`: what to repaint when it changes. */
+export function sheetsForMark(pagination: Pagination, markPage: number, ink: boolean): number[] {
+  const spine = pagination.blocks[markPage]?.spine;
+  if (ink || spine === undefined) return [markPage];
+  const pages: number[] = [];
+  for (let i = 0; i < pagination.blocks.length; i++) {
+    if (pagination.blocks[i].spine === spine) pages.push(i);
+  }
+  return pages;
+}
+
 export interface RestoreTarget {
   pageIndex: number;
   pageX: number;

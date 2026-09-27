@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lineOf, nearestOffset, type Box } from "../../../src/reading/epub/caret";
+import { glyphBox, lineOf, nearestOffset, type Box } from "../../../src/reading/epub/caret";
 
 // A text node laid out as ten characters a line, ten pixels a character,
 // twenty pixels a line. `columns[k]` is how many lines column k holds; column k
@@ -33,6 +33,28 @@ describe("the caret in a text node", () => {
     const { length, lines, caret } = layout([5, 2]);
     expect(nearestOffset(length, caret, lines, 1, 5)).toBe(0);
     expect(nearestOffset(length, caret, lines, 42, 85)).toBe(44);
+  });
+
+  test("a point left of a line's first character is at that character, not the end of the line above", () => {
+    // Left of the second column's top line, where a blockquote's padding
+    // would be: the stroke starts the column, and the first column's last
+    // character (the page before, on a sheet) is not in it.
+    const { length, lines, caret } = layout([5, 2]);
+    expect(nearestOffset(length, caret, lines, 195, 5)).toBe(50);
+    expect(nearestOffset(length, caret, lines, -5, 25)).toBe(10);
+  });
+
+  test("a character at the start of a wrapped line is measured by its glyph, not the empty box before it", () => {
+    // What WebKit reports for the first character of a column's top line whose
+    // text node began in the column before: an empty box at the end of the
+    // last line there, then the glyph (measured on the iPad simulator).
+    const rects: Box[] = [
+      { left: 27, right: 27, top: 1077, bottom: 1101 },
+      { left: 66, right: 82, top: 151, bottom: 175 },
+    ];
+    expect(glyphBox(rects)).toEqual(rects[1]);
+    expect(glyphBox([{ left: 5, right: 5, top: 0, bottom: 20 }])).toEqual({ left: 5, right: 5, top: 0, bottom: 20 });
+    expect(glyphBox([])).toBeNull();
   });
 
   test("one column reads top to bottom, with or without the line boxes", () => {
