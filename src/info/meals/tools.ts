@@ -20,7 +20,18 @@ import type { MealsCard, MealsPlanCardData } from "./cards";
 import { checkPlan } from "./plan/checks";
 import { FOOD_TAGS, FOODS, foodAllowed } from "./nutrition/foods";
 import type { TemplateItem, TemplateRole } from "./nutrition/solve";
-import type { Goal, Profile, Region, Targets, TrainTime, Work } from "./nutrition/targets";
+import {
+  DEFAULT_EFFORT,
+  EFFORTS,
+  minuteCap,
+  type Effort,
+  type Goal,
+  type Profile,
+  type Region,
+  type Targets,
+  type TrainTime,
+  type Work,
+} from "./nutrition/targets";
 import {
   addReaderItem,
   currentList,
@@ -84,7 +95,7 @@ function mealLine(meal: Meal): string {
   switch (meal.mode) {
     case "make": {
       const head = `${meal.name ?? "no foods yet"}${meal.flavour ? ` [${meal.flavour}]` : ""}`;
-      const mins = meal.minutes ? `, ${meal.minutes} min` : "";
+      const mins = (meal.minutes ? `, ${meal.minutes} min` : "") + (meal.proper ? ", proper" : "");
       return meal.items?.length ? `${head}${mins}: ${templateLine(meal.items)}` : `${head} — needs foods`;
     }
     case "out":
@@ -140,6 +151,14 @@ const GOAL_WORDS: Record<Goal, string> = {
   steady: "steady energy",
 };
 
+const EFFORT_ADVICE: Record<Effort, string> = {
+  simple:
+    "Simple food: one pot, a microwave or plain assembly, mostly from ready foods — ready-to-eat " +
+    "chicken breast, frozen shrimp, eggs, tofu, Greek yogurt, frozen vegetables, microwave grain " +
+    "rice, oats.",
+  homestyle: "Ordinary home cooking: a stir-fry, steamed fish, a pot of stew, from the foods below.",
+};
+
 const GOAL_ADVICE: Record<Goal, string> = {
   cut:
     "Losing fat: lean protein foods (chicken breast, shrimp, white fish, egg whites, tofu, Greek " +
@@ -183,7 +202,7 @@ export function mealsGuidance(
     const days = profile.trainingDays.map((d) => WEEKDAY_SHORT[d]).join(", ");
     out.push(
       `Goal: ${GOAL_WORDS[profile.goal]}. ${days ? `Trains ${days} (${profile.trainTime}).` : "Does not train."}`,
-      `At most ${profile.minutesPerMeal} minutes hands-on a meal. ${profile.people} eating.`,
+      `Effort: ${profile.effort}. ${profile.people} eating.`,
       `Shops: ${profile.shops.join(", ") || "none named"}. Kitchen: ${profile.kitchen.join(", ") || "not said"}.`,
       `Never use: ${profile.dislikes.join(", ") || "nothing named"}.`,
     );
@@ -234,14 +253,17 @@ export function mealsGuidance(
     for (const d of state.deviations.slice(-3)) out.push(`- ${d.date} ${d.meal}: ${d.said}`);
   }
 
-  const limit = profile?.minutesPerMeal ?? 10;
+  const effort = profile?.effort ?? DEFAULT_EFFORT;
   out.push(
     "",
     "HOW TO PLAN",
-    "Seven days, four meals each: breakfast, lunch, dinner and a snack. A made meal is about ten",
-    `minutes of hands-on work, never more than ${limit}, assembled mostly from ready foods —`,
-    "ready-to-eat chicken breast, frozen shrimp, eggs, tofu, Greek yogurt, frozen vegetables,",
-    "microwave grain rice, oats. Not cooked dishes.",
+    "Seven days, four meals each: breakfast, lunch, dinner and a snack.",
+    `${EFFORT_ADVICE[effort]} At most ${minuteCap({ effort })} minutes hands-on a made meal.`,
+    "When they say one meal should be a proper one ('周六想好好做一顿'), rework only that meal with",
+    "propose_meals_plan, adjustment set and `proper` true on it: it may take longer. Nothing else",
+    "changes and the effort level stays.",
+    "The effort level (simple or homestyle) changes only when they keep saying the meals are too",
+    "sloppy (homestyle) or too much work (simple): update_meals_profile with effort. Not on one remark.",
     "A made meal is a list of foods from FOODS by id, each with a role: exactly one `protein` and",
     "exactly one `staple`, whose grams the program solves (a fruit can be the staple of a snack or a",
     "breakfast); at most one `fat` (an oil, nuts, a fatty spread), which the program moves; and any",
@@ -274,7 +296,7 @@ export function mealsGuidance(
     "They will say one sentence ('中午没带饭，食堂吃的'). Call record_meals_deviation. It answers",
     "with at most two meals to re-pick; call propose_meals_plan with adjustment set for those",
     "meals only. Never re-plan the week over one meal. Boredom and 'too much hassle' are not",
-    "adjustments — remember them for the next week.",
+    "adjustments — remember them for the next week, or, said again and again, change the effort level.",
     "",
     "THE SHOPPING LIST",
     "Derived by the program from the solved grams, one trip a week. Before it is done, add,",
@@ -306,6 +328,12 @@ const mealSchema = (which: MealKey) =>
       Type.String({ description: "For make: one line on how it is put together, in their language." }),
     ),
     minutes: Type.Optional(Type.Number({ description: "For make: hands-on minutes." })),
+    proper: Type.Optional(
+      Type.Boolean({
+        description:
+          "For make: true only on a meal they asked to cook properly; its minutes may go past their effort level's limit.",
+      }),
+    ),
     items: Type.Optional(
       Type.Array(
         Type.Object({
@@ -488,8 +516,7 @@ export function patchProfile(profile: Profile, args: Record<string, unknown>): P
   set("goal", oneOf(args.goal, GOALS));
   set("trainTime", oneOf(args.trainTime, TRAIN_TIMES));
   set("work", oneOf(args.work, WORKS));
-  const minutes = positive(args.minutesPerMeal, 120);
-  set("minutesPerMeal", minutes === null ? null : Math.round(minutes));
+  set("effort", oneOf(args.effort, EFFORTS));
   const people = positive(args.people, 20);
   set("people", people === null ? null : Math.round(people));
   if (Array.isArray(args.trainingDays)) {
@@ -517,7 +544,8 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
     description:
       "Call this the moment they state a change to what the plan is built on: a new weight " +
       "('这周称了 71'), another goal ('改成增肌'), other training days ('周二也练'), a new dislike, " +
-      "more people eating. Send only the fields that changed. Lists (trainingDays, dislikes, " +
+      "more people eating, or the effort level when they keep saying the meals are too sloppy or " +
+      "too much work. Send only the fields that changed. Lists (trainingDays, dislikes, " +
       "shops, kitchen) replace the whole list, so send the full list as it now stands. `notes` " +
       "replaces what they have said about their meals in their own words. It writes at once and " +
       "re-solves the week.",
@@ -532,7 +560,13 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
       ),
       trainTime: Type.Optional(Type.String({ description: `One of: ${TRAIN_TIMES.join(", ")}.` })),
       work: Type.Optional(Type.String({ description: `One of: ${WORKS.join(", ")}.` })),
-      minutesPerMeal: Type.Optional(Type.Number()),
+      effort: Type.Optional(
+        Type.String({
+          description:
+            "simple: one pot, microwave or assembly, about 20 minutes hands-on. homestyle: ordinary " +
+            "home cooking, up to about 45 minutes.",
+        }),
+      ),
       people: Type.Optional(Type.Number()),
       dislikes: Type.Optional(
         Type.Array(Type.String(), {
@@ -1017,6 +1051,7 @@ function toMealDraft(raw: unknown): MealDraft | null {
     if (text("method")) draft.method = text("method");
     const minutes = Number(e.minutes);
     if (Number.isFinite(minutes) && minutes > 0) draft.minutes = Math.round(minutes);
+    if (e.proper === true) draft.proper = true;
   } else if (text("place")) {
     draft.place = text("place");
   }

@@ -166,6 +166,7 @@ export interface MealDraft {
   flavour?: Flavour;
   method?: string;
   minutes?: number;
+  proper?: boolean;
   items?: TemplateItem[];
   place?: string;
   note?: string;
@@ -222,6 +223,7 @@ function mealFromDraft(d: MealDraft): Meal {
   if (d.flavour) meal.flavour = d.flavour;
   if (d.method) meal.method = d.method;
   if (d.minutes !== undefined) meal.minutes = d.minutes;
+  if (d.proper) meal.proper = true;
   if (d.note) meal.note = d.note;
   return meal;
 }

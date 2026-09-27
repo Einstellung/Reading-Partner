@@ -19,7 +19,7 @@ const EXAMPLE: Profile = {
   trainingDays: [1, 3, 5],
   trainTime: "evening",
   work: "sit",
-  minutesPerMeal: 10,
+  effort: "simple",
   people: 1,
   shops: [],
   kitchen: [],

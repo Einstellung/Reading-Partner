@@ -9,7 +9,7 @@
 
 import { foodAllowed, foodById, type Food } from "../nutrition/foods";
 import type { TemplateItem } from "../nutrition/solve";
-import type { Profile, Targets } from "../nutrition/targets";
+import { minuteCap, type Profile, type Targets } from "../nutrition/targets";
 import { dayTargetsOn, mealNumbers, solvePlan } from "./solve-week";
 import { MAIN_MEAL_KEYS, MEAL_KEYS, type Meal, type MealRef, type WeekPlan } from "./types";
 import { dayIndexOf, sameMeal } from "./week";
@@ -110,6 +110,9 @@ export function checkPlan(input: CheckInput): CheckResult {
   if (problems.length) return { plan: input.plan, problems };
 
   const plan = solvePlan(input.plan, targets, profile);
+  // A proper meal the reader asked for is exempt; every other made meal is
+  // held to what their effort level allows.
+  const cap = minuteCap(profile);
   for (const day of plan.days) {
     const dayT = dayTargetsOn(targets, profile, day.date);
     for (const key of MEAL_KEYS) {
@@ -117,8 +120,8 @@ export function checkPlan(input: CheckInput): CheckResult {
       const ref = { date: day.date, meal: key };
       if (meal.mode !== "make" || !inScope(ref)) continue;
       const at = where(plan, ref);
-      if ((meal.minutes ?? 0) > profile.minutesPerMeal) {
-        problems.push(`${at} takes ${meal.minutes} minutes; they allow ${profile.minutesPerMeal}.`);
+      if (!meal.proper && (meal.minutes ?? 0) > cap) {
+        problems.push(`${at} takes ${meal.minutes} minutes; they allow ${cap}.`);
       }
       for (const item of meal.items ?? []) {
         const food = foodById(item.foodId);

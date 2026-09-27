@@ -13,7 +13,6 @@ import {
   GOAL_OPTIONS,
   INTRO_LINE,
   KITCHEN_OPTIONS,
-  MINUTES_OPTIONS,
   NO_CONSENT_REPLY,
   PEOPLE_OPTIONS,
   RESULT_STEP,
@@ -324,21 +323,6 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
                 label={o.label}
                 sub={o.sub}
                 onClick={() => dispatch({ type: "work", value: o.value })}
-              />
-            ))}
-          </Opts>
-        </div>
-      );
-    case "minutes":
-      return (
-        <div className="mt-2.5">
-          <Opts>
-            {MINUTES_OPTIONS.map((m) => (
-              <Opt
-                key={m}
-                selected={a.minutesPerMeal === m}
-                label={`${m} 分钟`}
-                onClick={() => dispatch({ type: "minutes", value: m })}
               />
             ))}
           </Opts>

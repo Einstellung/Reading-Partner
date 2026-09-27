@@ -13,7 +13,7 @@
 
 import { appGuardedFileIo, readGuardedFile, type GuardedFileIo } from "../../../platform/app/guarded-file";
 import { isObject } from "../../../platform/std/json";
-import type { Profile } from "../nutrition/targets";
+import { DEFAULT_EFFORT, EFFORTS, type Effort, type Profile } from "../nutrition/targets";
 import {
   EMPTY_MEALS,
   EMPTY_SHOPPING,
@@ -66,7 +66,13 @@ export function parseMealsFile(raw: unknown): MealsState | null {
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
 
-/** A profile as onboarding wrote it, or null. */
+/**
+ * A profile as onboarding wrote it, or null.
+ *
+ * The effort level defaults to simple when absent: onboarding never asks it.
+ * A profile written before the level existed carries `minutesPerMeal`, the
+ * answer it replaced, which is dropped.
+ */
 export function validateProfile(raw: unknown): Profile | null {
   if (!isObject(raw)) return null;
   const ok =
@@ -80,12 +86,14 @@ export function validateProfile(raw: unknown): Profile | null {
     raw.trainingDays.every(isNum) &&
     typeof raw.trainTime === "string" &&
     typeof raw.work === "string" &&
-    isNum(raw.minutesPerMeal) &&
     isNum(raw.people) &&
     isStrings(raw.shops) &&
     isStrings(raw.kitchen) &&
     isStrings(raw.dislikes);
-  return ok ? (raw as unknown as Profile) : null;
+  if (!ok) return null;
+  const { minutesPerMeal: _replaced, ...rest } = raw;
+  const effort = EFFORTS.includes(raw.effort as Effort) ? (raw.effort as Effort) : DEFAULT_EFFORT;
+  return { ...(rest as unknown as Profile), effort };
 }
 
 function validateCharter(raw: unknown): MealsCharter | null {

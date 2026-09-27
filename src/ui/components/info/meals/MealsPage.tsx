@@ -325,8 +325,8 @@ export function MealsHome(props: MealsHomeProps) {
       ) : !plan || head.length === 0 ? (
         <div className="rounded-2xl border border-border-soft bg-card p-5">
           <p className="m-0 font-display text-[17px] leading-relaxed text-foreground">
-            Nothing is planned. Four meals a day for seven days, each about ten minutes, and the
-            shopping list that goes with them.
+            Nothing is planned. Four simple meals a day for seven days, and the shopping list that
+            goes with them.
           </p>
           <div className="mt-4">
             <Button variant="cta" onClick={props.onPlanWeek}>

@@ -29,7 +29,6 @@ const EXAMPLE: OnboardingAction[] = [
   { type: "trainTime", value: "evening" },
   { type: "next" },
   { type: "work", value: "sit" },
-  { type: "minutes", value: 10 },
   { type: "toggle", field: "shops", value: "超市" },
   { type: "toggle", field: "kitchen", value: "微波炉" },
   { type: "toggle", field: "avoid", value: "不吃牛肉" },
@@ -64,7 +63,7 @@ describe("onboarding steps", () => {
       trainingDays: [1, 3, 5],
       trainTime: "evening",
       work: "sit",
-      minutesPerMeal: 10,
+      effort: "simple",
       dislikes: ["beef"],
       bodyFatPct: 20,
     });
@@ -115,6 +114,18 @@ describe("onboarding steps", () => {
     expect(s.answers.bodyFatPct).toBe(15);
     expect(s.answers.goal).toBeNull();
   });
+
+  test("nothing asks for minutes: work leads to the logistics, and the level starts simple", () => {
+    expect(STEPS as readonly string[]).not.toContain("minutes");
+    const s = run(EXAMPLE.slice(0, EXAMPLE.findIndex((a) => a.type === "work") + 1));
+    expect(STEPS[s.step]).toBe("logistics");
+    expect(toProfile(run(EXAMPLE).answers)?.effort).toBe("simple");
+  });
+
+  test("a replay keeps the effort level the conversation set", () => {
+    const s = initialOnboarding(profile({ effort: "homestyle" }));
+    expect(toProfile(run(EXAMPLE, s).answers)?.effort).toBe("homestyle");
+  });
 });
 
 describe("answer lines", () => {
@@ -124,7 +135,6 @@ describe("answer lines", () => {
     expect(answerText(a, "goal")).toBe("减脂");
     expect(answerText(a, "body")).toBe("男 · 30 岁 · 170 cm · 65.0 kg · 体脂 20.0%");
     expect(answerText(a, "train")).toBe("周一、三、五 · 下班后");
-    expect(answerText(a, "minutes")).toBe("10 分钟");
     expect(answerText(a, "logistics")).toBe("1 人 · 超市 · 微波炉 · 不吃牛肉");
   });
 

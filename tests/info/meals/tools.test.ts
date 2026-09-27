@@ -129,7 +129,10 @@ test("the instruction gives the program's targets and every meal of every day", 
   expect(text).toContain("dinner: delivery from the usual place");
   expect(text).toContain("dinner: late lunch");
   expect(text).toContain("They are looking at the week.");
-  expect(text).toContain("never more than 10");
+  expect(text).toContain("At most 20 minutes hands-on a made meal.");
+  expect(mealsGuidance(state({ charter: charter({ effort: "homestyle" }) }), MON)).toContain(
+    "At most 45 minutes hands-on a made meal.",
+  );
   expect(text).toContain("soy-ginger (");
 });
 
@@ -251,7 +254,7 @@ test("an adjustment re-picks only the meals it sends, and is checked against the
       days: [{ day: 2, lunch: { ...(sent(week())[4]!.dinner as object), minutes: 25 } }],
     }),
   );
-  expect(slow).toContain("Day 2 lunch takes 25 minutes; they allow 10.");
+  expect(slow).toContain("Day 2 lunch takes 25 minutes; they allow 20.");
   expect(slow).toContain("Fix only those meals and call propose_meals_plan again.");
 
   const out = await tool.execute({
@@ -265,6 +268,30 @@ test("an adjustment re-picks only the meals it sends, and is checked against the
   expect(card.days[1]!.lunch.name).toBe("虾仁杂粮饭");
   expect(card.days[1]!.lunch.solved?.length).toBeGreaterThan(0);
   expect(card.days[0]).toEqual(week().days[0]!);
+});
+
+test("a one-off proper meal goes past the cap for that meal only, and nothing else moves", async () => {
+  const current = state();
+  const d = deps(current);
+  const tool = buildProposeMealsPlanTool(d);
+  const long = { ...(sent(week())[4]!.dinner as object), minutes: 60 };
+  const out = await tool.execute({ adjustment: true, days: [{ day: 6, dinner: { ...long, proper: true } }] });
+  expect(said(out)).toContain("Proposed a change to 1 meal(s)");
+  const card = d.cards[0] as MealsPlanCardData;
+  expect(card.changed).toEqual([{ date: "2026-09-26", meal: "dinner" }]);
+  expect(card.days[5]!.dinner).toMatchObject({ proper: true, minutes: 60 });
+  card.days.forEach((day, i) => {
+    if (i !== 5) expect(day).toEqual(week().days[i]!);
+  });
+  expect(card.days[5]!.lunch).toEqual(week().days[5]!.lunch);
+  expect(current.charter?.profile.effort).toBe("simple");
+
+  // The same meal without the flag, or another meal beside it, is held to the cap.
+  const refused = said(
+    await tool.execute({ adjustment: true, days: [{ day: 6, dinner: { ...long, proper: true }, lunch: long }] }),
+  );
+  expect(refused).toContain("Day 6 lunch takes 60 minutes; they allow 20.");
+  expect(refused).not.toContain("Day 6 dinner takes");
 });
 
 test("an adjustment with no week to adjust is refused", async () => {
@@ -294,6 +321,17 @@ test("a stated weight is written at once and the week re-solved against it", asy
   expect(p.charters[1]!.charter.profile).toEqual(profile());
 });
 
+test("the effort level is set by the profile tool", async () => {
+  const current = state();
+  const p = ports(current);
+  const tool = buildUpdateProfileTool({ ...deps(current), ports: p });
+  const fields = (tool.parameters as { properties: Record<string, unknown> }).properties;
+  expect(fields).toHaveProperty("effort");
+  expect(fields).not.toHaveProperty("minutesPerMeal");
+  await tool.execute({ effort: "homestyle" });
+  expect(p.charters[0]!.charter.profile).toEqual(profile({ effort: "homestyle" }));
+});
+
 test("the profile tool refuses with no profile and with nothing usable", async () => {
   const none = { ...EMPTY_MEALS, shopping: shopping() };
   const p0 = ports(none);
@@ -316,7 +354,8 @@ test("a profile patch takes only usable fields", () => {
   expect(patchProfile(base, { goal: "CUT" })?.goal).toBe("cut");
   expect(patchProfile(base, { trainingDays: [5, 2, 2, 9, 0] })?.trainingDays).toEqual([2, 5]);
   expect(patchProfile(base, { trainingDays: [] })?.trainingDays).toEqual([]);
-  expect(patchProfile(base, { minutesPerMeal: 14.6 })?.minutesPerMeal).toBe(15);
+  expect(patchProfile(base, { effort: "Homestyle" })?.effort).toBe("homestyle");
+  expect(patchProfile(base, { effort: "gourmet" })).toBeNull();
   expect(patchProfile(base, { dislikes: ["celery", " ", "fish"] })?.dislikes).toEqual(["celery", "fish"]);
   expect(patchProfile(base, { weightKg: 0 })).toBeNull();
 });

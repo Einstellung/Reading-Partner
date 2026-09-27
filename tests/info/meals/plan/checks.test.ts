@@ -40,15 +40,32 @@ test("a template the solver cannot take is refused in words", () => {
   expect(problems).toContain("Day 2 breakfast needs exactly one protein item; it has 2.");
 });
 
-test("minutes over the reader's limit, and a disliked food, come back", () => {
+test("minutes over the effort level's cap, and a disliked food, come back", () => {
   const slow = { ...shrimpRice(), minutes: 25 };
   const { problems } = checkPlan({
     plan: withMeal(draftWeek(), 1, "lunch", slow),
     profile: profile({ dislikes: ["poultry"] }),
     targets,
   });
-  expect(problems).toContain("Day 2 lunch takes 25 minutes; they allow 10.");
+  expect(problems).toContain("Day 2 lunch takes 25 minutes; they allow 20.");
   expect(problems.filter((p) => p.includes("ready_chicken_breast, which they do not eat"))).toHaveLength(3);
+});
+
+test("the cap follows the effort level: 20 minutes simple, 45 homestyle", () => {
+  const at = (minutes: number, effort: "simple" | "homestyle") =>
+    checkPlan({ plan: withMeal(draftWeek(), 1, "lunch", { ...shrimpRice(), minutes }), profile: profile({ effort }), targets })
+      .problems;
+  expect(at(20, "simple")).toEqual([]);
+  expect(at(21, "simple")).toEqual(["Day 2 lunch takes 21 minutes; they allow 20."]);
+  expect(at(45, "homestyle")).toEqual([]);
+  expect(at(46, "homestyle")).toEqual(["Day 2 lunch takes 46 minutes; they allow 45."]);
+});
+
+test("a proper meal is not held to the cap; the meals around it still are", () => {
+  let plan = withMeal(draftWeek(), 5, "dinner", { ...shrimpRice(), minutes: 90, proper: true });
+  expect(checkPlan({ plan, profile: profile(), targets }).problems).toEqual([]);
+  plan = withMeal(plan, 5, "lunch", { ...shrimpRice(), flavour: "garlic", minutes: 30 });
+  expect(checkPlan({ plan, profile: profile(), targets }).problems).toEqual(["Day 6 lunch takes 30 minutes; they allow 20."]);
 });
 
 test("two main meals in a row with one flavour are refused, across the night too", () => {

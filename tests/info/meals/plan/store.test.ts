@@ -20,6 +20,7 @@ import {
   savePhotosAsked,
   savePlan,
   saveShopping,
+  validateProfile,
 } from "../../../../src/info/meals/plan/store";
 import {
   EMPTY_MEALS,
@@ -192,6 +193,21 @@ test("a half-understood file keeps what this build can read and drops what it ca
   expect(parsed?.shopping.doneOn).toBeNull();
   expect(parsed?.deviations).toHaveLength(1);
   expect(parseMealsFile("not an object")).toBeNull();
+});
+
+test("a profile starts at the simple level; one written with minutesPerMeal drops it", () => {
+  const { effort: _effort, ...bare } = charter().profile;
+  const old = parseMealsFile({
+    version: MEALS_VERSION,
+    charter: { ...charter(), profile: { ...bare, minutesPerMeal: 15 } },
+    plan: null,
+    deviations: [],
+  });
+  expect(old?.charter?.profile).toEqual(charter().profile);
+  expect(old?.charter?.profile).not.toHaveProperty("minutesPerMeal");
+  expect(validateProfile(bare)?.effort).toBe("simple");
+  expect(validateProfile({ ...bare, effort: "gourmet" })?.effort).toBe("simple");
+  expect(validateProfile({ ...bare, effort: "homestyle" })?.effort).toBe("homestyle");
 });
 
 test("a file body round-trips through the parser", () => {
