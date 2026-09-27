@@ -257,6 +257,10 @@ const LAYER: Record<string, Layer> = {
   "reading/session": "domain",
   "reading/sources": "domain",
   "reading/talk": "domain",
+  // A document taking another's place on the shelf: a translation, or a new
+  // version of a book the reader picked. Import, carry the marks and the
+  // position, move the conversations, retire the original.
+  "reading/replace": "domain",
   // Turning an article on the shelf into a bilingual one (docs/67). A domain of
   // its own rather than a corner of reading/epub: that directory builds and
   // reads the file, and this one decides what a translated document looks like

@@ -1,5 +1,5 @@
 // Marks moving from an article to its translation, by their words.
-// Run: bash scripts/t.sh tests/reading/translate/carry-marks.test.ts
+// Run: bash scripts/t.sh tests/reading/replace/carry-marks.test.ts
 
 import { expect, test } from "bun:test";
 import {
@@ -11,7 +11,7 @@ import {
 import { buildArticleEpub } from "../../../src/reading/epub/file/build-article";
 import { parseEpubRangeCfi, rangeToCfi, resolveRange } from "../../../src/reading/epub/file/cfi";
 import { parseEpub, type SpineDocument } from "../../../src/reading/epub/file/parse";
-import { carryMarks, type MarkRecord } from "../../../src/reading/translate/carry-marks";
+import { carryMarks, type MarkRecord } from "../../../src/reading/replace/carry-marks";
 import { translateArticleEpub } from "../../../src/reading/translate/translate-article";
 import type { TranslateBatchFn } from "../../../src/reading/translate/prompt";
 

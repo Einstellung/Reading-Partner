@@ -11,7 +11,7 @@
 //   2. Import the new bytes and list them in the topic. From here the reader has
 //      both documents, which is the only overlap state that is safe to be
 //      interrupted in — the original still opens, and so does the translation.
-//   3. Move the marks (carry-marks.ts), written under the new book id before the
+//   3. Move the marks (reading/replace/carry-marks.ts), written under the new book id before the
 //      old one is touched. A crash here loses nothing: the originals are still
 //      filed under a book that still exists.
 //   4. Move the conversations. A thread is filed under a book id, so a new file
@@ -31,7 +31,7 @@
 
 import type { ImportMeta, LibraryEntry } from "../../platform/app/library";
 import type { Thread } from "../../platform/app/threads";
-import { carryMarks, type CarryTarget, type MarkRecord } from "./carry-marks";
+import { carryMarks, type CarryTarget, type MarkRecord } from "../replace/carry-marks";
 import type { TranslatedArticle } from "./translate-article";
 
 /**

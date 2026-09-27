@@ -13,7 +13,7 @@ import {
   rangeAtSpan,
 } from "../../../src/reading/epub/annotation";
 import { rangeToCfi } from "../../../src/reading/epub/file/cfi";
-import type { MarkRecord } from "../../../src/reading/translate/carry-marks";
+import type { MarkRecord } from "../../../src/reading/replace/carry-marks";
 import {
   documentPathOf,
   orphanedThreadIds,

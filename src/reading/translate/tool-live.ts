@@ -62,7 +62,7 @@ import {
 } from "./book-run";
 import { hasTranslations, segmentDocument } from "./segment";
 import { translateArticleEpub } from "./translate-article";
-import type { MarkRecord } from "./carry-marks";
+import type { MarkRecord } from "../replace/carry-marks";
 import type { TranslateTarget, TranslateToolDeps } from "./tool";
 import { errMsg } from "../../platform/std/errors";
 
