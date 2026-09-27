@@ -157,9 +157,14 @@ const POSITION_QUOTE = 48;
  * The saved CFI counts steps through the old tree, and restoring prefers it over
  * the page number (reading/epub/reader-logic.ts: restoreTarget), so an old CFI
  * left in place would open the new file wherever those steps happen to land.
- * When the words are found the CFI is rewritten to them; when they are not, it
- * is dropped and the page number stands. A state with no CFI (every PDF) is
- * handed back as it is.
+ * When the words are found the CFI is rewritten to them. A page often starts on
+ * a running head or a heading, which is what a new layout rewrites, so the long
+ * quote runs into changed words; the words up to the first line break are tried
+ * next, in the same chapter file, nearest where they were. When neither is
+ * there but the chapter file is, the reader starts at the top of it: the old
+ * page number counts pages of the old layout and would open somewhere
+ * unrelated. With no chapter file of that id the CFI is dropped and the page
+ * number stands. A state with no CFI (every PDF) is handed back as it is.
  */
 export function carryPosition(
   state: ViewState,
@@ -176,9 +181,28 @@ export function carryPosition(
   const words = doc.text.text.slice(offset, offset + POSITION_QUOTE);
   if (words.trim().length < 8) return rest;
   const quote = quoteSelectorAt(doc.text.text, { start: offset, end: offset + words.length });
-  const found = locate(into, quote, doc.index, offset);
-  const point = found ? runAt(found.target.text.runs, found.span.start) : null;
+  const same = into.find((t) => t.idref === doc.idref);
+  const place = locate(into, quote, doc.index, offset) ?? firstLineIn(same, doc.text.text, offset, words);
+  const cfi = (place && cfiAt(place.target, place.span.start)) ?? (same ? cfiAt(same, 0) : null);
+  return cfi ? { ...rest, cfi } : rest;
+}
+
+/** The words up to the first line break, found in `target` nearest `offset`. */
+function firstLineIn(
+  target: CarryTarget | undefined,
+  text: string,
+  offset: number,
+  words: string,
+): { target: CarryTarget; span: TextSpan } | null {
+  const line = words.split("\n")[0];
+  if (!target || line.length === words.length || line.trim().length < 8) return null;
+  const span = spanIn(target.text.text, quoteSelectorAt(text, { start: offset, end: offset + line.length }), offset);
+  return span ? { target, span } : null;
+}
+
+/** A point CFI at a character of a new document, or null when no text is there. */
+function cfiAt(target: CarryTarget, at: number): string | null {
+  const point = runAt(target.text.runs, at);
   const local = point ? pointSteps(point.node, point.offset) : null;
-  if (!found || local === null) return rest;
-  return { ...rest, cfi: epubCfi(found.target.spineIndex, found.target.idref, local) };
+  return local === null ? null : epubCfi(target.spineIndex, target.idref, local);
 }

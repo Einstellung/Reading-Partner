@@ -201,6 +201,56 @@ test("the reading position is moved onto the same words in the new version", () 
   expect((at?.node as Text).data.slice(at!.offset)).toStartWith(phrase);
 });
 
+test("a position on a running head whose heading was rewritten stays on that head in the same chapter file", () => {
+  const head = "<p>Part one · The technical report</p>";
+  const v1 = parseEpub(
+    buildEpub({
+      docs: [
+        { name: "a.xhtml", body: `${head}<h2>First chapter / 第一章</h2><p>Words of the first chapter.</p>` },
+        { name: "b.xhtml", body: `${head}<h2>Second chapter / 第二章</h2><p>Words of the second chapter.</p>` },
+      ],
+    }),
+  );
+  // The new layout puts each half of a bilingual heading on its own line.
+  const v2 = parseEpub(
+    buildEpub({
+      docs: [
+        { name: "a.xhtml", body: `${head}<h2>First chapter</h2><h2>第一章</h2><p>Words of the first chapter.</p>` },
+        { name: "b.xhtml", body: `${head}<h2>Second chapter</h2><h2>第二章</h2><p>Words of the second chapter.</p>` },
+      ],
+    }),
+  );
+  const state: ViewState = { pageIndex: 7, scale: 1, scrollMode: 0, cfi: pointCfiAt(v1.docs[1], "Part one") };
+  const parsed = parseCfiStart(carryPosition(state, v1, carryTargetsOf(v2)).cfi!);
+  expect(parsed?.spineIndex).toBe(1);
+  const at = resolvePoint(v2.docs[1].doc.documentElement, parsed!);
+  expect((at?.node as Text).data.slice(at!.offset)).toStartWith("Part one");
+});
+
+test("a position whose words are gone from a chapter file the new version still has opens at the top of it", () => {
+  const v1 = parseEpub(
+    buildEpub({
+      docs: [
+        { name: "a.xhtml", body: "<p>The opening chapter, kept as it was.</p>" },
+        { name: "b.xhtml", body: "<p>A paragraph the new version rewrote from the first word.</p>" },
+      ],
+    }),
+  );
+  const v2 = parseEpub(
+    buildEpub({
+      docs: [
+        { name: "a.xhtml", body: "<p>The opening chapter, kept as it was.</p>" },
+        { name: "b.xhtml", body: "<p>Entirely different sentences now stand in its place.</p>" },
+      ],
+    }),
+  );
+  const state: ViewState = { pageIndex: 9, scale: 1, scrollMode: 0, cfi: pointCfiAt(v1.docs[1], "A paragraph") };
+  const parsed = parseCfiStart(carryPosition(state, v1, carryTargetsOf(v2)).cfi!);
+  expect(parsed?.spineIndex).toBe(1);
+  const at = resolvePoint(v2.docs[1].doc.documentElement, parsed!);
+  expect((at?.node as Text).data.slice(at!.offset)).toStartWith("Entirely different");
+});
+
 test("a position whose words are gone keeps its page number and drops the old CFI", () => {
   const { v1 } = books();
   const other = parseEpub(buildEpub({ docs: [{ name: "x.xhtml", body: "<p>Nothing in common with the first book at all.</p>" }] }));
