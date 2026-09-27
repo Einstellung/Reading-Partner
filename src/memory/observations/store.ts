@@ -504,6 +504,27 @@ export class ObservationFileStore {
     return moved.length;
   }
 
+  // Drop the mark cursor of every book named, the one map in meta.json keyed by
+  // book id. A deleted book's cursor is a watermark over marks that are gone.
+  // Writes only when one of them was there: a rewrite is a sync revision of a
+  // file every device holds. Answers whether it wrote.
+  async forgetBooks(bookIds: Iterable<string>): Promise<boolean> {
+    const stored = await this.readStoredMeta();
+    const marks = { ...(stored.distilledMarks ?? {}) };
+    let dropped = false;
+    for (const bookId of bookIds) {
+      if (!Object.prototype.hasOwnProperty.call(marks, bookId)) continue;
+      delete marks[bookId];
+      dropped = true;
+    }
+    if (!dropped) return false;
+    await this.fs.write(
+      `${this.dir}/meta.json`,
+      JSON.stringify({ ...stored, distilledMarks: marks }, null, 2),
+    );
+    return true;
+  }
+
   // The index as a prompt loads it. Without a topic that is the file verbatim,
   // every line naming the topic it belongs to; with one it is that topic's lines
   // with the topic segment dropped, because a prompt built for one topic would

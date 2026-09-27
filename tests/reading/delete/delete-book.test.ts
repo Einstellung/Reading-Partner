@@ -73,6 +73,7 @@ function deps(log: Log, over: Partial<DeleteBookDeps> = {}): DeleteBookDeps {
     deleteObservations: async (ids) => {
       for (const id of ids) log.calls.push(`observation ${id}`);
     },
+    forgetDistillCursor: note("cursor"),
     listStatements: async () => STATEMENTS,
     listSupplements: async () => [],
     listSupplementLists: async () => [],
@@ -101,6 +102,8 @@ test("the whole order, once, from the tombstone down to the files", async () => 
     // m-2 is a statement's evidence and stays; m-3 is another book's.
     "observation m-1",
     "observation m-4",
+    // The book's mark cursor in observations/meta.json.
+    "cursor " + BOOK,
     // The talk goes before the retell it came out of, which is how it is found.
     "outline o-1",
     "retell r-1",

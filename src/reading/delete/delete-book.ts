@@ -15,7 +15,8 @@
 //      208). Written before anything is taken away, so a crash in the middle
 //      leaves a deletion that finishes itself rather than half a book.
 //   2..4 The records: the shelf entry, the reading position, the topic links,
-//      the observations. Record-level deletes travel on their own.
+//      the observations and the book's mark cursor. Record-level deletes
+//      travel on their own.
 //   5..7 The retells, the supplements (each deleted the same way, recursively)
 //      and the files. Best-effort, one at a time: by the time the
 //      book is off the shelf and tombstoned it is deleted as far as the reader
@@ -64,6 +65,8 @@ export interface DeleteBookDeps {
   unlinkFile: (topicId: string, path: string) => Promise<void>;
   listObservations: () => Promise<Observation[]>;
   deleteObservations: (ids: readonly string[]) => Promise<void>;
+  /** Drop the book's mark cursor from the distillation bookkeeping. */
+  forgetDistillCursor: (bookId: string) => Promise<void>;
   listStatements: () => Promise<Statement[]>;
   listSupplements: (bookId: string) => Promise<SupplementRef[]>;
   /** Every book's supplements list on this device, for reference counting. */
@@ -96,6 +99,9 @@ export const liveDeleteBookDeps: DeleteBookDeps = {
   listObservations: () => new ObservationFileStore(observationFs).list(),
   deleteObservations: async (ids) => {
     await new ObservationFileStore(observationFs).deleteMany(ids);
+  },
+  forgetDistillCursor: async (bookId) => {
+    await new ObservationFileStore(observationFs).forgetBooks([bookId]);
   },
   listStatements: () => listStatements(),
   listSupplements,
@@ -177,6 +183,9 @@ async function deleteOne(
   const statements = await deps.listStatements();
   const observations = await deps.listObservations();
   await deps.deleteObservations(observationIdsToDelete(observations, statements, bookId));
+  // The mark cursor is the one other record of the memory keyed by the book.
+  // Every device drops it again when it settles the tombstone (settle.ts).
+  await deps.forgetDistillCursor(bookId);
 
   await deleteRetells(bookId, deps);
   await deleteSupplements(bookId, deps, seen);

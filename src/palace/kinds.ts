@@ -893,7 +893,10 @@ export const PALACE = [
     match: fixed("observations/meta.json"),
     samples: ["observations/meta.json"],
     id: "fixed",
-    refs: [{ kind: "topics", via: "lastDistilledAt{}", onDelete: "clear" }],
+    refs: [
+      { kind: "topics", via: "lastDistilledAt{}", onDelete: "clear" },
+      { kind: "library", via: "distilledMarks{}", onDelete: "clear" },
+    ],
     sync: "data",
     merge: "cursors",
     neverInferDelete: true,

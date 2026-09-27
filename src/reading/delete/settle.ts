@@ -5,8 +5,9 @@
 // device has nothing else. Everything a deleted book leaves on this device that
 // the sync pass does not take — its shelf entry and reading position when the
 // record delete lost to an edit or never ran, its blob, its covers, its
-// fulltext and figures, the pdf/ cache under prep- — is taken here, and a
-// topic's row the merge brought back is dropped again. Run once on the way up
+// fulltext and figures, the pdf/ cache under prep- — is taken here, a
+// topic's row the merge brought back is dropped again, and so is a deleted
+// book's mark cursor in observations/meta.json. Run once on the way up
 // and whenever a pull rewrites the log (reading/session/startup-repairs.ts,
 // ui/components/common/useBackgroundServices.ts); a run over a settled device
 // finds nothing and writes nothing.
@@ -16,7 +17,9 @@
 // probes and not fourteen hundred removes. The shelf's own list needs no
 // finishing: the topic store answers from the log already (platform/app/
 // topics.ts), and the rewrite here is what stops the merge carrying the record
-// round again.
+// round again. The cursors are the same: checked against the whole log on every
+// run, because a device that distilled the book before the tombstone reached it
+// moved the cursor, and an edit brings the key back through the merge.
 
 import { appData } from "../../platform/app/appdata";
 import { readDeletions, type Deletions } from "../../platform/app/deleted-books";
@@ -27,6 +30,8 @@ import {
 } from "../../platform/app/library";
 import { removeViewState } from "../../platform/app/storage";
 import { pruneDeletedFromTopics } from "../../platform/app/topics";
+import { ObservationFileStore } from "../../memory/observations/store";
+import { observationFs } from "../../memory/live/fs";
 import { deadLocalPathsFor } from "./pick";
 
 export interface SettleDeps {
@@ -38,6 +43,7 @@ export interface SettleDeps {
   removeFile: (path: string) => Promise<void>;
   removeDir: (path: string) => Promise<void>;
   pruneTopics: () => Promise<boolean>;
+  forgetDistillCursors: (bookIds: ReadonlySet<string>) => Promise<void>;
 }
 
 async function removeIfPresent(path: string, remove: (p: string) => Promise<void>): Promise<void> {
@@ -54,11 +60,13 @@ export const liveSettleDeps: SettleDeps = {
   removeFile: (path) => removeIfPresent(path, (p) => appData.remove(p)),
   removeDir: (path) => removeIfPresent(path, (p) => appData.removeDir(p)),
   pruneTopics: pruneDeletedFromTopics,
+  forgetDistillCursors: async (bookIds) => {
+    await new ObservationFileStore(observationFs).forgetBooks(bookIds);
+  },
 };
 
 /** Which deleted books still have something on this device. */
-export async function unsettledBooks(deps: SettleDeps): Promise<string[]> {
-  const dead = (await deps.deletions()).book;
+async function unsettledBooks(dead: ReadonlySet<string>, deps: SettleDeps): Promise<string[]> {
   if (dead.size === 0) return [];
   const shelved = new Set(await deps.libraryBookIds());
   const out: string[] = [];
@@ -75,7 +83,8 @@ export async function unsettledBooks(deps: SettleDeps): Promise<string[]> {
  */
 export async function settleDeletions(deps: SettleDeps = liveSettleDeps): Promise<boolean> {
   let changed = false;
-  for (const bookId of await unsettledBooks(deps)) {
+  const dead = (await deps.deletions()).book;
+  for (const bookId of await unsettledBooks(dead, deps)) {
     changed = true;
     try {
       await deps.removeLibraryEntry(bookId);
@@ -92,5 +101,11 @@ export async function settleDeletions(deps: SettleDeps = liveSettleDeps): Promis
     }
   }
   if (await deps.pruneTopics()) changed = true;
+  // Not a change to the shelf, so not counted in the answer.
+  if (dead.size > 0) {
+    await deps
+      .forgetDistillCursors(dead)
+      .catch((e) => console.warn("failed to drop the cursors of deleted books", e));
+  }
   return changed;
 }

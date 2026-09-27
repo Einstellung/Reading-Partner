@@ -78,3 +78,41 @@ test("moveBook refiles a book's observations and carries its mark cursor", async
   expect(meta.distilledMessages).toEqual({ thread1: 7 });
   expect(meta.lastDistilledAt).toBe(5);
 });
+
+test("forgetBooks drops the named books' mark cursors and nothing else", async () => {
+  const { fs } = makeFakeFs();
+  const store = new ObservationFileStore(fs, () => JULY_17);
+  await store.setMeta("t1", {
+    lastDistilledAt: 5,
+    lastAnnotationDistillAt: 3,
+    distilledMessages: { thread1: 7 },
+    distilledMessageKeys: { thread1: ["k1"] },
+    distilledMarks: { gone: 42, kept: 9 },
+  });
+
+  expect(await store.forgetBooks(new Set(["gone", "never-distilled"]))).toBe(true);
+
+  expect(await store.getMeta("t1")).toEqual({
+    lastDistilledAt: 5,
+    lastAnnotationDistillAt: 3,
+    distilledMessages: { thread1: 7 },
+    distilledMessageKeys: { thread1: ["k1"] },
+    distilledMarks: { kept: 9 },
+  });
+});
+
+// A rewrite is a sync revision of a file every device holds, so a settle over a
+// log whose books have no cursor left writes nothing.
+test("forgetBooks does not write when none of the books has a cursor", async () => {
+  const { fs, files } = makeFakeFs();
+  const store = new ObservationFileStore(fs, () => JULY_17);
+  await store.setMeta("t1", { lastDistilledAt: 5, lastAnnotationDistillAt: null, distilledMarks: { kept: 9 } });
+  const before = files.get("observations/meta.json");
+
+  expect(await store.forgetBooks(["gone"])).toBe(false);
+  expect(files.get("observations/meta.json")).toBe(before);
+
+  const empty = makeFakeFs();
+  expect(await new ObservationFileStore(empty.fs).forgetBooks(["gone"])).toBe(false);
+  expect(empty.files.size).toBe(0);
+});

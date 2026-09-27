@@ -41,6 +41,7 @@ function world(topics: Topic[], lists: Record<string, string[]>) {
     },
     listObservations: async () => [],
     deleteObservations: async () => {},
+    forgetDistillCursor: async () => {},
     listStatements: async () => [],
     listSupplements: async (bookId) =>
       (lists[bookId] ?? []).map((hash) => ({ hash, title: hash, addedAt: 1 })),
