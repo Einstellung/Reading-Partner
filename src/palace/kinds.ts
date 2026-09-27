@@ -363,8 +363,8 @@ export const PALACE = [
     refs: [{ kind: "topics", via: "<the file name>", onDelete: "delete" }],
     sync: "local",
     deleteWith: "never",
-    retention: marker("events-tail"),
-    note: "append-only local log, under a topic id or one of the reserved ids",
+    retention: { rule: "tail", lines: 5000 },
+    note: "append-only local log, under a topic id or one of the reserved ids. Nothing in the app reads it back; it is instrumentation for a person, so the tail is all that is worth keeping",
   },
   {
     kind: "housekeeper-log",
@@ -1037,7 +1037,8 @@ export const PALACE = [
     shape: LINES,
     neverInferDelete: true,
     deleteWith: "never",
-    retention: marker("info-feedback-tail"),
+    retention: NEVER,
+    note: "not reclaimed yet: truncating it would be a sync-safe tail of a synced lines file, and the records merge brings dropped lines back from any device without a base (docs/80, open)",
   },
   {
     kind: "info-sources",
@@ -1121,7 +1122,7 @@ export const PALACE = [
     sync: "data",
     merge: "opaque",
     deleteWith: "never",
-    retention: inline(flow("src/info/collect/store.ts", "staleCableFiles")),
+    retention: marker("info-daily-files"),
     note: "the day's kept items as evidence: synced because a picture's judgments cite cable ids, and kept for thirty days after the bodies are gone",
   },
   {
@@ -1216,7 +1217,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    retention: inline(flow("src/info/collect/store.ts", "staleDailyFiles")),
+    retention: marker("info-daily-files"),
     note: "the day boxed by room, derived and rebuilt rather than carried between devices",
   },
   {
@@ -1229,7 +1230,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    retention: inline(flow("src/info/collect/store.ts", "staleDailyFiles")),
+    retention: marker("info-daily-files"),
   },
   {
     kind: "info-daily-items",
@@ -1241,7 +1242,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    retention: inline(flow("src/info/collect/store.ts", "staleDailyFiles")),
+    retention: marker("info-daily-files"),
   },
   {
     kind: "info-daily-run",
@@ -1253,7 +1254,7 @@ export const PALACE = [
     refs: [],
     sync: "local",
     deleteWith: "never",
-    retention: inline(flow("src/info/collect/store.ts", "staleDailyFiles")),
+    retention: marker("info-daily-files"),
   },
   {
     kind: "info-daily-pool",
@@ -1339,7 +1340,7 @@ export const PALACE = [
     merge: "lattice",
     neverInferDelete: true,
     deleteWith: "never",
-    retention: inline(flow("src/legion/ledger/housekeeping.ts", "foldPass")),
+    retention: marker("legion-run-files"),
     note: "one run per file, written by whichever device is executing it and by whichever one delegated it, so the merge is a join and not a three-way (src/legion/run/merge.ts). It is the row that owns legion/, and the descend rule names runs/ so the bell directory beside it — machine-local — is never walked. Never-infer-delete because the hot layer is folded into the ledger at different times on different devices, and a fold the peer has not done yet would read as a deletion (docs/55)",
   },
   {
@@ -1482,8 +1483,8 @@ export const PALACE = [
     refs: [{ kind: "holdings", via: "deviceId" }],
     sync: "local",
     deleteWith: "never",
-    retention: marker("sync-holdings"),
-    note: "the local cache of what each device says it holds",
+    retention: NEVER,
+    note: "the local cache of what each device says it holds. Not reclaimed: a retired device's holdings stay in the remote, and the next pass would fetch the cache straight back (docs/80, open)",
   },
   {
     kind: "holdings",

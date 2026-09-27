@@ -7,7 +7,9 @@ import {
   createLedgerStore,
   foldPass,
   ledgerDay,
+  runFilesMarker,
 } from "../../../src/legion/ledger";
+import type { MarkReadIo } from "../../../src/housekeeper";
 import { createRunStore, type RunStore } from "../../../src/legion/run/store";
 import { mapDisk as disk } from "../../support/map-disk";
 import type { Run } from "../../../src/legion/run/types";
@@ -33,18 +35,29 @@ function device(hot = new Map<string, string>(), cold = new Map<string, string>(
     hot,
     cold,
     purged,
-    pass: (now) =>
-      foldPass({
-        runs,
-        ledger,
-        now,
-        briefHash: async () => "abc",
-        purgeRemote: async (paths) => {
-          purged.push(...paths);
-        },
-      }),
+    // The night as the device runs it: the fold job, then the housekeeper
+    // carrying out the legion-run-files marks on the runs — remote first.
+    async pass(now) {
+      const { folded } = await foldPass({ runs, ledger, now, briefHash: async () => "abc" });
+      const marker = runFilesMarker({ runs: () => runs, ledger: () => ledger });
+      const deleted: string[] = [];
+      for (const mark of await marker.mark({ io: NO_FILES, now })) {
+        const id = mark.path.slice("legion/runs/".length, -".json".length);
+        purged.push(mark.path);
+        await runIo.remove(`${id}.json`);
+        deleted.push(id);
+      }
+      return { folded, deleted };
+    },
   };
 }
+
+// No briefs or outputs on this disk: these tests are about the run files.
+const NO_FILES: MarkReadIo = {
+  list: async () => [],
+  stat: async () => null,
+  readText: async () => null,
+};
 
 /** A run that finished and whose bell was acked. */
 async function delivered(

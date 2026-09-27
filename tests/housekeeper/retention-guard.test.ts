@@ -7,7 +7,15 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { GENERIC_MARKER, garbageMarkerRegistered, isGenericRule } from "../../src/housekeeper";
+import {
+  GENERIC_MARKER,
+  garbageMarkerRegistered,
+  isGenericRule,
+  registerGarbageMarker,
+} from "../../src/housekeeper";
+import { infoDailyMarker } from "../../src/info/collect/store";
+import { bellMarker } from "../../src/legion/bell";
+import { runFilesMarker } from "../../src/legion/ledger";
 import { PALACE, type PalaceRow } from "../../src/palace";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
@@ -93,11 +101,15 @@ test("the permanent exemptions are never reclaimed", () => {
 // --- markers ------------------------------------------------------------
 
 // The domains register their garbage markers on the way up (useShellBootstrap's
-// bootDomains); this registers them the same way, inside the test and undone
-// after, as tests/palace/registry.test.ts does with distillation sources. A
-// domain marker is added here when it is written.
+// bootDomains); this registers the same ones, inside the test and undone after,
+// as tests/palace/registry.test.ts does with distillation sources. A domain
+// marker is added here when it is written.
 function withDomainMarkers<T>(body: () => T): T {
-  const undo: Array<() => void> = [];
+  const undo = [
+    registerGarbageMarker(runFilesMarker()),
+    registerGarbageMarker(bellMarker),
+    registerGarbageMarker(infoDailyMarker),
+  ];
   try {
     return body();
   } finally {
@@ -105,37 +117,15 @@ function withDomainMarkers<T>(body: () => T): T {
   }
 }
 
-// Rows whose retention names a marker nobody has written yet. The second baton
-// of the housekeeper work (docs/80) writes them and empties this list; it may
-// only shrink. A name here that is registered, or that no row uses, fails.
-const PENDING_BATON_2 = new Set([
-  "events-tail",
-  "info-feedback-tail",
-  "legion-bell",
-  "legion-run-files",
-  "sync-holdings",
-]);
-
-test("every marker a palace row names is registered, or pending by name", () => {
+test("every marker a palace row names is registered", () => {
   const unbacked = withDomainMarkers(() =>
     PALACE.flatMap((row) => {
       const r = row.retention;
       if (r.rule !== "marker") return [];
-      if (garbageMarkerRegistered(r.marker) || PENDING_BATON_2.has(r.marker)) return [];
-      return [`${row.kind}: ${r.marker}`];
+      return garbageMarkerRegistered(r.marker) ? [] : [`${row.kind}: ${r.marker}`];
     }),
   );
   expect(unbacked).toEqual([]);
-});
-
-test("the pending list only holds markers a row still waits for", () => {
-  const named = new Set(
-    PALACE.flatMap((r) => (r.retention.rule === "marker" ? [r.retention.marker] : [])),
-  );
-  const stale = withDomainMarkers(() =>
-    [...PENDING_BATON_2].filter((m) => !named.has(m) || garbageMarkerRegistered(m)),
-  );
-  expect(stale).toEqual([]);
 });
 
 test("every row that is reclaimed says by what: a generic rule, a flow or a marker", () => {

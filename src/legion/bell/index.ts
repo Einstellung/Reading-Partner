@@ -22,3 +22,4 @@ export {
   type BellIo,
   type BellStore,
 } from "./store";
+export { ACKED_BELL_GRACE_MS, BELL_MARKER, bellMarker } from "./marker";

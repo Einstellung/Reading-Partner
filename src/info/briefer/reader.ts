@@ -25,7 +25,6 @@ import {
   type PublishedBodies,
 } from "../boxes/publish";
 import { removeCollectedPoolFiles } from "../collect/pool-store";
-import { pruneStaleDailyFiles, todayLocal } from "../collect/store";
 import { appClaims } from "../../legion/claim";
 import {
   collectorReport,
@@ -222,11 +221,10 @@ export function collectorNotices(report: CollectorReport, now: number): string[]
   return out;
 }
 
-// What a device that used to collect left behind. A phone or tablet that ran an
-// older build has day after day of briefing-*.json and info-articles-*.json on
-// it (one day's article cache measured 4.4 MB) plus the item pool, and nothing
-// clears them any more: the pipeline used to prune on every run and a reader
-// never constructs one (docs/36). Run once at startup.
+// What a device that used to collect left behind: the item pool, which nothing
+// else clears on a reader, since a reader never constructs a collector
+// (docs/36). Run once at startup. The past days' briefing and article files
+// are the housekeeper's (info-daily-files, docs/80), on every device.
 //
 // info-pool-marks.json stays. It is in the sync range and it is the collector's
 // record of what has already been briefed — deleting it here would upload the
@@ -234,7 +232,6 @@ export function collectorNotices(report: CollectorReport, now: number): string[]
 //
 // Best effort throughout: this costs disk, never correctness.
 export async function clearCollectorLeftovers(): Promise<void> {
-  await pruneStaleDailyFiles(todayLocal()).catch(() => {});
   await removeCollectedPoolFiles().catch(() => {});
 }
 

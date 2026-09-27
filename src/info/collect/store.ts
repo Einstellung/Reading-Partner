@@ -7,8 +7,7 @@
 import { appData } from "../../platform/app/appdata";
 import { writeTextAtomic } from "../../platform/app/atomic-fs";
 import { dayNumber, localDate } from "../../platform/std/day";
-import { requestRemotePurge } from "../../platform/sync";
-import { listFileNames } from "./list-files";
+import type { GarbageMarker, Mark } from "../../housekeeper";
 import { INFO_RUN_VERSION, type InfoRunState } from "./run-state";
 import type { InfoItem } from "../sources/item";
 
@@ -204,36 +203,31 @@ export function staleCableFiles(names: string[], today: string, days = CABLE_DAY
   return out;
 }
 
-// Delete every past day's derived info file, and the cables older than the keep
-// window. Best effort: a listing failure or a file that will not go away is
-// swallowed, since a briefing must still generate.
-//
-// The cables are in the sync range and the daily files are not, so a cable
-// deleted here also has to leave Drive: a sync never propagates a local delete
-// (docs/13), and every new device would pull the whole history down. The purge
-// is only asked for once the local copy is gone — asked first, a pass could
-// run between the two, find the file still here and no longer in Drive, and
-// upload it again. Every device prunes on this same rule, so a remote delete
+// The info-daily-files garbage marker (docs/80): every past day's derived file
+// and the cables past the keep window, marked each night on every device and
+// removed by the housekeeper. The cables are in the sync range, so the
+// housekeeper purges each from the remote before removing it here: a sync never
+// propagates a local delete (docs/13), and every new device would pull the
+// whole history down. Every device marks on this same rule, so a remote delete
 // takes nothing another device still keeps.
-export async function pruneStaleDailyFiles(
-  today: string,
-  purgeRemote: (paths: readonly string[]) => Promise<void> = requestRemotePurge,
-): Promise<void> {
-  let names: string[];
-  try {
-    names = await listFileNames();
-  } catch {
-    return;
-  }
-  const cables = staleCableFiles(names, today);
-  const gone: string[] = [];
-  for (const name of [...staleDailyFiles(names, today), ...cables]) {
-    try {
-      await appData.remove(name);
-      if (cables.includes(name)) gone.push(name);
-    } catch {
-      // Locked or already gone; keep going through the rest.
+//
+// "Today" is the local date at the moment of the night's pass, the day the
+// pipeline's own files are keyed by; nothing reads a past day's files.
+export const INFO_DAILY_MARKER = "info-daily-files";
+
+export const infoDailyMarker: GarbageMarker = {
+  name: INFO_DAILY_MARKER,
+  async mark({ io, now }) {
+    const names = (await io.list("")).filter((e) => e.isFile).map((e) => e.name);
+    const today = localDate(now);
+    const marks: Mark[] = staleDailyFiles(names, today).map((path) => ({
+      path,
+      action: "delete",
+      reason: "a past day's derived file",
+    }));
+    for (const path of staleCableFiles(names, today)) {
+      marks.push({ path, action: "delete", reason: `cables older than ${CABLE_DAYS} days` });
     }
-  }
-  if (gone.length > 0) await purgeRemote(gone).catch(() => {});
-}
+    return marks;
+  },
+};

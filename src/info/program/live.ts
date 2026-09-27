@@ -61,7 +61,6 @@ import {
   loadArticles,
   loadItems,
   loadRun,
-  pruneStaleDailyFiles,
   saveArticles,
   saveItems,
   saveRun,
@@ -87,8 +86,7 @@ import { createCollectorSession, type CollectorSession } from "./presence";
 import { backfillPublish, loadPublishedBriefing, publishBriefing } from "../boxes/publish";
 import { ASK_PULL_ROUTE, COLLECT_KIND, readAsks, type CollectorClaim } from "../briefer/handoff";
 import { appClaims, WEBVIEW_FETCH } from "../../legion/claim";
-import { runLedgerHousekeeping } from "../../legion/ledger";
-import { registerSchedule, runScheduleTick } from "../../legion/schedule";
+import { registerSchedule } from "../../legion/schedule";
 import { subscribeSyncStatus } from "../../platform/sync";
 import { registerPullRoute } from "../../platform/sync/pull-routes";
 import { hostname, platform } from "@tauri-apps/plugin-os";
@@ -453,14 +451,6 @@ async function dailyTick(): Promise<void> {
 // for the election read.
 async function checkDailyRound(): Promise<void> {
   try {
-    // Every schedule registered, not just this domain's: this tick is the one
-    // place in the app that already asks the clock on a timer. On the device
-    // the election picked, an hour that has gone by leaves a wake bell.
-    await runScheduleTick({ deviceId: currentDeviceId() });
-  } catch (e) {
-    console.warn("the schedule check failed", e);
-  }
-  try {
     await dailyTick();
   } catch (e) {
     console.warn("the morning briefing check failed", e);
@@ -470,10 +460,6 @@ async function checkDailyRound(): Promise<void> {
   } catch (e) {
     console.warn("the nightly memory pass check failed", e);
   }
-  // Every device folds its own hot layer, collector or not: a run file this
-  // machine holds is deleted by this machine, and the ledger line is what tells
-  // it which ones (docs/55). Once a day, and it never throws.
-  await runLedgerHousekeeping();
   // Every device looks for parked prose copies and asks for a run per copy
   // (docs/59 §6); the run is keyed by content, so the devices' asks meet in one
   // file and the election picks who settles it. Never throws, never calls a model.
@@ -625,7 +611,6 @@ export function getInfoPipeline(): InfoPipeline {
       poolDraw: (date) => getInfoCollector().draw(date),
       poolRecord: (date, record) => getInfoCollector().record(date, record),
       canAutoGenerate,
-      pruneStaleDays: pruneStaleDailyFiles,
       keepAwake: (on) => wakeLock.set(on),
       ...realTimers,
     });

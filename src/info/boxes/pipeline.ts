@@ -220,9 +220,6 @@ export interface InfoDeps {
   // configured, at least one source is subscribed, and at least one room is
   // open. Absent means no — nothing spends the reader's money on a guess.
   canAutoGenerate?(): Promise<boolean>;
-  // Optional housekeeping: drop the derived per-day info files of every day but
-  // the given one. Absent, or throwing, leaves the old files on disk.
-  pruneStaleDays?(today: string): Promise<void>;
   // Optional screen wake lock for the length of a run (platform/app/wake-lock).
   // Best effort by construction: a screen that sleeps is a worse experience, not
   // a broken run.
@@ -329,18 +326,6 @@ export class InfoPipeline {
 
   private today(): string {
     return this.deps.today ? this.deps.today() : todayLocal();
-  }
-
-  // Housekeeping before a generation, guarded: it only ever removes days other
-  // than today, and a failure must not cost the reader a briefing. Not called
-  // from a re-analysis, which reads today's own files.
-  private async prune(): Promise<void> {
-    if (!this.deps.pruneStaleDays) return;
-    try {
-      await this.deps.pruneStaleDays(this.today());
-    } catch {
-      // Leave the old files; they cost disk, not correctness.
-    }
   }
 
   subscribe(fn: () => void): () => void {
@@ -513,7 +498,6 @@ export class InfoPipeline {
       this.deps.keepAwake?.(true);
       this.notify();
       const date = this.today();
-      await this.prune();
       await this.openRooms();
       await this.startOrContinue(date, opts.retryFailed);
       await this.discoverPhase();

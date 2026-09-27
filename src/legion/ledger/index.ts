@@ -24,8 +24,14 @@ export {
 } from "./store";
 export { tombstonedRunIds, type HotRun } from "./tombstone";
 export {
+  LEDGER_FOLD_JOB,
   foldPass,
-  runLedgerHousekeeping,
   type LedgerHousekeepingDeps,
   type LedgerHousekeepingResult,
 } from "./housekeeping";
+export {
+  RUN_FILES_MARKER,
+  RUN_FILE_GRACE_MS,
+  runFilesMarker,
+  type RunFilesMarkerDeps,
+} from "./marker";

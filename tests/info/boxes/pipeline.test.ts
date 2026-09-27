@@ -887,15 +887,7 @@ test("an overnight leftover is not resumed, and the next generate collects the d
       items: [item("old1")],
     }),
   );
-  const p = new InfoPipeline(
-    makeDeps(fx, {
-      // The real prune deletes every dated info file but today's, the run
-      // checkpoint included.
-      pruneStaleDays: async (today) => {
-        for (const date of [...fx.disk.runs.keys()]) if (date !== today) fx.disk.runs.delete(date);
-      },
-    }),
-  );
+  const p = new InfoPipeline(makeDeps(fx));
   await p.init();
   expect(fx.fetched).toEqual([]);
   expect(fx.analyzed).toEqual([]);
@@ -903,7 +895,6 @@ test("an overnight leftover is not resumed, and the next generate collects the d
   await p.generate().done;
   expect(fx.fetched).toEqual(["a"]);
   expect(fx.disk.items.get(TODAY)!.map((i) => i.id)).toEqual(["a1"]);
-  expect(fx.disk.runs.get("2026-07-21")).toBeUndefined();
 });
 
 test("a stopped run is left parked, and a hand-driven generate continues it", async () => {
@@ -1068,46 +1059,6 @@ test("retriage with no cables errors instead of producing a briefing", async () 
   expect(s.running).toBe(false);
   expect(s.briefing).toBeNull();
   expect(s.error).toBeTruthy();
-});
-
-test("generate prunes past days before collecting; retriage never prunes", async () => {
-  const order: string[] = [];
-  const pruned: string[] = [];
-  const fx = fixture();
-  fx.disk.items.set(TODAY, [item("1")]);
-  fx.disk.cables.set(TODAY, { version: 1, date: TODAY, cables: [cable("1")] });
-  const deps = makeDeps(fx, {
-    pruneStaleDays: async (today) => {
-      order.push("prune");
-      pruned.push(today);
-    },
-    discover: async (refs, onSettled) => {
-      order.push("collect");
-      for (const r of refs) await onSettled({ id: r.id, items: [item("1")] });
-    },
-  });
-
-  await new InfoPipeline(deps).generate().done;
-  expect(order).toEqual(["prune", "collect"]);
-  expect(pruned).toEqual([TODAY]);
-
-  await new InfoPipeline(deps).retriage().done;
-  expect(pruned).toEqual([TODAY]);
-});
-
-test("a failing prune does not stop the briefing", async () => {
-  const fx = fixture();
-  const p = new InfoPipeline(
-    makeDeps(fx, {
-      pruneStaleDays: async () => {
-        throw new Error("readDir denied");
-      },
-    }),
-  );
-  await p.generate().done;
-  const s = p.snapshot();
-  expect(s.error).toBeNull();
-  expect(s.briefing?.labs[0].cover).toBe("Robotics moved.");
 });
 
 test("a room's observations are read for the topic its charter files under", async () => {

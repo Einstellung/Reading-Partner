@@ -168,10 +168,9 @@ export interface RunStore {
    */
   markDelivered(id: string, at?: number): Promise<Run | null>;
   /**
-   * Take the hot file away, having written the ledger line that replaces it.
-   * Only the ledger's housekeeping calls this, and only for a run the ledger
-   * accounts for (docs/55): a run file deleted without a line is one the other
-   * device pushes straight back.
+   * Take the hot file away. Nothing in the app calls this: a folded run's file
+   * goes through the housekeeper (legion/ledger/marker.ts), which purges it from
+   * the remote first, and only for a run the ledger accounts for (docs/55).
    */
   remove(id: string): Promise<void>;
 }
