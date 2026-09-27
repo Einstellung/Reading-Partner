@@ -80,6 +80,7 @@
 - [59 同步：持有清单与裁决](./platform/59-同步：持有清单与裁决.md) — 按持有清单裁决的同步模型
 - [76 桌面自动更新](./platform/76-桌面自动更新.md) — 桌面版从 GitHub Releases 自更新
 - [78 分享](./platform/78-分享.md) — iOS 双向分享：Share Extension 进 Lumen 对话和书库，openin 往外交文字和链接
+- [80 回收](./platform/80-回收：retention、garbage marker 与 housekeeper.md) — palace 行的 retention、领域登记的 garbage marker、每晚执行的 housekeeper
 
 ## pitfall
 

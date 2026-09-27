@@ -1,6 +1,6 @@
 # legion
 
-> 2026-09-07 定案。同步引擎与删除模型在 [13](../platform/13-账户同步.md) 和 [50](../platform/50-删除.md)，记忆的两个仓在 [48](./48-记忆：观察与statement.md)。回收（gc）归 memory，不在本文。info 管线重做在 [60](../info/60-info：白宫与Red Boxes.md)；[17](../info/17-信息源系统.md) 的源配置、站点登录、正文抽取仍有效，只废「提名→主题」层。2026-09-14 改：架构定为 orchestrator-worker，soul 是唯一的 orchestrator，legion 是 worker 底座；认领由租约改为按能力指派；session 不同步；第一个调用方改为 translate。2026-09-14 再改：presence 改名 claim、mailbox 改名 bell（三种铃）、run 加 progress、batch 续跑、子 run 深度限两层。2026-09-15 改：答铃回合按 run 的 `deliverTo` 装配、回复写回提问的地方，铃之后由程序层装盒，第一个调用方改为 reading 的文献研究，交互层在 [68](../companion/68-Lumen与盒子的交互.md)。
+> 2026-09-07 定案。同步引擎与删除模型在 [13](../platform/13-账户同步.md) 和 [50](../platform/50-删除.md)，记忆的两个仓在 [48](./48-记忆：观察与statement.md)。回收在 [80](../platform/80-回收：retention、garbage marker 与 housekeeper.md)。info 管线重做在 [60](../info/60-info：白宫与Red Boxes.md)；[17](../info/17-信息源系统.md) 的源配置、站点登录、正文抽取仍有效，只废「提名→主题」层。2026-09-14 改：架构定为 orchestrator-worker，soul 是唯一的 orchestrator，legion 是 worker 底座；认领由租约改为按能力指派；session 不同步；第一个调用方改为 translate。2026-09-14 再改：presence 改名 claim、mailbox 改名 bell（三种铃）、run 加 progress、batch 续跑、子 run 深度限两层。2026-09-15 改：答铃回合按 run 的 `deliverTo` 装配、回复写回提问的地方，铃之后由程序层装盒，第一个调用方改为 reading 的文献研究，交互层在 [68](../companion/68-Lumen与盒子的交互.md)。
 
 ---
 

@@ -97,33 +97,21 @@ dream 按同一份契约也是蒸馏器：源是 observation，产出是 stateme
 
 ## 回收：memory/gc
 
-纯程序。逐行问账本的水位、那趟 pass 的成败和时间，加一个时钟，不读原文不调模型。
+回收的整体做法在 [80](../platform/80-回收：retention、garbage marker 与 housekeeper.md)：palace 行写 retention，garbage marker 判，housekeeper 每晚执行、管同步安全删除和请求预算。memory 这一份是 memory 登记的一个 garbage marker，等溯源账本有了再写。
 
-一个单元可回收，当且仅当水位到末尾、pass 成功、宽限期过了。动作由源登记表那一行给：删；截到尾部（`info-feedback.jsonl` 留 `FEEDBACK_TAIL` 那 30 行）；降到不同步的本地冷层。
+它的判据：一个单元可回收，当且仅当水位到末尾、pass 成功、宽限期过了。纯程序，逐行问账本的水位、那趟 pass 的成败和时间，加一个时钟，不读原文不调模型。动作由源登记表那一行给：删；截到尾部（`info-feedback.jsonl` 留 `FEEDBACK_TAIL` 那 30 行）；降到不同步的本地冷层。
 
-同步安全：同步范围内的文件不许直接删，对端会把它原样推回来（坑 [208](../pitfall/storage/208-file-deletion-does-not-survive-sync.md)）。两条路——走 `records` / `lines` 合并的文件加一行墓碑，就是 `deleted-observations.jsonl` 的形状；或者整文件退役走 `requestRemotePurge()`，远端删掉了才删本地。范围外的路径直接删。
-
-代价按请求算不按字节：Drive 上一文件一请求，所以"合并成更少的文件"优先于"删掉更多的文件"。每晚给回收一个请求预算，超了等下一晚；脏比例不到阈值就整晚不扫，判据形状取自 Kafka 的 `min.cleanable.dirty.ratio`。
+走 `records` / `lines` 合并的文件，另一条同步安全的路是加一行墓碑，就是 `deleted-observations.jsonl` 的形状。代价按请求算不按字节，"合并成更少的文件"优先于"删掉更多的文件"；脏比例不到阈值就整晚不标，判据形状取自 Kafka 的 `min.cleanable.dirty.ratio`。
 
 可解释：删掉一个单元要留一条 stub，由代码写出被删的区间和覆盖它的 observation id。
 
 要"先进回收站再真删"的时候照抄 `sync-trash.jsonl` 的形状和它那 30 天常数，不另发明一套。
 
-永久豁免，写在规则表之外并由测试盯着，不靠约定：`observations/`、`statements.json`、`user-profile.md`（48 的"关于人的留下"）、`saved-articles.json` 和 `article-bodies/`（读者自己收的）、各类墓碑文件。
+永久豁免（palace 上 retention 为 `never`，守卫测试盯着）：`observations/`、`statements.json`、`user-profile.md`（48 的"关于人的留下"）、`saved-articles.json` 和 `article-bodies/`（读者自己收的）、各类墓碑文件。
 
 ## 边界
 
-memory/gc 只回收已蒸馏的原料。分层上 memory 不认识 info 和 reading 的文件模式，规则由源登记表附带。
-
-其余回收是各领域自己的 housekeeping，判据是年龄或发布状态，挂在 legion/schedule 的夜间时点上：
-
-- info 日切缓存 `info-articles-<date>.json` 这一套，补全 `pruneStaleDailyFiles` 的触发点，重新分诊那条路径今天不触发。
-- `info-pool-*` 的 TTL 已经在代码里强制执行，不动。
-- 退役设备残留的 handoff 文件。
-- legion 的 run 折进自己的 ledger。
-- 盘点出的五处孤儿：线程配图目录、`threads-retell-<id>.json` / `threads-talk-<id>.json` 删记录时不级联、`deleteTopic` 不级联、按路径哈希命名的封面失败标记、条目级冲突副本。
-
-共用的只有两件：platform/sync 的同步安全删除，和 legion/schedule 的那个时点。
+memory 的 marker 只标已蒸馏的原料。分层上 memory 不认识 info 和 reading 的文件模式，规则由源登记表附带。其余回收是各领域自己的 marker 或 palace 行上的通用规则，都由 housekeeper 执行，见 80。
 
 ## 候选
 
