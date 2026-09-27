@@ -143,13 +143,21 @@ export function createAnnotationStore(io: AnnotationIo): AnnotationStore {
   // save that landed while the file was being read is the reader's whole set and
   // outranks anything on disk, and a write already in the air holds content this
   // read could not have seen.
+  //
+  // For the same reason, a read that is not installed is not what the caller
+  // gets either: the cache is. Opening a book right after its marks were saved
+  // (a replacement carrying them in, a first pagination cut setting their pages)
+  // otherwise hands the reader the file from before that save, and the reader's
+  // next mark writes that stale set back whole.
   async function load(bookId: string): Promise<Annotation[]> {
     const before = genOf(bookId);
     const list = await readSet(bookId);
     if (genOf(bookId) === before && !writer.isPending(bookId) && !writing.has(bookId)) {
       cache.set(bookId, list.map((a) => ({ ...a })));
+      return list;
     }
-    return list;
+    const held = cache.get(bookId);
+    return held ? held.map((a) => ({ ...a })) : list;
   }
 
   // The on-disk marks of a book that is not being read, without touching the

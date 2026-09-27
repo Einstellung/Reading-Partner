@@ -301,6 +301,31 @@ test("a mark made while the file is being loaded is not replaced by it", async (
   expect(idsIn("annotations-book13.json")).toEqual(["a", "just-made"]);
 });
 
+// A replaced book is opened while the marks carried onto it, and the page
+// numbers its first pagination cut gave them, are still on the debounce: the
+// file has the carried marks at page 0, or nothing yet. What the reader is
+// handed is the set that was saved, not the file.
+test("a load while a save waits on the debounce answers with the saved set", async () => {
+  store.save("book16", [mark("carried")]);
+  expect((await store.load("book16")).map((a) => a.id)).toEqual(["carried"]);
+
+  await advance(500);
+  const paged = { ...mark("carried"), pageIndex: 55 } as unknown as Annotation;
+  store.save("book16", [paged]);
+  const loaded = await store.load("book16");
+  expect((loaded[0] as unknown as { pageIndex: number }).pageIndex).toBe(55);
+});
+
+// And one saved while the read is in flight.
+test("a load whose read is outrun by a save answers with the saved set", async () => {
+  files.set("annotations-book17.json", JSON.stringify([mark("a")]));
+  const releaseRead = parkNextRead();
+  const loading = store.load("book17");
+  await settle();
+  store.save("book17", [mark("a"), mark("b")]);
+  releaseRead();
+  expect((await loading).map((a) => a.id)).toEqual(["a", "b"]);
+});
 
 // The window a single gen bump does not cover, the same one threads.ts has: the
 // write bumps on its way in and takes `writing`, and a load issued after that
