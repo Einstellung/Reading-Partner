@@ -14,6 +14,8 @@ import { initSync, TICK_MS } from "../../../platform/sync";
 import { registerPullRoute } from "../../../platform/sync/pull-routes";
 import { startBellWatch, startSoulSession } from "../../../soul";
 import { startRunner } from "../../../legion/execute/runner";
+import { SCHEDULE_TICK_MS, startScheduleClock } from "../../../legion/schedule";
+import { currentDeviceId } from "../../../platform/app/device";
 import { watchAppAwayForStalls } from "../../../legion/execute/stall";
 import { purgeLegacyChapterNotes } from "../../../reading/prep/chapters/purge";
 import { settleDeletions } from "../../../reading/delete/settle";
@@ -77,6 +79,16 @@ export function useBackgroundServices({
   // run it delegated is seen to finish, and how a local run of its own is
   // picked up at all.
   useEffect(() => startRunner({ intervalMs: TICK_MS }), []);
+
+  // The schedule's clock (docs/55, docs/80): the wake bells, rung only where the
+  // election says, and the nightly jobs every device owes its own disk — the
+  // ledger fold and the housekeeper. Here rather than on the info pipeline,
+  // which only a collecting device ever builds.
+  useEffect(
+    () =>
+      startScheduleClock({ deviceId: currentDeviceId, intervalMs: SCHEDULE_TICK_MS, target: window }),
+    [],
+  );
 
   // A turn the last process was killed in the middle of is finished now, on the
   // session it was killed on (src/soul/recover.ts). It runs at start and not on

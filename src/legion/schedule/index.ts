@@ -38,4 +38,11 @@ export {
   type Schedule,
   type ScheduleAt,
 } from "./schedule";
-export { runScheduleTick, wakeBellId, type ScheduleTickDeps } from "./tick";
+export {
+  SCHEDULE_TICK_MS,
+  runScheduleTick,
+  startScheduleClock,
+  wakeBellId,
+  type ScheduleClockDeps,
+  type ScheduleTickDeps,
+} from "./tick";

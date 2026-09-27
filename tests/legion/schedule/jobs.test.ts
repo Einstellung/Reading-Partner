@@ -4,6 +4,7 @@ import {
   jobFiredKey,
   lastAnchor,
   runScheduleTick,
+  startScheduleClock,
   type NightlyJob,
 } from "../../../src/legion/schedule";
 import { createFiredStore } from "../../../src/legion/schedule/fired";
@@ -74,4 +75,42 @@ test("a job that throws is late by a night, not retried on the next tick", async
   await runScheduleTick({ deviceId: "d", now: day, schedules: [], jobs: [failing], fired });
   await runScheduleTick({ deviceId: "d", now: day + 60_000, schedules: [], jobs: [failing], fired });
   expect(calls).toBe(1);
+});
+
+test("the schedule clock asks at start, on every interval and on the way back to the foreground", async () => {
+  const listeners = new Map<string, () => void>();
+  const target = {
+    document: { hidden: false },
+    addEventListener: (type: string, fn: () => void) => listeners.set(type, fn),
+    removeEventListener: (type: string) => listeners.delete(type),
+  };
+  const asked: string[] = [];
+  let interval: (() => void) | null = null;
+  let cleared = false;
+  let id = "";
+  const stop = startScheduleClock({
+    deviceId: () => id,
+    intervalMs: 1_000,
+    target,
+    tick: async (deps) => {
+      asked.push(deps.deviceId);
+    },
+    setInterval: (fn) => {
+      interval = fn;
+      return 1;
+    },
+    clearInterval: () => {
+      cleared = true;
+    },
+  });
+  expect(asked).toEqual([""]);
+  id = "d-1";
+  (interval as unknown as () => void)();
+  expect(asked).toEqual(["", "d-1"]);
+  listeners.get("blur")?.();
+  listeners.get("focus")?.();
+  expect(asked).toEqual(["", "d-1", "d-1"]);
+  stop();
+  expect(cleared).toBe(true);
+  expect(listeners.size).toBe(0);
 });

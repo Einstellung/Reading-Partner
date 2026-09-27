@@ -6,6 +6,7 @@
 // bell (the bell's id is the schedule and the anchor) while a bell that was
 // never rung because the record went first is an hour silently skipped.
 
+import { observeAppLifecycle, type LifecycleTarget } from "../../platform/app/lifecycle";
 import { appBells, type BellStore } from "../bell";
 import { appClaims, type DeviceClaim } from "../claim";
 import { appFired, type FiredStore } from "./fired";
@@ -39,6 +40,47 @@ export async function runScheduleTick(deps: ScheduleTickDeps): Promise<DueSchedu
   const due = await ringSchedules(deps, now);
   await runNightlyJobs(deps, now);
   return due;
+}
+
+/** How often the clock is asked. Nothing here is due more precisely than this. */
+export const SCHEDULE_TICK_MS = 5 * 60_000;
+
+export interface ScheduleClockDeps {
+  /** Asked on every tick: the device id is not known until device.json is read. */
+  deviceId: () => string;
+  intervalMs: number;
+  /** The window, for the foreground edge. */
+  target: LifecycleTarget;
+  /** The tick itself; a test hands its own. */
+  tick?: (deps: ScheduleTickDeps) => Promise<unknown>;
+  setInterval?: (fn: () => void, ms: number) => unknown;
+  clearInterval?: (handle: unknown) => void;
+}
+
+/**
+ * Ask the clock now, every `intervalMs`, and whenever the app comes back to
+ * the foreground. Every device and shell starts this (the shell's background
+ * services), because the nightly jobs are owed by every device for its own
+ * disk; the wake bells are still only rung where the election says. The
+ * interval is a hint: a suspended webview runs no timers, which is what the
+ * foreground edge is for. Returns the stop.
+ */
+export function startScheduleClock(deps: ScheduleClockDeps): () => void {
+  const tick = deps.tick ?? runScheduleTick;
+  const run = (): void => {
+    void tick({ deviceId: deps.deviceId() }).catch((e) =>
+      console.warn("the schedule check failed", e),
+    );
+  };
+  const set = deps.setInterval ?? ((fn, ms) => setInterval(fn, ms));
+  const clear = deps.clearInterval ?? ((h) => clearInterval(h as ReturnType<typeof setInterval>));
+  const handle = set(run, deps.intervalMs);
+  const unobserve = observeAppLifecycle(deps.target, { onForeground: run, onBackground: () => {} });
+  run();
+  return () => {
+    clear(handle);
+    unobserve();
+  };
 }
 
 async function ringSchedules(deps: ScheduleTickDeps, now: number): Promise<DueSchedule[]> {
