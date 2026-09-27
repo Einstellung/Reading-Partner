@@ -415,8 +415,8 @@ export const PALACE = [
     retention: NEVER,
     note: "references only; each supplement is a library document of its own, and deleting the book deletes them too (docs/67)",
   },
-  // The three specific thread keys sit above the general one, and the general
-  // one refuses their prefixes as well, so the two orders agree.
+  // The specific thread keys sit above the general one, and the general one
+  // refuses their prefixes as well, so the two orders agree.
   {
     kind: "retell-thread",
     about: "The conversation held over a retelling.",
@@ -470,6 +470,20 @@ export const PALACE = [
     retention: NEVER,
     distill: { unit: "thread", cursor: "distilledMessages" },
     note: "a day's briefing conversations; the unit is one thread, not the file, and the onboarding thread id repeats across days (pitfall 209)",
+  },
+  {
+    kind: "info-meals-thread",
+    domain: "info",
+    match: fixed("threads-info-meals.json"),
+    samples: ["threads-info-meals.json"],
+    id: "fixed",
+    refs: [{ kind: "topics", via: "threads[].topicId", onDelete: "keep" }],
+    sync: "data",
+    merge: "messages",
+    shape: MAP_THREADS,
+    deleteWith: "never",
+    retention: NEVER,
+    note: "the one standing meals conversation (docs/73), thread id \"meals\" and so unique across thread files; outside the conversation walk (conversations/topic-of.ts THREAD_KINDS), so no distillation, search or sequence reads it and a deleted topic's id filed on it by propose_topic stays",
   },
   {
     kind: "conversation",
