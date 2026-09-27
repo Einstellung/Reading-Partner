@@ -62,10 +62,13 @@ export interface AsideTailMessage {
 // The stretch of the parent conversation an aside's turn replays: the message
 // the span was pulled out of, back through `rounds` of the reader's questions.
 //
-// `anchorTs` is the parent message named by the aside's anchor. A mark-anchored
-// aside has none — it was drawn on the page while the lesson ran — and takes the
-// live end of the lesson instead, which is what the reader was looking at. So
-// does a chat-span aside whose anchor no longer resolves.
+// `anchorTs` is the parent message named by the aside's anchor. It is looked up
+// among the replies only: a span is only ever pulled out of one (reading/
+// chat-marks.ts: mayMarkReply), and the question before it may carry the same
+// stamp. A mark-anchored aside has none — it was drawn on the page while the
+// lesson ran — and takes the live end of the lesson instead, which is what the
+// reader was looking at. So does a chat-span aside whose anchor no longer
+// resolves.
 //
 // Rounds are counted by the reader's messages rather than by pairs, so a stretch
 // where the model answered twice, or where a turn produced no reply at all, cuts
@@ -78,7 +81,7 @@ export function asideParentTail<T extends AsideTailMessage>(
   max = ASIDE_PARENT_MAX_MESSAGES,
 ): T[] {
   if (messages.length === 0 || rounds <= 0 || max <= 0) return [];
-  const at = anchorTs === null ? -1 : messages.findIndex((m) => m.ts === anchorTs);
+  const at = anchorTs === null ? -1 : messages.findIndex((m) => m.ts === anchorTs && m.role === "ai");
   const end = at >= 0 ? at : messages.length - 1;
   let start = 0;
   let asks = 0;

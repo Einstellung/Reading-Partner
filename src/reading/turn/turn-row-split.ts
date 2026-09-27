@@ -59,6 +59,16 @@ export interface RowSplit {
   answerTail(full: string, liveText: string): string | null;
 }
 
+// The stamp for a row this turn opens: now, or just past the latest row
+// already in the thread file. The send path appends the reader's question and
+// starts the turn in the same millisecond, and a reply stamped like its
+// question is a row that stamp alone cannot find again.
+export function rowTsAfter(now: number, messages: readonly { ts: number }[]): number {
+  let last = -Infinity;
+  for (const m of messages) if (m.ts > last) last = m.ts;
+  return Math.max(now, last + 1);
+}
+
 export function createRowSplit(): RowSplit {
   // Set when the turn's first row is made.
   let rowTs = 0;

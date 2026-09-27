@@ -57,7 +57,7 @@ import type { FiguresIndex } from "../figures";
 import { readingTurns, type LiveTurn } from "../turn/live-turns";
 import { createDelivered } from "../turn/delivered";
 import { createSteering, type Steering } from "../turn/steering";
-import { createRowSplit } from "../turn/turn-row-split";
+import { createRowSplit, rowTsAfter } from "../turn/turn-row-split";
 import { boxUnseenTurn, setOpenCallPeek, watching, type TurnOutcome } from "../turn/turn-box";
 import { arrivedMessage, createOwnAppends } from "../turn/thread-arrivals";
 import { deferHangup } from "./hangup";
@@ -533,11 +533,14 @@ export function useCall<M extends CallRow, I extends StagedImage>(
     // thread file (reading/turn-row-split.ts). It moves when the reader speaks
     // into the turn or a delegated run comes back into it (docs/72).
     const rows = createRowSplit();
+    // Every row this turn opens is stamped after what the file already holds:
+    // the question it answers, and the lines said into it (rowTsAfter).
+    const rowTs = () => rowTsAfter(Date.now(), getThread(home, threadId)?.messages ?? []);
 
     // Called by everything that puts something in the row, and by nothing that
     // ends the turn: an ending writes into the row that is already there.
     const writingRow = (): number => {
-      const at = rows.writing(Date.now);
+      const at = rows.writing(rowTs);
       if (at.split) {
         const { was, origin } = at.split;
         const row = shapes.current.newRow({
@@ -679,7 +682,7 @@ export function useCall<M extends CallRow, I extends StagedImage>(
       flushSteering(threadId, home, steering);
     };
 
-    const ts = Date.now();
+    const ts = rowTs();
     rows.start(ts);
     const streamingRow = shapes.current.newRow({ role: "ai", text: "", ts, streaming: true });
     liveTurns.start({ threadId, bookId, home, controller, message: streamingRow, steering, delivered });

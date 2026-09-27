@@ -50,7 +50,7 @@ function startLiveTurn(): { said: { text: string; internal?: boolean }[] } {
     bookId: BOOK,
     home: BOOK,
     controller: new AbortController(),
-    message: { ts: 1 },
+    message: { ts: 1, role: "ai" },
     delivered,
   });
   delivered.open(port);
@@ -76,7 +76,7 @@ test("a turn with no queue of its own takes nothing", async () => {
     bookId: BOOK,
     home: BOOK,
     controller: new AbortController(),
-    message: { ts: 1 },
+    message: { ts: 1, role: "ai" },
   });
   expect(await deliverIntoReadingTurn({ origin, bell: "[bell] back", runId: "r-1" })).toBeNull();
 });

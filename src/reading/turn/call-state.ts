@@ -169,7 +169,11 @@ export function callReducer<M extends CallRow>(
       const { images } = action;
       return {
         ...state,
-        messages: state.messages.map((m) => (images.has(m.ts) ? { ...m, images: images.get(m.ts) } : m)),
+        // Only the reader's rows carry images; the reply beside one may share
+        // its stamp.
+        messages: state.messages.map((m) =>
+          m.role === "user" && images.has(m.ts) ? { ...m, images: images.get(m.ts) } : m,
+        ),
       };
     }
     case "turn-started":

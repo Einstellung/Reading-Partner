@@ -3,7 +3,7 @@
 // `head` and `liveText` arguments, and the clock is passed in. Run: bun test.
 
 import { expect, test } from "bun:test";
-import { createRowSplit } from "../../../src/reading/turn/turn-row-split";
+import { createRowSplit, rowTsAfter } from "../../../src/reading/turn/turn-row-split";
 
 const at = (ms: number) => () => ms;
 
@@ -150,4 +150,15 @@ test("a tail the joined rows do not prefix falls back to what arrived in the row
   rows.writing(at(2000));
   expect(rows.answerTail("Something else entirely.", "  What arrived.  ")).toBe("What arrived.");
   expect(rows.answerTail("Something else entirely.", "   ")).toBeNull();
+});
+
+// The reply is started in the millisecond its question was appended. Stamped
+// with the clock alone the two share a ts, and a lookup by ts finds the
+// question (reading/turn/live-turns.ts: withLive).
+test("a row opens after the latest row in the file, even in the same millisecond", () => {
+  expect(rowTsAfter(1000, [{ ts: 400 }, { ts: 1000 }])).toBe(1001);
+  // A steered line keyed ahead of the clock (use-call.ts: steerTsRef).
+  expect(rowTsAfter(1000, [{ ts: 1002 }, { ts: 900 }])).toBe(1003);
+  expect(rowTsAfter(1000, [{ ts: 400 }])).toBe(1000);
+  expect(rowTsAfter(1000, [])).toBe(1000);
 });

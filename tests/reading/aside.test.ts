@@ -60,6 +60,18 @@ test("no anchor takes the live end of the conversation", () => {
   expect(texts(asideParentTail(lesson, 999))).toEqual(["u2", "a2", "u3", "a3", "u4", "a4"]);
 });
 
+// Files written before rows were stamped apart hold a question and its reply in
+// the same millisecond. The anchor names the reply, and the tail must end on it.
+test("a question sharing the anchored reply's stamp does not cut the reply off", () => {
+  const shared = [
+    { role: "user" as const, text: "u1", ts: 1 },
+    { role: "ai" as const, text: "a1", ts: 2 },
+    { role: "user" as const, text: "u2", ts: 5 },
+    { role: "ai" as const, text: "a2", ts: 5 },
+  ];
+  expect(texts(asideParentTail(shared, 5))).toEqual(["u1", "a1", "u2", "a2"]);
+});
+
 // The cut lands on a question. A reply whose question is outside the window
 // would be the model reading its own words with nothing to hang them on.
 test("the cut never leaves a dangling reply at the front", () => {

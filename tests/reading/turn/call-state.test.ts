@@ -106,6 +106,15 @@ test("a thread's stored images land on the rows they belong to", () => {
   expect(next?.messages[2]).toBe(open.messages[2]);
 });
 
+test("a reply sharing an image row's stamp does not take its images", () => {
+  const open = call({ messages: [user(1, "look"), ai(1, "I see")] });
+  const images = new Map([[1, [{ data: "AAA", mediaType: "image/png" as const }]]]);
+  const next = reduce(open, { type: "images-loaded", threadId: "t1", images });
+
+  expect(next?.messages[0].images).toEqual([{ data: "AAA", mediaType: "image/png" }]);
+  expect(next?.messages[1]).toBe(open.messages[1]);
+});
+
 test("images that finished loading for another thread are ignored", () => {
   const open = call({ messages: [user(1, "look")] });
   const images = new Map([[1, [{ data: "AAA", mediaType: "image/png" as const }]]]);
@@ -478,7 +487,8 @@ test("what only the surface knows about the row survives every change", () => {
 });
 
 test("what only the surface knows about the row survives its images arriving", () => {
-  const open = call({ messages: [user(1, "look"), ai(2, "recorded", { parts: ["card"] })] });
+  // A user row: only the reader's rows take images.
+  const open = call({ messages: [ai(1, "recorded"), { ...user(2, "look"), parts: ["card"] }] });
   const images = new Map([[2, [{ data: "AAA", mediaType: "image/png" as const }]]]);
   const next = reduce(open, { type: "images-loaded", threadId: "t1", images });
 

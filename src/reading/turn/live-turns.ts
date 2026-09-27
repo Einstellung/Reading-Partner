@@ -18,8 +18,11 @@ import type { Steering } from "./steering";
 
 // The streaming row a turn owns. Structural, so the shell stores its own display
 // message type (trace, images, notice and all) without this module knowing it.
+// The role is here because a stamp alone does not name a row: the reader's
+// question and the reply to it can share one (withLive below).
 export interface LiveMessage {
   ts: number;
+  role: "user" | "ai";
 }
 
 export interface LiveTurn<M extends LiveMessage> {
@@ -138,10 +141,16 @@ export function createLiveTurns<M extends LiveMessage>(): LiveTurns<M> {
 
     // Thread history rebuilt from the file, plus the row still being written.
     // Reopening a mark mid-answer picks the stream back up where it is.
+    //
+    // Already there means a row of the live row's role at its stamp. Files
+    // written before rows were stamped apart hold the question and its reply
+    // in the same millisecond, and matching the question dropped the reply
+    // from the screen for the rest of the turn.
     withLive(threadId, messages) {
       const turn = turns.get(threadId);
       if (!turn || turn.silent) return messages;
-      if (messages.some((m) => m.ts === turn.message.ts)) return messages;
+      const { ts, role } = turn.message;
+      if (messages.some((m) => m.ts === ts && m.role === role)) return messages;
       return [...messages, turn.message];
     },
   };

@@ -11,12 +11,13 @@ import {
 
 interface Msg {
   ts: number;
+  role: "user" | "ai";
   text: string;
 }
 
 function start(turns: ReturnType<typeof createLiveTurns<Msg>>, threadId: string, ts = 1) {
   const controller = new AbortController();
-  turns.start({ threadId, bookId: "book", home: "book", controller, message: { ts, text: "" } });
+  turns.start({ threadId, bookId: "book", home: "book", controller, message: { ts, role: "ai", text: "" } });
   return controller;
 }
 
@@ -43,9 +44,22 @@ test("the stream is written into the stored row, which reopening splices back in
   start(turns, "a", 7);
   turns.patch("a", 7, (m) => ({ ...m, text: `${m.text}half` }));
   turns.patch("a", 7, (m) => ({ ...m, text: `${m.text} a sentence` }));
-  expect(turns.withLive("a", [{ ts: 5, text: "asked" }])).toEqual([
-    { ts: 5, text: "asked" },
-    { ts: 7, text: "half a sentence" },
+  expect(turns.withLive("a", [{ ts: 5, role: "user", text: "asked" }])).toEqual([
+    { ts: 5, role: "user", text: "asked" },
+    { ts: 7, role: "ai", text: "half a sentence" },
+  ]);
+});
+
+// The send path used to stamp the question and the reply in the same
+// millisecond, and files written then still hold such pairs. Reopening one
+// mid-answer must not take the question for the reply.
+test("a question sharing the live row's stamp does not stand in for it", () => {
+  const turns = createLiveTurns<Msg>();
+  start(turns, "a", 7);
+  turns.patch("a", 7, (m) => ({ ...m, text: "half" }));
+  expect(turns.withLive("a", [{ ts: 7, role: "user", text: "asked" }])).toEqual([
+    { ts: 7, role: "user", text: "asked" },
+    { ts: 7, role: "ai", text: "half" },
   ]);
 });
 
@@ -59,14 +73,18 @@ test("a patch for another turn's row is ignored", () => {
 
 test("a thread with nothing running shows its file history unchanged", () => {
   const turns = createLiveTurns<Msg>();
-  const msgs = [{ ts: 5, text: "asked" }];
+  const msgs: Msg[] = [{ ts: 5, role: "user", text: "asked" }];
   expect(turns.withLive("a", msgs)).toBe(msgs);
 });
 
 test("the live row is not spliced in twice once it is in the file", () => {
   const turns = createLiveTurns<Msg>();
   start(turns, "a", 7);
-  expect(turns.withLive("a", [{ ts: 7, text: "landed" }])).toEqual([{ ts: 7, text: "landed" }]);
+  const landed: Msg[] = [
+    { ts: 7, role: "user", text: "asked" },
+    { ts: 7, role: "ai", text: "landed" },
+  ];
+  expect(turns.withLive("a", landed)).toEqual(landed);
 });
 
 test("settling ends the turn", () => {
@@ -107,7 +125,7 @@ test("every session reaches the same registry", () => {
     bookId: "book",
     home: "book",
     controller,
-    message: { ts: 1, text: "" },
+    message: { ts: 1, role: "ai", text: "" },
   });
   expect(readingTurns<Msg>().has("a")).toBe(true);
   resetReadingTurns();

@@ -17,6 +17,7 @@ import type { ReaderShell } from "../../../src/reading/session/shell";
 
 interface Msg {
   ts: number;
+  role: "user" | "ai";
   text: string;
 }
 
@@ -71,7 +72,7 @@ for (const way of WAYS) {
       bookId: "book",
       home: "book",
       controller,
-      message: { ts: 1, text: "half" },
+      message: { ts: 1, role: "ai", text: "half" },
     });
 
     way.leave(turns, "t", log);
@@ -91,7 +92,7 @@ test("a turn nobody is watching still settles into its thread", () => {
     bookId: "book",
     home: "book",
     controller,
-    message: { ts: 1, text: "" },
+    message: { ts: 1, role: "ai", text: "" },
   });
   turns.patch("t", 1, (m) => ({ ...m, text: "a whole answer" }));
   const settled = turns.settle("t", controller);

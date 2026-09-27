@@ -144,7 +144,7 @@ export function holdReadingTurn(bookId: string, threadId: string, signal?: Abort
     bookId,
     home: bookId,
     controller,
-    message: { ts: Date.now() },
+    message: { ts: Date.now(), role: "ai" },
     steering,
     silent: true,
   });
