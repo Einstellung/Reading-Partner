@@ -2,6 +2,8 @@
 // Run: bun test.
 
 import { expect, test } from "bun:test";
+import { resolvePalace } from "../../../src/palace";
+import { strategyFor } from "../../../src/platform/sync/merge/contract";
 import { inSyncRange, NEVER_INFER_DELETE } from "../../../src/platform/sync/syncFs";
 
 test("core user-data files are in range", () => {
@@ -58,6 +60,9 @@ test("core user-data files are in range", () => {
     "info-pool-marks.json",
     "legion/claim/4d9f1b0a.json",
     "info-ask-4d9f1b0a.json",
+    // The standing meals conversation (docs/73): one thread file with a fixed
+    // name, written on whichever device the reader plans dinner on.
+    "threads-info-meals.json",
   ]) {
     expect(inSyncRange(p)).toBe(true);
   }
@@ -152,4 +157,13 @@ test("nothing on the never-infer list has fallen out of the sync range", () => {
   for (const p of NEVER_INFER_DELETE) {
     expect(inSyncRange(p)).toBe(true);
   }
+});
+
+// Its name is neither a day's info thread nor a book's, and for a while no row
+// claimed it: the meals conversation never left the device it was held on.
+test("the meals conversation is its own row, synced and merged as messages", () => {
+  const hit = resolvePalace("threads-info-meals.json");
+  expect(hit?.row.kind).toBe("info-meals-thread");
+  expect(inSyncRange("threads-info-meals.json")).toBe(true);
+  expect(strategyFor("threads-info-meals.json")).toBe("messages");
 });

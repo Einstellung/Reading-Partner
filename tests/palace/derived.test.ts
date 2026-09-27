@@ -133,8 +133,14 @@ test("the paths the domain builds resolve to the row that restates them", () => 
 // the pattern on each conversation row. Here is where the two are held
 // together, in both directions: a row that holds conversations must be a file
 // the store can name, and a row that holds none must be a file it never claims.
+// A row holds conversations when its records are messages. The conversation walk
+// reads a subset of those (THREAD_KINDS): the standing meals thread is a store
+// file it does not read.
 test("a conversation row's sample is the file its store key names, and nothing else is", () => {
-  const conversations: ReadonlySet<string> = new Set(THREAD_KINDS);
+  const conversations: ReadonlySet<string> = new Set(
+    PALACE.filter((r) => r.merge === "messages").map((r) => r.kind),
+  );
+  expect(THREAD_KINDS.filter((k) => !conversations.has(k))).toEqual([]);
   const wrong: string[] = [];
   for (const row of PALACE) {
     for (const path of row.samples) {
@@ -167,7 +173,7 @@ test("a conversation row's sample is the file its store key names, and nothing e
 const STORES_A_TOPIC_ID: Record<string, readonly PalaceKind[]> = {
   "info/labs/types.ts": ["info-labs"],
   "memory/usage/model-calls.ts": ["model-calls"],
-  "platform/app/threads.ts": ["info-thread", "conversation"],
+  "platform/app/threads.ts": ["info-thread", "conversation", "info-meals-thread"],
   "reading/rehearsal/types.ts": ["rehearsal"],
   "reading/retell/types.ts": ["retell"],
   "reading/saved/saved-articles.ts": ["saved-articles"],
