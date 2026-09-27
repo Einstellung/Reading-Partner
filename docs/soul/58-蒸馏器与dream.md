@@ -123,7 +123,7 @@ memory 的 marker 只标已蒸馏的原料。分层上 memory 不认识 info 和
 | `threads-info-<date>.json` | 一天一份，实测 25+ 份 | UI 重开对话；蒸馏不读 | 是 | 登记为源，蒸馏后按规则回收 |
 | `info-feedback.jsonl` | 追加，永不轮转 | 只读尾 30 行 | 是 | 登记为源，规则是截到 `FEEDBACK_TAIL` |
 | `memory-usage-<deviceId>.jsonl` | 一设备一文件，追加 | 无（48：第一版只记不用） | 是 | 等它的消费者出现再定，memory 自己的 housekeeping |
-| info 日切三件套 | 一天一份，`info-articles-<date>.json` 实测 4MB+/天 | 发布后无 | 否 | 补齐 `pruneStaleDailyFiles` 触发点，info 的 housekeeping |
+| info 日切三件套 | 一天一份，`info-articles-<date>.json` 实测 4MB+/天 | 发布后无 | 否 | 已做：`info-daily-files` marker（[80](../platform/80-回收：retention、garbage marker 与 housekeeper.md)） |
 
 `threads-info-<date>.json` 同时是私密度最高和唯一还没被蒸馏的一类，所以它是第一个登记进来的新源。
 

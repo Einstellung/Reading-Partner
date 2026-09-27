@@ -30,12 +30,12 @@ palace 行上的 `retention` 字段（`src/palace/kinds.ts`），取代原来只
 
 `src/housekeeper/`，capability 层，只 import platform 和 palace。
 
-每晚一次：挂在 legion/schedule 的本地夜间任务上（`registerNightlyJob`，每台设备都跑，不选举，锚点记在本机的 `legion/schedule/fired.json`）。触发它的仍是 `runScheduleTick` 所在的那个五分钟 tick。
+每晚一次：挂在 legion/schedule 的本地夜间任务上（`registerNightlyJob`，每台设备都跑，不选举，锚点记在本机的 `legion/schedule/fired.json`）。触发它的是外壳后台服务里的 `startScheduleClock`（`useBackgroundServices`）：启动时、每五分钟、回到前台时各问一次钟。原先这个 tick 挂在 info 的 `checkDailyRound` 上，而 info pipeline 只在收集机上构建，阅读机（手机、平板）从没跑过夜间任务。
 
 执行按行的同步通道分：
 
 - `local`：直接删。
-- `data` / `books`：先 `requestRemotePurge()` 再删本地，和 legion ledger 的顺序一样（坑 [208](../pitfall/storage/208-file-deletion-does-not-survive-sync.md)）。每晚的远端删除有请求预算，超了留到下一晚——文件还在盘上，下一晚会被重新标出来。
+- `data` / `books`：先 `requestRemotePurge()` 再删本地（坑 [208](../pitfall/storage/208-file-deletion-does-not-survive-sync.md)）。所有回收都用这个顺序：中途断掉时本地文件还在，下一晚重新标出、再请求一次；反过来先删本地，断在两步之间就没有东西能再标出它，远端那份留到永远。先请求后删本地的窗口里同步可能把它又传上去一次，下一晚同样收回。每晚的远端删除有请求预算，超了留到下一晚——文件还在盘上，下一晚会被重新标出来。
 - `remote-only`：拒绝。
 - `truncate-tail` 只对 `local` 做。同步文件截尾没有现成的安全做法，拒绝并记日志。
 - `demote-local` 只定义了动作，没有冷层，执行时记一条「未实现」。
@@ -44,4 +44,20 @@ palace 行上的 `retention` 字段（`src/palace/kinds.ts`），取代原来只
 
 ## 现状
 
-通用规则今天在跑的：封面读不出的失败标记（30 天）和 housekeeper 自己的日志。legion 的 run 折叠和 info 日切文件的清理还在原处，行上写 `inline`，之后迁成 marker。等 marker 的：`events`、`info-feedback`、`bell`、`run-brief`、`run-output`、`sync-holdings`。
+在跑的 marker：
+
+| marker | 行 | 判据 |
+|---|---|---|
+| 通用 | `cover-failure-unreadable`、`housekeeper-log`、`events` | 封面失败标记 30 天；日志和 `events-*.jsonl` 各留尾部（2000 / 5000 行）。`events` 没有代码回读，是给人看的仪表 |
+| `legion-run-files` | `run`、`run-brief`、`run-output` | run 文件：ledger 有它的行（`tombstonedRunIds`）。brief / output：没有任何 hot run 指向它，且 mtime 超过 7 天；折叠过的和孤儿一条规则 |
+| `legion-bell` | `bell` | 已 ack 且 ack 后 14 天。重响只发生在 run 还热或 tick 响铃未记账时，run 最迟 ack 后 7 天折叠 |
+| `info-daily-files` | `info-cables`、`info-daily-{briefing,articles,items,run}` | 今天以外的日切文件；cables 30 天 |
+
+ledger 折叠写 ledger 行，不是纯 marker：它是 legion 自己的夜间任务 `LEDGER_FOLD_JOB`，同一时刻注册在 housekeeper 之前，折完当晚 run 文件就被 marker 标走。info 生成前的 prune 和阅读机启动时的 prune 都删了，重新分诊从来不 prune 的缺口也随之不存在。`info-daily-pool` 仍由 collector 的 `removePoolDays` 即时处理。
+
+没回收、行上写 `never` 的：
+
+- `info-feedback.jsonl`：同步的按行 records 文件。一台设备截尾，有 base 的对端会把删掉的行当删除接受并逐条记进 sync-trash，没有 base 的设备（新设备、base 丢了）会把行并回来。安全截尾需要新机制（水位或墓碑），没做。
+- `sync-holdings/<deviceId>.json`：退役设备的 holdings 一直在远端，删了本地缓存，下一轮同步又会拉回来。要回收得先有「退役设备」这件事（删远端的 holdings），没做。
+
+冲突副本：`conflictCopyPath` 除了 prose 合并，还在 `mergeOpaque` 里写——opaque 行（retell、rehearsal、pagination、info-cables、info-picture、info-meals、info-ask、claim、article-bodies 等）以及任何结构化合并读不懂时退回 opaque 的文件（run、box、线程）。这些副本在各自目录里 `<stem>.conflict-<digest><ext>`，palace 不认，prose 裁决（`candidateDirs` 只看 observations、根目录、`prep-*` 和其 `chapters`）也不看，没人处理。副本里是用户内容，不做删除 marker；怎么收是待办。prose 裁决的扫描本身也挂在 info 的 `checkDailyRound` 上，只在收集机跑。
