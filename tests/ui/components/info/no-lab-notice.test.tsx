@@ -15,7 +15,8 @@ afterEach(cleanup);
 // Imported after the window is up, for the reason launch-placeholder.test.tsx
 // gives: react-dom decides once, at evaluation, whether it is in a browser.
 const { BriefingCardBody } = await import("../../../../src/ui/components/info/HomeCard");
-const { NO_LAB_NOTICE } = await import("../../../../src/ui/components/info/no-labs");
+const { noLabNotice } = await import("../../../../src/ui/components/info/no-labs");
+const NO_LAB_NOTICE = noLabNotice();
 
 function card(over: { noLabs: boolean | null; collecting?: boolean; onAsk?: () => void }) {
   return (

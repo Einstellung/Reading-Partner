@@ -4,6 +4,7 @@
 import library from "./messages/library";
 import reader from "./messages/reader";
 import phone from "./messages/phone";
+import info from "./messages/info";
 import settings from "./messages/settings";
 import shell from "./messages/shell";
 import study from "./messages/study";
@@ -11,6 +12,7 @@ import study from "./messages/study";
 export const AREAS = {
   library,
   reader,
+  info,
   settings,
   shell,
   study,

@@ -26,6 +26,7 @@ import type { ProbeConfirmCardData } from "../../../info/sources/source-cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import { Button } from "../ui/button";
 import { briefingErrorText } from "./no-labs";
+import { t, useT } from "../../../i18n";
 
 // Live seconds since a start timestamp, for the analysis activity readout. Ticks
 // on its own so the card keeps moving even while the user scrolls or chats.
@@ -47,6 +48,10 @@ function useSecondsSince(startedAt: number | null): number {
 // Add = one gesture, three host effects (mutate addSource + reply the synthetic
 // note + local flip of `added`); the card only raises the intent, onCardAction
 // orchestrates. `added` shows the settled state.
+// Kept a plain function, not a hook-using component: it (and BriefingReadyCard,
+// BriefingFailedCard below) is invoked directly by cardDispatch.test.tsx without
+// a render tree, so it stays hookless and reads the current locale off the
+// module-level t() instead of useT().
 export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<ProbeConfirmCardData>) {
   const { descriptor, pipeLabel, samples, added } = payload;
   return (
@@ -63,7 +68,7 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
             <span className="min-w-0 flex-1 text-muted-foreground">
               <span className="line-clamp-2">{s.title}</span>
               <span className="text-[12px] text-faint-foreground">
-                {s.chars} chars · {s.fullText ? "full text" : "summary only"}
+                {t("info.cards.charsCount", { count: s.chars })} · {s.fullText ? t("info.cards.fullText") : t("info.cards.summaryOnly")}
               </span>
             </span>
           </li>
@@ -71,7 +76,7 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
       </ul>
       <div className="mt-3.5 flex items-center justify-end">
         {added ? (
-          <span className="text-[13px] font-medium text-accent-line">Added ✓</span>
+          <span className="text-[13px] font-medium text-accent-line">{t("info.cards.added")}</span>
         ) : (
           <Button
             type="button"
@@ -80,7 +85,7 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
             className="px-3.5 py-1.5"
             onClick={() => dispatch({ kind: "mutate", op: "add-source" })}
           >
-            Add source
+            {t("info.cards.addSource")}
           </Button>
         )}
       </div>
@@ -89,37 +94,38 @@ export function ProbeConfirmCard({ payload, dispatch }: CardComponentProps<Probe
 }
 
 export function BriefingProgressCard({ payload }: CardComponentProps<BriefingProgressCardData>) {
+  const t = useT();
   const secs = useSecondsSince(payload.analysis?.startedAt ?? null);
-  const heading = payload.title ?? "Building your first briefing";
+  const heading = payload.title ?? t("info.cards.buildingFirstBriefing");
   const c = payload.collect;
-  const t = payload.analysis;
+  const a = payload.analysis;
 
   let main: string;
   let sub: string | null = null;
   if (payload.stopping) {
-    main = "Stopping";
-    sub = c && c.done > 0 ? `${c.done} source${c.done === 1 ? "" : "s"} kept` : null;
+    main = t("info.cards.stopping");
+    sub = c && c.done > 0 ? t("info.cards.sourcesKept", { count: c.done }) : null;
   } else if (payload.phase === "discovering") {
-    main = c && c.total ? `Collecting sources ${c.done}/${c.total}` : "Collecting sources";
+    main = c && c.total ? t("info.cards.collectingSourcesProgress", { done: c.done, total: c.total }) : t("info.cards.collectingSources");
     const parts: string[] = [];
-    if (c?.lastDone) parts.push(`${c.lastDone} done`);
-    if (c && c.items > 0) parts.push(`${c.items} headline${c.items === 1 ? "" : "s"}`);
-    if (c && c.failed > 0) parts.push(`${c.failed} failed`);
+    if (c?.lastDone) parts.push(t("info.cards.doneCount", { count: c.lastDone }));
+    if (c && c.items > 0) parts.push(t("info.cards.headlinesCount", { count: c.items }));
+    if (c && c.failed > 0) parts.push(t("info.cards.failedCount", { count: c.failed }));
     sub = parts.length ? parts.join(" · ") : null;
   } else if (payload.phase === "screening") {
-    main = c && c.items ? `Screening ${c.screened}/${c.items} headlines` : "Screening headlines";
-    sub = c && c.screened > 0 ? `${c.kept} worth fetching` : null;
+    main = c && c.items ? t("info.cards.screeningProgress", { screened: c.screened, items: c.items }) : t("info.cards.screeningHeadlines");
+    sub = c && c.screened > 0 ? t("info.cards.worthFetching", { count: c.kept }) : null;
   } else if (payload.phase === "fetching") {
-    main = c && c.bodiesTotal ? `Fetching articles ${c.bodies}/${c.bodiesTotal}` : "Fetching articles";
+    main = c && c.bodiesTotal ? t("info.cards.fetchingProgress", { done: c.bodies, total: c.bodiesTotal }) : t("info.cards.fetchingArticles");
     // A ceiling that trimmed the day says so here, not only in the log.
-    sub = c && c.cappedOut > 0 ? `${c.cappedOut} over the daily cap were left out` : null;
+    sub = c && c.cappedOut > 0 ? t("info.cards.overDailyCap", { count: c.cappedOut }) : null;
   } else {
     // One room at a time (docs/63), so the count is rooms and not items.
     const labs = c?.labs;
-    main = labs?.total ? `Analyzing ${labs.done}/${labs.total} labs` : "Analyzing the day";
-    const parts: string[] = [`${secs}s`];
-    if (t && t.chars > 0) parts.push(`${t.chars} chars`);
-    if (t && t.attempt > 1) parts.push(`attempt ${t.attempt}/${t.attempts}`);
+    main = labs?.total ? t("info.cards.analyzingProgress", { done: labs.done, total: labs.total }) : t("info.cards.analyzingDay");
+    const parts: string[] = [t("info.cards.secondsElapsed", { count: secs })];
+    if (a && a.chars > 0) parts.push(t("info.cards.charsCount", { count: a.chars }));
+    if (a && a.attempt > 1) parts.push(t("info.cards.attemptCount", { attempt: a.attempt, attempts: a.attempts }));
     sub = parts.join(" · ");
   }
 
@@ -137,12 +143,11 @@ export function BriefingProgressCard({ payload }: CardComponentProps<BriefingPro
 
 export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<BriefingReadyCardData>) {
   const counts = [
-    `${payload.labs} lab${payload.labs === 1 ? "" : "s"} changed`,
-    `${payload.worth} worth reading`,
-    `${payload.oneLiners} one-liner${payload.oneLiners === 1 ? "" : "s"}`,
+    t("info.cards.labsChanged", { count: payload.labs }),
+    t("info.cards.worthReading", { count: payload.worth }),
+    t("info.cards.oneLinersCount", { count: payload.oneLiners }),
   ].join(" · ");
-  const note =
-    payload.note ?? "A first briefing from one source is thin — it gets richer as you add more.";
+  const note = payload.note ?? t("info.cards.firstBriefingThin");
   return (
     <button
       type="button"
@@ -150,12 +155,12 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
       className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4 text-left hover:border-accent-line"
     >
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {payload.title ?? "Briefing ready"}
+        {payload.title ?? t("info.cards.briefingReady")}
       </div>
       <div className="mt-1 text-[15px] font-medium text-foreground">{payload.date}</div>
       <div className="mt-1 text-[13px] text-muted-foreground">{counts}</div>
       <div className="mt-2 text-[12px] leading-snug text-faint-foreground">{note}</div>
-      <div className="mt-2 text-[13px] font-medium text-accent-line">Open →</div>
+      <div className="mt-2 text-[13px] font-medium text-accent-line">{t("info.cards.openBriefing")}</div>
     </button>
   );
 }
@@ -165,23 +170,24 @@ export function BriefingReadyCard({ payload, dispatch }: CardComponentProps<Brie
 // intent; the host mints the topic and files both the article and the
 // conversation.
 export function TopicProposalCard({ payload, dispatch }: CardComponentProps<TopicProposalCardData>) {
+  const t = useT();
   const applied = payload.phase === "applied";
   const isNew = !("id" in payload.topic);
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? "Filed" : "Where this belongs"}
+        {applied ? t("info.cards.filed") : t("info.cards.whereThisBelongs")}
       </div>
       <div className="mt-1 text-[15px] font-medium text-foreground">
         {proposedTopicName(payload.topic)}
       </div>
       {isNew && !applied ? (
-        <div className="mt-0.5 text-[12px] text-faint-foreground">A new topic</div>
+        <div className="mt-0.5 text-[12px] text-faint-foreground">{t("info.cards.newTopic")}</div>
       ) : null}
       <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{payload.meaning}</div>
       <div className="mt-3 flex items-center justify-end gap-2">
         {applied ? (
-          <span className="text-[12px] text-faint-foreground">On your shelf.</span>
+          <span className="text-[12px] text-faint-foreground">{t("info.cards.onYourShelf")}</span>
         ) : (
           <Button
             type="button"
@@ -190,7 +196,7 @@ export function TopicProposalCard({ payload, dispatch }: CardComponentProps<Topi
             className="px-3.5 py-1.5"
             onClick={() => dispatch({ kind: "mutate", op: "apply-topic" })}
           >
-            {isNew ? "Create and file" : "File it"}
+            {isNew ? t("info.cards.createAndFile") : t("info.cards.fileIt")}
           </Button>
         )}
       </div>
@@ -205,12 +211,13 @@ export function TopicProposalCard({ payload, dispatch }: CardComponentProps<Topi
 // by talking, so there is nothing to edit here. Presentational: Apply only
 // raises intent; the host opens the room and claims the sources.
 export function LabProposalCard({ payload, dispatch }: CardComponentProps<LabProposalCardData>) {
+  const t = useT();
   const applied = payload.phase === "applied";
   const chips = payload.sourceNames ?? payload.sources;
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? "Lab opened" : "A lab to keep watch"}
+        {applied ? t("info.cards.labOpened") : t("info.cards.labToWatch")}
       </div>
       <div className="mt-1 text-[15px] font-medium text-foreground">{payload.name}</div>
       <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{payload.scope}</div>
@@ -238,7 +245,7 @@ export function LabProposalCard({ payload, dispatch }: CardComponentProps<LabPro
       )}
       <div className="mt-3.5 flex items-center justify-end gap-2">
         {applied ? (
-          <span className="text-[12px] text-faint-foreground">Watching from the next briefing on.</span>
+          <span className="text-[12px] text-faint-foreground">{t("info.cards.watchingFromNext")}</span>
         ) : (
           <Button
             type="button"
@@ -247,7 +254,7 @@ export function LabProposalCard({ payload, dispatch }: CardComponentProps<LabPro
             className="px-3.5 py-1.5"
             onClick={() => dispatch({ kind: "mutate", op: "apply-lab" })}
           >
-            Open this lab
+            {t("info.cards.openThisLab")}
           </Button>
         )}
       </div>
@@ -259,17 +266,16 @@ export function LabProposalCard({ payload, dispatch }: CardComponentProps<LabPro
 // "close" and "delete" are the same gesture on most screens and here they are
 // not.
 export function LabArchiveCard({ payload, dispatch }: CardComponentProps<LabArchiveCardData>) {
+  const t = useT();
   const applied = payload.phase === "applied";
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? "Lab closed" : "Close this lab"}
+        {applied ? t("info.cards.labClosed") : t("info.cards.closeThisLab")}
       </div>
       <div className="mt-1 text-[15px] font-medium text-foreground">{payload.name}</div>
       <div className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-        {applied
-          ? "Nothing is collected for it any more. What it worked out is kept."
-          : "It stops watching. What it has worked out is kept, and it can be reopened."}
+        {applied ? t("info.cards.labClosedNote") : t("info.cards.labCloseNote")}
       </div>
       <div className="mt-3.5 flex items-center justify-end gap-2">
         {applied ? null : (
@@ -280,7 +286,7 @@ export function LabArchiveCard({ payload, dispatch }: CardComponentProps<LabArch
             className="px-3.5 py-1.5"
             onClick={() => dispatch({ kind: "mutate", op: "apply-lab-archive" })}
           >
-            Close it
+            {t("info.cards.closeIt")}
           </Button>
         )}
       </div>
@@ -291,7 +297,7 @@ export function LabArchiveCard({ payload, dispatch }: CardComponentProps<LabArch
 export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<BriefingFailedCardData>) {
   return (
     <div className="w-full max-w-md rounded-xl border border-[#e6c3bd] bg-[#fdf5f3] p-4">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-[#c0392b]">Briefing failed</div>
+      <div className="text-[11px] font-medium uppercase tracking-wider text-[#c0392b]">{t("info.cards.briefingFailed")}</div>
       <div className="mt-1 text-[13px] leading-relaxed text-[#8a4b40]">
         {briefingErrorText(payload.message)}
       </div>
@@ -305,7 +311,7 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
           className="border-[#e6c3bd] px-3 py-1.5 font-medium text-[#c0392b] can-hover:enabled:hover:bg-[#f8e8e4]"
           onClick={() => dispatch({ kind: "mutate", op: "retry-briefing" })}
         >
-          Try again
+          {t("info.cards.tryAgain")}
         </Button>
       </div>
     </div>
@@ -320,12 +326,13 @@ export function BriefingFailedCard({ payload, dispatch }: CardComponentProps<Bri
 // the days this call actually changes marked, since on an adjustment those are
 // the only ones the reader has to read.
 export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPlanCardData>) {
+  const t = useT();
   const applied = payload.phase === "applied";
   const changed = new Set(payload.changedDates);
   return (
     <div className="w-full max-w-md rounded-xl border border-secondary-border bg-secondary-faint p-4">
       <div className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-        {applied ? "Planned" : payload.adjustment ? "A change to the week" : "This week's meals"}
+        {applied ? t("info.cards.planned") : payload.adjustment ? t("info.cards.weekChange") : t("info.cards.thisWeeksMeals")}
       </div>
       <ul className="m-0 mt-1.5 flex list-none flex-col p-0">
         {payload.days.map((day) => {
@@ -360,7 +367,7 @@ export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPla
       <div className="mt-3.5 flex items-center justify-end gap-2">
         {applied ? (
           <span className="text-[12px] text-faint-foreground">
-            It's on your Meals page, shopping list and all.
+            {t("info.cards.onMealsPage")}
           </span>
         ) : (
           <Button
@@ -370,7 +377,7 @@ export function MealsPlanCard({ payload, dispatch }: CardComponentProps<MealsPla
             className="px-3.5 py-1.5"
             onClick={() => dispatch({ kind: "mutate", op: "apply-meals-plan" })}
           >
-            {payload.adjustment ? "Change it" : "Plan the week"}
+            {payload.adjustment ? t("info.cards.changeIt") : t("info.cards.planTheWeek")}
           </Button>
         )}
       </div>

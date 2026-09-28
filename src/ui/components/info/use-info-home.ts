@@ -83,6 +83,7 @@ import type { CollectorSites } from "../../../info/briefer/reader";
 import type { ComposerVoice } from "../chat/composer-voice";
 import type { HomeScreen } from "./InfoHome";
 import { settleDelete } from "../common/settle-delete";
+import { t } from "../../../i18n";
 
 export interface KeepArticlePorts {
   // Read the item's body when the screen has not already got it.
@@ -358,7 +359,7 @@ export function useInfoHome(opts: InfoHomeOptions): InfoHomeController {
       void settleDelete({
         act: () => removeSource(id),
         refresh: refreshSources,
-        failed: "Could not remove the source",
+        failed: t("info.removeSourceFailed"),
         onFail: onSay,
       });
     },

@@ -13,7 +13,7 @@ import type { DeviceRole } from "../../../platform/app/device";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { todayLocal } from "../../../info/collect/store";
-import { MEALS_KICKOFF } from "../../../info/briefer/anchors";
+import { mealsKickoff } from "../../../info/briefer/anchors";
 import { EMPTY_MEALS } from "../../../info/meals/plan/types";
 import type { SignInSite } from "../../../info/sources/site-session";
 import { Vestibule } from "./Vestibule";
@@ -36,6 +36,7 @@ import { weekdayName } from "../../../info/meals/screen/view";
 import { useInfoHome } from "./use-info-home";
 import { useRegisterVoiceContext } from "../lumen/voice-context";
 import { noLabsOpen } from "./no-labs";
+import { useT } from "../../../i18n";
 
 // The screen union lives in base/shell-nav.ts, which is what maps it to the
 // shell's sidebar; re-exported here so its importers are unchanged.
@@ -163,6 +164,7 @@ export default function InfoHome(props: {
   // screen to offer it.
   pipCards?: boolean;
 }) {
+  const t = useT();
   const { screen, onNavigate } = props;
   const meals = useMeals(props.mealsEnabled === true);
   // The day the desktop shell has open. It has no navigation stack to hold it,
@@ -252,7 +254,7 @@ export default function InfoHome(props: {
           </div>
         );
         const wrapped = props.wrapScreen
-          ? props.wrapScreen({ label: "Ask about today's briefing", onAsk: () => void info.askBriefing() }, page)
+          ? props.wrapScreen({ label: t("info.ask.aboutBriefing"), onAsk: () => void info.askBriefing() }, page)
           : page;
         // The voice orb belongs to this screen and only to it (docs/33): it is
         // the briefing being talked about. Not while the text call is up —
@@ -301,7 +303,7 @@ export default function InfoHome(props: {
           if (screen !== "meals") onNavigate("meals");
           info.askMeals(fresh ?? meals.state ?? EMPTY_MEALS, meals.today, {
             focus: { kind: "week" },
-            kickoff: MEALS_KICKOFF,
+            kickoff: mealsKickoff(),
           });
           return true;
         };
@@ -315,7 +317,7 @@ export default function InfoHome(props: {
         if (screen === "meals-onboarding" || (screen === "meals" && meals.state && !meals.state.charter)) {
           const replay = screen === "meals-onboarding";
           shown = replay ? "onboarding-replay" : "onboarding";
-          ask = { label: "Ask about meals", onAsk: () => openChat({ kind: "week" }) };
+          ask = { label: t("info.ask.aboutMeals"), onAsk: () => openChat({ kind: "week" }) };
           inner = (
             <MealsOnboarding
               key={replay ? "replay" : "first"}
@@ -326,11 +328,11 @@ export default function InfoHome(props: {
           );
         } else if (screen === "meals-method") {
           shown = "method";
-          ask = { label: "Ask about the numbers", onAsk: () => openChat({ kind: "week" }) };
+          ask = { label: t("info.ask.aboutNumbers"), onAsk: () => openChat({ kind: "week" }) };
           inner = <MealsMethod state={meals.state} onBack={backFromSide} />;
         } else if (screen === "meals-shopping") {
           shown = "shopping";
-          ask = { label: "Ask about shopping", onAsk: () => openChat({ kind: "shopping" }) };
+          ask = { label: t("info.ask.aboutShopping"), onAsk: () => openChat({ kind: "shopping" }) };
           inner = (
             <MealsShopping
               state={meals.state}
@@ -344,7 +346,7 @@ export default function InfoHome(props: {
         } else if (screen === "meals-day" && day) {
           shown = `day:${day}`;
           const label =
-            day === meals.today ? "Ask about today" : `Ask about ${weekdayName(day)}`;
+            day === meals.today ? t("info.ask.aboutToday") : t("info.ask.aboutWeekday", { weekday: weekdayName(day) });
           ask = { label, onAsk: () => openChat({ kind: "day", date: day }) };
           inner = (
             <MealsDay
@@ -359,13 +361,13 @@ export default function InfoHome(props: {
           );
         } else {
           shown = "home";
-          ask = { label: "Ask about this week", onAsk: () => openChat({ kind: "week" }) };
+          ask = { label: t("info.ask.aboutThisWeek"), onAsk: () => openChat({ kind: "week" }) };
           inner = (
             <MealsHome
               state={meals.state}
               photos={meals.photos}
               today={meals.today}
-              onPlanWeek={() => openChat({ kind: "week" }, MEALS_KICKOFF)}
+              onPlanWeek={() => openChat({ kind: "week" }, mealsKickoff())}
               onAsk={ask.onAsk}
               onOpenShopping={() => onNavigate("meals-shopping")}
               onOpenDay={openDay}
@@ -411,7 +413,7 @@ export default function InfoHome(props: {
         const openArticleId = info.openArticleId;
         const meta =
           info.snap.briefing.items[openArticleId] ?? {
-            title: "Article",
+            title: t("info.article.fallbackTitle"),
             url: "",
             source: "",
             sourceName: "",
@@ -437,7 +439,7 @@ export default function InfoHome(props: {
         // child a wrapper receives directly; the plain box is what the desktop
         // shell has always drawn around it.
         return props.wrapScreen
-          ? props.wrapScreen({ label: "Ask about this article", onAsk: () => void info.askArticle(openArticleId) }, view)
+          ? props.wrapScreen({ label: t("info.ask.aboutArticle"), onAsk: () => void info.askArticle(openArticleId) }, view)
           : <div className="absolute inset-0">{view}</div>;
       })()}
 

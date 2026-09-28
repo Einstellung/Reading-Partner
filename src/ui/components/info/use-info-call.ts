@@ -30,7 +30,7 @@ import { buildLiveCompanionTools } from "../../../info/briefer/companion-live";
 import {
   BRIEFING_CARD_ID,
   OPENING_KICKOFF,
-  ASK_FAILED_NOTE,
+  askFailedNote,
   askScope,
   askSentNote,
   briefingJobPlan,
@@ -59,6 +59,7 @@ import { forgetScroll } from "../common/scroll-memory";
 import { modelIdFor } from "../../../ai/model-tier";
 import { navigateAway } from "../chat/call/call-layout";
 import { replayableHistory } from "../../../ai/turn-view/turn-rows";
+import { t } from "../../../i18n";
 import {
   findCardPart,
   patchCardPayload,
@@ -266,7 +267,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       // been passed on, and that never left the device, is worse than none.
       void done.then(
         () => noteTurn(askSentNote(plan.job, view.notices()[0]), { role: "ai", persist: false }),
-        () => noteTurn(ASK_FAILED_NOTE, { role: "ai", persist: false }),
+        () => noteTurn(askFailedNote(), { role: "ai", persist: false }),
       );
       return outcome;
     }
@@ -467,7 +468,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
   async function runAgent(history: ChatMessage[], run: StreamingTurnRun) {
     const settings = await loadSettings();
     if (!settings.defaultProviderId || !settings.defaultModelId) {
-      run.fail("No AI provider configured (Settings).");
+      run.fail(t("info.errors.noProvider"));
       return;
     }
     // The briefing controller for generate_briefing: a background job through the
@@ -519,7 +520,7 @@ export function useInfoCall(opts: InfoCallOptions): InfoCallController {
       turn = assembled.turn;
     } catch (e) {
       console.error("failed to load the article extractor", e);
-      run.fail("The article extractor could not be loaded. Try again.");
+      run.fail(t("info.errors.extractorFailed"));
       return;
     }
     // The reader walked away while the desk was being laid.

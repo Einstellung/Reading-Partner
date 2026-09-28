@@ -22,6 +22,7 @@ import type { SessionStatus, SignInOutcome } from "../extract/webview-session";
 import { buildReadPageTool } from "../extract/read-page-tool";
 import { buildArchiveLabTool, buildProposeLabTool, type LabToolDeps } from "./lab-tool";
 import { errMsg } from "../../platform/std/errors";
+import { t } from "../../i18n";
 
 export type BriefingScope = "retriage" | "full";
 
@@ -86,7 +87,8 @@ export function buildGenerateBriefingTool(
 ): AgentTool {
   return {
     name: "generate_briefing",
-    label: (args) => args.scope === "retriage" ? "Re-sorting today’s briefing" : "Regenerating the briefing",
+    label: (args) =>
+      args.scope === "retriage" ? t("info.tool.resortingBriefing") : t("info.tool.regeneratingBriefing"),
     effect: "write",
     description:
       "Regenerate today's briefing. Call this ONLY when the user explicitly asks to redo it " +
@@ -124,7 +126,10 @@ export function buildGenerateBriefingTool(
       }
       if (outcome === "asked") {
         return {
-          receipt: { label: "Passed the request on", summary: `${scope} briefing` },
+          receipt: {
+            label: t("info.tool.passedOnLabel"),
+            summary: scope === "full" ? t("info.tool.summaryFullBriefing") : t("info.tool.summaryRetriageBriefing"),
+          },
           text:
           "This device does not collect, so NOTHING is running here. The request has been " +
           `left for the computer that collects the user's sources; it will pick the ${scope} ` +
@@ -138,11 +143,12 @@ export function buildGenerateBriefingTool(
         scope === "full"
           ? "Started a full regeneration (re-collecting every source, then re-analyzing)"
           : "Started a re-analysis of today's cables";
+      const summary = scope === "full" ? t("info.tool.summaryFullRegen") : t("info.tool.summaryRetriageRegen");
       return {
         text:
           `${what} in the background. A progress card is now showing it. Do NOT say the briefing is ` +
           `done — it is still running; a note will report the new briefing when it settles.`,
-        receipt: { label: "Started a briefing run", summary: what },
+        receipt: { label: t("info.tool.startedRunLabel"), summary },
       };
     },
   };
@@ -202,7 +208,7 @@ function sessionVerdict(site: SignInSite, s: SessionStatus): string {
 export function buildSignInTool(deps: SiteSignInDeps): AgentTool {
   return {
     name: "open_site_sign_in",
-    label: (args) => `Waiting for the ${String(args.site ?? "site")} sign-in`,
+    label: (args) => t("info.tool.waitingForSignIn", { site: String(args.site ?? "site") }),
     // A read: the tool writes nothing of the app's own. What changes is the
     // site's session in a window the reader signed in to themselves, which they
     // watched happen — there is no receipt to give them that they do not have.

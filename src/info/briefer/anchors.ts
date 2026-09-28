@@ -18,6 +18,7 @@ import type { AiLanguage } from "../../platform/app/settings";
 import { briefingOverview } from "../boxes/briefing";
 import type { Briefing } from "../boxes/types";
 import type { CompanionContext } from "./chat";
+import { t } from "../../i18n";
 
 export interface InfoCallAnchor {
   // The thread this conversation writes to. Unique across every thread file, not
@@ -61,8 +62,12 @@ export interface InfoCallAnchor {
  */
 export const ONBOARDING_THREAD_ID = "onboarding";
 
-const BRIEFING_TITLE = "Today's briefing";
-const BRIEFING_PLACEHOLDER = "Ask about today's briefing…";
+function briefingTitle(): string {
+  return t("info.anchor.briefingTitle");
+}
+function briefingPlaceholder(): string {
+  return t("info.anchor.briefingPlaceholder");
+}
 
 /**
  * The day's briefing thread. One place because two anchors mint it — the
@@ -85,10 +90,10 @@ export function articleThreadId(dateKey: string, itemId: string): string {
 export function briefingAnchor(b: Briefing, ctx: CompanionContext): InfoCallAnchor {
   return {
     threadId: briefingThreadId(b.date),
-    emptyTitle: BRIEFING_TITLE,
-    placeholder: BRIEFING_PLACEHOLDER,
+    emptyTitle: briefingTitle(),
+    placeholder: briefingPlaceholder(),
     desk: [briefingRef(b.date, b, ctx)],
-    position: { title: BRIEFING_TITLE, line: briefingOverview(b) },
+    position: { title: briefingTitle(), line: briefingOverview(b) },
   };
 }
 
@@ -106,8 +111,8 @@ export function noBriefingAnchor(
 ): InfoCallAnchor {
   return {
     threadId: briefingThreadId(opts.dateKey),
-    emptyTitle: BRIEFING_TITLE,
-    placeholder: BRIEFING_PLACEHOLDER,
+    emptyTitle: briefingTitle(),
+    placeholder: briefingPlaceholder(),
     desk: [
       {
         kind: INFO_BRIEFING_KIND,
@@ -121,8 +126,8 @@ export function noBriefingAnchor(
       },
     ],
     position: {
-      title: BRIEFING_TITLE,
-      line: opts.error ?? opts.notices[0] ?? "Not collected yet",
+      title: briefingTitle(),
+      line: opts.error ?? opts.notices[0] ?? t("info.anchor.notCollectedYet"),
     },
   };
 }
@@ -162,11 +167,11 @@ export function articleAnchor(
   kept?: { savedId: string; fileArticle: FileArticle },
 ): InfoCallAnchor {
   const meta = b.items[itemId];
-  const title = meta?.title ?? "Article";
+  const title = meta?.title ?? t("info.article.fallbackTitle");
   return {
     threadId: articleThreadId(b.date, itemId),
     emptyTitle: title,
-    placeholder: "Ask about this article…",
+    placeholder: t("info.anchor.articlePlaceholder"),
     // Both, briefing first: an article chat is the day's conversation with one
     // piece pulled to the front, so the companion still has the day's document,
     // the profile and the tools.
@@ -194,10 +199,10 @@ export function onboardingAnchor(aiLanguage?: AiLanguage): InfoCallAnchor {
     threadId: ONBOARDING_THREAD_ID,
     mode: "add-source",
     onboarding: true,
-    emptyTitle: "Let's set up your sources",
-    placeholder: "Tell me what you follow, or paste a link…",
+    emptyTitle: t("info.anchor.onboardingTitle"),
+    placeholder: t("info.anchor.onboardingPlaceholder"),
     desk: [{ kind: INFO_BRIEFING_KIND, ref: { onboarding: true, aiLanguage } }],
-    position: { title: "Subscriptions", line: "Set up your information sources" },
+    position: { title: t("info.anchor.subscriptions"), line: t("info.anchor.setUpSources") },
   };
 }
 
@@ -214,9 +219,9 @@ export const MEALS_THREAD_ID = "meals";
 export const MEALS_BOOK_ID = "info-meals";
 
 /** What the screen's button says to start a week off. */
-export const MEALS_KICKOFF = "Plan this week.";
-
-const MEALS_TITLE = "Meals";
+export function mealsKickoff(): string {
+  return t("info.anchor.mealsKickoff");
+}
 
 /** The dinner conversation: the household, the week, and the tools for both. */
 export function mealsAnchor(
@@ -230,20 +235,20 @@ export function mealsAnchor(
   return {
     threadId: MEALS_THREAD_ID,
     bookKey: MEALS_BOOK_ID,
-    emptyTitle: MEALS_TITLE,
-    placeholder: "Ask about meals…",
+    emptyTitle: t("info.anchor.mealsTitle"),
+    placeholder: t("info.anchor.mealsPlaceholder"),
     desk: [
       { kind: INFO_MEALS_KIND, ref: { state, today, ...(opts?.focus ? { focus: opts.focus } : {}) } },
     ],
-    position: { title: MEALS_TITLE, line: mealsLine(state) },
+    position: { title: t("info.anchor.mealsTitle"), line: mealsLine(state) },
     ...(opts?.kickoff ? { kickoff: opts.kickoff } : {}),
   };
 }
 
 function mealsLine(state: MealsState): string | null {
-  if (!state.plan) return "No week planned yet";
+  if (!state.plan) return t("info.anchor.mealsNoPlan");
   const left = leftToBuy(state.shopping);
-  return left ? `This week's meals · ${left} still to buy` : "This week's meals";
+  return left ? t("info.anchor.mealsLeftToBuy", { count: left }) : t("info.anchor.mealsThisWeek");
 }
 
 // The day's briefing on the desk. One place because two anchors put it there —

@@ -13,8 +13,8 @@ import {
 } from "../../../src/ui/components/info/today";
 
 test("the date line names the weekday and the day, and not the year", () => {
-  const line = todayDateLine(new Date(2026, 8, 5), "en-GB");
-  expect(line).toBe("Saturday 5 September");
+  const line = todayDateLine(new Date(2026, 8, 5));
+  expect(line).toBe("Saturday, September 5");
   expect(line).not.toContain("2026");
 });
 

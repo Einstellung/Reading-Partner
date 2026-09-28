@@ -8,9 +8,12 @@
 // as the day's one nameless cover.
 
 import type { Briefing, LabCover } from "../../../info/boxes/types";
+import { t } from "../../../i18n";
 
 // The one line for a day where every lab ran and none of them changed.
-export const NOTHING_CHANGED = "Nothing changed today.";
+export function nothingChangedLine(): string {
+  return t("info.briefingPage.nothingChanged");
+}
 
 export function briefingCovers(briefing: Briefing): LabCover[] {
   return briefing.labs;
@@ -24,7 +27,7 @@ export function isEmptyDay(briefing: Briefing): boolean {
 // Which labs ran and stayed quiet. Faint, and only on an empty day: on a day
 // that had covers the covers are the answer to "what did you look at".
 export function quietLine(briefing: Briefing): string | null {
-  return briefing.quiet.length > 0 ? `Checked: ${briefing.quiet.join(" · ")}` : null;
+  return briefing.quiet.length > 0 ? t("info.briefingPage.checked", { names: briefing.quiet.join(" · ") }) : null;
 }
 
 // The lab tag that goes next to the source on an item's line. Empty string when

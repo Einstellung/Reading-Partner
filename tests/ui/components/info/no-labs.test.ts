@@ -4,8 +4,8 @@
 import { expect, test } from "bun:test";
 import { NO_LABS_ERROR } from "../../../../src/info/boxes/pipeline";
 import {
-  NO_LAB_NOTICE,
   briefingErrorText,
+  noLabNotice,
   noLabsOpen,
 } from "../../../../src/ui/components/info/no-labs";
 import type { Lab } from "../../../../src/info/labs/types";
@@ -45,7 +45,7 @@ test("a file of nothing but closed rooms collects nothing, so it gets the notice
 });
 
 test("a run that refused for want of a room shows the notice, not its error", () => {
-  expect(briefingErrorText(NO_LABS_ERROR)).toBe(NO_LAB_NOTICE);
+  expect(briefingErrorText(NO_LABS_ERROR)).toBe(noLabNotice());
 });
 
 test("every other error reaches the reader as it came", () => {
@@ -56,7 +56,8 @@ test("every other error reaches the reader as it came", () => {
 });
 
 test("the notice says what stopped, why, and what to do about it", () => {
-  expect(NO_LAB_NOTICE).toContain("No lab is open");
-  expect(NO_LAB_NOTICE).toContain("no briefing is being built");
-  expect(NO_LAB_NOTICE).toContain("the companion will propose one");
+  const notice = noLabNotice();
+  expect(notice).toContain("No lab is open");
+  expect(notice).toContain("no briefing is being built");
+  expect(notice).toContain("the companion will propose one");
 });
