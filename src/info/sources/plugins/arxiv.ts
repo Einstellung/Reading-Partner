@@ -22,6 +22,7 @@ import {
   type IndexQuery,
 } from "../plugin";
 import type { InfoItem } from "../item";
+import { t } from "../../../i18n";
 
 const HOST = "export.arxiv.org";
 const DEFAULT_LIMIT = 50;
@@ -44,18 +45,18 @@ interface ArxivIndexQuery {
 function readQuery(q: IndexQuery): ArxivIndexQuery | string {
   const categories = queryStrings(q, "categories");
   const bad = categories.find((c) => !CATEGORY_RE.test(c));
-  if (bad !== undefined) return `unknown arXiv category "${bad}" (expected e.g. cs.RO)`;
+  if (bad !== undefined) return t("sources.plugins.arxiv.unknownCategory", { category: bad });
   const rawTerms = queryStrings(q, "terms");
   // Every term is cleaned to the words an all: search can use (the export API
   // has no free-text query); one term may yield several words.
-  const terms = [...new Set(rawTerms.flatMap((t) => arxivQueryTerms(t)))];
-  if (rawTerms.length && !terms.length) return "terms contain no searchable words";
-  if (!categories.length && !terms.length) return "query needs categories or terms";
+  const terms = [...new Set(rawTerms.flatMap((term) => arxivQueryTerms(term)))];
+  if (rawTerms.length && !terms.length) return t("sources.plugins.arxiv.termsNoSearchableWords");
+  if (!categories.length && !terms.length) return t("sources.plugins.arxiv.needsCategoriesOrTerms");
   let days = DEFAULT_DAYS;
   if (q.days !== undefined) {
     const d = queryInt(q, "days");
-    if (d === undefined) return "days must be a positive integer";
-    if (d > MAX_DAYS) return `days must be at most ${MAX_DAYS}`;
+    if (d === undefined) return t("sources.plugins.daysPositiveInteger");
+    if (d > MAX_DAYS) return t("sources.plugins.daysMustBeAtMost", { max: MAX_DAYS });
     days = d;
   }
   return { categories, terms, days };

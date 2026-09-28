@@ -26,6 +26,7 @@ import {
   type IndexQuery,
 } from "../plugin";
 import type { InfoItem, ItemSignals } from "../item";
+import { t } from "../../../i18n";
 
 const HOST = "https://huggingface.co";
 const KINDS = ["papers", "models", "datasets"] as const;
@@ -72,34 +73,36 @@ function parse(q: IndexQuery): Parsed {
 function validateQuery(q: IndexQuery): string | null {
   const kind = q.kind;
   if (typeof kind !== "string" || !(KINDS as readonly string[]).includes(kind)) {
-    return `kind must be one of ${KINDS.join(", ")}`;
+    return t("sources.plugins.huggingface.kindMustBeOneOf", { kinds: KINDS.join(", ") });
   }
   const papers = kind === "papers";
   if (q.days !== undefined) {
-    if (!papers) return "days applies to papers only";
+    if (!papers) return t("sources.plugins.huggingface.daysPapersOnly");
     const n = queryInt(q, "days");
-    if (n === undefined || q.days !== n) return "days must be a positive integer";
-    if (n > MAX_DAYS) return `days must be at most ${MAX_DAYS}`;
+    if (n === undefined || q.days !== n) return t("sources.plugins.daysPositiveInteger");
+    if (n > MAX_DAYS) return t("sources.plugins.daysMustBeAtMost", { max: MAX_DAYS });
   }
   for (const key of ["pipelineTag", "author"]) {
     if (q[key] === undefined) continue;
-    if (papers) return `${key} applies to models and datasets only`;
-    if (typeof q[key] !== "string" || !(q[key] as string).trim()) return `${key} must be a non-empty string`;
+    if (papers) return t("sources.plugins.huggingface.fieldAppliesToModelsDatasetsOnly", { field: key });
+    if (typeof q[key] !== "string" || !(q[key] as string).trim())
+      return t("sources.plugins.huggingface.fieldMustBeNonEmptyString", { field: key });
   }
   if (q.tags !== undefined) {
-    if (papers) return "tags applies to models and datasets only";
-    const ok = Array.isArray(q.tags) && q.tags.every((t) => typeof t === "string" && t.trim());
-    if (!ok) return "tags must be a list of non-empty strings";
+    if (papers) return t("sources.plugins.huggingface.fieldAppliesToModelsDatasetsOnly", { field: "tags" });
+    const ok = Array.isArray(q.tags) && q.tags.every((tag) => typeof tag === "string" && tag.trim());
+    if (!ok) return t("sources.plugins.huggingface.tagsMustBeNonEmptyStrings");
   }
   if (q.sort !== undefined) {
-    if (papers) return "sort applies to models and datasets only";
+    if (papers) return t("sources.plugins.huggingface.fieldAppliesToModelsDatasetsOnly", { field: "sort" });
     if (typeof q.sort !== "string" || !(SORTS as readonly string[]).includes(q.sort)) {
-      return `sort must be one of ${SORTS.join(", ")}`;
+      return t("sources.plugins.huggingface.sortMustBeOneOf", { sorts: SORTS.join(", ") });
     }
   }
   if (q.includeConversions !== undefined) {
-    if (kind !== "models") return "includeConversions applies to models only";
-    if (typeof q.includeConversions !== "boolean") return "includeConversions must be a boolean";
+    if (kind !== "models") return t("sources.plugins.huggingface.includeConversionsModelsOnly");
+    if (typeof q.includeConversions !== "boolean")
+      return t("sources.plugins.huggingface.includeConversionsMustBeBoolean");
   }
   return null;
 }
@@ -153,9 +156,9 @@ async function fetchRows(url: string, deps: PluginDeps): Promise<Record<string, 
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error(`Hugging Face returned non-JSON from ${url}`);
+    throw new Error(t("sources.plugins.huggingface.nonJson", { url }));
   }
-  if (!Array.isArray(data)) throw new Error(`Hugging Face returned an unexpected shape from ${url}`);
+  if (!Array.isArray(data)) throw new Error(t("sources.plugins.huggingface.unexpectedShape", { url }));
   return data.filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
 }
 

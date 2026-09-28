@@ -12,6 +12,7 @@
 // in info/extract/webview-session.ts.
 
 import type { SourceDescriptor } from "./descriptor";
+import { t } from "../../i18n";
 
 /** One site the reader can sign in to, and the sources behind it. */
 export interface SignInSite {
@@ -120,9 +121,9 @@ export function resolveSignInSite(sites: SignInSite[], identifier: string): Sign
 
 /** What the sources page prints for a site that nothing is happening to. */
 export function sessionLabel(state: SiteSessionState | undefined): string {
-	if (!state) return "Not checked";
-	if (state.unknown) return "Could not tell";
-	return state.signedIn ? "Signed in" : "Not signed in";
+	if (!state) return t("sources.session.notChecked");
+	if (state.unknown) return t("sources.session.couldNotTell");
+	return state.signedIn ? t("sources.session.signedIn") : t("sources.session.notSignedIn");
 }
 
 /**
@@ -151,13 +152,13 @@ export function sessionWorkLabel(work: SessionWork): string {
 		// title says the same thing where they are actually looking
 		// (webview_fetch/session.rs).
 		case "signing-in":
-			return "Finish in the sign-in window, then close it";
+			return t("sources.session.workSigningIn");
 		case "confirming":
-			return "Confirming your sign-in…";
+			return t("sources.session.workConfirming");
 		case "checking":
-			return "Checking the site…";
+			return t("sources.session.workChecking");
 		case "signing-out":
-			return "Signing out…";
+			return t("sources.session.workSigningOut");
 	}
 }
 
@@ -174,7 +175,9 @@ export function sessionRowLine(
 ): string {
 	if (work) return sessionWorkLabel(work);
 	const sources =
-		site.sourceNames.length === 1 ? site.sourceNames[0] : `${site.sourceNames.length} sources`;
+		site.sourceNames.length === 1
+			? site.sourceNames[0]
+			: t("sources.session.sourcesCount", { count: site.sourceNames.length });
 	return `${sessionLabel(state)} · ${sources}`;
 }
 

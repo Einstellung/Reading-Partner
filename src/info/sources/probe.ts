@@ -18,6 +18,7 @@ import { BUILTIN_SOURCES, builtinCaveat } from "./builtins";
 import type { FetchFn } from "../extract/http";
 import type { Fulltext, SourceDescriptor } from "./descriptor";
 import { pluginOf } from "./plugin";
+import { t } from "../../i18n";
 
 // The feed paths tried in order, most common first. wp-json is last: it is a full
 // JSON API, only reached when the plain feed paths miss.
@@ -279,20 +280,23 @@ export function pipeLabel(desc: SourceDescriptor): string {
   const f = desc.fulltext;
   if (d.kind === "json-api") {
     return f.mode === "detail-endpoint" || (f.mode === "feed-field" && d.fields.content)
-      ? "API with full articles"
-      : "API, headlines only";
+      ? t("sources.pipe.apiFullArticles")
+      : t("sources.pipe.apiHeadlinesOnly");
   }
-  if (d.kind === "listpage") return "Article list, fetches each page";
-  if (d.kind === "stream") return "Live updates";
+  if (d.kind === "listpage") return t("sources.pipe.articleList");
+  if (d.kind === "stream") return t("sources.pipe.liveUpdates");
   if (d.kind === "index") {
     const found = pluginOf(desc);
-    return found ? `${found.provider.name}: ${found.provider.describeQuery(found.query)}` : `Index query (${d.provider})`;
+    return found
+      ? `${found.provider.name}: ${found.provider.describeQuery(found.query)}`
+      : t("sources.pipe.indexQuery", { provider: d.provider });
   }
   // feed discovery
-  if (f.mode === "feed-field") return f.truncationMarker ? "Full text in feed (some paywalled)" : "Full text in feed";
-  if (f.mode === "fetch-page") return "Feed headlines, fetches each page";
-  if (f.mode === "webview") return "Feed headlines, opens each article in a browser window";
-  return "Headlines only, opens in browser";
+  if (f.mode === "feed-field")
+    return f.truncationMarker ? t("sources.pipe.fullTextInFeedPaywalled") : t("sources.pipe.fullTextInFeed");
+  if (f.mode === "fetch-page") return t("sources.pipe.feedFetchesPage");
+  if (f.mode === "webview") return t("sources.pipe.feedOpensWindow");
+  return t("sources.pipe.headlinesOnlyBrowser");
 }
 
 // --- builtin domain matching -----------------------------------------------

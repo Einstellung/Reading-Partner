@@ -2,7 +2,9 @@
 // per area; the area's own directory under messages/ holds its nine files.
 
 import settings from "./messages/settings";
+import sources from "./messages/sources";
 
 export const AREAS = {
   settings,
+  sources,
 };

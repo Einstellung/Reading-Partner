@@ -25,20 +25,21 @@ import {
   type SiteSessions,
   type SignInSite,
 } from "../../../info/sources/site-session";
+import { useT, type Translate } from "../../../i18n";
 import { HIT_44 } from "../base/buttons";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import { roomsUsingSource } from "./sources-page";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: Translate): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (s < 60) return `${s}s ago`;
+  if (s < 60) return t("sources.time.secondsAgo", { count: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return t("sources.time.minutesAgo", { count: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (h < 24) return t("sources.time.hoursAgo", { count: h });
+  return t("sources.time.daysAgo", { count: Math.floor(h / 24) });
 }
 
 // Green when the last run succeeded at least as recently as any failure; amber
@@ -53,6 +54,7 @@ function healthState(h: SourceHealth | undefined): "ok" | "warn" | "unknown" {
 }
 
 function HealthDot({ health }: { health: SourceHealth | undefined }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const state = healthState(health);
@@ -76,21 +78,24 @@ function HealthDot({ health }: { health: SourceHealth | undefined }) {
           HIT_44 makes it tappable. */}
       <button
         type="button"
-        aria-label="Source health"
+        aria-label={t("sources.healthAriaLabel")}
         onClick={() => setOpen((v) => !v)}
         className={`relative h-2.5 w-2.5 rounded-full ${HIT_44} ${color}`}
       />
       {open && health && (
         <div className="absolute right-0 top-4 z-10 w-56 rounded-lg border border-border bg-popover p-3 text-left text-[12px] shadow-lg">
           {health.lastSuccess ? (
-            <div className="text-muted-foreground">Last success: {timeAgo(health.lastSuccess)}</div>
+            <div className="text-muted-foreground">
+              {t("sources.lastSuccess", { time: timeAgo(health.lastSuccess, t) })}
+            </div>
           ) : (
-            <div className="text-faint-foreground">No successful run yet.</div>
+            <div className="text-faint-foreground">{t("sources.noSuccessYet")}</div>
           )}
           {health.lastError && (
             <div className="mt-1.5 text-[#c0392b]">
-              {health.lastErrorAt ? `${timeAgo(health.lastErrorAt)}: ` : ""}
-              {health.lastError}
+              {health.lastErrorAt
+                ? t("sources.errorLine", { time: timeAgo(health.lastErrorAt, t), error: health.lastError })
+                : health.lastError}
             </div>
           )}
         </div>
@@ -109,6 +114,7 @@ function SignInRow(props: {
   onCheck: (site: SignInSite) => void;
   onSignOut: (site: SignInSite) => void;
 }) {
+  const t = useT();
   const { site, sessions, busy } = props;
   const state = sessions[site.host];
   const work = sessionWorkFor(busy, site.host);
@@ -131,17 +137,17 @@ function SignInRow(props: {
         size="chip"
         disabled={working}
         onClick={() => props.onCheck(site)}
-        title="Load the site in the background and see whether it still asks you to sign in"
+        title={t("sources.checkTitle")}
       >
-        Check
+        {t("sources.check")}
       </Button>
       {signedIn ? (
         <Button variant="subtle" size="chip" disabled={working} onClick={() => props.onSignOut(site)}>
-          Sign out
+          {t("sources.signOut")}
         </Button>
       ) : (
         <Button variant="cta" size="chip" disabled={working} onClick={() => props.onSignIn(site)}>
-          Sign in
+          {t("sources.signIn")}
         </Button>
       )}
     </li>
@@ -174,6 +180,7 @@ export interface SourcesPageProps {
 }
 
 export function SourcesPage(props: SourcesPageProps) {
+  const t = useT();
   const sites = signInSites(props.sources);
   const [removing, setRemoving] = useState<SourceDescriptor | null>(null);
 
@@ -181,16 +188,13 @@ export function SourcesPage(props: SourcesPageProps) {
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
       <div className="mb-6 flex items-center gap-3">
         <Button variant="subtle" size="chip" onClick={props.onBack}>
-          ‹ Briefing
+          {t("sources.backToBriefing")}
         </Button>
-        <span className="text-[15px] font-medium text-foreground">Sources</span>
+        <span className="text-[15px] font-medium text-foreground">{t("sources.title")}</span>
       </div>
 
       {/* Adding is a thing you say, not a thing you type here (docs/63). */}
-      <p className="mb-6 mt-0 text-[13px] leading-relaxed text-faint-foreground">
-        To add a source, tell the AI about it — say the site or feed you want followed and it
-        checks the source works before it goes on this list.
-      </p>
+      <p className="mb-6 mt-0 text-[13px] leading-relaxed text-faint-foreground">{t("sources.addHint")}</p>
 
       {/* What the collecting machine's sessions look like, on a device that has
           no webview to sign in with (docs/36). Read-only on purpose: the cookie
@@ -198,11 +202,12 @@ export function SourcesPage(props: SourcesPageProps) {
       {sites.length > 0 && !props.onSignIn && props.collectorSites && (
         <div className="mb-6">
           <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-faint-foreground">
-            Signed-in sites
+            {t("sources.signedInSites")}
           </div>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {sites.map((site) => {
               const signedIn = props.collectorSites?.sites[site.host] === true;
+              const device = props.collectorSites?.deviceName ?? "";
               return (
                 <li
                   key={site.host}
@@ -218,8 +223,8 @@ export function SourcesPage(props: SourcesPageProps) {
                     </div>
                     <div className="truncate text-[12px] text-faint-foreground">
                       {signedIn
-                        ? `Signed in on ${props.collectorSites?.deviceName}`
-                        : `Needs signing in on ${props.collectorSites?.deviceName} for the full text`}
+                        ? t("sources.collectorSignedIn", { device })
+                        : t("sources.collectorNeedsSignIn", { device })}
                     </div>
                   </div>
                 </li>
@@ -234,7 +239,7 @@ export function SourcesPage(props: SourcesPageProps) {
       {sites.length > 0 && props.onSignIn && (
         <div className="mb-6">
           <div className="mb-2 text-[12px] font-medium uppercase tracking-wide text-faint-foreground">
-            Signed-in sites
+            {t("sources.signedInSites")}
           </div>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {sites.map((site) => (
@@ -250,15 +255,14 @@ export function SourcesPage(props: SourcesPageProps) {
             ))}
           </ul>
           <p className="mt-2 text-[12px] leading-relaxed text-faint-foreground">
-            Signing in opens the site's own page in a window. Close it when you are done — your
-            password never reaches this app, and only the site's cookie stays behind.
+            {t("sources.signInNote")}
           </p>
         </div>
       )}
 
       {/* The list. */}
       {props.sources.length === 0 ? (
-        <p className="my-3.5 text-[14px] text-faint-foreground">No sources yet.</p>
+        <p className="my-3.5 text-[14px] text-faint-foreground">{t("sources.empty")}</p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {props.sources.map((s) => {
@@ -289,14 +293,14 @@ export function SourcesPage(props: SourcesPageProps) {
                 </div>
                 <Switch
                   checked={s.enabled}
-                  aria-label={`Enable ${s.name}`}
+                  aria-label={t("sources.enableAriaLabel", { name: s.name })}
                   onCheckedChange={(v) => props.onToggle(s.id, v)}
                 />
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Remove source"
-                  title="Remove"
+                  aria-label={t("sources.removeAriaLabel")}
+                  title={t("sources.remove")}
                   onClick={() => setRemoving(s)}
                   className="h-7 w-7 flex-none rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:text-[#c0392b] group-hover:opacity-100"
                 >
@@ -310,9 +314,9 @@ export function SourcesPage(props: SourcesPageProps) {
 
       {removing && (
         <ConfirmDestructiveDialog
-          title={`Remove “${removing.name}”?`}
-          description="Nothing more is collected from it. To follow it again, tell the AI about it."
-          actionLabel="Remove"
+          title={t("sources.removeConfirmTitle", { name: removing.name })}
+          description={t("sources.removeConfirmDescription")}
+          actionLabel={t("sources.remove")}
           open
           onOpenChange={(open) => !open && setRemoving(null)}
           onConfirm={() => props.onRemove(removing.id)}
