@@ -62,8 +62,12 @@ export function localeForSetting(
 let current: Locale = matchLocale(systemLanguages());
 const listeners = new Set<() => void>();
 
+// <html lang> picks the CJK glyph variant for text the UI did not write (book
+// text, AI replies). It stays "zh", as index.html always had it, unless the UI
+// itself is Japanese or Korean.
 function markDocument(locale: Locale): void {
-  if (typeof document !== "undefined") document.documentElement.lang = locale;
+  if (typeof document === "undefined") return;
+  document.documentElement.lang = locale === "ja" || locale === "ko" ? locale : "zh";
 }
 markDocument(current);
 
