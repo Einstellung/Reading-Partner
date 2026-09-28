@@ -10,7 +10,7 @@
 //   ?width=<px>      the column's width (default 393)
 //   ?paper=<name>    white | paper | green | dark; ?font=<px>, ?line=<n>, ?pad=<px>
 
-import { ANNOTATION_COLORS } from "../platform/app/annotations";
+import { HIGHLIGHT_COLOR } from "../platform/app/annotations";
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { buildEpub, prose } from "../../tests/reading/epub/fixture";
@@ -79,7 +79,7 @@ function Harness(props: {
   display: FlowDisplay;
   log: FlowLog;
 }) {
-  const [tool, setTool] = useState<FlowTool>({ type: "none", color: ANNOTATION_COLORS[0].color });
+  const [tool, setTool] = useState<FlowTool>({ type: "none", color: HIGHLIGHT_COLOR });
   const [display, setDisplay] = useState<FlowDisplay>(props.display);
   const { log } = props;
   useEffect(() => {

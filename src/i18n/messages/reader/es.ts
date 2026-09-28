@@ -19,8 +19,6 @@ export default {
   "pen.aiPen": "Bolígrafo IA",
   "pen.toolsLabel": "Herramientas de lectura",
   "pen.disabledReason": "{label}: {reason}",
-  "pen.color": "Color",
-  "pen.colors": "Colores",
 
   "top.learnBook": "Aprender este libro con IA",
   "top.zoomIn": "Acercar",
@@ -163,12 +161,4 @@ export default {
   "gate.bookThreadOpen": "La conversación de este libro ya está abierta.",
   "gate.bookThreadBehind": "La conversación del libro está detrás de esta conversación paralela.",
   "aside.receiptSummary": { one: "{count} pregunta durante la lectura", other: "{count} preguntas durante la lectura" },
-  "color.yellow": "Amarillo",
-  "color.red": "Rojo",
-  "color.green": "Verde",
-  "color.blue": "Azul",
-  "color.purple": "Morado",
-  "color.magenta": "Magenta",
-  "color.orange": "Naranja",
-  "color.gray": "Gris",
 } satisfies Translation<typeof en>;

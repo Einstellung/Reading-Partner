@@ -19,8 +19,6 @@ export default {
   "pen.aiPen": "KI-Stift",
   "pen.toolsLabel": "Lesewerkzeuge",
   "pen.disabledReason": "{label}: {reason}",
-  "pen.color": "Farbe",
-  "pen.colors": "Farben",
 
   "top.learnBook": "Dieses Buch mit KI lernen",
   "top.zoomIn": "Vergrößern",
@@ -163,12 +161,4 @@ export default {
   "gate.bookThreadOpen": "Die Unterhaltung zu diesem Buch ist bereits geöffnet.",
   "gate.bookThreadBehind": "Die Unterhaltung zum Buch liegt hinter diesem Seitengespräch.",
   "aside.receiptSummary": { one: "{count} Frage beim Lesen", other: "{count} Fragen beim Lesen" },
-  "color.yellow": "Gelb",
-  "color.red": "Rot",
-  "color.green": "Grün",
-  "color.blue": "Blau",
-  "color.purple": "Lila",
-  "color.magenta": "Magenta",
-  "color.orange": "Orange",
-  "color.gray": "Grau",
 } satisfies Translation<typeof en>;

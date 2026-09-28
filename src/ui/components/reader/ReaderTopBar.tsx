@@ -6,7 +6,6 @@
 import type { RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
 import type { LevelGate } from "../../../reading/turn/call-state";
-import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
 import { useT } from "../../../i18n";
 import type { ToolType } from "./types";
 import {
@@ -173,7 +172,6 @@ export default function ReaderTopBar(props: {
         <PenToolbar
           orientation="horizontal"
           tool={props.tool}
-          colors={ANNOTATION_COLORS}
           onToolChange={props.onToolChange}
           disabled={gate.aiPen === null ? undefined : { ai: gate.aiPen }}
         />

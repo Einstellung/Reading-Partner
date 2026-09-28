@@ -8,6 +8,7 @@
 // whole reason the marks are two hooks rather than one.
 
 import { useCallback, useEffect } from "react";
+import { HIGHLIGHT_COLOR } from "../../platform/app/annotations";
 import { isPageMark, type Annotation, type AnnotationPopupParams, type ViewInstance } from "../../platform/app/reader-contract";
 import {
   createAsideThread,
@@ -48,10 +49,8 @@ export interface MarkDoorsHost {
   // stroke gave no pen-lift.
   readerPaneRef: HostRef<HTMLDivElement | null>;
 
-  // Whether the pen in the rack is the AI pen, and the color the other two draw
-  // in. Both are the shell's tool state.
+  // Whether the pen in the rack is the AI pen: the shell's tool state.
   aiPen: boolean;
-  penColor: string;
 
   // A mark landing is one of the two things that start preparation (docs/09).
   onMarkPrepTrigger(): void;
@@ -85,7 +84,6 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
     bookIdRef,
     readerPaneRef,
     aiPen,
-    penColor,
     onMarkPrepTrigger,
     setSidebarOpen,
     openThreadCall,
@@ -286,7 +284,7 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
       const mark = buildChatMark({
         ...draw,
         id: crypto.randomUUID(),
-        color: draw.pen === "ai" ? AI_PEN_COLOR : penColor,
+        color: draw.pen === "ai" ? AI_PEN_COLOR : HIGHLIGHT_COLOR,
         threadId: lesson.threadId,
         ...(aiThreadId ? { aiThreadId } : {}),
       });
@@ -310,7 +308,6 @@ export function useMarkDoors(host: MarkDoorsHost): MarkDoors {
       openChatAside(asideAnchor, { annotationId: mark.id, threadId: aiThreadId });
     },
     [
-      penColor,
       persistChatMark,
       syncTraceList,
       currentCall,

@@ -19,8 +19,6 @@ export default {
   "pen.aiPen": "AI 펜",
   "pen.toolsLabel": "읽기 도구",
   "pen.disabledReason": "{label}: {reason}",
-  "pen.color": "색상",
-  "pen.colors": "색상",
 
   "top.learnBook": "AI와 이 책 배우기",
   "top.zoomIn": "확대",
@@ -163,12 +161,4 @@ export default {
   "gate.bookThreadOpen": "이 책의 대화가 이미 열려 있습니다.",
   "gate.bookThreadBehind": "이 책의 대화는 이 곁가지 대화 뒤에 있습니다.",
   "aside.receiptSummary": { other: "읽는 동안 한 질문 {count}개" },
-  "color.yellow": "노란색",
-  "color.red": "빨간색",
-  "color.green": "초록색",
-  "color.blue": "파란색",
-  "color.purple": "보라색",
-  "color.magenta": "자홍색",
-  "color.orange": "주황색",
-  "color.gray": "회색",
 } satisfies Translation<typeof en>;

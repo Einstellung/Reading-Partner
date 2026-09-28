@@ -19,8 +19,6 @@ export default {
   "pen.aiPen": "AIペン",
   "pen.toolsLabel": "読書ツール",
   "pen.disabledReason": "{label}: {reason}",
-  "pen.color": "カラー",
-  "pen.colors": "カラー",
 
   "top.learnBook": "AIとこの本を読む",
   "top.zoomIn": "拡大",
@@ -163,12 +161,4 @@ export default {
   "gate.bookThreadOpen": "この本の会話はすでに開いています。",
   "gate.bookThreadBehind": "この本の会話は、この脇道の会話の後ろにあります。",
   "aside.receiptSummary": { other: "読書中の質問 {count} 件" },
-  "color.yellow": "イエロー",
-  "color.red": "レッド",
-  "color.green": "グリーン",
-  "color.blue": "ブルー",
-  "color.purple": "パープル",
-  "color.magenta": "マゼンタ",
-  "color.orange": "オレンジ",
-  "color.gray": "グレイ",
 } satisfies Translation<typeof en>;

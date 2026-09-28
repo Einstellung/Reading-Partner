@@ -1,23 +1,22 @@
-// AnnotationPopup: editor shown when an existing annotation is clicked —
-// recolor, edit comment, delete. Pure and controlled; styled with Tailwind
-// utilities. The parent supplies the anchor in viewport coordinates.
+// AnnotationPopup: editor shown when an existing annotation is clicked — edit
+// comment, delete. A mark keeps the color it was drawn in; nothing here changes
+// it. Pure and controlled; styled with Tailwind utilities. The parent supplies
+// the anchor in viewport coordinates.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '../../../i18n';
-import { IconClose, IconColorSwatch, IconTrash } from '../base/icons';
+import { IconClose, IconTrash } from '../base/icons';
 import { placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
 import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useCloseOnOutsidePress, useOverlaySafePadding } from '../ui/overlay';
-import type { Annotation, ColorEntry } from './types';
-import { colorLabel } from './color-label';
+import type { Annotation } from './types';
 
 interface AnnotationPopupProps {
 	annotation: Annotation;
 	anchor: { x: number; y: number };
-	colors: ColorEntry[];
-	onChange(id: string, patch: { color?: string; comment?: string }): void;
+	onChange(id: string, patch: { comment: string }): void;
 	onDelete(id: string): void;
 	onClose(): void;
 }
@@ -25,13 +24,7 @@ interface AnnotationPopupProps {
 const GAP = 10;
 const COMMENT_DEBOUNCE = 400;
 
-// The 9-colour palette is too dense for a full 44px per swatch; a 36px coarse
-// target is the practical compromise (the popup widens and the row wraps to
-// keep the swatches reachable on touch). Geometry only: the fill and the hover
-// come from the ghost variant.
-const ICON_BTN = 'h-6 w-6 coarse:h-9 coarse:w-9 rounded active:bg-accent';
-
-export default function AnnotationPopup({ annotation, anchor, colors, onChange, onDelete, onClose }: AnnotationPopupProps) {
+export default function AnnotationPopup({ annotation, anchor, onChange, onDelete, onClose }: AnnotationPopupProps) {
 	const t = useT();
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -97,27 +90,12 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 			role="dialog"
 			aria-label={t("reader.popup.title")}
 		>
-			<div className="flex flex-wrap items-center gap-0.5">
-				{colors.map((c) => (
-					<Button
-						key={c.color}
-						type="button"
-						variant="ghost"
-						size={null}
-						className={ICON_BTN + (annotation.color === c.color ? ' ring-2 ring-inset ring-primary' : '')}
-						title={colorLabel(t, c.name)}
-						aria-label={colorLabel(t, c.name)}
-						aria-pressed={annotation.color === c.color}
-						onClick={() => onChange(annotation.id, { color: c.color })}
-					>
-						<IconColorSwatch color={c.color} size={18} />
-					</Button>
-				))}
+			<div className="flex items-center justify-end">
 				<Button
 					type="button"
 					variant="ghost"
 					size={null}
-					className={`${ICON_BTN} ml-auto text-neutral-500`}
+					className="h-6 w-6 coarse:h-9 coarse:w-9 rounded active:bg-accent text-neutral-500"
 					title={t("reader.popup.close")}
 					aria-label={t("reader.popup.close")}
 					onClick={onClose}

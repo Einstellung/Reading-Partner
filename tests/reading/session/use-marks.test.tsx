@@ -103,7 +103,6 @@ function mount(initial: { aiPen: boolean }) {
         bookIdRef: docIdRef,
         readerPaneRef,
         aiPen: props.aiPen,
-        penColor: "#ffd400",
         onMarkPrepTrigger: doors.onMarkPrepTrigger,
         setSidebarOpen: doors.setSidebarOpen,
         openThreadCall: doors.openThreadCall,

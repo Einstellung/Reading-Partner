@@ -19,8 +19,6 @@ export default {
   "pen.aiPen": "AI 笔",
   "pen.toolsLabel": "阅读工具",
   "pen.disabledReason": "{label}：{reason}",
-  "pen.color": "颜色",
-  "pen.colors": "颜色",
 
   "top.learnBook": "用 AI 学这本书",
   "top.zoomIn": "放大",
@@ -161,12 +159,4 @@ export default {
   "gate.bookThreadOpen": "这本书的对话已经打开了。",
   "gate.bookThreadBehind": "这本书的对话就在这段旁支对话后面。",
   "aside.receiptSummary": { other: "阅读时提了 {count} 个问题" },
-  "color.yellow": "黄色",
-  "color.red": "红色",
-  "color.green": "绿色",
-  "color.blue": "蓝色",
-  "color.purple": "紫色",
-  "color.magenta": "品红",
-  "color.orange": "橙色",
-  "color.gray": "灰色",
 } satisfies Translation<typeof en>;

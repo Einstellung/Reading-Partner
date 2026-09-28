@@ -1,21 +1,15 @@
 // PenToolbar: the annotation tool rack. Pure and controlled — the parent owns
 // the current Tool (including sticky behaviour); this renders it and reports
-// changes. Styled with Tailwind utilities.
+// changes. Styled with Tailwind utilities. The highlighter draws in one color,
+// so the rack has no color control.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT, type Translate } from '../../../i18n';
-import { IconAskHere, IconColorSwatch, IconHighlight, IconPointer } from '../base/icons';
-import { placePanel } from '../common/panel-position';
-import { useViewportSize } from '../common/useViewportSize';
+import { IconAskHere, IconHighlight, IconPointer } from '../base/icons';
 import { Button } from '../ui/button';
-import { cn } from '../lib/utils';
-import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
-import type { ColorEntry, Tool, ToolType } from './types';
-import { colorLabel } from './color-label';
+import type { Tool, ToolType } from './types';
 
 interface PenToolbarProps {
 	tool: Tool;
-	colors: ColorEntry[];
 	onToolChange(tool: Tool): void;
 	// 'horizontal' lays the rack out as a row for the header bar; 'vertical' is
 	// the floating rack beside the page.
@@ -43,12 +37,9 @@ function tools(t: Translate): { type: ToolType; label: string; Icon: (p: { size?
 }
 
 const CARD = 'rounded-xl border border-black/10 bg-popover shadow-lg';
-// Distance from the swatch to the palette that opens off it.
-const GAP = 8;
 
 export default function PenToolbar({
 	tool,
-	colors,
 	onToolChange,
 	orientation = 'vertical',
 	disabled,
@@ -56,84 +47,12 @@ export default function PenToolbar({
 }: PenToolbarProps) {
 	const t = useT();
 	const TOOLS = tools(t);
-	const [paletteOpen, setPaletteOpen] = useState(false);
-	// Where the open palette sits, in viewport coordinates. It cannot be laid out
-	// against the swatch: the header's tool band scrolls horizontally, and a
-	// scroll container clips both axes, so an absolutely-positioned popover
-	// hanging below the bar never reaches the screen.
-	const [palettePos, setPalettePos] = useState<{ left: number; top: number } | null>(null);
-	const paletteRef = useRef<HTMLDivElement>(null);
-	const popoverRef = useRef<HTMLDivElement>(null);
-	const swatchRef = useRef<HTMLButtonElement>(null);
-	const viewport = useViewportSize();
-	// Smallest distance from the palette to a viewport edge, per edge: the palette
-	// is `fixed`, so the shell's safe-area padding misses it (docs/pitfall/74).
-	// Without an inset this is the plain 8px gutter, as it was.
-	const margin = useOverlaySafePadding();
 	const horizontal = orientation === 'horizontal';
-	// Only the highlighter paints in a color; the navigation lock, the AI pen and
-	// the all-unselected state do not.
-	const hasColor = tool.type === 'highlight';
-
-	// Horizontal hangs the palette below the swatch and centres it on it; vertical
-	// opens it to the swatch's side. Both are measured and clamped to the viewport:
-	// the header's tool band scrolls, so the swatch can sit against the screen edge
-	// with half the palette's colors past it. A closed palette has nothing to
-	// place and sets nothing: a state update from a layout effect is one more
-	// nested sync render even when it changes nothing (docs/pitfall/457).
-	useLayoutEffect(() => {
-		if (!paletteOpen) return;
-		const swatch = swatchRef.current;
-		const popover = popoverRef.current;
-		if (!swatch || !popover) return;
-		const rect = popover.getBoundingClientRect();
-		setPalettePos(
-			placePanel({
-				anchor: swatch.getBoundingClientRect(),
-				panel: { width: rect.width, height: rect.height },
-				viewport,
-				placement: horizontal ? 'below' : 'right',
-				gap: GAP,
-				margin,
-			}),
-		);
-	}, [paletteOpen, horizontal, viewport, margin]);
-
-	// A press outside shuts the palette. pointerdown, not mousedown, and capture:
-	// docs/pitfall/webview/67-webkit-tap-does-not-focus-a-button.md.
-	useEffect(() => {
-		if (!paletteOpen) return;
-		function onDown(e: PointerEvent) {
-			if (paletteRef.current && !paletteRef.current.contains(e.target as Node)) {
-				setPaletteOpen(false);
-			}
-		}
-		document.addEventListener('pointerdown', onDown, true);
-		return () => document.removeEventListener('pointerdown', onDown, true);
-	}, [paletteOpen]);
-
-	useEffect(() => {
-		if (!hasColor) setPaletteOpen(false);
-	}, [hasColor]);
 
 	// Pressing the active button releases it: the rack drops to 'none', which is
 	// the traditional mode, not another tool.
 	function pickTool(type: ToolType) {
 		onToolChange({ type: type === tool.type ? 'none' : type, color: tool.color });
-	}
-
-	// Reaching for the color is reaching for the highlighter, the one pen the
-	// color belongs to, so the swatch picks it up rather than sitting there dead.
-	function pickSwatch() {
-		if (!hasColor) onToolChange({ type: 'highlight', color: tool.color });
-		// Opening: hidden again until the layout effect has measured it.
-		if (!hasColor || !paletteOpen) setPalettePos(null);
-		setPaletteOpen((v) => !hasColor || !v);
-	}
-
-	function pickColor(color: string) {
-		setPaletteOpen(false);
-		if (color !== tool.color) onToolChange({ type: tool.type, color });
 	}
 
 	// Horizontal lives inside the header bar (the header is its surface); the
@@ -194,77 +113,6 @@ export default function PenToolbar({
 					</Button>
 				);
 			})}
-
-			{/* The divider and swatch always hold their place so the rack width never
-			    jumps between tools. */}
-			<div className={horizontal ? 'mx-1 h-5 w-px bg-black/10' : 'my-0.5 h-px w-6 bg-black/10'} />
-
-			<div className="relative flex" ref={paletteRef}>
-				{/* The swatch is the palette's anchor, so the ref has to resolve: Button
-				    forwards it (docs/pitfall/95). */}
-				<Button
-					ref={swatchRef}
-					type="button"
-					variant="ghost"
-					size={null}
-					className={
-						`rounded-lg ${toolSize} text-neutral-700` +
-						(paletteOpen ? ' bg-secondary text-secondary-foreground can-hover:hover:bg-secondary' : '')
-					}
-					title={t('reader.pen.color')}
-					aria-label={t('reader.pen.color')}
-					aria-haspopup="true"
-					aria-expanded={paletteOpen}
-					onClick={pickSwatch}
-				>
-					<IconColorSwatch color={tool.color} size={20} />
-				</Button>
-
-				{paletteOpen && (
-					<div
-						ref={popoverRef}
-						// Hidden at the origin until it has been measured: clamping needs the
-						// palette's own size, which the swatch cannot supply. The layout
-						// effect places it before the browser paints.
-						style={
-							palettePos
-								? { left: palettePos.left, top: palettePos.top, visibility: 'visible' }
-								: { left: 0, top: 0, visibility: 'hidden' }
-						}
-						className={cn(
-							// CARD first: it carries shadow-lg, and cn() lets the later class of
-							// a kind win, so the popover's deeper shadow-xl has to come after it.
-							CARD,
-							// Fixed column tracks: the popover shrinks to its content, so 1fr
-							// tracks would collapse. A track has to hold a whole swatch button,
-							// which is finger-sized on a touch device.
-							'fixed grid grid-cols-[repeat(4,1.75rem)] coarse:grid-cols-[repeat(4,2.75rem)] gap-0.5 p-1.5 shadow-xl',
-							OVERLAY_Z.floating,
-						)}
-						role="listbox"
-						aria-label={t('reader.pen.colors')}
-					>
-						{colors.map((c) => (
-							<Button
-								key={c.color}
-								type="button"
-								variant="ghost"
-								size={null}
-								role="option"
-								aria-selected={tool.color === c.color}
-								className={
-									'h-7 w-7 coarse:h-11 coarse:w-11 rounded-md' +
-									(tool.color === c.color ? ' ring-2 ring-inset ring-primary' : '')
-								}
-								title={colorLabel(t, c.name)}
-								onClick={() => pickColor(c.color)}
-							>
-								<IconColorSwatch color={c.color} size={18} />
-							</Button>
-						))}
-					</div>
-				)}
-			</div>
 		</div>
 	);
 }

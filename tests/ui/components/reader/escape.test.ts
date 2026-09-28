@@ -46,8 +46,8 @@ test("the sidebar drawer closes, the column stays", () => {
 });
 
 test("the rack's tools map to the reader view's", () => {
-  expect(readerTool("none", "#111")).toEqual({ type: "pointer" });
-  expect(readerTool("navlock", "#111")).toEqual({ type: "navlock" });
-  expect(readerTool("highlight", "#111")).toEqual({ type: "highlight", color: "#111" });
-  expect(readerTool("ai", "#111")).toEqual({ type: "underline", color: AI_PEN_COLOR });
+  expect(readerTool("none")).toEqual({ type: "pointer" });
+  expect(readerTool("navlock")).toEqual({ type: "navlock" });
+  expect(readerTool("highlight")).toEqual({ type: "highlight", color: "#ffd400" });
+  expect(readerTool("ai")).toEqual({ type: "underline", color: AI_PEN_COLOR });
 });

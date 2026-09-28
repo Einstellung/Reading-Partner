@@ -14,7 +14,6 @@
 // the type (docs/70).
 
 import { useT } from "../../../../i18n";
-import { ANNOTATION_COLORS } from "../../../../platform/app/annotations";
 import type { ViewStats } from "../../../../platform/app/reader-contract";
 import type { LessonDot } from "../../../../reading/session/lesson-dot";
 import { IconBookSparkle, IconOutline, IconTextSize } from "../../base/icons";
@@ -98,7 +97,6 @@ export default function PhoneReaderBar(props: {
           <PenToolbar
             orientation="horizontal"
             tool={props.tool}
-            colors={ANNOTATION_COLORS}
             onToolChange={props.onToolChange}
             disabled={{ ai: aiPenNotOnPhone() }}
             omit={PHONE_OMITTED_TOOLS}

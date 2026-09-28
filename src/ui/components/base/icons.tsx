@@ -82,16 +82,6 @@ export function IconArea({ size = 20 }: IconProps) {
 	);
 }
 
-// Round color dot with a faint rim so light colors keep an edge.
-export function IconColorSwatch({ color, size = 18 }: { color: string; size?: number }) {
-	return (
-		<svg width={size} height={size} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-			<circle cx="10" cy="10" r="7.5" fill={color} />
-			<circle cx="10" cy="10" r="7" stroke="currentColor" strokeOpacity="0.15" />
-		</svg>
-	);
-}
-
 // Plain X.
 export function IconClose({ size = 16 }: IconProps) {
 	return (
