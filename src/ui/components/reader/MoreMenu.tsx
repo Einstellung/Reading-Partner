@@ -4,6 +4,7 @@
 // mechanics — outside press, Escape, focus, arrow keys and typeahead.
 
 import { useRef, useState } from "react";
+import { useT } from "../../../i18n";
 import { IconChevronDown } from "../base/icons";
 import {
 	DropdownMenu,
@@ -47,6 +48,7 @@ const ROW =
 	"[&_svg:not([class*='size-'])]:size-auto [&_svg:not([class*='text-'])]:text-current";
 
 export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: boolean }) {
+	const t = useT();
 	const [open, setOpen] = useState(false);
 	// Whether the menu was up when the press started. Radix opens on pointerdown
 	// and an item clicks itself on a pointerup it never saw a pointerdown for, so
@@ -66,8 +68,8 @@ export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: 
 						"cursor-pointer can-hover:hover:bg-black/5 coarse:h-11 coarse:w-11 " +
 						"data-[state=open]:bg-black/5 data-[state=open]:text-foreground"
 					}
-					title={alert ? "More — sync needs attention" : "More"}
-					aria-label={alert ? "More — sync needs attention" : "More"}
+					title={alert ? t("reader.more.buttonAlert") : t("reader.more.button")}
+					aria-label={alert ? t("reader.more.buttonAlert") : t("reader.more.button")}
 					onPointerDown={(e) => {
 						wasOpen.current = open;
 						e.preventDefault();
@@ -112,7 +114,7 @@ export default function MoreMenu({ items, alert }: { items: MoreItem[]; alert?: 
 										(item.on ? "text-secondary-foreground" : "text-faint-foreground")
 									}
 								>
-									{item.on ? "On" : "Off"}
+									{item.on ? t("reader.more.on") : t("reader.more.off")}
 								</span>
 							)}
 						</>

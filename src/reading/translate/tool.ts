@@ -17,6 +17,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
+import { t } from "../../i18n";
 import type { TranslationHome } from "./replace";
 
 /** A document the tool could act on, as the shelf knows it. */
@@ -59,7 +60,10 @@ export function buildTranslateTools(deps: TranslateToolDeps): AgentTool[] {
   return [
     {
       name: "translate_document",
-      label: (args) => args.document ? `Translating “${args.document}”` : "Translating this document",
+      label: (args) =>
+        args.document
+          ? t("reader.translate.labelNamed", { title: String(args.document) })
+          : t("reader.translate.label"),
       effect: "write",
       description:
         "Translate a web article on the shelf into Chinese. The result is a " +
@@ -117,7 +121,7 @@ export function buildTranslateTools(deps: TranslateToolDeps): AgentTool[] {
             `background and the result replaces this document on the shelf; I will say ` +
             `when it is done.`,
           receipt: {
-            label: "Started a translation",
+            label: t("reader.translate.started"),
             summary: target.title,
             link: { kind: "run", id: started.runId },
           },

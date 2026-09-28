@@ -22,6 +22,7 @@ import { registerWorker, type WorkerContext, type WorkerHandle } from "../../leg
 import { writeRunOutput } from "../../legion/execute/outputs";
 import { StoppedError } from "../../legion/stop";
 import { appData } from "../../platform/app/appdata";
+import { t } from "../../i18n";
 import { formatOfBytes, readLibraryBook } from "../../platform/app/library";
 import { hostOf } from "../../platform/std/url";
 import type { Fulltext } from "../../fulltext/types";
@@ -89,11 +90,11 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
     const done = (async () => {
       const ask = parseIngestAsk(await readAsk(brief));
       stopped();
-      await ctx.report(`Fetching ${hostOf(ask.url)} …`);
+      await ctx.report(t("reader.ingest.fetching", { host: hostOf(ask.url) }));
       const ingested = await ingest(ask.url, ask.bookId);
       stopped();
 
-      await ctx.report("Extracting the text …");
+      await ctx.report(t("reader.ingest.extractingText"));
       const kind = ingested.kind === "article" ? ("article" as const) : ("pdf" as const);
       const ft = await fulltext(ingested.entry.hash);
       stopped();
@@ -101,7 +102,7 @@ export function ingestUrlWorker(deps: IngestUrlWorkerDeps = {}) {
       let slug: string | undefined;
       const prep = pipeline(ask.bookId);
       if (prep && ft && ft.status === "ok") {
-        await ctx.report("Filing it under the book …");
+        await ctx.report(t("reader.ingest.filingUnderBook"));
         const prepared = prepareCapturedDocument(
           {
             documentId: ingested.entry.hash,

@@ -1,19 +1,21 @@
 // The opening intents an empty conversation offers (src/reading/intents.ts).
 // The table is data, so what is worth pinning is what the render layer and the
 // turn assembly both depend on: the explain intent still sends the exact text
-// the bubble used to send unprompted, the sets are distinct, and the book-level
-// thread offers nothing at all. Run: bun test.
+// the bubble used to send unprompted (in English, the test locale — docs/ui/81),
+// the sets are distinct, and the book-level thread offers nothing at all.
+// Run: bun test.
 
 import { expect, test } from "bun:test";
 import {
   EXPLAIN_KICKOFF,
-  MARK_INTENTS,
-  SPAN_INTENTS,
   asideIntents,
   bookTextNotice,
   bookTextState,
   openingIntents,
 } from "../../src/reading/intents";
+
+const MARK_INTENTS = openingIntents(false);
+const SPAN_INTENTS = asideIntents("chat");
 
 test("the first mark intent is the old unprompted kickoff, word for word", () => {
   expect(MARK_INTENTS[0].id).toBe("explain");
@@ -25,7 +27,7 @@ test("the first mark intent is the old unprompted kickoff, word for word", () =>
 
 test("a mark offers four ways in", () => {
   expect(MARK_INTENTS).toHaveLength(4);
-  expect(openingIntents(false)).toBe(MARK_INTENTS);
+  expect(openingIntents(false)).toEqual(MARK_INTENTS);
 });
 
 // docs/09, 2026-08-20: the reader types. The chips that were here spoke to
@@ -41,7 +43,7 @@ test("the book-level thread opens with no chips at all", () => {
 // and no page, so a chip that opens on "the passage I just marked" would send
 // the model looking for something the prompt does not carry.
 test("a span pulled out of a reply is offered chips that claim no marked passage", () => {
-  expect(asideIntents("chat")).toBe(SPAN_INTENTS);
+  expect(asideIntents("chat")).toEqual(SPAN_INTENTS);
   for (const intent of SPAN_INTENTS) {
     expect(intent.message.toLowerCase()).not.toContain("mark");
     expect(intent.message.toLowerCase()).not.toContain("passage");
@@ -51,7 +53,7 @@ test("a span pulled out of a reply is offered chips that claim no marked passage
 
 // One drawn on the page while the lesson ran is a marked passage like any other.
 test("a side conversation drawn on the page keeps the mark's chips", () => {
-  expect(asideIntents("mark")).toBe(MARK_INTENTS);
+  expect(asideIntents("mark")).toEqual(MARK_INTENTS);
 });
 
 test("every intent is a distinct id with a label and a message", () => {

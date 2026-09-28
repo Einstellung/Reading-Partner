@@ -18,6 +18,7 @@
 import { contentHash } from "../../platform/app/content-hash";
 import type { ImportMeta, LibraryEntry, LibraryKind } from "../../platform/app/library";
 import type { ExtractReadable } from "../../info/extract/readable-select";
+import { t } from "../../i18n";
 import { buildArticleEpub, type ArticleImage } from "../epub/file/build-article";
 import { resolveUrlSource, sniffContentType } from "../sources";
 import {
@@ -119,7 +120,7 @@ async function fetchWithin(
 ): Promise<FetchedBytes> {
   const res = await deps.fetch(url);
   if (res.ok && res.bytes.length > limit) {
-    throw new Error(`the source is too large (${Math.round(res.bytes.length / 1e6)}MB)`);
+    throw new Error(t("reader.ingest.sourceTooLarge", { mb: Math.round(res.bytes.length / 1e6) }));
   }
   return res;
 }
@@ -197,7 +198,7 @@ export async function ingestArticleUrl(
 ): Promise<IngestedDocument> {
   const source = resolveUrlSource(url);
   const res = await fetchWithin(deps, source.url, MAX_PAGE_BYTES);
-  if (!res.ok) throw new Error(`could not fetch the link (HTTP ${res.status})`);
+  if (!res.ok) throw new Error(t("reader.ingest.fetchFailed", { status: res.status }));
 
   const sniffed = sniffContentType(res.bytes, res.contentType);
   if (sniffed !== "html") {
@@ -216,7 +217,7 @@ export async function ingestArticleUrl(
   const page = decodePage(res.bytes, res.contentType);
   const extraction = deps.extractReadable(page, source.url);
   if (!extraction || extraction.textContent.trim() === "") {
-    throw new Error("no readable article content at the link");
+    throw new Error(t("reader.ingest.noReadableContent"));
   }
   const meta = readPageMeta(page);
   const title = extraction.title.trim() || source.title;

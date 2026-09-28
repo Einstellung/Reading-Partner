@@ -9,6 +9,7 @@
 import { useEffect, useRef } from "react";
 import { zoomKeyAction, type ZoomAction } from "../base/zoom-keys";
 import type { ViewInstance } from "../../../platform/app/reader-contract";
+import type { Translate } from "../../../i18n";
 
 export interface ReaderZoomContext {
   // A book is open (the reader owns the window).
@@ -45,8 +46,8 @@ export function applyReaderZoom(
 // it follows the layout: the paged strip resets to one whole page, and calling
 // that "Fit page width" is what made the item read as a zoom control the reader
 // would not expect to change how swiping behaves.
-export function zoomResetLabel(layout: "vertical" | "paged" | undefined): string {
-  return layout === "paged" ? "Fit page" : "Fit page width";
+export function zoomResetLabel(layout: "vertical" | "paged" | undefined, t: Translate): string {
+  return layout === "paged" ? t("reader.zoom.fitPage") : t("reader.zoom.fitPageWidth");
 }
 
 export function useReaderZoomKeys(args: {

@@ -23,6 +23,7 @@
 // where one step puts it.
 
 import type { ReactNode } from "react";
+import { useT, type Translate } from "../../../../i18n";
 import { IconHighlight, IconOutline, IconSparkle } from "../../base/icons";
 import { Button } from "../../ui/button";
 import OutlineView from "./OutlineView";
@@ -42,11 +43,13 @@ export type SidebarTab = "outline" | "traces" | "prep";
 // the breakpoint. `lg:` here is COLUMN_MIN_WIDTH_PX in sidebar-column.ts.
 export const PANEL_WIDTH_CLASS = "w-[min(300px,85vw)] lg:w-[280px]";
 
-const TABS: { id: SidebarTab; label: string; Icon: (p: { size?: number }) => JSX.Element }[] = [
-	{ id: "outline", label: "Outline", Icon: IconOutline },
-	{ id: "traces", label: "Marks", Icon: IconHighlight },
-	{ id: "prep", label: "Prep", Icon: IconSparkle },
-];
+function tabs(t: Translate): { id: SidebarTab; label: string; Icon: (p: { size?: number }) => JSX.Element }[] {
+	return [
+		{ id: "outline", label: t("reader.sidebar.outline"), Icon: IconOutline },
+		{ id: "traces", label: t("reader.sidebar.marks"), Icon: IconHighlight },
+		{ id: "prep", label: t("reader.sidebar.prep"), Icon: IconSparkle },
+	];
+}
 
 // A tab button. The active tab shows its label beside the icon so the panel is
 // self-describing without hover tooltips (which never fire on touch); inactive
@@ -108,6 +111,8 @@ export default function Sidebar({
 	onOpenThread,
 	prepPanel,
 }: SidebarProps) {
+	const t = useT();
+	const TABS = tabs(t);
 	return (
 		<>
 			{/* Backdrop: dims the reader and catches the outside tap. Transparent and

@@ -18,6 +18,7 @@
 // Plain and functional by design — visibility over polish. Tailwind-only.
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useT } from "../../../i18n";
 import type { PrepKind } from "../../../reading/prep";
 import type {
   ChapterSpineActivity,
@@ -63,17 +64,23 @@ interface Liveness {
 // startedAt so they advance smoothly between snapshots; chars come from the
 // snapshot. `withUnit` appends " chars" (header) vs. bare (row).
 function LivenessHint({ activity, withUnit }: { activity: Liveness; withUnit?: boolean }) {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
   const secs = Math.max(0, Math.floor((now - activity.startedAt) / 1000));
-  const chars = `${compactChars(activity.chars)}${withUnit ? " chars" : ""}`;
-  const retry = activity.attempt > 1 ? ` · retrying (${activity.attempt}/${activity.attempts})` : "";
+  const chars = withUnit
+    ? t("reader.prep.charsWithUnit", { value: compactChars(activity.chars) })
+    : compactChars(activity.chars);
+  const retry =
+    activity.attempt > 1
+      ? ` · ${t("reader.prep.retrying", { attempt: activity.attempt, attempts: activity.attempts })}`
+      : "";
   return (
     <>
-      {secs}s · {chars}
+      {t("reader.prep.liveness", { secs, chars })}
       {retry}
     </>
   );
@@ -98,6 +105,7 @@ function PlanStatusLine({
   onRetry(): void;
   running: boolean;
 }) {
+  const t = useT();
   return (
     <div className="mt-0.5 text-[11px] text-neutral-400">
       {status === "running" && (
@@ -111,10 +119,10 @@ function PlanStatusLine({
           )}
         </>
       )}
-      {status === "pending" && "Waiting to plan…"}
+      {status === "pending" && t("reader.prep.waitingToPlan")}
       {status === "failed" && (
         <span className="flex items-center gap-1.5">
-          <span className="text-destructive">Plan failed: {error}</span>
+          <span className="text-destructive">{t("reader.prep.planFailed", { error: error ?? "" })}</span>
           <Button
             type="button"
             variant="outline"
@@ -123,7 +131,7 @@ function PlanStatusLine({
             onClick={onRetry}
             disabled={running}
           >
-            Retry
+            {t("reader.prep.retry")}
           </Button>
         </span>
       )}
@@ -216,6 +224,7 @@ function PaperRow({
   // This paper's in-flight digest, when it is the one being digested.
   digestActivity: PrepActivity | null;
 }) {
+  const t = useT();
   const [note, setNote] = useState<string | null>(null);
   const hasNote = paper.status === "done" || paper.status === "abstract-only";
 
@@ -267,17 +276,17 @@ function PaperRow({
         <div className="mt-1 text-[11px] text-destructive">{paper.error}</div>
       )}
       {paper.status === "cooldown" && (
-        <div className="mt-1 text-[11px] text-amber-600/90">rate-limited, retrying later</div>
+        <div className="mt-1 text-[11px] text-amber-600/90">{t("reader.prep.rateLimited")}</div>
       )}
       <div className="mt-1 flex gap-1.5">
         {active && (
           <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onSkip}>
-            Skip
+            {t("reader.prep.skip")}
           </Button>
         )}
         {(paper.status === "skipped" || paper.status === "failed" || paper.status === "cooldown") && (
           <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRequeue}>
-            Retry
+            {t("reader.prep.retry")}
           </Button>
         )}
       </div>
@@ -285,7 +294,7 @@ function PaperRow({
         <div className="mt-2 rounded-md bg-muted-faint p-2 text-[12px] text-neutral-700">
           {hasNote ? (
             note === null ? (
-              <span className="text-neutral-400">Loading note…</span>
+              <span className="text-neutral-400">{t("reader.prep.loadingNote")}</span>
             ) : (
               // A note's [p.N] anchors point into the paper, not the document
               // the reader has open; suppress citation links here so they don't
@@ -295,7 +304,7 @@ function PaperRow({
               </CitationContext.Provider>
             )
           ) : (
-            <span className="text-neutral-400">No note yet — the paper hasn't been digested.</span>
+            <span className="text-neutral-400">{t("reader.prep.noNoteYet")}</span>
           )}
         </div>
       )}
@@ -304,6 +313,7 @@ function PaperRow({
 }
 
 function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
+  const t = useT();
   const { snapshot, loadNote, onSkip, onRequeue, onAdd, onRetryPlan, onReplan, selectedSlug } = papers;
   const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
   const [addText, setAddText] = useState("");
@@ -330,7 +340,7 @@ function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
     <div className="flex h-full flex-col">
       <div className={HEADER}>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[13px] text-foreground">Referenced papers</div>
+          <div className="text-[13px] text-foreground">{t("reader.prep.referencedPapers")}</div>
           {state.planStatus === "done" && (
             <Button
               type="button"
@@ -340,7 +350,7 @@ function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
               onClick={onReplan}
               disabled={running}
             >
-              Replan
+              {t("reader.prep.replan")}
             </Button>
           )}
         </div>
@@ -348,8 +358,8 @@ function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
           status={state.planStatus}
           error={state.planError}
           activity={planActivity}
-          runningText="Reading this document's references…"
-          doneText={`${doneCount} of ${state.papers.length} papers ready`}
+          runningText={t("reader.prep.readingReferences")}
+          doneText={t("reader.prep.papersReady", { done: doneCount, total: state.papers.length })}
           onRetry={onRetryPlan}
           running={running}
         />
@@ -369,7 +379,7 @@ function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
           />
         ))}
         {state.planStatus === "done" && state.papers.length === 0 && (
-          <li className="px-3 py-4 text-center text-sm text-neutral-400">No papers nominated.</li>
+          <li className="px-3 py-4 text-center text-sm text-neutral-400">{t("reader.prep.noPapers")}</li>
         )}
       </ul>
 
@@ -377,13 +387,13 @@ function PaperPrep({ papers }: { papers: PaperPrepBindings }) {
         <div className="flex gap-1.5">
           <Input
             className="px-2 py-1.5 text-[12px]"
-            placeholder="Add paper (title, arXiv id, or URL)"
+            placeholder={t("reader.prep.addPaperPlaceholder")}
             value={addText}
             onChange={(e) => setAddText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submitAdd()}
           />
           <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={submitAdd}>
-            Add
+            {t("reader.prep.add")}
           </Button>
         </div>
       </div>
@@ -411,6 +421,7 @@ function ChapterSection({
   onRegenerate(instruction?: string): void;
   onGenerate(): void;
 }) {
+  const t = useT();
   const [steering, setSteering] = useState(false);
   const [instruction, setInstruction] = useState("");
 
@@ -443,19 +454,19 @@ function ChapterSection({
         </div>
         {chapter.status === "done" && !disabled && (
           <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={() => setSteering((v) => !v)}>
-            Regenerate
+            {t("reader.prep.regenerate")}
           </Button>
         )}
         {chapter.status === "failed" && !disabled && (
           <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRetry}>
-            Retry
+            {t("reader.prep.retry")}
           </Button>
         )}
         {/* A chapter left pending by a Stop: the way back without re-running the
             whole book. */}
         {chapter.status === "pending" && !disabled && (
           <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onGenerate}>
-            Prepare
+            {t("reader.prep.prepare")}
           </Button>
         )}
       </div>
@@ -464,14 +475,14 @@ function ChapterSection({
         <div className="mt-1.5 flex gap-1.5">
           <Input
             className="px-2 py-1 text-[12px]"
-            placeholder="Optional: how to change it"
+            placeholder={t("reader.prep.instructionPlaceholder")}
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             autoFocus
           />
           <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={submit}>
-            Go
+            {t("reader.prep.go")}
           </Button>
         </div>
       )}
@@ -482,7 +493,7 @@ function ChapterSection({
 
       {chapter.status === "done" && (
         <div className="mt-2 text-[12px] text-neutral-700">
-          {body === null ? <span className="text-neutral-400">Loading…</span> : <Markdown text={body} />}
+          {body === null ? <span className="text-neutral-400">{t("reader.prep.loading")}</span> : <Markdown text={body} />}
         </div>
       )}
     </div>
@@ -490,6 +501,7 @@ function ChapterSection({
 }
 
 function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
+  const t = useT();
   const {
     snapshot,
     loadOverview,
@@ -542,15 +554,15 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
     <div className="flex h-full flex-col">
       <div className={HEADER}>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[13px] text-foreground">Chapter spines</div>
+          <div className="text-[13px] text-foreground">{t("reader.prep.chapterSpines")}</div>
           {running ? (
             <Button type="button" variant="link" size="link" className={HEADER_LINK} onClick={onStop}>
-              Stop
+              {t("reader.prep.stop")}
             </Button>
           ) : (
             state.planStatus === "done" && (
               <Button type="button" variant="link" size="link" className={HEADER_LINK} onClick={onGenerate}>
-                Resume
+                {t("reader.prep.resume")}
               </Button>
             )
           )}
@@ -559,8 +571,8 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
           status={state.planStatus}
           error={state.planError}
           activity={planActivity}
-          runningText="Reading this book's structure…"
-          doneText={`${doneCount} of ${state.chapters.length} chapters ready`}
+          runningText={t("reader.prep.readingStructure")}
+          doneText={t("reader.prep.chaptersReady", { done: doneCount, total: state.chapters.length })}
           onRetry={onRetryPlan}
           running={running}
         />
@@ -570,21 +582,21 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
         {(state.overviewStatus === "done" || state.overviewStatus === "stale") && (
           <div className={`${SECTION} bg-muted-faint`}>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[13px] font-semibold text-foreground">Chapter graph</div>
+              <div className="text-[13px] font-semibold text-foreground">{t("reader.prep.chapterGraph")}</div>
               {state.overviewStatus === "stale" && !running && (
                 <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRegenerateOverview}>
-                  Regenerate
+                  {t("reader.prep.regenerate")}
                 </Button>
               )}
             </div>
             {state.overviewStatus === "stale" && (
               <div className="mt-1 text-[11px] text-amber-600/90">
-                A chapter changed; this may be out of date.
+                {t("reader.prep.chapterChanged")}
               </div>
             )}
             <div className="mt-2 text-[12px] text-neutral-700">
               {overview === null ? (
-                <span className="text-neutral-400">Loading…</span>
+                <span className="text-neutral-400">{t("reader.prep.loading")}</span>
               ) : (
                 <Markdown text={overview} />
               )}
@@ -593,7 +605,7 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
         )}
         {state.overviewStatus === "running" && (
           <div className="border-b border-border-subtle px-3 py-2 text-[11px] text-neutral-400">
-            Connecting the chapters…
+            {t("reader.prep.connectingChapters")}
             {overviewActivity && (
               <>
                 {" "}
@@ -604,9 +616,11 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
         )}
         {state.overviewStatus === "failed" && (
           <div className="border-b border-border-subtle px-3 py-2 text-[11px]">
-            <span className="text-destructive">Chapter graph failed: {state.overviewError}</span>{" "}
+            <span className="text-destructive">
+              {t("reader.prep.chapterGraphFailed", { error: state.overviewError ?? "" })}
+            </span>{" "}
             <Button type="button" variant="outline" size="xs" className="text-neutral-500" onClick={onRegenerateOverview} disabled={running}>
-              Retry
+              {t("reader.prep.retry")}
             </Button>
           </div>
         )}
@@ -624,7 +638,7 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
           />
         ))}
         {state.planStatus === "done" && state.chapters.length === 0 && (
-          <div className="px-3 py-4 text-center text-sm text-neutral-400">No chapters found.</div>
+          <div className="px-3 py-4 text-center text-sm text-neutral-400">{t("reader.prep.noChapters")}</div>
         )}
       </div>
     </div>
@@ -636,12 +650,11 @@ function ChapterPrep({ chapters }: { chapters: ChapterPrepBindings }) {
 // Nothing prepped yet. The sentence says what this document is going to get, so
 // the reader is not left guessing which of the two the button starts.
 function StartPrep({ kind, onStart }: { kind: PrepKind; onStart(): void }) {
+  const t = useT();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
       <p className="m-0 text-sm text-neutral-500">
-        {kind === "papers"
-          ? "Nothing prepped for this document yet. The AI will read the papers it leans on and write a note on each."
-          : "Nothing prepped for this book yet. The AI will read it chapter by chapter and write down what each one does."}
+        {kind === "papers" ? t("reader.prep.startPapersHint") : t("reader.prep.startChaptersHint")}
       </p>
       <Button
         type="button"
@@ -651,7 +664,7 @@ function StartPrep({ kind, onStart }: { kind: PrepKind; onStart(): void }) {
         className="leading-5 coarse:py-2.5"
         onClick={onStart}
       >
-        Start prep
+        {t("reader.prep.startPrep")}
       </Button>
     </div>
   );

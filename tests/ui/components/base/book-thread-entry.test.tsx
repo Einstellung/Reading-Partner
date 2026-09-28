@@ -48,9 +48,10 @@ test("the book sparkle and the ask-here bubble are different drawings", () => {
 test("the top bar's book entry wears the book sparkle and says what it opens", () => {
   expect(topBar).toContain("IconBookSparkle");
   expect(topBar).not.toContain("IconAskHere");
-  // The label is a constant: while the button is dim its title is the line that
-  // says why instead, and both readings are rendered in pen-rack-gate.test.tsx.
-  expect(topBar).toContain('const BOOK_THREAD = "Learn this book with AI"');
+  // The label is a constant, drawn through t() (docs/ui/81): while the button
+  // is dim its title is the line that says why instead, and both readings are
+  // rendered in pen-rack-gate.test.tsx.
+  expect(topBar).toContain('const BOOK_THREAD = t("reader.top.learnBook")');
   expect(topBar).not.toContain("Retell about this book");
 });
 

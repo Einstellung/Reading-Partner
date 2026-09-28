@@ -3,6 +3,7 @@
 // utilities. The parent supplies the anchor in viewport coordinates.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useT } from '../../../i18n';
 import { IconClose, IconColorSwatch, IconTrash } from '../base/icons';
 import { placePanel, pointAnchor } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
@@ -30,6 +31,7 @@ const COMMENT_DEBOUNCE = 400;
 const ICON_BTN = 'h-6 w-6 coarse:h-9 coarse:w-9 rounded active:bg-accent';
 
 export default function AnnotationPopup({ annotation, anchor, colors, onChange, onDelete, onClose }: AnnotationPopupProps) {
+	const t = useT();
 	const ref = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 	const [draft, setDraft] = useState(annotation.comment ?? '');
@@ -92,7 +94,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 			)}
 			style={pos ? { left: pos.left, top: pos.top, visibility: 'visible' } : { visibility: 'hidden' }}
 			role="dialog"
-			aria-label="Annotation"
+			aria-label={t("reader.popup.title")}
 		>
 			<div className="flex flex-wrap items-center gap-0.5">
 				{colors.map((c) => (
@@ -115,8 +117,8 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 					variant="ghost"
 					size={null}
 					className={`${ICON_BTN} ml-auto text-neutral-500`}
-					title="Close"
-					aria-label="Close"
+					title={t("reader.popup.close")}
+					aria-label={t("reader.popup.close")}
 					onClick={onClose}
 				>
 					<IconClose size={14} />
@@ -125,7 +127,7 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 
 			<textarea
 				className="max-h-40 min-h-[60px] w-full resize-y rounded-md border border-black/15 bg-background px-2 py-1.5 text-[13px] coarse:text-base text-neutral-800 select-text focus:border-accent-line focus:outline-none"
-				placeholder="Add a comment"
+				placeholder={t("reader.popup.commentPlaceholder")}
 				value={draft}
 				onChange={(e) => {
 					setDraft(e.target.value);
@@ -140,11 +142,11 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 					variant="ghost"
 					size={null}
 					className="gap-1 rounded-md px-2 py-1 text-xs text-destructive can-hover:hover:bg-destructive/10 active:bg-destructive/10 coarse:px-3 coarse:py-2.5"
-					title="Delete"
+					title={t("reader.popup.delete")}
 					onClick={() => onDelete(annotation.id)}
 				>
 					<IconTrash size={15} />
-					<span>Delete</span>
+					<span>{t("reader.popup.delete")}</span>
 				</Button>
 			</div>
 		</div>

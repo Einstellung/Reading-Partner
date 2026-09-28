@@ -2,11 +2,13 @@
 // per area; the area's own directory under messages/ holds its nine files.
 
 import library from "./messages/library";
+import reader from "./messages/reader";
 import settings from "./messages/settings";
 import shell from "./messages/shell";
 
 export const AREAS = {
   library,
+  reader,
   settings,
   shell,
 };

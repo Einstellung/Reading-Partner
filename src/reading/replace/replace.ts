@@ -31,6 +31,7 @@
 import type { ImportMeta, LibraryEntry } from "../../platform/app/library";
 import type { ViewState } from "../../platform/app/reader-contract";
 import type { Thread } from "../../platform/app/threads";
+import { t } from "../../i18n";
 import type { CarryResult, MarkRecord } from "./carry-marks";
 
 /**
@@ -132,9 +133,11 @@ export function mergedMarks(existing: readonly MarkRecord[], carried: readonly M
 
 /** Pure: how the marks came across, as the half sentence both callers end on. */
 export function marksClause(result: Pick<ReplaceResult, "moved" | "unmatched">): string {
-  if (result.moved === 0 && result.unmatched === 0) return "no marks to move";
-  const moved = `${result.moved} mark${result.moved === 1 ? "" : "s"} moved`;
-  return result.unmatched === 0 ? moved : `${moved}, ${result.unmatched} could not be moved`;
+  if (result.moved === 0 && result.unmatched === 0) return t("reader.translate.marksNone");
+  const moved = t("reader.translate.marksMoved", { count: result.moved });
+  return result.unmatched === 0
+    ? moved
+    : t("reader.translate.marksPartial", { moved, unmatched: result.unmatched });
 }
 
 /**

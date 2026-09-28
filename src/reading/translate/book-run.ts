@@ -10,6 +10,7 @@
 import type { Run } from "../../legion/run";
 import type { TranslateModel } from "./live";
 import type { TranslateTarget } from "./tool";
+import { t } from "../../i18n";
 
 /** The kind legion knows a book translation by. */
 export const TRANSLATE_KIND = "translate-book";
@@ -101,22 +102,22 @@ export function parseReplacement(text: string): Replacement | null {
 
 /** Before anything has been read: the document has only just been picked up. */
 export function openingLine(title: string): string {
-  return `Translating "${title}" — reading the document`;
+  return t("reader.translate.opening", { title });
 }
 
 /** The document has been cut into blocks and the model has not been called yet. */
 export function segmentedLine(title: string, total: number): string {
-  return `Translating "${title}" — ${total} blocks to do`;
+  return t("reader.translate.segmented", { title, total });
 }
 
 /** How far along. The counter the reader used to watch, one line per half minute. */
 export function translatedLine(title: string, done: number, total: number): string {
-  return `Translating "${title}" — translated ${done}/${total} segments`;
+  return t("reader.translate.progress", { title, done, total });
 }
 
 /** What went wrong, for the last line a failed run leaves on itself. */
 export function failedLine(title: string, reason: string): string {
-  return `"${title}" could not be translated: ${reason}`;
+  return t("reader.translate.failed", { title, reason });
 }
 
 // --- what the screen shows ----------------------------------------------------
@@ -156,7 +157,8 @@ export function translateView(run: Run | null, replaced: Replacement | null): Tr
   if (run.state === "cancelled") return null;
   const phase: TranslateViewPhase =
     run.state === "done" ? "done" : run.state === "failed" ? "failed" : "running";
-  const fallback = phase === "failed" ? "The translation failed." : "Starting the translation";
+  const fallback =
+    phase === "failed" ? t("reader.translate.failedFallback") : t("reader.translate.startingFallback");
   return {
     runId: run.id,
     phase,

@@ -6,6 +6,7 @@
 // out loud, but not what the app stores.
 
 import type { ViewStats } from "../../../platform/app/reader-contract";
+import type { Translate } from "../../../i18n";
 
 export interface ReaderPageText {
   // "37 / 385", or the em-dashes before a book is open.
@@ -14,11 +15,11 @@ export interface ReaderPageText {
   printed: string | null;
 }
 
-export function readerPageText(stats: ViewStats | null): ReaderPageText {
+export function readerPageText(stats: ViewStats | null, t: Translate): ReaderPageText {
   if (!stats) return { blocks: "— / —", printed: null };
   const printed = stats.printedLabel;
   return {
-    blocks: `${stats.pageIndex + 1} / ${stats.pagesCount}`,
-    printed: printed ? `printed ${printed}` : null,
+    blocks: t("reader.page.blocks", { index: stats.pageIndex + 1, count: stats.pagesCount }),
+    printed: printed ? t("reader.page.printed", { label: printed }) : null,
   };
 }

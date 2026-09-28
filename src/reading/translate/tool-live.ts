@@ -12,6 +12,7 @@
 
 import { appData } from "../../platform/app/appdata";
 import { appRunner } from "../../legion/execute/runner";
+import { t } from "../../i18n";
 import { OUTPUTS_DIR } from "../../legion/execute/outputs";
 import { registerWorker, type WorkerContext, type WorkerHandle } from "../../legion/execute/worker";
 import type { BoxOrigin } from "../../box";
@@ -281,7 +282,7 @@ async function runTranslation(
 ): Promise<{ output?: string; progress?: string }> {
   const entry = await getLibraryEntry(target.bookId);
   if (!entry) {
-    const line = `"${target.title}" is no longer on the shelf.`;
+    const line = t("reader.translate.gone", { title: target.title });
     await tell(target.bookId, line);
     return { progress: line };
   }
@@ -293,13 +294,13 @@ async function runTranslation(
   // reader is not waiting on them.
   const body = bodyOf(await readLibraryBook(target.bookId));
   if (body && hasTranslations(body)) {
-    const line = `"${target.title}" is already bilingual.`;
+    const line = t("reader.translate.alreadyBilingual", { title: target.title });
     await tell(target.bookId, line);
     return { progress: line };
   }
   const blocks = body ? segmentDocument(body).length : 0;
   if (blocks === 0) {
-    const line = `"${target.title}" has nothing to translate.`;
+    const line = t("reader.translate.nothingToTranslate", { title: target.title });
     await tell(target.bookId, line);
     return { progress: line };
   }

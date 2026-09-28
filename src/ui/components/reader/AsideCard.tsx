@@ -22,6 +22,7 @@ import {
   type AsideReceiptItem,
 } from "../../../reading/aside";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
+import { useT } from "../../../i18n";
 import { Button } from "../ui/button";
 
 // The rule down the left, which is what makes a run of rows read as one block
@@ -42,6 +43,7 @@ function AsideReceiptRow({
   item: AsideReceiptItem;
   onOpen: () => void;
 }) {
+  const t = useT();
   const anchor = asideAnchorLabel(item);
   return (
     <Button
@@ -57,7 +59,7 @@ function AsideReceiptRow({
       // so the highlight takes the row in with its rule (BLOCK: 2px + pl-3).
       className="w-full items-baseline justify-start gap-2 text-left text-muted-foreground transition-opacity duration-200 data-held:relative data-held:z-21 data-held:-ml-3.5 data-held:w-[calc(100%+0.875rem)] data-held:border-l-2 data-held:border-muted-strong data-held:pl-4 data-held:bg-card data-held:ring-2 data-held:ring-accent-line data-leaving:opacity-0"
     >
-      <span className={LABEL}>Aside</span>
+      <span className={LABEL}>{t("reader.aside.label")}</span>
       {anchor !== "" && (
         <span className="max-w-[10em] shrink-0 truncate tabular-nums text-faint-foreground">
           {anchor}
@@ -72,6 +74,7 @@ function AsideReceiptRow({
 }
 
 export function AsideReceiptCard({ payload, dispatch }: CardComponentProps<AsideReceiptCardData>) {
+  const t = useT();
   const items = asideReceiptItems(payload);
   if (items.length === 0) return null;
   const rows = items.map((item) => (
@@ -97,7 +100,7 @@ export function AsideReceiptCard({ payload, dispatch }: CardComponentProps<Aside
           >
             ›
           </span>
-          <span className={LABEL}>Aside</span>
+          <span className={LABEL}>{t("reader.aside.label")}</span>
           <span className="min-w-0 flex-1 truncate tabular-nums">
             {asideReceiptSummary(items.length)}
           </span>
