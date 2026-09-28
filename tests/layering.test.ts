@@ -53,6 +53,7 @@ const LAYER: Record<string, Layer> = {
   i18n: "platform",
   "i18n/messages": "platform",
   "i18n/messages/settings": "platform",
+  "i18n/messages/phone": "platform",
   platform: "platform",
   "platform/app": "platform",
   "platform/http": "platform",

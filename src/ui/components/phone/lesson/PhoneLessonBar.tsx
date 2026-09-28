@@ -6,6 +6,7 @@
 // conversation, and the one thing a menu would have offered — hand this file to
 // another app — is short enough to be its own icon.
 
+import { useT } from "../../../../i18n";
 import { IconOutline, IconShareOut } from "../../base/icons";
 import { Button } from "../../ui/button";
 
@@ -18,14 +19,15 @@ export default function PhoneLessonBar(props: {
   // control that cannot do anything is worse than none (docs/70).
   onOpenIn?: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-none items-center gap-1 border-b border-border-subtle px-1 py-1">
       <Button
         variant="ghost"
         size="icon"
         className="flex-none text-muted-foreground"
-        title="Back to the shelf"
-        aria-label="Back to the shelf"
+        title={t("phone.lessonBar.backToShelf")}
+        aria-label={t("phone.lessonBar.backToShelf")}
         onClick={props.onBack}
       >
         ‹
@@ -37,8 +39,8 @@ export default function PhoneLessonBar(props: {
         variant="ghost"
         size="icon"
         className="flex-none text-muted-foreground"
-        title="Chapters"
-        aria-label="Chapters"
+        title={t("phone.lessonBar.chapters")}
+        aria-label={t("phone.lessonBar.chapters")}
         onClick={props.onChapters}
       >
         <IconOutline size={20} />
@@ -48,8 +50,8 @@ export default function PhoneLessonBar(props: {
           variant="ghost"
           size="icon"
           className="flex-none text-muted-foreground"
-          title="Open in…"
-          aria-label="Open in…"
+          title={t("phone.lessonBar.openIn")}
+          aria-label={t("phone.lessonBar.openIn")}
           onClick={props.onOpenIn}
         >
           <IconShareOut size={20} />

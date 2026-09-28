@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { t } from "../../../../i18n";
 import type { ProviderId } from "../../../../ai";
 import { runAgentTurn } from "../../../../legion/execute/turn";
 import {
@@ -43,9 +44,14 @@ import type { LessonFocus } from "./lesson-view";
 const NO_CHAPTERS: ReadonlySet<number> = new Set<number>();
 
 // Said where the focus line goes, like every other thing that has gone wrong on
-// the way into a lesson (reading/lesson/status.ts).
-const NO_PROVIDER = "Configure a provider in Settings and this paper can be taught.";
-const NO_THREAD = "This paper's conversation could not be read on this device.";
+// the way into a lesson (reading/lesson/status.ts). Read at call time rather
+// than hoisted into a constant, so it is in the language the reader has now.
+function noProviderLine(): string {
+  return t("phone.lessonCall.noProvider");
+}
+function noThreadLine(): string {
+  return t("phone.lessonCall.noThread");
+}
 
 export interface LessonBook {
   bookId: string;
@@ -136,7 +142,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
     const id = threadIdRef.current;
     if (!s || !ft || !id) return;
     if (!s.defaultProviderId || !s.defaultModelId) {
-      setStatus(NO_PROVIDER);
+      setStatus(noProviderLine());
       return;
     }
     begin((run) => {
@@ -278,7 +284,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
         // Without an ensureThread there is no such state, and a named thread
         // that is not there is one this device cannot read.
         if (!thread && !ensureRef.current) {
-          setStatus(NO_THREAD);
+          setStatus(noThreadLine());
           return;
         }
       } else {
@@ -286,7 +292,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
         if (cancelled) return;
         if (found.status === "cancelled") return;
         if (found.status !== "ok") {
-          setStatus(NO_THREAD);
+          setStatus(noThreadLine());
           return;
         }
         thread = found.thread;
@@ -313,7 +319,7 @@ export function useLessonCall(book: LessonBook): LessonCall {
       } catch (e) {
         if (cancelled) return;
         console.error("failed to open the lesson", e);
-        setStatus(e instanceof LessonOpenError ? e.message : "This paper could not be opened.");
+        setStatus(e instanceof LessonOpenError ? e.message : t("phone.lessonCall.openFailed"));
         return;
       }
       if (cancelled) return;

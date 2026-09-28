@@ -19,6 +19,7 @@
 // says it was not imported rather than guessing PDF, which is what it used to
 // do.
 
+import { t } from "../../../i18n";
 import type { Thread } from "../../../platform/app/threads";
 import type { TableChapter } from "../../../reading/chapters/table";
 import {
@@ -149,13 +150,11 @@ export type MaterialTap =
   // There is nothing here to open, and no copy this device can go and get.
   | { kind: "unavailable"; why: string };
 
-const NOT_CONFIGURED = "This build has no Google account set up, so it cannot download the book";
-const SIGNED_OUT = "Sign in to your account in Settings to download this book";
 // No entry and no book id: the desk filed the path and nothing has read the
 // file's bytes yet, so no copy of it exists anywhere to be fetched.
-export const NOT_IMPORTED = "The desk has not imported this file yet, so there is nothing to get";
 // A book id but no entry: the topics row got here before library.json did.
-export const NOT_FILED_YET = "This book has not finished syncing to this device yet";
+// Read at call time rather than hoisted into a constant, so a why said after
+// the reader switches languages is in the language they switched to.
 
 /**
  * What a tap on one card does. A PDF ends at the lesson and an EPUB at the
@@ -167,15 +166,15 @@ export function materialTap(m: ShelfMaterial, can: FetchAbility): MaterialTap {
   // A file nothing has described, whatever bytes may be beside it: opening it
   // would hand the reflow view something it may not be able to draw, and the
   // lesson a file that may not be a paper.
-  if (m.format === "unknown") return { kind: "unavailable", why: NOT_IMPORTED };
+  if (m.format === "unknown") return { kind: "unavailable", why: t("phone.shelfList.notImported") };
   const door: MaterialDoor = m.format === "pdf" ? "lesson" : "open";
   if (m.onDevice) {
     return door === "lesson" ? { kind: "lesson", bookId: m.bookId as string } : { kind: "open" };
   }
-  if (!m.bookId) return { kind: "unavailable", why: NOT_IMPORTED };
-  if (!m.filed) return { kind: "unavailable", why: NOT_FILED_YET };
-  if (!can.configured) return { kind: "unavailable", why: NOT_CONFIGURED };
-  if (!can.signedIn) return { kind: "unavailable", why: SIGNED_OUT };
+  if (!m.bookId) return { kind: "unavailable", why: t("phone.shelfList.notImported") };
+  if (!m.filed) return { kind: "unavailable", why: t("phone.shelfList.notFiledYet") };
+  if (!can.configured) return { kind: "unavailable", why: t("phone.shelfList.notConfigured") };
+  if (!can.signedIn) return { kind: "unavailable", why: t("phone.shelfList.signInToDownload") };
   return { kind: "download", bookId: m.bookId, then: door };
 }
 
@@ -185,10 +184,10 @@ export function materialTap(m: ShelfMaterial, can: FetchAbility): MaterialTap {
  * card says, and for a PDF that is the lesson's own line (lessonNote).
  */
 export function materialNote(m: ShelfMaterial, downloading: boolean): string | null {
-  if (downloading) return "Downloading…";
-  if (m.format === "unknown" || !m.bookId) return "Not imported";
+  if (downloading) return t("phone.shelfList.downloading");
+  if (m.format === "unknown" || !m.bookId) return t("phone.shelfList.notImportedShort");
   if (m.onDevice) return null;
-  return m.filed ? "In the cloud" : "Not synced yet";
+  return m.filed ? t("phone.shelfList.inCloud") : t("phone.shelfList.notSyncedYet");
 }
 
 /**
@@ -208,7 +207,7 @@ export function lessonNote(
   thread: Pick<Thread, "messages" | "focusChapter"> | null | undefined,
   chapters: readonly TableChapter[] | null,
 ): string {
-  if (!thread || thread.messages.length === 0) return "Not started";
+  if (!thread || thread.messages.length === 0) return t("phone.shelfList.lessonNotStarted");
   const title = chapters?.find((c) => c.number === thread.focusChapter)?.title.trim();
-  return title ? `On ${title}` : "In a lesson";
+  return title ? t("phone.shelfList.lessonOn", { title }) : t("phone.shelfList.lessonInProgress");
 }

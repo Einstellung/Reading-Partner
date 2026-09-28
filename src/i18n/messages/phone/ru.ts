@@ -1,0 +1,204 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+export default {
+  "holdMenu.deleteTopic": "Удалить тему",
+  "holdMenu.deleteLesson": "Удалить урок",
+  "holdMenu.deleteConversation": "Удалить беседу",
+  "holdMenu.removeFromTopic": "Убрать из темы",
+  "holdMenu.deleteArticle": "Удалить статью",
+  "holdMenu.deleteBook": "Удалить книгу",
+  "holdMenu.removeFromSaved": "Убрать из сохранённого",
+  "holdMenu.deleteAside": "Удалить побочный вопрос",
+
+  "holdMenu.confirmDeleteFileTitle": "Удалить «{title}»?",
+  "holdMenu.confirmDeleteBookDescription":
+    "Удалить эту книгу и всё, что с ней связано, на всех устройствах? Ваши собственные заметки сохранятся.",
+  "holdMenu.confirmDeleteArticleDescription":
+    "Удалить эту статью и всё, что с ней связано, на всех устройствах? Ваши собственные заметки сохранятся.",
+  "holdMenu.delete": "Удалить",
+  "holdMenu.confirmRemoveTitle": "Убрать «{title}»?",
+  "holdMenu.removeOthers": "Останется в {names}",
+  "holdMenu.removeNoOthers": "Она ещё числится где-то ещё, поэтому останется",
+  "holdMenu.removeBookDescription": "Эта тема лишится книги. {where}, вместе с позицией чтения и пометками.",
+  "holdMenu.removeArticleDescription": "Эта тема лишится статьи. {where}, вместе с позицией чтения и пометками.",
+  "holdMenu.remove": "Убрать",
+  "holdMenu.confirmConversationTitle": "Удалить эту беседу?",
+  "holdMenu.confirmLessonDescription":
+    "Урок будет удалён вместе с побочными вопросами на всех устройствах. Статья останется, а следующий урок начнётся сначала.",
+  "holdMenu.confirmConversationDescription":
+    "Всё, что было сказано об этой книге, будет удалено на всех устройствах. Сама книга, её пометки и позиция чтения останутся.",
+  "holdMenu.confirmRemoveSavedDescription":
+    "Она исчезнет из сохранённого на всех устройствах. Сводка, из которой она пришла, не изменится.",
+  "holdMenu.confirmDeleteAsideDescription":
+    "Побочный вопрос будет удалён вместе со своей строкой в уроке. Сам урок останется.",
+
+  "holdMenu.doneDeleted": "«{title}» удалено",
+  "holdMenu.doneRemovedFromTopic": "Убрано из «{topicName}»",
+  "holdMenu.doneLessonDeleted": "Урок удалён",
+  "holdMenu.doneConversationDeleted": "Беседа удалена",
+  "holdMenu.doneRemovedFromSaved": "Убрано из сохранённого",
+  "holdMenu.doneAsideDeleted": "Побочный вопрос удалён",
+
+  "holdMenu.failedTopic": "Не удалось удалить тему.",
+  "holdMenu.failedFile": "Не удалось удалить.",
+  "holdMenu.failedRemoveFromTopic": "Не удалось убрать из этой темы.",
+  "holdMenu.failedConversation": "Не удалось удалить беседу.",
+  "holdMenu.failedRemoveSaved": "Не удалось убрать из сохранённого.",
+
+  "savedList.back": "Сегодня",
+  "savedList.count": {
+    one: "{count} сохранённая статья",
+    few: "{count} сохранённые статьи",
+    many: "{count} сохранённых статей",
+    other: "{count} сохранённой статьи",
+  },
+  "savedList.empty": "Пока ничего не сохранено.",
+  "savedList.summaryOnly": "только сводка",
+
+  "home.today": "Сегодня",
+  "home.briefingLabel": "Сегодняшняя сводка",
+  "home.mealsLabel": "Питание",
+  "home.mealsBlurb": "Завтраки, обеды и ужины на эту неделю и что купить.",
+  "home.open": "Открыть →",
+  "home.savedLabel": "Сохранённое",
+  "home.savedBlurb": "Статьи, которые вы сохранили, чтобы прочитать в любое время.",
+  "home.savedCount": {
+    one: "{count} статья",
+    few: "{count} статьи",
+    many: "{count} статей",
+    other: "{count} статьи",
+  },
+  "home.savedEmpty": "Пока ничего не сохранено. Сохраните статью из сводки, и она будет ждать здесь.",
+  "home.libraryLabel": "Библиотека",
+  "home.continueReading": "Продолжить чтение · {topicName}",
+  "home.libraryBlurb": "Ваши темы и книги, разложенные по ним.",
+  "home.allTopics": "Все темы",
+
+  "newTopic.title": "Новая тема",
+  "newTopic.fieldLabel": "Название темы",
+  "newTopic.cancel": "Отмена",
+  "newTopic.create": "Создать",
+
+  "shelf.libraryLabel": "Библиотека",
+  "shelf.backHome": "Главная",
+  "shelf.topicCount": {
+    one: "{count} тема",
+    few: "{count} темы",
+    many: "{count} тем",
+    other: "{count} темы",
+  },
+  "shelf.newTopic": "Новая тема",
+  "shelf.noTopicsYet": "Тем пока нет.",
+  "shelf.created": "Создано «{name}»",
+  "shelf.createFailed": "Не удалось создать тему.",
+  "shelf.importing": "Импорт…",
+  "shelf.importEpub": "Импортировать EPUB",
+  "shelf.nothingFiled": "Здесь пока ничего нет.",
+  "shelf.lessonBadge": "Урок",
+  "shelf.downloadFailed": "Не удалось скачать эту книгу",
+  "shelf.importFailed": "Не удалось импортировать эту книгу",
+
+  "shelfList.notConfigured": "В этой сборке не настроен аккаунт Google, поэтому книгу нельзя скачать",
+  "shelfList.signInToDownload": "Войдите в свой аккаунт в настройках, чтобы скачать эту книгу",
+  "shelfList.notImported": "Компьютер ещё не импортировал этот файл, поэтому брать пока нечего",
+  "shelfList.notFiledYet": "Эта книга ещё не завершила синхронизацию с этим устройством",
+  "shelfList.downloading": "Скачивание…",
+  "shelfList.notImportedShort": "Не импортировано",
+  "shelfList.inCloud": "В облаке",
+  "shelfList.notSyncedYet": "Ещё не синхронизировано",
+  "shelfList.lessonNotStarted": "Ещё не начат",
+  "shelfList.lessonOn": "На «{title}»",
+  "shelfList.lessonInProgress": "Урок идёт",
+
+  "reader.rendering": "Отрисовка…",
+  "reader.openFailed": "Не удалось открыть эту книгу.",
+  "reader.drawFailed": "Не удалось отрисовать эту книгу.",
+  "reader.deleteMarkTitle": "Удалить эту пометку?",
+  "reader.deleteMarkDescription": "Пометка исчезнет, а вместе с ней и беседа, открытая из неё. Это нельзя отменить.",
+  "reader.deleteMarkButton": "Удалить эту пометку",
+  "reader.delete": "Удалить",
+
+  "readerBar.backToShelf": "Назад на полку",
+  "readerBar.outline": "Оглавление",
+  "readerBar.display": "Вид",
+  "readerBar.learnThisBook": "Изучить эту книгу с ИИ",
+  "readerBar.dotWriting": " (ответ печатается)",
+  "readerBar.dotUnseen": " (новый ответ)",
+
+  "readerGate.aiPenNotOnPhone":
+    "ИИ-перо пока недоступно на телефоне — «Изучить эту книгу с ИИ» находится на верхней панели",
+
+  "displaySheet.title": "Вид",
+  "displaySheet.size": "Размер",
+  "displaySheet.smallerText": "Меньше текст",
+  "displaySheet.largerText": "Крупнее текст",
+  "displaySheet.lineSpacing": "Межстрочный интервал",
+  "displaySheet.margins": "Поля",
+  "displaySheet.turnPages": "Листать страницы",
+  "displaySheet.paper": "Бумага",
+
+  "outlineSheet.title": "Оглавление",
+  "outlineSheet.done": "Готово",
+
+  "lessonBar.backToShelf": "Назад на полку",
+  "lessonBar.chapters": "Главы",
+  "lessonBar.openIn": "Открыть в…",
+
+  "lessonIntro.title": "Этот файл откроется как урок",
+  "lessonIntro.body1":
+    "На телефоне PDF не листают страница за страницей. Он открывается как урок: я провожу вас по статье в виде текста, цитируя её с указанием номеров страниц.",
+  "lessonIntro.body2":
+    "Чтобы увидеть сами страницы — рисунки, таблицы, вёрстку, — передайте файл в другое приложение через «Открыть в…» или читайте на iPad.",
+  "lessonIntro.body3": "Это говорится один раз. В следующий раз эта карточка сразу откроет урок.",
+  "lessonIntro.start": "Начать урок",
+  "lessonIntro.openIn": "Открыть в…",
+
+  "chapterSheet.title": "Главы",
+  "chapterSheet.empty": "На этом устройстве пока нет списка глав этой статьи.",
+  "chapterSheet.now": "Сейчас",
+
+  "lessonView.chipDontFollowLabel": "Не понимаю",
+  "lessonView.chipDontFollowText": "Я не понимаю.",
+  "lessonView.chipSkipLabel": "Пропустить",
+  "lessonView.chipSkipText": "Пропусти это.",
+  "lessonView.continuingFrom": "Продолжаем с: {title}",
+  "lessonView.now": "Сейчас: {title}",
+  "lessonView.nowWithPage": "Сейчас: {title} · с.{page}",
+
+  "bookLesson.backToPage": "Назад к странице",
+  "bookLesson.retry": "Повторить",
+  "bookLesson.ariaLabel": "Урок",
+  "bookLesson.placeholder": "Попросите меня рассказать о части этой книги…",
+
+  "lesson.backToLesson": "Назад к уроку",
+  "lesson.aside": "Побочный вопрос",
+  "lesson.placeholder": "Спросите о статье…",
+  "lesson.askAboutThis": "Спросить об этом",
+
+  "lessonCall.noProvider": "Настройте провайдера в настройках, и эту статью можно будет разобрать.",
+  "lessonCall.noThread": "Беседу по этой статье не удалось прочитать на этом устройстве.",
+  "lessonCall.openFailed": "Не удалось открыть эту статью.",
+
+  "bookLessonHook.imageLimitHint": {
+    one: "Можно прикрепить до {count} изображения.",
+    few: "Можно прикрепить до {count} изображений.",
+    many: "Можно прикрепить до {count} изображений.",
+    other: "Можно прикрепить до {count} изображения.",
+  },
+  "bookLessonHook.threadsUnreadable": "Не удалось загрузить сохранённые беседы с ИИ",
+
+  "pullToAsk.releaseToAsk": "Отпустите, чтобы задать вопрос",
+
+  "lessonStatus.downloading": "Скачивание…",
+  "lessonStatus.reading": "Чтение статьи…",
+  "lessonStatus.failedDownload": "Не удалось скачать эту статью.",
+  "lessonStatus.failedUnreadable": "Не удалось прочитать этот PDF.",
+  "lessonStatus.failedNoText": "Этот PDF — скан без текстового слоя, поэтому рассказывать не о чем.",
+
+  "lessonOpening.text":
+    "Сначала дайте мне общий каркас этой статьи — сколько в ней частей и о чём каждая, уместив это в один экран. Я читаю с телефона, и страниц перед глазами у меня нет, поэтому для рисунка или таблицы просто назовите её и укажите страницу; можете сказать, что написано в подписи. А затем не спрашивайте меня — сразу ведите к первой остановке.",
+  "lessonOpening.takeMeToChapterTitle": "Проведи меня к «{title}».",
+  "lessonOpening.takeMeToPage": "Проведи меня на страницу {page}.",
+  "lessonOpening.takeMeToChapterNumber": "Проведи меня к главе {number}.",
+} satisfies Translation<typeof en>;

@@ -15,6 +15,7 @@
 // is the position block — so a tap is goToChapter: the page, with the view
 // left to find the heading on it.
 
+import { useT } from "../../../../i18n";
 import type { OutlineItem } from "../../../../fulltext/types";
 import type { FlowPaperName } from "../../../../reading/epub/flow/flow-display";
 import OutlineView from "../../reader/sidebar/OutlineView";
@@ -33,15 +34,16 @@ export default function PhoneOutlineSheet(props: {
   onOpenChange: (open: boolean) => void;
   onGoToChapter: (pageIndex: number) => void;
 }) {
+  const t = useT();
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogSheetContent data-reader-paper={props.paper}>
         {/* Stuck to the top: the sheet scrolls as one, and Done must not scroll away. */}
         <div className="sticky top-0 z-10 flex items-center border-b border-border-subtle bg-background pr-1 pl-4">
-          <DialogTitle className="flex-1 py-3 text-[15px]">Outline</DialogTitle>
+          <DialogTitle className="flex-1 py-3 text-[15px]">{t("phone.outlineSheet.title")}</DialogTitle>
           <DialogClose asChild>
             <Button variant="ghost" className="text-[15px] font-medium">
-              Done
+              {t("phone.outlineSheet.done")}
             </Button>
           </DialogClose>
         </div>

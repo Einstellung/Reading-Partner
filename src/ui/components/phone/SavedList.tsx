@@ -3,6 +3,7 @@
 // it out of Saved (hold-menu.ts), and it leaves where it stands.
 
 import { useRef } from "react";
+import { useT } from "../../../i18n";
 import type { SavedArticle } from "../../../reading/saved/saved-articles";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import { cn } from "../lib/utils";
@@ -26,6 +27,7 @@ export default function SavedList({
   onChanged: () => Promise<void>;
   onNotice: (kind: NoticeKind, line: string) => void;
 }) {
+  const t = useT();
   const surface = useRef<HTMLDivElement | null>(null);
   const hold = useHoldDelete({
     host: surface,
@@ -47,15 +49,15 @@ export default function SavedList({
       <div className="mx-auto flex w-full max-w-lg flex-col px-4 py-5">
         <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-3 border-b border-border-subtle bg-background/85 px-4 py-3 backdrop-blur">
           <Button variant="subtle" size="chip" onClick={onBack}>
-            ‹ Today
+            ‹ {t("phone.savedList.back")}
           </Button>
           <span className="text-[13px] text-faint-foreground">
-            {articles.length} saved article{articles.length === 1 ? "" : "s"}
+            {t("phone.savedList.count", { count: articles.length })}
           </span>
         </div>
 
         {articles.length === 0 && (
-          <p className="m-0 text-[14px] text-faint-foreground">Nothing kept yet.</p>
+          <p className="m-0 text-[14px] text-faint-foreground">{t("phone.savedList.empty")}</p>
         )}
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {articles.map((a) => {
@@ -73,7 +75,9 @@ export default function SavedList({
                   <span className="text-[15px] font-medium leading-snug text-foreground">{a.title}</span>
                   <span className="flex items-center gap-2">
                     {line && <span className="text-[12px] text-faint-foreground">{line}</span>}
-                    {a.summaryOnly && <span className="text-[12px] text-[#b08a3a]">summary only</span>}
+                    {a.summaryOnly && (
+                      <span className="text-[12px] text-[#b08a3a]">{t("phone.savedList.summaryOnly")}</span>
+                    )}
                   </span>
                 </button>
               </li>

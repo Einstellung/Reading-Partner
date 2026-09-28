@@ -13,6 +13,7 @@
 // an offer rather than as something that already happened.
 
 import { useMemo } from "react";
+import { useT } from "../../../../i18n";
 import { IconSparkle } from "../../base/icons";
 import { usePullToAsk } from "./usePullToAsk";
 
@@ -28,6 +29,7 @@ export function PullToAsk({
   children: React.ReactNode;
 }) {
   const { hostRef, stripRef } = usePullToAsk(useMemo(() => ({ onAsk }), [onAsk]));
+  const t = useT();
 
   return (
     // Clips the screen once it has been pulled down, and holds the strip the
@@ -42,7 +44,7 @@ export function PullToAsk({
         <span className="mb-3 flex items-center gap-1.5 whitespace-nowrap rounded-full border border-secondary-border bg-card px-3 py-1.5 text-[13px] text-secondary-foreground group-data-[armed=true]:border-primary group-data-[armed=true]:bg-primary group-data-[armed=true]:text-primary-foreground">
           <IconSparkle size={14} />
           <span className="group-data-[armed=true]:hidden">{label}</span>
-          <span className="hidden group-data-[armed=true]:inline">Release to ask</span>
+          <span className="hidden group-data-[armed=true]:inline">{t("phone.pullToAsk.releaseToAsk")}</span>
         </span>
       </div>
       {children}

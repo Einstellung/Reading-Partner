@@ -3,6 +3,7 @@
 // one of the reading domain's own (reading/delete/); this file only picks which
 // and says what happened.
 
+import { t } from "../../../i18n";
 import { getBookThread, loadThreads } from "../../../platform/app/threads";
 import type { LibraryEntry } from "../../../platform/app/library";
 import type { FileRef, Topic } from "../../../platform/app/topics";
@@ -132,16 +133,16 @@ export async function runHoldChoice(
 export function holdFailedLine(choice: HoldChoice): string {
   switch (choice) {
     case "delete-topic":
-      return "The topic could not be deleted.";
+      return t("phone.holdMenu.failedTopic");
     case "delete-file":
-      return "It could not be deleted.";
+      return t("phone.holdMenu.failedFile");
     case "remove-from-topic":
-      return "It could not be removed from this topic.";
+      return t("phone.holdMenu.failedRemoveFromTopic");
     case "delete-lesson":
     case "delete-conversation":
     case "delete-aside":
-      return "The conversation could not be deleted.";
+      return t("phone.holdMenu.failedConversation");
     case "remove-saved":
-      return "It could not be removed from Saved.";
+      return t("phone.holdMenu.failedRemoveSaved");
   }
 }

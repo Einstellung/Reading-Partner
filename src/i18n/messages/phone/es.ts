@@ -1,0 +1,189 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+export default {
+  "holdMenu.deleteTopic": "Eliminar tema",
+  "holdMenu.deleteLesson": "Eliminar lección",
+  "holdMenu.deleteConversation": "Eliminar conversación",
+  "holdMenu.removeFromTopic": "Quitar del tema",
+  "holdMenu.deleteArticle": "Eliminar artículo",
+  "holdMenu.deleteBook": "Eliminar libro",
+  "holdMenu.removeFromSaved": "Quitar de Guardados",
+  "holdMenu.deleteAside": "Eliminar aparte",
+
+  "holdMenu.confirmDeleteFileTitle": "¿Eliminar “{title}”?",
+  "holdMenu.confirmDeleteBookDescription":
+    "¿Eliminar este libro y todo lo relacionado con él, en todos los dispositivos? Tus notas sobre ti mismo se conservan.",
+  "holdMenu.confirmDeleteArticleDescription":
+    "¿Eliminar este artículo y todo lo relacionado con él, en todos los dispositivos? Tus notas sobre ti mismo se conservan.",
+  "holdMenu.delete": "Eliminar",
+  "holdMenu.confirmRemoveTitle": "¿Quitar “{title}”?",
+  "holdMenu.removeOthers": "Seguirá en {names}",
+  "holdMenu.removeNoOthers": "Algo más lo sigue listando, así que se conserva",
+  "holdMenu.removeBookDescription": "Este tema pierde el libro. {where}, con su posición de lectura y sus marcas.",
+  "holdMenu.removeArticleDescription": "Este tema pierde el artículo. {where}, con su posición de lectura y sus marcas.",
+  "holdMenu.remove": "Quitar",
+  "holdMenu.confirmConversationTitle": "¿Eliminar esta conversación?",
+  "holdMenu.confirmLessonDescription":
+    "La lección se elimina, con sus apartes, en todos los dispositivos. El artículo se conserva, y la próxima lección empieza desde el principio.",
+  "holdMenu.confirmConversationDescription":
+    "Todo lo dicho sobre este libro se elimina, en todos los dispositivos. El libro, sus marcas y su posición de lectura se conservan.",
+  "holdMenu.confirmRemoveSavedDescription":
+    "Desaparece de Guardados en todos los dispositivos. El resumen del que vino no cambia.",
+  "holdMenu.confirmDeleteAsideDescription":
+    "El aparte se elimina, junto con su fila en la lección. La lección en sí se conserva.",
+
+  "holdMenu.doneDeleted": "Se eliminó “{title}”",
+  "holdMenu.doneRemovedFromTopic": "Se quitó de {topicName}",
+  "holdMenu.doneLessonDeleted": "Lección eliminada",
+  "holdMenu.doneConversationDeleted": "Conversación eliminada",
+  "holdMenu.doneRemovedFromSaved": "Se quitó de Guardados",
+  "holdMenu.doneAsideDeleted": "Aparte eliminado",
+
+  "holdMenu.failedTopic": "No se pudo eliminar el tema.",
+  "holdMenu.failedFile": "No se pudo eliminar.",
+  "holdMenu.failedRemoveFromTopic": "No se pudo quitar de este tema.",
+  "holdMenu.failedConversation": "No se pudo eliminar la conversación.",
+  "holdMenu.failedRemoveSaved": "No se pudo quitar de Guardados.",
+
+  "savedList.back": "Hoy",
+  "savedList.count": { one: "{count} artículo guardado", other: "{count} artículos guardados" },
+  "savedList.empty": "Todavía no has guardado nada.",
+  "savedList.summaryOnly": "solo resumen",
+
+  "home.today": "Hoy",
+  "home.briefingLabel": "El resumen de hoy",
+  "home.mealsLabel": "Comidas",
+  "home.mealsBlurb": "Los desayunos, comidas y cenas de esta semana, y qué comprar.",
+  "home.open": "Abrir →",
+  "home.savedLabel": "Guardados",
+  "home.savedBlurb": "Artículos que guardaste, para leer cuando quieras.",
+  "home.savedCount": { one: "{count} artículo", other: "{count} artículos" },
+  "home.savedEmpty": "Todavía no has guardado nada. Guarda un artículo del resumen y te esperará aquí.",
+  "home.libraryLabel": "Biblioteca",
+  "home.continueReading": "Continuar leyendo · {topicName}",
+  "home.libraryBlurb": "Tus temas, y los libros archivados en ellos.",
+  "home.allTopics": "Todos los temas",
+
+  "newTopic.title": "Nuevo tema",
+  "newTopic.fieldLabel": "Nombre del tema",
+  "newTopic.cancel": "Cancelar",
+  "newTopic.create": "Crear",
+
+  "shelf.libraryLabel": "Biblioteca",
+  "shelf.backHome": "Inicio",
+  "shelf.topicCount": { one: "{count} tema", other: "{count} temas" },
+  "shelf.newTopic": "Nuevo tema",
+  "shelf.noTopicsYet": "Todavía no hay temas.",
+  "shelf.created": "Se creó “{name}”",
+  "shelf.createFailed": "No se pudo crear el tema.",
+  "shelf.importing": "Importando…",
+  "shelf.importEpub": "Importar EPUB",
+  "shelf.nothingFiled": "Todavía no hay nada archivado aquí.",
+  "shelf.lessonBadge": "Lección",
+  "shelf.downloadFailed": "No se pudo descargar este libro",
+  "shelf.importFailed": "No se pudo importar este libro",
+
+  "shelfList.notConfigured":
+    "Esta compilación no tiene una cuenta de Google configurada, así que no puede descargar el libro",
+  "shelfList.signInToDownload": "Inicia sesión en tu cuenta en Ajustes para descargar este libro",
+  "shelfList.notImported": "El escritorio todavía no ha importado este archivo, así que no hay nada que obtener",
+  "shelfList.notFiledYet": "Este libro todavía no ha terminado de sincronizarse a este dispositivo",
+  "shelfList.downloading": "Descargando…",
+  "shelfList.notImportedShort": "No importado",
+  "shelfList.inCloud": "En la nube",
+  "shelfList.notSyncedYet": "Aún sin sincronizar",
+  "shelfList.lessonNotStarted": "Sin empezar",
+  "shelfList.lessonOn": "En {title}",
+  "shelfList.lessonInProgress": "En una lección",
+
+  "reader.rendering": "Renderizando…",
+  "reader.openFailed": "No se pudo abrir este libro.",
+  "reader.drawFailed": "No se pudo dibujar este libro.",
+  "reader.deleteMarkTitle": "¿Eliminar esta marca?",
+  "reader.deleteMarkDescription":
+    "La marca desaparece, y con ella la conversación abierta desde ella. Esto no se puede deshacer.",
+  "reader.deleteMarkButton": "Eliminar esta marca",
+  "reader.delete": "Eliminar",
+
+  "readerBar.backToShelf": "Volver a la estantería",
+  "readerBar.outline": "Índice",
+  "readerBar.display": "Presentación",
+  "readerBar.learnThisBook": "Aprender este libro con la IA",
+  "readerBar.dotWriting": " (se está escribiendo una respuesta)",
+  "readerBar.dotUnseen": " (respuesta nueva)",
+
+  "readerGate.aiPenNotOnPhone":
+    "El lápiz de IA todavía no está en el teléfono — Aprender este libro con la IA está en la barra superior",
+
+  "displaySheet.title": "Presentación",
+  "displaySheet.size": "Tamaño",
+  "displaySheet.smallerText": "Texto más pequeño",
+  "displaySheet.largerText": "Texto más grande",
+  "displaySheet.lineSpacing": "Interlineado",
+  "displaySheet.margins": "Márgenes",
+  "displaySheet.turnPages": "Pasar páginas",
+  "displaySheet.paper": "Papel",
+
+  "outlineSheet.title": "Índice",
+  "outlineSheet.done": "Listo",
+
+  "lessonBar.backToShelf": "Volver a la estantería",
+  "lessonBar.chapters": "Capítulos",
+  "lessonBar.openIn": "Abrir en…",
+
+  "lessonIntro.title": "Este se abre como una lección",
+  "lessonIntro.body1":
+    "En el teléfono, un PDF no se pasa página por página. Se abre como una lección: te llevo por el artículo en texto, citándolo con los números de página a medida que avanzamos.",
+  "lessonIntro.body2":
+    "Para ver las páginas en sí —las figuras, las tablas, la maquetación— pasa el archivo a otra app con Abrir en…, o léelo en el iPad.",
+  "lessonIntro.body3": "Se dice una sola vez. La próxima vez, esta tarjeta va directo a la lección.",
+  "lessonIntro.start": "Empezar la lección",
+  "lessonIntro.openIn": "Abrir en…",
+
+  "chapterSheet.title": "Capítulos",
+  "chapterSheet.empty": "Este dispositivo todavía no tiene la lista de capítulos de este artículo.",
+  "chapterSheet.now": "Ahora",
+
+  "lessonView.chipDontFollowLabel": "No entiendo",
+  "lessonView.chipDontFollowText": "No entiendo.",
+  "lessonView.chipSkipLabel": "Saltar",
+  "lessonView.chipSkipText": "Salta esto.",
+  "lessonView.continuingFrom": "Continuando desde: {title}",
+  "lessonView.now": "Ahora: {title}",
+  "lessonView.nowWithPage": "Ahora: {title} · p.{page}",
+
+  "bookLesson.backToPage": "Volver a la página",
+  "bookLesson.retry": "Reintentar",
+  "bookLesson.ariaLabel": "Lección",
+  "bookLesson.placeholder": "Pídeme que te enseñe una parte de este libro…",
+
+  "lesson.backToLesson": "Volver a la lección",
+  "lesson.aside": "Aparte",
+  "lesson.placeholder": "Pregunta sobre el artículo…",
+  "lesson.askAboutThis": "Preguntar sobre esto",
+
+  "lessonCall.noProvider": "Configura un proveedor en Ajustes y podré enseñarte este artículo.",
+  "lessonCall.noThread": "La conversación de este artículo no se pudo leer en este dispositivo.",
+  "lessonCall.openFailed": "No se pudo abrir este artículo.",
+
+  "bookLessonHook.imageLimitHint": {
+    one: "Puedes adjuntar hasta {count} imagen.",
+    other: "Puedes adjuntar hasta {count} imágenes.",
+  },
+  "bookLessonHook.threadsUnreadable": "No se pudieron cargar las conversaciones guardadas con la IA",
+
+  "pullToAsk.releaseToAsk": "Suelta para preguntar",
+
+  "lessonStatus.downloading": "Descargando…",
+  "lessonStatus.reading": "Leyendo el artículo…",
+  "lessonStatus.failedDownload": "No se pudo descargar este artículo.",
+  "lessonStatus.failedUnreadable": "No se pudo leer este PDF.",
+  "lessonStatus.failedNoText": "Este PDF es un escaneo sin capa de texto, así que no hay nada que enseñar.",
+
+  "lessonOpening.text":
+    "Primero dame el esqueleto de este artículo: cuántas partes tiene y de qué trata cada una, en una sola pantalla. Estoy leyendo en el teléfono y no tengo las páginas delante, así que para una figura o una tabla solo dime cuál es y en qué página está; puedes decirme qué dice el pie de imagen. Luego no me preguntes, llévame directo a la primera parada.",
+  "lessonOpening.takeMeToChapterTitle": "Llévame a {title}.",
+  "lessonOpening.takeMeToPage": "Llévame a la página {page}.",
+  "lessonOpening.takeMeToChapterNumber": "Llévame al capítulo {number}.",
+} satisfies Translation<typeof en>;

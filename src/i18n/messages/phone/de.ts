@@ -1,0 +1,188 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+export default {
+  "holdMenu.deleteTopic": "Thema löschen",
+  "holdMenu.deleteLesson": "Lektion löschen",
+  "holdMenu.deleteConversation": "Unterhaltung löschen",
+  "holdMenu.removeFromTopic": "Aus Thema entfernen",
+  "holdMenu.deleteArticle": "Artikel löschen",
+  "holdMenu.deleteBook": "Buch löschen",
+  "holdMenu.removeFromSaved": "Aus Gespeichert entfernen",
+  "holdMenu.deleteAside": "Nebenfrage löschen",
+
+  "holdMenu.confirmDeleteFileTitle": "„{title}“ löschen?",
+  "holdMenu.confirmDeleteBookDescription":
+    "Dieses Buch und alles dazu auf allen Geräten löschen? Deine eigenen Notizen bleiben erhalten.",
+  "holdMenu.confirmDeleteArticleDescription":
+    "Diesen Artikel und alles dazu auf allen Geräten löschen? Deine eigenen Notizen bleiben erhalten.",
+  "holdMenu.delete": "Löschen",
+  "holdMenu.confirmRemoveTitle": "„{title}“ entfernen?",
+  "holdMenu.removeOthers": "Bleibt erhalten in {names}",
+  "holdMenu.removeNoOthers": "Etwas anderes listet es noch, deshalb bleibt es erhalten",
+  "holdMenu.removeBookDescription": "Dieses Thema verliert das Buch. {where}, mit Leseposition und Markierungen.",
+  "holdMenu.removeArticleDescription": "Dieses Thema verliert den Artikel. {where}, mit Leseposition und Markierungen.",
+  "holdMenu.remove": "Entfernen",
+  "holdMenu.confirmConversationTitle": "Diese Unterhaltung löschen?",
+  "holdMenu.confirmLessonDescription":
+    "Die Lektion wird mitsamt ihren Nebenfragen auf allen Geräten gelöscht. Das Paper bleibt erhalten, und die nächste Lektion beginnt von vorn.",
+  "holdMenu.confirmConversationDescription":
+    "Alles, was zu diesem Buch gesagt wurde, wird auf allen Geräten gelöscht. Das Buch selbst, seine Markierungen und die Leseposition bleiben erhalten.",
+  "holdMenu.confirmRemoveSavedDescription":
+    "Er verschwindet auf allen Geräten aus Gespeichert. Das Briefing, aus dem er stammt, bleibt unverändert.",
+  "holdMenu.confirmDeleteAsideDescription":
+    "Die Nebenfrage und ihre Zeile in der Lektion werden gelöscht. Die Lektion selbst bleibt erhalten.",
+
+  "holdMenu.doneDeleted": "„{title}“ gelöscht",
+  "holdMenu.doneRemovedFromTopic": "Aus {topicName} entfernt",
+  "holdMenu.doneLessonDeleted": "Lektion gelöscht",
+  "holdMenu.doneConversationDeleted": "Unterhaltung gelöscht",
+  "holdMenu.doneRemovedFromSaved": "Aus Gespeichert entfernt",
+  "holdMenu.doneAsideDeleted": "Nebenfrage gelöscht",
+
+  "holdMenu.failedTopic": "Das Thema konnte nicht gelöscht werden.",
+  "holdMenu.failedFile": "Konnte nicht gelöscht werden.",
+  "holdMenu.failedRemoveFromTopic": "Konnte nicht aus diesem Thema entfernt werden.",
+  "holdMenu.failedConversation": "Die Unterhaltung konnte nicht gelöscht werden.",
+  "holdMenu.failedRemoveSaved": "Konnte nicht aus Gespeichert entfernt werden.",
+
+  "savedList.back": "Heute",
+  "savedList.count": { one: "{count} gespeicherter Artikel", other: "{count} gespeicherte Artikel" },
+  "savedList.empty": "Noch nichts gespeichert.",
+  "savedList.summaryOnly": "nur Zusammenfassung",
+
+  "home.today": "Heute",
+  "home.briefingLabel": "Das heutige Briefing",
+  "home.mealsLabel": "Mahlzeiten",
+  "home.mealsBlurb": "Frühstück, Mittag- und Abendessen dieser Woche, und was eingekauft werden muss.",
+  "home.open": "Öffnen →",
+  "home.savedLabel": "Gespeichert",
+  "home.savedBlurb": "Artikel, die du gespeichert hast, zum Lesen wann immer du willst.",
+  "home.savedCount": { one: "{count} Artikel", other: "{count} Artikel" },
+  "home.savedEmpty": "Noch nichts gespeichert. Speichere einen Artikel aus dem Briefing, und er wartet hier.",
+  "home.libraryLabel": "Bibliothek",
+  "home.continueReading": "Weiterlesen · {topicName}",
+  "home.libraryBlurb": "Deine Themen und die darin abgelegten Bücher.",
+  "home.allTopics": "Alle Themen",
+
+  "newTopic.title": "Neues Thema",
+  "newTopic.fieldLabel": "Themenname",
+  "newTopic.cancel": "Abbrechen",
+  "newTopic.create": "Erstellen",
+
+  "shelf.libraryLabel": "Bibliothek",
+  "shelf.backHome": "Start",
+  "shelf.topicCount": { one: "{count} Thema", other: "{count} Themen" },
+  "shelf.newTopic": "Neues Thema",
+  "shelf.noTopicsYet": "Noch keine Themen.",
+  "shelf.created": "„{name}“ erstellt",
+  "shelf.createFailed": "Das Thema konnte nicht erstellt werden.",
+  "shelf.importing": "Wird importiert…",
+  "shelf.importEpub": "EPUB importieren",
+  "shelf.nothingFiled": "Hier ist noch nichts abgelegt.",
+  "shelf.lessonBadge": "Lektion",
+  "shelf.downloadFailed": "Dieses Buch konnte nicht heruntergeladen werden",
+  "shelf.importFailed": "Dieses Buch konnte nicht importiert werden",
+
+  "shelfList.notConfigured": "Für diesen Build ist kein Google-Konto eingerichtet, das Buch kann nicht heruntergeladen werden",
+  "shelfList.signInToDownload": "Melde dich in den Einstellungen bei deinem Konto an, um dieses Buch herunterzuladen",
+  "shelfList.notImported": "Der Desktop hat diese Datei noch nicht importiert, es gibt also nichts zu holen",
+  "shelfList.notFiledYet": "Dieses Buch ist noch nicht fertig mit diesem Gerät synchronisiert",
+  "shelfList.downloading": "Wird heruntergeladen…",
+  "shelfList.notImportedShort": "Nicht importiert",
+  "shelfList.inCloud": "In der Cloud",
+  "shelfList.notSyncedYet": "Noch nicht synchronisiert",
+  "shelfList.lessonNotStarted": "Noch nicht begonnen",
+  "shelfList.lessonOn": "Bei {title}",
+  "shelfList.lessonInProgress": "Lektion läuft",
+
+  "reader.rendering": "Wird gerendert…",
+  "reader.openFailed": "Dieses Buch konnte nicht geöffnet werden.",
+  "reader.drawFailed": "Dieses Buch konnte nicht dargestellt werden.",
+  "reader.deleteMarkTitle": "Diese Markierung löschen?",
+  "reader.deleteMarkDescription":
+    "Die Markierung verschwindet, mitsamt der Unterhaltung, die daraus geöffnet wurde. Das kann nicht rückgängig gemacht werden.",
+  "reader.deleteMarkButton": "Diese Markierung löschen",
+  "reader.delete": "Löschen",
+
+  "readerBar.backToShelf": "Zurück zum Regal",
+  "readerBar.outline": "Gliederung",
+  "readerBar.display": "Anzeige",
+  "readerBar.learnThisBook": "Dieses Buch mit KI lernen",
+  "readerBar.dotWriting": " (eine Antwort wird geschrieben)",
+  "readerBar.dotUnseen": " (neue Antwort)",
+
+  "readerGate.aiPenNotOnPhone":
+    "Der KI-Stift ist auf dem Telefon noch nicht verfügbar — Dieses Buch mit KI lernen findest du in der oberen Leiste",
+
+  "displaySheet.title": "Anzeige",
+  "displaySheet.size": "Größe",
+  "displaySheet.smallerText": "Kleinerer Text",
+  "displaySheet.largerText": "Größerer Text",
+  "displaySheet.lineSpacing": "Zeilenabstand",
+  "displaySheet.margins": "Ränder",
+  "displaySheet.turnPages": "Seiten umblättern",
+  "displaySheet.paper": "Papier",
+
+  "outlineSheet.title": "Gliederung",
+  "outlineSheet.done": "Fertig",
+
+  "lessonBar.backToShelf": "Zurück zum Regal",
+  "lessonBar.chapters": "Kapitel",
+  "lessonBar.openIn": "Öffnen in …",
+
+  "lessonIntro.title": "Dieses öffnet sich als Lektion",
+  "lessonIntro.body1":
+    "Auf dem Telefon wird ein PDF nicht Seite für Seite geblättert. Es öffnet sich als Lektion: Ich führe dich als Text durch das Paper und zitiere dabei mit Seitenzahlen.",
+  "lessonIntro.body2":
+    "Um die Seiten selbst zu sehen — Abbildungen, Tabellen, den Satz —, gib die Datei mit Öffnen in … an eine andere App weiter oder lies sie auf dem iPad.",
+  "lessonIntro.body3": "Das erscheint nur einmal. Beim nächsten Mal führt diese Karte direkt in die Lektion.",
+  "lessonIntro.start": "Lektion starten",
+  "lessonIntro.openIn": "Öffnen in …",
+
+  "chapterSheet.title": "Kapitel",
+  "chapterSheet.empty": "Auf diesem Gerät gibt es noch keine Kapitelliste für dieses Paper.",
+  "chapterSheet.now": "Jetzt",
+
+  "lessonView.chipDontFollowLabel": "Verstehe ich nicht",
+  "lessonView.chipDontFollowText": "Ich verstehe das nicht.",
+  "lessonView.chipSkipLabel": "Überspringen",
+  "lessonView.chipSkipText": "Überspring das.",
+  "lessonView.continuingFrom": "Weiter bei: {title}",
+  "lessonView.now": "Jetzt: {title}",
+  "lessonView.nowWithPage": "Jetzt: {title} · S.{page}",
+
+  "bookLesson.backToPage": "Zurück zur Seite",
+  "bookLesson.retry": "Erneut versuchen",
+  "bookLesson.ariaLabel": "Lektion",
+  "bookLesson.placeholder": "Bitte mich, dir einen Teil dieses Buchs zu erklären …",
+
+  "lesson.backToLesson": "Zurück zur Lektion",
+  "lesson.aside": "Nebenfrage",
+  "lesson.placeholder": "Frag etwas zum Paper …",
+  "lesson.askAboutThis": "Dazu fragen",
+
+  "lessonCall.noProvider": "Richte einen Anbieter in den Einstellungen ein, dann kann dir dieses Paper erklärt werden.",
+  "lessonCall.noThread": "Die Unterhaltung zu diesem Paper konnte auf diesem Gerät nicht gelesen werden.",
+  "lessonCall.openFailed": "Dieses Paper konnte nicht geöffnet werden.",
+
+  "bookLessonHook.imageLimitHint": {
+    one: "Du kannst bis zu {count} Bild anhängen.",
+    other: "Du kannst bis zu {count} Bilder anhängen.",
+  },
+  "bookLessonHook.threadsUnreadable": "Gespeicherte KI-Unterhaltungen konnten nicht geladen werden",
+
+  "pullToAsk.releaseToAsk": "Loslassen zum Fragen",
+
+  "lessonStatus.downloading": "Wird heruntergeladen…",
+  "lessonStatus.reading": "Paper wird gelesen…",
+  "lessonStatus.failedDownload": "Dieses Paper konnte nicht heruntergeladen werden.",
+  "lessonStatus.failedUnreadable": "Dieses PDF konnte nicht gelesen werden.",
+  "lessonStatus.failedNoText": "Dieses PDF ist ein Scan ohne Textebene, es gibt also nichts zu erklären.",
+
+  "lessonOpening.text":
+    "Gib mir zuerst das Grundgerüst dieses Papers — wie viele Teile es hat und worum es in jedem geht, auf einem Bildschirm. Ich lese auf dem Telefon und habe die Seiten nicht vor mir, also nenn bei einer Abbildung oder Tabelle einfach ihren Namen und ihre Seite; du kannst mir auch sagen, was die Bildunterschrift sagt. Dann frag nicht nach, sondern führ mich direkt zur ersten Station.",
+  "lessonOpening.takeMeToChapterTitle": "Führ mich zu {title}.",
+  "lessonOpening.takeMeToPage": "Führ mich zu Seite {page}.",
+  "lessonOpening.takeMeToChapterNumber": "Führ mich zu Kapitel {number}.",
+} satisfies Translation<typeof en>;

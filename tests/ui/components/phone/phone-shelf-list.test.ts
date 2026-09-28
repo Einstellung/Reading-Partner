@@ -3,6 +3,7 @@
 // continue. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { t } from "../../../../src/i18n";
 import type { LibraryEntry } from "../../../../src/platform/app/library";
 import type { FileRef, Topic } from "../../../../src/platform/app/topics";
 import type { TableChapter } from "../../../../src/reading/chapters/table";
@@ -13,11 +14,11 @@ import {
   materialNote,
   materialTap,
   shelfMaterials,
-  NOT_FILED_YET,
-  NOT_IMPORTED,
 } from "../../../../src/ui/components/phone/shelf-list";
 
 const SIGNED_IN = { configured: true, signedIn: true };
+const NOT_IMPORTED = t("phone.shelfList.notImported");
+const NOT_FILED_YET = t("phone.shelfList.notFiledYet");
 
 function file(name: string, hash?: string, lastOpenedAt?: number): FileRef {
   return { path: `/books/${name}`, name, addedAt: 1, hash, lastOpenedAt } as FileRef;

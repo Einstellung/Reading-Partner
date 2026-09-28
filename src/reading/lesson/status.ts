@@ -7,6 +7,8 @@
 // — extraction reports none, and a bar that does not move is worse than a line
 // that does not claim to.
 
+import { t } from "../../i18n";
+
 export type LessonOpenFailure =
   // The bytes could not be got: no copy here, and the account would not give
   // one (no network, signed out, no such blob).
@@ -22,23 +24,31 @@ export type LessonOpenStep =
   | { kind: "reading" }
   | { kind: "failed"; why: LessonOpenFailure };
 
-const FAILURE_LINE: Record<LessonOpenFailure, string> = {
-  download: "This paper could not be downloaded.",
-  unreadable: "This PDF could not be read.",
-  // Named as a property of the file rather than as a fault, because it is one:
-  // a scanned paper is a real paper, and nothing the reader does here fixes it.
-  "no-text": "This PDF is a scan with no text in it, so there is no lesson to give.",
-};
+// Read at call time rather than hoisted into a table, so a status said after
+// the reader switches languages is in the language they switched to.
+function failureLine(why: LessonOpenFailure): string {
+  switch (why) {
+    case "download":
+      return t("phone.lessonStatus.failedDownload");
+    case "unreadable":
+      return t("phone.lessonStatus.failedUnreadable");
+    // Named as a property of the file rather than as a fault, because it is
+    // one: a scanned paper is a real paper, and nothing the reader does here
+    // fixes it.
+    case "no-text":
+      return t("phone.lessonStatus.failedNoText");
+  }
+}
 
 /** The line for one step of opening a lesson. */
 export function lessonStatus(step: LessonOpenStep): string {
   switch (step.kind) {
     case "downloading":
-      return "Downloading…";
+      return t("phone.lessonStatus.downloading");
     case "reading":
-      return "Reading the paper…";
+      return t("phone.lessonStatus.reading");
     case "failed":
-      return FAILURE_LINE[step.why];
+      return failureLine(step.why);
   }
 }
 
