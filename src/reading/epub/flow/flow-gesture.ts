@@ -9,6 +9,13 @@
 // The reducer is fed by flow-view.ts and told what it cannot know: whether the
 // press landed on the words (a caret was found under it) and which pen is in
 // hand. Every effect it answers with is one thing the view then does.
+//
+// The paged view (paged-view.ts) feeds it too, with one difference: there
+// nothing scrolls, and a drag is the page-turn router's, which follows the
+// finger from 10px but only turns past a fifth of the screen or on a fling.
+// A drift short of that springs back and is a tap, so the press there allows
+// PAGED_TAP_SLOP_PX of travel, and the router's turn, when there is one, ends
+// the press with a `yield` (docs/pitfall/489).
 
 import type { FlowTool } from "./flow-contract";
 import { FLOW_PAD_Y, type FlowDisplay } from "./flow-display";
@@ -19,9 +26,27 @@ export const LONG_PRESS_MS = 500;
 /** How far a pressed finger may drift and still be pressing, not scrolling. */
 export const PRESS_SLOP_PX = 8;
 
+/**
+ * How far a press may travel and still be a tap in the paged view, where no
+ * travel is a scroll. Above the drift a real tap has (20px measured on the
+ * simulator), well short of the 22% of the screen a drag needs to turn.
+ */
+export const PAGED_TAP_SLOP_PX = 30;
+
 export type PressState =
   | { phase: "idle" }
-  | { phase: "pressed"; pointerId: number; x: number; y: number; at: number; onWords: boolean }
+  | {
+      phase: "pressed";
+      pointerId: number;
+      x: number;
+      y: number;
+      at: number;
+      onWords: boolean;
+      /** Still within PRESS_SLOP_PX, so a hold can still start a mark. */
+      still: boolean;
+      /** Travel past which the press ends (see the down event). */
+      slop: number;
+    }
   | { phase: "marking"; pointerId: number }
   /** The browser or a large move has this pointer; nothing more is read from it. */
   | { phase: "released"; pointerId: number };
@@ -38,12 +63,21 @@ export type PressEvent =
       tool: FlowTool["type"];
       /** The first contact; a second finger is never a press. */
       primary: boolean;
+      /**
+       * Travel past which the press is over. PRESS_SLOP_PX (the default)
+       * where travel is somebody else's gesture: the browser's scroll, the
+       * shell's back swipe. PAGED_TAP_SLOP_PX on the paged view's page. A hold
+       * starts a mark only within PRESS_SLOP_PX either way.
+       */
+      slopPx?: number;
     }
   | { kind: "move"; pointerId: number; x: number; y: number; t: number }
   /** The long-press timer fired. */
   | { kind: "hold"; pointerId: number; t: number }
   | { kind: "up"; pointerId: number; x: number; y: number; t: number }
-  | { kind: "cancel"; pointerId: number };
+  | { kind: "cancel"; pointerId: number }
+  /** Another reader of the finger acted on it (the page-turn router turned). */
+  | { kind: "yield"; pointerId: number };
 
 export type PressEffect =
   | "none"
@@ -61,35 +95,56 @@ function distance(ax: number, ay: number, bx: number, by: number): number {
   return Math.hypot(bx - ax, by - ay);
 }
 
+function pressDown(event: Extract<PressEvent, { kind: "down" }>): { state: PressState; effect: PressEffect } {
+  if (event.tool === "highlight" && event.onWords) {
+    return { state: { phase: "marking", pointerId: event.pointerId }, effect: "start-mark" };
+  }
+  return {
+    state: {
+      phase: "pressed",
+      pointerId: event.pointerId,
+      x: event.x,
+      y: event.y,
+      at: event.t,
+      onWords: event.onWords,
+      still: true,
+      slop: event.slopPx ?? PRESS_SLOP_PX,
+    },
+    effect: event.onWords ? "arm" : "none",
+  };
+}
+
 export function pressStep(state: PressState, event: PressEvent): { state: PressState; effect: PressEffect } {
+  // A first contact while a press or a released pointer is still on the books
+  // means that pointer's end never reached us (someone above captured it, as the
+  // shell's back swipe does): the glass is empty again, so this is a new press.
+  if (
+    event.kind === "down" &&
+    event.primary &&
+    (state.phase === "pressed" || state.phase === "released")
+  ) {
+    return pressDown(event);
+  }
   switch (state.phase) {
     case "idle": {
       if (event.kind !== "down" || !event.primary) return { state, effect: "none" };
-      if (event.tool === "highlight" && event.onWords) {
-        return { state: { phase: "marking", pointerId: event.pointerId }, effect: "start-mark" };
-      }
-      return {
-        state: {
-          phase: "pressed",
-          pointerId: event.pointerId,
-          x: event.x,
-          y: event.y,
-          at: event.t,
-          onWords: event.onWords,
-        },
-        effect: event.onWords ? "arm" : "none",
-      };
+      return pressDown(event);
     }
     case "pressed": {
       if (event.kind === "down" || event.pointerId !== state.pointerId) return { state, effect: "none" };
       switch (event.kind) {
-        case "move":
-          if (distance(state.x, state.y, event.x, event.y) > PRESS_SLOP_PX) {
+        case "move": {
+          const d = distance(state.x, state.y, event.x, event.y);
+          if (d > state.slop) {
             return { state: { phase: "released", pointerId: state.pointerId }, effect: "none" };
           }
+          if (state.still && d > PRESS_SLOP_PX) return { state: { ...state, still: false }, effect: "none" };
           return { state, effect: "none" };
+        }
+        case "yield":
+          return { state: { phase: "released", pointerId: state.pointerId }, effect: "none" };
         case "hold":
-          if (state.onWords && event.t - state.at >= LONG_PRESS_MS) {
+          if (state.onWords && state.still && event.t - state.at >= LONG_PRESS_MS) {
             return { state: { phase: "marking", pointerId: state.pointerId }, effect: "start-mark" };
           }
           return { state, effect: "none" };
@@ -110,6 +165,7 @@ export function pressStep(state: PressState, event: PressEvent): { state: PressS
         case "cancel":
           return { state: IDLE, effect: "abandon-mark" };
         case "hold":
+        case "yield":
           return { state, effect: "none" };
       }
       return { state, effect: "none" };
@@ -120,6 +176,11 @@ export function pressStep(state: PressState, event: PressEvent): { state: PressS
       return { state, effect: "none" };
     }
   }
+}
+
+/** Whether a press that went down at one point and up at another stayed a tap. */
+export function stayedATap(downX: number, downY: number, upX: number, upY: number): boolean {
+  return distance(downX, downY, upX, upY) <= PRESS_SLOP_PX;
 }
 
 /** Whether the view takes the touch off the browser on this move (docs/pitfall/117, 261). */

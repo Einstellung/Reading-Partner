@@ -27,7 +27,15 @@ import { caretAtPoint } from "../caret";
 import { epubCfi, parseCfiStart, pointSteps, resolvePointRange } from "../file/cfi";
 import type { FlowReaderView, FlowTool } from "./flow-contract";
 import { FLOW_PAPERS, flowPaperSwatch, type FlowDisplay } from "./flow-display";
-import { IDLE, LONG_PRESS_MS, pressStep, type PressEvent, type PressState } from "./flow-gesture";
+import {
+  IDLE,
+  LONG_PRESS_MS,
+  PAGED_TAP_SLOP_PX,
+  PRESS_SLOP_PX,
+  pressStep,
+  type PressEvent,
+  type PressState,
+} from "./flow-gesture";
 import { createFlowMarks, flowRangeSource, rectsIn, type FlowDoc, type PressPoint } from "./flow-marks";
 import { flowBaselineCss, mountFlowDocument } from "./flow-mount";
 import type { FlowReaderOptions } from "./flow-view";
@@ -46,6 +54,7 @@ import {
   pageProbePoints,
   pagedColumnCss,
   strokeProbePoints,
+  turnOfTap,
   windowPageOf,
   type PagedWindow,
 } from "./paged-logic";
@@ -58,7 +67,6 @@ import {
   locateQuote,
   pageIndexOfCfi,
   spineStartsOf,
-  tapZone,
 } from "../reader-logic";
 import { topEdgeSteps } from "./top-edge";
 import { hrefFragment, resolveZipPath } from "../file/zip";
@@ -459,6 +467,13 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     showWindowPage(p + dir);
   }
 
+  // By the side a tap landed on (tapZone, the iPad's); the middle is not a turn.
+  function turnByTap(clientX: number, clientY: number): void {
+    const zone = turnOfTap(frame.getBoundingClientRect(), clientX, clientY);
+    if (zone === "next") turn(1);
+    else if (zone === "prev") turn(-1);
+  }
+
   function goToEntry(entry: string, fragment: string | null): boolean {
     const spine = book.docs.findIndex((d) => d.entry === entry);
     if (spine < 0) return false;
@@ -563,7 +578,15 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     gestures.fingerDraw = tool.type === "highlight";
   }
   syncGestureTool();
-  gestures.turnToPage = (n: number) => showWindowPage(n - 1);
+  // The router ends every drag here, a spring back included (the page it
+  // started on). One that turned was the finger's gesture, and its lift is not
+  // a tap as well: it arrives at the frame after this.
+  gestures.turnToPage = (n: number) => {
+    if (press.phase === "pressed" && n - 1 !== windowPageOf(win, cur, column)) {
+      feed({ kind: "yield", pointerId: press.pointerId });
+    }
+    showWindowPage(n - 1);
+  };
 
   const countDown = () => {
     touching++;
@@ -580,28 +603,9 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     ctx: { current: gestures },
   });
 
-  // The back band: a touch that starts in it is the shell's (its listeners
-  // run in the capture phase above this frame) and reaches neither the router
-  // nor the press reducer.
-  const shellOwns = new Set<number>();
-  const guardDown = (e: PointerEvent) => {
-    if (e.pointerType !== "touch") return;
-    if (!inBackEdge(e.clientX, frame.getBoundingClientRect().left, opts.backEdgePx)) return;
-    shellOwns.add(e.pointerId);
-    e.stopPropagation();
-  };
-  const guardRest = (e: PointerEvent) => {
-    if (!shellOwns.has(e.pointerId)) return;
-    if (e.type === "pointerup" || e.type === "pointercancel") shellOwns.delete(e.pointerId);
-    e.stopPropagation();
-  };
-  frame.addEventListener("pointerdown", guardDown, { capture: true });
-  frame.addEventListener("pointermove", guardRest, { capture: true });
-  frame.addEventListener("pointerup", guardRest, { capture: true });
-  frame.addEventListener("pointercancel", guardRest, { capture: true });
-
   let press: PressState = IDLE;
   let pressedAt: PressPoint | null = null;
+  let landedAt: { x: number; y: number } | null = null;
   let holdTimer: number | null = null;
 
   function feed(event: PressEvent, at?: { x: number; y: number }): void {
@@ -643,21 +647,31 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
         break;
       case "tap": {
         clearQuote();
-        if (!at || marks.tapAt(at.x, at.y) || followLinkAt(at.x, at.y)) break;
-        const box = frame.getBoundingClientRect();
-        const zone = tapZone("paged", at.x - box.left, box.width);
-        if (zone === "next") turn(1);
-        else if (zone === "prev") turn(-1);
+        // Where the finger landed: a tap here can drift (PAGED_TAP_SLOP_PX),
+        // and one that lands on the right third and lifts in the middle is
+        // still a tap on the right.
+        const spot = landedAt ?? at;
+        if (!spot || marks.tapAt(spot.x, spot.y) || followLinkAt(spot.x, spot.y)) break;
+        turnByTap(spot.x, spot.y);
         break;
       }
       case "none":
         break;
     }
-    if (press.phase === "idle") pressedAt = null;
+    if (press.phase === "idle") {
+      pressedAt = null;
+      landedAt = null;
+    }
   }
 
-  const onPointerDown = (e: PointerEvent) => {
-    pressedAt = marks.caretAt(e.clientX, e.clientY);
+  // A press in the back band is never a mark: the band is a tap or the shell's
+  // swipe, and the shell takes the swipe past its 10px without saying so, so
+  // the column's slop ends it. On the page a drag is the router's, and one that
+  // springs back is still a tap (docs/pitfall/489); a turn it made says so
+  // through turnToPage.
+  const pressDown = (e: PointerEvent, inBand: boolean) => {
+    pressedAt = inBand ? null : marks.caretAt(e.clientX, e.clientY);
+    if (e.isPrimary) landedAt = { x: e.clientX, y: e.clientY };
     feed(
       {
         kind: "down",
@@ -668,10 +682,12 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
         onWords: pressedAt !== null,
         tool: tool.type,
         primary: e.isPrimary,
+        slopPx: inBand ? PRESS_SLOP_PX : PAGED_TAP_SLOP_PX,
       },
       { x: e.clientX, y: e.clientY },
     );
   };
+  const onPointerDown = (e: PointerEvent) => pressDown(e, false);
   const onPointerMove = (e: PointerEvent) => {
     if (press.phase === "idle") return;
     feed(
@@ -690,11 +706,39 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     if (press.phase === "idle") return;
     feed({ kind: "cancel", pointerId: e.pointerId });
   };
+  // The back band (docs/pitfall/488): a touch that starts in it is the shell's
+  // swipe or the reader's tap. The shell's listeners run in the capture phase
+  // above this frame and take the swipe; the router never sees the touch, so
+  // a swipe to the right from here is never the previous page. The press
+  // reducer does, and a tap here turns back a page like any tap on the left.
+  const shellOwns = new Set<number>();
+  const guardDown = (e: PointerEvent) => {
+    if (e.pointerType !== "touch") return;
+    // The shell captures the swipe it takes, so its end never comes here.
+    if (e.isPrimary) shellOwns.clear();
+    if (!inBackEdge(e.clientX, frame.getBoundingClientRect().left, opts.backEdgePx)) return;
+    shellOwns.add(e.pointerId);
+    e.stopPropagation();
+    pressDown(e, true);
+  };
+  const guardRest = (e: PointerEvent) => {
+    if (!shellOwns.has(e.pointerId)) return;
+    e.stopPropagation();
+    if (e.type === "pointermove") onPointerMove(e);
+    else if (e.type === "pointerup") onPointerUp(e);
+    else onPointerCancel(e);
+    if (e.type !== "pointermove") shellOwns.delete(e.pointerId);
+  };
+
   // Every move is the reader's in a paged book, as on the iPad
   // (docs/pitfall/117): nothing under it scrolls natively.
   const onTouchMove = (e: TouchEvent) => {
     if (claimsTouch("paged", false)) e.preventDefault();
   };
+  frame.addEventListener("pointerdown", guardDown, { capture: true });
+  frame.addEventListener("pointermove", guardRest, { capture: true });
+  frame.addEventListener("pointerup", guardRest, { capture: true });
+  frame.addEventListener("pointercancel", guardRest, { capture: true });
   frame.addEventListener("pointerdown", onPointerDown);
   frame.addEventListener("pointermove", onPointerMove);
   frame.addEventListener("pointerup", onPointerUp);
@@ -761,6 +805,10 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     },
     highlightQuote: async (page, req) => highlightQuote(page, req.searchText),
     clearQuoteHighlight: clearQuote,
+    turnByTap: (clientX, clientY) => {
+      clearQuote();
+      turnByTap(clientX, clientY);
+    },
     removeAnnotations: (ids) => marks.unsetAnnotations(ids),
     setDisplay: (next) => {
       if (destroyed) return;

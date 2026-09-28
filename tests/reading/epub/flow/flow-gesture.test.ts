@@ -4,10 +4,12 @@ import { describe, expect, test } from "bun:test";
 import {
   IDLE,
   LONG_PRESS_MS,
+  PAGED_TAP_SLOP_PX,
   PRESS_SLOP_PX,
   claimsTouch,
   intrinsicHeightEstimate,
   pressStep,
+  stayedATap,
   wordBoundsAt,
   type PressEvent,
   type PressState,
@@ -97,6 +99,68 @@ describe("a press with no pen in hand", () => {
     const { state, effects } = run([down({ onWords: false }), hold(5000)]);
     expect(effects).toEqual(["none", "none"]);
     expect(state.phase).toBe("pressed");
+  });
+});
+
+describe("a press in the paged view, where a drag that springs back is still a tap", () => {
+  const paged = (over: Partial<Extract<PressEvent, { kind: "down" }>> = {}) =>
+    down({ slopPx: PAGED_TAP_SLOP_PX, ...over });
+  const yieldTo = (pointerId = 1): PressEvent => ({ kind: "yield", pointerId });
+  const last = (effects: string[]) => effects[effects.length - 1];
+
+  test("a press that drifts past the column's slop is still a tap", () => {
+    for (const drift of [12, 20]) {
+      const { effects } = run([paged(), move(100 + drift, 200), up(100 + drift, 200)]);
+      expect(last(effects)).toBe("tap");
+    }
+  });
+
+  test("a press that travels past the paged slop is not a tap", () => {
+    const far = 100 + PAGED_TAP_SLOP_PX + 1;
+    const { effects } = run([paged(), move(far, 200), move(100, 200), up(100, 200)]);
+    expect(effects).not.toContain("tap");
+  });
+
+  test("a press the router turned the page for is not a tap as well", () => {
+    const { state, effects } = run([paged(), move(115, 200), yieldTo(), up(115, 200)]);
+    expect(effects).not.toContain("tap");
+    expect(state).toEqual(IDLE);
+  });
+
+  test("a press that drifted cannot start a mark by holding", () => {
+    const { effects } = run([paged(), move(100 + PRESS_SLOP_PX + 4, 200), move(100, 200), hold(1000 + LONG_PRESS_MS)]);
+    expect(effects).not.toContain("start-mark");
+  });
+
+  test("a still press still starts a mark by holding", () => {
+    const { effects } = run([paged(), hold(1000 + LONG_PRESS_MS)]);
+    expect(last(effects)).toBe("start-mark");
+  });
+
+  test("a yield leaves a mark being drawn alone", () => {
+    const { state, effects } = run([paged({ tool: "highlight" }), yieldTo()]);
+    expect(effects).toEqual(["start-mark", "none"]);
+    expect(state.phase).toBe("marking");
+  });
+});
+
+describe("a press whose end never arrived", () => {
+  test("a new first contact starts a new press", () => {
+    // Someone above captured pointer 1 after it travelled; its up went there.
+    const { effects } = run([down({ onWords: false }), move(130, 200), down({ pointerId: 2, onWords: false }), up(100, 200, 1300, 2)]);
+    expect(effects).toEqual(["none", "none", "none", "tap"]);
+  });
+
+  test("a second finger is not a new press", () => {
+    const { state } = run([down({ onWords: false }), down({ pointerId: 2, primary: false })]);
+    expect(state.phase === "pressed" && state.pointerId).toBe(1);
+  });
+});
+
+describe("whether a press stayed a tap", () => {
+  test("within the slop it did, past it it did not", () => {
+    expect(stayedATap(0, 0, PRESS_SLOP_PX, 0)).toBe(true);
+    expect(stayedATap(0, 0, PRESS_SLOP_PX + 1, 0)).toBe(false);
   });
 });
 

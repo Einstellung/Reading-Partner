@@ -35,6 +35,12 @@ export interface FlowReaderView {
    */
   highlightQuote(pageIndex: number, req: { searchText: string; displayText: string }): Promise<boolean>;
   clearQuoteHighlight(): void;
+  /**
+   * A tap that something over the page took first (the mark popup's scrim),
+   * handed on: the paged view turns by the side it landed on, as its own tap
+   * would, and leaves the middle alone. The scrolled column has no sides.
+   */
+  turnByTap(clientX: number, clientY: number): void;
   removeAnnotations(ids: string[]): void;
   setTool(tool: FlowTool): void;
   /**
