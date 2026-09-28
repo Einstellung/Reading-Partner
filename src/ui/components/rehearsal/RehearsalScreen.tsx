@@ -11,6 +11,7 @@
 // without a retell has no materials and so no figures, which is the note as it
 // reads today.
 
+import { useT } from "../../../i18n";
 import type { Rehearsal } from "../../../reading/rehearsal";
 import MaterialFigureScope from "../common/MaterialFigureScope";
 import RehearsalView from "./RehearsalView";
@@ -23,6 +24,7 @@ export default function RehearsalScreen(props: {
   onBack(gave: boolean): void;
   onSaved(recorded: boolean): void;
 }) {
+  const t = useT();
   const { outline, error } = useTalkOutline(props.rehearsal.outlineId);
 
   if (error) {
@@ -34,7 +36,7 @@ export default function RehearsalScreen(props: {
           className="text-sm text-muted-foreground underline"
           onClick={() => props.onBack(false)}
         >
-          Back to the topic
+          {t("study.retell.backToTopic")}
         </button>
       </div>
     );
@@ -43,7 +45,7 @@ export default function RehearsalScreen(props: {
   if (!outline) {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-background">
-        <p className="m-0 text-sm text-muted-foreground">Opening the note…</p>
+        <p className="m-0 text-sm text-muted-foreground">{t("study.rehearsal.openingNote")}</p>
       </div>
     );
   }
@@ -53,7 +55,7 @@ export default function RehearsalScreen(props: {
       <RehearsalView
         rehearsal={props.rehearsal}
         outline={outline}
-        backLabel="Back to the topic"
+        backLabel={t("study.retell.backToTopic")}
         // Which talk is being given is known before a word of it is said, so its
         // name goes in as the recognizer's hot words. Opened when the reader
         // starts, not here: a talk is opened to read as often as to give.

@@ -18,6 +18,7 @@ import {
   type DeskItemKind,
 } from "../../desk";
 import type { Rung } from "../../budget";
+import { t } from "../../i18n";
 import { languageInstruction } from "../../platform/app/settings";
 import { HISTORY_KEEP, HISTORY_KEEP_TIGHT } from "../desk-history";
 import { buildArrangeTools, type TalkArrangementCardData, type TalkOutline } from "../talk";
@@ -34,13 +35,18 @@ export const OUTLINE_KIND = "outline";
 // so neither can go.
 export type CoachReductionId = "history-trim";
 
-export const COACH_LADDER: readonly Rung<CoachReductionId>[] = [
-  {
-    id: "history-trim",
-    price: "messages",
-    notice: "earlier passes over this talk were left out to make room",
-  },
-];
+// A function rather than a module-level constant, like RETELL_LADDER: the
+// notice is read out to the reader, so it has to come out in the locale a turn
+// is assembled in.
+export function COACH_LADDER(): readonly Rung<CoachReductionId>[] {
+  return [
+    {
+      id: "history-trim",
+      price: "messages",
+      notice: t("study.budget.passesTrimmed"),
+    },
+  ];
+}
 
 export interface CoachTurnMessage {
   role: "user" | "ai";
@@ -110,10 +116,10 @@ async function openOutline(ref: OutlineDeskRef, env: DeskEnv): Promise<DeskItem 
 
   return {
     kind: OUTLINE_KIND,
-    label: outline.name || "The talk",
+    label: outline.name || t("study.coach.fallbackName"),
     tools,
     toolPrompts: [],
-    rungs: COACH_LADDER,
+    rungs: COACH_LADDER(),
     prompt: composePrompt,
     // No anchor: a talk is not a book and has no observations scoped to it. What
     // is known about the reader rides the turn all the same — the soul prints it

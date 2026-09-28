@@ -1,6 +1,7 @@
 // The rehearsal's logic, without React: how a pass ends, how a run reads back
 // afterwards, and what the bar above the panel says (docs/44).
 
+import type { Translate } from "../../../i18n";
 import {
   buildRun,
   type BuiltRun,
@@ -132,14 +133,13 @@ export function rehearsalReadiness(input: {
   // still being found or made on disk. A second press while the first is out
   // would mount the panel against whichever of the two came back last.
   preparing?: boolean;
+  t: Translate;
 }): RehearsalReadiness {
-  if (input.preparing) return { ok: false, title: "Starting this rehearsal…" };
-  if (input.segments === null) return { ok: false, title: "Looking for this talk's outline…" };
+  const { t } = input;
+  if (input.preparing) return { ok: false, title: t("study.rehearsal.startingTitle") };
+  if (input.segments === null) return { ok: false, title: t("study.rehearsal.loadingTitle") };
   if (input.segments === 0) {
-    return {
-      ok: false,
-      title: "This talk has no segments yet. Arrange it at the end of the retell first.",
-    };
+    return { ok: false, title: t("study.rehearsal.emptyTitle") };
   }
-  return { ok: true, title: "Give the talk, from the top" };
+  return { ok: true, title: t("study.rehearsal.readyTitle") };
 }

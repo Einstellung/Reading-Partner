@@ -11,6 +11,7 @@
 //
 // Pure. The reads are the section's, and the join is here so it can be tested.
 
+import { t } from "../../i18n";
 import type { Rehearsal } from "./types";
 
 // The half of a retell this needs — one that has arranged its talk. Named
@@ -93,7 +94,12 @@ export function rehearsalRows(
 
 /** The line under a row's name. */
 export function rehearsalSummary(row: RehearsalRow): string {
-  const where = row.retellId ? "From a retell" : "Brought in";
-  if (row.runs === 0) return `${where} · not rehearsed yet`;
-  return `${where} · ${row.runs} ${row.runs === 1 ? "rehearsal" : "rehearsals"}`;
+  if (row.retellId) {
+    return row.runs === 0
+      ? t("study.rows.retellNotYet")
+      : t("study.rows.retellCount", { count: row.runs });
+  }
+  return row.runs === 0
+    ? t("study.rows.broughtInNotYet")
+    : t("study.rows.broughtInCount", { count: row.runs });
 }

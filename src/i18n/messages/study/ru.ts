@@ -1,0 +1,90 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+export default {
+  "retell.materialsCount": {
+    one: "{count} материал",
+    few: "{count} материала",
+    many: "{count} материалов",
+    other: "{count} материала",
+  },
+  "retell.noMaterials": "(нет материалов)",
+  "retell.materialsJoin": "и",
+  "retell.backToTopic": "Назад к теме",
+  "retell.renameTitle": "Переименовать пересказ",
+  "retell.renameDescription": "Изменится только название. План и переписка останутся как есть.",
+  "retell.save": "Сохранить",
+  "retell.fallbackName": "Пересказ",
+  "retell.rehearse": "Репетировать",
+  "retell.loading": "Загрузка пересказа…",
+  "retell.composerPlaceholder": "Расскажите своими словами…",
+  "retell.backToRetell": "Назад к пересказу",
+  "retell.notReadable": "Не удалось прочитать этот пересказ.",
+  "retell.needProvider": "Настройте провайдера в разделе «{settings}», чтобы начать пересказ.",
+  "retell.untitledDefault": "Пересказ без названия",
+  "retell.namePlusMore": "{title} и ещё {count}",
+
+  "rehearsal.startingTitle": "Начинаем эту репетицию…",
+  "rehearsal.loadingTitle": "Ищем план этого выступления…",
+  "rehearsal.emptyTitle": "В этом выступлении пока нет содержания. Сначала соберите его в конце пересказа.",
+  "rehearsal.readyTitle": "Произнести выступление с начала",
+  "rehearsal.openingNote": "Открываем текст…",
+  "rehearsal.outlineMissing": "Плана этого выступления нет на этом устройстве.",
+  "rehearsal.outlineReadError": "Не удалось прочитать план",
+  "rehearsal.elapsedTitle": "Сколько длится эта репетиция",
+  "rehearsal.starting": "Начинаем…",
+  "rehearsal.start": "Начать репетицию",
+  "rehearsal.end": "Завершить репетицию",
+  "rehearsal.noSegments":
+    "В этом выступлении пока нет содержания. Соберите его в конце пересказа, а потом репетируйте.",
+
+  "coach.fallbackName": "Это выступление",
+  "coach.subtitle": "Как прошла эта репетиция",
+  "coach.pendingNotice": "Получаем от распознавателя последнюю часть сказанного…",
+  "coach.loading": "Открываем выступление…",
+  "coach.composerPlaceholder": "Спросите, как прошла репетиция, или скажите, что изменить…",
+  "coach.needProvider":
+    "Настройте провайдера в разделе «{settings}», и я расскажу, как прошла эта репетиция.",
+
+  "talk.untitledDefault": "Выступление без названия",
+  "talk.untitledSegment": "Блок без названия",
+
+  "tools.setSpine": "Определяем стержень выступления",
+  "tools.setSpineDone": "Стержень выступления определён",
+  "tools.writeSegment": "Пишем блок выступления",
+  "tools.rewroteSegment": "Блок выступления переписан",
+  "tools.addedSegment": "В выступление добавлен блок",
+  "tools.moveSegment": "Перемещаем блок выступления",
+  "tools.movedSegment": "Блок выступления перемещён",
+  "tools.removeSegment": "Удаляем блок выступления",
+  "tools.droppedSegment": "Блок выступления удалён",
+  "tools.readTalkOutline": "Читаем план выступления",
+  "tools.settlingChapter": "Определяем содержание главы",
+  "tools.settlingChapterNum": "Определяем содержание главы {chapter}",
+  "tools.keptChapter": "Глава сохранена",
+  "tools.cutChapter": "Глава исключена",
+  "tools.readingChapterNote": "Читаем заметку по главе",
+  "tools.readingChapterNoteNum": "Читаем заметку по главе {chapter}",
+  "tools.readRetellOutline": "Читаем план пересказа",
+
+  "budget.prepNotesTrimmed": "часть моих заметок по справочным статьям была опущена, чтобы освободить место",
+  "budget.marksTrimmed":
+    "здесь ваши отметки сокращены, чтобы уместиться; попросите меня принести отметки по главе целиком, и я перечитаю их",
+  "budget.historyTrimmedRetell": "начало этого разговора было опущено, чтобы освободить место",
+  "budget.passesTrimmed": "более ранние репетиции этого выступления были опущены, чтобы освободить место",
+
+  "rows.retellNotYet": "Из пересказа · пока без репетиций",
+  "rows.retellCount": {
+    one: "Из пересказа · {count} репетиция",
+    few: "Из пересказа · {count} репетиции",
+    many: "Из пересказа · {count} репетиций",
+    other: "Из пересказа · {count} репетиции",
+  },
+  "rows.broughtInNotYet": "Создано отдельно · пока без репетиций",
+  "rows.broughtInCount": {
+    one: "Создано отдельно · {count} репетиция",
+    few: "Создано отдельно · {count} репетиции",
+    many: "Создано отдельно · {count} репетиций",
+    other: "Создано отдельно · {count} репетиции",
+  },
+} satisfies Translation<typeof en>;

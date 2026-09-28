@@ -28,6 +28,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";
+import { useT } from "../../../i18n";
 import {
   appendRun,
   type Rehearsal,
@@ -116,6 +117,7 @@ export default function RehearsalView({
   onExit,
   onSaved,
 }: RehearsalViewProps) {
+  const t = useT();
   const segments = outline.segments;
 
   const eventsRef = useRef<RehearsalEvent[]>([]);
@@ -302,17 +304,17 @@ export default function RehearsalView({
           <>
             <span
               className="flex-none text-[13px] tabular-nums text-muted-foreground"
-              title="How long this rehearsal has been going"
+              title={t("study.rehearsal.elapsedTitle")}
             >
               {formatElapsed(elapsed)}
             </span>
             <Button type="button" onClick={leave}>
-              End the rehearsal
+              {t("study.rehearsal.end")}
             </Button>
           </>
         ) : (
           <Button type="button" disabled={phase === "starting"} onClick={start}>
-            {phase === "starting" ? "Starting…" : "Start the rehearsal"}
+            {phase === "starting" ? t("study.rehearsal.starting") : t("study.rehearsal.start")}
           </Button>
         )}
       </div>
@@ -333,9 +335,7 @@ export default function RehearsalView({
           does not hand the gesture to whatever is behind this screen. */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-6 pb-safe-16 pl-safe-6 pr-safe-6">
         {segments.length === 0 ? (
-          <p className="m-0 text-sm text-muted-foreground">
-            This talk has no segments yet. Arrange it at the end of the retell, then rehearse.
-          </p>
+          <p className="m-0 text-sm text-muted-foreground">{t("study.rehearsal.noSegments")}</p>
         ) : (
           // A measure, not a column of the iPad's width: a line the eye has to
           // track back across is a line the reader loses. Blocks are told apart

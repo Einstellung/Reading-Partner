@@ -32,6 +32,7 @@ import MaterialFigureScope from "../common/MaterialFigureScope";
 import NameDialog from "../common/NameDialog";
 import { useKeyboardRoom } from "../common/useKeyboardInset";
 import { Button } from "../ui/button";
+import { useT, type Translate } from "../../../i18n";
 import { rehearsalForRetell, type Rehearsal } from "../../../reading/rehearsal";
 import type { Retell } from "../../../reading/retell";
 import CoachView from "../rehearsal/CoachView";
@@ -42,10 +43,10 @@ import { useRetellOutline } from "../rehearsal/useRehearsal";
 import { useRetell } from "./useRetell";
 
 // The line under the retell's name: what it is being prepared from.
-export function materialsLine(retell: Retell | null): string {
+export function materialsLine(retell: Retell | null, t: Translate): string {
   if (!retell || retell.materials.length === 0) return "";
   if (retell.materials.length === 1) return retell.materials[0].title;
-  return `${retell.materials.length} materials`;
+  return t("study.retell.materialsCount", { count: retell.materials.length });
 }
 
 export default function RetellView(props: {
@@ -53,6 +54,7 @@ export default function RetellView(props: {
   topicName: string;
   onBack(): void;
 }) {
+  const t = useT();
   const retell = useRetell(props.retellId, props.topicName);
   const [renaming, setRenaming] = useState(false);
 
@@ -103,6 +105,7 @@ export default function RetellView(props: {
   const readiness = rehearsalReadiness({
     segments: talk.loading ? null : (talk.outline?.segments.length ?? 0),
     preparing,
+    t,
   });
 
   // The composer is docked at the bottom, so the keyboard would cover it.
@@ -117,8 +120,8 @@ export default function RetellView(props: {
               type="button"
               variant="ghost"
               size="icon"
-              title="Back to the topic"
-              aria-label="Back to the topic"
+              title={t("study.retell.backToTopic")}
+              aria-label={t("study.retell.backToTopic")}
               onClick={props.onBack}
               className="h-9 w-9 text-muted-foreground"
             >
@@ -129,14 +132,16 @@ export default function RetellView(props: {
                 the loudest thing on the screen. */}
             <button
               className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left can-hover:hover:bg-muted"
-              title="Rename this retell"
+              title={t("study.retell.renameTitle")}
               disabled={!retell.retell}
               onClick={() => setRenaming(true)}
             >
-              <span className="truncate text-[15px] font-medium">{retell.retell?.name ?? "Retell"}</span>
-              {materialsLine(retell.retell) && (
+              <span className="truncate text-[15px] font-medium">
+                {retell.retell?.name ?? t("study.retell.fallbackName")}
+              </span>
+              {materialsLine(retell.retell, t) && (
                 <span className="truncate text-xs text-muted-foreground">
-                  {materialsLine(retell.retell)}
+                  {materialsLine(retell.retell, t)}
                 </span>
               )}
             </button>
@@ -151,7 +156,7 @@ export default function RetellView(props: {
               title={readiness.title}
               onClick={rehearse}
             >
-              Rehearse
+              {t("study.retell.rehearse")}
             </Button>
           </div>
 
@@ -162,7 +167,7 @@ export default function RetellView(props: {
               </p>
             )}
             {retell.loading ? (
-              <p className="m-0 px-4 py-3 text-sm text-muted-foreground">Loading the retell…</p>
+              <p className="m-0 px-4 py-3 text-sm text-muted-foreground">{t("study.retell.loading")}</p>
             ) : (
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
                 <MessageList
@@ -176,7 +181,7 @@ export default function RetellView(props: {
               <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
                 <Composer
                   onSend={retell.send}
-                  placeholder="Say it in your own words…"
+                  placeholder={t("study.retell.composerPlaceholder")}
                   pill
                   streaming={retell.streaming}
                   onStop={retell.stop}
@@ -189,7 +194,7 @@ export default function RetellView(props: {
             <RehearsalView
               rehearsal={rehearsing}
               outline={talk.outline}
-              backLabel="Back to the retell"
+              backLabel={t("study.retell.backToRetell")}
               // Which retell is being given is known before a word of it is said,
               // so its proper names go in as the recognizer's hot words: the
               // materials' titles and the chapter titles the retell has settled.
@@ -225,7 +230,7 @@ export default function RetellView(props: {
             <CoachView
               outlineId={talk.outline.id}
               topicName={props.topicName}
-              backLabel="Back to the retell"
+              backLabel={t("study.retell.backToRetell")}
               passKey={passKey}
               pending={passPending}
               onBack={() => setCoaching(false)}
@@ -236,9 +241,9 @@ export default function RetellView(props: {
             <NameDialog
               open
               onOpenChange={setRenaming}
-              title="Rename this retell"
-              description="Only the name changes. The outline and the conversation stay as they are."
-              confirmLabel="Save"
+              title={t("study.retell.renameTitle")}
+              description={t("study.retell.renameDescription")}
+              confirmLabel={t("study.retell.save")}
               initialValue={retell.retell.name}
               onConfirm={retell.rename}
             />

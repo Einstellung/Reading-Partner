@@ -6,6 +6,7 @@
 // hint, and the whole-book survey never appears.
 
 import type { Rung } from "../../budget";
+import { t } from "../../i18n";
 
 export type RetellReductionId =
   | "figure-catalog"
@@ -17,50 +18,56 @@ export type RetellReductionId =
   | "retell-marks"
   | "history-trim";
 
-export const RETELL_LADDER: readonly Rung<RetellReductionId>[] = [
-  // tier 1: redundancy.
-  { id: "figure-catalog" },
-  // The standing statements about the reader, which the retell reads for the
-  // first time now that it is assembled like every other turn (docs/61). Same
-  // place as on the reading ladder: they are a handful of lines, they are about
-  // the reader rather than about the material, and a retell that gives them up
-  // still has the material it is a retell of.
-  { id: "reader-statements" },
-  { id: "observation-trim" },
-  // tier 2: gone from the prompt, still reachable by a tool.
-  //
-  // The reference papers' notes go first of the three, and they are trimmed
-  // rather than dropped — a quarter of the budget, the same list further down the
-  // same queue (prep/papers/classroom.ts). Ahead of the chapter note because more
-  // of it survives being given up: the prep list stays in the prompt naming every
-  // slug, and read_note hands any of them back whole, so the model still knows
-  // exactly what it no longer has. It carries a notice all the same — which of
-  // their papers the retell was run against is the reader's business, and the
-  // model only fetches back what it thinks to fetch.
-  {
-    id: "prep-notes-trim",
-    price: "bulk",
-    notice: "some of my notes on the reference papers were left out to make room",
-  },
-  // The inlined chapter note goes before the tool results: the model asked for
-  // those and is working from them, while the note was put in front of it unasked
-  // and read_chapter_note fetches it straight back.
-  { id: "retell-notes", price: "bulk" },
-  { id: "tool-result-stubs", price: "none" },
-  // tier 3: evidence. The reader's own marks, in the one mode where they are the
-  // material rather than a hint (docs/31). Trimmed, not dropped: a retell
-  // with no marks in front of it stops being a retell of *their* reading, so
-  // what goes is the long tail of each chapter and the length of each quote.
-  {
-    id: "retell-marks",
-    price: "bulk",
-    notice: "your highlights are shortened here to fit; ask me to pull a chapter's marks up in full and I'll read them again",
-  },
-  // Last, for the same reason it is last on the reading ladder: cutting history
-  // is a straight loss of the conversation, not a compaction of it.
-  {
-    id: "history-trim",
-    price: "messages",
-    notice: "earlier turns of this conversation were left out to make room",
-  },
-];
+// A function rather than a module-level constant: the notices are read out to
+// the reader, so they have to come out in the locale a turn is assembled in,
+// not the one the app happened to be in when this module first loaded.
+export function RETELL_LADDER(): readonly Rung<RetellReductionId>[] {
+  return [
+    // tier 1: redundancy.
+    { id: "figure-catalog" },
+    // The standing statements about the reader, which the retell reads for the
+    // first time now that it is assembled like every other turn (docs/61). Same
+    // place as on the reading ladder: they are a handful of lines, they are about
+    // the reader rather than about the material, and a retell that gives them up
+    // still has the material it is a retell of.
+    { id: "reader-statements" },
+    { id: "observation-trim" },
+    // tier 2: gone from the prompt, still reachable by a tool.
+    //
+    // The reference papers' notes go first of the three, and they are trimmed
+    // rather than dropped — a quarter of the budget, the same list further down
+    // the same queue (prep/papers/classroom.ts). Ahead of the chapter note
+    // because more of it survives being given up: the prep list stays in the
+    // prompt naming every slug, and read_note hands any of them back whole, so
+    // the model still knows exactly what it no longer has. It carries a notice
+    // all the same — which of their papers the retell was run against is the
+    // reader's business, and the model only fetches back what it thinks to
+    // fetch.
+    {
+      id: "prep-notes-trim",
+      price: "bulk",
+      notice: t("study.budget.prepNotesTrimmed"),
+    },
+    // The inlined chapter note goes before the tool results: the model asked for
+    // those and is working from them, while the note was put in front of it
+    // unasked and read_chapter_note fetches it straight back.
+    { id: "retell-notes", price: "bulk" },
+    { id: "tool-result-stubs", price: "none" },
+    // tier 3: evidence. The reader's own marks, in the one mode where they are
+    // the material rather than a hint (docs/31). Trimmed, not dropped: a retell
+    // with no marks in front of it stops being a retell of *their* reading, so
+    // what goes is the long tail of each chapter and the length of each quote.
+    {
+      id: "retell-marks",
+      price: "bulk",
+      notice: t("study.budget.marksTrimmed"),
+    },
+    // Last, for the same reason it is last on the reading ladder: cutting
+    // history is a straight loss of the conversation, not a compaction of it.
+    {
+      id: "history-trim",
+      price: "messages",
+      notice: t("study.budget.historyTrimmedRetell"),
+    },
+  ];
+}

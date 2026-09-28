@@ -10,6 +10,8 @@
 // a pass is not part of this layer — nothing can be said about a rehearsal until
 // one has been recorded, so recording is what this layer does and all it does.
 
+import { t } from "../../i18n";
+
 export const REHEARSAL_VERSION = 1 as const;
 
 // The rehearsal itself: which topic it belongs to, and which outline it is given
@@ -53,7 +55,7 @@ export function newRehearsal(fields: NewRehearsalFields): Rehearsal {
     version: REHEARSAL_VERSION,
     id: fields.id,
     topicId: fields.topicId,
-    name: fields.name.trim() || "Untitled talk",
+    name: fields.name.trim() || t("study.talk.untitledDefault"),
     outlineId: fields.outlineId,
     retellId: fields.retellId ?? null,
     createdAt: fields.now,
@@ -87,7 +89,7 @@ export function normalizeRehearsal(raw: unknown): Rehearsal | null {
     version: REHEARSAL_VERSION,
     id: r.id,
     topicId: r.topicId,
-    name: typeof r.name === "string" && r.name.trim() ? r.name : "Untitled talk",
+    name: typeof r.name === "string" && r.name.trim() ? r.name : t("study.talk.untitledDefault"),
     outlineId: r.outlineId,
     retellId: typeof r.retellId === "string" && r.retellId ? r.retellId : null,
     createdAt: r.createdAt,
