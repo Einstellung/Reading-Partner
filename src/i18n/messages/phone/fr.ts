@@ -94,9 +94,9 @@ export default {
   "shelfList.notImportedShort": "Non importé",
   "shelfList.inCloud": "Dans le cloud",
   "shelfList.notSyncedYet": "Pas encore synchronisé",
-  "shelfList.lessonNotStarted": "Pas commencée",
+  "shelfList.lessonNotStarted": "Pas lancée",
   "shelfList.lessonOn": "À {title}",
-  "shelfList.lessonInProgress": "Leçon en cours",
+  "shelfList.lessonInProgress": "En cours",
 
   "reader.rendering": "Affichage…",
   "reader.openFailed": "Ce livre n'a pas pu être ouvert.",

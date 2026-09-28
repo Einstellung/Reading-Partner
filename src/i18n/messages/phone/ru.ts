@@ -133,7 +133,7 @@ export default {
   "displaySheet.size": "Размер",
   "displaySheet.smallerText": "Меньше текст",
   "displaySheet.largerText": "Крупнее текст",
-  "displaySheet.lineSpacing": "Межстрочный интервал",
+  "displaySheet.lineSpacing": "Интервал",
   "displaySheet.margins": "Поля",
   "displaySheet.turnPages": "Листать страницы",
   "displaySheet.paper": "Бумага",

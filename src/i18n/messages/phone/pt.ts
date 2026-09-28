@@ -118,7 +118,7 @@ export default {
   "displaySheet.size": "Tamanho",
   "displaySheet.smallerText": "Texto menor",
   "displaySheet.largerText": "Texto maior",
-  "displaySheet.lineSpacing": "Espaçamento entre linhas",
+  "displaySheet.lineSpacing": "Espaçamento",
   "displaySheet.margins": "Margens",
   "displaySheet.turnPages": "Virar páginas",
   "displaySheet.paper": "Papel",
