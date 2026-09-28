@@ -150,7 +150,7 @@ export default function AppSidebar(props: {
       {shellNavItems({ meals: props.meals === true }).map((item) => (
         <Row
           key={item.id}
-          label={item.label}
+          label={t(item.labelKey)}
           icon={ICONS[item.id]}
           collapsed={collapsed}
           active={props.active === item.id}

@@ -124,7 +124,7 @@ export const arxivPlugin: SourcePlugin = {
     const parts = ["arXiv"];
     if (read.categories.length) parts[0] += ` ${read.categories.join(", ")}`;
     if (read.terms.length) parts.push(read.terms.map((t) => `all:${t}`).join(", "));
-    parts.push(`last ${read.days} day${read.days === 1 ? "" : "s"}`);
+    parts.push(t("sources.window.lastDays", { count: read.days }));
     return parts.join(" · ");
   },
 

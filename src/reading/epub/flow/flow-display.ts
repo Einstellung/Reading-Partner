@@ -22,7 +22,6 @@ export interface FlowDisplayStore {
 export type FlowPaperName = "white" | "paper" | "green" | "dark";
 
 export interface FlowPaper {
-  label: string;
   /** What the column is painted on, under the book. */
   surface: string;
   /**
@@ -51,15 +50,15 @@ export function flowPaperSwatch(paper: FlowPaper): string {
 export const FLOW_PAPERS: Record<FlowPaperName, FlowPaper> = {
   // The reader with nothing over it: the sheet the column has always been when
   // the app's tint is off.
-  white: { label: "White", surface: "#ffffff", wash: null, ink: "#1c1c1c", overrules: false },
+  white: { surface: "#ffffff", wash: null, ink: "#1c1c1c", overrules: false },
   // The app's own paper tint, as a value rather than as a switch. Inside this
   // screen the Aa choice is the only one that speaks, so the column writes the
   // colour out instead of reading --page-wash; the two never stack.
-  paper: { label: "Paper", surface: "#ffffff", wash: "#f6efdc", ink: "#1c1c1c", overrules: false },
+  paper: { surface: "#ffffff", wash: "#f6efdc", ink: "#1c1c1c", overrules: false },
   // The same multiplication one quarter turn round the wheel: as light as the
   // paper, and as little of a hue as a wash can carry and still read as green.
-  green: { label: "Green", surface: "#ffffff", wash: "#e4f0de", ink: "#1c1c1c", overrules: false },
-  dark: { label: "Dark", surface: "#1b1c1e", wash: null, ink: "#c8c5bf", overrules: true },
+  green: { surface: "#ffffff", wash: "#e4f0de", ink: "#1c1c1c", overrules: false },
+  dark: { surface: "#1b1c1e", wash: null, ink: "#c8c5bf", overrules: true },
 };
 
 export const FLOW_PAPER_NAMES: readonly FlowPaperName[] = ["white", "paper", "green", "dark"];
@@ -67,15 +66,16 @@ export const FLOW_PAPER_NAMES: readonly FlowPaperName[] = ["white", "paper", "gr
 /** Five rungs with the column's long-standing 17px in the middle. */
 export const FLOW_FONT_STEPS: readonly number[] = [14, 15, 17, 19, 21];
 
-export const FLOW_LINE_STEPS: readonly { value: number; label: string }[] = [
-  { value: 1.4, label: "Tight" },
-  { value: 1.6, label: "Standard" },
-  { value: 1.85, label: "Loose" },
+// Each step is named by an id; the sheet looks the word up in the catalog.
+export const FLOW_LINE_STEPS: readonly { value: number; id: "tight" | "standard" | "loose" }[] = [
+  { value: 1.4, id: "tight" },
+  { value: 1.6, id: "standard" },
+  { value: 1.85, id: "loose" },
 ];
 
-export const FLOW_PAD_STEPS: readonly { value: number; label: string }[] = [
-  { value: 20, label: "Narrow" },
-  { value: 36, label: "Wide" },
+export const FLOW_PAD_STEPS: readonly { value: number; id: "narrow" | "wide" }[] = [
+  { value: 20, id: "narrow" },
+  { value: 36, id: "wide" },
 ];
 
 /** Room above the first line and below the last of each document. Not a choice. */

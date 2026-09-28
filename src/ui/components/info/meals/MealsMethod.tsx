@@ -50,10 +50,10 @@ function FoodTable() {
         <thead>
           <tr className="text-faint-foreground">
             <th className="py-1 pr-2 text-left font-normal">{t("meals.table.food")}</th>
-            <th className="py-1 pr-2 text-right font-normal">kcal</th>
-            <th className="py-1 pr-2 text-right font-normal">P</th>
-            <th className="py-1 pr-2 text-right font-normal">F</th>
-            <th className="py-1 pr-2 text-right font-normal">C</th>
+            <th className="py-1 pr-2 text-right font-normal">{t("meals.unit.kcal")}</th>
+            <th className="py-1 pr-2 text-right font-normal">{t("meals.abbr.protein")}</th>
+            <th className="py-1 pr-2 text-right font-normal">{t("meals.abbr.fat")}</th>
+            <th className="py-1 pr-2 text-right font-normal">{t("meals.abbr.carbs")}</th>
             <th className="py-1 text-left font-normal">{t("meals.table.source")}</th>
           </tr>
         </thead>

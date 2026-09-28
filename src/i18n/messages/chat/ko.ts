@@ -81,4 +81,15 @@ export default {
   "saved.savingArticle": "글을 저장하는 중",
   "saved.addedToPrepList": "예습 목록에 글을 추가했습니다",
   "saved.keptArticles": "저장한 글",
+
+  "call.preparing": "준비 중…",
+  "call.preparingProgress": "준비 중 {done}/{total}",
+  "call.pageRange": "p.{first}-{last}",
+  "call.page": "p.{page}",
+  "call.pageBadge": "p.{page}",
+  "call.clearFocus": "챕터 초점 해제",
+  "call.backToReading": "읽기로 돌아가기",
+  "call.deleteConversation": "대화 삭제",
+  "call.deleteTitle": "이 대화를 삭제할까요?",
+  "call.deleteDescription": "대화와 함께 대화를 연 표시도 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
 } satisfies Translation<typeof en>;

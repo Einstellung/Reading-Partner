@@ -104,8 +104,8 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
               <thead>
                 <tr className="text-[11px] text-faint-foreground">
                   <th className="pb-1 text-left font-normal">{t("meals.ingredient")}</th>
-                  <th className="pb-1 text-right font-normal">g</th>
-                  <th className="pb-1 text-right font-normal">kcal</th>
+                  <th className="pb-1 text-right font-normal">{t("meals.unit.g")}</th>
+                  <th className="pb-1 text-right font-normal">{t("meals.unit.kcal")}</th>
                   <th className="pb-1 text-right font-normal">{t("meals.protein")}</th>
                 </tr>
               </thead>

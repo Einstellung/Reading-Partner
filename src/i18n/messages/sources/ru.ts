@@ -144,4 +144,7 @@ export default {
   "plugins.huggingface.includeConversionsMustBeBoolean": "includeConversions должно быть логическим значением",
   "plugins.huggingface.nonJson": "Hugging Face вернул не-JSON ответ с {url}",
   "plugins.huggingface.unexpectedShape": "Hugging Face вернул неожиданную структуру с {url}",
+
+  "window.today": "сегодня",
+  "window.lastDays": { one: "последний {count} день", few: "последние {count} дня", many: "последние {count} дней", other: "последние {count} дня" },
 } satisfies Translation<typeof en>;

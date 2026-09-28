@@ -172,4 +172,14 @@ export default {
   "lessonOpening.takeMeToChapterTitle": "带我去{title}。",
   "lessonOpening.takeMeToPage": "带我去第{page}页。",
   "lessonOpening.takeMeToChapterNumber": "带我去第{number}章。",
+
+  "displaySheet.lineTight": "紧凑",
+  "displaySheet.lineStandard": "标准",
+  "displaySheet.lineLoose": "宽松",
+  "displaySheet.marginsNarrow": "窄",
+  "displaySheet.marginsWide": "宽",
+  "displaySheet.paperWhite": "白色",
+  "displaySheet.paperPaper": "纸张",
+  "displaySheet.paperGreen": "绿色",
+  "displaySheet.paperDark": "深色",
 } satisfies Translation<typeof en>;

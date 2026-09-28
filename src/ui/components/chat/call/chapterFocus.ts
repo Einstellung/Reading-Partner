@@ -3,6 +3,8 @@
 // which chapter the conversation has settled on, and how far this book's
 // preparation has got. Pure, so the wording is testable without a renderer.
 
+import { t as globalT, type Translate } from "../../../../i18n";
+
 export interface ChapterFocus {
   // The chapter as the book itself names it, numbering and all ("Chapter 3
   // Coding Attention Mechanisms"). Composed by whoever owns the focus state,
@@ -15,18 +17,22 @@ export interface ChapterFocus {
 }
 
 // "p.64-107", "p.64" for a one-page chapter, null when either end is unknown.
-function pageRange(first: number | null | undefined, last: number | null | undefined): string | null {
+function pageRange(
+  first: number | null | undefined,
+  last: number | null | undefined,
+  t: Translate,
+): string | null {
   if (typeof first !== "number" || !Number.isFinite(first)) return null;
   if (typeof last !== "number" || !Number.isFinite(last)) return null;
-  return last > first ? `p.${first}-${last}` : `p.${first}`;
+  return last > first ? t("chat.call.pageRange", { first, last }) : t("chat.call.page", { page: first });
 }
 
 // The whole line, or null when there is no chapter to name — which is also what
 // tells the row not to render at all.
-export function chapterFocusLabel(focus: ChapterFocus): string | null {
+export function chapterFocusLabel(focus: ChapterFocus, t: Translate = globalT): string | null {
   const chapter = focus.chapter?.trim();
   if (!chapter) return null;
-  const pages = pageRange(focus.firstPage, focus.lastPage);
+  const pages = pageRange(focus.firstPage, focus.lastPage, t);
   return pages ? `${chapter} · ${pages}` : chapter;
 }
 
@@ -40,8 +46,9 @@ export function chapterFocusLabel(focus: ChapterFocus): string | null {
 // having missed.
 export function prepProgressLabel(
   prep: { done: number; total: number } | null | undefined,
+  t: Translate = globalT,
 ): string | null {
   if (!prep) return null;
-  if (prep.total <= 0) return "Preparing…";
-  return `Preparing ${prep.done}/${prep.total}`;
+  if (prep.total <= 0) return t("chat.call.preparing");
+  return t("chat.call.preparingProgress", { done: prep.done, total: prep.total });
 }

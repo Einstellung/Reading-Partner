@@ -78,4 +78,9 @@ export default {
   "image.noCanvasContext": "画像を処理できませんでした（canvas コンテキストがありません）。",
   "image.tooLarge": "圧縮後も画像が大きすぎます（{mb} MB、上限 5 MB）。",
   "image.decodeFailed": "画像をデコードできませんでした。",
+
+  "nav.today": "今日",
+  "nav.briefing": "ブリーフィング",
+  "nav.meals": "食事",
+  "nav.topics": "トピック",
 } satisfies Translation<typeof en>;

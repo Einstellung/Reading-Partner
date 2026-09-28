@@ -122,4 +122,8 @@ export default {
   "plugins.huggingface.includeConversionsMustBeBoolean": "includeConversions must be a boolean",
   "plugins.huggingface.nonJson": "Hugging Face returned non-JSON from {url}",
   "plugins.huggingface.unexpectedShape": "Hugging Face returned an unexpected shape from {url}",
+
+  // The time window in a source's subtitle (plugins/arxiv.ts, plugins/huggingface.ts).
+  "window.today": "today",
+  "window.lastDays": { one: "last {count} day", other: "last {count} days" },
 } as const;

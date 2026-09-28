@@ -1683,7 +1683,9 @@ export default function App() {
                     title={title ?? ""}
                     badge={
                       stats?.pageLabel ? (
-                        <span className="shrink-0 text-[11px] text-faint-foreground">p. {stats.pageLabel}</span>
+                        <span className="shrink-0 text-[11px] text-faint-foreground">
+                          {t("chat.call.pageBadge", { page: stats.pageLabel })}
+                        </span>
                       ) : undefined
                     }
                     body={

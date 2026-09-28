@@ -197,4 +197,14 @@ export default {
   "flavour.pesto": "Pesto",
   "flavour.sweet": "Sweet",
   "flavour.plain": "Plain",
+
+  // Units and macro initials in the number lines and tables, so a table says
+  // what the sentence under it says.
+  "unit.kcal": "kcal",
+  "unit.g": "g",
+  "unit.min": "min",
+  "abbr.protein": "P",
+  "abbr.fat": "F",
+  "abbr.carbs": "C",
+  "guideLine": "Fat {fat} g · Carbs {carbs} g (guide {fatTarget} / {carbsTarget} g)",
 } as const;

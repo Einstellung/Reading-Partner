@@ -110,4 +110,7 @@ export default {
   "plugins.huggingface.includeConversionsMustBeBoolean": "includeConversions 必须是布尔值",
   "plugins.huggingface.nonJson": "Hugging Face 从 {url} 返回了非 JSON 内容",
   "plugins.huggingface.unexpectedShape": "Hugging Face 从 {url} 返回了意外的结构",
+
+  "window.today": "今天",
+  "window.lastDays": { other: "最近 {count} 天" },
 } satisfies Translation<typeof en>;

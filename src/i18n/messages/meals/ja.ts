@@ -170,4 +170,12 @@ export default {
   "flavour.pesto": "ジェノベーゼ",
   "flavour.sweet": "甘口",
   "flavour.plain": "プレーン",
+
+  "unit.kcal": "kcal",
+  "unit.g": "g",
+  "unit.min": "分",
+  "abbr.protein": "P",
+  "abbr.fat": "F",
+  "abbr.carbs": "C",
+  "guideLine": "脂質 {fat}g · 炭水化物 {carbs}g（目安 {fatTarget} / {carbsTarget}g）",
 } satisfies Translation<typeof en>;

@@ -158,4 +158,17 @@ export default {
   "engine.openFailedStatus": "열 수 없습니다",
   "engine.openFailedToast": "{which}을(를) 열 수 없습니다 — 파일이 손상되었거나 PDF가 아닐 수 있습니다.",
   "engine.thisBook": "이 책",
+
+  "gate.aiPenDim": "곁가지 대화는 이 책의 대화에서만 열 수 있습니다.",
+  "gate.bookThreadOpen": "이 책의 대화가 이미 열려 있습니다.",
+  "gate.bookThreadBehind": "이 책의 대화는 이 곁가지 대화 뒤에 있습니다.",
+  "aside.receiptSummary": { other: "읽는 동안 한 질문 {count}개" },
+  "color.yellow": "노란색",
+  "color.red": "빨간색",
+  "color.green": "초록색",
+  "color.blue": "파란색",
+  "color.purple": "보라색",
+  "color.magenta": "자홍색",
+  "color.orange": "주황색",
+  "color.gray": "회색",
 } satisfies Translation<typeof en>;

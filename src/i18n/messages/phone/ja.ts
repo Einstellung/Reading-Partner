@@ -172,4 +172,14 @@ export default {
   "lessonOpening.takeMeToChapterTitle": "{title}まで進めてください。",
   "lessonOpening.takeMeToPage": "{page}ページまで進めてください。",
   "lessonOpening.takeMeToChapterNumber": "第{number}章まで進めてください。",
+
+  "displaySheet.lineTight": "狭い",
+  "displaySheet.lineStandard": "標準",
+  "displaySheet.lineLoose": "広い",
+  "displaySheet.marginsNarrow": "狭い",
+  "displaySheet.marginsWide": "広い",
+  "displaySheet.paperWhite": "ホワイト",
+  "displaySheet.paperPaper": "ペーパー",
+  "displaySheet.paperGreen": "グリーン",
+  "displaySheet.paperDark": "ダーク",
 } satisfies Translation<typeof en>;

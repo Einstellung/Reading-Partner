@@ -85,4 +85,9 @@ export default {
   "image.noCanvasContext": "Не удалось обработать изображение (нет контекста canvas).",
   "image.tooLarge": "Изображение всё ещё слишком большое после сжатия ({mb} МБ, максимум 5 МБ).",
   "image.decodeFailed": "Не удалось декодировать изображение.",
+
+  "nav.today": "Сегодня",
+  "nav.briefing": "Сводка",
+  "nav.meals": "Питание",
+  "nav.topics": "Темы",
 } satisfies Translation<typeof en>;

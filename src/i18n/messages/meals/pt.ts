@@ -176,4 +176,12 @@ export default {
   "flavour.pesto": "Pesto",
   "flavour.sweet": "Doce",
   "flavour.plain": "Natural",
+
+  "unit.kcal": "kcal",
+  "unit.g": "g",
+  "unit.min": "min",
+  "abbr.protein": "P",
+  "abbr.fat": "G",
+  "abbr.carbs": "C",
+  "guideLine": "Gordura {fat} g · Carboidratos {carbs} g (referência {fatTarget} / {carbsTarget} g)",
 } satisfies Translation<typeof en>;

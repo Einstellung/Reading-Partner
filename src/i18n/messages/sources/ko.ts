@@ -112,4 +112,7 @@ export default {
   "plugins.huggingface.includeConversionsMustBeBoolean": "includeConversions는 불리언이어야 합니다",
   "plugins.huggingface.nonJson": "Hugging Face가 {url}에서 JSON이 아닌 응답을 반환했습니다",
   "plugins.huggingface.unexpectedShape": "Hugging Face가 {url}에서 예상치 못한 형식을 반환했습니다",
+
+  "window.today": "오늘",
+  "window.lastDays": { other: "최근 {count}일" },
 } satisfies Translation<typeof en>;

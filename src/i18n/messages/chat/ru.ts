@@ -81,4 +81,15 @@ export default {
   "saved.savingArticle": "Сохраняет статью",
   "saved.addedToPrepList": "Статья добавлена в список для подготовки",
   "saved.keptArticles": "Сохранённые статьи",
+
+  "call.preparing": "Подготовка…",
+  "call.preparingProgress": "Подготовка {done}/{total}",
+  "call.pageRange": "с. {first}-{last}",
+  "call.page": "с. {page}",
+  "call.pageBadge": "с. {page}",
+  "call.clearFocus": "Снять фокус с главы",
+  "call.backToReading": "Вернуться к чтению",
+  "call.deleteConversation": "Удалить разговор",
+  "call.deleteTitle": "Удалить этот разговор?",
+  "call.deleteDescription": "Разговор будет удалён вместе с пометкой, из которой он был открыт. Это действие нельзя отменить.",
 } satisfies Translation<typeof en>;

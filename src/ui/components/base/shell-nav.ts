@@ -30,17 +30,23 @@ export type ShellNavId = "today" | "briefing" | "meals" | "topics" | "settings";
 // Top to bottom, in the order a day uses them: what is open now, what came in
 // overnight, everything else. Settings is a nav id but not one of these — it is
 // pinned to the bottom of the sidebar, away from the day's three.
-export const SHELL_NAV_ITEMS: readonly { id: ShellNavId; label: string }[] = [
-  { id: "today", label: "Today" },
-  { id: "briefing", label: "Briefing" },
-  { id: "meals", label: "Meals" },
-  { id: "topics", label: "Topics" },
+// The label is a catalog key, looked up at render so a language switch redraws it.
+export interface ShellNavItem {
+  id: ShellNavId;
+  labelKey: "shell.nav.today" | "shell.nav.briefing" | "shell.nav.meals" | "shell.nav.topics";
+}
+
+export const SHELL_NAV_ITEMS: readonly ShellNavItem[] = [
+  { id: "today", labelKey: "shell.nav.today" },
+  { id: "briefing", labelKey: "shell.nav.briefing" },
+  { id: "meals", labelKey: "shell.nav.meals" },
+  { id: "topics", labelKey: "shell.nav.topics" },
 ];
 
 // The items a sidebar actually draws. Meals is opt-in (settings.meals,
 // docs/73) and is left out entirely when it is off — not greyed, not a teaser:
 // a switch that is off means the reader has said they do not want the line.
-export function shellNavItems(opts: { meals: boolean }): { id: ShellNavId; label: string }[] {
+export function shellNavItems(opts: { meals: boolean }): ShellNavItem[] {
   return SHELL_NAV_ITEMS.filter((item) => item.id !== "meals" || opts.meals);
 }
 

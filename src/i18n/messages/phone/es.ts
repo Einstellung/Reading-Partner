@@ -186,4 +186,14 @@ export default {
   "lessonOpening.takeMeToChapterTitle": "Llévame a {title}.",
   "lessonOpening.takeMeToPage": "Llévame a la página {page}.",
   "lessonOpening.takeMeToChapterNumber": "Llévame al capítulo {number}.",
+
+  "displaySheet.lineTight": "Compacto",
+  "displaySheet.lineStandard": "Estándar",
+  "displaySheet.lineLoose": "Amplio",
+  "displaySheet.marginsNarrow": "Estrechos",
+  "displaySheet.marginsWide": "Anchos",
+  "displaySheet.paperWhite": "Blanco",
+  "displaySheet.paperPaper": "Papel",
+  "displaySheet.paperGreen": "Verde",
+  "displaySheet.paperDark": "Oscuro",
 } satisfies Translation<typeof en>;

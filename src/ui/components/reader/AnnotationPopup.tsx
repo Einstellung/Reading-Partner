@@ -11,6 +11,7 @@ import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useCloseOnOutsidePress, useOverlaySafePadding } from '../ui/overlay';
 import type { Annotation, ColorEntry } from './types';
+import { colorLabel } from './color-label';
 
 interface AnnotationPopupProps {
 	annotation: Annotation;
@@ -104,8 +105,8 @@ export default function AnnotationPopup({ annotation, anchor, colors, onChange, 
 						variant="ghost"
 						size={null}
 						className={ICON_BTN + (annotation.color === c.color ? ' ring-2 ring-inset ring-primary' : '')}
-						title={c.name}
-						aria-label={c.name}
+						title={colorLabel(t, c.name)}
+						aria-label={colorLabel(t, c.name)}
 						aria-pressed={annotation.color === c.color}
 						onClick={() => onChange(annotation.id, { color: c.color })}
 					>

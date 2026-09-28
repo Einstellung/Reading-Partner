@@ -86,7 +86,7 @@ export default {
   "shelfList.notImportedShort": "가져오지 않음",
   "shelfList.inCloud": "클라우드에 있음",
   "shelfList.notSyncedYet": "아직 동기화되지 않음",
-  "shelfList.lessonNotStarted": "아직 시작 전",
+  "shelfList.lessonNotStarted": "시작 전",
   "shelfList.lessonOn": "{title} 진행 중",
   "shelfList.lessonInProgress": "레슨 진행 중",
 
@@ -172,4 +172,14 @@ export default {
   "lessonOpening.takeMeToChapterTitle": "{title}로 데려가 주세요.",
   "lessonOpening.takeMeToPage": "{page}쪽으로 데려가 주세요.",
   "lessonOpening.takeMeToChapterNumber": "{number}장으로 데려가 주세요.",
+
+  "displaySheet.lineTight": "좁게",
+  "displaySheet.lineStandard": "표준",
+  "displaySheet.lineLoose": "넓게",
+  "displaySheet.marginsNarrow": "좁게",
+  "displaySheet.marginsWide": "넓게",
+  "displaySheet.paperWhite": "흰색",
+  "displaySheet.paperPaper": "종이",
+  "displaySheet.paperGreen": "녹색",
+  "displaySheet.paperDark": "다크",
 } satisfies Translation<typeof en>;

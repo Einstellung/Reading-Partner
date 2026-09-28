@@ -181,4 +181,12 @@ export default {
   "flavour.pesto": "Песто",
   "flavour.sweet": "Сладкий",
   "flavour.plain": "Нейтральный",
+
+  "unit.kcal": "ккал",
+  "unit.g": "г",
+  "unit.min": "мин",
+  "abbr.protein": "Б",
+  "abbr.fat": "Ж",
+  "abbr.carbs": "У",
+  "guideLine": "Жиры {fat} г · Углеводы {carbs} г (ориентир {fatTarget} / {carbsTarget} г)",
 } satisfies Translation<typeof en>;

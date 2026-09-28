@@ -81,4 +81,9 @@ export default {
   "image.noCanvasContext": "Impossible de traiter l'image (pas de contexte canvas).",
   "image.tooLarge": "L'image reste trop volumineuse après compression ({mb} Mo, maximum 5 Mo).",
   "image.decodeFailed": "Impossible de décoder l'image.",
+
+  "nav.today": "Aujourd'hui",
+  "nav.briefing": "Synthèse",
+  "nav.meals": "Repas",
+  "nav.topics": "Sujets",
 } satisfies Translation<typeof en>;

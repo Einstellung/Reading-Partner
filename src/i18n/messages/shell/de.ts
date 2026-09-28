@@ -80,4 +80,9 @@ export default {
   "image.noCanvasContext": "Das Bild konnte nicht verarbeitet werden (kein Canvas-Kontext).",
   "image.tooLarge": "Das Bild ist nach der Komprimierung noch zu groß ({mb} MB, maximal 5 MB).",
   "image.decodeFailed": "Das Bild konnte nicht decodiert werden.",
+
+  "nav.today": "Heute",
+  "nav.briefing": "Briefing",
+  "nav.meals": "Mahlzeiten",
+  "nav.topics": "Themen",
 } satisfies Translation<typeof en>;

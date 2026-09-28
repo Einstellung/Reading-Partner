@@ -7,29 +7,41 @@ import type { MealCells, Nutrition } from "../nutrition/solve";
 import type { DayView, MealView } from "./view";
 
 const n0 = (x: number) => Math.round(x);
+const KCAL = () => t("meals.unit.kcal");
+const G = () => t("meals.unit.g");
 
 /** "412 kcal · P 31 g · 5 min" under a meal on a day card. Null for a meal with no grams. */
 export function mealNumbersLine(m: MealView): string | null {
   if (!m.totals) return null;
-  const minutes = m.minutes !== null ? ` · ${m.minutes} min` : "";
-  return `${n0(m.totals.kcal)} kcal · P ${n0(m.totals.protein)} g${minutes}`;
+  const minutes = m.minutes !== null ? ` · ${m.minutes} ${t("meals.unit.min")}` : "";
+  return `${n0(m.totals.kcal)} ${KCAL()} · ${t("meals.abbr.protein")} ${n0(m.totals.protein)} ${G()}${minutes}`;
 }
 
 /** "412 kcal · P 31 g · F 12 g · C 45 g" on a meal's own card. */
-export function macroLine(t: Nutrition): string {
-  return `${n0(t.kcal)} kcal · P ${n0(t.protein)} g · F ${n0(t.fat)} g · C ${n0(t.carbs)} g`;
+export function macroLine(n: Nutrition): string {
+  return [
+    `${n0(n.kcal)} ${KCAL()}`,
+    `${t("meals.abbr.protein")} ${n0(n.protein)} ${G()}`,
+    `${t("meals.abbr.fat")} ${n0(n.fat)} ${G()}`,
+    `${t("meals.abbr.carbs")} ${n0(n.carbs)} ${G()}`,
+  ].join(" · ");
 }
 
 /** "1980 / 2000 kcal · P 140 / 145 g" under a day's heading. Null without targets. */
 export function dayTotalsLine(d: DayView): string | null {
   if (!d.targets) return null;
-  return `${n0(d.totals.kcal)} / ${d.targets.kcal} kcal · P ${n0(d.totals.protein)} / ${d.targets.protein} g`;
+  return `${n0(d.totals.kcal)} / ${d.targets.kcal} ${KCAL()} · ${t("meals.abbr.protein")} ${n0(d.totals.protein)} / ${d.targets.protein} ${G()}`;
 }
 
 /** "Fat 60 g · Carbs 210 g (guide 56 / 230 g)" on the day screen. */
 export function guideLine(d: DayView): string | null {
   if (!d.targets) return null;
-  return `Fat ${n0(d.totals.fat)} g · Carbs ${n0(d.totals.carbs)} g (guide ${d.targets.fat} / ${d.targets.carbs} g)`;
+  return t("meals.guideLine", {
+    fat: n0(d.totals.fat),
+    carbs: n0(d.totals.carbs),
+    fatTarget: d.targets.fat,
+    carbsTarget: d.targets.carbs,
+  });
 }
 
 export interface Meter {
@@ -47,12 +59,12 @@ export function dayMeters(d: DayView): Meter[] {
     {
       label: t("meals.calories"),
       pct: pct(d.totals.kcal, d.targets.kcal),
-      value: `${n0(d.totals.kcal)} / ${d.targets.kcal} kcal`,
+      value: `${n0(d.totals.kcal)} / ${d.targets.kcal} ${KCAL()}`,
     },
     {
       label: t("meals.protein"),
       pct: pct(d.totals.protein, d.targets.protein),
-      value: `${n0(d.totals.protein)} / ${d.targets.protein} g`,
+      value: `${n0(d.totals.protein)} / ${d.targets.protein} ${G()}`,
     },
   ];
 }
@@ -60,7 +72,7 @@ export function dayMeters(d: DayView): Meter[] {
 /** A week row's right column: the day's kcal and protein, two lines. */
 export function weekRowNumbers(d: DayView): [string, string] | null {
   if (!d.meals.some((m) => m.totals)) return null;
-  return [`${n0(d.totals.kcal)} kcal`, `P ${n0(d.totals.protein)} g`];
+  return [`${n0(d.totals.kcal)} ${KCAL()}`, `${t("meals.abbr.protein")} ${n0(d.totals.protein)} ${G()}`];
 }
 
 export interface CellMark {

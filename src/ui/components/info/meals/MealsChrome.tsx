@@ -203,10 +203,10 @@ export function TargetsCard({
 }) {
   const t = useT();
   const rows: { label: string; key: "kcal" | "protein" | "fat" | "carbs"; unit: string; big?: boolean }[] = [
-    { label: t("meals.calories"), key: "kcal", unit: "kcal", big: true },
-    { label: t("meals.protein"), key: "protein", unit: "g" },
-    { label: t("meals.fat"), key: "fat", unit: "g" },
-    { label: t("meals.carbs"), key: "carbs", unit: "g" },
+    { label: t("meals.calories"), key: "kcal", unit: t("meals.unit.kcal"), big: true },
+    { label: t("meals.protein"), key: "protein", unit: t("meals.unit.g") },
+    { label: t("meals.fat"), key: "fat", unit: t("meals.unit.g") },
+    { label: t("meals.carbs"), key: "carbs", unit: t("meals.unit.g") },
   ];
   return (
     <section className="rounded-2xl border border-border-soft bg-card p-5">

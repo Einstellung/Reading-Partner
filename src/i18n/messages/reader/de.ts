@@ -158,4 +158,17 @@ export default {
   "engine.openFailedStatus": "Konnte nicht geöffnet werden",
   "engine.openFailedToast": "{which} konnte nicht geöffnet werden — die Datei ist möglicherweise beschädigt oder kein PDF.",
   "engine.thisBook": "dieses Buch",
+
+  "gate.aiPenDim": "Nur die Unterhaltung zum Buch kann ein Seitengespräch öffnen.",
+  "gate.bookThreadOpen": "Die Unterhaltung zu diesem Buch ist bereits geöffnet.",
+  "gate.bookThreadBehind": "Die Unterhaltung zum Buch liegt hinter diesem Seitengespräch.",
+  "aside.receiptSummary": { one: "{count} Frage beim Lesen", other: "{count} Fragen beim Lesen" },
+  "color.yellow": "Gelb",
+  "color.red": "Rot",
+  "color.green": "Grün",
+  "color.blue": "Blau",
+  "color.purple": "Lila",
+  "color.magenta": "Magenta",
+  "color.orange": "Orange",
+  "color.gray": "Grau",
 } satisfies Translation<typeof en>;

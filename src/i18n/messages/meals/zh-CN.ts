@@ -168,4 +168,12 @@ export default {
   "flavour.pesto": "青酱",
   "flavour.sweet": "甜口",
   "flavour.plain": "原味",
+
+  "unit.kcal": "千卡",
+  "unit.g": "克",
+  "unit.min": "分钟",
+  "abbr.protein": "蛋白",
+  "abbr.fat": "脂肪",
+  "abbr.carbs": "碳水",
+  "guideLine": "脂肪 {fat} 克 · 碳水 {carbs} 克（参考 {fatTarget} / {carbsTarget} 克）",
 } satisfies Translation<typeof en>;

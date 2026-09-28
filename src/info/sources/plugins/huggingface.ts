@@ -110,7 +110,7 @@ function validateQuery(q: IndexQuery): string | null {
 function describeQuery(q: IndexQuery): string {
   const p = parse(q);
   if (p.kind === "papers") {
-    return `HF papers · ${p.days === 1 ? "today" : `last ${p.days} days`}`;
+    return `HF papers · ${p.days === 1 ? t("sources.window.today") : t("sources.window.lastDays", { count: p.days })}`;
   }
   const parts = [`HF ${p.kind}`];
   if (p.pipelineTag) parts.push(p.pipelineTag);

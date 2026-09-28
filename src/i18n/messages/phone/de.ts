@@ -92,7 +92,7 @@ export default {
   "shelfList.notImportedShort": "Nicht importiert",
   "shelfList.inCloud": "In der Cloud",
   "shelfList.notSyncedYet": "Noch nicht synchronisiert",
-  "shelfList.lessonNotStarted": "Noch nicht begonnen",
+  "shelfList.lessonNotStarted": "Nicht begonnen",
   "shelfList.lessonOn": "Bei {title}",
   "shelfList.lessonInProgress": "Lektion läuft",
 
@@ -185,4 +185,14 @@ export default {
   "lessonOpening.takeMeToChapterTitle": "Führ mich zu {title}.",
   "lessonOpening.takeMeToPage": "Führ mich zu Seite {page}.",
   "lessonOpening.takeMeToChapterNumber": "Führ mich zu Kapitel {number}.",
+
+  "displaySheet.lineTight": "Eng",
+  "displaySheet.lineStandard": "Standard",
+  "displaySheet.lineLoose": "Weit",
+  "displaySheet.marginsNarrow": "Schmal",
+  "displaySheet.marginsWide": "Breit",
+  "displaySheet.paperWhite": "Weiß",
+  "displaySheet.paperPaper": "Papier",
+  "displaySheet.paperGreen": "Grün",
+  "displaySheet.paperDark": "Dunkel",
 } satisfies Translation<typeof en>;

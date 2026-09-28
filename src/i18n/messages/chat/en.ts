@@ -83,4 +83,17 @@ export default {
   "saved.savingArticle": "Saving the article",
   "saved.addedToPrepList": "Added an article to the prep list",
   "saved.keptArticles": "Kept articles",
+
+  // The chrome around a call (chat/call/): the focus line, the corner card
+  // that goes back to the page, and the delete control.
+  "call.preparing": "Preparing…",
+  "call.preparingProgress": "Preparing {done}/{total}",
+  "call.pageRange": "p.{first}-{last}",
+  "call.page": "p.{page}",
+  "call.pageBadge": "p. {page}",
+  "call.clearFocus": "Clear chapter focus",
+  "call.backToReading": "Back to reading",
+  "call.deleteConversation": "Delete conversation",
+  "call.deleteTitle": "Delete this conversation?",
+  "call.deleteDescription": "The conversation goes, and with it the mark it was opened from. This cannot be undone.",
 } as const;

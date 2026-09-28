@@ -101,4 +101,10 @@ export default {
   "image.noCanvasContext": "Could not process the image (no canvas context).",
   "image.tooLarge": "Image is too large after compression ({mb} MB, max 5 MB).",
   "image.decodeFailed": "Could not decode the image.",
+
+  // The sidebar's items (base/shell-nav.ts).
+  "nav.today": "Today",
+  "nav.briefing": "Briefing",
+  "nav.meals": "Meals",
+  "nav.topics": "Topics",
 } as const;

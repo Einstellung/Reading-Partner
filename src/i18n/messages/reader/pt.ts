@@ -158,4 +158,17 @@ export default {
   "engine.openFailedStatus": "Não foi possível abrir",
   "engine.openFailedToast": "Não foi possível abrir {which} — o arquivo pode estar corrompido, ou não é um PDF.",
   "engine.thisBook": "este livro",
+
+  "gate.aiPenDim": "Só a conversa do livro pode abrir uma conversa paralela.",
+  "gate.bookThreadOpen": "A conversa deste livro já está aberta.",
+  "gate.bookThreadBehind": "A conversa do livro está por trás desta conversa paralela.",
+  "aside.receiptSummary": { one: "{count} pergunta durante a leitura", other: "{count} perguntas durante a leitura" },
+  "color.yellow": "Amarelo",
+  "color.red": "Vermelho",
+  "color.green": "Verde",
+  "color.blue": "Azul",
+  "color.purple": "Roxo",
+  "color.magenta": "Magenta",
+  "color.orange": "Laranja",
+  "color.gray": "Cinza",
 } satisfies Translation<typeof en>;

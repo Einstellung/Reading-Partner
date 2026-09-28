@@ -81,4 +81,15 @@ export default {
   "saved.savingArticle": "記事を保存しています",
   "saved.addedToPrepList": "予習リストに記事を追加しました",
   "saved.keptArticles": "保存した記事",
+
+  "call.preparing": "準備中…",
+  "call.preparingProgress": "準備中 {done}/{total}",
+  "call.pageRange": "p.{first}-{last}",
+  "call.page": "p.{page}",
+  "call.pageBadge": "p.{page}",
+  "call.clearFocus": "章の絞り込みを解除",
+  "call.backToReading": "読書に戻る",
+  "call.deleteConversation": "会話を削除",
+  "call.deleteTitle": "この会話を削除しますか？",
+  "call.deleteDescription": "会話と、それを開いたマークが削除されます。この操作は取り消せません。",
 } satisfies Translation<typeof en>;

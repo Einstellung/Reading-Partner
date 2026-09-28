@@ -3,6 +3,7 @@
 // is lit for a given screen. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { translate } from "../../../../src/i18n";
 import {
   activeNavFor,
   screenForNav,
@@ -13,7 +14,7 @@ import {
 
 test("the sidebar's items are in the order a day uses them", () => {
   expect(SHELL_NAV_ITEMS.map((i) => i.id)).toEqual(["today", "briefing", "meals", "topics"]);
-  expect(SHELL_NAV_ITEMS.map((i) => i.label)).toEqual(["Today", "Briefing", "Meals", "Topics"]);
+  expect(SHELL_NAV_ITEMS.map((i) => translate("en", i.labelKey))).toEqual(["Today", "Briefing", "Meals", "Topics"]);
 });
 
 // Meals is opt-in (settings.meals, docs/73), and off it is not in the column

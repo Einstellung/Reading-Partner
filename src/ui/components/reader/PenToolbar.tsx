@@ -11,6 +11,7 @@ import { Button } from '../ui/button';
 import { cn } from '../lib/utils';
 import { OVERLAY_Z, useOverlaySafePadding } from '../ui/overlay';
 import type { ColorEntry, Tool, ToolType } from './types';
+import { colorLabel } from './color-label';
 
 interface PenToolbarProps {
 	tool: Tool;
@@ -255,7 +256,7 @@ export default function PenToolbar({
 									'h-7 w-7 coarse:h-11 coarse:w-11 rounded-md' +
 									(tool.color === c.color ? ' ring-2 ring-inset ring-primary' : '')
 								}
-								title={c.name}
+								title={colorLabel(t, c.name)}
 								onClick={() => pickColor(c.color)}
 							>
 								<IconColorSwatch color={c.color} size={18} />

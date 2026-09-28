@@ -81,4 +81,15 @@ export default {
   "saved.savingArticle": "Speichert den Artikel",
   "saved.addedToPrepList": "Artikel zur Vorbereitungsliste hinzugefügt",
   "saved.keptArticles": "Gespeicherte Artikel",
+
+  "call.preparing": "Wird vorbereitet…",
+  "call.preparingProgress": "Vorbereitung {done}/{total}",
+  "call.pageRange": "S. {first}-{last}",
+  "call.page": "S. {page}",
+  "call.pageBadge": "S. {page}",
+  "call.clearFocus": "Kapitelfokus aufheben",
+  "call.backToReading": "Zurück zum Lesen",
+  "call.deleteConversation": "Unterhaltung löschen",
+  "call.deleteTitle": "Diese Unterhaltung löschen?",
+  "call.deleteDescription": "Die Unterhaltung wird gelöscht, zusammen mit der Markierung, von der aus sie geöffnet wurde. Das kann nicht rückgängig gemacht werden.",
 } satisfies Translation<typeof en>;

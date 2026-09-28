@@ -12,6 +12,7 @@ import type { CompressedImage } from "../../ai/image-utils";
 import type { AsideAnchor, MessageOrigin } from "../../platform/app/threads";
 import type { ToolStatus } from "../../ai/turn-view/tool-status";
 import { applyRowChange, holdsNoAnswer, type RowChange, type TurnPhase } from "../../ai/turn-view/turn-rows";
+import { t } from "../../i18n";
 
 // Picture-in-picture (docs/03): the bubble by the mark, chat taking the whole
 // window with reading shrunk to a corner card, and reading back with chat
@@ -246,10 +247,6 @@ export interface OpenLevel {
   aside?: { parentThreadId: string };
 }
 
-const AI_PEN_DIM = "Only the book's conversation can open a side one.";
-const BOOK_THREAD_OPEN = "This book's conversation is already open.";
-const BOOK_THREAD_BEHIND = "The book's conversation is behind this side one.";
-
 // The AI pen opens a level, so it is live only where there is one left to open.
 export function mayOpenAside(call: OpenLevel | null | undefined): boolean {
   return !call || call.isBook === true;
@@ -296,11 +293,11 @@ export function levelGate(
   hasParent: (parentThreadId: string) => boolean,
 ): LevelGate {
   return {
-    aiPen: mayOpenAside(call) ? null : AI_PEN_DIM,
+    aiPen: mayOpenAside(call) ? null : t("reader.gate.aiPenDim"),
     bookThread: mayOpenBookThread(call, hasParent)
       ? null
       : call?.aside
-        ? BOOK_THREAD_BEHIND
-        : BOOK_THREAD_OPEN,
+        ? t("reader.gate.bookThreadBehind")
+        : t("reader.gate.bookThreadOpen"),
   };
 }

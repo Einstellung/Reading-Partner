@@ -8,6 +8,7 @@
 // can be going before any chapter is in focus, so either one alone is enough to
 // draw it. Renders nothing when neither has anything to say.
 
+import { useT } from '../../../../i18n';
 import { IconClose } from '../../base/icons';
 import { chapterFocusLabel, prepProgressLabel, type ChapterFocus } from './chapterFocus';
 import { Button } from '../../ui/button';
@@ -25,8 +26,9 @@ export interface ChapterFocusBarProps extends ChapterFocus {
 }
 
 export default function ChapterFocusBar({ onClear, prep, row, ...focus }: ChapterFocusBarProps) {
-	const label = chapterFocusLabel(focus);
-	const prepLabel = prepProgressLabel(prep);
+	const t = useT();
+	const label = chapterFocusLabel(focus, t);
+	const prepLabel = prepProgressLabel(prep, t);
 	if (!label && !prepLabel) return null;
 	if (row) {
 		return (
@@ -40,8 +42,8 @@ export default function ChapterFocusBar({ onClear, prep, row, ...focus }: Chapte
 						type="button"
 						variant="ghost"
 						size="icon"
-						title="Clear chapter focus"
-						aria-label="Clear chapter focus"
+						title={t('chat.call.clearFocus')}
+						aria-label={t('chat.call.clearFocus')}
 						onClick={onClear}
 						className="flex-none text-neutral-400"
 					>
@@ -59,8 +61,8 @@ export default function ChapterFocusBar({ onClear, prep, row, ...focus }: Chapte
 					type="button"
 					variant="ghost"
 					size="icon"
-					title="Clear chapter focus"
-					aria-label="Clear chapter focus"
+					title={t('chat.call.clearFocus')}
+					aria-label={t('chat.call.clearFocus')}
 					onClick={onClear}
 					className="rounded-full text-neutral-400"
 				>

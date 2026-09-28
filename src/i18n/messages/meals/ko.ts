@@ -170,4 +170,12 @@ export default {
   "flavour.pesto": "페스토",
   "flavour.sweet": "달콤한 맛",
   "flavour.plain": "담백한 맛",
+
+  "unit.kcal": "kcal",
+  "unit.g": "g",
+  "unit.min": "분",
+  "abbr.protein": "단",
+  "abbr.fat": "지",
+  "abbr.carbs": "탄",
+  "guideLine": "지방 {fat}g · 탄수화물 {carbs}g (권장 {fatTarget} / {carbsTarget}g)",
 } satisfies Translation<typeof en>;

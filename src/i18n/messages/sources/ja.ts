@@ -112,4 +112,7 @@ export default {
   "plugins.huggingface.includeConversionsMustBeBoolean": "includeConversions は真偽値である必要があります",
   "plugins.huggingface.nonJson": "Hugging Face が {url} から JSON 以外を返しました",
   "plugins.huggingface.unexpectedShape": "Hugging Face が {url} から予期しない形式を返しました",
+
+  "window.today": "今日",
+  "window.lastDays": { other: "過去{count}日" },
 } satisfies Translation<typeof en>;

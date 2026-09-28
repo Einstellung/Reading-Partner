@@ -81,4 +81,15 @@ export default {
   "saved.savingArticle": "正在保存这篇文章",
   "saved.addedToPrepList": "已将一篇文章加入预读列表",
   "saved.keptArticles": "收藏的文章",
+
+  "call.preparing": "准备中…",
+  "call.preparingProgress": "准备中 {done}/{total}",
+  "call.pageRange": "第 {first}-{last} 页",
+  "call.page": "第 {page} 页",
+  "call.pageBadge": "第 {page} 页",
+  "call.clearFocus": "取消章节聚焦",
+  "call.backToReading": "回到阅读",
+  "call.deleteConversation": "删除对话",
+  "call.deleteTitle": "删除这段对话？",
+  "call.deleteDescription": "对话会被删除，打开它的那处标记也一起删除。此操作无法撤销。",
 } satisfies Translation<typeof en>;

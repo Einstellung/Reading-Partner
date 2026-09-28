@@ -26,6 +26,7 @@ import {
 // A selection across a Markdown list or a code block brings the newlines with
 // it, and every place a span or a question is shown or stated is one line.
 import { clipLineTight } from "../platform/std/text";
+import { t } from "../i18n";
 
 // How far back the tail reaches, counted in the reader's own questions.
 //
@@ -264,7 +265,7 @@ export function asideAnchorLabel(item: AsideReceiptItem): string {
 
 // The one line a receipt of several asides is collapsed to.
 export function asideReceiptSummary(count: number): string {
-  return `${count} questions while you were reading`;
+  return t("reader.aside.receiptSummary", { count });
 }
 
 // The receipt row at the end of a conversation, if the last thing in it is one:

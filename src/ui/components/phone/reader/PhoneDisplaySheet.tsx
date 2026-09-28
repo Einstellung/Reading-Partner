@@ -29,6 +29,24 @@ import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
 import { Switch } from "../../ui/switch";
 
+const LINE_LABEL = {
+  tight: "phone.displaySheet.lineTight",
+  standard: "phone.displaySheet.lineStandard",
+  loose: "phone.displaySheet.lineLoose",
+} as const;
+
+const PAD_LABEL = {
+  narrow: "phone.displaySheet.marginsNarrow",
+  wide: "phone.displaySheet.marginsWide",
+} as const;
+
+const PAPER_LABEL = {
+  white: "phone.displaySheet.paperWhite",
+  paper: "phone.displaySheet.paperPaper",
+  green: "phone.displaySheet.paperGreen",
+  dark: "phone.displaySheet.paperDark",
+} as const;
+
 export default function PhoneDisplaySheet(props: {
   open: boolean;
   display: FlowDisplay;
@@ -73,7 +91,7 @@ export default function PhoneDisplaySheet(props: {
             {FLOW_LINE_STEPS.map((s) => (
               <Choice
                 key={s.value}
-                label={s.label}
+                label={t(LINE_LABEL[s.id])}
                 selected={display.lineHeight === s.value}
                 onClick={() => onChange({ ...display, lineHeight: s.value })}
               />
@@ -84,7 +102,7 @@ export default function PhoneDisplaySheet(props: {
             {FLOW_PAD_STEPS.map((s) => (
               <Choice
                 key={s.value}
-                label={s.label}
+                label={t(PAD_LABEL[s.id])}
                 selected={display.padX === s.value}
                 onClick={() => onChange({ ...display, padX: s.value })}
               />
@@ -112,8 +130,8 @@ export default function PhoneDisplaySheet(props: {
                     display.paper === name && "ring-2 ring-primary ring-offset-2 ring-offset-background",
                   )}
                   style={{ backgroundColor: flowPaperSwatch(paper) }}
-                  title={paper.label}
-                  aria-label={paper.label}
+                  title={t(PAPER_LABEL[name])}
+                  aria-label={t(PAPER_LABEL[name])}
                   aria-pressed={display.paper === name}
                   onClick={() => onChange({ ...display, paper: name })}
                 />

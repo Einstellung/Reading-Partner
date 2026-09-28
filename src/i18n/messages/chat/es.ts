@@ -81,4 +81,15 @@ export default {
   "saved.savingArticle": "Guardando el artículo",
   "saved.addedToPrepList": "Se añadió un artículo a la lista de lectura previa",
   "saved.keptArticles": "Artículos guardados",
+
+  "call.preparing": "Preparando…",
+  "call.preparingProgress": "Preparando {done}/{total}",
+  "call.pageRange": "pp. {first}-{last}",
+  "call.page": "p. {page}",
+  "call.pageBadge": "p. {page}",
+  "call.clearFocus": "Quitar el enfoque del capítulo",
+  "call.backToReading": "Volver a la lectura",
+  "call.deleteConversation": "Eliminar conversación",
+  "call.deleteTitle": "¿Eliminar esta conversación?",
+  "call.deleteDescription": "Se eliminarán la conversación y la marca desde la que se abrió. Esta acción no se puede deshacer.",
 } satisfies Translation<typeof en>;

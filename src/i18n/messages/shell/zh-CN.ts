@@ -77,4 +77,9 @@ export default {
   "image.noCanvasContext": "无法处理这张图片（没有 canvas 上下文）。",
   "image.tooLarge": "压缩后图片仍然太大（{mb} MB，上限 5 MB）。",
   "image.decodeFailed": "无法解码这张图片。",
+
+  "nav.today": "今天",
+  "nav.briefing": "简报",
+  "nav.meals": "三餐",
+  "nav.topics": "主题",
 } satisfies Translation<typeof en>;

@@ -211,4 +211,15 @@ export default {
   "lessonOpening.takeMeToChapterTitle": "Take me to {title}.",
   "lessonOpening.takeMeToPage": "Take me to page {page}.",
   "lessonOpening.takeMeToChapterNumber": "Take me to chapter {number}.",
+
+  // The Aa sheet's choices (reading/epub/flow/flow-display.ts).
+  "displaySheet.lineTight": "Tight",
+  "displaySheet.lineStandard": "Standard",
+  "displaySheet.lineLoose": "Loose",
+  "displaySheet.marginsNarrow": "Narrow",
+  "displaySheet.marginsWide": "Wide",
+  "displaySheet.paperWhite": "White",
+  "displaySheet.paperPaper": "Paper",
+  "displaySheet.paperGreen": "Green",
+  "displaySheet.paperDark": "Dark",
 } as const;

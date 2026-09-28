@@ -22,6 +22,7 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from '../../ui/alert-dialog';
+import { useT } from '../../../../i18n';
 import { Button } from '../../ui/button';
 import { IconTrash } from '../../base/icons';
 
@@ -30,14 +31,15 @@ interface DeleteThreadButtonProps {
 }
 
 export default function DeleteThreadButton({ onDelete }: DeleteThreadButtonProps) {
+	const t = useT();
 	return (
 		<AlertDialog>
 			<AlertDialogTrigger asChild>
 				<Button
 					variant="ghost"
 					size="icon"
-					title="Delete conversation"
-					aria-label="Delete conversation"
+					title={t('chat.call.deleteConversation')}
+					aria-label={t('chat.call.deleteConversation')}
 					className="h-6 w-6 text-neutral-400 can-hover:hover:bg-destructive/10 can-hover:hover:text-destructive"
 				>
 					<IconTrash size={15} />
@@ -45,15 +47,15 @@ export default function DeleteThreadButton({ onDelete }: DeleteThreadButtonProps
 			</AlertDialogTrigger>
 			<AlertDialogContent>
 				<AlertDialogHeader>
-					<AlertDialogTitle>Delete this conversation?</AlertDialogTitle>
+					<AlertDialogTitle>{t('chat.call.deleteTitle')}</AlertDialogTitle>
 					<AlertDialogDescription>
-						The conversation goes, and with it the mark it was opened from. This cannot be undone.
+						{t('chat.call.deleteDescription')}
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
-					<AlertDialogCancel>Cancel</AlertDialogCancel>
+					<AlertDialogCancel>{t('shell.action.cancel')}</AlertDialogCancel>
 					<AlertDialogAction variant="destructive" onClick={onDelete}>
-						Delete
+						{t('shell.action.delete')}
 					</AlertDialogAction>
 				</AlertDialogFooter>
 			</AlertDialogContent>

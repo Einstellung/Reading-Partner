@@ -107,7 +107,7 @@ export default {
   "shelfList.notImportedShort": "Не импортировано",
   "shelfList.inCloud": "В облаке",
   "shelfList.notSyncedYet": "Ещё не синхронизировано",
-  "shelfList.lessonNotStarted": "Ещё не начат",
+  "shelfList.lessonNotStarted": "Не начат",
   "shelfList.lessonOn": "На «{title}»",
   "shelfList.lessonInProgress": "Урок идёт",
 
@@ -201,4 +201,14 @@ export default {
   "lessonOpening.takeMeToChapterTitle": "Проведи меня к «{title}».",
   "lessonOpening.takeMeToPage": "Проведи меня на страницу {page}.",
   "lessonOpening.takeMeToChapterNumber": "Проведи меня к главе {number}.",
+
+  "displaySheet.lineTight": "Плотный",
+  "displaySheet.lineStandard": "Обычный",
+  "displaySheet.lineLoose": "Свободный",
+  "displaySheet.marginsNarrow": "Узкие",
+  "displaySheet.marginsWide": "Широкие",
+  "displaySheet.paperWhite": "Белый",
+  "displaySheet.paperPaper": "Бумага",
+  "displaySheet.paperGreen": "Зелёный",
+  "displaySheet.paperDark": "Тёмный",
 } satisfies Translation<typeof en>;

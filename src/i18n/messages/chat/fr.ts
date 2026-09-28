@@ -81,4 +81,15 @@ export default {
   "saved.savingArticle": "Enregistrement de l’article",
   "saved.addedToPrepList": "Article ajouté à la liste de préparation",
   "saved.keptArticles": "Articles enregistrés",
+
+  "call.preparing": "Préparation…",
+  "call.preparingProgress": "Préparation {done}/{total}",
+  "call.pageRange": "p. {first}-{last}",
+  "call.page": "p. {page}",
+  "call.pageBadge": "p. {page}",
+  "call.clearFocus": "Retirer le focus du chapitre",
+  "call.backToReading": "Revenir à la lecture",
+  "call.deleteConversation": "Supprimer la conversation",
+  "call.deleteTitle": "Supprimer cette conversation ?",
+  "call.deleteDescription": "La conversation sera supprimée, ainsi que la marque depuis laquelle elle a été ouverte. Cette action est irréversible.",
 } satisfies Translation<typeof en>;

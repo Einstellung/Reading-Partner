@@ -78,4 +78,9 @@ export default {
   "image.noCanvasContext": "이미지를 처리할 수 없습니다 (canvas 컨텍스트 없음).",
   "image.tooLarge": "압축 후에도 이미지가 너무 큽니다 ({mb} MB, 최대 5 MB).",
   "image.decodeFailed": "이미지를 디코딩할 수 없습니다.",
+
+  "nav.today": "오늘",
+  "nav.briefing": "브리핑",
+  "nav.meals": "식단",
+  "nav.topics": "주제",
 } satisfies Translation<typeof en>;

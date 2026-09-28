@@ -6,6 +6,7 @@
 // as nodes so each keeps its own look. Tailwind-only.
 
 import type { ReactNode } from 'react';
+import { useT } from '../../../../i18n';
 
 interface ReadingPipCardProps {
 	title: string;
@@ -18,7 +19,9 @@ interface ReadingPipCardProps {
 	onClick(): void;
 }
 
-export default function ReadingPipCard({ title, badge, body, hoverLabel = 'Back to reading', onClick }: ReadingPipCardProps) {
+export default function ReadingPipCard({ title, badge, body, hoverLabel: hoverLabelProp, onClick }: ReadingPipCardProps) {
+	const t = useT();
+	const hoverLabel = hoverLabelProp ?? t('chat.call.backToReading');
 	return (
 		<button
 			type="button"

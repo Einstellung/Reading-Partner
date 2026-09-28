@@ -116,4 +116,7 @@ export default {
   "plugins.huggingface.includeConversionsMustBeBoolean": "includeConversions debe ser un booleano",
   "plugins.huggingface.nonJson": "Hugging Face devolvió contenido que no es JSON desde {url}",
   "plugins.huggingface.unexpectedShape": "Hugging Face devolvió una estructura inesperada desde {url}",
+
+  "window.today": "hoy",
+  "window.lastDays": { one: "último {count} día", other: "últimos {count} días" },
 } satisfies Translation<typeof en>;
