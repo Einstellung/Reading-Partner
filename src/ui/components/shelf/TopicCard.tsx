@@ -7,6 +7,7 @@
 // renders them and binds the events.
 
 import { useMemo } from "react";
+import { useT } from "../../../i18n";
 import type { Topic } from "../../../platform/app/topics";
 import { CARD_LABEL, CARD_META, CARD_TITLE, LIBRARY_CARD } from "./cardStyles";
 import CardMenu from "./CardMenu";
@@ -22,6 +23,7 @@ export default function TopicCard(props: {
   onRename?: () => void;
   onDelete?: () => void;
 }) {
+  const t = useT();
   const { topic } = props;
   const tiles = useMemo(() => coverTiles(topic), [topic]);
 
@@ -42,13 +44,13 @@ export default function TopicCard(props: {
       {props.onRename && props.onDelete && (
         <div className="absolute right-0 bottom-0">
           <CardMenu
-            label={`Actions for ${topic.name}`}
+            label={t("library.card.actionsFor", { name: topic.name })}
             items={[
-              { label: "Rename", onSelect: props.onRename },
+              { label: t("library.card.rename"), onSelect: props.onRename },
               // The confirmation is a dialog the screen owns: a menu row cannot
               // be its trigger, because picking the row closes the menu and
               // would take the dialog down with it.
-              { label: "Delete", onSelect: props.onDelete, destructive: true },
+              { label: t("library.card.delete"), onSelect: props.onDelete, destructive: true },
             ]}
           />
         </div>

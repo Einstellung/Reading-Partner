@@ -15,6 +15,7 @@
 // this screen has to know a retell is happening.
 
 import { useCallback, useEffect, useState } from "react";
+import { useT } from "../../../i18n";
 import {
   createTopic,
   removeFileFromTopic,
@@ -61,13 +62,7 @@ import TopicCard from "../shelf/TopicCard";
 import NameDialog from "../common/NameDialog";
 import ConfirmDestructiveDialog from "../common/ConfirmDestructiveDialog";
 import TopicDeleteDialog from "./TopicDeleteDialog";
-import {
-  NEW_TOPIC_BLURB,
-  NEW_TOPIC_PLACEHOLDER,
-  shelfHeaderLine,
-  shelfOrder,
-  TOPIC_GRID_COLUMNS_CLASS,
-} from "../shelf/topic-shelf";
+import { shelfHeaderLine, shelfOrder, TOPIC_GRID_COLUMNS_CLASS } from "../shelf/topic-shelf";
 import ObservationSection from "./topic/ObservationSection";
 import RehearsalSection from "./topic/RehearsalSection";
 import RetellSection from "./topic/RetellSection";
@@ -91,6 +86,7 @@ export default function LibraryScreen(props: {
   // A failure the reader has to hear about, such as a delete that did not happen.
   onSay: (line: string) => void;
 }) {
+  const t = useT();
   // Articles kept out of a briefing (docs/21), and which one is being read.
   const [savedArticles, setSavedArticles] = useState<SavedArticle[]>([]);
   const [openSavedArticle, setOpenSavedArticle] = useState<SavedArticle | null>(null);
@@ -230,7 +226,7 @@ export default function LibraryScreen(props: {
           key={coachOutlineId}
           outlineId={coachOutlineId}
           topicName={activeTopic.name}
-          backLabel="Back to the topic"
+          backLabel={t("library.screen.backToTopicLabel")}
           passKey={passKey}
           pending={passPending}
           onBack={() => setCoachOutlineId(null)}
@@ -265,7 +261,7 @@ export default function LibraryScreen(props: {
                   className="text-[13px] text-muted-foreground underline-offset-4 can-hover:hover:underline"
                   onClick={props.onCloseTopic}
                 >
-                  ‹ All topics
+                  {t("library.screen.backToTopics")}
                 </Button>
                 <h1 className="mx-0 mt-1.5 mb-0 font-display text-[22px] font-bold">
                   {activeTopic.name}
@@ -279,7 +275,7 @@ export default function LibraryScreen(props: {
                   is a button in the wrong place. */}
               {section === "materials" && (
                 <Button className={HEADER_ACTION} onClick={props.onAddFile}>
-                  + Add book
+                  {t("library.screen.addBook")}
                 </Button>
               )}
             </div>
@@ -331,7 +327,7 @@ export default function LibraryScreen(props: {
                     void settleDelete({
                       act: () => removeFileFromTopic(activeTopic.id, p),
                       refresh: props.onTopicsChanged,
-                      failed: "Could not remove the book from this topic",
+                      failed: t("library.screen.removeFileFailed"),
                       onFail: props.onSay,
                     })
                   }
@@ -341,7 +337,7 @@ export default function LibraryScreen(props: {
                     void settleDelete({
                       act: () => removeFromTopic(activeTopic.id, file),
                       refresh: props.onTopicsChanged,
-                      failed: "Could not delete the book",
+                      failed: t("library.screen.deleteBookFailed"),
                       onFail: props.onSay,
                     })
                   }
@@ -350,7 +346,7 @@ export default function LibraryScreen(props: {
                     void settleDelete({
                       act: () => removeSavedArticle(id),
                       refresh: refreshSavedArticles,
-                      failed: "Could not remove the article",
+                      failed: t("library.screen.removeArticleFailed"),
                       onFail: props.onSay,
                     })
                   }
@@ -376,11 +372,11 @@ export default function LibraryScreen(props: {
           await props.onTopicsChanged();
         }}
         // Confirmed in the topic list's TopicDeleteDialog, which is what calls this.
-        onDelete={(t, alsoDeleteFiles) =>
+        onDelete={(deletedTopic, alsoDeleteFiles) =>
           void settleDelete({
-            act: () => deleteTopic(t.id, undefined, { alsoDeleteFiles }),
+            act: () => deleteTopic(deletedTopic.id, undefined, { alsoDeleteFiles }),
             refresh: props.onTopicsChanged,
-            failed: `Could not delete “${t.name}”`,
+            failed: t("library.deleteFailed", { name: deletedTopic.name }),
             onFail: props.onSay,
           })
         }
@@ -428,6 +424,7 @@ function TopicLibrary(props: {
   onDelete: (topic: Topic, alsoDeleteFiles: string[]) => void;
   onOpen: (topic: Topic) => void;
 }) {
+  const t = useT();
   // Which dialog is up. Each is mounted only while it is open, so its field
   // starts from the right value every time.
   const [creating, setCreating] = useState(false);
@@ -439,37 +436,37 @@ function TopicLibrary(props: {
     <div className={LIBRARY_PAGE}>
       <div className={PAGE_HEADER}>
         <div className={PAGE_HEADER_TEXT}>
-          <span className={PAGE_EYEBROW}>Your topics</span>
-          <h1 className={PAGE_TITLE}>Topics</h1>
+          <span className={PAGE_EYEBROW}>{t("library.topics.eyebrow")}</span>
+          <h1 className={PAGE_TITLE}>{t("library.topics.title")}</h1>
           <p className={PAGE_SUB}>
-            {topics.length === 0 ? NEW_TOPIC_BLURB : shelfHeaderLine(topics)}
+            {topics.length === 0 ? t("library.topics.blurb") : shelfHeaderLine(topics)}
           </p>
         </div>
         {/* An empty shelf makes its topic from the empty state's own button,
             which is the only thing on the page. */}
         {topics.length > 0 && (
           <Button className={HEADER_ACTION} onClick={() => setCreating(true)}>
-            + New topic
+            {t("library.topics.newTopicButton")}
           </Button>
         )}
       </div>
 
       {topics.length === 0 ? (
         <EmptyState
-          title="Nothing on the shelf yet"
-          blurb={`${NEW_TOPIC_BLURB} Name the question first; the PDFs go in after.`}
-          action="New topic"
+          title={t("library.topics.emptyTitle")}
+          blurb={t("library.topics.emptyBlurb")}
+          action={t("library.topics.emptyAction")}
           onAction={() => setCreating(true)}
         />
       ) : (
         <ul className={`${GRID} mt-6`}>
-          {topics.map((t) => (
+          {topics.map((topic) => (
             <TopicCard
-              key={t.id}
-              topic={t}
-              onOpen={() => props.onOpen(t)}
-              onRename={() => setRenaming(t)}
-              onDelete={() => setDeleting(t)}
+              key={topic.id}
+              topic={topic}
+              onOpen={() => props.onOpen(topic)}
+              onRename={() => setRenaming(topic)}
+              onDelete={() => setDeleting(topic)}
             />
           ))}
         </ul>
@@ -479,10 +476,10 @@ function TopicLibrary(props: {
         <NameDialog
           open
           onOpenChange={setCreating}
-          title="New topic"
-          description={NEW_TOPIC_BLURB}
-          placeholder={NEW_TOPIC_PLACEHOLDER}
-          confirmLabel="Create"
+          title={t("library.topics.createTitle")}
+          description={t("library.topics.blurb")}
+          placeholder={t("library.topics.placeholder")}
+          confirmLabel={t("library.topics.createConfirm")}
           onConfirm={props.onCreate}
         />
       )}
@@ -490,9 +487,9 @@ function TopicLibrary(props: {
         <NameDialog
           open
           onOpenChange={(open) => !open && setRenaming(null)}
-          title="Rename topic"
-          description="Only the name changes. The reading list stays as it is."
-          confirmLabel="Save"
+          title={t("library.topics.renameTitle")}
+          description={t("library.topics.renameDescription")}
+          confirmLabel={t("library.topics.renameConfirm")}
           initialValue={renaming.name}
           onConfirm={(name) => props.onRename(renaming, name)}
         />
@@ -534,6 +531,7 @@ function TopicMaterials(props: {
   onOpenSavedArticle: (article: SavedArticle) => void;
   onRemoveSavedArticle: (id: string) => void;
 }) {
+  const t = useT();
   const files = sortedFiles(props.topic);
   // Books are cards, articles are rows; both keep the shelf's recency order
   // (article-row.ts says why articles come after).
@@ -561,9 +559,9 @@ function TopicMaterials(props: {
     <>
       {files.length === 0 ? (
         <EmptyState
-          title="No books in this topic yet"
-          blurb="Add the books you want to read against this question. They are read where they are; nothing is copied or moved."
-          action="Add book"
+          title={t("library.materials.emptyTitle")}
+          blurb={t("library.materials.emptyBlurb")}
+          action={t("library.materials.addBook")}
           onAction={props.onAddFile}
         />
       ) : (
@@ -599,7 +597,9 @@ function TopicMaterials(props: {
         <>
           {/* Articles are rows, not cards: a kept web page has no cover, and a
               grid of blank tiles would say less than a line of text. */}
-          <h2 className="mt-10 mb-3 text-[15px] font-semibold text-foreground">Saved articles</h2>
+          <h2 className="mt-10 mb-3 text-[15px] font-semibold text-foreground">
+            {t("library.materials.savedArticlesHeading")}
+          </h2>
           <ArticleRows
             rows={props.savedArticles.map((a) => ({ article: a, title: a.title, line: savedArticleLine(a) }))}
             rowKey={(row) => row.article.id}
@@ -611,9 +611,9 @@ function TopicMaterials(props: {
 
       {removingArticle && (
         <ConfirmDestructiveDialog
-          title={`Remove “${removingArticle.title}”?`}
-          description="The article leaves your saved articles. Saving it again from a briefing brings it back."
-          actionLabel="Remove"
+          title={t("library.materials.removeArticleTitle", { title: removingArticle.title })}
+          description={t("library.materials.removeArticleDescription")}
+          actionLabel={t("library.materials.removeArticleAction")}
           open
           onOpenChange={(open) => !open && setRemovingArticle(null)}
           onConfirm={() => props.onRemoveSavedArticle(removingArticle.id)}
@@ -624,15 +624,17 @@ function TopicMaterials(props: {
         <ConfirmDestructiveDialog
           title={
             lastReference
-              ? `Delete “${displayFileTitle(removing.name)}”?`
-              : `Remove “${displayFileTitle(removing.name)}”?`
+              ? t("library.materials.deleteBookTitle", { title: displayFileTitle(removing.name) })
+              : t("library.materials.removeBookTitle", { title: displayFileTitle(removing.name) })
           }
           description={
             lastReference
-              ? "Delete this book and everything about it? Your notes about yourself stay."
-              : "The topic loses the book. The file stays on disk, and so do its reading position and marks — adding it back brings them with it."
+              ? t("library.materials.deleteBookDescription")
+              : t("library.materials.removeBookDescription")
           }
-          actionLabel={lastReference ? "Delete" : "Remove"}
+          actionLabel={
+            lastReference ? t("library.materials.deleteBookAction") : t("library.materials.removeBookAction")
+          }
           open
           onOpenChange={(open) => !open && setRemoving(null)}
           onConfirm={() =>

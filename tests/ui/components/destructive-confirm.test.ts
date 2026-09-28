@@ -55,18 +55,23 @@ test("deleting a topic goes through the destructive confirmation", () => {
   const own = readFileSync(join(ROOT, "ui/components/library/TopicDeleteDialog.tsx"), "utf8");
   expect(own).toContain("<ConfirmDestructiveDialog");
   // The topic goes with the work done in it (reading/delete/delete-topic.ts);
-  // its files go only when the box is ticked (shelf/topic-delete.ts).
+  // its files go only when the box is ticked (shelf/topic-delete.ts). The
+  // wording itself is in the i18n catalog now (docs/ui/81), not the source.
   const words = readFileSync(join(ROOT, "ui/components/shelf/topic-delete.ts"), "utf8");
-  expect(words).toContain("with the retells, talks and rehearsals made in it");
+  expect(words).toContain('t("library.topicDelete.description")');
+  const en = readFileSync(join(ROOT, "i18n/messages/library/en.ts"), "utf8");
+  expect(en).toContain("with the retells, talks and rehearsals made in it");
 });
 
 // deleteRetell takes the retell's rehearsals with it (reading/retell/store.ts),
-// so the confirmation says so.
+// so the confirmation says so. The wording is in the i18n catalog (docs/ui/81).
 test("deleting a retell says its rehearsals go too", () => {
   const source = readFileSync(join(ROOT, "ui/components/library/topic/RetellSection.tsx"), "utf8");
   const start = source.indexOf("<ConfirmDestructiveDialog");
   const dialog = source.slice(start, source.indexOf("/>", start));
-  expect(dialog).toContain("every rehearsal of its talk");
+  expect(dialog).toContain('t("library.retell.deleteDescription")');
+  const en = readFileSync(join(ROOT, "i18n/messages/library/en.ts"), "utf8");
+  expect(en).toContain("every rehearsal of its talk");
 });
 
 test("the citation chip carries a 44px target without moving the line", () => {

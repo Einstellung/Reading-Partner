@@ -1,0 +1,160 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+const de: Translation<typeof en> = {
+  "count.books": { one: "{count} Buch", other: "{count} Bücher" },
+  "count.articles": { one: "{count} Artikel", other: "{count} Artikel" },
+  "count.topics": { one: "{count} Thema", other: "{count} Themen" },
+  "count.files": { one: "{count} Datei", other: "{count} Dateien" },
+  "count.marks": { one: "{count} Markierung", other: "{count} Markierungen" },
+  "count.observations": { one: "{count} Beobachtung", other: "{count} Beobachtungen" },
+  "count.messages": { one: "{count} Nachricht", other: "{count} Nachrichten" },
+  "count.conflictCopies": { one: "{count} Konfliktkopie", other: "{count} Konfliktkopien" },
+  "count.booksAndArticles": "{books} und {articles}",
+
+  "time.today": "heute",
+  "time.yesterday": "gestern",
+  "time.daysAgo": { one: "vor {count} Tag", other: "vor {count} Tagen" },
+  "time.weeksAgo": { one: "vor {count} Woche", other: "vor {count} Wochen" },
+  "time.monthsAgo": { one: "vor {count} Monat", other: "vor {count} Monaten" },
+  "time.yearsAgo": { one: "vor {count} Jahr", other: "vor {count} Jahren" },
+
+  "header.lastRead": "zuletzt gelesen {when}",
+
+  "shelf.readPercent": "{percent}% gelesen",
+  "shelf.page": "Seite {page}",
+  "shelf.notOpened": "Noch nicht geöffnet",
+  "shelf.noFiles": "Keine Dateien",
+
+  "deleteTitle": "„{name}“ löschen?",
+  "deleteFailed": "„{name}“ konnte nicht gelöscht werden",
+
+  "card.actionsFor": "Aktionen für {name}",
+  "card.remove": "Entfernen",
+  "card.rename": "Umbenennen",
+  "card.delete": "Löschen",
+  "card.retell": "Dieses Buch nacherzählen…",
+
+  "topics.eyebrow": "Deine Themen",
+  "topics.title": "Themen",
+  "topics.blurb": "Ein Thema ist eine Frage und die Bücher, die du dafür liest.",
+  "topics.newTopicButton": "+ Neues Thema",
+  "topics.emptyTitle": "Das Regal ist noch leer",
+  "topics.emptyBlurb": "Ein Thema ist eine Frage und die Bücher, die du dafür liest. Lege zuerst die Frage fest; die PDFs kommen danach dazu.",
+  "topics.emptyAction": "Neues Thema",
+  "topics.createTitle": "Neues Thema",
+  "topics.createConfirm": "Erstellen",
+  "topics.placeholder": "z. B. was JITs schnell macht",
+  "topics.renameTitle": "Thema umbenennen",
+  "topics.renameDescription": "Nur der Name ändert sich. Die Leseliste bleibt, wie sie ist.",
+  "topics.renameConfirm": "Speichern",
+
+  "materials.emptyTitle": "In diesem Thema sind noch keine Bücher",
+  "materials.emptyBlurb":
+    "Füge die Bücher hinzu, die du zu dieser Frage lesen möchtest. Sie werden dort gelesen, wo sie liegen; nichts wird kopiert oder verschoben.",
+  "materials.addBook": "Buch hinzufügen",
+  "materials.savedArticlesHeading": "Gespeicherte Artikel",
+  "materials.removeArticleTitle": "„{title}“ entfernen?",
+  "materials.removeArticleDescription": "Der Artikel verschwindet aus deinen gespeicherten Artikeln. Erneutes Speichern aus einem Briefing bringt ihn zurück.",
+  "materials.removeArticleAction": "Entfernen",
+  "materials.deleteBookTitle": "„{title}“ löschen?",
+  "materials.removeBookTitle": "„{title}“ entfernen?",
+  "materials.deleteBookDescription": "Dieses Buch und alles dazu löschen? Deine Notizen über dich selbst bleiben erhalten.",
+  "materials.removeBookDescription":
+    "Das Thema verliert das Buch. Die Datei bleibt auf der Festplatte, ebenso Leseposition und Markierungen — fügst du es wieder hinzu, kommen sie mit zurück.",
+  "materials.deleteBookAction": "Löschen",
+  "materials.removeBookAction": "Entfernen",
+
+  "screen.backToTopics": "‹ Alle Themen",
+  "screen.addBook": "+ Buch hinzufügen",
+  "screen.backToTopicLabel": "Zurück zum Thema",
+  "screen.removeFileFailed": "Das Buch konnte nicht aus diesem Thema entfernt werden",
+  "screen.deleteBookFailed": "Das Buch konnte nicht gelöscht werden",
+  "screen.removeArticleFailed": "Der Artikel konnte nicht entfernt werden",
+
+  "topicDelete.onlyCaption": "Nur in diesem Thema",
+  "topicDelete.description":
+    "Das Thema verschwindet, auf allen Geräten, zusammen mit den Nacherzählungen, Vorträgen und Proben, die darin entstanden sind.",
+  "topicDelete.articlesMoveNote": "Hier gespeicherte Artikel wandern nach Später lesen.",
+  "topicDelete.sharedOneBook": "Ein Buch ist auch in einem anderen Thema abgelegt und bleibt dort erhalten.",
+  "topicDelete.sharedOneArticle": "Ein Artikel ist auch in einem anderen Thema abgelegt und bleibt dort erhalten.",
+  "topicDelete.sharedMany": "{tally} sind auch in anderen Themen abgelegt und bleiben dort erhalten.",
+  "topicDelete.checkOneBook": "Dieses Buch ebenfalls löschen",
+  "topicDelete.checkOneArticle": "Diesen Artikel ebenfalls löschen",
+  "topicDelete.checkMany": "Diese {tally} ebenfalls löschen",
+  "topicDelete.action": "Löschen",
+  "topicDelete.actionOneBook": "Thema und Buch löschen",
+  "topicDelete.actionOneArticle": "Thema und Artikel löschen",
+  "topicDelete.actionAll": { one: "Thema und alle {count} löschen", other: "Thema und alle {count} löschen" },
+  "topicDelete.doneNone": "„{name}“ gelöscht",
+  "topicDelete.doneOne": "„{name}“ und {tally} gelöscht",
+  "topicDelete.doneMany": "„{name}“, {tally} gelöscht",
+  "topicDelete.kindArticle": "Artikel",
+
+  "rehearsal.goneError": "Diese Probe gibt es nicht mehr",
+  "rehearsal.noTalkError": "Für diesen Vortrag gibt es nichts zu proben",
+  "rehearsal.openFailed": "Die Probe konnte nicht geöffnet werden",
+  "rehearsal.emptyBlurb":
+    "Hier gibt es noch nichts zu proben. Ein Vortrag erscheint hier, sobald eine Nacherzählung ihn angelegt hat, und jeder Durchlauf wird aufbewahrt, damit der nächste etwas zum Vergleichen hat.",
+  "rehearsal.howItWent": "Wie es lief",
+  "rehearsal.rehearseButton": "Proben",
+  "rehearsal.deleteMenuItem": "Diese Probe löschen",
+  "rehearsal.deleteDescription":
+    "Jeder Durchlauf dieses Vortrags verschwindet mit ihr. Der Vortrag selbst bleibt erhalten, und du kannst ihn von der Nacherzählung aus erneut proben.",
+
+  "retell.startFailed": "Die Nacherzählung konnte nicht gestartet werden",
+  "retell.emptyBlurb":
+    "Noch keine Nacherzählungen. Eine Nacherzählung ist etwas, das du dir vornimmst, ausgehend von dem, was du hier gelesen hast — du gehst es Kapitel für Kapitel mit der KI durch, und dabei entsteht die Gliederung der Nacherzählung.",
+  "retell.newRetellButton": "Neue Nacherzählung",
+  "retell.deleteMenuItem": "Diese Nacherzählung löschen",
+  "retell.deleteDescription":
+    "Die Nacherzählung verschwindet, zusammen mit der festgelegten Gliederung und jeder Probe ihres Vortrags. Die Bücher, ihre Markierungen und Notizen bleiben unberührt.",
+  "retell.pickDescription":
+    "Eine Nacherzählung wird vorbereitet, indem du das Gelesene Kapitel für Kapitel durchgehst und festlegst, was es beiträgt. Wähle, worum es geht.",
+  "retell.noCandidates": "Noch nichts zum Nacherzählen — öffne zuerst ein Buch in diesem Thema.",
+  "retell.cancel": "Abbrechen",
+  "retell.start": "Starten",
+
+  "loading": "Wird geladen…",
+
+  "observations.heading": "KI-Beobachtungen",
+  "observations.lastDistilled": "Zuletzt destilliert {date}",
+  "observations.noDistillation": "Es wurde noch keine Destillation durchgeführt.",
+  "observations.empty": "Noch nichts beobachtet. Beobachtungen werden destilliert, wenn ein Gespräch endet.",
+  "observations.footer": "Beobachtungen werden von der KI gepflegt. Wenn eine nicht stimmt, sag es in einem Gespräch.",
+  "observations.aboutYou": "Über dich",
+  "observations.lastSupported": "zuletzt bestätigt {date}",
+  "observations.fromEvidence": "aus {evidence}",
+  "observations.updated": "aktualisiert {date}",
+  "observations.evidenceLabel": "Beleg:",
+  "observations.evidenceAnnotation": "Anmerkung {id}",
+  "observations.evidenceMessage": "Nachricht {id}",
+  "observations.conflictNotice":
+    "{copies} aus der Synchronisierung. Zwei Geräte haben dieselbe Beobachtung geändert; die unterlegene Version wird daneben aufbewahrt.",
+  "observations.conflictUnreadable": "(diese Kopie konnte nicht gelesen werden; öffne die Datei, um sie zu sehen)",
+  "observations.typeReadingPosition": "Leseposition",
+  "observations.typeStuckPoint": "Stolperstelle",
+  "observations.typeCannotExplain": "kann es nicht erklären",
+  "observations.typeCanExplain": "kann es erklären",
+  "observations.typeUnderstoodConcept": "verstandenes Konzept",
+  "observations.typeBelief": "Ansicht",
+  "observations.typeCorrection": "Korrektur",
+
+  "statement.youSaid": "Du hast gesagt",
+  "statement.concluded": "Gefolgert",
+  "statement.evidenceBoth": "{observations}, {messages}",
+  "statement.kindProfile": "Profil",
+  "statement.kindConcern": "Anliegen",
+
+  "section.navLabel": "Thema",
+  "section.materials": "Material",
+  "section.retell": "Nacherzählung",
+  "section.rehearsal": "Probe",
+  "section.observations": "KI-Beobachtungen",
+
+  "savedArticle.backDefault": "Thema",
+  "savedArticle.summaryOnlyNote": "Der Volltext dieses Artikels wurde nie abgerufen. Es folgt nur eine Zusammenfassung.",
+  "savedArticle.noBody": "Zu diesem Artikel wurde kein Text gespeichert.",
+};
+
+export default de;

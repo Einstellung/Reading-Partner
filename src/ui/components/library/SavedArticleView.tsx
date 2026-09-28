@@ -4,6 +4,7 @@
 // separate screen rather than a reuse. The prose look is shared (proseCss).
 
 import { useEffect, useMemo, useState } from "react";
+import { useT } from "../../../i18n";
 import { ARTICLE_PROSE_CLASS, ARTICLE_PROSE_CSS, hideBrokenImage } from "../markdown/proseCss";
 import { articleHtmlForWebview } from "../../../platform/app/image-proxy";
 import { handleDelegatedLinkClick } from "../../../platform/app/external-link";
@@ -19,14 +20,16 @@ import { Button } from "../ui/button";
 export default function SavedArticleView({
   article,
   onBack,
-  backLabel = "Topic",
+  backLabel,
 }: {
   article: SavedArticle;
   onBack: () => void;
   // What Back leads to. The library opens this from a topic; the phone opens it
-  // from the list of kept articles, and the button has to say so.
+  // from the list of kept articles, and the button has to say so. Defaults to
+  // "Topic" (library.savedArticle.backDefault) when the caller leaves it out.
   backLabel?: string;
 }) {
+  const t = useT();
   const published = formatPublishedAt(article.publishedAt);
   // The body is its own file (docs/21), so opening the article is what reads it.
   // Null until it has answered: "no body was saved with this article" is a claim
@@ -55,7 +58,7 @@ export default function SavedArticleView({
       <div className="mx-auto flex w-full max-w-[46rem] flex-col px-4 py-5 sm:px-6 sm:py-8">
         <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
           <Button variant="subtle" size="chip" onClick={onBack}>
-            ‹ {backLabel}
+            ‹ {backLabel ?? t("library.savedArticle.backDefault")}
           </Button>
           {article.sourceName && (
             <span className="text-[12px] text-faint-foreground">{article.sourceName}</span>
@@ -69,7 +72,7 @@ export default function SavedArticleView({
 
         {article.summaryOnly && (
           <p className="mb-6 rounded-lg border border-[#efe2c4] bg-[#fdf8ec] px-3 py-2 text-[13px] leading-relaxed text-[#7a6432]">
-            The full text of this article was never retrieved. What follows is only a summary.
+            {t("library.savedArticle.summaryOnlyNote")}
           </p>
         )}
 
@@ -86,7 +89,7 @@ export default function SavedArticleView({
           <div className={`${ARTICLE_PROSE_CLASS} whitespace-pre-wrap`}>{body.text}</div>
         ) : (
           <p className="my-3.5 text-[15px] leading-relaxed text-faint-foreground">
-            No body was saved with this article.
+            {t("library.savedArticle.noBody")}
           </p>
         )}
 

@@ -8,7 +8,7 @@
 // book, and the numbers come from here either way.
 
 import { sortedFiles, type FileRef, type Topic } from "../../../platform/app/topics";
-import { plural } from "../../../platform/std/text";
+import { t } from "../../../i18n";
 
 // The grid's one source of truth. The class names are literal because Tailwind
 // finds classes by scanning source text: a name built at runtime is a name that
@@ -132,8 +132,8 @@ export function tileStyle(tile: CoverTile): { gridColumn: string; gridRow: strin
 }
 
 export function fileCountLabel(count: number): string {
-  if (count === 0) return "No files";
-  return `${count} file${count === 1 ? "" : "s"}`;
+  if (count === 0) return t("library.shelf.noFiles");
+  return t("library.count.files", { count });
 }
 
 // What a cover with no image shows. The extension is dropped because every file
@@ -155,5 +155,5 @@ export function shelfHeaderLine(topics: Topic[]): string {
   for (const topic of topics) {
     for (const file of topic.files) books.add(file.hash ?? file.path);
   }
-  return `${plural(topics.length, "topic")} · ${plural(books.size, "book")}`;
+  return `${t("library.count.topics", { count: topics.length })} · ${t("library.count.books", { count: books.size })}`;
 }

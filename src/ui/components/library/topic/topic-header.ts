@@ -4,7 +4,7 @@
 
 import type { BookMeta } from "../../shelf/file-title";
 import type { Topic } from "../../../../platform/app/topics";
-import { plural } from "../../../../platform/std/text";
+import { t } from "../../../../i18n";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -21,12 +21,12 @@ export function relativeDayLabel(at: number, now: Date): string {
   const then = new Date(at);
   const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((midnight(now) - midnight(then)) / DAY);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return plural(Math.floor(days / 7), "week") + " ago";
-  if (days < 365) return plural(Math.floor(days / 30), "month") + " ago";
-  return plural(Math.floor(days / 365), "year") + " ago";
+  if (days <= 0) return t("library.time.today");
+  if (days === 1) return t("library.time.yesterday");
+  if (days < 7) return t("library.time.daysAgo", { count: days });
+  if (days < 30) return t("library.time.weeksAgo", { count: Math.floor(days / 7) });
+  if (days < 365) return t("library.time.monthsAgo", { count: Math.floor(days / 30) });
+  return t("library.time.yearsAgo", { count: Math.floor(days / 365) });
 }
 
 // Marks across every file in the topic. The reads are the shelf's own
@@ -37,10 +37,10 @@ export function totalMarks(topic: Topic, meta: Record<string, BookMeta>): number
 }
 
 export function topicHeaderLine(topic: Topic, meta: Record<string, BookMeta>, now: Date): string {
-  const parts = [plural(topic.files.length, "file")];
+  const parts = [t("library.count.files", { count: topic.files.length })];
   const marks = totalMarks(topic, meta);
-  if (marks) parts.push(plural(marks, "mark"));
+  if (marks) parts.push(t("library.count.marks", { count: marks }));
   const read = lastReadAt(topic);
-  if (read) parts.push(`last read ${relativeDayLabel(read, now)}`);
+  if (read) parts.push(t("library.header.lastRead", { when: relativeDayLabel(read, now) }));
   return parts.join(" · ");
 }
