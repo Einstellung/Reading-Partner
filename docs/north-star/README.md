@@ -22,6 +22,7 @@
 - [share](./share.md) — 分享出去：info 或书的合集带网站地址传给没装过 app 的人；图片卡片不要服务器，链接要一个上传接口加静态托管；等有网站、装上即用之后再做
 - [mobile-platform](./mobile-platform.md) — 移动端平台缺口：Android 识别、语音权限、安全区、真机验证链没接；iOS OTA 分发未做；latest.json 三平台并发写有竞态
 - [soul-conversation-gaps](./soul-conversation-gaps.md) — soul 对话的尾巴：steer 只接书对话、图片和答铃不流式、Outline 刷新漏 synced 档、openThread 竞态、threadId 待改名 conversation
+- [voice-i18n](./voice-i18n.md) — 语音跟随语言选项：听写语言、STT/TTS、通话与按住说话文案、麦克风权限说明；2026-09-28 从多语言第一轮（[81](../ui/81-多语言.md)）拿掉
 - [architecture-audit](./architecture-audit.md) — [37](../platform/37-结构与架构优化.md) 架构审计 C 组长期债：App.tsx 与 ui/components 越线目录、流式驱动三份收拢到两份、loadPdfjs 待抽 capability、docs/38 安全审阅未入库
 
 webview 渲染管子（隐藏 WebviewWindow 当渲染引擎）已经落地并随彭博社源发货，不再是北极星方向；现状和剩下的缺口（SPA 站发现层）记在 [17](../info/17-信息源系统.md)。
