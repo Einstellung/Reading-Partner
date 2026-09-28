@@ -224,7 +224,7 @@ export function paintBoxes(boxes: readonly MarkBox[], pen: MarkPen): MarkBox[] {
 }
 
 // A hex color at an alpha. Anything that is not #rgb or #rrggbb is handed back
-// untouched — the palette is hex (platform/app/annotations.ts) and a file synced
+// untouched — mark colors are hex (platform/app/annotations.ts) and a file synced
 // from a build with a different one still has to draw something.
 export function withAlpha(color: string, alpha: number): string {
   const hex = color.trim();

@@ -27,9 +27,14 @@ import {
 import type { Annotation } from "./reader-contract";
 import { reportStoreError } from "./store-errors";
 
-// The annotation color palette. The UI components use the same list; this
-// export is the single source.
-export const ANNOTATION_COLORS: { name: string; color: string }[] = [
+// Every highlight the reader draws is this yellow; nothing offers another.
+export const HIGHLIGHT_COLOR = "#ffd400";
+
+// The palette highlights could be picked in before the pen went yellow-only.
+// Marks saved then, and annotations imported from Zotero or a PDF, keep the
+// color they carry and are drawn in it; nothing rewrites them. This list is the
+// record of those colors, not something the UI offers.
+export const LEGACY_ANNOTATION_COLORS: { name: string; color: string }[] = [
   { name: "Yellow", color: "#ffd400" },
   { name: "Red", color: "#ff6666" },
   { name: "Green", color: "#5fb236" },

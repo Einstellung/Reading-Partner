@@ -1,10 +1,6 @@
 // Shared prop contracts for the presentational reader-annotation components.
-// Colors come from ANNOTATION_COLORS in src/annotations.ts (single source).
-
-export interface ColorEntry {
-	name: string;
-	color: string;
-}
+// A tool's color is fixed: HIGHLIGHT_COLOR in platform/app/annotations.ts for
+// the highlighter, AI_PEN_COLOR for the AI pen.
 
 // The tool group is a single-select rack that also allows "nothing selected".
 //   'none'    — nothing selected: the traditional reading mode (a stylus marks

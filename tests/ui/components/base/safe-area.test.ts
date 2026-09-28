@@ -100,7 +100,6 @@ test("everyone who takes the safe padding places itself in a layout effect", () 
   // places itself some other way makes the rule above worth revisiting.
   for (const file of [
     "reader/AnnotationPopup.tsx",
-    "reader/PenToolbar.tsx",
     "chat/call/CallBubble.tsx",
   ]) {
     const source = readFileSync(join(SRC, file), "utf8");

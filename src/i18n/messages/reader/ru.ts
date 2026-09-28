@@ -19,8 +19,6 @@ export default {
   "pen.aiPen": "ИИ-перо",
   "pen.toolsLabel": "Инструменты чтения",
   "pen.disabledReason": "{label}: {reason}",
-  "pen.color": "Цвет",
-  "pen.colors": "Цвета",
 
   "top.learnBook": "Изучать эту книгу с ИИ",
   "top.zoomIn": "Увеличить",
@@ -173,12 +171,4 @@ export default {
   "gate.bookThreadOpen": "Разговор об этой книге уже открыт.",
   "gate.bookThreadBehind": "Разговор о книге находится за этим боковым разговором.",
   "aside.receiptSummary": { one: "{count} вопрос во время чтения", few: "{count} вопроса во время чтения", many: "{count} вопросов во время чтения", other: "{count} вопроса во время чтения" },
-  "color.yellow": "Жёлтый",
-  "color.red": "Красный",
-  "color.green": "Зелёный",
-  "color.blue": "Синий",
-  "color.purple": "Фиолетовый",
-  "color.magenta": "Пурпурный",
-  "color.orange": "Оранжевый",
-  "color.gray": "Серый",
 } satisfies Translation<typeof en>;

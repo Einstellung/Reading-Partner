@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useT } from "../../../../i18n";
 import {
-  ANNOTATION_COLORS,
+  HIGHLIGHT_COLOR,
   deleteAnnotations,
   saveAnnotations,
 } from "../../../../platform/app/annotations";
@@ -98,7 +98,7 @@ export default function PhoneReader(props: {
   const [failed, setFailed] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(t("phone.reader.rendering"));
   const [stats, setStats] = useState<ViewStats | null>(null);
-  const [tool, setTool] = useState<Tool>({ type: "none", color: ANNOTATION_COLORS[0].color });
+  const [tool, setTool] = useState<Tool>({ type: "none", color: HIGHLIGHT_COLOR });
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [displayOpen, setDisplayOpen] = useState(false);
   // This device's view of the text (flow-display.ts). Read once, synchronously,

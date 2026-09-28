@@ -25,8 +25,6 @@ export default {
   "pen.aiPen": "AI pen",
   "pen.toolsLabel": "Reading tools",
   "pen.disabledReason": "{label}: {reason}",
-  "pen.color": "Color",
-  "pen.colors": "Colors",
 
   // ReaderTopBar.
   "top.learnBook": "Learn this book with AI",
@@ -179,18 +177,10 @@ export default {
   "engine.openFailedToast": "Couldn't open {which} — the file may be damaged, or not a PDF.",
   "engine.thisBook": "this book",
 
-  // Why the AI pen or the blackboard is dim (reading/turn/call-state.ts), the
-  // aside receipt's summary line (reading/aside.ts), and the pen colours by name.
+  // Why the AI pen or the blackboard is dim (reading/turn/call-state.ts), and the
+  // aside receipt's summary line (reading/aside.ts).
   "gate.aiPenDim": "Only the book's conversation can open a side one.",
   "gate.bookThreadOpen": "This book's conversation is already open.",
   "gate.bookThreadBehind": "The book's conversation is behind this side one.",
   "aside.receiptSummary": { one: "{count} question while you were reading", other: "{count} questions while you were reading" },
-  "color.yellow": "Yellow",
-  "color.red": "Red",
-  "color.green": "Green",
-  "color.blue": "Blue",
-  "color.purple": "Purple",
-  "color.magenta": "Magenta",
-  "color.orange": "Orange",
-  "color.gray": "Gray",
 } as const;

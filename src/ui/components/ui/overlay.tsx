@@ -74,7 +74,7 @@ export const OVERLAY_Z = {
   // A dialog raised over such a page.
   pageDialog: "z-[80]",
   // The app's own hand-placed floaters: the call bubble, the annotation editor,
-  // the pen palette, the provider hint.
+  // the provider hint.
   floating: "z-[1000]",
   // A control that has to stay reachable over those.
   floatingTop: "z-[1001]",
@@ -176,7 +176,7 @@ const useBeforePaint = typeof document === "undefined" ? useEffect : useLayoutEf
 // Measured before paint, not after. The state starts at NO_SAFE_AREA because the
 // insets cannot be read before there is a document, and the hand-placed floaters
 // position themselves in layout effects of their own (AnnotationPopup,
-// PenToolbar, CallBubble). A passive effect would hand the first painted frame
+// CallBubble). A passive effect would hand the first painted frame
 // the bare 8px gutter and move the box on the frame after — a hop on exactly the
 // devices that report an inset. Measuring in the layout phase puts the update in
 // the same commit: React flushes it before the browser paints, the placement

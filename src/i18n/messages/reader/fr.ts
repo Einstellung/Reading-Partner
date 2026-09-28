@@ -19,8 +19,6 @@ export default {
   "pen.aiPen": "Stylo IA",
   "pen.toolsLabel": "Outils de lecture",
   "pen.disabledReason": "{label} : {reason}",
-  "pen.color": "Couleur",
-  "pen.colors": "Couleurs",
 
   "top.learnBook": "Apprendre ce livre avec l'IA",
   "top.zoomIn": "Zoomer",
@@ -163,12 +161,4 @@ export default {
   "gate.bookThreadOpen": "La conversation de ce livre est déjà ouverte.",
   "gate.bookThreadBehind": "La conversation du livre se trouve derrière cette conversation annexe.",
   "aside.receiptSummary": { one: "{count} question pendant la lecture", other: "{count} questions pendant la lecture" },
-  "color.yellow": "Jaune",
-  "color.red": "Rouge",
-  "color.green": "Vert",
-  "color.blue": "Bleu",
-  "color.purple": "Violet",
-  "color.magenta": "Magenta",
-  "color.orange": "Orange",
-  "color.gray": "Gris",
 } satisfies Translation<typeof en>;

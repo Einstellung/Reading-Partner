@@ -17,7 +17,7 @@ import {
   writeSidebarOpen,
 } from "./ui/components/reader/sidebar/sidebar-column";
 import { useSidebarColumn } from "./ui/components/reader/sidebar/useSidebarColumn";
-import { ANNOTATION_COLORS } from "./platform/app/annotations";
+import { HIGHLIGHT_COLOR } from "./platform/app/annotations";
 import {
   createTopic,
   listTopics,
@@ -243,7 +243,6 @@ export default function App() {
   const [title, setTitle] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [pickedTool, setPickedTool] = useState<ToolType>("none");
-  const [penColor, setPenColor] = useState(ANNOTATION_COLORS[0].color);
   const [viewReady, setViewReady] = useState(false);
   // The reader's left panel: a drawer below `lg`, a column beside the page at
   // and above it (docs/54). Which form is on screen is CSS; App holds the open
@@ -574,8 +573,8 @@ export default function App() {
   // is ready throws).
   useEffect(() => {
     if (!viewReady) return;
-    viewRef.current?.setTool(readerTool(toolType, penColor));
-  }, [toolType, penColor, viewReady]);
+    viewRef.current?.setTool(readerTool(toolType));
+  }, [toolType, viewReady]);
 
   // What a card in the reading conversation raises. Two do: an aside's receipt,
   // which navigates back into the side conversation it stands for, and a write's
@@ -738,7 +737,6 @@ export default function App() {
     bookIdRef,
     readerPaneRef,
     aiPen: toolType === "ai",
-    penColor,
     onMarkPrepTrigger,
     setSidebarOpen,
     openThreadCall,
@@ -1269,7 +1267,7 @@ export default function App() {
         ? {
             threadId: call.threadId,
             pen: chatPen,
-            color: chatPen === "ai" ? AI_PEN_COLOR : penColor,
+            color: chatPen === "ai" ? AI_PEN_COLOR : HIGHLIGHT_COLOR,
             marks: traceAnns,
             // The same setting the page is routed by, so a finger does the same
             // thing in the classroom as it does on the book.
@@ -1278,7 +1276,7 @@ export default function App() {
             onOpen: openChatMark,
           }
         : null,
-    [call?.view, call?.threadId, chatPen, penColor, fingerDraw, traceAnns, drawChatMark, openChatMark],
+    [call?.view, call?.threadId, chatPen, fingerDraw, traceAnns, drawChatMark, openChatMark],
   );
 
   // The empty state, and whether there is a lesson to go back to.
@@ -1348,8 +1346,8 @@ export default function App() {
         by its height (docs/pitfall/443); the shell moves back into view without
         changing size, so neither reader beside the chat is laid out again. */}
     <KeyboardShell className="relative flex flex-col h-full p-safe">
-      {/* z-10: the color palette drops out of the header into the reader area,
-          and <main> is positioned too — without this it would paint over it.
+      {/* z-10: <main> is positioned, so without this it would paint over
+          anything the header drops into the reader area.
           Three sections: left = navigation, center = tool group, right = AI +
           overflow. The side sections are shrink-0 so they always hold their
           content; the center is the flex-1 that grows to center its tools and,
@@ -1369,11 +1367,8 @@ export default function App() {
             onToggleSidebar={() => setSidebarOpen((v) => !v)}
             onCloseReader={closeReader}
             status={status}
-            tool={{ type: toolType, color: penColor }}
-            onToolChange={(t) => {
-              setPickedTool(t.type);
-              setPenColor(t.color);
-            }}
+            tool={{ type: toolType, color: HIGHLIGHT_COLOR }}
+            onToolChange={(t) => setPickedTool(t.type)}
             gate={gate}
             lumenShown={lumenShown}
             onToggleLumen={toggleLumen}
@@ -1539,7 +1534,6 @@ export default function App() {
           <AnnotationPopup
             annotation={popup.annotation as unknown as PopupAnnotation}
             anchor={popup.anchor}
-            colors={ANNOTATION_COLORS}
             onChange={(id, patch) => patchAnnotation(id, patch)}
             onDelete={(id) => removeAnnotation(id)}
             onClose={() => setPopup(null)}

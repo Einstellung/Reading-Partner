@@ -18,10 +18,7 @@ const { cleanup, fireEvent, render } = await useDom();
 const { default: ReaderTopBar } = await import("../../../../src/ui/components/reader/ReaderTopBar");
 afterEach(cleanup);
 
-const COLORS = [
-  { name: "Yellow", color: "#ffd400" },
-  { name: "Green", color: "#4caf50" },
-];
+const YELLOW = "#ffd400";
 
 const WHY = "Only the book's conversation can open a side one.";
 
@@ -30,8 +27,7 @@ function rack(disabled?: Partial<Record<ToolType, string>>, omit?: readonly Tool
   const view = render(
     <PenToolbar
       orientation="horizontal"
-      tool={{ type: "none", color: COLORS[0].color }}
-      colors={COLORS}
+      tool={{ type: "none", color: YELLOW }}
       onToolChange={(t) => void picked.push(t)}
       disabled={disabled}
       omit={omit}
@@ -67,7 +63,7 @@ test("the pen beside it is untouched", () => {
   expect(highlight?.disabled).toBe(false);
   expect(highlight?.getAttribute("title")).toBe("Highlight");
   fireEvent.click(highlight as HTMLButtonElement);
-  expect(picked).toEqual([{ type: "highlight", color: COLORS[0].color }]);
+  expect(picked).toEqual([{ type: "highlight", color: YELLOW }]);
 });
 
 // Three on the rack: the navigation lock, the highlighter and the AI pen.
@@ -80,6 +76,13 @@ test("the rack holds three", () => {
   expect(button("Underline")).toBeNull();
 });
 
+test("the highlighter has one color, so the rack offers none", () => {
+  const { button } = rack();
+
+  expect(button("Color")).toBeNull();
+  expect(document.querySelector('[role="listbox"]')).toBeNull();
+});
+
 test("with nothing dim the rack is the rack it was", () => {
   const { picked, button } = rack();
   const ai = button("AI pen");
@@ -87,7 +90,7 @@ test("with nothing dim the rack is the rack it was", () => {
   expect(ai?.disabled).toBe(false);
   expect(ai?.getAttribute("aria-label")).toBe("AI pen");
   fireEvent.click(ai as HTMLButtonElement);
-  expect(picked).toEqual([{ type: "ai", color: COLORS[0].color }]);
+  expect(picked).toEqual([{ type: "ai", color: YELLOW }]);
 });
 
 // Omitted is not dim: the phone has no pages to lock, so the rack there does
@@ -99,7 +102,7 @@ test("a tool the shell has no such thing for is gone, not dimmed", () => {
   expect(button("Highlight")).not.toBeNull();
   expect(button("AI pen")?.disabled).toBe(true);
   fireEvent.click(button("Highlight") as HTMLButtonElement);
-  expect(picked).toEqual([{ type: "highlight", color: COLORS[0].color }]);
+  expect(picked).toEqual([{ type: "highlight", color: YELLOW }]);
 });
 
 // --- the blackboard -------------------------------------------------------
@@ -116,7 +119,7 @@ function topBar(gate: LevelGate) {
       onToggleSidebar={() => {}}
       onCloseReader={() => {}}
       status=""
-      tool={{ type: "none", color: COLORS[0].color }}
+      tool={{ type: "none", color: YELLOW }}
       onToolChange={() => {}}
       onOpenBookThread={() => void opened.push(true)}
       gate={gate}
