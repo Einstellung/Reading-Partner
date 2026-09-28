@@ -7,18 +7,16 @@ import {
   TOPIC_SECTIONS,
 } from "../../../../src/ui/components/base/topic-nav";
 
+// The label for each id lives in the library catalog now (library.section.*,
+// docs/ui/81), drawn through useT() in TopicNav so it redraws with the
+// language setting; see tests/ui/components/library/topic-nav-render.test.tsx
+// for the rendered English text.
 test("the topic has exactly the four sections, Materials first", () => {
   expect(TOPIC_SECTIONS.map((s) => s.id)).toEqual([
     "materials",
     "retell",
     "rehearsal",
     "observations",
-  ]);
-  expect(TOPIC_SECTIONS.map((s) => s.label)).toEqual([
-    "Materials",
-    "Retell",
-    "Rehearsal",
-    "AI observations",
   ]);
 });
 

@@ -7,7 +7,7 @@
 // and a superseded statement drops out of this list on its own.
 
 import { isObservationId, type Statement, type StatementKind } from "../../../../memory";
-import { plural } from "../../../../platform/std/text";
+import { t } from "../../../../i18n";
 
 export interface StatementRow {
   id: string;
@@ -33,10 +33,15 @@ function evidenceLabel(evidence: readonly string[]): string {
     if (isObservationId(item)) observations += 1;
     else messages += 1;
   }
-  const parts: string[] = [];
-  if (observations > 0) parts.push(plural(observations, "observation"));
-  if (messages > 0) parts.push(plural(messages, "message"));
-  return parts.join(", ");
+  if (observations > 0 && messages > 0) {
+    return t("library.statement.evidenceBoth", {
+      observations: t("library.count.observations", { count: observations }),
+      messages: t("library.count.messages", { count: messages }),
+    });
+  }
+  if (observations > 0) return t("library.count.observations", { count: observations });
+  if (messages > 0) return t("library.count.messages", { count: messages });
+  return "";
 }
 
 // Newest support first: what has been seen lately is what the reader will
@@ -51,7 +56,7 @@ export function statementRows(statements: readonly Statement[]): StatementRow[] 
       id: s.id,
       text: s.text.trim(),
       kind: s.kind,
-      author: s.author === "reader" ? "You said" : "Concluded",
+      author: s.author === "reader" ? t("library.statement.youSaid") : t("library.statement.concluded"),
       lastSupported: s.lastSupported,
       evidence: evidenceLabel(s.evidence),
     }));

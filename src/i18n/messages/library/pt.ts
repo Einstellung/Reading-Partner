@@ -1,0 +1,158 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+// Brazilian Portuguese (docs/ui/81).
+const pt: Translation<typeof en> = {
+  "count.books": { one: "{count} livro", other: "{count} livros" },
+  "count.articles": { one: "{count} artigo", other: "{count} artigos" },
+  "count.topics": { one: "{count} tema", other: "{count} temas" },
+  "count.files": { one: "{count} arquivo", other: "{count} arquivos" },
+  "count.marks": { one: "{count} marcação", other: "{count} marcações" },
+  "count.observations": { one: "{count} observação", other: "{count} observações" },
+  "count.messages": { one: "{count} mensagem", other: "{count} mensagens" },
+  "count.conflictCopies": { one: "{count} cópia em conflito", other: "{count} cópias em conflito" },
+  "count.booksAndArticles": "{books} e {articles}",
+
+  "time.today": "hoje",
+  "time.yesterday": "ontem",
+  "time.daysAgo": { one: "há {count} dia", other: "há {count} dias" },
+  "time.weeksAgo": { one: "há {count} semana", other: "há {count} semanas" },
+  "time.monthsAgo": { one: "há {count} mês", other: "há {count} meses" },
+  "time.yearsAgo": { one: "há {count} ano", other: "há {count} anos" },
+
+  "header.lastRead": "lido pela última vez {when}",
+
+  "shelf.readPercent": "Lido {percent}%",
+  "shelf.page": "Página {page}",
+  "shelf.notOpened": "Ainda não aberto",
+  "shelf.noFiles": "Nenhum arquivo",
+
+  "deleteTitle": "Excluir “{name}”?",
+  "deleteFailed": "Não foi possível excluir “{name}”",
+
+  "card.actionsFor": "Ações para {name}",
+  "card.remove": "Remover",
+  "card.rename": "Renomear",
+  "card.delete": "Excluir",
+  "card.retell": "Recontar este livro…",
+
+  "topics.eyebrow": "Seus temas",
+  "topics.title": "Temas",
+  "topics.blurb": "Um tema é uma pergunta e os livros que você lê para respondê-la.",
+  "topics.newTopicButton": "+ Novo tema",
+  "topics.emptyTitle": "A estante ainda está vazia",
+  "topics.emptyBlurb": "Um tema é uma pergunta e os livros que você lê para respondê-la. Defina a pergunta primeiro; os PDFs entram depois.",
+  "topics.emptyAction": "Novo tema",
+  "topics.createTitle": "Novo tema",
+  "topics.createConfirm": "Criar",
+  "topics.placeholder": "ex.: o que torna os JITs rápidos",
+  "topics.renameTitle": "Renomear tema",
+  "topics.renameDescription": "Só o nome muda. A lista de leitura continua como está.",
+  "topics.renameConfirm": "Salvar",
+
+  "materials.emptyTitle": "Este tema ainda não tem livros",
+  "materials.emptyBlurb": "Adicione os livros que você quer ler para esta pergunta. Eles são lidos onde estão; nada é copiado ou movido.",
+  "materials.addBook": "Adicionar livro",
+  "materials.savedArticlesHeading": "Artigos salvos",
+  "materials.removeArticleTitle": "Remover “{title}”?",
+  "materials.removeArticleDescription": "O artigo sai dos seus artigos salvos. Salvá-lo de novo a partir de um resumo o traz de volta.",
+  "materials.removeArticleAction": "Remover",
+  "materials.deleteBookTitle": "Excluir “{title}”?",
+  "materials.removeBookTitle": "Remover “{title}”?",
+  "materials.deleteBookDescription": "Excluir este livro e tudo relacionado a ele? Suas anotações sobre você mesmo permanecem.",
+  "materials.removeBookDescription":
+    "O tema perde o livro. O arquivo continua no disco, assim como a posição de leitura e as marcações — adicioná-lo de novo as traz de volta.",
+  "materials.deleteBookAction": "Excluir",
+  "materials.removeBookAction": "Remover",
+
+  "screen.backToTopics": "‹ Todos os temas",
+  "screen.addBook": "+ Adicionar livro",
+  "screen.backToTopicLabel": "Voltar ao tema",
+  "screen.removeFileFailed": "Não foi possível remover o livro deste tema",
+  "screen.deleteBookFailed": "Não foi possível excluir o livro",
+  "screen.removeArticleFailed": "Não foi possível remover o artigo",
+
+  "topicDelete.onlyCaption": "Só neste tema",
+  "topicDelete.description": "O tema desaparece, em todos os dispositivos, junto com os recontos, conversas e ensaios feitos nele.",
+  "topicDelete.articlesMoveNote": "Artigos salvos aqui vão para Para depois.",
+  "topicDelete.sharedOneBook": "Um livro também está arquivado em outro tema e vai continuar lá.",
+  "topicDelete.sharedOneArticle": "Um artigo também está arquivado em outro tema e vai continuar lá.",
+  "topicDelete.sharedMany": "{tally} também estão arquivados em outros temas e vão continuar lá.",
+  "topicDelete.checkOneBook": "Excluir também este livro",
+  "topicDelete.checkOneArticle": "Excluir também este artigo",
+  "topicDelete.checkMany": "Excluir também estes {tally}",
+  "topicDelete.action": "Excluir",
+  "topicDelete.actionOneBook": "Excluir tema e livro",
+  "topicDelete.actionOneArticle": "Excluir tema e artigo",
+  "topicDelete.actionAll": { one: "Excluir tema e o {count} item", other: "Excluir tema e os {count} itens" },
+  "topicDelete.doneNone": "“{name}” excluído",
+  "topicDelete.doneOne": "“{name}” e {tally} excluídos",
+  "topicDelete.doneMany": "“{name}”, {tally} excluídos",
+  "topicDelete.kindArticle": "Artigo",
+
+  "rehearsal.goneError": "Esse ensaio não existe mais",
+  "rehearsal.noTalkError": "Essa palestra não tem nada para ensaiar",
+  "rehearsal.openFailed": "Não foi possível abrir o ensaio",
+  "rehearsal.emptyBlurb":
+    "Ainda não há nada para ensaiar aqui. Uma palestra aparece aqui assim que um reconto a organiza, e cada apresentação sobre ela fica guardada, para a próxima ter algo como referência.",
+  "rehearsal.howItWent": "Como foi",
+  "rehearsal.rehearseButton": "Ensaiar",
+  "rehearsal.deleteMenuItem": "Excluir este ensaio",
+  "rehearsal.deleteDescription":
+    "Cada apresentação dessa palestra desaparece junto com ele. A palestra em si continua onde está, e você pode ensaiá-la de novo a partir do reconto.",
+
+  "retell.startFailed": "Não foi possível iniciar o reconto",
+  "retell.emptyBlurb":
+    "Ainda não há recontos. Um reconto é algo que você prepara para contar a partir do que leu aqui — você passa por ele capítulo a capítulo com a IA, e o roteiro do reconto é o resultado.",
+  "retell.newRetellButton": "Novo reconto",
+  "retell.deleteMenuItem": "Excluir este reconto",
+  "retell.deleteDescription":
+    "O reconto desaparece, junto com o roteiro que você definiu e cada ensaio da sua palestra. Os livros, suas marcações e anotações continuam intactos.",
+  "retell.pickDescription": "Um reconto é preparado passando pelo que você leu, capítulo a capítulo, e definindo o que ele traz. Escolha sobre o que é.",
+  "retell.noCandidates": "Ainda não há nada para recontar — abra um livro neste tema primeiro.",
+  "retell.cancel": "Cancelar",
+  "retell.start": "Começar",
+
+  "loading": "Carregando…",
+
+  "observations.heading": "Observações da IA",
+  "observations.lastDistilled": "Última destilação {date}",
+  "observations.noDistillation": "Ainda não foi feita nenhuma destilação.",
+  "observations.empty": "Ainda nada observado. As observações são destiladas quando uma conversa termina.",
+  "observations.footer": "As observações são mantidas pela IA. Se alguma estiver errada, diga isso numa conversa.",
+  "observations.aboutYou": "Sobre você",
+  "observations.lastSupported": "último respaldo {date}",
+  "observations.fromEvidence": "de {evidence}",
+  "observations.updated": "atualizado {date}",
+  "observations.evidenceLabel": "Evidência:",
+  "observations.evidenceAnnotation": "anotação {id}",
+  "observations.evidenceMessage": "mensagem {id}",
+  "observations.conflictNotice":
+    "{copies} da sincronização. Dois dispositivos mudaram a mesma observação; a versão que perdeu fica guardada ao lado.",
+  "observations.conflictUnreadable": "(esta cópia não pôde ser lida; abra o arquivo para ver)",
+  "observations.typeReadingPosition": "posição de leitura",
+  "observations.typeStuckPoint": "ponto travado",
+  "observations.typeCannotExplain": "não sabe explicar",
+  "observations.typeCanExplain": "sabe explicar",
+  "observations.typeUnderstoodConcept": "conceito entendido",
+  "observations.typeBelief": "opinião",
+  "observations.typeCorrection": "correção",
+
+  "statement.youSaid": "Você disse",
+  "statement.concluded": "Concluído",
+  "statement.evidenceBoth": "{observations}, {messages}",
+  "statement.kindProfile": "perfil",
+  "statement.kindConcern": "preocupação",
+
+  "section.navLabel": "Tema",
+  "section.materials": "Materiais",
+  "section.retell": "Reconto",
+  "section.rehearsal": "Ensaio",
+  "section.observations": "Observações da IA",
+
+  "savedArticle.backDefault": "Tema",
+  "savedArticle.summaryOnlyNote": "O texto completo deste artigo nunca foi obtido. O que vem a seguir é só um resumo.",
+  "savedArticle.noBody": "Nenhum conteúdo foi salvo com este artigo.",
+};
+
+export default pt;

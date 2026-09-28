@@ -4,7 +4,7 @@
 // file can always be traced back to the thing it came from. Only the display
 // goes through here.
 
-import { plural } from "../../../platform/std/text";
+import { t } from "../../../i18n";
 
 // Per-book reading state. `page`/`pages` are absent until the book has been
 // opened at least once (no reading position, no full-text cache).
@@ -71,14 +71,14 @@ export function readingLabel(meta: BookMeta | undefined): string {
   if (progress !== null) {
     // Never "Read 0%": a reader who has opened a book has read some of it, and
     // a first page out of four hundred rounds to nothing.
-    parts.push(`Read ${Math.max(1, Math.round(progress * 100))}%`);
+    parts.push(t("library.shelf.readPercent", { percent: Math.max(1, Math.round(progress * 100)) }));
   } else if (meta?.page) {
-    parts.push(`Page ${meta.page}`);
+    parts.push(t("library.shelf.page", { page: meta.page }));
   }
-  if (meta?.marks) parts.push(plural(meta.marks, "mark"));
+  if (meta?.marks) parts.push(t("library.count.marks", { count: meta.marks }));
   // Said out loud rather than left blank: an empty line under a title reads as
   // something that failed to load.
-  return parts.length ? parts.join(" · ") : "Not opened yet";
+  return parts.length ? parts.join(" · ") : t("library.shelf.notOpened");
 }
 
 // How far in, 0 to 1, for the bar under the cover. Null when either end of the

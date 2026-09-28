@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import type { Observation, ObservationConflict, ObservationType, Statement } from "../../../../memory";
+import { formatDateTime, useT } from "../../../../i18n";
 import { CitationContext, Markdown } from "../../markdown/Markdown";
 import { statementRows, type StatementRow } from "./statements-view";
 
@@ -21,6 +22,32 @@ const TYPE_STYLE: Record<ObservationType, string> = {
 const KIND_STYLE: Record<Statement["kind"], string> = {
   profile: "bg-indigo-100 text-indigo-700",
   concern: "bg-fuchsia-100 text-fuchsia-700",
+};
+
+type ObservationTypeLabelKey =
+  | "library.observations.typeReadingPosition"
+  | "library.observations.typeStuckPoint"
+  | "library.observations.typeCannotExplain"
+  | "library.observations.typeCanExplain"
+  | "library.observations.typeUnderstoodConcept"
+  | "library.observations.typeBelief"
+  | "library.observations.typeCorrection";
+
+const TYPE_LABEL_KEY: Record<ObservationType, ObservationTypeLabelKey> = {
+  "reading-position": "library.observations.typeReadingPosition",
+  "stuck-point": "library.observations.typeStuckPoint",
+  "cannot-explain": "library.observations.typeCannotExplain",
+  "can-explain": "library.observations.typeCanExplain",
+  "understood-concept": "library.observations.typeUnderstoodConcept",
+  belief: "library.observations.typeBelief",
+  correction: "library.observations.typeCorrection",
+};
+
+type StatementKindLabelKey = "library.statement.kindProfile" | "library.statement.kindConcern";
+
+const KIND_LABEL_KEY: Record<Statement["kind"], StatementKindLabelKey> = {
+  profile: "library.statement.kindProfile",
+  concern: "library.statement.kindConcern",
 };
 
 interface ObservationPanelProps {
@@ -45,10 +72,11 @@ interface ObservationPanelProps {
 // Nothing at all when there are none — a heading over an empty list is a
 // statement about the reader too, and not one anybody made.
 function StatementList({ rows }: { rows: StatementRow[] }) {
+  const t = useT();
   if (rows.length === 0) return null;
   return (
     <section className="border-b border-border-subtle px-3 py-2">
-      <div className="text-[13px] text-foreground">About you</div>
+      <div className="text-[13px] text-foreground">{t("library.observations.aboutYou")}</div>
       <ul className="m-0 mt-2 list-none space-y-2.5 p-0">
         {rows.map((row) => (
           <li key={row.id}>
@@ -57,14 +85,16 @@ function StatementList({ rows }: { rows: StatementRow[] }) {
               <span
                 className={`rounded px-1.5 py-0.5 text-[10px] leading-none ${KIND_STYLE[row.kind]}`}
               >
-                {row.kind}
+                {t(KIND_LABEL_KEY[row.kind])}
               </span>
               <span className="text-[11px] text-neutral-400">{row.author}</span>
               <span className="text-[11px] text-neutral-400">
-                last supported {row.lastSupported}
+                {t("library.observations.lastSupported", { date: row.lastSupported })}
               </span>
               {row.evidence !== "" && (
-                <span className="text-[11px] text-neutral-400">from {row.evidence}</span>
+                <span className="text-[11px] text-neutral-400">
+                  {t("library.observations.fromEvidence", { evidence: row.evidence })}
+                </span>
               )}
             </div>
           </li>
@@ -75,6 +105,7 @@ function StatementList({ rows }: { rows: StatementRow[] }) {
 }
 
 function ObservationRow({ entry }: { entry: Observation }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   return (
     <li className="border-b border-border-subtle px-3 py-2">
@@ -86,9 +117,11 @@ function ObservationRow({ entry }: { entry: Observation }) {
         <span className="text-[13px] leading-snug text-foreground">{entry.summary}</span>
         <span className="flex items-center gap-1.5">
           <span className={`rounded px-1.5 py-0.5 text-[10px] leading-none ${TYPE_STYLE[entry.type]}`}>
-            {entry.type}
+            {t(TYPE_LABEL_KEY[entry.type])}
           </span>
-          <span className="text-[11px] text-neutral-400">updated {entry.updated}</span>
+          <span className="text-[11px] text-neutral-400">
+            {t("library.observations.updated", { date: entry.updated })}
+          </span>
         </span>
       </button>
       {expanded && (
@@ -98,10 +131,10 @@ function ObservationRow({ entry }: { entry: Observation }) {
           </CitationContext.Provider>
           {(entry.anchors.annotationIds.length > 0 || entry.anchors.messageIds.length > 0) && (
             <div className="mt-1.5 text-[10px] text-neutral-400">
-              Evidence:{" "}
+              {t("library.observations.evidenceLabel")}{" "}
               {[
-                ...entry.anchors.annotationIds.map((id) => `annotation ${id}`),
-                ...entry.anchors.messageIds.map((id) => `message ${id}`),
+                ...entry.anchors.annotationIds.map((id) => t("library.observations.evidenceAnnotation", { id })),
+                ...entry.anchors.messageIds.map((id) => t("library.observations.evidenceMessage", { id })),
               ].join(", ")}
             </div>
           )}
@@ -119,19 +152,21 @@ function ObservationRow({ entry }: { entry: Observation }) {
 // It stops at showing them. Resolving a conflict is a conversation ("keep the
 // iPad's version of that one"), not a merge screen.
 function ConflictNotice({ conflicts }: { conflicts: ObservationConflict[] }) {
+  const t = useT();
   if (conflicts.length === 0) return null;
   return (
     <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
       <div>
-        {conflicts.length === 1 ? "1 conflict copy" : `${conflicts.length} conflict copies`} from
-        sync. Two devices changed the same observation; the version that lost is kept beside it.
+        {t("library.observations.conflictNotice", {
+          copies: t("library.count.conflictCopies", { count: conflicts.length }),
+        })}
       </div>
       <ul className="m-0 mt-1.5 list-none space-y-1.5 p-0">
         {conflicts.map((c) => (
           <li key={c.path}>
             <div className="font-mono text-[10px] break-all text-amber-700">{c.path}</div>
             <div className="text-amber-900">
-              {c.summary || "(this copy could not be read; open the file to see it)"}
+              {c.summary || t("library.observations.conflictUnreadable")}
             </div>
           </li>
         ))}
@@ -146,15 +181,18 @@ export default function ObservationPanel({
   lastDistilledAt,
   conflicts,
 }: ObservationPanelProps) {
+  const t = useT();
   const rows = statementRows(statements);
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border-subtle px-3 py-2">
-        <div className="text-[13px] text-foreground">AI observations</div>
+        <div className="text-[13px] text-foreground">{t("library.observations.heading")}</div>
         <div className="mt-0.5 text-[11px] text-neutral-400">
           {lastDistilledAt
-            ? `Last distilled ${new Date(lastDistilledAt).toLocaleString()}`
-            : "No distillation has run yet."}
+            ? t("library.observations.lastDistilled", {
+                date: formatDateTime(lastDistilledAt, { dateStyle: "medium", timeStyle: "short" }),
+              })
+            : t("library.observations.noDistillation")}
         </div>
       </div>
 
@@ -164,11 +202,11 @@ export default function ObservationPanel({
         <StatementList rows={rows} />
         <ul className="m-0 list-none p-0">
           {entries === null && (
-            <li className="px-3 py-4 text-center text-sm text-neutral-400">Loading…</li>
+            <li className="px-3 py-4 text-center text-sm text-neutral-400">{t("library.loading")}</li>
           )}
           {entries !== null && entries.length === 0 && (
             <li className="px-3 py-4 text-center text-sm text-neutral-400">
-              Nothing observed yet. Observations are distilled when a conversation ends.
+              {t("library.observations.empty")}
             </li>
           )}
           {entries?.map((e) => <ObservationRow key={e.id} entry={e} />)}
@@ -176,7 +214,7 @@ export default function ObservationPanel({
       </div>
 
       <div className="border-t border-border-subtle px-3 py-2 text-[11px] text-neutral-400">
-        Observations are maintained by the AI. If one is off, say so in a conversation.
+        {t("library.observations.footer")}
       </div>
     </div>
   );

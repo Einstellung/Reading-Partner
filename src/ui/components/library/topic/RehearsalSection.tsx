@@ -11,6 +11,7 @@
 // reading/rehearsal; what is left here is the reads, the presses and the list.
 
 import { useCallback, useEffect, useState } from "react";
+import { useT } from "../../../../i18n";
 import type { Topic } from "../../../../platform/app/topics";
 import {
   deleteRehearsal,
@@ -43,6 +44,7 @@ export default function RehearsalSection(props: {
   // Open the talk's conversation without giving a pass first.
   onTalk: (outlineId: string) => void;
 }) {
+  const t = useT();
   const { topic, reloadKey, onStart, onTalk } = props;
   // null while loading; [] when this topic has nothing to rehearse.
   const [rows, setRows] = useState<RehearsalRow[] | null>(null);
@@ -110,11 +112,11 @@ export default function RehearsalSection(props: {
       try {
         if (row.id) {
           const rehearsal = (await listAllRehearsals()).find((r) => r.id === row.id);
-          if (!rehearsal) throw new Error("That rehearsal is no longer there");
+          if (!rehearsal) throw new Error(t("library.rehearsal.goneError"));
           onStart(rehearsal);
           return;
         }
-        if (!row.retellId) throw new Error("That talk has nothing to rehearse against");
+        if (!row.retellId) throw new Error(t("library.rehearsal.noTalkError"));
         onStart(
           await rehearsalForRetell({
             topicId: topic.id,
@@ -123,12 +125,12 @@ export default function RehearsalSection(props: {
           }),
         );
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not open the rehearsal");
+        setError(e instanceof Error ? e.message : t("library.rehearsal.openFailed"));
       } finally {
         setBusy(false);
       }
     },
-    [onStart, topic.id],
+    [onStart, topic.id, t],
   );
 
   return (
@@ -136,11 +138,10 @@ export default function RehearsalSection(props: {
       {error && <p className="mt-0 mb-3 text-sm text-destructive">{error}</p>}
 
       {rows === null ? (
-        <p className="m-0 text-sm text-muted-foreground">Loading…</p>
+        <p className="m-0 text-sm text-muted-foreground">{t("library.loading")}</p>
       ) : rows.length === 0 ? (
         <p className="m-0 max-w-prose text-sm text-muted-foreground">
-          Nothing to rehearse here yet. A talk shows up here once a retell has arranged one, and
-          every pass over it is kept, so the next one has something to be held against.
+          {t("library.rehearsal.emptyBlurb")}
         </p>
       ) : (
         <ul className="m-0 mb-3 flex list-none flex-col gap-1.5 p-0">
@@ -163,17 +164,17 @@ export default function RehearsalSection(props: {
                 disabled={busy}
                 onClick={() => onTalk(row.outlineId)}
               >
-                How it went
+                {t("library.rehearsal.howItWent")}
               </Button>
               <Button variant="outline" size="sm" disabled={busy} onClick={() => void start(row)}>
-                Rehearse
+                {t("library.rehearsal.rehearseButton")}
               </Button>
               {row.id && (
                 <CardMenu
-                  label={`Actions for ${row.name}`}
+                  label={t("library.card.actionsFor", { name: row.name })}
                   items={[
                     {
-                      label: "Delete this rehearsal",
+                      label: t("library.rehearsal.deleteMenuItem"),
                       destructive: true,
                       onSelect: () => setDeleting(row),
                     },
@@ -187,8 +188,8 @@ export default function RehearsalSection(props: {
 
       {deleting?.id && (
         <ConfirmDestructiveDialog
-          title={`Delete “${deleting.name}”?`}
-          description="Every pass over this talk goes with it. The talk itself stays where it is, and you can rehearse it again from the retell."
+          title={t("library.deleteTitle", { name: deleting.name })}
+          description={t("library.rehearsal.deleteDescription")}
           open
           onOpenChange={(open) => !open && setDeleting(null)}
           onConfirm={() => {
@@ -196,7 +197,7 @@ export default function RehearsalSection(props: {
             void settleDelete({
               act: () => deleteRehearsal(deleting.id as string),
               refresh,
-              failed: `Could not delete “${deleting.name}”`,
+              failed: t("library.deleteFailed", { name: deleting.name }),
               onFail: setError,
             });
           }}

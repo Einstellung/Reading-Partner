@@ -6,6 +6,7 @@
 // Rehearsal section, so there is no second product to show here.
 
 import { useCallback, useEffect, useState } from "react";
+import { useT } from "../../../../i18n";
 import { logEvent } from "../../../../platform/app/events";
 import type { Topic } from "../../../../platform/app/topics";
 import { deleteRetellWithTalk } from "../../../../reading/delete/delete-retell";
@@ -31,6 +32,7 @@ export default function RetellSection(props: {
   topic: Topic;
   onOpenRetell: (retellId: string) => void;
 }) {
+  const t = useT();
   const { topic, onOpenRetell } = props;
   // null while loading; [] when this topic has no retells.
   const [rows, setRows] = useState<RetellRow[] | null>(null);
@@ -77,10 +79,10 @@ export default function RetellSection(props: {
         );
         onOpenRetell(retell.id);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not start the retell");
+        setError(e instanceof Error ? e.message : t("library.retell.startFailed"));
       }
     },
-    [candidates, topic.id, onOpenRetell],
+    [candidates, topic.id, onOpenRetell, t],
   );
 
   return (
@@ -88,15 +90,11 @@ export default function RetellSection(props: {
       {error && <p className="mt-0 mb-3 text-sm text-destructive">{error}</p>}
 
       {rows === null ? (
-        <p className="m-0 text-sm text-muted-foreground">Loading…</p>
+        <p className="m-0 text-sm text-muted-foreground">{t("library.loading")}</p>
       ) : rows.length === 0 ? (
         <div className="max-w-prose">
-          <p className="m-0 mb-4 text-sm text-muted-foreground">
-            No retells yet. A retell is one thing you are preparing to give from what you have read here
-            — you go through it chapter by chapter with the AI, and the outline of the retell is what
-            comes out.
-          </p>
-          <Button onClick={() => setCreating(true)}>New retell</Button>
+          <p className="m-0 mb-4 text-sm text-muted-foreground">{t("library.retell.emptyBlurb")}</p>
+          <Button onClick={() => setCreating(true)}>{t("library.retell.newRetellButton")}</Button>
         </div>
       ) : (
         <>
@@ -114,10 +112,10 @@ export default function RetellSection(props: {
                   <span className="text-xs text-muted-foreground">{retellSummary(row)}</span>
                 </button>
                 <CardMenu
-                  label={`Actions for ${row.name}`}
+                  label={t("library.card.actionsFor", { name: row.name })}
                   items={[
                     {
-                      label: "Delete this retell",
+                      label: t("library.retell.deleteMenuItem"),
                       destructive: true,
                       onSelect: () => setDeleting(row),
                     },
@@ -127,15 +125,15 @@ export default function RetellSection(props: {
             ))}
           </ul>
           <Button variant="outline" onClick={() => setCreating(true)}>
-            New retell
+            {t("library.retell.newRetellButton")}
           </Button>
         </>
       )}
 
       {deleting && (
         <ConfirmDestructiveDialog
-          title={`Delete “${deleting.name}”?`}
-          description="The retell goes, and with it the outline you settled and every rehearsal of its talk. The books, their marks and their notes are untouched."
+          title={t("library.deleteTitle", { name: deleting.name })}
+          description={t("library.retell.deleteDescription")}
           open
           onOpenChange={(open) => !open && setDeleting(null)}
           onConfirm={() => {
@@ -143,7 +141,7 @@ export default function RetellSection(props: {
             void settleDelete({
               act: () => deleteRetellWithTalk(deleting.id),
               refresh,
-              failed: `Could not delete “${deleting.name}”`,
+              failed: t("library.deleteFailed", { name: deleting.name }),
               onFail: setError,
             });
           }}

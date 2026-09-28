@@ -6,6 +6,7 @@
 // retell from.
 
 import { useState } from "react";
+import { useT } from "../../../../i18n";
 import { Button } from "../../ui/button";
 import {
   Dialog,
@@ -23,6 +24,7 @@ export default function NewRetellDialog(props: {
   candidates: MaterialCandidate[];
   onConfirm: (bookIds: string[]) => void;
 }) {
+  const t = useT();
   const [picked, setPicked] = useState<string[]>(() =>
     defaultMaterialSelection(props.candidates),
   );
@@ -35,17 +37,12 @@ export default function NewRetellDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="w-[min(30rem,100%)]">
         <DialogHeader>
-          <DialogTitle className="leading-normal">New retell</DialogTitle>
-          <DialogDescription>
-            A retell is prepared by going through what you read, chapter by chapter, and settling what
-            it contributes. Pick what it is about.
-          </DialogDescription>
+          <DialogTitle className="leading-normal">{t("library.retell.newRetellButton")}</DialogTitle>
+          <DialogDescription>{t("library.retell.pickDescription")}</DialogDescription>
         </DialogHeader>
 
         {props.candidates.length === 0 ? (
-          <p className="m-0 text-sm text-muted-foreground">
-            Nothing to retell yet — open a book in this topic first.
-          </p>
+          <p className="m-0 text-sm text-muted-foreground">{t("library.retell.noCandidates")}</p>
         ) : (
           <ul className="m-0 flex max-h-[50vh] list-none flex-col gap-1 overflow-y-auto p-0">
             {props.candidates.map((c) => (
@@ -60,7 +57,7 @@ export default function NewRetellDialog(props: {
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate text-sm">{c.title}</span>
                     <span className="text-xs text-muted-foreground">
-                      {c.marks} mark{c.marks === 1 ? "" : "s"}
+                      {t("library.count.marks", { count: c.marks })}
                     </span>
                   </span>
                 </label>
@@ -71,7 +68,7 @@ export default function NewRetellDialog(props: {
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)}>
-            Cancel
+            {t("library.retell.cancel")}
           </Button>
           <Button
             type="button"
@@ -81,7 +78,7 @@ export default function NewRetellDialog(props: {
               props.onOpenChange(false);
             }}
           >
-            Start
+            {t("library.retell.start")}
           </Button>
         </DialogFooter>
       </DialogContent>

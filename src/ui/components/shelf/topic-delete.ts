@@ -6,7 +6,7 @@
 
 import { isArticleEntry, type LibraryEntry } from "../../../platform/app/library";
 import type { FileRef, Topic } from "../../../platform/app/topics";
-import { plural } from "../../../platform/std/text";
+import { t } from "../../../i18n";
 import { displayFileTitle } from "./file-title";
 
 export type FileKindLabel = "PDF" | "EPUB" | "Article";
@@ -22,18 +22,18 @@ export function fileKindLabel(file: FileRef, entries: Record<string, LibraryEntr
   return entry?.format === "epub" ? "EPUB" : "PDF";
 }
 
-function noun(file: FileRef, entries: Record<string, LibraryEntry>): string {
-  return isArticle(file, entries) ? "article" : "book";
-}
-
 /** "2 books and 1 article". */
 export function fileTally(files: readonly FileRef[], entries: Record<string, LibraryEntry>): string {
   const articles = files.filter((f) => isArticle(f, entries)).length;
   const books = files.length - articles;
-  const parts: string[] = [];
-  if (books) parts.push(plural(books, "book"));
-  if (articles) parts.push(plural(articles, "article"));
-  return parts.join(" and ");
+  if (books > 0 && articles > 0) {
+    return t("library.count.booksAndArticles", {
+      books: t("library.count.books", { count: books }),
+      articles: t("library.count.articles", { count: articles }),
+    });
+  }
+  if (books > 0) return t("library.count.books", { count: books });
+  return t("library.count.articles", { count: articles });
 }
 
 export interface TopicDeleteRow {
@@ -71,9 +71,9 @@ export function topicDeleteWords(input: {
   // Said only of the files it is true of: filed under another topic too. A file
   // kept because a book lists it, or one never opened, is not mentioned.
   const elsewhere = new Set<string>();
-  for (const t of topics) {
-    if (t.id === topic.id) continue;
-    for (const f of t.files) if (f.hash) elsewhere.add(f.hash);
+  for (const other of topics) {
+    if (other.id === topic.id) continue;
+    for (const f of other.files) if (f.hash) elsewhere.add(f.hash);
   }
   const shared = topic.files.filter(
     (f, i, all) =>
@@ -82,35 +82,49 @@ export function topicDeleteWords(input: {
       elsewhere.has(f.hash) &&
       all.findIndex((g) => g.hash === f.hash) === i,
   );
-  let description = "The topic goes, on every device, with the retells, talks and rehearsals made in it.";
-  if ((input.savedArticles ?? 0) > 0) description += " Articles saved here move to Brief.";
+  let description = t("library.topicDelete.description");
+  if ((input.savedArticles ?? 0) > 0) description += " " + t("library.topicDelete.articlesMoveNote");
   if (shared.length === 1) {
-    description += ` One ${noun(shared[0], entries)} is also filed under another topic and stays there.`;
+    description +=
+      " " +
+      (isArticle(shared[0], entries)
+        ? t("library.topicDelete.sharedOneArticle")
+        : t("library.topicDelete.sharedOneBook"));
   } else if (shared.length > 1) {
-    description += ` ${fileTally(shared, entries)} are also filed under other topics and stay there.`;
+    description += " " + t("library.topicDelete.sharedMany", { tally: fileTally(shared, entries) });
   }
   const tally = fileTally(only, entries);
-  const name = `“${topic.name}”`;
+  const name = topic.name;
   return {
-    title: `Delete ${name}?`,
+    title: t("library.deleteTitle", { name }),
     description,
     rows: only.map((file) => ({
       file,
       title: displayFileTitle(file.name),
       kind: fileKindLabel(file, entries),
     })),
-    onlyCaption: "Only in this topic",
+    onlyCaption: t("library.topicDelete.onlyCaption"),
     checkLabel:
-      n === 0 ? null : n === 1 ? `Also delete this ${noun(only[0], entries)}` : `Also delete these ${tally}`,
+      n === 0
+        ? null
+        : n === 1
+          ? isArticle(only[0], entries)
+            ? t("library.topicDelete.checkOneArticle")
+            : t("library.topicDelete.checkOneBook")
+          : t("library.topicDelete.checkMany", { tally }),
     action: (alsoFiles) =>
       !alsoFiles || n === 0
-        ? "Delete"
+        ? t("library.topicDelete.action")
         : n === 1
-          ? `Delete topic and ${noun(only[0], entries)}`
-          : `Delete topic and all ${n}`,
+          ? isArticle(only[0], entries)
+            ? t("library.topicDelete.actionOneArticle")
+            : t("library.topicDelete.actionOneBook")
+          : t("library.topicDelete.actionAll", { count: n }),
     done: (alsoFiles) =>
       !alsoFiles || n === 0
-        ? `Deleted ${name}`
-        : `Deleted ${name}${n === 1 ? " and " : ", "}${tally}`,
+        ? t("library.topicDelete.doneNone", { name })
+        : n === 1
+          ? t("library.topicDelete.doneOne", { name, tally })
+          : t("library.topicDelete.doneMany", { name, tally }),
   };
 }

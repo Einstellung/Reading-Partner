@@ -7,6 +7,7 @@
 // the PDF's own metadata, read on the same open as the cover.
 
 import { useMemo } from "react";
+import { useT } from "../../../i18n";
 import type { FileRef } from "../../../platform/app/topics";
 import {
   BOOK_AUTHOR,
@@ -32,6 +33,7 @@ export default function BookCard(props: {
   onRetell?: () => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   const { file, meta } = props;
   const tiles = useMemo(() => singleCoverTile(file), [file]);
   const title = displayFileTitle(file.name);
@@ -62,12 +64,12 @@ export default function BookCard(props: {
 
       <div className="absolute right-0 bottom-0">
         <CardMenu
-          label={`Actions for ${title}`}
+          label={t("library.card.actionsFor", { name: title })}
           items={[
             ...(props.onRetell
-              ? [{ label: "Retell this book…", onSelect: props.onRetell }]
+              ? [{ label: t("library.card.retell"), onSelect: props.onRetell }]
               : []),
-            { label: "Remove", onSelect: props.onRemove, destructive: true },
+            { label: t("library.card.remove"), onSelect: props.onRemove, destructive: true },
           ]}
         />
       </div>

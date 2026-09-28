@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useT } from "../../../i18n";
 import { listLibraryEntries, type LibraryEntry } from "../../../platform/app/library";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 import { listFilesOnlyInTopic } from "../../../reading/delete/delete-book";
@@ -28,6 +29,7 @@ export default function TopicDeleteDialog(props: {
   // The ids of the files to delete with the topic; empty when the box is not ticked.
   onConfirm(alsoDeleteFiles: string[]): void;
 }) {
+  const t = useT();
   const { topic, topics } = props;
   const [counted, setCounted] = useState<Counted | null>(null);
   const [alsoFiles, setAlsoFiles] = useState(false);
@@ -80,7 +82,9 @@ export default function TopicDeleteDialog(props: {
               {words.rows.map((row) => (
                 <li key={row.file.path} className="flex min-w-0 items-baseline gap-2 py-1 text-sm">
                   <span className="min-w-0 flex-1 truncate">{row.title}</span>
-                  <span className="shrink-0 text-xs text-faint-foreground">{row.kind}</span>
+                  <span className="shrink-0 text-xs text-faint-foreground">
+                    {row.kind === "Article" ? t("library.topicDelete.kindArticle") : row.kind}
+                  </span>
                 </li>
               ))}
             </ul>

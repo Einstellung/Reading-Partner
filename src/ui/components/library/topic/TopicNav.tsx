@@ -12,6 +12,7 @@
 // (LibraryScreen), which is also where it is remembered.
 
 import { IconBooks, IconObservations, IconRehearse, IconRetell } from "../../base/icons";
+import { useT } from "../../../../i18n";
 import { Button } from "../../ui/button";
 import { TOPIC_SECTIONS, type TopicSection } from "../../base/topic-nav";
 
@@ -29,16 +30,31 @@ const TAB =
   "font-medium text-muted-foreground";
 const TAB_ACTIVE = "border-accent-line text-foreground";
 
+type SectionLabelKey =
+  | "library.section.materials"
+  | "library.section.retell"
+  | "library.section.rehearsal"
+  | "library.section.observations";
+
+const SECTION_LABEL_KEY: Record<TopicSection, SectionLabelKey> = {
+  materials: "library.section.materials",
+  retell: "library.section.retell",
+  rehearsal: "library.section.rehearsal",
+  observations: "library.section.observations",
+};
+
 export default function TopicNav(props: {
   section: TopicSection;
   onSelect: (section: TopicSection) => void;
 }) {
+  const t = useT();
   return (
     // Scrolls within its own band on a narrow window rather than wrapping to a
     // second line, which would move everything under it.
-    <nav aria-label="Topic" className="-mb-px flex gap-0.5 overflow-x-auto">
-      {TOPIC_SECTIONS.map(({ id, label }) => {
+    <nav aria-label={t("library.section.navLabel")} className="-mb-px flex gap-0.5 overflow-x-auto">
+      {TOPIC_SECTIONS.map(({ id }) => {
         const Icon = ICONS[id];
+        const label = t(SECTION_LABEL_KEY[id]);
         const active = props.section === id;
         return (
           <Button

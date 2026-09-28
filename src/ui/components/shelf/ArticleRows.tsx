@@ -4,6 +4,7 @@
 //
 // What each row says is in article-row.ts. This file only draws it.
 
+import { useT } from "../../../i18n";
 import { Button } from "../ui/button";
 import { ROW, ROW_LIST, ROW_NAME } from "./cardStyles";
 
@@ -18,6 +19,7 @@ export default function ArticleRows<R extends { title: string; line: string }>(p
   onOpen: (row: R) => void;
   onRemove: (row: R) => void;
 }) {
+  const t = useT();
   if (props.rows.length === 0) return null;
   return (
     <ul className={`${ROW_LIST}${props.underCards ? " mt-4" : ""}`}>
@@ -31,7 +33,7 @@ export default function ArticleRows<R extends { title: string; line: string }>(p
           </button>
           <div className="flex gap-1">
             <Button variant="destructive-outline" size="sm" onClick={() => props.onRemove(row)}>
-              Remove
+              {t("library.card.remove")}
             </Button>
           </div>
         </li>
