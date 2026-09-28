@@ -7,6 +7,7 @@ import {
   columnAt,
   columnCount,
   inBackEdge,
+  turnOfTap,
   inkOnPage,
   isInkAt,
   layoutWindow,
@@ -182,5 +183,19 @@ describe("a stroke that runs off the words", () => {
     expect(firstBelow).toBeGreaterThan(1);
     expect(pts.slice(1, firstBelow).every((p) => p.y < 400)).toBe(true);
     expect(pts.slice(firstBelow).every((p) => p.y > 400)).toBe(true);
+  });
+});
+
+describe("a tap handed on from over the page", () => {
+  const box = { left: 0, top: 50, width: 400, height: 700 };
+  test("turns by the side it landed on", () => {
+    expect(turnOfTap(box, 12, 300)).toBe("prev");
+    expect(turnOfTap(box, 390, 300)).toBe("next");
+  });
+  test("the middle is not a turn", () => {
+    expect(turnOfTap(box, 200, 300)).toBe("none");
+  });
+  test("a tap on the bar above the page is not a turn", () => {
+    expect(turnOfTap(box, 12, 20)).toBe("none");
   });
 });

@@ -601,6 +601,8 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
       goToPage(i);
     },
     highlightQuote: async (page, req) => highlightQuote(page, req.searchText),
+    // A tap on the column never turns anything.
+    turnByTap: () => {},
     clearQuoteHighlight: clearQuote,
     removeAnnotations: (ids) => marks.unsetAnnotations(ids),
     setDisplay: (next) => {

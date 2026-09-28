@@ -54,11 +54,16 @@ const displays: FlowDisplay[] = [];
 // Every quote the column was asked to mark, and how many times a pane mounted.
 const highlights: [number, string][] = [];
 let paneMounts = 0;
+// Every tap the mark popup's scrim handed on to the view.
+const taps: [number, number][] = [];
+// The props the pane was last rendered with, for a test that plays the pane.
+let paneProps: FlowReaderPaneProps | null = null;
 
 // What the reflow pane does as far as this screen is concerned: it comes up,
 // reports where the reader is, and hands back a handle. Nothing of the real
 // one is needed to know whether the shell around it is wired.
 function StubPane(props: FlowReaderPaneProps) {
+  paneProps = props;
   useEffect(() => {
     displays.push(props.display);
   }, [props.display]);
@@ -67,6 +72,9 @@ function StubPane(props: FlowReaderPaneProps) {
     props.onView({
       goToCfi() {},
       goToHref() {},
+      turnByTap(x, y) {
+        taps.push([x, y]);
+      },
       goToPage(pageIndex) {
         pages.push(pageIndex);
       },
@@ -390,6 +398,42 @@ test("Done puts the outline sheet away", async () => {
     fireEvent.click(done as Element);
   });
   expect(document.body.textContent).not.toContain("One: the machine");
+});
+
+// --- the mark popup -------------------------------------------------------
+
+async function openMarkPopup() {
+  const view = await openReader();
+  await act(async () => {
+    paneProps?.onSetAnnotationPopup({
+      rect: [100, 200, 160, 220],
+      annotation: { id: "m1" } as Annotation,
+    });
+  });
+  const scrim = view.getByTestId("mark-popup-scrim");
+  return { view, scrim };
+}
+
+test("a tap on the mark popup's scrim puts it away and hands the tap to the view", async () => {
+  taps.length = 0;
+  const { view, scrim } = await openMarkPopup();
+  await act(async () => {
+    fireEvent.pointerDown(scrim, { pointerId: 7, clientX: 20, clientY: 300 });
+    fireEvent.pointerUp(scrim, { pointerId: 7, clientX: 24, clientY: 302 });
+  });
+  expect(view.queryByTestId("mark-popup-scrim")).toBeNull();
+  expect(taps).toEqual([[24, 302]]);
+});
+
+test("a swipe on the scrim only puts the popup away", async () => {
+  taps.length = 0;
+  const { view, scrim } = await openMarkPopup();
+  await act(async () => {
+    fireEvent.pointerDown(scrim, { pointerId: 7, clientX: 20, clientY: 300 });
+    fireEvent.pointerUp(scrim, { pointerId: 7, clientX: 120, clientY: 300 });
+  });
+  expect(view.queryByTestId("mark-popup-scrim")).toBeNull();
+  expect(taps).toEqual([]);
 });
 
 // --- the display sheet ----------------------------------------------------

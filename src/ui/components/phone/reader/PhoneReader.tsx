@@ -32,6 +32,7 @@ import {
   writeFlowDisplay,
   type FlowDisplay,
 } from "../../../../reading/epub/flow/flow-display";
+import { stayedATap } from "../../../../reading/epub/flow/flow-gesture";
 import { EDGE_ZONE } from "../gesture/edge-back-gesture";
 import { pageMarks } from "../../../../platform/app/reader-contract";
 import { browserPrefStore } from "../../base/pref-store";
@@ -288,6 +289,7 @@ export default function PhoneReader(props: {
             rect={popup.rect}
             onDelete={() => askRemoveMark(popup.annotation.id)}
             onClose={() => setPopup(null)}
+            onTapThrough={(x, y) => viewRef.current?.turnByTap(x, y)}
           />
         )}
 
@@ -332,12 +334,30 @@ function MarkPopup(props: {
   rect: [number, number, number, number];
   onDelete: () => void;
   onClose: () => void;
+  onTapThrough: (clientX: number, clientY: number) => void;
 }) {
   const [left, , right, bottom] = props.rect;
+  const down = useRef<{ id: number; x: number; y: number } | null>(null);
   return (
     <>
-      {/* A press anywhere else puts it away. */}
-      <div className="fixed inset-0" onPointerDown={props.onClose} />
+      {/* A press anywhere else puts it away, and a tap on the side of the page
+          still turns it: the scrim hands it on. */}
+      <div
+        className="fixed inset-0"
+        data-testid="mark-popup-scrim"
+        onPointerDown={(e) => {
+          down.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        }}
+        onPointerUp={(e) => {
+          const d = down.current;
+          down.current = null;
+          props.onClose();
+          if (d && d.id === e.pointerId && stayedATap(d.x, d.y, e.clientX, e.clientY)) {
+            props.onTapThrough(e.clientX, e.clientY);
+          }
+        }}
+        onPointerCancel={props.onClose}
+      />
       <div
         className={cn(
           "fixed -translate-x-1/2 rounded-xl border border-black/10 bg-popover p-1 shadow-lg",

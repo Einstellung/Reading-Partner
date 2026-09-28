@@ -8,6 +8,7 @@
 // pagination table's (docs/64), both reached from a screen page by measuring.
 
 import { FLOW_PAD_Y, type FlowDisplay } from "./flow-display";
+import { tapZone, type Turn } from "../reader-logic";
 
 /**
  * The column rules one spine document is laid out under, added after the flow
@@ -180,6 +181,20 @@ export function inkOnPage(text: string, offset: number, onPage: (offset: number)
 }
 
 /** Whether a touch starts in the left band the shell's back gesture owns. */
+/**
+ * The turn a tap handed on from over the page asks for (FlowReaderView.turnByTap):
+ * the side it landed on, and none when it landed outside the page, on the bar
+ * above it or anything else the scrim covered.
+ */
+export function turnOfTap(
+  box: { left: number; top: number; width: number; height: number },
+  x: number,
+  y: number,
+): Turn {
+  if (x < box.left || x > box.left + box.width || y < box.top || y > box.top + box.height) return "none";
+  return tapZone("paged", x - box.left, box.width);
+}
+
 export function inBackEdge(x: number, left: number, zone: number): boolean {
   return zone > 0 && x - left >= 0 && x - left < zone;
 }
