@@ -36,7 +36,7 @@
 
 ## 不迁的
 
-阅读区的标注层、笔工具色板（`PenToolbar`）、`CallBubble`、`MicButton` 的按住录音、`TraceList` 的滑动删除、`ReadingPipCard`。
+阅读区的标注层、`CallBubble`、`MicButton` 的按住录音、`TraceList` 的滑动删除、`ReadingPipCard`。
 
 理由分两类：一类没有对应的 Radix 原语（录音手势、滑动删除、锚定在划线上的气泡）；一类已经按实测结论调过并记在坑里（浮层定位与夹取见 `src/ui/components/common/panel-position.ts`，软键盘避让见 `useKeyboardInset`，触摸上的 tap 行为见坑 67）。换过去只有损失。
 
@@ -215,7 +215,7 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 
 **留在原地的**：
 
-- 笔工具的颜色点和痕迹行的类型图标：颜色由标注本身决定，走 inline style。
+- 痕迹行的类型图标：颜色由标注本身决定，走 inline style。（笔工具的颜色点 2026-09-28 随选色一起删了，荧光笔只有黄色。）
 - 麦克风键的录音三态背景（`bg-red-50` / `bg-neutral-200`）：红是「正在录」，灰是「松手取消」，是状态不是级别。静息态的悬停灰换了。
 - 滑动删除那条红条的宽度：`SWIPE_ACTION_WIDTH` 走 inline style，手势逻辑按它算。只换了颜色。
 - 状态 chip 的色阶（`PrepPanel` / `NotesPanel` / `ObservationPanel` / `SlidesDialog` 的 amber/green/sky/violet/red/neutral）：这是一组互相区分的分类色，不是控件级别。
@@ -262,7 +262,7 @@ shadcn 生成的组件是照 React 19 写的（那里 `ref` 是普通 prop），
 
 不是遗留，是终态。
 
-- 阅读区标注层、`PenToolbar` 的色板、`AnnotationPopup`、`CallBubble`、`MicButton` 的按住录音、`TraceList` 的滑动删除、`ReadingPipCard`：没有对应的 Radix 原语，或者已经按实测结论调过（坑 67、`panel-position.ts`、`useKeyboardInset`）。
+- 阅读区标注层、`AnnotationPopup`、`CallBubble`、`MicButton` 的按住录音、`TraceList` 的滑动删除、`ReadingPipCard`：没有对应的 Radix 原语，或者已经按实测结论调过（坑 67、`panel-position.ts`、`useKeyboardInset`）。
 - 聊天输入区（`chat/Composer.tsx`、`ChatPipCard`）：自动增高、图片贴片、语音接管都是自己的逻辑，textarea 只是里面的一块。
 - 侧栏标签行、`Sidebar` 的抽屉和背板、`LibraryScreen` / `BriefingPage` / `PrepPanel` 的列表行：`<button>` 就是它们该有的样子，包一层组件不会少写一行。
 - `HomeCard` / `InfoCards` 的卡片外壳、`settings/cardStyles.ts` 的 `CARD`：shadcn 的 Card 是 header/content/footer 三段式，这里的卡片没有那个结构。
