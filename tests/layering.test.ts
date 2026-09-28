@@ -45,6 +45,14 @@ const LAYER: Record<string, Layer> = {
   // merge strategies from it, and platform may only import platform. It imports
   // nothing at all itself, which is what makes that safe.
   palace: "platform",
+  // UI languages (docs/ui/81): the current locale, t() and the catalogs.
+  // Platform because every layer that shows the reader a sentence needs it,
+  // platform/sync's health messages included; it imports only platform/app
+  // (for the setting's type) and its own directories. One directory per
+  // catalog area under messages/, each registered here.
+  i18n: "platform",
+  "i18n/messages": "platform",
+  "i18n/messages/settings": "platform",
   platform: "platform",
   "platform/app": "platform",
   "platform/http": "platform",

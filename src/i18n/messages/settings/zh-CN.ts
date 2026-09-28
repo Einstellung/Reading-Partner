@@ -1,0 +1,128 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+export default {
+  title: "设置",
+  done: "完成",
+  "tab.account": "账户",
+  "tab.features": "功能",
+  "tab.optional": "可选",
+  connected: "已连接",
+  save: "保存",
+  signOut: "退出登录",
+  apiKey: "API 密钥",
+
+  "thinking.off": "关闭",
+  "thinking.low": "低",
+  "thinking.medium": "中",
+  "thinking.high": "高",
+
+  "account.providers": "服务商",
+  "account.signInWith": "使用 {name} 登录",
+  "account.defaultConversation": "默认对话",
+  "account.connectFirst": "先在上方连接一个服务商，再选择默认项。",
+  "account.provider": "服务商",
+  "account.model": "模型",
+  "account.select": "请选择…",
+  "account.contextHint":
+    "模型旁的数字是它的上下文窗口。本应用会把整本书放进去；窗口较小时，回复会删减部分材料以装下，并说明删了什么。",
+  "account.everydayModel": "日常模型",
+  "account.sameAsChat": "与对话相同",
+  "account.everydayHint":
+    "例行工作改用这里的模型，而不是上面那个：三餐，以及夜间的新闻简报。这些工作没人在等，用更便宜的模型不会让你损失什么；哪些任务归它由应用决定，不在这里设置。它使用上面的服务商。",
+  "account.briefing": "新闻简报",
+  "account.screening": "筛选",
+  "account.analysis": "分析",
+  "account.briefingHint":
+    "简报在夜间根据所有来源生成，不论你读不读。筛选阅读当天的标题来决定哪些文章值得抓取，所以这一步宜设低；分析阅读通过筛选的文章。",
+  "account.thinking": "思考",
+  "account.chat": "对话",
+  "account.lessonPrep": "备课",
+  "account.thinkingHint": "自适应模型会按问题决定实际思考多少；越高越深入，但也越慢。",
+  "account.sync": "同步",
+
+  "oauth.signInFailed": "登录失败",
+  "oauth.openFailed": "无法打开登录页面",
+  "oauth.invalidCode": "代码无效",
+  "oauth.pasteHintDevice": "登录后，复制地址栏（那个加载失败的 localhost 网址）并粘贴到这里。",
+  "oauth.pasteHintCode": "粘贴授权后显示的代码。",
+  "oauth.opening": "正在打开登录页面…",
+  "oauth.completeInBrowser": "请在浏览器中完成授权…",
+  "oauth.withCode": "使用代码登录",
+  "oauth.pastePlaceholder": "粘贴登录代码或网址",
+  "oauth.submit": "提交",
+  "oauth.signsOutOthers": "在此登录会退出其他服务商。",
+  "oauth.requestingCode": "正在获取登录代码…",
+  "oauth.openPage": "打开登录页面",
+  "oauth.enterCode": "请在 {url} 输入此代码。正在等待授权…",
+  "oauth.cancel": "取消",
+  "oauth.pasteInstead": "改为粘贴登录网址",
+  "oauth.tryAgain": "重试",
+
+  "key.replace": "替换 API 密钥",
+  "key.signsOutOthers": "在此保存密钥会退出其他服务商。",
+
+  "sync.drive": "Google 云端硬盘",
+  "sync.never": "从未",
+  "sync.justNow": "刚刚",
+  "sync.minutesAgo": { other: "{count} 分钟前" },
+  "sync.failed": "同步操作失败",
+  "sync.notConfigured": "未配置 Google 客户端。",
+  "sync.signIn": "使用 Google 登录",
+  "sync.signedOutNote": "上次同步之后的内容只在这台设备上。重新登录即可恢复同步，本地内容不会丢失。",
+  "sync.pitch": "把阅读进度、标注和书同步到你自己的 Google 云端硬盘。",
+  "sync.completeInBrowser": "请在浏览器中完成登录…",
+  "sync.lastSync": "上次同步：{time}",
+  "sync.auto": "自动同步",
+  "sync.running": "正在同步…",
+  "sync.now": "立即同步",
+
+  "features.general": "通用",
+  "features.language": "语言",
+  "features.languageAuto": "自动（界面随系统，AI 随你）",
+  "features.languageHint":
+    "应用界面的语言，也是 AI 所写内容的语言：对话回复、笔记和新闻简报。选自动时，界面使用系统语言，AI 用你书写的语言回答。语音转写始终跟随你说的语言。",
+  "features.paper": "纸张背景",
+  "features.paperHint":
+    "把整个应用背后的白色——对话、书架、侧栏、这个窗口和书页——换成米白的纸张色。只有这一种颜色，没有更深的档位；这不是深色模式。该选择只保存在这台设备上。",
+  "features.reading": "阅读",
+  "features.fingerDraw": "用手指绘制",
+  "features.fingerDrawHint":
+    "关闭时，无论选了什么工具，手指只翻动页面，由触控笔标注。没有触控笔的设备请打开，让手指也能高亮和绘制。阅读器里的导航锁仍优先于这两者。有没有触控笔是这台设备的属性，所以该设置只保存在这台设备上。",
+  "features.briefing": "新闻简报",
+  "features.collect": "在这台电脑上从你的来源收集",
+  "features.collectHint":
+    "每个来源按各自的时间表检查，发布的内容会保留到当天的简报生成为止。关闭后，这台机器完全停止收集，如果你有别的收集机，会由它接手。",
+  "features.thisComputer": "这台电脑",
+  "features.role": "这台机器是",
+  "features.roleCollector": "收集机——在这里读取来源",
+  "features.roleReader": "阅读机——读取另一台机器收集的内容",
+  "features.roleHint":
+    "收集机全天读取你订阅的网站，并为你的其他设备发布简报；阅读机显示收集机发布的内容，自己从不抓取网站。手机和平板始终是阅读机。如果有两台机器在收集，由运行时间最长的那台工作。",
+  "features.autostart": "开机时启动 Reading Partner",
+  "features.autostartHint":
+    "默认关闭。在你希望全天收集来源的那台机器上打开——配合托盘图标，无论你是否打开应用，简报都会在后台生成。该设置属于这台电脑，不会同步到你的其他设备。",
+
+  "optional.intro":
+    "外部服务的密钥，每一项都是可选的。两个语音密钥和这台设备的凭据保存在一起，从不同步，所以每台设备都需要各自设置。",
+  "optional.meals": "三餐",
+  "optional.mealsHint": "规划一周的早餐、午餐和晚餐，维护购物清单，吃了别的也可以告诉它。",
+  "optional.lessonPrep": "备课",
+  "optional.s2Key": "Semantic Scholar API 密钥",
+  "optional.s2Placeholder": "可选",
+  "optional.s2Hint": "在 semanticscholar.org 免费申请一个密钥，可以避开导致论文抓取卡住的共享速率限制。",
+  "optional.voiceInput": "语音输入",
+  "optional.voiceOutput": "语音输出",
+  "optional.dictationLanguage": "听写语言",
+  "optional.dictationHint":
+    "按住输入条说话时 iPhone 识别的语言。语音在手机上转写，从不上传。说其他语言不会得到粗糙的转写，而会得到一段看似可信的错误文字，所以请设为你实际说的语言。",
+  "optional.speechKey": "语音 API 密钥",
+  "optional.speechKeyReplace": "替换语音 API 密钥",
+  "optional.speechHint": "小米 MiMo 的密钥，用于朗读回答的语音。没有它，应用保持静音，其余一切照常工作。",
+  "optional.sttKey": "语音识别 API 密钥",
+  "optional.sttKeyReplace": "替换语音识别 API 密钥",
+  "optional.model": "模型",
+  "optional.baseUrl": "Base URL",
+  "optional.sttHint":
+    "在对话框里按住麦克风说话。硅基流动的 SenseVoice 档免费，API 密钥开箱即用；任何兼容 OpenAI 的转写接口也都可以。",
+} satisfies Translation<typeof en>;

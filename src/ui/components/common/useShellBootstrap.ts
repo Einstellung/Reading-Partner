@@ -58,6 +58,7 @@ import { HOUSEKEEPER_JOB, registerGarbageMarker } from "../../../housekeeper";
 import { bellMarker } from "../../../legion/bell";
 import { LEDGER_FOLD_JOB, runFilesMarker } from "../../../legion/ledger";
 import { registerNightlyJob } from "../../../legion/schedule";
+import { applyLanguageSetting } from "../../../i18n";
 import { infoDailyMarker } from "../../../info/collect/store";
 import type { ToastKind } from "./toast-list";
 import { useSyncHealth } from "./useSyncHealth";
@@ -355,6 +356,13 @@ export function useShellBootstrap({
     pendingPullRef.current = false;
     adoptPulledSettings();
   }, [settingsOpen, adoptPulledSettings]);
+
+  // One setting is both the AI's language and the UI's (docs/ui/81). Applied
+  // on every change, the start-up read included, so the UI redraws in the new
+  // language the moment the choice is made.
+  useEffect(() => {
+    applyLanguageSetting(settings.aiLanguage);
+  }, [settings.aiLanguage]);
 
   // The week's photographs are looked for here, from the synced week, on the
   // machine that can search (docs/73 图片). Started when the meals screen is
