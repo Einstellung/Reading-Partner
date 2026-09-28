@@ -19,10 +19,12 @@ const button = readFileSync(join(SRC, "ui/components/ui/button.tsx"), "utf8");
 
 test("neither form chooses between Stop and Send", () => {
   // The shape that was there before: `streaming ? <Stop/> : <Send/>`.
-  expect(chat).not.toMatch(/streaming \?[\s\S]{0,400}aria-label="Stop"[\s\S]{0,400}aria-label="Send"/);
+  expect(chat).not.toMatch(
+    /streaming \?[\s\S]{0,400}aria-label=\{t\('chat\.composer\.stop'\)\}[\s\S]{0,400}aria-label=\{t\('chat\.composer\.send'\)\}/,
+  );
   // Two of each: the pill's pair and the corner bubble's.
-  expect(chat.match(/aria-label="Stop"/g)).toHaveLength(2);
-  expect(chat.match(/aria-label="Send"/g)).toHaveLength(2);
+  expect(chat.match(/aria-label=\{t\('chat\.composer\.stop'\)\}/g)).toHaveLength(2);
+  expect(chat.match(/aria-label=\{t\('chat\.composer\.send'\)\}/g)).toHaveLength(2);
 });
 
 test("the composer's round buttons take their size from the variant table", () => {

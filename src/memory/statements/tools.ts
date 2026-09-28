@@ -18,6 +18,7 @@ import { messageAnchor, type AnchoredMessage } from "../observations/anchors";
 import { anchorSpan } from "./dates";
 import type { StatementStore } from "./store";
 import { isStatementKind, STATEMENT_KINDS, type CreateStatementInput } from "./types";
+import { t } from "../../i18n";
 
 // The message this turn is answering, in the shape an anchor is made of.
 export type ReaderMessage = Pick<AnchoredMessage, "id" | "ts" | "threadId"> & { role: "user" | "ai" };
@@ -63,7 +64,7 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
   return [
     {
       name: "statement_write",
-      label: () => "Writing down what you said about yourself",
+      label: () => t("chat.statements.writingSelf"),
       effect: "write",
       // Bookkeeping, not something the reader came here to read (docs/72): no
       // phase, no trace line, no receipt. It is still written to the thread
@@ -133,7 +134,7 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
           const written = await ctx.store.createStatement(input);
           return {
             text: `Wrote ${written.id} (${written.kind}, in the reader's own words): ${written.text}`,
-            receipt: { label: `Wrote down a ${written.kind}`, summary: written.text },
+            receipt: { label: t("chat.statements.wroteKind", { kind: written.kind }), summary: written.text },
           };
         }
 
@@ -163,7 +164,7 @@ export function buildStatementTools(ctx: StatementToolContext): AgentTool[] {
         }
         return {
           text: `Wrote ${written.id} (${written.kind}, in the reader's own words): ${written.text}\nIt supersedes ${supersedes}, which is kept.`,
-          receipt: { label: `Rewrote a ${written.kind}`, summary: written.text },
+          receipt: { label: t("chat.statements.rewroteKind", { kind: written.kind }), summary: written.text },
         };
       },
     },

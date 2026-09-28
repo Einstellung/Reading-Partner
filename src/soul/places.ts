@@ -14,6 +14,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/execute/turn";
 import { listPlaces, type Place } from "../desk";
+import { t } from "../i18n";
 
 export const GO_TO_TOOL = "go_to";
 
@@ -48,7 +49,8 @@ export function buildPlaceTools(): AgentTool[] {
   return [
     {
       name: GO_TO_TOOL,
-      label: (args) => args.place ? `Going to ${args.place}` : "Going somewhere in the app",
+      label: (args) =>
+        args.place ? t("chat.places.goingTo", { place: String(args.place) }) : t("chat.places.goingSomewhere"),
       effect: "write",
       description: placesDescription(mounted),
       parameters: Type.Object({
@@ -67,7 +69,7 @@ export function buildPlaceTools(): AgentTool[] {
         await place.go();
         return {
           text: `Went to ${place.id}.`,
-          receipt: { label: "Went somewhere", summary: place.id },
+          receipt: { label: t("chat.places.wentSomewhere"), summary: place.id },
         };
       },
     },

@@ -9,6 +9,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool, ToolResult } from "../../legion/execute/turn";
 import { findFigureById } from "./lookup";
 import type { Figure } from "./types";
+import { t } from "../../i18n";
 
 export interface FigureImage {
   base64: string;
@@ -53,7 +54,8 @@ export function buildFigureTools(opts: BuildFigureToolsOptions): AgentTool[] {
   return [
     {
       name: "view_figure",
-      label: (args) => args.id ? `Looking at figure ${args.id}` : "Looking at a figure",
+      label: (args) =>
+        args.id ? t("chat.figures.lookingAtId", { id: String(args.id) }) : t("chat.figures.lookingAt"),
       effect: "read",
       description:
         "Look at a figure from the current document by its number, exactly as the figure catalog lists it (\"3\", \"3a\", \"3.8\", \"3-1\"). Returns the figure image so you can describe what it shows.",

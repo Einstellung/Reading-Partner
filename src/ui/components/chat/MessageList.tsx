@@ -27,10 +27,12 @@ import { DispatchPart } from './DispatchPart';
 import { ReceiptPart } from './ReceiptPart';
 import { DeliveredRunsContext, deliveredRunIds, type DeliveredRuns } from './deliveredRuns';
 import { useCardRegistry } from './cardRegistryContext';
+import { useT } from '../../../i18n';
 
 // Copy the reply's Markdown source. Hidden until the row is hovered or the
 // button itself is focused; confirms for a moment, then returns.
 function CopyButton({ text }: { text: string }) {
+	const t = useT();
 	const [copied, setCopied] = useState(false);
 	const timer = useRef<number | null>(null);
 	useEffect(() => () => window.clearTimeout(timer.current ?? undefined), []);
@@ -42,17 +44,18 @@ function CopyButton({ text }: { text: string }) {
 		timer.current = window.setTimeout(() => setCopied(false), 1500);
 	}
 
+	const copiedLabel = t('chat.list.copied');
 	return (
 		<Button
 			type="button"
 			variant="ghost"
 			size={null}
-			aria-label={copied ? 'Copied' : 'Copy'}
+			aria-label={copied ? copiedLabel : t('chat.list.copy')}
 			onClick={copy}
 			className="w-fit gap-1 rounded-md px-1.5 py-1 text-[12px] leading-none text-neutral-400 can-hover:opacity-0 transition-opacity can-hover:hover:text-neutral-600 focus-visible:opacity-100 group-hover:opacity-100 coarse:px-2.5 coarse:py-2"
 		>
 			{copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-			{copied && 'Copied'}
+			{copied && copiedLabel}
 		</Button>
 	);
 }
@@ -61,13 +64,14 @@ function CopyButton({ text }: { text: string }) {
 // tall screenshot doesn't blow out the column; no lightbox in v1 (docs:
 // original-size, bounded).
 function MessageImages({ images }: { images: CompressedImage[] }) {
+	const t = useT();
 	return (
 		<div className="flex flex-wrap justify-end gap-1.5">
 			{images.map((img, i) => (
 				<img
 					key={i}
 					src={`data:${img.mediaType};base64,${img.data}`}
-					alt="attachment"
+					alt={t('chat.list.attachment')}
 					className="max-h-52 max-w-full rounded-xl object-contain"
 				/>
 			))}
@@ -100,28 +104,29 @@ function PhaseLine({ phase, size }: { phase?: TurnPhase; size: 'sm' | 'lg' }) {
 // --destructive, the app's one red. The reply resumes under it in the next round
 // (docs/pitfall/291), and a successful call's line is gone by then.
 function ToolTrace({ tools, size }: { tools: ToolStatus[]; size: 'sm' | 'lg' }) {
+	const t = useT();
 	const text = traceText(size);
 	// The calls that finished collapse into one grey line under the answer, in the
 	// order they ran; a running call keeps its own line with the ellipsis, and a
 	// failure keeps its own line in red with the sentence the tool threw. Quiet
 	// calls are not here at all (ai/turn-view/tool-status.ts) unless they failed.
 	const shown = visibleTrace(tools);
-	const done = shown.filter((t) => t.state === 'done');
+	const done = shown.filter((tool) => tool.state === 'done');
 	return (
 		<div className="flex flex-col gap-0.5">
-			{shown.map((t, i) =>
-				t.state === 'error' ? (
+			{shown.map((tool, i) =>
+				tool.state === 'error' ? (
 					<div key={i} className={'text-destructive ' + text}>
-						{t.label} — {t.error || 'failed'}
+						{tool.label} — {tool.error || t('chat.list.toolFailed')}
 					</div>
-				) : t.state === 'running' ? (
+				) : tool.state === 'running' ? (
 					<div key={i} className={'text-neutral-400 ' + text}>
-						{t.label}…
+						{tool.label}…
 					</div>
 				) : null,
 			)}
 			{done.length > 0 && (
-				<div className={'text-neutral-400 ' + text}>{done.map((t) => t.label).join(' · ')}</div>
+				<div className={'text-neutral-400 ' + text}>{done.map((tool) => tool.label).join(' · ')}</div>
 			)}
 		</div>
 	);

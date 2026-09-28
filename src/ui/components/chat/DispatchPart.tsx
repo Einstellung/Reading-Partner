@@ -15,6 +15,7 @@ import { ReceiptFrame, receiptText } from './ReceiptPart';
 import { dispatchView, dispatchWatch, type DispatchWatch } from './dispatch-view';
 import { useDeliveredRuns } from './deliveredRuns';
 import type { Receipt } from '../../../ai/turn-view/tool-status';
+import { useT } from '../../../i18n';
 
 export function DispatchPart({
 	runId,
@@ -28,6 +29,7 @@ export function DispatchPart({
 	size: 'sm' | 'lg';
 	watch?: DispatchWatch;
 }) {
+	const t = useT();
 	const snap = useSyncExternalStore(watch.subscribe, () => watch.snapshot(runId));
 	const view = useMemo(() => dispatchView(receipt, snap), [receipt, snap]);
 	const delivered = useDeliveredRuns();
@@ -37,9 +39,11 @@ export function DispatchPart({
 		<ReceiptFrame>
 			<div className={'font-medium text-neutral-600 ' + text}>
 				{view.title}
-				{view.state === 'running' && <span className="text-neutral-400"> — still out</span>}
+				{view.state === 'running' && (
+					<span className="text-neutral-400">{t('chat.dispatch.stillOut')}</span>
+				)}
 				{view.state === 'failed' && (
-					<span className="text-destructive"> — needs your decision</span>
+					<span className="text-destructive">{t('chat.dispatch.needsDecision')}</span>
 				)}
 			</div>
 			<div className={(view.state === 'failed' ? 'text-destructive ' : 'text-neutral-500 ') + text}>
@@ -52,7 +56,7 @@ export function DispatchPart({
 					onClick={() => delivered?.scrollTo(runId)}
 					className={'self-start font-normal text-neutral-500 underline underline-offset-2 ' + text}
 				>
-					Back — see below
+					{t('chat.dispatch.backSeeBelow')}
 				</Button>
 			)}
 		</ReceiptFrame>

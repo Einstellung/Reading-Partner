@@ -26,6 +26,7 @@ import {
   type PaperLibrary,
   type PaperSearchFn,
 } from "./paper-search";
+import { t } from "../../i18n";
 
 const LIBRARY_CHOICES = ["all", ...LIBRARIES] as const;
 
@@ -62,7 +63,10 @@ export function buildPaperSearchTools(deps: PaperSearchToolDeps): AgentTool[] {
   return [
     {
       name: "search_papers",
-      label: (args) => args.query ? `Searching the literature for “${args.query}”` : "Searching the literature",
+      label: (args) =>
+        args.query
+          ? t("chat.papers.searchingFor", { query: String(args.query) })
+          : t("chat.papers.searching"),
       effect: "read",
       description:
         "Search the academic literature by topic. Covers arXiv (preprints in CS, " +

@@ -15,6 +15,7 @@ import type { CleanupModel } from '../../../ai/voice';
 import { loadSettings, type DictationLocale } from '../../../platform/app/settings';
 import { hasNativeRecorder, hasOnDeviceDictation } from '../../../platform/app/platform';
 import { cleanupModelFromSettings, resolveComposerVoice, type ComposerVoice } from './composer-voice';
+import { useT } from '../../../i18n';
 
 // What the composer's voice input reads from settings, so any composer has
 // working voice input without the caller wiring it. Both are unset until
@@ -49,6 +50,7 @@ function useVoiceSettings(): {
 // the badge stays 20px and HIT_44 carries the touch target, so it does not cover
 // the thumbnail it sits on. Already absolute, so no `relative`.
 function StagingCards({ images, onRemove, size }: { images: PendingImage[]; onRemove?: (id: string) => void; size: number }) {
+	const t = useT();
 	return (
 		<div className="flex flex-wrap gap-2">
 			{images.map((img) => (
@@ -60,13 +62,13 @@ function StagingCards({ images, onRemove, size }: { images: PendingImage[]; onRe
 					) : (
 						<img
 							src={`data:${img.mediaType};base64,${img.data}`}
-							alt="attachment"
+							alt={t('chat.list.attachment')}
 							className="h-full w-full rounded-lg object-cover"
 						/>
 					)}
 					<button
 						type="button"
-						aria-label="Remove image"
+						aria-label={t('chat.composer.removeImage')}
 						onClick={() => onRemove?.(img.id)}
 						className={`absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black text-[10px] leading-none text-white shadow ${HIT_44}`}
 					>
@@ -104,6 +106,7 @@ export function Composer({
 	// or `voice={false}` to explicitly opt a surface out of the mic.
 	voice?: ComposerVoice | false;
 }) {
+	const t = useT();
 	const [value, setValue] = useState('');
 	const [voiceHint, setVoiceHint] = useState<string | null>(null);
 	const taRef = useRef<HTMLTextAreaElement>(null);
@@ -212,7 +215,7 @@ export function Composer({
 							type="button"
 							variant="ghost"
 							size="icon"
-							aria-label={voiceMode ? 'Switch to keyboard' : 'Switch to voice'}
+							aria-label={voiceMode ? t('chat.composer.switchToKeyboard') : t('chat.composer.switchToVoice')}
 							onClick={() => setVoiceMode((on) => !on)}
 							className="shrink-0 rounded-full text-neutral-400"
 						>
@@ -255,11 +258,11 @@ export function Composer({
 					{pill && !(voiceMode && !streaming) && (
 						<>
 							{streaming && (
-								<Button variant="ghost" size="composer" aria-label="Stop" onClick={onStop} className={stopInk}>
+								<Button variant="ghost" size="composer" aria-label={t('chat.composer.stop')} onClick={onStop} className={stopInk}>
 									<IconStop size={16} />
 								</Button>
 							)}
-							<Button size="composer" aria-label="Send" onClick={send} disabled={!canSend} className="shrink-0">
+							<Button size="composer" aria-label={t('chat.composer.send')} onClick={send} disabled={!canSend} className="shrink-0">
 								<IconSend size={17} />
 							</Button>
 						</>
@@ -269,7 +272,7 @@ export function Composer({
 							<Button
 								variant="ghost"
 								size="composer-sm"
-								aria-label="Stop"
+								aria-label={t('chat.composer.stop')}
 								onClick={onStop}
 								className={`${stopInk} mb-0.5`}
 							>
@@ -277,7 +280,7 @@ export function Composer({
 							</Button>
 							<Button
 								size="composer-sm"
-								aria-label="Send"
+								aria-label={t('chat.composer.send')}
 								onClick={send}
 								disabled={!canSend}
 								className="mb-0.5 shrink-0"

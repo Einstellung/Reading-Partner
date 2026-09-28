@@ -18,6 +18,7 @@ import { isTerminal, type Run } from "../../../legion/run";
 import type { Receipt } from "../../../ai/turn-view/tool-status";
 import { clipLine } from "../../../platform/std/text";
 import { watchSource } from "../../../platform/std/watch";
+import { t } from "../../../i18n";
 
 /** How far a handed-off piece of work has got, for the one line drawn about it. */
 export type DispatchState = "running" | "done" | "failed" | "gone";
@@ -69,15 +70,15 @@ export function dispatchView(receipt: Receipt, snap: DispatchSnapshot): Dispatch
     // Still looking: the work was sent from here a moment ago and the store has
     // not answered yet.
     if (!snap.loaded) return { title, line: clipLine(receipt.summary, LINE), state: "running" };
-    return { title, line: "No record of it on this device.", state: "gone" };
+    return { title, line: t("chat.dispatch.noRecord"), state: "gone" };
   }
   if (run.state === "done") {
     const said = snap.output ? firstSentence(snap.output) : run.progress;
-    return { title, line: clipLine(said || "Back with an answer.", LINE), state: "done" };
+    return { title, line: clipLine(said || t("chat.dispatch.backWithAnswer"), LINE), state: "done" };
   }
   if (isTerminal(run.state)) {
-    const why = run.state === "cancelled" ? "Stopped before it finished." : run.progress;
-    return { title, line: clipLine(why || "It stopped without saying why.", LINE), state: "failed" };
+    const why = run.state === "cancelled" ? t("chat.dispatch.stoppedBeforeFinished") : run.progress;
+    return { title, line: clipLine(why || t("chat.dispatch.stoppedNoReason"), LINE), state: "failed" };
   }
   return {
     title,

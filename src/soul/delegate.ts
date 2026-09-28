@@ -17,6 +17,7 @@ import { delegableWorkerKinds } from "../legion/execute/worker";
 import type { DelegateInput, Delegated } from "../legion/execute/worker";
 import { appData } from "../platform/app/appdata";
 import { firstSentence } from "../platform/std/text";
+import { t } from "../i18n";
 import type { BoxOrigin } from "../box";
 
 export const DELEGATE_TOOL = "delegate";
@@ -76,7 +77,10 @@ export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
   return [
     {
       name: DELEGATE_TOOL,
-      label: (args) => args.kind ? `Handing this to a ${args.kind} worker` : "Handing this over to a worker",
+      label: (args) =>
+        args.kind
+          ? t("chat.delegate.handingToKind", { kind: String(args.kind) })
+          : t("chat.delegate.handingOver"),
       effect: "write",
       description: DELEGATE_DESCRIPTION,
       parameters: Type.Object({
@@ -123,7 +127,7 @@ export function buildDelegateTools(deps: DelegateDeps = {}): AgentTool[] {
             `with will arrive in this conversation later. Tell the reader the answer is ` +
             `coming rather than answering the question yourself.`,
           receipt: {
-            label: `Sent off ${kind} work`,
+            label: t("chat.delegate.sentOffWork", { kind }),
             summary: firstSentence(task),
             link: { kind: "run" as const, id: result.run.id },
           },

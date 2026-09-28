@@ -13,6 +13,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../../legion/execute/turn";
 import { looksLikeHttpUrl } from "../../sources";
 import { hostOf } from "../../../platform/std/url";
+import { t } from "../../../i18n";
 
 /** What starting one ingest run answers: enough to name the run, nothing read yet. */
 export interface StartedIngest {
@@ -39,7 +40,10 @@ export function buildSourceTools(ingestor: SourceIngestor): AgentTool[] {
   return [
     {
       name: "ingest_url",
-      label: (args) => args.url ? `Taking in ${hostOf(String(args.url))}` : "Taking in a page",
+      label: (args) =>
+        args.url
+          ? t("chat.prep.takingInHost", { host: hostOf(String(args.url)) })
+          : t("chat.prep.takingInPage"),
       effect: "write",
       description:
         "Take in a URL the user shared — a PDF link (arXiv/OpenReview/anywhere) or a " +
@@ -63,7 +67,7 @@ export function buildSourceTools(ingestor: SourceIngestor): AgentTool[] {
         const started = await ingestor.start(url, note);
         return {
           receipt: {
-            label: "Taking in a page",
+            label: t("chat.prep.takingInPage"),
             summary: url,
             link: { kind: "run", id: started.runId },
           },

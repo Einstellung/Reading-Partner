@@ -21,6 +21,7 @@ import { buildCitationTools } from "./citation-tool";
 import type { CitationDeps } from "./citations";
 import type { PaperSearchFn } from "./paper-search";
 import { buildPaperSearchTools } from "./search-tool";
+import { t } from "../../i18n";
 
 export const RESEARCH_TOOL_NAME = "research_literature";
 
@@ -28,10 +29,13 @@ export const RESEARCH_TOOL_NAME = "research_literature";
 // Named here, beside the sub-agent it runs, because the prompt below has to say it.
 export const RESEARCH_KIND = "research-literature";
 
-// The one line the reader sees while a run is going. The sub-agent tool's own
-// label (legion/subagent/tool.ts) and every progress event repeat it, so the row
-// does not change its wording the moment the first update lands.
-export const RESEARCH_LABEL = "Searching the literature";
+// The one line the reader sees while a run is going, resolved fresh each time
+// buildResearchAgent is called so it follows the current locale. The sub-agent
+// tool's own label (legion/subagent/tool.ts) and every progress event repeat
+// it, so the row does not change its wording the moment the first update lands.
+function researchLabel(): string {
+  return t("chat.papers.searching");
+}
 
 // The pot one reader turn may spend on literature research, every
 // research_literature call in it together. One full investigation plus a real
@@ -170,7 +174,7 @@ export function buildResearchAgent(deps: ResearchAgentDeps): SubagentDefinition 
       "the claim or passage in question, the field it belongs to, any paper you have " +
       "already identified (give its DOI or id), and which years matter. Ask about one " +
       "thing: a task with three unrelated questions in it comes back thin on all three.",
-    label: RESEARCH_LABEL,
+    label: researchLabel(),
     systemPrompt: RESEARCH_SYSTEM_PROMPT,
     tools: buildResearchTools(deps),
     briefTokenCap: RESEARCH_BRIEF_TOKENS,

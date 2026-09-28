@@ -18,6 +18,7 @@ import {
   NO_ARTICLE_BODY,
   type SavedArticle,
 } from "./saved-articles";
+import { t } from "../../i18n";
 
 export const SAVED_ARTICLES_KIND = "saved-articles";
 
@@ -69,7 +70,7 @@ async function openSavedArticles(
   const list = () => (records ??= savedArticles.all().catch((): SavedArticle[] => []));
   return {
     kind: SAVED_ARTICLES_KIND,
-    label: "Kept articles",
+    label: t("chat.saved.keptArticles"),
     tools: buildSavedArticleTools({
       list,
       add: async (article) => {
