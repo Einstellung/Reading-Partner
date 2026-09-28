@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useT } from "../../../i18n";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -17,6 +18,7 @@ export default function ApiKeyField({
   placeholder: string;
   replacePlaceholder: string;
 }) {
+  const t = useT();
   const [configured, setConfigured] = useState(false);
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,7 +40,7 @@ export default function ApiKeyField({
 
   return (
     <Label layout="stack">
-      API key
+      {t("settings.apiKey")}
       <div className="flex gap-2">
         <Input
           type="password"
@@ -47,9 +49,11 @@ export default function ApiKeyField({
           onChange={(e) => setKey(e.target.value)}
         />
         <Button type="button" variant="outline" disabled={busy || !key.trim()} onClick={saveKey}>
-          Save
+          {t("settings.save")}
         </Button>
-        {configured && <span className="self-center text-xs text-[#5fb236]">Connected</span>}
+        {configured && (
+          <span className="self-center text-xs text-[#5fb236]">{t("settings.connected")}</span>
+        )}
       </div>
     </Label>
   );

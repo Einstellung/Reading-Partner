@@ -3,6 +3,7 @@ import {
   type DictationLocale,
   type Settings,
 } from "../../../platform/app/settings";
+import { useT } from "../../../i18n";
 import { CARD } from "./cardStyles";
 import { ChoiceField, FieldGrid } from "./ChoiceField";
 
@@ -27,11 +28,12 @@ export default function DictationLanguageCard({
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
 }) {
+  const t = useT();
   return (
     <div className={CARD}>
       <FieldGrid>
         <ChoiceField
-          label="Dictation language"
+          label={t("settings.optional.dictationLanguage")}
           value={settings.dictationLocale}
           choices={DICTATION_LOCALE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           onChange={(v) =>
@@ -39,12 +41,7 @@ export default function DictationLanguageCard({
           }
         />
       </FieldGrid>
-      <p className="m-0 text-xs text-faint-foreground">
-        The language the iPhone listens for when you hold the bar and talk. Speech is transcribed on
-        the phone and never uploaded. Speaking a language other than this one does not produce a
-        rough transcript — it produces a confident wrong one, so set it to the language you actually
-        speak.
-      </p>
+      <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.dictationHint")}</p>
     </div>
   );
 }

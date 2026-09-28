@@ -7,6 +7,7 @@
 // than claiming all three.
 
 import { type Settings } from "../../../platform/app/settings";
+import { useT } from "../../../i18n";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
@@ -24,40 +25,36 @@ export default function OptionalPanel({
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
 }) {
+  const t = useT();
   return (
     <>
-      <p className="mt-0 mb-5 text-xs text-faint-foreground">
-        Keys for outside services, each of them optional. The two voice keys are kept with this
-        device's credentials and never sync, so every device needs its own.
-      </p>
+      <p className="mt-0 mb-5 text-xs text-faint-foreground">{t("settings.optional.intro")}</p>
 
       <div className={SETTINGS_PANEL}>
         {/* Not a key, and the one thing on this tab that costs nothing to turn
             on. Off, the app has no meals screen and no entry to one; the data
             it has already written stays where it is (docs/73). */}
-        <SettingsSection title="Meals">
+        <SettingsSection title={t("settings.optional.meals")}>
           <div className={CARD}>
             <Label>
               <Switch
                 checked={settings.meals}
                 onCheckedChange={(v) => onSettingsChange({ ...settings, meals: v === true })}
               />
-              Meals
+              {t("settings.optional.meals")}
             </Label>
-            <p className="m-0 text-xs text-faint-foreground">
-              Plan the week's breakfasts, lunches and dinners, keep the shopping list, say when you ate something else.
-            </p>
+            <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.mealsHint")}</p>
           </div>
 
         </SettingsSection>
 
-        <SettingsSection title="Lesson prep">
+        <SettingsSection title={t("settings.optional.lessonPrep")}>
           <div className={CARD}>
             <Label layout="stack">
-              Semantic Scholar API key
+              {t("settings.optional.s2Key")}
               <Input
                 type="password"
-                placeholder="Optional"
+                placeholder={t("settings.optional.s2Placeholder")}
                 value={settings.semanticScholarApiKey ?? ""}
                 onChange={(e) =>
                   onSettingsChange({
@@ -67,14 +64,11 @@ export default function OptionalPanel({
                 }
               />
             </Label>
-            <p className="m-0 text-xs text-faint-foreground">
-              A free key from semanticscholar.org avoids the shared rate limits that make paper
-              fetching stall.
-            </p>
+            <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.s2Hint")}</p>
           </div>
         </SettingsSection>
 
-        <SettingsSection title="Voice input">
+        <SettingsSection title={t("settings.optional.voiceInput")}>
           {/* One card per voice path, and only the one this machine has. They are
               deliberately separate features (platform.ts): the desktop records a
               WAV and ships it to an STT host, the phone transcribes on device
@@ -86,7 +80,7 @@ export default function OptionalPanel({
           )}
         </SettingsSection>
 
-        <SettingsSection title="Voice output">
+        <SettingsSection title={t("settings.optional.voiceOutput")}>
           {/* Not under "Voice input" and not conditional: this is the other
               direction, and unlike the two cards above it is the same path on
               every host — the request is made in Rust (plugins/voice). */}

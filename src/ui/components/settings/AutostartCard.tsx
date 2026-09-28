@@ -5,6 +5,7 @@
 
 import { setAutostart } from "../../../platform/app/autostart";
 import type { DeviceSettings } from "../../../platform/app/device";
+import { useT } from "../../../i18n";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import { CARD } from "./cardStyles";
@@ -18,6 +19,7 @@ export default function AutostartCard({
 }) {
   // The stored intent goes through the panel's state like every other device
   // setting; the login-item registration is the extra half only this switch has.
+  const t = useT();
   const toggle = (next: boolean) => {
     onDeviceChange({ ...device, autostart: next });
     setAutostart(next).catch((e) => console.warn("failed to change autostart", e));
@@ -27,13 +29,9 @@ export default function AutostartCard({
     <div className={CARD}>
       <Label>
         <Checkbox checked={device.autostart} onCheckedChange={(v) => toggle(v === true)} />
-        Start Reading Partner when this computer starts
+        {t("settings.features.autostart")}
       </Label>
-      <p className="m-0 text-xs text-faint-foreground">
-        Off by default. Turn it on for the machine you want collecting your sources all day —
-        together with the tray, it means the briefing is being built whether or not you opened the
-        app. This setting belongs to this computer and is not carried to your other devices.
-      </p>
+      <p className="m-0 text-xs text-faint-foreground">{t("settings.features.autostartHint")}</p>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { hasTtsKey, setTtsKey, syncSpeechKey } from "../../../ai/voice";
+import { useT } from "../../../i18n";
 import ApiKeyField from "./ApiKeyField";
 import { CARD } from "./cardStyles";
 
@@ -16,18 +17,16 @@ async function saveSpeechKey(key: string): Promise<void> {
 }
 
 export default function SpeechKeyCard() {
+  const t = useT();
   return (
     <div className={CARD}>
       <ApiKeyField
         has={hasTtsKey}
         save={saveSpeechKey}
-        placeholder="Speech API key"
-        replacePlaceholder="Replace speech API key"
+        placeholder={t("settings.optional.speechKey")}
+        replacePlaceholder={t("settings.optional.speechKeyReplace")}
       />
-      <p className="m-0 text-xs text-faint-foreground">
-        A Xiaomi MiMo key, for the voice that reads answers aloud. Without one the app stays silent
-        and everything else works as it does now.
-      </p>
+      <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.speechHint")}</p>
     </div>
   );
 }

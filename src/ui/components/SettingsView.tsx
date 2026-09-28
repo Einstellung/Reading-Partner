@@ -23,6 +23,7 @@ import { useEffect, useState } from "react";
 import { LICENSE_NAME, readAppVersion, UNPACKAGED_VERSION } from "../../platform/app/version";
 import { type Settings } from "../../platform/app/settings";
 import { type DeviceSettings } from "../../platform/app/device";
+import { useT } from "../../i18n";
 import AccountPanel from "./settings/AccountPanel";
 import FeaturesPanel from "./settings/FeaturesPanel";
 import OptionalPanel from "./settings/OptionalPanel";
@@ -63,19 +64,16 @@ const SUBNAV_ROW =
   "data-[state=active]:bg-secondary data-[state=active]:font-medium " +
   "data-[state=active]:text-secondary-foreground data-[state=active]:shadow-none";
 
-const TABS = [
-  { value: "account", label: "Account" },
-  { value: "features", label: "Features" },
-  { value: "optional", label: "Optional" },
-];
+const TABS = ["account", "features", "optional"] as const;
 
 export default function SettingsView(props: SettingsBodyProps) {
+  const t = useT();
   return (
     <div className="absolute inset-0 overflow-y-auto bg-background">
       <div className={PAGE}>
-        <div className={EYEBROW}>Settings</div>
+        <div className={EYEBROW}>{t("settings.title")}</div>
         <h1 className="mb-6 mt-1 font-display text-[30px] font-semibold text-foreground">
-          Settings
+          {t("settings.title")}
         </h1>
         <SettingsBody {...props} />
       </div>
@@ -92,6 +90,7 @@ export function SettingsBody({
   device,
   onDeviceChange,
 }: SettingsBodyProps) {
+  const t = useT();
   return (
     <Tabs
       defaultValue="account"
@@ -99,9 +98,9 @@ export function SettingsBody({
       className="flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:gap-8"
     >
       <TabsList className={SUBNAV}>
-        {TABS.map((t) => (
-          <TabsTrigger key={t.value} value={t.value} className={SUBNAV_ROW}>
-            {t.label}
+        {TABS.map((tab) => (
+          <TabsTrigger key={tab} value={tab} className={SUBNAV_ROW}>
+            {t(`settings.tab.${tab}`)}
           </TabsTrigger>
         ))}
       </TabsList>

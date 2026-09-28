@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import { setApiKey, type ApiKeyProviderId, type ProviderInfo } from "../../../ai";
+import { useT } from "../../../i18n";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { CARD } from "./cardStyles";
@@ -21,6 +22,7 @@ export default function KeyCard({
   providers: ProviderInfo[];
   onActivated: (id: ApiKeyProviderId) => void;
 }) {
+  const t = useT();
   const [picked, setPicked] = useState<ApiKeyProviderId | undefined>(undefined);
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,8 +50,8 @@ export default function KeyCard({
   return (
     <div className={CARD}>
       <div className="flex items-center justify-between">
-        <span className="font-medium">API key</span>
-        {isConnected && <span className="text-xs text-[#5fb236]">Connected</span>}
+        <span className="font-medium">{t("settings.apiKey")}</span>
+        {isConnected && <span className="text-xs text-[#5fb236]">{t("settings.connected")}</span>}
       </div>
       <div className="flex flex-wrap gap-2">
         {keyProviderChips().map((chip) => (
@@ -68,7 +70,7 @@ export default function KeyCard({
       <div className="flex gap-2">
         <Input
           type="password"
-          placeholder={isConnected ? "Replace API key" : "API key"}
+          placeholder={isConnected ? t("settings.key.replace") : t("settings.apiKey")}
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
@@ -78,10 +80,10 @@ export default function KeyCard({
           disabled={busy || !selected || !key.trim()}
           onClick={save}
         >
-          Save
+          {t("settings.save")}
         </Button>
       </div>
-      <p className="m-0 text-xs text-faint-foreground">Saving a key here signs out other providers.</p>
+      <p className="m-0 text-xs text-faint-foreground">{t("settings.key.signsOutOthers")}</p>
     </div>
   );
 }

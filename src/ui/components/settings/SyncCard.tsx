@@ -8,22 +8,24 @@ import {
   syncNow,
   type SyncStatus,
 } from "../../../platform/sync";
+import { formatDateTime, useT, type Translate } from "../../../i18n";
 import { CARD } from "./cardStyles";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 
-function formatSyncTime(ts: number | null): string {
-  if (!ts) return "Never";
+function formatSyncTime(ts: number | null, t: Translate): string {
+  if (!ts) return t("settings.sync.never");
   const diff = Date.now() - ts;
-  if (diff < 60_000) return "Just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} min ago`;
-  return new Date(ts).toLocaleString();
+  if (diff < 60_000) return t("settings.sync.justNow");
+  if (diff < 3_600_000) return t("settings.sync.minutesAgo", { count: Math.floor(diff / 60_000) });
+  return formatDateTime(ts, { dateStyle: "medium", timeStyle: "short" });
 }
 
 // Google Drive sync (docs/13). Data and books live in the user's own Drive; no
 // backend. Disabled with a hint until the Google client is configured via env.
 export default function SyncCard() {
+  const t = useT();
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export default function SyncCard() {
     } catch (e) {
       // Tauri plugin invokes reject with plain strings; show them verbatim so
       // platform-level failures (network, scope, fs) are diagnosable in the UI.
-      setError(e instanceof Error ? e.message : String(e) || "Sync action failed");
+      setError(e instanceof Error ? e.message : String(e) || t("settings.sync.failed"));
     } finally {
       setBusy(false);
     }
@@ -53,10 +55,10 @@ export default function SyncCard() {
   if (!status.configured) {
     return (
       <div className={CARD}>
-        <span className="font-medium">Google Drive</span>
-        <p className="m-0 text-sm text-faint-foreground">Google client not configured.</p>
+        <span className="font-medium">{t("settings.sync.drive")}</span>
+        <p className="m-0 text-sm text-faint-foreground">{t("settings.sync.notConfigured")}</p>
         <Button type="button" disabled>
-          Sign in with Google
+          {t("settings.sync.signIn")}
         </Button>
       </div>
     );
@@ -66,22 +68,23 @@ export default function SyncCard() {
     const broken = report.health === "credentials-missing";
     return (
       <div className={CARD}>
-        <span className="font-medium">Google Drive</span>
+        <span className="font-medium">{t("settings.sync.drive")}</span>
         {broken ? (
           <p className="m-0 text-sm text-[#b45309]">
-            {report.message} Everything since the last sync is on this device only. Sign in again
-            to resume; nothing local is lost.
+            {report.message} {t("settings.sync.signedOutNote")}
           </p>
         ) : (
           <p className="m-0 text-sm text-faint-foreground">
-            Sync reading progress, marks, and books to your own Google Drive.
+            {t("settings.sync.pitch")}
           </p>
         )}
         <Button type="button" disabled={busy} onClick={() => run(signInToGoogle)}>
-          {busy ? "Complete sign-in in your browser…" : "Sign in with Google"}
+          {busy ? t("settings.sync.completeInBrowser") : t("settings.sync.signIn")}
         </Button>
         {broken && (
-          <span className="text-xs text-faint-foreground">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
+          <span className="text-xs text-faint-foreground">
+            {t("settings.sync.lastSync", { time: formatSyncTime(status.lastSyncAt, t) })}
+          </span>
         )}
         {error && <p className="m-0 text-xs text-destructive">{error}</p>}
       </div>
@@ -91,8 +94,8 @@ export default function SyncCard() {
   return (
     <div className={CARD}>
       <div className="flex items-center justify-between">
-        <span className="font-medium">Google Drive</span>
-        <span className="text-xs text-[#5fb236]">{status.email ?? "Connected"}</span>
+        <span className="font-medium">{t("settings.sync.drive")}</span>
+        <span className="text-xs text-[#5fb236]">{status.email ?? t("settings.connected")}</span>
       </div>
       <Label>
         <Checkbox
@@ -100,7 +103,7 @@ export default function SyncCard() {
           disabled={busy}
           onCheckedChange={(v) => void run(() => setAutoSyncEnabled(v === true))}
         />
-        Sync automatically
+        {t("settings.sync.auto")}
       </Label>
       <div className="flex flex-wrap items-center gap-3">
         <Button
@@ -109,14 +112,16 @@ export default function SyncCard() {
           disabled={busy || status.running}
           onClick={() => run(syncNow)}
         >
-          {status.running ? "Syncing…" : "Sync now"}
+          {status.running ? t("settings.sync.running") : t("settings.sync.now")}
         </Button>
         {/* Quieter than Sync now beside it, the way sign-out is quieter than
             sign-in on a provider card. */}
         <Button type="button" variant="subtle" disabled={busy} onClick={() => run(signOutOfGoogle)}>
-          Sign out
+          {t("settings.signOut")}
         </Button>
-        <span className="text-xs text-faint-foreground">Last sync: {formatSyncTime(status.lastSyncAt)}</span>
+        <span className="text-xs text-faint-foreground">
+          {t("settings.sync.lastSync", { time: formatSyncTime(status.lastSyncAt, t) })}
+        </span>
       </div>
       {report.message && (
         <p

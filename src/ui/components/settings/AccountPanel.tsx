@@ -26,6 +26,7 @@ import {
   type ProviderId,
   type ProviderInfo,
 } from "../../../ai";
+import { useT } from "../../../i18n";
 import { type Settings, type ThinkingSetting } from "../../../platform/app/settings";
 import { CARD } from "./cardStyles";
 import { ChoiceField, FieldGrid } from "./ChoiceField";
@@ -39,12 +40,7 @@ import SyncCard from "./SyncCard";
 // this one (ai/auth/provider-ids.ts).
 const SAME_AS_CHAT = "same-as-chat";
 
-const THINKING_OPTIONS: { value: ThinkingSetting; label: string }[] = [
-  { value: "off", label: "Off" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
+const THINKING_OPTIONS: ThinkingSetting[] = ["off", "low", "medium", "high"];
 
 export default function AccountPanel({
   settings,
@@ -53,6 +49,7 @@ export default function AccountPanel({
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
 }) {
+  const t = useT();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const refresh = () => {
     listProviders().then(setProviders).catch(() => {});
@@ -85,10 +82,10 @@ export default function AccountPanel({
 
   return (
     <div className={SETTINGS_PANEL}>
-      <SettingsSection title="Providers">
+      <SettingsSection title={t("settings.account.providers")}>
         <OAuthCard
           name="Anthropic (Claude)"
-          signInLabel="Sign in with Claude"
+          signInLabel={t("settings.account.signInWith", { name: "Claude" })}
           provider={providers.find((p) => p.id === "anthropic")}
           login={anthropicLogin}
           loginWithManualCode={anthropicLoginWithManualCode}
@@ -99,7 +96,7 @@ export default function AccountPanel({
         />
         <OAuthCard
           name="OpenAI (ChatGPT)"
-          signInLabel="Sign in with ChatGPT"
+          signInLabel={t("settings.account.signInWith", { name: "ChatGPT" })}
           provider={providers.find((p) => p.id === "openai")}
           login={openaiLogin}
           loginWithManualCode={openaiLoginWithManualCode}
@@ -115,16 +112,16 @@ export default function AccountPanel({
         <KeyCard providers={providers} onActivated={activate} />
       </SettingsSection>
 
-      <SettingsSection title="Default conversation">
+      <SettingsSection title={t("settings.account.defaultConversation")}>
         <div className={CARD}>
           {connectedProviders.length === 0 ? (
-            <p className="m-0 text-sm text-faint-foreground">Connect a provider above to choose a default.</p>
+            <p className="m-0 text-sm text-faint-foreground">{t("settings.account.connectFirst")}</p>
           ) : (
             <>
               <FieldGrid>
                 <ChoiceField
-                  label="Provider"
-                  placeholder="Select…"
+                  label={t("settings.account.provider")}
+                  placeholder={t("settings.account.select")}
                   value={settings.defaultProviderId ?? undefined}
                   choices={connectedProviders.map((p) => ({ value: p.id, label: p.name }))}
                   onChange={(defaultProviderId) =>
@@ -137,33 +134,30 @@ export default function AccountPanel({
                   }
                 />
                 <ChoiceField
-                  label="Model"
-                  placeholder="Select…"
+                  label={t("settings.account.model")}
+                  placeholder={t("settings.account.select")}
                   value={settings.defaultModelId ?? undefined}
                   disabled={!settings.defaultProviderId || models.length === 0}
                   choices={models.map((m) => ({ value: m.id, label: modelChoiceLabel(m) }))}
                   onChange={(defaultModelId) => onSettingsChange({ ...settings, defaultModelId })}
                 />
               </FieldGrid>
-              <p className="m-0 text-xs text-faint-foreground">
-                The number beside each model is its context window. This app reads a whole book into
-                it; on a smaller window a reply drops material to fit and says what it dropped.
-              </p>
+              <p className="m-0 text-xs text-faint-foreground">{t("settings.account.contextHint")}</p>
             </>
           )}
         </div>
       </SettingsSection>
 
       {connectedProviders.length > 0 && (
-        <SettingsSection title="Everyday model">
+        <SettingsSection title={t("settings.account.everydayModel")}>
           <div className={CARD}>
             <FieldGrid>
               <ChoiceField
-                label="Model"
+                label={t("settings.account.model")}
                 value={settings.everydayModelId ?? SAME_AS_CHAT}
                 disabled={!settings.defaultProviderId || models.length === 0}
                 choices={[
-                  { value: SAME_AS_CHAT, label: "Same as chat" },
+                  { value: SAME_AS_CHAT, label: t("settings.account.sameAsChat") },
                   ...models.map((m) => ({ value: m.id, label: modelChoiceLabel(m) })),
                 ]}
                 onChange={(v) =>
@@ -174,63 +168,52 @@ export default function AccountPanel({
                 }
               />
             </FieldGrid>
-            <p className="m-0 text-xs text-faint-foreground">
-              The routine work runs here instead of on the model above: meals, and the nightly
-              briefing. It is work nobody is waiting for, so a cheaper model costs you nothing;
-              which tasks belong to it is decided by the app, not here. It uses the provider above.
-            </p>
+            <p className="m-0 text-xs text-faint-foreground">{t("settings.account.everydayHint")}</p>
           </div>
         </SettingsSection>
       )}
 
       {connectedProviders.length > 0 && (
-        <SettingsSection title="Briefing">
+        <SettingsSection title={t("settings.account.briefing")}>
           <div className={CARD}>
             <FieldGrid>
               <ThinkingField
-                label="Screening"
+                label={t("settings.account.screening")}
                 value={settings.briefingScreenThinking}
                 onChange={(briefingScreenThinking) =>
                   onSettingsChange({ ...settings, briefingScreenThinking })
                 }
               />
               <ThinkingField
-                label="Analysis"
+                label={t("settings.account.analysis")}
                 value={settings.briefingThinking}
                 onChange={(briefingThinking) => onSettingsChange({ ...settings, briefingThinking })}
               />
             </FieldGrid>
-            <p className="m-0 text-xs text-faint-foreground">
-              The briefing is built overnight, from every source, whether or not you read it.
-              Screening reads the day's headlines to decide which articles are worth fetching, so it
-              is the stage to keep low; analysis reads the ones that got through.
-            </p>
+            <p className="m-0 text-xs text-faint-foreground">{t("settings.account.briefingHint")}</p>
           </div>
         </SettingsSection>
       )}
 
-      <SettingsSection title="Thinking">
+      <SettingsSection title={t("settings.account.thinking")}>
         <div className={CARD}>
           <FieldGrid>
             <ThinkingField
-              label="Chat"
+              label={t("settings.account.chat")}
               value={settings.chatThinking}
               onChange={(chatThinking) => onSettingsChange({ ...settings, chatThinking })}
             />
             <ThinkingField
-              label="Lesson prep"
+              label={t("settings.account.lessonPrep")}
               value={settings.prepThinking}
               onChange={(prepThinking) => onSettingsChange({ ...settings, prepThinking })}
             />
           </FieldGrid>
-          <p className="m-0 text-xs text-faint-foreground">
-            Adaptive models decide per question how much to actually think; higher = deeper but
-            slower.
-          </p>
+          <p className="m-0 text-xs text-faint-foreground">{t("settings.account.thinkingHint")}</p>
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Sync">
+      <SettingsSection title={t("settings.account.sync")}>
         <SyncCard />
       </SettingsSection>
     </div>
@@ -248,11 +231,12 @@ function ThinkingField({
   value: ThinkingSetting;
   onChange: (v: ThinkingSetting) => void;
 }) {
+  const t = useT();
   return (
     <ChoiceField
       label={label}
       value={value}
-      choices={THINKING_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+      choices={THINKING_OPTIONS.map((v) => ({ value: v, label: t(`settings.thinking.${v}`) }))}
       onChange={(v) => onChange(v as ThinkingSetting)}
     />
   );

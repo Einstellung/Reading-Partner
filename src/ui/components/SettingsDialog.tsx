@@ -11,6 +11,7 @@
 // the title bar scrolls away with the cards (docs/pitfall/88 — there is no
 // scroll lock to fight over either).
 
+import { useT } from "../../i18n";
 import { cn } from "./lib/utils";
 import { SettingsBody, type SettingsBodyProps } from "./SettingsView";
 import { Button } from "./ui/button";
@@ -21,6 +22,7 @@ export default function SettingsDialog({
   onClose,
   ...body
 }: SettingsBodyProps & { onClose: () => void }) {
+  const t = useT();
   return (
     <Dialog
       open
@@ -46,10 +48,10 @@ export default function SettingsDialog({
                 contradicts — it only races it in the stylesheet. On DialogTitle
                 they go through cn() and the default is gone. */}
             <DialogTitle asChild className="m-0 font-display text-[22px] leading-normal font-semibold">
-              <h1>Settings</h1>
+              <h1>{t("settings.title")}</h1>
             </DialogTitle>
             <Button type="button" variant="outline" onClick={onClose}>
-              Done
+              {t("settings.done")}
             </Button>
           </div>
 

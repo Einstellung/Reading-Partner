@@ -12,6 +12,7 @@
 import { hasAutostart } from "../../../platform/app/autostart";
 import { roleIsChoosable, type DeviceRole, type DeviceSettings } from "../../../platform/app/device";
 import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings } from "../../../platform/app/settings";
+import { useT } from "../../../i18n";
 import { setPaperTint, usePaperTint } from "../base/usePaperTint";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
@@ -19,11 +20,6 @@ import AutostartCard from "./AutostartCard";
 import { CARD } from "./cardStyles";
 import { ChoiceField, FieldGrid } from "./ChoiceField";
 import { SETTINGS_PANEL, SettingsSection } from "./SettingsSection";
-
-const ROLE_CHOICES = [
-  { value: "collector", label: "Collector — read the sources here" },
-  { value: "reader", label: "Reader — read what another machine collected" },
-];
 
 export default function FeaturesPanel({
   settings,
@@ -42,39 +38,43 @@ export default function FeaturesPanel({
   // says why in ui/components/base/paper-tint.ts. It is drawn here anyway,
   // beside the other switches that belong to this machine.
   const paperTint = usePaperTint();
+  const t = useT();
+  // The languages are named in themselves, as a language picker does; only
+  // "auto" is a sentence and needs translating.
+  const languageChoices = AI_LANGUAGE_OPTIONS.map((o) => ({
+    value: o.value,
+    label: o.value === "auto" ? t("settings.features.languageAuto") : o.label,
+  }));
+  const roleChoices = [
+    { value: "collector", label: t("settings.features.roleCollector") },
+    { value: "reader", label: t("settings.features.roleReader") },
+  ];
 
   return (
     <div className={SETTINGS_PANEL}>
-      <SettingsSection title="General">
+      <SettingsSection title={t("settings.features.general")}>
         <div className={CARD}>
           <FieldGrid>
             <ChoiceField
-              label="AI output language"
+              label={t("settings.features.language")}
               value={settings.aiLanguage}
-              choices={AI_LANGUAGE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              choices={languageChoices}
               onChange={(v) => onSettingsChange({ ...settings, aiLanguage: v as AiLanguage })}
             />
           </FieldGrid>
-          <p className="m-0 text-xs text-faint-foreground">
-            The language the AI writes chat replies, notes, and the news briefing in. Auto
-            follows the language you write in. Voice transcription always follows what you speak.
-          </p>
+          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.languageHint")}</p>
         </div>
 
         <div className={CARD}>
           <Label>
             <Checkbox checked={paperTint} onCheckedChange={(v) => setPaperTint(v === true)} />
-            Paper background
+            {t("settings.features.paper")}
           </Label>
-          <p className="m-0 text-xs text-faint-foreground">
-            Turns the white behind the whole app — chats, shelves, sidebars, this dialog, and the
-            pages of a book — into an off-white paper colour. There is one shade and no darker
-            step; this is not a dark mode. The choice stays on this device.
-          </p>
+          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.paperHint")}</p>
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Reading">
+      <SettingsSection title={t("settings.features.reading")}>
         <div className={CARD}>
           <Label>
             <Checkbox
@@ -84,20 +84,15 @@ export default function FeaturesPanel({
                 device && onDeviceChange({ ...device, fingerDraw: v === true })
               }
             />
-            Draw with your finger
+            {t("settings.features.fingerDraw")}
           </Label>
-          <p className="m-0 text-xs text-faint-foreground">
-            Off, a finger only moves the page and a stylus does the marking, whatever tool is
-            selected. Turn it on for a device with no stylus, where the finger has to be able to
-            highlight and draw. The navigation lock in the reader still overrides both. Whether
-            there is a stylus is a property of this device, so this setting stays on it.
-          </p>
+          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.fingerDrawHint")}</p>
         </div>
       </SettingsSection>
 
       {/* A reader collects nothing, so there is no schedule to switch off. */}
       {device?.role === "collector" && (
-        <SettingsSection title="Briefing">
+        <SettingsSection title={t("settings.features.briefing")}>
           <div className={CARD}>
             <Label>
               <Checkbox
@@ -106,36 +101,27 @@ export default function FeaturesPanel({
                   onDeviceChange({ ...device, backgroundCollect: v === true })
                 }
               />
-              Collect from your sources on this computer
+              {t("settings.features.collect")}
             </Label>
-            <p className="m-0 text-xs text-faint-foreground">
-              Each source is checked on its own schedule and what it published is kept until the
-              day's briefing is built. Off, this machine stops collecting entirely and another
-              collector, if you have one, takes over.
-            </p>
+            <p className="m-0 text-xs text-faint-foreground">{t("settings.features.collectHint")}</p>
           </div>
         </SettingsSection>
       )}
 
       {/* Nothing here syncs, and none of it exists on a phone. */}
       {device && (roleIsChoosable() || hasAutostart()) && (
-        <SettingsSection title="This computer">
+        <SettingsSection title={t("settings.features.thisComputer")}>
           {roleIsChoosable() && (
             <div className={CARD}>
               <FieldGrid>
                 <ChoiceField
-                  label="This machine is a"
+                  label={t("settings.features.role")}
                   value={device.role}
-                  choices={ROLE_CHOICES}
+                  choices={roleChoices}
                   onChange={(v) => onDeviceChange({ ...device, role: v as DeviceRole })}
                 />
               </FieldGrid>
-              <p className="m-0 text-xs text-faint-foreground">
-                A collector reads your subscribed sites all day and publishes the briefing for your
-                other devices; a reader shows what a collector published and never fetches from a
-                site itself. Phones and tablets are always readers. If two machines collect, the
-                one that has been running longest does the work.
-              </p>
+              <p className="m-0 text-xs text-faint-foreground">{t("settings.features.roleHint")}</p>
             </div>
           )}
           {hasAutostart() && <AutostartCard device={device} onDeviceChange={onDeviceChange} />}

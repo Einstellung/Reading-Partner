@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { type DeviceCodeState, type ProviderInfo } from "../../../ai";
+import { useT } from "../../../i18n";
 import { isIOS } from "../../../platform/app/platform";
 import { CARD } from "./cardStyles";
 import { Button } from "../ui/button";
@@ -51,6 +52,7 @@ export default function OAuthCard({
   onChanged: () => void;
   onActivated: () => void;
 }) {
+  const t = useT();
   const ios = isIOS();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export default function OAuthCard({
       await login();
       onActivated();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sign-in failed");
+      setError(e instanceof Error ? e.message : t("settings.oauth.signInFailed"));
       setMode("paste");
     } finally {
       setBusy(false);
@@ -87,7 +89,7 @@ export default function OAuthCard({
       await codeFlow.manualStart();
       setMode("paste");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not open the sign-in page");
+      setError(e instanceof Error ? e.message : t("settings.oauth.openFailed"));
     } finally {
       setBusy(false);
     }
@@ -126,7 +128,7 @@ export default function OAuthCard({
       setCode("");
       onActivated();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Invalid code");
+      setError(e instanceof Error ? e.message : t("settings.oauth.invalidCode"));
     } finally {
       setBusy(false);
     }
@@ -134,14 +136,14 @@ export default function OAuthCard({
 
   const pasteHint =
     codeFlow.kind === "device"
-      ? "After signing in, copy the address bar (the localhost URL that fails to load) and paste it here."
-      : "Paste the code shown after you approve access.";
+      ? t("settings.oauth.pasteHintDevice")
+      : t("settings.oauth.pasteHintCode");
 
   return (
     <div className={CARD}>
       <div className="flex items-center justify-between">
         <span className="font-medium">{name}</span>
-        {provider?.configured && <span className="text-xs text-[#5fb236]">Connected</span>}
+        {provider?.configured && <span className="text-xs text-[#5fb236]">{t("settings.connected")}</span>}
       </div>
       {provider?.configured ? (
         // Not a full-width button, and not the filled one either: signing out is
@@ -157,7 +159,7 @@ export default function OAuthCard({
             onChanged();
           }}
         >
-          Sign out
+          {t("settings.signOut")}
         </Button>
       ) : (
         <>
@@ -165,17 +167,17 @@ export default function OAuthCard({
             // No loopback on iOS: the code flow is the primary action.
             mode === "idle" && (
               <Button type="button" disabled={busy} onClick={startCodeFlow}>
-                {busy ? "Opening the sign-in page…" : signInLabel}
+                {busy ? t("settings.oauth.opening") : signInLabel}
               </Button>
             )
           ) : (
             <>
               <Button type="button" disabled={busy} onClick={signIn}>
-                {busy ? "Complete authorization in your browser…" : signInLabel}
+                {busy ? t("settings.oauth.completeInBrowser") : signInLabel}
               </Button>
               {mode === "idle" && (
                 <Button type="button" variant="link" size="link" className={LINK} disabled={busy} onClick={startCodeFlow}>
-                  Sign in with a code
+                  {t("settings.oauth.withCode")}
                 </Button>
               )}
             </>
@@ -195,19 +197,19 @@ export default function OAuthCard({
             <div className="flex flex-col gap-1.5">
               <div className="flex gap-2">
                 <Input
-                  placeholder="Paste sign-in code or URL"
+                  placeholder={t("settings.oauth.pastePlaceholder")}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                 />
                 <Button type="button" variant="outline" disabled={busy || !code.trim()} onClick={submitCode}>
-                  Submit
+                  {t("settings.oauth.submit")}
                 </Button>
               </div>
               <p className="m-0 text-xs text-faint-foreground">{pasteHint}</p>
             </div>
           )}
 
-          <p className="m-0 text-xs text-faint-foreground">Signing in here signs out other providers.</p>
+          <p className="m-0 text-xs text-faint-foreground">{t("settings.oauth.signsOutOthers")}</p>
         </>
       )}
       {error && <p className="m-0 text-xs text-destructive">{error}</p>}
@@ -230,8 +232,9 @@ function DeviceCodePanel({
   onPaste: () => void;
   onRetry: () => void;
 }) {
+  const t = useT();
   if (!state || state.status === "starting") {
-    return <p className="m-0 text-xs text-faint-foreground">Requesting a sign-in code…</p>;
+    return <p className="m-0 text-xs text-faint-foreground">{t("settings.oauth.requestingCode")}</p>;
   }
   if (state.status === "awaiting") {
     return (
@@ -241,14 +244,14 @@ function DeviceCodePanel({
             {state.userCode}
           </span>
           <Button type="button" variant="outline" onClick={() => onOpen(state.verificationUri)}>
-            Open sign-in page
+            {t("settings.oauth.openPage")}
           </Button>
         </div>
         <p className="m-0 text-xs text-faint-foreground">
-          Enter this code at {state.verificationUri}. Waiting for authorization…
+          {t("settings.oauth.enterCode", { url: state.verificationUri })}
         </p>
         <Button type="button" variant="link" size="link" className={LINK} onClick={onCancel}>
-          Cancel
+          {t("settings.oauth.cancel")}
         </Button>
       </div>
     );
@@ -260,11 +263,11 @@ function DeviceCodePanel({
         <div className="flex gap-3">
           {state.canPaste && (
             <Button type="button" variant="link" size="link" className={LINK} onClick={onPaste}>
-              Paste the sign-in URL instead
+              {t("settings.oauth.pasteInstead")}
             </Button>
           )}
           <Button type="button" variant="link" size="link" className={LINK} onClick={onRetry}>
-            Try again
+            {t("settings.oauth.tryAgain")}
           </Button>
         </div>
       </div>

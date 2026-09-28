@@ -1,5 +1,6 @@
 import { DEFAULT_STT_BASE, DEFAULT_STT_MODEL, hasSttKey, setSttKey } from "../../../ai/voice";
 import { type Settings } from "../../../platform/app/settings";
+import { useT } from "../../../i18n";
 import ApiKeyField from "./ApiKeyField";
 import { CARD } from "./cardStyles";
 import { Input } from "../ui/input";
@@ -15,16 +16,17 @@ export default function VoiceInputCard({
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
 }) {
+  const t = useT();
   return (
     <div className={CARD}>
       <ApiKeyField
         has={hasSttKey}
         save={setSttKey}
-        placeholder="STT API key"
-        replacePlaceholder="Replace STT API key"
+        placeholder={t("settings.optional.sttKey")}
+        replacePlaceholder={t("settings.optional.sttKeyReplace")}
       />
       <Label layout="stack">
-        Model
+        {t("settings.optional.model")}
         <Input
           placeholder={DEFAULT_STT_MODEL}
           value={settings.sttModel ?? ""}
@@ -32,7 +34,7 @@ export default function VoiceInputCard({
         />
       </Label>
       <Label layout="stack">
-        Base URL
+        {t("settings.optional.baseUrl")}
         <Input
           placeholder={DEFAULT_STT_BASE}
           value={settings.sttApiBase ?? ""}
@@ -41,10 +43,7 @@ export default function VoiceInputCard({
           }
         />
       </Label>
-      <p className="m-0 text-xs text-faint-foreground">
-        Hold the mic in the chat box to talk. SiliconFlow's SenseVoice tier is free and its API key
-        works out of the box; any OpenAI-compatible transcription endpoint works too.
-      </p>
+      <p className="m-0 text-xs text-faint-foreground">{t("settings.optional.sttHint")}</p>
     </div>
   );
 }
