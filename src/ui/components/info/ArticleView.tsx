@@ -13,22 +13,23 @@ import { handleDelegatedLinkClick, openExternal } from "../../../platform/app/ex
 import type { ArticleState } from "../../../info/briefer/reader";
 import type { BriefingItemMeta } from "../../../info/boxes/types";
 import { Button } from "../ui/button";
+import { useT, type Translate } from "../../../i18n";
 
 // What to say when there is no body. Four cases and four different sentences,
 // because they call for four different things from the reader (docs/36): wait,
 // don't wait, open it yourself, or nothing at all. The one that was screened out
 // says only that, with nothing to argue against: what the day did not fetch is
 // not the reader's problem (docs/63).
-function noBodyLine(state: ArticleState): string {
+function noBodyLine(state: ArticleState, t: Translate): string {
   switch (state.kind) {
     case "pending":
-      return "The text of this article is still on its way from the computer that collected it.";
+      return t("info.article.pending");
     case "filtered":
-      return "This one was not fetched.";
+      return t("info.article.filtered");
     case "summaryOnly":
-      return "The full text of this article could not be retrieved. It may be summarized in the briefing.";
+      return t("info.article.summaryOnly");
     default:
-      return "This article is not in the briefing on this device.";
+      return t("info.article.unavailable");
   }
 }
 
@@ -49,6 +50,7 @@ export function ArticleView({
   onAsk: () => void;
   onSave: () => void;
 }) {
+  const t = useT();
   const html = state?.kind === "body" ? state.body.html : null;
   // External images are pointed at the img: proxy here rather than in what the
   // host holds, so the HTML that gets kept keeps its original URLs. meta.url is
@@ -69,7 +71,7 @@ export function ArticleView({
       <div className="mx-auto flex w-full max-w-[46rem] flex-col px-4 py-5 sm:px-6 sm:py-8">
         <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:py-3">
           <Button variant="subtle" size="chip" onClick={onBack}>
-            ‹ Briefing
+            {t("info.article.back")}
           </Button>
           {meta.sourceName && (
             <span className="text-[12px] text-faint-foreground">{meta.sourceName}</span>
@@ -89,13 +91,13 @@ export function ArticleView({
                 }
                 onClick={onSave}
                 disabled={saved}
-                title={saved ? "Already in Brief" : "Keep this in my reading context"}
+                title={saved ? t("info.article.alreadyKept") : t("info.article.keepTitle")}
               >
                 {saved ? <IconCheck size={14} /> : <IconFileInto size={14} />}
-                {saved ? "Kept" : "Keep"}
+                {saved ? t("info.article.kept") : t("info.article.keep")}
               </Button>
-              <Button variant="secondary" size="chip" onClick={onAsk} title="Ask about this article">
-                <IconSparkle size={14} /> Ask
+              <Button variant="secondary" size="chip" onClick={onAsk} title={t("info.article.askTitle")}>
+                <IconSparkle size={14} /> {t("info.article.ask")}
               </Button>
             </>
           )}
@@ -104,9 +106,9 @@ export function ArticleView({
               variant="subtle"
               size="chip"
               onClick={() => openExternal(meta.url)}
-              title="Open the article on its own site"
+              title={t("info.article.openOnSite")}
             >
-              Open in browser
+              {t("info.article.openInBrowser")}
             </Button>
           )}
         </div>
@@ -124,7 +126,7 @@ export function ArticleView({
           />
         ) : (
           state && (
-            <p className="my-3.5 text-[15px] leading-relaxed text-faint-foreground">{noBodyLine(state)}</p>
+            <p className="my-3.5 text-[15px] leading-relaxed text-faint-foreground">{noBodyLine(state, t)}</p>
           )
         )}
 

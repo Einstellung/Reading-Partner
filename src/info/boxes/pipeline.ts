@@ -94,6 +94,7 @@ import { boxBriefing } from "./briefing";
 import type { Briefing } from "./types";
 import type { InfoItem } from "../sources/item";
 import { errMsg } from "../../platform/std/errors";
+import { t } from "../../i18n";
 
 export type { AiCallOptions };
 export type { CollectProgress, InfoSourceRef, SourceResult };
@@ -630,7 +631,7 @@ export class InfoPipeline {
     const own = this.run!.items.length;
     await this.seedFromPool();
     if (this.run!.items.length === 0) {
-      throw new Error("No articles could be fetched from any source.");
+      throw new Error(t("info.pipeline.noArticlesFetched"));
     }
     this.logPhase("discovering", startedAt, {
       sources: this.run!.sources.length,
@@ -945,7 +946,7 @@ export class InfoPipeline {
       await this.openRooms();
       const day = await this.deps.loadCableDay(date);
       if (!day || day.cables.length === 0) {
-        throw new Error("No cables to analyze. Generate a briefing first.");
+        throw new Error(t("info.pipeline.noCablesToAnalyze"));
       }
       if (this.stopController.signal.aborted) throw new StoppedError();
       const items = await this.deps.loadItems(date);

@@ -18,6 +18,7 @@ import type { InfoSnapshot, RunStart } from "../boxes/pipeline";
 import type { RequestOutcome } from "./reader";
 import { briefingOverview } from "../boxes/briefing";
 import type { Briefing } from "../boxes/types";
+import { t } from "../../i18n";
 
 // Info threads hang off a per-day pseudo-book, so a day's briefing, article and
 // onboarding conversations file together.
@@ -42,17 +43,20 @@ export type BriefingJob = BriefingScope | "first" | "joined";
 
 // Progress-card heading per job; "first" keeps the onboarding default copy.
 function progressTitle(job: BriefingJob): string | undefined {
-  if (job === "retriage") return "Re-running today's triage";
-  if (job === "full") return "Regenerating today's briefing";
-  if (job === "joined") return "A briefing run is already going";
+  if (job === "retriage") return t("info.call.progress.retriage");
+  if (job === "full") return t("info.call.progress.full");
+  if (job === "joined") return t("info.call.progress.joined");
   return undefined;
 }
 
 // Ready-card heading and note per job; "first" keeps the onboarding default copy.
 function readyCopy(job: BriefingJob): { title?: string; note?: string } {
-  if (job === "retriage") return { title: "Briefing updated", note: "Re-triaged today's items with your updated profile." };
-  if (job === "full") return { title: "Briefing regenerated", note: "Re-collected every source and re-triaged." };
-  if (job === "joined") return { title: "Briefing updated", note: "The run that was already going has finished." };
+  if (job === "retriage")
+    return { title: t("info.call.ready.retriageTitle"), note: t("info.call.ready.retriageNote") };
+  if (job === "full")
+    return { title: t("info.call.ready.fullTitle"), note: t("info.call.ready.fullNote") };
+  if (job === "joined")
+    return { title: t("info.call.ready.joinedTitle"), note: t("info.call.ready.joinedNote") };
   return {};
 }
 
@@ -118,23 +122,34 @@ export function briefingJobPlan(
 // answers from the new briefing rather than the one it still has in context.
 function completionNote(job: BriefingJob, b: Briefing): string {
   const worth = b.mustRead.length + b.outOfLane.length;
-  const verb =
-    job === "retriage" ? "re-sorted" : job === "full" ? "regenerated" : job === "joined" ? "updated" : "generated";
+  const key =
+    job === "retriage"
+      ? "info.call.note.completion.retriage"
+      : job === "full"
+        ? "info.call.note.completion.full"
+        : job === "joined"
+          ? "info.call.note.completion.joined"
+          : "info.call.note.completion.first";
+  const main = t(key, {
+    overview: briefingOverview(b) || t("info.call.note.overviewFallback"),
+    labs: b.labs.length,
+    worth,
+    oneLiners: b.oneLiners.length,
+  });
   // The quiet rooms belong in the note as much as the loud ones (docs/63): a day
   // where four rooms had nothing is a fact about the day, and without it the
   // companion reads three covers as the whole bureau.
-  const quiet = b.quiet.length ? `, quiet rooms: ${b.quiet.join(", ")}` : "";
-  return (
-    `Today's briefing has been ${verb}. ${briefingOverview(b) || "Nothing moved in any room."} — ` +
-    `rooms that moved: ${b.labs.length}, worth your time: ${worth}, ` +
-    `one-liners: ${b.oneLiners.length}${quiet}. Answer from this updated briefing now, not the ` +
-    `earlier one.`
-  );
+  return b.quiet.length ? `${main} ${t("info.call.note.quietRooms", { names: b.quiet.join(", ") })}` : main;
 }
 
 function failureNote(job: BriefingJob, error: string | null): string {
-  const verb = job === "retriage" ? "re-triage" : job === "joined" ? "run" : "regeneration";
-  return `The briefing ${verb} failed: ${error || "unknown error"}.`;
+  const key =
+    job === "retriage"
+      ? "info.call.note.failure.retriage"
+      : job === "joined"
+        ? "info.call.note.failure.joined"
+        : "info.call.note.failure.other";
+  return t(key, { error: error || t("info.call.note.unknownError") });
 }
 
 // What the thread says when the request went to another machine (docs/36). No
@@ -142,20 +157,15 @@ function failureNote(job: BriefingJob, error: string | null): string {
 // collector next syncs, then the collecting itself, and a countdown over three
 // unknowns is a number that would be wrong.
 export function askSentNote(job: BriefingJob, status?: string): string {
-  const what = job === "retriage" ? "re-sort today's items" : "collect a fresh briefing";
-  return (
-    `I have asked the computer that collects your sources to ${what}. It will pick the request ` +
-    `up the next time it syncs, and the new briefing will appear here when it is done. Nothing ` +
-    `is running on this device.` +
-    // Whatever is known about that machine, so the sentence is not a promise
-    // made on its behalf. A request it never picks up expires in six hours.
-    (status ? ` ${status}` : "")
-  );
+  const main = t(job === "retriage" ? "info.call.note.askSentRetriage" : "info.call.note.askSentFull");
+  // Whatever is known about that machine, so the sentence is not a promise
+  // made on its behalf. A request it never picks up expires in six hours.
+  return status ? `${main} ${status}` : main;
 }
 
-export const ASK_FAILED_NOTE =
-  "I could not leave the request for the collecting computer — the file could not be written. " +
-  "Nothing has been asked for.";
+export function askFailedNote(): string {
+  return t("info.call.note.askFailed");
+}
 
 // The progress card for a job. Before the pipeline has reported anything (the
 // card appears the moment the job starts) the phase comes from the job itself —
@@ -215,7 +225,7 @@ export function briefingJobUpdate(job: BriefingJob, s: InfoSnapshot): BriefingJo
   }
   return {
     status: "failed",
-    card: { kind: "briefing-failed", message: s.error || "The briefing could not be generated." },
+    card: { kind: "briefing-failed", message: s.error || t("info.call.note.couldNotGenerate") },
     note: failureNote(job, s.error),
     persist: false,
   };
@@ -224,25 +234,24 @@ export function briefingJobUpdate(job: BriefingJob, s: InfoSnapshot): BriefingJo
 // The synthetic turns reporting a card gesture the AI did not make itself: the
 // user added a trialed source, opened a drafted room, closed one.
 export function sourceAddedNote(card: ProbeConfirmCardData): string {
-  return `Added "${card.descriptor.name}" to my sources.`;
+  return t("info.call.note.sourceAdded", { name: card.descriptor.name });
 }
 
 // Opened the room the companion drafted a charter for (docs/63). The AI is told
 // what it now follows, because the next thing it says about the lab has to be
 // about one that exists.
 export function labFiledNote(card: LabProposalCardData): string {
-  const claims = card.sourceNames?.length
-    ? ` It reads ${card.sourceNames.join(", ")}.`
-    : " It claims no sources of its own yet.";
-  return `Opened the "${card.name}" lab.${claims}`;
+  return card.sourceNames?.length
+    ? t("info.call.note.labFiledWithSources", { name: card.name, sources: card.sourceNames.join(", ") })
+    : t("info.call.note.labFiledNoSources", { name: card.name });
 }
 
 export function labArchivedNote(card: LabArchiveCardData): string {
-  return `Closed the "${card.name}" lab. Stop treating it as something being followed.`;
+  return t("info.call.note.labArchived", { name: card.name });
 }
 
 // Filed under the topic the companion proposed. Said in the reader's voice, like
 // the other two, because it is their gesture the AI is being told about.
 export function topicFiledNote(card: TopicProposalCardData): string {
-  return `Filed this conversation under "${proposedTopicName(card.topic)}".`;
+  return t("info.call.note.topicFiled", { name: proposedTopicName(card.topic) });
 }

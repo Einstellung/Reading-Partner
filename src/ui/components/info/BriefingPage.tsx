@@ -7,7 +7,8 @@
 import type { Briefing, BriefingItemMeta } from "../../../info/boxes/types";
 import { Button } from "../ui/button";
 import { IconSparkle } from "../base/icons";
-import { NOTHING_CHANGED, briefingCovers, isEmptyDay, labTag, quietLine } from "./briefing-view";
+import { briefingCovers, isEmptyDay, labTag, nothingChangedLine, quietLine } from "./briefing-view";
+import { useT } from "../../../i18n";
 
 // Where a piece of news came from, on the line of the title it belongs to
 // rather than in a pill of its own (docs/51). Small and faint: it is what the
@@ -19,12 +20,13 @@ function SourceTag({ name }: { name: string }) {
 
 // A hover/touch × that logs a dismissal without opening anything.
 function DismissButton({ onDismiss }: { onDismiss: () => void }) {
+  const t = useT();
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label="Dismiss"
-      title="Not for me"
+      aria-label={t("info.briefingPage.dismiss")}
+      title={t("info.briefingPage.notForMe")}
       onClick={(e) => {
         e.stopPropagation();
         onDismiss();
@@ -48,6 +50,7 @@ export interface BriefingPageProps {
 }
 
 export function BriefingPage(props: BriefingPageProps) {
+  const t = useT();
   const { briefing: b } = props;
   const meta = (id: string): BriefingItemMeta | undefined => b.items[id];
   const covers = briefingCovers(b);
@@ -60,11 +63,11 @@ export function BriefingPage(props: BriefingPageProps) {
             the phone back is the edge swipe and the system button (docs/22). */}
         <span className="text-[13px] text-faint-foreground">{b.date}</span>
         <span className="flex-1" />
-        <Button variant="subtle" size="chip" onClick={props.onOpenSources} title="Manage sources">
-          Sources
+        <Button variant="subtle" size="chip" onClick={props.onOpenSources} title={t("info.briefingPage.manageSources")}>
+          {t("info.briefingPage.sources")}
         </Button>
-        <Button variant="secondary" size="chip" onClick={props.onAskBriefing} title="Ask about this briefing">
-          <IconSparkle size={14} /> Ask
+        <Button variant="secondary" size="chip" onClick={props.onAskBriefing} title={t("info.briefingPage.askAboutBriefing")}>
+          <IconSparkle size={14} /> {t("info.briefingPage.ask")}
         </Button>
       </div>
 
@@ -75,7 +78,7 @@ export function BriefingPage(props: BriefingPageProps) {
       {isEmptyDay(b) ? (
         <div className="mb-6 sm:mb-9">
           <p className="m-0 font-display text-[17px] font-medium leading-relaxed text-foreground sm:text-[19px]">
-            {NOTHING_CHANGED}
+            {nothingChangedLine()}
           </p>
           {quiet && <p className="m-0 mt-2 text-[13px] text-faint-foreground">{quiet}</p>}
         </div>
@@ -97,7 +100,7 @@ export function BriefingPage(props: BriefingPageProps) {
       {/* Worth your time. */}
       {b.mustRead.length > 0 && (
         <section className="mb-8 sm:mb-10">
-          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">Worth your time</h2>
+          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">{t("info.briefingPage.worthYourTime")}</h2>
           <div className="flex flex-col gap-3">
             {b.mustRead.map((r) => {
               const m = meta(r.itemId);
@@ -123,7 +126,7 @@ export function BriefingPage(props: BriefingPageProps) {
                         <SourceTag name={labTag(b, r.labId)} />
                         <span className="font-display text-[16px] font-medium text-foreground">{m.title}</span>
                         {opened && (
-                          <span className="ml-2 text-[11px] text-faint-foreground">Read</span>
+                          <span className="ml-2 text-[11px] text-faint-foreground">{t("info.briefingPage.read")}</span>
                         )}
                       </div>
                       <div className="mt-1.5 text-[14px] leading-relaxed text-muted-foreground">{r.reason}</div>
@@ -132,8 +135,8 @@ export function BriefingPage(props: BriefingPageProps) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="Ask about this"
-                        title="Ask about this"
+                        aria-label={t("info.briefingPage.askAboutThis")}
+                        title={t("info.briefingPage.askAboutThis")}
                         onClick={() => props.onAskArticle(r.itemId)}
                         className="h-6 w-6 rounded-full text-faint-foreground can-hover:opacity-0 transition-opacity can-hover:hover:bg-secondary can-hover:hover:text-foreground group-hover:opacity-100"
                       >
@@ -152,7 +155,7 @@ export function BriefingPage(props: BriefingPageProps) {
       {/* In one line. */}
       {b.oneLiners.length > 0 && (
         <section className="mb-8 sm:mb-10">
-          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">In one line</h2>
+          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">{t("info.briefingPage.inOneLine")}</h2>
           <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
             {b.oneLiners.map((r) => {
               const m = meta(r.itemId);
@@ -195,7 +198,7 @@ export function BriefingPage(props: BriefingPageProps) {
                 <div className="flex items-start gap-3">
                   <button className="min-w-0 flex-1 text-left" onClick={() => props.onOpenArticle(r.itemId)}>
                     <div className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
-                      Out of your lane
+                      {t("info.briefingPage.outOfYourLane")}
                     </div>
                     <div className="mt-1.5 leading-snug">
                       <SourceTag name={m.sourceName} />

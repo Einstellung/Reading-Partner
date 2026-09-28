@@ -18,6 +18,7 @@ import { activeLabs } from "../labs/labs";
 import type { Lab } from "../labs/types";
 import type { SourceDescriptor } from "../sources/descriptor";
 import type { LabArchiveCardData, LabProposalCardData } from "../boxes/cards";
+import { t } from "../../i18n";
 
 // How much of a charter's scope paragraph the roster prints per room. The whole
 // paragraph is on the card and in the file; the roster is a list, and a list of
@@ -153,7 +154,7 @@ export function labGuidance(
 export function buildProposeLabTool(deps: LabToolDeps): AgentTool {
   return {
     name: "propose_lab",
-    label: (args) => `Drafting a lab for ${String(args.name ?? "what you follow")}`,
+    label: (args) => t("info.tool.draftingLab", { name: String(args.name ?? t("info.tool.whatYouFollow")) }),
     effect: "write",
     gate: "card",
     description:
@@ -220,7 +221,7 @@ export function buildProposeLabTool(deps: LabToolDeps): AgentTool {
           `Proposed a lab called "${name}"${claimed.length ? `, claiming ${claimed.map((s) => s.name).join(", ")}` : ", claiming no sources yet"}. ` +
           `A card now shows the user the charter. Nothing is filed yet — they Apply it themselves, ` +
           `and they can have you change any of it first.${dropped}`,
-        receipt: { label: "Drafted a lab", summary: `${name} — ${scope}` },
+        receipt: { label: t("info.tool.draftedLabLabel"), summary: t("info.tool.draftedLabSummary", { name, scope }) },
       };
     },
   };
@@ -233,7 +234,7 @@ export function buildProposeLabTool(deps: LabToolDeps): AgentTool {
 export function buildArchiveLabTool(deps: LabToolDeps): AgentTool {
   return {
     name: "archive_lab",
-    label: (args) => `Proposing to close ${String(args.labId ?? "a lab")}`,
+    label: (args) => t("info.tool.proposingCloseLab", { name: String(args.labId ?? t("info.tool.aLab")) }),
     effect: "write",
     gate: "card",
     description:
@@ -273,7 +274,7 @@ export function buildArchiveLabTool(deps: LabToolDeps): AgentTool {
         text:
           `Proposed closing the "${lab.name}" lab. A card now shows the user; nothing is closed ` +
           `until they apply it. Its picture and what it has filed are kept either way.`,
-        receipt: { label: "Proposed closing a lab", summary: lab.name },
+        receipt: { label: t("info.tool.proposedCloseLabel"), summary: lab.name },
       };
     },
   };

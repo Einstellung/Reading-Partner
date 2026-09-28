@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import type { InfoSnapshot } from "../../../info/boxes/pipeline";
 import { Button } from "../ui/button";
 import { briefingCardBody, briefingFooterLine, builtAt } from "./today";
-import { NO_LAB_NOTICE, briefingErrorText } from "./no-labs";
+import { noLabNotice, briefingErrorText } from "./no-labs";
+import { useT } from "../../../i18n";
 
 // Live elapsed seconds since a generation started, for the running state.
 function useElapsed(running: boolean): number {
@@ -111,6 +112,7 @@ export function BriefingCardBody({
   onOpenSettings,
   onStartSubscribing,
 }: BriefingCardProps) {
+  const t = useT();
   const running = !!snap?.running;
   const stopping = !!snap?.stopping;
   const elapsed = useElapsed(running);
@@ -118,37 +120,37 @@ export function BriefingCardBody({
 
   if (running) {
     const phase = stopping
-      ? "Stopping"
+      ? t("info.home.stopping")
       : snap?.phase === "discovering"
-        ? "Reading the sources"
+        ? t("info.home.readingSources")
         : snap?.phase === "screening"
-          ? "Screening headlines"
+          ? t("info.home.screeningHeadlines")
           : snap?.phase === "fetching"
-            ? "Fetching articles"
-            : "Analyzing the day";
+            ? t("info.home.fetchingArticles")
+            : t("info.home.analyzingDay");
     const detail = (() => {
       const c = snap?.collect ?? null;
       if (snap?.phase === "discovering") {
         if (!c || !c.total) return null;
-        const parts = [`${c.done}/${c.total} sources`];
-        if (c.items > 0) parts.push(`${c.items} headlines`);
+        const parts = [t("info.home.sourcesProgress", { done: c.done, total: c.total })];
+        if (c.items > 0) parts.push(t("info.home.headlinesCount", { count: c.items }));
         return parts.join(" · ");
       }
       if (snap?.phase === "screening") {
         if (!c || !c.items) return null;
-        return `${c.screened}/${c.items} judged · ${c.kept} kept`;
+        return t("info.home.screenProgress", { screened: c.screened, items: c.items, kept: c.kept });
       }
       if (snap?.phase === "fetching") {
         if (!c || !c.bodiesTotal) return null;
-        const parts = [`${c.bodies}/${c.bodiesTotal} articles`];
-        if (c.cappedOut > 0) parts.push(`${c.cappedOut} over the cap`);
+        const parts = [t("info.home.articlesProgress", { done: c.bodies, total: c.bodiesTotal })];
+        if (c.cappedOut > 0) parts.push(t("info.home.overCap", { count: c.cappedOut }));
         return parts.join(" · ");
       }
       const items = c?.bodiesTotal || c?.items || 0;
       const chars = snap?.activity?.chars ?? 0;
       const parts: string[] = [];
-      if (items) parts.push(`${items} items`);
-      if (chars) parts.push(`${chars} chars`);
+      if (items) parts.push(t("info.home.itemsCount", { count: items }));
+      if (chars) parts.push(t("info.home.charsCount", { count: chars }));
       return parts.length ? parts.join(" · ") : null;
     })();
     return (
@@ -169,7 +171,7 @@ export function BriefingCardBody({
           disabled={stopping}
           onClick={onStop}
         >
-          {stopping ? "Stopping…" : "Stop"}
+          {stopping ? t("info.home.stoppingEllipsis") : t("info.home.stop")}
         </Button>
       </div>
     );
@@ -188,7 +190,7 @@ export function BriefingCardBody({
           <p className="m-0 text-[15px] leading-relaxed text-muted-foreground">{briefingCardBody(briefing)}</p>
           <div className="mt-4 flex items-center justify-between">
             <span className="text-[13px] text-faint-foreground">{counts}</span>
-            <span className="text-[13px] font-medium text-accent-line">Open →</span>
+            <span className="text-[13px] font-medium text-accent-line">{t("info.home.open")}</span>
           </div>
         </button>
         <Notices lines={notices} />
@@ -213,13 +215,11 @@ export function BriefingCardBody({
     return (
       <div className="flex flex-1 flex-col justify-between">
         <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
-          {collecting
-            ? "Subscribe to what you follow — AI sources, robotics, anything with a feed — and get a triaged briefing each day."
-            : "No sources yet. Subscriptions are set up on the computer that collects them, and the briefing arrives here."}
+          {collecting ? t("info.home.subscribePitch") : t("info.home.noSourcesReader")}
         </p>
         {collecting && (
           <Button variant="cta" size="lg" className="mt-4 w-fit" onClick={onStartSubscribing}>
-            Start subscribing
+            {t("info.home.startSubscribing")}
           </Button>
         )}
       </div>
@@ -234,9 +234,9 @@ export function BriefingCardBody({
   if (configured && noLabs) {
     return (
       <div className="flex flex-1 flex-col justify-between">
-        <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">{NO_LAB_NOTICE}</p>
+        <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">{noLabNotice()}</p>
         <Button variant="cta" size="lg" className="mt-4 w-fit" onClick={onAsk}>
-          Tell the companion
+          {t("info.home.tellTheCompanion")}
         </Button>
       </div>
     );
@@ -248,14 +248,12 @@ export function BriefingCardBody({
   //
   // "On its way" is a promise only the collector can make. A reader says what it
   // knows about the machine that would have made it instead.
-  const waiting = collecting
-    ? "Your sources, read in full and triaged against your profile. Today's is on its way."
-    : "Today's briefing is built on the computer that collects your sources.";
+  const waiting = collecting ? t("info.home.waitingCollecting") : t("info.home.waitingReader");
   return (
     <div className="flex flex-1 flex-col justify-between">
       <div>
         <p className="m-0 text-[14px] leading-relaxed text-faint-foreground">
-          {snap?.error ? "Today's briefing could not be built." : waiting}
+          {snap?.error ? t("info.home.buildFailed") : waiting}
         </p>
         {snap?.error && (
           <p className="mt-2 text-[13px] text-[#c0392b]">{briefingErrorText(snap.error)}</p>
@@ -264,11 +262,11 @@ export function BriefingCardBody({
       </div>
       {configured ? (
         <Button variant="subtle" size="lg" className="mt-4 w-fit" onClick={onAsk}>
-          Ask the companion
+          {t("info.home.askTheCompanion")}
         </Button>
       ) : (
         <Button variant="subtle" size="lg" className="mt-4 w-fit" onClick={onOpenSettings}>
-          Configure a provider to begin
+          {t("info.home.configureProvider")}
         </Button>
       )}
     </div>

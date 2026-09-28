@@ -33,6 +33,7 @@ import {
   todayDateLine,
   TODAY_CARD_ITEMS,
 } from "./today";
+import { useT } from "../../../i18n";
 
 // The column the page is set in. 32px top and bottom; 40px sides on a landscape
 // tablet, 32 on a portrait one, where the sidebar has already taken 52px.
@@ -79,13 +80,14 @@ export function Vestibule({
   // The card's own onOpen, named for what it opens: this screen has several.
   onOpenBriefing: () => void;
 }) {
+  const t = useT();
   const [creating, setCreating] = useState(false);
   const shelf = topics ? shelfOrder(topics) : [];
 
   return (
     <div className={PAGE}>
       <div className="text-[13px] text-muted-foreground">{todayDateLine(new Date())}</div>
-      <h1 className="mb-5 mt-1 font-display text-[26px] font-semibold text-foreground">Today</h1>
+      <h1 className="mb-5 mt-1 font-display text-[26px] font-semibold text-foreground">{t("info.vestibule.title")}</h1>
 
       {/* A desktop on an older build; draws only on an iPad. */}
       <PeerUpdateNotice className="mb-3" />
@@ -111,27 +113,27 @@ export function Vestibule({
 
       <div className="mt-6">
         <div className="flex items-baseline justify-between">
-          <h2 className="m-0 text-[15px] font-semibold text-foreground">Your topics</h2>
+          <h2 className="m-0 text-[15px] font-semibold text-foreground">{t("info.vestibule.yourTopics")}</h2>
           <Button
             variant="link"
             size="link"
             className="text-[13px] text-muted-foreground underline-offset-4 can-hover:hover:underline"
             onClick={onOpenLibrary}
           >
-            All topics →
+            {t("info.vestibule.allTopics")}
           </Button>
         </div>
         <ul className={`${LIBRARY_GRID} mt-3 grid-cols-3 lg:grid-cols-5`}>
-          {shelf.map((t) => (
+          {shelf.map((topic) => (
             <TopicCard
-              key={t.id}
-              topic={t}
-              onOpen={() => onOpenTopic(t)}
+              key={topic.id}
+              topic={topic}
+              onOpen={() => onOpenTopic(topic)}
               // No card menu here: renaming and deleting are done where the
               // topics are.
             />
           ))}
-          <AddCard label="New topic" onClick={() => setCreating(true)} />
+          <AddCard label={t("info.vestibule.newTopic")} onClick={() => setCreating(true)} />
         </ul>
       </div>
 
@@ -139,10 +141,10 @@ export function Vestibule({
         <NameDialog
           open
           onOpenChange={setCreating}
-          title="New topic"
-          description="A topic is one question and the books you read against it."
-          placeholder="e.g. what makes JITs fast"
-          confirmLabel="Create"
+          title={t("info.vestibule.newTopic")}
+          description={t("info.vestibule.newTopicDescription")}
+          placeholder={t("info.vestibule.newTopicPlaceholder")}
+          confirmLabel={t("info.vestibule.create")}
           onConfirm={onCreateTopic}
         />
       )}
@@ -158,6 +160,7 @@ function ContinueCard(props: {
   onContinue: () => void;
   onOpenLibrary: () => void;
 }) {
+  const t = useT();
   const file = props.book?.file ?? null;
   const [meta, setMeta] = useState<BookMeta | undefined>(undefined);
 
@@ -178,7 +181,7 @@ function ContinueCard(props: {
   if (props.book === undefined) {
     return (
       <div className={CARD}>
-        <div className={EYEBROW}>Continue reading</div>
+        <div className={EYEBROW}>{t("info.vestibule.continueReading")}</div>
         <div className="mt-3">
           <CardBodyPlaceholder />
         </div>
@@ -189,12 +192,12 @@ function ContinueCard(props: {
   if (!props.book) {
     return (
       <div className={CARD}>
-        <div className={EYEBROW}>Continue reading</div>
+        <div className={EYEBROW}>{t("info.vestibule.continueReading")}</div>
         <p className="m-0 mt-3 text-[14px] leading-relaxed text-muted-foreground">
-          Nothing open yet. Add a book to a topic in the library.
+          {t("info.vestibule.nothingOpen")}
         </p>
         <Button variant="subtle" size="lg" className="mt-4 w-fit" onClick={props.onOpenLibrary}>
-          Go to library
+          {t("info.vestibule.goToLibrary")}
         </Button>
       </div>
     );
@@ -217,7 +220,7 @@ function ContinueCard(props: {
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className={`block ${EYEBROW}`}>Continue reading</span>
+        <span className={`block ${EYEBROW}`}>{t("info.vestibule.continueReading")}</span>
         <span className="mt-1.5 block font-display text-[18px] font-medium leading-snug text-foreground">
           {displayFileTitle(book.file.name)}
         </span>

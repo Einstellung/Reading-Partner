@@ -6,14 +6,14 @@
 // model).
 
 import type { Briefing } from "../../../info/boxes/types";
-import { NOTHING_CHANGED, briefingCovers, isEmptyDay } from "./briefing-view";
+import { briefingCovers, isEmptyDay, nothingChangedLine } from "./briefing-view";
 import type { BookMeta } from "../shelf/file-title";
-import { plural } from "../../../platform/std/text";
+import { formatDateTime, t } from "../../../i18n";
 
-// The date above the heading, in the device's own locale and calendar. No year:
-// the screen is called Today.
-export function todayDateLine(now: Date, locale?: string): string {
-  return now.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
+// The date above the heading, in the app's own language. No year: the screen is
+// called Today.
+export function todayDateLine(now: Date): string {
+  return formatDateTime(now, { weekday: "long", day: "numeric", month: "long" });
 }
 
 // The line under a Continue reading title: which question the book is read
@@ -22,8 +22,12 @@ export function todayDateLine(now: Date, locale?: string): string {
 // topic — which is still worth saying.
 export function continueMetaLine(topicName: string, meta: BookMeta | undefined): string {
   const parts = [topicName];
-  if (meta?.page) parts.push(meta.pages ? `p. ${meta.page} of ${meta.pages}` : `p. ${meta.page}`);
-  if (meta?.marks) parts.push(plural(meta.marks, "mark"));
+  if (meta?.page) {
+    parts.push(
+      meta.pages ? t("info.today.pageOf", { page: meta.page, pages: meta.pages }) : t("info.today.page", { page: meta.page }),
+    );
+  }
+  if (meta?.marks) parts.push(t("info.today.marks", { count: meta.marks }));
   return parts.join(" · ");
 }
 
@@ -32,23 +36,25 @@ export function continueMetaLine(topicName: string, meta: BookMeta | undefined):
 // — at yesterday's, which is the right thing to show as long as it says so.
 export function builtAt(generatedAt: number, now: Date = new Date()): string {
   const at = new Date(generatedAt);
-  const time = at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const time = formatDateTime(at, { hour: "2-digit", minute: "2-digit" });
   const sameDay =
     at.getFullYear() === now.getFullYear() &&
     at.getMonth() === now.getMonth() &&
     at.getDate() === now.getDate();
-  return sameDay ? time : `${at.toLocaleDateString()} ${time}`;
+  return sameDay ? time : `${formatDateTime(at)} ${time}`;
 }
 
 // The briefing card's eyebrow.
 export function briefingEyebrow(briefing: Briefing | null, now: Date = new Date()): string {
-  return briefing ? `Today's briefing · built ${builtAt(briefing.generatedAt, now)}` : "Today's briefing";
+  return briefing
+    ? t("info.today.briefingEyebrowBuilt", { time: builtAt(briefing.generatedAt, now) })
+    : t("info.today.briefingEyebrow");
 }
 
 // What the card says the day was: the covers of the labs that changed, cut to
 // the two the card has room for.
 export function briefingCardBody(briefing: Briefing): string {
-  if (isEmptyDay(briefing)) return NOTHING_CHANGED;
+  if (isEmptyDay(briefing)) return nothingChangedLine();
   const covers = briefingCovers(briefing);
   const shown = covers.slice(0, TODAY_CARD_COVERS).map((c) => c.cover);
   return covers.length > TODAY_CARD_COVERS ? `${shown.join(" ")} …` : shown.join(" ");
@@ -59,8 +65,8 @@ export function briefingCardBody(briefing: Briefing): string {
 // one-liners are read on the card's own page, and what the day discarded is
 // nobody's business (docs/63).
 export function briefingFooterLine(briefing: Briefing): string {
-  const worth = `${briefing.mustRead.length + briefing.outOfLane.length} worth reading`;
-  const labs = `${plural(briefingCovers(briefing).length, "lab")} changed`;
+  const worth = t("info.today.worthReading", { count: briefing.mustRead.length + briefing.outOfLane.length });
+  const labs = t("info.today.labsChanged", { count: briefingCovers(briefing).length });
   return isEmptyDay(briefing) ? labs : `${labs} · ${worth}`;
 }
 

@@ -15,10 +15,11 @@
 import { NO_LABS_ERROR } from "../../../info/boxes/pipeline";
 import { activeLabs } from "../../../info/labs/labs";
 import type { Lab } from "../../../info/labs/types";
+import { t } from "../../../i18n";
 
-export const NO_LAB_NOTICE =
-  'No lab is open, so nothing is being collected and no briefing is being built. ' +
-  'Say what you want followed — "keep an eye on embodied AI" — and the companion will propose one.';
+export function noLabNotice(): string {
+  return t("info.noLabs.notice");
+}
 
 /**
  * Whether the notice belongs on the screen: true when the labs file has been
@@ -41,5 +42,5 @@ export function noLabsOpen(labs: readonly Lab[] | null): boolean | null {
  */
 export function briefingErrorText(error: string | null | undefined): string | null {
   if (!error) return null;
-  return error === NO_LABS_ERROR ? NO_LAB_NOTICE : error;
+  return error === NO_LABS_ERROR ? noLabNotice() : error;
 }

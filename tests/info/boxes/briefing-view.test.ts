@@ -6,10 +6,10 @@
 import { expect, test } from "bun:test";
 import type { Briefing, LabCover } from "../../../src/info/boxes/types";
 import {
-  NOTHING_CHANGED,
   briefingCovers,
   isEmptyDay,
   labTag,
+  nothingChangedLine,
   quietLine,
 } from "../../../src/ui/components/info/briefing-view";
 
@@ -35,7 +35,7 @@ function briefingWith(over: Partial<Briefing>): Briefing {
 test("an empty lab list is an empty day", () => {
   const empty = briefingWith({ labs: [] });
   expect(isEmptyDay(empty)).toBe(true);
-  expect(NOTHING_CHANGED).toBe("Nothing changed today.");
+  expect(nothingChangedLine()).toBe("Nothing changed today.");
 });
 
 test("labs that changed are the covers", () => {
