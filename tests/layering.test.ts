@@ -52,6 +52,7 @@ const LAYER: Record<string, Layer> = {
   // catalog area under messages/, each registered here.
   i18n: "platform",
   "i18n/messages": "platform",
+  "i18n/messages/meals": "platform",
   "i18n/messages/settings": "platform",
   platform: "platform",
   "platform/app": "platform",

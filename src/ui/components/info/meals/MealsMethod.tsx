@@ -3,11 +3,12 @@
 // health-data notes. Rendering only; the text is info/meals/screen/method-screen.ts.
 
 import { openExternal } from "../../../../platform/app/external-link";
+import { useT } from "../../../../i18n";
 import { hostRegion } from "../../../../info/meals/region";
 import {
-  HEALTH_DATA_NOTE,
-  MEDICAL_NOTE,
   foodTableRows,
+  healthDataNote,
+  medicalNote,
   methodSections,
   type TextSegment,
 } from "../../../../info/meals/screen/method-screen";
@@ -42,17 +43,18 @@ function Segments({ segments }: { segments: TextSegment[] }) {
 }
 
 function FoodTable() {
+  const t = useT();
   return (
     <div className="mt-2 overflow-x-auto">
       <table className="w-full min-w-[560px] border-collapse text-[12px] tabular-nums">
         <thead>
           <tr className="text-faint-foreground">
-            <th className="py-1 pr-2 text-left font-normal">Food</th>
+            <th className="py-1 pr-2 text-left font-normal">{t("meals.table.food")}</th>
             <th className="py-1 pr-2 text-right font-normal">kcal</th>
             <th className="py-1 pr-2 text-right font-normal">P</th>
             <th className="py-1 pr-2 text-right font-normal">F</th>
             <th className="py-1 pr-2 text-right font-normal">C</th>
-            <th className="py-1 text-left font-normal">Source</th>
+            <th className="py-1 text-left font-normal">{t("meals.table.source")}</th>
           </tr>
         </thead>
         <tbody>
@@ -73,16 +75,15 @@ function FoodTable() {
 }
 
 export function MealsMethod(props: MealsMethodProps) {
+  const t = useT();
   const profile = props.state?.charter?.profile ?? null;
   const targets = props.state ? targetsOf(props.state.charter, hostRegion()) : null;
   const sections = targets && profile ? methodSections(targets, profile) : [];
 
   return (
     <MealsColumn>
-      <MealsHeader title="Method & sources" onBack={props.onBack} />
-      <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">
-        Every number in Meals comes from the steps below. Worked lines use your answers.
-      </p>
+      <MealsHeader title={t("meals.methodTitle")} onBack={props.onBack} />
+      <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">{t("meals.methodIntro")}</p>
       <div className="mt-3 flex flex-col gap-4">
         {sections.map((s) => (
           <section key={s.n} className="rounded-2xl border border-border-soft bg-card p-5">
@@ -112,9 +113,9 @@ export function MealsMethod(props: MealsMethodProps) {
           </section>
         ))}
         <div className="rounded-xl border border-secondary-border bg-secondary-faint px-4 py-3.5 text-[14px] leading-relaxed text-foreground">
-          {MEDICAL_NOTE}
+          {medicalNote()}
         </div>
-        <p className="m-0 text-[13px] leading-relaxed text-faint-foreground">{HEALTH_DATA_NOTE}</p>
+        <p className="m-0 text-[13px] leading-relaxed text-faint-foreground">{healthDataNote()}</p>
       </div>
     </MealsColumn>
   );

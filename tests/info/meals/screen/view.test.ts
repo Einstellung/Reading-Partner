@@ -83,7 +83,10 @@ test("a row shows the food table's name, and an egg in whole eggs", () => {
   expect(egg.name).toBe("鸡蛋");
   expect(egg.units).toBe(`${egg.grams / 50} 个`);
   expect(breakfast.rows.find((r) => r.foodId === "cherry_tomato")!.units).toBeNull();
-  expect(mealName(breakfast)).toBe("鸡蛋全麦吐司 · 原味");
+  // flavourLabel now draws from the i18n catalog (meals.flavour.*) instead of
+  // always reading the Chinese name off FLAVOURS; the default test locale is
+  // English, so "plain" reads as "Plain" here.
+  expect(mealName(breakfast)).toBe("鸡蛋全麦吐司 · Plain");
 });
 
 test("a meal that is not made has no grams, and shows its place", () => {

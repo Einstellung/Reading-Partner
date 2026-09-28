@@ -13,6 +13,7 @@
 // checks and derives them (docs/73 事实不经模型).
 
 import { Type } from "@earendil-works/pi-ai";
+import { t } from "../../i18n";
 import type { AgentTool } from "../../legion/execute/turn";
 import { asStrings } from "../../platform/std/json";
 import { mealWords, recordDeviation, refreshPhotos, saveProfile, type MealsPorts } from "./apply";
@@ -353,7 +354,7 @@ const mealSchema = (which: MealKey) =>
 export function buildProposeMealsPlanTool(deps: MealsToolDeps): AgentTool {
   return {
     name: "propose_meals_plan",
-    label: (args) => (args.adjustment ? "Reworking a meal" : "Drafting this week's meals"),
+    label: (args) => (args.adjustment ? t("meals.tool.reworkingMeal") : t("meals.tool.draftingWeek")),
     effect: "write",
     gate: "card",
     description:
@@ -539,7 +540,7 @@ export function patchProfile(profile: Profile, args: Record<string, unknown>): P
 export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
   return {
     name: "update_meals_profile",
-    label: () => "Updating your meal targets",
+    label: () => t("meals.tool.updatingTargets"),
     effect: "write",
     description:
       "Call this the moment they state a change to what the plan is built on: a new weight " +
@@ -617,7 +618,7 @@ export function buildUpdateProfileTool(deps: MealsToolDeps & { ports: MealsPorts
 export function buildRecordDeviationTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
   return {
     name: "record_meals_deviation",
-    label: () => "Recording what you ate instead",
+    label: () => t("meals.tool.recordingDeviation"),
     effect: "write",
     description:
       "Call this the moment they say a meal went differently from the plan ('we ordered in', " +
@@ -701,7 +702,7 @@ export function buildAddShoppingItemsTool(
 ): AgentTool {
   return {
     name: "add_shopping_items",
-    label: () => "Adding to the shopping list",
+    label: () => t("meals.tool.addingToList"),
     effect: "write",
     description:
       "Put things on the shopping list because they asked for them ('add washing-up liquid and " +
@@ -777,7 +778,7 @@ export function buildRemoveShoppingItemTool(
 ): AgentTool {
   return {
     name: "remove_shopping_item",
-    label: () => "Taking a line off the shopping list",
+    label: () => t("meals.tool.removingFromList"),
     effect: "write",
     description:
       "Take one line off the shopping list because they said they do not need it ('drop the " +
@@ -814,7 +815,7 @@ export function buildReplaceShoppingItemTool(
 ): AgentTool {
   return {
     name: "replace_shopping_item",
-    label: () => "Swapping a line on the shopping list",
+    label: () => t("meals.tool.swappingLine"),
     effect: "write",
     description:
       "Swap one line of the shopping list for something else because they said so ('coriander " +
@@ -874,7 +875,7 @@ export const MAX_METHOD_CHARS = 160;
 export function buildWriteMethodTool(deps: MealsToolDeps & { ports: MealsPorts }): AgentTool {
   return {
     name: "write_meals_method",
-    label: () => "Rewriting how it's made",
+    label: () => t("meals.tool.rewritingMethod"),
     effect: "write",
     description:
       "Rewrite the one-line method of one made meal, when they want it done another way ('no " +
@@ -929,7 +930,7 @@ export function buildRefreshMealsPhotosTool(
 ): AgentTool {
   return {
     name: "refresh_meals_photos",
-    label: () => "Looking for better photographs",
+    label: () => t("meals.tool.refreshingPhotos"),
     effect: "write",
     description:
       "Call this when they say a picture on the meals screen is wrong or is not the dish they " +

@@ -6,6 +6,7 @@
 // without React (CLAUDE.md). Every number is computed by the program from the
 // profile and the stored grams; the .tsx formats nothing but what it is given.
 
+import { formatDateTime, getLocale, t, translate } from "../../../i18n";
 import { fishMeals } from "../plan/checks";
 import { photoForDish, photoForIngredient, type PhotoCache } from "../photos/dish-photos";
 import { ingredientImageUrl } from "../photos/images";
@@ -33,15 +34,15 @@ import { addDays, isoWeekday, planExhausted } from "../plan/week";
 export function modeWord(mode: MealMode): string {
   switch (mode) {
     case "make":
-      return "Make";
+      return t("meals.mode.make");
     case "out":
-      return "Eat out";
+      return t("meals.mode.out");
     case "delivery":
-      return "Delivery";
+      return t("meals.mode.delivery");
     case "bought":
-      return "Bought";
+      return t("meals.mode.bought");
     case "skip":
-      return "Skip";
+      return t("meals.mode.skip");
   }
 }
 
@@ -49,58 +50,59 @@ export function modeWord(mode: MealMode): string {
 export function mealLabel(meal: MealKey): string {
   switch (meal) {
     case "breakfast":
-      return "Breakfast";
+      return t("meals.meal.breakfast");
     case "lunch":
-      return "Lunch";
+      return t("meals.meal.lunch");
     case "dinner":
-      return "Dinner";
+      return t("meals.meal.dinner");
     case "snack":
-      return "Snack";
+      return t("meals.meal.snack");
   }
 }
 
-/** A flavour's label in Chinese, the language the meal names are in. */
+/** A flavour's label, in the current UI language. */
 export function flavourLabel(flavour: Flavour | null | undefined): string {
-  return FLAVOURS.find((f) => f.id === flavour)?.zh ?? "";
+  if (!flavour) return "";
+  const known = FLAVOURS.some((f) => f.id === flavour);
+  return known ? translate(getLocale(), `meals.flavour.${flavour}`) : "";
 }
 
 export function goalLabel(goal: Goal): string {
-  return goal === "cut" ? "Lose fat" : goal === "gain" ? "Build muscle" : "Steady energy";
+  return goal === "cut" ? t("meals.goal.cut") : goal === "gain" ? t("meals.goal.gain") : t("meals.goal.steady");
 }
 
 /** How long a thing keeps, in words. */
 export function keepsLabel(keeps: KeepsClass): string {
   switch (keeps) {
     case "d1-2":
-      return "1–2 days";
+      return t("meals.keeps.d1-2");
     case "d3-5":
-      return "3–5 days";
+      return t("meals.keeps.d3-5");
     case "w1":
-      return "1 week";
+      return t("meals.keeps.w1");
     case "w2plus":
-      return "2+ weeks";
+      return t("meals.keeps.w2plus");
     case "pantry":
-      return "pantry";
+      return t("meals.keeps.pantry");
   }
 }
 
 /** The aisle's heading. */
 export function categoryLabel(category: IngredientCategory): string {
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  return translate(getLocale(), `meals.category.${category}`);
 }
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-/** The weekday a local "YYYY-MM-DD" falls on, read as UTC so the host zone cannot move it. */
+/** The weekday a local "YYYY-MM-DD" falls on, read as UTC so the host zone cannot move it, in the UI language. */
 export function weekdayName(date: string): string {
   const wd = isoWeekday(date);
-  return wd ? (WEEKDAYS[wd % 7] ?? "") : "";
+  if (!wd) return "";
+  return formatDateTime(new Date(`${date}T00:00:00Z`), { weekday: "long", timeZone: "UTC" });
 }
 
 /** Today and Tomorrow by name, everything else by its weekday. */
 export function dayWord(date: string, today: string): string {
-  if (date === today) return "Today";
-  if (date === addDays(today, 1)) return "Tomorrow";
+  if (date === today) return t("meals.today");
+  if (date === addDays(today, 1)) return t("meals.tomorrow");
   return weekdayName(date);
 }
 
@@ -126,13 +128,13 @@ export interface TargetsSummary {
 }
 
 export function targetsSummary(targets: Targets, profile: Profile): TargetsSummary {
-  const col = (kind: "training" | "rest", t: DayTargets): TargetsColumn => ({
+  const col = (kind: "training" | "rest", d: DayTargets): TargetsColumn => ({
     kind,
-    label: kind === "training" ? "Training day" : "Rest day",
-    kcal: t.kcal,
-    protein: t.protein,
-    fat: t.fat,
-    carbs: t.carbs,
+    label: kind === "training" ? t("meals.trainingDay") : t("meals.restDay"),
+    kcal: d.kcal,
+    protein: d.protein,
+    fat: d.fat,
+    carbs: d.carbs,
   });
   const columns: TargetsColumn[] = [];
   if (targets.trainingDaysPerWeek > 0) columns.push(col("training", targets.training));
@@ -141,13 +143,17 @@ export function targetsSummary(targets: Targets, profile: Profile): TargetsSumma
   const gap = Math.round(Math.abs(targets.tdeeAverage - targets.weekAverageKcal));
   const line =
     profile.goal === "cut"
-      ? `Weekly average ${avg} kcal a day, about ${gap} under maintenance: roughly ${Math.abs(targets.weightChangeKgPerWeek).toFixed(2)} kg a week.`
+      ? t("meals.targetsLine.cut", {
+          avg,
+          gap,
+          kg: Math.abs(targets.weightChangeKgPerWeek).toFixed(2),
+        })
       : profile.goal === "gain"
-        ? `Weekly average ${avg} kcal a day, about ${gap} over maintenance.`
-        : `Weekly average ${avg} kcal a day, at maintenance.`;
+        ? t("meals.targetsLine.gain", { avg, gap })
+        : t("meals.targetsLine.steady", { avg });
   const warning =
     profile.goal === "gain" && targets.bmi >= targets.bmiCuts.overweight
-      ? `BMI ${targets.bmi.toFixed(1)} is in the overweight range. Losing fat or holding weight first usually works better.`
+      ? t("meals.overweightWarning", { bmi: targets.bmi.toFixed(1) })
       : null;
   return { goal: goalLabel(profile.goal), columns, line, warning };
 }
@@ -266,13 +272,11 @@ export function dayView(day: DayPlan, today: string, targets: Targets | null, pr
     word: dayWord(day.date, today),
     weekday: weekdayName(day.date),
     training,
-    kindLabel: training ? "Training day" : "Rest day",
+    kindLabel: training ? t("meals.trainingDay") : t("meals.restDay"),
     targets: dayT,
     totals: sumNutrition(meals.flatMap((m) => (m.totals ? [m.totals] : []))),
     meals,
-    arrangement: training
-      ? "The snack moves to right after training; the meal after it carries more of the day's calories."
-      : "No training today: a little less food, the same protein.",
+    arrangement: training ? t("meals.arrangementTraining") : t("meals.arrangementRest"),
     day,
   };
 }
@@ -394,7 +398,7 @@ export function dishPhotoCredit(
   const site = photo.site.trim();
   const url = photo.pageUrl.trim();
   if (!site || !url) return null;
-  return { text: `Photo: ${site}`, url };
+  return { text: t("meals.photoCredit", { site }), url };
 }
 
 const THUMBNAIL_LIMIT = 4;
@@ -425,5 +429,7 @@ export function dishThumbnails(
 
 /** The second line of a shopping row: how long it keeps, and the one instruction a line can carry. */
 export function shoppingNote(item: ShoppingItem): string {
-  return keepsLabel(item.keeps) + (item.freezeOnArrival ? " · freeze on arrival" : "");
+  return item.freezeOnArrival
+    ? t("meals.shoppingNoteFreeze", { keeps: keepsLabel(item.keeps) })
+    : keepsLabel(item.keeps);
 }

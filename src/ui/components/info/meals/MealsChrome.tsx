@@ -6,6 +6,7 @@
 // knows which day it is looking at.
 
 import { openExternal } from "../../../../platform/app/external-link";
+import { useT } from "../../../../i18n";
 import { Button } from "../../ui/button";
 import { IconSparkle } from "../../base/icons";
 import { cn } from "../../lib/utils";
@@ -66,12 +67,13 @@ export function MealsHeader({
   onAsk?: () => void;
   onBack?: () => void;
 }) {
+  const t = useT();
   return (
     <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b border-border-subtle bg-background/85 px-4 pb-1.5 pt-3 backdrop-blur sm:-mx-6 sm:mb-6 sm:gap-3 sm:px-6 sm:pb-2 sm:pt-5">
       {onBack && (
         <button
           type="button"
-          aria-label="Back"
+          aria-label={t("meals.back")}
           className="-ml-2 flex h-11 w-9 flex-none items-center justify-center text-muted-foreground can-hover:hover:text-foreground"
           onClick={onBack}
         >
@@ -99,9 +101,10 @@ export function MealsHeader({
  * outbound link.
  */
 export function PhotoCredit() {
+  const t = useT();
   return (
     <p className="mt-8 text-[11px] leading-snug text-faint-foreground">
-      Ingredient photos from{" "}
+      {t("meals.photoCreditPrefix")}{" "}
       <button
         type="button"
         className="underline underline-offset-2 can-hover:hover:text-muted-foreground"
@@ -124,7 +127,14 @@ export function Chevron() {
 
 /** "Training day" or "Rest day", as a pill; training in the accent. */
 export function DayKindTag({ training, short }: { training: boolean; short?: boolean }) {
-  const word = short ? (training ? "Training" : "Rest") : training ? "Training day" : "Rest day";
+  const t = useT();
+  const word = short
+    ? training
+      ? t("meals.training")
+      : t("meals.rest")
+    : training
+      ? t("meals.trainingDay")
+      : t("meals.restDay");
   return (
     <span
       className={cn(
@@ -191,16 +201,17 @@ export function TargetsCard({
   summary: TargetsSummary;
   onMethod?: () => void;
 }) {
+  const t = useT();
   const rows: { label: string; key: "kcal" | "protein" | "fat" | "carbs"; unit: string; big?: boolean }[] = [
-    { label: "Calories", key: "kcal", unit: "kcal", big: true },
-    { label: "Protein", key: "protein", unit: "g" },
-    { label: "Fat", key: "fat", unit: "g" },
-    { label: "Carbs", key: "carbs", unit: "g" },
+    { label: t("meals.calories"), key: "kcal", unit: "kcal", big: true },
+    { label: t("meals.protein"), key: "protein", unit: "g" },
+    { label: t("meals.fat"), key: "fat", unit: "g" },
+    { label: t("meals.carbs"), key: "carbs", unit: "g" },
   ];
   return (
     <section className="rounded-2xl border border-border-soft bg-card p-5">
       <div className="flex items-baseline gap-2">
-        <CardLabel>Daily targets</CardLabel>
+        <CardLabel>{t("meals.dailyTargets")}</CardLabel>
         <span className="flex-1" />
         <CardLabel accent>{summary.goal}</CardLabel>
       </div>
@@ -235,7 +246,7 @@ export function TargetsCard({
       )}
       {onMethod && (
         <div className="mt-2">
-          <CardLink onClick={onMethod}>How it's calculated ›</CardLink>
+          <CardLink onClick={onMethod}>{t("meals.howCalculated")}</CardLink>
         </div>
       )}
     </section>

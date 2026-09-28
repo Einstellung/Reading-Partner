@@ -6,6 +6,7 @@
 
 import { useEffect, useReducer, useRef, useState } from "react";
 
+import { useT } from "../../../../i18n";
 import { computeTargets, type Profile } from "../../../../info/meals/nutrition/targets";
 import {
   AVOID_OPTIONS,
@@ -109,12 +110,13 @@ function Stepper({
   unit: string;
   dispatch: Dispatch;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-1.5">
       <Button
         variant="outline"
         size="icon"
-        aria-label="Less"
+        aria-label={t("meals.less")}
         className="text-[20px]"
         onClick={() => dispatch({ type: "step", field, dir: -1 })}
       >
@@ -127,7 +129,7 @@ function Stepper({
       <Button
         variant="outline"
         size="icon"
-        aria-label="More"
+        aria-label={t("meals.more")}
         className="text-[20px]"
         onClick={() => dispatch({ type: "step", field, dir: 1 })}
       >
@@ -152,16 +154,18 @@ function SubQ({ children }: { children: React.ReactNode }) {
 }
 
 function Next({ enabled, dispatch }: { enabled: boolean; dispatch: Dispatch }) {
+  const t = useT();
   return (
     <div className="mt-3 flex justify-end">
       <Button variant="cta" size="lg" disabled={!enabled} onClick={() => dispatch({ type: "next" })}>
-        Next
+        {t("meals.next")}
       </Button>
     </div>
   );
 }
 
 function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispatch: Dispatch }) {
+  const t = useT();
   const a = s.answers;
   switch (id) {
     case "consent":
@@ -170,10 +174,10 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
           <Panel>
             <dl className="m-0">
               {[
-                ["What", "体重、体脂率、身高、腰围（腰围选填）。"],
-                ["Why", "只用来算你每天该吃多少热量和蛋白，不做别的。"],
-                ["Where", "只存在这台设备和你的账号里，不给第三方，不用于广告。"],
-                ["Undo", "随时可以在设置里撤回同意并删掉这些数据。"],
+                [t("meals.consent.what"), t("meals.consent.whatValue")],
+                [t("meals.consent.why"), t("meals.consent.whyValue")],
+                [t("meals.consent.where"), t("meals.consent.whereValue")],
+                [t("meals.consent.undo"), t("meals.consent.undoValue")],
               ].map(([dt, dd]) => (
                 <div key={dt} className="mt-2.5 first:mt-0">
                   <dt className="text-[11px] font-medium uppercase tracking-wider text-faint-foreground">{dt}</dt>
@@ -215,7 +219,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
     case "body":
       return (
         <Panel>
-          <Field title="Sex">
+          <Field title={t("meals.sex")}>
             <Opts>
               {SEX_OPTIONS.map((o) => (
                 <Opt
@@ -227,40 +231,40 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               ))}
             </Opts>
           </Field>
-          <Field title="Age">
-            <Stepper field="age" value={String(a.age)} unit="岁" dispatch={dispatch} />
+          <Field title={t("meals.age")}>
+            <Stepper field="age" value={String(a.age)} unit={t("meals.yearsUnit")} dispatch={dispatch} />
           </Field>
-          <Field title="Height">
+          <Field title={t("meals.height")}>
             <Stepper field="heightCm" value={String(a.heightCm)} unit="cm" dispatch={dispatch} />
           </Field>
-          <Field title="Weight">
+          <Field title={t("meals.weight")}>
             <Stepper field="weightKg" value={a.weightKg.toFixed(1)} unit="kg" dispatch={dispatch} />
           </Field>
-          <Field title="Body fat · optional">
+          <Field title={t("meals.bodyFatOptional")}>
             {a.bodyFatKnown && (
               <Stepper field="bodyFatPct" value={a.bodyFatPct.toFixed(1)} unit="%" dispatch={dispatch} />
             )}
             <div className="mt-2">
               <Opt
                 selected={!a.bodyFatKnown}
-                label="不知道体脂"
+                label={t("meals.bodyFatUnknown")}
                 onClick={() => dispatch({ type: "flag", field: "bodyFatKnown" })}
               />
             </div>
           </Field>
-          <Field title="Waist · optional">
+          <Field title={t("meals.waistOptional")}>
             {a.waistKnown && (
               <Stepper field="waistCm" value={String(a.waistCm)} unit="cm" dispatch={dispatch} />
             )}
             <div className="mt-2">
               <Opt
                 selected={a.waistKnown}
-                label="填腰围"
+                label={t("meals.waistFill")}
                 onClick={() => dispatch({ type: "flag", field: "waistKnown" })}
               />
             </div>
             <p className="m-0 mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-              Waist is only kept as a trend. It does not enter the formulas.
+              {t("meals.waistHint")}
             </p>
           </Field>
           <Next enabled={stepDone(a, "body")} dispatch={dispatch} />
@@ -269,7 +273,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
     case "train":
       return (
         <Panel>
-          <SubQ>Days</SubQ>
+          <SubQ>{t("meals.days")}</SubQ>
           <div className="flex gap-1.5">
             {[1, 2, 3, 4, 5, 6, 7].map((d) => (
               <Button
@@ -290,13 +294,13 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
           <div className="mt-2">
             <Opt
               selected={a.noTraining && a.trainingDays.length === 0}
-              label="现在不练"
+              label={t("meals.noTrainingNow")}
               onClick={() => dispatch({ type: "noTraining" })}
             />
           </div>
           {a.trainingDays.length > 0 && (
             <>
-              <SubQ>When</SubQ>
+              <SubQ>{t("meals.when")}</SubQ>
               <Opts>
                 {TRAIN_TIME_OPTIONS.map((o) => (
                   <Opt
@@ -331,7 +335,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
     case "logistics":
       return (
         <Panel>
-          <SubQ>几个人吃</SubQ>
+          <SubQ>{t("meals.peopleQuestion")}</SubQ>
           <Opts>
             {PEOPLE_OPTIONS.map((o) => (
               <Opt
@@ -342,7 +346,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               />
             ))}
           </Opts>
-          <SubQ>在哪买（可多选）</SubQ>
+          <SubQ>{t("meals.shopWhereQuestion")}</SubQ>
           <Opts>
             {SHOP_OPTIONS.map((v) => (
               <Opt
@@ -353,7 +357,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               />
             ))}
           </Opts>
-          <SubQ>厨房有什么（可多选）</SubQ>
+          <SubQ>{t("meals.kitchenQuestion")}</SubQ>
           <Opts>
             {KITCHEN_OPTIONS.map((v) => (
               <Opt
@@ -364,7 +368,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               />
             ))}
           </Opts>
-          <SubQ>忌口（可多选）</SubQ>
+          <SubQ>{t("meals.avoidQuestion")}</SubQ>
           <Opts>
             {AVOID_OPTIONS.map((o) => (
               <Opt
@@ -375,7 +379,7 @@ function StepPanel({ id, s, dispatch }: { id: StepId; s: OnboardingState; dispat
               />
             ))}
           </Opts>
-          <p className="m-0 mt-2.5 text-[13px] leading-relaxed text-muted-foreground">别的忌口直接在对话里说。</p>
+          <p className="m-0 mt-2.5 text-[13px] leading-relaxed text-muted-foreground">{t("meals.otherAvoidHint")}</p>
           <Next enabled={stepDone(a, "logistics")} dispatch={dispatch} />
         </Panel>
       );
@@ -389,6 +393,7 @@ function Result({
   s: OnboardingState;
   onFinish: (profile: Profile) => Promise<boolean>;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const profile = toProfile(s.answers);
@@ -409,11 +414,11 @@ function Result({
       </Ai>
       <TargetsCard summary={targetsSummary(targets, profile)} />
       {failed && (
-        <p className="m-0 text-[13px] text-destructive">Could not save your answers. Try again.</p>
+        <p className="m-0 text-[13px] text-destructive">{t("meals.saveFailed")}</p>
       )}
       <div className="flex justify-end">
         <Button variant="cta" size="lg" disabled={busy} onClick={finish}>
-          Make this week's plan
+          {t("meals.makeWeekPlan")}
         </Button>
       </div>
     </>
@@ -421,6 +426,7 @@ function Result({
 }
 
 export function MealsOnboarding(props: MealsOnboardingProps) {
+  const t = useT();
   const [s, dispatch] = useReducer(onboardingReducer, props.existing, initialOnboarding);
   const current = useRef<HTMLDivElement | null>(null);
 
@@ -438,7 +444,7 @@ export function MealsOnboarding(props: MealsOnboardingProps) {
 
   return (
     <MealsColumn>
-      <MealsHeader title="Meals" onBack={props.onBack} />
+      <MealsHeader title={t("meals.title")} onBack={props.onBack} />
       <div className="flex flex-col gap-3.5">
         <Ai>
           <p className="m-0">{INTRO_LINE}</p>
@@ -474,7 +480,7 @@ export function MealsOnboarding(props: MealsOnboardingProps) {
           </div>
         )}
         {s.step > 0 && (
-          <p className="m-0 text-center text-[12px] text-faint-foreground">Tap an answer to change it.</p>
+          <p className="m-0 text-center text-[12px] text-faint-foreground">{t("meals.tapToChange")}</p>
         )}
       </div>
     </MealsColumn>
