@@ -392,7 +392,7 @@
    rather than two, because only the top edge is one the sheet must not cross;
    max() and the 4-unit gutter for the reason above. */
 @utility overlay-sheet {
-  max-height: calc(100dvh - max(env(safe-area-inset-top), var(--spacing) * 4));
+  max-height: min(85dvh, calc(100dvh - max(env(safe-area-inset-top), var(--spacing) * 4)));
   overflow-y: auto;
 }
 

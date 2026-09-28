@@ -7,6 +7,9 @@
 // only thing said here is where it sits: pinned to the bottom rather than
 // centred, because a list reached with a thumb belongs under the thumb.
 //
+// A long outline fills the sheet to its height limit, so the way out cannot be
+// only the strip of book left above it: the title row carries a Done.
+//
 // The entries carry page numbers rather than hrefs — the outline is read off
 // the pagination table (reading/epub/fulltext.ts outlineFor), whose coordinate
 // is the position block — so a tap is goToChapter: the page, with the view
@@ -15,7 +18,8 @@
 import type { OutlineItem } from "../../../../fulltext/types";
 import type { FlowPaperName } from "../../../../reading/epub/flow/flow-display";
 import OutlineView from "../../reader/sidebar/OutlineView";
-import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
+import { Button } from "../../ui/button";
+import { Dialog, DialogClose, DialogSheetContent, DialogTitle } from "../../ui/dialog";
 
 const NO_SUPPLEMENTS = [] as const;
 const noop = () => {};
@@ -32,9 +36,15 @@ export default function PhoneOutlineSheet(props: {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogSheetContent data-reader-paper={props.paper}>
-        <DialogTitle className="border-b border-border-subtle px-4 py-3 text-[15px]">
-          Outline
-        </DialogTitle>
+        {/* Stuck to the top: the sheet scrolls as one, and Done must not scroll away. */}
+        <div className="sticky top-0 z-10 flex items-center border-b border-border-subtle bg-background pr-1 pl-4">
+          <DialogTitle className="flex-1 py-3 text-[15px]">Outline</DialogTitle>
+          <DialogClose asChild>
+            <Button variant="ghost" className="text-[15px] font-medium">
+              Done
+            </Button>
+          </DialogClose>
+        </div>
         {/* The phone has no supplements: the sheet is the book's chapters only. */}
         <OutlineView
           size="sheet"

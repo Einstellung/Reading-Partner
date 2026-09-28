@@ -137,8 +137,10 @@ export const OVERLAY_SAFE = {
   // This one is a height, and only a height: a sheet touches all three edges on
   // purpose, its background has to reach them the way the full-screen page's
   // does, and what stays clear of the insets is the content inside it. The one
-  // edge it must not reach is the top, so the clamp is the viewport less
-  // whatever the notch takes, with the sheet scrolling inside that.
+  // edge it must not reach is the top: the clamp is 85% of the viewport, so a
+  // strip of what is under it always shows and a press there closes it, and
+  // never more than the viewport less whatever the notch takes. The sheet
+  // scrolls inside that.
   sheet: "overlay-sheet",
   // Covering the whole app: Settings, the only page shaped this way. Nothing
   // is clamped, because the overlay is the viewport — what needs the

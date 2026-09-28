@@ -379,6 +379,19 @@ test("the outline sheet lists the chapters and navigates by block", async () => 
   expect(container.textContent).toContain("37 / 385");
 });
 
+test("Done puts the outline sheet away", async () => {
+  const { getByLabelText } = await openReader();
+  await act(async () => {
+    fireEvent.click(getByLabelText("Outline"));
+  });
+  expect(document.body.textContent).toContain("One: the machine");
+  const done = [...document.body.querySelectorAll("button")].find((b) => b.textContent === "Done");
+  await act(async () => {
+    fireEvent.click(done as Element);
+  });
+  expect(document.body.textContent).not.toContain("One: the machine");
+});
+
 // --- the display sheet ----------------------------------------------------
 
 test("the rack draws no navigation lock, and an Aa stands where it would have", async () => {
