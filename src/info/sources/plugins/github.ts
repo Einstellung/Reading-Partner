@@ -25,6 +25,7 @@ import {
   type IndexQuery,
 } from "../plugin";
 import type { InfoItem, ItemSignals } from "../item";
+import { t } from "../../../i18n";
 
 const OSSINSIGHT_HOST = "api.ossinsight.io";
 const GITHUB_HOST = "api.github.com";
@@ -67,35 +68,36 @@ function nonNegativeInt(v: unknown): number | undefined {
 // authoring slip ("period" on a search) is reported at add time.
 function readQuery(q: IndexQuery): GithubIndexQuery | string {
   const mode = q.mode;
-  if (mode !== "trending" && mode !== "search") return 'mode must be "trending" or "search"';
-  if (q.language !== undefined && typeof q.language !== "string") return "language must be a string";
+  if (mode !== "trending" && mode !== "search") return t("sources.plugins.github.modeMustBe");
+  if (q.language !== undefined && typeof q.language !== "string")
+    return t("sources.plugins.github.languageMustBeString");
   const language = queryString(q, "language");
   if (mode === "trending") {
     for (const key of ["topics", "days", "minStars"]) {
-      if (q[key] !== undefined) return `${key} applies to search mode only`;
+      if (q[key] !== undefined) return t("sources.plugins.github.fieldAppliesToSearchOnly", { field: key });
     }
     let period: Period = "day";
     if (q.period !== undefined) {
-      if (!PERIODS.includes(q.period as Period)) return 'period must be "day", "week" or "month"';
+      if (!PERIODS.includes(q.period as Period)) return t("sources.plugins.github.periodMustBe");
       period = q.period as Period;
     }
     return { mode, language, period };
   }
-  if (q.period !== undefined) return "period applies to trending mode only";
+  if (q.period !== undefined) return t("sources.plugins.github.periodTrendingOnly");
   if (q.topics !== undefined && typeof q.topics !== "string" && !Array.isArray(q.topics)) {
-    return "topics must be a list of strings";
+    return t("sources.plugins.github.topicsMustBeStrings");
   }
-  const topics = [...new Set(queryStrings(q, "topics").map((t) => t.toLowerCase()))];
+  const topics = [...new Set(queryStrings(q, "topics").map((topic) => topic.toLowerCase()))];
   let days = DEFAULT_DAYS;
   if (q.days !== undefined) {
     const d = nonNegativeInt(q.days);
-    if (d === undefined || d === 0) return "days must be a positive integer";
+    if (d === undefined || d === 0) return t("sources.plugins.daysPositiveInteger");
     days = d;
   }
   let minStars = DEFAULT_MIN_STARS;
   if (q.minStars !== undefined) {
     const s = nonNegativeInt(q.minStars);
-    if (s === undefined) return "minStars must be a non-negative integer";
+    if (s === undefined) return t("sources.plugins.github.minStarsMustBeNonNegative");
     minStars = s;
   }
   return { mode, language, topics, days, minStars };
@@ -113,7 +115,7 @@ function mustRead(q: IndexQuery): GithubIndexQuery {
 // URLSearchParams does; `language` is left off for "all languages".
 export function githubTrendingUrl(query: IndexQuery): string {
   const read = mustRead(query);
-  if (read.mode !== "trending") throw new Error("not a trending query");
+  if (read.mode !== "trending") throw new Error(t("sources.plugins.github.notTrendingQuery"));
   const params = new URLSearchParams({ period: OSSINSIGHT_PERIOD[read.period] });
   if (read.language) params.set("language", read.language);
   return `https://${OSSINSIGHT_HOST}/v1/trends/repos/?${params}`;
@@ -130,7 +132,7 @@ function qualifier(name: string, value: string): string {
 // Sorted by stars so the cap keeps the largest, not the newest.
 export function githubSearchUrls(query: IndexQuery, today: string, limit: number): string[] {
   const read = mustRead(query);
-  if (read.mode !== "search") throw new Error("not a search query");
+  if (read.mode !== "search") throw new Error(t("sources.plugins.github.notSearchQuery"));
   const base = [`created:>${daysBefore(today, read.days)}`, `stars:>=${read.minStars}`];
   if (read.language) base.push(qualifier("language", read.language));
   const variants = read.topics.length ? read.topics.map((t) => [...base, qualifier("topic", t)]) : [base];
@@ -156,7 +158,11 @@ async function fetchJson(url: string, deps: PluginDeps, headers?: Record<string,
     // GitHub answers a spent anonymous quota with 403 (primary) or 429
     // (secondary) and says so in the headers; worth naming in the health note.
     const spent = (res.status === 403 || res.status === 429) && res.headers.get("x-ratelimit-remaining") === "0";
-    throw new Error(`HTTP ${res.status} from ${url}${spent ? " (rate limit spent)" : ""}`);
+    throw new Error(
+      spent
+        ? t("sources.plugins.github.httpErrorRateLimited", { status: res.status, url })
+        : t("sources.plugins.github.httpError", { status: res.status, url }),
+    );
   }
   return res.json();
 }
@@ -219,7 +225,15 @@ async function discoverTrending(desc: SourceDescriptor, query: IndexQuery, deps:
   if (!rows.length && dq?.status === "unavailable") {
     const since = str(dq.unavailable_since);
     const reason = str(dq.reason);
-    throw new Error(`OSS Insight trending unavailable${since ? ` since ${since}` : ""}${reason ? `: ${reason}` : ""}`);
+    throw new Error(
+      since && reason
+        ? t("sources.plugins.github.ossUnavailableSinceReason", { since, reason })
+        : since
+          ? t("sources.plugins.github.ossUnavailableSince", { since })
+          : reason
+            ? t("sources.plugins.github.ossUnavailableReason", { reason })
+            : t("sources.plugins.github.ossUnavailable"),
+    );
   }
   const today = deps.today();
   const items: InfoItem[] = [];

@@ -23,6 +23,7 @@ import type { InfoItem } from "./item";
 import { probeSource, pipeLabel } from "./probe";
 import type { ProbeConfirmCardData, TrialSample } from "./source-cards";
 import { errMsg } from "../../platform/std/errors";
+import { t } from "../../i18n";
 
 // A body of at least this many plain-text characters counts as "full text" in a
 // trial sample (below it the fetch got a headline/teaser only).
@@ -206,7 +207,7 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
   return [
     {
       name: "probe_source",
-      label: (args) => `Probing ${String(args.input ?? "the site")}`,
+      label: (args) => t("sources.tool.probingSite", { input: String(args.input ?? t("sources.tool.theSite")) }),
       effect: "read",
       description:
         "Given a site URL or bare domain the user named or linked, try the common feed " +
@@ -237,9 +238,10 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
     },
     {
       name: "trial_source",
-      label: (args) => argsFulltextMode(args) === "webview"
-          ? `Fetching ${WEBVIEW_TRIAL_LIMIT} article through a background browser window — tens of seconds`
-          : `Fetching ${TRIAL_LIMIT} articles to test`,
+      label: (args) =>
+        argsFulltextMode(args) === "webview"
+          ? t("sources.tool.fetchingWebviewArticles", { count: WEBVIEW_TRIAL_LIMIT })
+          : t("sources.tool.fetchingArticles", { count: TRIAL_LIMIT }),
       effect: "write",
       gate: "card",
       description:
@@ -272,13 +274,16 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
           text:
             `Trial of "${descriptor.name}" (${label}) succeeded:\n${lines}${note}\n\n` +
             `A confirmation card is now shown to the user. Only call add_source after they explicitly say yes.`,
-          receipt: { label: "Trialled a source", summary: `${descriptor.name} (${label})` },
+          receipt: {
+            label: t("sources.tool.trialReceiptLabel"),
+            summary: t("sources.tool.trialReceiptSummary", { name: descriptor.name, pipe: label }),
+          },
         };
       },
     },
     {
       name: "add_source",
-      label: () => "Adding the source",
+      label: () => t("sources.tool.addingSource"),
       effect: "write",
       description:
         "Add a source to the user's list. ONLY call this after you have shown a trial " +
@@ -290,7 +295,7 @@ export function buildSourceTools(deps: SourceToolDeps): AgentTool[] {
         await deps.addSource(descriptor);
         return {
           text: `Added "${descriptor.name}" to the user's sources.`,
-          receipt: { label: "Added a source", summary: descriptor.name },
+          receipt: { label: t("sources.tool.addReceiptLabel"), summary: descriptor.name },
         };
       },
     },

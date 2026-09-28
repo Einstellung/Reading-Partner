@@ -19,6 +19,7 @@ import { itemId } from "../../extract/id";
 import type { SourceDescriptor } from "../descriptor";
 import { daysBefore, queryInt, queryStrings, type PluginDeps, type SourcePlugin, type IndexQuery } from "../plugin";
 import type { InfoItem, ItemSignals } from "../item";
+import { t } from "../../../i18n";
 
 const HOST = "api.semanticscholar.org";
 const DEFAULT_DAYS = 30;
@@ -119,11 +120,12 @@ export const s2Plugin: SourcePlugin = {
   defaultLimit: DEFAULT_LIMIT,
 
   validateQuery(q: IndexQuery): string | null {
-    if (queryStrings(q, "terms").length === 0) return "terms is required (a string or a list of strings)";
-    if (q.days !== undefined && queryInt(q, "days") === undefined) return "days must be a positive number";
-    if (q.minCitations !== undefined && minCitations(q) === undefined) return "minCitations must be a non-negative number";
+    if (queryStrings(q, "terms").length === 0) return t("sources.plugins.s2.termsRequired");
+    if (q.days !== undefined && queryInt(q, "days") === undefined) return t("sources.plugins.s2.daysMustBePositiveNumber");
+    if (q.minCitations !== undefined && minCitations(q) === undefined)
+      return t("sources.plugins.s2.minCitationsMustBeNonNegative");
     if (q.fieldsOfStudy !== undefined && queryStrings(q, "fieldsOfStudy").length === 0) {
-      return "fieldsOfStudy must be a list of strings";
+      return t("sources.plugins.s2.fieldsOfStudyMustBeStrings");
     }
     return null;
   },

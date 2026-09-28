@@ -8,6 +8,7 @@ import info from "./messages/info";
 import settings from "./messages/settings";
 import shell from "./messages/shell";
 import study from "./messages/study";
+import sources from "./messages/sources";
 
 export const AREAS = {
   library,
@@ -17,4 +18,5 @@ export const AREAS = {
   shell,
   study,
   phone,
+  sources,
 };

@@ -14,6 +14,7 @@ import type { AgentTool } from "../../legion/execute/turn";
 import type { FetchFn } from "./http";
 import { readPage, READ_PAGE_MAX_LINKS, type PageReadout } from "./read-page";
 import { errMsg } from "../../platform/std/errors";
+import { t } from "../../i18n";
 
 // Render a page readout into the text the AI reads back. HTML pages show the
 // title, the readable text, and the full link list (anchor → absolute URL) so the
@@ -46,7 +47,7 @@ function formatReadout(url: string, r: PageReadout): string {
 export function buildReadPageTool(deps: { fetchFn: FetchFn }): AgentTool {
   return {
     name: "read_page",
-    label: (args) => `Reading ${String(args.url ?? "the page")}`,
+    label: (args) => t("sources.readPage.reading", { url: String(args.url ?? t("sources.readPage.thePage")) }),
     effect: "read",
     description:
       "Fetch a web page and return a readable summary — its title, visible text, and the FULL " +

@@ -16,12 +16,16 @@
 
 import { DEFAULT_SUBAGENT_ROUNDS, type SubagentDefinition } from "../../legion/subagent";
 import { buildTaskingTools, type TaskingToolDeps } from "./tools";
+import { t } from "../../i18n";
 
 /** The legion kind the info domain registers for this work (worker.ts). */
 export const TASKING_KIND = "tasking";
 
-/** The one line shown while a tasking run is going. */
-export const TASKING_LABEL = "Looking into it";
+/** The one line shown while a tasking run is going. Read at dispatch time, not
+ * at import time, so it follows the locale the reader has now. */
+export function taskingLabel(): string {
+  return t("sources.tasking.label");
+}
 
 // A question off a briefing takes a few lookups more than a literature search:
 // the cable list, two or three bodies, a room's picture, and sometimes the page
@@ -81,7 +85,7 @@ export function buildTaskingAgent(deps: TaskingToolDeps = {}): SubagentDefinitio
       "The user's question restated for someone who cannot see this conversation and has " +
       "not read today's briefing: what to find out, which article or figure it came off " +
       "(give its title and source), and what would count as an answer. One question per run.",
-    label: TASKING_LABEL,
+    label: taskingLabel(),
     systemPrompt: TASKING_SYSTEM_PROMPT,
     tools: buildTaskingTools(deps),
     briefTokenCap: TASKING_BRIEF_TOKENS,

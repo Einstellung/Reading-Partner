@@ -21,6 +21,7 @@ import type { Lab } from "../labs/types";
 import { loadPicture } from "../picture/store";
 import { pictureSummary } from "../picture/picture";
 import type { Picture } from "../picture/types";
+import { t } from "../../i18n";
 
 /** How many cables one search may answer with. */
 export const CABLE_HITS_MAX = 25;
@@ -100,7 +101,10 @@ export function cableLine(cable: Cable): string {
 function buildSearchCablesTool(io: Stores): AgentTool {
   return {
     name: "search_cables",
-    label: (args) => args.query ? `Searching the cables for “${args.query}”` : "Searching the cables",
+    label: (args) =>
+      args.query
+        ? t("sources.tasking.searchingCablesFor", { query: String(args.query) })
+        : t("sources.tasking.searchingCables"),
     effect: "read",
     description:
       "Search the cables this device holds — every item the bureau's own collection screened " +
@@ -156,7 +160,7 @@ function buildSearchCablesTool(io: Stores): AgentTool {
 function buildReadCableTool(io: Stores): AgentTool {
   return {
     name: "read_cable",
-    label: () => "Reading a cable",
+    label: () => t("sources.tasking.readingCable"),
     effect: "read",
     description:
       "Read the body of one cable by its id, as the collection obtained it. Answers with the " +
@@ -223,7 +227,10 @@ function buildReadCableTool(io: Stores): AgentTool {
 function buildReadPictureTool(io: Stores): AgentTool {
   return {
     name: "read_picture",
-    label: (args) => args.lab ? `Reading the picture for ${args.lab}` : "Reading the situation picture",
+    label: (args) =>
+      args.lab
+        ? t("sources.tasking.readingPictureFor", { lab: String(args.lab) })
+        : t("sources.tasking.readingPicture"),
     effect: "read",
     description:
       "Read where one research room stands: what normal looks like there, what it watches, the " +
