@@ -367,6 +367,16 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     }
   }
 
+  function emitSelection(): void {
+    if (!destroyed) callbacks.onSelection?.(marks.selection());
+  }
+
+  function dropSelection(): void {
+    if (!marks.hasSelection()) return;
+    marks.clearSelection();
+    emitSelection();
+  }
+
   // --- position ---------------------------------------------------------------
   function emit(): void {
     if (destroyed) return;
@@ -415,6 +425,8 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     paintShown();
     paintQuote();
     emit();
+    // A selection stays on its words; the shell's handles follow them.
+    if (marks.hasSelection()) emitSelection();
   }
 
   // Land on the page holding a CFI; it becomes the anchor.
@@ -467,11 +479,13 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     showWindowPage(p + dir);
   }
 
-  // By the side a tap landed on (tapZone, the iPad's); the middle is not a turn.
+  // By the side a tap landed on (tapZone, the iPad's). The middle is not a
+  // turn: it is the shell's, which shows or hides its bars.
   function turnByTap(clientX: number, clientY: number): void {
     const zone = turnOfTap(frame.getBoundingClientRect(), clientX, clientY);
     if (zone === "next") turn(1);
     else if (zone === "prev") turn(-1);
+    else callbacks.onMiddleTap?.();
   }
 
   function goToEntry(entry: string, fragment: string | null): boolean {
@@ -582,8 +596,15 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
   // started on). One that turned was the finger's gesture, and its lift is not
   // a tap as well: it arrives at the frame after this.
   gestures.turnToPage = (n: number) => {
-    if (press.phase === "pressed" && n - 1 !== windowPageOf(win, cur, column)) {
+    const turned = n - 1 !== windowPageOf(win, cur, column);
+    if (press.phase === "pressed" && turned) {
       feed({ kind: "yield", pointerId: press.pointerId });
+    }
+    // With a selection up, a swipe only puts it away: the page springs back.
+    if (turned && marks.hasSelection()) {
+      dropSelection();
+      place();
+      return;
     }
     showWindowPage(n - 1);
   };
@@ -625,6 +646,7 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
       case "start-mark":
         if (!pressedAt) break;
         marks.beginDrag(pressedAt);
+        emitSelection();
         // Captured on the scroller, not the frame: the router listens there
         // and has to see this finger lift, or it counts it as still down and
         // eats every touch after it (docs/pitfall/437). It does not turn under
@@ -640,12 +662,20 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
         if (at) marks.extendDrag(at.x, at.y);
         break;
       case "commit-mark":
-        if (!marks.commitDrag() && at) marks.tapAt(at.x, at.y);
+        // The words stay selected for the shell's handles and popup.
+        marks.commitDrag();
+        emitSelection();
         break;
       case "abandon-mark":
         marks.cancelDrag();
+        emitSelection();
         break;
       case "tap": {
+        // With a selection up, a tap anywhere only puts it away.
+        if (marks.hasSelection()) {
+          dropSelection();
+          break;
+        }
         clearQuote();
         // Where the finger landed: a tap here can drift (PAGED_TAP_SLOP_PX),
         // and one that lands on the right third and lifts in the middle is
@@ -810,6 +840,35 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
       turnByTap(clientX, clientY);
     },
     removeAnnotations: (ids) => marks.unsetAnnotations(ids),
+    // Turned to the screen the mark starts on, which becomes the anchor, and
+    // rung there.
+    goToAnnotation: (id) => {
+      clearQuote();
+      dropSelection();
+      const target = marks.cfiOf(id);
+      const at = target ? parseCfiStart(target) : null;
+      const leaf = at ? focus(at.spineIndex) : null;
+      const range = leaf && target ? resolvePointRange(leaf.root, target) : null;
+      if (!leaf || !range) return;
+      column = columnOfRange(leaf, range);
+      place();
+      const local = pointSteps(range.startContainer, range.startOffset);
+      anchor = local !== null ? epubCfi(leaf.spine, leaf.idref, local) : anchorOfShown();
+      paintShown();
+      emit();
+      marks.flash(id);
+    },
+    moveSelectionEnd: (end, x, y) => {
+      marks.moveSelectionEnd(end, x, y);
+      emitSelection();
+    },
+    saveSelection: (spec) => {
+      const mark = marks.saveSelection(spec);
+      emitSelection();
+      return mark;
+    },
+    clearSelection: dropSelection,
+    selectMark: (id) => marks.selectMark(id),
     setDisplay: (next) => {
       if (destroyed) return;
       display = next;

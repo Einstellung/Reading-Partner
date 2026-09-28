@@ -15,12 +15,12 @@ import {
   replyStreaming,
 } from "../../../../../src/ui/components/phone/lesson/epub-lesson";
 
-test("the lesson covers the page only as the book's call in its full view", () => {
+test("a conversation covers the page only in its main view, the book's or a passage's", () => {
   expect(lessonOnScreen(null)).toBe(false);
-  expect(lessonOnScreen({ isBook: true, view: "chat-main" })).toBe(true);
+  expect(lessonOnScreen({ view: "chat-main" })).toBe(true);
   // Left open behind the page: the phone draws nothing for it.
-  expect(lessonOnScreen({ isBook: true, view: "chat-pip" })).toBe(false);
-  expect(lessonOnScreen({ isBook: false, view: "chat-main" })).toBe(false);
+  expect(lessonOnScreen({ view: "chat-pip" })).toBe(false);
+  expect(lessonOnScreen({ view: "bubble" })).toBe(false);
 });
 
 test("a reply is streaming only while the newest row is one being written", () => {

@@ -1,6 +1,11 @@
-// The phone's reading screen (docs/70). Its own top bar over the reflow pane,
-// and the book's lesson (docs/77), which Learn draws over the whole screen: no
-// sidebar, no prep panel, no corner cards.
+// The phone's reading screen (docs/70, docs/82): the page, with its chrome away
+// until a tap in the middle asks for it, and the book's lesson (docs/77) as a
+// sheet over it. No sidebar, no prep panel, no corner cards.
+//
+// A hold on the words selects them; the reader draws the handles and the
+// Highlight / Ask popup over the selection, which the view keeps. Ask lays an
+// AI underline on the words and opens a conversation anchored on it, the phone
+// form of the iPad's AI pen. A tap on a mark raises what that mark offers.
 //
 // The pane is a prop rather than an import. It is written against the contract
 // (reading/epub/flow/flow-contract.ts) and the shell against the same contract, so
@@ -9,39 +14,30 @@
 //
 // The order a book opens in is reading/session/open-epub.ts, which has no React
 // in it. What is here is the binding: the state that sequence produces, the
-// handle the pane hands back, and the four things a tap can reach.
+// handle the pane hands back, and what a tap can reach.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useT } from "../../../../i18n";
-import {
-  HIGHLIGHT_COLOR,
-  deleteAnnotations,
-  saveAnnotations,
-} from "../../../../platform/app/annotations";
+import { HIGHLIGHT_COLOR, deleteAnnotations, saveAnnotations } from "../../../../platform/app/annotations";
+import type { Annotation, ViewState, ViewStats } from "../../../../platform/app/reader-contract";
 import type {
-  Annotation,
-  AnnotationPopupParams,
-  ViewState,
-  ViewStats,
-} from "../../../../platform/app/reader-contract";
-import type {
+  FlowMarkPopup,
   FlowReaderPaneProps,
   FlowReaderView,
+  FlowSelection,
+  FlowTool,
 } from "../../../../reading/epub/flow/flow-contract";
 import {
+  FLOW_PAPERS,
+  flowPaperSwatch,
   readFlowDisplay,
   writeFlowDisplay,
   type FlowDisplay,
 } from "../../../../reading/epub/flow/flow-display";
-import { stayedATap } from "../../../../reading/epub/flow/flow-gesture";
 import { EDGE_ZONE } from "../gesture/edge-back-gesture";
 import { pageMarks } from "../../../../platform/app/reader-contract";
 import { browserPrefStore } from "../../base/pref-store";
-import { IconTrash } from "../../base/icons";
 import { cn } from "../../lib/utils";
-import type { Tool } from "../../reader/types";
-import { Button } from "../../ui/button";
-import { OVERLAY_Z } from "../../ui/overlay";
 import {
   closePhoneBook,
   mergeSavedMarks,
@@ -50,15 +46,19 @@ import {
   type OpenedBook,
   type PhoneBookIo,
 } from "../../../../reading/session/open-epub";
+import { AI_PEN_COLOR } from "../../../../reading/session/use-marks";
 import type { Settings } from "../../../../platform/app/settings";
-import { flowTool } from "./reader-gate";
 import { createViewGate } from "../lesson/epub-lesson";
 import PhoneBookLesson from "../lesson/PhoneBookLesson";
 import { deletePhoneMark, markThreadId, type MarkDeleteIo } from "./delete-mark";
 import ConfirmDestructiveDialog from "../../common/ConfirmDestructiveDialog";
+import PhoneContentsSheet from "./PhoneContentsSheet";
 import PhoneDisplaySheet from "./PhoneDisplaySheet";
-import PhoneOutlineSheet from "./PhoneOutlineSheet";
+import PhoneMarkPopup from "./PhoneMarkPopup";
+import type { ScreenFrame } from "./PhonePopup";
 import PhoneReaderBar from "./PhoneReaderBar";
+import PhoneSelection from "./PhoneSelection";
+import { takeReaderHint, type ContentsTab } from "./reader-chrome";
 import { useBookLesson, type LessonTopic } from "../lesson/use-book-lesson";
 import { deleteThreadTree, loadThreads } from "../../../../platform/app/threads";
 import { logEvent } from "../../../../platform/app/events";
@@ -72,6 +72,12 @@ const markDeleteIo: MarkDeleteIo = {
     logEvent(topicId, "thread-delete", { threadId, book: false }),
   removeThreadImages: deleteThreadImages,
 };
+
+// No pen on the phone: a drag on the words is always a selection (docs/82).
+const NO_PEN: FlowTool = { type: "none", color: HIGHLIGHT_COLOR };
+
+// How long the first-open hint stays up.
+const HINT_MS = 5000;
 
 export default function PhoneReader(props: {
   Pane: ComponentType<FlowReaderPaneProps>;
@@ -98,14 +104,21 @@ export default function PhoneReader(props: {
   const [failed, setFailed] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(t("phone.reader.rendering"));
   const [stats, setStats] = useState<ViewStats | null>(null);
-  const [tool, setTool] = useState<Tool>({ type: "none", color: HIGHLIGHT_COLOR });
-  const [outlineOpen, setOutlineOpen] = useState(false);
-  const [displayOpen, setDisplayOpen] = useState(false);
+  const [chrome, setChrome] = useState(false);
+  const [panel, setPanel] = useState<"contents" | "display" | null>(null);
+  const [tab, setTab] = useState<ContentsTab>("outline");
   // This device's view of the text (flow-display.ts). Read once, synchronously,
   // so the column mounts at the size and paper the reader left it at.
   const prefs = useMemo(() => browserPrefStore(window), []);
   const [display, setDisplay] = useState<FlowDisplay>(() => readFlowDisplay(prefs));
-  const [popup, setPopup] = useState<AnnotationPopupParams | null>(null);
+  const [hint, setHint] = useState(false);
+  // The selection and the tapped mark, each with the screen's box as it was
+  // when the view reported them: the rects are the viewport's.
+  const [selection, setSelection] = useState<{ selection: FlowSelection; frame: ScreenFrame } | null>(null);
+  const [popup, setPopup] = useState<{ popup: FlowMarkPopup; frame: ScreenFrame } | null>(null);
+  // The marks live in a ref the session reads; this redraws what shows them.
+  const [, setMarksVersion] = useState(0);
+  const screenRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<FlowReaderView | null>(null);
   // Every mark the book has, the half the pane cannot hold included: what is
   // written back is this merged with what the pane hands over.
@@ -115,14 +128,27 @@ export default function PhoneReader(props: {
   // Holds a citation's jump until the column can take it (epub-lesson.ts).
   const gate = useMemo(() => createViewGate<FlowReaderView>(), []);
 
+  const frameNow = useCallback((): ScreenFrame => {
+    const r = screenRef.current?.getBoundingClientRect();
+    // A screen not laid out yet has no box; the window stands in for it.
+    return r && r.height > 0
+      ? { top: r.top, bottom: r.bottom, left: r.left, right: r.right }
+      : { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
+  }, []);
+
+  const setMarks = useCallback((next: readonly Annotation[]) => {
+    marksRef.current = next;
+    setMarksVersion((v) => v + 1);
+  }, []);
+
   const removeMark = useCallback(
     (id: string) => {
       viewRef.current?.removeAnnotations([id]);
       deleteAnnotations(bookId, [id]);
-      marksRef.current = marksRef.current.filter((a) => a.id !== id);
+      setMarks(marksRef.current.filter((a) => a.id !== id));
       setPopup(null);
     },
-    [bookId],
+    [bookId, setMarks],
   );
 
   // Above the open/close effect below, so leaving the book hangs the lesson up
@@ -156,7 +182,7 @@ export default function PhoneReader(props: {
     })
       .then((opened) => {
         if (left) return;
-        marksRef.current = opened.allAnnotations;
+        setMarks(opened.allAnnotations);
         setBook(opened);
       })
       .catch((e: unknown) => {
@@ -170,15 +196,15 @@ export default function PhoneReader(props: {
       viewRef.current = null;
       closePhoneBook(io, { bookId, topicId, path }, lastStateRef.current);
     };
-  }, [bookId, topicId, path, io, gate]);
+  }, [bookId, topicId, path, io, gate, setMarks]);
 
-  // The rack drives the pane directly as well as the state: the pane holds the
-  // tool it was last told about, and a prop change alone would not reach a pane
-  // that does not re-read it.
-  const changeTool = useCallback((next: Tool) => {
-    setTool(next);
-    viewRef.current?.setTool(flowTool(next));
-  }, []);
+  // Said once per device, the first time a book comes up here.
+  useEffect(() => {
+    if (!book || !takeReaderHint(prefs)) return;
+    setHint(true);
+    const timer = setTimeout(() => setHint(false), HINT_MS);
+    return () => clearTimeout(timer);
+  }, [book, prefs]);
 
   const changeDisplay = useCallback(
     (next: FlowDisplay) => {
@@ -188,24 +214,32 @@ export default function PhoneReader(props: {
     [prefs],
   );
 
+  const openPanel = useCallback((next: "contents" | "display") => {
+    setChrome(false);
+    setHint(false);
+    viewRef.current?.clearSelection();
+    setPopup(null);
+    setPanel(next);
+  }, []);
+
   // The mark whose conversation is about to go with it, while that is being
   // confirmed.
   const [confirming, setConfirming] = useState<string | null>(null);
 
-  // The reader deleting a mark from its popup: the conversation opened from it
-  // goes too (delete-mark.ts). removeMark above stays mark-only, which is what
-  // the lesson's call asks of it after it has dropped the threads itself.
+  // Deleting a mark: the conversation opened from it goes too (delete-mark.ts).
+  // removeMark above stays mark-only, which is what the lesson's call asks of
+  // it after it has dropped the threads itself.
   const deleteMarkWithThread = useCallback(
     (id: string) => {
       void deletePhoneMark({ bookId, topicId }, marksRef.current, id, markDeleteIo)
         .then((ids) => {
           viewRef.current?.removeAnnotations(ids);
           const gone = new Set(ids);
-          marksRef.current = marksRef.current.filter((a) => !gone.has(a.id));
+          setMarks(marksRef.current.filter((a) => !gone.has(a.id)));
         })
         .catch((e: unknown) => console.error("failed to delete the mark", e));
     },
-    [bookId, topicId],
+    [bookId, topicId, setMarks],
   );
 
   const askRemoveMark = useCallback(
@@ -217,33 +251,62 @@ export default function PhoneReader(props: {
     [deleteMarkWithThread],
   );
 
+  // Ask: the selection becomes an AI underline carrying a new thread's id, and
+  // that conversation opens over the page.
+  const { openMark } = lesson;
+  const askAboutSelection = useCallback(() => {
+    const mark = viewRef.current?.saveSelection({
+      stroke: "underline",
+      color: AI_PEN_COLOR,
+      aiThreadId: crypto.randomUUID(),
+    });
+    setSelection(null);
+    if (mark) openMark(mark);
+  }, [openMark]);
+
+  const askAboutMark = useCallback(
+    (id: string) => {
+      if (viewRef.current?.selectMark(id)) askAboutSelection();
+    },
+    [askAboutSelection],
+  );
+
+  const openConversation = useCallback(
+    (id: string) => {
+      const mark = marksRef.current.find((a) => a.id === id);
+      if (mark) openMark(mark);
+    },
+    [openMark],
+  );
+
+  // The passage a conversation in the slot is about, for the quote over it.
+  const call = lesson.call;
+  const quote =
+    call && !call.isBook && call.annotationId
+      ? (marksRef.current.find((a) => a.id === call.annotationId)?.text as string | undefined) ?? null
+      : null;
+
+  const covered = panel !== null || lesson.onScreen;
+
   return (
     <div className="absolute inset-0">
     {/* The paper the reader chose is the whole reading screen's, not just the
-        column's: the dark one redefines the tokens the bar and the sheets are
-        drawn from (styles.css), and the other three leave them alone. The
-        lesson is not under it — it is a conversation, not the paper. */}
+        column's: the dark one redefines the tokens the bars and the sheets are
+        drawn from (styles.css), and the other three leave them alone. */}
     <div
-      className="absolute inset-0 flex flex-col bg-background"
+      ref={screenRef}
+      className="absolute inset-0 overflow-hidden bg-background"
+      // The strip under the paged view, where the page line sits, is the paper.
+      style={{ backgroundColor: flowPaperSwatch(FLOW_PAPERS[display.paper]) }}
       data-reader-paper={display.paper}
+      data-chrome={chrome ? "shown" : "hidden"}
       // Covered, not unmounted, while the lesson is up: the column keeps its
       // place and its layout, so a citation can be found and marked in it.
       aria-hidden={lesson.onScreen || undefined}
     >
-      <PhoneReaderBar
-        title={name}
-        status={status}
-        stats={stats}
-        tool={tool}
-        onToolChange={changeTool}
-        onBack={props.onBack}
-        onOutline={() => setOutlineOpen(true)}
-        onDisplay={() => setDisplayOpen(true)}
-        {...(book ? { onLearn: lesson.learn } : {})}
-        learnDot={lesson.dot}
-      />
-
-      <div className="relative min-h-0 flex-1">
+      {/* The paged view leaves a strip at the foot for the page line; the
+          scrolled column runs under it. */}
+      <div className={cn("absolute inset-x-0 top-0", display.mode === "paged" ? "bottom-6" : "bottom-0")}>
         {failed ? (
           <p className="m-0 px-5 py-8 text-[15px] text-muted-foreground">{failed}</p>
         ) : book ? (
@@ -256,7 +319,7 @@ export default function PhoneReader(props: {
             annotations={pageMarks(marksRef.current)}
             authorName="me"
             viewState={book.viewState}
-            tool={flowTool(tool)}
+            tool={NO_PEN}
             display={display}
             backEdgePx={EDGE_ZONE}
             className="absolute inset-0"
@@ -273,113 +336,124 @@ export default function PhoneReader(props: {
               setFailed(t("phone.reader.drawFailed"));
             }}
             onChangeViewState={(s) => {
+              // A turn or a scroll puts the bars away.
+              const was = lastStateRef.current;
+              if (was && (was.cfi !== s.cfi || was.pageIndex !== s.pageIndex)) setChrome(false);
               lastStateRef.current = s;
               io.keepReadingPosition(bookId, s);
             }}
             onChangeViewStats={setStats}
             onSaveAnnotations={(anns) => {
-              marksRef.current = mergeSavedMarks(marksRef.current, anns);
+              setMarks(mergeSavedMarks(marksRef.current, anns));
               saveAnnotations(bookId, [...marksRef.current]);
             }}
             onSelectAnnotations={() => {}}
-            onSetAnnotationPopup={(params) => setPopup(params ?? null)}
+            onSetAnnotationPopup={(params) => {
+              setChrome(false);
+              setHint(false);
+              setPopup(params ? { popup: params, frame: frameNow() } : null);
+            }}
+            onSelection={(next) => {
+              if (next) {
+                setChrome(false);
+                setHint(false);
+                setPopup(null);
+              }
+              setSelection(next ? { selection: next, frame: frameNow() } : null);
+            }}
+            onMiddleTap={() => {
+              setHint(false);
+              setChrome((on) => !on);
+            }}
           />
         ) : null}
-
-        {popup && (
-          <MarkPopup
-            rect={popup.rect}
-            onDelete={() => askRemoveMark(popup.annotation.id)}
-            onClose={() => setPopup(null)}
-            onTapThrough={(x, y) => viewRef.current?.turnByTap(x, y)}
-          />
-        )}
-
-        {confirming && (
-          // Opened after the popup has closed, so it sits on the dialog layer
-          // and nothing covers Cancel (docs/pitfall/211).
-          <ConfirmDestructiveDialog
-            title={t("phone.reader.deleteMarkTitle")}
-            description={t("phone.reader.deleteMarkDescription")}
-            open
-            onOpenChange={(open) => !open && setConfirming(null)}
-            onConfirm={() => deleteMarkWithThread(confirming)}
-          />
-        )}
       </div>
 
-      <PhoneOutlineSheet
-        open={outlineOpen}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute top-[64%] left-1/2 z-4 -translate-x-1/2 -translate-y-1/2 rounded-3xl bg-primary px-4.5 py-3 text-center text-[14px] leading-snug whitespace-nowrap text-primary-foreground opacity-0 shadow-lg transition-opacity duration-300",
+          hint && "opacity-90",
+        )}
+      >
+        {t("phone.reader.hintTap")}
+        <br />
+        {t("phone.reader.hintHold")}
+      </div>
+
+      {selection && (
+        <PhoneSelection
+          selection={selection.selection}
+          frame={selection.frame}
+          onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
+          onHighlight={() => {
+            viewRef.current?.saveSelection({ stroke: "highlight", color: HIGHLIGHT_COLOR });
+            setSelection(null);
+          }}
+          onAsk={askAboutSelection}
+        />
+      )}
+
+      {popup && (
+        <PhoneMarkPopup
+          popup={popup.popup}
+          frame={popup.frame}
+          onClose={() => setPopup(null)}
+          onDelete={askRemoveMark}
+          onAsk={askAboutMark}
+          onOpen={openConversation}
+        />
+      )}
+
+      <PhoneReaderBar
+        shown={chrome}
+        title={name}
+        status={status}
+        stats={stats}
+        onBack={props.onBack}
+        onOutline={() => openPanel("contents")}
+        onDisplay={() => openPanel("display")}
+        {...(book ? { onLearn: lesson.learn } : {})}
+        learnDot={lesson.dot}
+        covered={covered}
+      />
+
+      {confirming && (
+        // Opened after the popup has closed, so it sits on the dialog layer
+        // and nothing covers Cancel (docs/pitfall/211).
+        <ConfirmDestructiveDialog
+          title={t("phone.reader.deleteMarkTitle")}
+          description={t("phone.reader.deleteMarkDescription")}
+          open
+          onOpenChange={(open) => !open && setConfirming(null)}
+          onConfirm={() => deleteMarkWithThread(confirming)}
+        />
+      )}
+
+      <PhoneContentsSheet
+        open={panel === "contents"}
+        tab={tab}
+        onTabChange={setTab}
+        bookId={bookId}
         outline={book?.outline ?? []}
+        marks={marksRef.current}
         paper={display.paper}
-        onOpenChange={setOutlineOpen}
+        onOpenChange={(open) => setPanel(open ? "contents" : null)}
         onGoToChapter={(pageIndex) => viewRef.current?.goToChapter(pageIndex)}
+        onGoToMark={(id) => viewRef.current?.goToAnnotation(id)}
+        onOpenConversation={openConversation}
+        onDeleteMark={askRemoveMark}
       />
 
       <PhoneDisplaySheet
-        open={displayOpen}
+        open={panel === "display"}
         display={display}
-        onOpenChange={setDisplayOpen}
+        onOpenChange={(open) => setPanel(open ? "display" : null)}
         onChange={changeDisplay}
       />
     </div>
 
-    {lesson.onScreen && <PhoneBookLesson title={name} lesson={lesson} />}
+    {lesson.onScreen && <PhoneBookLesson title={name} lesson={lesson} quote={quote} />}
     </div>
-  );
-}
-
-// A mark that was tapped: delete it, or let it be. No colour and no comment —
-// the pane draws the marks it was handed and the contract gives the shell no
-// way to change one that is already on screen, only to take it away.
-function MarkPopup(props: {
-  rect: [number, number, number, number];
-  onDelete: () => void;
-  onClose: () => void;
-  onTapThrough: (clientX: number, clientY: number) => void;
-}) {
-  const t = useT();
-  const [left, , right, bottom] = props.rect;
-  const down = useRef<{ id: number; x: number; y: number } | null>(null);
-  return (
-    <>
-      {/* A press anywhere else puts it away, and a tap on the side of the page
-          still turns it: the scrim hands it on. */}
-      <div
-        className="fixed inset-0"
-        data-testid="mark-popup-scrim"
-        onPointerDown={(e) => {
-          down.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
-        }}
-        onPointerUp={(e) => {
-          const d = down.current;
-          down.current = null;
-          props.onClose();
-          if (d && d.id === e.pointerId && stayedATap(d.x, d.y, e.clientX, e.clientY)) {
-            props.onTapThrough(e.clientX, e.clientY);
-          }
-        }}
-        onPointerCancel={props.onClose}
-      />
-      <div
-        className={cn(
-          "fixed -translate-x-1/2 rounded-xl border border-black/10 bg-popover p-1 shadow-lg",
-          OVERLAY_Z.floating,
-        )}
-        style={{ left: (left + right) / 2, top: bottom + 8 }}
-      >
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-destructive"
-          title={t("phone.reader.deleteMarkButton")}
-          aria-label={t("phone.reader.deleteMarkButton")}
-          onClick={props.onDelete}
-        >
-          <IconTrash size={16} />
-          <span className="ml-1.5">{t("phone.reader.delete")}</span>
-        </Button>
-      </div>
-    </>
   );
 }

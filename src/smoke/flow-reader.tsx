@@ -9,13 +9,14 @@
 //   ?cfi=<cfi>       open at this CFI; ?page=<n> at the start of this page
 //   ?width=<px>      the column's width (default 393)
 //   ?paper=<name>    white | paper | green | dark; ?font=<px>, ?line=<n>, ?pad=<px>
+//   ?mode=paged      turn pages rather than scroll
 
 import { HIGHLIGHT_COLOR } from "../platform/app/annotations";
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { buildEpub, prose } from "../../tests/reading/epub/fixture";
 import type { Annotation, ViewState } from "../platform/app/reader-contract";
-import type { FlowReaderView, FlowTool } from "../reading/epub/flow/flow-contract";
+import type { FlowReaderView, FlowSelection, FlowTool } from "../reading/epub/flow/flow-contract";
 import FlowReaderPane from "../reading/epub/flow/FlowReaderPane";
 import { parseEpubRangeCfi, resolveRange } from "../reading/epub/file/cfi";
 import { FLOW_DISPLAY_DEFAULT, normalizeFlowDisplay, type FlowDisplay } from "../reading/epub/flow/flow-display";
@@ -31,6 +32,9 @@ interface FlowLog {
   saved: Annotation[][];
   selected: string[][];
   popups: unknown[];
+  /** Every selection the view reported, null when it went. */
+  selections: (FlowSelection | null)[];
+  middleTaps: number;
   setTool: (tool: FlowTool) => void;
   setDisplay: (display: FlowDisplay) => void;
   /** The words a range CFI resolves to in a mounted document, for a driver to check a mark by. */
@@ -121,6 +125,12 @@ function Harness(props: {
         onSetAnnotationPopup={(params) => {
           log.popups.push(params ?? null);
         }}
+        onSelection={(selection) => {
+          log.selections.push(selection);
+        }}
+        onMiddleTap={() => {
+          log.middleTaps += 1;
+        }}
       />
     </div>
   );
@@ -138,6 +148,8 @@ export async function runFlowReaderSmoke(): Promise<void> {
     saved: [],
     selected: [],
     popups: [],
+    selections: [],
+    middleTaps: 0,
     setTool: () => {},
     setDisplay: () => {},
     wordsOf: (cfi) => {
@@ -170,6 +182,7 @@ export async function runFlowReaderSmoke(): Promise<void> {
     ...(params.has("line") ? { lineHeight: Number(params.get("line")) } : {}),
     ...(params.has("pad") ? { padX: Number(params.get("pad")) } : {}),
     ...(params.has("paper") ? { paper: params.get("paper") } : {}),
+    ...(params.has("mode") ? { mode: params.get("mode") } : {}),
   });
   document.body.style.margin = "0";
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

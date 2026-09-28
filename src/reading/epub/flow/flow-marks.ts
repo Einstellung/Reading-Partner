@@ -1,7 +1,12 @@
 // The marks in the reflow column (docs/70): what is painted over every mounted
-// document, what a finger leaves behind, and what a tap on one opens. The
-// column (flow-view.ts) owns the documents and the pointer; this layer is
-// handed the documents and told when a drag begins, moves and ends.
+// document, what a finger selects, and what a tap on one opens. The column
+// (flow-view.ts) owns the documents and the pointer; this layer is handed the
+// documents and told when a drag begins, moves and ends.
+//
+// A drag is a selection, not a mark (docs/82): it stays on the page after the
+// finger lifts, its two ends can be moved by the shell's handles, and it
+// becomes a mark only when the shell saves it — a highlight, or the underline
+// an Ask leaves. Saving a highlight over highlights already there merges them.
 //
 // A text mark is the same mark the sheets draw (mark-layer.ts, docs/64): a
 // range CFI as the anchor, the quote as the repair, and the pagination table's
@@ -13,11 +18,11 @@
 // is a rect the overlay draws unchanged. Only the popup's rect leaves as a
 // viewport rect.
 
-import type { Annotation, AnnotationPopupParams } from "../../../platform/app/reader-contract";
-import { DEFAULT_MARK_COLOR, epubPositionOf, markKind } from "../annotation";
+import type { Annotation } from "../../../platform/app/reader-contract";
+import { epubPositionOf, markKind } from "../annotation";
 import { caretAtPoint, rangeBetween, type CaretPoint } from "../caret";
 import { parseCfiStart, parseEpubRangeCfi, resolveRange } from "../file/cfi";
-import type { FlowTool } from "./flow-contract";
+import type { FlowMarkPopup, FlowMarkSpec, FlowRect, FlowSelection, FlowTool } from "./flow-contract";
 import { wordBoundsAt } from "./flow-gesture";
 import { colorOf, createMarkPainter, rangeForMark, type MarkRangeSource, type SpineText } from "../mark-draw";
 import { popupRect, rectsHit, unionRect, type PageRect } from "../mark-geometry";
@@ -50,7 +55,7 @@ export interface FlowMarkHost {
   /** Every mark of the book, after one was added. */
   onSave(annotations: Annotation[]): void;
   onSelect(ids: string[]): void;
-  onPopup(params?: AnnotationPopupParams): void;
+  onPopup(params?: FlowMarkPopup): void;
   /**
    * Where a drag's end is in a document, for a view whose margins are not the
    * book's: the paged view (docs/79) looks for the nearest words on the screen
@@ -70,12 +75,18 @@ interface PaintedMark {
   rects: PageRect[];
 }
 
-interface Drag {
+interface Selecting {
   doc: FlowDoc;
-  color: string;
-  start: CaretPoint;
+  /** The word the hold began on, which a drag grows from. */
+  startWord: { start: CaretPoint; end: CaretPoint };
   range: Range | null;
 }
+
+/** The blue a selection is drawn in, under the marks' own opacity. */
+const SELECTION_COLOR = "#3f7ff0";
+
+/** How long a mark reached from the Marks list stays ringed. */
+const FLASH_MS = 1500;
 
 export interface FlowMarks {
   reset(annotations: readonly Annotation[]): void;
@@ -93,12 +104,24 @@ export interface FlowMarks {
   caretAt(clientX: number, clientY: number): PressPoint | null;
   beginDrag(at: PressPoint): void;
   extendDrag(clientX: number, clientY: number): void;
-  /** Write the mark. False when the drag covered no words. */
+  /** The finger lifted: the selection stays. False when it covered no words. */
   commitDrag(): boolean;
   cancelDrag(): void;
   isDragging(): boolean;
   /** A press that was not a drag: open the mark under it, if there is one. */
   tapAt(clientX: number, clientY: number): boolean;
+  /** The selection left by the last drag, where it is on screen now. */
+  selection(): FlowSelection | null;
+  hasSelection(): boolean;
+  moveSelectionEnd(end: "start" | "end", clientX: number, clientY: number): void;
+  saveSelection(spec: FlowMarkSpec): Annotation | null;
+  clearSelection(): void;
+  /** Select a mark's words, as a hold would have. False when they are not laid out. */
+  selectMark(id: string): boolean;
+  /** Ring a mark for a moment. */
+  flash(id: string): void;
+  /** Where a mark is, as the range CFI it was written with. */
+  cfiOf(id: string): string | null;
 }
 
 /** A document's tree and spine item, for the shared lookups in mark-draw.ts. */
@@ -128,8 +151,9 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
   const painted = new Map<number, PaintedMark[]>();
   const dirty = new Set<number>();
   const selected = new Set<string>();
-  let toolColor = DEFAULT_MARK_COLOR;
-  let drag: Drag | null = null;
+  let sel: Selecting | null = null;
+  let dragging = false;
+  let flashTimer: ReturnType<typeof setTimeout> | null = null;
   const owner = host.owner;
   const painter = createMarkPainter(owner);
 
@@ -164,6 +188,7 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     }
     painted.set(doc.spine, drawn);
     dirty.delete(doc.spine);
+    if (sel?.doc === doc) paintSelection();
   }
 
   function invalidate(spine: number): void {
@@ -181,69 +206,160 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     for (const spine of spines) invalidate(spine);
   }
 
-  // --- the draft ----------------------------------------------------------
+  // --- the selection ----------------------------------------------------
 
-  function paintDraft(): void {
-    if (!drag) return;
-    const layer = painter.sublayer(drag.doc.overlay, "rp-draft");
+  function paintSelection(): void {
+    if (!sel) return;
+    const layer = painter.sublayer(sel.doc.overlay, "rp-select");
     layer.replaceChildren();
-    if (!drag.range) return;
-    painter.drawStroke(layer, "highlight", rectsIn(drag.doc, drag.range), drag.color);
+    if (!sel.range) return;
+    painter.drawStroke(layer, "highlight", rectsIn(sel.doc, sel.range), SELECTION_COLOR);
   }
 
-  function clearDraft(doc: FlowDoc): void {
-    doc.overlay.querySelector<HTMLElement>(".rp-draft")?.replaceChildren();
+  function clearSelection(): void {
+    if (!sel) return;
+    sel.doc.overlay.querySelector<HTMLElement>(".rp-select")?.replaceChildren();
+    sel = null;
+    dragging = false;
   }
 
-  // --- writing a mark -----------------------------------------------------
+  function selection(): FlowSelection | null {
+    if (!sel?.range || dragging) return null;
+    const rects: FlowRect[] = [];
+    for (const r of Array.from(sel.range.getClientRects())) {
+      if (r.width < 0.5 || r.height < 0.5) continue;
+      rects.push({ left: r.left, top: r.top, width: r.width, height: r.height });
+    }
+    if (rects.length === 0) return null;
+    return { rects, text: sel.range.toString() };
+  }
 
-  function commit(d: Drag): boolean {
-    if (!d.range) return false;
-    const mark = textMarkOf(d.range, {
-      spine: d.doc.spine,
-      stroke: "highlight",
-      color: d.color,
+  function caretIn(doc: FlowDoc, clientX: number, clientY: number): CaretPoint | null {
+    return host.strokeCaret
+      ? host.strokeCaret(doc, clientX, clientY)
+      : caretAtPoint(doc.shadow, doc.root, clientX, clientY);
+  }
+
+  function wordOf(caret: CaretPoint): { start: CaretPoint; end: CaretPoint } {
+    const w = wordBoundsAt(caret.node.data, caret.offset);
+    return { start: { node: caret.node, offset: w.start }, end: { node: caret.node, offset: w.end } };
+  }
+
+  // The selection from the word a hold began on to the word under a point, in
+  // whichever direction the point is: the far edge of each word, so a drag
+  // never cuts one.
+  function spanTo(from: { start: CaretPoint; end: CaretPoint }, to: CaretPoint): Range | null {
+    const target = wordOf(to);
+    const probe = owner.createRange();
+    try {
+      probe.setStart(from.start.node, from.start.offset);
+      probe.collapse(true);
+      if (probe.comparePoint(to.node, to.offset) < 0) return rangeBetween(owner, target.start, from.end);
+    } catch {
+      return null;
+    }
+    return rangeBetween(owner, from.start, target.end);
+  }
+
+  function moveSelectionEnd(end: "start" | "end", clientX: number, clientY: number): void {
+    if (!sel?.range) return;
+    const caret = caretIn(sel.doc, clientX, clientY);
+    if (!caret) return;
+    const r = sel.range;
+    // The end that stays, as a point: the moving one grows from it the way a
+    // drag grows from the held word.
+    const node = end === "start" ? r.endContainer : r.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE) return;
+    const at: CaretPoint = { node: node as Text, offset: end === "start" ? r.endOffset : r.startOffset };
+    const next = spanTo({ start: at, end: at }, caret);
+    if (!next) return;
+    sel.range = next;
+    paintSelection();
+  }
+
+  // Highlights the new one touches: their words join it and they go, so two
+  // marks never sit on the same words.
+  function mergeInto(doc: FlowDoc, range: Range): { range: Range; gone: string[] } {
+    const merged = range.cloneRange();
+    const gone: string[] = [];
+    for (const ann of marks.values()) {
+      if (spineOfMark(ann) !== doc.spine || markKind(ann) !== "highlight") continue;
+      const other = rangeForMark(rangesOf(doc), ann);
+      if (!other) continue;
+      let overlaps = false;
+      try {
+        overlaps =
+          other.compareBoundaryPoints(Range.END_TO_START, merged) <= 0 &&
+          other.compareBoundaryPoints(Range.START_TO_END, merged) >= 0;
+      } catch {
+        continue;
+      }
+      if (!overlaps) continue;
+      if (other.compareBoundaryPoints(Range.START_TO_START, merged) < 0) {
+        merged.setStart(other.startContainer, other.startOffset);
+      }
+      if (other.compareBoundaryPoints(Range.END_TO_END, merged) > 0) {
+        merged.setEnd(other.endContainer, other.endOffset);
+      }
+      gone.push(ann.id);
+    }
+    return { range: merged, gone };
+  }
+
+  function saveSelection(spec: FlowMarkSpec): Annotation | null {
+    const s = sel;
+    if (!s?.range) return null;
+    const { range, gone } = spec.stroke === "highlight" ? mergeInto(s.doc, s.range) : { range: s.range, gone: [] };
+    const mark = textMarkOf(range, {
+      spine: s.doc.spine,
+      stroke: spec.stroke,
+      color: spec.color,
       spineOf: host.spineOf,
       pagination: host.pagination,
       authorName: host.authorName,
       now: new Date().toISOString(),
       id: crypto.randomUUID(),
     });
-    if (!mark) return false;
-    marks.set(mark.id, mark);
-    invalidate(d.doc.spine);
+    clearSelection();
+    if (!mark) return null;
+    const saved = spec.aiThreadId ? ({ ...mark, aiThreadId: spec.aiThreadId } as Annotation) : mark;
+    for (const id of gone) {
+      marks.delete(id);
+      selected.delete(id);
+    }
+    marks.set(saved.id, saved);
+    invalidate(s.doc.spine);
     host.onSave(Array.from(marks.values()));
-    return true;
+    return saved;
   }
 
   // --- pressing a mark ----------------------------------------------------
 
-  function markAt(clientX: number, clientY: number): { doc: FlowDoc; mark: PaintedMark } | null {
+  function tapAt(clientX: number, clientY: number): boolean {
     const doc = host.docAt(clientX, clientY);
-    if (!doc) return null;
-    const drawn = painted.get(doc.spine);
-    if (!drawn) return null;
+    const drawn = doc ? painted.get(doc.spine) : undefined;
+    if (!doc || !drawn) return false;
     const box = doc.host.getBoundingClientRect();
     const at = { x: clientX - box.left, y: clientY - box.top };
-    // Last painted first: the newest mark is the one on top.
-    for (let i = drawn.length - 1; i >= 0; i--) {
-      if (rectsHit(drawn[i].rects, at)) return { doc, mark: drawn[i] };
-    }
-    return null;
-  }
-
-  function tapAt(clientX: number, clientY: number): boolean {
-    const hit = markAt(clientX, clientY);
-    if (!hit) return false;
-    const ann = marks.get(hit.mark.id);
-    if (!ann) return false;
-    const box = unionRect(hit.mark.rects);
-    if (!box) return false;
-    const origin = hit.doc.host.getBoundingClientRect();
-    host.onSelect([ann.id]);
+    // Every mark under the finger, newest first. An underline wins: it is a
+    // door into a conversation, and the highlight it runs through rides along.
+    const hits = drawn
+      .filter((m) => rectsHit(m.rects, at))
+      .reverse()
+      .flatMap((m) => {
+        const ann = marks.get(m.id);
+        return ann ? [{ painted: m, ann }] : [];
+      });
+    const first = hits.find((h) => markKind(h.ann) === "underline") ?? hits[0];
+    if (!first) return false;
+    const under = hits.find((h) => h !== first && markKind(h.ann) === "highlight");
+    const union = unionRect(first.painted.rects);
+    if (!union) return false;
+    host.onSelect([first.ann.id]);
     host.onPopup({
-      rect: popupRect(box, (p) => ({ x: origin.left + p.x, y: origin.top + p.y })),
-      annotation: ann,
+      rect: popupRect(union, (p) => ({ x: box.left + p.x, y: box.top + p.y })),
+      annotation: first.ann,
+      ...(under && markKind(first.ann) === "underline" ? { under: under.ann } : {}),
     });
     return true;
   }
@@ -257,38 +373,63 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     return caret ? { doc, caret } : null;
   }
 
-  // The word under the finger is the first thing highlighted, so a hold shows
-  // what it began before the finger has moved.
+  // The word under the finger is selected first, so a hold shows what it began
+  // before the finger has moved.
   function beginDrag(at: PressPoint): void {
-    const word = wordBoundsAt(at.caret.node.data, at.caret.offset);
-    const start: CaretPoint = { node: at.caret.node, offset: word.start };
-    const end: CaretPoint = { node: at.caret.node, offset: word.end };
-    drag = { doc: at.doc, color: toolColor, start, range: rangeBetween(owner, start, end) };
-    paintDraft();
+    clearSelection();
+    const word = wordOf(at.caret);
+    sel = { doc: at.doc, startWord: word, range: rangeBetween(owner, word.start, word.end) };
+    dragging = true;
+    paintSelection();
   }
 
   function extendDrag(clientX: number, clientY: number): void {
-    if (!drag) return;
-    const end = host.strokeCaret
-      ? host.strokeCaret(drag.doc, clientX, clientY)
-      : caretAtPoint(drag.doc.shadow, drag.doc.root, clientX, clientY);
+    if (!sel || !dragging) return;
+    const end = caretIn(sel.doc, clientX, clientY);
     if (!end) return;
-    drag.range = rangeBetween(owner, drag.start, end);
-    paintDraft();
+    const next = spanTo(sel.startWord, end);
+    if (!next) return;
+    sel.range = next;
+    paintSelection();
   }
 
+  // The finger lifted: the selection stays. False when it covered no words.
   function commitDrag(): boolean {
-    const d = drag;
-    if (!d) return false;
-    drag = null;
-    clearDraft(d.doc);
-    return commit(d);
+    if (!sel || !dragging) return false;
+    dragging = false;
+    if (!sel.range || sel.range.toString().trim() === "") {
+      clearSelection();
+      return false;
+    }
+    return true;
   }
 
-  function cancelDrag(): void {
-    if (!drag) return;
-    clearDraft(drag.doc);
-    drag = null;
+  function selectMark(id: string): boolean {
+    const ann = marks.get(id);
+    const spine = ann ? spineOfMark(ann) : null;
+    const doc = spine === null ? null : host.docOf(spine);
+    const range = ann && doc ? rangeForMark(rangesOf(doc), ann) : null;
+    if (!doc || !range || range.collapsed) return false;
+    clearSelection();
+    const start = { node: range.startContainer as Text, offset: range.startOffset };
+    sel = { doc, startWord: { start, end: start }, range };
+    paintSelection();
+    return true;
+  }
+
+  function flash(id: string): void {
+    const ann = marks.get(id);
+    if (!ann) return;
+    if (flashTimer) clearTimeout(flashTimer);
+    selected.clear();
+    selected.add(id);
+    invalidateMarks([ann]);
+    flashTimer = setTimeout(() => {
+      flashTimer = null;
+      if (!selected.delete(id)) return;
+      const still = marks.get(id);
+      if (still) invalidateMarks([still]);
+    }, FLASH_MS);
   }
 
   return {
@@ -298,6 +439,7 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
       selected.clear();
       painted.clear();
       dirty.clear();
+      clearSelection();
     },
 
     setAnnotations(annotations) {
@@ -335,9 +477,9 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
       invalidateMarks(anns);
     },
 
-    setTool(tool) {
-      if (tool.color) toolColor = tool.color;
-    },
+    // The phone has no pen: a drag is always a selection, and the colour of
+    // a mark is decided when the selection is saved.
+    setTool() {},
 
     all: () => Array.from(marks.values()),
     needsPaint: (spine) => dirty.has(spine) || !painted.has(spine),
@@ -347,8 +489,16 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     beginDrag,
     extendDrag,
     commitDrag,
-    cancelDrag,
-    isDragging: () => drag !== null,
+    cancelDrag: clearSelection,
+    isDragging: () => dragging,
     tapAt,
+    selection,
+    hasSelection: () => sel !== null,
+    moveSelectionEnd,
+    saveSelection,
+    clearSelection,
+    selectMark,
+    flash,
+    cfiOf: (id) => epubPositionOf(marks.get(id))?.value ?? null,
   };
 }

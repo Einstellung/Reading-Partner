@@ -11,6 +11,13 @@
 // The hook is called ahead of the reader's own open/close effect, so on the way
 // out of the book the call is hung up (call-end, distillation) before the reader
 // writes its position and lets the archive go — close-book.ts's order.
+//
+// Besides the book's lesson, the slot holds a passage's conversation (docs/82):
+// Ask on a selection or a highlight leaves an AI underline carrying a thread
+// id, and the conversation is anchored on that mark the way the iPad's AI pen
+// anchors one (use-mark-doors.ts). It is written down when the underline is,
+// so the underline is a door into it from the start; closing it with nothing
+// asked takes both away again.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../../i18n";
@@ -27,6 +34,7 @@ import type { Citation } from "../../../../reading/prep";
 import type { PrepPipeline } from "../../../../reading/prep/papers/pipeline";
 import { lessonDot, seenReplyTs, type LessonDot } from "../../../../reading/session/lesson-dot";
 import { resolveBookThread } from "../../../../reading/session/book-thread";
+import { createThread, getThread, loadThreads } from "../../../../platform/app/threads";
 import {
   citationLogDetail,
   citationSources,
@@ -76,6 +84,11 @@ export interface BookLessonArgs {
   marksRef: { readonly current: readonly Annotation[] };
   removeMark(id: string): void;
   gate: ViewGate<FlowReaderView>;
+}
+
+/** A passage conversation opened on a mark and left with nothing asked. */
+export function leftEmpty(call: { isBook?: boolean; annotationId: string; messages: readonly unknown[] } | null): boolean {
+  return !!call && call.isBook !== true && call.annotationId !== "" && call.messages.length === 0;
 }
 
 export function useBookLesson(args: BookLessonArgs) {
@@ -146,7 +159,7 @@ export function useBookLesson(args: BookLessonArgs) {
         ? null
         : staged.flatMap((p) => (p.status === "ready" ? [{ data: p.data, mediaType: p.mediaType }] : [])),
   });
-  const { call, showChat, showReading, reopenThread } = lesson;
+  const { call, showChat, showReading, reopenThread, dropThread } = lesson;
   const sessionRef = useRef(lesson);
   sessionRef.current = lesson;
 
@@ -193,9 +206,10 @@ export function useBookLesson(args: BookLessonArgs) {
   }, [book, bookId]);
 
   // Learn: the book's thread, read from its file on every press
-  // (book-thread.ts), or the call already open behind the page.
+  // (book-thread.ts), or the book's call already open behind the page. A
+  // passage's conversation in the slot is not the lesson: Learn replaces it.
   const learn = useCallback(() => {
-    if (sessionRef.current.current()) {
+    if (sessionRef.current.current()?.isBook) {
       showChat();
       return;
     }
@@ -212,12 +226,46 @@ export function useBookLesson(args: BookLessonArgs) {
     })();
   }, [showChat, reopenThread, pushToast]);
 
+  // A mark's conversation, opened as itself over the page. A record that has
+  // not arrived on this device yet is written now, so the door opens onto an
+  // empty conversation rather than onto nothing.
+  const openMark = useCallback(
+    (mark: Annotation) => {
+      const id = bookIdRef.current;
+      const threadId = typeof mark.aiThreadId === "string" ? mark.aiThreadId : "";
+      if (!id || !threadId) return;
+      void (async () => {
+        try {
+          await loadThreads(id);
+        } catch (e) {
+          console.error("threads did not load", e);
+          pushToast("warn", t("phone.bookLessonHook.threadsUnreadable"));
+          return;
+        }
+        if (bookIdRef.current !== id) return;
+        const thread = getThread(id, threadId) ?? createThread(id, mark.id, threadId);
+        reopenThread(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
+      })();
+    },
+    [reopenThread, pushToast],
+  );
+
+  // Going back to the page. A passage's conversation that was never asked
+  // anything goes, underline and all: the Ask was changed one's mind about.
+  const back = useCallback(() => {
+    const c = sessionRef.current.current();
+    showReading();
+    if (!leftEmpty(c) || !c) return;
+    dropThread(c.annotationId, c.threadId);
+    removeMark(c.annotationId);
+  }, [showReading, dropThread, removeMark]);
+
   const onScreen = lessonOnScreen(call);
   useEffect(() => {
     if (!onOverlayChange) return;
-    onOverlayChange(onScreen ? showReading : null);
+    onOverlayChange(onScreen ? back : null);
     return () => onOverlayChange(null);
-  }, [onOverlayChange, onScreen, showReading]);
+  }, [onOverlayChange, onScreen, back]);
 
   // The dot on Learn. What was last seen moves forward while the lesson is on
   // screen, read off the call on every render.
@@ -270,7 +318,8 @@ export function useBookLesson(args: BookLessonArgs) {
     onScreen,
     dot,
     learn,
-    back: showReading,
+    openMark,
+    back,
     send: lesson.send,
     stop: lesson.stop,
     retry: lesson.retry,

@@ -1,7 +1,7 @@
-// The phone's reading screen on a real DOM (docs/70), against a stub pane: the
-// page text the desk prints, the two sheets, and the two AI controls drawn and
-// unpressable. The pane itself is another file's; what is pinned here is the
-// shell it is handed to. Run: bun test.
+// The phone's reading screen on a real DOM (docs/70, docs/82), against a stub
+// pane: the page text the desk prints, the bars a middle tap brings, the two
+// sheets, and what a selection and a tapped mark offer. The pane itself is
+// another file's; what is pinned here is the shell it is handed to. Run: bun test.
 
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { useEffect } from "react";
@@ -11,19 +11,19 @@ import type { Thread, ThreadMessage } from "../../../../../src/platform/app/thre
 import * as events from "../../../../../src/platform/app/events";
 import * as memory from "../../../../../src/memory";
 import * as threads from "../../../../../src/platform/app/threads";
+import * as annotations from "../../../../../src/platform/app/annotations";
 import * as agent from "../../../../../src/legion/execute/turn";
 import * as turn from "../../../../../src/reading/turn/turn";
 import type { AgentCallbacks } from "../../../../../src/legion/execute/contract";
 import { callSettings, emptyReadingTurn } from "../../../../support/use-call";
 import { bookThreadIo } from "../../../../../src/reading/session/book-thread";
 import type { LessonTopic } from "../../../../../src/ui/components/phone/lesson/use-book-lesson";
-import type { FlowReaderPaneProps } from "../../../../../src/reading/epub/flow/flow-contract";
+import type { FlowMarkSpec, FlowReaderPaneProps } from "../../../../../src/reading/epub/flow/flow-contract";
 import {
   FLOW_DISPLAY_DEFAULT,
   FLOW_DISPLAY_KEY,
   type FlowDisplay,
 } from "../../../../../src/reading/epub/flow/flow-display";
-import { aiPenNotOnPhone } from "../../../../../src/ui/components/phone/reader/reader-gate";
 import type { PhoneBookIo } from "../../../../../src/reading/session/open-epub";
 import { useDom } from "../../../../support/dom";
 
@@ -54,8 +54,12 @@ const displays: FlowDisplay[] = [];
 // Every quote the column was asked to mark, and how many times a pane mounted.
 const highlights: [number, string][] = [];
 let paneMounts = 0;
-// Every tap the mark popup's scrim handed on to the view.
+// Every tap handed on to the view, every mark it was asked to save, remove, go
+// to or select.
 const taps: [number, number][] = [];
+const saved: FlowMarkSpec[] = [];
+const removed: string[][] = [];
+const wentTo: string[] = [];
 // The props the pane was last rendered with, for a test that plays the pane.
 let paneProps: FlowReaderPaneProps | null = null;
 
@@ -86,7 +90,33 @@ function StubPane(props: FlowReaderPaneProps) {
         return true;
       },
       clearQuoteHighlight() {},
-      removeAnnotations() {},
+      removeAnnotations(ids) {
+        removed.push(ids);
+      },
+      goToAnnotation(id) {
+        wentTo.push(id);
+      },
+      moveSelectionEnd() {},
+      // What the real view does with a selection: a mark over its words, handed
+      // back in the whole list the shell writes to disk.
+      saveSelection(spec) {
+        saved.push(spec);
+        const mark = {
+          id: `m${saved.length}`,
+          type: spec.stroke,
+          color: spec.color,
+          text: "the words held",
+          sortIndex: "00001|0000010",
+          pageLabel: "37",
+          position: { type: "FragmentSelector", conformsTo: "", value: "epubcfi(/6/4!/4/2,/1:0,/1:5)", pageIndex: 36 },
+          ...(spec.aiThreadId ? { aiThreadId: spec.aiThreadId } : {}),
+        } as unknown as Annotation;
+        props.onSaveAnnotations([mark]);
+        props.onSelection?.(null);
+        return mark;
+      },
+      clearSelection() {},
+      selectMark: () => true,
       setTool() {},
       setDisplay() {},
       destroy() {},
@@ -167,12 +197,34 @@ test("the book comes up and the bar counts in the pages the desk counts in", asy
   expect(container.textContent).toContain("printed 52");
 });
 
-test("the AI pen is on screen with its reason, and Learn can be pressed", async () => {
+test("the bars are away while reading, and a tap in the middle brings them and puts them back", async () => {
   const { container, getByLabelText } = await openReader();
-  const dim = [...container.querySelectorAll("button[disabled]")];
-  const reasons = dim.map((b) => b.getAttribute("title"));
-  expect(reasons.filter((r) => r === aiPenNotOnPhone()).length).toBe(1);
+  const screen = container.querySelector("[data-chrome]");
+  expect(screen?.getAttribute("data-chrome")).toBe("hidden");
+  // No pen rack: marking starts from a hold on the words.
+  expect(container.querySelector('button[aria-label^="Highlight"]')).toBeNull();
   expect((getByLabelText("Learn this book with AI") as HTMLButtonElement).disabled).toBe(false);
+  await act(async () => {
+    paneProps?.onMiddleTap?.();
+  });
+  expect(screen?.getAttribute("data-chrome")).toBe("shown");
+  await act(async () => {
+    paneProps?.onMiddleTap?.();
+  });
+  expect(screen?.getAttribute("data-chrome")).toBe("hidden");
+});
+
+test("a turn puts the bars away", async () => {
+  const { container } = await openReader();
+  await act(async () => {
+    paneProps?.onChangeViewState({ pageIndex: 36, scale: "auto", scrollMode: 0, layout: "vertical", cfi: "a" });
+    paneProps?.onMiddleTap?.();
+  });
+  expect(container.querySelector('[data-chrome="shown"]')).not.toBeNull();
+  await act(async () => {
+    paneProps?.onChangeViewState({ pageIndex: 37, scale: "auto", scrollMode: 0, layout: "vertical", cfi: "b" });
+  });
+  expect(container.querySelector('[data-chrome="hidden"]')).not.toBeNull();
 });
 
 // --- the lesson (docs/77) ---------------------------------------------------
@@ -400,48 +452,153 @@ test("Done puts the outline sheet away", async () => {
   expect(document.body.textContent).not.toContain("One: the machine");
 });
 
-// --- the mark popup -------------------------------------------------------
+// --- the selection and the marks --------------------------------------------
 
-async function openMarkPopup() {
-  const view = await openReader();
-  await act(async () => {
-    paneProps?.onSetAnnotationPopup({
-      rect: [100, 200, 160, 220],
-      annotation: { id: "m1" } as Annotation,
-    });
-  });
-  const scrim = view.getByTestId("mark-popup-scrim");
-  return { view, scrim };
+function quietDisk() {
+  spyOn(annotations, "saveAnnotations").mockImplementation(() => {});
+  spyOn(annotations, "deleteAnnotations").mockImplementation(() => {});
 }
 
-test("a tap on the mark popup's scrim puts it away and hands the tap to the view", async () => {
-  taps.length = 0;
-  const { view, scrim } = await openMarkPopup();
+async function select(view: Awaited<ReturnType<typeof openReader>>) {
   await act(async () => {
-    fireEvent.pointerDown(scrim, { pointerId: 7, clientX: 20, clientY: 300 });
-    fireEvent.pointerUp(scrim, { pointerId: 7, clientX: 24, clientY: 302 });
+    paneProps?.onSelection?.({ rects: [{ left: 40, top: 300, width: 200, height: 20 }], text: "the words held" });
   });
-  expect(view.queryByTestId("mark-popup-scrim")).toBeNull();
-  expect(taps).toEqual([[24, 302]]);
+  return view.getByRole("menu", { name: "Selection" });
+}
+
+test("a selection offers Highlight and Ask, and Highlight saves a yellow mark", async () => {
+  quietDisk();
+  saved.length = 0;
+  const view = await openReader();
+  const menu = await select(view);
+  expect(view.container.querySelectorAll("[data-selection-handle]").length).toBe(2);
+  const highlight = [...menu.querySelectorAll("button")].find((b) => b.textContent === "Highlight");
+  await act(async () => {
+    fireEvent.click(highlight as Element);
+  });
+  expect(saved).toEqual([{ stroke: "highlight", color: "#ffd400" }]);
+  expect(view.queryByRole("menu", { name: "Selection" })).toBeNull();
 });
 
-test("a swipe on the scrim only puts the popup away", async () => {
-  taps.length = 0;
-  const { view, scrim } = await openMarkPopup();
+async function askOnSelection() {
+  quietDisk();
+  saved.length = 0;
+  removed.length = 0;
+  spyOn(threads, "loadThreads").mockResolvedValue({});
+  spyOn(threads, "getThread").mockReturnValue(undefined);
+  const created = spyOn(threads, "createThread").mockImplementation(
+    (bookId, annotationId, threadId) =>
+      ({ id: threadId, annotationId, path: bookId, createdAt: 1, messages: [] }) as Thread,
+  );
+  spyOn(threads, "deleteThreadTree").mockReturnValue([]);
+  const view = await openReader();
+  const menu = await select(view);
+  const ask = [...menu.querySelectorAll("button")].find((b) => b.textContent === "Ask");
   await act(async () => {
-    fireEvent.pointerDown(scrim, { pointerId: 7, clientX: 20, clientY: 300 });
-    fireEvent.pointerUp(scrim, { pointerId: 7, clientX: 120, clientY: 300 });
+    fireEvent.click(ask as Element);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return { view, created };
+}
+
+test("Ask underlines the words and opens their conversation with the passage quoted", async () => {
+  const { view, created } = await askOnSelection();
+  expect(saved.length).toBe(1);
+  expect(saved[0].stroke).toBe("underline");
+  expect(typeof saved[0].aiThreadId).toBe("string");
+  // The conversation is written down with the underline, anchored on it.
+  expect(created).toHaveBeenCalledWith("b1", "m1", saved[0].aiThreadId);
+  const lesson = view.container.querySelector('[aria-label="Lesson"]');
+  expect(lesson?.querySelector("[data-lesson-quote]")?.textContent).toBe("the words held");
+  expect(lesson?.querySelector("textarea")?.getAttribute("placeholder")).toBe("Ask about this passage");
+});
+
+test("closing an Ask with nothing asked takes the underline away again", async () => {
+  const { view } = await askOnSelection();
+  await act(async () => {
+    fireEvent.click(view.getByLabelText("Back to the page"));
+  });
+  expect(view.container.querySelector('[aria-label="Lesson"]')).toBeNull();
+  expect(removed).toEqual([["m1"]]);
+});
+
+async function openMarkPopup(annotation: Annotation, under?: Annotation) {
+  const view = await openReader();
+  await act(async () => {
+    paneProps?.onSetAnnotationPopup({ rect: [100, 200, 160, 220], annotation, ...(under ? { under } : {}) });
+  });
+  return view;
+}
+
+test("a highlight offers Delete and Ask; a tap elsewhere only puts the popup away", async () => {
+  taps.length = 0;
+  const view = await openMarkPopup({ id: "h1", type: "highlight" } as Annotation);
+  const menu = view.getByRole("menu", { name: "Highlight" });
+  expect([...menu.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Delete", "Ask"]);
+  await act(async () => {
+    fireEvent.pointerUp(view.getByTestId("mark-popup-scrim"), { pointerId: 7, clientX: 20, clientY: 300 });
   });
   expect(view.queryByTestId("mark-popup-scrim")).toBeNull();
   expect(taps).toEqual([]);
 });
 
+test("an underline through a highlight names which one each Delete removes", async () => {
+  const view = await openMarkPopup(
+    { id: "u1", type: "underline", aiThreadId: "t9" } as Annotation,
+    { id: "h1", type: "highlight" } as Annotation,
+  );
+  const menu = view.getByRole("menu", { name: "Conversation" });
+  expect([...menu.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+    "Open",
+    "Delete underline",
+    "Delete highlight",
+  ]);
+});
+
+test("the Marks tab lists the book's marks and goes to the one tapped", async () => {
+  quietDisk();
+  saved.length = 0;
+  wentTo.length = 0;
+  const view = await openReader();
+  await select(view);
+  const highlight = [...view.getByRole("menu", { name: "Selection" }).querySelectorAll("button")].find(
+    (b) => b.textContent === "Highlight",
+  );
+  await act(async () => {
+    fireEvent.click(highlight as Element);
+  });
+  await act(async () => {
+    fireEvent.click(view.getByLabelText("Outline"));
+  });
+  const marksTab = [...document.body.querySelectorAll('[role="tab"]')].find((b) => b.textContent === "Marks");
+  await act(async () => {
+    fireEvent.click(marksTab as Element);
+  });
+  const row = document.body.querySelector('[aria-label="Highlight: the words held"]');
+  expect(row?.textContent).toContain("One: the machine");
+  await act(async () => {
+    fireEvent.click(row as Element);
+  });
+  expect(wentTo).toEqual(["m1"]);
+  // And the panel reopens on the tab last looked at.
+  await act(async () => {
+    fireEvent.click(view.getByLabelText("Outline"));
+  });
+  const selected = document.body.querySelector('[role="tab"][aria-selected="true"]');
+  expect(selected?.textContent).toBe("Marks");
+});
+
 // --- the display sheet ----------------------------------------------------
 
-test("the rack draws no navigation lock, and an Aa stands where it would have", async () => {
+test("the bottom bar is Outline, Display and Learn", async () => {
   const { container } = await openReader();
-  expect(container.querySelector('button[aria-label^="Navigate only"]')).toBeNull();
-  expect(container.querySelector('button[aria-label="Display"]')).not.toBeNull();
+  const bar = container.querySelector('[data-reader-chrome="bottom"]');
+  expect([...(bar?.querySelectorAll("button") ?? [])].map((b) => b.getAttribute("aria-label"))).toEqual([
+    "Outline",
+    "Display",
+    "Learn this book with AI",
+  ]);
 });
 
 test("the sheet's choices reach the pane and the slot on this device", async () => {

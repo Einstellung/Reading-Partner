@@ -7,9 +7,10 @@
 // portalled to <body>: the reading screen's dark tokens are scoped to that
 // attribute and do not reach out of the tree they are set on.
 //
-// Every control applies on the press. There is no Done: the book is behind the
-// sheet, the change is visible in it, and a setting the reader has to confirm
-// is a setting they cannot see while choosing.
+// The first row is scrolling or turning pages (docs/79). Every control applies
+// on the press. There is no Done: the book is behind the sheet, the change is
+// visible in it, and a setting the reader has to confirm is a setting they
+// cannot see while choosing.
 
 import type { ReactNode } from "react";
 import { useT } from "../../../../i18n";
@@ -27,7 +28,6 @@ import {
 import { cn } from "../../lib/utils";
 import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
-import { Switch } from "../../ui/switch";
 
 const LINE_LABEL = {
   tight: "phone.displaySheet.lineTight",
@@ -63,6 +63,23 @@ export default function PhoneDisplaySheet(props: {
           {t("phone.displaySheet.title")}
         </DialogTitle>
         <div className="flex flex-col gap-4 p-4 pb-safe-4">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-[3px]" role="group">
+            {(["scroll", "paged"] as const).map((mode) => (
+              <Button
+                key={mode}
+                variant="ghost"
+                className={cn(
+                  "h-10 rounded-[9px] text-[15px] font-normal text-muted-foreground",
+                  display.mode === mode && "bg-background font-semibold text-foreground shadow-sm can-hover:hover:bg-background",
+                )}
+                aria-pressed={display.mode === mode}
+                onClick={() => onChange({ ...display, mode })}
+              >
+                {t(mode === "scroll" ? "phone.displaySheet.scroll" : "phone.displaySheet.pages")}
+              </Button>
+            ))}
+          </div>
+
           <Row label={t("phone.displaySheet.size")}>
             <Button
               variant="outline"
@@ -107,14 +124,6 @@ export default function PhoneDisplaySheet(props: {
                 onClick={() => onChange({ ...display, padX: s.value })}
               />
             ))}
-          </Row>
-
-          <Row label={t("phone.displaySheet.turnPages")}>
-            <Switch
-              aria-label={t("phone.displaySheet.turnPages")}
-              checked={display.mode === "paged"}
-              onCheckedChange={(on) => onChange({ ...display, mode: on ? "paged" : "scroll" })}
-            />
           </Row>
 
           <Row label={t("phone.displaySheet.paper")}>

@@ -37,6 +37,7 @@ export {
 } from "./live";
 export {
   chapterFileName,
+  loadChapterSpineState,
   readChapterSpine,
   readSpineOverview,
 } from "./store";

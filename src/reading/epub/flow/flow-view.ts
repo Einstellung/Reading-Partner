@@ -13,17 +13,12 @@
 // It is not a component because none of it is rendering. The pane owns one
 // element; everything that happens to the book happens here.
 
-import type {
-  Annotation,
-  AnnotationPopupParams,
-  ViewState,
-  ViewStats,
-} from "../../../platform/app/reader-contract";
+import type { Annotation, ViewState, ViewStats } from "../../../platform/app/reader-contract";
 import { openExternal } from "../../../platform/app/external-link";
 import { acquireEpub, ensurePagination, releaseEpub } from "../book-cache";
 import { caretAtPoint } from "../caret";
 import { epubCfi, parseCfiStart, resolvePointRange } from "../file/cfi";
-import type { FlowReaderView, FlowTool } from "./flow-contract";
+import type { FlowMarkPopup, FlowReaderView, FlowSelection, FlowTool } from "./flow-contract";
 import {
   IDLE,
   LONG_PRESS_MS,
@@ -51,7 +46,11 @@ export interface FlowReaderCallbacks {
   /** Every mark of the book, after one was drawn here. */
   onSaveAnnotations(annotations: Annotation[]): void;
   onSelectAnnotations(ids: string[]): void;
-  onAnnotationPopup(params?: AnnotationPopupParams): void;
+  onAnnotationPopup(params?: FlowMarkPopup): void;
+  /** The selection appeared, moved on screen, or went (flow-contract.ts). */
+  onSelection?(selection: FlowSelection | null): void;
+  /** A tap on nothing of the book's: the shell's bars come or go. */
+  onMiddleTap?(): void;
 }
 
 export interface FlowReaderOptions {
@@ -76,6 +75,9 @@ const TOP_PROBE_STEP = 8;
 
 // How far down the viewport a cited passage lands.
 const QUOTE_LANDING = 1 / 3;
+
+// And a mark reached from the Marks list.
+const MARK_LANDING = 0.3;
 
 // Passes over a restored position: the first lands on the estimated height of
 // every document above, the next ones on the real one once those documents have
@@ -288,6 +290,9 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   function onScroll(): void {
     if (destroyed) return;
     paintShown();
+    // The selection is painted in the book and scrolls with it; the shell's
+    // handles and popup are over it and have to be told.
+    if (marks.hasSelection()) emitSelection();
     if (scrollTimer !== null) clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => {
       scrollTimer = null;
@@ -351,6 +356,9 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
         readPosition();
         paintShown();
         emit();
+        // A selection stays on its words through a relayout; the shell's
+        // handles follow them.
+        if (marks.hasSelection()) emitSelection();
       },
     );
   }
@@ -450,6 +458,16 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     return goToEntry(entry, hrefFragment(link.href));
   }
 
+  function emitSelection(): void {
+    if (!destroyed) callbacks.onSelection?.(marks.selection());
+  }
+
+  function dropSelection(): void {
+    if (!marks.hasSelection()) return;
+    marks.clearSelection();
+    emitSelection();
+  }
+
   // --- the finger -------------------------------------------------------------------
   // The reducer (flow-gesture.ts) says what a pointer sequence is; the column
   // supplies what it cannot see — the caret under the press — and does what it
@@ -475,6 +493,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
       case "start-mark":
         if (!pressedAt) break;
         marks.beginDrag(pressedAt);
+        emitSelection();
         // Captured to the column so a stroke that leaves it still finishes.
         try {
           scroller.setPointerCapture(event.pointerId);
@@ -486,16 +505,23 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
         if (at) marks.extendDrag(at.x, at.y);
         break;
       case "commit-mark":
-        // A hold that never moved is a press on the word under it: the mark
-        // there opens, exactly as a tap would.
-        if (!marks.commitDrag() && at) marks.tapAt(at.x, at.y);
+        // The finger lifted and the words it held stay selected; the shell
+        // puts its handles and Highlight / Ask on them.
+        marks.commitDrag();
+        emitSelection();
         break;
       case "abandon-mark":
         marks.cancelDrag();
+        emitSelection();
         break;
       case "tap":
+        // With a selection up, a tap anywhere only puts it away.
+        if (marks.hasSelection()) {
+          dropSelection();
+          break;
+        }
         clearQuote();
-        if (at && !marks.tapAt(at.x, at.y)) followLinkAt(at.x, at.y);
+        if (at && !marks.tapAt(at.x, at.y) && !followLinkAt(at.x, at.y)) callbacks.onMiddleTap?.();
         break;
       case "none":
         break;
@@ -605,6 +631,33 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     turnByTap: () => {},
     clearQuoteHighlight: clearQuote,
     removeAnnotations: (ids) => marks.unsetAnnotations(ids),
+    goToAnnotation: (id) => {
+      clearQuote();
+      dropSelection();
+      const target = marks.cfiOf(id);
+      if (!target) return;
+      land(
+        () => rangeOfCfi(target),
+        () => scroller.clientHeight * MARK_LANDING,
+        () => {
+          readPosition();
+          paintShown();
+          emit();
+          marks.flash(id);
+        },
+      );
+    },
+    moveSelectionEnd: (end, x, y) => {
+      marks.moveSelectionEnd(end, x, y);
+      emitSelection();
+    },
+    saveSelection: (spec) => {
+      const mark = marks.saveSelection(spec);
+      emitSelection();
+      return mark;
+    },
+    clearSelection: dropSelection,
+    selectMark: (id) => marks.selectMark(id),
     setDisplay: (next) => {
       if (destroyed) return;
       display = next;

@@ -4,14 +4,14 @@
 
 ## 定下的
 
-- 阅读器还是阅读器。顶栏的 Learn 按下去，整屏换成课堂；返回（按钮或左缘右滑）回到离开时的阅读位置，按 CFI 落回同一个字。
+- 阅读器还是阅读器。Learn 按下去，课堂盖在页面上（2026-09-28 起是 85% 高的底部 sheet，见 [82](./82-手机阅读外壳.md)）；返回（按钮或左缘右滑）回到离开时的阅读位置，按 CFI 落回同一个字。
 - 课堂就是 iPad/PC 的书级线程：`threads-<bookId>.json` 里那一条，两边互相同步。回合走 `reading/session/use-call.ts`（`useCall`），提示词、工具、教法和 iPad 一样，不带 `form: "phone"`。docs/74 的手机 PDF 课堂是另一档（没有页、放开拷问），EPUB 课堂不走那一档。
 - 没有画中画卡片。iPad 上微信通话式的 ReadingPipCard / ChatPipCard 手机上两个方向都没有。
 - 在页上时 Learn 图标带一个点：回复正在写时闪，写完了还没看过时常亮，进课堂就消掉。
 - 回复写到一半回到页上，回复接着写；Stop 只在课堂里。回到页上不挂断：call 留着，只是不画（`showReading`，view 为 `chat-pip`），所以写完的回复算有人在看，落进线程，不进盒子。
 - 点引文：离开课堂，书滚到那一段并标出来，颜色和 iPad EPUB 的引文高亮一样。这一版没有「跳回课堂」，回课堂按 Learn。
 - 离开这本书和 iPad 关书一样挂断：记 `call-end`，对话交给蒸馏。
-- 这一片不做：语音、AI pen、选中一段问。笔架上的 AI pen 仍置灰，原因改成 `The AI pen is not on the phone yet — Learn this book with AI is in the top bar`。
+- 这一片不做：语音、AI pen、选中一段问。选中一段问 2026-09-28 做了，见 [82](./82-手机阅读外壳.md)。
 
 ## 和 iPad 共用的
 

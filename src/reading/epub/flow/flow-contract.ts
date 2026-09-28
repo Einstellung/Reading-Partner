@@ -15,6 +15,41 @@ export interface FlowTool {
   color: string;
 }
 
+/** A box in viewport coordinates. */
+export interface FlowRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The words a hold selected (docs/82): what the shell draws its handles and the
+ * Highlight / Ask popup against. The selection itself is the view's, painted
+ * in the book's overlay; this is only where it is on screen now.
+ */
+export interface FlowSelection {
+  /** One box per line, in reading order, in viewport coordinates. */
+  rects: FlowRect[];
+  text: string;
+}
+
+/**
+ * A mark was tapped. Where an AI underline runs through a highlight, the tap
+ * names the underline and carries the highlight as `under`, so one popup can
+ * delete either.
+ */
+export interface FlowMarkPopup extends AnnotationPopupParams {
+  under?: Annotation;
+}
+
+/** What a selection is saved as: a highlight, or the underline an Ask leaves. */
+export interface FlowMarkSpec {
+  stroke: "highlight" | "underline";
+  color: string;
+  aiThreadId?: string;
+}
+
 export interface FlowReaderView {
   goToCfi(cfi: string): void;
   goToHref(href: string): void;
@@ -42,6 +77,21 @@ export interface FlowReaderView {
    */
   turnByTap(clientX: number, clientY: number): void;
   removeAnnotations(ids: string[]): void;
+  /** Go to a mark and ring it briefly, so the eye finds it (the Marks list). */
+  goToAnnotation(id: string): void;
+  /**
+   * A handle was dragged: that end of the selection follows the point, to the
+   * edge of the word under it; the other end stays.
+   */
+  moveSelectionEnd(end: "start" | "end", clientX: number, clientY: number): void;
+  /** Write the selection as a mark and let it go. Null when it covers no words. */
+  saveSelection(spec: FlowMarkSpec): Annotation | null;
+  clearSelection(): void;
+  /**
+   * Select a mark's words, as a hold on them would have (Ask on a highlight
+   * lays its underline over the same words). False when it cannot be found.
+   */
+  selectMark(id: string): boolean;
   setTool(tool: FlowTool): void;
   /**
    * Lay the column out again at this type and this paper. The reader stays on
@@ -75,6 +125,14 @@ export interface FlowReaderPaneProps {
   onChangeViewStats: (s: ViewStats) => void;
   onSaveAnnotations: (anns: Annotation[]) => void;
   onSelectAnnotations: (ids: string[]) => void;
-  onSetAnnotationPopup: (params?: AnnotationPopupParams) => void;
+  onSetAnnotationPopup: (params?: FlowMarkPopup) => void;
+  /** The selection appeared, moved on screen, or went (null). */
+  onSelection?: (selection: FlowSelection | null) => void;
+  /**
+   * A tap that was not on a mark or a link and not a page turn: the middle of
+   * the paged view, anywhere on the scrolled column. The shell shows or hides
+   * its bars on it. A tap while a selection is up only clears the selection.
+   */
+  onMiddleTap?: () => void;
   className?: string;
 }

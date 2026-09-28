@@ -3,9 +3,11 @@
 // the gate that holds that jump until the reading column can take it.
 //
 // The lesson is the iPad's book-level call (reading/session/use-call.ts). The
-// phone draws it full screen while the call's view is "chat-main" and draws the
-// page otherwise; "chat-pip" is the call left open behind the page, which the
-// phone does not draw at all (no corner cards on this shell).
+// phone draws it as a sheet over the page while the call's view is "chat-main"
+// and draws only the page otherwise; "chat-pip" is the call left open behind
+// the page, which the phone does not draw at all (no corner cards on this
+// shell). A passage's conversation (docs/82) takes the same slot and the same
+// sheet.
 
 import type { CallRow, CallView } from "../../../../reading/turn/call-state";
 import type { TableChapter } from "../../../../reading/chapters";
@@ -16,9 +18,9 @@ import type { Citation } from "../../../../reading/prep";
 import { quoteSearchText, routeCitation } from "../../../../reading/session/citations";
 import type { ChapterFocus } from "../../chat/call/chapterFocus";
 
-/** Whether the lesson covers the page: the book's call, in its full-screen view. */
-export function lessonOnScreen(call: { isBook?: boolean; view: CallView } | null): boolean {
-  return call?.isBook === true && call.view === "chat-main";
+/** Whether a conversation is over the page: the book's or a passage's, in its main view. */
+export function lessonOnScreen(call: { view: CallView } | null): boolean {
+  return call?.view === "chat-main";
 }
 
 /** Whether the conversation's newest row is a reply still being written. */

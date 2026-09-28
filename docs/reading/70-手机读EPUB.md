@@ -8,10 +8,10 @@
 
 - docs/22 不做书的理由是 PDFium WASM。EPUB 绕开了它，但 docs/64 的 Letter 纸在 393pt 宽的屏上 fit-width 是 0.48 倍、正文约 7.7pt，纸页在手机上守不住。手机用自己的重排视图。
 - PDF 不给手机看。书架上 PDF 的封面照常渲染，点了出一条提示，不打开。
-- AI 的闸：笔架上的 AI pen 画出来但不可按，带一句原因。不隐藏：手机是 reading 的一种形态，规矩要在界面上读得出来。2026-09-25 起顶栏的 Learn this book with AI 可按，进的是和 iPad 同一堂课（[77](./77-手机EPUB课堂.md)）；AI pen 仍置灰，原因改成 `The AI pen is not on the phone yet — Learn this book with AI is in the top bar`。
-- 长按划线。手指按住不动约半秒起一条高亮，拖动延长，抬手落标注。也可以在笔架上选 Highlight 再拖，两条路落的是同一种标注。点已有标注弹出删除。墨迹不做：手机没有页。
+- AI 的闸：2026-09-28 起没有笔架，AI pen 不再画出来；对一段话提问走长按选中后的 Ask，见 [82](./82-手机阅读外壳.md)。顶栏（现在收在点正文中间才出来的底栏里）的 Learn 进的是和 iPad 同一堂课（[77](./77-手机EPUB课堂.md)）。
+- 长按选中。手指按住不动约半秒选中一个词，拖动按词延长，抬手后选区留着，再选 Highlight 或 Ask（[82](./82-手机阅读外壳.md)）。点已有标注弹出它能做的事。墨迹不做：手机没有页。
 - 手机上只有 Outline 一个侧栏内容，做成 sheet（Radix dialog 贴底边）。条目按分页表的块号跳，不按 href——`outlineFor` 交回的就是块号。没有 Marks 列表、备课面板、痕迹列表。
-- 笔架上不画导航锁：手机没有页可以锁住，一根手指只有滚动一个意思。那一格改成 Aa，打开显示设置。`PenToolbar` 加 `omit` 省掉某个工具，桌面不变——置灰是「有这个工具，这本书不给开」，省掉是「这个形态没有这种东西」。
+- 没有笔架（2026-09-28 起，见 [82](./82-手机阅读外壳.md)），Aa 在底栏里，名叫 Display。
 - 书按需下载。手机的 books 通道仍是 off（不对齐 library.json），书架上没下载的 EPUB 显示为在云端，点了从 Drive 拉这一本，拉完打开；PDF 永远不拉。这是 docs/13「书按需下载」的第一次落地，只在手机形态。反方向是手机导入：topic 书架上的 Import EPUB 按钮只收 EPUB（字节用 `isEpub` 复核），选中即读字节进库、挂进当前 topic，不自动打开；随后经 engine 把这一本传上 Drive（`pushBook`，与下载同一条串行队列，远端已有就跳过）。没登录就不传，传失败只提示一句；两种情况都没有补传，之后登录了这本书也只在手机上。2026-09-21 起每道门都在门口入库：桌面「添加文件」和分享进来的书都是选中即读字节、进库、连哈希一次写进 topics.json。书架上仍可能有库里没有记录的行——旧版本写下的，或者 topics.json 的修订先到而 library.json 没到——这时按文件名判 epub/pdf，两样都不是就说不知道，点了只说还没入库，不当成 PDF，也不去 Drive 拉。书架跟着 pull 刷新（`SHELF_PULL_ROUTE`，topics.json / library.json / deleted-books），不再只在退出阅读器时读一次。
 
 ## 坐标系不变
@@ -32,14 +32,14 @@
 
 ## 显示设置
 
-顶栏的 Aa 开一张贴底 sheet，和 Outline 同一种壳。全部即点即生效，没有确定按钮。滚动和翻页的开关在同一张 sheet 里，翻页见 [79](./79-手机EPUB翻页.md)；这一篇讲的是滚动。
+底栏的 Display 开一张贴底 sheet，和 Outline 同一种壳。全部即点即生效，没有确定按钮。滚动和翻页的开关在同一张 sheet 里，翻页见 [79](./79-手机EPUB翻页.md)；这一篇讲的是滚动。
 
 - 字号：14 / 15 / 17 / 19 / 21，−/+ 步进，中间那档 17 是原来的。
 - 行距：1.4 / 1.6 / 1.85（紧、标准、松），1.6 是原来的。
 - 边距：20 / 36（窄、宽），20 是原来的。
 - 纸色：White、Paper（`#f6efdc`，就是护眼开关那个值）、Green（`#e4f0de`，同一条乘法）、Dark。默认 White，和 app 关掉护眼时的样子一致。
 
-深色不是乘法——白乘不出黑。Dark 单独一条：滚动容器画成 `#1b1c1e`，`.rp-wash` 关掉，`html, body` 的背景用 `!important` 压成透明、`html, body, body *` 的 `color` 压成 `#c8c5bf`。书自己写的段落底色、代码块底、表格底留着；图片不动，`color` 碰不到它。顶栏、笔架、标注弹窗和两张 sheet 跟着深：阅读屏根节点带 `data-reader-paper`，styles.css 里 `[data-reader-paper="dark"]` 重定义那一组 token（外加 Tailwind 自己的 `--color-neutral-700`，笔架的图标用的是它）。sheet portal 到 `<body>`，所以属性要在 `DialogContent` 上再写一次。只有这一屏，styles.css 那句「app 不做深色模式」照旧成立——这是一张纸的颜色，不是 app 的主题。
+深色不是乘法——白乘不出黑。Dark 单独一条：滚动容器画成 `#1b1c1e`，`.rp-wash` 关掉，`html, body` 的背景用 `!important` 压成透明、`html, body, body *` 的 `color` 压成 `#c8c5bf`。书自己写的段落底色、代码块底、表格底留着；图片不动，`color` 碰不到它。顶栏、底栏、标注弹窗和各张 sheet 跟着深：阅读屏根节点带 `data-reader-paper`，styles.css 里 `[data-reader-paper="dark"]` 重定义那一组 token（外加 Tailwind 自己的 `--color-neutral-700`，笔架的图标用的是它）。sheet portal 到 `<body>`，所以属性要在 `DialogContent` 上再写一次。只有这一屏，styles.css 那句「app 不做深色模式」照旧成立——这是一张纸的颜色，不是 app 的主题。
 
 改字号、行距、边距之后位置不跑：`FlowReaderView.setDisplay` 改完每份文档的基线 `<style>`，再走 `relayout()`——标注矩形全部失效，按当前 CFI `settle` 回同一个字。宽度变化走的是同一个入口（原来的 ResizeObserver）。`intrinsicHeightEstimate` 吃当前排版参数，离屏文档的估高跟着字号和边距走。
 
@@ -47,7 +47,7 @@
 
 ## 外壳
 
-`PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/reader/PhoneReader.tsx`：自己的顶栏（返回、书名、页码、Outline、笔架、Learn 按钮），笔架复用 `PenToolbar` 的 `disabled`，阅读区挂 `FlowReaderPane`。打开顺序在 `reading/session/open-epub.ts`：复用 `open-book.ts` 的读位置、`preparePagination`、读标注，之后在后台抽全文和图索引给课堂用（[77](./77-手机EPUB课堂.md)）。
+`PhoneApp.tsx` 的导航栈加三种屏：`library`（topic 列表）、`topic`（一个 topic 的材料，封面网格复用 `shelf/BookCard`）、`reader`。首页加一张 Library 卡，上面带最近打开的一本 EPUB 作续读入口。阅读屏是 `ui/components/phone/reader/PhoneReader.tsx`：收起的顶栏和底栏（[82](./82-手机阅读外壳.md)），阅读区挂 `FlowReaderPane`。打开顺序在 `reading/session/open-epub.ts`：复用 `open-book.ts` 的读位置、`preparePagination`、读标注，之后在后台抽全文和图索引给课堂用（[77](./77-手机EPUB课堂.md)）。
 
 ## 验过的
 
@@ -59,9 +59,9 @@
 点 PDF 出「PDFs open on iPad and desktop」；没字节的那本标「In the cloud」。
 
 书里：Rendering… 之后是一列正文，顶栏是块号加 `printed`（14 / 222 printed 3）；原生滚动改块号；
-长按落一条单词高亮；笔架选 Highlight 再拖落一条跨词高亮；按住再拖（长按延长）也落一条；
-点已有标注弹删除，删掉就没了；Outline 跳章，块号和 `printed` 跟着变；AI pen 和 Learn 画着但按不动，
-各带一句原因；退回书架再从续读进来落在同一块。盘上 `reading-state.json` 写的是 `cfi` + `pageIndex` +
+长按选中一个词，按住再拖延长，松手后 Highlight 落一条高亮（2026-09-28 起，[82](./82-手机阅读外壳.md)）；
+点已有标注弹删除，删掉就没了；Outline 跳章，块号和 `printed` 跟着变；
+退回书架再从续读进来落在同一块。盘上 `reading-state.json` 写的是 `cfi` + `pageIndex` +
 `scale: "auto"` + `layout: "vertical"`，`annotations-<bookId>.json` 写的是 range CFI 加 `quote`、
 `pageIndex`、`pageLabel`、`sortIndex`——和 docs/64 同一份形状。
 

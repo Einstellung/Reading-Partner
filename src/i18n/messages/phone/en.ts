@@ -117,16 +117,32 @@ export default {
   "reader.deleteMarkButton": "Delete this mark",
   "reader.delete": "Delete",
 
-  // ---- reader/PhoneReaderBar.tsx: the reading screen's top bar.
+  "reader.hintTap": "Tap the middle for tools",
+  "reader.hintHold": "Hold a word to select",
+
+  // ---- reader/PhoneReaderBar.tsx: the reading screen's two bars.
   "readerBar.backToShelf": "Back to the shelf",
+  "readerBar.tools": "Reading tools",
   "readerBar.outline": "Outline",
   "readerBar.display": "Display",
+  "readerBar.learn": "Learn",
   "readerBar.learnThisBook": "Learn this book with AI",
   "readerBar.dotWriting": " (a reply is being written)",
   "readerBar.dotUnseen": " (new reply)",
 
-  // ---- reader/reader-gate.ts: why the AI pen is dim on the phone.
-  "readerGate.aiPenNotOnPhone": "The AI pen is not on the phone yet — Learn this book with AI is in the top bar",
+  // ---- reader/PhoneSelection.tsx: what a selection offers.
+  "selection.label": "Selection",
+  "selection.highlight": "Highlight",
+  "selection.ask": "Ask",
+
+  // ---- reader/PhoneMarkPopup.tsx: what a tapped mark offers.
+  "markPopup.highlight": "Highlight",
+  "markPopup.conversation": "Conversation",
+  "markPopup.open": "Open",
+  "markPopup.ask": "Ask",
+  "markPopup.delete": "Delete",
+  "markPopup.deleteUnderline": "Delete underline",
+  "markPopup.deleteHighlight": "Delete highlight",
 
   // ---- reader/PhoneDisplaySheet.tsx: the Aa sheet.
   "displaySheet.title": "Display",
@@ -135,12 +151,34 @@ export default {
   "displaySheet.largerText": "Larger text",
   "displaySheet.lineSpacing": "Line spacing",
   "displaySheet.margins": "Margins",
-  "displaySheet.turnPages": "Turn pages",
+  "displaySheet.scroll": "Scroll",
+  "displaySheet.pages": "Pages",
   "displaySheet.paper": "Paper",
 
-  // ---- reader/PhoneOutlineSheet.tsx: the table of contents sheet.
-  "outlineSheet.title": "Outline",
-  "outlineSheet.done": "Done",
+  // ---- reader/PhoneContentsSheet.tsx: Outline, Marks and Prep.
+  "contents.label": "Outline, marks and prep",
+  "contents.outline": "Outline",
+  "contents.marks": "Marks",
+  "contents.prep": "Prep",
+  "contents.done": "Done",
+
+  // ---- reader/PhoneMarksList.tsx: every mark in the book.
+  "marks.emptyTitle": "No marks yet",
+  "marks.emptyBody": "Hold a word to select it, then choose Highlight or Ask.",
+  "marks.highlightRow": "Highlight: {text}",
+  "marks.underlineRow": "Underline: {text}",
+  "marks.page": "p. {label}",
+  "marks.openConversation": "Open conversation",
+  "marks.delete": "Delete",
+
+  // ---- reader/PhonePrepTab.tsx: what the AI prepared about the book.
+  "prep.title": "Chapter spines",
+  "prep.ready": "{done} of {total} chapters ready",
+  "prep.graph": "Chapter graph",
+  "prep.loading": "Reading…",
+  "prep.empty":
+    "Nothing has been prepared for this book yet. Prep runs on the iPad or the desktop and shows up here once it syncs.",
+  "prep.notReady": "Not prepared yet.",
 
   // ---- lesson/PhoneLessonBar.tsx: the lesson screen's top bar.
   "lessonBar.backToShelf": "Back to the shelf",
@@ -173,6 +211,9 @@ export default {
 
   // ---- lesson/PhoneBookLesson.tsx: the lesson on the EPUB reader.
   "bookLesson.backToPage": "Back to the page",
+  "bookLesson.title": "Learn",
+  "bookLesson.done": "Done",
+  "bookLesson.passagePlaceholder": "Ask about this passage",
   "bookLesson.retry": "Retry",
   "bookLesson.ariaLabel": "Lesson",
   "bookLesson.placeholder": "Ask me to teach you part of this book…",

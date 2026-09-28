@@ -42,6 +42,8 @@ function FlowReaderPaneImpl(props: FlowReaderPaneProps) {
         onSaveAnnotations: (anns) => propsRef.current.onSaveAnnotations(anns),
         onSelectAnnotations: (ids) => propsRef.current.onSelectAnnotations(ids),
         onAnnotationPopup: (params) => propsRef.current.onSetAnnotationPopup(params),
+        onSelection: (selection) => propsRef.current.onSelection?.(selection),
+        onMiddleTap: () => propsRef.current.onMiddleTap?.(),
       },
     } satisfies Parameters<typeof createFlowReader>[0];
     const opening =
