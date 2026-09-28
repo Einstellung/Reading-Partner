@@ -9,6 +9,7 @@
 // no view in it for one to be read into.
 
 import { useEffect, useState } from "react";
+import { useT } from "../../../i18n";
 import {
   loadTalkOutline,
   talkOutlineOfRetell,
@@ -58,6 +59,7 @@ export function useTalkOutline(outlineId: string): {
   outline: TalkOutline | null;
   error: string | null;
 } {
+  const t = useT();
   const [outline, setOutline] = useState<TalkOutline | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,15 +71,15 @@ export function useTalkOutline(outlineId: string): {
       .then((read) => {
         if (cancelled) return;
         if (read) setOutline(read);
-        else setError("The outline for this talk is not on this device.");
+        else setError(t("study.rehearsal.outlineMissing"));
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Could not read the outline");
+        if (!cancelled) setError(e instanceof Error ? e.message : t("study.rehearsal.outlineReadError"));
       });
     return () => {
       cancelled = true;
     };
-  }, [outlineId]);
+  }, [outlineId, t]);
 
   return { outline, error };
 }

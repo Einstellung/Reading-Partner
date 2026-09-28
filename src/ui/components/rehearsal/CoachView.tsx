@@ -16,6 +16,7 @@ import { MessageList } from "../chat/MessageList";
 import { CitationContext } from "../markdown/Markdown";
 import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";
+import { useT } from "../../../i18n";
 import { useCoach } from "./useCoach";
 import { useKeyboardRoom } from "../common/useKeyboardInset";
 
@@ -32,6 +33,7 @@ export default function CoachView(props: {
   pending?: boolean;
   onBack(): void;
 }) {
+  const t = useT();
   const coach = useCoach(props.outlineId, props.topicName, props.passKey ?? 0);
   // The composer is docked at the bottom, so the keyboard would cover it.
   const keyboard = useKeyboardRoom();
@@ -53,10 +55,10 @@ export default function CoachView(props: {
           </Button>
           <div className="flex min-w-0 flex-1 flex-col gap-0.5 px-1.5 py-1">
             <span className="truncate text-[15px] font-medium">
-              {coach.outline?.name ?? "The talk"}
+              {coach.outline?.name ?? t("study.coach.fallbackName")}
             </span>
             <span className="truncate text-xs text-muted-foreground">
-              How that pass went
+              {t("study.coach.subtitle")}
             </span>
           </div>
         </div>
@@ -69,11 +71,11 @@ export default function CoachView(props: {
           )}
           {props.pending && !coach.streaming && (
             <p className="m-0 border-b border-border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
-              Getting the last of what you said back from the recogniser…
+              {t("study.coach.pendingNotice")}
             </p>
           )}
           {coach.loading ? (
-            <p className="m-0 px-4 py-3 text-sm text-muted-foreground">Opening the talk…</p>
+            <p className="m-0 px-4 py-3 text-sm text-muted-foreground">{t("study.coach.loading")}</p>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
               <MessageList
@@ -87,7 +89,7 @@ export default function CoachView(props: {
             <div className="mx-auto w-full max-w-[calc(48rem*var(--chat-scale,1))]">
               <Composer
                 onSend={coach.send}
-                placeholder="Ask about the pass, or say what to change…"
+                placeholder={t("study.coach.composerPlaceholder")}
                 pill
                 streaming={coach.streaming}
                 onStop={coach.stop}

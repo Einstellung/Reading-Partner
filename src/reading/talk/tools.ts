@@ -17,6 +17,7 @@
 // itself, and that is the prompt's job, not a gate here.
 
 import { Type } from "@earendil-works/pi-ai";
+import { t } from "../../i18n";
 import type { AgentTool } from "../../legion/execute/turn";
 import { moveSegment, putSegment, removeSegment, setSpine, type SegmentEdit } from "./edit";
 import type { TalkArrangementCardData } from "./cards";
@@ -101,7 +102,7 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
   return [
     {
       name: "set_talk_spine",
-      label: () => "Setting the spine of the talk",
+      label: () => t("study.tools.setSpine"),
       effect: "write",
       gate: "card",
       description:
@@ -155,13 +156,13 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
         deps.onCard?.({ kind: "talk-arrangement", change: "spine", spine: next.spine });
         return {
           text: `Written: ${Object.keys(patch).join(", ")}. The reader can see the entry.`,
-          receipt: { label: "Set the spine of the talk", summary: Object.keys(patch).join(", ") },
+          receipt: { label: t("study.tools.setSpineDone"), summary: Object.keys(patch).join(", ") },
         };
       },
     },
     {
       name: "write_talk_segment",
-      label: () => "Writing a block of the talk",
+      label: () => t("study.tools.writeSegment"),
       effect: "write",
       gate: "card",
       description:
@@ -226,7 +227,7 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
         return {
           text: `${known ? "Rewrote" : "Added"} block ${place} of ${next.segments.length} (id: ${seg.id}). The reader can see the entry.`,
           receipt: {
-            label: known ? "Rewrote a block of the talk" : "Added a block to the talk",
+            label: known ? t("study.tools.rewroteSegment") : t("study.tools.addedSegment"),
             summary: segmentLabel(seg),
           },
         };
@@ -234,7 +235,7 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
     },
     {
       name: "move_talk_segment",
-      label: () => "Moving a block of the talk",
+      label: () => t("study.tools.moveSegment"),
       effect: "write",
       gate: "card",
       description:
@@ -272,13 +273,13 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
         });
         return {
           text: `"${title}" is now block ${place} of ${next.segments.length}. The reader can see the entry.`,
-          receipt: { label: "Moved a block of the talk", summary: `${title} — now block ${place}` },
+          receipt: { label: t("study.tools.movedSegment"), summary: `${title} — now block ${place}` },
         };
       },
     },
     {
       name: "remove_talk_segment",
-      label: () => "Dropping a block of the talk",
+      label: () => t("study.tools.removeSegment"),
       effect: "write",
       gate: "card",
       description:
@@ -308,13 +309,13 @@ export function buildArrangeTools(deps: ArrangeToolDeps): AgentTool[] {
         });
         return {
           text: `Dropped "${title}". The note now has ${next.segments.length} block(s). The reader can see the entry.`,
-          receipt: { label: "Dropped a block of the talk", summary: title },
+          receipt: { label: t("study.tools.droppedSegment"), summary: title },
         };
       },
     },
     {
       name: "read_talk_outline",
-      label: () => "Reading the talk outline",
+      label: () => t("study.tools.readTalkOutline"),
       effect: "read",
       description:
         "Read the talk back as it now stands: the spine, and every block of the note " +

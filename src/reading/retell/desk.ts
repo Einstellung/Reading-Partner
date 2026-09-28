@@ -22,6 +22,7 @@ import {
   type DeskPromptView,
 } from "../../desk";
 import { languageInstruction } from "../../platform/app/settings";
+import { t } from "../../i18n";
 import type { TopicMaterial } from "../../fulltext/format";
 import {
   buildObservationSnapshot,
@@ -152,9 +153,10 @@ export function registerRetellDesk(): () => void {
 // The retell's materials named in one phrase, for the line the prompt opens with.
 function materialsLabel(materials: readonly LoadedMaterial[]): string {
   const titles = materials.map((m) => m.title);
-  if (titles.length === 0) return "(no materials)";
+  if (titles.length === 0) return t("study.retell.noMaterials");
   if (titles.length === 1) return titles[0];
-  return `${titles.slice(0, -1).join(", ")} and ${titles[titles.length - 1]}`;
+  const join = t("study.retell.materialsJoin");
+  return `${titles.slice(0, -1).join(", ")} ${join} ${titles[titles.length - 1]}`;
 }
 
 // The figure catalog for a retell. One book's catalog is the book's; several get a
@@ -405,7 +407,7 @@ async function openRetell(ref: RetellDeskRef, env: DeskEnv): Promise<DeskItem | 
     label: materialsLabel(materials),
     tools,
     toolPrompts: [],
-    rungs: RETELL_LADDER,
+    rungs: RETELL_LADDER(),
     skip,
     prompt: composePrompt,
     memory: {

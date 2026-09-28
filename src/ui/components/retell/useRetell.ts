@@ -18,6 +18,7 @@ import {
   type ThreadMessage as StoredMessage,
 } from "../../../platform/app/threads";
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
+import { useT } from "../../../i18n";
 import type { ProviderId } from "../../../ai";
 import { runAgentTurn } from "../../../legion/execute/turn";
 import { soulHarness } from "../../../soul";
@@ -68,6 +69,7 @@ export interface RetellController {
 }
 
 export function useRetell(retellId: string, topicName: string): RetellController {
+  const t = useT();
   const [retell, setRetell] = useState<Retell | null>(null);
   const [materials, setMaterials] = useState<LoadedMaterial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,7 +176,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
       const loaded = await loadRetell(retellId);
       if (cancelled) return;
       if (!loaded) {
-        setError("This retell could not be read.");
+        setError(t("study.retell.notReadable"));
         setLoading(false);
         return;
       }
@@ -200,7 +202,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
       if (captureExit()) return;
       abort();
     };
-  }, [retellId, key, threadId, captureExit, abort, setError, setMessages]);
+  }, [retellId, key, threadId, captureExit, abort, setError, setMessages, t]);
 
   // One turn. Assembles from the retell as it stands, streams into the last row,
   // persists on done. A decision recorded mid-turn writes the file and drops a
@@ -210,7 +212,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
     const s = settingsRef.current;
     if (!current) return;
     if (!s?.defaultProviderId || !s?.defaultModelId) {
-      setError("Configure a provider in Settings to start the retell.");
+      setError(t("study.retell.needProvider", { settings: t("settings.title") }));
       return;
     }
     begin((run) => {
@@ -279,7 +281,7 @@ export function useRetell(retellId: string, topicName: string): RetellController
         });
       })();
     });
-  }, [retellId, key, threadId, topicName, begin, raiseCard, setError]);
+  }, [retellId, key, threadId, topicName, begin, raiseCard, setError, t]);
 
   // A retell opened with nothing in it starts itself: stage one of the retell is
   // the AI laying out the skeleton and asking which thread the retell should

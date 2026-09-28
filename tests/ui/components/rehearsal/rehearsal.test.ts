@@ -3,6 +3,7 @@
 // a microphone; everything that can be wrong is in here. Run: bun test.
 
 import { expect, test } from "bun:test";
+import { t } from "../../../../src/i18n";
 import {
   endEvent,
   finishRun,
@@ -37,20 +38,20 @@ test("elapsed time reads in minutes until it needs hours", () => {
 });
 
 test("the Rehearse button says why it is off", () => {
-  expect(rehearsalReadiness({ segments: null }).ok).toBe(false);
-  expect(rehearsalReadiness({ segments: null }).title).toContain("Looking");
-  const none = rehearsalReadiness({ segments: 0 });
+  expect(rehearsalReadiness({ segments: null, t }).ok).toBe(false);
+  expect(rehearsalReadiness({ segments: null, t }).title).toContain("Looking");
+  const none = rehearsalReadiness({ segments: 0, t });
   expect(none.ok).toBe(false);
   expect(none.title).toContain("no segments");
-  expect(rehearsalReadiness({ segments: 3 }).ok).toBe(true);
+  expect(rehearsalReadiness({ segments: 3, t }).ok).toBe(true);
 });
 
 test("a rehearsal being started holds the button, outline or no outline", () => {
-  const starting = rehearsalReadiness({ segments: 3, preparing: true });
+  const starting = rehearsalReadiness({ segments: 3, preparing: true, t });
   expect(starting.ok).toBe(false);
   expect(starting.title).toContain("Starting");
   // The gate lifts on its own, so the same retell is rehearsable again afterwards.
-  expect(rehearsalReadiness({ segments: 3, preparing: false }).ok).toBe(true);
+  expect(rehearsalReadiness({ segments: 3, preparing: false, t }).ok).toBe(true);
 });
 
 // --- ending a rehearsal ------------------------------------------------------

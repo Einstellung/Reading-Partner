@@ -18,6 +18,7 @@ import { runAgentTurn } from "../../../legion/execute/turn";
 import { soulHarness } from "../../../soul";
 import { appendMessage, type ThreadMessage as StoredMessage } from "../../../platform/app/threads";
 import { loadSettings, toReasoning, type Settings } from "../../../platform/app/settings";
+import { useT } from "../../../i18n";
 import { buildCoachTurn } from "../../../reading/rehearsal";
 import {
   editTalkOutline,
@@ -48,6 +49,7 @@ export interface CoachController {
 }
 
 export function useCoach(outlineId: string, topicName: string, passKey = 0): CoachController {
+  const t = useT();
   const [outline, setOutline] = useState<TalkOutline | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -89,7 +91,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
     const s = settingsRef.current;
     if (!current) return;
     if (!s?.defaultProviderId || !s?.defaultModelId) {
-      setError("Configure a provider in Settings and I can tell you how that pass went.");
+      setError(t("study.coach.needProvider", { settings: t("settings.title") }));
       return;
     }
     begin((run) => {
@@ -140,7 +142,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
         });
       })();
     });
-  }, [outlineId, threadId, begin, raiseCard, setError]);
+  }, [outlineId, threadId, begin, raiseCard, setError, t]);
 
   // Open the talk and its conversation, and read them again when a pass has been
   // handed in: `passKey` is bumped by the shell the moment a pass reaches disk,
@@ -158,7 +160,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
       settingsRef.current = await loadSettings().catch(() => null);
       if (cancelled) return;
       if (!read) {
-        setError("The outline for this talk is not on this device.");
+        setError(t("study.rehearsal.outlineMissing"));
         setLoading(false);
         return;
       }
@@ -177,7 +179,7 @@ export function useCoach(outlineId: string, topicName: string, passKey = 0): Coa
     return () => {
       cancelled = true;
     };
-  }, [outlineId, passKey, runTurn, running, setError, setMessages]);
+  }, [outlineId, passKey, runTurn, running, setError, setMessages, t]);
 
   // Leaving stops the turn. Nothing is distilled here: what the coach hears is
   // the reader giving a talk rather than answering for a chapter, and what an

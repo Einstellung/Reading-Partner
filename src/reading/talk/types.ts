@@ -18,6 +18,8 @@
 // settled by giving the talk and rewriting what did not come out, and a schema
 // can only stand in the way of that.
 
+import { t } from "../../i18n";
+
 export const TALK_OUTLINE_VERSION = 1 as const;
 
 // The whole talk, in one place: the line it argues, the ribs under that line,
@@ -98,7 +100,7 @@ export function newTalkOutline(fields: NewTalkOutlineFields): TalkOutline {
     id: fields.id,
     topicId: fields.topicId,
     retellId: fields.retellId ?? null,
-    name: (fields.name ?? "").trim() || "Untitled talk",
+    name: (fields.name ?? "").trim() || t("study.talk.untitledDefault"),
     spine: fields.spine ? normalizeSpine(fields.spine) : emptySpine(),
     segments: [],
     createdAt: fields.now,
@@ -251,7 +253,7 @@ export function segmentLabel(segment: TalkSegment): string {
     const text = line.replace(LEADING_MARKERS, "").trim();
     if (text) return truncate(text, LABEL_COLUMNS);
   }
-  return "Untitled segment";
+  return t("study.talk.untitledSegment");
 }
 
 // A load-time repair. A file this build cannot use at all reads as null and the
@@ -274,7 +276,7 @@ export function normalizeTalkOutline(raw: unknown): TalkOutline | null {
     id: o.id,
     topicId: o.topicId,
     retellId: typeof o.retellId === "string" && o.retellId ? o.retellId : null,
-    name: typeof o.name === "string" && o.name.trim() ? o.name : "Untitled talk",
+    name: typeof o.name === "string" && o.name.trim() ? o.name : t("study.talk.untitledDefault"),
     spine: normalizeSpine(o.spine),
     segments,
     createdAt: o.createdAt,

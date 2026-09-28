@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import type { BookChapter } from "../chapters";
 
 // A retell (docs/31, "讲是一个对象，不是一个按钮"): one pass over what was read,
@@ -69,9 +70,9 @@ export function newRetellId(now: number): string {
 // The default name for a retell started from one material: the material's title.
 // The reader renames it from the list.
 export function defaultRetellName(materials: readonly RetellMaterial[]): string {
-  if (materials.length === 0) return "Untitled retell";
+  if (materials.length === 0) return t("study.retell.untitledDefault");
   if (materials.length === 1) return materials[0].title;
-  return `${materials[0].title} +${materials.length - 1}`;
+  return t("study.retell.namePlusMore", { title: materials[0].title, count: materials.length - 1 });
 }
 
 export interface NewRetellFields {

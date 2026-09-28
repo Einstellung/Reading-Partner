@@ -10,6 +10,7 @@
 // exactly what landed in the card it raises.
 
 import { Type } from "@earendil-works/pi-ai";
+import { t } from "../../i18n";
 import type { AgentTool } from "../../legion/execute/turn";
 import type { RetellDecisionCardData } from "./cards";
 import { formatOutline } from "./plan";
@@ -41,7 +42,10 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
   return [
     {
       name: "record_chapter_decision",
-      label: (args) => args.chapter === undefined ? "Settling a chapter" : `Settling chapter ${args.chapter}`,
+      label: (args) =>
+        args.chapter === undefined
+          ? t("study.tools.settlingChapter")
+          : t("study.tools.settlingChapterNum", { chapter: Number(args.chapter) }),
       effect: "write",
       gate: "card",
       description:
@@ -97,7 +101,7 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
             ? `Recorded chapter ${chapter} as going in the retell, with ${points.length} point(s). The reader can see the entry.`
             : `Recorded chapter ${chapter} as cut from the retell. The reader can see the entry.`,
           receipt: {
-            label: decision.include ? "Kept a chapter" : "Cut a chapter",
+            label: decision.include ? t("study.tools.keptChapter") : t("study.tools.cutChapter"),
             summary: `${chapter}. ${target.title}`,
           },
         };
@@ -105,7 +109,10 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
     },
     {
       name: "read_chapter_note",
-      label: (args) => args.chapter === undefined ? "Reading a chapter note" : `Reading the note on chapter ${args.chapter}`,
+      label: (args) =>
+        args.chapter === undefined
+          ? t("study.tools.readingChapterNote")
+          : t("study.tools.readingChapterNoteNum", { chapter: Number(args.chapter) }),
       effect: "read",
       description:
         "Read the note the reader's notes pass wrote for a chapter of this book, by " +
@@ -126,7 +133,7 @@ export function buildRetellTools(deps: RetellToolDeps): AgentTool[] {
     },
     {
       name: "read_retell_outline",
-      label: () => "Reading the retell outline",
+      label: () => t("study.tools.readRetellOutline"),
       effect: "read",
       description:
         "Read the whole retell outline back: every chapter settled so far, what each " +

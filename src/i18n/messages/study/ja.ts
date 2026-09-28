@@ -1,0 +1,75 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+export default {
+  "retell.materialsCount": { other: "資料 {count} 件" },
+  "retell.noMaterials": "（資料なし）",
+  "retell.materialsJoin": "と",
+  "retell.backToTopic": "トピックに戻る",
+  "retell.renameTitle": "このリテリングの名前を変更",
+  "retell.renameDescription": "変わるのは名前だけです。アウトラインと会話はそのまま残ります。",
+  "retell.save": "保存",
+  "retell.fallbackName": "リテリング",
+  "retell.rehearse": "リハーサル",
+  "retell.loading": "リテリングを読み込み中…",
+  "retell.composerPlaceholder": "自分の言葉で話してみましょう…",
+  "retell.backToRetell": "リテリングに戻る",
+  "retell.notReadable": "このリテリングを読み込めませんでした。",
+  "retell.needProvider": "リテリングを始めるには{settings}でプロバイダを設定してください。",
+  "retell.untitledDefault": "無題のリテリング",
+  "retell.namePlusMore": "{title} ほか{count}件",
+
+  "rehearsal.startingTitle": "このリハーサルを開始しています…",
+  "rehearsal.loadingTitle": "このトークのアウトラインを探しています…",
+  "rehearsal.emptyTitle": "このトークにはまだ内容がありません。先にリテリングの最後で組み立ててください。",
+  "rehearsal.readyTitle": "最初からトークを行う",
+  "rehearsal.openingNote": "台本を開いています…",
+  "rehearsal.outlineMissing": "このトークのアウトラインはこの端末にありません。",
+  "rehearsal.outlineReadError": "アウトラインを読み込めませんでした",
+  "rehearsal.elapsedTitle": "このリハーサルの経過時間",
+  "rehearsal.starting": "開始しています…",
+  "rehearsal.start": "リハーサルを開始",
+  "rehearsal.end": "リハーサルを終了",
+  "rehearsal.noSegments":
+    "このトークにはまだ内容がありません。先にリテリングの最後で組み立ててから、リハーサルしてください。",
+
+  "coach.fallbackName": "このトーク",
+  "coach.subtitle": "今回の出来栄え",
+  "coach.pendingNotice": "話した最後の部分を認識エンジンから受け取っています…",
+  "coach.loading": "このトークを開いています…",
+  "coach.composerPlaceholder": "今回の出来栄えを聞いたり、変えたいことを伝えたり…",
+  "coach.needProvider":
+    "今回の出来栄えをお伝えするには{settings}でプロバイダを設定してください。",
+
+  "talk.untitledDefault": "無題のトーク",
+  "talk.untitledSegment": "無題のブロック",
+
+  "tools.setSpine": "トークの軸を設定しています",
+  "tools.setSpineDone": "トークの軸を設定しました",
+  "tools.writeSegment": "トークの一段落を書いています",
+  "tools.rewroteSegment": "トークの一段落を書き直しました",
+  "tools.addedSegment": "トークに一段落を追加しました",
+  "tools.moveSegment": "トークの一段落を移動しています",
+  "tools.movedSegment": "トークの一段落を移動しました",
+  "tools.removeSegment": "トークの一段落を削除しています",
+  "tools.droppedSegment": "トークの一段落を削除しました",
+  "tools.readTalkOutline": "トークのアウトラインを読み込んでいます",
+  "tools.settlingChapter": "章の内容を決めています",
+  "tools.settlingChapterNum": "第{chapter}章の内容を決めています",
+  "tools.keptChapter": "章を採用しました",
+  "tools.cutChapter": "章を除外しました",
+  "tools.readingChapterNote": "章のノートを読み込んでいます",
+  "tools.readingChapterNoteNum": "第{chapter}章のノートを読み込んでいます",
+  "tools.readRetellOutline": "リテリングのアウトラインを読み込んでいます",
+
+  "budget.prepNotesTrimmed": "参考論文のメモの一部を省略して余裕を作りました",
+  "budget.marksTrimmed":
+    "ここではハイライトを短くしています。ある章の全文を見たければ、もう一度読み上げるよう伝えてください",
+  "budget.historyTrimmedRetell": "会話の前の部分を省略して余裕を作りました",
+  "budget.passesTrimmed": "このトークの前のリハーサルを省略して余裕を作りました",
+
+  "rows.retellNotYet": "リテリングから · まだリハーサルなし",
+  "rows.retellCount": { other: "リテリングから · リハーサル{count}回" },
+  "rows.broughtInNotYet": "単独作成 · まだリハーサルなし",
+  "rows.broughtInCount": { other: "単独作成 · リハーサル{count}回" },
+} satisfies Translation<typeof en>;

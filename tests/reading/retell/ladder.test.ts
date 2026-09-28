@@ -24,7 +24,7 @@ const EVEN: Record<RetellReductionId, number> = {
 
 function plan(used: number) {
   return planReductions<RetellReductionId>({
-    rungs: RETELL_LADDER,
+    rungs: RETELL_LADDER(),
     contextWindow: WINDOW,
     purpose: "chat",
     used,
@@ -34,7 +34,7 @@ function plan(used: number) {
 }
 
 test("the retell ladder's order and its wording are pinned", () => {
-  expect(RETELL_LADDER.map((r) => [r.id, r.notice ?? ""])).toEqual([
+  expect(RETELL_LADDER().map((r) => [r.id, r.notice ?? ""])).toEqual([
     ["figure-catalog", ""],
     ["reader-statements", ""],
     ["observation-trim", ""],
@@ -95,7 +95,7 @@ test("history is the last thing given up here too", () => {
 // distort the pricing of the small rungs above them, so all three are held out of
 // the baseline.
 test("the rungs that are not priced like the rest say so on the table", () => {
-  const priced = Object.fromEntries(RETELL_LADDER.map((r) => [r.id, r.price ?? "prompt"]));
+  const priced = Object.fromEntries(RETELL_LADDER().map((r) => [r.id, r.price ?? "prompt"]));
   expect(priced).toEqual({
     "figure-catalog": "prompt",
     "reader-statements": "prompt",
