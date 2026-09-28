@@ -13,6 +13,7 @@
 // an aside has none of: the chapter sheet, the standing chips and the hold.
 
 import { useEffect, useRef, useState } from "react";
+import { useT } from "../../../../i18n";
 import CallView from "../../chat/call/CallView";
 import { useShellKeyboard } from "../../common/useKeyboardInset";
 import { CitationModeContext } from "../../markdown/Markdown";
@@ -26,7 +27,7 @@ import HoldMenu from "../HoldMenu";
 import { useHoldDelete } from "../use-hold-delete";
 import PhoneChapterSheet from "./PhoneChapterSheet";
 import PhoneLessonBar from "./PhoneLessonBar";
-import { LESSON_CHIPS, lessonFocusLine, type LessonViewProps } from "./lesson-view";
+import { lessonChips, lessonFocusLine, type LessonViewProps } from "./lesson-view";
 
 // What an empty aside opens on: the passage itself, set as a quotation, so the
 // reader can see which words they took. The strip over it names the aside and
@@ -53,6 +54,7 @@ interface Held {
 }
 
 export default function PhoneLesson(props: LessonViewProps) {
+  const t = useT();
   const [chaptersOpen, setChaptersOpen] = useState(false);
   const [held, setHeld] = useState<Held | null>(null);
 
@@ -117,7 +119,7 @@ export default function PhoneLesson(props: LessonViewProps) {
             className="px-2 text-[15px] font-normal text-muted-foreground"
             onClick={props.aside.onBack}
           >
-            ‹ Back to the lesson
+            ‹ {t("phone.lesson.backToLesson")}
           </Button>
         )}
       </div>
@@ -125,7 +127,7 @@ export default function PhoneLesson(props: LessonViewProps) {
           it is not the lesson, besides the ground under it. */}
       <div className="flex flex-none items-baseline gap-2 border-b border-border-subtle bg-background px-4 py-2 text-[12px]">
         <span className="flex-none font-medium uppercase tracking-[0.08em] text-accent-line">
-          Aside
+          {t("phone.lesson.aside")}
         </span>
         <span className="min-w-0 flex-1 truncate font-display text-[13px] text-muted-foreground">
           {props.aside.span === "" ? "" : `“${props.aside.span}”`}
@@ -167,7 +169,7 @@ export default function PhoneLesson(props: LessonViewProps) {
   const cramped = useShellKeyboard()?.cramped ?? false;
   const chips = props.aside || cramped ? undefined : (
     <div className="mb-2 flex flex-wrap gap-2">
-      {LESSON_CHIPS.map((chip) => (
+      {lessonChips().map((chip) => (
         <Button
           key={chip.label}
           variant="outline"
@@ -209,7 +211,7 @@ export default function PhoneLesson(props: LessonViewProps) {
         streaming={props.streaming}
         onStop={props.onStop}
         emptyTitle={props.aside ? asideEpigraph(props.aside.span) : props.title}
-        {...(props.aside ? {} : { placeholder: "Ask about the paper…" })}
+        {...(props.aside ? {} : { placeholder: t("phone.lesson.placeholder") })}
         scalable={false}
         stickKey={props.aside ? `aside-${props.bookId}` : `lesson-${props.bookId}`}
         aside={props.aside}
@@ -239,7 +241,7 @@ export default function PhoneLesson(props: LessonViewProps) {
               if (span) props.onAsk?.(span);
             }}
           >
-            Ask about this
+            {t("phone.lesson.askAboutThis")}
           </Button>
         </PopoverContent>
       </Popover>

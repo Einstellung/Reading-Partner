@@ -12,6 +12,7 @@
 // handle the pane hands back, and the four things a tap can reach.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useT } from "../../../../i18n";
 import {
   ANNOTATION_COLORS,
   deleteAnnotations,
@@ -90,11 +91,12 @@ export default function PhoneReader(props: {
   onBack: () => void;
   io?: PhoneBookIo;
 }) {
+  const t = useT();
   const { Pane, bookId, name, topicId, path } = props;
   const io = props.io ?? phoneBookIo;
   const [book, setBook] = useState<OpenedBook | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>("Rendering…");
+  const [status, setStatus] = useState<string | null>(t("phone.reader.rendering"));
   const [stats, setStats] = useState<ViewStats | null>(null);
   const [tool, setTool] = useState<Tool>({ type: "none", color: ANNOTATION_COLORS[0].color });
   const [outlineOpen, setOutlineOpen] = useState(false);
@@ -146,7 +148,7 @@ export default function PhoneReader(props: {
     let left = false;
     setBook(null);
     setFailed(null);
-    setStatus("Rendering…");
+    setStatus(t("phone.reader.rendering"));
     setStats(null);
     lastStateRef.current = null;
     void openPhoneBook(bookId, io, (line) => {
@@ -159,7 +161,7 @@ export default function PhoneReader(props: {
       })
       .catch((e: unknown) => {
         console.error("failed to open the book", e);
-        if (!left) setFailed("This book could not be opened.");
+        if (!left) setFailed(t("phone.reader.openFailed"));
       });
     return () => {
       left = true;
@@ -268,7 +270,7 @@ export default function PhoneReader(props: {
             }}
             onError={(e) => {
               console.error("the reading area failed", e);
-              setFailed("This book could not be drawn.");
+              setFailed(t("phone.reader.drawFailed"));
             }}
             onChangeViewState={(s) => {
               lastStateRef.current = s;
@@ -297,8 +299,8 @@ export default function PhoneReader(props: {
           // Opened after the popup has closed, so it sits on the dialog layer
           // and nothing covers Cancel (docs/pitfall/211).
           <ConfirmDestructiveDialog
-            title="Delete this mark?"
-            description="The mark goes, and with it the conversation opened from it. This cannot be undone."
+            title={t("phone.reader.deleteMarkTitle")}
+            description={t("phone.reader.deleteMarkDescription")}
             open
             onOpenChange={(open) => !open && setConfirming(null)}
             onConfirm={() => deleteMarkWithThread(confirming)}
@@ -336,6 +338,7 @@ function MarkPopup(props: {
   onClose: () => void;
   onTapThrough: (clientX: number, clientY: number) => void;
 }) {
+  const t = useT();
   const [left, , right, bottom] = props.rect;
   const down = useRef<{ id: number; x: number; y: number } | null>(null);
   return (
@@ -369,12 +372,12 @@ function MarkPopup(props: {
           variant="ghost"
           size="sm"
           className="text-destructive"
-          title="Delete this mark"
-          aria-label="Delete this mark"
+          title={t("phone.reader.deleteMarkButton")}
+          aria-label={t("phone.reader.deleteMarkButton")}
           onClick={props.onDelete}
         >
           <IconTrash size={16} />
-          <span className="ml-1.5">Delete</span>
+          <span className="ml-1.5">{t("phone.reader.delete")}</span>
         </Button>
       </div>
     </>

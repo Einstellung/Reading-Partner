@@ -5,6 +5,7 @@
 // confirmation and the line after it are all worked out here, from facts the
 // screen has already read; the screens only draw them.
 
+import { t } from "../../../i18n";
 import type { FileRef, Topic } from "../../../platform/app/topics";
 
 /** What the finger is on. */
@@ -66,27 +67,29 @@ export function holdMenuHead(subject: HoldSubject): string {
 export function holdMenuItems(subject: HoldSubject, facts: HoldFacts = {}): HoldMenuItem[] {
   switch (subject.kind) {
     case "topic":
-      return [{ choice: "delete-topic", label: "Delete topic" }];
+      return [{ choice: "delete-topic", label: t("phone.holdMenu.deleteTopic") }];
     case "saved":
-      return [{ choice: "remove-saved", label: "Remove from Saved" }];
+      return [{ choice: "remove-saved", label: t("phone.holdMenu.removeFromSaved") }];
     case "aside":
-      return [{ choice: "delete-aside", label: "Delete aside" }];
+      return [{ choice: "delete-aside", label: t("phone.holdMenu.deleteAside") }];
     case "file": {
       const items: HoldMenuItem[] = [];
       // An article has no conversation of its own on the shelf, and a file not
       // on the device has no book id to hold one under.
       if (facts.hasConversation && subject.bookId && !subject.article) {
-        if (subject.format === "pdf") items.push({ choice: "delete-lesson", label: "Delete lesson" });
-        else if (subject.format === "epub") {
-          items.push({ choice: "delete-conversation", label: "Delete conversation" });
+        if (subject.format === "pdf") {
+          items.push({ choice: "delete-lesson", label: t("phone.holdMenu.deleteLesson") });
+        } else if (subject.format === "epub") {
+          items.push({ choice: "delete-conversation", label: t("phone.holdMenu.deleteConversation") });
         }
       }
       // Unknown counts as last: the stronger claim is the one to confirm.
-      if (facts.last === false) items.push({ choice: "remove-from-topic", label: "Remove from topic" });
-      else {
+      if (facts.last === false) {
+        items.push({ choice: "remove-from-topic", label: t("phone.holdMenu.removeFromTopic") });
+      } else {
         items.push({
           choice: "delete-file",
-          label: subject.article ? "Delete article" : "Delete book",
+          label: subject.article ? t("phone.holdMenu.deleteArticle") : t("phone.holdMenu.deleteBook"),
         });
       }
       return items;
@@ -98,10 +101,6 @@ export interface HoldConfirm {
   title: string;
   description: string;
   action: string;
-}
-
-function noun(subject: Extract<HoldSubject, { kind: "file" }>): string {
-  return subject.article ? "article" : "book";
 }
 
 /**
@@ -117,9 +116,11 @@ export function holdConfirm(
     case "delete-file": {
       const s = subject as Extract<HoldSubject, { kind: "file" }>;
       return {
-        title: `Delete “${s.title}”?`,
-        description: `Delete this ${noun(s)} and everything about it, on every device? Your notes about yourself stay.`,
-        action: "Delete",
+        title: t("phone.holdMenu.confirmDeleteFileTitle", { title: s.title }),
+        description: s.article
+          ? t("phone.holdMenu.confirmDeleteArticleDescription")
+          : t("phone.holdMenu.confirmDeleteBookDescription"),
+        action: t("phone.holdMenu.delete"),
       };
     }
     case "remove-from-topic": {
@@ -127,41 +128,41 @@ export function holdConfirm(
       const others = facts.otherTopics ?? [];
       const where =
         others.length > 0
-          ? `It stays in ${others.map((n) => `“${n}”`).join(", ")}`
-          : "Something else still lists it, so it stays";
+          ? t("phone.holdMenu.removeOthers", { names: others.map((n) => `“${n}”`).join(", ") })
+          : t("phone.holdMenu.removeNoOthers");
       return {
-        title: `Remove “${s.title}”?`,
-        description: `This topic loses the ${noun(s)}. ${where}, with its reading position and marks.`,
-        action: "Remove",
+        title: t("phone.holdMenu.confirmRemoveTitle", { title: s.title }),
+        description: s.article
+          ? t("phone.holdMenu.removeArticleDescription", { where })
+          : t("phone.holdMenu.removeBookDescription", { where }),
+        action: t("phone.holdMenu.remove"),
       };
     }
     case "delete-lesson":
       return {
-        title: "Delete this conversation?",
-        description:
-          "The lesson goes, with its asides, on every device. The paper stays, and the next lesson starts from the beginning.",
-        action: "Delete",
+        title: t("phone.holdMenu.confirmConversationTitle"),
+        description: t("phone.holdMenu.confirmLessonDescription"),
+        action: t("phone.holdMenu.delete"),
       };
     case "delete-conversation":
       return {
-        title: "Delete this conversation?",
-        description:
-          "Everything said about this book goes, on every device. The book, its marks and its reading position stay.",
-        action: "Delete",
+        title: t("phone.holdMenu.confirmConversationTitle"),
+        description: t("phone.holdMenu.confirmConversationDescription"),
+        action: t("phone.holdMenu.delete"),
       };
     case "remove-saved": {
       const s = subject as Extract<HoldSubject, { kind: "saved" }>;
       return {
-        title: `Remove “${s.title}”?`,
-        description: "It leaves Saved on every device. The briefing it came from is not changed.",
-        action: "Remove",
+        title: t("phone.holdMenu.confirmRemoveTitle", { title: s.title }),
+        description: t("phone.holdMenu.confirmRemoveSavedDescription"),
+        action: t("phone.holdMenu.remove"),
       };
     }
     case "delete-aside":
       return {
-        title: "Delete this conversation?",
-        description: "The aside goes, and its row in the lesson with it. The lesson itself stays.",
-        action: "Delete",
+        title: t("phone.holdMenu.confirmConversationTitle"),
+        description: t("phone.holdMenu.confirmDeleteAsideDescription"),
+        action: t("phone.holdMenu.delete"),
       };
   }
 }
@@ -173,17 +174,21 @@ export function holdDoneLine(
 ): string {
   switch (choice) {
     case "delete-file":
-      return `Deleted “${(subject as Extract<HoldSubject, { kind: "file" }>).title}”`;
+      return t("phone.holdMenu.doneDeleted", {
+        title: (subject as Extract<HoldSubject, { kind: "file" }>).title,
+      });
     case "remove-from-topic":
-      return `Removed from ${(subject as Extract<HoldSubject, { kind: "file" }>).topicName}`;
+      return t("phone.holdMenu.doneRemovedFromTopic", {
+        topicName: (subject as Extract<HoldSubject, { kind: "file" }>).topicName,
+      });
     case "delete-lesson":
-      return "Lesson deleted";
+      return t("phone.holdMenu.doneLessonDeleted");
     case "delete-conversation":
-      return "Conversation deleted";
+      return t("phone.holdMenu.doneConversationDeleted");
     case "remove-saved":
-      return "Removed from Saved";
+      return t("phone.holdMenu.doneRemovedFromSaved");
     case "delete-aside":
-      return "Aside deleted";
+      return t("phone.holdMenu.doneAsideDeleted");
   }
 }
 

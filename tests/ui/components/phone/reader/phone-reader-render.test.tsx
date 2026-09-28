@@ -23,7 +23,7 @@ import {
   FLOW_DISPLAY_KEY,
   type FlowDisplay,
 } from "../../../../../src/reading/epub/flow/flow-display";
-import { AI_PEN_NOT_ON_PHONE } from "../../../../../src/ui/components/phone/reader/reader-gate";
+import { aiPenNotOnPhone } from "../../../../../src/ui/components/phone/reader/reader-gate";
 import type { PhoneBookIo } from "../../../../../src/reading/session/open-epub";
 import { useDom } from "../../../../support/dom";
 
@@ -171,7 +171,7 @@ test("the AI pen is on screen with its reason, and Learn can be pressed", async 
   const { container, getByLabelText } = await openReader();
   const dim = [...container.querySelectorAll("button[disabled]")];
   const reasons = dim.map((b) => b.getAttribute("title"));
-  expect(reasons.filter((r) => r === AI_PEN_NOT_ON_PHONE).length).toBe(1);
+  expect(reasons.filter((r) => r === aiPenNotOnPhone()).length).toBe(1);
   expect((getByLabelText("Learn this book with AI") as HTMLButtonElement).disabled).toBe(false);
 });
 

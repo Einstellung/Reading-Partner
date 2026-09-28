@@ -7,6 +7,7 @@
 // read_chapter reads that chapter (docs/09). So the sheet closes and the lesson
 // answers, which is why the current chapter is not a link at all.
 
+import { useT } from "../../../../i18n";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
 import type { TableChapter } from "../../../../reading/chapters/table";
 import { lessonChapterRows } from "./lesson-view";
@@ -21,16 +22,17 @@ export default function PhoneChapterSheet(props: {
   onOpenChange: (open: boolean) => void;
   onPick: (chapter: TableChapter) => void;
 }) {
+  const t = useT();
   const rows = lessonChapterRows(props.chapters, props.focusChapter, props.taught);
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogSheetContent>
         <DialogTitle className="border-b border-border-subtle px-4 py-3 text-[15px]">
-          Chapters
+          {t("phone.chapterSheet.title")}
         </DialogTitle>
         {rows.length === 0 ? (
           <p className="m-0 px-4 py-6 text-[14px] text-faint-foreground">
-            This paper has no chapter list on this device yet.
+            {t("phone.chapterSheet.empty")}
           </p>
         ) : (
           <ul className="m-0 list-none overflow-y-auto p-0 pb-safe-4">
@@ -61,7 +63,7 @@ export default function PhoneChapterSheet(props: {
                   </span>
                   {row.state === "now" ? (
                     <span className="flex-none text-[11px] font-medium tracking-[0.08em] text-accent-line uppercase">
-                      Now
+                      {t("phone.chapterSheet.now")}
                     </span>
                   ) : (
                     <span className="flex-none text-[12px] text-faint-foreground [font-variant-numeric:tabular-nums]">

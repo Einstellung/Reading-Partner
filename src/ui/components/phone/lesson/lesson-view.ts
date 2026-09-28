@@ -13,6 +13,7 @@
 // the reading order (reading/desk.ts onFocus), so every match here is on
 // TableChapter.number; `index` is only ever a key.
 
+import { t } from "../../../../i18n";
 import type { TableChapter } from "../../../../reading/chapters/table";
 import type { CardActionHandler } from "../../chat/chatParts";
 import type { ThreadMessage } from "../../chat/types";
@@ -56,10 +57,14 @@ export interface LessonChip {
   text: string;
 }
 
-export const LESSON_CHIPS: readonly LessonChip[] = [
-  { label: "I don't follow", text: "I don't follow." },
-  { label: "Skip", text: "Skip this one." },
-];
+// A function rather than a hoisted constant, so the chips are in the language
+// the reader has the app set to right now, not the one it launched in.
+export function lessonChips(): readonly LessonChip[] {
+  return [
+    { label: t("phone.lessonView.chipDontFollowLabel"), text: t("phone.lessonView.chipDontFollowText") },
+    { label: t("phone.lessonView.chipSkipLabel"), text: t("phone.lessonView.chipSkipText") },
+  ];
+}
 
 /**
  * Everything the lesson screen takes. The turn half of it — the messages, the
@@ -134,8 +139,10 @@ export function lessonFocusLine(
   if (!focus) return null;
   const title = chapters?.find((c) => c.number === focus.chapter)?.title.trim();
   if (!title) return null;
-  if (focus.resumed) return `Continuing from: ${title}`;
-  return focus.page === null ? `Now: ${title}` : `Now: ${title} · p.${focus.page}`;
+  if (focus.resumed) return t("phone.lessonView.continuingFrom", { title });
+  return focus.page === null
+    ? t("phone.lessonView.now", { title })
+    : t("phone.lessonView.nowWithPage", { title, page: focus.page });
 }
 
 /**

@@ -7,6 +7,7 @@
 // a user gesture, and Radix's own autofocus runs after it.
 
 import { useState, type MutableRefObject } from "react";
+import { useT } from "../../../i18n";
 import { useKeyboardInset } from "../common/useKeyboardInset";
 import { NEW_TOPIC_BLURB, NEW_TOPIC_PLACEHOLDER } from "../shelf/topic-shelf";
 import { Button } from "../ui/button";
@@ -19,6 +20,7 @@ export default function NewTopicSheet(props: {
   onCreate: (name: string) => void;
   inputRef: MutableRefObject<HTMLInputElement | null>;
 }) {
+  const t = useT();
   const [name, setName] = useState("");
   const trimmed = name.trim();
   const keyboard = useKeyboardInset();
@@ -49,7 +51,7 @@ export default function NewTopicSheet(props: {
         }}
       >
         <DialogTitle className="border-b border-border-subtle px-4 py-3 text-[15px]">
-          New topic
+          {t("phone.newTopic.title")}
         </DialogTitle>
         <form
           className="flex min-w-0 flex-col gap-4 px-4 pt-4 pb-safe-4"
@@ -66,7 +68,7 @@ export default function NewTopicSheet(props: {
             ref={props.inputRef}
             value={name}
             placeholder={NEW_TOPIC_PLACEHOLDER}
-            aria-label="Topic name"
+            aria-label={t("phone.newTopic.fieldLabel")}
             enterKeyHint="done"
             onChange={(e) => setName(e.target.value)}
           />
@@ -77,10 +79,10 @@ export default function NewTopicSheet(props: {
               className="flex-1"
               onClick={() => props.onOpenChange(false)}
             >
-              Cancel
+              {t("phone.newTopic.cancel")}
             </Button>
             <Button type="submit" className="flex-1" disabled={!trimmed}>
-              Create
+              {t("phone.newTopic.create")}
             </Button>
           </div>
         </form>

@@ -13,6 +13,7 @@
 // writes its position and lets the archive go — close-book.ts's order.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../../../../i18n";
 import type { Fulltext } from "../../../../fulltext";
 import { toDistillAnnotations } from "../../../../memory";
 import { logEvent } from "../../../../platform/app/events";
@@ -137,7 +138,7 @@ export function useBookLesson(args: BookLessonArgs) {
     newRow: (row) => row,
     cards: { id: nextCardId },
     maxImages: MAX_PENDING_IMAGES,
-    imageLimitHint: `You can attach up to ${MAX_PENDING_IMAGES} images.`,
+    imageLimitHint: t("phone.bookLessonHook.imageLimitHint", { count: MAX_PENDING_IMAGES }),
     loadingImage: (id) => ({ id, status: "loading" }),
     readyImage: (id, image) => ({ id, status: "ready", data: image.data, mediaType: image.mediaType }),
     sendableImages: (staged) =>
@@ -203,7 +204,7 @@ export function useBookLesson(args: BookLessonArgs) {
     void (async () => {
       const resolved = await resolveBookThread(id, () => bookIdRef.current !== id);
       if (resolved.status === "unreadable") {
-        pushToast("warn", "Saved AI conversations could not be loaded");
+        pushToast("warn", t("phone.bookLessonHook.threadsUnreadable"));
         return;
       }
       if (resolved.status === "cancelled") return;

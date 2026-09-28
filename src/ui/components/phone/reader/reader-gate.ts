@@ -7,11 +7,15 @@
 // the reading forms, and the rule has to be legible where the reader would
 // reach for it — so what is needed is the reason, and the way in that is here.
 
+import { t } from "../../../../i18n";
 import type { FlowTool } from "../../../../reading/epub/flow/flow-contract";
 import type { Tool, ToolType } from "../../reader/types";
 
-export const AI_PEN_NOT_ON_PHONE =
-  "The AI pen is not on the phone yet — Learn this book with AI is in the top bar";
+// A function rather than a hoisted constant, so a reader said after the
+// language setting changes is in the language they switched to.
+export function aiPenNotOnPhone(): string {
+  return t("phone.readerGate.aiPenNotOnPhone");
+}
 
 // The lock holds a page still under a finger that is drawing. The phone has no
 // pages to hold — it is one scroll, and the finger scrolls it — so the rack

@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
+import { useT, type Translate } from "../../../i18n";
 import { libraryHas, type LibraryEntry } from "../../../platform/app/library";
 import { getBookThread, loadThreads } from "../../../platform/app/threads";
 import { fetchBook, subscribeSyncStatus } from "../../../platform/sync";
@@ -190,6 +191,7 @@ function TopicList(props: {
   onChanged: () => Promise<void>;
   onNotice: (kind: NoticeKind, line: string) => void;
 }) {
+  const t = useT();
   // Newest first, as on the desk: a topic made here lands at the top.
   const all = shelfOrder(props.topics ?? []);
   const surface = useRef<HTMLDivElement | null>(null);
@@ -225,11 +227,11 @@ function TopicList(props: {
         // The new card is the first one; the list goes back up to where it lands.
         scroller.current?.scrollTo({ top: 0, behavior: "smooth" });
         await props.onChanged();
-        props.onNotice("info", `Created “${name}”`);
+        props.onNotice("info", t("phone.shelf.created", { name }));
       })
       .catch((e: unknown) => {
         console.error("failed to create the topic", e);
-        props.onNotice("error", "The topic could not be created.");
+        props.onNotice("error", t("phone.shelf.createFailed"));
       });
   };
 
@@ -239,14 +241,14 @@ function TopicList(props: {
       className="absolute inset-0 flex flex-col bg-background select-none [-webkit-touch-callout:none]"
     >
       <Header
-        title="Library"
-        sub={props.topics === null ? "…" : topicLine(topics)}
-        backLabel="Home"
+        title={t("phone.shelf.libraryLabel")}
+        sub={props.topics === null ? "…" : topicLine(t, topics)}
+        backLabel={t("phone.shelf.backHome")}
         onBack={props.onBack}
         action={
           topics.length > 0 && (
             <Button variant="outline" size="sm" onClick={startNaming}>
-              New topic
+              {t("phone.shelf.newTopic")}
             </Button>
           )
         }
@@ -254,8 +256,10 @@ function TopicList(props: {
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-safe-6">
         {props.topics !== null && topics.length === 0 ? (
           <div className="flex flex-col items-start gap-3">
-            <p className="m-0 text-[14px] text-faint-foreground">No topics yet. {NEW_TOPIC_BLURB}</p>
-            <Button onClick={startNaming}>New topic</Button>
+            <p className="m-0 text-[14px] text-faint-foreground">
+              {t("phone.shelf.noTopicsYet")} {NEW_TOPIC_BLURB}
+            </p>
+            <Button onClick={startNaming}>{t("phone.shelf.newTopic")}</Button>
           </div>
         ) : (
           <ul className={`${LIBRARY_GRID} grid-cols-2`}>
@@ -288,9 +292,8 @@ function TopicList(props: {
   );
 }
 
-function topicLine(topics: Topic[]): string {
-  const n = topics.length;
-  return `${n} topic${n === 1 ? "" : "s"}`;
+function topicLine(t: Translate, topics: Topic[]): string {
+  return t("phone.shelf.topicCount", { count: topics.length });
 }
 
 function TopicShelf(props: {
@@ -305,6 +308,7 @@ function TopicShelf(props: {
   onSay: (line: string) => void;
   onImported: () => Promise<void>;
 }) {
+  const t = useT();
   const { topic, entries } = props;
   // The book ids whose bytes are in the library directory. Null while it is
   // being worked out: "in the cloud" is a claim about a directory nobody has
@@ -422,12 +426,12 @@ function TopicShelf(props: {
         door({ ...opened, bookId: action.bookId });
       } catch (e) {
         console.warn("failed to download the book", e);
-        props.onSay(e instanceof Error ? e.message : "This book could not be downloaded");
+        props.onSay(e instanceof Error ? e.message : t("phone.shelf.downloadFailed"));
       } finally {
         setDownloading(null);
       }
     },
-    [can, onDevice, props, readOnDevice, topic.id],
+    [can, onDevice, props, readOnDevice, t, topic.id],
   );
 
   const importBook = useCallback(async (): Promise<void> => {
@@ -441,13 +445,13 @@ function TopicShelf(props: {
       await props.onImported();
     } catch (e) {
       console.warn("failed to import the book", e);
-      return props.onSay(e instanceof Error ? e.message : "This book could not be imported");
+      return props.onSay(e instanceof Error ? e.message : t("phone.shelf.importFailed"));
     } finally {
       setImporting(false);
     }
     const line = await uploadImported(bookId);
     if (line) props.onSay(line);
-  }, [props, topic.id]);
+  }, [props, t, topic.id]);
 
   return (
     <div
@@ -457,7 +461,7 @@ function TopicShelf(props: {
       <Header
         title={topic.name}
         sub={fileCountLabel(topic.files.length)}
-        backLabel="Library"
+        backLabel={t("phone.shelf.libraryLabel")}
         onBack={props.onBack}
         action={
           <Button
@@ -466,13 +470,13 @@ function TopicShelf(props: {
             disabled={importing}
             onClick={() => void importBook()}
           >
-            {importing ? "Importing…" : "Import EPUB"}
+            {importing ? t("phone.shelf.importing") : t("phone.shelf.importEpub")}
           </Button>
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-safe-6">
         {materials.length === 0 ? (
-          <p className="m-0 text-[14px] text-faint-foreground">Nothing filed here yet.</p>
+          <p className="m-0 text-[14px] text-faint-foreground">{t("phone.shelf.nothingFiled")}</p>
         ) : (
           <>
             <ul className={`${LIBRARY_GRID} grid-cols-2`}>
@@ -495,7 +499,7 @@ function TopicShelf(props: {
                             (shelf/cardStyles.ts). */}
                         {m.format === "pdf" && (
                           <span className="flex-none rounded-sm border border-accent-line px-[5px] text-[10px] leading-[14px] font-medium tracking-[0.08em] text-accent-line uppercase">
-                            Lesson
+                            {t("phone.shelf.lessonBadge")}
                           </span>
                         )}
                         <span className="truncate">

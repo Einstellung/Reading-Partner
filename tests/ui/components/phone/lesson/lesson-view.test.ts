@@ -6,8 +6,8 @@
 import { expect, test } from "bun:test";
 import type { TableChapter } from "../../../../../src/reading/chapters/table";
 import {
-  LESSON_CHIPS,
   lessonChapterRows,
+  lessonChips,
   lessonFocusLine,
 } from "../../../../../src/ui/components/phone/lesson/lesson-view";
 
@@ -72,7 +72,7 @@ test("a lesson that has not started marks nothing", () => {
 });
 
 test("the two standing chips say what a reader would have typed", () => {
-  expect(LESSON_CHIPS.map((c) => c.label)).toEqual(["I don't follow", "Skip"]);
+  expect(lessonChips().map((c) => c.label)).toEqual(["I don't follow", "Skip"]);
   // Each sends a sentence, not a command: the model is being told something.
-  for (const chip of LESSON_CHIPS) expect(chip.text.endsWith(".")).toBe(true);
+  for (const chip of lessonChips()) expect(chip.text.endsWith(".")).toBe(true);
 });

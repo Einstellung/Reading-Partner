@@ -13,6 +13,7 @@
 // to lock, and the one thing a reader reaches for there instead is the size of
 // the type (docs/70).
 
+import { useT } from "../../../../i18n";
 import { ANNOTATION_COLORS } from "../../../../platform/app/annotations";
 import type { ViewStats } from "../../../../platform/app/reader-contract";
 import type { LessonDot } from "../../../../reading/session/lesson-dot";
@@ -23,15 +24,7 @@ import PenToolbar from "../../reader/PenToolbar";
 import { readerPageText } from "../../reader/reader-page-text";
 import type { Tool } from "../../reader/types";
 import { Button } from "../../ui/button";
-import { AI_PEN_NOT_ON_PHONE, PHONE_OMITTED_TOOLS } from "./reader-gate";
-
-const BOOK_THREAD = "Learn this book with AI";
-
-// What the dot says, in the button's accessible name.
-const DOT_WORDS: Record<Exclude<LessonDot, null>, string> = {
-  writing: " (a reply is being written)",
-  unseen: " (new reply)",
-};
+import { aiPenNotOnPhone, PHONE_OMITTED_TOOLS } from "./reader-gate";
 
 export default function PhoneReaderBar(props: {
   title: string;
@@ -49,11 +42,14 @@ export default function PhoneReaderBar(props: {
   // finished while the reader was on the page (lesson-dot.ts).
   learnDot: LessonDot;
 }) {
-  // The desk's ReaderTopBar owns reader.page.* now (docs/ui/81); the phone area
-  // has not been migrated to t() yet, so this only satisfies readerPageText's
-  // signature — none of this file's own strings are translated here.
   const t = useT();
   const pageText = readerPageText(props.stats, t);
+  const bookThread = t("phone.readerBar.learnThisBook");
+  // What the dot says, in the button's accessible name.
+  const dotWords: Record<Exclude<LessonDot, null>, string> = {
+    writing: t("phone.readerBar.dotWriting"),
+    unseen: t("phone.readerBar.dotUnseen"),
+  };
   return (
     <div className="flex flex-none flex-col gap-0.5 border-b border-border-subtle px-1 pt-1 pb-1">
       <div className="flex items-center gap-1">
@@ -61,8 +57,8 @@ export default function PhoneReaderBar(props: {
           variant="ghost"
           size="icon"
           className="flex-none text-muted-foreground"
-          title="Back to the shelf"
-          aria-label="Back to the shelf"
+          title={t("phone.readerBar.backToShelf")}
+          aria-label={t("phone.readerBar.backToShelf")}
           onClick={props.onBack}
         >
           ‹
@@ -83,8 +79,8 @@ export default function PhoneReaderBar(props: {
           variant="ghost"
           size="icon"
           className="flex-none text-muted-foreground"
-          title="Outline"
-          aria-label="Outline"
+          title={t("phone.readerBar.outline")}
+          aria-label={t("phone.readerBar.outline")}
           onClick={props.onOutline}
         >
           <IconOutline size={20} />
@@ -93,8 +89,8 @@ export default function PhoneReaderBar(props: {
           variant="ghost"
           size="icon"
           className="flex-none text-muted-foreground"
-          title="Display"
-          aria-label="Display"
+          title={t("phone.readerBar.display")}
+          aria-label={t("phone.readerBar.display")}
           onClick={props.onDisplay}
         >
           <IconTextSize size={20} />
@@ -105,7 +101,7 @@ export default function PhoneReaderBar(props: {
             tool={props.tool}
             colors={ANNOTATION_COLORS}
             onToolChange={props.onToolChange}
-            disabled={{ ai: AI_PEN_NOT_ON_PHONE }}
+            disabled={{ ai: aiPenNotOnPhone() }}
             omit={PHONE_OMITTED_TOOLS}
           />
         </div>
@@ -114,8 +110,8 @@ export default function PhoneReaderBar(props: {
           size="icon"
           className="relative flex-none text-muted-foreground"
           disabled={!props.onLearn}
-          title={BOOK_THREAD}
-          aria-label={BOOK_THREAD + (props.learnDot ? DOT_WORDS[props.learnDot] : "")}
+          title={bookThread}
+          aria-label={bookThread + (props.learnDot ? dotWords[props.learnDot] : "")}
           onClick={props.onLearn}
         >
           <IconBookSparkle size={20} />

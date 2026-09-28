@@ -9,6 +9,7 @@
 // Citations are chips and quote blocks that jump (no CitationModeContext here —
 // "quote" is the PDF lesson's, where there is no page to jump to).
 
+import { useT } from "../../../../i18n";
 import CallView from "../../chat/call/CallView";
 import ChapterFocusBar from "../../chat/call/ChapterFocusBar";
 import {
@@ -24,6 +25,7 @@ export default function PhoneBookLesson(props: {
   title: string;
   lesson: BookLesson;
 }) {
+  const t = useT();
   const { lesson } = props;
   const call = lesson.call;
   if (!call) return null;
@@ -35,8 +37,8 @@ export default function PhoneBookLesson(props: {
           variant="ghost"
           size="icon"
           className="flex-none text-muted-foreground"
-          title="Back to the page"
-          aria-label="Back to the page"
+          title={t("phone.bookLesson.backToPage")}
+          aria-label={t("phone.bookLesson.backToPage")}
           onClick={lesson.back}
         >
           ‹
@@ -53,7 +55,7 @@ export default function PhoneBookLesson(props: {
   const retry = call.error ? (
     <div className="mb-2 flex justify-center">
       <Button variant="outline" size="sm" className="rounded-full" onClick={lesson.retry}>
-        Retry
+        {t("phone.bookLesson.retry")}
       </Button>
     </div>
   ) : undefined;
@@ -63,7 +65,7 @@ export default function PhoneBookLesson(props: {
     <PrepSlugContext.Provider value={lesson.sources}>
     <FigureContext.Provider value={lesson.figureHost}>
     <QuoteCheckContext.Provider value={lesson.quoteCheck}>
-      <div className="absolute inset-0 z-10 flex flex-col bg-chat-surface" aria-label="Lesson">
+      <div className="absolute inset-0 z-10 flex flex-col bg-chat-surface" aria-label={t("phone.bookLesson.ariaLabel")}>
         <CallView
           messages={call.messages}
           onSend={lesson.send}
@@ -75,7 +77,7 @@ export default function PhoneBookLesson(props: {
           voice={false}
           scalable={false}
           emptyTitle={props.title}
-          placeholder="Ask me to teach you part of this book…"
+          placeholder={t("phone.bookLesson.placeholder")}
           emptyNote={lesson.note}
           stickKey={call.threadId}
           header={header}

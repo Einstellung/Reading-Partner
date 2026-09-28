@@ -10,6 +10,7 @@
 // sync: the sentence explains what this phone does with a tap, and an iPad has
 // nothing to learn from it.
 
+import { useT } from "../../../../i18n";
 import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
 
@@ -21,32 +22,29 @@ export default function PhoneLessonIntroSheet(props: {
   // and the button is not drawn.
   onOpenIn?: () => void;
 }) {
+  const t = useT();
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogSheetContent>
         <DialogTitle className="border-b border-border-subtle px-4 py-3.5 text-[15px] font-semibold">
-          This one opens as a lesson
+          {t("phone.lessonIntro.title")}
         </DialogTitle>
         <div className="overflow-y-auto p-4">
-          <p className="m-0 mb-3 text-[15px] leading-[1.55]">
-            On the phone a PDF is not turned page by page. It opens as a lesson: I take you through
-            the paper in text, quoting it with page numbers as we go.
-          </p>
+          <p className="m-0 mb-3 text-[15px] leading-[1.55]">{t("phone.lessonIntro.body1")}</p>
           <p className="m-0 mb-3 text-[15px] leading-[1.55] text-muted-foreground">
-            To see the pages themselves — the figures, the tables, the typesetting — hand the file
-            to another app with Open in…, or read it on the iPad.
+            {t("phone.lessonIntro.body2")}
           </p>
           <p className="m-0 text-[15px] leading-[1.55] text-muted-foreground">
-            Said once. Next time this card goes straight into the lesson.
+            {t("phone.lessonIntro.body3")}
           </p>
         </div>
         <div className="flex flex-col gap-2.5 px-4 pt-1 pb-safe-4">
           <Button variant="default" size="lg" className="w-full" onClick={props.onStart}>
-            Start the lesson
+            {t("phone.lessonIntro.start")}
           </Button>
           {props.onOpenIn && (
             <Button variant="outline" size="lg" className="w-full" onClick={props.onOpenIn}>
-              Open in…
+              {t("phone.lessonIntro.openIn")}
             </Button>
           )}
         </div>

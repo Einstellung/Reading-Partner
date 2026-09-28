@@ -7,6 +7,7 @@
 // reader would plausibly have typed, which is the same posture the two standing
 // chips take (docs/09 — the AI does not open its own mouth).
 
+import { t } from "../../i18n";
 import type { TableChapter } from "../chapters";
 
 /**
@@ -15,15 +16,11 @@ import type { TableChapter } from "../chapters";
  *
  * Three things, in the order they have to happen: the shape of the paper, how
  * figures are to be handled on a screen with no pages on it, and permission to
- * start without asking for it.
+ * start without asking for it. In the reader's own language, since it reads as
+ * something they would plausibly have typed (docs/09).
  */
 export function lessonOpening(): string {
-  return [
-    "Give me the skeleton of this paper first — how many parts it has and what each one",
-    "does, in one screen. I'm reading on my phone and the pages aren't in front of me, so",
-    "for a figure or a table just name it and give me its page; you can tell me what the",
-    "caption says. Then don't ask me, take me straight to the first stop.",
-  ].join(" ");
+  return t("phone.lessonOpening.text");
 }
 
 /**
@@ -33,10 +30,10 @@ export function lessonOpening(): string {
  */
 export function takeMeTo(chapter: TableChapter): string {
   const title = chapter.title.trim().replace(/[.。]+$/, "");
-  if (title) return `Take me to ${title}.`;
+  if (title) return t("phone.lessonOpening.takeMeToChapterTitle", { title });
   // A chapter with no title of its own is still a chapter to be taught; the
   // printed number is what the reader has to point at with.
   return chapter.number === null
-    ? `Take me to page ${chapter.startPage}.`
-    : `Take me to chapter ${chapter.number}.`;
+    ? t("phone.lessonOpening.takeMeToPage", { page: chapter.startPage })
+    : t("phone.lessonOpening.takeMeToChapterNumber", { number: chapter.number });
 }

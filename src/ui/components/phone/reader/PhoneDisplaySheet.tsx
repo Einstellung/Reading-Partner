@@ -12,6 +12,7 @@
 // is a setting they cannot see while choosing.
 
 import type { ReactNode } from "react";
+import { useT } from "../../../../i18n";
 import {
   FLOW_FONT_STEPS,
   FLOW_LINE_STEPS,
@@ -35,19 +36,20 @@ export default function PhoneDisplaySheet(props: {
   onChange: (display: FlowDisplay) => void;
 }) {
   const { display, onChange } = props;
+  const t = useT();
   const step = flowFontStep(display);
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogSheetContent data-reader-paper={display.paper}>
         <DialogTitle className="border-b border-border-subtle px-4 py-3 text-[15px]">
-          Display
+          {t("phone.displaySheet.title")}
         </DialogTitle>
         <div className="flex flex-col gap-4 p-4 pb-safe-4">
-          <Row label="Size">
+          <Row label={t("phone.displaySheet.size")}>
             <Button
               variant="outline"
               size="icon"
-              aria-label="Smaller text"
+              aria-label={t("phone.displaySheet.smallerText")}
               disabled={step === 0}
               onClick={() => onChange(stepFlowFont(display, -1))}
             >
@@ -59,7 +61,7 @@ export default function PhoneDisplaySheet(props: {
             <Button
               variant="outline"
               size="icon"
-              aria-label="Larger text"
+              aria-label={t("phone.displaySheet.largerText")}
               disabled={step === FLOW_FONT_STEPS.length - 1}
               onClick={() => onChange(stepFlowFont(display, 1))}
             >
@@ -67,7 +69,7 @@ export default function PhoneDisplaySheet(props: {
             </Button>
           </Row>
 
-          <Row label="Line spacing">
+          <Row label={t("phone.displaySheet.lineSpacing")}>
             {FLOW_LINE_STEPS.map((s) => (
               <Choice
                 key={s.value}
@@ -78,7 +80,7 @@ export default function PhoneDisplaySheet(props: {
             ))}
           </Row>
 
-          <Row label="Margins">
+          <Row label={t("phone.displaySheet.margins")}>
             {FLOW_PAD_STEPS.map((s) => (
               <Choice
                 key={s.value}
@@ -89,15 +91,15 @@ export default function PhoneDisplaySheet(props: {
             ))}
           </Row>
 
-          <Row label="Turn pages">
+          <Row label={t("phone.displaySheet.turnPages")}>
             <Switch
-              aria-label="Turn pages"
+              aria-label={t("phone.displaySheet.turnPages")}
               checked={display.mode === "paged"}
               onCheckedChange={(on) => onChange({ ...display, mode: on ? "paged" : "scroll" })}
             />
           </Row>
 
-          <Row label="Paper">
+          <Row label={t("phone.displaySheet.paper")}>
             {FLOW_PAPER_NAMES.map((name) => {
               const paper = FLOW_PAPERS[name];
               return (
