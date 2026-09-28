@@ -2,6 +2,7 @@
 // hand over a view and get a string back instead of rounding anything
 // themselves.
 
+import { t } from "../../../i18n";
 import type { MealCells, Nutrition } from "../nutrition/solve";
 import type { DayView, MealView } from "./view";
 
@@ -44,12 +45,12 @@ export function dayMeters(d: DayView): Meter[] {
   const pct = (v: number, t: number) => (t > 0 ? Math.max(0, Math.min(100, (v / t) * 100)) : 0);
   return [
     {
-      label: "Calories",
+      label: t("meals.calories"),
       pct: pct(d.totals.kcal, d.targets.kcal),
       value: `${n0(d.totals.kcal)} / ${d.targets.kcal} kcal`,
     },
     {
-      label: "Protein",
+      label: t("meals.protein"),
       pct: pct(d.totals.protein, d.targets.protein),
       value: `${n0(d.totals.protein)} / ${d.targets.protein} g`,
     },
@@ -71,20 +72,20 @@ export interface CellMark {
 /** The three squares a meal carries: protein, veg, carbs. */
 export function cellMarks(c: MealCells): CellMark[] {
   return [
-    { short: "P", long: "Protein", on: c.protein },
-    { short: "V", long: "Veg", on: c.produce },
-    { short: "C", long: "Carb", on: c.carbs },
+    { short: "P", long: t("meals.cellProtein"), on: c.protein },
+    { short: "V", long: t("meals.cellVeg"), on: c.produce },
+    { short: "C", long: t("meals.cellCarb"), on: c.carbs },
   ];
 }
 
 export function cellsAriaLabel(c: MealCells): string {
-  const yn = (b: boolean) => (b ? "yes" : "no");
-  return `Protein ${yn(c.protein)}, veg ${yn(c.produce)}, carbs ${yn(c.carbs)}`;
+  const yn = (b: boolean) => (b ? t("meals.yes") : t("meals.no"));
+  return t("meals.cellsAriaLabel", { protein: yn(c.protein), veg: yn(c.produce), carbs: yn(c.carbs) });
 }
 
 /** A meal's label on the day screen: "Dinner · after training" for the main meal eaten after training. */
 export function mealHeading(m: MealView): string {
-  return m.postWorkout ? `${m.label} · after training` : m.label;
+  return m.postWorkout ? t("meals.mealAfterTraining", { label: m.label }) : m.label;
 }
 
 /** An ingredient row's protein, to one decimal. */

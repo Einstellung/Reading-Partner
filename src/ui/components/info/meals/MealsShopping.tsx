@@ -11,6 +11,7 @@
 
 import { useRef } from "react";
 
+import { useT } from "../../../../i18n";
 import type { MealsState, ShoppingItem } from "../../../../info/meals/plan/types";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import {
@@ -73,6 +74,7 @@ function Line({
   mark: boolean;
   onToggle?: (checked: boolean) => void;
 }) {
+  const t = useT();
   const picture = ingredientPicture(item.en, photos);
   const id = `shop-${item.category}-${item.name}`;
   return (
@@ -98,7 +100,7 @@ function Line({
           {item.name}
           {item.source === "reader" && (
             <span className="ml-2 rounded-full border border-border px-1.5 py-px align-[1px] text-[11px] leading-normal text-faint-foreground">
-              added
+              {t("meals.added")}
             </span>
           )}
         </span>
@@ -166,6 +168,7 @@ function FlatGroup({ title, hint, ...rest }: GroupProps & { title: string; hint?
 }
 
 export function MealsShopping(props: MealsShoppingProps) {
+  const t = useT();
   const { state, photos } = props;
   const shopping = state?.shopping ?? EMPTY_SHOPPING;
   // The order is settled once and then honoured: a tick changes the box and the
@@ -186,8 +189,8 @@ export function MealsShopping(props: MealsShoppingProps) {
   return (
     <MealsColumn>
       <MealsHeader
-        title={done ? `Bought · ${weekdayName(done)}` : "Shopping"}
-        askLabel="Ask about shopping"
+        title={done ? t("meals.boughtDate", { weekday: weekdayName(done) }) : t("meals.shopping")}
+        askLabel={t("meals.askShopping")}
         onAsk={props.onAsk}
         onBack={props.onBack}
       />
@@ -198,11 +201,11 @@ export function MealsShopping(props: MealsShoppingProps) {
         <>
           <div className="mb-3 flex items-baseline gap-2">
             <h2 className="m-0 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
-              Bought
+              {t("meals.bought")}
             </h2>
             <span className="flex-1" />
             <span className="text-[13px] text-faint-foreground">
-              {bought.length} of {lines.length}
+              {t("meals.progress", { bought: bought.length, total: lines.length })}
             </span>
           </div>
           <Aisles
@@ -214,7 +217,7 @@ export function MealsShopping(props: MealsShoppingProps) {
           />
           {toGet.length > 0 && (
             <FlatGroup
-              title="To get on the way"
+              title={t("meals.toGetOnWay")}
               items={toGet}
               state={state}
               photos={photos}
@@ -224,8 +227,8 @@ export function MealsShopping(props: MealsShoppingProps) {
           )}
           {missedLines.length > 0 && (
             <FlatGroup
-              title="Didn't get"
-              hint="Say so in Ask and the week adjusts"
+              title={t("meals.didntGet")}
+              hint={t("meals.didntGetHint")}
               items={missedLines}
               state={state}
               photos={photos}
@@ -238,10 +241,10 @@ export function MealsShopping(props: MealsShoppingProps) {
         <>
           <div className="mb-3 flex items-baseline gap-2">
             <h2 className="m-0 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
-              Still to buy
+              {t("meals.stillToBuy")}
             </h2>
             <span className="flex-1" />
-            <span className="text-[13px] text-faint-foreground">{left.length} left</span>
+            <span className="text-[13px] text-faint-foreground">{t("meals.left", { count: left.length })}</span>
           </div>
           <Aisles
             items={lines}
@@ -255,13 +258,13 @@ export function MealsShopping(props: MealsShoppingProps) {
           {lines.length > LONG_LIST ? (
             <div className="sticky bottom-0 -mx-4 mt-5 flex border-t border-border-subtle bg-background/90 px-4 py-2.5 pb-safe backdrop-blur sm:-mx-6 sm:px-6">
               <Button variant="cta" className="flex-1" onClick={props.onDone}>
-                Done
+                {t("meals.done")}
               </Button>
             </div>
           ) : (
             <div className="mt-5 flex">
               <Button variant="cta" className="flex-1" onClick={props.onDone}>
-                Done
+                {t("meals.done")}
               </Button>
             </div>
           )}

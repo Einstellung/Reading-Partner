@@ -9,8 +9,9 @@
 //
 // None of the bureau's vocabulary appears here. It is what they eat.
 
+import { useT } from "../../../../i18n";
 import type { Meal, MealsState, ShoppingItem } from "../../../../info/meals/plan/types";
-import { FOOT_NOTE } from "../../../../info/meals/screen/method-screen";
+import { footNote } from "../../../../info/meals/screen/method-screen";
 import { dayTotalsLine, mealNumbersLine, weekRowNumbers } from "../../../../info/meals/screen/screen-lines";
 import { hostRegion } from "../../../../info/meals/region";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
@@ -180,6 +181,7 @@ function ShoppingCard({
   photos: PhotoCache;
   onOpen: () => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -188,7 +190,7 @@ function ShoppingCard({
     >
       <div className="flex items-baseline gap-2">
         <h2 className="m-0 text-[11px] font-medium uppercase tracking-wider text-faint-foreground">
-          Shopping
+          {t("meals.shopping")}
         </h2>
         <span className="flex-1" />
         <span className="text-[13px] text-faint-foreground">{status}</span>
@@ -230,6 +232,7 @@ function WeekRow({
   photos: PhotoCache;
   onOpen: () => void;
 }) {
+  const t = useT();
   const lead = leadMeal(view);
   const picture = dishPicture(lead, photos);
   const thumbnails = dishThumbnails(lead?.items, (en) => ingredientPicture(en, photos)?.url ?? null);
@@ -247,7 +250,7 @@ function WeekRow({
           {view.weekday}
           {view.targets && (
             <small className={view.training ? "block text-[11px] text-accent-line" : "block text-[11px]"}>
-              {view.training ? "Training" : "Rest"}
+              {view.training ? t("meals.training") : t("meals.rest")}
             </small>
           )}
         </span>
@@ -286,6 +289,7 @@ function WeekRow({
 }
 
 export function MealsHome(props: MealsHomeProps) {
+  const t = useT();
   const { state, today, photos } = props;
   const plan = state?.plan ?? null;
   const view = state ? mealsView(state, today, hostRegion()) : null;
@@ -297,19 +301,19 @@ export function MealsHome(props: MealsHomeProps) {
   const lines = linesInOrder(shopping, orderShoppingLines(shopping));
   const preview = shoppingPreview(shopping, lines);
   const exhausted = planExhausted(plan, today);
-  const planLabel = plan ? "Plan next week" : "Plan this week";
+  const planLabel = plan ? t("meals.planNextWeek") : t("meals.planThisWeek");
 
   return (
     <MealsColumn>
-      <MealsHeader title="Meals" askLabel="Ask about this week" onAsk={props.onAsk} />
+      <MealsHeader title={t("meals.title")} askLabel={t("meals.askWeek")} onAsk={props.onAsk} />
       {state !== null && (
         <div className="mb-3 flex flex-wrap gap-2">
           <Button variant="outline" size="chip" onClick={props.onReplayOnboarding}>
-            Replay onboarding
+            {t("meals.replayOnboarding")}
           </Button>
           {view?.targets && (
             <Button variant="outline" size="chip" onClick={props.onOpenMethod}>
-              Method &amp; sources
+              {t("meals.methodTitle")}
             </Button>
           )}
         </div>
@@ -325,8 +329,7 @@ export function MealsHome(props: MealsHomeProps) {
       ) : !plan || head.length === 0 ? (
         <div className="rounded-2xl border border-border-soft bg-card p-5">
           <p className="m-0 font-display text-[17px] leading-relaxed text-foreground">
-            Nothing is planned. Four simple meals a day for seven days, and the shopping list that
-            goes with them.
+            {t("meals.nothingPlanned")}
           </p>
           <div className="mt-4">
             <Button variant="cta" onClick={props.onPlanWeek}>
@@ -367,7 +370,7 @@ export function MealsHome(props: MealsHomeProps) {
           {later.length > 0 && (
             <section className="mt-6">
               <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-faint-foreground">
-                The rest of the week
+                {t("meals.restOfWeek")}
               </h2>
               <ul className="m-0 flex list-none flex-col p-0">
                 {later.map((v) => (
@@ -385,18 +388,18 @@ export function MealsHome(props: MealsHomeProps) {
           {exhausted && (
             <div className="mt-6 rounded-2xl border border-border-soft bg-card p-5">
               <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">
-                This week runs out after today.
+                {t("meals.weekRunsOut")}
               </p>
               <div className="mt-3">
                 <Button variant="cta" size="chip" className="px-3.5 py-1.5" onClick={props.onPlanWeek}>
-                  Plan next week
+                  {t("meals.planNextWeek")}
                 </Button>
               </div>
             </div>
           )}
         </>
       )}
-      <p className="m-0 mt-7 text-[11px] leading-snug text-faint-foreground">{FOOT_NOTE}</p>
+      <p className="m-0 mt-7 text-[11px] leading-snug text-faint-foreground">{footNote()}</p>
       <PhotoCredit />
     </MealsColumn>
   );

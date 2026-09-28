@@ -6,6 +6,7 @@
 import { useState } from "react";
 
 import { openExternal } from "../../../../platform/app/external-link";
+import { useT } from "../../../../i18n";
 import type { PhotoCache } from "../../../../info/meals/photos/dish-photos";
 import { markDishPhotoBroken } from "../../../../info/meals/photos/photo-store";
 import { hostRegion } from "../../../../info/meals/region";
@@ -45,6 +46,7 @@ export interface MealsDayProps {
 }
 
 function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
+  const t = useT();
   const [photoFailed, setPhotoFailed] = useState(false);
   const made = view.mode === "make";
   const dish = { searchName: view.searchName };
@@ -57,7 +59,7 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
         <CardLabel>{mealHeading(view)}</CardLabel>
         <span className="flex-1" />
         <CardLabel accent>
-          {made && view.minutes !== null ? `${view.minutes} min` : modeWord(view.mode)}
+          {made && view.minutes !== null ? t("meals.minutes", { count: view.minutes }) : modeWord(view.mode)}
         </CardLabel>
       </div>
 
@@ -101,10 +103,10 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
             <table className="mt-3 w-full border-collapse text-[13px] tabular-nums">
               <thead>
                 <tr className="text-[11px] text-faint-foreground">
-                  <th className="pb-1 text-left font-normal">Ingredient</th>
+                  <th className="pb-1 text-left font-normal">{t("meals.ingredient")}</th>
                   <th className="pb-1 text-right font-normal">g</th>
                   <th className="pb-1 text-right font-normal">kcal</th>
-                  <th className="pb-1 text-right font-normal">Protein</th>
+                  <th className="pb-1 text-right font-normal">{t("meals.protein")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -139,7 +141,7 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
           {view.method && (
             <div className="mt-3 border-t border-border-subtle pt-2.5 text-[14px] leading-relaxed text-foreground">
               <span className="mb-0.5 block">
-                <CardLabel>How</CardLabel>
+                <CardLabel>{t("meals.how")}</CardLabel>
               </span>
               {view.method}
             </div>
@@ -159,12 +161,13 @@ function MealCard({ view, photos }: { view: MealView; photos: PhotoCache }) {
 
 /** The day against its targets: the kind of day, two bars, fat and carbs. */
 function DaySummary({ view, onOpenMethod }: { view: DayView; onOpenMethod: () => void }) {
+  const t = useT();
   return (
     <section className="rounded-2xl border border-border-soft bg-card p-5">
       <div className="flex items-center gap-2">
         <DayKindTag training={view.training} />
         <span className="flex-1" />
-        <CardLink onClick={onOpenMethod}>How targets work ›</CardLink>
+        <CardLink onClick={onOpenMethod}>{t("meals.howTargetsWork")}</CardLink>
       </div>
       <div className="mt-2">
         {dayMeters(view).map((m) => (
@@ -179,17 +182,18 @@ function DaySummary({ view, onOpenMethod }: { view: DayView; onOpenMethod: () =>
       </div>
       <p className="m-0 mt-2.5 text-[13px] tabular-nums leading-relaxed text-muted-foreground">{guideLine(view)}</p>
       <p className="m-0 mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-        Planned against target. {view.arrangement}
+        {t("meals.plannedAgainstTarget", { arrangement: view.arrangement })}
       </p>
     </section>
   );
 }
 
 export function MealsDay(props: MealsDayProps) {
+  const t = useT();
   const { state, photos, today, date } = props;
   const view = state ? dayViewOn(state, date, today, hostRegion()) : null;
   const word = view?.word ?? "";
-  const askLabel = word === "Today" ? "Ask about today" : `Ask about ${weekdayName(date)}`;
+  const askLabel = date === today ? t("meals.askToday") : t("meals.askWeekday", { weekday: weekdayName(date) });
 
   return (
     <MealsColumn>

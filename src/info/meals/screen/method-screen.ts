@@ -3,6 +3,8 @@
 // row comes from, and the medical and health-data notes. Pure, so the .tsx
 // only lays it out.
 
+// Aliased: this file's own `t` names a Targets value throughout methodSections.
+import { t as tMsg } from "../../../i18n";
 import {
   FOODS,
   TAIWAN_FDA_DATASET_URL,
@@ -107,7 +109,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
   return [
     {
       n: 1,
-      title: "Basal metabolic rate",
+      title: tMsg("meals.section.bmr"),
       formula:
         "With body fat (men 5–45%, women 10–55%): Cunningham\nBMR = 22 × FFM + 500,  FFM = weight × (1 − body fat)\n\n" +
         "Without: Mifflin-St Jeor\nBMR = 10W + 6.25H − 5A + 5 (men) / − 161 (women)",
@@ -122,7 +124,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
     },
     {
       n: 2,
-      title: "Activity factor",
+      title: tMsg("meals.section.activity"),
       formula:
         "Work base: mostly sitting 1.40 · on your feet 1.60 · manual work 1.80\n" +
         "Training day: base + 0.20 (max 2.0) · Rest day: base\n" +
@@ -137,7 +139,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
     },
     {
       n: 3,
-      title: "Calorie target",
+      title: tMsg("meals.section.calorieTarget"),
       formula:
         `Lose fat\n  BMI < ${over}: deficit = 0.5% of weight per week × 7700 kcal/kg ÷ 7\n` +
         `  BMI ${over}–${obese}: 85% of TDEE · BMI ≥ ${obese}: 80% of TDEE\n` +
@@ -156,7 +158,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
     },
     {
       n: 4,
-      title: "Protein",
+      title: tMsg("meals.section.protein"),
       formula:
         "Lose fat: 1.8 g/kg if training ≥ 2×/week, else 1.4\n  with body fat known and training ≥ 2×: 2.3 g × FFM\n" +
         `Build muscle: 1.8 / 1.6 · Steady energy: 1.4 / 1.2\nBMI ≥ ${over}: use the weight at BMI ${over} instead of actual weight\n` +
@@ -170,7 +172,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
     },
     {
       n: 5,
-      title: "Fat and carbs",
+      title: tMsg("meals.section.fatCarbs"),
       formula:
         `Fat = ${fatPct}% of calories, never below max(0.5 g/kg, 20% of calories), at most ${Math.round(t.fatCapPct * 100)}%\n` +
         "Carbs = what is left ÷ 4, never below 130 g/day\nIf carbs would fall under 130 g, fat drops toward its floor first.\n" +
@@ -183,7 +185,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
     },
     {
       n: 6,
-      title: "Splitting across meals",
+      title: tMsg("meals.section.splitting"),
       formula:
         "Calories: breakfast 25% · lunch 35% · dinner 30% · snack 10%\nProtein: snack ≤ 10 g, the rest split evenly over three meals\n" +
         "Training day: the snack moves to right after training; the next\n  main meal takes 5% more of the day's calories, from the other two\n" +
@@ -206,7 +208,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
     },
     {
       n: 7,
-      title: "Food numbers",
+      title: tMsg("meals.section.foodNumbers"),
       formula:
         "Per 100 g. Chinese ingredients come from the Taiwan FDA Food Nutrient Database (食品營養成分資料集), " +
         "using 修正熱量 for calories, 粗蛋白, 粗脂肪 and 總碳水化合物. What it lacks comes from USDA FoodData Central " +
@@ -219,7 +221,7 @@ export function methodSections(t: Targets, p: Profile): MethodSection[] {
     },
     {
       n: 8,
-      title: "When your weight changes",
+      title: tMsg("meals.section.weightChange"),
       formula:
         "Tell Meals your new weight in the conversation (\"这周称了 71\"). Every target and every gram is recomputed " +
         "from it at once. The plan does not adjust itself from a weight trend.",
@@ -242,17 +244,17 @@ export function foodTableRows(): FoodTableRow[] {
   }));
 }
 
-export const MEDICAL_NOTE =
-  "Not medical advice. This is a meal plan, not a diagnosis or treatment. Talk to a doctor or registered " +
-  "dietitian before changing how you eat if you are pregnant or breastfeeding, under 18, have diabetes, " +
-  "kidney or liver disease, a history of eating disorders, or take medication that depends on what you eat. " +
-  "Stop and see a doctor if you feel dizzy, faint or unwell.";
+// Functions, not module-level constants, so a language switch redraws them:
+// a translation looked up once at import time would never change afterwards.
+export function medicalNote(): string {
+  return tMsg("meals.medicalNote");
+}
 
-export const HEALTH_DATA_NOTE =
-  "Health data (height, weight, body fat, waist) is used only to calculate these targets. It stays on this " +
-  "device and in your account, and is never given to third parties or used for ads.";
+export function healthDataNote(): string {
+  return tMsg("meals.healthDataNote");
+}
 
 /** The one line at the foot of the home screen. */
-export const FOOT_NOTE =
-  "Food values per 100 g from the Taiwan FDA Food Nutrient Database and USDA FoodData Central; packaged " +
-  "foods use typical label values. See Method & sources. Not medical advice.";
+export function footNote(): string {
+  return tMsg("meals.footNote");
+}
