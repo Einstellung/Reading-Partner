@@ -9,6 +9,7 @@
 import type { ReactNode } from "react";
 import type { TalkArrangementCardData } from "../../../reading/retell/cards";
 import type { CardComponentProps } from "../chat/chatParts";
+import { t } from "../../../i18n";
 import { Badge } from "../ui/badge";
 
 function Shell({ eyebrow, badge, badgeVariant, children }: {
@@ -65,48 +66,61 @@ function preview(body: string): string {
   return lines.length > PREVIEW_LINES ? `${head}\n…` : head;
 }
 
+// Not useT(): see the note on RetellCard.tsx — this is also walked as a plain
+// function by talk-arrangement-card.test.tsx, outside any React render.
 export function TalkArrangementCard({ payload }: CardComponentProps<TalkArrangementCardData>) {
+  const theTalk = t("reader.talk.theTalk");
+
   if (payload.change === "spine") {
     const s = payload.spine;
     return (
-      <Shell eyebrow="The talk" badge="Spine">
+      <Shell eyebrow={theTalk} badge={t("reader.talk.spine")}>
         <div className="mt-1 text-[15px] font-medium leading-snug text-foreground">
-          {s.thesis || "No through-line yet"}
+          {s.thesis || t("reader.talk.noThroughLine")}
         </div>
-        {s.audience && <Line label="For" value={s.audience} />}
+        {s.audience && <Line label={t("reader.talk.for")} value={s.audience} />}
         {s.backbone.length > 0 && <Bullets items={s.backbone} />}
-        {s.conventions.length > 0 && <Line label="Throughout" value={s.conventions.join("; ")} />}
-        {s.excluded.length > 0 && <Line label="Not going into" value={s.excluded.join("; ")} />}
+        {s.conventions.length > 0 && (
+          <Line label={t("reader.talk.throughout")} value={s.conventions.join("; ")} />
+        )}
+        {s.excluded.length > 0 && (
+          <Line label={t("reader.talk.notGoingInto")} value={s.excluded.join("; ")} />
+        )}
       </Shell>
     );
   }
 
   if (payload.change === "removed") {
     return (
-      <Shell eyebrow="The talk" badge="Dropped" badgeVariant="aside">
+      <Shell eyebrow={theTalk} badge={t("reader.talk.dropped")} badgeVariant="aside">
         <div className="mt-1 text-[15px] font-medium text-foreground line-through decoration-faint-foreground">
-          {payload.title || "Untitled segment"}
+          {payload.title || t("reader.talk.untitledSegment")}
         </div>
-        <div className="mt-2 text-[12px] text-faint-foreground">{payload.total} segment(s) left.</div>
+        <div className="mt-2 text-[12px] text-faint-foreground">
+          {t("reader.talk.segmentsLeft", { count: payload.total })}
+        </div>
       </Shell>
     );
   }
 
   if (payload.change === "moved") {
     return (
-      <Shell eyebrow="The talk" badge="Moved" badgeVariant="aside">
+      <Shell eyebrow={theTalk} badge={t("reader.talk.moved")} badgeVariant="aside">
         <div className="mt-1 text-[15px] font-medium text-foreground">
-          {payload.title || "Untitled segment"}
+          {payload.title || t("reader.talk.untitledSegment")}
         </div>
         <div className="mt-2 text-[12px] text-faint-foreground">
-          Now segment {payload.position} of {payload.total}.
+          {t("reader.talk.nowSegment", { position: payload.position, total: payload.total })}
         </div>
       </Shell>
     );
   }
 
   return (
-    <Shell eyebrow={`Block ${payload.position} of ${payload.total}`} badge="Written">
+    <Shell
+      eyebrow={t("reader.talk.blockOf", { position: payload.position, total: payload.total })}
+      badge={t("reader.talk.written")}
+    >
       {/* The head of the block, as it was written — markdown source and not
           rendered markdown. This is a receipt saying which block landed, and a
           second place to read the note would be a second note. */}

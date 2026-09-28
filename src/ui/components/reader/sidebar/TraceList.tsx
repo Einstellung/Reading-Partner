@@ -14,6 +14,7 @@
 // is the swipe: uncover it, then press it.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useT, type Translate } from '../../../../i18n';
 import { IconArea, IconHighlight, IconSparkle, IconTrash, IconUnderline } from '../../base/icons';
 import { Button } from '../../ui/button';
 import { markDoorThread, traceGroups, type TraceGroupKey } from '../../../../reading/chat-marks';
@@ -42,10 +43,12 @@ interface TraceListProps {
 
 // What each group is. A mark drawn on a reply has no page to jump to, so the
 // two are told apart here rather than left to read as one list with holes in it.
-const GROUP_TITLE: Record<TraceGroupKey, string> = {
-	page: 'On the page',
-	chat: 'In the classroom',
-};
+function groupTitle(t: Translate): Record<TraceGroupKey, string> {
+	return {
+		page: t('reader.trace.groupPage'),
+		chat: t('reader.trace.groupChat'),
+	};
+}
 
 // The sliding content needs an opaque background of its own: the delete drawer
 // sits behind it, and a translucent hover tint would show it through.
@@ -74,6 +77,7 @@ interface TraceRowProps {
 	// Whether this is the list's one open row. The list holds it, so opening a
 	// second row shuts the first.
 	open: boolean;
+	t: Translate;
 	hasThread(threadId: string): boolean;
 	onOpenChange(id: string, open: boolean): void;
 	onSelect(id: string): void;
@@ -81,7 +85,7 @@ interface TraceRowProps {
 	onOpenThread?(id: string): void;
 }
 
-function TraceRow({ annotation, selected, open, hasThread, onOpenChange, onSelect, onDelete, onOpenThread }: TraceRowProps) {
+function TraceRow({ annotation, selected, open, t, hasThread, onOpenChange, onSelect, onDelete, onOpenThread }: TraceRowProps) {
 	const a = annotation;
 	const contentRef = useRef<HTMLDivElement>(null);
 	const swipeRef = useRef<SwipeState>(initSwipeState());
@@ -146,13 +150,13 @@ function TraceRow({ annotation, selected, open, hasThread, onOpenChange, onSelec
 					type="button"
 					className="absolute inset-y-0 right-0 flex cursor-pointer items-center justify-center border-0 bg-destructive text-[13px] font-medium text-destructive-foreground can-hover:hover:bg-destructive-hover active:bg-destructive-hover"
 					style={{ width: SWIPE_ACTION_WIDTH }}
-					title="Confirm delete"
+					title={t('reader.trace.confirmDelete')}
 					onClick={(e) => {
 						e.stopPropagation();
 						onDelete(a.id);
 					}}
 				>
-					Delete
+					{t('reader.trace.delete')}
 				</button>
 			)}
 
@@ -184,15 +188,15 @@ function TraceRow({ annotation, selected, open, hasThread, onOpenChange, onSelec
 					{text && <div className="line-clamp-2 leading-snug">{text}</div>}
 					{comment && <div className="line-clamp-2 text-xs leading-snug text-neutral-500">{comment}</div>}
 					<div className="flex items-center gap-1.5">
-						{pageLabel && <span className="text-[11px] text-neutral-400">Page {pageLabel}</span>}
+						{pageLabel && <span className="text-[11px] text-neutral-400">{t('reader.trace.page', { label: pageLabel })}</span>}
 						{door && (
 							<Button
 								type="button"
 								variant="ghost"
 								size={null}
 								className="rounded p-0.5 text-accent-line can-hover:hover:bg-accent-line/10 coarse:h-11 coarse:w-11"
-								title="Open AI thread"
-								aria-label="Open AI thread"
+								title={t('reader.trace.openThread')}
+								aria-label={t('reader.trace.openThread')}
 								onClick={(e) => {
 									e.stopPropagation();
 									onOpenThread?.(a.id);
@@ -213,8 +217,8 @@ function TraceRow({ annotation, selected, open, hasThread, onOpenChange, onSelec
 					variant="ghost"
 					size={null}
 					className="hidden h-6 w-6 flex-none rounded p-0 text-neutral-400 opacity-0 transition-opacity can-hover:flex group-hover:opacity-100 focus-visible:opacity-100 can-hover:hover:bg-destructive/10 can-hover:hover:text-destructive"
-					title="Delete mark"
-					aria-label="Delete mark"
+					title={t('reader.trace.deleteMark')}
+					aria-label={t('reader.trace.deleteMark')}
 					aria-expanded={actionVisible(swipe)}
 					onClick={(e) => {
 						e.stopPropagation();
@@ -229,6 +233,8 @@ function TraceRow({ annotation, selected, open, hasThread, onOpenChange, onSelec
 }
 
 export default function TraceList({ annotations, selectedId, hasThread, onSelect, onDelete, onOpenThread }: TraceListProps) {
+	const t = useT();
+	const GROUP_TITLE = groupTitle(t);
 	// The one row standing open. Opening another shuts it, so there is never more
 	// than one Delete on screen.
 	const [openId, setOpenId] = useState<string | null>(null);
@@ -260,7 +266,7 @@ export default function TraceList({ annotations, selectedId, hasThread, onSelect
 	const groups = traceGroups(annotations);
 
 	return (
-		<div className="h-full overflow-y-auto bg-background text-[13px] text-neutral-800 select-none" role="listbox" aria-label="Traces">
+		<div className="h-full overflow-y-auto bg-background text-[13px] text-neutral-800 select-none" role="listbox" aria-label={t('reader.trace.list')}>
 			{groups.map((group) => (
 				<div key={group.key} role="group" aria-labelledby={`trace-group-${group.key}`}>
 					<div
@@ -275,6 +281,7 @@ export default function TraceList({ annotations, selectedId, hasThread, onSelect
 							annotation={a}
 							selected={a.id === selectedId}
 							open={a.id === openId}
+							t={t}
 							hasThread={hasThread}
 							onOpenChange={onOpenChange}
 							onSelect={handleSelect}

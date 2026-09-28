@@ -7,7 +7,9 @@
 import { expect, test } from "bun:test";
 import IntentChips from "../../../../../src/ui/components/chat/call/IntentChips";
 import { Button } from "../../../../../src/ui/components/ui/button";
-import { MARK_INTENTS, openingIntents } from "../../../../../src/reading/intents";
+import { openingIntents } from "../../../../../src/reading/intents";
+
+const MARK_INTENTS = openingIntents(false);
 
 type El = { type?: unknown; props?: Record<string, any> };
 

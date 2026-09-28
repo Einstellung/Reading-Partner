@@ -13,6 +13,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../../legion/execute/turn";
+import { t } from "../../i18n";
 import { citationKey } from "../prep/anchors";
 
 /** A supplement, as much of one as this tool needs. */
@@ -57,7 +58,10 @@ export function buildSupplementTools(deps: SupplementToolDeps): AgentTool[] {
   return [
     {
       name: "remove_supplement",
-      label: (args) => args.title ? `Removing “${args.title}”` : "Removing a supplement",
+      label: (args) =>
+        args.title
+          ? t("reader.ingest.removingNamed", { title: String(args.title) })
+          : t("reader.ingest.removingSupplement"),
       effect: "write",
       description:
         "Take one of this book's supplements away: it leaves the Outline, the " +
@@ -86,7 +90,7 @@ export function buildSupplementTools(deps: SupplementToolDeps): AgentTool[] {
           text:
             `Removed "${found.title}". It is off the Outline and out of the library, and ` +
             `you can no longer read it.`,
-          receipt: { label: "Removed a supplement", summary: found.title },
+          receipt: { label: t("reader.ingest.removedSupplement"), summary: found.title },
         };
       },
     },

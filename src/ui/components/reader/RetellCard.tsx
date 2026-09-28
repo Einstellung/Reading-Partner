@@ -9,19 +9,25 @@
 import type { RetellDecisionCardData } from "../../../reading/retell/cards";
 import type { CardComponentProps, CardRegistryFor } from "../chat/chatParts";
 import type { ReadingCard } from "../../../reading/retell/cards";
+import { t } from "../../../i18n";
 import { Badge } from "../ui/badge";
 import { TalkArrangementCard } from "./TalkArrangementCard";
 
+// Not useT(): this component is also called directly as a plain function by
+// the card-registry walker (retell-card.test.tsx), outside any React render,
+// where a hook has no dispatcher. Read-only receipts like this one and
+// TalkArrangementCard read the current locale off the module-level t instead;
+// they redraw with the rest of the transcript on the next message.
 export function RetellDecisionCard({ payload }: CardComponentProps<RetellDecisionCardData>) {
   const kept = payload.include;
   return (
     <div className="w-full max-w-md rounded-xl border border-black/10 bg-card p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2">
         <span className="text-[11px] font-medium uppercase tracking-wider text-accent-line">
-          Chapter {payload.chapter}
+          {t("reader.retell.chapter", { n: payload.chapter })}
         </span>
         <span className="flex-1" />
-        <Badge className="shrink-0">{kept ? "In the retell" : "Cut"}</Badge>
+        <Badge className="shrink-0">{kept ? t("reader.retell.inRetell") : t("reader.retell.cut")}</Badge>
       </div>
       <div className="mt-1 text-[15px] font-medium text-foreground">{payload.title}</div>
       {payload.points.length > 0 && (
@@ -35,7 +41,7 @@ export function RetellDecisionCard({ payload }: CardComponentProps<RetellDecisio
         </ul>
       )}
       {payload.figure && (
-        <div className="mt-2 text-[12px] text-muted-foreground">Figure: {payload.figure}</div>
+        <div className="mt-2 text-[12px] text-muted-foreground">{t("reader.retell.figure", { figure: payload.figure })}</div>
       )}
       {payload.note && (
         <div className="mt-2 text-[12px] leading-snug text-faint-foreground">{payload.note}</div>

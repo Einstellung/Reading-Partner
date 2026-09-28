@@ -16,6 +16,7 @@
 import { ANNOTATION_COLORS } from "../../../../platform/app/annotations";
 import type { ViewStats } from "../../../../platform/app/reader-contract";
 import type { LessonDot } from "../../../../reading/session/lesson-dot";
+import { useT } from "../../../../i18n";
 import { IconBookSparkle, IconOutline, IconTextSize } from "../../base/icons";
 import { cn } from "../../lib/utils";
 import PenToolbar from "../../reader/PenToolbar";
@@ -48,7 +49,11 @@ export default function PhoneReaderBar(props: {
   // finished while the reader was on the page (lesson-dot.ts).
   learnDot: LessonDot;
 }) {
-  const pageText = readerPageText(props.stats);
+  // The desk's ReaderTopBar owns reader.page.* now (docs/ui/81); the phone area
+  // has not been migrated to t() yet, so this only satisfies readerPageText's
+  // signature — none of this file's own strings are translated here.
+  const t = useT();
+  const pageText = readerPageText(props.stats, t);
   return (
     <div className="flex flex-none flex-col gap-0.5 border-b border-border-subtle px-1 pt-1 pb-1">
       <div className="flex items-center gap-1">

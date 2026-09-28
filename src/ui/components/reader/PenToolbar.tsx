@@ -3,6 +3,7 @@
 // changes. Styled with Tailwind utilities.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useT, type Translate } from '../../../i18n';
 import { IconAskHere, IconColorSwatch, IconHighlight, IconPointer } from '../base/icons';
 import { placePanel } from '../common/panel-position';
 import { useViewportSize } from '../common/useViewportSize';
@@ -32,11 +33,13 @@ interface PenToolbarProps {
 
 // 'none' is not a button: it is the state the rack is in when no button is
 // pressed. Every button toggles, so tapping the active one returns to 'none'.
-const TOOLS: { type: ToolType; label: string; Icon: (p: { size?: number }) => JSX.Element }[] = [
-	{ type: 'navlock', label: 'Navigate only', Icon: IconPointer },
-	{ type: 'highlight', label: 'Highlight', Icon: IconHighlight },
-	{ type: 'ai', label: 'AI pen', Icon: IconAskHere },
-];
+function tools(t: Translate): { type: ToolType; label: string; Icon: (p: { size?: number }) => JSX.Element }[] {
+	return [
+		{ type: 'navlock', label: t('reader.pen.navigateOnly'), Icon: IconPointer },
+		{ type: 'highlight', label: t('reader.pen.highlight'), Icon: IconHighlight },
+		{ type: 'ai', label: t('reader.pen.aiPen'), Icon: IconAskHere },
+	];
+}
 
 const CARD = 'rounded-xl border border-black/10 bg-popover shadow-lg';
 // Distance from the swatch to the palette that opens off it.
@@ -50,6 +53,8 @@ export default function PenToolbar({
 	disabled,
 	omit,
 }: PenToolbarProps) {
+	const t = useT();
+	const TOOLS = tools(t);
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	// Where the open palette sits, in viewport coordinates. It cannot be laid out
 	// against the swatch: the header's tool band scrolls horizontally, and a
@@ -165,7 +170,7 @@ export default function PenToolbar({
 			className={rack}
 			role="toolbar"
 			aria-orientation={orientation}
-			aria-label="Reading tools"
+			aria-label={t('reader.pen.toolsLabel')}
 		>
 			{TOOLS.filter(({ type }) => !omit?.includes(type)).map(({ type, label, Icon }) => {
 				const why = disabled?.[type];
@@ -180,7 +185,7 @@ export default function PenToolbar({
 						className={toolBtn(tool.type === type, type, why !== undefined)}
 						disabled={why !== undefined}
 						title={why ?? label}
-						aria-label={why === undefined ? label : `${label}: ${why}`}
+						aria-label={why === undefined ? label : t('reader.pen.disabledReason', { label, reason: why })}
 						aria-pressed={tool.type === type}
 						onClick={() => pickTool(type)}
 					>
@@ -205,8 +210,8 @@ export default function PenToolbar({
 						`rounded-lg ${toolSize} text-neutral-700` +
 						(paletteOpen ? ' bg-secondary text-secondary-foreground can-hover:hover:bg-secondary' : '')
 					}
-					title="Color"
-					aria-label="Color"
+					title={t('reader.pen.color')}
+					aria-label={t('reader.pen.color')}
 					aria-haspopup="true"
 					aria-expanded={paletteOpen}
 					onClick={pickSwatch}
@@ -236,7 +241,7 @@ export default function PenToolbar({
 							OVERLAY_Z.floating,
 						)}
 						role="listbox"
-						aria-label="Colors"
+						aria-label={t('reader.pen.colors')}
 					>
 						{colors.map((c) => (
 							<Button

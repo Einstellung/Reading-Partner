@@ -17,6 +17,7 @@ import {
   type ReplaceDeps as DocumentReplaceDeps,
   type ReplaceResult as DocumentReplaceResult,
 } from "../replace/replace";
+import { t } from "../../i18n";
 import type { TranslatedArticle } from "./translate-article";
 
 export { documentPathOf, orphanedThreadIds } from "../replace/replace";
@@ -61,7 +62,7 @@ export function translatedTitle(originalFilename: string): string {
 
 /** Pure: the one line the conversation gets when a translation finishes. */
 export function summaryLine(title: string, result: ReplaceResult): string {
-  return `Translated "${title}": ${result.blocks} blocks, ${marksClause(result)}.`;
+  return t("reader.translate.done", { title, blocks: result.blocks, marks: marksClause(result) });
 }
 
 /**

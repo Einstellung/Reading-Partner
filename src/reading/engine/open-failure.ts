@@ -10,6 +10,8 @@
 // worth having in a bug report and is no explanation to a reader, so it goes to
 // the console and never into the sentence they are handed.
 
+import { t } from "../../i18n";
+
 export interface OpenFailureText {
   // The reader's status line, which was until now saying "Rendering…".
   status: string;
@@ -37,10 +39,10 @@ export function engineErrorText(error: unknown): string {
 
 export function openFailureText(bookName: string, error: unknown): OpenFailureText {
   const name = bookName.trim();
-  const which = name ? `“${name}”` : "this book";
+  const which = name ? `“${name}”` : t("reader.engine.thisBook");
   return {
-    status: "Couldn't be opened",
-    toast: `Couldn't open ${which} — the file may be damaged, or not a PDF.`,
+    status: t("reader.engine.openFailedStatus"),
+    toast: t("reader.engine.openFailedToast", { which }),
     detail: `failed to open ${which}: ${engineErrorText(error)}`,
   };
 }

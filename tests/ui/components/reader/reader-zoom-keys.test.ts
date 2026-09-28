@@ -9,6 +9,7 @@ import {
   zoomResetLabel,
 } from "../../../../src/ui/components/reader/reader-zoom-keys";
 import type { ViewInstance } from "../../../../src/platform/app/reader-contract";
+import { t } from "../../../../src/i18n";
 
 function press(key: string, mods: { ctrl?: boolean; meta?: boolean; alt?: boolean } = {}) {
   return { key, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, altKey: !!mods.alt };
@@ -69,10 +70,10 @@ test("reset is the same call in the paged layout", () => {
 });
 
 test("the reset item names the fit its layout lands on", () => {
-  expect(zoomResetLabel("vertical")).toBe("Fit page width");
-  expect(zoomResetLabel("paged")).toBe("Fit page");
+  expect(zoomResetLabel("vertical", t)).toBe("Fit page width");
+  expect(zoomResetLabel("paged", t)).toBe("Fit page");
   // No stats yet: the reader opens vertical.
-  expect(zoomResetLabel(undefined)).toBe("Fit page width");
+  expect(zoomResetLabel(undefined, t)).toBe("Fit page width");
 });
 
 test("a press before the view is ready is dropped", () => {

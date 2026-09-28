@@ -3,6 +3,7 @@
 
 import { expect, test } from "bun:test";
 import type { ViewStats } from "../../../../src/platform/app/reader-contract";
+import { t } from "../../../../src/i18n";
 import { readerPageText } from "../../../../src/ui/components/reader/reader-page-text";
 
 const stats = (over: Partial<ViewStats>): ViewStats => ({
@@ -18,13 +19,13 @@ const stats = (over: Partial<ViewStats>): ViewStats => ({
 });
 
 test("a book with a page-list prints its own number beside the block number", () => {
-  expect(readerPageText(stats({}))).toEqual({ blocks: "37 / 385", printed: "printed 52" });
+  expect(readerPageText(stats({}), t)).toEqual({ blocks: "37 / 385", printed: "printed 52" });
 });
 
 test("a book without a printed number shows the block number alone", () => {
   // pageLabel falls back to the block number; that fallback must not be shown
   // twice as if the book had printed it.
-  expect(readerPageText(stats({ pageLabel: "37", printedLabel: null }))).toEqual({
+  expect(readerPageText(stats({ pageLabel: "37", printedLabel: null }), t)).toEqual({
     blocks: "37 / 385",
     printed: null,
   });
@@ -32,13 +33,13 @@ test("a book without a printed number shows the block number alone", () => {
 
 test("a PDF shows the block number alone", () => {
   const pdf = stats({ pageIndex: 0, pageLabel: "1", printedLabel: null, pagesCount: 12 });
-  expect(readerPageText(pdf)).toEqual({ blocks: "1 / 12", printed: null });
+  expect(readerPageText(pdf, t)).toEqual({ blocks: "1 / 12", printed: null });
 });
 
 test("no book open yet", () => {
-  expect(readerPageText(null)).toEqual({ blocks: "— / —", printed: null });
+  expect(readerPageText(null, t)).toEqual({ blocks: "— / —", printed: null });
 });
 
 test("a roman-numbered front matter page is printed as the book prints it", () => {
-  expect(readerPageText(stats({ printedLabel: "xii" })).printed).toBe("printed xii");
+  expect(readerPageText(stats({ printedLabel: "xii" }), t).printed).toBe("printed xii");
 });

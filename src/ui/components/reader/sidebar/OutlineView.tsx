@@ -12,6 +12,7 @@
 import { outlineRows, ruleAt, type OutlineRow } from "./outline-rows";
 import type { SupplementRef } from "../../../../platform/app/supplements";
 import type { OutlineItem } from "../../../../fulltext/types";
+import { useT } from "../../../../i18n";
 
 interface OutlineViewProps {
 	// The book's own outline, not the document on screen's.
@@ -32,12 +33,12 @@ type OutlineSize = "sidebar" | "sheet";
 
 const SIZES: Record<
 	OutlineSize,
-	{ list: string; empty: string; emptyText: string; row: string; indent: number; title: string; page: string }
+	{ list: string; empty: string; emptyKey: "reader.outline.emptyDocument" | "reader.outline.emptyBook"; row: string; indent: number; title: string; page: string }
 > = {
 	sidebar: {
 		list: "h-full overflow-y-auto py-1",
 		empty: "px-3 py-3 text-[13px] text-faint-foreground",
-		emptyText: "This document has no outline.",
+		emptyKey: "reader.outline.emptyDocument",
 		// h-auto with generous padding on a coarse pointer keeps it a 44px target
 		// without forcing the height on a mouse.
 		row: "flex w-full items-baseline gap-2 border-0 bg-transparent py-1.5 pr-3 text-left cursor-pointer can-hover:hover:bg-accent coarse:py-3",
@@ -48,7 +49,7 @@ const SIZES: Record<
 	sheet: {
 		list: "overflow-y-auto pb-safe-4",
 		empty: "px-4 py-6 text-[14px] text-faint-foreground",
-		emptyText: "This book has no table of contents.",
+		emptyKey: "reader.outline.emptyBook",
 		row: "flex w-full items-baseline gap-2 border-0 bg-transparent py-3 pr-4 text-left text-[15px] coarse:min-h-[44px] can-hover:hover:bg-muted",
 		indent: 16,
 		title: "min-w-0 flex-1 truncate",
@@ -70,6 +71,7 @@ export default function OutlineView({
 	onOpenBook,
 	onOpenSupplement,
 }: OutlineViewProps) {
+	const t = useT();
 	const rows = outlineRows({
 		bookOutline: outline,
 		bookTitle,
@@ -80,10 +82,10 @@ export default function OutlineView({
 	});
 	const s = SIZES[size];
 	if (pending && rows.length === 0) {
-		return <div className={s.empty}>Reading the outline…</div>;
+		return <div className={s.empty}>{t("reader.outline.loading")}</div>;
 	}
 	if (rows.length === 0) {
-		return <div className={s.empty}>{s.emptyText}</div>;
+		return <div className={s.empty}>{t(s.emptyKey)}</div>;
 	}
 	const rule = ruleAt(rows);
 	return (

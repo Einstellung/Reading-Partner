@@ -7,6 +7,7 @@ import type { RefObject } from "react";
 import type { ViewInstance, ViewStats } from "../../../platform/app/reader-contract";
 import type { LevelGate } from "../../../reading/turn/call-state";
 import { ANNOTATION_COLORS } from "../../../platform/app/annotations";
+import { useT } from "../../../i18n";
 import type { ToolType } from "./types";
 import {
   IconBookSparkle,
@@ -24,10 +25,6 @@ import PenToolbar from "./PenToolbar";
 import { Button } from "../ui/button";
 import lumenIcon from "../lumen/lumen-icon.webp";
 import { Separator } from "../ui/separator";
-
-// The blackboard's label. What it opens, and the half of the dim button's line
-// that names the control.
-const BOOK_THREAD = "Learn this book with AI";
 
 // Lumen's row in the overflow menu wears Lumen's own face: the hand-drawn
 // water drop on a transparent ground, strokes thickened so they hold up at
@@ -69,9 +66,11 @@ export default function ReaderTopBar(props: {
   lumenShown: boolean;
   onToggleLumen: () => void;
 }) {
+  const t = useT();
   const { view, stats, sidebarOpen, gate } = props;
+  const BOOK_THREAD = t("reader.top.learnBook");
 
-  const pageText = readerPageText(stats);
+  const pageText = readerPageText(stats, t);
   const paged = stats?.layout === "paged";
 
   // The "More" overflow: low-frequency view controls collapsed out of the main
@@ -79,21 +78,21 @@ export default function ReaderTopBar(props: {
   const moreItems: MoreItem[] = [
     {
       kind: "action",
-      label: zoomResetLabel(stats?.layout),
+      label: zoomResetLabel(stats?.layout, t),
       icon: IconFitWidth,
       disabled: !stats?.canZoomReset,
       onClick: () => view.current?.zoomReset(),
     },
     {
       kind: "action",
-      label: "Zoom in",
+      label: t("reader.top.zoomIn"),
       icon: IconZoomIn,
       disabled: !stats?.canZoomIn,
       onClick: () => view.current?.zoomIn(),
     },
     {
       kind: "action",
-      label: "Zoom out",
+      label: t("reader.top.zoomOut"),
       icon: IconZoomOut,
       disabled: !stats?.canZoomOut,
       onClick: () => view.current?.zoomOut(),
@@ -101,7 +100,7 @@ export default function ReaderTopBar(props: {
     { kind: "divider" },
     {
       kind: "toggle",
-      label: "Paged flip",
+      label: t("reader.top.pagedFlip"),
       icon: IconPagedLayout,
       on: paged,
       disabled: !props.viewReady,
@@ -111,7 +110,7 @@ export default function ReaderTopBar(props: {
       // "Lumen", not lumenToggleTitle's "Hide Lumen": the row names the thing
       // and the On/Off on its right says which way it stands.
       kind: "toggle",
-      label: "Lumen",
+      label: t("reader.top.lumen"),
       icon: IconLumen,
       on: props.lumenShown,
       onClick: props.onToggleLumen,
@@ -119,7 +118,7 @@ export default function ReaderTopBar(props: {
     { kind: "divider" },
     {
       kind: "action",
-      label: "Settings",
+      label: t("reader.top.settings"),
       icon: IconGear,
       onClick: props.onOpenSettings,
     },
@@ -133,8 +132,8 @@ export default function ReaderTopBar(props: {
           variant="ghost"
           size="icon"
           className="relative flex-none text-muted-foreground"
-          title={sidebarOpen ? "Close panel" : "Open panel"}
-          aria-label={sidebarOpen ? "Close panel" : "Open panel"}
+          title={sidebarOpen ? t("reader.top.closePanel") : t("reader.top.openPanel")}
+          aria-label={sidebarOpen ? t("reader.top.closePanel") : t("reader.top.openPanel")}
           aria-pressed={sidebarOpen}
           onClick={props.onToggleSidebar}
         >
@@ -151,12 +150,12 @@ export default function ReaderTopBar(props: {
           variant="ghost"
           size="icon"
           className="w-auto flex-none gap-0 px-1 text-[13px] text-muted-foreground coarse:w-auto coarse:min-w-[44px] sm:px-2"
-          title="Back to library"
-          aria-label="Back to library"
+          title={t("reader.top.backToLibrary")}
+          aria-label={t("reader.top.backToLibrary")}
           onClick={props.onCloseReader}
         >
           <span aria-hidden className="sm:hidden">‹</span>
-          <span className="hidden sm:inline">‹ Library</span>
+          <span className="hidden sm:inline">‹ {t("reader.top.library")}</span>
         </Button>
         {/* No title breadcrumb: the book is open in front of the reader, so
             its name carries no information and the width is better spent on

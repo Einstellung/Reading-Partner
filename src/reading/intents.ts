@@ -9,6 +9,14 @@
 // Data only, so the wording is testable and the render layer stays a render
 // layer. `label` is what the chip says, `message` is what the reader is taken
 // to have said.
+//
+// Both are drawn through t() (docs/ui/81): the message is sent as the reader's
+// own words, in the language the interface is set to, same as everything else
+// they say. MARK_INTENTS and SPAN_INTENTS below read the current locale at
+// call time, not at import time, so a language change mid-session is picked up
+// on the next open.
+
+import { t } from "../i18n";
 
 export interface ReadingIntent {
   id: string;
@@ -19,59 +27,42 @@ export interface ReadingIntent {
   message: string;
 }
 
-// The opening ask on a marked passage. Unchanged in wording, and still exported
-// under its old name from reading/turn.ts: it is also the synthetic first user
-// message a turn falls back to when the replayed history starts with a reply.
+// The opening ask on a marked passage, in English: still exported under its old
+// name from reading/turn.ts, where it is the synthetic first user message a
+// turn falls back to when the replayed history starts with a reply — a program
+// sentinel a handful of providers require, never shown on screen. The "Explain
+// this" chip below carries the reader's own translated wording instead; the two
+// read the same in English and only that rare fallback stays English elsewhere.
 export const EXPLAIN_KICKOFF =
   "Please explain the passage I just marked, using the reading context above.";
 
 // A mark-anchored thread: there is a passage, and it is in the prompt.
-export const MARK_INTENTS: readonly ReadingIntent[] = [
-  { id: "explain", label: "Explain this", message: EXPLAIN_KICKOFF },
-  {
-    id: "connect",
-    label: "How it connects",
-    message: "How does this passage follow from what came before it?",
-  },
-  {
-    id: "example",
-    label: "Give an example",
-    message: "Can you give me a concrete example of what this is saying?",
-  },
-  {
-    id: "doubt",
-    label: "I have doubts",
-    message: "Something here doesn't add up for me. What am I missing?",
-  },
-];
+function markIntents(): readonly ReadingIntent[] {
+  return [
+    { id: "explain", label: t("reader.intent.explain"), message: t("reader.intent.explainMessage") },
+    { id: "connect", label: t("reader.intent.connect"), message: t("reader.intent.connectMessage") },
+    { id: "example", label: t("reader.intent.example"), message: t("reader.intent.exampleMessage") },
+    { id: "doubt", label: t("reader.intent.doubt"), message: t("reader.intent.doubtMessage") },
+  ];
+}
 
 // A side conversation opened on words the reader picked out of a reply (docs/03).
 // There is no mark and no page here, so nothing in this set may point at one —
-// MARK_INTENTS opens on "the passage I just marked", which would send the model
+// markIntents() opens on "the passage I just marked", which would send the model
 // looking for something the prompt does not carry. The span itself is in the
 // prompt; what these ask is what to do with it.
-export const SPAN_INTENTS: readonly ReadingIntent[] = [
-  {
-    id: "span-explain",
-    label: "Explain this",
-    message: "Explain the part of your answer I just picked out.",
-  },
-  {
-    id: "span-example",
-    label: "Give an example",
-    message: "Can you give me a concrete example of what that means?",
-  },
-  {
-    id: "span-doubt",
-    label: "I have doubts",
-    message: "Something there doesn't add up for me. What am I missing?",
-  },
-];
+function spanIntents(): readonly ReadingIntent[] {
+  return [
+    { id: "span-explain", label: t("reader.intent.explain"), message: t("reader.intent.spanExplainMessage") },
+    { id: "span-example", label: t("reader.intent.example"), message: t("reader.intent.spanExampleMessage") },
+    { id: "span-doubt", label: t("reader.intent.doubt"), message: t("reader.intent.spanDoubtMessage") },
+  ];
+}
 
 // Which set an aside opens with. One drawn on the page is a marked passage like
 // any other and gets the same chips; one pulled out of a reply is not.
 export function asideIntents(from: "chat" | "mark"): readonly ReadingIntent[] {
-  return from === "chat" ? SPAN_INTENTS : MARK_INTENTS;
+  return from === "chat" ? spanIntents() : markIntents();
 }
 
 // Which set a thread opens with. The book-level thread is the one with no mark
@@ -86,7 +77,7 @@ export function asideIntents(from: "chat" | "mark"): readonly ReadingIntent[] {
 const NO_INTENTS: readonly ReadingIntent[] = [];
 
 export function openingIntents(isBookLevel: boolean): readonly ReadingIntent[] {
-  return isBookLevel ? NO_INTENTS : MARK_INTENTS;
+  return isBookLevel ? NO_INTENTS : markIntents();
 }
 
 // What a book-level conversation says about itself while it cannot yet teach
@@ -119,8 +110,7 @@ export function bookTextState(fulltext: { status: string } | null, pending: bool
 }
 
 export function bookTextNotice(state: BookTextState): string | null {
-  if (state === "extracting")
-    return "Still reading through this book — I can't teach from it just yet.";
-  if (state === "unreadable") return "This book's pages have no text layer, so they can't be read as text.";
+  if (state === "extracting") return t("reader.intent.bookExtracting");
+  if (state === "unreadable") return t("reader.intent.bookUnreadable");
   return null;
 }
