@@ -14,6 +14,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "../legion/execute/turn";
+import { t } from "../i18n";
 import type { ConversationIo } from "./io";
 import {
   readConversation,
@@ -68,7 +69,10 @@ export function buildConversationTools(
   return [
     {
       name: "search_conversations",
-      label: (args) => args.query ? `Searching past conversations for “${args.query}”` : "Searching past conversations",
+      label: (args) =>
+        args.query
+          ? t("chat.conversations.searchingFor", { query: String(args.query) })
+          : t("chat.conversations.searching"),
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
@@ -114,7 +118,7 @@ export function buildConversationTools(
     },
     {
       name: "read_conversation",
-      label: () => "Reading back a conversation",
+      label: () => t("chat.conversations.readingBack"),
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than

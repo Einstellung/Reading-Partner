@@ -22,6 +22,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { listTopics, type Topic } from "../../platform/app/topics";
 import type { AgentTool } from "../../legion/execute/turn";
 import type { TopicProposalCardData } from "./card";
+import { t } from "../../i18n";
 
 /** A topic as this tool needs it: enough to name one and to match one. */
 export interface TopicChoice {
@@ -120,7 +121,10 @@ export function resolveProposedTopic(
 export function buildProposeTopicTool(deps: ProposeTopicDeps): AgentTool {
   return {
     name: "propose_topic",
-    label: (args) => args.topic ? `Proposing this belongs under ${args.topic}` : "Proposing where this belongs",
+    label: (args) =>
+      args.topic
+        ? t("chat.filing.proposingUnder", { topic: String(args.topic) })
+        : t("chat.filing.proposingWhere"),
     effect: "write",
     gate: "card",
     description:
@@ -160,7 +164,7 @@ export function buildProposeTopicTool(deps: ProposeTopicDeps): AgentTool {
         text:
           `Proposed ${where}. A confirm card now shows the user the proposal. Nothing is filed ` +
           `yet — they Apply it themselves.`,
-        receipt: { label: "Proposed where this belongs", summary: where },
+        receipt: { label: t("chat.filing.proposedWhere"), summary: where },
       };
     },
   };

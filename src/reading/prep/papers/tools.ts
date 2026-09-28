@@ -12,6 +12,7 @@ import { parseNote, stripModelAsides } from "./notes";
 import { paperFulltextHash, readPrepNote } from "./store";
 import type { PrepPaper, PrepState } from "./types";
 import { pageRangeLabel } from "../../../ai/turn-view/tool-labels";
+import { t } from "../../../i18n";
 
 function slugList(states: readonly PrepState[]): string {
   return states.flatMap((s) => s.papers.map((p) => p.slug)).join(", ") || "(none)";
@@ -97,7 +98,7 @@ export function buildClassroomTools(getStates: () => readonly PrepState[]): Agen
     },
     {
       name: "read_note",
-      label: () => "Reading the note on a paper",
+      label: () => t("chat.prep.readingNote"),
       effect: "read",
       description: "Read the whole prep note of a pre-read reference paper, by slug.",
       parameters: Type.Object({

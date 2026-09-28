@@ -56,8 +56,8 @@ test("a ticket reads the run live and needs the answer to be in this thread", ()
   expect(dispatch).toContain("useSyncExternalStore");
   expect(dispatch).toContain("watch.subscribe");
   expect(dispatch).toContain("useDeliveredRuns");
-  expect(dispatch).toContain("Back — see below");
-  expect(dispatch).toContain("needs your decision");
+  expect(dispatch).toContain("chat.dispatch.backSeeBelow");
+  expect(dispatch).toContain("chat.dispatch.needsDecision");
   // A failure is the app's one red, the same as a failed call in the trace.
   expect(dispatch).toContain("text-destructive");
 });

@@ -38,6 +38,7 @@ import {
   type WalkDirection,
 } from "./citations";
 import { parseSinceYear } from "./search-tool";
+import { t } from "../../i18n";
 
 // The prompt line for find_paper on the reader's own turn. It describes a move the
 // model will not otherwise make: the book's own endnotes are a way into the
@@ -71,7 +72,10 @@ function parseLimit(raw: unknown): number | undefined {
 export function buildFindPaperTool(fetchDeps: CitationDeps): AgentTool {
   return {
     name: "find_paper",
-    label: (args) => args.paper ? `Looking up “${args.paper}”` : "Looking up a paper",
+    label: (args) =>
+      args.paper
+        ? t("chat.papers.lookingUpFor", { paper: String(args.paper) })
+        : t("chat.papers.lookingUp"),
     effect: "read",
     description:
       "Identify one specific paper you already know of — a citation from the book's " +
@@ -113,7 +117,10 @@ export function buildWalkCitationsTool(deps: CitationToolDeps): AgentTool {
   const { canIngest, ...fetchDeps } = deps;
   return {
     name: "walk_citations",
-    label: (args) => args.paper ? `Walking the citations of “${args.paper}”` : "Walking the citations",
+    label: (args) =>
+      args.paper
+        ? t("chat.papers.walkingCitationsFor", { paper: String(args.paper) })
+        : t("chat.papers.walkingCitations"),
     effect: "read",
     description:
       "Follow the citation graph one step out from a paper. direction \"citations\" " +

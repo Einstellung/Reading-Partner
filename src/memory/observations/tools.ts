@@ -22,6 +22,7 @@ import {
   type Observation,
   type ObservationHit,
 } from "./types";
+import { t } from "../../i18n";
 
 export type ObservationWriteAction = "create" | "update" | "delete" | "same-as";
 
@@ -357,7 +358,10 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
   return [
     {
       name: "observation_search",
-      label: (args) => args.query ? `Searching its observations for “${args.query}”` : "Searching its observations",
+      label: (args) =>
+        args.query
+          ? t("chat.observations.searchingFor", { query: String(args.query) })
+          : t("chat.observations.searching"),
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
@@ -396,7 +400,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
     },
     {
       name: "observation_read",
-      label: () => "Reading an observation",
+      label: () => t("chat.observations.reading"),
       effect: "read",
       // Off this device's own files, and the same answer however often it is
       // asked: a call left in flight by a dead process is run again rather than
@@ -422,10 +426,10 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
     {
       name: OBSERVATION_WRITE_TOOL,
       label: (args) => args.action === "delete"
-          ? "Dropping an observation"
+          ? t("chat.observations.dropping")
           : args.action === "create"
-            ? "Writing down an observation"
-            : "Updating an observation",
+            ? t("chat.observations.writing")
+            : t("chat.observations.updating"),
       effect: "write",
       // Bookkeeping, not something the reader came here to read (docs/72): no
       // phase, no trace line, no receipt. It is still written to the thread
@@ -656,7 +660,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           return {
             text: `Created ${entry.id}.`,
             receipt: {
-              label: "Wrote down an observation",
+              label: t("chat.observations.wroteReceipt"),
               summary: entry.summary,
               link: { kind: "observation" as const, id: entry.id },
             },
@@ -693,7 +697,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           return {
             text: `Added evidence to ${grown.id}.`,
             receipt: {
-              label: "Added evidence to an observation",
+              label: t("chat.observations.addedEvidence"),
               summary: grown.summary,
               link: { kind: "observation" as const, id: grown.id },
             },
@@ -710,7 +714,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           opts.onWrite?.("delete");
           return {
             text: `Deleted ${id}.`,
-            receipt: { label: "Dropped an observation", summary: id },
+            receipt: { label: t("chat.observations.droppedReceipt"), summary: id },
           };
         }
 
@@ -737,7 +741,7 @@ export function buildObservationTools(adapter: ObservationAdapter, opts: Observa
           return {
             text: `Updated ${entry.id}.`,
             receipt: {
-              label: "Updated an observation",
+              label: t("chat.observations.updatedReceipt"),
               summary: entry.summary,
               link: { kind: "observation" as const, id: entry.id },
             },

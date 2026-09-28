@@ -14,6 +14,7 @@ import { formatPages, formatSearch } from "../../../fulltext/format";
 import type { Fulltext } from "../../../fulltext/types";
 import type { PrepPaper } from "./types";
 import { pageRangeLabel } from "../../../ai/turn-view/tool-labels";
+import { t } from "../../../i18n";
 
 export const SHORT_PAPER_MAX = 10;
 const DIGEST_MAX_ROUNDS = 12;
@@ -116,7 +117,10 @@ export function buildDigestTools(ft: Fulltext): AgentTool[] {
     },
     {
       name: "search_paper",
-      label: (args) => args.query ? `Searching the paper for “${args.query}”` : "Searching the paper",
+      label: (args) =>
+        args.query
+          ? t("chat.prep.searchingPaperFor", { query: String(args.query) })
+          : t("chat.prep.searchingPaper"),
       effect: "read",
       description: "Keyword-search the paper's full text. Returns ranked snippets with pages.",
       parameters: Type.Object({

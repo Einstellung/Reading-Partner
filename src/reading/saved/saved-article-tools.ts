@@ -29,6 +29,7 @@ import type { FetchOutcome } from "../prep/papers/pipeline";
 import { uniqueSlug } from "../prep/papers/plan";
 import type { PaperStatus, PrepPaper } from "../prep/papers/types";
 import { savedArticleTextChars, type SavedArticle, type SavedArticleBody } from "./saved-articles";
+import { t } from "../../i18n";
 
 // Rows the list answers with at most. A kept list is a queue, meant to be
 // emptied (docs/21), so a few dozen covers a realistic backlog; the cap is what
@@ -279,7 +280,10 @@ export function buildSavedArticleTools(ports: SavedArticlePorts): AgentTool[] {
   return [
     {
       name: "list_saved_articles",
-      label: (args) => args.query ? `Looking through what you saved for “${args.query}”` : "Looking through what you saved",
+      label: (args) =>
+        args.query
+          ? t("chat.saved.lookingThroughFor", { query: String(args.query) })
+          : t("chat.saved.lookingThrough"),
       effect: "read",
       description:
         "List the articles the reader kept on the info side, newest first, with " +
@@ -297,7 +301,7 @@ export function buildSavedArticleTools(ports: SavedArticlePorts): AgentTool[] {
     },
     {
       name: "add_saved_article",
-      label: () => "Saving the article",
+      label: () => t("chat.saved.savingArticle"),
       effect: "write",
       description:
         "Put one saved article into this book's prep list, using the copy of its " +
@@ -336,7 +340,7 @@ export function buildSavedArticleTools(ports: SavedArticlePorts): AgentTool[] {
           : "";
         return {
           receipt: {
-            label: "Added an article to the prep list",
+            label: t("chat.saved.addedToPrepList"),
             summary: r.title,
           },
           text:
