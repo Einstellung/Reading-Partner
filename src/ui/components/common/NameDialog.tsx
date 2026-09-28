@@ -7,6 +7,7 @@
 // what resets the field between two uses.
 
 import { useState } from "react";
+import { useT } from "../../../i18n";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -28,6 +29,7 @@ export default function NameDialog(props: {
   initialValue?: string;
   onConfirm: (name: string) => void;
 }) {
+  const t = useT();
   const [name, setName] = useState(props.initialValue ?? "");
   const trimmed = name.trim();
 
@@ -62,7 +64,7 @@ export default function NameDialog(props: {
           />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)}>
-              Cancel
+              {t("shell.action.cancel")}
             </Button>
             <Button type="submit" disabled={!trimmed}>
               {props.confirmLabel}

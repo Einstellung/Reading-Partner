@@ -129,6 +129,7 @@ import {
   type ChatPart,
 } from "./ui/components/chat/chatParts";
 import { CardRegistryProvider } from "./ui/components/CardRegistryProvider";
+import { useT } from "./i18n";
 import { refreshInfoCollector } from "./info/program/live";
 
 // Cap on images attached to one chat turn (docs/03: paste screenshots to ask).
@@ -157,6 +158,7 @@ function toDisplayMessages(msgs: ThreadMessage[]): CallMessage[] {
 }
 
 export default function App() {
+  const t = useT();
   // The reader pane's DOM container: anchor fallbacks measure against it, and
   // its capture-phase pointer handlers implement pen-lift tracking + the
   // touch-the-book dismissal (the engine lives in the same document now).
@@ -865,10 +867,10 @@ export default function App() {
         await switchDocument(readerShell, { bookId, docId: id, name, bytes });
       } catch (e) {
         console.error("failed to open the document", e);
-        pushToast("error", "Can't open this — it may not have finished downloading.");
+        pushToast("error", t("shell.toast.cantOpenDownloading"));
       }
     },
-    [readerShell, pushToast],
+    [readerShell, pushToast, t],
   );
 
   openDocumentRef.current = openDocument;
@@ -909,10 +911,10 @@ export default function App() {
         await refreshTopics();
       } catch (e) {
         console.error("failed to open file", e);
-        pushToast("error", "Can't open this file — it may have been moved or deleted.");
+        pushToast("error", t("shell.toast.cantOpenFile"));
       }
     },
-    [activeTopicId, openInReader, refreshTopics, pushToast],
+    [activeTopicId, openInReader, refreshTopics, pushToast, t],
   );
 
   // Books handed over from outside the app: the iOS share sheet, "Open in" from
@@ -930,10 +932,10 @@ export default function App() {
           .then((filed) => filed && openFile(filed.file, filed.topicId))
           .catch((e) => {
             console.error("failed to file a shared book", e);
-            pushToast("error", "Can't open this file — it may have been moved or deleted.");
+            pushToast("error", t("shell.toast.cantOpenFile"));
           });
       }),
-    [openFile, pushToast],
+    [openFile, pushToast, t],
   );
 
   // The desk's door. The book is imported as it is picked, the same as on the
@@ -949,9 +951,9 @@ export default function App() {
       await refreshTopics();
     } catch (e) {
       console.error("failed to import the picked file", e);
-      pushToast("error", "Can't read this file — it may have been moved or deleted.");
+      pushToast("error", t("shell.toast.cantReadFile"));
     }
-  }, [activeTopicId, refreshTopics, pushToast]);
+  }, [activeTopicId, refreshTopics, pushToast, t]);
 
   // The translation that took a document's place, which the reader is moved
   // onto. A supplement is a document of
@@ -1012,12 +1014,12 @@ export default function App() {
       const thread = bookId ? getThread(bookId, threadId) : undefined;
       const framing = asideFramingFor(thread);
       if (!thread || !framing.aside) {
-        pushToast("warn", "That side conversation is gone.");
+        pushToast("warn", t("shell.toast.asideGone"));
         return;
       }
       reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     },
-    [reopenThreadCall, asideFramingFor, pushToast],
+    [reopenThreadCall, asideFramingFor, pushToast, t],
   );
   openAsideThreadRef.current = openAsideThread;
 
@@ -1041,7 +1043,7 @@ export default function App() {
     void (async () => {
       const resolved = await resolveBookThread(bookId, () => bookIdRef.current !== bookId);
       if (resolved.status === "unreadable") {
-        pushToast("warn", "Saved AI conversations could not be loaded");
+        pushToast("warn", t("shell.toast.conversationsUnloadable"));
         return;
       }
       if (resolved.status === "cancelled") return;
@@ -1049,7 +1051,7 @@ export default function App() {
       setPopup(null);
       reopenThreadCall(thread, { view: "chat-main", anchor: { x: 0, y: 0 } });
     })();
-  }, [reopenThreadCall, pushToast, onEntryPrepTrigger]);
+  }, [reopenThreadCall, pushToast, onEntryPrepTrigger, t]);
 
   const closeReader = useCallback(() => {
     closeBook(readerShell, bookIdRef.current, docIdRef.current);
@@ -1583,13 +1585,13 @@ export default function App() {
               } as CSSProperties
             }
           >
-            <p className="m-0 text-sm text-muted-foreground">Configure a provider in Settings to start chatting.</p>
+            <p className="m-0 text-sm text-muted-foreground">{t("shell.call.configurePrompt")}</p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={endCall}>
-                Dismiss
+                {t("shell.action.dismiss")}
               </Button>
               <Button onClick={openSettings}>
-                Open Settings
+                {t("shell.call.openSettings")}
               </Button>
             </div>
           </div>
@@ -1601,7 +1603,7 @@ export default function App() {
             className={`fixed bottom-safe-6 left-1/2 ${OVERLAY_Z.floatingTop} -translate-x-1/2 rounded-full border border-border bg-card px-4 py-1.5 text-sm shadow-md hover:bg-muted`}
             onClick={retryCall}
           >
-            Retry
+            {t("shell.call.retry")}
           </button>
         )}
 
@@ -1647,16 +1649,20 @@ export default function App() {
                 aside={call.aside ? { onBack: asideBack } : undefined}
                 marks={chatMarkHost}
                 emptyTitle={
-                  spanAside ? "Ask about this" : call.isBook ? title ?? "This book" : undefined
+                  spanAside
+                    ? t("shell.call.askAboutThisTitle")
+                    : call.isBook
+                      ? title ?? t("shell.call.thisBookFallback")
+                      : undefined
                 }
                 // With no chips left (docs/09), the placeholder is the only
                 // thing saying what this room is for: being taught out of the
                 // book, not asked about a book you have read.
                 placeholder={
                   spanAside
-                    ? "Ask about this…"
+                    ? t("shell.call.askAboutThisPlaceholder")
                     : call.isBook
-                      ? "Ask me to teach you part of this book…"
+                      ? t("shell.call.teachPlaceholder")
                       : undefined
                 }
                 intents={callIntents}

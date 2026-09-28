@@ -6,6 +6,8 @@
 // with an <img> fallback for WebKitGTK; also accepts raw RGBA from the Tauri
 // clipboard path (compressImageData).
 
+import { t } from "../i18n";
+
 const MAX_EDGE = 1568;
 const MAX_BYTES = 5 * 1024 * 1024;
 const JPEG_QUALITY = 0.85;
@@ -54,7 +56,7 @@ function encodeDrawable(source: Drawable, srcW: number, srcH: number, probeAlpha
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not process the image (no canvas context).");
+  if (!ctx) throw new Error(t("shell.image.noCanvasContext"));
   ctx.drawImage(source, 0, 0, width, height);
 
   const mediaType: CompressedImage["mediaType"] =
@@ -64,7 +66,7 @@ function encodeDrawable(source: Drawable, srcW: number, srcH: number, probeAlpha
 
   const bytes = base64Bytes(data);
   if (bytes > MAX_BYTES) {
-    throw new Error(`Image is too large after compression (${(bytes / 1024 / 1024).toFixed(1)} MB, max 5 MB).`);
+    throw new Error(t("shell.image.tooLarge", { mb: (bytes / 1024 / 1024).toFixed(1) }));
   }
   return { data, mediaType };
 }
@@ -90,7 +92,7 @@ export async function decodeBlob(blob: Blob): Promise<{ source: Drawable; width:
     const img = new Image();
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error("Could not decode the image."));
+      img.onerror = () => reject(new Error(t("shell.image.decodeFailed")));
       img.src = url;
     });
     return { source: img, width: img.naturalWidth, height: img.naturalHeight, cleanup: () => URL.revokeObjectURL(url) };
@@ -118,7 +120,7 @@ export async function compressImageData(rgba: Uint8Array, width: number, height:
   src.width = width;
   src.height = height;
   const sctx = src.getContext("2d");
-  if (!sctx) throw new Error("Could not process the image (no canvas context).");
+  if (!sctx) throw new Error(t("shell.image.noCanvasContext"));
   sctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
   return encodeDrawable(src, width, height, true);
 }

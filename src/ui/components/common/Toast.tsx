@@ -7,6 +7,7 @@
 // (ui/toast.tsx). Both call sites (App, PhoneApp) render one of these.
 
 import { useCallback, useState } from 'react';
+import { useT } from '../../../i18n';
 import { IconClose } from '../base/icons';
 import { addToast, DISMISS_MS, removeToast, type ToastItem, type ToastKind } from './toast-list';
 import { Toast as ToastBox, ToastClose, ToastDescription, ToastProvider, ToastViewport } from '../ui/toast';
@@ -31,22 +32,23 @@ export function useToasts() {
 }
 
 export default function Toast({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss(id: string): void }) {
+	const t = useT();
 	return (
 		<ToastProvider duration={DISMISS_MS} swipeDirection="right">
 			<ToastViewport>
-				{toasts.map((t) => (
+				{toasts.map((toast) => (
 					<ToastBox
-						key={t.id}
-						kind={t.kind}
+						key={toast.id}
+						kind={toast.kind}
 						// Controlled: the countdown, a swipe and the close button all
 						// arrive here as the same close, and the list is the one state.
 						open
 						onOpenChange={(open) => {
-							if (!open) onDismiss(t.id);
+							if (!open) onDismiss(toast.id);
 						}}
 					>
-						<ToastDescription>{t.message}</ToastDescription>
-						<ToastClose aria-label="Dismiss">
+						<ToastDescription>{toast.message}</ToastDescription>
+						<ToastClose aria-label={t("shell.action.dismiss")}>
 							<IconClose size={12} />
 						</ToastClose>
 					</ToastBox>

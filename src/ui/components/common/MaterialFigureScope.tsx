@@ -20,6 +20,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { useT } from "../../../i18n";
 import { getFigures, renderFigure } from "../../../reading/figures";
 import { loadRetell, readMaterialBytes } from "../../../reading/retell";
 import { loadTalkOutline } from "../../../reading/talk";
@@ -134,6 +135,7 @@ function FigureViewer(props: {
   onClose: () => void;
 }) {
   const { target, readBytes } = props;
+  const t = useT();
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -167,7 +169,7 @@ function FigureViewer(props: {
       <DialogContent className="w-[min(56rem,100%)]">
         <DialogHeader>
           <DialogTitle className="text-base leading-normal">
-            Fig. {target.figure.id} · p.{target.figure.page}
+            {t("shell.figure.label", { id: target.figure.id, page: target.figure.page })}
           </DialogTitle>
           <DialogDescription>{target.figure.caption}</DialogDescription>
         </DialogHeader>
@@ -180,7 +182,7 @@ function FigureViewer(props: {
             />
           ) : (
             <p className="m-0 py-10 text-sm text-muted-foreground">
-              {failed ? "This figure could not be rendered." : "Rendering the figure…"}
+              {failed ? t("shell.figure.notRendered") : t("shell.figure.rendering")}
             </p>
           )}
         </div>

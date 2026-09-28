@@ -5,6 +5,7 @@
 // it differently and neither of them can be tested. What comes out is a list of
 // steps in the order they have to happen; a shell walks it.
 
+import { t } from "../../../i18n";
 import type { BoxOrigin } from "../../../box/types";
 
 export type Shell = "desktop" | "phone";
@@ -36,12 +37,14 @@ export interface Jump {
 // The phone has no reader (PhoneApp.tsx), so a card born over a book has
 // nowhere to land on it. The card still shows and can still be pressed away —
 // what it must not do is fail silently.
-export const NO_READER_HERE = "This one is in a book. Open it on the iPad or the desk.";
+export function noReaderHereLine(): string {
+  return t("shell.box.notReadable");
+}
 
 export function planJump(origin: BoxOrigin, place: Place): Jump {
   switch (origin.place) {
     case "book": {
-      if (place.shell === "phone") return { steps: [], unreachable: NO_READER_HERE };
+      if (place.shell === "phone") return { steps: [], unreachable: noReaderHereLine() };
       const steps: JumpStep[] = [];
       // Across books, the book first: the page and the thread are both inside
       // the one being opened.

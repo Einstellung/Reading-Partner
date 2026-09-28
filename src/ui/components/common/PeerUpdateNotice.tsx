@@ -2,12 +2,14 @@
 // phone or iPad (usePeerUpdateNotice.ts). Renders nothing on a desktop or when
 // there is nothing to say.
 
+import { useT } from "../../../i18n";
 import { IconClose } from "../base/icons";
 import { Button } from "../ui/button";
 import { peerUpdateText } from "./peer-update";
 import { usePeerUpdateNotice } from "./usePeerUpdateNotice";
 
 export default function PeerUpdateNotice({ className = "" }: { className?: string }) {
+  const t = useT();
   const { notice, dismiss } = usePeerUpdateNotice();
   if (!notice) return null;
   return (
@@ -18,7 +20,7 @@ export default function PeerUpdateNotice({ className = "" }: { className?: strin
       <p className="m-0 min-w-0 flex-1 py-1.5 text-[13px] leading-snug text-muted-foreground">
         {peerUpdateText(notice)}
       </p>
-      <Button variant="ghost" size="icon" aria-label="Dismiss" title="Dismiss" onClick={dismiss}>
+      <Button variant="ghost" size="icon" aria-label={t("shell.action.dismiss")} title={t("shell.action.dismiss")} onClick={dismiss}>
         <IconClose size={12} />
       </Button>
     </div>

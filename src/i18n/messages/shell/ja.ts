@@ -1,0 +1,81 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+export default {
+  "toast.cantOpenDownloading": "開けません — ダウンロードが完了していない可能性があります。",
+  "toast.cantOpenFile": "このファイルを開けません — 移動または削除された可能性があります。",
+  "toast.cantReadFile": "このファイルを読み込めません — 移動または削除された可能性があります。",
+  "toast.asideGone": "この脇道の会話はもうありません。",
+  "toast.conversationsUnloadable": "保存された AI 会話を読み込めませんでした",
+  "toast.cantShareFile": "このファイルを他のアプリに渡せませんでした。",
+
+  "call.askAboutThisTitle": "これについて聞く",
+  "call.askAboutThisPlaceholder": "これについて聞く…",
+  "call.teachPlaceholder": "この本の一部を教えてもらう…",
+  "call.thisBookFallback": "この本",
+  "call.configurePrompt": "対話を始めるには、設定でプロバイダを接続してください。",
+  "call.openSettings": "設定を開く",
+  "call.retry": "再試行",
+
+  "action.dismiss": "閉じる",
+  "action.cancel": "キャンセル",
+  "action.delete": "削除",
+
+  "savedArticle.backLabel": "保存済み",
+
+  "nav.settings": "設定",
+  "nav.settingsNeedsAttention": "設定 — 同期に対応が必要です",
+  "sidebar.sections": "セクション",
+  "sidebar.expand": "サイドバーを展開",
+  "sidebar.collapse": "サイドバーを折りたたむ",
+  "sidebar.updating": "更新中…",
+  "sidebar.restartToUpdate": "再起動して更新",
+
+  "lumen.show": "Lumen を表示",
+  "lumen.hide": "Lumen を隠す",
+  "lumen.needsDecision": "判断が必要です",
+
+  "box.bookFallback": "ある本",
+  "box.originBookPage": "{book} · {page}ページ",
+  "box.originDoor": "扉にて · {date}",
+  "box.originBriefing": "ブリーフィング · {date}",
+  "box.originMeals": "食事",
+  "box.label": "ボックス",
+  "box.waiting": { other: "ボックス、{count} 件待ち" },
+  "box.empty": "ボックスには何もありません。",
+  "box.notReadable": "これは本の中にあります。iPad かデスクで開いてください。",
+
+  "figure.label": "図 {id} · {page}ページ",
+  "figure.number": "図 {id}",
+  "figure.pageSuffix": "· {page}ページ",
+  "figure.notFound": "この文書に図 {id} はありません。",
+  "figure.loading": "図を読み込み中…",
+  "figure.notRendered": "この図は表示できませんでした。",
+  "figure.rendering": "図を描画中…",
+
+  "peer.desktopMac": "Mac",
+  "peer.desktopWindows": "Windows PC",
+  "peer.desktopLinux": "Linux コンピュータ",
+  "peer.desktopFallback": "コンピュータ",
+  "peer.notice": "{name}は {version} のままです。そちらで Reading Partner を開いて {target} に更新してください。",
+
+  "sync.credentialsMissing": "自動同期は有効ですが、このデバイスは Google からサインアウトしています — 同期されていません。",
+  "sync.engineStopped": "自動同期は有効ですが、同期エンジンが動作していません。",
+  "sync.neverSynced": "このデバイスはまだ一度も同期を完了していません。",
+  "sync.neverSyncedWithError": "このデバイスはまだ一度も同期を完了していません。直近のエラー: {error}",
+  "sync.stalled": "1日以上、同期が成功していません。",
+  "sync.stalledWithError": "1日以上、同期が成功していません。直近のエラー: {error}",
+  "sync.lastFailed": "前回の同期が失敗しました: {error}",
+
+  "auth.notConfigured": "Google クライアントが設定されていません",
+  "auth.tokenRequestFailed": "Google のトークン取得に失敗しました（HTTP {status}）: {text}",
+  "auth.redirectCaptureFailed": "Google サインインのリダイレクトを受け取れませんでした: {error}",
+  "auth.signInTimedOut": "Google サインインがリダイレクト待ちでタイムアウトしました",
+  "auth.authorizationError": "Google の認証エラー: {error}",
+  "auth.noRefreshToken":
+    "Google からリフレッシュトークンが返されませんでした。myaccount.google.com でこのアプリを削除してから、もう一度サインインしてください。",
+
+  "image.noCanvasContext": "画像を処理できませんでした（canvas コンテキストがありません）。",
+  "image.tooLarge": "圧縮後も画像が大きすぎます（{mb} MB、上限 5 MB）。",
+  "image.decodeFailed": "画像をデコードできませんでした。",
+} satisfies Translation<typeof en>;

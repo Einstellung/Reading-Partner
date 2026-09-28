@@ -6,20 +6,22 @@
 // localStorage: it is this device's view choice, and a newer release asks
 // again.
 
+import { t } from "../../../i18n";
 import type { LaggingDesktop } from "../../../platform/sync";
 import type { PrefStore } from "../base/pref-store";
 
 const DISMISS_PREFIX = "shell.peerUpdateDismissed.";
 
-const DESKTOP_NAMES: Record<string, string> = {
-  macos: "Mac",
-  windows: "Windows PC",
-  linux: "Linux computer",
+const DESKTOP_NAME_KEYS: Record<string, "shell.peer.desktopMac" | "shell.peer.desktopWindows" | "shell.peer.desktopLinux"> = {
+  macos: "shell.peer.desktopMac",
+  windows: "shell.peer.desktopWindows",
+  linux: "shell.peer.desktopLinux",
 };
 
 export function peerUpdateText(l: LaggingDesktop): string {
-  const name = DESKTOP_NAMES[l.platform] ?? "computer";
-  return `Your ${name} is on ${l.version}. Open Reading Partner there to update to ${l.target}.`;
+  const nameKey = DESKTOP_NAME_KEYS[l.platform];
+  const name = nameKey ? t(nameKey) : t("shell.peer.desktopFallback");
+  return t("shell.peer.notice", { name, version: l.version, target: l.target });
 }
 
 function dismissedTarget(store: PrefStore | null, device: string): string | null {

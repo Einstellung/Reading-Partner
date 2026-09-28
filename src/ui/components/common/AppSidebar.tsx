@@ -12,6 +12,7 @@
 // This file renders them and binds the events.
 
 import appIcon from "../../assets/app-icon.png";
+import { useT } from "../../../i18n";
 import { lumenToggleTitle } from "../lumen/corner-pref";
 import { IconBriefing, IconBooks, IconMeals, IconGear, IconRestart, IconSidebar, IconToday } from "../base/icons";
 import { restartLabel, type UpdateState } from "../../../platform/app/update-policy";
@@ -102,6 +103,7 @@ export default function AppSidebar(props: {
   // its row is not in the column at all.
   meals?: boolean;
 }) {
+  const t = useT();
   const collapsed = props.collapsed;
   const toggle = (
     <Button
@@ -119,7 +121,7 @@ export default function AppSidebar(props: {
   );
 
   return (
-    <nav aria-label="Sections" className={sidebarNavClass(collapsed)}>
+    <nav aria-label={t("shell.sidebar.sections")} className={sidebarNavClass(collapsed)}>
       <div className={sidebarWordmarkClass(collapsed)}>
         <button
           type="button"
@@ -160,7 +162,7 @@ export default function AppSidebar(props: {
 
       {props.update && restartLabel(props.update) && (
         <Row
-          label={props.update.kind === "installing" ? "Updating…" : "Restart to update"}
+          label={props.update.kind === "installing" ? t("shell.sidebar.updating") : t("shell.sidebar.restartToUpdate")}
           icon={IconRestart}
           collapsed={collapsed}
           title={restartLabel(props.update) ?? undefined}
@@ -170,11 +172,11 @@ export default function AppSidebar(props: {
       )}
 
       <Row
-        label="Settings"
+        label={t("shell.nav.settings")}
         icon={ICONS.settings}
         collapsed={collapsed}
         active={props.active === "settings"}
-        title={props.settingsAlert ? "Settings — sync needs attention" : "Settings"}
+        title={props.settingsAlert ? t("shell.nav.settingsNeedsAttention") : t("shell.nav.settings")}
         onClick={props.onOpenSettings}
       >
         {props.settingsAlert && (

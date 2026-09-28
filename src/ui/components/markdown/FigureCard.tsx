@@ -8,13 +8,14 @@
 // so it is drawn as inert text rather than a control that does nothing.
 
 import { useEffect, useRef, useState } from "react";
+import { t, useT } from "../../../i18n";
 import type { FigureHost, RenderedCard } from "./Markdown";
 import { cardDisplayWidth } from "../../../reading/figures/render";
 import type { Figure } from "../../../reading/figures/types";
 
 // "Fig. 3 · p.5" — the text chip label and the card's caption tag. Pure.
 export function figureChipLabel(figure: Figure): string {
-  return `Fig. ${figure.id} · p.${figure.page}`;
+  return t("shell.figure.label", { id: figure.id, page: figure.page });
 }
 
 const CHIP =
@@ -36,6 +37,7 @@ function Chip({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 export default function FigureCard({ host, id }: { host: FigureHost; id: string }) {
+  const t = useT();
   const figure = host.getFigure(id);
   const ref = useRef<HTMLButtonElement | null>(null);
   const [card, setCard] = useState<RenderedCard | null>(null);
@@ -82,7 +84,7 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
 
   if (!figure)
     return (
-      <span className={CHIP_DEAD} title={`No figure ${id} in this document.`}>
+      <span className={CHIP_DEAD} title={t("shell.figure.notFound", { id })}>
         fig:{id}
       </span>
     );
@@ -114,11 +116,12 @@ export default function FigureCard({ host, id }: { host: FigureHost; id: string 
           className="flex items-center justify-center rounded bg-muted-soft text-[0.8em] text-neutral-400"
           style={{ minHeight: 80, minWidth: 160 }}
         >
-          Loading figure…
+          {t("shell.figure.loading")}
         </span>
       )}
       <span className="px-0.5 text-[0.8em] leading-snug text-neutral-500">
-        <span className="font-medium text-secondary-foreground">Fig. {figure.id}</span> · p.{figure.page}
+        <span className="font-medium text-secondary-foreground">{t("shell.figure.number", { id: figure.id })}</span>{" "}
+        {t("shell.figure.pageSuffix", { page: figure.page })}
         {figure.caption ? ` — ${figure.caption}` : ""}
       </span>
     </button>

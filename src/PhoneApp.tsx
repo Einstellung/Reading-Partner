@@ -67,6 +67,7 @@ import { useEdgeBack } from "./ui/components/phone/gesture/useEdgeBack";
 import SavedArticleView from "./ui/components/library/SavedArticleView";
 import SettingsDialog from "./ui/components/SettingsDialog";
 import Toast, { useToasts } from "./ui/components/common/Toast";
+import { useT } from "./i18n";
 import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import { useShellBootstrap } from "./ui/components/common/useShellBootstrap";
 import { KeyboardShell } from "./ui/components/common/KeyboardShell";
@@ -112,6 +113,7 @@ export default function PhoneApp({
 }: {
   Pane?: ComponentType<FlowReaderPaneProps> | null;
 } = {}) {
+  const t = useT();
   const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
   // The corner companion, per device (docs/68). The phone keeps its own answer:
   // a reader who put Lumen away here has not put it away on the desk.
@@ -328,11 +330,11 @@ export default function PhoneApp({
           await openIn(await libraryFilePath(bookId, "pdf"), shareFileName(name, "pdf"));
         } catch (e) {
           console.error("failed to open the file elsewhere", e);
-          pushToast("warn", "This file could not be handed to another app.");
+          pushToast("warn", t("shell.toast.cantShareFile"));
         }
       })();
     },
-    [pushToast],
+    [pushToast, t],
   );
 
   const openSettings = useCallback(() => setStack((s) => push(s, screen("settings"))), []);
@@ -419,7 +421,7 @@ export default function PhoneApp({
           )}
 
           {base.kind === "savedArticle" && (
-            <SavedArticleView article={base.article} backLabel="Saved" onBack={goBack} />
+            <SavedArticleView article={base.article} backLabel={t("shell.savedArticle.backLabel")} onBack={goBack} />
           )}
 
           {(base.kind === "library" || base.kind === "topic") && (

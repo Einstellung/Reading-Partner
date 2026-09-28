@@ -4,7 +4,7 @@
 
 import { expect, test } from "bun:test";
 
-import { NO_READER_HERE, planJump, type Place } from "../../../../src/ui/components/lumen/box-jump";
+import { noReaderHereLine, planJump, type Place } from "../../../../src/ui/components/lumen/box-jump";
 
 const DESK: Place = { shell: "desktop", inReader: false, openBookId: null };
 const PHONE: Place = { shell: "phone", inReader: false, openBookId: null };
@@ -52,7 +52,7 @@ test("no page on the item means no page step", () => {
 test("the phone has no reader to jump into, and says so", () => {
   const jump = planJump({ place: "book", bookId: "b1", threadId: "t1", page: 3 }, PHONE);
   expect(jump.steps).toEqual([]);
-  expect(jump.unreachable).toBe(NO_READER_HERE);
+  expect(jump.unreachable).toBe(noReaderHereLine());
 });
 
 test("the door and the briefing go to their own place in either shell", () => {

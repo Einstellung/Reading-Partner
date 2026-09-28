@@ -1,0 +1,81 @@
+import type { Translation } from "../types";
+import type en from "./en";
+
+export default {
+  "toast.cantOpenDownloading": "열 수 없습니다 — 아직 다운로드가 끝나지 않았을 수 있습니다.",
+  "toast.cantOpenFile": "이 파일을 열 수 없습니다 — 이동되었거나 삭제되었을 수 있습니다.",
+  "toast.cantReadFile": "이 파일을 읽을 수 없습니다 — 이동되었거나 삭제되었을 수 있습니다.",
+  "toast.asideGone": "이 곁가지 대화는 더 이상 없습니다.",
+  "toast.conversationsUnloadable": "저장된 AI 대화를 불러올 수 없습니다",
+  "toast.cantShareFile": "이 파일을 다른 앱으로 보낼 수 없습니다.",
+
+  "call.askAboutThisTitle": "이것에 대해 묻기",
+  "call.askAboutThisPlaceholder": "이것에 대해 묻기…",
+  "call.teachPlaceholder": "이 책의 한 부분을 가르쳐 달라고 하기…",
+  "call.thisBookFallback": "이 책",
+  "call.configurePrompt": "대화를 시작하려면 설정에서 제공업체를 연결하세요.",
+  "call.openSettings": "설정 열기",
+  "call.retry": "다시 시도",
+
+  "action.dismiss": "닫기",
+  "action.cancel": "취소",
+  "action.delete": "삭제",
+
+  "savedArticle.backLabel": "저장됨",
+
+  "nav.settings": "설정",
+  "nav.settingsNeedsAttention": "설정 — 동기화 확인 필요",
+  "sidebar.sections": "섹션",
+  "sidebar.expand": "사이드바 펼치기",
+  "sidebar.collapse": "사이드바 접기",
+  "sidebar.updating": "업데이트 중…",
+  "sidebar.restartToUpdate": "재시작하여 업데이트",
+
+  "lumen.show": "Lumen 표시",
+  "lumen.hide": "Lumen 숨기기",
+  "lumen.needsDecision": "결정이 필요합니다",
+
+  "box.bookFallback": "어떤 책",
+  "box.originBookPage": "{book} · {page}쪽",
+  "box.originDoor": "문 앞에서 · {date}",
+  "box.originBriefing": "브리핑 · {date}",
+  "box.originMeals": "식단",
+  "box.label": "박스",
+  "box.waiting": { other: "박스, {count}개 대기 중" },
+  "box.empty": "박스에 아무것도 없습니다.",
+  "box.notReadable": "이 항목은 책 안에 있습니다. iPad나 데스크에서 열어 주세요.",
+
+  "figure.label": "그림 {id} · {page}쪽",
+  "figure.number": "그림 {id}",
+  "figure.pageSuffix": "· {page}쪽",
+  "figure.notFound": "이 문서에 그림 {id}가 없습니다.",
+  "figure.loading": "그림 불러오는 중…",
+  "figure.notRendered": "이 그림을 표시할 수 없습니다.",
+  "figure.rendering": "그림 렌더링 중…",
+
+  "peer.desktopMac": "Mac",
+  "peer.desktopWindows": "Windows PC",
+  "peer.desktopLinux": "Linux 컴퓨터",
+  "peer.desktopFallback": "컴퓨터",
+  "peer.notice": "{name}이(가) 아직 {version}입니다. 그 기기에서 Reading Partner를 열어 {target}(으)로 업데이트하세요.",
+
+  "sync.credentialsMissing": "자동 동기화가 켜져 있지만 이 기기는 Google에서 로그아웃되어 있습니다 — 동기화되지 않습니다.",
+  "sync.engineStopped": "자동 동기화가 켜져 있지만 동기화 엔진이 실행 중이 아닙니다.",
+  "sync.neverSynced": "이 기기는 아직 동기화를 한 번도 완료하지 못했습니다.",
+  "sync.neverSyncedWithError": "이 기기는 아직 동기화를 한 번도 완료하지 못했습니다. 최근 오류: {error}",
+  "sync.stalled": "하루 넘게 동기화가 성공하지 못했습니다.",
+  "sync.stalledWithError": "하루 넘게 동기화가 성공하지 못했습니다. 최근 오류: {error}",
+  "sync.lastFailed": "지난 동기화 실패: {error}",
+
+  "auth.notConfigured": "Google 클라이언트가 설정되지 않았습니다",
+  "auth.tokenRequestFailed": "Google 토큰 요청이 실패했습니다 (HTTP {status}): {text}",
+  "auth.redirectCaptureFailed": "Google 로그인 리디렉션을 받지 못했습니다: {error}",
+  "auth.signInTimedOut": "Google 로그인이 리디렉션을 기다리다 시간 초과되었습니다",
+  "auth.authorizationError": "Google 인증 오류: {error}",
+  "auth.noRefreshToken":
+    "Google이 갱신 토큰을 반환하지 않았습니다. myaccount.google.com에서 이 앱을 제거한 뒤 다시 로그인해 보세요.",
+
+  "image.noCanvasContext": "이미지를 처리할 수 없습니다 (canvas 컨텍스트 없음).",
+  "image.tooLarge": "압축 후에도 이미지가 너무 큽니다 ({mb} MB, 최대 5 MB).",
+  "image.decodeFailed": "이미지를 디코딩할 수 없습니다.",
+} satisfies Translation<typeof en>;

@@ -8,6 +8,7 @@
 // Hidden means the corner draws nothing. The box goes on filling behind it; the
 // count is waiting when the logo is pressed again.
 
+import { t } from "../../../i18n";
 import type { PrefStore } from "../base/pref-store";
 import {
   CORNER_SPOT_DEFAULT,
@@ -65,5 +66,5 @@ export function writeLumenCornerSpot(store: PrefStore | null, spot: CornerSpot):
 // phone's title both say the same thing. Not the reader, where the switch is a
 // row in the "More" menu and the On/Off beside it carries the state instead.
 export function lumenToggleTitle(shown: boolean): string {
-  return shown ? "Hide Lumen" : "Show Lumen";
+  return t(shown ? "shell.lumen.hide" : "shell.lumen.show");
 }

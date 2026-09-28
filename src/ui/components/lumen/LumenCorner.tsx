@@ -49,6 +49,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } 
 
 import { UNSEEN, appBox } from "../../../box";
 import type { BoxItem } from "../../../box/types";
+import { useT } from "../../../i18n";
 import { voiceStartFeedback, voiceStopFeedback } from "../../../platform/app/haptics";
 import { getLibraryEntry } from "../../../platform/app/library";
 import { hasNativeSpeech } from "../../../platform/app/platform";
@@ -68,7 +69,7 @@ import {
 	badgeCount,
 	caseLabel,
 	columnMaxPx,
-	EMPTY_LINE,
+	emptyBoxLine,
 	isDismissSwipe,
 	originLabel,
 	showsCase,
@@ -494,7 +495,7 @@ function Column({
 	onDismiss: (item: BoxItem) => void;
 }) {
 	if (items !== null && items.length === 0) {
-		return <p className="m-0 px-2 py-3 text-[13px] text-muted-foreground">{EMPTY_LINE}</p>;
+		return <p className="m-0 px-2 py-3 text-[13px] text-muted-foreground">{emptyBoxLine()}</p>;
 	}
 	return (
 		<>
@@ -531,6 +532,7 @@ function Card({
 	onFollow: () => void;
 	onDismiss: () => void;
 }) {
+	const t = useT();
 	const from = useRef<{ x: number; y: number; touch: boolean } | null>(null);
 	const [swiped, setSwiped] = useState(false);
 
@@ -566,7 +568,7 @@ function Card({
 					{/* "要你定": the one mark a card carries. */}
 					{item.needsDecision && (
 						<span
-							aria-label="Needs a decision"
+							aria-label={t("shell.lumen.needsDecision")}
 							className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-accent-line"
 						/>
 					)}
@@ -583,7 +585,7 @@ function Card({
 			    a card that only accumulates. */}
 			<button
 				type="button"
-				aria-label="Dismiss"
+				aria-label={t("shell.action.dismiss")}
 				className="absolute right-1 top-1 hidden h-6 w-6 items-center justify-center rounded-md text-[13px] leading-none text-muted-foreground can-hover:group-hover:flex can-hover:hover:bg-muted"
 				onClick={onDismiss}
 			>

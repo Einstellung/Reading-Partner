@@ -4,6 +4,7 @@
 // Here and not in LumenCorner.tsx because all of it is arithmetic and strings,
 // and none of it needs React to be read.
 
+import { t } from "../../../i18n";
 import type { BoxItem, BoxOrigin } from "../../../box/types";
 
 // Five, and the sixth scrolls. Past five the column is a page, and a page in a
@@ -60,15 +61,17 @@ export function badgeCount(openCount: number): number | null {
 export function originLabel(origin: BoxOrigin, title: string | null): string {
   switch (origin.place) {
     case "book": {
-      const book = title ?? "A book";
-      return origin.page === undefined ? book : `${book} · p. ${origin.page}`;
+      const book = title ?? t("shell.box.bookFallback");
+      return origin.page === undefined
+        ? book
+        : t("shell.box.originBookPage", { book, page: origin.page });
     }
     case "door":
-      return `At the door · ${origin.date}`;
+      return t("shell.box.originDoor", { date: origin.date });
     case "briefing":
-      return `Briefing · ${origin.date}`;
+      return t("shell.box.originBriefing", { date: origin.date });
     case "meals":
-      return "Meals";
+      return t("shell.box.originMeals");
   }
 }
 
@@ -84,11 +87,13 @@ export function bookIdsIn(items: readonly BoxItem[]): string[] {
 /** What a reader hears on the case, which is the only control in the corner. */
 export function caseLabel(openCount: number): string {
   const n = badgeCount(openCount);
-  return n === null ? "The box" : `The box, ${n} waiting`;
+  return n === null ? t("shell.box.label") : t("shell.box.waiting", { count: n });
 }
 
 /** The one line an empty column says. */
-export const EMPTY_LINE = "Nothing in the box.";
+export function emptyBoxLine(): string {
+  return t("shell.box.empty");
+}
 
 // How far sideways a finger has to travel for a card to count as pressed away.
 // 64px rather than a fraction of the card: the column is one width everywhere,

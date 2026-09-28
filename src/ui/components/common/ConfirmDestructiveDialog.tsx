@@ -13,6 +13,7 @@
 
 import type { ReactNode } from "react";
 
+import { useT } from "../../../i18n";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ export default function ConfirmDestructiveDialog(props: {
   // topic's files that could go with it, and the box that says whether they do.
   children?: ReactNode;
 }) {
+  const t = useT();
   return (
     <AlertDialog open={props.open} onOpenChange={props.onOpenChange}>
       {/* One track no wider than the dialog: the content is a grid, and its
@@ -49,9 +51,9 @@ export default function ConfirmDestructiveDialog(props: {
         </AlertDialogHeader>
         {props.children}
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("shell.action.cancel")}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={props.onConfirm}>
-            {props.actionLabel ?? "Delete"}
+            {props.actionLabel ?? t("shell.action.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

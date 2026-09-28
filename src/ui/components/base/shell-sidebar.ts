@@ -9,6 +9,7 @@
 // and React carries the second, so a rotation moves the sidebar with no
 // JavaScript and no frame of the wrong width.
 
+import { t } from "../../../i18n";
 import type { PrefStore } from "./pref-store";
 
 export const RAIL_WIDTH_PX = 52;
@@ -39,7 +40,7 @@ export function showsCollapseToggle(atLg: boolean): boolean {
 
 // What the toggle does next, not what it is looking at.
 export function collapseToggleTitle(collapsed: boolean): string {
-  return collapsed ? "Expand sidebar" : "Collapse sidebar";
+  return t(collapsed ? "shell.sidebar.expand" : "shell.sidebar.collapse");
 }
 
 // localStorage, like the reader panel's open state and the paper tint: a

@@ -42,6 +42,7 @@ import { writeTextAtomic } from "../app/atomic-fs";
 import { base64Url, generatePKCE } from "../app/oauth";
 import { cleanTauriFetch } from "../app/tauri-fetch";
 import { activeAuthFlow, AUTHORIZE_URL, GOOGLE_SCOPES, TOKEN_URL } from "./googleConfig";
+import { t } from "../../i18n";
 import {
   authCodeBody,
   buildAuthUrl,
@@ -134,14 +135,14 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
     // invalid_grant on a refresh means the refresh token is dead (revoked or
     // expired) — the caller turns this into a signed-out state.
     if (text.includes("invalid_grant")) throw new GoogleAuthError("invalid_grant");
-    throw new Error(`Google token request failed (HTTP ${res.status}): ${text}`);
+    throw new Error(t("shell.auth.tokenRequestFailed", { status: res.status, text }));
   }
   return JSON.parse(text) as TokenResponse;
 }
 
 function requireFlow(): AuthFlow {
   const flow = activeAuthFlow();
-  if (!flow) throw new Error("Google client not configured");
+  if (!flow) throw new Error(t("shell.auth.notConfigured"));
   return flow;
 }
 
@@ -160,7 +161,7 @@ async function captureLoopbackCode(flow: AuthFlow, challenge: string, state: str
   try {
     return (await listener).code;
   } catch (e) {
-    throw new Error(`Google sign-in could not capture the redirect: ${errMsg(e)}`);
+    throw new Error(t("shell.auth.redirectCaptureFailed", { error: errMsg(e) }));
   }
 }
 
@@ -173,7 +174,7 @@ async function captureLoopbackCode(flow: AuthFlow, challenge: string, state: str
 function codeFromRedirect(url: string, flow: AuthFlow, expectedState: string): string | null {
   if (!matchesRedirect(url, flow.redirectUri)) return null;
   const { code, state, error } = parseCallbackParams(url);
-  if (error) throw new Error(`Google authorization error: ${error}`);
+  if (error) throw new Error(t("shell.auth.authorizationError", { error }));
   if (!code || state !== expectedState) return null;
   return code;
 }
@@ -212,7 +213,7 @@ async function captureSchemeCode(flow: AuthFlow, challenge: string, state: strin
     await openUrl(buildAuthUrl(AUTHORIZE_URL, flow, GOOGLE_SCOPES, challenge, state));
 
     const timeout = new Promise<never>((_, rej) =>
-      setTimeout(() => rej(new Error("Google sign-in timed out waiting for the redirect")), DEEP_LINK_TIMEOUT_MS),
+      setTimeout(() => rej(new Error(t("shell.auth.signInTimedOut"))), DEEP_LINK_TIMEOUT_MS),
     );
     return await Promise.race([pending, timeout]);
   } finally {
@@ -236,7 +237,7 @@ export async function signIn(): Promise<void> {
 
   const token = await tokenRequest(authCodeBody(flow, code, verifier));
   if (!token.refresh_token) {
-    throw new Error("Google did not return a refresh token; try removing the app under myaccount.google.com and signing in again.");
+    throw new Error(t("shell.auth.noRefreshToken"));
   }
   await saveAuth({
     access: token.access_token,

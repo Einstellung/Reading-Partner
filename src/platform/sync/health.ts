@@ -1,3 +1,5 @@
+import { t } from "../../i18n";
+
 // What the app should say about sync, decided from the sync state alone.
 //
 // The state this exists for: auto-sync reads on, the credentials file is gone,
@@ -97,7 +99,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealthReport {
       return {
         health: "credentials-missing",
         alert: "alert",
-        message: "Auto-sync is on but this device is signed out of Google — nothing is syncing.",
+        message: t("shell.sync.credentialsMissing"),
       };
     }
     return quiet("signed-out");
@@ -109,7 +111,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealthReport {
     return {
       health: "engine-stopped",
       alert: "alert",
-      message: "Auto-sync is on but the sync engine is not running.",
+      message: t("shell.sync.engineStopped"),
     };
   }
 
@@ -120,8 +122,8 @@ export function syncHealth(input: SyncHealthInput): SyncHealthReport {
       health: "never-synced",
       alert: "alert",
       message: lastError
-        ? `This device has never completed a sync. Last error: ${lastError}`
-        : "This device has never completed a sync.",
+        ? t("shell.sync.neverSyncedWithError", { error: lastError })
+        : t("shell.sync.neverSynced"),
     };
   }
 
@@ -130,13 +132,13 @@ export function syncHealth(input: SyncHealthInput): SyncHealthReport {
       health: "stalled",
       alert: "alert",
       message: lastError
-        ? `No sync has succeeded for over a day. Last error: ${lastError}`
-        : "No sync has succeeded for over a day.",
+        ? t("shell.sync.stalledWithError", { error: lastError })
+        : t("shell.sync.stalled"),
     };
   }
 
   if (lastError) {
-    return { health: "failing", alert: "notice", message: `Last sync failed: ${lastError}` };
+    return { health: "failing", alert: "notice", message: t("shell.sync.lastFailed", { error: lastError }) };
   }
 
   if (lastSyncAt === null) return quiet("pending");
