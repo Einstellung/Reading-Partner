@@ -17,7 +17,6 @@ import { useT } from "../../../../i18n";
 import { ANNOTATION_COLORS } from "../../../../platform/app/annotations";
 import type { ViewStats } from "../../../../platform/app/reader-contract";
 import type { LessonDot } from "../../../../reading/session/lesson-dot";
-import { useT } from "../../../../i18n";
 import { IconBookSparkle, IconOutline, IconTextSize } from "../../base/icons";
 import { cn } from "../../lib/utils";
 import PenToolbar from "../../reader/PenToolbar";
