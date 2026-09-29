@@ -221,3 +221,22 @@ test("spineOverviewSection: truncates long text at a paragraph boundary", () => 
   const inner = block.split('"""')[1];
   expect(inner.trimEnd().endsWith("…")).toBe(true);
 });
+
+test("search_topic searches the book's supplements with the topic", async () => {
+  const book = ft(["the book says nothing on this"]);
+  const tools = buildReadingTools({
+    currentFulltext: book,
+    materials: [{ label: "Book", fulltext: book, annotations: [] }],
+    supplements: [{ label: "Gated Attention", fulltext: ft(["", "sigmoid gate on the output"]), annotations: [] }],
+  });
+  const search = tools.find((t) => t.name === "search_topic")!;
+  expect(String(await search.execute({ query: "sigmoid gate" }))).toContain("[Gated Attention, p2]");
+
+  // Supplements alone are enough to mount it.
+  const only = buildReadingTools({
+    currentFulltext: null,
+    materials: [],
+    supplements: [{ label: "Gated Attention", fulltext: ft(["sigmoid"]), annotations: [] }],
+  });
+  expect(only.map((t) => t.name)).toEqual(["search_topic"]);
+});

@@ -1,6 +1,6 @@
 // The tools every thread of an open book carries, whatever the book has been
 // through (reading/desk.ts): taking in a link, taking a supplement away,
-// translating the document on screen, and looking up one paper. A tool that is
+// reading one, translating the document on screen, and looking up one paper. A tool that is
 // only sometimes there is one the model stops reaching for.
 
 import type { AgentTool } from "../legion/execute/turn";
@@ -13,6 +13,8 @@ import { INGEST_URL_PROMPT, buildSourceTools } from "./prep/papers/source-tool";
 import type { PrepPipeline } from "./prep/papers/pipeline";
 import { startUrlIngest } from "./ingest/url-run";
 import { REMOVE_SUPPLEMENT_PROMPT, buildSupplementTools } from "./ingest/remove-tool";
+import { READ_SUPPLEMENT_PROMPT, buildReadSupplementTools } from "./ingest/read-supplement-tool";
+import { getFulltext } from "../fulltext/store";
 import { TRANSLATE_PROMPT, buildTranslateTools } from "./translate/tool";
 import { bookDeleter, liveTranslateToolDeps } from "./translate/tool-live";
 import { buildFindPaperTool, FIND_PAPER_PROMPT } from "./papers/citation-tool";
@@ -45,7 +47,12 @@ export interface BookSideTools {
 // The paragraphs of those tools, in the order they have always come out in:
 // the shelf's before whatever the rest of the desk brought, the literature's
 // after.
-export const SHELF_TOOL_PROMPTS = [INGEST_URL_PROMPT, REMOVE_SUPPLEMENT_PROMPT, TRANSLATE_PROMPT];
+export const SHELF_TOOL_PROMPTS = [
+  INGEST_URL_PROMPT,
+  REMOVE_SUPPLEMENT_PROMPT,
+  TRANSLATE_PROMPT,
+  READ_SUPPLEMENT_PROMPT,
+];
 export const LITERATURE_TOOL_PROMPTS = [FIND_PAPER_PROMPT, RESEARCH_PROMPT];
 
 export function bookSideTools(deps: BookSideToolDeps): BookSideTools {
@@ -102,6 +109,14 @@ export function bookSideTools(deps: BookSideToolDeps): BookSideTools {
     },
   });
 
+  // Reading one (feedback 辅助资料读不到). Not gated on the prep pipeline or on
+  // which document is on screen: the text is in the fulltext store under the
+  // document id from the moment it was taken in.
+  const readSupplement = buildReadSupplementTools({
+    list: () => listSupplements(bookId),
+    fulltext: getFulltext,
+  });
+
   // Translation (docs/67): the reader says "translate this" and the article on
   // the shelf is replaced by a bilingual copy. Mounted on every book thread, not
   // only on an article's: the tool itself is what says a PDF cannot be done in
@@ -135,5 +150,5 @@ export function bookSideTools(deps: BookSideToolDeps): BookSideTools {
     s2ApiKey: s.semanticScholarApiKey ?? undefined,
   });
 
-  return { shelf: [...ingest, ...supplement, ...translate], literature: [findPaper] };
+  return { shelf: [...ingest, ...supplement, ...translate, ...readSupplement], literature: [findPaper] };
 }
