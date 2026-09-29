@@ -88,6 +88,10 @@
 
 实测踩到的坑，一坑一文件，索引见 [pitfall/README.md](./pitfall/README.md)。
 
+## feedback
+
+用户报上来的现象与处理，不占编号，索引见 [feedback/README.md](./feedback/README.md)。
+
 ## research
 
 调研级文档，不占编号，索引见 [research/README.md](./research/README.md)。
