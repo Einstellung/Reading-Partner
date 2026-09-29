@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 445）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 491）。
 
 ## EmbedPDF 引擎
 
@@ -192,6 +192,7 @@
 - [241-whitespace-between-head-and-body-shifts-every-anchor](./storage/241-whitespace-between-head-and-body-shifts-every-anchor.md) — `</head>` 和 `<body>` 之间那个排版换行在 XML 解析里是 `<html>` 的文本子节点（HTML 解析器会挪进 body，XML 不会），计入正文偏移后整篇文档每个锚点推后一格，page-list 的第一个印刷页锚点于是看着不在文档开头。抽取正文时处在块边界上的纯空白文本节点整个跳过，块内的空格照留
 
 - [305-jsonlsessionrepo-resolves-an-undefined-cwd](./storage/305-jsonlsessionrepo-resolves-an-undefined-cwd.md) — pi 的 `JsonlSessionRepo` 把 `undefined` 交给声明为 `string` 的 `FileSystem.absolutePath`（`create` 不带 cwd 时），自家的 NodeExecutionEnv 一样炸；空 path 当 cwd 处理。附带：`joinPath` 要照 node 的 `join` 拼接不是 `resolve`，以及一致性测试里那条 fork/create 抢 id 的用例文件系统实现过不了
+- [490-android-picker-hands-over-a-content-uri-with-no-name](./storage/490-android-picker-hands-over-a-content-uri-with-no-name.md) — Android 的选择器返回 `content://…/document%3A2905a`，末段不是文件名，书名成了 `document:2905a`，别的设备按这条路径什么也读不到。非 `file://` 的 URL 取 EPUB 的 `dc:title` 做名字，另一台设备打开时按 book id 从账户拉
 - [09-appdata-glob-capability](./storage/09-appdata-glob-capability.md) — Tauri 权限 glob 不匹配目录本身；且持久化失败绝不静默吞
 - [36-appdata-root-not-created-first-write](./storage/36-appdata-root-not-created-first-write.md) — iOS 首装首跑第一个写入者报 os error 2，数据根目录由 Rust setup 的 create_dir_all 保障，前端不再各自兜底
 - [51-sync-stopped-looks-healthy](./storage/51-sync-stopped-looks-healthy.md) — 凭据文件不在，引擎从不启动，`autoSync:true` + `lastError:null` 读起来完全健康，四天没人发现；启动的三选一和「该说什么」都收进 `platform/sync/health.ts`

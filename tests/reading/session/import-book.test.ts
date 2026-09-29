@@ -8,6 +8,7 @@ import {
   fileBook,
   importEpub,
   importPickedBook,
+  nameForOpaquePath,
   sniffBookFormat,
   uploadImported,
   NOT_AN_EPUB,
@@ -34,7 +35,7 @@ function fakeIo(over: Partial<ImportBookIo> = {}) {
     Object.entries(io).map(([name, fn]) => [
       name,
       (...args: unknown[]) => {
-        calls.push([name, ...args.filter((a) => !(a instanceof Uint8Array))]);
+        calls.push([name, ...args.filter((a) => a !== undefined && !(a instanceof Uint8Array))]);
         return (fn as (...a: unknown[]) => unknown)(...args);
       },
     ]),
@@ -46,6 +47,31 @@ test("what the bytes are is read from the bytes", () => {
   expect(sniffBookFormat(EPUB)).toBe("epub");
   expect(sniffBookFormat(PDF)).toBe("pdf");
   expect(sniffBookFormat(new TextEncoder().encode("<html></html>"))).toBeNull();
+});
+
+// --- a picker that hands back no file name ----------------------------------
+
+const ANDROID_URI = "content://com.android.providers.downloads.documents/document/document%3A2905a";
+
+test("a book picked as an Android content URI is filed under its own title", async () => {
+  const titled = buildEpub({ title: "Homo Deus", docs: [{ name: "c1.xhtml", body: "<p>One</p>" }] });
+  const { io, calls } = fakeIo({ pickBook: async () => ANDROID_URI, readFile: async () => titled });
+
+  await importEpub("t1", io);
+
+  expect(calls).toContainEqual(["importBook", ANDROID_URI, { filename: "Homo Deus.epub" }]);
+  expect(calls).toContainEqual(["addFileToTopic", "t1", ANDROID_URI, "content-hash", "Homo Deus.epub"]);
+});
+
+test("an ordinary path is named by its basename, whatever the book's title", () => {
+  const titled = buildEpub({ title: "Homo Deus", docs: [{ name: "c1.xhtml", body: "<p>One</p>" }] });
+  expect(nameForOpaquePath("/books/a.epub", titled, "epub")).toBeUndefined();
+  expect(nameForOpaquePath("C:\\books\\a.epub", titled, "epub")).toBeUndefined();
+  expect(nameForOpaquePath("file:///books/a.epub", titled, "epub")).toBeUndefined();
+});
+
+test("a content URI whose bytes name no title keeps the basename", () => {
+  expect(nameForOpaquePath(ANDROID_URI, new Uint8Array([1, 2, 3]), "epub")).toBeUndefined();
 });
 
 // --- the desk's door --------------------------------------------------------

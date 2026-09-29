@@ -97,6 +97,9 @@ export function displaySource(sourceUrl: string | undefined): string | null {
 // not attach it.
 export interface ImportMeta {
   kind?: LibraryKind;
+  // The file name, when the path's last segment is not one (an Android content
+  // URI). Becomes the title and original filename; not a field of its own.
+  filename?: string;
   sourceUrl?: string;
   byline?: string;
   publishedAt?: string;
@@ -292,10 +295,11 @@ export async function importBook(
   const store = await loadStore();
   const existing = store.books[hash];
   if (existing) return existing;
+  const filename = meta?.filename ?? basename(originalPath);
   const entry: LibraryEntry = {
     hash,
-    title: basename(originalPath),
-    originalFilename: basename(originalPath),
+    title: filename,
+    originalFilename: filename,
     addedAt: Date.now(),
     format,
     ...importMetaFields(meta),

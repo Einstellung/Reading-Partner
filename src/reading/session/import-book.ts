@@ -25,15 +25,21 @@ import { importBook, type BookFormat } from "../../platform/app/library";
 import { normalizeFilePath } from "../../platform/app/path";
 import { addFileToTopic } from "../../platform/app/topics";
 import { pushBook } from "../../platform/sync";
+import { parsePackage, readContainer } from "../epub/file/package";
 import { isEpub } from "../epub/file/sniff";
+import { openZip } from "../epub/file/zip";
 import { sniffContentType } from "../sources/url";
 
 /** Everything filing a picked path needs: read the bytes, store them, list it. */
 export interface FileBookIo {
   /** The file at the absolute path the reader picked, not an AppData one. */
   readFile(path: string): Promise<Uint8Array>;
-  importBook(bytes: Uint8Array, originalPath: string): Promise<{ hash: string }>;
-  addFileToTopic(topicId: string, path: string, hash: string): Promise<void>;
+  importBook(
+    bytes: Uint8Array,
+    originalPath: string,
+    meta?: { filename?: string },
+  ): Promise<{ hash: string }>;
+  addFileToTopic(topicId: string, path: string, hash: string, name?: string): Promise<void>;
 }
 
 export interface ImportBookIo extends FileBookIo {
@@ -91,6 +97,30 @@ export function sniffBookFormat(bytes: Uint8Array): BookFormat | null {
   return sniffContentType(bytes) === "pdf" ? "pdf" : null;
 }
 
+// A path that is a URL other than file:// — Android's picker hands back a
+// content:// URI whose last segment is an opaque id ("document:2905a"), not a
+// file name, and nothing in the picker says what the file was called.
+const OPAQUE_URI = /^(?!file:)[a-z][a-z0-9+.-]*:\/\//i;
+
+/**
+ * The name to file a book under when its path does not carry one: the EPUB's
+ * own title, with the extension a name would have had. Undefined for an
+ * ordinary path, whose basename is the name, and when the book declares no
+ * title.
+ */
+export function nameForOpaquePath(path: string, bytes: Uint8Array, format: BookFormat): string | undefined {
+  if (!OPAQUE_URI.test(path) || format !== "epub") return undefined;
+  try {
+    const zip = openZip(bytes);
+    const opfEntry = readContainer(zip);
+    const opf = opfEntry ? zip.text(opfEntry) : null;
+    const title = opf && opfEntry ? parsePackage(opf, opfEntry)?.title?.trim() : null;
+    return title ? `${title.replace(/[/\\]/g, " ")}.epub` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export type FileResult =
   | { kind: "refused"; why: string }
   | { kind: "imported"; bookId: string; path: string; format: BookFormat };
@@ -116,8 +146,10 @@ export async function fileBook(
   if (format === null || !accept.formats.includes(format)) {
     return { kind: "refused", why: accept.refusal };
   }
-  const { hash } = await io.importBook(bytes, path);
-  await io.addFileToTopic(topicId, path, hash);
+  const name = nameForOpaquePath(path, bytes, format);
+  const { hash } =
+    name === undefined ? await io.importBook(bytes, path) : await io.importBook(bytes, path, { filename: name });
+  await io.addFileToTopic(topicId, path, hash, name);
   return { kind: "imported", bookId: hash, path, format };
 }
 
