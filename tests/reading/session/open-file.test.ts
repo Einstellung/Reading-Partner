@@ -3,6 +3,7 @@
 
 import { expect, test } from "bun:test";
 import {
+  BookNotHere,
   resolveBookSource,
   topicForOpen,
   type BookSourceIo,
@@ -20,6 +21,7 @@ function fakeIo(over: Partial<BookSourceIo> = {}) {
     readFile: async () => DISK_BYTES,
     importBook: async () => ({ hash: "content-hash" }),
     setFileHash: async () => {},
+    fetchBook: async () => {},
     ...over,
   };
   const traced = Object.fromEntries(
@@ -91,6 +93,32 @@ test("a file that cannot be read stops there", async () => {
   const { io, calls } = fakeIo({ readFile: () => Promise.reject(new Error("ENOENT")) });
 
   await expect(resolveBookSource(file(), "topic-1", io)).rejects.toThrow("ENOENT");
+  expect(calls).not.toContain("importBook");
+});
+
+test("a known id filed on another device is downloaded when its path is not here", async () => {
+  const { io, calls } = fakeIo({
+    readFile: () => Promise.reject(new Error("ENOENT")),
+  });
+  const opened = await resolveBookSource(
+    file({ path: "content://com.android.providers/document/2905", hash: "content-hash" }),
+    "topic-1",
+    io,
+  );
+
+  expect(opened).toEqual({ bookId: "content-hash", bytes: LIBRARY_BYTES });
+  expect(calls).toEqual(["libraryHas", "readFile", "fetchBook", "readLibraryBook"]);
+});
+
+test("a book neither here nor in the account says so", async () => {
+  const { io, calls } = fakeIo({
+    readFile: () => Promise.reject(new Error("ENOENT")),
+    fetchBook: () => Promise.reject(new Error("not found")),
+  });
+
+  await expect(resolveBookSource(file({ hash: "content-hash" }), "topic-1", io)).rejects.toBeInstanceOf(
+    BookNotHere,
+  );
   expect(calls).not.toContain("importBook");
 });
 
