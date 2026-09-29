@@ -131,4 +131,6 @@ export default {
   "optional.baseUrl": "URL de base",
   "optional.sttHint":
     "Maintenez le micro dans la zone de chat pour parler. L'offre SenseVoice de SiliconFlow est gratuite et sa clé API fonctionne telle quelle ; tout service de transcription compatible OpenAI convient aussi.",
+  "features.showMarks": "Afficher les marques dans la lecture sur téléphone",
+  "features.showMarksHint": "Les surlignages et les soulignements de l’IA sont dessinés sur la page. Désactivé, la page reste nette : les marques restent dans le livre et dans la liste Marques, et en enregistrer une nouvelle réactive l’option. Le même interrupteur se trouve dans le panneau Affichage du lecteur et ne vaut que pour ce téléphone.",
 } satisfies Translation<typeof en>;

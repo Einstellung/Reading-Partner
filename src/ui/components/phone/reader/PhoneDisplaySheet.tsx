@@ -7,10 +7,11 @@
 // portalled to <body>: the reading screen's dark tokens are scoped to that
 // attribute and do not reach out of the tree they are set on.
 //
-// The first row is scrolling or turning pages (docs/79). Every control applies
-// on the press. There is no Done: the book is behind the sheet, the change is
-// visible in it, and a setting the reader has to confirm is a setting they
-// cannot see while choosing.
+// The first row is scrolling or turning pages (docs/79); the marks switch is
+// also in Settings (docs/82). Every control applies on the press. There is no
+// Done: the book is behind the sheet, the change is visible in it, and a
+// setting the reader has to confirm is a setting they cannot see while
+// choosing.
 
 import type { ReactNode } from "react";
 import { useT } from "../../../../i18n";
@@ -28,6 +29,7 @@ import {
 import { cn } from "../../lib/utils";
 import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
+import { Switch } from "../../ui/switch";
 
 const LINE_LABEL = {
   tight: "phone.displaySheet.lineTight",
@@ -124,6 +126,14 @@ export default function PhoneDisplaySheet(props: {
                 onClick={() => onChange({ ...display, padX: s.value })}
               />
             ))}
+          </Row>
+
+          <Row label={t("phone.displaySheet.marks")}>
+            <Switch
+              aria-label={t("phone.displaySheet.showMarks")}
+              checked={display.showMarks}
+              onCheckedChange={(on) => onChange({ ...display, showMarks: on })}
+            />
           </Row>
 
           <Row label={t("phone.displaySheet.paper")}>

@@ -96,6 +96,8 @@ export interface FlowDisplay {
   padX: number;
   paper: FlowPaperName;
   mode: FlowMode;
+  /** Whether the book's highlights and underlines are drawn (docs/82). */
+  showMarks: boolean;
 }
 
 // The column as it has been since docs/70, and the app's own default ground:
@@ -108,6 +110,7 @@ export const FLOW_DISPLAY_DEFAULT: FlowDisplay = {
   paper: "white",
   // The iPad's EPUB opens in its vertical column until the reader switches.
   mode: "scroll",
+  showMarks: true,
 };
 
 export const FLOW_DISPLAY_KEY = "phone-display";
@@ -142,6 +145,7 @@ export function normalizeFlowDisplay(value: unknown): FlowDisplay {
         ? (paper as FlowPaperName)
         : FLOW_DISPLAY_DEFAULT.paper,
     mode: FLOW_MODES.includes(v.mode as FlowMode) ? (v.mode as FlowMode) : FLOW_DISPLAY_DEFAULT.mode,
+    showMarks: typeof v.showMarks === "boolean" ? v.showMarks : FLOW_DISPLAY_DEFAULT.showMarks,
   };
 }
 
@@ -167,6 +171,17 @@ export function writeFlowDisplay(store: FlowDisplayStore | null, display: FlowDi
   } catch {
     // Full or disabled storage: the choice still holds for this session.
   }
+}
+
+/** Whether two displays lay the text out alike: they differ at most in showing the marks. */
+export function sameLayout(a: FlowDisplay, b: FlowDisplay): boolean {
+  return (
+    a.fontPx === b.fontPx &&
+    a.lineHeight === b.lineHeight &&
+    a.padX === b.padX &&
+    a.paper === b.paper &&
+    a.mode === b.mode
+  );
 }
 
 /** Which rung of the size ladder a display is on. */

@@ -128,4 +128,6 @@ export default {
   "optional.baseUrl": "기본 URL",
   "optional.sttHint":
     "채팅 입력란의 마이크를 누른 채 말하세요. SiliconFlow의 SenseVoice 요금제는 무료이며 API 키를 바로 쓸 수 있습니다. OpenAI 호환 받아쓰기 엔드포인트라면 무엇이든 됩니다.",
+  "features.showMarks": "휴대폰에서 읽을 때 표시 보기",
+  "features.showMarksHint": "페이지에 하이라이트와 AI 밑줄을 그립니다. 끄면 페이지가 깔끔해지며, 표시는 책과 표시 목록에 그대로 남고 새로 표시하면 다시 켜집니다. 읽기 화면의 보기 시트에도 같은 스위치가 있으며 이 휴대폰에만 적용됩니다.",
 } satisfies Translation<typeof en>;

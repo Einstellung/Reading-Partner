@@ -27,16 +27,11 @@ import type {
   FlowSelection,
   FlowTool,
 } from "../../../../reading/epub/flow/flow-contract";
-import {
-  FLOW_PAPERS,
-  flowPaperSwatch,
-  readFlowDisplay,
-  writeFlowDisplay,
-  type FlowDisplay,
-} from "../../../../reading/epub/flow/flow-display";
+import { FLOW_PAPERS, flowPaperSwatch } from "../../../../reading/epub/flow/flow-display";
 import { EDGE_ZONE } from "../gesture/edge-back-gesture";
 import { pageMarks } from "../../../../platform/app/reader-contract";
 import { browserPrefStore } from "../../base/pref-store";
+import { currentPhoneDisplay, setPhoneDisplay, usePhoneDisplay } from "../../base/usePhoneDisplay";
 import { cn } from "../../lib/utils";
 import {
   closePhoneBook,
@@ -107,10 +102,11 @@ export default function PhoneReader(props: {
   const [chrome, setChrome] = useState(false);
   const [panel, setPanel] = useState<"contents" | "display" | null>(null);
   const [tab, setTab] = useState<ContentsTab>("outline");
-  // This device's view of the text (flow-display.ts). Read once, synchronously,
-  // so the column mounts at the size and paper the reader left it at.
+  // This device's view of the text (flow-display.ts), shared with Settings,
+  // which carries the same marks switch. Read synchronously, so the column
+  // mounts at the size and paper the reader left it at.
   const prefs = useMemo(() => browserPrefStore(window), []);
-  const [display, setDisplay] = useState<FlowDisplay>(() => readFlowDisplay(prefs));
+  const display = usePhoneDisplay();
   const [hint, setHint] = useState(false);
   // The selection and the tapped mark, each with the screen's box as it was
   // when the view reported them: the rects are the viewport's.
@@ -206,13 +202,12 @@ export default function PhoneReader(props: {
     return () => clearTimeout(timer);
   }, [book, prefs]);
 
-  const changeDisplay = useCallback(
-    (next: FlowDisplay) => {
-      setDisplay(next);
-      writeFlowDisplay(prefs, next);
-    },
-    [prefs],
-  );
+  // A mark saved with the marks hidden would vanish as it is made: saving one
+  // shows them again.
+  const showMarks = useCallback(() => {
+    const now = currentPhoneDisplay();
+    if (!now.showMarks) setPhoneDisplay({ ...now, showMarks: true });
+  }, []);
 
   const openPanel = useCallback((next: "contents" | "display") => {
     setChrome(false);
@@ -255,6 +250,7 @@ export default function PhoneReader(props: {
   // that conversation opens over the page.
   const { openMark } = lesson;
   const askAboutSelection = useCallback(() => {
+    showMarks();
     const mark = viewRef.current?.saveSelection({
       stroke: "underline",
       color: AI_PEN_COLOR,
@@ -262,7 +258,7 @@ export default function PhoneReader(props: {
     });
     setSelection(null);
     if (mark) openMark(mark);
-  }, [openMark]);
+  }, [openMark, showMarks]);
 
   const askAboutMark = useCallback(
     (id: string) => {
@@ -387,6 +383,7 @@ export default function PhoneReader(props: {
           frame={selection.frame}
           onMoveEnd={(end, x, y) => viewRef.current?.moveSelectionEnd(end, x, y)}
           onHighlight={() => {
+            showMarks();
             viewRef.current?.saveSelection({ stroke: "highlight", color: HIGHLIGHT_COLOR });
             setSelection(null);
           }}
@@ -449,7 +446,7 @@ export default function PhoneReader(props: {
         open={panel === "display"}
         display={display}
         onOpenChange={(open) => setPanel(open ? "display" : null)}
-        onChange={changeDisplay}
+        onChange={setPhoneDisplay}
       />
     </div>
 

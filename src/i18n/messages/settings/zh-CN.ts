@@ -125,4 +125,6 @@ export default {
   "optional.baseUrl": "Base URL",
   "optional.sttHint":
     "在对话框里按住麦克风说话。硅基流动的 SenseVoice 档免费，API 密钥开箱即用；任何兼容 OpenAI 的转写接口也都可以。",
+  "features.showMarks": "手机阅读时显示标注",
+  "features.showMarksHint": "在页面上画出划线和 AI 下划线。关掉后页面是干净的：标注仍在书里，也仍在 Marks 列表里，新划一条会自动重新打开。阅读器的 Display 面板里是同一个开关，只对这台手机生效。",
 } satisfies Translation<typeof en>;

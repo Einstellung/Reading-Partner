@@ -14,6 +14,7 @@ import { roleIsChoosable, type DeviceRole, type DeviceSettings } from "../../../
 import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings } from "../../../platform/app/settings";
 import { useT } from "../../../i18n";
 import { setPaperTint, usePaperTint } from "../base/usePaperTint";
+import { setPhoneDisplay, usePhoneDisplay } from "../base/usePhoneDisplay";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import AutostartCard from "./AutostartCard";
@@ -26,6 +27,7 @@ export default function FeaturesPanel({
   onSettingsChange,
   device,
   onDeviceChange,
+  phoneReader,
 }: {
   settings: Settings;
   onSettingsChange: (next: Settings) => void;
@@ -33,7 +35,10 @@ export default function FeaturesPanel({
   // rather than drawing a checkbox on a default that is about to change.
   device: DeviceSettings | null;
   onDeviceChange: (next: DeviceSettings) => void;
+  // The phone shell: its reader's marks switch is drawn here too (docs/82).
+  phoneReader?: boolean;
 }) {
+  const phoneDisplay = usePhoneDisplay();
   // Neither settings.json nor device.json: the tint is kept in localStorage and
   // says why in ui/components/base/paper-tint.ts. It is drawn here anyway,
   // beside the other switches that belong to this machine.
@@ -88,6 +93,19 @@ export default function FeaturesPanel({
           </Label>
           <p className="m-0 text-xs text-faint-foreground">{t("settings.features.fingerDrawHint")}</p>
         </div>
+        {/* The same switch as the reader's Aa sheet, and like it this phone's. */}
+        {phoneReader && (
+          <div className={CARD}>
+            <Label>
+              <Checkbox
+                checked={phoneDisplay.showMarks}
+                onCheckedChange={(v) => setPhoneDisplay({ ...phoneDisplay, showMarks: v === true })}
+              />
+              {t("settings.features.showMarks")}
+            </Label>
+            <p className="m-0 text-xs text-faint-foreground">{t("settings.features.showMarksHint")}</p>
+          </div>
+        )}
       </SettingsSection>
 
       {/* A reader collects nothing, so there is no schedule to switch off. */}

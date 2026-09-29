@@ -245,4 +245,6 @@ export default {
   "bookLesson.title": "Учиться",
   "bookLesson.done": "Готово",
   "bookLesson.passagePlaceholder": "Спросите об этом отрывке",
+  "displaySheet.marks": "Пометки",
+  "displaySheet.showMarks": "Показывать пометки",
 } satisfies Translation<typeof en>;

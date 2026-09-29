@@ -217,4 +217,6 @@ export default {
   "bookLesson.title": "学习",
   "bookLesson.done": "完成",
   "bookLesson.passagePlaceholder": "就这一段提问",
+  "displaySheet.marks": "标注",
+  "displaySheet.showMarks": "显示标注",
 } satisfies Translation<typeof en>;

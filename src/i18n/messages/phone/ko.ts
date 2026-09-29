@@ -217,4 +217,6 @@ export default {
   "bookLesson.title": "학습",
   "bookLesson.done": "완료",
   "bookLesson.passagePlaceholder": "이 부분에 대해 질문하기",
+  "displaySheet.marks": "표시",
+  "displaySheet.showMarks": "표시 보기",
 } satisfies Translation<typeof en>;

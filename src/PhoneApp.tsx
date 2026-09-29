@@ -504,6 +504,7 @@ export default function PhoneApp({
             onSettingsChange={applySettings}
             device={device}
             onDeviceChange={applyDevice}
+            phoneReader
             onClose={goBack}
           />
         )}

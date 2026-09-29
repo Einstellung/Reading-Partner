@@ -15,6 +15,7 @@ import {
   flowPaperSwatch,
   normalizeFlowDisplay,
   readFlowDisplay,
+  sameLayout,
   stepFlowFont,
   writeFlowDisplay,
   type FlowDisplay,
@@ -92,6 +93,18 @@ describe("a value that is not on a ladder", () => {
     const old = normalizeFlowDisplay({ fontPx: 21, paper: "dark" });
     expect(old).toEqual({ ...FLOW_DISPLAY_DEFAULT, fontPx: 21, paper: "dark", mode: "scroll" });
   });
+
+  test("the marks are shown unless the reader hid them", () => {
+    expect(FLOW_DISPLAY_DEFAULT.showMarks).toBe(true);
+    expect(normalizeFlowDisplay({ showMarks: false }).showMarks).toBe(false);
+    expect(normalizeFlowDisplay({ showMarks: "no" }).showMarks).toBe(true);
+  });
+
+  test("showing or hiding the marks is not a relayout; anything else is", () => {
+    expect(sameLayout(FLOW_DISPLAY_DEFAULT, { ...FLOW_DISPLAY_DEFAULT, showMarks: false })).toBe(true);
+    expect(sameLayout(FLOW_DISPLAY_DEFAULT, { ...FLOW_DISPLAY_DEFAULT, mode: "paged" })).toBe(false);
+    expect(sameLayout(FLOW_DISPLAY_DEFAULT, { ...FLOW_DISPLAY_DEFAULT, fontPx: 21 })).toBe(false);
+  });
 });
 
 describe("the slot on this device", () => {
@@ -102,7 +115,14 @@ describe("the slot on this device", () => {
 
   test("what was written comes back", () => {
     const s = store();
-    const chosen: FlowDisplay = { fontPx: 21, lineHeight: 1.4, padX: 36, paper: "dark", mode: "paged" };
+    const chosen: FlowDisplay = {
+      fontPx: 21,
+      lineHeight: 1.4,
+      padX: 36,
+      paper: "dark",
+      mode: "paged",
+      showMarks: false,
+    };
     writeFlowDisplay(s, chosen);
     expect(readFlowDisplay(s)).toEqual(chosen);
   });

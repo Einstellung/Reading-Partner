@@ -26,7 +26,7 @@ import { acquireEpub, ensurePagination, releaseEpub } from "../book-cache";
 import { caretAtPoint } from "../caret";
 import { epubCfi, parseCfiStart, pointSteps, resolvePointRange } from "../file/cfi";
 import type { FlowReaderView, FlowTool } from "./flow-contract";
-import { FLOW_PAPERS, flowPaperSwatch, type FlowDisplay } from "./flow-display";
+import { FLOW_PAPERS, flowPaperSwatch, sameLayout, type FlowDisplay } from "./flow-display";
 import {
   IDLE,
   LONG_PRESS_MS,
@@ -360,6 +360,7 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
   });
   marks.reset(opts.annotations);
   marks.setTool(tool);
+  marks.setVisible(opts.display.showMarks);
 
   function paintShown(): void {
     for (const leaf of leaves.values()) {
@@ -871,7 +872,10 @@ export async function createPagedReader(opts: PagedReaderOptions): Promise<FlowR
     selectMark: (id) => marks.selectMark(id),
     setDisplay: (next) => {
       if (destroyed) return;
+      marks.setVisible(next.showMarks);
+      const unmoved = sameLayout(display, next);
       display = next;
+      if (unmoved) return;
       paintPaper();
       applyDisplay();
       reflow();
