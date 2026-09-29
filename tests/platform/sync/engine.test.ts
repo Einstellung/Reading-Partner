@@ -780,6 +780,58 @@ test("the phone policy leaves the data channel alone", async () => {
   expect(engine.status().lastError).toBeNull();
 });
 
+test("the phone's pass uploads a held book the account lacks and downloads nothing", async () => {
+  const be = makeBackend();
+  be.books.set("remotehash", enc("REMOTE"));
+  const { books, store } = makeBooks({ imported: "EPUB" });
+  const listing: BookFs = {
+    ...books,
+    async listHashes() {
+      return ["imported", "remotehash", "desk-only"];
+    },
+  };
+  let asked = 0;
+  const backend: SyncBackend = {
+    ...be.backend,
+    async hasBook(hash) {
+      asked += 1;
+      return be.backend.hasBook(hash);
+    },
+  };
+  const { engine } = makeEngine({ backend, books: listing, booksPolicy: "upload", snapshot: {} });
+
+  await engine.syncNow();
+
+  // The import whose upload failed goes up on the next pass.
+  expect(dec(be.books.get("imported")!)).toBe("EPUB");
+  // Nothing comes down, and a book not held here costs no request.
+  expect(store.has("remotehash")).toBe(false);
+  expect(asked).toBe(1);
+  expect(engine.status().lastError).toBeNull();
+});
+
+test("the phone's pass neither removes nor uploads a deleted book", async () => {
+  const be = makeBackend();
+  be.books.set("gone", enc("OLD"));
+  let removed = 0;
+  const backend: SyncBackend = {
+    ...be.backend,
+    async removeBook(hash) {
+      removed += 1;
+      return be.backend.removeBook(hash);
+    },
+  };
+  const { fs } = makeFs({ [TOMBSTONE]: { text: tombstoned("gone", "dead-here"), mtime: 100 } });
+  const { books } = makeBooks({ "dead-here": "EPUB" });
+  const { engine } = makeEngine({ backend, fs, books, booksPolicy: "upload", snapshot: {} });
+
+  await engine.syncNow();
+
+  // The desk removes the blob; the phone has no standing to.
+  expect(removed).toBe(0);
+  expect(be.books.has("dead-here")).toBe(false);
+});
+
 // --- one book on demand -----------------------------------------------------
 //
 // Under the phone policy the only book transfers are the ones the shelf asks

@@ -121,16 +121,14 @@ export const RESUME_MIN_INTERVAL_MS = 30_000;
 // an order of magnitude would still be affordable.
 export const DATA_CONCURRENCY = 8;
 
-// Whether the books channel runs at all. "mirror" is every shell that can open
-// a book: local-only blobs go up, remote-only ones come down. "off" is the
-// phone (docs/22), which never opens a PDF and has no way to import one —
-// mirroring the library there spends a data plan and a phone's storage on files
-// nothing on the device can read. The channel is off in both directions, not
-// just the download half, so the policy has one meaning rather than two.
-//
-// library.json still travels the data channel, so the phone knows which books
-// exist; nothing there reads it (docs/22 — no shelf, no reader).
-export type BooksPolicy = "mirror" | "off";
+// What the books channel does in a pass. "mirror" is the desk and the tablet:
+// local-only blobs go up, remote-only ones come down. "upload" is the phone
+// (docs/70): it downloads a book only when the shelf asks for it (fetchBook),
+// so nothing comes down in a pass, but a book it holds that the account lacks
+// goes up — a book imported on the phone whose one upload failed would
+// otherwise stay on the phone forever while its library.json row, which does
+// travel, tells every other device it exists. "off" runs no channel at all.
+export type BooksPolicy = "mirror" | "upload" | "off";
 
 export interface EngineDeps {
   backend: SyncBackend;
@@ -1017,7 +1015,12 @@ export class SyncEngine {
     // exist, so it does not read library.json either — nor does it delete
     // anything from the remote, since a shell that never mirrors a book has no
     // standing to say a blob should go.
-    if ((this.d.booksPolicy ?? "mirror") === "off") return;
+    const policy = this.d.booksPolicy ?? "mirror";
+    if (policy === "off") return;
+    // A shell that does not mirror holds only what it imported or was asked to
+    // fetch; it has no standing to say a blob should go. The mirroring shells
+    // remove it.
+    if (policy === "upload") return this.uploadHeldBooks(failures, dead);
     // A deleted book is normally gone from library.json too, so listHashes will
     // not name it; the blob it left in Drive is what has to be asked for by
     // name. Once per process: removeBook is idempotent, and a hash that is
@@ -1059,6 +1062,26 @@ export class SyncEngine {
       } catch (e) {
         if (isAuthFailure(e)) throw e;
         if (isRemoteGone(e)) continue;
+        failures.record(`book ${hash}`, e);
+      }
+    }
+  }
+
+  // The phone's half of the channel: every book it holds that the account does
+  // not, one at a time. A book it does not hold costs nothing — no request is
+  // made to ask whether the account has it.
+  private async uploadHeldBooks(failures: PassFailures, dead: ReadonlySet<string>): Promise<void> {
+    const hashes = await this.d.books.listHashes();
+    for (const hash of hashes) {
+      if (failures.halted()) break;
+      if (dead.has(hash)) continue;
+      try {
+        if (!(await this.d.books.has(hash))) continue;
+        if (await this.d.backend.hasBook(hash)) continue;
+        await this.d.backend.uploadBook(hash, await this.d.books.read(hash));
+        failures.succeeded();
+      } catch (e) {
+        if (isAuthFailure(e)) throw e;
         failures.record(`book ${hash}`, e);
       }
     }
