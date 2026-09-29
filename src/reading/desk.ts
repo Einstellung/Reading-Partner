@@ -237,7 +237,20 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
   const topicId = context.topicId;
   const topicName = context.topicName;
   const { fileName, pageLabel, files } = context;
-  const materials = await gatherTopicMaterials(files, bookId, currentFulltext, annotations);
+  // The text and marks in hand are the document on screen's. While that is a
+  // supplement they are not the book's, so the book is read from the store like
+  // any other material rather than filed under the supplement's pages.
+  const materials = await gatherTopicMaterials(files, docId, currentFulltext, annotations);
+  // The supplements' text, searched with the topic (feedback 辅助资料读不到).
+  // Their pages are read with read_supplement; here they only need a label.
+  const supplementTexts: TopicMaterial[] = await Promise.all(
+    supplements.map(async (sup) => ({
+      label: sup.title,
+      fulltext:
+        sup.hash === docId ? currentFulltext : await getFulltext(sup.hash).catch(() => null),
+      annotations: [],
+    })),
+  );
   // A conversation is in the file of the document it belongs to: the book's
   // for the lesson and everything pulled out of it, the document on screen for
   // a mark drawn on it (reading/session/documents.ts). Which of the two this
@@ -303,7 +316,12 @@ async function openBook(ref: BookDeskRef, env: DeskEnv): Promise<DeskItem | null
     markedRange && currentFulltext && page
       ? markedPagesSection(currentFulltext, page, pageAnchor)
       : "";
-  let tools = buildReadingTools({ currentFulltext, materials, pageAnchor });
+  let tools = buildReadingTools({
+    currentFulltext,
+    materials,
+    supplements: supplementTexts,
+    pageAnchor,
+  });
 
   // The lecture load (docs/09). The chapter table decides what read_chapter can
   // be asked for and which chapter the thread can be parked on; the thread's own
@@ -816,9 +834,8 @@ export async function gatherTopicMaterials(
  * What the reader has put beside this book, and how to cite it (docs/67
  * 「辅助资料」). Nothing at all when the book has none, which is most books.
  *
- * No tool is named here: a supplement is opened by the reader from the Outline,
- * not fetched by the model, and the prompt must not mention a tool that is not
- * mounted (tests/reading/turn.test.ts).
+ * No tool is named here: read_supplement's own paragraph says how they are
+ * read, and it rides only where that tool is mounted.
  */
 export function supplementsSection(
   supplements: readonly { title: string }[],
@@ -827,7 +844,8 @@ export function supplementsSection(
   if (supplements.length === 0) return "";
   const lines = [
     "Beside this book the reader keeps these supplements — pages and papers they",
-    "brought in while reading. Each is open to them from the Outline sidebar:",
+    "brought in while reading. They can open each from the Outline sidebar, and",
+    "you can read each one yourself:",
     ...supplements.map((s) => `- ${s.title}`),
     "",
     viewing

@@ -188,8 +188,12 @@ export function buildReadingTools(ctx: {
   // book's pages are cited bare; a supplement's carry its title, so the
   // header the model copies has to say which (docs/67).
   pageAnchor?: (page: number) => string;
+  // The book's supplements (docs/67). Searched alongside the topic; read with
+  // read_supplement, which is mounted elsewhere.
+  supplements?: TopicMaterial[];
 }): AgentTool[] {
-  const { currentFulltext, materials, pageAnchor } = ctx;
+  const { currentFulltext, materials, pageAnchor, supplements = [] } = ctx;
+  const searchable = [...materials, ...supplements];
   const tools: AgentTool[] = [];
 
   if (currentFulltext?.status === "ok") {
@@ -216,17 +220,17 @@ export function buildReadingTools(ctx: {
     });
   }
 
-  if (materials.some((m) => m.fulltext?.status === "ok")) {
+  if (searchable.some((m) => m.fulltext?.status === "ok")) {
     tools.push({
       name: "search_topic",
       label: (args) => args.query ? `Searching the topic for “${args.query}”` : "Searching the topic",
       effect: "read",
       description:
-        "Keyword-search the full text of every material in this topic. Returns ranked snippets, each tagged with its book and page.",
+        "Keyword-search the full text of every material in this topic and of this book's supplements. Returns ranked snippets, each tagged with its book and page.",
       parameters: Type.Object({
         query: Type.String({ description: "Search terms." }),
       }),
-      execute: async (args) => formatSearch(String(args.query), materials),
+      execute: async (args) => formatSearch(String(args.query), searchable),
     });
   }
 

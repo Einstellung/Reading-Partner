@@ -58,7 +58,7 @@ PDF 用第一页，EPUB 用它自己声明的封面，文章还是没封面的�
 
 Outline 侧栏：书的目录下面一条横线，横线下每行一个 supplement，标题后跟来源域名。点开在同一个阅读器里读，顶栏标题换成资料标题，书自己的页码不变；点书的章节回到书。没有 supplement 就没有横线。
 
-对话归书。读 supplement 时顶栏 AI 按钮打开的仍是这本书的书级线程；在 supplement 上划线的旁支线程按 supplement 的文档 id 存。引用 `[p.N]` 指书，supplement 的引用带标题 `[标题 p.N]`。
+对话归书。AI 自己能读 supplement，不用读者先点开。读 supplement 时顶栏 AI 按钮打开的仍是这本书的书级线程；在 supplement 上划线的旁支线程按 supplement 的文档 id 存。引用 `[p.N]` 指书，supplement 的引用带标题 `[标题 p.N]`。
 
 删书时它的 supplement 一起删：每个 supplement 递归走一遍删书那条路（墓碑、library 条目、划线、线程、分页、全文缓存），`supplements-<bookId>.json` 随书的文件一起删。
 
@@ -70,7 +70,7 @@ topic 根聊天贴 URL 落成 topic 文档那条路保留为将来的入口，�
 
 ## 和 ingest_url 合并
 
-做完了。一个 URL 只产生一个对象：`ingest_url` 先把链接落成 supplement（library 里的 EPUB/PDF），再从那份字节抽全文存进 fulltext store，键就是文档 id。有 prep 管线时这份全文直接交给管线（`ingestCaptured`，`PrepPaper.documentId` 记文档 id，`captured: true`），页面不再取第二次；没有管线时只落 supplement，AI 读不到正文。
+做完了。一个 URL 只产生一个对象：`ingest_url` 先把链接落成 supplement（library 里的 EPUB/PDF），再从那份字节抽全文存进 fulltext store，键就是文档 id。有 prep 管线时这份全文直接交给管线（`ingestCaptured`，`PrepPaper.documentId` 记文档 id，`captured: true`），页面不再取第二次；没有管线时只落 supplement，没有备课笔记。正文不管有没有管线都能读：`read_supplement(title, from, to)` 按标题从 fulltext store 读，每个书内线程都挂；`search_topic` 的范围含这本书的辅助资料（见反馈[辅助资料读不到](../feedback/辅助资料读不到.md)）。
 
 `read_paper` 按 `documentId` 读 fulltext store 里那份，页头写 `[<标题> p.N]`，`prep-<hash>/` 下不再另存一份全文。`read_note` 的锚点同样补标题。AI 读的和用户读的是同一份，引用落到用户眼前的那一页。
 
