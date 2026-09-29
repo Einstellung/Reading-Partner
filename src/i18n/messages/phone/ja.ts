@@ -113,6 +113,7 @@ export default {
   "displaySheet.lineSpacing": "行間",
   "displaySheet.margins": "余白",
   "displaySheet.paper": "用紙",
+  "displaySheet.lumen": "Lumen",
 
 
   "lessonBar.backToShelf": "書棚へ戻る",

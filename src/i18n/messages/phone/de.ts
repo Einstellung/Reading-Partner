@@ -120,6 +120,7 @@ export default {
   "displaySheet.lineSpacing": "Zeilenabstand",
   "displaySheet.margins": "Ränder",
   "displaySheet.paper": "Papier",
+  "displaySheet.lumen": "Lumen",
 
 
   "lessonBar.backToShelf": "Zurück zum Regal",

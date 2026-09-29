@@ -7,7 +7,8 @@
 // portalled to <body>: the reading screen's dark tokens are scoped to that
 // attribute and do not reach out of the tree they are set on.
 //
-// The first row is scrolling or turning pages (docs/79). Every control applies
+// The first row is scrolling or turning pages (docs/79). The last is Lumen,
+// the same switch as Settings and the home screen's title (docs/68). Every control applies
 // on the press. There is no Done: the book is behind the sheet, the change is
 // visible in it, and a setting the reader has to confirm is a setting they
 // cannot see while choosing.
@@ -26,8 +27,10 @@ import {
   type FlowDisplay,
 } from "../../../../reading/epub/flow/flow-display";
 import { cn } from "../../lib/utils";
+import { setLumenShown, useLumenShown } from "../../lumen/use-lumen-shown";
 import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
+import { Switch } from "../../ui/switch";
 
 const LINE_LABEL = {
   tight: "phone.displaySheet.lineTight",
@@ -56,6 +59,7 @@ export default function PhoneDisplaySheet(props: {
   const { display, onChange } = props;
   const t = useT();
   const step = flowFontStep(display);
+  const lumenShown = useLumenShown();
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogSheetContent data-reader-paper={display.paper}>
@@ -146,6 +150,14 @@ export default function PhoneDisplaySheet(props: {
                 />
               );
             })}
+          </Row>
+
+          <Row label={t("phone.displaySheet.lumen")}>
+            <Switch
+              aria-label={t("phone.displaySheet.lumen")}
+              checked={lumenShown}
+              onCheckedChange={setLumenShown}
+            />
           </Row>
         </div>
       </DialogSheetContent>

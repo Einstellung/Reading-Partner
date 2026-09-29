@@ -113,6 +113,7 @@ export default {
   "displaySheet.lineSpacing": "줄 간격",
   "displaySheet.margins": "여백",
   "displaySheet.paper": "용지",
+  "displaySheet.lumen": "Lumen",
 
 
   "lessonBar.backToShelf": "서재로 돌아가기",

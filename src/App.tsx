@@ -104,10 +104,7 @@ import TranslateStatus from "./ui/components/reader/TranslateStatus";
 import AppSidebar from "./ui/components/common/AppSidebar";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
 import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
-import {
-  readLumenCornerShown,
-  writeLumenCornerShown,
-} from "./ui/components/lumen/corner-pref";
+import { toggleLumenShown, useLumenShown } from "./ui/components/lumen/use-lumen-shown";
 import {
   readSidebarCollapsed,
   writeSidebarCollapsed,
@@ -270,15 +267,8 @@ export default function App() {
   // The corner companion, per device (docs/68). Read synchronously for the
   // same reason the sidebar's width is: the first frame should already be the
   // screen the reader left.
-  const [lumenShown, setLumenShown] = useState(() =>
-    readLumenCornerShown(browserPrefStore(window)),
-  );
-  const toggleLumen = useCallback(() => {
-    setLumenShown((shown) => {
-      writeLumenCornerShown(browserPrefStore(window), !shown);
-      return !shown;
-    });
-  }, []);
+  const lumenShown = useLumenShown();
+  const toggleLumen = toggleLumenShown;
 
   const toggleShellSidebar = useCallback(() => {
     setShellSidebarCollapsed((collapsed) => {
