@@ -465,7 +465,13 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
         void abortRun();
       },
     });
+    // What is measured is the provider's silence. Until the first request goes
+    // out this turn may be queued behind another on a held lane for as long as
+    // that one takes; a watch that ran out there would abort nothing and leave
+    // the turn unwatched for the stream that follows.
+    watch.hold();
   }
+  let awaitingFirstRequest = watch !== undefined;
 
   // One of the two is set: a session of this turn's own, or a borrowed lane.
   let handle: Awaited<ReturnType<typeof createHarness>> | undefined;
@@ -479,6 +485,7 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       borrowed = await params.held.acquire(
         { model, streamFn, tools: harnessTools, systemPrompt, toProviderMessages },
         ctx,
+        signal,
       );
       harness = borrowed.harness;
       lane = borrowed.lane;
@@ -526,6 +533,10 @@ export async function runHarnessTurn(params: HarnessTurnParams): Promise<void> {
       if (step !== "assistant") return undefined;
       // The clock starts at the request, not at the turn: what is measured is
       // how long this round has been waiting for its first byte.
+      if (awaitingFirstRequest) {
+        awaitingFirstRequest = false;
+        watch?.unhold();
+      }
       watch?.beat();
       round += 1;
       // Same exit as the budget refusal, for the same reason: every round of

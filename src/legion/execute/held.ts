@@ -81,8 +81,12 @@ export interface HeldLane {
 
 export interface HeldHarness {
   readonly lane: TurnLane;
-  /** Borrow the lane, configured for `turn` and standing on the session root. */
-  acquire(turn: HeldTurn, context: Context): Promise<HeldLane>;
+  /**
+   * Borrow the lane, configured for `turn` and standing on the session root.
+   * An abort while waiting for the turn ahead gives up the place in line and
+   * rejects; the lane is never handed to a turn nobody is waiting on.
+   */
+  acquire(turn: HeldTurn, context: Context, signal?: AbortSignal): Promise<HeldLane>;
   /**
    * Open the session without taking the lane, so `recover` runs before anybody
    * asks for a turn. `turn` is only the seed the harness is created with — its
@@ -247,6 +251,20 @@ function heldRecovery(previous: PreviousSession, slot: ReturnType<typeof turnSlo
   };
 }
 
+// True once `ahead` settles, false as soon as `signal` aborts.
+function waitUnlessAborted(ahead: Promise<void>, signal: AbortSignal | undefined): Promise<boolean> {
+  if (!signal) return ahead.then(() => true);
+  if (signal.aborted) return Promise.resolve(false);
+  return new Promise<boolean>((resolve) => {
+    const onAbort = (): void => resolve(false);
+    signal.addEventListener("abort", onAbort, { once: true });
+    void ahead.then(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(true);
+    });
+  });
+}
+
 export function holdHarness(options: HoldOptions): HeldHarness {
   const { lane: laneId } = options;
   const slot = turnSlot();
@@ -324,13 +342,17 @@ export function holdHarness(options: HoldOptions): HeldHarness {
       await open(turn, context);
     },
 
-    async acquire(turn, context) {
+    async acquire(turn, context, signal) {
       const previous = tail;
       let release!: () => void;
       tail = new Promise<void>((resolve) => {
         release = resolve;
       });
-      await previous;
+      if (!(await waitUnlessAborted(previous, signal))) {
+        // The turns queued behind this one still wait for the one ahead.
+        void previous.then(release);
+        throw new Error("the turn was stopped while waiting for the lane");
+      }
       try {
         const opened = await open(turn, context);
         slot.take(turn);

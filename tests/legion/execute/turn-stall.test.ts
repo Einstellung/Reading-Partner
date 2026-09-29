@@ -170,3 +170,102 @@ test("coming back to a turn that said nothing while the app was away cuts it at 
   expect(isStall(failure)).toBe(true);
   await held.close(ctx);
 });
+
+// Another turn has the lane; this one waits behind it for longer than the
+// window. The wait is not the provider's silence, so the watch is still there
+// for the stream that follows — which is the one that freezes.
+test("a turn queued behind another for longer than the window is still watched once its stream opens", async () => {
+  const timers = clock();
+  const watches = createStallWatches({ timers });
+  const disk = memoryAppData();
+  const held = holdHarness({ lane: SOUL, fileSystem: createSessionFileSystem(disk) });
+  const ahead = await held.acquire(
+    { model: MODEL, streamFn: deadStream(() => {}), tools: [], toProviderMessages: (m) => m as Message[] },
+    ctx,
+  );
+
+  let open = (): void => {};
+  const inFlight = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  let failure: unknown;
+  const turn = runHarnessTurn({
+    stream: deadStream(open),
+    model: MODEL,
+    messages: [user("plan this week")],
+    tools: [],
+    maxRounds: 8,
+    held,
+    stall: watches,
+    stallMs: 90_000,
+    onDelta: () => {},
+    onToolStart: () => {},
+    onToolEnd: () => {},
+    onDone: () => {},
+    onError: (_message, _assistant, thrown) => {
+      failure = thrown;
+    },
+  });
+
+  await Bun.sleep(20);
+  timers.advance(200_000);
+  expect(failure).toBeUndefined();
+
+  ahead.release();
+  await inFlight;
+  await Bun.sleep(20);
+  timers.advance(100_000);
+  await turn;
+
+  expect(isStall(failure)).toBe(true);
+  await held.close(ctx);
+});
+
+test("stopping a turn that is waiting for the lane ends it and keeps the queue behind it", async () => {
+  const disk = memoryAppData();
+  const held = holdHarness({ lane: SOUL, fileSystem: createSessionFileSystem(disk) });
+  const seed = { model: MODEL, streamFn: deadStream(() => {}), tools: [], toProviderMessages: (m: unknown) => m as Message[] };
+  const ahead = await held.acquire(seed, ctx);
+
+  const stop = new AbortController();
+  let settled = false;
+  let started = false;
+  const turn = runHarnessTurn({
+    stream: deadStream(() => {
+      started = true;
+    }),
+    model: MODEL,
+    messages: [user("plan this week")],
+    tools: [],
+    maxRounds: 8,
+    held,
+    stall: null,
+    signal: stop.signal,
+    onDelta: () => {},
+    onToolStart: () => {},
+    onToolEnd: () => {},
+    onDone: () => {},
+    onError: () => {},
+  }).then(() => {
+    settled = true;
+  });
+
+  await Bun.sleep(20);
+  stop.abort();
+  await turn;
+  expect(settled).toBe(true);
+
+  // The next turn gets the lane once the one ahead lets go, and the stopped
+  // turn never sent anything.
+  let next = false;
+  const queued = held.acquire(seed, ctx).then((l) => {
+    next = true;
+    return l;
+  });
+  await Bun.sleep(20);
+  expect(next).toBe(false);
+  ahead.release();
+  (await queued).release();
+  expect(started).toBe(false);
+  await held.close(ctx);
+});
