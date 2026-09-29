@@ -113,6 +113,7 @@ export default {
   "displaySheet.lineSpacing": "行距",
   "displaySheet.margins": "页边距",
   "displaySheet.paper": "纸张",
+  "displaySheet.lumen": "Lumen",
 
 
   "lessonBar.backToShelf": "返回书架",

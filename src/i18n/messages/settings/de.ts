@@ -92,6 +92,9 @@ export default {
   "features.fingerDraw": "Mit dem Finger zeichnen",
   "features.fingerDrawHint":
     "Aus: Der Finger bewegt nur die Seite und der Stift markiert, egal welches Werkzeug gewählt ist. Schalte es auf einem Gerät ohne Stift ein, wo der Finger markieren und zeichnen können muss. Die Navigationssperre im Reader hat weiterhin Vorrang vor beidem. Ob es einen Stift gibt, hängt vom Gerät ab, deshalb bleibt diese Einstellung auf ihm.",
+  "features.lumen": "Lumen anzeigen",
+  "features.lumenHint":
+    "Lumen steht in der Ecke jedes Bildschirms, auch im Reader. Aus bleibt die Ecke leer; der Lumen-Knopf in der Seitenleiste, auf dem Startbildschirm des Handys und im Mehr-Menü des Readers holt es zurück. Die Wahl bleibt auf diesem Gerät.",
   "features.briefing": "Briefing",
   "features.collect": "Quellen auf diesem Computer sammeln",
   "features.collectHint":

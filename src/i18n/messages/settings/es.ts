@@ -92,6 +92,9 @@ export default {
   "features.fingerDraw": "Dibujar con el dedo",
   "features.fingerDrawHint":
     "Desactivado, el dedo solo mueve la página y el lápiz hace las marcas, sea cual sea la herramienta elegida. Actívalo en un dispositivo sin lápiz, donde el dedo tiene que poder resaltar y dibujar. El bloqueo de navegación del lector sigue teniendo prioridad sobre ambos. Tener lápiz o no es propio de cada dispositivo, así que este ajuste se queda en él.",
+  "features.lumen": "Mostrar a Lumen",
+  "features.lumenHint":
+    "Lumen está en la esquina de cada pantalla, también en el lector. Desactivado, la esquina queda vacía; el botón de Lumen en la barra lateral, en la pantalla de inicio del móvil y en el menú Más del lector lo trae de vuelta. La elección se queda en este dispositivo.",
   "features.briefing": "Resumen de noticias",
   "features.collect": "Recopilar de tus fuentes en este ordenador",
   "features.collectHint":

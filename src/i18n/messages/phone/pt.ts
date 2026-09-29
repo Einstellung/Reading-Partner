@@ -119,6 +119,7 @@ export default {
   "displaySheet.lineSpacing": "Espaçamento",
   "displaySheet.margins": "Margens",
   "displaySheet.paper": "Papel",
+  "displaySheet.lumen": "Lumen",
 
 
   "lessonBar.backToShelf": "Voltar à estante",

@@ -92,6 +92,9 @@ export default {
   "features.fingerDraw": "Draw with your finger",
   "features.fingerDrawHint":
     "Off, a finger only moves the page and a stylus does the marking, whatever tool is selected. Turn it on for a device with no stylus, where the finger has to be able to highlight and draw. The navigation lock in the reader still overrides both. Whether there is a stylus is a property of this device, so this setting stays on it.",
+  "features.lumen": "Show Lumen",
+  "features.lumenHint":
+    "Lumen stands in the corner of every screen, the reader included. Off, the corner is empty; the Lumen button in the sidebar, on the phone's home screen and in the reader's More menu brings it back. The choice stays on this device.",
   "features.briefing": "Briefing",
   "features.collect": "Collect from your sources on this computer",
   "features.collectHint":

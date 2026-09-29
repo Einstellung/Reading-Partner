@@ -14,6 +14,7 @@ import { roleIsChoosable, type DeviceRole, type DeviceSettings } from "../../../
 import { AI_LANGUAGE_OPTIONS, type AiLanguage, type Settings } from "../../../platform/app/settings";
 import { useT } from "../../../i18n";
 import { setPaperTint, usePaperTint } from "../base/usePaperTint";
+import { setLumenShown, useLumenShown } from "../lumen/use-lumen-shown";
 import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import AutostartCard from "./AutostartCard";
@@ -38,6 +39,9 @@ export default function FeaturesPanel({
   // says why in ui/components/base/paper-tint.ts. It is drawn here anyway,
   // beside the other switches that belong to this machine.
   const paperTint = usePaperTint();
+  // Also localStorage and also this device's: the same value the sidebar's
+  // wordmark and the reader's More menu switch (lumen/use-lumen-shown.ts).
+  const lumenShown = useLumenShown();
   const t = useT();
   // The languages are named in themselves, as a language picker does; only
   // "auto" is a sentence and needs translating.
@@ -87,6 +91,13 @@ export default function FeaturesPanel({
             {t("settings.features.fingerDraw")}
           </Label>
           <p className="m-0 text-xs text-faint-foreground">{t("settings.features.fingerDrawHint")}</p>
+        </div>
+        <div className={CARD}>
+          <Label>
+            <Checkbox checked={lumenShown} onCheckedChange={(v) => setLumenShown(v === true)} />
+            {t("settings.features.lumen")}
+          </Label>
+          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.lumenHint")}</p>
         </div>
       </SettingsSection>
 

@@ -121,6 +121,7 @@ export default {
   "displaySheet.lineSpacing": "Interlineado",
   "displaySheet.margins": "Márgenes",
   "displaySheet.paper": "Papel",
+  "displaySheet.lumen": "Lumen",
 
 
   "lessonBar.backToShelf": "Volver a la estantería",

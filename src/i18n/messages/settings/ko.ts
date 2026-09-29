@@ -91,6 +91,9 @@ export default {
   "features.fingerDraw": "손가락으로 그리기",
   "features.fingerDrawHint":
     "끄면 어떤 도구를 선택했든 손가락은 페이지만 움직이고 표시는 스타일러스로 합니다. 스타일러스가 없는 기기에서는 켜서 손가락으로도 하이라이트하고 그릴 수 있게 하세요. 리더의 탐색 잠금은 여전히 둘 다보다 우선합니다. 스타일러스 유무는 기기의 속성이므로 이 설정은 이 기기에만 저장됩니다.",
+  "features.lumen": "Lumen 표시",
+  "features.lumenHint":
+    "Lumen은 리더를 포함한 모든 화면의 모서리에 있습니다. 끄면 모서리가 비고, 사이드바, 휴대폰 홈 화면, 리더의 더 보기 메뉴에 있는 Lumen 버튼으로 다시 불러올 수 있습니다. 이 설정은 이 기기에만 저장됩니다.",
   "features.briefing": "브리핑",
   "features.collect": "이 컴퓨터에서 소스 수집",
   "features.collectHint":

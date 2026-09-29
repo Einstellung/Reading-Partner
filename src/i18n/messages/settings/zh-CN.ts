@@ -89,6 +89,9 @@ export default {
   "features.fingerDraw": "用手指绘制",
   "features.fingerDrawHint":
     "关闭时，无论选了什么工具，手指只翻动页面，由触控笔标注。没有触控笔的设备请打开，让手指也能高亮和绘制。阅读器里的导航锁仍优先于这两者。有没有触控笔是这台设备的属性，所以该设置只保存在这台设备上。",
+  "features.lumen": "显示 Lumen",
+  "features.lumenHint":
+    "Lumen 站在每个界面的角落，阅读时也在。关掉后角落空着；侧栏、手机首页和阅读器「更多」菜单里的 Lumen 按钮可以再叫它出来。这个选择只留在这台设备上。",
   "features.briefing": "新闻简报",
   "features.collect": "在这台电脑上从你的来源收集",
   "features.collectHint":

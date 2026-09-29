@@ -38,11 +38,7 @@ import PhoneHome from "./ui/components/phone/PhoneHome";
 import { LumenCorner } from "./ui/components/lumen/LumenCorner";
 import { useCornerLift } from "./ui/components/lumen/use-corner-lift";
 import { ComposerSlotContext } from "./ui/components/chat/call/composer-slot";
-import {
-  readLumenCornerShown,
-  writeLumenCornerShown,
-} from "./ui/components/lumen/corner-pref";
-import { browserPrefStore } from "./ui/components/base/pref-store";
+import { toggleLumenShown, useLumenShown } from "./ui/components/lumen/use-lumen-shown";
 import { PullToAsk } from "./ui/components/phone/gesture/PullToAsk";
 import PhoneReader from "./ui/components/phone/reader/PhoneReader";
 import PhoneLessonScreen from "./ui/components/phone/lesson/PhoneLessonScreen";
@@ -117,21 +113,14 @@ export default function PhoneApp({
   const [stack, setStack] = useState<NavStack>(INITIAL_STACK);
   // The corner companion, per device (docs/68). The phone keeps its own answer:
   // a reader who put Lumen away here has not put it away on the desk.
-  const [lumenShown, setLumenShown] = useState(() =>
-    readLumenCornerShown(browserPrefStore(window)),
-  );
+  const lumenShown = useLumenShown();
   // Where it stands. Every conversation on this shell is the whole screen, so
   // any composer that reports itself is one sitting on the bottom edge, and the
   // corner rises above it (lumen/corner-placement.ts) — the briefing's call, the
   // lesson and the lesson's aside alike. On the screens that hold no
   // conversation nothing is measured and the corner keeps the corner.
   const { composerRef: composerSlot, placement: lumen } = useCornerLift(lumenShown, true);
-  const toggleLumen = useCallback(() => {
-    setLumenShown((shown) => {
-      writeLumenCornerShown(browserPrefStore(window), !shown);
-      return !shown;
-    });
-  }, []);
+  const toggleLumen = toggleLumenShown;
   // The kept articles (docs/21). Fixed to the Brief topic: the phone has no
   // other place to file one from. The one being read is a stack entry.
   // Null until saved-articles.json has been read: "Nothing kept yet" is a claim

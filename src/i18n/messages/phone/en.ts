@@ -154,6 +154,7 @@ export default {
   "displaySheet.scroll": "Scroll",
   "displaySheet.pages": "Pages",
   "displaySheet.paper": "Paper",
+  "displaySheet.lumen": "Lumen",
 
   // ---- reader/PhoneContentsSheet.tsx: Outline, Marks and Prep.
   "contents.label": "Outline, marks and prep",
