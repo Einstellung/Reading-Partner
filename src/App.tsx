@@ -92,7 +92,7 @@ import {
 import { createPasteHandler, systemImageReader } from "./reading/session/paste-images";
 import { runStartupRepairs } from "./reading/session/startup-repairs";
 import { importPickedBook } from "./reading/session/import-book";
-import { resolveBookSource, topicForOpen } from "./reading/session/open-file";
+import { BookNotHere, resolveBookSource, topicForOpen } from "./reading/session/open-file";
 import { fileSharedBook, watchSharedBooks } from "./reading/session/shared-file";
 import type { ReaderShell } from "./reading/session/shell";
 import { keepReadingPosition } from "./reading/reading-position";
@@ -899,7 +899,10 @@ export default function App() {
         await refreshTopics();
       } catch (e) {
         console.error("failed to open file", e);
-        pushToast("error", t("shell.toast.cantOpenFile"));
+        pushToast(
+          "error",
+          e instanceof BookNotHere ? t("shell.toast.cantOpenDownloading") : t("shell.toast.cantOpenFile"),
+        );
       }
     },
     [activeTopicId, openInReader, refreshTopics, pushToast, t],

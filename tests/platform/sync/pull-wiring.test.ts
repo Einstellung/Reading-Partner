@@ -43,7 +43,7 @@ test("the engine announces a finished pull to the route table", () => {
 // with PDFs it will never open (docs/22).
 test("books travel to a shell that opens them and to no other", () => {
   expect(engineDeps("desktop").booksPolicy).toBe("mirror");
-  expect(engineDeps("phone").booksPolicy).toBe("off");
+  expect(engineDeps("phone").booksPolicy).toBe("upload");
 });
 
 function recordingRoute() {

@@ -136,7 +136,7 @@ export interface TopicStore {
   ensureBrief: () => Promise<Topic>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  addFile: (id: string, rawPath: string, hash: string) => Promise<void>;
+  addFile: (id: string, rawPath: string, hash: string, name?: string) => Promise<void>;
   removeFile: (id: string, path: string) => Promise<void>;
   setFileHash: (id: string, path: string, hash: string) => Promise<void>;
   markOpened: (id: string, path: string) => Promise<void>;
@@ -274,13 +274,13 @@ export function createTopicStore(io: TopicIo): TopicStore {
     // The book id comes with the path because by the time a row is written the
     // bytes are already in the library (reading/session/import-book.ts). One
     // write, one sync revision.
-    addFile: (id, rawPath, hash) => {
+    addFile: (id, rawPath, hash, name) => {
       const path = normalizeFilePath(rawPath);
       return serialize(async () => {
         const store = await load();
         const topic = store.topics.find((t) => t.id === id);
         if (!topic || topic.files.some((f) => f.path === path)) return;
-        topic.files.push({ path, name: basename(path), addedAt: io.now(), hash });
+        topic.files.push({ path, name: name ?? basename(path), addedAt: io.now(), hash });
         await save(store);
       });
     },
@@ -381,8 +381,10 @@ export function removeTopicRecord(id: string): Promise<void> {
   return store.remove(id);
 }
 
-export function addFileToTopic(id: string, rawPath: string, hash: string): Promise<void> {
-  return store.addFile(id, rawPath, hash);
+// `name` is for a path whose last segment is not a file name (an Android content
+// URI); without it the name is the path's basename.
+export function addFileToTopic(id: string, rawPath: string, hash: string, name?: string): Promise<void> {
+  return store.addFile(id, rawPath, hash, name);
 }
 
 export function removeFileFromTopic(id: string, path: string): Promise<void> {

@@ -12,7 +12,7 @@
 - 长按选中。手指按住不动约半秒选中一个词，拖动按词延长，抬手后选区留着，再选 Highlight 或 Ask（[82](./82-手机阅读外壳.md)）。点已有标注弹出它能做的事。墨迹不做：手机没有页。
 - 手机上只有 Outline 一个侧栏内容，做成 sheet（Radix dialog 贴底边）。条目按分页表的块号跳，不按 href——`outlineFor` 交回的就是块号。没有 Marks 列表、备课面板、痕迹列表。
 - 没有笔架（2026-09-28 起，见 [82](./82-手机阅读外壳.md)），Aa 在底栏里，名叫 Display。
-- 书按需下载。手机的 books 通道仍是 off（不对齐 library.json），书架上没下载的 EPUB 显示为在云端，点了从 Drive 拉这一本，拉完打开；PDF 永远不拉。这是 docs/13「书按需下载」的第一次落地，只在手机形态。反方向是手机导入：topic 书架上的 Import EPUB 按钮只收 EPUB（字节用 `isEpub` 复核），选中即读字节进库、挂进当前 topic，不自动打开；随后经 engine 把这一本传上 Drive（`pushBook`，与下载同一条串行队列，远端已有就跳过）。没登录就不传，传失败只提示一句；两种情况都没有补传，之后登录了这本书也只在手机上。2026-09-21 起每道门都在门口入库：桌面「添加文件」和分享进来的书都是选中即读字节、进库、连哈希一次写进 topics.json。书架上仍可能有库里没有记录的行——旧版本写下的，或者 topics.json 的修订先到而 library.json 没到——这时按文件名判 epub/pdf，两样都不是就说不知道，点了只说还没入库，不当成 PDF，也不去 Drive 拉。书架跟着 pull 刷新（`SHELF_PULL_ROUTE`，topics.json / library.json / deleted-books），不再只在退出阅读器时读一次。
+- 书按需下载。手机的 books 通道只上不下（docs/13，不对齐 library.json），书架上没下载的 EPUB 显示为在云端，点了从 Drive 拉这一本，拉完打开；PDF 永远不拉。这是 docs/13「书按需下载」的第一次落地，只在手机形态。反方向是手机导入：topic 书架上的 Import EPUB 按钮只收 EPUB（字节用 `isEpub` 复核），选中即读字节进库、挂进当前 topic，不自动打开；随后经 engine 把这一本传上 Drive（`pushBook`，与下载同一条串行队列，远端已有就跳过）。没登录就不传，传失败只提示一句；之后每趟 pass 补传，直到远端有这本。2026-09-21 起每道门都在门口入库：桌面「添加文件」和分享进来的书都是选中即读字节、进库、连哈希一次写进 topics.json。书架上仍可能有库里没有记录的行——旧版本写下的，或者 topics.json 的修订先到而 library.json 没到——这时按文件名判 epub/pdf，两样都不是就说不知道，点了只说还没入库，不当成 PDF，也不去 Drive 拉。书架跟着 pull 刷新（`SHELF_PULL_ROUTE`，topics.json / library.json / deleted-books），不再只在退出阅读器时读一次。
 
 ## 坐标系不变
 

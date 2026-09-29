@@ -77,7 +77,7 @@
 | 开机自启、托盘、常驻 | 开发环境 |
 | 让一个浮层避开另一个元素、用 callback ref 量它的位置 | 浮层与 shadcn 原语 |
 
-编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 445）。
+编号只加不回收：删掉的坑、或 2026-08-21 那次给撞号坑腾地方用掉的号，都不再复用；新坑接着当前最大编号往后加（下一个是 491）。
 
 ## EmbedPDF 引擎
 
@@ -192,6 +192,7 @@
 - [241-whitespace-between-head-and-body-shifts-every-anchor](./storage/241-whitespace-between-head-and-body-shifts-every-anchor.md) — `</head>` 和 `<body>` 之间那个排版换行在 XML 解析里是 `<html>` 的文本子节点（HTML 解析器会挪进 body，XML 不会），计入正文偏移后整篇文档每个锚点推后一格，page-list 的第一个印刷页锚点于是看着不在文档开头。抽取正文时处在块边界上的纯空白文本节点整个跳过，块内的空格照留
 
 - [305-jsonlsessionrepo-resolves-an-undefined-cwd](./storage/305-jsonlsessionrepo-resolves-an-undefined-cwd.md) — pi 的 `JsonlSessionRepo` 把 `undefined` 交给声明为 `string` 的 `FileSystem.absolutePath`（`create` 不带 cwd 时），自家的 NodeExecutionEnv 一样炸；空 path 当 cwd 处理。附带：`joinPath` 要照 node 的 `join` 拼接不是 `resolve`，以及一致性测试里那条 fork/create 抢 id 的用例文件系统实现过不了
+- [490-android-picker-hands-over-a-content-uri-with-no-name](./storage/490-android-picker-hands-over-a-content-uri-with-no-name.md) — Android 的选择器返回 `content://…/document%3A2905a`，末段不是文件名，书名成了 `document:2905a`，别的设备按这条路径什么也读不到。非 `file://` 的 URL 取 EPUB 的 `dc:title` 做名字，另一台设备打开时按 book id 从账户拉
 - [09-appdata-glob-capability](./storage/09-appdata-glob-capability.md) — Tauri 权限 glob 不匹配目录本身；且持久化失败绝不静默吞
 - [36-appdata-root-not-created-first-write](./storage/36-appdata-root-not-created-first-write.md) — iOS 首装首跑第一个写入者报 os error 2，数据根目录由 Rust setup 的 create_dir_all 保障，前端不再各自兜底
 - [51-sync-stopped-looks-healthy](./storage/51-sync-stopped-looks-healthy.md) — 凭据文件不在，引擎从不启动，`autoSync:true` + `lastError:null` 读起来完全健康，四天没人发现；启动的三选一和「该说什么」都收进 `platform/sync/health.ts`
@@ -380,7 +381,7 @@
 
 - [64-replayed-assistant-timestamp-without-usage](./ai/64-replayed-assistant-timestamp-without-usage.md) — 重放的 assistant 消息缺 `timestamp` 和 `usage` 正好绕开 pi 的估算路径；单补 `timestamp` 会让 `clampMaxTokensToContext` 在每一次 AI 调用里抛 TypeError，全 app 的 AI 当场全死
 - [390-a-frozen-ios-app-leaves-the-stream-silent-and-the-lane-held](./ai/390-a-frozen-ios-app-leaves-the-stream-silent-and-the-lane-held.md) — iOS 冻住进程后那条流式连接不报错也不结束，pi 停在 `drive` 里，run 不结算、soul 的 lane 不交还、线程一直算 busy，用户之后说的每句话都被当成 steering 塞进死 run 的队列，谁也看不见。挂钟量沉默（90 秒，工具跑着时暂停），回前台且整个离开期间没有字节就立刻掐；只能用 `lane.requestAbort` 掐，abort 底下的请求会让 pi 抛 `SessionInvariantError`
-- [490-a-stall-watch-that-runs-out-in-the-lane-queue-watches-nothing](./ai/490-a-stall-watch-that-runs-out-in-the-lane-queue-watches-nothing.md) — 停摆计时器在排队等 soul lane 时就开始计时，排满 90 秒触发时还没有 operation 可掐，计时器结束了；之后那条流静默死掉就永远占着 lane，全 app 的 soul 回合停在 Thinking。计时器在第一次请求前 `hold`，`acquire` 认 abort 信号
+- [491-a-stall-watch-that-runs-out-in-the-lane-queue-watches-nothing](./ai/491-a-stall-watch-that-runs-out-in-the-lane-queue-watches-nothing.md) — 停摆计时器在排队等 soul lane 时就开始计时，排满 90 秒触发时还没有 operation 可掐，计时器结束了；之后那条流静默死掉就永远占着 lane，全 app 的 soul 回合停在 Thinking。计时器在第一次请求前 `hold`，`acquire` 认 abort 信号
 - [65-pi-clamps-max-tokens-to-one-and-calls-it-done](./ai/65-pi-clamps-max-tokens-to-one-and-calls-it-done.md) — 上下文接近窗口时 pi 把允许输出夹到 1，模型吐一个 token 就停，`done` 正常发出、没有 error；聊天里是一个字的回复，解析 JSON 的地方变成"格式错误"。pi 的估算器还是 `chars/4`，中文低估 2.5–4 倍，最该收紧时放行。发请求前自己算，见 `src/budget/`
 - [66-usage-shortcut-freezes-pi-context-estimate](./ai/66-usage-shortcut-freezes-pi-context-estimate.md) — 消息数组里一旦有带 usage 的真 assistant 消息，pi 的估算就等于那个 usage，系统提示词不再计入，压缩 usage 之前的任何东西都不改变它；重放历史里那条没 timestamp 的 assistant 消息又会把捷径整个关掉（NaN 比较），同一个调用点两套计价。判断压缩够不够只能重新量，不能拿字符估的 saving 去减
 - [131-pi-cache-retention-env-never-reaches-the-webview](./ai/131-pi-cache-retention-env-never-reaches-the-webview.md) — `PI_CACHE_RETENTION=long` 在 dev 和打包版都读不到：webview 里没有 `process`，Vite build 又把 `process.env` 换成 `{}`，pi 每次都落回 5 分钟保留期。要换只能在发送路径上传 `cacheRetention`，并把同一个值传给埋点

@@ -145,11 +145,12 @@ export function engineDeps(forShell: Shell): EngineDeps {
     backend,
     fs: tauriSyncFs,
     books: tauriBookFs,
-    // The phone never opens a book, so it mirrors none (docs/22). Decided here
-    // rather than in the engine: the pass stays headless, and the one thing it
-    // would need — which shell is running — is something the caller already
-    // knows.
-    booksPolicy: forShell === "phone" ? "off" : "mirror",
+    // The phone downloads a book only when it is tapped, so it mirrors none;
+    // what it imported still goes up every pass until the account has it
+    // (docs/13). Decided here rather than in the engine: the pass stays
+    // headless, and the one thing it would need — which shell is running — is
+    // something the caller already knows.
+    booksPolicy: forShell === "phone" ? "upload" : "mirror",
     base: tauriBaseStore,
     trash: tauriTrashJournal,
     // Who this device is, for the tree it publishes (docs/59). Read at pass
