@@ -131,6 +131,4 @@ export default {
   "optional.baseUrl": "Base URL",
   "optional.sttHint":
     "Hold the mic in the chat box to talk. SiliconFlow's SenseVoice tier is free and its API key works out of the box; any OpenAI-compatible transcription endpoint works too.",
-  "features.showMarks": "Show marks in the phone reader",
-  "features.showMarksHint": "Highlights and AI underlines are drawn on the page. Off, the page is clean: the marks are still in the book and in the Marks list, and saving a new one turns this back on. The same switch is in the reader's Display sheet, and it stays on this phone.",
 } as const;

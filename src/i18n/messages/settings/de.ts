@@ -131,6 +131,4 @@ export default {
   "optional.baseUrl": "Basis-URL",
   "optional.sttHint":
     "Halte das Mikrofon im Chatfeld gedrückt, um zu sprechen. Der SenseVoice-Tarif von SiliconFlow ist kostenlos und sein API-Schlüssel funktioniert sofort; jeder OpenAI-kompatible Transkriptionsdienst geht ebenfalls.",
-  "features.showMarks": "Markierungen beim Lesen auf dem Handy zeigen",
-  "features.showMarksHint": "Markierungen und KI-Unterstreichungen werden auf der Seite gezeigt. Aus bleibt die Seite sauber: Die Markierungen bleiben im Buch und in der Markierungsliste, und eine neue Markierung schaltet dies wieder ein. Derselbe Schalter ist im Anzeige-Blatt des Lesers und gilt nur für dieses Handy.",
 } satisfies Translation<typeof en>;

@@ -217,6 +217,4 @@ export default {
   "bookLesson.title": "学ぶ",
   "bookLesson.done": "完了",
   "bookLesson.passagePlaceholder": "この箇所について質問",
-  "displaySheet.marks": "マーク",
-  "displaySheet.showMarks": "マークを表示",
 } satisfies Translation<typeof en>;

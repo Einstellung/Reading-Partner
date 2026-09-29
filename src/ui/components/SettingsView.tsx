@@ -37,8 +37,6 @@ export interface SettingsBodyProps {
   // being folded into Settings.
   device: DeviceSettings | null;
   onDeviceChange: (next: DeviceSettings) => void;
-  // Drawn by the phone shell: Settings then carries its reader's switches.
-  phoneReader?: boolean;
 }
 
 // The column the page is set in, the same measurements as Today's (Vestibule):
@@ -91,7 +89,6 @@ export function SettingsBody({
   onSettingsChange,
   device,
   onDeviceChange,
-  phoneReader,
 }: SettingsBodyProps) {
   const t = useT();
   return (
@@ -118,7 +115,6 @@ export function SettingsBody({
             onSettingsChange={onSettingsChange}
             device={device}
             onDeviceChange={onDeviceChange}
-            {...(phoneReader ? { phoneReader } : {})}
           />
         </TabsContent>
         <TabsContent value="optional">

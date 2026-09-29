@@ -131,6 +131,4 @@ export default {
   "optional.baseUrl": "ベース URL",
   "optional.sttHint":
     "チャット欄のマイクを押したまま話します。SiliconFlow の SenseVoice プランは無料で、API キーはそのまま使えます。OpenAI 互換の文字起こしエンドポイントならどれでも使えます。",
-  "features.showMarks": "携帯の読書画面でマークを表示",
-  "features.showMarksHint": "ページにハイライトと AI の下線を表示します。オフにするとページはすっきりします。マークは本と「マーク」一覧に残り、新しく引くとこの設定は自動でオンに戻ります。読書画面の「表示」シートにも同じスイッチがあり、この携帯だけに適用されます。",
 } satisfies Translation<typeof en>;

@@ -228,6 +228,4 @@ export default {
   "bookLesson.title": "Aprender",
   "bookLesson.done": "OK",
   "bookLesson.passagePlaceholder": "Pergunte sobre este trecho",
-  "displaySheet.marks": "Marcas",
-  "displaySheet.showMarks": "Mostrar marcas",
 } satisfies Translation<typeof en>;

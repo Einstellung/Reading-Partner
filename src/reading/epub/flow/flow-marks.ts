@@ -118,8 +118,6 @@ export interface FlowMarks {
   clearSelection(): void;
   /** Select a mark's words, as a hold would have. False when they are not laid out. */
   selectMark(id: string): boolean;
-  /** Draw the marks, or keep them off the page; hidden marks cannot be tapped. */
-  setVisible(visible: boolean): void;
   /** Ring a mark for a moment. */
   flash(id: string): void;
   /** Where a mark is, as the range CFI it was written with. */
@@ -153,7 +151,6 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
   const painted = new Map<number, PaintedMark[]>();
   const dirty = new Set<number>();
   const selected = new Set<string>();
-  let visible = true;
   let sel: Selecting | null = null;
   let dragging = false;
   let flashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -175,7 +172,6 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
   function paint(doc: FlowDoc): void {
     const layer = painter.sublayer(doc.overlay, "rp-marks");
     layer.replaceChildren();
-    layer.style.display = visible ? "" : "none";
     const drawn: PaintedMark[] = [];
     for (const ann of marks.values()) {
       if (spineOfMark(ann) !== doc.spine) continue;
@@ -340,7 +336,6 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
   // --- pressing a mark ----------------------------------------------------
 
   function tapAt(clientX: number, clientY: number): boolean {
-    if (!visible) return false;
     const doc = host.docAt(clientX, clientY);
     const drawn = doc ? painted.get(doc.spine) : undefined;
     if (!doc || !drawn) return false;
@@ -503,13 +498,6 @@ export function createFlowMarks(host: FlowMarkHost): FlowMarks {
     saveSelection,
     clearSelection,
     selectMark,
-    setVisible(next) {
-      visible = next;
-      for (const spine of painted.keys()) {
-        const layer = host.docOf(spine)?.overlay.querySelector<HTMLElement>(".rp-marks");
-        if (layer) layer.style.display = next ? "" : "none";
-      }
-    },
     flash,
     cfiOf: (id) => epubPositionOf(marks.get(id))?.value ?? null,
   };

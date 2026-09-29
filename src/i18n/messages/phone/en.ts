@@ -263,6 +263,4 @@ export default {
   "displaySheet.paperPaper": "Paper",
   "displaySheet.paperGreen": "Green",
   "displaySheet.paperDark": "Dark",
-  "displaySheet.marks": "Marks",
-  "displaySheet.showMarks": "Show marks",
 } as const;

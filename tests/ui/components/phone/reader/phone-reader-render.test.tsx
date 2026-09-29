@@ -628,31 +628,6 @@ test("the sheet's choices reach the pane and the slot on this device", async () 
   expect(JSON.parse(localStorage.getItem(FLOW_DISPLAY_KEY) as string)).toEqual(displays[2]);
 });
 
-test("the marks switch in the sheet reaches the pane, and saving a mark shows them again", async () => {
-  localStorage.removeItem(FLOW_DISPLAY_KEY);
-  displays.length = 0;
-  spyOn(annotations, "saveAnnotations").mockImplementation(() => {});
-  const view = await openReader();
-  await act(async () => {
-    fireEvent.click(view.getByLabelText("Display"));
-  });
-  const hide = document.body.querySelector('button[aria-label="Show marks"]');
-  await act(async () => {
-    fireEvent.click(hide as Element);
-  });
-  expect(displays[displays.length - 1]?.showMarks).toBe(false);
-  await act(async () => {
-    fireEvent.keyDown(document.body, { key: "Escape" });
-  });
-  const menu = await select(view);
-  const highlight = [...menu.querySelectorAll("button")].find((b) => b.textContent === "Highlight");
-  await act(async () => {
-    fireEvent.click(highlight as Element);
-  });
-  expect(displays[displays.length - 1]?.showMarks).toBe(true);
-  localStorage.removeItem(FLOW_DISPLAY_KEY);
-});
-
 test("a book opens at the settings the reader left, not at the default", async () => {
   localStorage.setItem(
     FLOW_DISPLAY_KEY,
@@ -662,10 +637,7 @@ test("a book opens at the settings the reader left, not at the default", async (
   await openReader();
   // The pane was mounted with them: no 17px frame first, and nothing pushed in
   // after.
-  // A slot written before the paged mode and the marks switch existed reads as
-  // the scrolled column with the marks shown.
-  expect(displays).toEqual([
-    { fontPx: 21, lineHeight: 1.4, padX: 36, paper: "green", mode: "scroll", showMarks: true },
-  ]);
+  // A slot written before the paged mode existed reads as the scrolled column.
+  expect(displays).toEqual([{ fontPx: 21, lineHeight: 1.4, padX: 36, paper: "green", mode: "scroll" }]);
   localStorage.removeItem(FLOW_DISPLAY_KEY);
 });

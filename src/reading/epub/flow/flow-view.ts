@@ -28,7 +28,7 @@ import {
   type PressEvent,
   type PressState,
 } from "./flow-gesture";
-import { FLOW_PAPERS, sameLayout, type FlowDisplay } from "./flow-display";
+import { FLOW_PAPERS, type FlowDisplay } from "./flow-display";
 import { createFlowMarks, flowRangeSource, rectsIn, type FlowDoc, type PressPoint } from "./flow-marks";
 import { flowBaselineCss, mountFlowDocument } from "./flow-mount";
 import { createMarkPainter, rangeOfSpan } from "../mark-draw";
@@ -211,7 +211,6 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
   });
   marks.reset(opts.annotations);
   marks.setTool(tool);
-  marks.setVisible(opts.display.showMarks);
 
   function paintShown(): void {
     for (const doc of docs) {
@@ -661,10 +660,7 @@ export async function createFlowReader(opts: FlowReaderOptions): Promise<FlowRea
     selectMark: (id) => marks.selectMark(id),
     setDisplay: (next) => {
       if (destroyed) return;
-      marks.setVisible(next.showMarks);
-      const unmoved = sameLayout(display, next);
       display = next;
-      if (unmoved) return;
       scroller.style.background = FLOW_PAPERS[next.paper].surface;
       const css = flowBaselineCss(next);
       const width = scroller.clientWidth || lastWidth;
