@@ -92,6 +92,10 @@
 
 调研级文档，不占编号，索引见 [research/README.md](./research/README.md)。
 
+## feedback
+
+用户实际遇到、打了补丁但要系统重做的问题，不占编号，索引见 [feedback/README.md](./feedback/README.md)。
+
 ## north-star
 
 认定要做、不在当前规划内的方向，索引见 [north-star/README.md](./north-star/README.md)。
