@@ -7,11 +7,21 @@
 // booting twice replaces its adapter rather than throwing. Among different
 // names, the first registered that claims the material takes it.
 
-import type { Adapter, Material } from "./material";
+import type { Rejection } from "./gate";
+import type { Manuscript } from "./manuscript";
+import type { Adapter, BinderyDeps, Material, WholeDocument } from "./material";
 
-export interface SiteAdapter extends Adapter<Material> {
+export interface SiteAdapter extends Omit<Adapter<Material>, "toManuscript"> {
   /** Whether this adapter reads this material, usually decided by its URL. */
   claims(material: Material): boolean;
+  /**
+   * A manuscript to build, or a document the site serves whole (an arXiv
+   * paper's PDF), which the bindery passes through unbuilt.
+   */
+  toManuscript(
+    material: Material,
+    deps: BinderyDeps,
+  ): Promise<Manuscript | WholeDocument | Rejection>;
 }
 
 const ADAPTERS = new Map<string, SiteAdapter>();

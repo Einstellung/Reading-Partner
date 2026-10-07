@@ -12,7 +12,7 @@ import { buildFigureCatalog, ensureFigures } from "../../figures";
 import { loadSettings } from "../../../platform/app/settings";
 import { recordParse } from "../../../platform/app/structured-output";
 import { extractArticle, looksLikeHttpUrl, sniffContentType } from "../../sources";
-import { fetchFromArxiv, normalizeArxivId } from "../../../info/sources/plugins/arxiv-client";
+import { arxivPdfUrl, fetchFromArxiv, normalizeArxivId } from "../../../info/sources/plugins/arxiv-client";
 import { fetchFromOpenAlex } from "../../../info/sources/plugins/openalex-client";
 import { fetchWithRetry } from "../../../platform/http/throttled-fetch";
 import { runDigest } from "./digest";
@@ -174,7 +174,7 @@ function makeDeps(surveyHash: string, surveyName: string, surveyFulltext: Fullte
             const id = normalizeArxivId(oa.arxivId);
             if (id) {
               try {
-                const res = await fetchWithRetry(`https://arxiv.org/pdf/${id}`);
+                const res = await fetchWithRetry(arxivPdfUrl(id));
                 if (res.ok) pdfBytes = await res.arrayBuffer();
               } catch {
                 // Still abstract-only; S2 is next only if OpenAlex found nothing.

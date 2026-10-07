@@ -20,7 +20,9 @@ import { parseEpub } from "../../../src/reading/epub/file/parse";
 import type { Extraction } from "../../../src/workshop/extract/readable-select";
 import { buildArticleEpub } from "../../../src/workshop/bindery/build-article";
 import { registerSiteAdapter } from "../../../src/workshop/bindery";
+import { arxivSiteAdapter } from "../../../src/info/sources/plugins/arxiv";
 import { PNG } from "../epub/fixture";
+import { apiUrl, ATTENTION_ATOM, pdfUrl, PDF_HEAD } from "../../info/sources/plugins/arxiv-fixtures";
 import { installAppData, type FakeDisk } from "../../support/appdata-fake";
 
 const PAGE_URL = "https://example.com/posts/how-a-web-page-becomes-a-book";
@@ -321,4 +323,90 @@ test("a PDF link is a supplement too", async () => {
   expect(r.supplements).toEqual([
     { bookId: "bk1", ref: { hash: got.entry.hash, title: "attention", sourceUrl: url } },
   ]);
+});
+
+// --- an arXiv link (docs/85) ------------------------------------------------
+
+// The arXiv adapter as the shells register it at startup, for one case.
+async function withArxiv<T>(run: () => Promise<T>): Promise<T> {
+  const undo = registerSiteAdapter(arxivSiteAdapter);
+  try {
+    return await run();
+  } finally {
+    undo();
+  }
+}
+
+const ATTENTION = {
+  [pdfUrl("1706.03762")]: ok(PDF_HEAD, "application/pdf"),
+  [apiUrl("1706.03762")]: ok(ATTENTION_ATOM, "application/atom+xml"),
+};
+
+test("an arXiv abstract link is the paper's PDF, filed under its title", async () => {
+  const r = recorder(ATTENTION);
+  const got = await withArxiv(() =>
+    ingestArticleUrl("https://arxiv.org/abs/1706.03762", book("bk1"), r.deps),
+  );
+
+  expect(got.kind).toBe("book");
+  expect(got.title).toBe("Attention Is All You Need");
+  expect(got.entry.format).toBe("pdf");
+  expect(got.entry.kind).toBeUndefined();
+  expect(got.entry.title).toBe("Attention Is All You Need.pdf");
+  expect(got.entry.byline).toBe("Ashish Vaswani et al.");
+  expect(got.entry.publishedAt).toBe("2017-06-12T17:57:34Z");
+  expect(got.entry.sourceUrl).toBe("https://arxiv.org/abs/1706.03762");
+  expect(got.path).toBe(`library/${got.entry.hash}/Attention Is All You Need.pdf`);
+  expect(disk.blobs.get(libraryBookPath(got.entry.hash, "pdf"))).toEqual(PDF_HEAD);
+  // read_supplement matches by this title, so it is the paper's, not its id.
+  expect(r.supplements).toEqual([
+    {
+      bookId: "bk1",
+      ref: {
+        hash: got.entry.hash,
+        title: "Attention Is All You Need",
+        sourceUrl: "https://arxiv.org/abs/1706.03762",
+      },
+    },
+  ]);
+  expect(r.fetched).toEqual([pdfUrl("1706.03762"), apiUrl("1706.03762")]);
+});
+
+test("an arXiv PDF link is named by the paper's title, not the URL's tail", async () => {
+  const r = recorder(ATTENTION);
+  const got = await withArxiv(() =>
+    ingestArticleUrl("https://arxiv.org/pdf/1706.03762", book("bk1"), r.deps),
+  );
+  expect(got.title).toBe("Attention Is All You Need");
+  expect(r.supplements[0].ref.title).toBe("Attention Is All You Need");
+});
+
+test("an arXiv link whose lookup fails is still filed, under its id", async () => {
+  const r = recorder({ [pdfUrl("1706.03762v2")]: ok(PDF_HEAD, "application/pdf") });
+  const got = await withArxiv(() =>
+    ingestArticleUrl("https://arxiv.org/pdf/1706.03762v2.pdf", topic("t1"), r.deps),
+  );
+  expect(r.fetched).toEqual([pdfUrl("1706.03762v2"), apiUrl("1706.03762v2")]);
+  expect(got.kind).toBe("book");
+  expect(got.title).toBe("arXiv 1706.03762");
+  expect(got.entry.byline).toBeUndefined();
+  expect(r.attached).toEqual([{ topicId: "t1", path: got.path, hash: got.entry.hash }]);
+});
+
+test("an arXiv paper with no PDF leaves nothing behind", async () => {
+  const r = recorder({ [apiUrl("1706.03762")]: ok(ATTENTION_ATOM, "application/atom+xml") });
+  await expect(
+    withArxiv(() => ingestArticleUrl("https://arxiv.org/abs/1706.03762", book("bk1"), r.deps)),
+  ).rejects.toThrow("arXiv answered HTTP 404 for the PDF of 1706.03762");
+  expect(r.supplements).toEqual([]);
+  expect(disk.files.has(LIBRARY_FILE)).toBe(false);
+});
+
+test("with the arXiv adapter registered, a PDF link elsewhere is filed as before", async () => {
+  const url = "https://example.com/papers/attention.pdf";
+  const r = recorder({ [url]: ok(PDF_BYTES, "application/pdf") });
+  const got = await withArxiv(() => ingestArticleUrl(url, book("bk1"), r.deps));
+  expect(got.title).toBe("attention");
+  expect(got.entry.sourceUrl).toBe(url);
+  expect(r.fetched).toEqual([url]);
 });

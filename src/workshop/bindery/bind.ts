@@ -8,6 +8,10 @@
 // the EPUB is built. A manuscript of one untitled section builds to the bytes
 // buildArticleEpub has always written for the same article, so a page taken in
 // again is the document already on the shelf.
+//
+// A site adapter may instead find the document already whole (an arXiv paper
+// is its PDF). Nothing is gated or built then: its bytes are handed back as the
+// site served them, with what the adapter read about it.
 
 import { oneLine } from "../../platform/std/text";
 import { builtInAdapter } from "./adapters";
@@ -15,7 +19,7 @@ import { buildSectionedEpub, type SectionedEpubInput } from "./build-article";
 import { gateManuscript, isRejection, rejection, type Rejection } from "./gate";
 import { fetchImages } from "./images";
 import { manuscriptText, type Manuscript } from "./manuscript";
-import type { BinderyDeps, Material } from "./material";
+import { isWholeDocument, type BinderyDeps, type Material, type WholeDocument } from "./material";
 import { collectImageSrcs } from "./page-meta";
 import { siteAdapterFor } from "./registry";
 
@@ -44,7 +48,44 @@ export interface Bound {
   metadata: BoundMetadata;
 }
 
-export type BindResult = Bound | Rejection;
+/** What a document a site serves whole is, for the caller to file it by. */
+export interface PassedMetadata {
+  /** What the adapter read the document to be called; may be empty. */
+  title: string;
+  author?: string;
+  publishedAt?: string;
+  sourceUrl?: string;
+  abstract?: string;
+  /** The adapter that read the material. */
+  adapter: string;
+}
+
+/**
+ * A document a site adapter found already whole (an arXiv paper's PDF): its
+ * bytes as the site served them, nothing built.
+ */
+export interface PassedThrough {
+  ok: true;
+  passedThrough: true;
+  format: "pdf" | "epub";
+  bytes: Uint8Array;
+  metadata: PassedMetadata;
+}
+
+export type BindResult = Bound | PassedThrough | Rejection;
+
+function passThrough(whole: WholeDocument, adapter: string): PassedThrough | Rejection {
+  if (whole.bytes.length === 0) return rejection("empty", "the document is empty");
+  const optional = (value: string | undefined) => oneLine(value ?? "");
+  const metadata: PassedMetadata = { title: optional(whole.title), adapter };
+  for (const key of ["author", "publishedAt", "abstract"] as const) {
+    const value = optional(whole[key]);
+    if (value !== "") metadata[key] = value;
+  }
+  const sourceUrl = (whole.sourceUrl ?? "").trim();
+  if (sourceUrl !== "") metadata.sourceUrl = sourceUrl;
+  return { ok: true, passedThrough: true, format: whole.format, bytes: whole.bytes, metadata };
+}
 
 /** The build's input for a manuscript. Exported for the byte-identity test. */
 export function manuscriptEpubInput(m: Manuscript): SectionedEpubInput {
@@ -84,6 +125,7 @@ export async function bind(material: Material, deps: BinderyDeps = {}): Promise<
   }
   const made = await adapter.toManuscript(material, deps);
   if (isRejection(made)) return made;
+  if (isWholeDocument(made)) return passThrough(made, adapter.name);
   if (made.sections.length === 0) return rejection("empty", "the page has no body text");
 
   const turnedBack = gateManuscript(made, { minChars: adapter.minChars });

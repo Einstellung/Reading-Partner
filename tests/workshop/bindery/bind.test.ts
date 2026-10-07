@@ -65,7 +65,7 @@ test("one untitled section builds to the bytes buildArticleEpub writes for the s
       () => bind(SITE),
     );
     expect(bound.ok).toBe(true);
-    if (bound.ok) expect(bound.epub).toEqual(before);
+    if (bound.ok && "epub" in bound) expect(bound.epub).toEqual(before);
   }
 });
 
@@ -82,7 +82,7 @@ test("a fetched page bound twice is the same bytes", async () => {
   const material = { kind: "web", url: "https://e.com/a", html: page } as const;
   const [first, second] = [await bind(material, deps), await bind(material, deps)];
   expect(first.ok && second.ok).toBe(true);
-  if (first.ok && second.ok) {
+  if (first.ok && second.ok && "epub" in first && "epub" in second) {
     expect(second.epub).toEqual(first.epub);
     expect(first.metadata).toMatchObject({
       title: "T",
@@ -213,6 +213,42 @@ test("a site adapter's own rejection is passed through", async () => {
   expect(got).toEqual({ ok: false, reason: "login-wall", message: "needs a session" });
 });
 
+test("a document the site serves whole passes through unbuilt, its metadata cleaned", async () => {
+  const bytes = new TextEncoder().encode("%PDF-1.7\n");
+  const got = await withSite(
+    {
+      toManuscript: async () => ({
+        kind: "whole",
+        format: "pdf",
+        bytes,
+        title: "  A  paper ",
+        author: " ",
+        sourceUrl: "https://site.test/1",
+        abstract: "Line one.\n  Line two.",
+      }),
+    },
+    () => bind(SITE),
+  );
+  expect(got).toEqual({
+    ok: true,
+    passedThrough: true,
+    format: "pdf",
+    bytes,
+    metadata: {
+      title: "A paper",
+      sourceUrl: "https://site.test/1",
+      abstract: "Line one. Line two.",
+      adapter: "test-site",
+    },
+  });
+
+  const empty = await withSite(
+    { toManuscript: async () => ({ kind: "whole", format: "pdf", bytes: new Uint8Array(), title: "T" }) },
+    () => bind(SITE),
+  );
+  expect(empty).toMatchObject({ ok: false, reason: "empty" });
+});
+
 test("a site adapter that claims a fetched page is asked before the generic one", async () => {
   const got = await withSite(
     {
@@ -230,7 +266,7 @@ test("Markdown and plain text go through the door with their counts", async () =
     { kind: "markdown", markdown: `# Notes\n\n${PROSE}\n\n## Two\n\n${PROSE}`, sourceUrl: "https://e.com/n" },
   );
   expect(md.ok).toBe(true);
-  if (md.ok) {
+  if (md.ok && "epub" in md) {
     expect(md.metadata).toMatchObject({ title: "Notes", adapter: "markdown", sections: 1, imagesMissing: 0 });
     expect(md.metadata.chars).toBeGreaterThan(2 * PROSE.trim().length);
     const book = parseEpub(md.epub);
@@ -255,6 +291,6 @@ test("pictures the fetch could not get are counted as missing", async () => {
           : { ok: false, status: 404, bytes: new Uint8Array(), contentType: null },
     },
   );
-  expect(got.ok && got.metadata.imagesEmbedded).toBe(1);
-  expect(got.ok && got.metadata.imagesMissing).toBe(1);
+  expect(got.ok && "epub" in got && got.metadata.imagesEmbedded).toBe(1);
+  expect(got.ok && "epub" in got && got.metadata.imagesMissing).toBe(1);
 });
