@@ -35,3 +35,5 @@
 2. 可读稿、通用适配器、站点适配器登记表、质量关、多段生成，`ingest_url` 接上。
 3. 站点适配器：X 等 [84](../info/84-X链接摄入.md) 实测完再做，arXiv abs 页取 PDF 和真实标题。
 4. 简报的 Keep 和备课面板的加链接改走 bindery，收藏存成 EPUB。
+
+   已做（2026-10-07）。Keep 把简报手里的正文（HTML，没有就纯文本）交给 bindery，不重取页面，只取图；产出的 EPUB 以 `kind: "article"` 入库，归进收藏记录所在的 topic（现在固定 Brief），记录上新增可选字段 `documentHash` 指向它（`reading/ingest/keep.ts`）。质量关没过、构建失败或正文为空，只留记录。只有摘要的正文照样过关就建，`summaryOnly` 留在记录上。记录和文档算一件东西：文章对话的 Apply 和删 topic 的 reassign 把文档一起搬（`reading/saved/kept-document.ts`），取消收下把文档从记录的 topic 拿掉、没有别处引用就删（`reading/delete/unkeep.ts`），从 topic 拿掉文档那一行也取消收下。书架上有文档就不再列记录那一行；手机 Saved 列表点开时文档在本机就进阅读器，不在就打开快照。再收同一篇复用已有文档，摘要换成全文时建新的、旧的退掉。存量记录不迁移，没有 `documentHash` 的照旧走 `SavedArticleView`。备课面板加链接的网页改走 bindery 的 web 适配器和质量关（`readMaterial`，只读不建），`reading/sources/article.ts` 的正则抽取删了。

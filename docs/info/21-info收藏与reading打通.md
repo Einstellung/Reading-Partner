@@ -6,6 +6,8 @@
 
 > 补记（2026-09-12）：「收藏的文章算不算书」在 [67](../reading/67-HTML文档.md) 答完：阅读层同一种文档，摄入时构建成 EPUB 走纸页；topic 里和书并排，没有第二个列表。存量的 `saved-articles.json` 和 `SavedArticleView` 先留着，等新路跑稳再按同一函数重建。
 
+> 补记（2026-10-07）：Keep 已改走 bindery（[85](../platform/85-workshop与bindery.md) 第 4 步）。收下时简报手里的正文建成 EPUB，以文章入库并列进记录的 topic，记录多一个可选的 `documentHash` 指向它；能在阅读器里打开、划线、进全文和 prep。记录照旧写，Saved 列表、文章对话的 Apply、删 topic 的 reassign 都动记录，文档跟着走。正文过不了质量关的只留记录。存量记录不迁移。
+
 ---
 
 ## 原则
@@ -76,11 +78,11 @@ AI 这次用了哪几条外部材料，用户要看得见。可见性是闸的�
 
 按依赖排。
 
-- Topic 装得下文章。已做：没有往 `FileRef` 上挂可选字段，也没有塞进 `Topic.files`——`SavedArticle` 自带 `topicId`（`src/reading/saved/saved-articles.ts`），`savedArticlesForTopic` 按 topic 过滤，topic 屏另列一段展示（`LibraryScreen.tsx`、手机端 `PhoneApp.tsx` 经 `SavedArticleView`）。默认 topic 也已经有了：固定 id 的 Brief topic，首次收下时创建，按 id 幂等（`ensureBriefTopic`，`src/platform/app/topics.ts`）；清空还要新加。prep 抓来的论文是同一个坑的既有案例，它至今没进 topic，住在 `prep-<bookHash>/` 里。
+- Topic 装得下文章。已做：`SavedArticle` 自带 `topicId`（`src/reading/saved/saved-articles.ts`），`savedArticlesForTopic` 按 topic 过滤。新收的文章另有一份 EPUB 文档在 `Topic.files` 里，和书并排，topic 屏不再另列它的记录；没有文档的记录（存量、或质量关没过）仍另列一段，经 `SavedArticleView` 打开（`LibraryScreen.tsx`、手机端 `PhoneApp.tsx`）。默认 topic 也已经有了：固定 id 的 Brief topic，首次收下时创建，按 id 幂等（`ensureBriefTopic`，`src/platform/app/topics.ts`）；清空还要新加。prep 抓来的论文是同一个坑的既有案例，它至今没进 topic，住在 `prep-<bookHash>/` 里。
 
 - 保存那一刻的编排。工具形状现成（`AgentTool`：name / description / TypeBox schema / execute），`src/ai/` 只有机器、零领域工具，收藏工具属于领域。卡片这边已经动过：联合类型已拆成 `CardPayload = InfoCard | ReadingCard | AsideCard`（`src/ui/components/chat/chatParts.ts`），白名单里也已经有 reading 侧的项（`retell-decision`、`aside`），reading 侧的聊天现在会落卡片（`src/reading/session/use-call.ts` 写 `PersistedCardPayload`）。只剩收藏卡这一种还没做。工具名要避开 `add_source`——info 的"订阅源"和 prep 的"摄入 URL"已经各占一次。
 
-  分层上这件事落在 reading：材料进的是 reading 的上下文，编排代码放 `src/reading/` 下。现在已有两条 reading → info 的边（`src/reading/saved/saved-articles.ts`、`src/reading/sources/article.ts`，都只 import `info/extract/sanitize` 这个纯函数模块）；星标在 info 的卡片上、写路径在 reading，由 `App.tsx` 接线，聊天里的保存工具由 `ui/components/info` 装配（ui 可以 import 任何领域）。`info` 现在拆到十余个子目录（`analysis`、`boxes`、`briefer`、`cable`、`collect`、`extract`、`labs`、`meals`、`picture`、`program`、`sources`、`tasking` 等），都在 `tests/layering.test.ts` 的 LAYER 表里按真实粒度登记，全图无环，不必再顾虑升级到分组目录。
+  分层上这件事落在 reading：材料进的是 reading 的上下文，编排代码放 `src/reading/` 下。reading 取网页正文和消毒都从 `workshop/`（capability）拿，不再有 reading → info 的边；星标在 info 的卡片上、写路径在 reading，由 `App.tsx` 接线，聊天里的保存工具由 `ui/components/info` 装配（ui 可以 import 任何领域）。`info` 现在拆到十余个子目录（`analysis`、`boxes`、`briefer`、`cable`、`collect`、`extract`、`labs`、`meals`、`picture`、`program`、`sources`、`tasking` 等），都在 `tests/layering.test.ts` 的 LAYER 表里按真实粒度登记，全图无环，不必再顾虑升级到分组目录。
 
 - reading 的根聊天。现在没有。所有阅读对话都在 `threads-<bookId>.json` 里，只能从打开的书里进（划线气泡、标记列表、顶栏 AI 按钮的书级 thread）；`LibraryScreen` 一个聊天入口都没有。要新加一个不属于任何书的 thread key 和一个进得去的屏，新收下的材料在那儿浮现。
 

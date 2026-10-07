@@ -100,7 +100,7 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 
 ## 代码事实
 
-- 网页正文抽取有两个：`src/reading/sources/article.ts` 的 `extractArticle` 是字符串正则、只出纯文本，`ingest_url` 今天用它；`src/workshop/extract/readable.ts` 的 `extractReadable` 走 Readability 加 defuddle 回退、出 HTML、要 DOMParser，收藏文章的 `html` 是它产的（`src/reading/saved/saved-articles.ts`）。构建 EPUB 要 HTML，用后者，经 `readable-lazy.ts` 那扇门进；`ingest_url` 合并后也换到它。
+- 网页正文抽取只剩一个：`src/workshop/extract/readable.ts` 的 `extractReadable`，Readability 加 defuddle 回退、出 HTML、要 DOMParser，经 `readable-lazy.ts` 那扇门进，由 bindery 的 web 适配器调用。`ingest_url`、备课面板的加链接、收藏文章都走 bindery（[85](../platform/85-workshop与bindery.md)）。原来的正则抽取 `extractArticle` 已删。
 - 消毒：`src/workshop/bindery/sanitize.ts` 的 `sanitizeDocument`，允许列表、幂等（坑 126）。构建时先用它过一遍，产出直接就是阅读器要吃的那棵树。
 - 入库：`src/platform/app/library.ts` 的 `importBook(bytes, originalPath)`，按内容哈希判重，`formatOfBytes` 嗅探格式。EPUB 字节进去就是一本书，重复摄入同一篇是 no-op。
 - zip 写：`fflate` 0.8.3 已装（`src/workshop/bindery/zip.ts` 用它的 `unzipSync` 读），构建用 `zipSync`，`mimetype` 条目必须第一个且不压缩。
@@ -122,7 +122,7 @@ Red Box 里 cable 的正文是浏览模式：打开就看，不落盘、不建�
 - 合订本构建：先有零散文章，再看「合成一本」的频率。
 - 分享面板：见 [78](../platform/78-分享.md)。
 - 盒内浏览模式：info 侧的 Red Box 还没生在 palace 里（61 第 6 步）。
-- 收藏文章的存量迁移：`saved-articles.json` 和 `SavedArticleView` 先留着，等新路跑稳再把存量按同一函数重建。
+- 收藏文章的存量迁移：新收的已经建成 EPUB 进 topic（[85](../platform/85-workshop与bindery.md) 第 4 步），存量记录没有 `documentHash`，照旧由 `SavedArticleView` 打开，等新路跑稳再按同一函数重建。
 - 稿：编辑部还没做，没有稿。
 - 只看译文和双语切换：先只出双语对照，等用过再说。
 - 翻整本书：形态一样，量级不一样，先只翻文章。
