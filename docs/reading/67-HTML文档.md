@@ -52,7 +52,7 @@ PDF 用第一页，EPUB 用它自己声明的封面，文章还是没封面的�
 
 ## 辅助资料
 
-书内对话里贴的 URL 落成这本书的辅助资料（supplement），归这本书，不进 topic 列表，书架上不多一行。任意 http/https URL 都收，PDF 和 EPUB 链接直接入库也是 supplement。
+书内对话里贴的 URL 落成这本书的辅助资料（supplement），归这本书，不进 topic 列表，书架上不多一行。任意 http/https URL 都收，PDF 和 EPUB 链接直接入库也是 supplement。arXiv 的摘要页和 PDF 链接落成论文的 PDF，按论文标题命名（[85](../platform/85-workshop与bindery.md)）。
 
 存 `supplements-<bookId>.json`，一书一文件，每条记 supplement 的文档 id（内容哈希）、标题、来源 URL、加入时间。同一个 URL 收两次是同一份字节、同一个 id，一条。文件本身还是 library 里的 EPUB/PDF，构建路径和文章相同。
 

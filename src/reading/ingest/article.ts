@@ -7,7 +7,8 @@
 // any other, and the reader, the pagination, the marks and the prep have
 // nothing new to learn. A link that turns out to be a PDF or an EPUB skips all
 // of that: the bytes are already a document, so they go straight into the
-// library.
+// library. A link a site adapter claims is the bindery's to read: an arXiv
+// abstract or PDF link comes back as the paper's PDF with its real title.
 //
 // Where it is then listed is the target's: a book's supplements, or a topic's
 // documents. The bytes and everything derived from them are the same either way.
@@ -163,6 +164,23 @@ async function fileBound(
   bound: BindResult,
 ): Promise<IngestedDocument> {
   if (!bound.ok) throw new Error(t("reader.ingest.unreadable", { url, reason: bound.message }));
+  if ("passedThrough" in bound) {
+    // A document the site serves whole (an arXiv paper's PDF): a book, as a PDF
+    // link is, but named by the title the adapter read rather than the URL.
+    const meta = bound.metadata;
+    return await file(
+      deps,
+      target,
+      bound.bytes,
+      articleFileName(meta.title, slugBase, bound.format),
+      {
+        ...(meta.sourceUrl === undefined ? {} : { sourceUrl: meta.sourceUrl }),
+        ...(meta.author === undefined ? {} : { byline: meta.author }),
+        ...(meta.publishedAt === undefined ? {} : { publishedAt: meta.publishedAt }),
+      },
+      { kind: "book", chars: 0, imagesEmbedded: 0, imagePlaceholders: 0 },
+    );
+  }
   return fileBuilt(deps, target, bound, slugBase);
 }
 

@@ -6,8 +6,11 @@ export {
   type BindResult,
   type Bound,
   type BoundMetadata,
+  type PassedMetadata,
+  type PassedThrough,
   type ReadManuscript,
 } from "./bind";
+export { rejection } from "./gate";
 export type { Rejection, RejectionReason } from "./gate";
 export type { FetchBytes, FetchedBytes } from "./images";
 export {
@@ -22,6 +25,7 @@ export {
   type BinderyDeps,
   type Material,
   type MaterialMeta,
+  type WholeDocument,
 } from "./material";
 export {
   registerSiteAdapter,

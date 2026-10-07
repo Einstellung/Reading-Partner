@@ -8,7 +8,13 @@
 import { MIN_BODY_CHARS } from "../extract/readable-select";
 import { manuscriptText, type Manuscript } from "./manuscript";
 
-export type RejectionReason = "empty" | "too-short" | "login-wall" | "no-adapter";
+export type RejectionReason =
+  | "empty"
+  | "too-short"
+  | "login-wall"
+  | "no-adapter"
+  /** The site did not serve what a site adapter asked it for. */
+  | "unreachable";
 
 /** Why material did not become a document. `message` is an English clause. */
 export interface Rejection {

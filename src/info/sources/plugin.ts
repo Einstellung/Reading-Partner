@@ -22,6 +22,7 @@
 // allows, and the program registers the set (sources/plugins/all.ts).
 
 import { addDays } from "../../platform/std/day";
+import type { SiteAdapter } from "../../workshop/bindery";
 import type { FetchFn } from "../../workshop/extract/http";
 import type { SourceDescriptor } from "./descriptor";
 import type { InfoItem, ItemSignals } from "./item";
@@ -58,6 +59,11 @@ export interface SourcePlugin {
   // them; never a body. Throws on a failed request (collectAll records it as
   // source health); returns [] when the library has nothing.
   discover(desc: SourceDescriptor, query: IndexQuery, deps: PluginDeps): Promise<InfoItem[]>;
+
+  // A link into this library a reader pasted, read as the document it names
+  // (docs/85): the bindery's site adapter for the library's own pages, which
+  // sources/plugins/all.ts registers at startup.
+  site?: SiteAdapter;
 
   // --- optional capabilities, unimplemented this release -------------------
 

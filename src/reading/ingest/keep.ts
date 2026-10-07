@@ -105,7 +105,11 @@ export async function keepArticle(input: SavedArticleInput, deps: KeepDeps): Pro
     if (material) {
       try {
         const bound = await bind(material, deps.fetch ? { fetch: deps.fetch } : {});
-        if (bound.ok) {
+        if (!bound.ok) {
+          rejection = bound;
+        } else if (!("passedThrough" in bound)) {
+          // A body in hand is always built; only a site adapter passes a whole
+          // document through, and none reads a kept body.
           document = await fileBuilt(
             {
               importBook: deps.importBook,
@@ -117,8 +121,6 @@ export async function keepArticle(input: SavedArticleInput, deps: KeepDeps): Pro
             slugBaseFromUrl(input.url),
           );
           documentHash = document.entry.hash;
-        } else {
-          rejection = bound;
         }
       } catch (e) {
         console.warn("could not build the kept article into a document", e);

@@ -35,6 +35,41 @@ export function normalizeArxivId(raw: string): string | null {
   return null;
 }
 
+/** An arXiv paper a link points at: its id, and the version when the link names one. */
+export interface ArxivPaperRef {
+  id: string;
+  /** "v2", or absent for the latest. */
+  version?: string;
+}
+
+// arxiv.org itself, and the mirrors that keep its path shape: alphaXiv
+// (/abs, /overview, /pdf) and ar5iv (/abs, /html).
+const ARXIV_LINK =
+  /^(?:www\.|export\.)?arxiv\.org$|^(?:www\.)?alphaxiv\.org$|^ar5iv(?:\.labs\.arxiv)?\.org$/i;
+const PAPER_PATH = /^\/(?:abs|pdf|overview|html)\/(.+?)(?:\.pdf)?\/?$/i;
+const PAPER_ID = /^(\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(v\d+)?$/;
+
+// The paper an arXiv abstract or PDF link points at, or null for any other
+// link: "https://arxiv.org/abs/2505.06708v2" -> { id: "2505.06708", version: "v2" },
+// "https://arxiv.org/pdf/hep-th/9901001" -> { id: "hep-th/9901001" }.
+export function arxivPaperOfUrl(url: string): ArxivPaperRef | null {
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  if (!/^https?:$/.test(u.protocol) || !ARXIV_LINK.test(u.hostname)) return null;
+  const path = PAPER_PATH.exec(decodeURIComponent(u.pathname));
+  const m = path ? PAPER_ID.exec(path[1]) : null;
+  if (!m) return null;
+  return m[2] ? { id: m[1], version: m[2] } : { id: m[1] };
+}
+
+export function arxivPdfUrl(id: string): string {
+  return `https://arxiv.org/pdf/${id}`;
+}
+
 export function arxivIdUrl(id: string): string {
   return `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}&max_results=1`;
 }
@@ -73,7 +108,7 @@ export function parseArxivAtom(xml: string): ArxivEntry[] {
       title: tagText(entry, "title"),
       summary: tagText(entry, "summary"),
       authors,
-      pdfUrl: `https://arxiv.org/pdf/${id}`,
+      pdfUrl: arxivPdfUrl(id),
       published: tagText(entry, "published"),
       ...(primary ? { primaryCategory: primary[1] } : {}),
     });

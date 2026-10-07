@@ -36,6 +36,9 @@ export async function readWebSource(
     { extractReadable: deps.extractReadable },
   );
   if (!read.ok) throw new Error(`no readable article at the link: ${read.message}`);
+  // A site adapter found a whole document behind the page (a PDF): there is no
+  // page text to digest, and prep fetches documents by its own route.
+  if ("passedThrough" in read) throw new Error("the link is a whole document, not a web page");
   const full = manuscriptText(read.manuscript);
   const truncated = full.length > WEB_SOURCE_MAX_CHARS;
   const text = truncated ? full.slice(0, WEB_SOURCE_MAX_CHARS) + TRUNCATION_MARKER : full;

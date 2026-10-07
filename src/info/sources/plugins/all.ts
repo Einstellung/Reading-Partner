@@ -5,15 +5,23 @@
 // Each plugin file exports its plugin object and registers nothing on
 // import, so this is the only place the set is spelled out.
 
-import { registerSourcePlugin } from "../plugin";
+import { registerSiteAdapter } from "../../../workshop/bindery";
+import { registerSourcePlugin, type SourcePlugin } from "../plugin";
 import { arxivPlugin } from "./arxiv";
 import { githubPlugin } from "./github";
 import { huggingfacePlugin } from "./huggingface";
 import { s2Plugin } from "./s2";
 
+const PLUGINS: readonly SourcePlugin[] = [arxivPlugin, githubPlugin, huggingfacePlugin, s2Plugin];
+
 export function registerAllSourcePlugins(): void {
-  registerSourcePlugin(arxivPlugin);
-  registerSourcePlugin(githubPlugin);
-  registerSourcePlugin(huggingfacePlugin);
-  registerSourcePlugin(s2Plugin);
+  for (const plugin of PLUGINS) registerSourcePlugin(plugin);
+}
+
+/**
+ * Hand the bindery the site adapter of every plugin that reads its library's
+ * own links (docs/85). Called once from the shells' bootDomains.
+ */
+export function registerSourceSiteAdapters(): void {
+  for (const plugin of PLUGINS) if (plugin.site) registerSiteAdapter(plugin.site);
 }

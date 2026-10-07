@@ -43,6 +43,29 @@ export interface BinderyDeps {
   extractReadable?: ExtractReadable;
 }
 
+/**
+ * A document a site already serves whole, such as a paper's PDF. There is
+ * nothing to build, so a site adapter may hand one back instead of a manuscript,
+ * and the bindery passes its bytes through with what the adapter read about it.
+ */
+export interface WholeDocument {
+  kind: "whole";
+  format: "pdf" | "epub";
+  bytes: Uint8Array;
+  title: string;
+  author?: string;
+  publishedAt?: string;
+  sourceUrl?: string;
+  /** The document's own summary, where the site gives one (a paper's abstract). */
+  abstract?: string;
+}
+
+export function isWholeDocument(value: unknown): value is WholeDocument {
+  return (
+    typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "whole"
+  );
+}
+
 /** Turns one kind of material into a manuscript, or says why it cannot. */
 export interface Adapter<M extends Material = Material> {
   name: string;

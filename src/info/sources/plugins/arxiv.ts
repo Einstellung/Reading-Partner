@@ -7,9 +7,26 @@
 // export API does not answer sortBy=submittedDate and its limiter is strict
 // (docs/pitfall/72). One request per run, through fetchWithRetry's per-host
 // spacing; a terminal failure throws so collectAll records source health.
+//
+// The plugin also reads a pasted arXiv link as the paper itself, through the
+// bindery's site-adapter registry (docs/85): the PDF whole, with its real title.
 
 import { throwIfAborted } from "../../../platform/app/abort";
-import { arxivQueryTerms, parseArxivAtom, type ArxivEntry } from "./arxiv-client";
+import {
+  arxivIdUrl,
+  arxivPaperOfUrl,
+  arxivPdfUrl,
+  arxivQueryTerms,
+  parseArxivAtom,
+  type ArxivEntry,
+  type ArxivPaperRef,
+} from "./arxiv-client";
+import {
+  rejection,
+  type FetchBytes,
+  type FetchedBytes,
+  type SiteAdapter,
+} from "../../../workshop/bindery";
 import { fetchWithRetry, HttpStatusError, interactiveRetry } from "../../../platform/http/throttled-fetch";
 import { itemId } from "../../../workshop/extract/id";
 import type { SourceDescriptor } from "../descriptor";
@@ -106,11 +123,83 @@ function toItem(desc: SourceDescriptor, e: ArxivEntry): InfoItem {
   return item;
 }
 
+// --- a pasted link, read as the paper (docs/85) ------------------------------
+
+// A byline names this many authors before it says "et al.".
+const BYLINE_AUTHORS = 3;
+
+function byline(authors: string[]): string | undefined {
+  if (authors.length === 0) return undefined;
+  if (authors.length <= BYLINE_AUTHORS) return authors.join(", ");
+  return `${authors[0]} et al.`;
+}
+
+// "%PDF": arXiv answers some PDF links with an HTML page (a paper still being
+// processed, a withdrawn one), and that is not the document.
+function isPdf(bytes: Uint8Array): boolean {
+  return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+}
+
+// The paper's entry in the export API, or null when the lookup failed or found
+// nothing. Never throws: the PDF is the document, and without its metadata it is
+// still filed, under its id.
+async function lookupEntry(ref: ArxivPaperRef, fetch: FetchBytes): Promise<ArxivEntry | null> {
+  try {
+    const res = await fetch(arxivIdUrl(ref.id + (ref.version ?? "")));
+    if (!res.ok) return null;
+    const entry = parseArxivAtom(new TextDecoder("utf-8").decode(res.bytes))[0];
+    return entry && entry.id === ref.id && entry.title !== "" ? entry : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * An arXiv abstract or PDF link, read as the paper: its PDF, whole, named by the
+ * title the export API gives it. A link to an abstract page fetched as a web
+ * page would be a document holding only the abstract, and a PDF link filed as
+ * it is would be called by its id.
+ */
+export const arxivSiteAdapter: SiteAdapter = {
+  name: "arxiv",
+  claims: (material) => material.kind === "url" && arxivPaperOfUrl(material.url) !== null,
+  async toManuscript(material, deps) {
+    const ref = material.kind === "url" ? arxivPaperOfUrl(material.url) : null;
+    if (!ref) return rejection("no-adapter", "the link is not an arXiv paper");
+    if (!deps.fetch) throw new Error("the arXiv adapter needs fetch");
+    const versioned = ref.id + (ref.version ?? "");
+    let pdf: FetchedBytes;
+    try {
+      pdf = await deps.fetch(arxivPdfUrl(versioned));
+    } catch {
+      return rejection("unreachable", `arXiv could not be reached for the PDF of ${versioned}`);
+    }
+    if (!pdf.ok) {
+      return rejection("unreachable", `arXiv answered HTTP ${pdf.status} for the PDF of ${versioned}`);
+    }
+    if (!isPdf(pdf.bytes)) return rejection("unreachable", `arXiv served no PDF for ${versioned}`);
+
+    const entry = await lookupEntry(ref, deps.fetch);
+    const author = entry ? byline(entry.authors) : undefined;
+    return {
+      kind: "whole",
+      format: "pdf",
+      bytes: pdf.bytes,
+      title: entry?.title || `arXiv ${ref.id}`,
+      ...(author === undefined ? {} : { author }),
+      ...(entry?.published ? { publishedAt: entry.published } : {}),
+      sourceUrl: `https://arxiv.org/abs/${versioned}`,
+      ...(entry?.summary ? { abstract: entry.summary } : {}),
+    };
+  },
+};
+
 export const arxivPlugin: SourcePlugin = {
   id: "arxiv",
   name: "arXiv",
   hosts: [HOST],
   defaultLimit: DEFAULT_LIMIT,
+  site: arxivSiteAdapter,
 
   validateQuery(query: IndexQuery): string | null {
     const read = readQuery(query);
