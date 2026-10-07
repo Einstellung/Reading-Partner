@@ -14,7 +14,7 @@
 >
 > 五：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期的常量清干净。Tabs / Tooltip 没引，理由见「没引的」。
 >
-> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「各版改了什么」）。2026-09-17 删掉 collapsible 和 textarea，两个都没有调用点。之后加了 popover（`23eeb7cc`，见「没引的」），现在 15 个：alert-dialog、badge、button、checkbox、dialog、dropdown-menu、input、label、overlay、popover、select、separator、switch、tabs、toast。
+> `src/ui/components/ui/` 五版之后一共 15 个文件：alert-dialog、badge、button、checkbox、collapsible、dialog、dropdown-menu、input、label、overlay、select、separator、switch、textarea、toast。之后设置页重组时加了 tabs，共 16 个（见「各版改了什么」）。2026-09-17 删掉 collapsible 和 textarea，两个都没有调用点。之后加了 popover（`23eeb7cc`，见「没引的」），之后手机 Display sheet 改版时加了 slider，现在 16 个：alert-dialog、badge、button、checkbox、dialog、dropdown-menu、input、label、overlay、popover、select、separator、slider、switch、tabs、toast。
 
 ---
 
@@ -180,6 +180,7 @@ className={cn(OVERLAY_SAFE.centered, "fixed top-[50%] left-[50%] ...", className
 - 四（对话框）：`SlidesDialog`（现在叫 `retell/DeckDialog.tsx`，宿主从 `NotesPanel` 换成了 `RetellView`）换居中 Dialog，`SettingsView` 换全屏 content 变体。风险最高，单独发一版。
 - 五（收尾）：四个 `<select>` 换 Select，四个原生复选框换 Checkbox，紫底 chip 换 Badge，过渡期常量清干净。
 - 之后：设置页从一个弹窗堆九组改成账号/功能/可选三个 Tabs，`SettingsView.tsx` 只剩壳，三个面板拆进 `settings/AccountPanel.tsx` / `FeaturesPanel.tsx` / `OptionalPanel.tsx`；Tabs 是这时候引的。
+- 之后：手机 Display sheet 的字号、行距、边距换成带刻度的滑轨（`phone/reader/SteppedTrack.tsx`），Slider 是这时候引的。`ui/slider.tsx` 把 Root / Track / Range / Thumb 分开导出，因为刻度要画在 Track 里。
 
 真机：五版都靠两份产物在 Chromium 里逐节点 diff 加逐像素对比核对几何与行为等价，一版一验、每版发 TestFlight 对比，但 iOS 幽灵点击本身当时都没有真机验证。第一次 iPad 真机驱动是在五版之后：改了两处——引用 chip 的命中区太小（换成 `relative` + `HIT_44`）、`DeleteTopicButton` 的 `window.confirm` 在 Tauri 下是同步的因此一按就删（换 AlertDialog，坑 98）。
 

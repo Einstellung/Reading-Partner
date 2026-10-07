@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { useDom } from "../../../support/dom";
 
 // The primitives come in dynamically, after the window is up. Eleven of the
-// fifteen wrap a Radix package that reaches for a portal, and that pulls in
+// sixteen wrap a Radix package that reaches for a portal, and that pulls in
 // react-dom's client bundle, which decides at module evaluation whether it is
 // in a browser and never reconsiders (docs/pitfall/121). Static imports are
 // evaluated before any top-level await in the file, so importing them the
@@ -46,6 +46,7 @@ const overlay = await import("../../../../src/ui/components/ui/overlay");
 const popover = await import("../../../../src/ui/components/ui/popover");
 const select = await import("../../../../src/ui/components/ui/select");
 const separator = await import("../../../../src/ui/components/ui/separator");
+const slider = await import("../../../../src/ui/components/ui/slider");
 const switchModule = await import("../../../../src/ui/components/ui/switch");
 const tabs = await import("../../../../src/ui/components/ui/tabs");
 const toast = await import("../../../../src/ui/components/ui/toast");
@@ -66,6 +67,7 @@ const MODULES: Record<string, Record<string, unknown>> = {
   "popover.tsx": popover,
   "select.tsx": select,
   "separator.tsx": separator,
+  "slider.tsx": slider,
   "switch.tsx": switchModule,
   "tabs.tsx": tabs,
   "toast.tsx": toast,

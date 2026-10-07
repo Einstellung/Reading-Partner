@@ -663,3 +663,72 @@ export function IconShareOut({ size = 20 }: IconProps) {
 		</svg>
 	);
 }
+
+// The two ends of the Display sheet's line-spacing track (docs/70): the same
+// block of text set close together and set apart.
+export function IconLinesTight({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+		>
+			<path d="M3.5 6.25H16.5" />
+			<path d="M3.5 8.75H16.5" />
+			<path d="M3.5 11.25H16.5" />
+			<path d="M3.5 13.75H12.5" />
+		</svg>
+	);
+}
+
+export function IconLinesLoose({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+		>
+			<path d="M3.5 4H16.5" />
+			<path d="M3.5 10H16.5" />
+			<path d="M3.5 16H12.5" />
+		</svg>
+	);
+}
+
+// The two ends of the Display sheet's margins track: a page whose lines run
+// close to its edges, and one whose lines keep well clear of them.
+export function IconMarginsNarrow({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<rect x="3.25" y="2.75" width="13.5" height="14.5" rx="1.5" />
+			<path d="M5.75 6.5H14.25" />
+			<path d="M5.75 10H14.25" />
+			<path d="M5.75 13.5H11.75" />
+		</svg>
+	);
+}
+
+export function IconMarginsWide({ size = 20 }: IconProps) {
+	return (
+		<svg
+			{...svgProps(size)}
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<rect x="3.25" y="2.75" width="13.5" height="14.5" rx="1.5" />
+			<path d="M8 6.5H12" />
+			<path d="M8 10H12" />
+			<path d="M8 13.5H10.5" />
+		</svg>
+	);
+}

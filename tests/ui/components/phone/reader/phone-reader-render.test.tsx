@@ -628,6 +628,42 @@ test("the sheet's choices reach the pane and the slot on this device", async () 
   expect(JSON.parse(localStorage.getItem(FLOW_DISPLAY_KEY) as string)).toEqual(displays[2]);
 });
 
+test("the sheet opens on Layout, with three stepped tracks that read as sliders", async () => {
+  localStorage.removeItem(FLOW_DISPLAY_KEY);
+  displays.length = 0;
+  const { getByLabelText } = await openReader();
+  await act(async () => {
+    fireEvent.click(getByLabelText("Display"));
+  });
+  const tabs = [...document.body.querySelectorAll('[role="tab"]')];
+  expect(tabs.map((tab) => [tab.textContent, tab.getAttribute("aria-selected")])).toEqual([
+    ["Layout", "true"],
+    ["More", "false"],
+  ]);
+  const sliders = [...document.body.querySelectorAll('[role="slider"]')];
+  expect(
+    sliders.map((s) => [
+      s.getAttribute("aria-label"),
+      s.getAttribute("aria-valuemax"),
+      s.getAttribute("aria-valuenow"),
+      s.getAttribute("aria-valuetext"),
+    ]),
+  ).toEqual([
+    ["Size", "4", "2", "17px"],
+    ["Line spacing", "2", "1", "Standard"],
+    ["Margins", "1", "0", "Narrow"],
+  ]);
+
+  // The end icons step the ladder, one rung a press.
+  const looser = document.body.querySelector('button[aria-label="Looser lines"]');
+  await act(async () => {
+    fireEvent.click(looser as Element);
+  });
+  expect(displays[displays.length - 1].lineHeight).toBe(1.85);
+  expect(sliders[1].getAttribute("aria-valuetext")).toBe("Loose");
+  localStorage.removeItem(FLOW_DISPLAY_KEY);
+});
+
 test("a book opens at the settings the reader left, not at the default", async () => {
   localStorage.setItem(
     FLOW_DISPLAY_KEY,

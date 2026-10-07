@@ -114,6 +114,12 @@ export default {
   "displaySheet.margins": "页边距",
   "displaySheet.paper": "纸张",
   "displaySheet.lumen": "Lumen",
+  "displaySheet.layout": "排版",
+  "displaySheet.more": "更多",
+  "displaySheet.tighterLines": "行距更紧",
+  "displaySheet.looserLines": "行距更松",
+  "displaySheet.narrowerMargins": "页边距更窄",
+  "displaySheet.widerMargins": "页边距更宽",
 
 
   "lessonBar.backToShelf": "返回书架",

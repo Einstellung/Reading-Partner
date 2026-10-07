@@ -155,6 +155,12 @@ export default {
   "displaySheet.pages": "Pages",
   "displaySheet.paper": "Paper",
   "displaySheet.lumen": "Lumen",
+  "displaySheet.layout": "Layout",
+  "displaySheet.more": "More",
+  "displaySheet.tighterLines": "Tighter lines",
+  "displaySheet.looserLines": "Looser lines",
+  "displaySheet.narrowerMargins": "Narrower margins",
+  "displaySheet.widerMargins": "Wider margins",
 
   // ---- reader/PhoneContentsSheet.tsx: Outline, Marks and Prep.
   "contents.label": "Outline, marks and prep",

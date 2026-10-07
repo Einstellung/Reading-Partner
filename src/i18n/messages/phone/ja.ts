@@ -114,6 +114,12 @@ export default {
   "displaySheet.margins": "余白",
   "displaySheet.paper": "用紙",
   "displaySheet.lumen": "Lumen",
+  "displaySheet.layout": "レイアウト",
+  "displaySheet.more": "その他",
+  "displaySheet.tighterLines": "行間を狭く",
+  "displaySheet.looserLines": "行間を広く",
+  "displaySheet.narrowerMargins": "余白を狭く",
+  "displaySheet.widerMargins": "余白を広く",
 
 
   "lessonBar.backToShelf": "書棚へ戻る",

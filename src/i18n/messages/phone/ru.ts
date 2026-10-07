@@ -135,6 +135,12 @@ export default {
   "displaySheet.margins": "Поля",
   "displaySheet.paper": "Бумага",
   "displaySheet.lumen": "Lumen",
+  "displaySheet.layout": "Макет",
+  "displaySheet.more": "Ещё",
+  "displaySheet.tighterLines": "Плотнее строки",
+  "displaySheet.looserLines": "Свободнее строки",
+  "displaySheet.narrowerMargins": "Уже поля",
+  "displaySheet.widerMargins": "Шире поля",
 
 
   "lessonBar.backToShelf": "Назад на полку",

@@ -120,6 +120,12 @@ export default {
   "displaySheet.margins": "Margens",
   "displaySheet.paper": "Papel",
   "displaySheet.lumen": "Lumen",
+  "displaySheet.layout": "Layout",
+  "displaySheet.more": "Mais",
+  "displaySheet.tighterLines": "Espaçamento menor",
+  "displaySheet.looserLines": "Espaçamento maior",
+  "displaySheet.narrowerMargins": "Margens mais estreitas",
+  "displaySheet.widerMargins": "Margens mais largas",
 
 
   "lessonBar.backToShelf": "Voltar à estante",

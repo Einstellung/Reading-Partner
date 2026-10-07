@@ -121,6 +121,12 @@ export default {
   "displaySheet.margins": "Ränder",
   "displaySheet.paper": "Papier",
   "displaySheet.lumen": "Lumen",
+  "displaySheet.layout": "Layout",
+  "displaySheet.more": "Mehr",
+  "displaySheet.tighterLines": "Engere Zeilen",
+  "displaySheet.looserLines": "Weitere Zeilen",
+  "displaySheet.narrowerMargins": "Schmalere Ränder",
+  "displaySheet.widerMargins": "Breitere Ränder",
 
 
   "lessonBar.backToShelf": "Zurück zum Regal",

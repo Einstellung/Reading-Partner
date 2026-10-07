@@ -123,6 +123,12 @@ export default {
   "displaySheet.margins": "Marges",
   "displaySheet.paper": "Papier",
   "displaySheet.lumen": "Lumen",
+  "displaySheet.layout": "Mise en page",
+  "displaySheet.more": "Plus",
+  "displaySheet.tighterLines": "Interligne plus serré",
+  "displaySheet.looserLines": "Interligne plus large",
+  "displaySheet.narrowerMargins": "Marges plus étroites",
+  "displaySheet.widerMargins": "Marges plus larges",
 
 
   "lessonBar.backToShelf": "Retour à l'étagère",

@@ -1,21 +1,28 @@
-// The Aa sheet (docs/70): the type the column is set in and the paper it sits
-// on, off the bottom edge like the outline is.
+// The Aa sheet (docs/70, docs/82): the type the column is set in and the paper
+// it sits on, off the bottom edge like the outline is. Kept as short as it can
+// be, so the page it changes stays in view above it.
 //
-// Same shell as PhoneOutlineSheet — a Radix dialog through ui/dialog.tsx, so
+// Same shell as PhoneContentsSheet — a Radix dialog through ui/dialog.tsx, so
 // the layer, the safe area and the layer registration all come from one place
 // (docs/30). It carries the paper as an attribute of its own because it is
 // portalled to <body>: the reading screen's dark tokens are scoped to that
 // attribute and do not reach out of the tree they are set on.
 //
-// The first row is scrolling or turning pages (docs/79). The last is Lumen,
-// the same switch as Settings and the home screen's title (docs/68). Every control applies
-// on the press. There is no Done: the book is behind the sheet, the change is
-// visible in it, and a setting the reader has to confirm is a setting they
-// cannot see while choosing.
+// Two text tabs and no title bar. Layout is scrolling or turning pages
+// (docs/79), then text size, line spacing and margins as stepped tracks
+// (SteppedTrack.tsx) whose end icons stand in for row labels, then the paper.
+// More is the Lumen switch, the same one as Settings and the home screen's
+// title (docs/68). Both panels share one grid cell, so the sheet is as tall on
+// More as on Layout and the tabs stay under the finger; it opens on Layout
+// every time because the content unmounts on close.
+//
+// Every control applies on the press. There is no Done: the book is behind the
+// sheet, the change is visible in it, and a setting the reader has to confirm
+// is a setting they cannot see while choosing.
 
-import type { ReactNode } from "react";
 import { useT } from "../../../../i18n";
 import {
+  FLOW_DISPLAY_DEFAULT,
   FLOW_FONT_STEPS,
   FLOW_LINE_STEPS,
   FLOW_PAD_STEPS,
@@ -23,14 +30,22 @@ import {
   FLOW_PAPER_NAMES,
   flowFontStep,
   flowPaperSwatch,
-  stepFlowFont,
   type FlowDisplay,
 } from "../../../../reading/epub/flow/flow-display";
+import {
+  IconLinesLoose,
+  IconLinesTight,
+  IconMarginsNarrow,
+  IconMarginsWide,
+} from "../../base/icons";
 import { cn } from "../../lib/utils";
 import { setLumenShown, useLumenShown } from "../../lumen/use-lumen-shown";
 import { Button } from "../../ui/button";
 import { Dialog, DialogSheetContent, DialogTitle } from "../../ui/dialog";
 import { Switch } from "../../ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
+import SteppedTrack from "./SteppedTrack";
+import { stepIndexOf } from "./stepped-track";
 
 const LINE_LABEL = {
   tight: "phone.displaySheet.lineTight",
@@ -50,6 +65,14 @@ const PAPER_LABEL = {
   dark: "phone.displaySheet.paperDark",
 } as const;
 
+const LINE_VALUES = FLOW_LINE_STEPS.map((s) => s.value);
+const PAD_VALUES = FLOW_PAD_STEPS.map((s) => s.value);
+
+const TAB_CLASS =
+  "relative flex-none rounded-none px-1 text-[15px] font-medium text-muted-foreground after:absolute after:bottom-1 after:left-1/2 after:h-[3px] after:w-5 after:-translate-x-1/2 after:rounded-full after:content-[''] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-foreground";
+
+const PANEL_CLASS = "[grid-area:1/1] data-[state=inactive]:invisible";
+
 export default function PhoneDisplaySheet(props: {
   open: boolean;
   display: FlowDisplay;
@@ -58,134 +81,109 @@ export default function PhoneDisplaySheet(props: {
 }) {
   const { display, onChange } = props;
   const t = useT();
-  const step = flowFontStep(display);
   const lumenShown = useLumenShown();
+  const lineStep = stepIndexOf(LINE_VALUES, display.lineHeight, FLOW_DISPLAY_DEFAULT.lineHeight);
+  const padStep = stepIndexOf(PAD_VALUES, display.padX, FLOW_DISPLAY_DEFAULT.padX);
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogSheetContent data-reader-paper={display.paper}>
-        <DialogTitle className="border-b border-border-subtle px-4 py-3 text-[15px]">
-          {t("phone.displaySheet.title")}
-        </DialogTitle>
-        <div className="flex flex-col gap-4 p-4 pb-safe-4">
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-[3px]" role="group">
-            {(["scroll", "paged"] as const).map((mode) => (
-              <Button
-                key={mode}
-                variant="ghost"
-                className={cn(
-                  "h-10 rounded-[9px] text-[15px] font-normal text-muted-foreground",
-                  display.mode === mode && "bg-background font-semibold text-foreground shadow-sm can-hover:hover:bg-background",
-                )}
-                aria-pressed={display.mode === mode}
-                onClick={() => onChange({ ...display, mode })}
-              >
-                {t(mode === "scroll" ? "phone.displaySheet.scroll" : "phone.displaySheet.pages")}
-              </Button>
-            ))}
-          </div>
+      <DialogSheetContent data-reader-paper={display.paper} aria-describedby={undefined}>
+        <DialogTitle className="sr-only">{t("phone.displaySheet.title")}</DialogTitle>
+        <Tabs defaultValue="layout" className="flex-col gap-0">
+          <TabsList className="justify-start gap-5 rounded-none bg-transparent p-0 px-4 pt-1">
+            <TabsTrigger value="layout" className={TAB_CLASS}>
+              {t("phone.displaySheet.layout")}
+            </TabsTrigger>
+            <TabsTrigger value="more" className={TAB_CLASS}>
+              {t("phone.displaySheet.more")}
+            </TabsTrigger>
+          </TabsList>
 
-          <Row label={t("phone.displaySheet.size")}>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={t("phone.displaySheet.smallerText")}
-              disabled={step === 0}
-              onClick={() => onChange(stepFlowFont(display, -1))}
-            >
-              <span className="text-[14px]">A</span>
-            </Button>
-            <span className="min-w-12 text-center text-[13px] [font-variant-numeric:tabular-nums] text-muted-foreground">
-              {display.fontPx}px
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={t("phone.displaySheet.largerText")}
-              disabled={step === FLOW_FONT_STEPS.length - 1}
-              onClick={() => onChange(stepFlowFont(display, 1))}
-            >
-              <span className="text-[19px]">A</span>
-            </Button>
-          </Row>
+          <div className="grid">
+            <TabsContent value="layout" forceMount className={cn(PANEL_CLASS, "flex flex-col gap-2.5 px-4 pt-2 pb-safe-4")}>
+              <div className="mb-1 grid grid-cols-2 gap-1 rounded-xl bg-muted p-[3px]" role="group">
+                {(["scroll", "paged"] as const).map((mode) => (
+                  <Button
+                    key={mode}
+                    variant="ghost"
+                    className={cn(
+                      "h-10 rounded-[9px] text-[15px] font-normal text-muted-foreground",
+                      display.mode === mode && "bg-background font-semibold text-foreground shadow-sm can-hover:hover:bg-background",
+                    )}
+                    aria-pressed={display.mode === mode}
+                    onClick={() => onChange({ ...display, mode })}
+                  >
+                    {t(mode === "scroll" ? "phone.displaySheet.scroll" : "phone.displaySheet.pages")}
+                  </Button>
+                ))}
+              </div>
 
-          <Row label={t("phone.displaySheet.lineSpacing")}>
-            {FLOW_LINE_STEPS.map((s) => (
-              <Choice
-                key={s.value}
-                label={t(LINE_LABEL[s.id])}
-                selected={display.lineHeight === s.value}
-                onClick={() => onChange({ ...display, lineHeight: s.value })}
+              <SteppedTrack
+                label={t("phone.displaySheet.size")}
+                count={FLOW_FONT_STEPS.length}
+                index={flowFontStep(display)}
+                valueText={(i) => `${FLOW_FONT_STEPS[i]}px`}
+                start={{ icon: <span className="text-[13px] leading-none">A</span>, label: t("phone.displaySheet.smallerText") }}
+                end={{ icon: <span className="text-[21px] leading-none">A</span>, label: t("phone.displaySheet.largerText") }}
+                onStep={(i) => onChange({ ...display, fontPx: FLOW_FONT_STEPS[i] })}
               />
-            ))}
-          </Row>
 
-          <Row label={t("phone.displaySheet.margins")}>
-            {FLOW_PAD_STEPS.map((s) => (
-              <Choice
-                key={s.value}
-                label={t(PAD_LABEL[s.id])}
-                selected={display.padX === s.value}
-                onClick={() => onChange({ ...display, padX: s.value })}
+              <SteppedTrack
+                label={t("phone.displaySheet.lineSpacing")}
+                count={FLOW_LINE_STEPS.length}
+                index={lineStep}
+                valueText={(i) => t(LINE_LABEL[FLOW_LINE_STEPS[i].id])}
+                start={{ icon: <IconLinesTight />, label: t("phone.displaySheet.tighterLines") }}
+                end={{ icon: <IconLinesLoose />, label: t("phone.displaySheet.looserLines") }}
+                onStep={(i) => onChange({ ...display, lineHeight: FLOW_LINE_STEPS[i].value })}
               />
-            ))}
-          </Row>
 
-          <Row label={t("phone.displaySheet.paper")}>
-            {FLOW_PAPER_NAMES.map((name) => {
-              const paper = FLOW_PAPERS[name];
-              return (
-                <Button
-                  key={name}
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "rounded-full border border-black/20",
-                    display.paper === name && "ring-2 ring-primary ring-offset-2 ring-offset-background",
-                  )}
-                  style={{ backgroundColor: flowPaperSwatch(paper) }}
-                  title={t(PAPER_LABEL[name])}
-                  aria-label={t(PAPER_LABEL[name])}
-                  aria-pressed={display.paper === name}
-                  onClick={() => onChange({ ...display, paper: name })}
+              <SteppedTrack
+                label={t("phone.displaySheet.margins")}
+                count={FLOW_PAD_STEPS.length}
+                index={padStep}
+                valueText={(i) => t(PAD_LABEL[FLOW_PAD_STEPS[i].id])}
+                start={{ icon: <IconMarginsNarrow />, label: t("phone.displaySheet.narrowerMargins") }}
+                end={{ icon: <IconMarginsWide />, label: t("phone.displaySheet.widerMargins") }}
+                onStep={(i) => onChange({ ...display, padX: FLOW_PAD_STEPS[i].value })}
+              />
+
+              <div className="mt-1 grid grid-cols-4 justify-items-center" role="group" aria-label={t("phone.displaySheet.paper")}>
+                {FLOW_PAPER_NAMES.map((name) => {
+                  const paper = FLOW_PAPERS[name];
+                  return (
+                    <Button
+                      key={name}
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "size-12 rounded-full border border-foreground/20 coarse:size-12",
+                        display.paper === name && "ring-2 ring-foreground ring-offset-[3px] ring-offset-background",
+                      )}
+                      style={{ backgroundColor: flowPaperSwatch(paper) }}
+                      title={t(PAPER_LABEL[name])}
+                      aria-label={t(PAPER_LABEL[name])}
+                      aria-pressed={display.paper === name}
+                      onClick={() => onChange({ ...display, paper: name })}
+                    />
+                  );
+                })}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="more" forceMount className={cn(PANEL_CLASS, "px-4 pt-2")}>
+              <div className="flex min-h-11 items-center justify-between gap-3 px-1">
+                <span className="text-[15px]">{t("phone.displaySheet.lumen")}</span>
+                <Switch
+                  className="data-[state=checked]:bg-foreground"
+                  aria-label={t("phone.displaySheet.lumen")}
+                  checked={lumenShown}
+                  onCheckedChange={setLumenShown}
                 />
-              );
-            })}
-          </Row>
-
-          <Row label={t("phone.displaySheet.lumen")}>
-            <Switch
-              aria-label={t("phone.displaySheet.lumen")}
-              checked={lumenShown}
-              onCheckedChange={setLumenShown}
-            />
-          </Row>
-        </div>
+              </div>
+            </TabsContent>
+          </div>
+        </Tabs>
       </DialogSheetContent>
     </Dialog>
-  );
-}
-
-function Row(props: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="flex-none text-[14px] text-muted-foreground">{props.label}</span>
-      <div className="flex items-center gap-2">{props.children}</div>
-    </div>
-  );
-}
-
-function Choice(props: { label: string; selected: boolean; onClick: () => void }) {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      className={cn(
-        props.selected && "bg-secondary text-secondary-foreground can-hover:hover:bg-secondary",
-      )}
-      aria-pressed={props.selected}
-      onClick={props.onClick}
-    >
-      {props.label}
-    </Button>
   );
 }

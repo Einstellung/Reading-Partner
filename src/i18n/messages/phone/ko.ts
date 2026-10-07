@@ -114,6 +114,12 @@ export default {
   "displaySheet.margins": "여백",
   "displaySheet.paper": "용지",
   "displaySheet.lumen": "Lumen",
+  "displaySheet.layout": "레이아웃",
+  "displaySheet.more": "더 보기",
+  "displaySheet.tighterLines": "줄 간격 좁게",
+  "displaySheet.looserLines": "줄 간격 넓게",
+  "displaySheet.narrowerMargins": "여백 좁게",
+  "displaySheet.widerMargins": "여백 넓게",
 
 
   "lessonBar.backToShelf": "서재로 돌아가기",
