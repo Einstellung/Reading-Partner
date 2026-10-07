@@ -25,6 +25,8 @@
 2. 质量关：正文为空、太短、或者是登录墙的提示，就不往下走，交回原因。
 3. 生成 EPUB：现在 `reading/epub/file` 里的生成器下移到这里，扩展成能接多段（thread、合订本）。只有一段时，产出的字节和今天一样，书架上已有的文章不会因为重建多出一份。
 
+站点适配器也可以交回一份现成的文档（`WholeDocument`，arXiv 论文就是它的 PDF）：不过质量关、不生成，`bind` 原样交回字节和元信息（`PassedThrough`）。
+
 ## 和领域的分工
 
 入口收到的东西经 `intake` 分到领域。领域负责编排：调 bindery 拿到 EPUB，决定放进哪个 topic、挂在哪本书上，做全文索引。归 topic 用 `memory/filing`。reading 的 `ingest_url` 改成走 bindery，质量关没过就回一句取不到和原因，不再落成空书。
@@ -33,5 +35,5 @@
 
 1. 纯搬家：`git mv` 加改 import，零逻辑改动。`info/extract` 下移到 `workshop/extract`；生成 EPUB 用到的文件（生成器和它依赖的打包、清洗、目录、zip）以及网页适配要用的页面元信息、取图下移到 `workshop/bindery`。reading 读 EPUB 时用的清洗和 zip 改从 bindery 引用。
 2. 可读稿、通用适配器、站点适配器登记表、质量关、多段生成，`ingest_url` 接上。
-3. 站点适配器：X 等 [84](../info/84-X链接摄入.md) 实测完再做，arXiv abs 页取 PDF 和真实标题。
+3. 站点适配器：arXiv 已做，摘要页和 PDF 链接（含版本号、旧式 id、alphaXiv 和 ar5iv 镜像）取 PDF，标题、作者、日期、摘要查 export API，查不到用 id 命名；适配器在 `info/sources/plugins/arxiv.ts`，挂在插件的 `site` 上，`bootDomains` 登记。X 等 [84](../info/84-X链接摄入.md) 实测完再做。
 4. 简报的 Keep 和备课面板的加链接改走 bindery，收藏存成 EPUB。
