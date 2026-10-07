@@ -31,7 +31,6 @@ import {
 } from './chat-mark-dom';
 import {
 	beginPenDrag,
-	chatTouchAction,
 	createGestureLatch,
 	dragOffset,
 	drawFromSpan,
@@ -55,11 +54,6 @@ export interface ChatMarkHost {
 	color: string;
 	// Every mark of the open book. A row picks its own out of it.
 	marks: readonly Annotation[];
-	// The reader's "draw with your finger" setting, the same one the page is
-	// routed by (platform/app/device.ts). Absent is off, its default: a finger
-	// then scrolls the lesson and marks nothing, and the stylus and the mouse
-	// still draw.
-	fingerDraw?: boolean;
 	onDraw(draw: ChatMarkDraw): void;
 	// A press on a mark, with where it landed in viewport coordinates.
 	onOpen(annotation: Annotation, at: { x: number; y: number }): void;
@@ -104,7 +98,6 @@ export function ChatMarkLayer({
 	latest.current = marks;
 	const live = markable && !!host;
 	const pen = host?.pen ?? null;
-	const fingerDraw = host?.fingerDraw ?? false;
 	// The stroke while it is still being made. On the page the ink appears under
 	// the stylus; here the mark used to appear only once the finger came off. It
 	// is painted in the pen that is making it, and swapped for the real mark on
@@ -166,8 +159,8 @@ export function ChatMarkLayer({
 
 	// The stroke taken straight off the drag, the way the page takes one
 	// (reading/engine/gesture/attach-touch.ts). The pointer is routed by the
-	// reader's own table — stylus and mouse mark, the finger moves the lesson
-	// unless the setting says otherwise — and the words are read out of the same
+	// reader's own table — stylus and mouse mark, the finger moves the lesson —
+	// and the words are read out of the same
 	// walk that draws marks back, so a drag never has to become a selection
 	// first. Which is what the finger had to do before: on iPadOS a native
 	// selection only begins after a long press, so marking a reply meant pressing
@@ -182,10 +175,9 @@ export function ChatMarkLayer({
 		let drag: PenDrag | null = null;
 		let index: RenderedText | null = null;
 
-		// What stops the page from scrolling out under the ink. touch-action is on
-		// the box below, but it cannot name a stylus — on iPadOS a Pencil drag is
-		// a pan like any other — so the drag also prevents every touchmove while
-		// it lasts. Non-passive, and only while a drag is live: the two engines
+		// What stops the page from scrolling out under the ink. touch-action
+		// cannot name a stylus — on iPadOS a Pencil drag is a pan like any other —
+		// so the drag prevents every touchmove while it lasts. Non-passive, and only while a drag is live: the two engines
 		// disagree about which move claims the scroll and agree that preventing
 		// them all works (docs/pitfall/71, /117).
 		const onTouchMove = (e: TouchEvent) => {
@@ -206,7 +198,7 @@ export function ChatMarkLayer({
 
 		const onDown = (e: PointerEvent) => {
 			if (drag || e.button !== 0) return;
-			if (routeChatPointer(pen, e.pointerType, fingerDraw) !== 'draw') return;
+			if (routeChatPointer(pen, e.pointerType) !== 'draw') return;
 			// A press on a link or a citation chip belongs to that control, and a
 			// press on a mark already drawn opens it (the click handler above).
 			// Taking the gesture would prevent the click all three of them need.
@@ -278,7 +270,7 @@ export function ChatMarkLayer({
 			doc.removeEventListener('pointercancel', onCancel);
 			doc.removeEventListener('touchmove', onTouchMove);
 		};
-	}, [live, host, pen, fingerDraw, messageTs]);
+	}, [live, host, pen, messageTs]);
 
 	return (
 		<>
@@ -319,16 +311,9 @@ export function ChatMarkLayer({
 					))}
 				</div>
 			)}
-			{/* touch-action only where a finger is meant to draw: a reply has to
-			    stay scrollable under a finger in every other configuration, and a
-			    blanket `none` would strand the reader in a lesson they cannot
-			    scroll. The stylus is not covered by it and does not rely on it
-			    (chat-pen-drag.ts: chatTouchAction). */}
-			<div
-				ref={body}
-				data-reply-body=""
-				style={live ? { touchAction: chatTouchAction(pen, fingerDraw) } : undefined}
-			>
+			{/* No touch-action here: a finger always scrolls a reply, and the
+			    stylus does not rely on it. */}
+			<div ref={body} data-reply-body="">
 				{children}
 			</div>
 		</>

@@ -10,7 +10,6 @@
 import { expect, test } from "bun:test";
 import {
   beginPenDrag,
-  chatTouchAction,
   createGestureLatch,
   dragOffset,
   drawFromSpan,
@@ -31,11 +30,9 @@ const POINTERS = ["mouse", "pen", "touch", ""];
 test("every pointer is routed by the reader's table, not by one of the classroom's", () => {
   for (const pen of PENS) {
     for (const pointerType of POINTERS) {
-      for (const fingerDraw of [false, true]) {
-        expect(routeChatPointer(pen, pointerType, fingerDraw)).toBe(
-          routePointer(toolKindOf(pen), pointerKindOf(pointerType), fingerDraw),
-        );
-      }
+      expect(routeChatPointer(pen, pointerType)).toBe(
+        routePointer(toolKindOf(pen), pointerKindOf(pointerType)),
+      );
     }
   }
 });
@@ -43,30 +40,20 @@ test("every pointer is routed by the reader's table, not by one of the classroom
 // The verdicts that matter on the surface, spelled out so a change to the table
 // that would change what a reply does has to be made here too.
 test("a pen in hand marks with the stylus and the mouse; the finger moves the lesson", () => {
-  expect(routeChatPointer("highlight", "pen", false)).toBe("draw");
-  expect(routeChatPointer("highlight", "mouse", false)).toBe("draw");
-  expect(routeChatPointer("highlight", "touch", false)).toBe("scroll");
-  expect(routeChatPointer("highlight", "touch", true)).toBe("draw");
+  expect(routeChatPointer("highlight", "pen")).toBe("draw");
+  expect(routeChatPointer("highlight", "mouse")).toBe("draw");
+  expect(routeChatPointer("highlight", "touch")).toBe("scroll");
 });
 
 test("with no pen in hand nothing is drawn, whatever the pointer", () => {
   for (const pointerType of POINTERS) {
-    for (const fingerDraw of [false, true]) {
-      // "draw" for a mouse or a stylus here means the surface's own pointer
-      // pipeline — a native selection — not a stroke: the classroom only takes a
-      // gesture when a pen is in hand.
-      expect(routeChatPointer(null, pointerType, fingerDraw)).toBe(
-        pointerKindOf(pointerType) === "touch" ? "scroll" : "draw",
-      );
-    }
+    // "draw" for a mouse or a stylus here means the surface's own pointer
+    // pipeline — a native selection — not a stroke: the classroom only takes a
+    // gesture when a pen is in hand.
+    expect(routeChatPointer(null, pointerType)).toBe(
+      pointerKindOf(pointerType) === "touch" ? "scroll" : "draw",
+    );
   }
-});
-
-test("a reply gives up its scrolling only where a finger is meant to draw", () => {
-  expect(chatTouchAction("highlight", true)).toBe("none");
-  expect(chatTouchAction("highlight", false)).toBeUndefined();
-  expect(chatTouchAction(null, true)).toBeUndefined();
-  expect(chatTouchAction(null, false)).toBeUndefined();
 });
 
 // --- the drag ---------------------------------------------------------------

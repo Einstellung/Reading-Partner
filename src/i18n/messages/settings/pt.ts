@@ -90,9 +90,6 @@ export default {
   "features.paperHint":
     "Troca o branco por trás de todo o app (chats, estantes, barras laterais, esta janela e as páginas dos livros) por uma cor de papel off-white. Há um só tom e nenhum mais escuro; não é um modo escuro. A escolha fica neste dispositivo.",
   "features.reading": "Leitura",
-  "features.fingerDraw": "Desenhar com o dedo",
-  "features.fingerDrawHint":
-    "Desativado, o dedo só move a página e a caneta faz as marcações, seja qual for a ferramenta escolhida. Ative num dispositivo sem caneta, onde o dedo precisa poder destacar e desenhar. O bloqueio de navegação do leitor continua tendo prioridade sobre os dois. Ter ou não caneta é uma característica do dispositivo, então este ajuste fica nele.",
   "features.lumen": "Mostrar o Lumen",
   "features.lumenHint":
     "O Lumen fica no canto de todas as telas, inclusive no leitor. Desativado, o canto fica vazio; o botão do Lumen na barra lateral, na tela inicial do celular e no menu Mais do leitor o traz de volta. A escolha fica neste dispositivo.",

@@ -33,7 +33,6 @@ test("a machine with no file gets an identity and the migrated defaults", () => 
   expect(settings.deviceId).toBe("id-1");
   expect(settings.role).toBe(DEFAULT_DEVICE_SETTINGS.role);
   expect(settings.backgroundCollect).toBe(true);
-  expect(settings.fingerDraw).toBe(false);
   expect(settings.chatScale).toBe(DEFAULT_DEVICE_SETTINGS.chatScale);
 });
 
@@ -51,12 +50,20 @@ test("a field with no migration behind it still survives the first run", () => {
 test("the account's old values are taken over on the first run", () => {
   const { settings, changed } = initialDeviceSettings(
     { deviceId: "id-1" },
-    { backgroundCollect: false, fingerDraw: true },
+    { backgroundCollect: false },
     () => "unused",
   );
   expect(changed).toBe(true);
   expect(settings.backgroundCollect).toBe(false);
-  expect(settings.fingerDraw).toBe(true);
+});
+
+// fingerDraw was a device setting until a finger marked only by a hold
+// (docs/82). A file that still has it opens, and the key is carried, not read.
+test("an old file's fingerDraw is harmless", () => {
+  const stored = { deviceId: "id-1", backgroundCollect: true, fingerDraw: true } as Partial<DeviceSettings>;
+  const { settings, changed } = initialDeviceSettings(stored, {}, () => "unused");
+  expect(changed).toBe(false);
+  expect(settings.backgroundCollect).toBe(true);
 });
 
 test("a device that already answered keeps its answer and is not rewritten", () => {
@@ -65,14 +72,13 @@ test("a device that already answered keeps its answer and is not rewritten", () 
     role: "reader",
     autostart: true,
     backgroundCollect: false,
-    fingerDraw: true,
     chatScale: 1.4,
     lessonIntroSeen: true,
   };
   const { settings, changed } = initialDeviceSettings(
     stored,
     // A stale account-level copy must not win over this device's own answer.
-    { backgroundCollect: true, fingerDraw: false },
+    { backgroundCollect: true },
     () => "new-id",
   );
   expect(changed).toBe(false);
@@ -133,10 +139,10 @@ test("a second store patches onto its own file, not the first store's copy", asy
   await first.store.load();
 
   const second = storeOver(null);
-  await second.store.patch({ fingerDraw: true });
+  await second.store.patch({ lessonIntroSeen: true });
 
   const out = second.written()!;
-  expect(out.fingerDraw).toBe(true);
+  expect(out.lessonIntroSeen).toBe(true);
   // Neither of the other machine's answers came along.
   expect(out.deviceId).toBe(DEFAULT_DEVICE_SETTINGS.deviceId);
   expect(out.autostart).toBe(false);

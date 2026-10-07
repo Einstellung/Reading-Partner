@@ -35,15 +35,14 @@ export interface DeviceSettings {
   // Whether this collector is collecting at all: docs/35 for what collection is,
   // docs/36 for why the switch belongs to the machine. A reader never reads it.
   backgroundCollect: boolean;
-  // Whether a finger may mark the page in the reader. Off means the stylus
-  // writes and the finger only ever moves the page, which is what a device with
-  // a stylus wants; a device without one turns this on to reach annotation at
-  // all. The navigation lock still outranks it: while that is on, nothing draws.
-  fingerDraw: boolean;
   // How large the maximized chat window sets its content, as a multiplier on the
-  // body size (ui/components/base/chat-scale.ts). Per-device for the same reason
-  // fingerDraw is: a 4K desktop and an iPad held at arm's length do not have the
-  // same answer, and a synced one would carry the wrong answer onto the other.
+  // body size (ui/components/base/chat-scale.ts). Per-device because a 4K
+  // desktop and an iPad held at arm's length do not have the same answer, and a
+  // synced one would carry the wrong answer onto the other.
+  //
+  // fingerDraw used to be here: a finger marks only by a hold now (docs/82), so
+  // there is nothing left to switch. An old file still carrying the key rides
+  // through load/save as an unknown key; nothing reads it.
   chatScale: number;
   // Whether this phone has already been told that a PDF here opens as a lesson
   // rather than as pages (docs/70). Per-device because the sentence is about
@@ -58,7 +57,6 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   role: "collector",
   autostart: false,
   backgroundCollect: true,
-  fingerDraw: false,
   chatScale: 1,
   lessonIntroSeen: false,
 };
@@ -78,8 +76,8 @@ export function roleIsChoosable(): boolean {
   return !isMobilePlatform();
 }
 
-// What a first run on a new build has to fill in: an identity, and the two
-// settings that used to live in settings.json. The old keys are copied once as
+// What a first run on a new build has to fill in: an identity, and the setting
+// that used to live in settings.json. The old key is copied once as
 // the initial value and never read again — a device already on the new build has
 // its own answer, and the account-level copy is one machine's opinion carried
 // onto another's (docs/36). They are not deleted from settings.json: a device
@@ -89,7 +87,7 @@ export function roleIsChoosable(): boolean {
 // Pure, so the migration is testable; the id source is injected.
 export function initialDeviceSettings(
   stored: Partial<DeviceSettings>,
-  legacy: { backgroundCollect?: boolean; fingerDraw?: boolean },
+  legacy: { backgroundCollect?: boolean },
   newId: () => string,
 ): { settings: DeviceSettings; changed: boolean } {
   const settings: DeviceSettings = {
@@ -100,12 +98,9 @@ export function initialDeviceSettings(
       stored.backgroundCollect ??
       legacy.backgroundCollect ??
       DEFAULT_DEVICE_SETTINGS.backgroundCollect,
-    fingerDraw: stored.fingerDraw ?? legacy.fingerDraw ?? DEFAULT_DEVICE_SETTINGS.fingerDraw,
   };
   const changed =
-    settings.deviceId !== stored.deviceId ||
-    settings.backgroundCollect !== stored.backgroundCollect ||
-    settings.fingerDraw !== stored.fingerDraw;
+    settings.deviceId !== stored.deviceId || settings.backgroundCollect !== stored.backgroundCollect;
   return { settings, changed };
 }
 
@@ -167,24 +162,20 @@ export function createDeviceStore(io: DeviceIo): DeviceStore {
   return {
     load,
     // The first read of the session: give a machine that has never had one an
-    // identity, and take over the two settings that used to be the account's.
+    // identity, and take over the setting that used to be the account's.
     // Called once at startup, before anything asks for the role.
     init: async () => {
       const read = await io.read();
       const stored = read.status === "ok" ? read.value : {};
-      let legacy: { backgroundCollect?: boolean; fingerDraw?: boolean } = {};
-      if (stored.backgroundCollect === undefined || stored.fingerDraw === undefined) {
+      let legacy: { backgroundCollect?: boolean } = {};
+      if (stored.backgroundCollect === undefined) {
         try {
-          // The two keys are gone from the Settings type and still on disk,
-          // which is exactly the shape a one-time migration reads.
-          const old = (await io.legacy()) as {
-            backgroundCollect?: unknown;
-            fingerDraw?: unknown;
-          };
+          // The key is gone from the Settings type and still on disk, which is
+          // exactly the shape a one-time migration reads.
+          const old = (await io.legacy()) as { backgroundCollect?: unknown };
           legacy = {
             backgroundCollect:
               typeof old.backgroundCollect === "boolean" ? old.backgroundCollect : undefined,
-            fingerDraw: typeof old.fingerDraw === "boolean" ? old.fingerDraw : undefined,
           };
         } catch {
           // Nothing to inherit; the defaults stand.

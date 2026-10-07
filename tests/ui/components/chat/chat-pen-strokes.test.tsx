@@ -458,7 +458,7 @@ test("a mouse dragged across a reply does the same", async () => {
   }
 });
 
-// The finger moves the lesson by default, exactly as it moves the page: it takes
+// The finger moves the lesson, exactly as it moves the page: it takes
 // no stroke, and the reply keeps its scrolling.
 test("a finger takes no stroke and the reply stays scrollable", async () => {
   const drawn: ChatMarkDraw[] = [];
@@ -468,19 +468,6 @@ test("a finger takes no stroke and the reply stays scrollable", async () => {
     await dragAcross(replyBody(view), 20, 34, "touch");
     expect(drawn).toEqual([]);
     expect(replyBody(view).style.touchAction).toBe("");
-  } finally {
-    restore();
-  }
-});
-
-test("with the setting on, a finger draws and the reply gives up its scrolling", async () => {
-  const drawn: ChatMarkDraw[] = [];
-  const view = await renderChat(messages, { ...host("highlight", drawn), fingerDraw: true });
-  const restore = caretsByX(textNodeHolding(view.container, REPLY));
-  try {
-    expect(replyBody(view).style.touchAction).toBe("none");
-    await dragAcross(replyBody(view), 20, 34, "touch");
-    expect(drawn.map((d) => d.text)).toEqual(["three matrices"]);
   } finally {
     restore();
   }

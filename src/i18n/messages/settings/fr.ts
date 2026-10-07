@@ -89,9 +89,6 @@ export default {
   "features.paperHint":
     "Remplace le blanc derrière toute l'app (chats, étagères, barres latérales, cette fenêtre et les pages d'un livre) par une couleur de papier crème. Il n'y a qu'une teinte, sans niveau plus sombre ; ce n'est pas un mode sombre. Le choix reste sur cet appareil.",
   "features.reading": "Lecture",
-  "features.fingerDraw": "Dessiner au doigt",
-  "features.fingerDrawHint":
-    "Désactivé, le doigt ne fait que déplacer la page et c'est le stylet qui annote, quel que soit l'outil choisi. Activez-le sur un appareil sans stylet, où le doigt doit pouvoir surligner et dessiner. Le verrou de navigation du lecteur reste prioritaire sur les deux. La présence d'un stylet dépend de l'appareil, ce réglage reste donc sur celui-ci.",
   "features.lumen": "Afficher Lumen",
   "features.lumenHint":
     "Lumen se tient dans le coin de chaque écran, lecteur compris. Désactivé, le coin reste vide ; le bouton Lumen de la barre latérale, de l'écran d'accueil du téléphone et du menu Plus du lecteur le fait revenir. Ce choix reste sur cet appareil.",

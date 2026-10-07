@@ -81,19 +81,6 @@ export default function FeaturesPanel({
       <SettingsSection title={t("settings.features.reading")}>
         <div className={CARD}>
           <Label>
-            <Checkbox
-              checked={!!device?.fingerDraw}
-              disabled={!device}
-              onCheckedChange={(v) =>
-                device && onDeviceChange({ ...device, fingerDraw: v === true })
-              }
-            />
-            {t("settings.features.fingerDraw")}
-          </Label>
-          <p className="m-0 text-xs text-faint-foreground">{t("settings.features.fingerDrawHint")}</p>
-        </div>
-        <div className={CARD}>
-          <Label>
             <Checkbox checked={lumenShown} onCheckedChange={(v) => setLumenShown(v === true)} />
             {t("settings.features.lumen")}
           </Label>

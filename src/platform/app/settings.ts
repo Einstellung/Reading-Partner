@@ -184,7 +184,7 @@ export interface Settings {
   // on the old build reads its own copy, and a fields merge that saw one side
   // drop a key would carry the deletion to it. They ride through load/save as
   // unknown keys; nothing here reads them after the one-time migration in
-  // device.ts.
+  // device.ts. fingerDraw has since gone from device.json too (docs/82).
 }
 
 export const DEFAULT_SETTINGS: Settings = {

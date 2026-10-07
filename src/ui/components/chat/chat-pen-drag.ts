@@ -2,8 +2,8 @@
 // takes its verdict from the reader's own routing table
 // (reading/engine/gesture/touch-routing.ts), so a stroke on an answer begins the
 // way a stroke on a page does: the stylus and the mouse mark, the finger moves
-// the view unless the reader has said otherwise. One table, two surfaces — a
-// second one here would be a second answer to the same question.
+// the view. One table, two surfaces — a second one here would be a second
+// answer to the same question.
 //
 // Pure and DOM-free. The caller resolves a screen point to an offset in the
 // rendering (chat-mark-dom.ts) and hands the number in; what is decided here is
@@ -26,22 +26,8 @@ import {
 // the pointer ("none"), and the surface then behaves as it always did — native
 // selection, native scrolling. The navigation lock never reaches here: the shell
 // resolves it to no pen at all before the host is built (App.tsx: chatPen).
-export function routeChatPointer(
-  pen: MarkPen | null,
-  pointerType: string,
-  fingerDraw: boolean,
-): RouteAction {
-  return routePointer(toolKindOf(pen), pointerKindOf(pointerType), fingerDraw);
-}
-
-// What a reply's box declares for touch, and the one place the finger's default
-// is spelled out: `none` only when a finger is meant to draw, so a reply is
-// scrollable under a finger in every other configuration. Chromium latches
-// touch-action when the gesture starts, which is before the first move a
-// handler could prevent, so the declaration has to be standing before the touch
-// lands rather than applied once the drag is recognised.
-export function chatTouchAction(pen: MarkPen | null, fingerDraw: boolean): "none" | undefined {
-  return routeChatPointer(pen, "touch", fingerDraw) === "draw" ? "none" : undefined;
+export function routeChatPointer(pen: MarkPen | null, pointerType: string): RouteAction {
+  return routePointer(toolKindOf(pen), pointerKindOf(pointerType));
 }
 
 // A drag in flight: which reply it belongs to, which pointer is making it, where
